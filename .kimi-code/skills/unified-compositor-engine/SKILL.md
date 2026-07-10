@@ -19,7 +19,7 @@ What already renders through it: flash, subliminal, bouncing text, pink tint, sp
 
 What still uses separate windows: ~23 Chaos overlay/window classes, AvatarTube, secondary-monitor video (`VideoOverlayWindow` nested in `AvaloniaVideoService.cs` around line 1156), dialogs, and secondary windows (~101 `Window` subclasses in `CCP.Avalonia` total). That is intentional for now.
 
-**Status tracker:** `ConditioningControlPanel/docs/unified-compositor-engine-plan.md` is the ONLY status tracker for the UCE (the master plan's section 1A deliberately does not track it). `unified-compositor-engine-goal.md` is the loop driver: one unchecked task per iteration, in phase order. Read both before doing UCE work, and check the git log since their last update; the docs can lag the code.
+**Status tracker:** `ConditioningControlPanel/docs/unified-compositor-engine-plan.md` is the ONLY UCE doc — it holds both the status tracker and the loop driver (one unchecked task per iteration, in phase order); the former `unified-compositor-engine-goal.md` was folded into it on 2026-07-10. Read it before doing UCE work, and check the git log since its last update; the doc can lag the code.
 
 ## Architecture map (verified paths)
 

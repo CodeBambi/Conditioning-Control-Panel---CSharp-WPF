@@ -1,5 +1,7 @@
 # Webcam Calibration Window — Avalonia Port Plan (+ human-testing mode)
 
+> Umbrella driver: [`docs/skia-rebuild-goal.md`](skia-rebuild-goal.md) — THE spirit, workflow model, and acceptance gate. Live work rows live in [`docs/avalonia-migration-task-board.md`](avalonia-migration-task-board.md).
+
 Owner-directed 2026-07-05. Context: the webcam/gaze subsystem has **zero machine
 verification** (no `--verify-webcam` harness; smoke only clicks the tabs). Per owner:
 treat the webcam subsystem as UNVERIFIED — keep the **WPF behavior contract**, implementation
@@ -468,3 +470,22 @@ cheapest, most independent wins; no new capture flow). Smooth-pursuit + fixation
 gate — VERIFY consumer-webcam pursuit feasibility with PARENT web tools first) and fixation snap (I-DT/I-VT
 atop One-Euro). **Cadence decision (owner):** build Tier 1 now for a full 3-way, OR camera-test Current-vs-Deep
 first then build Tier 1 informed by results.
+
+---
+
+## Backlog — folded from avalonia-calibration-overhaul-port.md (merge fce9713d + dfbe20c4)
+
+> Folded from `avalonia-calibration-overhaul-port.md` 2026-07-10 (that source is deleted after this merge). **Reconciliation:** that source predated the Core DIM seam work above (S1a `bc6eba94`, S1b `5cece1c8`, S1c `df06d06d`), so its headline note that the Avalonia calibration window was a non-functional shell is **resolved** — the window now collects iris samples, fits the polynomial, and commits calibration (S1c). `GazeDriftCorrectionService` is **DONE** (`591e898d`). The per-frame gaze algorithm (the 13 hunks: target lock-on, motion shaping, eye-disagreement gating, iris clamping, mouth/tongue timing) already lives in `AvaloniaWebcamTrackingService`. What remains genuinely open is preserved below.
+
+### Window finalize additions (open — fold into S3 sub-slices)
+The calibration flow that *populates* `IrisRange`/`AxisCorrection`/`GazeTrim`/`LightSource` data. The WPF window's finalize additions — **IrisRange min/max capture**, **`BuildAxisCorrection`**, and the **bubble test** (GazeTrim) — layer onto the polynomial-fit pipeline that S1c now provides. Also pending: the **dim-room warning that replaced the lighting picker** (`dfbe20c4`). These map onto S3 above ("gesture warm-up, bubble-test gaze-trim, axis-correction/head-pose comp"); IrisRange min/max finalize and the dim-room warning are the two items S3 did not name explicitly.
+
+### GazeFocusService — `SetGazeAttractor` consumer wiring (+47) (open refinement)
+The BASE feature is already ported (`AvaloniaGazeFocusService` rect-based gaze dwell/blink-pop, registered in DI and consumed by `BlinkTrainerTabViewModel`, smoke-tested at port time). The merge delta is a niche refinement: pull the cursor toward the dwell target. Low-value in the Avalonia rect-based pop model (pops everything in a 60-DIP radius — inherently forgiving, unlike WPF's single-best-target precision pop); a faithful port needs a target-presence query (added `IBubbleService`/`IFlashService` surface). `SetGazeAttractor`/`ClearGazeAttractor` exist on the tracker (ported) and `SetGazeAttractor` takes coords in the `OnGazeMove` space, so the wiring itself is trivial once a target-presence query exists.
+
+### GazeDebugCursorService — lock-state visualization (+306) (open refinement)
+The BASE `AvaloniaGazeDebugCursorService` is already ported (registered in DI, smoke-tested). The merge delta is lock-state visualization on the debug cursor. Documented refinement.
+
+### Live-webcam verification (release gate — open)
+The port mirrors the WPF math exactly (diff-driven, not from memory), compiles clean, and Core tests pass. Still **NOT live-verified with a webcam (no device)** — that remains a release gate for the gaze math. S2 above provides the logged human-verify ritual; the owner camera A/B/C of Current vs Tier 1 vs Deep is the standing proof.
+

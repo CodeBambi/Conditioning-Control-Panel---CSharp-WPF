@@ -1,160 +1,79 @@
-# Conditioning Control Panel - Project Context
+# Conditioning Control Panel — Project Context (agent onboarding)
 
-## Overview
-A WPF desktop application (.NET 8, Windows-only) that provides a conditioning/hypnosis control panel with various features including flash images, videos, AI avatar companion, achievement system, and more.
+> **Read order for port work:** [`docs/docs-index.md`](docs/docs-index.md) → [`docs/skia-rebuild-goal.md`](docs/skia-rebuild-goal.md) → claim exactly ONE row on [`docs/avalonia-migration-task-board.md`](docs/avalonia-migration-task-board.md). The repo-root [`AGENTS.md`](../AGENTS.md) holds the canonical build/test/run commands and the full version-bump list; this file is quick orientation, not a duplicate of either.
 
-## Build & Run
-```bash
-cd ConditioningControlPanel
-dotnet build
-dotnet run
-```
+## What this project is
 
-## Quick File Reference
+A conditioning/hypnosis desktop app mid-migration from a Windows-only WPF/WinForms head to cross-platform
+**Avalonia UI v12**. The contract is functional parity (see `docs/skia-rebuild-goal.md` — "functionality is
+the contract, implementation is not"): every WPF feature must work end-to-end in the Avalonia heads on
+Windows AND Linux, at least as fast and smooth as WPF.
 
-### Version Locations (ALL must be updated for releases)
-| File | What |
-|------|------|
-| `ConditioningControlPanel.csproj:12` | `<Version>` tag |
-| `Services/Update/UpdateService.cs:~23` | `AppVersion` constant |
-| `Services/Update/UpdateService.cs:~29` | `CurrentPatchNotes` |
-| `../installer.iss:16` | `MyAppVersion` |
-| `../build-installer.bat:10` | `VERSION` |
-| `MainWindow/MainWindow.xaml:~569` | `BtnUpdateAvailable` Content + ToolTip loc keys |
-| `Localization/Languages/*.json` (9 files) | `btn_vX_Y_Z_is_out` + `tooltip_vX_Y_Z_*` keys |
+## Heads (dual-head layout)
 
-Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.txt` (plain-text notes for the GitHub release; no em-dashes). After signing: push main, tag `vX.Y.Z`, create the GitHub release (mark Latest), POST server marquee + update-banner (`x-admin-token`), update download links + version badge in `C:\Projects\cclabs-site` (index.html + guide-getting-started.html, then commit+push and `vercel deploy --prod`), announce on Discord. Note: de.json contains a pre-existing control character that strict JSON parsers reject; validate with a lenient parser (Newtonsoft tolerates it).
+| Head | Role | Status |
+|---|---|---|
+| **`CCP.Core/`** | Portable core: models + platform-agnostic services + seam interfaces (`ISecretStore`, `IOverlaySurface`, `IVideoSurface`, `IAudioPlayer`, `IBrowserHost`, `IWallpaperProvider`, …). Single source of truth for models; referenced by every head. | Live |
+| **`CCP.Avalonia/`** | Shared Avalonia UI (views, viewmodels, services, `Compositor/`, `AvatarTube/`, `Chaos/`). DI via `Microsoft.Extensions.DependencyInjection` (`ServiceCollectionExtensions.cs`). | Live (port target) |
+| **`CCP.Avalonia.Desktop.{Windows,Linux,macOS}/`** | Per-OS desktop heads; each `Program.cs` overrides the seams it can implement natively. | Windows ~92%, Linux ~45% (see parity matrix) |
+| **`CCP.Avalonia.Android/`** | Android head. | Out of port scope (builds stay green) |
+| **Legacy WPF head** (`ConditioningControlPanel.csproj`, root `Services/` `Views/` `Models/`) | **Behavior reference ONLY. Never modify its behavior.** | Frozen reference |
 
-### Important Paths
-| Path | Purpose |
-|------|---------|
-| `logs/crash.log` | Crash logs with stack traces - CHECK THIS FIRST |
-| `%APPDATA%/ConditioningControlPanel/` | User data, settings, tokens |
-| `%APPDATA%/ConditioningControlPanel/assets/` | Default assets folder |
-| `App.EffectiveAssetsPath` | User's chosen assets folder (or default) |
-| `../docs/` | GitHub Pages website |
-| `../releases/` | Velopack release output |
-| `../installer-output/` | Inno Setup installer output |
+> Do **not** put shared source inside the legacy WPF folder — put it in `CCP.Core` and reference it. The WPF
+> `.csproj` excludes `CCP.*/` and `tests/`. The legacy `.sln` builds WPF only; use `CCP.Desktop.slnf` or the
+> `.slnx` for Avalonia heads + tests.
 
-> **Server code** lives in private repo `CC-Labs-llc/CCP-Server`. See that repo's docs for endpoints, deployment, and admin operations.
+## Build / test / run
 
-## Common Tasks
+See repo-root [`AGENTS.md`](../AGENTS.md) for the full set. Quick reference:
 
-### Debug a Crash
-1. Check `logs/crash.log` for stack trace
-2. Search for the exception type in codebase
-3. Common culprits: null references in async callbacks, WPF resource lookup failures
+- Avalonia desktop: `dotnet build ConditioningControlPanel/CCP.Desktop.slnf -c Debug`; run `…/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj`.
+- Core tests: `dotnet test ConditioningControlPanel/tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release` (floor **542** — never decrease; read the live count).
+- Legacy WPF (reference only): `dotnet build ConditioningControlPanel/ConditioningControlPanel.csproj`.
+- **Gates block every commit:** `CCP.Desktop.slnf` 0 errors; WPF `.sln` 0 errors; Core tests green; `--smoke-test` at baseline (Findings 5); `--verify-layers` / `--verify-video` when touching compositor/video; `--benchmark` before/after on hot paths — not worse than `docs/benchmark-optimized.json`.
 
-### Add a New Setting
-1. Add property to `Models/AppSettings.cs` with `[JsonProperty]`
-2. Add UI control in `MainWindow.xaml` (usually in Settings tab)
-3. Bind to `App.Settings.Current.YourProperty`
+## How to work here (NOT the legacy WPF patterns)
 
-### Add a New Service
-1. Create `Services/YourService.cs`
-2. Add static property in `App.xaml.cs`: `public static YourService? YourService { get; private set; }`
-3. Initialize in `App.OnStartup()` after other services
+- **Services are DI-resolved** in Avalonia (`ServiceCollectionExtensions.cs`), not static `App.Foo`
+  properties. The `App.Flash` / `App.Video` / `App.Settings` static-accessor pattern is head-local to the
+  legacy WPF reference head only; do not copy it into Avalonia code.
+- **Skills are MANDATORY, not optional** — Avalonia v12 is 2026-new and LLM training data about it is stale
+  or actively wrong. Always start with `avalonia-research` before any Avalonia API/dependency/unexplained
+  exception; use `port-feature` for the implementation workflow + v12 cheatsheet; `wpf-parity` for behavior
+  contracts; `unified-compositor-engine` + `overlay-clickthrough` for all media/input/overlay work;
+  `dashboard-design` for user-facing surfaces (5-theme reskin is part of done); `mechanical-port-work` for
+  small-tier rows; `port-audit` at workstream close-out. Definitions live in `.pi/skills/` (authoritative)
+  with `.kimi-code/skills/` mirrors.
+- **All real-time visuals render as `IAvaloniaLayer`s** in the one `CompositorEngine` (one topmost window
+  per monitor, z-ordered layers, one 60Hz tick, PER-REGION click-through per the 2026-07-09 team review).
+  No new per-effect windows, ever. Interactive surfaces (main UI, dialogs, AvatarTube, HUD, lock card) stay
+  windows.
+- **Acceptance gate:** a ported feature is accepted only when at least as fast and smooth as the WPF head —
+  preferably measurably improved. Big changes are encouraged when they win on merit; what/why is recorded in
+  the task board.
 
-### Release a New Version
-Follow `../RELEASE_WORKFLOW.md` - covers all version locations, build steps, and deployment.
+## Known scars (read before touching these areas)
 
-## Project Structure
+- **Threading / timers:** UI-thread work uses the Dispatcher; some timers must be `DispatcherTimer`. See the
+  threading notes in `CCP.Core/Services/Deeper/IActionDispatcher.cs` and `docs/crossplatform-rebuild-plan.md`
+  §21 (v12 gotchas). When in doubt, consult the `avalonia-research` skill — do not guess v12 APIs.
+- **Crash logging:** `logs/crash.log` is the first place to look. Global handlers (dispatcher /
+  `AppDomain` / `TaskScheduler.UnobservedTaskException`) log full stack traces.
+- **Privacy / security (never regress):** webcam frames never hit disk/network (only calibration
+  coefficients persist); enhancement validation rejects NaN/Infinity/UNC/absolute paths/control chars;
+  overlay capture-exclusion rules stay; secrets stay in the `ISecretStore` seam;
+  `Microsoft.WindowsAppSDK` stays pinned. See `AI_AUDIT.md` for the endpoint/prompt audit (paths are
+  WPF-era — a task-board row tracks refreshing them).
 
-### Key Files
-- **App.xaml.cs** - Application entry point, initializes all services (Flash, Video, Audio, Subliminal, etc.), manages static service instances
-- **MainWindow.xaml/.cs** - Main UI with multiple tabs (Flashes, Videos, Overlays, Subliminals, Sessions, Progression, Settings)
-- **AvatarTubeWindow.xaml/.cs** - AI companion avatar window that can be attached/detached from main window, handles speech bubbles, animations, and AI interactions
+## Runtime data
 
-### Services (Services/)
-- **FlashService.cs** - Handles flash image display with GIF animation support, uses images from `App.EffectiveAssetsPath/images`
-- **VideoService.cs** - Handles mandatory video playback with attention checks, uses videos from `App.EffectiveAssetsPath/videos`
-- **AudioService.cs** - Audio ducking and playback management
-- **SubliminalService.cs** - Subliminal text/image overlay display
-- **OverlayService.cs** - Screen overlays (BrainDrain blur, edge effects, etc.)
-- **BubbleService.cs** - Floating bubble popping minigame
-- **BubbleCountService.cs** - Bubble counting video minigame (Level 50+)
-- **SessionEngine.cs** - AI-powered session management with OpenRouter integration
-- **ProgressionService.cs** - XP and leveling system
-- **AchievementService.cs** - Achievement tracking and unlocks
-- **UpdateService.cs** - Auto-update via GitHub Releases API + Inno Setup silent installer
-- **PatreonService.cs** - Patreon OAuth, subscription validation, whitelist (server-side)
-- **ContentPackService.cs** - Download/install encrypted content packs
+- Settings: `%APPDATA%/ConditioningControlPanel/settings.json` (atomic temp-file + rename writes).
+- Assets: `App.EffectiveAssetsPath` → `images/` and `videos/` subfolders (user-choosable; default
+  `%APPDATA%/ConditioningControlPanel/assets`).
+- Logs: `logs/crash.log`. Localization JSON is copied to output at build — rebuild to pick up edits.
 
-### Models (Models/)
-- **AppSettings.cs** - All application settings with INotifyPropertyChanged, auto-saves to JSON
-- **CompanionPromptSettings.cs** - AI companion personality customization
-- **Session.cs** - Session data model
-- **PatreonModels.cs** - Patreon API response models, cache state
+## Version bumps
 
-### Key Patterns
-- Services are accessed via static properties on `App` class: `App.Flash`, `App.Video`, `App.Audio`, `App.Patreon`, etc.
-- Settings via `App.Settings.Current` (AppSettings instance)
-- Assets path: `App.EffectiveAssetsPath` returns custom path if set, else default `App.UserAssetsPath`
-- User data in `%APPDATA%/ConditioningControlPanel/`
-- Patreon features gated by `App.Patreon?.HasPremiumAccess` or `App.Patreon?.HasAiAccess`
-
-### UI Architecture
-- Dark theme with pink/purple accent colors (#FF69B4, #252542, #1A1A2E)
-- Custom styles in MainWindow.xaml Resources section
-- Tab-based navigation with animated icons
-- Avatar tube window positions relative to main window when attached
-- Converters must be in Window.Resources (not local Grid.Resources) to work in DataTemplates
-
-## Known Issues & Solutions
-
-### WPF Issues
-1. **Crash on resize**: Wrap in try-catch, use `SizeToContent = Manual` before layout changes
-2. **Null template on animation**: Check `btn.IsLoaded` and `btn.Template != null` before animations
-3. **Duplicate windows**: Only one StartupUri OR manual window creation in App.xaml.cs, not both
-4. **Resource not found in DataTemplate**: Move converters/resources to Window.Resources, not local Grid.Resources
-5. **Screen enumeration crash**: Always check `Screen.AllScreens.Length > 0` before accessing - can return empty during certain system states
-
-### Async/Threading Issues
-6. **Fire-and-forget Task crashes**: Always wrap `Task.Delay().ContinueWith()` callbacks with `if (Application.Current?.Dispatcher == null) return;` and try-catch
-7. **MainWindow null during session**: SessionEngine holds reference to MainWindow - use `IsMainWindowValid` check before calling window methods
-8. **Event handlers on closed windows**: Check `Application.Current.Dispatcher.HasShutdownStarted` before triggering UI operations in event handlers
-
-### Build Issues
-9. **Velopack "Access denied"**: Delete `%LOCALAPPDATA%\Temp\Velopack` folder and retry
-10. **Build warnings about Screen**: These are CA1416 platform warnings - safe to ignore for Windows-only app
-
-## Crash Logging
-- Crashes are logged to `logs/crash.log` with full stack traces
-- Check this file first when debugging random crashes
-- Global exception handlers catch: DispatcherUnhandledException, AppDomain.UnhandledException, TaskScheduler.UnobservedTaskException
-
-## Dependencies
-- NAudio - Audio playback
-- Serilog - Logging
-- XamlAnimatedGif - GIF animation support
-- System.Windows.Forms - Screen enumeration, dialogs
-- LibVLCSharp - Video playback
-- WebView2 - Embedded browser
-- Newtonsoft.Json - JSON serialization
-- (Auto-updates: GitHub Releases API + Inno Setup silent install — no extra package)
-
-## Architecture Notes
-
-### Initialization Order (App.OnStartup)
-1. Logger (Serilog)
-2. Settings (AppSettings.Load)
-3. Core services (Flash, Video, Audio, Subliminal, Overlay)
-4. Patreon service (async validation)
-5. Update service (async check)
-6. MainWindow creation
-7. Optional services (Autonomy, Discord, etc.)
-
-### Patreon/Whitelist Flow
-1. User logs in via OAuth -> tokens stored encrypted (DPAPI)
-2. `PatreonService.ValidateSubscriptionAsync()` called on startup
-3. Server returns subscription tier + `is_whitelisted` flag
-4. `HasPremiumAccess` / `HasAiAccess` properties gate features
-5. Results cached for 24 hours
-
-### Update Flow
-1. `UpdateService.CheckForUpdatesAsync()` on startup hits the GitHub Releases API
-2. Compares `AppVersion` constant with the `tag_name` of the latest release
-3. If newer: shows `UpdateNotificationDialog`
-4. On install: downloads the `Setup.exe` asset from the release and runs it silently with `/SILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS` so Inno Setup upgrades the existing install in place
-5. Fallback: server marquee/banner notifies users whose check failed
-6. Velopack was retired in v5.8.4 (the in-app `UpdateManager` had been bypassed since v5.4.10's switch to Inno Setup)
+The canonical, always-current list of version locations is in repo-root [`AGENTS.md`](../AGENTS.md)
+("Version bumps"). Use `/release X.Y.Z "Subtitle"` to automate it; this file intentionally does not keep a
+second copy.

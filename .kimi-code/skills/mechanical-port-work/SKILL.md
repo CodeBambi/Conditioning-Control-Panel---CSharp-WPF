@@ -1,6 +1,6 @@
 ---
 name: mechanical-port-work
-description: "Execution discipline for pre-planned Avalonia port work, designed so a smaller/mechanical-tier model can safely continue the port without smart-model judgment. Use this skill whenever picking up ANY item from docs/model-handoff-queue.md, any chaos slice S5-S9 from docs/chaos-run-engine-port-plan.md, any task-board row, or when the user says 'continue the port', 'next slice', 'work the queue', or 'pick up where the smart model left off'. The skill's core promise: every decision that needs judgment was already made and written down with WPF file:line citations, your job is faithful execution, gates, and knowing when to STOP instead of improvising."
+description: "Execution discipline for pre-planned Avalonia port work, designed so a smaller/mechanical-tier model can safely continue the port without smart-model judgment. Use this skill whenever picking up ANY tier-tagged live row from docs/avalonia-migration-task-board.md (the single mechanical work queue), or when the user says 'continue the port', 'next slice', 'work the queue', or 'pick up where the smart model left off'. The skill's core promise: every decision that needs judgment was already made and written down with WPF file:line citations, your job is faithful execution, gates, and knowing when to STOP instead of improvising."
 ---
 
 # mechanical-port-work
@@ -11,9 +11,9 @@ find yourself inventing a design, you are off the rails, go to "When to STOP".
 
 ## The work queue
 
-`ConditioningControlPanel/docs/model-handoff-queue.md` is the single ordered queue.
+`ConditioningControlPanel/docs/avalonia-migration-task-board.md` is the single mechanical work queue (its tier-tagged live rows).
 Take the TOP unblocked item unless the user names one. Each item links to its full spec
-(usually `docs/chaos-run-engine-port-plan.md` or the task board). Read the spec BEFORE
+(usually the claimed task-board row's detail doc; see `docs/docs-index.md` for the map). Read the spec BEFORE
 touching code.
 
 ## Iron rules (violating any of these is a failed task)
@@ -126,7 +126,7 @@ passes the gate. Two crashes in a row = STOP condition.
 
 ## When to STOP (file a blocker instead of improvising)
 
-Append a row to the "Blocked / Questions" ledger in `docs/model-handoff-queue.md`
+Append a row to the "Blocked / Questions" ledger in `docs/avalonia-migration-task-board.md`
 (item, what you found, exact file:line, why you stopped), leave the working tree CLEAN
 (revert or stash uncommitted work), and tell the user. STOP conditions:
 
