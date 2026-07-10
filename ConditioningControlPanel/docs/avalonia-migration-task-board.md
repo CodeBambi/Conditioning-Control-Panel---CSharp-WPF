@@ -391,10 +391,10 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 
 | Row | Evidence | Expected gain | Tier | Proportionality |
 |---|---|---|---|---|
-**Claim-priority order (LIVE — the claimer updates this line as rows close/land):** IMP-11 → IMP-5 →
+**Claim-priority order (LIVE — the claimer updates this line as rows close/land):** IMP-5 →
 IMP-7 → IMP-10 → IMP-4 (mechanical/trivial first) → IMP-9 → IMP-6 → IMP-2 (STANDARD) → IMP-8 (JUDGMENT,
-flag-don't-force) → major rows #1–#8. IMP-1 DONE `49ec3707`. IMP-3 is CONDITIONAL on row #3's libmpv
-spike gate — never do both.
+flag-don't-force) → major rows #1–#8. IMP-1 DONE `49ec3707`. IMP-11 DONE `2d5c0c43`. IMP-3 is CONDITIONAL
+on row #3's libmpv spike gate — never do both.
 
 | **IMP-1 — `VideoLayer` lacks a `ConsumeDirty` override**: engine invalidates all windows at 60Hz while clips decode at ~25-30fps; `Update`'s `presented` flag (FRONT↔READY swap) IS the dirty signal | `Compositor/Layers/VideoLayer.cs` (no override; inherits always-true `BaseLayer.ConsumeDirty()`, `BaseLayer.cs:46`) | ~halves GPU render passes during plain video playback; `MandatoryVideoLayer` inherits the fix free | MECHANICAL | ~10 lines, UI-tick-only state, no protocol change; verify with `--verify-video` |
 | **IMP-2 — engine render tick runs at Background dispatcher priority**: parameterless `DispatcherTimer` = background priority in Avalonia 12.0.x (pinned 12.0.5) — the whole UCE hangs off one starvable timer | `Compositor/CompositorEngine.cs` ctor; Avalonia.Base 12.0.x XML docs (`M:Avalonia.Threading.DispatcherTimer.#ctor`) | removes scheduling-induced stutter under UI-thread load; candidate one-liner `new DispatcherTimer(DispatcherPriority.Render)`; doubles as a row-#2 MinFps=0 hypothesis | STANDARD | one line + before/after benchmark (row #2's re-baseline is the measurement vehicle) |
@@ -406,9 +406,22 @@ spike gate — never do both.
 | **IMP-8 — coalesce the two 30s dirty-save timers**: `AchievementService._saveTimer` + `QuestService._saveTimer` do identical "if dirty, serialize+flush" work with near-identical tmp-recovery boilerplate | `CCP.Core/Services/Progression/AchievementService.cs:86,:99`; `QuestService.cs:71,:95` | one fewer always-waking timer (latency/battery on laptops), shared crash-recovery logic, fewer moving parts | JUDGMENT | low-medium; structural win, not headline perf — flag, don't force. Keep the 1s tracking timers separate (different state, higher risk) |
 | **IMP-9 — `BubbleEngine` per-tick allocations**: 2 transient lists allocated EVERY active 32ms tick (after the early-return guard) + 2 redundant full `_bubbles.ToArray()` snapshots per tick in the hazard passes | `CCP.Core/Services/Chaos/BubbleEngine.cs:822-823` (driver `:174-176`, `TickIntervalSec=0.032` `:13`); `:1534` (`TickSpankSweeps`), `:1431` (`TickFieldHazards`) | removes ~4 Gen0 allocs/frame (~120/s) on the UI thread in bubble-mode steady state; net code smaller (reusable field buffers + ONE shared snapshot passed to both passes) | STANDARD | low risk, behavior-preserving; pinned by existing BubbleEngine unit tests in CCP.Core.Tests |
 | **IMP-10 — `ActiveRipples` dead alloc-y getter**: `ToList()` + closure on every read; repo-wide grep = the declaration only, zero readers | `CCP.Core/Services/Chaos/BubbleEngine.cs:146-147` | removes a latent per-frame footgun (any future per-frame reader = per-frame `List<>` alloc); delete, or replace with a zero-alloc count+indexed accessor | STANDARD | trivial; confirm ripple-overlay intent first — the Size-Queen ripple effect is gameplay-relevant (`:1434-1445`) |
-| **IMP-11 — orphaned `AvaloniaBubble` control**: `new AvaloniaBubble(` has 0 call sites; chaos bubbles render via the compositor `BubbleLayer` (`AvaloniaBubbleService.cs:533-535` routes `SetFuse` there); its per-call `new SolidColorBrush` pattern reads as a hot-path smell on every scan | `CCP.Avalonia/Chaos/AvaloniaBubble.cs` (~220 lines) | deletes dead UI code + a misleading allocation pattern; simplification, not runtime speed | MECHANICAL | confirm-then-delete: verify no XAML / resource-factory / reflection construction first; STOP if found |
+| **IMP-11 — orphaned `AvaloniaBubble` control** — **DONE 2026-07-10 (`2d5c0c43`)**: `new AvaloniaBubble(` had 0 call sites; chaos bubbles render via the compositor `BubbleLayer` (`AvaloniaBubbleService.cs:533-535` routes `SetFuse` there); its per-call `new SolidColorBrush` pattern read as a hot-path smell on every scan | `CCP.Avalonia/Chaos/AvaloniaBubble.cs` (274 lines) DELETED | deleted dead UI code + a misleading allocation pattern; simplification, not runtime speed | MECHANICAL | confirm-then-deleted: verified no XAML / resource-factory / reflection construction (sealed Panel, parameterized ctor, no typeof/Activator/nameof, no paired .axaml, glob-included) |
 
 **Improvement-row claim ledger (append-only):**
+- **CLAIM 2026-07-10 · wip @driver (continuous-mode session):** IMP-11 (orphaned `AvaloniaBubble`
+  confirm-then-delete). Claimed as topmost of the LIVE claim-priority order. Confirm sweep before deletion:
+  word-boundary grep for `\bAvaloniaBubble\b` across `**/*.cs`/`**/*.axaml`/`**/*.xaml`/`**/*.json`
+  (excluding `AvaloniaBubbleService`/`AvaloniaBubbleWindow`) = only the class decl + ctor inside the file
+  itself; zero `new AvaloniaBubble(` call sites; zero `typeof/Activator.CreateInstance/nameof`; no paired
+  `AvaloniaBubble.axaml`; no explicit `.csproj` include (Avalonia glob); `sealed` (not a base class); all
+  members instance-only (no statics consumed elsewhere). Precondition satisfied → deleted.
+- **DONE 2026-07-10 (same session, `2d5c0c43`):** `git rm CCP.Avalonia/Chaos/AvaloniaBubble.cs` (274 lines,
+  dead UI control). Residual grep 0 hits. Gates: slnf **0 errors** (warnings 384→383, one fewer from the
+  removed file) · WPF sln **0 errors** · Core **542/542** · `--smoke-test` 44 tabs / 0 unhandled /
+  **Findings 5** (logged-out baseline this run — StartSession blocker only, exit 0). No compositor/video
+  path touched (AvaloniaBubble was a standalone `Panel`, not a registered layer — `BubbleLayer` is the
+  live compositor bubble path and is untouched), so `--verify-layers/--verify-video` not triggered.
 - **CLAIM 2026-07-10 · wip @driver (workflow-run, continuous-mode session):** IMP-1 (VideoLayer `ConsumeDirty`
   override). Claimed after R-scrub `820526d5` + bubble-border fix `6346d964` closed out. Gate note: smoke
   runs at Findings 16 = recorded pre-existing drift (owner-waved; see drift row). Plan: recon dirty-path
