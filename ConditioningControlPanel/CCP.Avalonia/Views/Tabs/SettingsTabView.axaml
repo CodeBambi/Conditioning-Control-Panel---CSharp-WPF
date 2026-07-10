@@ -272,8 +272,11 @@
         </Grid>
         </Viewbox>
 
-        <!-- Right half: browser / audio / quick links / media path -->
-        <Grid Grid.Column="1" Margin="5" RowDefinitions="*,Auto,Auto">
+        <!-- Right half: browser (Row 0 = '*', flexes and takes the most space) + audio/quick-links
+             (Row 1 = Auto, compact). Because the browser is the only star row, extra window height
+             goes proportionally to it. The Media-folder picker moved to the System (gear) settings
+             popup, which already hosts it (SystemFeatureControl 'Assets folder') — 2026-07-10. -->
+        <Grid Grid.Column="1" Margin="5" RowDefinitions="*,Auto">
 
           <!-- Browser -->
           <Border Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,5"
@@ -497,6 +500,7 @@
                              Foreground="{DynamicResource TextLightBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
                   <Button Content="{loc:Str label_help_symbol}"
                           Command="{Binding ShowHelpSectionCommand}" CommandParameter="QuickLinks"
+                          HorizontalAlignment="Right" VerticalAlignment="Center"
                           Background="{DynamicResource TransparentPinkBrush}"
                           Foreground="{DynamicResource TextLightBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                           CornerRadius="11" Padding="0" Width="22" Height="22"
@@ -544,31 +548,9 @@
             </Border>
           </Grid>
 
-          <!-- Media assets path -->
-          <Border Grid.Row="2" CornerRadius="12" Padding="9" Margin="0,0,0,6"
-                  Background="{DynamicResource ElevatedSurfaceBrush}"
-                  BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-            <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
-              <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
-                         Text="Media folder"
-                         Foreground="{DynamicResource TextLightBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
-              <TextBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                       Text="{Binding CustomAssetsPath, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                       Watermark="Select or type the folder containing images, videos, wallpapers..."
-                       Foreground="{DynamicResource TextLightBrush}"
-                       FontSize="10"
-                       Margin="0,4,8,0"
-                       VerticalAlignment="Center" />
-              <Button Grid.Row="1" Grid.Column="2"
-                      Content="Browse..."
-                      Command="{Binding BrowseCustomAssetsPathCommand}"
-                      Padding="10,5"
-                      Background="{DynamicResource TransparentPinkBrush}"
-                      Foreground="{DynamicResource TextLightBrush}"
-                      BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                      VerticalAlignment="Center" />
-            </Grid>
-          </Border>
+          <!-- Media-folder picker relocated to the System (gear) settings popup 2026-07-10
+               (SystemFeatureControl 'Assets folder' pick/open). The dashboard no longer duplicates
+               it, giving the browser panel more room. -->
         </Grid>
         </Grid>
         </Grid>

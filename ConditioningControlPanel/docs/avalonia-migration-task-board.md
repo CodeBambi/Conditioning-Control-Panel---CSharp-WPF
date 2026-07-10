@@ -504,6 +504,16 @@ WPF head scans `SearchOption.AllDirectories` ("Scan subfolders to support user-o
 parity; the whole library is now in the pool). `_random = new()` was already time-seeded, so randomness was
 fine once the pool was correct. Gates: slnf 0 err, smoke 44 tabs/0 unhandled.
 
+**User-requested dashboard right-column rebalance + `?`-overlap fix — 2026-07-10 (this session):** (1) removed
+the dashboard's duplicate "Media folder" picker (the System/gear settings popup already hosts it via
+`SystemFeatureControl` "Assets folder") and dropped the right column from `RowDefinitions="*,Auto,Auto"` to
+`"*,Auto"`, so the browser panel (the lone `*` row) gets the freed space and a proportionally larger share as
+the window grows; audio + quick-links stay compact `Auto`. (2) Fixed the Quick Links help `?` button which
+had no `HorizontalAlignment` in its single-cell header Grid — with an explicit `Width=22` it centred and
+overlapped the "Quick Links" label; added `HorizontalAlignment="Right"` to match the Audio/Browser panels.
+Gates: slnf 0 err, smoke 44 tabs/0 unhandled, per-theme dashboard screenshot confirms bigger browser, no
+media row, `?` at the header's right edge.
+
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
 **#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)** for autonomous tiers. **row #2 re-baseline is now BLOCKED**
 (this session): its scheduling half is DONE via IMP-2 and `MinFps=0` is root-caused (un-decodable YouTube
