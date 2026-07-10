@@ -669,6 +669,8 @@
   "label_time_aware": "시간 인식",
   "label_basic": "기본",
   "label_web_videos": "웹 영상",
+  "label_takeover_strict_videos": "엄격 영상",
+  "tooltip_takeover_strict_videos": "테이크오버가 재생하는 영상에 엄격 잠금을 적용합니다 (건너뛰기/ESC 불가). 꺼짐 = 항상 건너뛰기 가능",
   "tooltip_auto_plays_hypnotube_videos_fullscreen": "HypnoTube 영상을 자동으로 전체 화면 재생해요",
   "label_comments": "댓글",
   "label_advanced_2": "고급",

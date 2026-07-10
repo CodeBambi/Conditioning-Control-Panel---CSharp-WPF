@@ -337,9 +337,10 @@ namespace ConditioningControlPanel.Services
                 xpForLog = finalXP;
 
                 // Track achievement using settings captured at session START (not current settings).
-                // AutonomyService.TriggerVideoSafely() temporarily sets StrictLockEnabled=false mid-session,
-                // and RestoreSettings()+SessionStopped fire before this point, so reading App.Settings.Current
+                // RestoreSettings()+SessionStopped fire before this point, so reading App.Settings.Current
                 // here would give the wrong value. Use the snapshot taken in StartSessionAsync() instead.
+                // (TriggerVideoSafely used to also mutate StrictLockEnabled mid-session; it now passes a
+                // per-call strictOverride instead, but the snapshot is still the correct source here.)
                 App.Logger?.Information("Session achievement check: Session={Name}, NoPanic={NoPanic}, StrictLock={Strict}",
                     _currentSession.Name, !_sessionStartPanicKey, _sessionStartStrictLock);
                 App.Achievements?.TrackSessionComplete(

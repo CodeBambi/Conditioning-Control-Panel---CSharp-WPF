@@ -651,6 +651,8 @@
   "label_time_aware": "С учётом времени",
   "label_basic": "Базовый",
   "label_web_videos": "Веб-видео",
+  "label_takeover_strict_videos": "Строгие видео",
+  "tooltip_takeover_strict_videos": "Видео, запущенные захватом, используют строгую блокировку (без пропуска и ESC). Выкл = всегда можно пропустить",
   "tooltip_auto_plays_hypnotube_videos_fullscreen": "Авто-воспроизведение видео HypnoTube в полноэкранном режиме",
   "label_comments": "Комментарии",
   "label_advanced_2": "Расширенные",

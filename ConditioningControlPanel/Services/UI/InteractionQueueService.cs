@@ -16,7 +16,12 @@ public class InteractionQueueService
         Video,
         BubbleCount,
         LockCard,
-        PopQuiz
+        PopQuiz,
+        /// <summary>Takeover "Hypnotube" video playing fullscreen in the embedded browser.
+        /// Deliberately a distinct type from <see cref="Video"/>: native teardown paths
+        /// (panic, ForceCleanup, session switch) call CompleteIfCurrent(Video) and must
+        /// never be able to release a web video's claim.</summary>
+        WebVideo
     }
 
     private readonly Queue<(InteractionType Type, Action Trigger)> _queue = new();
@@ -304,21 +309,32 @@ public class InteractionQueueService
             App.Logger?.Warning("InteractionQueue: STUCK INTERACTION DETECTED! {Type} has been active for {Duration:F1} minutes. Auto-recovering...",
                 stuckType, activeDuration.TotalMinutes);
 
-            // Force-cleanup the stuck service so its windows don't linger on screen
+            // Force-cleanup the stuck service so its windows don't linger on screen.
+            // MUST be BeginInvoke, never inline: this tick runs on the UI thread holding
+            // _lock, and the cleanups call back into CompleteIfCurrent — inline execution
+            // re-enters the (re-entrant) lock, dequeues the next item, and then the code
+            // below clears CurrentInteraction and dequeues a SECOND item (double-dispatch).
             try
             {
-                DispatcherHelper.RunOnUI(() =>
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher != null && !dispatcher.HasShutdownStarted)
                 {
-                    switch (stuckType)
+                    dispatcher.BeginInvoke(() =>
                     {
-                        case InteractionType.Video:
-                            App.Video?.ForceCleanup();
-                            break;
-                        case InteractionType.BubbleCount:
-                            App.BubbleCount?.ForceCleanup();
-                            break;
-                    }
-                });
+                        switch (stuckType)
+                        {
+                            case InteractionType.Video:
+                                App.Video?.ForceCleanup();
+                                break;
+                            case InteractionType.BubbleCount:
+                                App.BubbleCount?.ForceCleanup();
+                                break;
+                            case InteractionType.WebVideo:
+                                App.Autonomy?.ForceEndWebVideoTakeover();
+                                break;
+                        }
+                    });
+                }
             }
             catch (Exception ex)
             {

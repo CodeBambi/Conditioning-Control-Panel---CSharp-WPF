@@ -3541,6 +3541,22 @@ namespace ConditioningControlPanel.Models
             set { _autonomyCanTriggerWallpaper = value; OnPropertyChanged(); }
         }
 
+        private bool _takeoverVideosStrict = false;
+        /// <summary>
+        /// Opt-in: mandatory videos launched by Takeover play with Strict Lock (no skip,
+        /// no ESC). Default OFF — Takeover videos have always been skippable so surprise
+        /// autonomous videos can be dismissed; this lets users who want the full loss of
+        /// control turn that on (support request, 2026-07-10). Passed to
+        /// VideoService.TriggerVideo as strictOverride, independent of the global
+        /// StrictLockEnabled.
+        /// </summary>
+        [JsonProperty]
+        public bool TakeoverVideosStrict
+        {
+            get => _takeoverVideosStrict;
+            set { _takeoverVideosStrict = value; OnPropertyChanged(); }
+        }
+
         private int _autonomyAnnouncementChance = 50;
         /// <summary>
         /// Chance (0-100%) that she announces before triggering an action
