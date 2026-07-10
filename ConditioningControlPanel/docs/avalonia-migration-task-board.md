@@ -181,6 +181,26 @@ implement**; the inventory below is corrected to the post-merge tree. NOTE the g
 app (HTML/JS + Three.js), NOT Skia** — it ports through the `IBrowserHost` seam (copy the web bundle + port
 the JS↔C# bridge), not as native Avalonia/Skia layers.
 
+**OWNER RULING 2026-07-10 (direction):** the Avalonia head goes **web-only** for DTRH. The native/Skia
+chaos-run game already ported (WS2 S1–S9, hub/HUD/boon-bar windows, run-specific Core services) is now
+**dead code slated for deletion** — see the decommission phase in the appendix. WPF keeps its native run as
+a Lab toggle + WebGL-boot-failure fallback (`MainWindow.Lab.cs:107-126`, `ChaosWebGameEnabled` default ON
+since M6); the Avalonia head deliberately does **NOT** port that fallback — a web boot failure surfaces an
+error, not the native game (**recorded owner-approved deviation** from WPF behavior). Ordering is binding:
+**implement the web port FIRST, then delete** — the head never loses the feature mid-stream. Linux caveat:
+until `WebKitGtkBrowserHost` is real (row #5), DTRH has no in-app presence on Linux at all — accepted.
+
+**Doctrine split (owner, 2026-07-10):** UCE stays correct and unchanged — it covers **ambient/session
+conditioning that runs while the user uses the device normally**. DTRH is a **dedicated game environment
+in its own window**: it does not interact with the rest of the desktop, so it needs NO compositor layers,
+NO click-through/input-mask machinery, NO topmost. **Window contract (matches WPF `ChaosWebViewHost`):**
+dedicated window hosting the browser control, **never Topmost** (`ChaosWebViewHost.cs:112-113` — free
+Alt-Tab/minimize), launches windowed (`DtrhHostService.cs:101` `StartFullscreen=false`), **borderless
+fullscreen** on the page's Fullscreen API toggle (`WindowStyle.None` + whole-screen manual bounds incl
+taskbar, `ChaosWebViewHost.cs:138-154`; synced via `ContainsFullScreenElementChanged`). Owner requirement:
+the game window is borderless or fullscreen — satisfied by the borderless-fullscreen toggle; port that
+same contract onto an Avalonia `Window`.
+
 A web-era roguelite ("endless rabbit hole") that renders a Three.js/WebGL 3D world inside a WebView2 host
 and bridges to C# for XP, assets, and chaos payloads. This is the single largest parity gap introduced
 since the port began. **FALSIFIED at the 2026-07-10 trust-nothing verification pass:** the old
@@ -206,6 +226,7 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
 | **Legacy chaos WebView host** | `Chaos/ChaosWebViewHost.cs`, `Chaos/ChaosHubWindow.xaml.cs` | browser-host seam | WebView2 shells for the hub/game. |
 | **Lab-tab launch hook** | `Views/Tabs/LabTabView.xaml`, `MainWindow.LabTab.cs`, `MainWindow.Lab.cs` | `CCP.Avalonia` Lab tab view + VM | The entry point that boots the web game. |
 | **In-world integration edits** | `Chaos/ChaosFlashOverlay.cs`, `ChaosGifCascadeOverlay.cs`, `Services/Flash/FlashService.cs` (+15), `Services/Video/VideoService.cs` (+26), `Services/Tracking/GazeFocusService.cs` (+102, gaze-click follows camera), `GazeDebugCursorService.cs` (+28), `App.xaml.cs`, `AvatarTube/AvatarTubeWindow.Speech.cs`, `MainWindow.RemoteControl.cs` | mostly `CCP.Core` / `CCP.Avalonia` chaos + gaze + flash services | Commit `8343e1e0` "render bubble effects in-world; gaze-click follows camera; glitch/cascade draw the flash pool". VERIFY whether any standalone (non-DTRH) flash/video/gaze behavior changed and needs an independent port. |
+| **Native chaos-run DECOMMISSION (LAST phase — only after the web port is live and user-verified)** | n/a (deletion in the Avalonia head, not a WPF port) | delete dead run-game code: `CCP.Avalonia/Chaos/` run-specific files (~12k lines total in the folder — `ChaosHubWindow.*` (hub, ~3.3k), `ChaosHudWindow`, `ChaosBoonBarOverlay`, `ChaosIntroWindow`, `ChaosUnlockCardOverlay`/`AvaloniaChaosUnlockCards`, `ChaosHappyPath`, `ChaosLessons`, `ChaosNarrativeDirector`, `ChaosBackdropService`, `AvaloniaChaosCatalogs`, `AvaloniaChaosStubs`, …) + run-specific `CCP.Core/Services/Chaos/` (`ChaosDraftPool`, `ChaosEconomy`, `ChaosScoring`, `ChaosSpawnDirector`, `ChaosSpawnCatalog`, `ChaosRunRules`, `ChaosRunKnobs`, …) + run-only compositor chaos layers | **Confirm-then-delete per file** (grep zero live refs before each removal; never bulk-delete). **CARVE-OUTS — shared with ambient/non-DTRH features, keep:** `BubbleEngine`/`BubbleState`/`IBubbleService`/`BubbleLayer` (ambient trigger-bubbles), gif-cascade + DVD + any layer reachable from ambient effects (#493 Gif Rain row #8a uses the cascade), `ChaosImagePool` (facade consumers), `ChaosCrashSentinel` (VERIFY), `ChaosMetaState`/meta persistence (likely becomes the web game's C# meta store via the bridge — VERIFY against `DtrhMetaBridge` before deleting anything meta). Each deletion commit runs full gates incl `--verify-layers`. |
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 

@@ -15,10 +15,12 @@ feature is fully ported to Avalonia** and WORKS on Windows and Linux: build, lau
 features (or improved versions of them) through the Avalonia heads. Functionality is the contract; the
 implementation underneath is not. Old WPF code, old dependencies, and old architectural choices carry
 zero sentimental weight: replace anything if the replacement is faster, safer, or simpler, as long as
-the user-visible behavior survives or improves. All real-time visuals (engine mode: session effects;
-game mode: Chaos) render through the unified Skia compositor, not per-effect windows; non-visual and
-interactive features are likewise rehomed onto Avalonia+Core seams so this goal applies to **all
-feature ports, not just the UCE**.
+the user-visible behavior survives or improves. All real-time visuals (engine mode: session effects)
+render through the unified Skia compositor, not per-effect windows; non-visual and interactive features
+are likewise rehomed onto Avalonia+Core seams so this goal applies to **all feature ports, not just the
+UCE**. **DTRH/Chaos game-mode exception (owner ruling 2026-07-10, post-merge `a06509eb`):** the game is
+now a WebView web app (Three.js/WebGL) hosted through `IBrowserHost` — web-only in the Avalonia head; the
+already-ported native/Skia chaos-run game is dead code slated for confirm-then-delete (board row #6).
 
 ## What matters and what does not
 
@@ -46,10 +48,14 @@ doctrine:
    input; every other active layer captures pointer input over its painted region; `AvaloniaMouseHook`
    swallows clicks inside the per-frame capture mask). **No new per-effect `Window`s. Ever.**
 2. **Engine mode** (video, flash, subliminal, bouncing text, spiral, brain drain, pink tint, bubbles,
-   keyword highlight) and **game mode** (Chaos: field FX, DVD, cascades, cursor glow, vibe trail,
-   e-stim arc, banners, wave timer, pop text, announcer) both target the compositor.
+   keyword highlight) targets the compositor. **Game mode (DTRH/Chaos) no longer does** — owner ruling
+   2026-07-10: UCE scope = ambient conditioning while the user works normally; DTRH is a **dedicated
+   game environment in its own window** (WebView via `IBrowserHost`, never topmost, borderless/
+   fullscreen per the page's Fullscreen API — window contract on board row #6). Run-only chaos layers
+   are decommission candidates, but any chaos layer also reachable from ambient effects (gif-cascade,
+   DVD, bubbles …) stays a compositor layer (carve-outs on board row #6).
 3. Windows that remain windows are INTERACTIVE surfaces only: main UI, dialogs, AvatarTube, HUD, lock
-   card, quiz/mantra-style interactive overlays. If the user clicks IN it, it may be a window; if it
+   card, quiz/mantra-style interactive overlays, and the DTRH game window (a game the user plays IN). If the user clicks IN it, it may be a window; if it
    just draws, it is a layer.
 4. Custom Skia drawing uses the established v12 primitives (`ICustomDrawOperation` +
    `ISkiaSharpApiLeaseFeature` lease, or `CompositionCustomVisualHandler` for render-thread loops).
@@ -174,14 +180,14 @@ Corrections + filed improvement rows landed the same day; the board carries the 
    evdev/XInput2/XRecord global mouse, system libvlc, Linux equivalents-or-recorded-gaps for
    wallpaper/WebView/ducking; then a full per-feature sweep per `docs/linux-vm-testing.md` + the
    parity matrix's Linux section. Mechanism catalogue: `crossplatform-rebuild-plan.md`.
-6. **DTRH "The Fall" web mini-game epic** [JUDGMENT — NOT seam-blocked; corrected 2026-07-10] —
-   `IBrowserHost` is an implemented 11-member in-app WebView seam (`CCP.Core/Platform/IBrowserHost.cs`:
-   Navigate/ExecuteScript/WebMessage/virtual-host/`CreateBrowserControl` …), with `WebView2BrowserHost`
-   (Windows), `WebKitBrowserHost` (macOS), `WebKitGtkBrowserHost` (Linux, stub) and `MobileBrowserHost`
-   (Android); `ChaosTunnelService` already hosts the three.js tunnel through it
-   (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24-33`). Remaining work is the
-   game port itself — web assets, host/bridge/telemetry split Core-vs-head, chaos meta models. Phase
-   breakdown: the board's DTRH epic appendix.
+6. **DTRH web roguelite port epic (dollhouse rewrite)** [JUDGMENT — NOT seam-blocked; re-inventoried
+   post-merge `a06509eb` 2026-07-10] — upstream scrapped "The Fall" and shipped the dollhouse rewrite
+   (3D hub, gold economy, Four Chambers, 16 biomes, junction v6); **owner ruling: Avalonia goes
+   web-only** — port the web bundle + JS↔C# bridge through `IBrowserHost` (implemented 11-member seam,
+   `CCP.Core/Platform/IBrowserHost.cs`; `WebView2BrowserHost` Windows / `WebKitBrowserHost` macOS /
+   `WebKitGtkBrowserHost` Linux stub / `MobileBrowserHost` Android; `ChaosTunnelService` already hosts
+   three.js through it). Then **delete the dead native chaos-run game** (confirm-then-delete, ambient
+   carve-outs). Full direction, ordering, and phase breakdown: board row #6.
 7. **v6.2.11 verify-set** [VERIFY → STANDARD] — lock-card repeat (`LockCardWindow.IsAnyOpen`), overlay
    z-order #497 (likely N/A under UCE — confirm), bounce-in-tray, weekly-quest #496, update-restart
    #499 (N/A until an Avalonia installer). Rows on the board. Code-check 2026-07-10: 3a's guard code
@@ -298,10 +304,13 @@ the claimed board row and this goal's relevant workstream.
 - [x] Video, audio controls, and attention checks run through the compositor on Windows; legacy video
   windows deleted — Phase E: E1 `6180efc2` / E2 `ed636a7c` / E3 `8069cfb7`; attention check migrated
   to `AttentionCheckLayer` `57f6f048`.
-- [ ] All passive Chaos visuals are compositor layers; a full Chaos run holds the FPS floor;
-  per-region input mask + `AvaloniaMouseHook` swallow implemented per the 2026-07-09 team review
-  (REQUIRED scope). — Layer migration DONE (12 chaos layers; run engine S1–S9); AvgFps 138.7 ≫ 30
-  floor held 2026-07-05. REMAINING: open items 1 (mask/swallow) + 2 (re-baseline, MinFps=0).
+- [ ] ~~All passive Chaos visuals are compositor layers; a full Chaos run holds the FPS floor~~
+  **REWRITTEN by the 2026-07-10 owner ruling (board row #6):** DTRH goes web-only in a dedicated
+  window — the native chaos-run DoD is obsolete (historical: layer migration DONE, 12 chaos layers,
+  run engine S1–S9, AvgFps 138.7 ≫ 30 on 2026-07-05). NEW bar: web DTRH runs end-to-end through
+  `IBrowserHost` per row #6's window contract, THEN the dead native run code is confirm-then-deleted
+  (ambient carve-outs kept). Per-region input mask + `AvaloniaMouseHook` swallow (2026-07-09 review)
+  still REQUIRED — for ambient/session layers (rows #1, #2).
 - [x] No passive effect window remains in `CCP.Avalonia` (audited); interactive windows justified —
   `docs/uce-coverage-audit.md`: 22 registered layers; 4 dead unwired passive windows DELETED.
 - [ ] Windows: every parity-matrix item re-verified `[x]` after WS1–3; benchmarks not worse than

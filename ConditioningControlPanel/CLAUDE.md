@@ -46,7 +46,10 @@ See repo-root [`AGENTS.md`](../AGENTS.md) for the full set. Quick reference:
   with `.kimi-code/skills/` mirrors.
 - **All real-time visuals render as `IAvaloniaLayer`s** in the one `CompositorEngine` (one topmost window
   per monitor, z-ordered layers, one 60Hz tick, PER-REGION click-through per the 2026-07-09 team review).
-  No new per-effect windows, ever. Interactive surfaces (main UI, dialogs, AvatarTube, HUD, lock card) stay
+  No new per-effect windows, ever. UCE scope = ambient/session conditioning; DTRH is a dedicated WebView
+  game window, NOT the compositor (owner ruling 2026-07-10 — board row #6; native chaos-run is dead code
+  pending confirm-then-delete). Interactive surfaces (main UI, dialogs, AvatarTube, HUD, lock card, DTRH
+  game window) stay
   windows.
 - **Acceptance gate:** a ported feature is accepted only when at least as fast and smooth as the WPF head —
   preferably measurably improved. Big changes are encouraged when they win on merit; what/why is recorded in

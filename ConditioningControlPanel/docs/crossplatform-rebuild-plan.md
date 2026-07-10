@@ -510,8 +510,9 @@ degrade with a recorded gap.
 
 Introduce `IBrowserHost`. Options: Avalonia.Controls.WebView (WebView2 on Windows, WPE WebKit on Linux, Android
 WebView; macOS WKWebView); CEF wrapper (`CefGlue.Avalonia`/`CefNet.Avalonia`); system browser via
-`xdg-open`/`open`. Keep WebView2 in `CCP.WindowsOnly` for Windows parity. (The DTRH "The Fall" web mini-game epic
-is BLOCKED on this seam — board row.)
+`xdg-open`/`open`. Keep WebView2 in `CCP.WindowsOnly` for Windows parity. (The DTRH web roguelite epic —
+dollhouse rewrite, web-only per the 2026-07-10 owner ruling — is NOT seam-blocked on Windows: the seam +
+`WebView2BrowserHost` exist; only the LINUX leg waits on a real `WebKitGtkBrowserHost` — board row #6.)
 
 ### 7.8 Imaging / Computer Vision
 

@@ -172,7 +172,7 @@ live code — those `.cs` comment citations are scrubbed via the task-board **R-
 | `ConditioningControlPanel/docs/avalonia-calibration-overhaul-port.md` | `webcam-calibration-port-plan.md` (calibration window UX + 3 services + live-webcam verify) | SWEEPER |
 | `ConditioningControlPanel/docs/parity-reverify-triage.md` | `avalonia-ui-parity-matrix.md` ("Re-verify queue" section) | PARITY |
 | `ConditioningControlPanel/docs/unified-compositor-engine-goal.md` | `unified-compositor-engine-plan.md` (surviving acceptance criteria + layer doctrine) | UCE |
-| `ConditioningControlPanel/docs/v6.2.11-port-catalogue.md` | `avalonia-migration-task-board.md` (DTRH "The Fall" epic appendix + verify-set rows) | BOARD |
+| `ConditioningControlPanel/docs/v6.2.11-port-catalogue.md` | `avalonia-migration-task-board.md` (DTRH web roguelite epic appendix — dollhouse rewrite superseded "The Fall" 2026-07-10 — + verify-set rows) | BOARD |
 
 **Arithmetic:** 118 tracked `.md` before the rework → 40 direct deletes + 4 post-merge deletes = **44 removed**;
 1 created (`docs-index.md`); **75 surviving tracked `.md`**. 6 were rewritten in place

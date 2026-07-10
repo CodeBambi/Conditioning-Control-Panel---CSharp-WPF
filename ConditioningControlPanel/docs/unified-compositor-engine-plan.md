@@ -70,6 +70,11 @@ running).
 
 ### WS2 — Chaos run engine + passive-overlay migration: DONE
 
+> **Direction change (owner ruling 2026-07-10, board row #6):** DTRH went web-only (dedicated WebView
+> window, not the compositor). UCE scope is now **ambient/session conditioning only**. The WS2 run engine
+> below shipped and its evidence stands, but the run-only pieces are decommission candidates once the web
+> DTRH port is live — confirm-then-delete with ambient carve-outs (gif-cascade, DVD, bubbles … stay).
+
 - **Run engine S1–S9** (S1–S4 JUDGMENT, then MECHANICAL):
   `2d7bc384` (S1–S4: `ChaosSpawnCatalog` + `ChaosRunRules` + `ChaosScoring` + `ChaosSpawnDirector`
   + live-lambda knobs via `ChaosRunKnobs`) → `490da8c6` (S5 draft/boon) → `f5fa0757`
