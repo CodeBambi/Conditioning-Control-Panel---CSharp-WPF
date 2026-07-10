@@ -563,19 +563,21 @@
         </Grid>
         </Grid>
 
-      <!-- Helper button row -->
+      <!-- Helper button row: consistent themed OutlineButtons (rounded, pink outline, centered
+           icon + label with proper spacing) instead of the bare default buttons that looked
+           unstyled and cramped the emoji against the text. 2026-07-10. -->
       <Grid Grid.Row="1" Margin="5,12,5,0" ColumnDefinitions="*,10,*,10,*,10,*">
-        <Button Grid.Column="0" Click="VelvetBtnWebcam_Click">
-          <TextBlock><Run Text="📷"/><Run Text="{loc:Str btn_webcam}"/></TextBlock>
+        <Button Grid.Column="0" Theme="{StaticResource OutlineButton}" Click="VelvetBtnWebcam_Click">
+          <TextBlock TextTrimming="CharacterEllipsis"><Run Text="📷 " /><Run Text="{loc:Str btn_webcam}" /></TextBlock>
         </Button>
-        <Button Grid.Column="2" Click="VelvetBtnAppInfo_Click">
-          <TextBlock><Run Text="ℹ️"/><Run Text="{loc:Str btn_app_info}"/></TextBlock>
+        <Button Grid.Column="2" Theme="{StaticResource OutlineButton}" Click="VelvetBtnAppInfo_Click">
+          <TextBlock TextTrimming="CharacterEllipsis"><Run Text="ℹ️ " /><Run Text="{loc:Str btn_app_info}" /></TextBlock>
         </Button>
-        <Button Grid.Column="4" Click="VelvetBtnSchedulerRamp_Click">
-          <TextBlock><Run Text="📅"/><Run Text="{loc:Str btn_scheduler_intensity_ramp}"/></TextBlock>
+        <Button Grid.Column="4" Theme="{StaticResource OutlineButton}" Click="VelvetBtnSchedulerRamp_Click">
+          <TextBlock TextTrimming="CharacterEllipsis"><Run Text="📅 " /><Run Text="{loc:Str btn_scheduler_intensity_ramp}" /></TextBlock>
         </Button>
-        <Button Grid.Column="6" Click="VelvetBtnCatalogue_Click">
-          <TextBlock><Run Text="📁"/><Run Text="{loc:Str btn_ccp_catalogue}"/></TextBlock>
+        <Button Grid.Column="6" Theme="{StaticResource OutlineButton}" Click="VelvetBtnCatalogue_Click">
+          <TextBlock TextTrimming="CharacterEllipsis"><Run Text="📁 " /><Run Text="{loc:Str btn_ccp_catalogue}" /></TextBlock>
         </Button>
       </Grid>
 
