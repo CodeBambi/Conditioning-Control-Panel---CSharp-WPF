@@ -35,62 +35,62 @@ public class UpdateService : IUpdateService, IDisposable
     public bool IsDownloading { get; private set; }
 
     /// <inheritdoc />
-    public string CurrentVersion => "6.2.11";
+    public string CurrentVersion => "6.3.0";
 
     /// <summary>
     /// Hard-coded current application version (single source for heads that need a const,
     /// e.g. the What's-New dialog title). Mirrors the WPF UpdateService.AppVersion constant.
     /// </summary>
-    public const string AppVersion = "6.2.11";
+    public const string AppVersion = "6.3.0";
 
     /// <summary>
     /// Patch notes for the current version — shown in the update/what's-new dialogs and used as a
     /// fallback when GitHub release notes are unavailable. Update together with <see cref="AppVersion"/>.
     /// </summary>
-    public const string CurrentPatchNotes = @"v6.2.11 - The Fall
+    public const string CurrentPatchNotes = @"v6.3.0 - Deeper Down
 
-🔧 BUG FIXES
-- Lock cards work again. After the last update only the first one played and
-  then they went quiet; every scheduled lock card triggers now.
-- Fixed the spiral and pink filter getting stuck on top of everything after
-  a video during a locked-in session. They no longer bury the next video or
-  trap you into a force quit, and the video you are meant to watch stays on
-  top.
-- The bouncing subliminal text keeps running when you send the app to the
-  system tray, instead of vanishing.
-- The weekly quest no longer gets stuck on ""Loading"" with no image. If your
-  weekly is already done it now shows a clear ""complete, new one Monday"" card.
+The Rabbit Hole is reborn as a real game. What used to be a screen full of
+popping bubbles is now a 3D descent you fall through, room by room, all the
+way down.
 
-🗣️ COMPANION PACING
-- She no longer runs her mouth constantly. Her reactive and idle voice lines,
-  including the webcam ""welcome back into frame"" line, are now capped to about
-  once a minute. Panic lines, milestone celebrations, and the mandatory-video
-  ""pay attention"" correction still speak right away. A proper cooldown slider
-  is coming next.
+✨ THE FALL (all-new Rabbit Hole)
+- Descend a living 3D tunnel that reacts to you as you drop.
+- A full roguelite loop - draft boons, grab toys, build a loadout, cash out.
+- The Warren: a hub to spend what you earn, unlock dials, and learn the ropes.
+- THE WEATHER: mood zones that change how the tunnel plays.
+- Clickable pickups, in-world effects, and ambient reactivity everywhere.
 
---- Still in The Fall (6.2.9 / 6.2.10) ---
+🗺️ THE DESCENT
+- Four Chambers, each with its own palette, shaders, and voice.
+- 16 biomes on a kink-discovery arc, each with its own look and particles.
+- Acts I through IV, gated by a 16-square casino reveal.
+- Real forking junctions and 3-door draft rooms - pick your path.
+- Boons are picked inside the tube now: reach out and shatter the card.
 
-✨ THE FALL
-- Our side project is live and free for everyone: an endless rabbit hole
-  visualizer powered by YOUR media. Drop in a folder or zip of your pictures
-  and videos and watch them spiral into an endless descent. It runs entirely
-  in your browser, so your media never leaves your device.
-  Try it: https://cclabs.app/fall.html
+🏠 THE DOLLHOUSE
+- The hub is now a 3D room you stand inside.
+- Gold economy: earn gold, unlock dials, drop your level for more.
+- Options and dials are earned through play, not handed to you.
 
-⚡ EARLIER STABILITY
-- Fixed the mid-session freeze that could force you to kill the process, and
-  the flash-window hangs, so heavy sessions (webcam, whispers and effects all
-  at once) stay responsive.
-- The dashboard ""Cascade"" (Rain) bubble rains its gifs where you can see them
-  on multi-monitor setups.
+🎁 BOONS, TOYS and TOUCH
+- Fresh card art for all 20 boons and power-ups.
+- 10 new duo boons and a reworked wand ink trail.
+- Grab toys mid-fall, fling flash clips with a ripple, paddle cards with your cursor.
+- Hold a wall gif to swing the camera onto it.
+- Consumable actives ride the run-pick ribbon and grey out when spent.
 
-🔧 EARLIER FIXES
-- Lock card and subliminal phrases survive updates and change with your mode,
-  plus export / import in the Phrase Manager.
-- Bambi Takeover respects the interval slider, retries when briefly busy, the
-  ""time aware"" toggle works, and the quest counts your real active time.
-- A mandatory video no longer jumps in front of the bubbles when clicked, and
-  the season shimmer renders again.
+🗣️ VOICE
+- 400 region voice clips plus triple biome drift narration.
+- A full Circe voice set (576 lines) with a clean voice gate.
+- The hole picks for you, and tells you so.
+
+📦 ALSO IN THIS RELEASE
+- Link your phone: scan a QR to sign the mobile app into your account.
+- Daily settings backups so a bad edit never costs you your setup.
+- Discord share prompt when you link, plus refreshed share UX.
+- Fixes: quiz category leak, lockdown key hook, haptics, AI effects, a startup
+  crash guard, and update-restart finally landing.
+- Sync fix: an empty server read no longer resets you to level 1.
 
 Season: Jelly July";
 

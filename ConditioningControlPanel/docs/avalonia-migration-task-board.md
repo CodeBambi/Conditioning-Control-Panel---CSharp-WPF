@@ -225,6 +225,16 @@ implement**; the inventory below is corrected to the post-merge tree. NOTE the g
 app (HTML/JS + Three.js), NOT Skia** — it ports through the `IBrowserHost` seam (copy the web bundle + port
 the JS↔C# bridge), not as native Avalonia/Skia layers.
 
+**Web bundle advanced to v6.3.0 (merge `a539a7c7`, 2026-07-10):** the DTRH web game (`Resources/web/dtrh/**`,
+14 files — chaosRun/spawner/biomeMech/warren/junctions/vnPortrait/…) got the v6.3.0 "Deeper Down" play-test
+batch (consumable actives in the run-pick ribbon, native-stinger audio panel, VN-portrait gating, Warren
+options overlay, charges-3/biome-clarity). **The Windows Avalonia head already auto-bundles this** —
+`CCP.Avalonia.Desktop.Windows.csproj:61` links `..\Resources\web\**\*` as Content, so the port inherits the
+current assets with no copy step; **implement the web port against the live `Resources/web/dtrh/` tree, not a
+snapshot.** GAP: the Linux/macOS heads do NOT link `Resources/web/**` (see the dedicated row below) — they
+will have no DTRH assets until that + a real browser host land (row #5). Native chaos-run confirm-then-delete
+ordering is unchanged.
+
 **OWNER RULING 2026-07-10 (direction):** the Avalonia head goes **web-only** for DTRH. The native/Skia
 chaos-run game already ported (WS2 S1–S9, hub/HUD/boon-bar windows, run-specific Core services) is now
 **dead code slated for deletion** — see the decommission phase in the appendix. WPF keeps its native run as
@@ -446,6 +456,33 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 
 | Row | Evidence | Expected gain | Tier | Proportionality |
 |---|---|---|---|---|
+### DTRH web assets not bundled on Linux/macOS heads · **STANDARD (cross-platform DTRH gap, filed 2026-07-10)**
+
+Only `CCP.Avalonia.Desktop.Windows.csproj:61` links `..\Resources\web\**\*` (Content) — so the DTRH web
+bundle (`Resources/web/dtrh/**`) ships ONLY on the Windows head. `CCP.Avalonia.Desktop.Linux`,
+`CCP.Avalonia.Desktop.macOS`, `CCP.Avalonia.Desktop`, and shared `CCP.Avalonia` have NO `Resources/web`
+include. When the DTRH web port (row #6) lands, the Linux/macOS heads will have no game assets to load. Fix
+= add the same `Content Include="..\Resources\web\**\*"` link to the Linux/macOS heads (or hoist it to a
+shared `.props`) as part of, or just before, the row-#6 web port + the row-#5 `WebKitGtkBrowserHost`/
+`WKWebView` browser host. Sub-item of the cross-platform DTRH work; not actionable in isolation until a
+browser host exists on those OSes, but recorded so it is not missed.
+
+---
+
+**Merge `a539a7c7` (v6.3.0 "Deeper Down") reconciliation — 2026-07-10 (this session):** merged main
+(6 commits: v6.3.0 release + DTRH web-game play-test batch) into `feat/crossplatform` (merge commit
+`3d4362b6`, clean/no-conflict). All incoming code landed in the **frozen WPF head** + shared/linked assets;
+port-side reconciliation done separately: (1) **version bump to 6.3.0** across all 8 Avalonia csproj + Android
+`ApplicationDisplayVersion` + `CCP.Core/Services/Update/UpdateService.cs` (`CurrentVersion`, `AppVersion`,
+`CurrentPatchNotes`→Deeper Down) — **stops the update-available popup on the Avalonia head** (verified in
+smoke: `current=6.3.0, latest=6.3.0, isNewer=False`). (2) **Localization** v6.3.0 strings
+(`btn_v6_3_0_is_out`/`tooltip_v6_3_0_deeper_down`) flow automatically — `CCP.Core.csproj:50` links the WPF
+head's `Localization/Languages/*.json`. (3) **DTRH web assets** flow automatically to the Windows head (csproj
+Content link); Linux/macOS gap filed as the row directly above. (4) **No UpdateService logic to mirror** — the
+WPF `UpdateService.cs` 90-line diff was patch-notes + version only (verified). **Doc fix (this session):** the
+AGENTS.md version-bump list named only the WPF `Services/Update/UpdateService.cs`; corrected to also list the
+port-critical `CCP.Core/Services/Update/UpdateService.cs` (the one the Avalonia head actually reads).
+
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
 **#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)** for autonomous tiers. **row #2 re-baseline is now BLOCKED**
 (this session): its scheduling half is DONE via IMP-2 and `MinFps=0` is root-caused (un-decodable YouTube
