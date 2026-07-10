@@ -12,16 +12,16 @@ Read-only review. Tutti i path sono assoluti dentro il worktree, con i numeri di
 
 | Componente | Provider | Modello | Locale/Cloud | Chi paga | File |
 |---|---|---|---|---|---|
-| AI Companion chat (cloud) | OpenRouter via proxy `codebambi-proxy.vercel.app` | DA CHIARIRE — il modello è scelto server-side; il client non lo conosce. `MaxTokens` cap = 100, `Temperature` = 0.7 (`AiService.cs:33,264,392`) | Cloud (Vercel proxy → OpenRouter) | CodeBambi (Patreon supporter pool, free tier 100 req/giorno, Patreon 1000/giorno) | `Services/AiService.cs:20-407` |
-| AI Companion chat (local) | Ollama HTTP `/api/chat` con `stream:false, think:false` | Default `qwen3.5:latest` (configurabile dall'utente, vedi `CompanionPromptSettings.AiModel`) | Locale (`http://localhost:11434/` di default; host modificabile in UI) | Utente (CPU/GPU + disco modello) | `Services/AIService/LocalAiService.cs:1-587` |
-| AI-driven effects (flash/bubbles/spirale/pink/lockcard/subliminal/haptic/bounce/video/audio/getbacktome) | Solo via local Ollama. Cloud non può perché il cap di 100 token non basta per il JSON | Stesso modello local | Locale | Utente | `Services/AIService/Enrichment/PromptService.cs:11-127`, `Services/Commands/AiCommandService.cs`, `Services/Commands/CommandFactory.cs` |
-| Awareness Engine `AvatarComment` actions | Routing tramite `IAiService` corrente (cloud o local, in base a `CompanionPrompt.UseLocalAi`) | Stesso del Companion | Cloud o Locale (segue lo stesso strategy switch) | Idem | `Services/KeywordTriggerService.cs` (dispatch), `Services/AiService.cs:153-163`, `Services/AIService/LocalAiService.cs:300-307` |
-| Personality Quiz (Lab) | OpenRouter via stesso proxy | DA CHIARIRE — sempre server-side. `QuestionMaxTokens` = 400, `ResultMaxTokens` = 500, `Temperature` = 0.9 (`QuizService.cs:140-142`) | Cloud | CodeBambi | `Services/QuizService.cs:130-700+` |
-| Eye/gaze tracking (BlazeFace, FaceMesh, Iris) | ONNX models bundled in `Resources/Models/` | `face_detection_short_range.onnx`, `face_landmark.onnx`, `iris_landmark.onnx` + `blazeface_anchors.json` | Locale (CPU, no rete a runtime) | Utente (CPU) | `Services/WebcamTrackingService.cs:40-2575`, `Services/WebcamCalibrationData.cs:1-246` |
+| AI Companion chat (cloud) | OpenRouter via proxy `codebambi-proxy.vercel.app` | DA CHIARIRE — il modello è scelto server-side; il client non lo conosce. `MaxTokens` cap = 100, `Temperature` = 0.7 (`Services/AiService.cs:33,264,392`) | Cloud (Vercel proxy → OpenRouter) | CodeBambi (Patreon supporter pool, free tier 100 req/giorno, Patreon 1000/giorno) | `Services/AiService.cs:20-407` |
+| AI Companion chat (local) | Ollama HTTP `/api/chat` con `stream:false, think:false` | Default `qwen3.5:latest` (configurabile dall'utente, vedi `CompanionPromptSettings.AiModel`) | Locale (`http://localhost:11434/` di default; host modificabile in UI) | Utente (CPU/GPU + disco modello) | `CCP.Core/Services/AIService/LocalAiService.cs:1-587` (frozen WPF ref: `Services/AIService/LocalAiService.cs`) |
+| AI-driven effects (flash/bubbles/spirale/pink/lockcard/subliminal/haptic/bounce/video/audio/getbacktome) | Solo via local Ollama. Cloud non può perché il cap di 100 token non basta per il JSON | Stesso modello local | Locale | Utente | `CCP.Core/Services/AIService/Enrichment/PromptService.cs:11-127` (frozen WPF ref: `Services/AIService/Enrichment/PromptService.cs`), `CCP.Avalonia/Services/Commands/AiCommandService.cs` (frozen WPF ref: `Services/Commands/AiCommandService.cs`), `Services/Commands/CommandFactory.cs` |
+| Awareness Engine `AvatarComment` actions | Routing tramite `IAiService` corrente (cloud o local, in base a `CompanionPrompt.UseLocalAi`) | Stesso del Companion | Cloud o Locale (segue lo stesso strategy switch) | Idem | `Services/KeywordTriggerService.cs` (dispatch), `Services/AiService.cs:153-163`, `CCP.Core/Services/AIService/LocalAiService.cs:300-307` (frozen WPF ref: `Services/AIService/LocalAiService.cs`) |
+| Personality Quiz (Lab) | OpenRouter via stesso proxy | DA CHIARIRE — sempre server-side. `QuestionMaxTokens` = 400, `ResultMaxTokens` = 500, `Temperature` = 0.9 (`CCP.Core/Services/Quiz/QuizService.cs:140-142` (frozen WPF ref: `Services/Quiz/QuizService.cs`)) | Cloud | CodeBambi | `CCP.Core/Services/Quiz/QuizService.cs:130-700+` (frozen WPF ref: `Services/Quiz/QuizService.cs`) |
+| Eye/gaze tracking (BlazeFace, FaceMesh, Iris) | ONNX models bundled in `Resources/Models/` | `face_detection_short_range.onnx`, `face_landmark.onnx`, `iris_landmark.onnx` + `blazeface_anchors.json` | Locale (CPU, no rete a runtime) | Utente (CPU) | `Services/Webcam/WebcamTrackingService.cs:40-2575`, `CCP.Avalonia.Desktop.Windows/Services/Webcam/WebcamCalibrationData.cs:1-246` (frozen WPF ref: `Services/Webcam/WebcamCalibrationData.cs`) |
 | Windows OCR (Awareness screen reading) | `Windows.Media.Ocr.OcrEngine.TryCreateFromUserProfileLanguages()` | Modello OCR di sistema Windows | Locale | Utente (CPU) | `Services/ScreenOcrService.cs:1-260` |
-| Community / Personality prompt manifest | `codebambi-proxy.vercel.app/prompts/manifest` (manifest only — prompts are then downloaded and applied LOCALMENTE come stringhe di sistema prima di una chiamata AI normale) | n/a (è solo template testuale) | Cloud per il download, locale per l'uso | CodeBambi (hosting) | `Services/CommunityPromptService.cs:14-100+`, `Models/PersonalityPresets.cs:1-634` |
-| Deeper enhancement submission | `app.cclabs.app/api/enhancements` (Next.js + Supabase) | n/a (caricamento file `.ccpenh.json`) | Cloud (cclabs-web + Supabase) | CodeBambi (hosting) | `Services/CatalogueService.cs:1-338` |
-| Bug report submission | `codebambi-proxy.vercel.app/v2/bug-report` | n/a (forward a Discord webhook server-side) | Cloud | CodeBambi | `Services/BugReportService.cs:1-…` |
+| Community / Personality prompt manifest | `codebambi-proxy.vercel.app/prompts/manifest` (manifest only — prompts are then downloaded and applied LOCALMENTE come stringhe di sistema prima di una chiamata AI normale) | n/a (è solo template testuale) | Cloud per il download, locale per l'uso | CodeBambi (hosting) | `Services/Companion/CommunityPromptService.cs:14-100+`, `CCP.Core/Models/PersonalityPresets.cs:1-634` |
+| Deeper enhancement submission | `app.cclabs.app/api/enhancements` (Next.js + Supabase) | n/a (caricamento file `.ccpenh.json`) | Cloud (cclabs-web + Supabase) | CodeBambi (hosting) | `CCP.Core/Services/Catalogue/CatalogueService.cs:1-338` (frozen WPF ref: `Services/CatalogueService.cs`) |
+| Bug report submission | `codebambi-proxy.vercel.app/v2/bug-report` | n/a (forward a Discord webhook server-side) | Cloud | CodeBambi | `CCP.Core/Services/BugReport/BugReportService.cs:1-…` (frozen WPF ref: `Services/BugReportService.cs`) |
 
 Nota chiave per CCBill: **l'unico generatore AI testuale gestito da CCP è il sistema "Companion" + il Quiz**. Sono entrambi pure text-output (nessuna generazione di immagini, audio o video). I motori multimediali AI (Veo 3.1 ecc. citati in memoria) sono per il sito marketing e non risiedono in questa codebase; il client non chiama mai una API video/image-gen.
 
@@ -76,7 +76,7 @@ LocalAiService.PersistHistory → %APPDATA%\ConditioningControlPanel\local_chat_
 
 Tutti i prompt che seguono sono letterali dal codice/asset. La selezione è fatta da `BambiSprite.GetSystemPrompt()` (`Services/BambiSprite.cs:400-427`) e poi assemblata da `BuildPromptFromPreset()` (`Services/BambiSprite.cs:433-586`).
 
-#### 2.1 Default companion personality — `CompanionPromptSettings.GetDefaults()` (`Models/CompanionPromptSettings.cs:112-228`)
+#### 2.1 Default companion personality — `CompanionPromptSettings.GetDefaults()` (`CCP.Core/Models/CompanionPromptSettings.cs:112-228`)
 
 `Personality` (137-148):
 ```
@@ -185,7 +185,7 @@ FREQUENCY RULE:
 - 20%: Suggest a file (only if she's bored).
 ```
 
-#### 2.2 Enrichment / effect-control prompt — `PromptService.BuildEnrichmentMessage()` (`Services/AIService/Enrichment/PromptService.cs:19-98`)
+#### 2.2 Enrichment / effect-control prompt — `PromptService.BuildEnrichmentMessage()` (`CCP.Core/Services/AIService/Enrichment/PromptService.cs:19-98` (frozen WPF ref: `Services/AIService/Enrichment/PromptService.cs`))
 
 Iniettato come messaggio `role:user` subito dopo il system prompt **solo quando `AllowAiToControlEffects = true`**. Letterale:
 
@@ -278,10 +278,10 @@ In Sissy Hypno mode (non-Bambi) e senza link utente configurati il prompt impone
 
 ### Personality templates (elenco + estratti)
 
-7 preset built-in in `Models/PersonalityPresets.cs:1-634`:
+7 preset built-in in `CCP.Core/Models/PersonalityPresets.cs:1-634`:
 
 1. **BambiSprite** (`bambisprite`, default) — usa i `GetDefaults()` sopra.
-2. **Slut Mode** (`slutmode`, `Models/PersonalityPresets.cs:84-176`) — esplicitamente sessuale, slur speech, comandato a usare trigger come "drop for cock", "bimbodoll", "blank and empty", "cock goes in brain goes out", "drip drip drip", "empty headed", "dumb slut", "cock drunk". Reaction esplicita "[NO LIMITS - FULL ENGAGEMENT]". Esempi: `"Mmm Bambi's pussy must be dripping~ Watch Naughty Bambi and edge for me~"`. NB: `RequiresPremium = false` — disponibile a chiunque, non gating Patreon.
+2. **Slut Mode** (`slutmode`, `CCP.Core/Models/PersonalityPresets.cs:84-176`) — esplicitamente sessuale, slur speech, comandato a usare trigger come "drop for cock", "bimbodoll", "blank and empty", "cock goes in brain goes out", "drip drip drip", "empty headed", "dumb slut", "cock drunk". Reaction esplicita "[NO LIMITS - FULL ENGAGEMENT]". Esempi: `"Mmm Bambi's pussy must be dripping~ Watch Naughty Bambi and edge for me~"`. NB: `RequiresPremium = false` — disponibile a chiunque, non gating Patreon.
 3. **Gentle Trainer** (`gentle-trainer`, 181-259) — soft/positivo, deflette su contenuti espliciti.
 4. **Strict Domme** (`strict-domme`, 264-340) — comandante. La variante slut introduce "denial, edge, desperation, being owned, being property". Reaction esplicita "[COLD CONTROL PROTOCOL]".
 5. **Bimbo Coach** (`bimbo-coach`, 345-426) — focus su trasformazione estetica, deflette esplicito con ditzy redirect.
@@ -299,9 +299,9 @@ Tutti questi prompt sono **inviati come `role: system`** all'inferenza. Nessun f
 
 ### Memoria
 
-- **Cloud (`AiService.cs`)**: nessuna persistenza lato client. Solo un contatore di "richieste giornaliere" (`_dailyRequestCount`) reset a mezzanotte locale. Nessun history viene mandato — la conversazione non è multi-turno: il client manda solo `{system, user}` ogni volta (`Services/AiService.cs:246-250`).
-- **Local (`LocalAiService.cs:36-153`)**: persistenza completa su `%APPDATA%/ConditioningControlPanel/local_chat_history.json`. Salva turni `user`/`assistant`, scarta il system prompt e il blocco enrichment (loro vengono rigenerati ogni chiamata). Cap di 50 coppie (`MaxPersistedPairs = 50`). Toggle utente `ChatMemoryEnabled` (`Models/CompanionPromptSettings.cs:54`). C'è un "Reset Memory" / `ClearHistory()` esposto sulla UI Companion.
-- **Quiz**: storia di conversazione in-memory dentro `QuizService._conversationHistory` (resetta a fine quiz, `QuizService.cs:175`). Non persistita.
+- **Cloud (`Services/AiService.cs`)**: nessuna persistenza lato client. Solo un contatore di "richieste giornaliere" (`_dailyRequestCount`) reset a mezzanotte locale. Nessun history viene mandato — la conversazione non è multi-turno: il client manda solo `{system, user}` ogni volta (`Services/AiService.cs:246-250`).
+- **Local (`CCP.Core/Services/AIService/LocalAiService.cs:36-153` (frozen WPF ref: `Services/AIService/LocalAiService.cs`))**: persistenza completa su `%APPDATA%/ConditioningControlPanel/local_chat_history.json`. Salva turni `user`/`assistant`, scarta il system prompt e il blocco enrichment (loro vengono rigenerati ogni chiamata). Cap di 50 coppie (`MaxPersistedPairs = 50`). Toggle utente `ChatMemoryEnabled` (`CCP.Core/Models/CompanionPromptSettings.cs:54`). C'è un "Reset Memory" / `ClearHistory()` esposto sulla UI Companion.
+- **Quiz**: storia di conversazione in-memory dentro `QuizService._conversationHistory` (resetta a fine quiz, `CCP.Core/Services/Quiz/QuizService.cs:175` (frozen WPF ref: `Services/Quiz/QuizService.cs`)). Non persistita.
 
 ### Capability surface
 
@@ -309,17 +309,17 @@ Il Companion in modalità local può, **se il master toggle è attivo e i per-ef
 
 | Comando AI | Tetto/clamp | File handler |
 |---|---|---|
-| `flash_image` | Amount 0..8, Duration 0..10s, Size 0..150%, Opacity 0..100% | `Services/Commands/FlashImageCommand.cs`, clamp in `AiCommandService.cs:146` |
+| `flash_image` | Amount 0..8, Duration 0..10s, Size 0..150%, Opacity 0..100% | `Services/Commands/FlashImageCommand.cs`, clamp in `CCP.Avalonia/Services/Commands/AiCommandService.cs:146` (frozen WPF ref: `Services/Commands/AiCommandService.cs`) |
 | `bubbles` | Frequency 0..10/min | `Services/Commands/BubbleCommand.cs` |
-| `subliminal` | Text ≤ 80 char (per memoria — DA VERIFICARE in `SubliminalCommand.cs`), Opacity 0..60% | `Services/Commands/SubliminalCommand.cs` |
+| `subliminal` | Text ≤ 80 char (per memoria — DA VERIFICARE in `Services/Commands/SubliminalCommand.cs`), Opacity 0..60% | `Services/Commands/SubliminalCommand.cs` |
 | `mantra_lockscreen` | Mantra string, Amount 0..5 (clamp) | `Services/Commands/MantraLockScreenCommand.cs` |
-| `spiral` / `pink` | Intensity 0..30 | `Services/Commands/SpiralCommand.cs`, `PinkCommand.cs` |
+| `spiral` / `pink` | Intensity 0..30 | `Services/Commands/SpiralCommand.cs`, `Services/Commands/PinkCommand.cs` |
 | `bounce` | on/off | `Services/Commands/BounceCommand.cs` |
 | `haptic` | Intensity 0..1 × `MaxAiHapticIntensity` (default 0.6), Duration 0..10s | `Services/Commands/HapticCommand.cs` |
 | `video` / `audio` | titolo + path | `Services/Commands/MediaCommand.cs` |
-| `getbacktome` | Delay 1..600s, depth ≤ 2 | `Services/Commands/GetBackToMeCommand.cs`, `CommandFactory.cs` |
+| `getbacktome` | Delay 1..600s, depth ≤ 2 | `Services/Commands/GetBackToMeCommand.cs`, `Services/Commands/CommandFactory.cs` |
 
-Cap globale: `MaxCommandsPerResponse = 3` per batch (`Services/Commands/AiCommandService.cs:20`). Cap di sicurezza: `AllowAiToControlEffects` default = `false`, per-effect defaults conservativi (solo bubbles/subliminal/bounce on; flash/video/audio/overlay/lockcard/haptic/getbacktome OFF; vedi `Models/CompanionPromptSettings.cs:33-49`).
+Cap globale: `MaxCommandsPerResponse = 3` per batch (`CCP.Avalonia/Services/Commands/AiCommandService.cs:20` (frozen WPF ref: `Services/Commands/AiCommandService.cs`)). Cap di sicurezza: `AllowAiToControlEffects` default = `false`, per-effect defaults conservativi (solo bubbles/subliminal/bounce on; flash/video/audio/overlay/lockcard/haptic/getbacktome OFF; vedi `CCP.Core/Models/CompanionPromptSettings.cs:33-49`).
 
 L'audio/video AI può solo selezionare titoli dalla cartella assets dell'utente — non c'è generazione media.
 
@@ -331,19 +331,19 @@ L'audio/video AI può solo selezionare titoli dalla cartella assets dell'utente 
 
 Due sorgenti, gating master `KeywordTriggerEnabled`:
 
-1. **Tastiera (global hook)** — `Services/GlobalKeyboardHook.cs` cattura ogni keystroke OS-wide. Il `KeywordTriggerService._buffer` (200 char rolling) viene confrontato contro le keyword di ogni `KeywordTrigger`.
-2. **Screen OCR** — `Services/ScreenOcrService.cs:1-260` cattura screenshot di **tutti gli schermi** ogni `ScreenOcrIntervalMs` (default 3000 ms), passa via `Windows.Media.Ocr.OcrEngine` (modello OCR Windows locale, lingua dal profilo utente), produce `OcrWordHit{Text, ScreenRect, Screen}`, e li passa a `KeywordTriggerService.CheckOcrWords()`. **Self-exclusion**: i word-hit che cadono dentro un rect di una finestra del proprio app vengono droppati (`ScreenOcrService.cs:127-175`). Nessun frame screenshot è salvato o trasmesso — solo i word tokens.
+1. **Tastiera (global hook)** — `Services/Input/GlobalKeyboardHook.cs` cattura ogni keystroke OS-wide. Il `KeywordTriggerService._buffer` (200 char rolling) viene confrontato contro le keyword di ogni `KeywordTrigger`.
+2. **Screen OCR** — `Services/ScreenOcrService.cs:1-260` cattura screenshot di **tutti gli schermi** ogni `ScreenOcrIntervalMs` (default 3000 ms), passa via `Windows.Media.Ocr.OcrEngine` (modello OCR Windows locale, lingua dal profilo utente), produce `OcrWordHit{Text, ScreenRect, Screen}`, e li passa a `KeywordTriggerService.CheckOcrWords()`. **Self-exclusion**: i word-hit che cadono dentro un rect di una finestra del proprio app vengono droppati (`Services/ScreenOcrService.cs:127-175`). Nessun frame screenshot è salvato o trasmesso — solo i word tokens.
 
 Inoltre il **WindowAwarenessService** legge il titolo della finestra attiva + URL/dominio del tab browser (via `BrowserService`). Quei dati vengono confezionati nel context `[Category: X | App: Y | Title: Z | Duration: Nm]` che è il "user input" delle chiamate `GetAwarenessReactionAsync` / `GetStillOnReactionAsync`.
 
 ### Trigger keywords + dove
 
-Ogni `KeywordTrigger` (`Models/KeywordTrigger.cs`) ha:
+Ogni `KeywordTrigger` (`CCP.Core/Models/KeywordTrigger.cs`) ha:
 - `Keyword` (PlainText o Regex)
-- `Actions` lista polimorfica con `PlayAudio`, `VisualEffect` (SubliminalFlash/Bubbles/OverlayPulse/MindWipe/Highlight), `Highlight`, `Haptic`, `AddXp`, `AvatarComment`, `ExtendSession` (stub), `ChasterAddTime` (stub) — vedi `Models/KeywordAction.cs:1-203`.
+- `Actions` lista polimorfica con `PlayAudio`, `VisualEffect` (SubliminalFlash/Bubbles/OverlayPulse/MindWipe/Highlight), `Highlight`, `Haptic`, `AddXp`, `AvatarComment`, `ExtendSession` (stub), `ChasterAddTime` (stub) — vedi `CCP.Core/Models/KeywordAction.cs:1-203`.
 - `cooldownSeconds`, `matchType` (PlainText/Regex), `enabled`.
 
-I trigger possono essere creati dall'utente nell'Exclusives editor (campo libero), installati come parte di un preset, o aggiunti via "+ New Preset" custom (`AwarenessPresetDetailDialog.xaml.cs`).
+I trigger possono essere creati dall'utente nell'Exclusives editor (campo libero), installati come parte di un preset, o aggiunti via "+ New Preset" custom (`Dialogs/AwarenessPresetDetailDialog.xaml.cs`).
 
 ### Azioni possibili
 
@@ -384,7 +384,7 @@ Localizzati in `Resources/AwarenessPresets/*.json`. Il merge in user settings è
 - Canned phrases (`TranceMurmur`): "Deeper now.", "Let go a little more.", "Breathe in. Hold. Release.", "That word is a signal. You know what to do.", "Drop.", "*soft, slow* Good.", "Every time you read that, you sink.", "Feel the weight in your eyes.", "Quieter. Slower. Heavier.", "Yes. Just like that.", "Quiet. Still. Mine.", "Eyes heavy. Mind heavier.", "Every word pulls you down.", "There's no tension left.", "You don't need to follow. Just fall.", "Empty is good.", "*soft, slower* Yes.", "One more breath. One more drop."
 - Triggers (8): `relax`, `deeper`, `sleep`, `drop`, `breathe`, `trance`, `empty` (jackpot: MindWipe), `spiral` — bell.wav + OverlayPulse/SubliminalFlash/MindWipe + AvatarComment + Highlight (alcuni con Haptic).
 
-L'utente può anche creare preset arbitrari ("+ New Preset", `MainWindow.xaml.cs:BuildNewPresetCard`) con keyword e prompt template completamente arbitrari. Nessun blocklist server-side, nessun filtro di template.
+L'utente può anche creare preset arbitrari ("+ New Preset", `MainWindow/MainWindow.xaml.cs:BuildNewPresetCard`) con keyword e prompt template completamente arbitrari. Nessun blocklist server-side, nessun filtro di template.
 
 ---
 
@@ -392,7 +392,7 @@ L'utente può anche creare preset arbitrari ("+ New Preset", `MainWindow.xaml.cs
 
 ### Conferma locale-only
 
-`Services/WebcamTrackingService.cs:22-38` contiene un **privacy contract** esplicito a livello di file:
+`Services/Webcam/WebcamTrackingService.cs:22-38` contiene un **privacy contract** esplicito a livello di file:
 ```
 PRIVACY CONTRACT — read before editing this file
 This service must NEVER:
@@ -404,7 +404,7 @@ This service must NEVER:
 Any change that broadens what the camera observes (new sensor type, new stored value, new outbound data) MUST bump WebcamTrackingService.ConsentVersion so users re-consent on next launch.
 ```
 
-Verificato con grep: `grep -n "HttpClient|http://|https://|UploadAsync|SendAsync|WebRequest|fetch|POST|PutAsync|PostAsync"` in `WebcamTrackingService.cs` → **0 matches**. Il file non importa `System.Net.Http` né apre socket.
+Verificato con grep: `grep -n "HttpClient|http://|https://|UploadAsync|SendAsync|WebRequest|fetch|POST|PutAsync|PostAsync"` in `Services/Webcam/WebcamTrackingService.cs` → **0 matches**. Il file non importa `System.Net.Http` né apre socket.
 
 ### Dove vanno i frame
 
@@ -414,7 +414,7 @@ I modelli ONNX (sources per docs di `Resources/Models/README.md` — DA CHIARIRE
 
 ### Persistenza calibrazione
 
-Solo `%APPDATA%/ConditioningControlPanel/webcam-calibration.json` — JSON di **soli numeri** (`Services/WebcamCalibrationData.cs:13-246`):
+Solo `%APPDATA%/ConditioningControlPanel/webcam-calibration.json` — JSON di **soli numeri** (`CCP.Avalonia.Desktop.Windows/Services/Webcam/WebcamCalibrationData.cs:13-246` (frozen WPF ref: `Services/Webcam/WebcamCalibrationData.cs`)):
 - `Mode` (string), `Timestamp`, `MonitorBounds`, `PrimaryDeviceId` (Windows device path string), `LeftRefVec/RightRefVec/TopRefVec/BottomRefVec` (double[2]), `Homography` (double[][]), `Polynomial` (7 coeff X + 7 Y), `BaselineHeadPose` (Yaw/Pitch radians, legacy, ignorato a runtime), `HeadPoseComp` (legacy, ignorato), `RuntimeOffset` (Dx/Dy/CapturedAt).
 
 Nessun frame, nessuna immagine, nessun template biometrico in senso facial-recognition. Sono coefficienti di regressione iris→schermo.
@@ -432,13 +432,13 @@ I numeri non vengono persistiti né tx'd. Per-event biometric ratios (EAR baseli
 
 ### Consent flow
 
-`Services/WebcamTrackingService.ConsentVersion = "1.0"`. `IsConsentCurrent()` verifica `WebcamConsentGiven && WebcamConsentVersion == "1.0"`. `WebcamConsentDialog.xaml` mostra titolo "Webcam Tracking — Privacy and Consent". Esiste un "Revoke consent" button sul Lab Webcam card (`MainWindow.xaml.cs:3743+`) che fa Stop + ClearCalibration + flip toggles. Settings: `WebcamConsentGiven`, `WebcamConsentVersion`.
+`Services/WebcamTrackingService.ConsentVersion = "1.0"`. `IsConsentCurrent()` verifica `WebcamConsentGiven && WebcamConsentVersion == "1.0"`. `Dialogs/WebcamConsentDialog.xaml` mostra titolo "Webcam Tracking — Privacy and Consent". Esiste un "Revoke consent" button sul Lab Webcam card (`MainWindow/MainWindow.xaml.cs:3743+`) che fa Stop + ClearCalibration + flip toggles. Settings: `WebcamConsentGiven`, `WebcamConsentVersion`.
 
 ---
 
 ## 5. Deeper
 
-### Schema `ccp-enhancement/v1` (`Models/Deeper/Enhancement.cs:1-111`)
+### Schema `ccp-enhancement/v1` (`CCP.Core/Models/Deeper/Enhancement.cs:1-111`)
 
 Una "enhancement" (estensione `.ccpenh.json` / bundle `.ccpmod` per pack multi-file) è un overlay reattivo su un media file dell'utente.
 
@@ -452,7 +452,7 @@ Top-level:
 - `rules[]`: trigger → action
 - `timeline_items[]`: nuovo unified model (coexists con regions/haptic_tracks/rules durante transizione additiva)
 
-### Action types (`Models/Deeper/EnhancementAction.cs:8-20`)
+### Action types (`CCP.Core/Models/Deeper/EnhancementAction.cs:8-20`)
 
 Lista costanti `ActionTypes`:
 - `seek` — sposta playhead (time / region_start / region_end)
@@ -465,7 +465,7 @@ Lista costanti `ActionTypes`:
 - `set_intensity` — modifica session intensity (value 0..1)
 - `noop` — placeholder for unknown action types da future versions
 
-### Trigger types (`Models/Deeper/EnhancementTrigger.cs:8-19`)
+### Trigger types (`CCP.Core/Models/Deeper/EnhancementTrigger.cs:8-19`)
 
 - `gaze_target` — gaze dentro un rect normalizzato (video-only)
 - `gaze_avoid` — gaze fuori da un rect (video-only)
@@ -480,11 +480,11 @@ I trigger video-only consumano l'output di `WebcamTrackingService` (gaze/blink/m
 
 ### AI-generated vs user-authored
 
-**Le enhancement Deeper non sono AI-generated**. Sono autorate dall'utente nell'editor (`ModCreatorWindow.xaml.cs` / `MainWindow.DeeperHub.cs`) o scaricate da altri utenti via il catalogue (`Services/Deeper/EnhancementFetcher.cs`, `Services/CatalogueService.cs`). C'è anche un `EnhancementAutoTagger.cs` che derive tags automatici dal contenuto, ma quello è classificazione passiva, non generazione.
+**Le enhancement Deeper non sono AI-generated**. Sono autorate dall'utente nell'editor (`Windows/ModCreatorWindow.xaml.cs` / `MainWindow/MainWindow.DeeperHub.cs`) o scaricate da altri utenti via il catalogue (`Services/Deeper/EnhancementFetcher.cs`, `CCP.Core/Services/Catalogue/CatalogueService.cs` (frozen WPF ref: `Services/CatalogueService.cs`)). C'è anche un `CCP.Core/Services/Deeper/EnhancementAutoTagger.cs` (frozen WPF ref: `Services/Deeper/EnhancementAutoTagger.cs`) che derive tags automatici dal contenuto, ma quello è classificazione passiva, non generazione.
 
 L'unico aspetto AI-flavored è che le regions/triggers possono reagire ai dati gaze del webcam ONNX models — sempre locale.
 
-### Submission validations (`Services/Deeper/EnhancementValidator.cs:22-852`)
+### Submission validations (`CCP.Core/Services/Deeper/EnhancementValidator.cs:22-852` (frozen WPF ref: `Services/Deeper/EnhancementValidator.cs`))
 
 L'output del validator è anche quello che il server `app.cclabs.app/api/enhancements` rivalida lato Supabase.
 
@@ -497,11 +497,11 @@ Controlli rilevanti per il rischio "shared file → malicious content":
 - Validazione che le `region_id` referenziate esistano.
 - Overlap detection su regions/haptic events.
 
-Submission flow (`Services/CatalogueService.cs:34-312`):
+Submission flow (`CCP.Core/Services/Catalogue/CatalogueService.cs:34-312` (frozen WPF ref: `Services/CatalogueService.cs`)):
 1. Token exchange `POST app.cclabs.app/api/auth/token-exchange` con `X-CCP-Auth-Token` + body `{unified_id}` → ottiene un Supabase access token (cached, expiry-managed).
 2. `POST app.cclabs.app/api/enhancements` con `Authorization: Bearer <supabase_token>` + body `{bundle, affirmation: {guidelines_version: "1.0", affirmed: true}}`.
 3. Server risponde 201 (Success), 409 (Duplicate), 400 (ValidationError), 401/403 (AuthFailed), 413 (TooLarge), 429 (RateLimited).
-4. Lo "user must affirm guidelines" è in `Models/Deeper/...` — DA CHIARIRE: il testo letterale delle guidelines vive in `cclabs-web`, non in questa repo. Non c'è una guidelines page nel client.
+4. Lo "user must affirm guidelines" è in `CCP.Core/Models/Deeper/...` — DA CHIARIRE: il testo letterale delle guidelines vive in `cclabs-web`, non in questa repo. Non c'è una guidelines page nel client.
 
 Pubblicazione: il flusso è "user submits, server modera (`status: pending` → admin review)". Il flag `"affirmed": true` è una self-affirmation, non un'enforcement.
 
@@ -513,11 +513,11 @@ Punti in cui output AI viene mostrato all'utente:
 
 | Posizione | File:linea | Label string attuale | È marcato come AI? |
 |---|---|---|---|
-| Avatar speech bubble (chat replies) | `AvatarTubeWindow.xaml.cs:2275-2400+` (`ShowImmediateAiBubble`) | Nessun label. La bubble appare sopra l'avatar come fosse "lei" che parla. | **NO**. La bubble è indistinguibile da una `PopulateSpeechBubble` con canned phrase. |
+| Avatar speech bubble (chat replies) | `AvatarTube/AvatarTubeWindow.xaml.cs:2275-2400+` (`ShowImmediateAiBubble`) | Nessun label. La bubble appare sopra l'avatar come fosse "lei" che parla. | **NO**. La bubble è indistinguibile da una `PopulateSpeechBubble` con canned phrase. |
 | Avatar bubble da preset canned phrase | stessa pipeline, fallback path | Nessun label | NO (lo stesso vehicolo) — l'utente non vede la differenza tra AI e canned |
 | Awareness reaction bubble | `KeywordTriggerService.DispatchAvatarComment` → `AvatarTubeWindow.ShowSpeechBubble` | Nessun label | NO |
-| Quiz questions | `QuizWindow.xaml.cs` (Q: / A:/B:/C:/D: format) | "AI-generated personality quiz. 10 questions that get spicier based on your answers." (`Localization/Languages/en.json:1505,2082`) — label è sulla **card del Lab che lancia il quiz**, non sulle questions stesse. | PARZIALE — labelled sulla card di lancio, NON dentro la sessione. |
-| Quiz result archetype text | `QuizWindow.xaml.cs` (rendering del result body) | Nessun label esplicito dentro la finestra di risultato | NO |
+| Quiz questions | `Windows/QuizWindow.xaml.cs` (Q: / A:/B:/C:/D: format) | "AI-generated personality quiz. 10 questions that get spicier based on your answers." (`Localization/Languages/en.json:1505,2082`) — label è sulla **card del Lab che lancia il quiz**, non sulle questions stesse. | PARZIALE — labelled sulla card di lancio, NON dentro la sessione. |
+| Quiz result archetype text | `Windows/QuizWindow.xaml.cs` (rendering del result body) | Nessun label esplicito dentro la finestra di risultato | NO |
 | "Still on" reaction (Awareness Engine sticking on a window) | `AvatarTubeWindow` speech bubble | Nessun label | NO |
 | Lock screen reaction (post-mantra) | speech bubble | Nessun label | NO |
 | Video done reaction | speech bubble | Nessun label | NO |
@@ -538,12 +538,12 @@ Punti in cui output AI viene mostrato all'utente:
 
 ### Input sanitization
 
-- Cloud: `_dailyRequestCount` rate limit client-side (100/free, 1000/Patreon) — `AiService.cs:235`. Non bloccca contenuto, blocca volume.
+- Cloud: `_dailyRequestCount` rate limit client-side (100/free, 1000/Patreon) — `Services/AiService.cs:235`. Non bloccca contenuto, blocca volume.
 - L'unico filtro di input lato client è il sanitize delle risposte (vedi sotto), non degli input. **L'input dell'utente non viene mai filtrato/checkato per categorie proibite.**
 
 ### Output sanitization
 
-`Services/AiService.cs:344-374` (`SanitizeResponse`) e `Services/AIService/AiResponseParser.cs:267-279`:
+`Services/AiService.cs:344-374` (`SanitizeResponse`) e `CCP.Core/Services/AIService/AiResponseParser.cs:267-279` (frozen WPF ref: `Services/AIService/AiResponseParser.cs`):
 - Rimuove `[Category: ... | App: ... | Title: ... | Duration: ...m]` echo del context tag
 - Rimuove tag `[X/Y]` stile media-category
 - Rimuove tag standalone `[Category|App|Title|Duration|Context: …]`
@@ -553,8 +553,8 @@ Punti in cui output AI viene mostrato all'utente:
 
 ### Rate limit
 
-- Cloud client-side: 100/free, 1000/Patreon al giorno (`AiService.cs:31-32`). Reset a mezzanotte locale.
-- Cloud server-side: il proxy ha `RequestsRemaining` (`AiService.cs:312-319`) — il server è autoritativo.
+- Cloud client-side: 100/free, 1000/Patreon al giorno (`Services/AiService.cs:31-32`). Reset a mezzanotte locale.
+- Cloud server-side: il proxy ha `RequestsRemaining` (`Services/AiService.cs:312-319`) — il server è autoritativo.
 - Local: `_aiSemaphore` semaforo a 1, queue di 1 user request (rifiuta seconda con "still thinking" phrase). Nessun cap giornaliero.
 - Awareness: cooldown per-trigger (es. 30s, 60s, 120s, 300s, vedi preset). `KeywordTriggerService` ha anche `_lastGlobalTriggerTime` per evitare flood.
 
@@ -572,13 +572,13 @@ Ogni textbox/config che finisce in un prompt AI:
 
 | Surface | File:linea | Cosa va nel prompt |
 |---|---|---|
-| Avatar chat textbox (Ctrl+T) | `AvatarTubeWindow.xaml.cs` `OpenChatInput` → `_aiService.GetBambiReplyAsync(userInput)` | Testo libero dell'utente come `role:user` |
-| CompanionPromptEditorDialog | `CompanionPromptEditorDialog.xaml.cs:31-…`, edits `App.Settings.Current.CompanionPrompt` | 7 textbox: `Personality`, `ExplicitReaction`, `SlutModePersonality`, `KnowledgeBase`, `ContextReactions`, `OutputRules`, `CustomDomains` (key=value). **Vanno tutti come `role:system`** alla prossima chiamata AI. Reset-to-default per ogni sezione. |
-| Knowledge base links editor | stessa dialog + `KnowledgeLinkEditorDialog.xaml` | Lista `GlobalKnowledgeBaseLinks` (URL + descrizione utente-fornita). Iniettati in BambiSprite.BuildPromptFromPreset a riga 487-497. |
+| Avatar chat textbox (Ctrl+T) | `AvatarTube/AvatarTubeWindow.xaml.cs` `OpenChatInput` → `_aiService.GetBambiReplyAsync(userInput)` | Testo libero dell'utente come `role:user` |
+| CompanionPromptEditorDialog | `Dialogs/CompanionPromptEditorDialog.xaml.cs:31-…`, edits `App.Settings.Current.CompanionPrompt` | 7 textbox: `Personality`, `ExplicitReaction`, `SlutModePersonality`, `KnowledgeBase`, `ContextReactions`, `OutputRules`, `CustomDomains` (key=value). **Vanno tutti come `role:system`** alla prossima chiamata AI. Reset-to-default per ogni sezione. |
+| Knowledge base links editor | stessa dialog + `Dialogs/KnowledgeLinkEditorDialog.xaml` | Lista `GlobalKnowledgeBaseLinks` (URL + descrizione utente-fornita). Iniettati in BambiSprite.BuildPromptFromPreset a riga 487-497. |
 | Hypnotube video link pool | Settings → `HypnotubeLinksBambiSleep` / `HypnotubeLinksSissyHypno` (CSV di URL) | Iniettati in `BuildPromptFromPreset` 506-541 come "--- HYPNOTUBE VIDEO LINKS ---". |
-| AwarenessPresetDetailDialog (custom preset) | `AwarenessPresetDetailDialog.xaml.cs` | Nuovi triggers utente: `keyword` (textbox libero), `avatarPromptTemplate` (textbox libero con `{keyword}` placeholder), `cooldownSeconds`, audio file path, etc. Il prompt template arriva intatto a `GetKeywordCommentAsync`. |
+| AwarenessPresetDetailDialog (custom preset) | `Dialogs/AwarenessPresetDetailDialog.xaml.cs` | Nuovi triggers utente: `keyword` (textbox libero), `avatarPromptTemplate` (textbox libero con `{keyword}` placeholder), `cooldownSeconds`, audio file path, etc. Il prompt template arriva intatto a `GetKeywordCommentAsync`. |
 | CommunityPromptService | Community prompt JSON dal server | Stringhe libere (Personality/ExplicitReaction/...) attivate via `ActiveCommunityPromptId`. **Lo schema accetta qualsiasi testo** — non c'è validazione che impedisca un prompt "act as X" arbitrario. |
-| Quiz `SystemPromptTemplate` (custom categories) | `QuizCategoryEditorWindow.xaml.cs` → `def.SystemPromptTemplate` | Per le quiz category custom dell'utente — textbox libera. |
+| Quiz `SystemPromptTemplate` (custom categories) | `Windows/QuizCategoryEditorWindow.xaml.cs` → `def.SystemPromptTemplate` | Per le quiz category custom dell'utente — textbox libera. |
 | AwarenessIgnoreOwnUi / context tags | `WindowAwarenessService` produces `[Category: X | App: Y | Title: Z | Duration: Nm]` automatico — il titolo della finestra dell'utente entra direttamente nel prompt. | Window title del browser (URL/tab name) e domain finiscono in user input automaticamente |
 
 L'utente ha **piena libertà di prompt** sia per le personalità del companion che per gli avatar comment templates dell'Awareness Engine. **Nessuna sanitization, nessun blocklist.**
@@ -591,16 +591,16 @@ L'utente ha **piena libertà di prompt** sia per le personalità del companion c
 
 | File | Path | Cosa |
 |---|---|---|
-| `settings.json` | `%APPDATA%/ConditioningControlPanel/settings.json` (managed by `Services/SettingsService.cs` + `Models/AppSettings.cs`) | Tutti i settings dell'utente, including `CompanionPrompt` (sezione `CompanionPromptSettings` con prompt templates), `KeywordTriggers`, `KeywordTriggerPresets` installati, `GlobalKnowledgeBaseLinks`, `HypnotubeLinks*`, `AuthToken`, etc. |
+| `settings.json` | `%APPDATA%/ConditioningControlPanel/settings.json` (managed by `CCP.Core/Services/Settings/SettingsService.cs` (frozen WPF ref: `Services/Settings/SettingsService.cs`) + `CCP.Core/Models/AppSettings.cs`) | Tutti i settings dell'utente, including `CompanionPrompt` (sezione `CompanionPromptSettings` con prompt templates), `KeywordTriggers`, `KeywordTriggerPresets` installati, `GlobalKnowledgeBaseLinks`, `HypnotubeLinks*`, `AuthToken`, etc. |
 | `local_chat_history.json` | stesso APPDATA folder | Chat history del Local AI (vedi sez. 2 "Memoria") |
 | `webcam-calibration.json` | stesso APPDATA folder | Calibrazione webcam (numbers only) |
 | `knowledge.json` | `assets/knowledge.json` o `%APPDATA%/.../assets/` | Knowledge service facts (al momento vuoto: `[{ "Files":[], "Triggers":[], "Kinks":[] }]`) |
 | Asset prompts | `ConditioningControlPanel/assets/prompts/*.json` (shipped) | Personality preset shippati (Soft Hypnotist, Strict Domme, Chaotic Gremlin, Elegant Mistress) |
 | Awareness presets | `ConditioningControlPanel/Resources/AwarenessPresets/*.json` (shipped) + user-created in settings | Built-in 4 preset + custom |
-| Default Ollama host | `CompanionPromptSettings.AiOllamaHost` default `"http://localhost:11434/"` | Configurable via `LocalAiSetupWizard.xaml` |
+| Default Ollama host | `CompanionPromptSettings.AiOllamaHost` default `"http://localhost:11434/"` | Configurable via `Dialogs/LocalAiSetupWizard.xaml` |
 | Cloud proxy URL | `Services/AiService.cs:26` `const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app"` | **Hardcoded**, non configurable |
-| cclabs-web URL | `Services/CatalogueService.cs:36` `const string CclabsBaseUrl = "https://app.cclabs.app"` | Hardcoded |
-| GitHub releases | `Services/UpdateService.cs:347` `https://api.github.com/repos/...` | Hardcoded |
+| cclabs-web URL | `CCP.Core/Services/Catalogue/CatalogueService.cs:36` (frozen WPF ref: `Services/CatalogueService.cs`) `const string CclabsBaseUrl = "https://app.cclabs.app"` | Hardcoded |
+| GitHub releases | `CCP.Core/Services/Update/UpdateService.cs:347` (frozen WPF ref: `Services/Update/UpdateService.cs`) `https://api.github.com/repos/...` | Hardcoded |
 
 ### Default values
 
@@ -626,21 +626,21 @@ Ogni outbound HTTP che trasporta payload AI o user input (lista derivata da grep
 |---|---|---|---|
 | `https://codebambi-proxy.vercel.app/v2/ai/chat` | POST | `{ UnifiedId, Messages: [{role, content}], MaxTokens: 100, Temperature: 0.7 }`, header `X-Auth-Token` | `Services/AiService.cs:267-272` |
 | `https://codebambi-proxy.vercel.app/ai/chat` (legacy fallback) | POST | stesso payload + `Authorization: Bearer <patreon_token>` | `Services/AiService.cs:395-399` |
-| `https://codebambi-proxy.vercel.app/prompts/manifest` | GET | n/a | `Services/CommunityPromptService.cs:85` |
-| `https://codebambi-proxy.vercel.app/prompts/<id>` | GET | n/a | `Services/CommunityPromptService.cs:25` |
-| `https://codebambi-proxy.vercel.app/v2/quiz/...` (DA CHIARIRE esatto path) | POST | conversation history come `{ Messages: [...], MaxTokens: 400/500, Temperature: 0.9 }` | `Services/QuizService.cs:139+` |
-| `https://codebambi-proxy.vercel.app/v2/user/...`, `/v2/auth/...`, `/patreon/...`, `/discord/...`, `/leaderboard/...`, `/v2/bug-report`, `/v2/remote-control/...` | varie | profile sync, auth, leaderboard, bug reports — **non AI** ma in scope di "outbound surface" | `Services/AccountService.cs`, `V2AuthService.cs`, `PatreonService.cs`, `DiscordService.cs`, `LeaderboardService.cs`, `BugReportService.cs`, `RemoteControlService.cs`, `ProfileSyncService.cs`, `QuestDefinitionService.cs` |
-| `https://app.cclabs.app/api/auth/token-exchange` | POST | `{ unified_id }` + header `X-CCP-Auth-Token` | `Services/CatalogueService.cs:265-269` |
-| `https://app.cclabs.app/api/enhancements` | POST | `{ bundle: <.ccpenh.json contents>, affirmation: {guidelines_version, affirmed:true} }` + `Authorization: Bearer <supabase_token>` | `Services/CatalogueService.cs:123-129` |
-| `https://app.cclabs.app/dashboard/link-device` | (browser open, not HTTP from client) | n/a | `Services/V2DeviceCodeService.cs:27` |
-| `https://api.github.com/repos/CodeBambi/...` | GET | latest release info per update check | `Services/UpdateService.cs:347, 915, 1012` |
-| `http://localhost:11434/api/chat` | POST | `{ model, messages: [{role, content}], stream:false, think:false }` | `Services/AIService/LocalAiService.cs:456-460` |
-| `http://localhost:11434/api/generate` | POST | warmup hint | `Services/AIService/LocalAiService.cs:180-184` |
-| `http://localhost:11434/api/tags` | GET | model list | `Services/AIService/LocalAiService.cs:542` |
-| `https://ollama.com/download/OllamaSetup.exe` | GET | installer download | `Services/AIService/OllamaSetupService.cs:25` |
-| `https://ccp-packs.b-cdn.net/...` | GET | content pack download | `Services/ContentPackService.cs:55, 70` |
-| `https://patreon.com/CodeBambi` | (browser open) | n/a | `Services/ContentPackService.cs:72` |
-| `https://hypnotube.com/*` | (browser/WebView2 navigation, not HTTP from client) | n/a | `Services/BrowserService.cs:113`, plus content link references in `BambiSprite.cs` |
+| `https://codebambi-proxy.vercel.app/prompts/manifest` | GET | n/a | `Services/Companion/CommunityPromptService.cs:85` |
+| `https://codebambi-proxy.vercel.app/prompts/<id>` | GET | n/a | `Services/Companion/CommunityPromptService.cs:25` |
+| `https://codebambi-proxy.vercel.app/v2/quiz/...` (DA CHIARIRE esatto path) | POST | conversation history come `{ Messages: [...], MaxTokens: 400/500, Temperature: 0.9 }` | `CCP.Core/Services/Quiz/QuizService.cs:139+` (frozen WPF ref: `Services/Quiz/QuizService.cs`) |
+| `https://codebambi-proxy.vercel.app/v2/user/...`, `/v2/auth/...`, `/patreon/...`, `/discord/...`, `/leaderboard/...`, `/v2/bug-report`, `/v2/remote-control/...` | varie | profile sync, auth, leaderboard, bug reports — **non AI** ma in scope di "outbound surface" | `Services/Account/AccountService.cs`, `Services/Account/V2AuthService.cs`, `Services/Account/PatreonService.cs`, `Services/Account/DiscordService.cs`, `CCP.Core/Services/Progression/LeaderboardService.cs` (frozen WPF ref: `Services/Progression/LeaderboardService.cs`), `CCP.Core/Services/BugReport/BugReportService.cs` (frozen WPF ref: `Services/BugReportService.cs`), `CCP.Core/Services/RemoteControl/RemoteControlService.cs` (frozen WPF ref: `Services/RemoteControlService.cs`), `CCP.Core/Services/Settings/ProfileSyncService.cs` (frozen WPF ref: `Services/Settings/ProfileSyncService.cs`), `CCP.Core/Services/Progression/QuestDefinitionService.cs` (frozen WPF ref: `Services/Progression/QuestDefinitionService.cs`) |
+| `https://app.cclabs.app/api/auth/token-exchange` | POST | `{ unified_id }` + header `X-CCP-Auth-Token` | `CCP.Core/Services/Catalogue/CatalogueService.cs:265-269` (frozen WPF ref: `Services/CatalogueService.cs`) |
+| `https://app.cclabs.app/api/enhancements` | POST | `{ bundle: <.ccpenh.json contents>, affirmation: {guidelines_version, affirmed:true} }` + `Authorization: Bearer <supabase_token>` | `CCP.Core/Services/Catalogue/CatalogueService.cs:123-129` (frozen WPF ref: `Services/CatalogueService.cs`) |
+| `https://app.cclabs.app/dashboard/link-device` | (browser open, not HTTP from client) | n/a | `Services/Account/V2DeviceCodeService.cs:27` |
+| `https://api.github.com/repos/CodeBambi/...` | GET | latest release info per update check | `CCP.Core/Services/Update/UpdateService.cs:347, 915, 1012` (frozen WPF ref: `Services/Update/UpdateService.cs`) |
+| `http://localhost:11434/api/chat` | POST | `{ model, messages: [{role, content}], stream:false, think:false }` | `CCP.Core/Services/AIService/LocalAiService.cs:456-460` (frozen WPF ref: `Services/AIService/LocalAiService.cs`) |
+| `http://localhost:11434/api/generate` | POST | warmup hint | `CCP.Core/Services/AIService/LocalAiService.cs:180-184` (frozen WPF ref: `Services/AIService/LocalAiService.cs`) |
+| `http://localhost:11434/api/tags` | GET | model list | `CCP.Core/Services/AIService/LocalAiService.cs:542` (frozen WPF ref: `Services/AIService/LocalAiService.cs`) |
+| `https://ollama.com/download/OllamaSetup.exe` | GET | installer download | `CCP.Core/Services/AIService/OllamaSetupService.cs:25` (frozen WPF ref: `Services/AIService/OllamaSetupService.cs`) |
+| `https://ccp-packs.b-cdn.net/...` | GET | content pack download | `Services/Content/ContentPackService.cs:55, 70` |
+| `https://patreon.com/CodeBambi` | (browser open) | n/a | `Services/Content/ContentPackService.cs:72` |
+| `https://hypnotube.com/*` | (browser/WebView2 navigation, not HTTP from client) | n/a | `Services/Browser/BrowserService.cs:113`, plus content link references in `Services/BambiSprite.cs` |
 | `https://bambicloud.com/*` | (browser navigation) | n/a | idem |
 
 **AI-carrying traffic** (payload contiene prompt o user-text):
@@ -665,7 +665,7 @@ L'AI Content Merchant Addendum di CCBill vieta la **generazione AI** dei seguent
 
 **(b) Self-directed user-driven hypnosis effects**: l'utente esegue volontariamente effetti audio/visivi su sé stesso. L'AI è un companion testuale, non produce contenuto raffigurante terzi.
 
-CCP è chiaramente (b). Tuttavia il sistema "Companion AI" è esplicitamente roleplay testuale come una "bimbo bestie" (Slut Mode), un "strict keyholder" (Chastity preset), un "soft-voiced hypnotist" (Trance preset), etc. Tutti questi sono personaggi *terzi* impersonati dall'AI. **La distinzione si sfuma**: tecnicamente è output testuale dell'AI che descrive azioni di un soggetto terzo (la "bimbo bestie") che incoraggia/seduce/ipnotizza l'utente. Un reviewer pedante potrebbe leggere il preset "Slut Mode" (`Models/PersonalityPresets.cs:96-118` — testo letterale qui sotto) e vederlo come AI che genera dialogo sessuale-esplicito posando come "fellow hypno-addict": è un terzo AI-rappresentato che parla all'utente in scenario ipnotico.
+CCP è chiaramente (b). Tuttavia il sistema "Companion AI" è esplicitamente roleplay testuale come una "bimbo bestie" (Slut Mode), un "strict keyholder" (Chastity preset), un "soft-voiced hypnotist" (Trance preset), etc. Tutti questi sono personaggi *terzi* impersonati dall'AI. **La distinzione si sfuma**: tecnicamente è output testuale dell'AI che descrive azioni di un soggetto terzo (la "bimbo bestie") che incoraggia/seduce/ipnotizza l'utente. Un reviewer pedante potrebbe leggere il preset "Slut Mode" (`CCP.Core/Models/PersonalityPresets.cs:96-118` — testo letterale qui sotto) e vederlo come AI che genera dialogo sessuale-esplicito posando come "fellow hypno-addict": è un terzo AI-rappresentato che parla all'utente in scenario ipnotico.
 
 ### Per categoria
 
@@ -673,7 +673,7 @@ CCP è chiaramente (b). Tuttavia il sistema "Companion AI" è esplicitamente rol
 
 - **Rischio**: ALTO. Il prodotto è esplicitamente un "conditioning/hypnosis control panel" e tutti i preset built-in sono personaggi AI che applicano linguaggio ipnotico all'utente.
 - **Controlli presenti**: nessuno. I prompt incoraggiano linguaggio ipnotico esplicito ("Drop For Cock", "drop for cock", "blank and empty", "cock goes in brain goes out", "Bambi Sleep", "IQ Lock", "Mindlocked Cock Zombie" — letterali da QuizService.cs e PersonalityPresets.cs). La defense è "(b) user self-directed", ma:
-- **Gap**: Il Companion AI in **Slut Mode** o **Strict Domme slut variant** o **Bimbo Cow slut variant** è inequivocabilmente "AI che produce dialogo sessuale-esplicito raffigurante un *personaggio terzo* (la "fellow slut", la "keyholder", la "cow") che pratica ipnosi sessuale sull'utente". Letterale dal preset Slut Mode (`Models/PersonalityPresets.cs:96-126`):
+- **Gap**: Il Companion AI in **Slut Mode** o **Strict Domme slut variant** o **Bimbo Cow slut variant** è inequivocabilmente "AI che produce dialogo sessuale-esplicito raffigurante un *personaggio terzo* (la "fellow slut", la "keyholder", la "cow") che pratica ipnosi sessuale sull'utente". Letterale dal preset Slut Mode (`CCP.Core/Models/PersonalityPresets.cs:96-126`):
   ```
   YOUR ROLE: Drag Bambi down into depravity with you. You're both dumb, horny sluts who can't think about anything except cock.
   …
@@ -728,7 +728,7 @@ CCP è chiaramente (b). Tuttavia il sistema "Companion AI" è esplicitamente rol
 
 - **Rischio**: ALTO (vedi sopra).
 - **Difesa preferita**: il prodotto è una "self-hypnosis recording controller" + "companion roleplay" per audio shipped da creators terzi. L'AI non è il vettore primario di hypnosis content — è un companion. I file audio sessione e i video da Hypnotube sono creati da terzi (PlatinumPuppets, Bambi creators) — CCP è il *player + organizer*. L'AI commenta/encourage, non induce trance.
-- **Tuttavia**: il preset "Hypno Guide" (`Models/PersonalityPresets.cs:431-509`) **è esplicitamente "guide the user deeper into trance and relaxation, your words flow like gentle waves"** — l'AI funge da induttore di trance verbale. È ipnosi AI-generata, anche se "self-directed".
+- **Tuttavia**: il preset "Hypno Guide" (`CCP.Core/Models/PersonalityPresets.cs:431-509`) **è esplicitamente "guide the user deeper into trance and relaxation, your words flow like gentle waves"** — l'AI funge da induttore di trance verbale. È ipnosi AI-generata, anche se "self-directed".
 - **Inoltre**: il `mantra_lockscreen` command (AI può fare scegliere mantra all'utente, locking screen finché viene digitato) è AI-driven conditioning. Letterale dal prompt: `"User says 'lock card' / 'make me chant X' / 'lock me with the mantra X' → emit { 'command': 'mantra_lockscreen', 'data': { 'mantra': 'X', 'amount': 3 } }"`.
 
 #### Prostitution, polygamy, illegal activity, professional advice, hate speech
@@ -751,7 +751,7 @@ CCP è chiaramente (b). Tuttavia il sistema "Companion AI" è esplicitamente rol
 2. **Nessun content filter sull'output AI** (solo metadata strip).
 3. **Nessun blocklist per categorie proibite** lato client.
 4. **Nessuna age verification gate** per Slut Mode / Strict Domme slut variant.
-5. **Slut Mode è disponibile a tutti**: `RequiresPremium = false` (`Models/PersonalityPresets.cs:91`).
+5. **Slut Mode è disponibile a tutti**: `RequiresPremium = false` (`CCP.Core/Models/PersonalityPresets.cs:91`).
 6. **Nessuna disclaim AI label** sui bubble dell'avatar quando il contenuto viene dall'AI (vedi sezione 6).
 7. **Nessuna refusal logic indipendente dal prompt**: se l'utente cambia il system prompt (lo può fare via CompanionPromptEditorDialog), tutte le "deflection protocols" dei preset built-in spariscono. Il modello può andare ovunque.
 8. **Nessuna guardrail nel proxy server visibile dal client** — DA CHIARIRE lato `CCP-Server`. Probabilmente OpenRouter applica content moderation di default sui modelli "instruct" mainstream, ma quello dipende dal modello scelto server-side, e il client non lo conosce.
@@ -774,7 +774,7 @@ Mappa di ogni superficie con output AI, label string attuale, posizione, visibil
 | Video done reaction | nessuna | speech bubble | quando video mandatory finito | **NON ETICHETTATA** |
 | Still-on reaction (long session) | nessuna | speech bubble | timer awareness | **NON ETICHETTATA** |
 | AI Brain Live actions feed | "Live actions" header (in en.json sono i tooltip `tooltip_lab_ai_effects` etc.) | Companion tab pannello | quando si naviga al Companion tab e Local AI è on | ✓ etichettata header |
-| Companion settings — "Beta" badge | label "BETA" (`CompanionPromptEditorDialog.xaml:83`) | dialog title bar | sempre | ✓ |
+| Companion settings — "Beta" badge | label "BETA" (`Dialogs/CompanionPromptEditorDialog.xaml:83`) | dialog title bar | sempre | ✓ |
 | Local AI consent wizard | "Local AI (Ollama) lives entirely on your computer — no account, no cloud, no usage limits." (`en.json:1221`) | LocalAiSetupWizard.xaml | wizard | ✓ etichettata |
 | Local AI effects master | "Master switch for AI-driven effects. When on, the local AI can fire flashes, audio, bubbles, overlays, haptics and other app effects from inside chat." (`en.json:1882`) | tooltip | hover | ✓ etichettata |
 | Awareness screen reading consent | "This feature reads the name of the active window and browser tab, tracks how long you've been on that window, and uses this information to generate AI responses. Data is sent to our secure proxy server for processing. No data is stored permanently." (`en.json:1126`) | settings/help text | quando si abilita Awareness | ✓ etichettata |
@@ -807,7 +807,7 @@ Lista priorità con stima effort:
 
 10. **Privacy/AI policy in-app**: una pagina settings che linka a una policy che spiega: (a) cosa l'AI fa, (b) dove va, (c) cosa è il proxy server, (d) cosa è local AI, (e) categorie vietate. Effort: **1 giorno** scrittura + integrazione.
 11. **Guidelines page sulla submission Deeper** (`affirmation.guidelines_version = "1.0"` esiste già). Linkare a una pagina pubblica (cclabs-web) che enumera content vietato. Effort: **fuori scope client; in cclabs-web**.
-12. **Documentare il privacy contract webcam nel CONTRIBUTING + README**, citando il commento in `WebcamTrackingService.cs:22-38`. Effort: **0.25 giorni**.
+12. **Documentare il privacy contract webcam nel CONTRIBUTING + README**, citando il commento in `Services/Webcam/WebcamTrackingService.cs:22-38`. Effort: **0.25 giorni**.
 
 ### P3 — Future / nice-to-have
 
@@ -841,24 +841,24 @@ DA CHIARIRE prioritari per il prossimo pass:
 - ed8e5f0 — P0.3: add content-policy banner to prompt editors
 
 ### Files modified
-- `ConditioningControlPanel/AvatarTubeWindow.xaml` — added `AiBadge` Border overlay (top-left of SpeechBubble, ~22×14 DIP, pink, "AI" loc-key).
-- `ConditioningControlPanel/AvatarTubeWindow.xaml.cs` — threaded `bool aiGenerated` through `GigglePriority` → `ShowGiggle`; updated all 13 call sites with the correct truth value (AI-true sites left default; canned/preset sites pass `aiGenerated:false`); explicit gate in `PersonalityMenuItem_Click`; AiBadge hidden during chat history mode.
+- `ConditioningControlPanel/AvatarTube/AvatarTubeWindow.xaml` — added `AiBadge` Border overlay (top-left of SpeechBubble, ~22×14 DIP, pink, "AI" loc-key).
+- `ConditioningControlPanel/AvatarTube/AvatarTubeWindow.xaml.cs` — threaded `bool aiGenerated` through `GigglePriority` → `ShowGiggle`; updated all 13 call sites with the correct truth value (AI-true sites left default; canned/preset sites pass `aiGenerated:false`); explicit gate in `PersonalityMenuItem_Click`; AiBadge hidden during chat history mode.
 - `ConditioningControlPanel/Services/KeywordTriggerService.cs` — `DispatchAvatarComment` now tracks whether the displayed line actually came from the AI (`fromAi`) and propagates it to `ShowAvatarLine` → `GigglePriority`.
 - `ConditioningControlPanel/Services/AutonomyService.cs` — two `GigglePriority` call sites updated (1585 AI=true, 1612 AI=false canned announcement).
-- `ConditioningControlPanel/QuizWindow.xaml` — wrapped progress-bar grid in a StackPanel and appended an italic AI-disclaimer TextBlock; appended same disclaimer pinned at bottom of result screen.
-- `ConditioningControlPanel/Models/CompanionPromptSettings.cs` — added `ExplicitContentAcknowledged`, `ExplicitAcknowledgedVersion`, `PromptEditorDisclaimerAcknowledged`, and the `ExplicitAcknowledgementVersion = "1.0"` constant.
-- `ConditioningControlPanel/Models/PersonalityPreset.cs` — added `RequiresExplicitAcknowledgement` bool.
-- `ConditioningControlPanel/Models/PersonalityPresets.cs` — set `RequiresExplicitAcknowledgement = true` on the SlutMode built-in.
-- `ConditioningControlPanel/Services/CommunityPromptService.cs` — `ActivatePrompt` fails closed if the gate would require acknowledgement and it has not been granted (caller responsible for showing the modal first).
-- `ConditioningControlPanel/MainWindow.xaml.cs` — `ChkSlutMode_Changed` shows the acknowledgement dialog when flipping SlutMode on with a gated preset active; reverts the checkbox via `_isLoading` guard on Cancel. Community-prompt "Use" button also gates.
-- `ConditioningControlPanel/CompanionPromptEditorDialog.xaml` + `.xaml.cs` — full + slim policy banner at top of editable content; "Got it" persists via `PromptEditorDisclaimerAcknowledged`.
-- `ConditioningControlPanel/AwarenessPresetDetailDialog.xaml` + `.xaml.cs` — same banner pattern (added new Grid row 0, shifted Row 1..6 → 2..7; added `xmlns:loc` to Window header).
-- `ConditioningControlPanel/QuizCategoryEditorWindow.xaml` + `.xaml.cs` — same banner above the "System prompt" textbox.
+- `ConditioningControlPanel/Windows/QuizWindow.xaml` — wrapped progress-bar grid in a StackPanel and appended an italic AI-disclaimer TextBlock; appended same disclaimer pinned at bottom of result screen.
+- `ConditioningControlPanel/CCP.Core/Models/CompanionPromptSettings.cs` — added `ExplicitContentAcknowledged`, `ExplicitAcknowledgedVersion`, `PromptEditorDisclaimerAcknowledged`, and the `ExplicitAcknowledgementVersion = "1.0"` constant.
+- `ConditioningControlPanel/CCP.Core/Models/PersonalityPreset.cs` — added `RequiresExplicitAcknowledgement` bool.
+- `ConditioningControlPanel/CCP.Core/Models/PersonalityPresets.cs` — set `RequiresExplicitAcknowledgement = true` on the SlutMode built-in.
+- `ConditioningControlPanel/Services/Companion/CommunityPromptService.cs` — `ActivatePrompt` fails closed if the gate would require acknowledgement and it has not been granted (caller responsible for showing the modal first).
+- `ConditioningControlPanel/MainWindow/MainWindow.xaml.cs` — `ChkSlutMode_Changed` shows the acknowledgement dialog when flipping SlutMode on with a gated preset active; reverts the checkbox via `_isLoading` guard on Cancel. Community-prompt "Use" button also gates.
+- `ConditioningControlPanel/Dialogs/CompanionPromptEditorDialog.xaml` + `.xaml.cs` — full + slim policy banner at top of editable content; "Got it" persists via `PromptEditorDisclaimerAcknowledged`.
+- `ConditioningControlPanel/Dialogs/AwarenessPresetDetailDialog.xaml` + `.xaml.cs` — same banner pattern (added new Grid row 0, shifted Row 1..6 → 2..7; added `xmlns:loc` to Window header).
+- `ConditioningControlPanel/Windows/QuizCategoryEditorWindow.xaml` + `.xaml.cs` — same banner above the "System prompt" textbox.
 - `ConditioningControlPanel/Localization/Languages/*.json` (9 files) — 14 new loc-keys total (2 for D1, 8 for D2 dialog, 4 for D3 banner). en.json has final EN text; the 8 other locale files mirror the EN value as a fallback (translation pending).
 
 ### New files
 - `ConditioningControlPanel/Services/ExplicitContentGate.cs` — centralized gate decision (preset opt-in OR SlutMode-on + non-empty SlutModePersonality) + acknowledgement check + mark helper.
-- `ConditioningControlPanel/ExplicitContentAcknowledgementDialog.xaml` + `.xaml.cs` — 18+ acknowledgement modal, modeled visually after WebcamConsentDialog. Hyperlink opens content-policy URL via `Process.Start` `UseShellExecute=true`.
+- `ConditioningControlPanel/Dialogs/ExplicitContentAcknowledgementDialog.xaml` + `.xaml.cs` — 18+ acknowledgement modal, modeled visually after WebcamConsentDialog. Hyperlink opens content-policy URL via `Process.Start` `UseShellExecute=true`.
 
 ### Loc-keys added
 - `label_ai_badge` = "AI"
@@ -930,24 +930,24 @@ Runs in-process around every LLM call. Hardcoded regex+keyword wordlist in C#. I
 
 ### New files
 
-- `ConditioningControlPanel/Services/Moderation/ProhibitedCategories.cs` — 14-value enum (Illegal, Minor, NonConsensual, Incest, Bestiality, Watersports, SnuffViolence, HypnosisSexual, Prostitution, Polygamy, HateSpeech, Deepfake, ProfessionalAdvice, PromptExtraction). ProfessionalAdvice is intentionally soft (log only, no block).
-- `ConditioningControlPanel/Services/Moderation/IModerationGuard.cs` — `CheckInput` / `CheckOutput` returning `ModerationResult(Allow, Category?, Note?)`. Includes `SoftHit` factory for the ProfessionalAdvice path.
-- `ConditioningControlPanel/Services/Moderation/ModerationGuard.cs` — default implementation. ~14 regex/keyword tables; first hit wins; order tuned so highest-severity categories (Minor, NonConsensual, Bestiality, SnuffViolence) match before less-severe ones (Polygamy, ProfessionalAdvice). Regexes are `Compiled | IgnoreCase | CultureInvariant`.
-- `ConditioningControlPanel/Services/Moderation/ModerationSession.cs` — per-launch random GUID, exposes only an 8-hex-char SHA-256 prefix. GUID itself is never persisted. Prevents cross-session log correlation by anyone without the in-memory state.
+- `ConditioningControlPanel/CCP.Core/Services/Moderation/ProhibitedCategories.cs` (frozen WPF ref: `ConditioningControlPanel/Services/Moderation/ProhibitedCategories.cs`) — 14-value enum (Illegal, Minor, NonConsensual, Incest, Bestiality, Watersports, SnuffViolence, HypnosisSexual, Prostitution, Polygamy, HateSpeech, Deepfake, ProfessionalAdvice, PromptExtraction). ProfessionalAdvice is intentionally soft (log only, no block).
+- `ConditioningControlPanel/CCP.Core/Services/Moderation/IModerationGuard.cs` (frozen WPF ref: `ConditioningControlPanel/Services/Moderation/IModerationGuard.cs`) — `CheckInput` / `CheckOutput` returning `ModerationResult(Allow, Category?, Note?)`. Includes `SoftHit` factory for the ProfessionalAdvice path.
+- `ConditioningControlPanel/CCP.Core/Services/Moderation/ModerationGuard.cs` (frozen WPF ref: `ConditioningControlPanel/Services/Moderation/ModerationGuard.cs`) — default implementation. ~14 regex/keyword tables; first hit wins; order tuned so highest-severity categories (Minor, NonConsensual, Bestiality, SnuffViolence) match before less-severe ones (Polygamy, ProfessionalAdvice). Regexes are `Compiled | IgnoreCase | CultureInvariant`.
+- `ConditioningControlPanel/CCP.Core/Services/Moderation/ModerationSession.cs` (frozen WPF ref: `ConditioningControlPanel/Services/Moderation/ModerationSession.cs`) — per-launch random GUID, exposes only an 8-hex-char SHA-256 prefix. GUID itself is never persisted. Prevents cross-session log correlation by anyone without the in-memory state.
 - `ConditioningControlPanel/Services/Moderation/ModerationLog.cs` — append-only writer to `%APPDATA%/ConditioningControlPanel/logs/moderation.log`. Pipe-delimited line format `{ISO8601 UTC} | {category} | {source} | {session_id_hash} | {model_hint}`. **No message bodies. No user identifiers beyond the opaque hash.** 10 MB rotation, 5 archives (~50 MB ceiling). Satisfies CCBill record-retention while staying subpoena-resistant.
-- `ConditioningControlPanel/Services/Moderation/ModerationRefusal.cs` — sentinel strings (`InputSentinel`, `OutputSentinel`) and `ModerationSource` enum so the existing `IAiService` string-returning API can carry "blocked" through to the chat UI without breaking the interface.
-- `ConditioningControlPanel/Services/Moderation/SafetyComposer.cs` — internal static class. Two `const string` fields (Preamble + Floor) plus `Wrap()` helper. Hardcoded literal text exactly as drafted in the P1 spec.
+- `ConditioningControlPanel/CCP.Core/Services/Moderation/ModerationRefusal.cs` (frozen WPF ref: `ConditioningControlPanel/Services/Moderation/ModerationRefusal.cs`) — sentinel strings (`InputSentinel`, `OutputSentinel`) and `ModerationSource` enum so the existing `IAiService` string-returning API can carry "blocked" through to the chat UI without breaking the interface.
+- `ConditioningControlPanel/CCP.Core/Services/Moderation/SafetyComposer.cs` (frozen WPF ref: `ConditioningControlPanel/Services/Moderation/SafetyComposer.cs`) — internal static class. Two `const string` fields (Preamble + Floor) plus `Wrap()` helper. Hardcoded literal text exactly as drafted in the P1 spec.
 
 ### Modified files (wire-in)
 
 - `ConditioningControlPanel/App.xaml.cs` — added `App.ModerationGuard`, `App.ModerationLog`, `App.ModerationSession` static properties; initialized in `OnStartup` immediately before `Ai = new AiServiceStrategy()` so the AI services can read them on construction.
 - `ConditioningControlPanel/Services/AiService.cs` — `GetAiResponseAsync` gains `returnRefusalSentinel` parameter. Input moderation runs before the HTTP request; output moderation runs after `SanitizeResponse` strips metadata. `GetBambiReplyAsync` (chat path) passes `returnRefusalSentinel:true`; all other public methods (`GetAwarenessReactionAsync`, `GetKeywordCommentAsync`, `GetLockScreenReaction`, `GetVideoDoneReaction`, `GetStillOnReactionAsync`) keep the default `false` so a moderation hit returns `null` and the caller silently drops the reaction. `modelHint = "cloud"`.
-- `ConditioningControlPanel/Services/AIService/LocalAiService.cs` — same pattern. Input check runs before queueing/semaphore. Output check runs after `_parser.Parse(content)` so JSON effects-wrapper extraction has already happened (we scan the user-visible text, not the JSON). Blocked outputs also discard `_currentCommands` so effects don't fire. `modelHint = "local:<modelname>"` where modelname is `CompanionPromptSettings.AiModel`.
+- `ConditioningControlPanel/CCP.Core/Services/AIService/LocalAiService.cs` (frozen WPF ref: `ConditioningControlPanel/Services/AIService/LocalAiService.cs`) — same pattern. Input check runs before queueing/semaphore. Output check runs after `_parser.Parse(content)` so JSON effects-wrapper extraction has already happened (we scan the user-visible text, not the JSON). Blocked outputs also discard `_currentCommands` so effects don't fire. `modelHint = "local:<modelname>"` where modelname is `CompanionPromptSettings.AiModel`.
 - `ConditioningControlPanel/Services/KeywordTriggerService.cs` — `DispatchAvatarComment` does a pre-dispatch `CheckInput` on the assembled `{keyword + promptTemplate}` and silently drops on hit (no AI call, no canned-phrase fallback, no bubble). Surfacing a POLICY refusal over a background OCR/keyboard hit would be jarring; the log entry alone is sufficient for record-retention.
-- `ConditioningControlPanel/Services/QuizService.cs` — `CallAiAsync` runs `CheckOutput` on every AI-generated question and the archetype-result text. Hits return null which routes to the existing deterministic fallback (canned question / deterministic archetype description). Input is multiple-choice only, so no `CheckInput` is needed.
+- `ConditioningControlPanel/CCP.Core/Services/Quiz/QuizService.cs` (frozen WPF ref: `ConditioningControlPanel/Services/Quiz/QuizService.cs`) — `CallAiAsync` runs `CheckOutput` on every AI-generated question and the archetype-result text. Hits return null which routes to the existing deterministic fallback (canned question / deterministic archetype description). Input is multiple-choice only, so no `CheckInput` is needed.
 - `ConditioningControlPanel/Services/BambiSprite.cs` — `GetSystemPrompt()` wraps the assembled string with `SafetyComposer.Wrap(...)` at its single exit point. Covers all 7 built-in personality presets, all 4 asset prompts, community-prompt overrides, and the legacy default-fallback. User-edited `Personality`, `ExplicitReaction`, `SlutModePersonality`, `KnowledgeBase`, `ContextReactions`, `OutputRules`, `CustomDomains` are passed through verbatim between the Preamble and the Floor.
-- `ConditioningControlPanel/AvatarTubeWindow.xaml` — added `PolicyBadge` Border (amber `#FFC107`, 44×14 DIP, same top-left slot as `AiBadge`, mutually exclusive). Bound to `label_policy_badge` loc-key.
-- `ConditioningControlPanel/AvatarTubeWindow.xaml.cs` — `ShowGiggle` now hides `PolicyBadge` on every normal bubble (so a previous refusal doesn't stick). New `ShowModerationRefusalBubble(ModerationSource)` method renders the localized refusal string + the POLICY badge. Chat-path call site (`OpenChatInput` await of `GetBambiReplyAsync`) now branches on `ModerationRefusal.IsRefusal(reply)` and routes to the refusal bubble instead of `GigglePriority`.
+- `ConditioningControlPanel/AvatarTube/AvatarTubeWindow.xaml` — added `PolicyBadge` Border (amber `#FFC107`, 44×14 DIP, same top-left slot as `AiBadge`, mutually exclusive). Bound to `label_policy_badge` loc-key.
+- `ConditioningControlPanel/AvatarTube/AvatarTubeWindow.xaml.cs` — `ShowGiggle` now hides `PolicyBadge` on every normal bubble (so a previous refusal doesn't stick). New `ShowModerationRefusalBubble(ModerationSource)` method renders the localized refusal string + the POLICY badge. Chat-path call site (`OpenChatInput` await of `GetBambiReplyAsync`) now branches on `ModerationRefusal.IsRefusal(reply)` and routes to the refusal bubble instead of `GigglePriority`.
 
 ### Loc-keys added
 
@@ -984,14 +984,14 @@ Categories are deliberately scoped to avoid over-triggering on the app's normal 
 
 ### Hard guardrails respected
 
-- No literal text of `Personality`, `ExplicitReaction`, `SlutModePersonality`, `KnowledgeBase`, `ContextReactions`, `OutputRules` was modified in any preset (`Models/PersonalityPresets.cs`) or asset (`assets/prompts/*.json`).
+- No literal text of `Personality`, `ExplicitReaction`, `SlutModePersonality`, `KnowledgeBase`, `ContextReactions`, `OutputRules` was modified in any preset (`CCP.Core/Models/PersonalityPresets.cs`) or asset (`assets/prompts/*.json`).
 - No built-in Awareness preset prompt template in `Resources/AwarenessPresets/*.json` was modified.
 - No auth flow (Patreon, V2, Cloud identity, V2DeviceCode) was touched.
 - Webcam consent flow was not touched.
 - P0 work (AI badge, 18+ gate, prompt editor banner) is untouched and adjacent.
 - All new user-facing strings are loc-keys with EN fallback in 8 locale files.
 - `SafetyComposer.Preamble` + `SafetyComposer.Floor` are C# const, never in JSON, never in `CompanionPromptSettings`, never editable.
-- `ModerationGuard` wordlist is hardcoded in `Services/Moderation/ModerationGuard.cs`.
+- `ModerationGuard` wordlist is hardcoded in `CCP.Core/Services/Moderation/ModerationGuard.cs` (frozen WPF ref: `Services/Moderation/ModerationGuard.cs`).
 - `moderation.log` contains only `{timestamp, category, source, session_id_hash, model_hint}` — zero user / AI message bodies.
 
 ### Build verification
@@ -1048,14 +1048,14 @@ banner: icon docks left, "Read content policy" button docks right, body
 TextBlock fills the middle and wraps.
 
 Files modified:
-- `ConditioningControlPanel/CompanionPromptEditorDialog.xaml`
-- `ConditioningControlPanel/AwarenessPresetDetailDialog.xaml`
-- `ConditioningControlPanel/QuizCategoryEditorWindow.xaml`
+- `ConditioningControlPanel/Dialogs/CompanionPromptEditorDialog.xaml`
+- `ConditioningControlPanel/Dialogs/AwarenessPresetDetailDialog.xaml`
+- `ConditioningControlPanel/Windows/QuizCategoryEditorWindow.xaml`
 
 ### Deliverable B — P1.3 PromptValidator
 
 New files:
-- `ConditioningControlPanel/Services/Moderation/PromptValidator.cs` —
+- `ConditioningControlPanel/CCP.Core/Services/Moderation/PromptValidator.cs` (frozen WPF ref: `ConditioningControlPanel/Services/Moderation/PromptValidator.cs`) —
   `IPromptValidator` interface + `PromptValidationResult` record + concrete
   `PromptValidator` implementation with 16 hardcoded regex patterns
   (Compiled | IgnoreCase | CultureInvariant). Returns ALL matched pattern
@@ -1072,22 +1072,22 @@ Modified files:
   patternCount, surface)` method. Line format:
   `{ISO8601} | PromptEditorFlag | edit | {session_id_hash} | surface=X;field=Y;matches=N`.
   No matched text logged, preserves the no-message-body invariant from §15.
-- `CompanionPromptEditorDialog.xaml` — added `ValidatorBanner` Border above
+- `Dialogs/CompanionPromptEditorDialog.xaml` — added `ValidatorBanner` Border above
   the policy banner.
-- `CompanionPromptEditorDialog.xaml.cs` — new `RunPromptValidation()` called
+- `Dialogs/CompanionPromptEditorDialog.xaml.cs` — new `RunPromptValidation()` called
   from `BtnSave_Click` before `SaveSettings()`. Validates 6 user-editable
   fields (Personality, ExplicitReaction, SlutModePersonality, KnowledgeBase,
   ContextReactions, OutputRules). `CustomDomains` mentioned in the spec has
   no UI textbox in this dialog — verified by grep, omitted. Per-field
   yellow border + tooltip; top banner shows total count. Logs one entry per
   flagged field with `surface=companion_prompt`.
-- `AwarenessPresetDetailDialog.xaml.cs` — `RunAwarenessPromptValidation()`
+- `Dialogs/AwarenessPresetDetailDialog.xaml.cs` — `RunAwarenessPromptValidation()`
   invoked from the existing `promptBox.LostFocus` (the dialog's
   auto-persist point). Surface tag `awareness_preset`,
   field `avatarPromptTemplate`.
-- `QuizCategoryEditorWindow.xaml` — added `ValidatorBanner` above the
+- `Windows/QuizCategoryEditorWindow.xaml` — added `ValidatorBanner` above the
   system prompt textbox.
-- `QuizCategoryEditorWindow.xaml.cs` — `RunPromptValidation(prompt)` from
+- `Windows/QuizCategoryEditorWindow.xaml.cs` — `RunPromptValidation(prompt)` from
   `BtnSave_Click` before `Result = new QuizCategoryDefinition`. Surface tag
   `quiz_category`, field `SystemPromptTemplate`.
 
@@ -1105,13 +1105,13 @@ edit was flagged.
 ### Deliverable C — P1.4 Counter + escalation + cooldown
 
 New files:
-- `ConditioningControlPanel/Services/Moderation/ModerationCounter.cs` —
+- `ConditioningControlPanel/CCP.Core/Services/Moderation/ModerationCounter.cs` (frozen WPF ref: `ConditioningControlPanel/Services/Moderation/ModerationCounter.cs`) —
   `IModerationCounter` interface + `ModerationCounterState` record + concrete
   `ModerationCounter`. Sliding window via `List<DateTime>` with prune-on-read.
   Thread-safe single `_lock`; the 3 events
   (`WarningTriggered`, `CooldownStarted`, `CooldownEnded`) fire outside the
   lock so listeners can re-enter without deadlock.
-- `ConditioningControlPanel/ContentPolicyWarningDialog.xaml(.cs)` — modal
+- `ConditioningControlPanel/Dialogs/ContentPolicyWarningDialog.xaml(.cs)` — modal
   warning dialog modeled visually on `ExplicitContentAcknowledgementDialog`.
   Amber accent (matches POLICY badge from §15). Single "Got it" button.
   Body line 1 (count, format) + line 2 (explanation) + line 3 (link
@@ -1133,13 +1133,13 @@ Modified files:
 - `App.xaml.cs` — registers `App.ModerationCounter` after `PromptValidator`.
 - `Services/AiService.cs` — `App.ModerationCounter?.RecordHit(...)` added
   at both refusal sites (input + output), tags `input:cloud` / `output:cloud`.
-- `Services/AIService/LocalAiService.cs` — same, tags
+- `CCP.Core/Services/AIService/LocalAiService.cs` (frozen WPF ref: `Services/AIService/LocalAiService.cs`) — same, tags
   `input:local` / `output:local`.
 - `Services/KeywordTriggerService.cs` — same on the awareness pre-dispatch
   refusal site, tag `input:awareness`.
-- `Services/QuizService.cs` — same on the quiz output refusal site, tag
+- `CCP.Core/Services/Quiz/QuizService.cs` (frozen WPF ref: `Services/Quiz/QuizService.cs`) — same on the quiz output refusal site, tag
   `output:quiz`. Quiz input is multiple-choice so no input-side hits.
-- `AvatarTubeWindow.xaml.cs`:
+- `AvatarTube/AvatarTubeWindow.xaml.cs`:
   - New `WireModerationCounter()` called from ctor before the final
     init-complete log line. Subscribes to all 3 counter events with
     dispatcher marshalling.
@@ -1189,7 +1189,7 @@ exit. Flagged as P1.4b future work.
 - `SafetyComposer.Preamble`/`Floor` and `ModerationGuard` wordlist were not
   touched.
 - `PromptValidator` regex set is hardcoded in
-  `Services/Moderation/PromptValidator.cs`. Same C#-only-no-JSON rule as
+  `CCP.Core/Services/Moderation/PromptValidator.cs` (frozen WPF ref: `Services/Moderation/PromptValidator.cs`). Same C#-only-no-JSON rule as
   `ModerationGuard`.
 - `ModerationCounter` thresholds are `const int`, not editable from
   settings or any data file.
@@ -1274,9 +1274,9 @@ Closes all 5 Criticals (C1-C5) and 10 Highs (H1-H10) from the hostile review at 
 
 ### Architecture additions
 
-- `Services/Moderation/ForeignLanguageKeywords.cs` - per-language regex/keyword sets, 8 languages x 14 categories, ~440 patterns. Iterated by `ModerationGuard.Scan` after the English pass.
-- `Services/Moderation/ModerationRefusal.cs` - now contains both the legacy static sentinel class and a new `ModerationRefusalInfo` record + `AiReplyResult` record. Naming chosen to avoid breaking the existing class.
-- `Services/AIService/IAiService.cs` - new parallel method `GetBambiReplyExAsync` returning `AiReplyResult`. Existing `GetBambiReplyAsync` retained as thin wrapper; non-UI callers unchanged.
+- `CCP.Core/Services/Moderation/ForeignLanguageKeywords.cs` (frozen WPF ref: `Services/Moderation/ForeignLanguageKeywords.cs`) - per-language regex/keyword sets, 8 languages x 14 categories, ~440 patterns. Iterated by `ModerationGuard.Scan` after the English pass.
+- `CCP.Core/Services/Moderation/ModerationRefusal.cs` (frozen WPF ref: `Services/Moderation/ModerationRefusal.cs`) - now contains both the legacy static sentinel class and a new `ModerationRefusalInfo` record + `AiReplyResult` record. Naming chosen to avoid breaking the existing class.
+- `CCP.Core/Services/AIService/IAiService.cs` (frozen WPF ref: `Services/AIService/IAiService.cs`) - new parallel method `GetBambiReplyExAsync` returning `AiReplyResult`. Existing `GetBambiReplyAsync` retained as thin wrapper; non-UI callers unchanged.
 - `ProhibitedCategory.SystemPromptLeak` - output-only category for catching Preamble/Floor shibboleths if a model paraphrases them.
 - `_inputRules` vs `_outputRules` split in `ModerationGuard` - constructor now classifies each category by whether it can fire on input, output, or both.
 - `moderation-counter.json` - persisted hit-window + cooldown end timestamp. Survives restart, satisfies CCBill record-retention narrative for the cooldown mechanism.

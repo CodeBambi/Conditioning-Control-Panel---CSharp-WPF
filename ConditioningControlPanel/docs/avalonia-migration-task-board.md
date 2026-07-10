@@ -357,17 +357,24 @@ The interactive tutorial overlay system is not fully ported. Recon lives in
 [`TUTORIAL_SYSTEM_CONTEXT.md`](TUTORIAL_SYSTEM_CONTEXT.md); claim only after reading it. (Mod-creator and
 some per-window tutorials are already shipped — see the shipped ledger.)
 
-### AI_AUDIT — WPF-path refresh · **MECHANICAL (low-pri)**
+### AI_AUDIT — WPF-path refresh · **MECHANICAL (low-pri)** — **DONE 2026-07-10 (this session)**
 
-[`AI_AUDIT.md`](../AI_AUDIT.md) (repo root) carries WPF-era paths that mislead porting agents. Refresh
-the paths to the dual-head Core/Avalonia layout. Low priority; AI_AUDIT is kept as the canonical AI
-audit (refcount 6) and is not rewritten in the docs rework.
+[`AI_AUDIT.md`](../AI_AUDIT.md) (repo root) carried WPF-era paths that misled porting agents. **DONE:**
+dispatched to a STANDARD-tier agent (glm-5.2) via the `workflow` tool; 117 path-only edits (line count
+preserved 1326, findings/prose untouched) refreshed to the dual-head layout with WPF-frozen-ref vs
+Core/Avalonia labelling. Driver-verified in-sandbox: 120/123 new path tokens exist on disk; the 3
+"missing" are runtime-data files (`settings.json`/`webcam-calibration.json`/`local_chat_history.json`)
+correctly cited at their `%APPDATA%` locations with their managing source class. Docs-only; no build
+gates apply.
 
-### subagents.json — `.kimi-code` re-sync · **MECHANICAL (low-pri, non-md)**
+### subagents.json — `.kimi-code` re-sync · **MECHANICAL (low-pri, non-md)** — **DONE 2026-07-10 (this session)**
 
-`.kimi-code/subagents.json` is divergent from `.pi/subagents.json`. It is NOT a `.md` file, so the
-docs-rework workflow could not touch it; needs a code-capable session to re-sync. Recorded as a known gap
-in [`docs-index.md`](docs-index.md).
+`.kimi-code/subagents.json` was divergent from `.pi/subagents.json`. **DONE** (STANDARD-tier agent via the
+`workflow` tool): the files are NOT agent-definition registries — they are subagent RUNTIME-CONFIG scalars
+(`maxConcurrent`/`defaultMaxTurns`/`graceTurns`). Aligned the mirror to authoritative `.pi`: `maxConcurrent`
+9→10, `defaultMaxTurns` 0→20 (`graceTurns` already 10). Both files now byte-equal
+(`{10,20,10}`). NOTE for a future session: the docs-index "known gap" described this as "divergent agent
+definitions" — that was imprecise; the actual divergence was two config values, now reconciled.
 
 ### ai-command P3 gaps · **DEFER**
 
@@ -400,7 +407,7 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 | Row | Evidence | Expected gain | Tier | Proportionality |
 |---|---|---|---|---|
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
-**row #2 re-baseline → subagents.json → AI_AUDIT → #6 (DTRH web) → #4 (WS3 sweep) →
+**row #2 re-baseline → #6 (DTRH web) → #4 (WS3 sweep) →
 #3 (libmpv, CONDITIONAL)**. BubbleLayer-mod-resolver DONE (this session). IMP-ECON1 DONE (this session) — economy double-pay fixed;
 **Core test floor 542→543** (new pinning test). Original 12-row improvement queue fully resolved this session:
 IMP-1 DONE `49ec3707`. IMP-11 DONE `28fa06a2`. IMP-5 DONE `23b4dd86`. IMP-7 DONE `85f036f1`. IMP-10 DONE
