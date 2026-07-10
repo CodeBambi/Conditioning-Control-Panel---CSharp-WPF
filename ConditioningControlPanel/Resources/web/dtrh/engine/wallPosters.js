@@ -342,9 +342,86 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
     slot.mesh.scale.set(w, h, 1);
     slot.mat.map = item.tex;
     slot.assetName = item.assetName || null; // which user image this poster shows (for the "like")
+    // born mid-Mirror-Moment: wear the favorite (the real map waits underneath)
+    if (mirror) { slot.mirrorMap = slot.mat.map; slot.mat.map = mirror.tex; }
     slot.mat.needsUpdate = true;
+    slot.mat.opacity = 0.92;
+    slot.melt = null;
     slot.mesh.visible = true;
     return true;
+  }
+
+  // ---- biome seams: grab arbitration, the melt, the Mirror Moment -------------
+  // THE BIOMES (game/biomeMech.js): the game may veto a poster hold ('melt' -
+  // the Gallery's look-don't-touch) and wants to hear about holds that stick.
+  let grabHooks = null;   // { policy(rec)->'allow'|'melt', onGrab(rec), onMelt(rec) }
+  function setGrabHooks(h) { grabHooks = h || null; }
+
+  // A melting poster droops off the wall and fades, then its slot retires.
+  function meltSlot(slot) {
+    if (!slot || !slot.active || slot.melt) return;
+    slot.melt = { t: 0, dur: 0.6, h: slot.mesh.scale.y };
+    if (_heldSlot === slot) { _heldSlot = null; _heldGap = null; }
+  }
+  /** THE BIOMES (Incognito): the wipe - every live poster droops off the wall
+   * at once. Returns how many started melting. */
+  function meltAll() {
+    let n = 0;
+    for (const slot of slots) {
+      if (!slot.active || slot.melt || !slot.mesh.visible) continue;
+      meltSlot(slot);
+      if (slot.melt) n++;
+    }
+    return n;
+  }
+
+  function tickMelts(dt) {
+    for (const slot of slots) {
+      if (!slot.melt || !slot.active) continue;
+      slot.melt.t += dt;
+      const k = Math.min(1, slot.melt.t / slot.melt.dur);
+      slot.mesh.scale.y = Math.max(0.03, slot.melt.h * (1 - k));
+      slot.mat.opacity = 0.92 * (1 - k);
+      if (k >= 1) {
+        slot.active = false;
+        slot.mesh.visible = false;
+        slot.mat.map = null;
+        slot.mirrorMap = undefined;
+        slot.mat.opacity = 0.92;
+        slot.melt = null;
+        liveCount -= 1;
+      }
+    }
+  }
+
+  // The Mirror Moment (Hall of Mirrors): every live poster temporarily wears
+  // ONE texture - the player's most-engaged asset. The pool keeps animating
+  // underneath; restore just points the slots back at their real maps.
+  let mirror = null;   // { url, tex }
+  function setMirror(url) {
+    if (!url) {
+      if (!mirror) return;
+      for (const s of slots) {
+        if (s.mirrorMap === undefined) continue;
+        s.mat.map = s.mirrorMap;
+        s.mirrorMap = undefined;
+        s.mat.needsUpdate = true;
+      }
+      if (mirror.tex) mirror.tex.dispose();
+      mirror = null;
+      return;
+    }
+    if (mirror && mirror.url === url) return;
+    if (mirror) setMirror(null);   // swap: restore first
+    const tex = new THREE.TextureLoader().load(url);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    mirror = { url, tex };
+    for (const s of slots) {
+      if (!s.active || !s.mesh.visible || s.melt) continue;
+      s.mirrorMap = s.mat.map;
+      s.mat.map = mirror.tex;
+      s.mat.needsUpdate = true;
+    }
   }
 
   // ---- public API ------------------------------------------------------------
@@ -373,7 +450,10 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
   // placed slot sits on the OLD spine. Retire them all; update() re-places fresh
   // ones ahead on the new spine via layout.frameAtDepth as the fall continues.
   function reset() {
-    for (const s of slots) { s.active = false; s.mesh.visible = false; }
+    for (const s of slots) {
+      s.active = false; s.mesh.visible = false;
+      s.melt = null; s.mirrorMap = undefined; s.mat.opacity = 0.92;
+    }
     liveCount = 0;
     addCooldown = 0;
     _heldSlot = null;
@@ -383,16 +463,24 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
   // The live poster meshes the scene raycast can hit.
   function getPickables() {
     const out = [];
-    for (const s of slots) if (s.active && s.mesh.visible) out.push(s.mesh);
+    for (const s of slots) if (s.active && s.mesh.visible && !s.melt) out.push(s.mesh);
     return out;
   }
   // Seize the poster behind `mesh`; returns { assetName } (or null if it's gone).
   function grabPoster(mesh) {
     const slot = mesh && mesh.userData && mesh.userData.slot;
-    if (!slot || !slot.active) return null;
+    if (!slot || !slot.active || slot.melt) return null;
+    const rec = { assetName: slot.assetName || null };
+    // THE BIOMES: the Gallery melts a denied hold right off the wall
+    if (grabHooks && grabHooks.policy && grabHooks.policy(rec) === 'melt') {
+      meltSlot(slot);
+      if (grabHooks.onMelt) { try { grabHooks.onMelt(rec); } catch (e) { /* ignore */ } }
+      return null;
+    }
     _heldSlot = slot;
     _heldGap = null; // captured on the first advanceHeld() from the live cam depth
-    return { assetName: slot.assetName || null };
+    if (grabHooks && grabHooks.onGrab) { try { grabHooks.onGrab(rec); } catch (e) { /* ignore */ } }
+    return rec;
   }
   function releasePoster() { _heldSlot = null; _heldGap = null; }
   // Ride the held poster along with the camera AND ease it to be level with us
@@ -420,6 +508,7 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
   function update(cam, camDepth, dt) {
     if (paused) return;
     tickPool(dt); // advance any animated (gif) poster textures
+    tickMelts(dt); // THE BIOMES: denied holds drooping off the wall
     // ease the live count toward the region ceiling: add posters gradually (in
     // the fog ahead) and retire extras as they pass behind, so a chamber change
     // breathes in/out instead of snapping.
@@ -441,11 +530,13 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
     for (const slot of slots) {
       if (!slot.active) continue;
       if (slot === _heldSlot) continue; // frozen while the player holds it
+      if (slot.melt) continue;          // mid-melt: tickMelts owns its exit
       if (slot.depth < camDepth - BEHIND) {
         if (liveCount > targetCount) {          // over ceiling: retire this one
           slot.active = false;
           slot.mesh.visible = false;
           slot.mat.map = null;
+          slot.mirrorMap = undefined;
           liveCount -= 1;
         } else {                                 // re-throw ahead into the fog
           const d = safeDepth(camDepth + rand(AHEAD_MAX * 0.6, AHEAD_MAX), camDepth);
@@ -454,6 +545,7 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
             slot.active = false;
             slot.mesh.visible = false;
             slot.mat.map = null;
+            slot.mirrorMap = undefined;
             liveCount -= 1;
           }
         }
@@ -482,5 +574,5 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
     unit.dispose();
   }
 
-  return { setRegion, setPaused, setBlockedSpan, update, dispose, reset, getPickables, grabPoster, releasePoster, advanceHeld, getHeldWorldPos };
+  return { setRegion, setPaused, setBlockedSpan, update, dispose, reset, getPickables, grabPoster, releasePoster, advanceHeld, getHeldWorldPos, setGrabHooks, setMirror, meltAll };
 }

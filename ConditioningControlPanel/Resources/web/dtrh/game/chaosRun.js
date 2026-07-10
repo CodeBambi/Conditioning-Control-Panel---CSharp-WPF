@@ -41,6 +41,9 @@ import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boon
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
 import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL } from './regions.js';
+import { rollBiomeIds, biomeForWave, biomeById } from './biomes.js';
+import { createBiomeMech } from './biomeMech.js';
+import { setAudioColor } from '../engine/audioBus.js';
 import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
 import { createPayloadFx } from './payloadFx.js';
@@ -182,6 +185,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   let ctx = null;      // { nav, fx, director, hud, canvas } from scene.start
   let field = null, ffx = null, hudUi = null, overlays = null, payloadFx = null;
+  let bMech = null;    // the biome mechanic controller (game/biomeMech.js), built in attach
   let warren = null, lessons = null, happy = null, vn = null, lessonCardUi = null, hubGuide = null;
   let rippleCastCount = 0;   // per-run: feeds the classroom's "try the ripple" prompt
   const metrics = createSessionMetrics();   // per-run engagement counters (local-only telemetry)
@@ -205,6 +209,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       ordinarySpawns: 0, spawnSerial: 0, waveDetonations: 0, runDetonations: 0,
       endingSoonFired: false, finalLoopAnnounced: false, finalLandingDone: false,
       lastComboBig: 0, lastActFired: 1,
+
+      // ---- THE BIOMES: one rolled id per room (null on legacy/scripted runs) ----
+      biomes: null,
 
       // ---- branching paths (junctions.js) ----
       nextJunctionSec: 45,     // first fork ~45s into the descent
@@ -312,16 +319,39 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   const heatMult = () => 1.0 + st.heat;
   const totalMult = () => st.baseMult * comboMult() * cfg.difficultyMult * heatMult() * st.boonMult * st.urgeMult * wxPay();
 
+  // ---- THE BIOMES (game/biomes.js): the rolled place-variant of each room ----
+  // A biome is the LAND under whatever sky is up: its style replaces the room's
+  // classic dress, its profile replaces the spawn feel, and its wx scalars fold
+  // into the same math as the weather modifiers below. Legacy/scripted runs
+  // roll no biomes (st.biomes null) and everything resolves to the classics.
+  const activeBiome = () => (st && cfg && cfg.regionMode ? biomeForWave(st.waveIndex, st.biomes) : null);
+  const biomeAt = (waveIndex) => (st && cfg && cfg.regionMode ? biomeForWave(waveIndex, st.biomes) : null);
+  /** The chamber's effective style/profile/weather: biome override or classic. */
+  const styleForWaveNow = (waveIndex) => {
+    const b = biomeAt(waveIndex);
+    return (b && b.style) || regionForWave(waveIndex).style || null;
+  };
+  const profileForWaveNow = (waveIndex) => {
+    const b = biomeAt(waveIndex);
+    return (b && b.profile) || profileForWave(waveIndex);
+  };
+  const weatherIdForWave = (waveIndex) => {
+    const b = biomeAt(waveIndex);
+    return b && b.weatherId !== undefined ? b.weatherId : regionForWave(waveIndex).weatherId;
+  };
+  const bx = (key) => { const b = activeBiome(); return (b && b.wx && b.wx[key]) || null; };
+  const bxMult = (key) => { const v = bx(key); return v ? v : 1; };
+
   // ---- Wave 2 weather math (weather.js) ----
   // Mood Ring L2 amplifies every weather effect x1.5 (bonus part only).
   const wxAmp = () => (st && st.moodRingLevel >= 2 ? 1.5 : 1.0);
   const wxMult = (v) => (weatherNow && v ? 1 + (v - 1) * wxAmp() : 1);
-  const wxPay = () => wxMult(weatherNow && weatherNow.payMult);
-  const wxHeatGain = () => wxMult(weatherNow && weatherNow.heatGain);
-  const wxFuse = () => wxMult(weatherNow && weatherNow.fuseMult);
+  const wxPay = () => wxMult(weatherNow && weatherNow.payMult) * bxMult('payMult');
+  const wxHeatGain = () => wxMult(weatherNow && weatherNow.heatGain) * bxMult('heatGain');
+  const wxFuse = () => wxMult(weatherNow && weatherNow.fuseMult) * bxMult('fuseMult');
   const wxSpeed = () => wxMult(weatherNow && weatherNow.speedMult);
   const wxSpawnRate = () => wxMult(weatherNow && weatherNow.spawnRate);
-  const wxGolden = () => (weatherNow && weatherNow.goldenBonus ? weatherNow.goldenBonus * wxAmp() : 0);
+  const wxGolden = () => (weatherNow && weatherNow.goldenBonus ? weatherNow.goldenBonus * wxAmp() : 0) + (bx('goldenBonus') || 0);
   /** The run's resting time factor (freeze/slow-mo restore to THIS, not 1).
    * Overstim weather and the Freefall sin both live here. */
   const baseTime = () => wxSpeed() * (st && st.freefallActive ? 2 : 1);
@@ -638,6 +668,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       bark('detonated-absorbed', { variant: spec.variantId, strength: spec.strength, runDetonations: st.runDetonations, combo: st.combo, difficulty: diff, shields: st.shields });
       return;
     }
+    // THE BIOMES: an UNSHIELDED detonation truly landed (Fool's Casino's pot burns).
+    if (bMech) bMech.onDetonated(spec, x, y);
     const comboBefore = st.combo;
     st.combo = 0;
     st.lastComboBig = 0;
@@ -693,10 +725,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       lessons.onSpecialPopped();
       st.focus = clamp(st.focus + FOCUS_PER_GOLDEN, 0, FOCUS_MAX);
       const gold = goldScaled(randInt(st.goldenPay[0], st.goldenPay[1]));
-      bankGold(gold, x, y);
-      hudUi.announce(`🪙 +${gold} gold`, 'powerup', 1600);
-      sfx('golden_pop', 0.6);
-      pulse('255,215,0', 0.35);
+      // THE BIOMES: Fool's Casino stakes the payout instead of banking it -
+      // when the mech owns the gold, nothing lands until the pot resolves.
+      if (bMech && bMech.onGoldenPop(gold, x, y)) {
+        sfx('golden_pop', 0.6);
+        pulse('255,215,0', 0.35);
+      } else {
+        bankGold(gold, x, y);
+        hudUi.announce(`🪙 +${gold} gold`, 'powerup', 1600);
+        sfx('golden_pop', 0.6);
+        pulse('255,215,0', 0.35);
+      }
       if (st.goldDigger) {
         for (let i = 0; i < 3; i++) {
           markDiscovered('bubble:gold_droplet');
@@ -759,6 +798,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     }
     // Private Show (shielded half): pops pay x3 while she holds the stage
     if (showActive && st.privateShowPayMult > 1) pts *= st.privateShowPayMult;
+    // THE BIOMES: the place weighs in - positional pay (Keyhole beams, Gallery
+    // restraint) plus the mechanic's own pop reaction (Toybox mimic flips, the
+    // Grey Ward's color touch, Mirror Moment chains).
+    if (bMech) {
+      pts *= bMech.payMultAt(x, y, spec);
+      const tp = bMech.treatPop(spec, x, y, src);
+      if (tp && tp.payMult) pts *= tp.payMult;
+    }
     st.score += pts;
     bankDripFeed();
     showPopScore(pts, x, y);
@@ -880,8 +927,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const lastBreath = st.lastBreathWindowSec > 0 && fuseSecLeft <= st.lastBreathWindowSec
       ? st.lastBreathPayMult : 1.0;
     const slowburn = fuseSecLeft <= 1.5 && st.maxedBoons.has('slowburner') ? 3.0 : 1.0;
+    // THE BIOMES: the chamber may weigh in on the snap (Vertigo's mid-flip
+    // double, the Undertow's beaten current, the Chain Court's kept bargains).
+    const bd = bMech ? bMech.onDefused(spec, fuseSecLeft, viaChannel, x, y) : null;
     const pts = basePoints(spec.strength) * 1.0 * lastBreath * slowburn
-      * pendulumFactor() * chanceFlip() * totalMult() * st.blindfoldPayMult;
+      * pendulumFactor() * chanceFlip() * totalMult() * st.blindfoldPayMult
+      * (bd && bd.payMult ? bd.payMult : 1);
     st.score += pts;
     bankDripFeed();
     showPopScore(pts, x, y);
@@ -1403,9 +1454,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
    * (handled by advanceWeather before this is reached). */
   function applyRegionSky(regionIndex) {
     const region = regionForWave(regionIndex);
-    const w = region.weatherId ? WEATHER_BY_ID[region.weatherId] : null;
-    const nextRegion = regionIndex < REGION_COUNT ? regionForWave(regionIndex + 1) : null;
-    weatherNext = nextRegion && nextRegion.weatherId ? WEATHER_BY_ID[nextRegion.weatherId] : null;
+    // THE BIOMES: the rolled place-variant owns the chamber's sky + dress +
+    // mechanic; the room keeps its band/numeral/title. No biome = the classics.
+    const biome = biomeAt(regionIndex);
+    const wid = weatherIdForWave(regionIndex);
+    const w = wid ? WEATHER_BY_ID[wid] : null;
+    const nextWid = regionIndex < REGION_COUNT ? weatherIdForWave(regionIndex + 1) : null;
+    weatherNext = nextWid ? WEATHER_BY_ID[nextWid] : null;
     // The chamber banner (announceRegion) is the headline, so the sky lands
     // quietly here - just its persistent HUD chip + a first-sight desc toast,
     // never its own competing banner.
@@ -1419,18 +1474,24 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (ctx && ctx.wall) ctx.wall.setRegion(regionIndex);
     // Four Chambers voiceover: the drift chain draws this chamber's region-tagged
     // lines (universal backbone still plays underneath). Escalates I->IV.
-    if (ctx && ctx.drift) ctx.drift.setRegion(cfg.regionMode ? regionIndex : 0);
+    // THE BIOMES: biome-tagged lines join in only while their place is up.
+    if (ctx && ctx.drift) {
+      ctx.drift.setRegion(cfg.regionMode ? regionIndex : 0);
+      if (ctx.drift.setBiome) ctx.drift.setBiome(biome ? biome.id : null);
+    }
     // Four Chambers visual identity: the chamber OWNS the tube. Palette grade
     // crossfades in (~3.2s, landing as the ready-GO beat clears); the ring/
     // spiral/arm cadence snaps ONCE right here, hidden under commitWave's flash
     // (eased count changes read as a visible respace); bloom + the 2D field
     // accents finish the dress. The strobe knob is scaled by the player's
     // effect-intensity dial (photosensitivity guard).
-    const style = region.style || null;
+    const style = (biome && biome.style) || region.style || null;
     ctx.fx.applyRegionGrade(style, 3.2, { strobeScale: cfg.effectIntensity });
     if (style && style.density) ctx.fx.setDensity(style.density, { snap: true });
     if (ffx && ffx.setRegionPalette) ffx.setRegionPalette(style ? style.field : null);
     if (ctx.setBloomStrength) ctx.setBloomStrength(style && style.bloom ? style.bloom : 1);
+    // THE BIOMES: swap the chamber's mechanic in (exits the old one cleanly).
+    if (bMech) bMech.setBiome(regionIndex, biome);
   }
 
   // ---- Wave 2: tunnel pickups (spawner.spawnPickup - clickable 3D objects) ----
@@ -1555,7 +1616,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
    * the portal veins sit in-chamber while the brand word stays legible. */
   function chamberBlend(hex) {
     if (!cfg.regionMode) return hex;
-    const style = regionForWave(st.waveIndex).style;
+    const style = styleForWaveNow(st.waveIndex);
     if (!style || !style.palette) return hex;
     const a = parseInt(hex.slice(1), 16), b = style.palette.colLine, t = 0.35;
     const mix = (sh) => Math.round(((a >> sh) & 255) + (((b >> sh) & 255) - ((a >> sh) & 255)) * t);
@@ -1779,6 +1840,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     draftRoomActive = true;
     draftRoomSkip = false;
     draftRoomDoors = options.length;
+    // The Journey Rooms: the doors lead INTO the next room, so its title hangs
+    // over them - big writing above the doorway mouths (junctions buildTitle).
+    // The room theme only; the rolled biome stays a surprise until arrival.
+    const next = regionForWave(pendingWave);
+    const nextStyle = next.style;   // classic room palette - never the biome's (no early hint)
     ctx.junctions.schedule({
       atDepth: ctx.nav.getDepth() + DRAFT_ROOM_LEAD,
       branches: options.map(boonBranch),
@@ -1786,6 +1852,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       mode: 'draft',
       lingerSec: cfg.draftAutoResumeSec,
       lead: DRAFT_ROOM_LEAD,
+      title: { numeral: next.numeral, text: next.name,
+               color: (nextStyle && nextStyle.palette && nextStyle.palette.colLine) || 0xff69b4 },
     });
   }
 
@@ -1861,6 +1929,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     st.elapsedSec += dt;
     st.heat = Math.max(0, st.heat - 0.0015);
     ambientTick();
+    // THE BIOMES: the chamber's mechanic breathes AFTER ambientTick so its
+    // rush/speed writes win the frame (Terminal Velocity outruns Heat Warp).
+    if (bMech) bMech.tick(dt);
     maybeScheduleJunction();
 
     // Weather Girl: the sky that arrived while the field was held makes its entrance now.
@@ -2367,12 +2438,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (!cfg.boonDraftEnabled) announceFinalLoopIfEntering();
   }
 
-  /** Four Chambers: the arrival banner for a region (I..IV) - name + descent
-   * beat. Fired on every chamber entry (and Region I at the opening GO). */
+  /** The Journey Rooms arrival card: room title (the emotional beat) headlining,
+   * the rolled BIOME naming the place underneath - the "surprise on entry"
+   * reveal. Fired on every chamber entry (and Room I at the opening GO). */
   function announceRegion(regionIndex) {
     const r = regionForWave(regionIndex);
+    const b = biomeAt(regionIndex);
     sfx('depth_change', 0.55);
-    hudUi.announce(`CHAMBER ${r.numeral} · ${r.name}`, 'depth', 2600, { artKey: 'depth', subText: r.subtitle });
+    hudUi.announce(`${r.numeral} · ${r.name.toUpperCase()}`, 'depth', 3000, {
+      artKey: 'depth',
+      subText: b ? `${b.glyph} ${b.name} — ${b.tagline}` : r.subtitle,
+    });
     bark('act-changed', { act: Math.min(regionIndex, REGION_COUNT), wave: regionIndex });
   }
 
@@ -2418,10 +2494,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function trySpawnBehavioral(effIntensity) {
     const gentleMult = cfg.pace.strange;
     const rank = cfg.rankIndex;
-    // Four Chambers: the region biases WHICH mechanics show up (pairs in the
-    // Hall, echoes in the Garden, teases in the Court). `behavioral` is a global
-    // scale; the per-mechanic keys ride on top. Neutral (all 1.0) off-region.
-    const prof = cfg.regionMode ? profileForWave(st.waveIndex) : PROFILE_NEUTRAL;
+    // Four Chambers: the region (or its rolled BIOME) biases WHICH mechanics
+    // show up. `behavioral` is a global scale; the per-mechanic keys ride on
+    // top. Neutral (all 1.0) off-region.
+    const prof = cfg.regionMode ? profileForWaveNow(st.waveIndex) : PROFILE_NEUTRAL;
     const bMult = gentleMult * prof.behavioral;
 
     if (rank >= RANK.Tempted && Math.random() < ECHO_SPAWN_CHANCE * bMult * prof.echo) {
@@ -2488,9 +2564,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (st.freezeRemainingSec > 0) { spawnWait = 0.3; return; }   // frozen: hold the field
     const i = intensity();
     const effIntensity = clamp(i + cfg.pace.surge, 0, 1);
-    // Four Chambers: the region's `density` scales how full the field runs -
-    // sparse in the Long Fall, an overgrown tangle in the Mad Garden.
-    const prof = cfg.regionMode ? profileForWave(st.waveIndex) : PROFILE_NEUTRAL;
+    // Four Chambers: the chamber's (biome-aware) `density` scales how full the
+    // field runs - sparse and open up top, an overgrown tangle in the deep.
+    const prof = cfg.regionMode ? profileForWaveNow(st.waveIndex) : PROFILE_NEUTRAL;
     // Population ceiling: kept low through most of the fall and only climbing
     // hard as intensity peaks in the deep chambers, so the run RAMPS instead of
     // firing a full field the whole way down. (Was 6 + i*10.)
@@ -2741,10 +2817,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     finalLandingActive = false;
     vnHold = false;   // a run torn down mid-beat must not carry a stuck field-freeze into the next descent
     clearAmbient();
+    // THE BIOMES: roll this descent's place-variants (one per room). Scripted
+    // first runs stay biome-free - the classroom plays the classic chambers.
+    st.biomes = (cfg.regionMode && !cfg.scriptedFirstRun) ? rollBiomeIds() : null;
+    if (bMech) bMech.reset();
     // Four Chambers: Region I is the open fall; the Mood Ring forecasts the next
-    // chamber's fixed sky. Legacy runs roll a random loop-2 sky instead.
+    // chamber's fixed sky (the BIOME's sky when one overrides it). Legacy runs
+    // roll a random loop-2 sky instead.
     weatherNext = cfg.regionMode
-      ? (regionForWave(2).weatherId ? WEATHER_BY_ID[regionForWave(2).weatherId] : null)
+      ? (weatherIdForWave(2) ? WEATHER_BY_ID[weatherIdForWave(2)] : null)
       : rollWeather(null);   // loop 1 flies under an open sky; the weather lands with loop 2
     // Tunnel videos hold in view (the Fall's spotlight) during a descent too, so
     // a passing video lingers for its 'video spotlight time' (S.spotSeconds)
@@ -2790,7 +2871,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           applyRegionSky(st.waveIndex);
         } else {
           if (ctx && ctx.wall) ctx.wall.setRegion(0);
-          if (ctx && ctx.drift) ctx.drift.setRegion(0);
+          if (ctx && ctx.drift) { ctx.drift.setRegion(0); if (ctx.drift.setBiome) ctx.drift.setBiome(null); }
         }
         // First descent since the verb changed: one quiet line so the hold isn't
         // a mystery. The scripted run 1 lands this at its lone-threat beat instead.
@@ -2813,7 +2894,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // Surfaced: hush the drift whisper + calm the tube for the recap/hub idle.
     try { ctx.setRunActive && ctx.setRunActive(false); } catch (e) { /* ignore */ }
     if (ctx && ctx.wall) ctx.wall.setRegion(0); // bare the wall for the recap/warren
-    if (ctx && ctx.drift) ctx.drift.setRegion(0); // recap/warren: universal voice only
+    if (ctx && ctx.drift) { ctx.drift.setRegion(0); if (ctx.drift.setBiome) ctx.drift.setBiome(null); } // recap/warren: universal voice only
+    if (bMech) bMech.reset();   // THE BIOMES: exit the mechanic (restores dim/beams/mirrors/speed)
     if (st.freezeRemainingSec > 0) endFreeze();
     if (st.slowMoRemainingSec > 0) endSlowMo();
     field.setVibe(false);
@@ -2856,6 +2938,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       defused: st.defused,
       detonated: st.detonated,
       trickleDrops: st.trickleDrops,
+      // THE BIOMES: the route this fall took, for the recap's summary line
+      biomes: (st.biomes || []).map((id) => biomeById(id)).filter(Boolean)
+        .map((b) => ({ glyph: b.glyph, name: b.name })),
     }, {
       onAgain: () => {
         // Re-request a fresh config (the loadout/settings may have moved, and
@@ -2879,6 +2964,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.setPicks([]);
     field.clearAll();
     clearAmbient();
+    if (bMech) bMech.reset();   // a run aborted mid-chamber must not leak its biome mechanic into the hub
     try { ctx.setRunActive && ctx.setRunActive(false); } catch (e) { /* ignore */ }
     if (ctx.spawner) ctx.spawner.setAutoSpotlight(true);
     ctx.director.setTimeFactor(0.3);
@@ -2917,7 +3003,38 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
             commitWave(clamp(Math.round(n || 1), 1, REGION_COUNT));
           }
         };
+        // diagnostics seam: force a biome mid-run - __sfBiome('gallery') rigs
+        // the roll for that biome's room and recommits its chamber so the full
+        // arrival choreography (banner + grade + mechanic swap) plays.
+        window.__sfBiome = (id) => {
+          const b = biomeById(String(id || ''));
+          if (!b || state !== 'running' || !cfg || !cfg.regionMode) return false;
+          if (!st.biomes) st.biomes = rollBiomeIds();
+          st.biomes[b.room - 1] = b.id;
+          commitWave(b.room);
+          return true;
+        };
       } catch { /* diagnostics seam */ }
+      // THE BIOMES: the mechanic controller - the run brain forwards its seams
+      // (tick / pops / grabs / detonations) into whichever mechanic the rolled
+      // chamber runs. The facade below is everything a mechanic may touch.
+      bMech = createBiomeMech({
+        st: () => st,
+        get field() { return field; },   // created just below; getter dodges the ordering
+        get ffx() { return ffx; },
+        get fx() { return ctx.fx; },
+        get nav() { return ctx.nav; },
+        get spawner() { return ctx.spawner; },
+        get wall() { return ctx.wall; },
+        sfx, pulse, addHeat, bankGold, hudNow,
+        syncPhys: () => syncPhys(),
+        firePayload: (spec) => firePayload(spec),
+        toast: (t) => hudUi && hudUi.toast(t),
+        announce: (text, kind, ms, opts) => hudUi && hudUi.announce(text, kind, ms, opts),
+        favoriteAsset: (kind) => (ctx.media && ctx.media.favorite ? ctx.media.favorite(kind) : null),
+        assetUrl: (name) => (ctx.media && ctx.media.urlByName ? ctx.media.urlByName(name) : null),
+        audioColor: (mode) => { try { setAudioColor(mode); } catch (e) { /* ignore */ } },
+      });
       field = createChaosField({
         hud: ctx.hud, fx: ffx,
         canChannel, onBenignPopped, onFreezeCaught,
@@ -2950,6 +3067,23 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (ctx.junctions) {
         ctx.junctions.onCommit = (choice) => (choice && choice.mode === 'draft' ? onDraftDoorChosen(choice) : onJunctionChosen(choice));
         ctx.junctions.onLinger = (on, mode) => (mode === 'draft' ? onDraftRoomLinger(on) : onJunctionLinger(on));
+      }
+      // THE BIOMES: grab arbitration. The Gallery melts a denied grab in your
+      // hands; every grab that holds feeds the run-wide tally the Coronation
+      // reads back. Outside a live run everything stays 'allow'.
+      if (ctx.spawner && ctx.spawner.setGrabHooks) {
+        ctx.spawner.setGrabHooks({
+          policy: (rec) => (state === 'running' && bMech ? bMech.grabPolicy('card', rec) : 'allow'),
+          onGrab: (rec) => { if (state === 'running' && bMech) bMech.onGrabbed('card', rec); },
+          onMelt: (rec) => { if (state === 'running' && bMech) bMech.onMelted('card', rec); },
+        });
+      }
+      if (ctx.wall && ctx.wall.setGrabHooks) {
+        ctx.wall.setGrabHooks({
+          policy: (rec) => (state === 'running' && bMech ? bMech.grabPolicy('poster', rec) : 'allow'),
+          onGrab: (rec) => { if (state === 'running' && bMech) bMech.onGrabbed('poster', rec); },
+          onMelt: (rec) => { if (state === 'running' && bMech) bMech.onMelted('poster', rec); },
+        });
       }
       overlays = createOverlays(ctx.hud);
       // Shared world-hold contract. The VN portrait AND the in-run lesson cards

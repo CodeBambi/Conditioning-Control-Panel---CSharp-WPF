@@ -24,6 +24,7 @@ export function createHostMediaSource() {
   let skipped = 0;    // reported by the host (browser-undecodable formats etc.)
   let deck = [];      // shuffled indices into entries, drawn from the end
   const recent = [];  // last NO_ECHO drawn indices (echo guard for tiny pools)
+  let favorites = []; // host-ranked asset names (dtrh_asset_stats.json, most-engaged first)
 
   const counts = () => {
     let images = 0, videos = 0;
@@ -79,6 +80,25 @@ export function createHostMediaSource() {
 
     hasUserMedia: () => entries.length > 0,
     stats: counts,
+
+    // ---- THE BIOMES (S3 read-back): the host ranks assets by cumulative
+    // engagement (DtrhAssetStatsStore) and posts the top names with the
+    // manifest. Mirror biomes ask for "the one you like most". ----
+    /** Host-ranked names, most-engaged first ({type:'favorites'} message). */
+    setFavorites(names) { favorites = Array.isArray(names) ? names.filter(Boolean) : []; },
+    /** The most-engaged asset still present in the pool (kind-filtered). */
+    favorite(kind) {
+      for (const name of favorites) {
+        const e = entries.find((x) => x.name === name && (!kind || x.kind === kind));
+        if (e) return { kind: e.kind, name: e.name, url: e.url };
+      }
+      return null;
+    },
+    /** Resolve an asset name to its virtual-host URL (null if not in the pool). */
+    urlByName(name) {
+      const e = name ? entries.find((x) => x.name === name) : null;
+      return e ? e.url : null;
+    },
 
     // Picker surface from the site's media.js: the pool is host-fed here, so the
     // in-scene "add a folder" affordances are simply off (supportsFS false) and the

@@ -110,6 +110,9 @@ bridge.on('manifest', (m) => {
   haveManifest = true;
   maybeStart();
 });
+// THE BIOMES (S3 read-back): host-ranked most-engaged asset names - the
+// Mirror biomes draw "the one you like most" from this.
+bridge.on('favorites', (m) => media.setFavorites(m.names));
 bridge.on('meta', (m) => {
   hostState.meta = m.state;
   hostState.metaRev = m.rev;

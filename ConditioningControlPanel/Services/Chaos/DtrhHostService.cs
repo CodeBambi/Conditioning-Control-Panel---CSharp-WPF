@@ -185,6 +185,15 @@ internal static class DtrhHostService
                 skipped = m.Skipped,
                 truncated = m.Truncated,
             });
+            // THE BIOMES (S3 read-back): the cumulative engagement ranking, so the
+            // page can bias toward the media the user actually likes (the exact
+            // future feature DtrhAssetStatsStore was built to serve).
+            try
+            {
+                var favorites = DtrhAssetStatsStore.TopAssets(12);
+                if (favorites.Count > 0) _host?.Post(new { type = "favorites", names = favorites });
+            }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHostService favorites post failed: {E}", ex.Message); }
         }
         catch (Exception ex) { App.Logger?.Warning("DtrhHostService.OnPageReady: {E}", ex.Message); }
     }

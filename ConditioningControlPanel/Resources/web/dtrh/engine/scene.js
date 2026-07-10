@@ -28,7 +28,7 @@ import { createFx } from './fx.js';
 import { createPanel } from './panel.js';
 import { createDriftChain } from './driftChain.js';
 import { getLevel, setLevel, audioGroups } from './audioLevels.js';
-import { getAudioCtx, closeAudioBus } from './audioBus.js';
+import { getAudioCtx, getMasterOut, closeAudioBus } from './audioBus.js';
 import { S, updateSetting, onSettings, THEME_COLORS, THEME_PRESETS, applyThemePreset, intToHex, hexToInt } from './settings.js';
 
 const DRONE_URL = '/dtrh/assets/audio/drone1.mp3'; // Explore uses drift-under-glass; the fall gets its own bed
@@ -157,7 +157,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
         droneGain = droneCtx.createGain();
         droneGain.gain.value = droneVol;
         src.connect(droneGain);
-        droneGain.connect(droneCtx.destination);
+        droneGain.connect(getMasterOut() || droneCtx.destination);
         drone.volume = 1; // loudness lives in the gain node now
       }
     } catch (e) { droneCtx = null; droneGain = null; }

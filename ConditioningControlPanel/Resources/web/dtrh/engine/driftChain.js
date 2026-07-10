@@ -17,7 +17,7 @@
 import { FALL_DRIFT } from '/dtrh/assets/barks/manifest.js';
 import { isMuted, onMuteChange } from '../shared/audioMute.js';
 import { getLevel, onLevels } from './audioLevels.js';
-import { getAudioCtx, makeSfxPlayer } from './audioBus.js';
+import { getAudioCtx, getMasterOut, makeSfxPlayer } from './audioBus.js';
 
 const BASE = '/dtrh/assets/barks/';
 const SFX_BASE = '/dtrh/assets/bubbles/sfx/';
@@ -61,7 +61,7 @@ export function createDriftChain({ getDepth }) {
       const src = ctx.createMediaElementSource(el);
       voiceGain = ctx.createGain();
       voiceGain.gain.value = getLevel('voice');
-      src.connect(voiceGain); voiceGain.connect(ctx.destination);
+      src.connect(voiceGain); voiceGain.connect(getMasterOut() || ctx.destination);
       el.volume = 1; // loudness lives in the gain node now
     } catch (e) { voiceGain = null; }
   }
@@ -124,8 +124,13 @@ export function createDriftChain({ getDepth }) {
   // the universal backbone speaks, exactly as before. Fed by setRegion() from
   // chaosRun.applyRegionSky, mirroring the wallPosters region feed.
   let curRegion = 0;
-  const inRegion = (b) => !b.region || b.region === curRegion;
+  // Biome gate (THE BIOMES): entries tagged `biome: '<id>'` only play while
+  // that rolled biome dresses the current chamber - a Gallery line must never
+  // whisper in the Casino. Fed alongside setRegion from applyRegionSky.
+  let curBiome = null;
+  const inRegion = (b) => (!b.region || b.region === curRegion) && (!b.biome || b.biome === curBiome);
   function setRegion(n) { curRegion = (n | 0) || 0; }
+  function setBiome(id) { curBiome = id || null; }
 
   function pick(poolId) {
     const pool = FALL_DRIFT[poolId];
@@ -345,5 +350,5 @@ export function createDriftChain({ getDepth }) {
   // read-only state for the ?e2e hook
   const debugState = () => ({ started, blocksLeft, region: curRegion, speaking: !el.paused, routed: !!voiceGain, duck });
 
-  return { start, stop, setSpeed, setDuck, setRegion, isSpeaking, dispose, debugState };
+  return { start, stop, setSpeed, setDuck, setRegion, setBiome, isSpeaking, dispose, debugState };
 }
