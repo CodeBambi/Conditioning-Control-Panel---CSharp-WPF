@@ -138,6 +138,39 @@ environmentally invalidate the "not-worse than benchmark-optimized.json" compari
   ~+15–17% avg AND higher minimums, i.e. the scheduling-starvation component of the render gap is real and
   now removed. The LibVLC decode-retry component of MinFps=0 is SEPARATE and still owned by this row's
   re-baseline (the two were always additive, not exclusive).
+- **MinFps=0 ROOT-CAUSED (this session) — benchmark-input defect, not a UCE/product bug:** the MaxIntensity
+  video-stress segments all feed `video.PlayUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ")`
+  (`BenchmarkContext.cs:387,411,445`) — a YouTube **watch-page** URL. `PlayUrl`→`PlayUrlCore`→
+  `VideoLayer.PlayVideo` hands the URL straight to LibVLC (WPF-parity contract, `AvaloniaVideoService.cs:1080-1103`;
+  WPF `VideoService.cs:900-903`), which cannot stream-extract a YouTube page → a decode-retry loop (≈4× CPU)
+  → the ≥1s render stalls behind `MaxIntensityMinFps: 0`. This is a benchmark HARNESS artifact; production
+  `PlayUrl` callers (`AvaloniaAutonomyService.cs:682`, hypnotube remote `AvaloniaRemoteCommandExecutor.cs:270`,
+  `_lastBrowserUrl` `MainWindowViewModel.cs:786`) pass DIRECT-STREAM URLs LibVLC decodes fine. Prescribed fix:
+  swap the three `youtube.com/watch` URLs for a directly-decodable source so MinFps reflects real render cost
+  — bundled into the SIGSEGV row below (unverifiable in isolation until the harness can run).
+- **Clean 240s re-baseline BLOCKED (this session):** Release `--max-benchmark` reproducibly **SIGSEGVs at
+  window-show** (right after `MandatoryVideoLayer` registration, before `[BENCH] MainWindow shown`) — 2/2 on
+  `feat/crossplatform` @ `00ea03ad` AND 1/1 at the pre-code baseline `c9475bdd`, so it is **PRE-EXISTING**, not
+  a session regression (IMP-2/BubbleLayer/economy all exonerated by the baseline repro). The Debug `--benchmark`
+  Idle/Active path runs clean (that is where the IMP-2 141.6/144.2 numbers came from); only the Release
+  max-intensity full-session window-show path crashes. A fresh MaxIntensity re-baseline cannot be captured on
+  this machine until that crash is fixed — see the new row directly below.
+
+### Release `--max-benchmark` SIGSEGV at window-show · **JUDGMENT (native crash) — BLOCKS row #2 re-baseline** (filed 2026-07-10)
+
+Release `--max-benchmark` (Windows head) crashes with SIGSEGV (exit 139) during window-show, before the first
+`[BENCH]` marker, immediately after the compositor layers register (`VideoLayer`/`MandatoryVideoLayer`). No
+managed exception is logged (global handlers don't fire → native fault). Reproduced 3/3 across two commits
+including the pre-code baseline `c9475bdd`, so **pre-existing** (candidate origin: the main merge `a06509eb`
+or earlier; the 2026-07-05 Release baseline was captured on a since-changed env). Debug `--benchmark`
+(Idle/Active) is UNAFFECTED — the fault is specific to the Release full-session/max-intensity first-show path.
+- **Prescribed first step:** capture the faulting module — set `DOTNET_DbgEnableMiniDump=1` (+ `DbgMiniDumpType=4`)
+  and re-run, then triage the dump with `dotnet-dump`; prime suspects are LibVLC video-layer native init and the
+  Skia/GPU context at first show under the heavy session. Do NOT guess a fix without the module.
+- **Then (bundled from row #2):** replace the three un-decodable `youtube.com/watch` URLs in `BenchmarkContext.cs`
+  with a directly-decodable source, run a clean 240s `--max-benchmark`, and confirm `MaxIntensityMinFps` > 0
+  reflecting real UCE frame cost — which re-arms row #2's "not-worse than `benchmark-optimized.json`" gate.
+- **Tier:** JUDGMENT (native-crash forensics + measurement-methodology decision); not a mechanical row.
 
 ### #3 — WP2b optional libmpv render-API engine-swap spike · **JUDGMENT (spike, benchmark-gated)**
 
@@ -407,8 +440,13 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 | Row | Evidence | Expected gain | Tier | Proportionality |
 |---|---|---|---|---|
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
-**row #2 re-baseline → #6 (DTRH web) → #4 (WS3 sweep) →
-#3 (libmpv, CONDITIONAL)**. BubbleLayer-mod-resolver DONE (this session). IMP-ECON1 DONE (this session) — economy double-pay fixed;
+**#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)** for autonomous tiers. **row #2 re-baseline is now BLOCKED**
+(this session): its scheduling half is DONE via IMP-2 and `MinFps=0` is root-caused (un-decodable YouTube
+watch URL in the benchmark harness), but the clean 240s re-baseline is blocked by a PRE-EXISTING Release
+`--max-benchmark` window-show SIGSEGV (new row above, JUDGMENT native-crash forensics — needs a minidump
+triage before any fix; the harness URL fix is bundled there because it is unverifiable until the run works).
+**#6 (DTRH web)** is a JUDGMENT multi-session epic (owner-written direction). AI_AUDIT + subagents.json DONE
+(this session). BubbleLayer-mod-resolver DONE (this session). IMP-ECON1 DONE (this session) — economy double-pay fixed;
 **Core test floor 542→543** (new pinning test). Original 12-row improvement queue fully resolved this session:
 IMP-1 DONE `49ec3707`. IMP-11 DONE `28fa06a2`. IMP-5 DONE `23b4dd86`. IMP-7 DONE `85f036f1`. IMP-10 DONE
 `53f2b4d7`. IMP-4 DONE `e4f40bc1`. IMP-9 DONE `066063e4`. IMP-6 DONE `7e6e0d9e`. IMP-2 DONE `60b10afc`.
