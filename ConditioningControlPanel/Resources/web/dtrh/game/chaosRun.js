@@ -44,7 +44,7 @@ import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL }
 import { rollBiomeIds, biomeForWave, biomeById, BIOMES_ALL } from './biomes.js';
 import { createBiomeMech } from './biomeMech.js';
 import { setAudioColor } from '../engine/audioBus.js';
-import { getVoice, setVoiceDefault, onVoice } from '../engine/audioLevels.js';
+import { getVoice, setVoiceDefault, onVoice, getLevel } from '../engine/audioLevels.js';
 import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
 import { createPayloadFx } from './payloadFx.js';
@@ -57,7 +57,7 @@ import { createHappyPath } from './happyPath.js';
 import { createVnPortrait } from './vnPortrait.js';
 import { createLessonCard } from './lessonCard.js';
 import { createHubGuide } from './hubGuide.js';
-import { setDucked } from '../shared/audioMute.js';
+import { setDucked, isMuted } from '../shared/audioMute.js';
 import { lessonById, boonDefById, DIARY_CODEX, DIARY_VERBS, RANKS } from './catalog.js';
 
 // ---- first-discovery lesson copy (catalog is the single source of truth) ----
@@ -440,7 +440,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const stats = ctx.spawner.drainAssetStats();
     if (stats && stats.length) bridge.send({ type: 'asset-stats', stats });
   }
-  const sfx = (name, scale) => bridge.send({ type: 'sfx', name, scale });
+  // Native stingers play in WPF (ChaosSfx), which can't see the web mix - so
+  // the audio panel is applied HERE: the master mute silences them, the
+  // 'effects' slider scales them, and a flat 0.5 trim keeps them under the
+  // in-page bubble pops (they read much hotter than the DOM-field sounds).
+  const sfx = (name, scale) => {
+    if (isMuted()) return;
+    bridge.send({ type: 'sfx', name, scale: (scale ?? 0.6) * 0.5 * getLevel('fx') });
+  };
   const bark = (event, data) => bridge.send({ type: 'bark', event, ...(data || {}) });
   // The boon draft plays IN the tube (engine/boonPick.js): the fall parks, themed
   // cards hang ahead, click one to shatter-and-drop-through. Same callback
