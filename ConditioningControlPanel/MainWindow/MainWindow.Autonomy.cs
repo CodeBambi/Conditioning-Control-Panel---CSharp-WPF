@@ -58,11 +58,11 @@ namespace ConditioningControlPanel
                     "AUTONOMY MODE\n\n" +
                     "This feature allows the companion to autonomously trigger effects:\n" +
                     "• Flash images\n" +
-                    "• Videos (without strict mode)\n" +
+                    "• Videos\n" +
                     "• Subliminal messages\n" +
                     "• Make comments\n\n" +
                     "She will act on her own within your configured intensity settings.\n\n" +
-                    "You can disable this at any time. Videos triggered autonomously will NEVER use strict mode.\n\n" +
+                    "You can disable this at any time. Videos triggered autonomously are skippable unless you explicitly enable Strict Videos in the Takeover settings.\n\n" +
                     "Do you consent to enable Autonomy Mode?",
                     "Enable Autonomy Mode",
                     MessageBoxButton.YesNo,
@@ -147,7 +147,7 @@ namespace ConditioningControlPanel
                     "AUTONOMY MODE\n\n" +
                     "This feature allows the companion to autonomously trigger effects:\n" +
                     "• Flash images\n" +
-                    "• Videos (without strict mode)\n" +
+                    "• Videos (skippable unless you enable Strict Videos)\n" +
                     "• Subliminal messages\n" +
                     "• Make comments\n\n" +
                     "She will act on her own schedule based on your intensity setting.\n" +
