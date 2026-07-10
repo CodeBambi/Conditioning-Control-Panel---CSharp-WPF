@@ -391,11 +391,11 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 
 | Row | Evidence | Expected gain | Tier | Proportionality |
 |---|---|---|---|---|
-**Claim-priority order (LIVE — the claimer updates this line as rows close/land):** IMP-10 →
+**Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
 IMP-4 (mechanical/trivial first) → IMP-9 → IMP-6 → IMP-2 (STANDARD) → IMP-8 (JUDGMENT,
 flag-don't-force) → major rows #1–#8. IMP-1 DONE `49ec3707`. IMP-11 DONE `28fa06a2`. IMP-5 DONE `23b4dd86`.
-IMP-7 DONE (this commit; hash reconciled at next claim). IMP-3 is CONDITIONAL on row #3's libmpv spike
-gate — never do both.
+IMP-7 DONE `85f036f1`. IMP-10 DONE (this commit; hash reconciled at next claim). IMP-3 is CONDITIONAL on
+row #3's libmpv spike gate — never do both.
 
 | **IMP-1 — `VideoLayer` lacks a `ConsumeDirty` override**: engine invalidates all windows at 60Hz while clips decode at ~25-30fps; `Update`'s `presented` flag (FRONT↔READY swap) IS the dirty signal | `Compositor/Layers/VideoLayer.cs` (no override; inherits always-true `BaseLayer.ConsumeDirty()`, `BaseLayer.cs:46`) | ~halves GPU render passes during plain video playback; `MandatoryVideoLayer` inherits the fix free | MECHANICAL | ~10 lines, UI-tick-only state, no protocol change; verify with `--verify-video` |
 | **IMP-2 — engine render tick runs at Background dispatcher priority**: parameterless `DispatcherTimer` = background priority in Avalonia 12.0.x (pinned 12.0.5) — the whole UCE hangs off one starvable timer | `Compositor/CompositorEngine.cs` ctor; Avalonia.Base 12.0.x XML docs (`M:Avalonia.Threading.DispatcherTimer.#ctor`) | removes scheduling-induced stutter under UI-thread load; candidate one-liner `new DispatcherTimer(DispatcherPriority.Render)`; doubles as a row-#2 MinFps=0 hypothesis | STANDARD | one line + before/after benchmark (row #2's re-baseline is the measurement vehicle) |
@@ -406,10 +406,19 @@ gate — never do both.
 | **IMP-7 — remove dead seam method `IV2AuthService.SendHeartbeatAsync(string)`** — **DONE 2026-07-10**: had ZERO Core/Avalonia callers; the real heartbeat is the internal no-arg `ProfileSyncService.SendHeartbeatAsync()` on the 120s timer; the DI comment itself admitted it dead | interface member `IV2AuthService.cs` + impl `AvaloniaV2AuthService.cs` (−26) DELETED; stale DI comment `ServiceCollectionExtensions.cs:~219` updated | removed the misleading interface member + dead impl + the stale comment contradicting the single-heartbeat-owner invariant (invariant now strengthened) | STANDARD (+JUDGMENT review for the interface change: SHIP) | DONE — no behavior change; WPF head keeps its own legacy copy (`Services/Account/V2AuthService.cs:528`, untouched) |
 | **IMP-8 — coalesce the two 30s dirty-save timers**: `AchievementService._saveTimer` + `QuestService._saveTimer` do identical "if dirty, serialize+flush" work with near-identical tmp-recovery boilerplate | `CCP.Core/Services/Progression/AchievementService.cs:86,:99`; `QuestService.cs:71,:95` | one fewer always-waking timer (latency/battery on laptops), shared crash-recovery logic, fewer moving parts | JUDGMENT | low-medium; structural win, not headline perf — flag, don't force. Keep the 1s tracking timers separate (different state, higher risk) |
 | **IMP-9 — `BubbleEngine` per-tick allocations**: 2 transient lists allocated EVERY active 32ms tick (after the early-return guard) + 2 redundant full `_bubbles.ToArray()` snapshots per tick in the hazard passes | `CCP.Core/Services/Chaos/BubbleEngine.cs:822-823` (driver `:174-176`, `TickIntervalSec=0.032` `:13`); `:1534` (`TickSpankSweeps`), `:1431` (`TickFieldHazards`) | removes ~4 Gen0 allocs/frame (~120/s) on the UI thread in bubble-mode steady state; net code smaller (reusable field buffers + ONE shared snapshot passed to both passes) | STANDARD | low risk, behavior-preserving; pinned by existing BubbleEngine unit tests in CCP.Core.Tests |
-| **IMP-10 — `ActiveRipples` dead alloc-y getter**: `ToList()` + closure on every read; repo-wide grep = the declaration only, zero readers | `CCP.Core/Services/Chaos/BubbleEngine.cs:146-147` | removes a latent per-frame footgun (any future per-frame reader = per-frame `List<>` alloc); delete, or replace with a zero-alloc count+indexed accessor | STANDARD | trivial; confirm ripple-overlay intent first — the Size-Queen ripple effect is gameplay-relevant (`:1434-1445`) |
+| **IMP-10 — `ActiveRipples` dead alloc-y getter** — **DONE 2026-07-10**: `ToList()` + closure on every read; repo-wide grep = the declaration only, zero readers | `CCP.Core/Services/Chaos/BubbleEngine.cs` getter DELETED (doc comment + expression body) | removed a latent per-frame footgun (any future per-frame reader = per-frame `List<>` alloc) | STANDARD | DONE — deleted the dead exposure getter only; `_ripples` state + `RIPPLE_LIFE_MS` (14 refs) + the Size-Queen ripple effect (`:1434-1445`) untouched; ripple-overlay port still pending, will re-add a zero-alloc accessor when a consumer exists |
 | **IMP-11 — orphaned `AvaloniaBubble` control** — **DONE 2026-07-10 (`28fa06a2`)**: `new AvaloniaBubble(` had 0 call sites; chaos bubbles render via the compositor `BubbleLayer` (`AvaloniaBubbleService.cs:533-535` routes `SetFuse` there); its per-call `new SolidColorBrush` pattern read as a hot-path smell on every scan | `CCP.Avalonia/Chaos/AvaloniaBubble.cs` (274 lines) DELETED | deleted dead UI code + a misleading allocation pattern; simplification, not runtime speed | MECHANICAL | confirm-then-deleted: verified no XAML / resource-factory / reflection construction (sealed Panel, parameterized ctor, no typeof/Activator/nameof, no paired .axaml, glob-included) |
 
 **Improvement-row claim ledger (append-only):**
+- **CLAIM+DONE 2026-07-10 · @driver (continuous-mode session):** IMP-10 (delete dead `ActiveRipples`
+  getter). Grounded live: repo-wide `grep ActiveRipples` = the declaration line only, ZERO readers (the
+  "for optional overlay rendering" consumer was never ported — ripple/residue/tether are seam-only per the
+  `--verify-layers` note). Not on any interface (concrete `BubbleEngine` getter) → no JUDGMENT trigger.
+  Deleted the getter + its doc comment; left `_ripples`/`RIPPLE_LIFE_MS` (14 remaining refs) and the
+  Size-Queen ripple simulation (`:1434-1445`) fully intact — removed dead EXPOSURE, not gameplay state.
+  Gates: slnf **0 errors** (383 warn, Linq still used elsewhere) · WPF sln **0 errors** · Core **542/542**
+  (BubbleEngine unit tests green) · `--smoke-test` 44 tabs / 0 unhandled / **Findings 5** (logged-out
+  baseline this run). Core-only, no compositor/video path → `--verify-layers/video` not triggered.
 - **CLAIM+DONE 2026-07-10 · @driver (continuous-mode session):** IMP-7 (remove dead
   `IV2AuthService.SendHeartbeatAsync(string)`). Interface-member removal → dispatched the mandatory
   JUDGMENT-tier adversarial review (`anthropic/claude-fable-5`, read-only) on the actual diff: independently

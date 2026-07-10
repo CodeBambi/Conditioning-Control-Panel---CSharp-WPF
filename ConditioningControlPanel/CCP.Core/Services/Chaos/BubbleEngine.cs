@@ -142,10 +142,6 @@ public sealed class BubbleEngine
     /// wrapper over <see cref="ChaosRunKnobs.RabbitTrailSec"/> (S4b-4 knob migration).</summary>
     public double ChaosRabbitTrailSecNow => Knobs.RabbitTrailSec;
 
-    /// <summary>Active Size Queen ripples for optional overlay rendering.</summary>
-    public IReadOnlyList<(Point CenterPx, double AgeMs, double LifeMs)> ActiveRipples =>
-        _ripples.Select(r => (r.CenterPx, r.AgeMs, RIPPLE_LIFE_MS)).ToList();
-
     public event Action? OnBubblePopped;
     public event Action? OnBubbleMissed;
 
