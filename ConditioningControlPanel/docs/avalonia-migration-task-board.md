@@ -573,6 +573,36 @@ a JUDGMENT (fable-5) agent (hit its turn limit during research; driver implement
   0 err, smoke 44 tabs / 0 unhandled / Findings 17 (authed benign band) / 0 avatar+menu findings. Menu
   appearance + reappear behavior are NOT smoke-exercised — flagged for user verification.
 
+### AvatarTube attached positioning — **FAILED, REDO** (owner ruling 2026-07-10) · **JUDGMENT**
+
+Owner tested the reappear fix (`2c3dc0d5`) and rejected it: the attached avatar **still lands in the wrong
+spot and does not follow the main window as fluidly as the WPF head**. Owner declared the attached-
+positioning port FAILED and to be redone against the goal (behave like WPF; free to beat it under the hood).
+**Supersedes** `2c3dc0d5`'s ledger claim: its fullscreen-restore GATE logic is correct and stays, but the
+commit did NOT fix the user-visible defect — downgrade that claim from "fixed" to "partial (fullscreen-exit
+gate only)".
+
+**Measured root-cause (probe added+removed this session, 100% DPI box):** the STEADY-STATE math already
+matches WPF — identical constants (`DesignWidth=780`, `DesignHeight=1020`, `BaseOffsetFromParent=-350`,
+`VerticalOffset=20`), and the `*RenderScaling` term is dimensionally correct at any DPI. So the defect is NOT
+the resting position; it is the **follow cadence / fluidity** (and possibly reappear transients + content
+layout WITHIN the 780x1020 canvas). Advisor-identified jank: `ParentWindow_PositionChanged` reasserted
+z-order (`BringAttachedPairToFront`) on EVERY move event = a `SetWindowPos` per mouse-move WPF never issues.
+
+**Done this pass (committed, needs user re-test):** removed the per-move z-order call from the follow hot
+path (z-order still maintained by `_zOrderRefreshTimer` + attach/activate/reappear); `Math.Round` instead of
+`(int)` truncation to kill sub-pixel up/left bias; kept the follow synchronous (no `Dispatcher.Post` in the
+follow path — deferral is reappear-only).
+
+**Queued if still not WPF-smooth (advisor Step 4, the "better than WPF" card):** a Windows-head
+`Win32Properties.AddWndProcHookCallback` on MainWindow to reposition the tube inside the parent's OS move
+loop (`WM_MOVING`/`WM_WINDOWPOSCHANGED`) so both windows move in the same compose pass — replicates WPF's
+continuous `LocationChanged` cadence that Avalonia's coalesced `PositionChanged` may not match. MUST verify
+the v12 API via the `avalonia-research` skill first; Windows-seam only; Linux/macOS keep event-chasing.
+
+**Acceptance (owner is the ONLY verifier — not smoke-testable):** drag the main window fast → tube tracks with
+no lag/detach; minimize+restore, exclusive-fullscreen exit, theme switch → tube lands in the WPF spot.
+
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
 **#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)** for autonomous tiers. **row #2 re-baseline is now BLOCKED**
 (this session): its scheduling half is DONE via IMP-2 and `MinFps=0` is root-caused (un-decodable YouTube

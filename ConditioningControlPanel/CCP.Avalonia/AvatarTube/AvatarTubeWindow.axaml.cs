@@ -1769,8 +1769,12 @@ _parentWindow = parentWindow;
         private void ParentWindow_PositionChanged(object? sender, EventArgs e)
         {
             if (_parentWindow?.WindowState == WindowState.Minimized) return;
+            // Follow the parent synchronously for lag-free glue. Do NOT reassert z-order here: WPF's
+            // LocationChanged handler doesn't, and calling BringAttachedPairToFront() on every move
+            // event issues a SetWindowPos per mouse-move during a drag, which visibly stutters the
+            // follow. Z-order is kept fresh by _zOrderRefreshTimer and the attach/activate/reappear
+            // paths instead.
             UpdatePosition();
-            if (_isAttached) BringAttachedPairToFront();
         }
 
         private void ParentWindow_PropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)

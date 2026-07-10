@@ -306,7 +306,9 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             double newTop = _parentWindow.Position.Y + ((_parentWindow.ClientSize.Height - tubeHeight) / 2 + VerticalOffset * _scaleFactor) * s;
             if (newTop < -500 || newTop > 5000 || newLeft < -2000 || newLeft > 5000) return;
 
-            Position = new PixelPoint((int)newLeft, (int)newTop);
+            // Round rather than truncate: (int) floors, which accumulates a sub-pixel up/left bias
+            // versus the WPF head (which positions in logical DIPs without truncation).
+            Position = new PixelPoint((int)Math.Round(newLeft), (int)Math.Round(newTop));
         }
 
         private void StartFloatingAnimation()
