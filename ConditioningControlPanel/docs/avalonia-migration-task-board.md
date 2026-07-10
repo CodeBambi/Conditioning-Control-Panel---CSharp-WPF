@@ -494,6 +494,16 @@ would break it). Verified: slnf 0 err, smoke 44 tabs/0 unhandled, per-theme dash
 16 cards + emblem + browser/audio/quick-links fitting with no scrollbar. JUDGMENT (advisor) validated the
 approach + caught the StackPanel-infinite-measure + 640-gutter traps pre-implementation.
 
+**User-reported PARITY BUG fixed: flash images/gifs not random — 2026-07-10 (this session):** the user saw
+the same few flash images every launch despite a library of thousands. Root cause: `AvaloniaFlashService`
+`GetImageFiles` scanned the images path with `SearchOption.TopDirectoryOnly`, so a library organized into
+subfolders (categories) only ever exposed the handful of loose top-level files to `_random.Next`. The frozen
+WPF head scans `SearchOption.AllDirectories` ("Scan subfolders to support user-organized categories",
+`FlashService.cs:2039`), and the Avalonia video/bubble-count/content-pack scanners already use
+`AllDirectories` — flash was the lone `TopDirectoryOnly` outlier. Changed to `AllDirectories` (restores
+parity; the whole library is now in the pool). `_random = new()` was already time-seeded, so randomness was
+fine once the pool was correct. Gates: slnf 0 err, smoke 44 tabs/0 unhandled.
+
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
 **#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)** for autonomous tiers. **row #2 re-baseline is now BLOCKED**
 (this session): its scheduling half is DONE via IMP-2 and `MinFps=0` is root-caused (un-decodable YouTube

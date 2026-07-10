@@ -654,7 +654,12 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
                     return new List<string>();
                 }
 
-                var files = Directory.GetFiles(_imagesPath, "*.*", SearchOption.TopDirectoryOnly)
+                // Scan subfolders so user-organized category folders are included (WPF parity:
+                // FlashService.GetMediaFiles uses SearchOption.AllDirectories, "Scan subfolders to
+                // support user-organized categories", FlashService.cs:2039). TopDirectoryOnly only
+                // saw the handful of loose top-level files, so a library organized into subfolders
+                // replayed the same few images every launch instead of drawing from all of them.
+                var files = Directory.GetFiles(_imagesPath, "*.*", SearchOption.AllDirectories)
                     .Where(f => IMAGE_EXTENSIONS.Contains(Path.GetExtension(f).ToLowerInvariant()))
                     .ToList();
 
