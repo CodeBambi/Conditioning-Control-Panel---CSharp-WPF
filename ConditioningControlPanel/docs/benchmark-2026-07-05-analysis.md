@@ -31,6 +31,11 @@ than `benchmark-optimized.json`." Run by @glm5.2 on the Windows Avalonia head, *
    stress (the YouTube stress URL failed to decode). I.e. a **video-path-induced stall**, not a
    Skia/UCE regression. Follow-up: the video decode/fallback path should not block the compositor
    render loop for a full second when a web video fails.
+   **Evidence gap (2026-07-10, trust-nothing verification pass):** the primary run log
+   (`ccp-run.log`) has been overwritten by a later run and now contains **0** matches for
+   `Failed to create video converter` / `mjpeg demux`; the correlation stands on this doc's
+   capture + `benchmark-report-2026-07-05.json` (`MaxIntensityMinFps: 0`) only — re-verify
+   against a fresh log before building on the decode-stall interpretation.
 3. **"Not-worse than baseline": environmentally invalidated on this machine — NOT a code regression.**
    The dominant confound: **Phase 2 is 120 s of WEB VIDEO that failed to decode** (the LibVLC
    `Failed to create video converter` / `mjpeg demux` storm) — **~half the 240 s run was spent in

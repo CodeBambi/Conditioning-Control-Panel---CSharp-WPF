@@ -130,7 +130,7 @@ This script will:
 4. Build `CCP.Core`.
 5. Run `CCP.Core.Tests`.
 6. Build `CCP.Avalonia.Desktop.Linux`.
-7. Run the Avalonia Linux head for 15 seconds to verify it launches.
+7. Run the Avalonia Linux head for up to 30 seconds to verify it launches (the script uses `timeout 30s`; corrected 2026-07-10 — the previously documented "15 seconds" never matched `build-linux.sh`).
 
 Logs are written to `logs/linux-build-*.log` and `logs/linux-run-*.log`.
 

@@ -44,7 +44,8 @@ under the iron rules), `port-parity-auditor` (adversarial working-tree diff vs W
 commit — mandatory for state/economy/lifecycle diffs).
 
 **Gates before every commit (all must pass):** slnf build 0 errors; WPF sln build 0 errors; Core tests all
-pass and the count NEVER decreases (floor **542** as of 2026-07-10 — read the live count); `--smoke-test`
+pass and the count NEVER decreases (floor **542** — re-run LIVE 2026-07-10: Core **542/542** Release 0
+failed · slnf **0 errors**/384 warnings · WPF sln **0 errors** — read the live count); `--smoke-test`
 at baseline (Findings 5); `--verify-layers`/`--verify-video` when touching the compositor/video;
 `--benchmark` before/after on hot paths — not worse than [`docs/benchmark-optimized.json`](benchmark-optimized.json)
 (re-baseline caveat: open row #2). Re-verify live before signing off.
@@ -68,7 +69,14 @@ per-frame capture mask (including the WPF hold-to-defuse no-swallow exception). 
 - **Mechanism:** each non-ambient layer exposes its active painted region; the engine unions them per frame
   into an immutable per-monitor capture-mask snapshot (hook-thread-safe per `overlay-clickthrough` rules);
   `AvaloniaMouseHook` gains a WPF-style swallow path (swallow inside the mask, pass outside).
-  `CompositorWindow` stays `WS_EX_TRANSPARENT|LAYERED`.
+  `CompositorWindow` stays `WS_EX_TRANSPARENT|LAYERED`. **Status check 2026-07-10:** none of this is
+  implemented yet — the compositor window is still globally `WS_EX_TRANSPARENT` (all-or-nothing
+  click-through, `CompositorWindow.axaml.cs:107`); the hook explicitly passes clicks
+  (`AvaloniaMouseHook.cs:156-159`). **Sub-goal (folded 2026-07-10, improvement scan I-6):** the same
+  per-layer painted-region data should also drive per-MONITOR dirty invalidation — today one dirty
+  layer invalidates every monitor's window (`CompositorEngine.OnFrameTick` global `anyDirty`);
+  intersecting painted regions with `screen.Bounds` skips untouched monitors (up to ~50% GPU on
+  dual-monitor rigs with localized effects).
 - **Open questions to resolve before/while implementing:** (a) does per-region capture apply mid-chaos-run,
   where the whole screen is already a game surface (likely the whole run captures — confirm)? (b) the
   `WH_MOUSE_LL` hook swallows POINTER only — is pointer-blocking sufficient for "blocks the desktop", or
@@ -90,6 +98,15 @@ environmentally invalidate the "not-worse than benchmark-optimized.json" compari
 - **Work:** re-baseline cleanly at 240s; investigate the video-failure→render-stall correlation.
 - **Acceptance:** a clean benchmark where `MinFps` reflects real UCE frame cost, not LibVLC decode
   starvation; the "not-worse than benchmark-optimized.json" gate becomes re-comparable.
+- **Evidence gap (2026-07-10):** the primary 2026-07-05 run log has been overwritten — `ccp-run.log`
+  (mtime 2026-07-09) has **0** matches for `Failed to create video converter`/`mjpeg demux`; the
+  decode-stall interpretation now stands on `benchmark-2026-07-05-analysis.md` +
+  `benchmark-report-2026-07-05.json` (`MaxIntensityMinFps: 0`) only. Re-capture a fresh log during
+  the re-baseline.
+- **Fresh hypothesis (improvement scan 2026-07-10):** the engine tick is a parameterless
+  `DispatcherTimer` = **Background** dispatcher priority in Avalonia 12.0.x — starvable under UI-thread
+  load; a saturated UI thread alone can produce a ≥1s render gap. Test alongside (not instead of) the
+  LibVLC decode-retry theory — see improvement row IMP-2 below.
 
 ### #3 — WP2b optional libmpv render-API engine-swap spike · **JUDGMENT (spike, benchmark-gated)**
 
@@ -127,19 +144,27 @@ are not swept. This is essentially the whole remaining Linux gap (head overall ~
 - **Acceptance:** Linux head feature-swept with per-feature status recorded; click-through works on X11;
   genuine platform gaps recorded (never silently absent).
 
-### #6 — DTRH "The Fall" web mini-game epic · **BLOCKED on the `IBrowserHost` seam**
+### #6 — DTRH "The Fall" web mini-game epic · **JUDGMENT** (NOT seam-blocked — corrected 2026-07-10)
 
 A brand-new v6.2.11 roguelite ("endless rabbit hole") that renders a Three.js/WebGL 3D world inside a
 WebView2 host and bridges to C# for XP, assets, and chaos payloads. This is the single largest parity gap
-introduced since the port began. The `IBrowserHost` seam (WebView2 on Windows / WebKitGTK on Linux /
-WKWebView on macOS — *planned* per AGENTS.md, not yet implemented) is **EPIC phase 0**. Do NOT start
-without the seam + `unified-compositor-engine`/`port-feature` coordination.
+introduced since the port began. **FALSIFIED at the 2026-07-10 trust-nothing verification pass:** the old
+"BLOCKED on a missing `IBrowserHost` seam (only `OpenExternalAsync` exists)" premise is wrong —
+`IBrowserHost` is an implemented, rich 11-member in-app WebView seam (`CCP.Core/Platform/IBrowserHost.cs`:
+`NavigateAsync`, `ExecuteScriptAsync`, `WebMessageReceived`/`PostWebMessageAsJson`,
+`SetVirtualHostToFolder`, `CreateBrowserControl`, `PopOutAsync`, fullscreen/title/navigation events …)
+with per-head impls: `WebView2BrowserHost` (Windows), `WebKitBrowserHost` (macOS), `WebKitGtkBrowserHost`
+(Linux — a stub: shells out to `xdg-open`, `CreateBrowserControl()` returns null) and `MobileBrowserHost`
+(Android). `ChaosTunnelService` already hosts the three.js "rabbit hole" tunnel through it with JSON
+messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24-33`). **EPIC phase 0
+(the seam) is DONE on Windows**; remaining work = the game port itself (+ a real Linux in-app host — row
+#5 territory). Coordinate with `unified-compositor-engine`/`port-feature`.
 
 #### Appendix — phase breakdown (absorbed from the v6.2.11 release catalogue, deleted 2026-07-10; its knowledge now lives here)
 
 | Sub-part | WPF source | Avalonia/Core target | Notes |
 |---|---|---|---|
-| **Web game assets** (~30 files: Three.js engine, `chaosRun.js` 2490L, `warren.js` 1314L, `chaosField.js`, `vnPortrait.js`, VN/four-chambers, shaders, `styles.css` 2225L, `omggif`) | `Resources/web/dtrh/**` | `CCP.Avalonia` resources (Content-linked / `avares://`) | Platform-agnostic JS/HTML/CSS. Mostly copy+wire, served through the browser-host seam, not `Resources/`. |
+| **Web game assets** — inventory corrected 2026-07-10: `Resources/web/dtrh/**` holds 200+ assets (barks, bubbles, VN avatars, sfx) + `styles.css` 2225L ✓, but the top-level JS actually present is `boot.js`/`bridge.js`/`hostMedia.js`/`m2test.js`/`spike.js` — the previously listed `chaosRun.js` (2490L) and `warren.js` (1314L) do NOT exist at that path (`wc -l` → no such file). UNVERIFIED: where the engine JS actually lives; re-inventory the WPF-side game JS before slicing the asset copy | `Resources/web/dtrh/**` | `CCP.Avalonia` resources (Content-linked / `avares://`) | Platform-agnostic JS/HTML/CSS. Mostly copy+wire, served through the browser-host seam, not `Resources/`. |
 | **Host + bridge services** | `Services/Chaos/DtrhHostService.cs` (967L, WebView2), `DtrhMetaBridge.cs` (378L), `DtrhSpike.cs` (226L) | new `CCP.Core/Services/Chaos/Dtrh*` (portable logic) + head browser-host impl | Split: JS↔C# message bridge + run/session orchestration is portable; the WebView2 surface is head-specific. |
 | **Asset + session telemetry** | `DtrhAssetManifest.cs` (130L), `DtrhAssetStatsStore.cs` (105L), `DtrhSessionStatsStore.cs` (186L) | `CCP.Core/Services/Chaos/` | Portable (file I/O + models). Respect the privacy contract: per-asset engagement stays local. |
 | **Chaos meta/progression model deltas** | `Services/Chaos/ChaosModels.cs`, `ChaosUpgrades.cs`, `ChaosMetaState.cs`, `ChaosLifetimeBoons.cs` (68L new) | `CCP.Core/Services/Chaos/` counterparts | Lifetime boons, upgrades, meta-state feed the roguelite. Mirror the model changes into Core so both heads share them. |
@@ -156,7 +181,10 @@ already done. These five remain:
 - **3a** lock-card repeat: gate on `LockCardWindow.IsAnyOpen()` not `Application.Current.Windows`
   (keep-alive pooled hidden window lingered → blocked every card after the first); `ForceCloseAll()` if
   `ShowOnAllMonitors` throws mid-show. VERIFY the Avalonia UCE lock-card path for the analogous hidden-
-  pool-blocks-guard bug and a mid-show throw leaving the visible-set armed.
+  pool-blocks-guard bug and a mid-show throw leaving the visible-set armed. Code-check 2026-07-10:
+  `IsAnyOpen():99` + `ForceCloseAll():144` exist and are consumed (`AvaloniaLockCardService.cs:83`,
+  `BubbleCountResultWindow.axaml.cs:340`); the runtime repeat-guard behavior itself — like 3b–3e —
+  remains headed-unverified (no headless evidence).
 - **3b** overlay z-order #497: spiral/pink must not bury session videos. VERIFY (likely N/A) — in the UCE,
   video (`VideoLayer` Z=10) and spiral/pink are z-ordered layers on one surface, so the WPF "video buried
   behind a filter window" class is structurally absent; confirm the layer ordering keeps session video
@@ -183,7 +211,9 @@ falls off the active screen on multi-monitor rigs. Target: `CCP.Avalonia/Composi
 `ChaosMotionMode` (Mixed/FloatUp/RainDown/RoamBounce instead of always FloatUp) for **ambient** dashboard
 bubbles. Target = `CCP.Core/Services/Chaos/BubbleEngine.cs` (the ambient engine
 `AvaloniaBubbleService._ambientEngine`): the Avalonia ambient bubble is a simplified physics-rising model
-(vy<0 = rises) and uses NO `ChaosMotion` enum today. Port = ADD FloatUp(rise)/RainDown(fall-from-top)/
+(vy<0 = rises); the AMBIENT engine uses no `ChaosMotion` today. (Corrected 2026-07-10: the blanket
+"Avalonia uses NO ChaosMotion enum" phrasing was stale — chaos-RUN effect bubbles DO parse/use
+`ChaosMotion`, `AvaloniaChaosStubs.cs:284,306-308`; only the dashboard ambient path lacks it.) Port = ADD FloatUp(rise)/RainDown(fall-from-top)/
 RoamBounce(bounce) to match WPF `ChaosBubbleSpec` dashboard bubbles. MEDIUM behavioral change,
 visual-unverifiable headless → defer to a focused session with visual verification (ignoring RoamBounce
 = false port).
@@ -237,14 +267,48 @@ cloud faithfully omits commands):
 
 - `IBubbleService.Start()` is parameterless — WPF passes a runtime freq for the bubbles-frequency
   override; needs a `Start(int?)` seam or a spawn-rate setter.
-- `LocalAiService` stateless reactions don't carry the `[CONTEXT BLOCK]` enrichment (WPF :472-477 does);
-  minor — reactions rarely emit commands and the chat path is the command surface.
+- ~~`LocalAiService` `[CONTEXT BLOCK]` enrichment~~ **CLOSED (verified 2026-07-10):**
+  `EnsureEnrichmentMessage()` manages `[CONTEXT BLOCK]` at `LocalAiService.cs:426-439` (landed
+  `424ea528`, Phase 3b). The remaining four gaps below still hold (code-checked same day).
 - Enrichment `factsJson=""` — no Core `KnowledgeService` yet.
 - Legacy Patreon bearer-token `/ai/chat` fallback (`IPatreonTokenProvider`) for V2-404 / no-cloud-identity
   users.
 - `SystemPromptBuilder` hypnotube block uses slug-fallback names (WPF `KnownVideoLinks` reverse-map is a
   Window static) — needs a reverse-map seam for clickable-name fidelity. (SystemPromptBuilder parity
   itself is DONE `b84eb90`.)
+
+---
+
+## Improvement opportunities (filed 2026-07-10, trust-nothing verification pass)
+
+Filed from the same-day evidence-based improvement scans (compositor/video/input · Core services +
+seams + DI · non-compositor hot paths) against code `5e3ed650`. Every row is grounded in file:line
+evidence from live code; none duplicates an OPEN row above (checked against #1/#2/#3/#4/#5/#8a/#8b
+before filing). Scan finding I-6 (per-monitor dirty invalidation) was FOLDED into row #1's mechanism
+rather than filed here; the Background-priority-tick hypothesis also feeds row #2. Owner ruling
+2026-07-10: verified-existing features are fair game — big changes allowed on merit.
+
+| Row | Evidence | Expected gain | Tier | Proportionality |
+|---|---|---|---|---|
+| **IMP-1 — `VideoLayer` lacks a `ConsumeDirty` override**: engine invalidates all windows at 60Hz while clips decode at ~25-30fps; `Update`'s `presented` flag (FRONT↔READY swap) IS the dirty signal | `Compositor/Layers/VideoLayer.cs` (no override; inherits always-true `BaseLayer.ConsumeDirty()`, `BaseLayer.cs:46`) | ~halves GPU render passes during plain video playback; `MandatoryVideoLayer` inherits the fix free | MECHANICAL | ~10 lines, UI-tick-only state, no protocol change; verify with `--verify-video` |
+| **IMP-2 — engine render tick runs at Background dispatcher priority**: parameterless `DispatcherTimer` = background priority in Avalonia 12.0.x (pinned 12.0.5) — the whole UCE hangs off one starvable timer | `Compositor/CompositorEngine.cs` ctor; Avalonia.Base 12.0.x XML docs (`M:Avalonia.Threading.DispatcherTimer.#ctor`) | removes scheduling-induced stutter under UI-thread load; candidate one-liner `new DispatcherTimer(DispatcherPriority.Render)`; doubles as a row-#2 MinFps=0 hypothesis | STANDARD | one line + before/after benchmark (row #2's re-baseline is the measurement vehicle) |
+| **IMP-3 — native-size video decode**: fixed 1920×1080 `SetVideoFormat` forces per-frame swscale + double-scaling on non-1080p media (SD upscale, 4K decode→down→GPU-up) | `Compositor/Layers/VideoLayer.cs:36-37,298`; same pattern `Controls/AvaloniaInlineLoopVideo.cs:106` | removes a full-frame swscale per decoded frame for all non-1080p media; sharper output; buffers already per-PlayVideo so the protocol supports it (cap at monitor max) | JUDGMENT | medium (format callbacks + fixed-size fallback). **CONDITIONAL: decide after row #3's libmpv spike gate — libmpv replaces this pipeline wholesale; never do both** |
+| **IMP-4 — per-frame native allocs on the render path**: letterbox `SKPaint` per frame contradicts VideoLayer's own "allocation-free" header; BrainDrain allocates `SKImageFilter.CreateBlur` + 2 `SKPaint` per frame, amplified by the excluded surface's unconditional per-tick invalidate | `Compositor/Layers/VideoLayer.cs` Render; `Compositor/Layers/BrainDrainLayer.cs:165-196`; codebase norm = ctor-cached paints (`ChaosAnnouncerLayer.cs:109-127`, `AttentionCheckLayer.cs:66-76`) | removes 60–360 native alloc/free per second per monitor during video/brain-drain; blur-filter caching (rebuild only on sigma change) is the meaningful part | MECHANICAL | small sweep, render-thread-only state, no behavior change |
+| **IMP-5 — delete the dead dialog-mode seam**: `Push/PopDialogMode` is a documented no-op, yet 12 sites still bracket every dialog with the pair and carry a compositor dependency solely for it | `Compositor/CompositorEngine.cs` PushDialogMode/PopDialogMode ("kept for API compatibility but is a no-op"); `Platform/AvaloniaDialogService.cs:33,51,60,74,83,102,135,143,162,170,181,189` | deletes a phantom coupling (dialog service → compositor), the dead ref-count field, and 12 try/finally brackets; zero behavior change by construction | MECHANICAL | trivial debt removal |
+| **IMP-6 — chain `VideoLayer` teardown tasks**: `Stop()` overwrites `_teardownTask`, so `WaitForTeardown` drains only the LATEST teardown; rapid stop→play→quit leaves an untracked native free (player dispose + `FreeHGlobal` after 400ms) racing process exit | `Compositor/Layers/VideoLayer.cs` Stop()/WaitForTeardown (called by `AvaloniaVideoService.Dispose`) | closes a crash-on-exit race window (segfault class) | STANDARD | ~5 lines (`_teardownTask = Task.WhenAll(previous, new)` or a small list) |
+| **IMP-7 — remove dead seam method `IV2AuthService.SendHeartbeatAsync(string)`**: ZERO Core/Avalonia callers; the real heartbeat is the internal no-arg `ProfileSyncService.SendHeartbeatAsync()` on the 120s timer; the DI comment itself admits it dead | `CCP.Core/Services/Auth/IV2AuthService.cs:55`; impl `AvaloniaV2AuthService.cs:305`; real path `ProfileSyncService.cs:250` (timer `:228`); `ServiceCollectionExtensions.cs:220` | removes a misleading interface member + dead impl + a stale comment contradicting the single-heartbeat-owner invariant | STANDARD | interface/impl edit, no behavior change; WPF head keeps its own legacy copy (`Services/Account/V2AuthService.cs:528`) |
+| **IMP-8 — coalesce the two 30s dirty-save timers**: `AchievementService._saveTimer` + `QuestService._saveTimer` do identical "if dirty, serialize+flush" work with near-identical tmp-recovery boilerplate | `CCP.Core/Services/Progression/AchievementService.cs:86,:99`; `QuestService.cs:71,:95` | one fewer always-waking timer (latency/battery on laptops), shared crash-recovery logic, fewer moving parts | JUDGMENT | low-medium; structural win, not headline perf — flag, don't force. Keep the 1s tracking timers separate (different state, higher risk) |
+| **IMP-9 — `BubbleEngine` per-tick allocations**: 2 transient lists allocated EVERY active 32ms tick (after the early-return guard) + 2 redundant full `_bubbles.ToArray()` snapshots per tick in the hazard passes | `CCP.Core/Services/Chaos/BubbleEngine.cs:822-823` (driver `:174-176`, `TickIntervalSec=0.032` `:13`); `:1534` (`TickSpankSweeps`), `:1431` (`TickFieldHazards`) | removes ~4 Gen0 allocs/frame (~120/s) on the UI thread in bubble-mode steady state; net code smaller (reusable field buffers + ONE shared snapshot passed to both passes) | STANDARD | low risk, behavior-preserving; pinned by existing BubbleEngine unit tests in CCP.Core.Tests |
+| **IMP-10 — `ActiveRipples` dead alloc-y getter**: `ToList()` + closure on every read; repo-wide grep = the declaration only, zero readers | `CCP.Core/Services/Chaos/BubbleEngine.cs:146-147` | removes a latent per-frame footgun (any future per-frame reader = per-frame `List<>` alloc); delete, or replace with a zero-alloc count+indexed accessor | STANDARD | trivial; confirm ripple-overlay intent first — the Size-Queen ripple effect is gameplay-relevant (`:1434-1445`) |
+| **IMP-11 — orphaned `AvaloniaBubble` control**: `new AvaloniaBubble(` has 0 call sites; chaos bubbles render via the compositor `BubbleLayer` (`AvaloniaBubbleService.cs:533-535` routes `SetFuse` there); its per-call `new SolidColorBrush` pattern reads as a hot-path smell on every scan | `CCP.Avalonia/Chaos/AvaloniaBubble.cs` (~220 lines) | deletes dead UI code + a misleading allocation pattern; simplification, not runtime speed | MECHANICAL | confirm-then-delete: verify no XAML / resource-factory / reflection construction first; STOP if found |
+
+Scan verdicts recorded as explicitly GOOD (checked, no action): VideoLayer's triple-buffer frame path
+matches its zero-alloc spec (index-swap locks, zero-copy `SKImage.FromPixels`, stale-session guards);
+z-order snapshot cached (rebuilt only on Register/Unregister); static-frame skip + idle watchdog + epoch
+guards real; `FlashImageCache` memory policy correctly ported (LRU + GIF caps + ref-count lease — do NOT
+"improve"); `AvaloniaMouseHook` disciplined; event-handler `+=`/`-=` hygiene clean in Avalonia transient
+surfaces; `SettingsService`'s Newtonsoft use is load-bearing (member-level `Error` recovery contract) and
+NOT worth an STJ swap.
 
 ---
 
@@ -269,7 +333,11 @@ Each has a detail pointer; claim only in a focused session.
   `AvaloniaRemoteCommandExecutor`). Needs a `wpf-parity` contract on whether the WPF head played inbound
   remote emotes on the tube before this is a parity gap vs. a future enhancement.
 - **Calibration 16-point window pipeline** (~1300–1500 LoC) — the per-frame algorithm is already in Core
-  (`837aaa1d`); the 3 calibration windows are fake-success shells. Detail:
+  (`837aaa1d`). CORRECTED 2026-07-10: the "3 fake-success shells" note was STALE — one calibration
+  window exists in CCP.Avalonia, `WebcamCalibrationWindow` (708 LOC), and it now collects iris samples,
+  fits the polynomial (fit-quality gate `WebcamCalibrationWindow.axaml.cs:298`), and commits calibration
+  (S1c `df06d06d`); the port-plan marks the old "non-functional shell" note RESOLVED (the "3" was the 3
+  tab callers opening the one window). Remaining scope = the full 16-point window pipeline. Detail:
   [`webcam-calibration-port-plan.md`](webcam-calibration-port-plan.md).
 - **WS0 lots 7–11 residual P2/P3 findings (effect-seam-blocked):** whisper-audio busy gate (A1-15, blocked
   on the subliminal whisper linked-audio port); Bambi-Freeze pre-roll around triggered videos (V1-7, needs
@@ -295,7 +363,7 @@ hash. Re-read hashes live from `git` before re-claiming them.
 | **Companion AI — all three transports ported** | cloud `61ca0d1`, local/Ollama `2bd37899`, OpenAI `ca873d25`; AI-command dispatch `70cf9803`/`9fa09853`/`424ea528` (cloud faithfully omits); `IModerationLog` wired `b3b8da4`; `SystemPromptBuilder` parity `b84eb90` |
 | **v6.2.11 sync** | merge `cd2ff1f9` (+ChaosImagePool facade fix + DtrhHostService `using` fix); all heads → 6.2.11; quiz #501 + speech #505 ported to Core; bark floor N/A (no rule gate); trigger-bubble settings already ported |
 | **v6.2.9 #5** interaction-queue slot-leak guard | `f4a556a` |
-| **Measured wins vs WPF** (recorded) | startup ~2.5s vs ~4.2s; working set ~422MB vs ~1218MB; chaos FPS-floor 2026-07-05 AvgFps 138.7 ≫ 30 floor (MinFps=0 caveat → open row #2) |
+| **Wins vs WPF** (recorded; WPF halves UNBACKED) | Avalonia recorded: startup ~2.0s (`benchmark-optimized.json` `MainWindowShownMs` 1976.9; better than the previously claimed 2.5s), working set ~422MB (`perf-avalonia.json`); chaos FPS-floor 2026-07-05 AvgFps 138.7 ≫ 30 floor (MinFps=0 caveat → open row #2). UNVERIFIED (2026-07-10): "~4.2s / ~1218MB WPF" — evidence gap: NO recorded WPF benchmark artifact exists anywhere in the repo; re-measure the WPF head before citing a vs-WPF win |
 | **Pre-WS0 foundation** (Core carve-out, DI, theming, tabs/dialogs, smoke harness) | WPF→`CCP.Core` reference collapse + WPF `Models/` deleted; `Microsoft.WindowsAppSDK` pinned; 5-theme reskin (dashboard-design lit/unlit borders); ~44 tabs + ~40 dialogs ported; `--smoke-test` harness (44 tabs, Findings 5 baseline); Buttplug.io haptics; cross-platform audio-device detection |
 
 ---
@@ -309,7 +377,7 @@ items below — all triaged.**
 
 | Deposited by | File → item | Why it might be open | Disposition |
 |---|---|---|---|
-| SWEEPER 2026-07-10 | `CCP.Avalonia/AvatarTube/TODO.md` → “Cross-platform z-order/always-on-top edge cases on Linux/macOS” (Windows HWND path implemented) | Linux/macOS always-on-top not verified | **CLOSED → row #5** (Linux bring-up epic; X11/Wayland topmost + click-through mechanism in `crossplatform-rebuild-plan.md` WS4). |
+| SWEEPER 2026-07-10 | `CCP.Avalonia/AvatarTube/TODO.md` → “Cross-platform z-order/always-on-top edge cases on Linux/macOS” (Windows HWND path implemented; corrected 2026-07-10: a Linux/macOS `Topmost`-pulse+`Activate()` fallback ALSO exists — `AvatarTubeWindow.ChatInput.cs:128-133` — so "HWND path only" was imprecise) | Linux/macOS always-on-top not verified (no test record) | **CLOSED → row #5** (Linux bring-up epic; X11/Wayland topmost + click-through mechanism in `crossplatform-rebuild-plan.md` WS4). |
 | SWEEPER 2026-07-10 | `CCP.Avalonia/AvatarTube/TODO.md` → “Remote emote command routing from `IRemoteControlService` to the active tube” | Outbound `SendEmoteAsync` exists (`RemoteControlTabViewModel`); inbound command→tube play is not implemented (`AvaloniaRemoteCommandExecutor` has no emote action) | **→ new DEFER row** (see #9 “AvatarTube inbound emote routing” — needs `wpf-parity` contract). |
 | SWEEPER 2026-07-10 | `CCP.Avalonia/Views/Deeper/TODO.md` → “engine/effect integration stubbed; `EnhancementHostService`/`IPlaybackTimeSource` not yet in Core” | TODO premise is **OUTDATED**: `EnhancementHostService` + `IPlaybackTimeSource` ARE in `CCP.Core/Services/Deeper/`, `AvaloniaLibVlcTimeSource` implements the interface, and `EnhancementPlayerWindow` resolves the host via DI (`ServiceCollectionExtensions.cs:315`) | **CLOSED** (premise outdated since the Core migration). Residual narrow stub: `AvaloniaSpeakPromptHost` time-source not yet wired (its own comment, `…/Deeper/AvaloniaSpeakPromptHost.cs:22`) — a speak-prompt sub-item, not a shipped-feature stub; left for the Deeper/calibration backlog. |
 | SWEEPER 2026-07-10 | `CCP.Avalonia/TODO-avalonia-port-batch.md` → “What Remains”: real tab views for placeholder VMs, Core seam extraction, browser web-view, profile/Discord viewer, lockdown wiring | Broad sweep, not a discrete gap | **CLOSED → rows #4/#5** (Windows/Linux sweeps) + parity-matrix DEFER bullets (companion/browser/Discord). |

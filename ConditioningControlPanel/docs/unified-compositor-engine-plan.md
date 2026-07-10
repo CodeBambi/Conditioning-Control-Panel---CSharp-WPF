@@ -19,7 +19,9 @@ inside the one `CompositorEngine`: **one topmost `CompositorWindow` per monitor,
 layers, one 60Hz tick, PER-REGION click-through** (2026-07-09 team review: only the theme
 color-filter and the spiral are ambient "tinted glass" the user works through; every other
 active layer captures input over the region it paints; `AvaloniaMouseHook` swallows clicks
-inside the capture mask). **No new per-effect windows, ever.** Interactive surfaces (main UI,
+inside the capture mask — TARGET state: the mask + swallow are board row #1 and NOT yet implemented;
+today the compositor window is globally `WS_EX_TRANSPARENT`, all-or-nothing click-through,
+`CompositorWindow.axaml.cs:107`). **No new per-effect windows, ever.** Interactive surfaces (main UI,
 dialogs, AvatarTube, HUD, boon bar, lock card) stay windows.
 
 The full matters/does-not-matter table, the rendering doctrine, the porting doctrine, and the
@@ -57,7 +59,7 @@ running).
 | A | `85fa6570` | `VideoLayer`/`MandatoryVideoLayer` render: LibVLC vmem → `SKImage`; the `--verify-video` harness bisect found no broken stage (the "does not render" premise was stale — docs had lagged the code). |
 | B | `bbdb3077` / `99a50721` | Parity with the legacy path, rehomed onto the layer: audio (volume / output-device / mute), attention checks + duration + safety timer + segment (random-slice) mode, `VideoAboutToStart`/`VideoStarted`/`VideoEnded` timing, watch-position credit. Adversarial review verdict: safe to bank, 0 blockers. |
 | C | `07c094e1` | `--verify-layers` harness — every migrated layer PASS (register/activate/render-delta/teardown; dual-surface capture affinity asserted both directions). |
-| D | `37bd454a` | Perf: zero per-frame alloc (triple-buffered pinned decoder buffers + long-lived zero-copy `SKImage.FromPixels`); the per-layer `_renderTimer` folded into the engine's single `Update()` tick. `CompositionCustomVisualHandler` + dirty-rect evaluated → DEFERRED (no profiling need; idle ~121 / active ~130 fps). |
+| D | `37bd454a` | Perf: zero per-frame alloc (triple-buffered pinned decoder buffers + long-lived zero-copy `SKImage.FromPixels`); the per-layer `_renderTimer` folded into the engine's single `Update()` tick. `CompositionCustomVisualHandler` + dirty-rect evaluated → DEFERRED (no profiling need; commit `37bd454a` measured **idle 122.7 / active 123.4 fps** — corrected 2026-07-10: the previously cited "active ~130" overstated the commit's own measurement by ~7 fps; render-thread eval stays deferred). |
 | E1 | `6180efc2` | ESC/panic routed through the global `IInputHook` (the layer path has no window to receive keys). |
 | E2 | `ed636a7c` | Default flipped to compositor video; user eyes-verified (video renders with spiral/pink tint compositing ON TOP — the "video covers the overlays" bug is fixed). |
 | E3 | `8069cfb7` | **Legacy path DELETED:** `AvaloniaMultiMonitorVideoService` + `IMultiMonitorVideoService` + `VideoOverlayWindow` removed (grep-confirmed 0 matches in `CCP.Avalonia`); `HasOpenVideoWindows => IsPlaying`, `PrimaryVideoWindow => null`; no `CCP_UCE_VIDEO` / `CCP_LEGACY_VIDEO` env gate. The compositor `VideoLayer` / `MandatoryVideoLayer` are the only video path. |
@@ -184,7 +186,10 @@ across a full run incl. a 60s Chaos phase — but the comparison to `benchmark-o
 **environmentally invalidated on this machine, NOT a code regression:**
 
 - **MinFps=0** is a ≥1s render stall correlated with **LibVLC web-video decode failures** — a
-  video-path stall, NOT a Skia/UCE regression.
+  video-path stall, NOT a Skia/UCE regression. (Evidence gap 2026-07-10: the primary run log was
+  overwritten — `ccp-run.log` now has 0 decode-failure matches; the correlation stands on
+  `benchmark-2026-07-05-analysis.md` + `benchmark-report-2026-07-05.json` `MaxIntensityMinFps: 0`
+  only. A Background-priority engine-tick starvation hypothesis was also filed — board row IMP-2.)
 - Phase 2 is 120s of web video that **FAILED to decode** (~half the run); its LibVLC
   decode-retry loop accounts for BOTH the AvgFps drop and the ~4× CPU.
 - Secondary confound: the 180s→240s duration drift (the extra 60s is the heaviest Chaos phase).

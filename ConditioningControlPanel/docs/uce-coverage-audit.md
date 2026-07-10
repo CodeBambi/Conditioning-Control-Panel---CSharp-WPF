@@ -35,8 +35,13 @@ window-migration lane is complete.
 > SkiaFx) are now DELETED (dead code removed so they cannot be re-wired or mis-used). EStimGlow's
 > charge-glow remains a DEFERRED FEATURE (the charged-pop mechanic), not a window to migrate.
 >
-> Independent re-verification post-landing (`fb0dfd1`/`fb5414` agent, 2026-07-05): slnf 0 err/0 warn,
-> Core 542/542, smoke 44 tabs / Findings 5 / exit 0 — **identical to baseline, no regression**.
+> Independent re-verification post-landing (2026-07-05): slnf 0 err/0 warn, Core 542/542, smoke 44
+> tabs / Findings 5 / exit 0 — **identical to baseline, no regression**. CORRECTED 2026-07-10
+> (trust-nothing verification pass): the E-Stim arc code landed in `05520f52`; the previously cited
+> `fb0dfd1`/`fb5414` are 2-line #493 doc-scope corrections (3 insertions each; they never touch this
+> file) — NOT the re-verification run. The gate numbers themselves are real: Core **542/542** and
+> slnf 0 errors re-confirmed LIVE 2026-07-10; smoke 44/Findings 5 is a recorded runtime baseline
+> (not re-run headlessly).
 
 > **Progress 2026-07-05:** gaps #1–2 closed — `ChaosFxWindow`→`ChaosFxLayer` (Z=118, `8df68031`)
 > and `ChaosWaveTimerOverlay`→`ChaosWaveTimerLayer` (Z=155, `16fe5a92`); both windows deleted;

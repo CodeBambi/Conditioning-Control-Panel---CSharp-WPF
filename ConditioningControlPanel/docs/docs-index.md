@@ -1,7 +1,8 @@
 # CCP Avalonia Port — Docs Index
 
 **Branch:** `feat/crossplatform` @ `5e3ed650` · **App version:** 6.2.11 · **Index authored:** 2026-07-10 (docs rework)
-**Live gates at index time (re-run 2026-07-10):** `CCP.Desktop.slnf` build 0 errors · Core tests **542/542** · working tree clean. Re-run gates live before claiming them; do not cite a stale capture.
+**Live gates at index time (re-run 2026-07-10):** `CCP.Desktop.slnf` build 0 errors (384 warnings) · WPF sln build 0 errors · Core tests **542/542** (Release, 0 failed) · working tree clean. Re-run gates live before claiming them; do not cite a stale capture.
+**Trust-nothing verification pass (2026-07-10):** 90 material status claims from the canonical docs were audited against code/git/live output — **68 VERIFIED · 16 WEAKENED (downgraded in place) · 2 FALSIFIED (corrected: `IBrowserHost` is an implemented 11-member seam, not missing; CCP.Core is 302 `.cs` / 33 seam interfaces / 91 models) · 4 PLATFORM-LIMITED**. Corrections applied in place; improvement rows filed on the task board.
 
 This is THE map of the port doc set. A doc is listed here or it does not exist. Future port sessions read
 this first, then `skia-rebuild-goal.md`, then claim exactly ONE row on the task board. Everything else in
@@ -203,6 +204,13 @@ the UCE plan, the cross-platform plan).
 - **Evidence is re-read live, never invented.** Commit hashes, dates, and test counts are re-read from
   `git` and the live gate runs (or copied from the task-board SHIPPED ledger / parity-matrix rows) before
   they are claimed — there is no separate `progress`/`gates` scratch file in the read path.
+- **Doc-claimed state is a hypothesis, not truth (owner ruling 2026-07-10).** Before building on ANY
+  claimed-done area, re-verify the claim (done / exists / deleted / count / perf / open / blocked)
+  against actual code, git history, or live command output; doc prose citing other doc prose is
+  inadmissible evidence — docs are hypotheses, code and the running app are truth. Verified-existing
+  features are still fair game for improvement: big changes are allowed when they win on merit (behavior
+  is the only contract). Each verification pass records its date + claim total + verdict counts here and
+  in `skia-rebuild-goal.md`.
 - **Transient workflow scratch is not part of this index.** Recon/scratch directories produced by a docs
   rework (e.g. a local `.rework/`) are local-only, not committed, not listed here, and not pointed at by any
   governed doc — the workflow that creates them purges them on close. Only the docs in sections 1–3 belong

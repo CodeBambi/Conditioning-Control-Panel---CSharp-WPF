@@ -29,6 +29,7 @@ feature ports, not just the UCE**.
 | Windows AND Linux: build, launch, features function | Matching WPF pixel-for-pixel (keep the design language, see `dashboard-design`) |
 | Per-region click-through (team review 2026-07-09): only the color filter + spiral are ambient tinted glass the user works through; every other active layer captures input over its painted region | Keeping legacy per-effect windows |
 | Privacy/security posture never regresses (see Guardrails) | Preserving old workarounds whose reason died |
+| **Trust nothing written:** every claimed status (done / exists / deleted / count / perf) is re-verified against code, git, or live output before being built on — docs are hypotheses, code and the running app are truth | Doc prose citing other doc prose as evidence |
 
 **Acceptance gate:** a ported feature is accepted only when at least as fast and smooth as the WPF head
 — preferably measurably improved (startup, memory, FPS, reliability, security). Big changes are
@@ -104,16 +105,24 @@ Branch `feat/crossplatform` @ `5e3ed650` · app **v6.2.11** · working tree clea
 **Nothing is in flight; the task board is the only claim ledger.** Any "claimed / co-agent / WIP" note
 found anywhere is historical debris — purge it, do not honor it.
 
-**Gates, re-run live 2026-07-10:** slnf build **0 errors** · Core tests **542/542** (Release, 0
-failed). App/`--smoke-test` not re-run in that pass; recorded smoke baseline stays `[SMOKE] Findings:
-5`, exit 0 (the `StartSession` blocker IS baseline).
+**Gates, re-run live 2026-07-10 (trust-nothing verification pass):** slnf build **0 errors** (384
+warnings) · WPF sln build **0 errors** · Core tests **542/542** (Release, 0 failed). App/`--smoke-test`
+not re-run (GUI); the smoke baseline `[SMOKE] Findings: 5`, exit 0, 44 tabs is a RECORDED runtime value
+(commit `fb704a6d` message — there is no in-code baseline constant), so treat it as recorded evidence
+until the next headed run (the `StartSession` blocker IS baseline).
+
+**Trust-nothing verification pass (2026-07-10):** 90 material status claims extracted from the
+canonical docs were checked against code/git/live gates — **68 VERIFIED · 16 WEAKENED (downgraded in
+place) · 2 FALSIFIED (corrected: `IBrowserHost` is an implemented 11-member seam, not missing;
+CCP.Core is 302 `.cs` / 33 seam interfaces / 91 models, not 156/26/53) · 4 PLATFORM-LIMITED**.
+Corrections + filed improvement rows landed the same day; the board carries the improvement queue.
 
 | Surface | Status |
 |---|---|
-| Windows head | **~92%** — WS0 done (11 lots), video through the compositor (legacy path deleted), chaos run engine ported, 22-layer UCE lane complete. Remaining: input mask + hook swallow, FPS re-baseline, completion sweep, verify-set, DEFER backlog |
-| UCE media surface | **~95%** — 22 registered layers (9 session + 12 chaos + 1 attention-check), one 60Hz tick, no passive effect window remains. Remaining: per-region capture mask + swallow |
-| Linux head | **~45%** — builds and launches in a VM; ZERO click-through code (`SupportsClickThrough = IsWindows`), no input hooks, no verified feature sweep |
-| Measured wins vs WPF | Startup ~2.5s vs ~4.2s · working set ~422MB vs ~1218MB · chaos full-run AvgFps 138.7 ≫ 30 floor (2026-07-05; re-baseline caveat on its board row) |
+| Windows head | **~92%** (synthesized from parity lot rows, not independently re-derived) — WS0 done (11 lots), video through the compositor (legacy path deleted), chaos run engine ported, 22-layer UCE lane complete. Remaining: input mask + hook swallow, FPS re-baseline, completion sweep, verify-set, DEFER backlog |
+| UCE media surface | **~95%** (22/22 layers VERIFIED in code; the % is synthesized) — 22 registered layers (9 session + 12 chaos + 1 attention-check), one 60Hz tick, no passive effect window remains. Remaining: per-region capture mask + swallow (board row #1 — today the compositor window is still globally `WS_EX_TRANSPARENT`) |
+| Linux head | **~45%** (synthesized) — builds and launches in a VM; ZERO click-through code (`SupportsClickThrough = IsWindows`), no input hooks, no verified feature sweep |
+| Wins vs WPF | Avalonia halves recorded: startup ~2.0s (`benchmark-optimized.json` `MainWindowShownMs` 1976.9) · working set ~422MB (`perf-avalonia.json`) · chaos full-run AvgFps 138.7 ≫ 30 floor (2026-07-05; re-baseline caveat on its board row). UNVERIFIED (2026-07-10): the WPF halves “~4.2s startup / ~1218MB working set” — evidence gap: NO recorded WPF benchmark artifact exists in the repo; re-measure WPF before building on any vs-WPF comparison |
 
 ## Shipped ledger (compressed history; hashes are the evidence)
 
@@ -163,12 +172,19 @@ failed). App/`--smoke-test` not re-run in that pass; recorded smoke baseline sta
    evdev/XInput2/XRecord global mouse, system libvlc, Linux equivalents-or-recorded-gaps for
    wallpaper/WebView/ducking; then a full per-feature sweep per `docs/linux-vm-testing.md` + the
    parity matrix's Linux section. Mechanism catalogue: `crossplatform-rebuild-plan.md`.
-6. **DTRH "The Fall" web mini-game epic** [BLOCKED on the `IBrowserHost` seam → JUDGMENT] —
-   Three.js/WebGL roguelite in a WebView host; ~30 web assets portable; host/bridge/telemetry split
-   Core-vs-head; chaos meta models to mirror. Phase breakdown: the board's DTRH epic appendix.
+6. **DTRH "The Fall" web mini-game epic** [JUDGMENT — NOT seam-blocked; corrected 2026-07-10] —
+   `IBrowserHost` is an implemented 11-member in-app WebView seam (`CCP.Core/Platform/IBrowserHost.cs`:
+   Navigate/ExecuteScript/WebMessage/virtual-host/`CreateBrowserControl` …), with `WebView2BrowserHost`
+   (Windows), `WebKitBrowserHost` (macOS), `WebKitGtkBrowserHost` (Linux, stub) and `MobileBrowserHost`
+   (Android); `ChaosTunnelService` already hosts the three.js tunnel through it
+   (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24-33`). Remaining work is the
+   game port itself — web assets, host/bridge/telemetry split Core-vs-head, chaos meta models. Phase
+   breakdown: the board's DTRH epic appendix.
 7. **v6.2.11 verify-set** [VERIFY → STANDARD] — lock-card repeat (`LockCardWindow.IsAnyOpen`), overlay
    z-order #497 (likely N/A under UCE — confirm), bounce-in-tray, weekly-quest #496, update-restart
-   #499 (N/A until an Avalonia installer). Rows on the board.
+   #499 (N/A until an Avalonia installer). Rows on the board. Code-check 2026-07-10: 3a's guard code
+   EXISTS (`LockCardWindow.IsAnyOpen():99` / `ForceCloseAll():144`); 3b–3e have no headless evidence —
+   headed verify required.
 8. **#493 pair** [STANDARD] — Gif Rain cascade multi-monitor; dashboard bubble motion-override. Not
    started.
 9. **Standing DEFER backlog** — Ditzy Data PRO analytics (~832 LoC) · Discord Rich Presence ·
@@ -186,6 +202,9 @@ Windows is reverted, not patched around.
 ## Loop protocol (how a workflow-driven session runs this goal)
 
 1. **`port-plan`**: read `docs-index.md` → this file → the task board; check `git status` + recent log.
+   **Trust nothing written:** before building on any claimed-done area, re-verify the claim against
+   code (grep/read/git/live gates) — docs are hypotheses, code and the running app are truth.
+   Verified-existing features are still fair game for improvement — big changes allowed on merit.
 2. **Claim ONE board row** (append-only claim ledger entry). One task per session where possible.
 3. **Fan out discovery** via the `workflow` tool: `wpf-archaeologist` for the behavior contract
    (`wpf-parity` discipline); `avalonia-research` for every API touched. Carry conclusions forward,

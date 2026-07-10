@@ -64,8 +64,8 @@ Windows, degrade gracefully with a recorded gap on Linux.
 
 | Phase | Status | One-line evidence (hashes from `progress.md`) |
 |---|---|---|
-| 0 — Cleanup | ✅ done | Dead deps (`SharpDX`, `OpenAI-DotNet`, `OllamaSharp`) removed from all projects; `NAudio`/`OpenCvSharp`/WebView2 confined to the Windows head. |
-| 1 — Carve out `CCP.Core` | ✅ done | 156 `.cs` in Core (53 models + 26 platform-seam interfaces in `CCP.Core/Platform/` + portable services); builds clean on `net8.0`. |
+| 0 — Cleanup | ✅ done | Dead deps: `SharpDX.*` + `OpenAI-DotNet` fully removed (0 references, verified 2026-07-10). CORRECTED 2026-07-10: `OllamaSharp` is STILL a `<PackageReference>` in the legacy WPF head (`ConditioningControlPanel.csproj:100`, v5.4.16, no `.cs` usage — dead weight; remove on the next WPF-head csproj touch). `NAudio`/`OpenCvSharp`/WebView2 confined to the Windows head. |
+| 1 — Carve out `CCP.Core` | ✅ done | **302** `.cs` in Core (**91** models + **33** platform-seam interfaces in `CCP.Core/Platform/` + portable services) — live count 2026-07-10; the long-cited "156 (53 models + 26 seams)" was stale by ~2× and is FALSIFIED. Builds clean on `net8.0`. |
 | 2 — Prove Core off-Windows | ✅ done | CI builds Core + heads on `ubuntu-latest`/`macos-latest` and runs `CCP.Core.Tests` (542/542 live 2026-07-10). |
 | 3 — Avalonia solution | ✅ done | All four desktop heads + Android head exist and build (§3.1). |
 | 4 — XAML/UI migration | 🚧 Windows ~92% / Linux ~45% | Shell, chrome, tabs, dialogs ported; 22-layer UCE surface complete; chaos run engine S1–S9 done. Open: per-region mask + hook swallow, completion sweep, Linux feature sweep. Parity evidence: `avalonia-ui-parity-matrix.md`. |
@@ -183,7 +183,7 @@ below is the *original design intent*; a few entries were consolidated or deferr
 | `IOverlaySurface` / `IWindowChrome` | Win32 DWM, layered windows, z-order (click-through — §7.4) |
 | `IHotkeyProvider` / `IInputHook` | `RegisterHotKey`, `SetWindowsHookEx` |
 | `ITrayIcon` | `NotifyIcon` |
-| `IBrowserHost` | WebView2 (design context for the DTRH epic — board row; planned, not yet implemented) |
+| `IBrowserHost` | IMPLEMENTED 11-member in-app WebView seam (corrected 2026-07-10; was wrongly "planned, not yet implemented"): `WebView2BrowserHost` (Windows) / `WebKitBrowserHost` (macOS) / `WebKitGtkBrowserHost` (Linux, stub) / `MobileBrowserHost` (Android); hosts the Chaos three.js tunnel (`ChaosTunnelService`) — DTRH epic context on board row #6 |
 | `ISecretStore` | DPAPI |
 | `IWallpaperProvider` | `SystemParametersInfo` wallpaper |
 | `IUpdateInstaller` | Inno Setup updater |
@@ -407,7 +407,7 @@ used everywhere else, unifying the video stack.
 | `VideoLAN.LibVLC.Windows` | Keep + add runtimes | Mac/Android packages; Linux via system or custom. |
 | `XamlAnimatedGif` | Remove | `AvaloniaGif` or custom frame animation. |
 
-(`SharpDX.*`, `OpenAI-DotNet`, `OllamaSharp` already removed — zero references.)
+(`SharpDX.*` + `OpenAI-DotNet` removed — zero references; `OllamaSharp` still lingers UNUSED in the legacy WPF head only, `ConditioningControlPanel.csproj:100` — corrected 2026-07-10.)
 
 ---
 
@@ -463,6 +463,11 @@ and passes the rest. For a region that is ambient-only (color filter and/or spir
 - **render its own visual smoothly** — the ambient layers (spiral, color tint) spin/pulse at a fluid frame rate
   while their ambient-only regions stay click-through. "See the ambient glass smoothly and use your PC through it;
   every other effect owns (captures) its painted region" is the requirement.
+
+> **Implementation status (2026-07-10, annotation — the spec above is verbatim):** the per-region
+> capture mask + hook swallow are TARGET scope (board row #1), not yet implemented. Today the
+> per-monitor `CompositorWindow` is globally `WS_EX_TRANSPARENT` (all-or-nothing click-through,
+> `CompositorWindow.axaml.cs:107`) and `AvaloniaMouseHook` passes all clicks (`AvaloniaMouseHook.cs:156-159`).
 
 This needs input-transparency at **both** levels, and the reported bug is shipping only one:
 1. **Avalonia level:** the overlay's content/root must be `IsHitTestVisible="false"` so clicks fall through to the
@@ -548,7 +553,7 @@ AppImage/snap/flatpak. (Update-restart #499 is N/A until an Avalonia installer �
 | **Global mouse hook** | `SetWindowsHookEx` WH_MOUSE_LL (swallows clicks in the capture mask) | **evdev** (root/udev, `/dev/input/event*`), **XInput2** (`XIQueryPointer`, passive grabs), or **XRecord** (record extension; read-only). | Degrade: without root, global mouse capture is limited — record the gap; the per-region mask may need a XInput2-grab fallback instead of a true hook. |
 | **Global keyboard hook / hotkeys** | `SetWindowsHookEx` WH_KEYBOARD_LL, `RegisterHotKey` | X11 grab keys (`XGrabKey`); evdev for low-level. | Work for hotkeys; **system-key suppression (lockdown) requires root/udev** — degrade with a recorded gap. |
 | **Native video engine** | `VideoLAN.LibVLC.Windows` NuGet | **System `libvlc`** — install `libvlc-dev`/`libvlccore-dev`/`vlc` (CI does this; `build-linux.sh` installs it); `Core.Initialize(path)` from `AppContext.BaseDirectory`. | Work (system package). macOS ARM64 still needs a manual dylib from VLC.app. |
-| **Embedded browser (`IBrowserHost`)** | WebView2 | **WebKitGTK** (`webkit2gtk-4.1`) via a CEF/WebKit binding, or **system browser** `xdg-open`. | Work (WebKitGTK) or degrade (system browser launch). Blocks the DTRH epic until implemented. |
+| **Embedded browser (`IBrowserHost`)** | WebView2 | **WebKitGTK** (`webkit2gtk-4.1`) via a CEF/WebKit binding, or **system browser** `xdg-open`. | Work (WebKitGTK) or degrade (system browser launch). Blocks only the DTRH epic's LINUX leg (corrected 2026-07-10: the `IBrowserHost` seam + Windows `WebView2BrowserHost` exist and host the Chaos tunnel; the Linux `WebKitGtkBrowserHost` is the remaining stub — `CreateBrowserControl()` returns null, navigation shells out to `xdg-open`). |
 | **Audio ducking (`ISystemAudioDucker`)** | NAudio/WASAPI (`WindowsSystemAudioDucker`) | **PulseAudio/PipeWire** (`pactl` load-module/module-role-ducking, or PipeWire session manager). | Best-effort (`pactl`/`osascript`-equivalent); degrade with a recorded gap where the DE lacks a ducking API. |
 | **Desktop wallpaper (`IWallpaperProvider`)** | `SystemParametersInfo` (`SPI_SETDESKWALLPAPER`) | `gsettings` (GNOME), `feh`/`nitrogen` (X11), or **layer-shell** overlay under Wayland. | Per-DE; degrade with a recorded gap where no API exists. |
 | **Tray icon** | Avalonia `TrayIcon` | `StatusNotifierItem`/AppIndicator (needs `libdbusmenu` on some distros). | Work, with per-distro dependency. |
@@ -663,7 +668,7 @@ original.
 
 | Area | Current (WPF) | Target |
 |---|---|---|
-| Startup time | Custom `Main` sync-inits Serilog/services/Patreon | Async startup pipeline; lazy service init; splash with real progress. **Measured: ~2.5s (Avalonia) vs ~4.2s (WPF).** |
+| Startup time | Custom `Main` sync-inits Serilog/services/Patreon | Async startup pipeline; lazy service init; splash with real progress. **Recorded: ~2.0s Avalonia (`benchmark-optimized.json` `MainWindowShownMs` 1976.9). UNVERIFIED (2026-07-10): "~4.2s (WPF)" — evidence gap: no recorded WPF benchmark artifact exists in the repo; re-measure before citing.** |
 | UI render thread | Single WPF render thread can deadlock | Avalonia/Skia composition; 60 FPS independent render thread. |
 | GIF animation | XamlAnimatedGif decodes on UI thread | SkiaSharp/ImageSharp decode on thread pool; upload frames to GPU. |
 | Audio SFX | `WaveOutEvent` per sound can exhaust devices | Pool audio players; LibVLC for short SFX on all platforms. |
