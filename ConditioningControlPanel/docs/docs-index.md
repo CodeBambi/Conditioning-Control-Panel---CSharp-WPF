@@ -30,6 +30,7 @@ The WPF head is behavior reference ONLY and is never modified.
 | 4 | [`avalonia-ui-parity-matrix.md`](avalonia-ui-parity-matrix.md) | Parity evidence store + re-verify queue + Linux sweep status. |
 | 5 | [`unified-compositor-engine-plan.md`](unified-compositor-engine-plan.md) | UCE state, 22-layer registry, per-region input-mask spec, FPS protocol. |
 | 6 | [`crossplatform-rebuild-plan.md`](crossplatform-rebuild-plan.md) | v12 gotchas (section 21), platform seams, Linux mechanism catalogue. |
+| 7 | [`port-session-prompt.md`](port-session-prompt.md) | LIVE driver prompt + launch pre-flight for autonomous port sessions. Stable protocol only; volatile facts stay on the board; the running session maintains it. |
 
 ### On-demand per-area detail (read only when a claimed row points at it)
 

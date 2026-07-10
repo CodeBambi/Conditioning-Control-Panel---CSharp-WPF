@@ -391,6 +391,11 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 
 | Row | Evidence | Expected gain | Tier | Proportionality |
 |---|---|---|---|---|
+**Claim-priority order (LIVE — the claimer updates this line as rows close/land):** IMP-11 → IMP-5 →
+IMP-7 → IMP-10 → IMP-4 (mechanical/trivial first) → IMP-9 → IMP-6 → IMP-2 (STANDARD) → IMP-8 (JUDGMENT,
+flag-don't-force) → major rows #1–#8. IMP-1 DONE `49ec3707`. IMP-3 is CONDITIONAL on row #3's libmpv
+spike gate — never do both.
+
 | **IMP-1 — `VideoLayer` lacks a `ConsumeDirty` override**: engine invalidates all windows at 60Hz while clips decode at ~25-30fps; `Update`'s `presented` flag (FRONT↔READY swap) IS the dirty signal | `Compositor/Layers/VideoLayer.cs` (no override; inherits always-true `BaseLayer.ConsumeDirty()`, `BaseLayer.cs:46`) | ~halves GPU render passes during plain video playback; `MandatoryVideoLayer` inherits the fix free | MECHANICAL | ~10 lines, UI-tick-only state, no protocol change; verify with `--verify-video` |
 | **IMP-2 — engine render tick runs at Background dispatcher priority**: parameterless `DispatcherTimer` = background priority in Avalonia 12.0.x (pinned 12.0.5) — the whole UCE hangs off one starvable timer | `Compositor/CompositorEngine.cs` ctor; Avalonia.Base 12.0.x XML docs (`M:Avalonia.Threading.DispatcherTimer.#ctor`) | removes scheduling-induced stutter under UI-thread load; candidate one-liner `new DispatcherTimer(DispatcherPriority.Render)`; doubles as a row-#2 MinFps=0 hypothesis | STANDARD | one line + before/after benchmark (row #2's re-baseline is the measurement vehicle) |
 | **IMP-3 — native-size video decode**: fixed 1920×1080 `SetVideoFormat` forces per-frame swscale + double-scaling on non-1080p media (SD upscale, 4K decode→down→GPU-up) | `Compositor/Layers/VideoLayer.cs:36-37,298`; same pattern `Controls/AvaloniaInlineLoopVideo.cs:106` | removes a full-frame swscale per decoded frame for all non-1080p media; sharper output; buffers already per-PlayVideo so the protocol supports it (cap at monitor max) | JUDGMENT | medium (format callbacks + fixed-size fallback). **CONDITIONAL: decide after row #3's libmpv spike gate — libmpv replaces this pipeline wholesale; never do both** |
