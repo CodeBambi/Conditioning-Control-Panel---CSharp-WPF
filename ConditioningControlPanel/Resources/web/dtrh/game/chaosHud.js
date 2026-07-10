@@ -154,7 +154,7 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
   tips.attach(biomeRow, () => {
     if (!lastBiome) return null;
     return { glyph: lastBiome.glyph || '◈', kicker: 'the place', name: lastBiome.name || '',
-      desc: lastBiome.tagline || '', accent: '156,232,160' };
+      desc: lastBiome.tagline || '', extra: lastBiome.mechHint || '', accent: '156,232,160' };
   });
   tips.attach(badge, () => {
     if (!lastSt) return HUD_TIPS.mult;
@@ -433,6 +433,14 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
       biomeFx.textContent = b.tagline || '';
       biomeHint.textContent = b.mechHint || '';
       biomeHint.style.display = b.mechHint ? '' : 'none';
+    },
+    /** THE BIOMES: flare the chip - fired whenever the place's mechanic
+     * actually does something, so the event reads as "the biome did that". */
+    biomePing() {
+      if (biomeRow.style.display === 'none') return;
+      biomeRow.classList.remove('is-ping');
+      void biomeRow.offsetWidth;
+      biomeRow.classList.add('is-ping');
     },
     flashFocus() {
       focusBar.classList.remove('cf-focus-flash');

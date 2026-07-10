@@ -74,6 +74,7 @@ export function createBiomeMech(g) {
         g.firePayload({ variantId: 'flash', strength: 45, payload: { kind: 'flash' } });
         g.field.floatText('🧸→ oh.', x, y - 10, 'cf-pop--gold');
         g.toast(`🧸 ${LINES[(Math.random() * LINES.length) | 0]}`);
+        g.biomePing();
         g.sfx('boon_pick', 0.35);
         g.addHeat(0.03);
         return { payMult: 3.0 };
@@ -153,7 +154,8 @@ export function createBiomeMech(g) {
         chain = 0;
         g.spawner.setMirror(fav.url);
         g.wall.setMirror(fav.url);
-        g.announce('🪞 …it’s this one, isn’t it?', 'depth', 2600, { subText: 'everywhere you look' });
+        g.announce('🪞 …it’s this one, isn’t it?', 'depth', 2600, { subText: 'everywhere you look — pops pay ×1.5 for 9s' });
+        g.biomePing();
         g.sfx('tunnel_zone', 0.5);
         g.pulse('200,216,255', 0.35);
       },
@@ -190,7 +192,7 @@ export function createBiomeMech(g) {
         const st = g.st();
         if (st.combo <= 0) return;
         st.combo = Math.floor(st.combo * 0.7);
-        if (!warned) { warned = true; g.toast('🌫 the grey creeps in — keep touching the color'); }
+        if (!warned) { warned = true; g.toast('🌫 the grey creeps in — keep touching the color'); g.biomePing(); }
         g.hudNow();
       },
       treatPop() { touch(); return null; },
@@ -218,6 +220,7 @@ export function createBiomeMech(g) {
         windowIn = rand(50, 70);
         windowLeft = 10;
         g.announce('👐 TOUCH PERMITTED', 'powerup', 2200, { subText: 'ten seconds. go.' });
+        g.biomePing();
         g.sfx('streak_milestone', 0.5);
         g.pulse('255,215,0', 0.35);
       },
@@ -234,6 +237,7 @@ export function createBiomeMech(g) {
         const st = g.st();
         st.combo = Math.max(0, st.combo - 3);
         g.toast('🫠 it melts in your hands — look, don’t touch');
+        g.biomePing();
         g.sfx('focus_empty', 0.35);
         g.hudNow();
       },
@@ -251,6 +255,7 @@ export function createBiomeMech(g) {
       if (pot <= 0) return;
       g.bankGold(pot);
       g.toast(`🎰 ${why} — +${pot} 🪙 cashed out`);
+      g.biomePing();
       g.sfx('golden_pop', 0.55);
       pot = 0; doubles = 0; timer = 0;
     };
@@ -266,11 +271,13 @@ export function createBiomeMech(g) {
           pot = gold; doubles = 0; timer = 20;
           g.field.floatText(`${pot} 🪙 riding`, x, y + 30, 'cf-pop--gold');
           g.toast(`🎰 the pot opens — ${pot} 🪙 riding. golden again to double`);
+          g.biomePing();
           g.sfx('golden_pop', 0.5);
         } else {
           pot *= 2; doubles++; timer = 20;
           g.field.floatText(`×2 → ${pot} 🪙`, x, y + 30, 'cf-pop--gold');
           g.announce(`🎰 DOUBLE — ${pot} 🪙 riding`, 'powerup', 1800);
+          g.biomePing();
           g.sfx('streak_milestone', 0.5);
           g.pulse('255,215,0', 0.4);
           if (doubles >= 3) cashout('table limit');
@@ -280,6 +287,7 @@ export function createBiomeMech(g) {
       onDetonated() {
         if (pot <= 0) return;
         g.announce(`🎰 BUST — ${pot} 🪙 burns`, 'bad', 2000);
+        g.biomePing();
         g.sfx('fx_drain', 0.4);
         pot = 0; doubles = 0; timer = 0;
       },
@@ -306,7 +314,7 @@ export function createBiomeMech(g) {
         const st = g.st();
         if (st.combo <= 0) return;
         st.combo--;
-        if (!warned) { warned = true; g.toast('☄ the flow thins — keep popping'); }
+        if (!warned) { warned = true; g.toast('☄ the flow thins — keep popping'); g.biomePing(); }
         g.hudNow();
       },
       treatPop() { sincePop = 0; return null; },
@@ -357,7 +365,8 @@ export function createBiomeMech(g) {
             verdicts++;
             const st = g.st();
             st.boonMult += 0.12;
-            g.announce(`👑 ${fact}`, 'powerup', 2800, { subText: 'accepted' });
+            g.announce(`👑 ${fact}`, 'powerup', 2800, { subText: 'accepted — +0.12 mult' });
+            g.biomePing();
             g.sfx('streak_milestone', 0.55);
             g.pulse('255,215,0', 0.4);
             g.hudNow();
@@ -368,6 +377,7 @@ export function createBiomeMech(g) {
           },
         });
         g.toast('👑 a verdict drifts down — accept it');
+        g.biomePing();
       },
       exit() { if (wallMirrorLeft > 0) { wallMirrorLeft = 0; g.wall.setMirror(null); } },
     };
@@ -415,6 +425,7 @@ export function createBiomeMech(g) {
         if (wipeIn <= 5 && !warned) {
           warned = true;
           g.toast('🕶 clearing history in 5…');
+          g.biomePing();
           g.sfx('tunnel_zone', 0.35);
         }
         if (wipeIn > 0) return;
@@ -425,6 +436,7 @@ export function createBiomeMech(g) {
           const refund = n * 2;
           g.bankGold(refund);
           g.announce('🕶 HISTORY CLEARED', 'depth', 2200, { subText: `${n} erased · +${refund} 🪙 — you always come back` });
+          g.biomePing();
           g.sfx('fx_drain', 0.45);
           g.pulse('90,110,160', 0.40);
           g.addHeat(0.04);
@@ -463,7 +475,8 @@ export function createBiomeMech(g) {
         flipIn = rand(16, 24); warnAt = 3;
         flipLeft = 7;
         setFlip(true);
-        g.announce('🙃 THE FLIP', 'depth', 1800, { subText: 'fuses burn hot while the world is wrong' });
+        g.announce('🙃 THE FLIP', 'depth', 1800, { subText: 'fuses burn hot — snaps finished now pay ×2' });
+        g.biomePing();
         g.sfx('tunnel_zone', 0.5);
         g.pulse('154,123,255', 0.45);
       },
@@ -525,6 +538,7 @@ export function createBiomeMech(g) {
           spotCd = 7; seenHold = 0;
           const n = g.field.enrageNear(cur.x, cur.y, 300);
           g.announce('🔦 SPOTTED', 'bad', 1800, { subText: n > 0 ? 'the fuses saw you too' : 'caught in the light' });
+          g.biomePing();
           g.addHeat(0.05);
           g.sfx('detonate_thud', 0.4);
           g.pulse('255,80,80', 0.45);
@@ -555,6 +569,7 @@ export function createBiomeMech(g) {
           debts.splice(i, 1);
           g.addHeat(0.10);
           g.announce('⛓ THE BALANCE COMES DUE', 'bad', 2200, { subText: 'you knew the terms' });
+          g.biomePing();
           g.sfx('fx_drain', 0.45);
           g.pulse('230,90,110', 0.45);
         }
@@ -569,11 +584,13 @@ export function createBiomeMech(g) {
             g.bankGold(20);
             debts.push({ left: 45 });
             g.announce('⛓ SIGNED — 20 🪙 now', 'powerup', 2200, { subText: 'the balance comes due in 45s' });
+            g.biomePing();
             g.sfx('golden_pop', 0.5);
             g.hudNow();
           },
         });
         g.toast('⛓ a contract drifts down — read the terms');
+        g.biomePing();
       },
       onDefused(spec, fuseSecLeft, viaChannel, x, y) {
         g.bankGold(2);
@@ -625,6 +642,7 @@ export function createBiomeMech(g) {
         if (!hit) return null;
         hit.stilled = 12;
         g.announce('🌊 YOU BEAT THE CURRENT — ×3', 'powerup', 2200, { subText: 'it stills. for a while.' });
+        g.biomePing();
         g.sfx('streak_milestone', 0.5);
         g.pulse('120,180,255', 0.40);
         return { payMult: 3 };
@@ -670,8 +688,8 @@ export function createBiomeMech(g) {
         if (beatDist() <= WINDOW) {
           chain++;
           g.field.floatText(`♥ ×${chain}`, x, y - 12, 'cf-pop--gold');
-          if (chain % 4 === 0 && g.field.gildNear(x, y, 190)) g.field.floatText('🕊 gilded', x, y - 34, 'cf-pop--gold');
-          if (chain === 8) g.announce('🕊 COMMUNION', 'powerup', 2200, { subText: 'you stopped fighting the tempo' });
+          if (chain % 4 === 0 && g.field.gildNear(x, y, 190)) { g.field.floatText('🕊 gilded', x, y - 34, 'cf-pop--gold'); g.biomePing(); }
+          if (chain === 8) { g.announce('🕊 COMMUNION', 'powerup', 2200, { subText: 'you stopped fighting the tempo' }); g.biomePing(); }
           return { payMult: 1.4 + 0.08 * Math.min(chain, 10) };
         }
         if (chain >= 3) g.toast('🕊 the chain breaks — listen for the bell');
@@ -703,6 +721,7 @@ export function createBiomeMech(g) {
           st.shields = 0;
           st.boonMult += 0.15 * n;
           g.announce('🪷 you won’t need armor here', 'powerup', 2600, { subText: `${n} shield${n > 1 ? 's' : ''} become ×${(0.15 * n).toFixed(2)} mult` });
+          g.biomePing();
           g.hudNow();
         }
         g.toast('🪷 mirror lake — the water is calm because you are');
@@ -721,7 +740,8 @@ export function createBiomeMech(g) {
         reflIn = rand(30, 42);
         reflLeft = 10;
         g.wall.setMirror(fav.url);
-        g.announce('🪷 look at the water', 'depth', 2400, { subText: 'that’s you. it’s okay.' });
+        g.announce('🪷 look at the water', 'depth', 2400, { subText: 'that’s you. it’s okay. — pops pay ×1.5 for 10s' });
+        g.biomePing();
         g.pulse('220,200,235', 0.30);
       },
       treatPop() { return reflLeft > 0 ? { payMult: 1.5 } : null; },

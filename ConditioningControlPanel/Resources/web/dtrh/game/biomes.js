@@ -75,7 +75,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 0.95, behavioral: 0.30, echo: 0.4, chaperone: 0.5, bound: 0.3, tease: 0.6 },
       wx: { fuseMult: 1.15 },   // kind fuses - nothing here means anything, right?
       mech: 'mimics',
-      mechHint: 'some toys flip when popped: a flash slips out and the pop pays ×3',
+      mechHint: 'about 1 in 7 toys flips when popped: a flash slips out and that pop pays ×3',
     },
     {
       id: 'keyhole', name: 'The Keyhole', glyph: '🗝',
@@ -96,7 +96,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 0.70, behavioral: 0.35, echo: 0.4, chaperone: 0.6, bound: 0.4, tease: 0.7 },
       wx: {},
       mech: 'keyhole',
-      mechHint: 'the room is dark and two candle beams roam: pops inside the light pay extra',
+      mechHint: 'two candle beams roam the dark: pop inside the light for ×1.6 pay, outside it only ×0.8',
     },
     {
       id: 'static', name: 'Late Night Static', glyph: '📺',
@@ -121,7 +121,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 0.92, behavioral: 0.35, echo: 0.5, chaperone: 0.5, bound: 0.3, tease: 0.8 },
       wx: {},
       mech: 'flicker',
-      mechHint: 'the signal rolls in and out: pops on the picture pay double, pops in the snow pay half',
+      mechHint: 'the signal rolls in and out (screen tints teal when it is IN): on-signal pops pay ×2, snow pops ×0.5',
     },
     {
       id: 'incognito', name: 'Incognito', glyph: '🕶',
@@ -145,7 +145,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 1.00, behavioral: 0.30, echo: 0.7, chaperone: 0.5, bound: 0.3, tease: 0.9 },
       wx: {},
       mech: 'incognito',
-      mechHint: 'the room clears its history on a timer: whatever is still on screen melts into gold',
+      mechHint: 'HISTORY CLEARED wipes hit every ~40s (5s warning): everything still on screen melts for +2 🪙 each',
     },
   ],
 
@@ -172,7 +172,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 0.92, behavioral: 0.95, echo: 0.7, chaperone: 1.8, bound: 1.8, tease: 0.9 },
       wx: {},
       mech: 'mirrors',
-      mechHint: 'mirror moments: everything briefly becomes your favorite, and those pops pay extra',
+      mechHint: 'every ~40s a 9-second mirror moment turns everything into your favorite: those pops pay ×1.5',
     },
     {
       id: 'greyward', name: 'The Grey Ward', glyph: '🌫',
@@ -195,7 +195,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 0.88, behavioral: 0.90, echo: 0.6, chaperone: 1.6, bound: 1.6, tease: 1.0 },
       wx: { heatGain: 0.5 },   // lust only warms where the color is (mech re-adds it on media touch)
       mech: 'greyward',
-      mechHint: 'only the media holds color: stop touching it and your streak greys away',
+      mechHint: 'only the media holds color: go 7s without popping or grabbing any and your streak greys away fast',
     },
     {
       id: 'vertigo', name: 'Vertigo', glyph: '🙃',
@@ -218,7 +218,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 0.90, behavioral: 0.90, echo: 0.6, chaperone: 1.5, bound: 1.4, tease: 0.9 },
       wx: {},
       mech: 'vertigo',
-      mechHint: 'gravity flips on a 3-count: fuses burn hotter and snaps finished mid-flip pay double',
+      mechHint: 'a 3·2·1 count flips gravity for 7s: fuses burn ×1.4 hotter and snaps finished mid-flip pay ×2',
     },
     {
       id: 'searchlight', name: 'The Searchlight', glyph: '🔦',
@@ -240,7 +240,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 0.80, behavioral: 1.00, echo: 0.6, chaperone: 1.7, bound: 1.6, tease: 0.8 },
       wx: {},
       mech: 'searchlight',
-      mechHint: 'work in the dark for extra pay: linger in a beam and you are spotted, and nearby fuses enrage',
+      mechHint: 'pops in the dark pay ×1.35, inside a beam only ×0.6 — linger in the light and you are SPOTTED: nearby fuses enrage',
     },
   ],
 
@@ -267,7 +267,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 1.10, behavioral: 1.00, echo: 1.6, chaperone: 0.9, bound: 0.8, tease: 1.6 },
       wx: {},
       mech: 'gallery',
-      mechHint: 'grabs melt in your hands: restraint builds bonus pay until a touch-permitted window opens',
+      mechHint: 'grabs melt in your hands (−3 streak): keeping hands off builds pay up to ×2, and 10s TOUCH PERMITTED windows let you binge',
     },
     {
       id: 'casino', name: 'Fool’s Casino', glyph: '🎰',
@@ -291,7 +291,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 1.20, behavioral: 1.05, echo: 1.8, chaperone: 0.8, bound: 0.9, tease: 1.2 },
       wx: { goldenBonus: 0.02 },   // stacked deck: goldens land noticeably more often
       mech: 'casino',
-      mechHint: 'a golden pop opens a pot: golden again doubles it, a detonation burns it, waiting cashes out',
+      mechHint: 'a golden pop puts its gold in a pot: golden again doubles it (up to 3 times), a detonation burns it, 20s quiet cashes out',
     },
     {
       id: 'chaincourt', name: 'The Chain Court', glyph: '⛓',
@@ -314,7 +314,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 1.05, behavioral: 1.10, echo: 1.2, chaperone: 1.0, bound: 2.6, tease: 1.3 },
       wx: {},
       mech: 'contracts',
-      mechHint: 'every clean snap banks gold; contracts pay 20 gold now and the balance comes due later',
+      mechHint: 'every clean snap banks +2 🪙; signing a drifting contract pays 20 🪙 now — the balance comes due 45s later',
     },
     {
       id: 'undertow', name: 'The Undertow', glyph: '🌊',
@@ -338,7 +338,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 1.00, behavioral: 1.00, echo: 1.4, chaperone: 0.9, bound: 0.9, tease: 1.4 },
       wx: {},
       mech: 'undertow',
-      mechHint: 'currents drag everything toward their eye: win a snap inside one for ×3 and the water stills',
+      mechHint: 'currents drag everything to their eye and slow your snaps: win one inside for ×3 pay and 12s of still water',
     },
   ],
 
@@ -365,7 +365,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 1.50, behavioral: 0.60, echo: 0.8, chaperone: 0.6, bound: 0.6, tease: 1.0 },
       wx: { fuseMult: 2.6 },   // fuses so long the field never threatens - the combo clock is the game
       mech: 'velocity',
-      mechHint: 'full speed and nothing can hurt you: but stop popping and your streak bleeds',
+      mechHint: 'full speed and fuses barely burn: but 4s without a pop and your streak starts bleeding away',
     },
     {
       id: 'coronation', name: 'The Coronation', glyph: '👑',
@@ -388,7 +388,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 1.30, behavioral: 1.20, echo: 1.2, chaperone: 1.1, bound: 1.2, tease: 1.9 },
       wx: {},
       mech: 'coronation',
-      mechHint: 'verdicts drift down reading your run back: accept one for a permanent multiplier',
+      mechHint: 'gold verdicts drift down reading your run back: click to accept one for +0.12 multiplier, kept all run',
     },
     {
       id: 'chapel', name: 'The Pink Chapel', glyph: '🕊',
@@ -411,7 +411,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 1.10, behavioral: 1.00, echo: 1.0, chaperone: 1.0, bound: 1.0, tease: 1.5 },
       wx: {},
       mech: 'communion',
-      mechHint: 'a soft bell keeps time: pop on the beat to chain and gild, off-beat pays less',
+      mechHint: 'a soft bell rings every ~2s: pop ON it to chain up to ×2.2 (every 4th gilds nearby) — off-beat pays ×0.8',
     },
     {
       id: 'mirrorlake', name: 'Mirror Lake', glyph: '🪷',
@@ -434,7 +434,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 1.15, behavioral: 0.80, echo: 1.0, chaperone: 0.8, bound: 0.7, tease: 1.7 },
       wx: { payMult: 1.1 },   // acceptance pays - gently, on everything
       mech: 'acceptance',
-      mechHint: 'your shields become multiplier on entry; pops while the water shows a reflection pay extra',
+      mechHint: 'your shields melt into +0.15 multiplier each on entry; pops while the water shows a reflection pay ×1.5',
     },
   ],
 };

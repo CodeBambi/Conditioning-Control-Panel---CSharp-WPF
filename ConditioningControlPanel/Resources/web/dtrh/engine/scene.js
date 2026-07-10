@@ -461,6 +461,16 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
           let o = h.object;
           while (o && !(o.userData && o.userData.type === 'poster')) o = o.parent;
           if (o && o.userData && o.userData.type === 'poster') {
+            // Sticky Fingers: the hold RIPS the gif off the wall and wields it as
+            // the paddle (spawner card around the same pool texture). Without the
+            // boon the classic hold stays: swing the camera to face the poster.
+            if (game && game.wieldPosters && game.wieldPosters()
+                && wall.ripPoster && spawner.grabExternalCard && !spawner.isGrabbing() && !spawner.spotlightActive()) {
+              const ripped = wall.ripPoster(o);   // null = the Gallery melted it off the wall
+              // (no noteLike here: grabExternalCard's startGrab already notes the grab)
+              if (ripped && spawner.grabExternalCard(ripped, camera)) fx.pulseFlash(0.4); // the snatch punch
+              return;                 // this pointer owns the rip (wield or melt)
+            }
             const rec = wall.grabPoster(o);
             if (rec) {
               _heldPoster = true;

@@ -1546,6 +1546,35 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     grabbed = null;
   }
 
+  // Sticky Fingers: wield a poster RIPPED off the tube wall (wallPosters.ripPoster).
+  // The texture is BORROWED - the poster pool owns it, keeps its gif animating,
+  // and may hand it to future posters - so this card never disposes it and never
+  // Ken-Burns it (mutating repeat/offset would warp every poster sharing the map).
+  // Once released it lives as a normal conveyor card and despawns on the cull.
+  function grabExternalCard({ tex, aspect = 1, assetName = null, pos = null } = {}, camera) {
+    if (!tex || grabbed || spotlight) return false;
+    const shell = makeUserCardShell(camDepthNow);
+    const rec = {
+      group: shell.group, depth: camDepthNow, kind: 'image', billboard: true, tex: null,
+      dispose() {
+        rec.dead = true;   // borrowed map: NOT ours to dispose
+        shell.mat.dispose();
+        for (const m of shell.dressed) m.dispose();
+      },
+    };
+    rec.contentMat = shell.mat;
+    rec.dressedMats = shell.dressed;
+    shell.mat.map = tex;
+    shell.mat.needsUpdate = true;
+    sizeShell(shell, aspect);
+    if (pos) shell.group.position.copy(pos);   // ease in from where it hung on the wall
+    shell.group.visible = true;
+    tagAsset(rec, assetName, 'image');
+    addCard(rec);
+    startGrab(rec, camera);
+    return grabbed === rec;   // false = the Gallery melted it in your hand
+  }
+
   // Wave 2 (Sticky Fingers capstone): hurl the held card down the tube; the
   // impact callback fires once it's flown well ahead, then it despawns.
   function throwHeldCard(onImpact) {
@@ -1896,16 +1925,26 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   // its transform/parenting (a branch mouth), and the spawner only keeps its
   // pixels animating (gif frames / video texture / Ken Burns) via the detached
   // tick in update(). No despawn, no billboard, no spotlight promotion.
-  async function acquireDetachedItem() {
+  async function acquireDetachedItem(prefer) {
     if (!media.hasUserMedia()) return null;
-    // prefer a video so a mouth shows live motion, else gif, else photo
-    let entry = (media.drawKind && media.drawKind('video')) || media.draw();
-    if (!entry) return null;
-    const acquired = await entry.acquire();
-    if (!acquired) return null;
-    if (entry.kind === 'video') return prefetchVideo(acquired);
-    if (/\.gif$/i.test(entry.name || '')) return prefetchGifAny(acquired);
-    return prefetchImage(acquired);
+    // Mouth prize cards prefer a video (live motion in the opening); wall-dress
+    // cards ('still') prefer gifs/photos - a cluster of muted videos is heavy
+    // AND prefetchVideo can time out to null, which left walled-off doors bare.
+    // Either way, retry a couple of draws so one bad file doesn't strip the card.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const entry = prefer === 'still'
+        ? ((media.drawKind && media.drawKind('image')) || media.draw())
+        : ((media.drawKind && media.drawKind('video')) || media.draw());
+      if (!entry) return null;
+      const acquired = await entry.acquire();
+      if (!acquired) continue;
+      let item = null;
+      if (entry.kind === 'video') item = await prefetchVideo(acquired);
+      else if (/\.gif$/i.test(entry.name || '')) item = await prefetchGifAny(acquired);
+      else item = await prefetchImage(acquired);
+      if (item) return item;
+    }
+    return null;
   }
 
   // opts: { pos:Vector3, quat:Quaternion, scale:number }. Returns a handle the
@@ -1919,7 +1958,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
       handle.group.scale.setScalar(opts.scale || 1);
     };
     applyTransform();
-    acquireDetachedItem().then((item) => {
+    acquireDetachedItem(opts.prefer).then((item) => {
       if (disposed || !item) { if (item && item.dispose) item.dispose(); return; }
       let built = null;
       if (item.kind === 'video') {
@@ -2026,7 +2065,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
 
   return {
     update, reset, dispose, setPaused, warm,
-    grabAtPointer, releaseGrab, probeGrab,
+    grabAtPointer, releaseGrab, probeGrab, grabExternalCard,
     setGrabHooks, setMirror, meltAll,
     setBlockedSpan: (s) => { blockedSpan = s || null; },
     // junction branch-mouth media cards
