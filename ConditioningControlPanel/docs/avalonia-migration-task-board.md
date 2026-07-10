@@ -342,6 +342,13 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 | **IMP-10 — `ActiveRipples` dead alloc-y getter**: `ToList()` + closure on every read; repo-wide grep = the declaration only, zero readers | `CCP.Core/Services/Chaos/BubbleEngine.cs:146-147` | removes a latent per-frame footgun (any future per-frame reader = per-frame `List<>` alloc); delete, or replace with a zero-alloc count+indexed accessor | STANDARD | trivial; confirm ripple-overlay intent first — the Size-Queen ripple effect is gameplay-relevant (`:1434-1445`) |
 | **IMP-11 — orphaned `AvaloniaBubble` control**: `new AvaloniaBubble(` has 0 call sites; chaos bubbles render via the compositor `BubbleLayer` (`AvaloniaBubbleService.cs:533-535` routes `SetFuse` there); its per-call `new SolidColorBrush` pattern reads as a hot-path smell on every scan | `CCP.Avalonia/Chaos/AvaloniaBubble.cs` (~220 lines) | deletes dead UI code + a misleading allocation pattern; simplification, not runtime speed | MECHANICAL | confirm-then-delete: verify no XAML / resource-factory / reflection construction first; STOP if found |
 
+**Improvement-row claim ledger (append-only):**
+- **CLAIM 2026-07-10 · wip @driver (workflow-run, continuous-mode session):** IMP-1 (VideoLayer `ConsumeDirty`
+  override). Claimed after R-scrub `820526d5` + bubble-border fix `6346d964` closed out. Gate note: smoke
+  runs at Findings 16 = recorded pre-existing drift (owner-waved; see drift row). Plan: recon dirty-path
+  contract → implement override (~10 lines, UI-tick-only state) → --verify-video + --verify-layers →
+  parity audit → full gates → one commit.
+
 Scan verdicts recorded as explicitly GOOD (checked, no action): VideoLayer's triple-buffer frame path
 matches its zero-alloc spec (index-swap locks, zero-copy `SKImage.FromPixels`, stale-session guards);
 z-order snapshot cached (rebuilt only on Register/Unregister); static-frame skip + idle watchdog + epoch
