@@ -82,12 +82,32 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             }
             else if (!fullscreen && _hiddenForFullscreen)
             {
-                _hiddenForFullscreen = false;
-                if (_wasAttachedBeforeFullscreen && _settings?.Current?.AvatarEnabled == true)
+                // Mirror the WPF head (AvatarTube/AvatarTubeWindow.Windowing.cs): only clear the
+                // flag and Show() once the parent is actually visible and NOT minimized. During
+                // exclusive-fullscreen exit the parent is transiently minimized and reports
+                // Position ~(-32000,-32000); showing then makes UpdatePosition() anchor off-screen,
+                // hit its out-of-range guard, silently skip the move, and leave the tube parked in
+                // the wrong spot with nothing to re-trigger it ("reappears in the wrong place").
+                // Keeping the flag set retries on the next tick until the parent settles.
+                bool parentReady = _parentWindow?.IsVisible == true
+                                   && _parentWindow.WindowState != WindowState.Minimized;
+                if (parentReady && _wasAttachedBeforeFullscreen && _settings?.Current?.AvatarEnabled == true)
                 {
+                    _hiddenForFullscreen = false;
                     Show();
-                    UpdatePosition();
-                    BringAttachedPairToFront(true);
+                    // Defer the anchor one dispatcher pass so the just-shown window has a settled
+                    // size/scale before UpdatePosition() reads RenderScaling (running synchronously
+                    // here can sample a pre-layout transient). Re-derive scale too in case the
+                    // monitor/DPI changed while we were hidden. Design-size anchoring is untouched.
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (_isAttached)
+                        {
+                            CalculateScaleFactor();
+                            UpdatePosition();
+                        }
+                        BringAttachedPairToFront(true);
+                    }, DispatcherPriority.Background);
                 }
             }
         }
