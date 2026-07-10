@@ -342,7 +342,11 @@ namespace ConditioningControlPanel
                     // Enable system key suppression on the keyboard hook (the setter also
                     // installs the hook if panic key / keyword triggers never started it)
                     if (_keyboardHook != null)
+                    {
                         _keyboardHook.SuppressSystemKeys = true;
+                        if (!_keyboardHook.IsInstalled)
+                            App.Logger?.Warning("Lockdown: keyboard hook could not be installed - Esc/Win/Alt-Tab will NOT be blocked this session");
+                    }
 
                     // Gray out strict lock and panic key toggles
                     if (SettingsTab.ChkStrictLock != null)

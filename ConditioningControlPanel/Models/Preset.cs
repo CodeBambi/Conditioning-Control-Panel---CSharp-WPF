@@ -99,10 +99,14 @@ namespace ConditioningControlPanel.Models
         // Bubbles Settings (Level 20+)
         public bool BubblesEnabled { get; set; } = false;
         public int BubblesFrequency { get; set; } = 5;
-        public int BubblesVolume { get; set; } = 50;
-        public bool BubbleSharedHost { get; set; } = true;
-        public bool BubblesLinkRamp { get; set; } = false;
-        public bool BubblesClickable { get; set; } = true;
+        // Nullable for back-compat: presets saved before these fields existed (or shared
+        // from older versions) deserialize them as null, and ApplyTo skips null — so
+        // applying an old preset can't clobber the live values (e.g. a deliberate
+        // BubbleSharedHost=false opt-out for the mixed-DPI hit-test workaround).
+        public int? BubblesVolume { get; set; }
+        public bool? BubbleSharedHost { get; set; }
+        public bool? BubblesLinkRamp { get; set; }
+        public bool? BubblesClickable { get; set; }
 
         // Trigger Bubbles (ambient bubbles that fire a Chaos effect on pop)
         public bool BubbleTriggersEnabled { get; set; } = false;
@@ -371,10 +375,10 @@ namespace ConditioningControlPanel.Models
             // Bubbles
             settings.BubblesEnabled = BubblesEnabled;
             settings.BubblesFrequency = BubblesFrequency;
-            settings.BubblesVolume = BubblesVolume;
-            settings.BubbleSharedHost = BubbleSharedHost;
-            settings.BubblesLinkRamp = BubblesLinkRamp;
-            settings.BubblesClickable = BubblesClickable;
+            if (BubblesVolume.HasValue) settings.BubblesVolume = BubblesVolume.Value;
+            if (BubbleSharedHost.HasValue) settings.BubbleSharedHost = BubbleSharedHost.Value;
+            if (BubblesLinkRamp.HasValue) settings.BubblesLinkRamp = BubblesLinkRamp.Value;
+            if (BubblesClickable.HasValue) settings.BubblesClickable = BubblesClickable.Value;
             settings.BubbleTriggersEnabled = BubbleTriggersEnabled;
             settings.BubbleTriggerChance = BubbleTriggerChance;
             settings.BubbleSpeedBoost = BubbleSpeedBoost;

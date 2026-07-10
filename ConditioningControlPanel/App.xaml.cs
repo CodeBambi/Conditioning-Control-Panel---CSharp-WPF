@@ -1270,7 +1270,6 @@ namespace ConditioningControlPanel
                 if (Settings.Current != null)
                 {
                     Settings.Current.RunFlashClickableDecouplingMigration();
-                    Settings.Current.RunFlashGazeReEnableMigration();
                     Settings.Save();
                 }
             }
@@ -1873,10 +1872,14 @@ namespace ConditioningControlPanel
                 var task = Discord?.SendAchievementWebhookAsync(achievement, displayName);
                 task?.ContinueWith(t =>
                 {
-                    if (t.IsFaulted)
-                        Logger?.Warning(t.Exception?.GetBaseException(), "Achievement '{Name}' did NOT post to Discord", achievement.Name);
-                    else if (!t.Result)
-                        Logger?.Warning("Achievement '{Name}' did NOT post to Discord (see preceding warning for cause)", achievement.Name);
+                    try
+                    {
+                        if (t.IsFaulted)
+                            Logger?.Warning(t.Exception?.GetBaseException(), "Achievement '{Name}' did NOT post to Discord", achievement.Name);
+                        else if (t.IsCanceled || !t.Result)
+                            Logger?.Warning("Achievement '{Name}' did NOT post to Discord (see preceding warning for cause)", achievement.Name);
+                    }
+                    catch { /* diagnostics only — never let logging fault the continuation */ }
                 }, TaskContinuationOptions.ExecuteSynchronously);
             }
         }

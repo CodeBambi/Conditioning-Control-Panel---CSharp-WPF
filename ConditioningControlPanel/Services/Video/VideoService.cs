@@ -696,16 +696,14 @@ namespace ConditioningControlPanel.Services
             // Teardown of a previous video is pumping messages (CloseAll/WaitWithMessagePump
             // runs a nested dispatcher loop for up to ~4s) — a trigger re-entering through
             // that pump would start creating windows while players are mid-detach, the
-            // proven multi-monitor freeze path. Drop it; the scheduler re-arms and queued
-            // triggers use the same release pattern as the gif-rain drop below.
+            // proven multi-monitor freeze path. Drop WITHOUT touching the queue slot:
+            // during teardown, CurrentInteraction==Video is the DYING video's claim
+            // (ForceCleanup sets _videoPlaying=false at its top), and releasing it here
+            // would dequeue the next interaction into this very pump. ForceCleanup's own
+            // trailing CompleteIfCurrent(Video) releases once teardown is done.
             if (_isCleaningUp)
             {
                 App.Logger?.Information("VideoService: TriggerVideo dropped - cleanup in progress");
-                if (!_videoPlaying &&
-                    App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video)
-                {
-                    App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
-                }
                 return;
             }
 
@@ -863,15 +861,12 @@ namespace ConditioningControlPanel.Services
             }
 
             // Same re-entrancy protection as TriggerVideo: never start creating windows
-            // while a previous video's teardown is pumping messages (freeze path).
+            // while a previous video's teardown is pumping messages (freeze path). Drop
+            // without releasing the queue slot — it's the dying video's claim, and
+            // ForceCleanup's trailing CompleteIfCurrent(Video) frees it after teardown.
             if (_isCleaningUp)
             {
                 App.Logger?.Information("VideoService: PlaySpecificVideo dropped - cleanup in progress");
-                if (!_videoPlaying &&
-                    App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video)
-                {
-                    App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
-                }
                 return;
             }
 
@@ -2267,7 +2262,7 @@ namespace ConditioningControlPanel.Services
                         // Extend the stuck detection timeout to prevent InteractionQueue from
                         // auto-completing Video during the retry gap, which would let queued
                         // interactions (e.g. BubbleCount) start while the retry video plays.
-                        App.InteractionQueue?.ExtendTimeout(300);
+                        App.InteractionQueue?.ExtendTimeout(300, InteractionQueueService.InteractionType.Video);
                         // Pick a fresh video for the retry — replaying the same video makes
                         // attention checks easier to game (memorize the timing) and was a
                         // user-reported inconsistency vs. BubbleCount which always picks new.
@@ -2382,7 +2377,7 @@ namespace ConditioningControlPanel.Services
             _fallbackSafetyTimer = null;
 
             // Extend stuck detection timeout so long videos aren't killed prematurely
-            App.InteractionQueue?.ExtendTimeout(videoDurationSeconds);
+            App.InteractionQueue?.ExtendTimeout(videoDurationSeconds, InteractionQueueService.InteractionType.Video);
 
             // Add 5 second buffer beyond video duration
             var timeoutSeconds = videoDurationSeconds + 5;

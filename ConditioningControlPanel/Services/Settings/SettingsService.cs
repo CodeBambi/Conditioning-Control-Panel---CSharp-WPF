@@ -584,19 +584,32 @@ namespace ConditioningControlPanel.Services
         /// day. Daily (not per-save) so a corruption doesn't immediately propagate into
         /// every backup before anyone notices.
         /// </summary>
+        // Date of the last successful rotation this process; spares the save hot path
+        // (SaveImmediate fires constantly during play) the per-save filesystem stats.
+        private DateTime _lastBackupRotationDate = DateTime.MinValue;
+
         private void RotateDailyBackupBeforeWrite()
         {
+            if (_lastBackupRotationDate == DateTime.Now.Date) return;
             try
             {
                 if (!File.Exists(_settingsPath)) return;
                 var bak1 = _settingsPath.Replace(".json", ".bak-1.json");
-                if (File.Exists(bak1) && File.GetLastWriteTime(bak1).Date == DateTime.Now.Date) return;
+                if (File.Exists(bak1) && File.GetLastWriteTime(bak1).Date == DateTime.Now.Date)
+                {
+                    _lastBackupRotationDate = DateTime.Now.Date;
+                    return;
+                }
 
                 var bak2 = _settingsPath.Replace(".json", ".bak-2.json");
                 var bak3 = _settingsPath.Replace(".json", ".bak-3.json");
                 if (File.Exists(bak2)) File.Move(bak2, bak3, overwrite: true);
                 if (File.Exists(bak1)) File.Move(bak1, bak2, overwrite: true);
                 File.Copy(_settingsPath, bak1, overwrite: true);
+                // File.Copy preserves the SOURCE mtime — stamp the rotation time or the
+                // date check above re-rotates on the next save and burns a second slot.
+                try { File.SetLastWriteTime(bak1, DateTime.Now); } catch { }
+                _lastBackupRotationDate = DateTime.Now.Date;
                 App.Logger?.Information("Settings daily backup rotated: {Backup}", bak1);
             }
             catch (Exception ex)

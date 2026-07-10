@@ -93,14 +93,25 @@ async function maybeStart() {
 // watchdog stays quiet and the loader spins forever (support: "fall minigame
 // stuck on loading"). Force the failure path instead; the host reacts to
 // boot-error by falling back to the classic WPF game.
-setTimeout(() => {
+// Progress-aware: 45s from the LAST milestone (script start, init, manifest),
+// not wall-clock from page load - a slow-but-progressing boot (manifest scan,
+// AV-scanned module downloads, first shader compile) must not be misread as a
+// wedge, because boot-error downgrades to the classic game for the whole session.
+let bootDeadline = 0;
+function armBootDeadline() {
   if (bootSettled) return;
-  bridge.log('boot deadline (30s) hit - engine never came live'
-    + (initMsg ? '' : ' [no init]') + (haveManifest ? '' : ' [no manifest]'));
-  bridge.send({ type: 'boot-error', msg: 'boot deadline: engine not live after 30s' });
-  if (dom.loader) dom.loader.hidden = true;
-  if (dom.nope) dom.nope.hidden = false;
-}, 30000);
+  clearTimeout(bootDeadline);
+  bootDeadline = setTimeout(() => {
+    if (bootSettled) return;
+    bootSettled = true;
+    bridge.log('boot deadline (45s since last progress) - engine never came live'
+      + (initMsg ? '' : ' [no init]') + (haveManifest ? '' : ' [no manifest]'));
+    bridge.send({ type: 'boot-error', msg: 'boot deadline: engine not live 45s after last progress' });
+    if (dom.loader) dom.loader.hidden = true;
+    if (dom.nope) dom.nope.hidden = false;
+  }, 45000);
+}
+armBootDeadline();
 
 function shutdown() {
   try { engine && engine.dispose && engine.dispose(); } catch (e) { /* best effort */ }
@@ -111,6 +122,7 @@ function shutdown() {
 
 bridge.on('init', (m) => {
   initMsg = m;
+  armBootDeadline(); // progress milestone - reset the boot deadline
   if (m.m2Test) {
     try { window.__dtrhVnTest = true; } catch (e) { /* lets the VN welcome fire on any descent for play-testing */ }
     import('./m2test.js').then((t) => t.run(bridge, hostState)).catch((e) => bridge.log('m2test load failed: ' + e));
@@ -126,6 +138,7 @@ bridge.on('manifest', (m) => {
     truncated: !!m.truncated,
   };
   haveManifest = true;
+  armBootDeadline(); // progress milestone - reset the boot deadline
   maybeStart();
 });
 // THE BIOMES (S3 read-back): host-ranked most-engaged asset names - the

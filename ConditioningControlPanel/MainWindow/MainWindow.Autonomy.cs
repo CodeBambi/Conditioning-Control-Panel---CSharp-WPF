@@ -296,7 +296,33 @@ namespace ConditioningControlPanel
             App.Settings.Current.AutonomyCanTriggerFlash = BambiTakeoverTab.ChkAutonomyFlash.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerVideo = BambiTakeoverTab.ChkAutonomyVideo.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerWebVideo = BambiTakeoverTab.ChkAutonomyWebVideo.IsChecked ?? false;
-            App.Settings.Current.TakeoverVideosStrict = BambiTakeoverTab.ChkTakeoverVideosStrict.IsChecked ?? false;
+
+            // Strict takeover videos are a no-escape amplifier (surprise fullscreen videos
+            // with no skip/ESC; combined with a disabled panic key there is NO way out) —
+            // gate enabling behind the same double warning the NoPanic toggle uses.
+            var strictRequested = BambiTakeoverTab.ChkTakeoverVideosStrict.IsChecked ?? false;
+            if (strictRequested && !App.Settings.Current.TakeoverVideosStrict)
+            {
+                var confirmed = WarningDialog.ShowDoubleWarning(this,
+                    "Strict Takeover Videos",
+                    "• Takeover videos will be UNSKIPPABLE (no ESC, no close)\n" +
+                    "• They fire WITHOUT warning at random moments\n" +
+                    "• With the Panic Key disabled there is NO way to end them early\n" +
+                    "• You must watch every video to the end");
+                if (!confirmed)
+                {
+                    strictRequested = false;
+                    // Defer the revert so it runs after the dialog's event stack unwinds
+                    // (same pattern as the NoPanic toggle).
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        BambiTakeoverTab.ChkTakeoverVideosStrict.IsChecked = false;
+                        _isLoading = false;
+                    }));
+                }
+            }
+            App.Settings.Current.TakeoverVideosStrict = strictRequested;
             App.Settings.Current.AutonomyCanTriggerSubliminal = BambiTakeoverTab.ChkAutonomySubliminal.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerBubbles = BambiTakeoverTab.ChkAutonomyBubbles.IsChecked ?? false;
             App.Settings.Current.AutonomyCanComment = BambiTakeoverTab.ChkAutonomyComment.IsChecked ?? false;

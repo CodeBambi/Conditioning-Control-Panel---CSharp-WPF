@@ -625,7 +625,32 @@ namespace ConditioningControlPanel.Models
         public bool FlashClickable
         {
             get => _flashClickable;
-            set { _flashClickable = value; OnPropertyChanged(); }
+            set
+            {
+                _flashClickable = value;
+                // Self-heal for the decoupling migration: it turned the gaze toggles off
+                // to preserve "no interaction" intent while clicking was off. The moment
+                // the user turns clicking back ON, that intent is gone — restore the gaze
+                // toggles the migration took, exactly once (support: "gaze-to-click
+                // doesn't work", v6.2.11). Users who toggled gaze off themselves never
+                // have the flag set, so their choice is untouched.
+                if (value && FlashGazeDisabledByDecoupling)
+                {
+                    FlashGazeDisabledByDecoupling = false;
+                    FlashGazePopEnabled = true;
+                    FlashGazeLingerEnabled = true;
+                }
+                OnPropertyChanged();
+            }
+        }
+
+        // Set by RunFlashClickableDecouplingMigration when IT (not the user) turned the
+        // gaze toggles off; consumed by the FlashClickable setter's self-heal above.
+        private bool _flashGazeDisabledByDecoupling = false;
+        public bool FlashGazeDisabledByDecoupling
+        {
+            get => _flashGazeDisabledByDecoupling;
+            set { _flashGazeDisabledByDecoupling = value; OnPropertyChanged(); }
         }
 
         private bool _corruptionMode = false; // Hydra effect
@@ -1581,15 +1606,6 @@ namespace ConditioningControlPanel.Models
             set { _migratedFlashClickableDecoupling = value; OnPropertyChanged(); }
         }
 
-        // One-shot flag for RunFlashGazeReEnableMigration (6.3) — un-sticks gaze
-        // toggles for users the decoupling migration turned off but who have
-        // since re-enabled FlashClickable.
-        private bool _migratedFlashGazeReEnable = false;
-        public bool MigratedFlashGazeReEnable
-        {
-            get => _migratedFlashGazeReEnable;
-            set { _migratedFlashGazeReEnable = value; OnPropertyChanged(); }
-        }
 
         // ---- Phase 4: Attention-Check headline mechanic --------------------
 
@@ -4904,36 +4920,17 @@ namespace ConditioningControlPanel.Models
             {
                 FlashGazePopEnabled = false;
                 FlashGazeLingerEnabled = false;
+                // Record that WE took the gaze toggles (not the user), so the
+                // FlashClickable setter can restore them if clicking comes back on.
+                // A heuristic re-enable ("clickable on + both toggles off") was tried
+                // and rejected: it can't distinguish this stuck state from a user who
+                // deliberately opted out of gaze interaction, and silently re-enabling
+                // webcam-driven interaction against an explicit opt-out is worse than
+                // asking the affected upgraders to flip one toggle.
+                FlashGazeDisabledByDecoupling = true;
             }
 
             MigratedFlashClickableDecoupling = true;
-        }
-
-        /// <summary>
-        /// 6.3: un-stick the gaze toggles the decoupling migration turned off.
-        /// That migration disabled gaze-pop/linger for FlashClickable=false
-        /// upgraders to preserve "no interaction" intent — correct while
-        /// FlashClickable stays off, but users who later re-enabled clicking
-        /// were left with both gaze toggles silently off and no idea why
-        /// (support report: "gaze-to-click doesn't work", v6.2.11). Re-enable
-        /// only for that exact stuck signature: the old migration ran, clicking
-        /// is back ON, and BOTH gaze toggles are still off (if the user touched
-        /// either toggle themselves, leave their choice alone). FlashClickable
-        /// =false users keep their hands-off setup untouched. Must run after
-        /// RunFlashClickableDecouplingMigration; caller persists afterwards.
-        /// </summary>
-        public void RunFlashGazeReEnableMigration()
-        {
-            if (MigratedFlashGazeReEnable) return;
-
-            if (MigratedFlashClickableDecoupling && FlashClickable &&
-                !FlashGazePopEnabled && !FlashGazeLingerEnabled)
-            {
-                FlashGazePopEnabled = true;
-                FlashGazeLingerEnabled = true;
-            }
-
-            MigratedFlashGazeReEnable = true;
         }
 
         #endregion

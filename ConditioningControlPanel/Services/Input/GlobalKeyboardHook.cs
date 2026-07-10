@@ -21,6 +21,11 @@ public class GlobalKeyboardHook : IDisposable
     public event Action<Key>? KeyPressed;
     public event Action<Key, int>? KeyPressedWithVkCode;
 
+    /// <summary>True while the WH_KEYBOARD_LL hook is actually installed. Lockdown
+    /// checks this after arming suppression — SetWindowsHookEx can fail (hook quota,
+    /// security software) and suppression on a hook that isn't there blocks nothing.</summary>
+    public bool IsInstalled => _hookId != IntPtr.Zero;
+
     private bool _suppressSystemKeys;
 
     /// <summary>
