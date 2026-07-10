@@ -411,91 +411,93 @@
 
           <!-- Audio + Quick Links -->
           <Grid Grid.Row="1" ColumnDefinitions="*,5,*">
-            <!-- Audio -->
-            <Border Grid.Column="0" CornerRadius="12" Padding="9" Margin="0,5,0,6"
+            <!-- Audio (compacted 2026-07-10: single header row carries title + duck toggle +
+                 advanced chevron + help, Master slider sits right under it; advanced options stay
+                 collapsed behind BtnAudioAdvanced per v6.2.9 #9) -->
+            <Border Grid.Column="0" CornerRadius="12" Padding="10,6" Margin="0,5,0,6"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-              <StackPanel>
-                <Grid Margin="0,0,0,6">
-                  <TextBlock Text="{loc:Str label_audio}"
+              <StackPanel Spacing="2">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+                  <TextBlock Grid.Column="0" Text="{loc:Str label_audio}"
                              Foreground="{DynamicResource TextLightBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
-                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <Button Content="{loc:Str label_help_symbol}"
-                            Command="{Binding ShowHelpSectionCommand}" CommandParameter="Audio"
-                            Background="{DynamicResource TransparentPinkBrush}"
-                            Foreground="{DynamicResource TextLightBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                            CornerRadius="11" Padding="0" Width="22" Height="22" Margin="0,0,8,0"
-                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                            FontSize="11" FontWeight="Bold"
-                            ToolTip.Tip="{loc:Str btn_help}" />
-                    <TextBlock Text="{loc:Str label_duck}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
-                    <ToggleSwitch IsChecked="{Binding AudioDuckEnabled, Mode=TwoWay}" />
-                    <!-- v6.2.9 #9: collapse/expand the advanced audio options (WPF SettingsTabView.xaml:1193-1247). Master volume + duck-enable stay always visible. -->
-                    <ToggleButton x:Name="BtnAudioAdvanced" Background="Transparent" BorderThickness="0" Padding="4,1"
-                                  Cursor="Hand" VerticalAlignment="Center" Margin="6,0,0,0"
-                                  ToolTip.Tip="Show advanced audio options (video &amp; duck volume, output device, ducking)">
-                      <Panel>
-                        <TextBlock Text="▾" FontSize="13" Foreground="{DynamicResource PinkBrush}"
-                                   IsVisible="{Binding !#BtnAudioAdvanced.IsChecked}" />
-                        <TextBlock Text="▴" FontSize="13" Foreground="{DynamicResource PinkBrush}"
-                                   IsVisible="{Binding #BtnAudioAdvanced.IsChecked}" />
-                      </Panel>
-                    </ToggleButton>
-                  </StackPanel>
+                  <TextBlock Grid.Column="2" Text="{loc:Str label_duck}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,2,0" />
+                  <ToggleSwitch Grid.Column="3" IsChecked="{Binding AudioDuckEnabled, Mode=TwoWay}"
+                                OnContent="" OffContent="" VerticalAlignment="Center" />
+                  <!-- v6.2.9 #9: collapse/expand the advanced audio options (WPF SettingsTabView.xaml:1193-1247). Master volume + duck-enable stay always visible. -->
+                  <ToggleButton Grid.Column="4" x:Name="BtnAudioAdvanced" Background="Transparent" BorderThickness="0" Padding="4,1"
+                                Cursor="Hand" VerticalAlignment="Center" Margin="2,0,6,0"
+                                ToolTip.Tip="Show advanced audio options (video &amp; duck volume, output device, ducking)">
+                    <Panel>
+                      <TextBlock Text="▾" FontSize="13" Foreground="{DynamicResource PinkBrush}"
+                                 IsVisible="{Binding !#BtnAudioAdvanced.IsChecked}" />
+                      <TextBlock Text="▴" FontSize="13" Foreground="{DynamicResource PinkBrush}"
+                                 IsVisible="{Binding #BtnAudioAdvanced.IsChecked}" />
+                    </Panel>
+                  </ToggleButton>
+                  <Button Grid.Column="5" Content="{loc:Str label_help_symbol}"
+                          Command="{Binding ShowHelpSectionCommand}" CommandParameter="Audio"
+                          Background="{DynamicResource TransparentPinkBrush}"
+                          Foreground="{DynamicResource TextLightBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                          CornerRadius="10" Padding="0" Width="20" Height="20"
+                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                          FontSize="10" FontWeight="Bold" VerticalAlignment="Center"
+                          ToolTip.Tip="{loc:Str btn_help}" />
                 </Grid>
 
                 <controls:SliderHeader Label="{loc:Str setting_master}" ValueText="{Binding MasterVolumeText}" />
-                <Slider Value="{Binding MasterVolume, Mode=TwoWay}" Minimum="0" Maximum="100" Margin="0,0,0,6" />
+                <Slider Value="{Binding MasterVolume, Mode=TwoWay}" Minimum="0" Maximum="100" />
 
                 <!-- Advanced audio options, collapsed by default; toggled by BtnAudioAdvanced (v6.2.9 #9) -->
-                <StackPanel IsVisible="{Binding #BtnAudioAdvanced.IsChecked}">
-                <controls:SliderHeader Label="{loc:Str setting_video}" ValueText="{Binding VideoVolumeText}" />
-                <Slider Value="{Binding VideoVolume, Mode=TwoWay}" Minimum="0" Maximum="100" Margin="0,0,0,6" />
+                <StackPanel IsVisible="{Binding #BtnAudioAdvanced.IsChecked}" Spacing="2">
+                  <controls:SliderHeader Label="{loc:Str setting_video}" ValueText="{Binding VideoVolumeText}" />
+                  <Slider Value="{Binding VideoVolume, Mode=TwoWay}" Minimum="0" Maximum="100" />
 
-                <controls:SliderHeader Label="{loc:Str label_duck}" ValueText="{Binding DuckVolumeText}" />
-                <Slider Value="{Binding DuckVolume, Mode=TwoWay}" Minimum="0" Maximum="100" Margin="0,0,0,6" />
+                  <controls:SliderHeader Label="{loc:Str label_duck}" ValueText="{Binding DuckVolumeText}" />
+                  <Slider Value="{Binding DuckVolume, Mode=TwoWay}" Minimum="0" Maximum="100" />
 
-                <!-- Audio output device picker -->
-                <Grid Margin="0,6,0,0" ColumnDefinitions="Auto,*,Auto">
-                  <TextBlock Text="{loc:Str setting_output}"
-                             Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
-                             VerticalAlignment="Center" Margin="0,0,4,0"
-                             ToolTip.Tip="{loc:Str tooltip_audio_output_device}" />
-                  <ComboBox Grid.Column="1"
-                            ItemsSource="{Binding AudioOutputDevices}"
-                            SelectedItem="{Binding SelectedAudioOutputDevice, Mode=TwoWay}"
-                            DisplayMemberBinding="{Binding Name}"
-                            Margin="4,0,4,0"
-                            ToolTip.Tip="{loc:Str tooltip_audio_output_device}" />
-                  <Button Grid.Column="2" Content="↻"
-                          Command="{Binding RefreshAudioOutputDevicesCommand}"
-                          ToolTip.Tip="Re-scan playback devices."
-                          Padding="8,2" Background="#33FF69B4" Foreground="{DynamicResource TextLightBrush}" FontSize="10"
-                          BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" />
-                </Grid>
+                  <!-- Audio output device picker -->
+                  <Grid Margin="0,2,0,0" ColumnDefinitions="Auto,*,Auto">
+                    <TextBlock Text="{loc:Str setting_output}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               VerticalAlignment="Center" Margin="0,0,4,0"
+                               ToolTip.Tip="{loc:Str tooltip_audio_output_device}" />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding AudioOutputDevices}"
+                              SelectedItem="{Binding SelectedAudioOutputDevice, Mode=TwoWay}"
+                              DisplayMemberBinding="{Binding Name}"
+                              Margin="4,0,4,0"
+                              ToolTip.Tip="{loc:Str tooltip_audio_output_device}" />
+                    <Button Grid.Column="2" Content="↻"
+                            Command="{Binding RefreshAudioOutputDevicesCommand}"
+                            ToolTip.Tip="Re-scan playback devices."
+                            Padding="8,2" Background="{DynamicResource TransparentPinkBrush}" Foreground="{DynamicResource TextLightBrush}" FontSize="10"
+                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" />
+                  </Grid>
 
-                <!-- Don't-duck-browser toggle + Audio Test -->
-                <Grid Margin="0,4,0,0" ColumnDefinitions="*,Auto">
-                  <CheckBox Content="{loc:Str setting_don_t_duck_browser}"
-                            IsChecked="{Binding ExcludeBrowserDucking, Mode=TwoWay}"
-                            Foreground="{DynamicResource PinkBrush}" FontSize="9" />
-                  <Button Grid.Column="1" Content="Test Audio"
-                          Command="{Binding TestAudioCommand}"
-                          ToolTip.Tip="Play a test sound and show audio diagnostics. Use this if audio isn't working."
-                          Background="#33FF69B4" Foreground="{DynamicResource TextLightBrush}" FontSize="9" Padding="8,3"
-                          BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                          VerticalAlignment="Center" />
-                </Grid>
+                  <!-- Don't-duck-browser toggle + Audio Test -->
+                  <Grid Margin="0,2,0,0" ColumnDefinitions="*,Auto">
+                    <CheckBox Content="{loc:Str setting_don_t_duck_browser}"
+                              IsChecked="{Binding ExcludeBrowserDucking, Mode=TwoWay}"
+                              Foreground="{DynamicResource PinkBrush}" FontSize="9" />
+                    <Button Grid.Column="1" Content="Test Audio"
+                            Command="{Binding TestAudioCommand}"
+                            ToolTip.Tip="Play a test sound and show audio diagnostics. Use this if audio isn't working."
+                            Background="{DynamicResource TransparentPinkBrush}" Foreground="{DynamicResource TextLightBrush}" FontSize="9" Padding="8,3"
+                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                            VerticalAlignment="Center" />
+                  </Grid>
                 </StackPanel><!-- end advanced audio options (v6.2.9 #9) -->
               </StackPanel>
             </Border>
 
-            <!-- Quick Links -->
-            <Border Grid.Column="2" CornerRadius="12" Padding="9" Margin="0,5,0,6"
+            <!-- Quick Links (compacted 2026-07-10: tighter paddings, Join-Discord and the Rich
+                 Presence toggle share one row so the card matches the slimmed Audio card height) -->
+            <Border Grid.Column="2" CornerRadius="12" Padding="10,6" Margin="0,5,0,6"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-              <StackPanel>
-                <Grid Margin="0,0,0,6">
+              <StackPanel Spacing="5">
+                <Grid>
                   <TextBlock Text="{loc:Str label_quick_links}"
                              Foreground="{DynamicResource TextLightBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
                   <Button Content="{loc:Str label_help_symbol}"
@@ -503,47 +505,53 @@
                           HorizontalAlignment="Right" VerticalAlignment="Center"
                           Background="{DynamicResource TransparentPinkBrush}"
                           Foreground="{DynamicResource TextLightBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                          CornerRadius="11" Padding="0" Width="22" Height="22"
+                          CornerRadius="10" Padding="0" Width="20" Height="20"
                           HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                          FontSize="11" FontWeight="Bold"
+                          FontSize="10" FontWeight="Bold"
                           ToolTip.Tip="{loc:Str btn_help}" />
                 </Grid>
 
                 <Button Content="{loc:Str btn_login}"
                         Command="{Binding UnifiedLoginCommand}"
                         IsVisible="{Binding IsNotLoggedIn}"
-                        Padding="8,12" Margin="0,0,0,6"
+                        Padding="8,6" HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
                         ToolTip.Tip="{loc:Str tooltip_login_with_discord_or_patreon}" />
 
                 <Border IsVisible="{Binding IsLoggedIn}"
-                        Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
+                        Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="8,4">
                   <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel>
+                    <StackPanel VerticalAlignment="Center">
                       <TextBlock Text="{loc:Str label_logged_in_as}"
-                                 Foreground="{DynamicResource TextMutedBrush}" FontSize="10" />
+                                 Foreground="{DynamicResource TextMutedBrush}" FontSize="9" />
                       <TextBlock Text="{Binding LoggedInDisplayName}"
-                                 Foreground="{DynamicResource TextLightBrush}" FontWeight="Bold" FontSize="12" />
+                                 Foreground="{DynamicResource TextLightBrush}" FontWeight="Bold" FontSize="11"
+                                 TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <!-- v6.2.9 #10: prominent, high-contrast Logout button (WPF SettingsTabView.xaml:1406) -->
                     <Button Grid.Column="1" Content="{loc:Str btn_logout}"
                             Command="{Binding LogoutCommand}"
-                            Padding="16,7" Background="{DynamicResource PinkBrush}" Foreground="White"
-                            BorderThickness="0" FontSize="12" FontWeight="Bold" />
+                            Padding="12,4" Background="{DynamicResource PinkBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
                   </Grid>
                 </Border>
 
-                <Button Content="{loc:Str label_join_discord}"
-                        Command="{Binding OpenDiscordCommand}"
-                        Padding="8,10" Margin="0,0,0,6"
-                        Background="{DynamicResource DiscordBlueBrush}"
-                        Foreground="{DynamicResource TextLightBrush}"
-                        FontWeight="Bold"
-                        HorizontalAlignment="Stretch" />
-
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                  <ToggleSwitch IsChecked="{Binding DiscordRichPresenceEnabled, Mode=TwoWay}" />
-                  <TextBlock Text="{loc:Str label_rp}" Foreground="{DynamicResource TextMutedBrush}" FontSize="9" VerticalAlignment="Center" Margin="4,0,0,0" />
-                </StackPanel>
+                <!-- Join Discord + Rich Presence toggle share one compact row -->
+                <Grid ColumnDefinitions="*,Auto">
+                  <Button Content="{loc:Str label_join_discord}"
+                          Command="{Binding OpenDiscordCommand}"
+                          Padding="8,6"
+                          Background="{DynamicResource DiscordBlueBrush}"
+                          Foreground="{DynamicResource TextLightBrush}"
+                          FontWeight="Bold" FontSize="11"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                          VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
+                    <ToggleSwitch IsChecked="{Binding DiscordRichPresenceEnabled, Mode=TwoWay}"
+                                  OnContent="" OffContent="" />
+                    <TextBlock Text="{loc:Str label_rp}" Foreground="{DynamicResource TextMutedBrush}" FontSize="9" VerticalAlignment="Center" Margin="2,0,0,0" />
+                  </StackPanel>
+                </Grid>
               </StackPanel>
             </Border>
           </Grid>

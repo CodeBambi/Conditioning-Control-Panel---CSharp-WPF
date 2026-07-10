@@ -514,6 +514,16 @@ overlapped the "Quick Links" label; added `HorizontalAlignment="Right"` to match
 Gates: slnf 0 err, smoke 44 tabs/0 unhandled, per-theme dashboard screenshot confirms bigger browser, no
 media row, `?` at the header's right edge.
 
+**JUDGMENT redesign: compacted Audio + Quick Links panels — 2026-07-10 (this session):** dispatched a
+JUDGMENT-tier agent (fable-5) to shrink + tidy both right-column panels. Audio: header/duck/chevron/help
+collapsed into one 6-col grid, toggle On/Off text removed (`OnContent=""/OffContent=""`, established repo
+pattern), slider margins → `Spacing`, advanced options stay collapsed behind `BtnAudioAdvanced`. Quick Links:
+Join-Discord + RP toggle share one row, tighter paddings, display-name ellipsis. Also replaced two
+pre-existing hardcoded `#33FF69B4` fills with `{DynamicResource TransparentPinkBrush}` (theme-compliance
+win). ~55-60px reclaimed by the browser; cards now near-equal height (no dead space). All bindings/commands/
+x:Names preserved (grep-verified). Driver reviewed diff + screenshot. Gates: slnf 0 err, smoke 44 tabs/0
+unhandled.
+
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
 **#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)** for autonomous tiers. **row #2 re-baseline is now BLOCKED**
 (this session): its scheduling half is DONE via IMP-2 and `MinFps=0` is root-caused (un-decodable YouTube
