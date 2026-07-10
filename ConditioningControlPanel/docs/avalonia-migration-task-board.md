@@ -38,6 +38,13 @@ work, `dashboard-design` for all user-facing surfaces, `port-audit` at workstrea
 - **BLOCKED** — cannot start until a named precondition lands.
 - **DEFER** — deliberately scheduled for later; each carries a pointer.
 
+Driver session model: `anthropic/claude-opus-4-8` (orchestration only — claims, dispatch, gates, commits,
+tracker updates; never burn the JUDGMENT model on the long-lived driver context). Routing caveats:
+`zai/glm-5.2` has NO vision — screenshot/visual verification (`--smoke-screenshots`, dashboard-design
+5-theme checks, img-state comparisons) never routes to STANDARD; send it to JUDGMENT or the driver
+(`zai/glm-5v-turbo` is an acceptable cheap vision fallback). `kimi-for-coding` has a 256k window —
+MECHANICAL prompts stay self-contained (slice spec + cites only, never whole docs or the 100KB+ WPF files).
+
 Project agentTypes available inside workflows: `wpf-archaeologist` (read-only WPF behavior contracts with
 File.cs:line cites — nobody opens the 100KB+ WPF files raw), `port-slice-executor` (one pre-planned slice
 under the iron rules), `port-parity-auditor` (adversarial working-tree diff vs WPF ground truth before
