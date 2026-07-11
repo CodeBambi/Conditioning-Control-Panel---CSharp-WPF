@@ -974,8 +974,10 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
     `PauseSpokenAudio`/`ResumeSpokenAudio` added to the Avalonia avatar — `IAudioPlayer.Pause()/Resume()` no-op DIM
     defaults (frozen `WpfAudioPlayer` untouched), `AvaloniaAudioPlayer` LibVLC `SetPause(true)`/`Play()` guarded by
     `State`, `AvatarTubeWindow.PauseSpokenAudio/ResumeSpokenAudio` (does NOT touch `_isSpeakingAudio`). +2 Core tests.
-    **STILL PENDING: wire `DtrhNativeEffects.SetWorldFrozen` → these methods** (the S2c-3 driver mini-slice, now
-    unblocked). `port-parity-auditor`: REWORK→absence-on-disk only; re-implemented under driver control from the gold
+    **✅ DONE (S2c-3 mini-slice, `1ff8bd49`):** `DtrhNativeEffects.SetWorldFrozen` now pauses/resumes the avatar
+    spoken voice line alongside the ambient video (IAvatarWindowService no-op DIM → AvaloniaAvatarWindowService →
+    AvatarTubeWindow Lane-B seam; resolved via static `AvaloniaChaosApp.Avatar`). **Avatar half of world-freeze
+    COMPLETE; honest-deferral removed.** `port-parity-auditor`: REWORK→absence-on-disk only; re-implemented under driver control from the gold
     recon spec (executor's claimed diff was ephemeral — worktree torn down).
 - **SUB-PART 7 “In-world integration edits” VERIFY COMPLETE 2026-07-11 · @driver** (docs-only). Audited WPF commit
   `8343e1e0` (“gaze-click follows camera; glitch/cascade draw the flash pool”) for standalone (non-DTRH)
@@ -1016,8 +1018,8 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   `port-parity-auditor` specifically against the privacy invariant. Standalone (non-DTRH) — tracked here because the
   sub-part-7 verify surfaced it, but it is its own feature, not gated on DTRH web-boot.
   - **NEXT:** gaze-autostart (Lane A, `843500a8`) + avatar-freeze capability (Lane B, `e49209d5`) are BOTH LANDED.
-    Remaining row-#6 tail: **wire `DtrhNativeEffects.SetWorldFrozen` → avatar Pause/ResumeSpokenAudio** (S2c-3 driver
-    mini-slice, now unblocked by Lane B). **All other row-#6 phase-1–7 appendix
+    Row-#6 tail **wire `DtrhNativeEffects.SetWorldFrozen` → avatar Pause/ResumeSpokenAudio COMPLETE** (S2c-3
+    mini-slice, `1ff8bd49`) — **S2c avatar-freeze fully done (video + avatar halves).** **All other row-#6 phase-1–7 appendix
     sub-parts are LANDED or verify-resolved** (web bundle = csproj Content-link at Windows head `:61`; host+bridge =
     S2c; telemetry = S1; meta deltas done; Lab launch = S2c-2c; in-world = this verify). **Live web-boot
     verification of phases 1–7 remains an owner-headed gate; phase 8 native-chaos decommission stays out of
