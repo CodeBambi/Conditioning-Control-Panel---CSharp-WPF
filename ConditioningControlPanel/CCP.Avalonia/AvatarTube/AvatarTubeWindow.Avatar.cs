@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Services.Avatar;
+using ConditioningControlPanel.Core.Services.AvatarTube;
 using ConditioningControlPanel.Core.Services.Companion;
 using ConditioningControlPanel.Avalonia.Services.Mod;
 using ConditioningControlPanel.Models;
@@ -572,7 +573,19 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 if (Math.Abs(setOffsetX) > 0.001)
                     group.Children.Add(new TranslateTransform(setOffsetX * layoutScale, 0));
                 AvatarBorder.RenderTransform = group;
-                AvatarBorder.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+                // WPF ApplyTubeLayoutOffsets (AvatarTubeWindow.Avatar.cs:712-715) sets ONE
+                // ScaleTransform(EffAvatarScale) as a LayoutTransform on ALL THREE avatar images
+                // (ImgAvatar + ImgAvatarAnimated + ImgAvatarAnimatedB, comment "Circe emote
+                // crossfade layer must match"). WPF's LayoutTransform participates in layout, so
+                // for a bottom-aligned figure the feet stay anchored (the scaled slot grows
+                // upward). Avalonia has NO LayoutTransform, so the mod avatar scale is applied as
+                // a RenderTransform on AvatarBorder (the shared parent of all three images —
+                // identical to ImgAvatar by construction). RenderTransformOrigin = bottom-center
+                // (0.5,1.0) is the faithful approximation of WPF's bottom-anchoring LayoutTransform:
+                // scaling around the bottom edge keeps the feet planted instead of lifting the
+                // figure (center-origin scaling was the "shifted up" half of the emote bug,
+                // Engram obs #6). The per-set nudge (setScale, +12%) composes onto the same origin.
+                AvatarBorder.RenderTransformOrigin = new RelativePoint(0.5, 1.0, RelativeUnit.Relative);
             }
             else
             {
@@ -733,11 +746,35 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 && _resourceResolver?.HasModOverride("tube2.png") != true;
         }
 
-        internal double EffAvatarScale() => _modService?.GetAvatarScale() ?? 1.0;
-        internal int EffAvatarOffsetX() => _modService?.GetAvatarOffsetX() ?? 0;
-        internal int EffAvatarOffsetY() => _modService?.GetAvatarOffsetY() ?? 0;
-        internal int EffAvatarDetachedOffsetX() => _modService?.GetAvatarDetachedOffsetX() ?? 0;
-        internal int EffAvatarDetachedOffsetY() => _modService?.GetAvatarDetachedOffsetY() ?? 0;
+        // Effective layout = the mod's global TubeLayout + the engaged Circe emote set's optional
+        // layout delta. Mirrors WPF AvatarTubeWindow.CirceEmotes.cs:388-393 (EmoteLayoutActive =>
+        // fold _emoteScaleMul / _emoteOff[X|Y|DetX|DetY] into the effective values) via the pure
+        // AvatarTubeLayoutFold helper. Before this fold the Avalonia emote path applied a SEPARATE
+        // center-origin ScaleTransform(baseScale=1.0,...) onto each emote image, IGNORING the mod
+        // avatar scale and lifting the bottom-anchored figure — the "avatar enlarged + shifted up
+        // during Circe emotes" bug (Engram obs #6). Now both pose and emote layers resolve to the
+        // SAME effective scale/offset through ApplyAvatarTransform + ApplyTubeLayoutOffsets.
+        //
+        // Active = a Circe emote set with a layout delta is currently engaged. WPF CirceEmotes.cs:388
+        // defines EmoteLayoutActive = _circeEmoteMode && _emoteHasLayout; the Avalonia engine owns
+        // both signals (IsActive tracks engagement, HasLayout tracks _emoteHasLayout).
+        private bool EmoteLayoutActive => _circeEngine?.IsActive == true && _circeEngine.HasLayout;
+
+        internal double EffAvatarScale()
+            => AvatarTubeLayoutFold.Scale(_modService?.GetAvatarScale() ?? 1.0,
+                                          EmoteLayoutActive, _circeEngine?.EffScaleMul ?? 1.0);
+        internal int EffAvatarOffsetX()
+            => AvatarTubeLayoutFold.OffsetX(_modService?.GetAvatarOffsetX() ?? 0,
+                                            EmoteLayoutActive, _circeEngine?.EffOffsetX ?? 0);
+        internal int EffAvatarOffsetY()
+            => AvatarTubeLayoutFold.OffsetY(_modService?.GetAvatarOffsetY() ?? 0,
+                                            EmoteLayoutActive, _circeEngine?.EffOffsetY ?? 0);
+        internal int EffAvatarDetachedOffsetX()
+            => AvatarTubeLayoutFold.OffsetX(_modService?.GetAvatarDetachedOffsetX() ?? 0,
+                                            EmoteLayoutActive, _circeEngine?.EffDetachedOffsetX ?? 0);
+        internal int EffAvatarDetachedOffsetY()
+            => AvatarTubeLayoutFold.OffsetY(_modService?.GetAvatarDetachedOffsetY() ?? 0,
+                                            EmoteLayoutActive, _circeEngine?.EffDetachedOffsetY ?? 0);
 
         // ════════════════════════════════════════════════════════════════════════════════
         //  EMOTIVE PORTRAIT AVATAR
