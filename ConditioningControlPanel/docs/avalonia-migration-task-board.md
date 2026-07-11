@@ -936,14 +936,41 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
     Findings 16 (⊆ benign, ZERO new — game window verified NOT opened: no "DTRH web game window up" log).
   - **🎉 S2c-2 CHAIN COMPLETE (2a+2b+2c):** the ported `DtrhHostOrchestrator` is now fully constructed, wired to a
     real focusable WebView2 game Window, and launchable from the Lab tab. Remaining S2c work = **S2c-3** only.
-  - **NEXT:** **S2c-3** (JUDGMENT, two deferred seams — both genuine new-seam additions, advisor-approved as interim
-    honest no-ops in the shipped code): (1) **world-freeze** — faithful `SetWorldFrozen(bool)` needs NEW
-    `IVideoService`/avatar pause-resume seams (currently a tracked no-op in `DtrhNativeEffects`); (2) **N1
-    video-watch-credit** — add `VideoWatchCredited(watchedSec,durationSec)` to Core `IVideoService` +
-    `AvaloniaVideoService`, then wire the game window → `OnVideoWatchCredited`/`OnVideoSkipped` with the WPF `<0.90`
-    skip rule (`DtrhHostService.cs:618-623`). Both are telemetry/immersion-only (no economy drift — XP has no video
-    term). Then appendix head slices (row #6 phases 2–7). **Live web-boot verification of phases 1–7 remains an
-    owner-headed gate; phase 8 native-chaos decommission stays out of autonomous scope.**
+- **S2c-3a LANDED 2026-07-11 · @driver** (`a37452ad`, 5 files / +65-12): faithful **world-freeze video** seam,
+  replacing the S2c-2a interim no-op. Core `IVideoService` gains `PausePrimary()`/`PlayPrimary()` DIM no-op
+  defaults (WPF head's existing concrete methods satisfy them); compositor `VideoLayer.SetPaused(bool)` →
+  `_player?.SetPause(paused)` (explicit, not toggle `Pause()`/`Play()` → redundant resume never restarts stopped
+  media → orchestrator's unconditional teardown force-resume `:558` is idempotent-safe; matches the
+  `AvaloniaInlineLoopVideo` SetPause precedent); `AvaloniaVideoService.PausePrimary/PlayPrimary` rewired (were dead
+  — targeted the null Phase-E3 `PrimaryMediaPlayer`) to pause/resume **only** the ambient `_videoLayer` (mandatory
+  layer left rolling — WPF parity, advisor correction 1); `DtrhNativeEffects` injects `IVideoService?`,
+  `SetWorldFrozen(true/false)`→PausePrimary/PlayPrimary; `DtrhGameHostService` receives `IVideoService?` and passes
+  it into the MANUAL `new DtrhNativeEffects(...)` (advisor condition 2 — DI can't populate a manual ctor).
+  Advisor: APPROVED (2 corrections + 5 conditions folded). `port-parity-auditor`: **SHIP** (7/7).
+- **S2c-3b LANDED 2026-07-11 · @driver** (`32697d93`, 3 files / +69): **N1 video-watch-credit telemetry** seam.
+  `AvaloniaVideoService` already had a pause-aware, watermarked `FinalizeWatchCredit` (driving achievements) — the
+  only missing piece was the event. Core `IVideoService` gains `event VideoWatchCredited` (empty add/remove DIM) +
+  `VideoWatchInfoEventArgs{WatchedSec,DurationSec,EndedNaturally}` (exactly WPF's three members); the event is raised
+  inside the EXISTING `uncredited>=1.0` block after `TrackVideoWatched`, own try/catch (WPF `:2450`), `WatchedSec`=
+  total credited position, `DurationSec` live-read `_videoLayer?.DurationMs` else `_layerLengthMs` (advisor
+  correction 2 — mandatory layer has no `DurationMs`; do NOT wire `_videoLayer.LengthKnown` into the safety-cap
+  watermark), `EndedNaturally` at 0.90; `DtrhGameHostService` subscribes after orchestrator creation, translates per
+  WPF `:618-623`, and **unsubscribes in DisposeAll** (leak trap — long-lived singleton). Telemetry-only (no XP term).
+  `port-parity-auditor`: **SHIP** (7/7 A–G). Follow-up (non-blocking, per auditor + advisor): a skip-boundary
+  regression test (0.89/0.90/dur≤0) — head-side math, NOT Core-unit-testable, so Core floor stays **590**.
+  - **🎉 S2c FULLY COMPLETE (2a+2b+2c+3a+3b):** DTRH web game is constructed, windowed, DI-registered, Lab-launchable,
+    with faithful world-freeze **video** + watch-credit telemetry. Gates on both 3a/3b: slnf 0 err (383 warn =
+    baseline) · WPF head 0 err · Core 590/590 · smoke 44 tabs / 0 unhandled / Findings 16 (band UNCHANGED across both).
+  - **🔴 REMAINING DEFERRED SEAM — avatar-spoken-audio freeze (new, advisor-condition-3):** WPF `ApplyWorldFreeze`
+    (`DtrhHostService.cs:566-573`) also calls `App.AvatarWindow?.PauseSpokenAudio()`/`ResumeSpokenAudio()`. The
+    Avalonia `AvatarTubeWindow` exposes only `StopSpokenAudio` (a hard stop that kills the voice line and cannot
+    resume) — substituting it would be a behavioral deviation, so the avatar half of world-freeze is an HONEST
+    DEFERRAL (documented in `DtrhNativeEffects.SetWorldFrozen`). **Future work:** add position-preserving
+    `PauseSpokenAudio`/`ResumeSpokenAudio` to the Avalonia avatar, then extend `SetWorldFrozen` to call them. Touches
+    the avatar audio subsystem (out of the video-scoped S2c-3 slice); immersion-only, no economy/state impact.
+  - **NEXT:** appendix head slices (row #6 phases 2–7) + the avatar-freeze future seam above. **Live web-boot
+    verification of phases 1–7 remains an owner-headed gate; phase 8 native-chaos decommission stays out of
+    autonomous scope.**
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
