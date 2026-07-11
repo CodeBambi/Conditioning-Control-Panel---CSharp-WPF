@@ -609,11 +609,55 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   guard path, all clamps correct (100000/36000/64/128/5); driver added the 4 auditor-flagged guard pins
   (spend-gold negative guard, add-gold cap, set-num<64, add-channel-seconds<36000). 19 economy `[Fact]`s.
   **Gates:** slnf 0 err · WPF sln 0 err · Core **576/576** (was 557, +19) x3 stable · smoke 44 tabs / 0
-  unhandled / Findings 16 (⊆ benign). **Next = S2b-2b** (head integration): head `IChaosMetaStore` adapter
-  over the `ChaosMeta` facade (State/RankIndex/Save) + DI registration; wire `IBarkService.
-  NotifyChaosFirstTime` in `AvaloniaHeadStubs.cs` bark impl; connect the bridge to the DTRH WebView
-  message pump (broadcast → `IBrowserHost` post; inbound meta-command → `Handle`). Then S2c = `DtrhHostService`
-  914L split.
+  unhandled / Findings 16 (⊆ benign). **Next = S2c** (see the CONTRACT+PLAN entry below): archaeology proved
+  there is NO existing DTRH host in the Avalonia head — a standalone S2b-2b head `IChaosMetaStore` adapter
+  would be DEAD WIRING (no consumer until the host port). The bridge's only consumer is the S2c
+  `DtrhHostOrchestrator`, which absorbs the head adapter + DI + bark wiring + WebView pump when it lands.
+- **S2c CONTRACT + PLAN 2026-07-11 · @driver** (`wpf-archaeologist` extraction of `DtrhHostService.cs` 914L
+  + `DtrhSpike.cs` 226L; read-only, files never entered driver context). **Seam line:** `DtrhHostService` is
+  a static singleton whose ENTIRE inbound message router (`OnPageMessage` switch), run/session orchestration,
+  XP formula, `Build*` outbound factories, and heartbeat/exit watchdogs are PORTABLE → a Core
+  `DtrhHostOrchestrator` over `IBrowserHost` + seams; only the concrete Window, native effects, tray, and
+  legacy fallback stay head-side.
+  - **Inbound `type`s** (portable unless tagged HEAD): vn-speaking, sfx (AvaloniaChaosSfx), fire-payload
+    **HEAD** (video/audio `EffectPayload`), freeze-state **HEAD** (video/avatar pause), meta-command (ported
+    bridge), request-run, run-started, run-ended, bark (`IBarkService` ~40 events), heartbeat/pong,
+    asset-stats (ported store), boot-error **HEAD** (WPF fallback — DROP in port: no Avalonia native game,
+    surface error + close), exit/exit-done. **Outbound** (via `IBrowserHost.PostWebMessageAsJson`, queued
+    until page 'ready'): init, meta snapshot, manifest, favorites, run-config, payout-result, payload-state,
+    end-run.
+  - **Ordering invariants (MUST preserve):** (1) `_meta.AwardRun` banks+saves BEFORE the payout reply;
+    (2) `_meta.Rebroadcast()` runs AFTER `RevealService.Sync("run_end")` (page must see fresh pendingReveals);
+    (3) `_meta.FlushSave()` on EVERY teardown path (DisposeAll); (4) `ForceScriptedRun` one-shot spent at
+    DEAL time (`request-run`), not run-end; (5) world-freeze force-resumed on run-end AND teardown.
+    XP: `baseXp=Min(score, 250*durMin*diffMult)`, `finalXp=baseXp*skillMult` (`DtrhHostService.cs:403-414`).
+    `PersistRunSetup` clamps `:315-333`; `FirePayload` clamps `:386-387`.
+  - **🔴 S2c-0 BLOCKER (JUDGMENT protocol change — review before doing):** `IBrowserHost.
+    SetVirtualHostToFolder(hostName, folder)` (`IBrowserHost.cs:75`) is single-mapping and hardcodes
+    `CoreWebView2HostResourceAccessKind.Deny` (`WebView2BrowserHost.cs:189-214`). DTRH needs THREE
+    simultaneous mappings with per-host access kind (ccp.game=Deny, ccp.assets=Allow, ccp.art=Allow) or
+    WebGL media/boon-icon uploads CORS-fail. Extend the seam (access-kind param + accumulate a mapping list)
+    across ALL 5 impls (WebView2/WebKit/WebKitGtk/Mobile/Wpf). No Chromium-arg seam either:
+    `--autoplay-policy=no-user-gesture-required` + anti-MPO args set on the concrete `WebView2BrowserHost`
+    pre-nav (head configures host, hands seam to Core — mirror `ChaosTunnelService.cs:151`). Protocol change
+    ⇒ JUDGMENT gate per iron rules; do NOT land casually.
+  - **S2c-pre PREREQUISITE PORTS (Core=0 today, orchestrator needs them):** `ChaosHappyPath.
+    BuildFirstRunConfig` (Avalonia=17), `RevealService.Sync` (Avalonia=11 — or a Core seam), `ChaosRanks.For`
+    (Avalonia=1). VERIFY `ChaosRunConfig.FromSettings` (Core=2/Av=14 — partial), progression `AddXP`
+    (Core=15), skill-tree `GetTotalXpMultiplier` (Core=11), `ChaosCrashSentinel` (Core=13). `EffectPayloadFactory`
+    stays HEAD (native).
+  - **Slice order:** S2c-0 (IBrowserHost multi-mapping seam ext — JUDGMENT/review) → S2c-pre (port
+    ChaosHappyPath/RevealService/ChaosRanks to Core + verify the rest) → S2c-1 (Core `DtrhHostOrchestrator`:
+    router + run/session + XP + Build* + watchdogs over `IBrowserHost` + an `IDtrhNativeEffects` callback seam
+    for head natives) → S2c-2 (head: owned game Window titled/`Topmost=false`/borderless-FS on page Fullscreen
+    API, `IDtrhNativeEffects` impl [FirePayload/ApplyWorldFreeze/video-focus-reclaim], WebView2 host config,
+    tray minimize, Lab-tab launch hook `MainWindow.Lab.cs:108-115` on `ChaosWebGameEnabled` — drop the
+    `BootFailedThisSession` fallback per owner web-only ruling). Mirror `ChaosTunnelService` wiring but
+    input-enabled (skip SinkToBottom/ExStyles; add `Activate()`).
+  - **DtrhSpike.cs = throwaway `--dtrh-spike` dev harness (M0), NOT portable, decommission-adjacent — SKIP.**
+  - Impl-time ambiguities: page-side message shapes unverified vs `Resources/web/dtrh/*` (C# reader is ground
+    truth for consumed fields); whether Avalonia `IBrowserHost.FullscreenChanged` already drives a window
+    resize; exact Avalonia `IVideoService`/avatar-audio seam names for pause/resume.
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
