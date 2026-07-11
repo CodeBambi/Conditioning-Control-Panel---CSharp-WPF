@@ -178,6 +178,38 @@ native-interop-timing) fault, observed on THIS machine (run via `dotnet run -c R
   with a directly-decodable source, run a clean 240s `--max-benchmark`, and confirm `MaxIntensityMinFps` > 0
   reflecting real UCE frame cost — which re-arms row #2's "not-worse than `benchmark-optimized.json`" gate.
 - **Tier:** JUDGMENT (native-crash forensics + measurement-methodology decision); not a mechanical row.
+- **CLAIM 2026-07-11 · @driver (continuous-mode session):** static + dump forensics performed while the
+  live-repro slot is blocked (single-instance lock held by the running Debug head PID 20240 — a Release
+  launch hands off/exits BEFORE window-show, so the SIGSEGV cannot be reproduced until that instance frees).
+  **Findings:**
+  1. **Not a project-flag artifact (confirms "flag-independent").** `CCP.Avalonia.Desktop.Windows.csproj`
+     + `Directory.Build.props` carry ZERO Release-specific properties — no `PublishReadyToRun`,
+     `PublishTrimmed`, `PublishSingleFile`, `TieredPGO`, or `InvariantGlobalization`. The Release-vs-Debug
+     delta is only the stock SDK Release defaults (JIT `Optimize=true`, no `DEBUG` constant) plus the smoke
+     harness being compiled out (`Condition=='Debug'`). So the fault is optimized-JIT / native-interop
+     timing, not a csproj switch.
+  2. **Release slnf build is clean:** `dotnet build CCP.Desktop.slnf -c Release` → **0 errors** (380
+     pre-existing warnings) at HEAD `1b6bbb6c`. No Release compile break; binaries refreshed to `bin/Release`.
+  3. **On-disk crash dumps are a RED HERRING — ruled out.** `%LOCALAPPDATA%\CrashDumps` holds a cluster of
+     `CCP.Desktop.Windows.exe` full dumps (Jul 5 21:55-21:57). Triaged `…31000.dmp` with `dotnet-dump`
+     (`clrthreads`/`clrstack -all`/`modules`): module paths are **`bin\Debug`**, and thread 0 carries a
+     **managed `System.InvalidOperationException`** on a 12-frame `Microsoft.Extensions.DependencyInjection`
+     `CallSiteFactory` recursion (DI circular-dependency, caught by `CallSiteChain`). That is a Debug,
+     managed, since-fixed failure (Debug launches fine today) — NOT the Release native SIGSEGV (which the
+     row defines as native / no managed exception). No SIGSEGV dump exists on disk. Recorded so a future
+     session does not chase these.
+  4. **Native surface at window-show (same libs load in Release):** SkiaSharp, LibVLCSharp + **dozens of
+     `libvlc\w*` plugin DLLs** (full VLC plugin cache loaded at VideoLayer/MandatoryVideoLayer registration),
+     OpenCvSharp, HarfBuzz, Avalonia native. Consistent with the row's prime suspects: **LibVLC native init**
+     and/or **Skia GPU context creation at first show**.
+  5. **WER full-dump capture is now ARMED** for `CCP.Desktop.Windows.exe` (HKCU `…\Windows Error
+     Reporting\LocalDumps\CCP.Desktop.Windows.exe` → `DumpType=2` full, `DumpCount=10`,
+     `DumpFolder=%LOCALAPPDATA%\CrashDumps`). The NEXT Release launch that SIGSEGVs will auto-capture a real
+     dump — no `DOTNET_DbgEnableMiniDump` env plumbing needed.
+  - **NEXT (deferred, needs the lock free):** once the owner's AvatarTube retest concludes and PID 20240
+    exits, launch the Release head to repro, let WER capture the SIGSEGV dump, then dispatch the fable-5
+    JUDGMENT triage on THAT dump (LibVLC-init vs Skia-context) — root-causing without the real dump would
+    be speculation. Tooling is staged: `dotnet-dump` installed to `ConditioningControlPanel/.tools`.
 
 ### #3 — WP2b optional libmpv render-API engine-swap spike · **JUDGMENT (spike, benchmark-gated)**
 
