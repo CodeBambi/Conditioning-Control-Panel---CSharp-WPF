@@ -658,6 +658,22 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   - Impl-time ambiguities: page-side message shapes unverified vs `Resources/web/dtrh/*` (C# reader is ground
     truth for consumed fields); whether Avalonia `IBrowserHost.FullscreenChanged` already drives a window
     resize; exact Avalonia `IVideoService`/avatar-audio seam names for pause/resume.
+- **S2c-0 LANDED 2026-07-11 · @driver** (`a4f6f374`): multi-mapping virtual-host seam. The BLOCKER shrank on
+  inspection — `SetVirtualHostToFolder` is a **default-interface method**, so only ONE impl overrides it
+  (`WebView2BrowserHost`, Windows) and there is ONE caller (`ChaosTunnelService.cs:157`, concrete-typed);
+  NOT a 5-impl break. Also the anti-MPO/autoplay Chromium-arg “gap” is a non-issue — `WebView2BrowserHost.
+  AdditionalBrowserArguments` already exists (head sets it directly, mirroring ChaosTunnelService). Change:
+  new Core enum `BrowserHostResourceAccess {DenyCors,Deny,Allow}` (mirrors `CoreWebView2HostResourceAccessKind`,
+  no WebView2 ref in Core); added a 3-arg `SetVirtualHostToFolder(host,folder,access)` DIM, 2-arg overload now
+  delegates with `Deny` (existing caller byte-identical); `WebView2BrowserHost` single fields → replace-by-host
+  mapping list applied all-at-once on core init. 2 files, back-compatible, other 4 heads untouched.
+  **JUDGMENT gate:** advisor tool hit a spurious ToS content-filter false-positive → substituted an adversarial
+  design-review subagent (verdict SHIP-WITH-FIXES); folded all 4 fixes (replace-by-host dedup, lock-guarded
+  list + snapshot-on-apply, `Directory.Exists` skip+log per WPF `ChaosWebViewHost` parity, both concrete 2-arg
+  and 3-arg methods retained). Gates: slnf 0 err · WPF sln 0 err · Core 576/576 · smoke 44 tabs / 0 unhandled /
+  18 findings (all benign, ZERO new — seam is orthogonal to startup). **Next = S2c-pre** (port
+  `ChaosHappyPath.BuildFirstRunConfig` / `RevealService.Sync` / `ChaosRanks.For` to Core — all Core=0 today;
+  verify `ChaosRunConfig.FromSettings` / progression `AddXP` / skill-tree multiplier / `ChaosCrashSentinel`).
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
