@@ -549,6 +549,27 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   **Gates:** slnf 0 err · WPF sln 0 err · Core **557/557** (was 553, +4) · smoke 44 tabs / 0 unhandled /
   Findings 17 (⊆ recorded authed benign band). **Next = S2a-2** (relocate `ChaosRank`/`BenchIds`/
   `ChaosRunRewardInput`/`MAX_CONSUMABLE_SLOTS` + data-only `ChaosFirstTimes` to Core, update head consumers).
+- **S1 FOLLOW-UP FIX 2026-07-11 · @driver** (`03d91c86`): the S1 telemetry stores fired an independent
+  `Task.Run` per write and tracked only the last task, so under full-suite threadpool contention writes
+  acquired `_writeLock` out of enqueue order — a stale snapshot could land last and `WhenSaved` could
+  complete early (intermittent `SessionStats_Record_CapsRecentAtTwentyFive` fail: Expected D2, Actual D0).
+  Fixed by CHAINING writes via `ContinueWith(TaskScheduler.Default)` (FIFO, latest snapshot wins; `WhenSaved`
+  awaits the whole chain). Best-effort semantics unchanged. Full Core suite now stable 557/557 across repeats.
+- **S2a-2 LANDED 2026-07-11 · @driver** (pure value-type relocation): moved `ChaosRank` enum + `BenchIds`
+  from `CCP.Avalonia/Chaos/AvaloniaChaosStubs.cs` (namespace `...Avalonia.Chaos`) into new
+  `CCP.Core/Services/Chaos/ChaosMetaPrimitives.cs` (namespace `...Core.Services.Chaos`) — single source of
+  truth so the portable DTRH meta bridge (S2b) can reference the rank spine + bench/console ids. Deleted the
+  head defs; added the Core `using` to the 3 consumer files that lacked it (`AvaloniaChaosCatalogs.cs`,
+  `ChaosHubWindow.axaml.cs`, `ChaosOverlayWindow.axaml.cs`); the WPF head keeps its own frozen copies. Done
+  driver-level (tiny mechanical relocation — direct edit beat a ~700K-token executor dispatch; cost
+  discipline). Boundary confirmed by grep: `ChaosRunRewardInput` has ZERO head refs (define fresh in Core at
+  S2b, not relocate); `ChaosFirstTimes` is used only inside `ChaosLessons.cs` (dead code) — S2b gets a Core
+  data-only copy, head copy dies at phase 8; `MAX_CONSUMABLE_SLOTS` folds into the S2b seam. **Gates:** slnf
+  0 err · WPF sln 0 err · Core **557/557** · smoke 44 tabs / 0 unhandled / Findings 16 (⊆ benign band).
+  **Next = S2b** (JUDGMENT/economy): design the Core `IChaosMetaStore` seam (`State`/`RankIndex`/`Save`/
+  `AwardRunRewards(in ChaosRunRewardInput)` + `ChaosRunRewardInput`/`MAX_CONSUMABLE_SLOTS`/first-time
+  amounts Core-side), port `DtrhMetaBridge` over it, head adapts its `IChaosMetaService`, economy pinning
+  tests, `port-parity-auditor` on the diff. Seam-design is driver-level; executor implements.
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 

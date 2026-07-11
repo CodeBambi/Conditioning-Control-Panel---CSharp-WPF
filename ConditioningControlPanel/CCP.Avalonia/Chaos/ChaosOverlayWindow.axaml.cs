@@ -12,6 +12,7 @@ using global::Avalonia.Interactivity;
 using global::Avalonia.Threading;
 
 using Microsoft.Extensions.DependencyInjection;
+using ConditioningControlPanel.Core.Services.Chaos;
 namespace ConditioningControlPanel.Avalonia.Chaos;
 
 public partial class ChaosOverlayWindow : Window

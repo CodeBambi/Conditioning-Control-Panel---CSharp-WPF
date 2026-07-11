@@ -16,9 +16,9 @@ namespace ConditioningControlPanel.Avalonia.Chaos;
 
 #region legacy enums / identifiers
 
-/// <summary>The rank spine — the single source of truth for depth ranks. Order and
-/// ordinals mirror WPF <c>ChaosRanks.cs</c> exactly (Entranced before Devoted; no Lost).</summary>
-public enum ChaosRank { Curious = 0, Tempted = 1, Slipping = 2, Entranced = 3, Devoted = 4, Claimed = 5 }
+// ChaosRank enum relocated to CCP.Core/Services/Chaos/ChaosMetaPrimitives.cs (web-port S2a-2)
+// so the portable DTRH meta bridge shares one source of truth; consumed here via the
+// `using ConditioningControlPanel.Core.Services.Chaos;` above.
 public enum ChaosBranch { Control, Greed, Depth }
 public enum ChaosRarity { Common, Uncommon, Rare }
 public enum ChaosSpeaker { Madam, Rabbit, Hatter, Doll, Enemy }
@@ -54,16 +54,7 @@ public static class RevealIds
     public const string ExtremeTierRow     = "extreme_tier_buyable";  // Devoted (buyability; lesson stacks on top)
 }
 
-public static class BenchIds
-{
-    public const string ToyPocket1 = "toy_pocket_1";
-    public const string AccPocket1 = "acc_pocket_1";
-    public const string StartMantra = "start_mantra";
-    public const string Diary = "diary";
-    public const string StatsPanel = "stats_panel";
-    public const string ToyPocket2 = "toy_pocket_2";
-    public const string AccPocket2 = "acc_pocket_2";
-}
+// BenchIds relocated to CCP.Core/Services/Chaos/ChaosMetaPrimitives.cs (web-port S2a-2).
 
 public static class ChaosGlyphs
 {

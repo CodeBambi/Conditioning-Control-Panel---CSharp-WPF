@@ -11,6 +11,7 @@ using global::Avalonia.Interactivity;
 using global::Avalonia.Threading;
 
 using Microsoft.Extensions.DependencyInjection;
+using ConditioningControlPanel.Core.Services.Chaos;
 using ChaosNarrativeContext = ConditioningControlPanel.Core.Services.Chaos.ChaosNarrativeContext;
 namespace ConditioningControlPanel.Avalonia.Chaos;
 
