@@ -548,6 +548,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     discovered.add(codexId);
     bridge.send({ type: 'meta-command', op: 'add-to-set', set: 'discoveredCodexIds', id: codexId });
   };
+  // How long the reveal holds before the explainer speaks: enough for the newly
+  // discovered object to fall into view. The field rings it during this window so
+  // the eye lands on the new thing before the lesson/VN card explains it.
+  const REVEAL_DELAY_MS = 2000;
   const markDiscovered = (codexId) => {
     if (discovered.has(codexId)) return;
     // Codex-only entries (draft boons, or anything with no teach copy): record, no
@@ -556,17 +560,21 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // While the Cheshire arc runs, NO lesson card fires (her beats cover the
     // mechanics); record so it never cards later. Intentional, not a cooldown-drop.
     if (guide && guide.suppressLessons()) { commitDiscovery(codexId); return; }
-    // Post-arc she may claim a first-discovery as her own held card - but only if the
-    // narration channel is free. On a claim: record + stamp. (false => fall through.)
-    if (guide && narration.ready() && guide.handleDiscovery(codexId, CODEX_COPY[codexId])) {
-      commitDiscovery(codexId); narration.stamp(); return;
-    }
-    // Plain lesson card - the shared 20s gate. If the VN/VO or another card spoke in
-    // the window, DROP this one (don't record) so the next encounter re-triggers it.
+    // Shared 20s gate (drop-not-queue): if the VN/VO or another card spoke in the
+    // window, DROP this one (don't record) so the next encounter re-triggers it.
     if (!narration.ready()) return;
+    // Committed to explaining it: record + stamp NOW so the channel stays held
+    // through the reveal delay. Spotlight the object as it enters, then after ~2s
+    // let her claim it (held card) or fall back to the plain lesson card.
+    const copy = CODEX_COPY[codexId];
     commitDiscovery(codexId);
-    teach(CODEX_COPY[codexId]);
     narration.stamp();
+    field.highlightDiscovery?.(codexId, REVEAL_DELAY_MS);
+    window.setTimeout(() => {
+      if (state !== 'running') return;
+      if (guide && guide.handleDiscovery(codexId, copy)) return;
+      teach(copy);
+    }, REVEAL_DELAY_MS);
   };
   const pulse = (rgb, strength) => { if (cfg.colorFlashes) hudUi?.pulse(rgb, strength); };
   const showPopScore = (pts, x, y) => {

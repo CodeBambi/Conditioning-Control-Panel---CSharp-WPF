@@ -1296,7 +1296,45 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     fxLayer.remove();
   }
 
+  // ---- discovery spotlight ----------------------------------------------------
+  // The lesson/VN reveal delay (chaosRun) rings the just-arrived bubble it's about
+  // to explain, so the eye lands on the new thing while it falls into view. The
+  // ring is a child of the bubble's wrap, so it tracks the bubble as it drifts and
+  // vanishes with it if the bubble pops before the window closes.
+  function spotlightBubble(b, ms) {
+    if (!b || !b.wrap) return;
+    if (b.spotEl) { try { b.spotEl.remove(); } catch (e) {} b.spotEl = null; }
+    const el = document.createElement('div');
+    el.className = 'cf-spotlight';
+    b.wrap.appendChild(el);
+    b.spotEl = el;
+    requestAnimationFrame(() => { if (b.spotEl === el) el.classList.add('cf-spotlight--in'); });
+    window.setTimeout(() => {
+      if (b.spotEl !== el) return;
+      el.classList.remove('cf-spotlight--in');
+      el.classList.add('cf-spotlight--out');
+      window.setTimeout(() => { try { el.remove(); } catch (e) {} if (b.spotEl === el) b.spotEl = null; }, 340);
+    }, Math.max(400, ms | 0));
+  }
+  // Ring the newest live bubble matching a discovery codex id (bubble:/pickup:).
+  // Best-effort: no-op (returns false) when nothing in-field matches - weather,
+  // junctions and 3D tunnel pickups have no field object to ring.
+  function highlightDiscovery(codexId, ms = 2000) {
+    const m = /^(?:bubble|pickup):(.+)$/.exec(codexId || '');
+    if (!m) return false;
+    const key = m[1];
+    let hit = null;   // Set keeps insertion order, so the last match is the newest
+    for (const b of live) {
+      if (b.state !== 'live') continue;
+      if (b.spec.kind === key || b.spec.variantId === key) hit = b;
+    }
+    if (!hit) return false;
+    spotlightBubble(hit, ms);
+    return true;
+  }
+
   return {
+    highlightDiscovery,
     spawn,
     update,
     floatText,

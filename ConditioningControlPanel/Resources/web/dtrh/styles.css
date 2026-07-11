@@ -1127,6 +1127,27 @@ img.rh-fx-spiralspin {
    hold. Raising it keeps the cursor "over" the held bubble the whole channel. */
 .cf-bubble.is-channeling { z-index: 30; }
 
+/* discovery spotlight: a golden pulsing halo the lesson/VN reveal delay puts on a
+   just-appeared bubble it's about to explain, so the eye finds the new thing while
+   it enters. Fades in, pulses through the ~2s window, fades out. */
+.cf-spotlight {
+  position: absolute;
+  inset: -20%;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 6;
+  border: 3px solid rgba(255, 238, 150, 0.95);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  animation: cfSpotPulse 0.9s ease-in-out infinite;
+}
+.cf-spotlight.cf-spotlight--in { opacity: 1; }
+.cf-spotlight.cf-spotlight--out { opacity: 0; }
+@keyframes cfSpotPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 18px 3px rgba(255, 225, 120, 0.6), inset 0 0 14px rgba(255, 225, 120, 0.4); }
+  50% { transform: scale(1.12); box-shadow: 0 0 32px 8px rgba(255, 236, 140, 0.9), inset 0 0 18px rgba(255, 236, 140, 0.55); }
+}
+
 /* pop / detonate / fade exits */
 .cf-bubble.is-pop { animation: cfPop 0.3s ease-out forwards; }
 @keyframes cfPop {
