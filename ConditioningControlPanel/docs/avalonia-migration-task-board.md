@@ -330,12 +330,19 @@ native-interop-timing) fault, observed on THIS machine (run via `dotnet run -c R
     lands vs the 240s cutoff; (3) `AverageFps` uses `frames / effectiveDuration` (total-based) so it is
     UNAFFECTED — consistent with the ~78 avg holding steady while Min reads 0/1. So the historic `MinFps=0`
     across sessions was never a real ≥1s freeze; the FPS floor genuinely held the whole run.
-    **QUEUED ONE-LINE FIX (STANDARD, not landed — defer to next gate window; needs a code build + `--smoke-test`
-    which requires killing the owner's live AvatarTube retest surface, disproportionate for a metric-only
-    correction):** drop the trailing partial bucket from `perSecond` (remove/guard the final `buckets.Add` in the
-    `else` branch, or normalize it by its true elapsed fraction). `TotalFrames`/`AverageFps` are total-based and
-    stay correct; only Min/Max stop being polluted. Zero product-behavior change. Verify: one Release
-    `--max-benchmark` should then report a real full-second MinFPS (expect ~30-70, not 0/1).
+    **FIX LANDED 2026-07-11 · @driver — `fix(bench)` commit below.** Dropped the trailing partial-second bucket
+    from `perSecond` (`BenchmarkFrameCounter.cs` `else` branch: `buckets.Add(bucketFrames)` now guarded by
+    `if (buckets.Count == 0)` so it is kept only for sub-1s runs where it is the sole data point; otherwise the
+    partial window is discarded). `TotalFrames`/`AverageFps` are total-based (`frames / effectiveDuration`) and
+    unchanged; only Min/Max stop being polluted. Zero product-behavior change (benchmark-only counter, not a
+    production or hot path). **EMPIRICALLY CONFIRMED:** post-fix Release `--max-benchmark` reported
+    `MaxIntensityMinFps=8.0` (a real worst full-second under max synthetic stress — all effects + web video +
+    chaos stacked) with `AvgFPS=74.8` holding, vs the historic artifactual 0/1. Deterministic fix, so one run
+    off the 0/1 value confirms it (no multi-run repro needed, unlike the intermittent SIGSEGV). Gates: slnf 0 ·
+    WPF sln 0 · Core 543/543 · smoke 44 tabs / Findings 16 (⊆ drift) / 0 unhandled. Row #2's `MinFps=0` half is
+    now CLOSED. NOTE: the corrected MinFPS=8 is one worst-second under a synthetic worst case that never occurs
+    in real sessions (which never stack every effect at once); if a future NORMAL-load run shows a real min
+    consistently in single digits, that would warrant its own investigation — not indicated by current data.
   - **WEB/URL STREAMING GAP RESOLVED 2026-07-11 · @driver — `feat(video)` commit below.** Investigated: the
     gap is real and NOT benchmark-only — THREE production callers pass URLs to `PlayUrl` and all were
     silently dropped as "file not found": `MainWindowViewModel.cs:786` (browser fullscreen direct-video

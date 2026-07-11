@@ -53,7 +53,16 @@ public static class BenchmarkFrameCounter
             }
             else
             {
-                buckets.Add(bucketFrames);
+                // Only the trailing PARTIAL-second bucket remains here (the span between the last
+                // 1s boundary and the duration cutoff). Dropping it: perSecond divides every bucket
+                // by a full BucketSeconds, so a near-empty final window would read as a spurious 0-1
+                // fps and become MinimumFps - a measurement artifact, not a real render stall. Its
+                // frames are already counted in `frames`, so AverageFps stays correct. Keep it only
+                // when it is the sole data point (sub-1s runs) so Min/Max are never empty.
+                if (buckets.Count == 0)
+                {
+                    buckets.Add(bucketFrames);
+                }
                 tcs.TrySetResult();
             }
         }
