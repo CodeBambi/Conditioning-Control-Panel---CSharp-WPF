@@ -872,7 +872,28 @@ IntPtr lParam, ref bool handled)` — HOLD it in a field so it isn't GC'd. HWND 
 no lag/detach; minimize+restore, exclusive-fullscreen exit, theme switch → tube lands in the WPF spot.
 
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
-**#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)** for autonomous tiers. **row #2 re-baseline is now BLOCKED**
+**AUTONOMOUS-TIER QUEUE EXHAUSTED 2026-07-11 · @driver — zero claimable OPEN rows remain for autonomous
+tiers (STANDARD/MECHANICAL with deterministic verification).** Exhaustive row-by-row audit this session:
+every remaining OPEN row is gated on JUDGMENT, headed-human visual verification, owner product decisions,
+or a Linux environment, so none is driver-completable. Specifically — #1 (JUDGMENT + human-in-loop mask
+verify); #2 (`MinFps=0` half CLOSED via `5dc47066`, scheduling half DONE via IMP-2, clean 240s re-baseline
+data now exists at AvgFPS 74.8 — residual is only the JUDGMENT libmpv tie-in); #3 (JUDGMENT owner-authorized
+engine-swap spike); #4 (effect-window sweep GREEN + version-drift + stub-hunt + perf-gate all DONE this
+session; residual parity re-verify is HEADED-HUMAN-GATED); #5 (Linux env); #6 (JUDGMENT epic + owner
+decisions); #8a/#8b (visual-verification-gated, board-excluded from the autonomous bar); DTRH-Linux/macOS-
+assets (blocked on #5/#6). The original 12-row IMP queue + all scan findings (I-6..I-10) + R-scrub + AI_AUDIT
++ subagents.json + BubbleLayer-mod-resolver are DONE/DECLINED. Full-gate run this session (`5dc47066`: Debug
+slnf 0 · WPF sln 0 · Core 543/543 · smoke 44 tabs / Findings 16 ⊆ drift / 0 unhandled · Release
+`--max-benchmark` AvgFPS 74.8, floor 30 held). **NEXT autonomous work re-opens only when: the owner returns
+an AvatarTube verdict (`1b6bbb6c`) that says "still wrong" (→ diagnose+fix), a JUDGMENT/owner decision lands
+on #1/#3/#6, a headed session enables the parity re-verify + #8a/#8b visual gates, or a Linux session opens
+#5. Goal deliberately left ACTIVE (not marked complete): the pending AvatarTube verdict could re-open work
+and the broader port is not 100% — autonomous-queue-exhaustion is a snapshot, not port-completion.**
+
+---
+
+**[SUPERSEDED by the exhaustion note above] Prior claim order — #4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)**
+for autonomous tiers. **row #2 re-baseline is now BLOCKED**
 (this session): its scheduling half is DONE via IMP-2 and `MinFps=0` is root-caused (un-decodable YouTube
 watch URL in the benchmark harness), but the clean 240s re-baseline is blocked by a PRE-EXISTING Release
 `--max-benchmark` window-show SIGSEGV (new row above, JUDGMENT native-crash forensics — needs a minidump
