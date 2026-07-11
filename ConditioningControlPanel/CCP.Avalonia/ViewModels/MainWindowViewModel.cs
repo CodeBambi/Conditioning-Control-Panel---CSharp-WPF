@@ -1403,26 +1403,6 @@ public partial class MainWindowViewModel : ObservableObject
         await ExitApplicationAsync();
     }
 
-    [RelayCommand]
-    private void ShowChaosOverlaySmokeTest()
-    {
-        try
-        {
-            var overlay = new ChaosOverlayWindow();
-            overlay.Show();
-            overlay.ShowCountdown(() =>
-            {
-                try { overlay.Close(); }
-                catch (Exception ex) { _logger?.LogWarning(ex, "Chaos overlay smoke-test close failed"); }
-            }, shortFlash: true);
-            _logger?.LogInformation("Chaos overlay smoke-test displayed");
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Failed to show Chaos overlay smoke-test");
-        }
-    }
-
     #endregion
 
     #region Title-bar status pills

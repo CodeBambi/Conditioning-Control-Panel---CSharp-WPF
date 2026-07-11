@@ -101,7 +101,6 @@ public interface IChaosMetaService
     bool TrySpendGold(int amount);
     void EquipStartBoon(string? boonId);
     void ApplyTo(ChaosRunConfig config);
-    void ApplyLifetimeBoons(ChaosRunState run);
     void MarkDiscovered(string codexId);
     bool IsDiscovered(string codexId);
     bool IsOwned(string id);
@@ -251,21 +250,6 @@ public sealed class ChaosMetaService : IChaosMetaService
         foreach (var id in State.PurchasedUpgrades)
             if (IsUpgradeActive(id))
                 ChaosUpgrades.ById(id)?.Apply(config);
-    }
-
-    public void ApplyLifetimeBoons(ChaosRunState run)
-    {
-        if (run == null) return;
-        foreach (var id in State.ActiveLifetimeBoons)
-        {
-            int lvl = BoonLevel(id);
-            var b = ChaosLifetimeBoons.ById(id);
-            if (b != null && lvl >= 1)
-            {
-                b.Apply?.Invoke(run, b.ValueAt(lvl));
-                if (lvl >= b.MaxLevel) run.MaxedBoons.Add(b.Id);
-            }
-        }
     }
 
     public void MarkDiscovered(string codexId)

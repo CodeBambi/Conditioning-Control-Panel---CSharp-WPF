@@ -206,7 +206,7 @@ public sealed class DtrhNativeEffects : IDtrhNativeEffects
     {
         try
         {
-            var cfg = scripted ? ChaosHappyPath.BuildFirstRunConfig() : ChaosRunConfig.FromSettings();
+            var cfg = scripted ? BuildFirstRunConfig() : ChaosRunConfig.FromSettings();
             var s = _settings?.Current;
             var meta = _meta?.State ?? new ChaosMetaState();
             int rankIndex = _meta?.RankIndex ?? 0;
@@ -274,4 +274,37 @@ public sealed class DtrhNativeEffects : IDtrhNativeEffects
             return JsonConvert.SerializeObject(new { difficulty = "Easy", difficultyMult = 1.0, durationSec = 180, waveCount = 5, effectIntensity = 0.85 });
         }
     }
+
+    /// <summary>The forced naked config for the very first descent (RunsCompleted == 0).
+    /// Relocated verbatim from the deleted native-run <c>ChaosHappyPath.BuildFirstRunConfig</c>
+    /// (native DTRH strip 2026-07-11) — the WEB game still requests the scripted first-run
+    /// shape through <see cref="BuildRunConfigJson"/> (WPF ChaosHappyPath.cs BuildFirstRunConfig
+    /// via DtrhHostService.cs:808-891).</summary>
+    private static ChaosRunConfig BuildFirstRunConfig() => new()
+    {
+        ScriptedFirstRun = true,
+        Difficulty = "Easy",
+        RunDurationSec = 180,
+        WaveCount = 5,
+        EnabledVariants = new List<string> { "flash", "subliminal" },
+        BoonDraftEnabled = false,
+        AllowCurses = false,
+        DartersEnabled = false,
+        SpawnRateMult = 0.6,   // = deleted ChaosHappyPath.R1_SPAWN_RATE_MULT
+        SinChance = 0.0,
+        EffectIntensity = 0.85,
+        DraftAutoResumeSec = 12,
+        AmbientMode = false,
+        MagnetEnabled = false,
+        FuseTimeMult = 1.0,
+        HitboxScale = 1.0,
+        DraftChoices = 3,
+        ScreenShakeEnabled = true,
+        ColorFlashesEnabled = true,
+        ShakeIntensity = 0.8,
+        StartingShields = 0,
+        StartingFocus = 50,
+        BaseMult = 1.0,
+        SparkGainMult = 1.0,
+    };
 }

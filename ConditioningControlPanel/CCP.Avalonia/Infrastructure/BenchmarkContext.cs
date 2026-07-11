@@ -86,7 +86,7 @@ public static class BenchmarkContext
         // 4-minute max benchmark split into 3 phases:
         // Phase 1 (0-60s): All effects at max intensity, local video
         // Phase 2 (60-180s): All effects + web browser video + all layers at full
-        // Phase 3 (180-240s): Chaos mode "down the rabbit hole" at max intensity
+        // Phase 3 (180-240s): continuing effects + video stress at max intensity
         const int TotalMinutes = 4;
         var totalDuration = TimeSpan.FromMinutes(TotalMinutes);
         Log.Information("[BENCH] Starting {TotalMinutes}-minute MAX-INTENSITY benchmark (all modules, all layers, all phases)", TotalMinutes);
@@ -113,7 +113,6 @@ public static class BenchmarkContext
         var lockCard = services.GetService<ILockCardService>();
         var popQuiz = services.GetService<IPopQuizService>();
         var bubbleCount = services.GetService<IBubbleCountService>();
-        var chaos = services.GetService<IChaosService>();
 
         // Build a session that has EVERY effect flag flipped on at MAX settings.
         var session = new Session
@@ -247,15 +246,16 @@ public static class BenchmarkContext
         phase2Cts.Dispose();
         Log.Information("[BENCH] === PHASE 2 COMPLETE ===");
 
-        // ── Phase 3: 180-240s — Chaos mode on top of continuing effects ──
-        Log.Information("[BENCH] === PHASE 3 (180-240s): Chaos mode + continuing effects ===");
+        // ── Phase 3: 180-240s — continuing effects + video stress ──
+        // (Native chaos-run phase dropped with the DTRH strip — web is the sole DTRH path,
+        // owner ruling 2026-07-11; the native chaos.StartRun surface no longer exists.)
+        Log.Information("[BENCH] === PHASE 3 (180-240s): continuing effects + video stress ===");
         var phase3Cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var phase3Task = DriveEffectsAsync(TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(200),
             flash, overlay, bubbles, subliminal, video, false, phase3Cts.Token);
         var phase3Video = RunVideoStressSegmentAsync(TimeSpan.FromMinutes(1), video, false, phase3Cts.Token);
-        var phase3Chaos = RunChaosModeAsync(TimeSpan.FromMinutes(1), chaos, phase3Cts.Token);
 
-        await Task.WhenAll(phase3Task, phase3Video, phase3Chaos);
+        await Task.WhenAll(phase3Task, phase3Video);
         phase3Cts.Dispose();
         Log.Information("[BENCH] === PHASE 3 COMPLETE ===");
 
@@ -291,7 +291,6 @@ public static class BenchmarkContext
         // Cleanup
         try
         {
-            if (chaos?.IsRunning == true) chaos.RequestStop();
             sessionService.StopSession(completed: false);
         }
         catch (Exception ex)
@@ -449,36 +448,6 @@ public static class BenchmarkContext
         }
         catch (OperationCanceledException) { try { video.ForceCleanup(); video.Stop(); } catch { } }
         catch (Exception ex) { Log.Debug(ex, "[BENCH] Web video stress segment failed"); }
-    }
-
-    private static async Task RunChaosModeAsync(TimeSpan duration, IChaosService? chaos, CancellationToken cancellationToken)
-    {
-        if (chaos == null) return;
-        try
-        {
-            Log.Information("[BENCH] Starting Chaos mode (down the rabbit hole) for {Duration}s", duration.TotalSeconds);
-            var config = new ChaosRunConfig
-            {
-                PlayMode = ChaosPlayMode.FreeDesktop,
-                Difficulty = "Extreme",
-                RunDurationSec = (int)duration.TotalSeconds,
-                WaveCount = 10,
-                DifficultyMult = 2.0,
-                EffectIntensity = 1.0,
-                DartersEnabled = true,
-                AllowCurses = true,
-                BoonDraftEnabled = false,
-                ScreenShakeEnabled = true,
-                ColorFlashesEnabled = true,
-                ShakeIntensity = 1.0,
-            };
-            await Task.Run(() => chaos.StartRun(config), cancellationToken);
-            await Task.Delay(duration, cancellationToken);
-            await Task.Run(() => chaos.RequestStop(), cancellationToken);
-            Log.Information("[BENCH] Chaos mode ended");
-        }
-        catch (OperationCanceledException) { try { chaos?.RequestStop(); } catch { } }
-        catch (Exception ex) { Log.Debug(ex, "[BENCH] Chaos mode failed"); }
     }
 
     private static async Task<(long WorkingSet, long Peak, long Managed)> SamplePeakMemoryAsync(TimeSpan duration, TimeSpan interval, CancellationToken cancellationToken)

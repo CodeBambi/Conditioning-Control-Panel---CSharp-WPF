@@ -21,7 +21,6 @@ public static class AvaloniaChaosCatalogs
 
         SeedLifetimeBoons();
         SeedUpgrades();
-        SeedBoonPool();
         SeedBubbleVariants();
     }
 
@@ -45,7 +44,6 @@ public static class AvaloniaChaosCatalogs
             LevelValues = new[] { 3.0, 4, 5, 5 },
             CapstoneDesc = "no need to hold. while it buzzes, hovering alone pops.",
             IsActiveUse = true, UseCooldownSec = 20,
-            Apply = (s, v) => s.ToyPower["vibe_popping"] = v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -58,7 +56,6 @@ public static class AvaloniaChaosCatalogs
             LevelValues = new[] { 1.0, 2, 3, 3 },
             CapstoneDesc = "each freeze also snaps every live bubble on screen.",
             IsActiveUse = true, UseCooldownSec = 0,
-            Apply = (s, v) => s.ToyPower["freeze_trigger"] = v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -71,7 +68,6 @@ public static class AvaloniaChaosCatalogs
             LevelValues = new[] { 10.0, 15, 20, 20 },
             CapstoneDesc = "two screens.",
             IsActiveUse = true, UseCooldownSec = 60,
-            Apply = (s, v) => s.ToyPower["porn_dvd"] = v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -84,7 +80,6 @@ public static class AvaloniaChaosCatalogs
             LevelValues = new[] { 60.0, 45, 30 },
             CapstoneDesc = "the snap clears EVERYTHING — every bubble on screen goes.",
             IsActiveUse = true, UseCooldownSec = 60,
-            Apply = (s, v) => s.ToyPower["snap_field"] = v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -97,7 +92,6 @@ public static class AvaloniaChaosCatalogs
             LevelValues = new[] { 1.0, 2, 3 },
             CapstoneDesc = "each whistle also calls a storm — eight more rabbits over the next ten seconds.",
             IsActiveUse = true, UseCooldownSec = 45,
-            Apply = (s, v) => s.ToyPower["rabbit_caller"] = v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -110,7 +104,6 @@ public static class AvaloniaChaosCatalogs
             LevelValues = new[] { 3.0, 4, 5 },
             CapstoneDesc = "charged pops chain-react — the current leaps on through every bubble close enough, and onward.",
             IsActiveUse = true, UseCooldownSec = 30,
-            Apply = (s, v) => s.ToyPower["e_stim"] = v,
         });
 
         // ---- Accessories (passives) ----
@@ -124,7 +117,6 @@ public static class AvaloniaChaosCatalogs
             UpgradeCosts = new[] { 250, 450 },
             LevelValues = new[] { 0.05, 0.10, 0.15 },
             CapstoneDesc = "every draft offers a sin, saying yes restores +1 resistance, and the first sin you embrace loses its sting entirely.",
-            Apply = (s, v) => s.SinExtraMult = v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -135,7 +127,6 @@ public static class AvaloniaChaosCatalogs
             UnlockCost = 150, MaxLevel = 5, ValueLabel = "{0:0.00}x reach",
             UpgradeCosts = new[] { 120, 160, 220, 300 },
             LevelValues = new[] { 1.2, 1.35, 1.6, 1.8, 2.0 },
-            Apply = (s, v) => s.ChainReactionReach = v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -147,12 +138,6 @@ public static class AvaloniaChaosCatalogs
             UpgradeCosts = new[] { 450, 700 },
             LevelValues = new[] { 1.5, 1.75, 2.0 },
             CapstoneDesc = "a heartbeat tells you when one is about to go. listen.",
-            Apply = (s, v) =>
-            {
-                s.BlindfoldPayMult = v;
-                s.BlindfoldActive = true;
-                s.BlindfoldOpacity = v >= 2.0 ? 0.25 : v >= 1.75 ? 0.32 : 0.40;
-            },
         });
         Add(new ChaosLifetimeBoon
         {
@@ -163,11 +148,6 @@ public static class AvaloniaChaosCatalogs
             UnlockCost = 250, MaxLevel = 3, ValueLabel = "x{0:0} at the brink",
             UpgradeCosts = new[] { 350, 550 },
             LevelValues = new[] { 5.0, 10, 20 },
-            Apply = (s, v) =>
-            {
-                s.LastBreathPayMult = v;
-                s.LastBreathWindowSec = v >= 20 ? 0.8 : v >= 10 ? 0.6 : 0.4;
-            },
         });
         Add(new ChaosLifetimeBoon
         {
@@ -178,11 +158,6 @@ public static class AvaloniaChaosCatalogs
             UnlockCost = 250, MaxLevel = 3, ValueLabel = "{0:0} rerolls",
             UpgradeCosts = new[] { 300, 500 },
             LevelValues = new[] { 1.0, 2, 3 },
-            Apply = (s, v) =>
-            {
-                s.RerollsLeft = (int)v;
-                s.ChanceDoubleOdds = 0.50 + 0.05 * (Math.Clamp(v, 1, 3) - 1);
-            },
         });
         Add(new ChaosLifetimeBoon
         {
@@ -193,7 +168,6 @@ public static class AvaloniaChaosCatalogs
             UnlockCost = 200, MaxLevel = 5, ValueLabel = "{0:0.00} pull",
             UpgradeCosts = new[] { 200, 300, 450, 650 },
             LevelValues = new[] { 0.12, 0.22, 0.32, 0.44, 0.58 },
-            Apply = (s, v) => s.CursorPullStrength = v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -205,7 +179,6 @@ public static class AvaloniaChaosCatalogs
             UpgradeCosts = new[] { 450, 700 },
             LevelValues = new[] { 1.20, 1.45, 1.70 },
             CapstoneDesc = "the bouncing texts answer to you too — smack them to turn them.",
-            Apply = (s, v) => { s.SpankerActive = true; s.SpankGrowFactor = v; },
         });
         Add(new ChaosLifetimeBoon
         {
@@ -217,7 +190,6 @@ public static class AvaloniaChaosCatalogs
             UpgradeCosts = new[] { 350, 550 },
             LevelValues = new[] { 3.0, 4, 5 },
             CapstoneDesc = "a thought that brushes a rabbit splits in two. and those split too. (max 8, +2s)",
-            Apply = (s, v) => s.IntrusiveThoughtsSec = v,
         });
 
         // ---- Utility (charms) ----
@@ -231,7 +203,6 @@ public static class AvaloniaChaosCatalogs
             UpgradeCosts = new[] { 350, 600, 900 },
             LevelValues = new[] { 0.010, 0.015, 0.020, 0.020 },
             CapstoneDesc = "the gold doubles — twenty to forty a bubble.",
-            Apply = (s, v) => s.GoldenChance = v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -243,7 +214,6 @@ public static class AvaloniaChaosCatalogs
             UpgradeCosts = new[] { 400, 650, 1000 },
             LevelValues = new[] { 1.0, 2, 3, 4 },
             CapstoneDesc = "the hole tips you 10% extra on everything gathered when you surface.",
-            Apply = (s, v) => s.DropPerPop = (int)v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -253,7 +223,6 @@ public static class AvaloniaChaosCatalogs
             Flavor = "glaze over. let the numbers do the looking.",
             UnlockCost = 120, MaxLevel = 1, ValueLabel = "on",
             LevelValues = new[] { 1.0 },
-            Apply = (s, v) => s.ShowPopScores = true,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -264,7 +233,6 @@ public static class AvaloniaChaosCatalogs
             UnlockCost = 120, MaxLevel = 4, ValueLabel = "+{0:0}% size",
             UpgradeCosts = new[] { 180, 260, 380 },
             LevelValues = new[] { 5.0, 10, 15, 25 },
-            Apply = (s, v) => s.BubbleScale = 1.0 + v / 100.0,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -275,7 +243,6 @@ public static class AvaloniaChaosCatalogs
             UnlockCost = 200, MaxLevel = 4, ValueLabel = "{0:0} pops a point",
             UpgradeCosts = new[] { 300, 450, 650 },
             LevelValues = new[] { 60.0, 50, 40, 30 },
-            Apply = (s, v) => s.ShieldRegenPops = (int)v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -286,7 +253,6 @@ public static class AvaloniaChaosCatalogs
             UnlockCost = 100, MaxLevel = 3, ValueLabel = "+{0:0} resistance",
             UpgradeCosts = new[] { 200, 350 },
             LevelValues = new[] { 1.0, 2, 3 },
-            Apply = (s, v) => { s.Shields += (int)v; s.Config.StartingShields += (int)v; },
         });
         Add(new ChaosLifetimeBoon
         {
@@ -297,7 +263,6 @@ public static class AvaloniaChaosCatalogs
             UnlockCost = 200, MaxLevel = 3, ValueLabel = "{0:0} saves",
             UpgradeCosts = new[] { 300, 450 },
             LevelValues = new[] { 1.0, 2, 3 },
-            Apply = (s, v) => s.CollarSaves = (int)v,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -308,11 +273,6 @@ public static class AvaloniaChaosCatalogs
             UnlockCost = 150, MaxLevel = 4, ValueLabel = "x{0:0.00} baseline",
             UpgradeCosts = new[] { 250, 400, 600 },
             LevelValues = new[] { 1.1, 1.2, 1.3, 1.45 },
-            Apply = (s, v) =>
-            {
-                s.Config.BaseMult = v;
-                s.BenignBaseline = v >= 1.45 ? 0.60 : v >= 1.3 ? 0.55 : v >= 1.2 ? 0.50 : 0.45;
-            },
         });
         Add(new ChaosLifetimeBoon
         {
@@ -324,7 +284,6 @@ public static class AvaloniaChaosCatalogs
             UpgradeCosts = new[] { 250, 400, 600 },
             LevelValues = new[] { 10.0, 20, 30, 40 },
             CapstoneDesc = "snapping one in its final 1.5 seconds pays triple.",
-            Apply = (s, v) => s.FuseTimeMult *= 1.0 + v / 100.0,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -334,7 +293,6 @@ public static class AvaloniaChaosCatalogs
             Flavor = "borrowed from the white rabbit. he knows where you live.",
             UnlockCost = 150, MaxLevel = 1, ValueLabel = "on",
             LevelValues = new[] { 1.0 },
-            Apply = (s, v) => s.ShowWaveTimer = true,
         });
         Add(new ChaosLifetimeBoon
         {
@@ -346,13 +304,6 @@ public static class AvaloniaChaosCatalogs
             UpgradeCosts = new[] { 380, 650, 950 },
             LevelValues = new[] { 13.0, 11, 9, 8 },
             CapstoneDesc = "the stone skips — every cast sends three waves, a second apart.",
-            Apply = (s, v) =>
-            {
-                s.RippleRechargeSec = v;
-                int lvl = ChaosMeta.BoonLevel("skipping_stone");
-                s.RippleRadiusPx = ChaosTuning.RIPPLE_RADIUS_PX + lvl * ChaosTuning.RIPPLE_RADIUS_PER_LVL_PX;
-                s.RippleLifeMs = ChaosTuning.RIPPLE_LIFE_MS + lvl * ChaosTuning.RIPPLE_LIFE_PER_LVL_MS;
-            },
         });
     }
 
@@ -389,219 +340,6 @@ public static class AvaloniaChaosCatalogs
         Add(new ChaosUpgrade { Id = "extreme_tier", Branch = ChaosBranch.Depth, Name = "Inescapable Tier", Cost = 350, Glyph = "🌀",
             Desc = "opens the inescapable difficulty in the descent setup.",
             Flavor = "the last door was never locked." });   // no-op Apply: flag stored at purchase time (WPF ChaosUpgrades.cs:88)
-    }
-
-    private static void SeedBoonPool()
-    {
-        void Add(ChaosBoon b)
-        {
-            if (ChaosBoonPool.All.Exists(x => x.Id == b.Id)) return;
-            ChaosBoonPool.All.Add(b);
-        }
-
-        // ---- WPF parity: v1 draftable mantras / sins ----
-        Add(new ChaosBoon
-        {
-            Id = "defuse_chain", Name = "Snap Chain",
-            Desc = "for 0.9s after every snap, a trigger can't break your streak, feed your lust, or spend your resistance. +0.10x run multiplier.",
-            Rarity = ChaosRarity.Uncommon, RunMultBonus = 0.10,
-            Apply = s => s.DefuseInvulnMs = 900,
-            Flavor = "one clean snap buys a heartbeat of grace."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "golden_touch", Name = "Golden Touch",
-            Desc = "+0.15x run multiplier, immediately.",
-            Rarity = ChaosRarity.Uncommon, RunMultBonus = 0.15,
-            Apply = _ => { /* RunMultBonus is the effect */ },
-            Flavor = "nothing down here is actually free."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "extra_shield", Name = "Left Brain",
-            Desc = "+2 resistance, right now.",
-            Rarity = ChaosRarity.Common,
-            Apply = s => s.Shields += 2,
-            Flavor = "the part still arguing. give it something to hold."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "gold_digger", Name = "Gold Digger",
-            Desc = "golden bubbles burst into 3 falling droplets worth 3-7 gold each. catch them before they slip off screen.",
-            Rarity = ChaosRarity.Uncommon, Unique = true,
-            Apply = s => s.GoldDiggerEnabled = true,
-            Flavor = "she loves you for your wallet. you knew."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "welcome_shower", Name = "Welcome Shower",
-            Desc = "every loop opens with 6 treats raining from the top of the screen.",
-            Rarity = ChaosRarity.Common, Unique = true,
-            Apply = s => s.WelcomeShowerEnabled = true,
-            Flavor = "a warm welcome, every time you go back under."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "heavy_drop", Name = "Heavy Drop",
-            Desc = "every 10th bubble is a giant: x1.55 size, drifts at half speed, lives 9s, pays x3.",
-            Rarity = ChaosRarity.Common, Unique = true,
-            Apply = s => s.HeavyDropEvery = 10,
-            Flavor = "some things are worth waiting under."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "gg_rabbits", Name = "GG make more GG",
-            Desc = "15% of popped treats burst into 3 wild rabbits that mow down everything in their path.",
-            Rarity = ChaosRarity.Rare, Unique = true,
-            Apply = s => s.GgRabbitChance = 0.15,
-            Flavor = "good girls multiply."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "size_queen", Name = "Size Queen",
-            Desc = "every snap sends out an expanding ring, 430px wide, that pops every treat it touches.",
-            Rarity = ChaosRarity.Uncommon, Unique = true,
-            Apply = s => s.RippleEnabled = true,
-            Flavor = "bigger is a love language."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "aftermath", Name = "Aftermath",
-            Desc = "snap a live bubble in its final 1.5s and the spot crackles for 2s: a 170px zone where anything drifting through pops itself.",
-            Rarity = ChaosRarity.Uncommon, Unique = true,
-            Apply = s => s.AftermathEnabled = true,
-            Flavor = "you can still feel it after. that's the point."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "focus_here", Name = "Focus here...",
-            Desc = "the pendulum swings once per loop. pops during its 2.5s slow swing pay x3.",
-            Rarity = ChaosRarity.Uncommon, Unique = true,
-            RequiresAny = new[] { "pendulum_swing" },
-            Apply = s => s.PendulumPayMult = 3.0,
-            Flavor = "watch the watch. everything else can wait."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "overload", Name = "Overload",
-            Desc = "the e-stim runs double charges per press: 6/8/10 charged pops by toy level.",
-            Rarity = ChaosRarity.Rare, Unique = true,
-            RequiresAny = new[] { "e_stim" },
-            Apply = s => s.EStimChargeMult = 2,
-            Flavor = "more than the dial was built for."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "afterglow", Name = "Afterglow",
-            Desc = "when the buzz ends it lingers 2.5s more, still popping whatever you hover.",
-            Rarity = ChaosRarity.Rare, Unique = true,
-            RequiresAny = new[] { "vibe_popping" },
-            Apply = s => s.AfterglowSec = 2.5,
-            Flavor = "it never really stops. you just stop noticing."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "casting_couch", Name = "Casting Couch",
-            Desc = "the logo splits on its first two bounces: one becomes two, then four.",
-            Rarity = ChaosRarity.Rare, Unique = true,
-            RequiresAny = new[] { "porn_dvd" },
-            Apply = s => s.DvdSplitBounces = 2,
-            Flavor = "everyone starts somewhere."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "tail_plug", Name = "Tail-Plug",
-            Desc = "every rabbit drags a sparkling trail for 2s that pops anything within 46px of it.",
-            Rarity = ChaosRarity.Rare, Unique = true,
-            RequiresAny = new[] { "rabbit_caller", "the_pull", "the_spanker" },
-            Apply = s => s.RabbitTrailSec = 2.0,
-            Flavor = "you'll know exactly where they've been."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "unleashed", Name = "Unleashed",
-            Desc = "each time the collar saves your streak, a golden shockwave snaps every live bubble on screen for full pay.",
-            Rarity = ChaosRarity.Rare, Unique = true,
-            RequiresAny = new[] { "collar" },
-            Apply = s => s.UnleashedEnabled = true,
-            Flavor = "held tight, then let go all at once."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "electrified_rabbits", Name = "Electrified Rabbits",
-            Desc = "every bubble a spanked rabbit mows down discharges, arcing lightning into up to 3 bubbles within 620px.",
-            Rarity = ChaosRarity.Rare, Unique = true,
-            RequiresAll = new[] { "the_spanker", "e_stim" },
-            Apply = s => s.ElectrifiedRabbits = true,
-            Flavor = "you wired the paddle. of course you did."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "body_buzz", Name = "Body Buzz",
-            Desc = "1 treat pop in 8 fires a 440px shockwave, arcing lightning into up to 8 bubbles caught inside it.",
-            Rarity = ChaosRarity.Rare, Unique = true,
-            RequiresAll = new[] { "chain_reaction", "e_stim" },
-            Apply = s => s.EStimShockwaveChance = 0.125,
-            Flavor = "it hums under your skin between pops."
-        });
-
-        // ---- sins ----
-        Add(new ChaosBoon
-        {
-            Id = "hair_trigger", Name = "Hair Trigger",
-            Desc = "every trance burns 25% faster. in exchange, +0.40x run multiplier.",
-            Rarity = ChaosRarity.Rare, IsCurse = true, Unique = true, RunMultBonus = 0.40,
-            Apply = s => s.FuseTimeMult *= 0.75,
-            Flavor = "everything goes off early. including you."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "playing_fire", Name = "Playing with fire",
-            Desc = "trigger effects last 50% longer. in exchange, snapping a live bubble in its final second tips 5-9 gold, plus +0.15x run multiplier.",
-            Rarity = ChaosRarity.Rare, IsCurse = true, Unique = true, RunMultBonus = 0.15,
-            Apply = s => { s.DetonationDurationMult = 1.5; s.LastSecondGoldEnabled = true; },
-            ApplyShielded = s => s.LastSecondGoldEnabled = true,
-            Flavor = "warm hands were always the price."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "bright_colors", Name = "Look at the bright colors...",
-            Desc = "5% of spawns are prism bubbles wearing another bubble's look. popping one pays x10 and fires the copied effect at full strength.",
-            Rarity = ChaosRarity.Rare, IsCurse = true, Unique = true,
-            Apply = s => s.PrismChance = 0.05,
-            ApplyShielded = s => { s.PrismChance = 0.05; s.PrismTreatOnly = true; },
-            Flavor = "so pretty you forget to ask what's inside."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "cam_girl", Name = "Cam Girl",
-            Desc = "bubbles flee your cursor, stronger than any pull. in exchange, 25% of pops tip 2-4 gold, plus +0.40x run multiplier.",
-            Rarity = ChaosRarity.Rare, IsCurse = true, Unique = true, RunMultBonus = 0.40,
-            Apply = s => { s.CamGirlFlee = 1.6; s.CamGirlTipChance = 0.25; },
-            ApplyShielded = s => s.CamGirlTipChance = 0.25,
-            Flavor = "look, don't touch. tips appreciated."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "the_urge", Name = "The urge",
-            Desc = "the rest of the descent pays x3 on everything. your toys are off-limits.",
-            Rarity = ChaosRarity.Rare, IsCurse = true, Unique = true,
-            Apply = s => { s.UrgeMult = 3.0; s.ActivesDisabled = true; },
-            ApplyShielded = s => s.UrgeMult = 2.0,
-            Flavor = "bare hands. that's the deal."
-        });
-        Add(new ChaosBoon
-        {
-            Id = "double_or_nothing", Name = "Relapse",
-            Desc = "60% chance the descent runs one loop longer than promised, and that loop pays double gold and double drops.",
-            Rarity = ChaosRarity.Rare, IsCurse = true, Unique = true,
-            Apply = s => s.RelapseLoopArmed = Random.Shared.NextDouble() < 0.6,
-            ApplyShielded = s => s.RelapseLoopArmed = true,
-            Flavor = "one more. it's always just one more."
-        });
-        // WPF parity (ChaosModels.cs:313-392): the draft pool is EXACTLY these 23 mantras/sins.
-        // The seven non-WPF "common-effect" boons (focus_crystal, combo_rush, cold_snap,
-        // starter_purse, unlock_spiral, puritan_oath, forbidden_tome) were removed 2026 to match.
     }
 
     private static void SeedBubbleVariants()
