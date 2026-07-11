@@ -5,7 +5,7 @@
              x:Class="ConditioningControlPanel.Avalonia.Features.PresetCard"
              Cursor="Hand"
              Width="110"
-             Height="80"
+             Height="100"
              x:DataType="{x:Type local:PresetCard}">
 
   <Border x:Name="RootBorder"

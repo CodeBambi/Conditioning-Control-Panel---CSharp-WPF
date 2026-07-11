@@ -125,7 +125,7 @@
                       BorderThickness="1"
                       CornerRadius="10"
                       Width="110"
-                      Height="80"
+                      Height="100"
                       Margin="4"
                       Cursor="Hand"
                       ToolTip.Tip="{Binding [tooltip_create_a_new_preset_from_current_settings], Source={x:Static loc:LocalizationManager.Instance}}">
