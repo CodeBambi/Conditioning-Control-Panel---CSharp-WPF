@@ -956,8 +956,10 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   correction 2 — mandatory layer has no `DurationMs`; do NOT wire `_videoLayer.LengthKnown` into the safety-cap
   watermark), `EndedNaturally` at 0.90; `DtrhGameHostService` subscribes after orchestrator creation, translates per
   WPF `:618-623`, and **unsubscribes in DisposeAll** (leak trap — long-lived singleton). Telemetry-only (no XP term).
-  `port-parity-auditor`: **SHIP** (7/7 A–G). Follow-up (non-blocking, per auditor + advisor): a skip-boundary
-  regression test (0.89/0.90/dur≤0) — head-side math, NOT Core-unit-testable, so Core floor stays **590**.
+  `port-parity-auditor`: **SHIP** (7/7 A–G). Follow-up **✅ DONE** (fan-out wave-1 Lane C, `4002b282`): extracted the skip predicate to Core
+  `ChaosSkipClassification.IsSkip` (byte-identical to WPF `DtrhHostService.cs:618-623`), rewired
+  `DtrhGameHostService:225`, pinned with 12 boundary tests (0.89→skip / 0.90 boundary→not / over-watch→not /
+  dur≤0 guard→not) — now Core-unit-testable. **Live Core count 604** (was 590; run-gates.sh floor pin unchanged, never decreased).
   - **🎉 S2c FULLY COMPLETE (2a+2b+2c+3a+3b):** DTRH web game is constructed, windowed, DI-registered, Lab-launchable,
     with faithful world-freeze **video** + watch-credit telemetry. Gates on both 3a/3b: slnf 0 err (383 warn =
     baseline) · WPF head 0 err · Core 590/590 · smoke 44 tabs / 0 unhandled / Findings 16 (band UNCHANGED across both).
@@ -968,6 +970,13 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
     DEFERRAL (documented in `DtrhNativeEffects.SetWorldFrozen`). **Future work:** add position-preserving
     `PauseSpokenAudio`/`ResumeSpokenAudio` to the Avalonia avatar, then extend `SetWorldFrozen` to call them. Touches
     the avatar audio subsystem (out of the video-scoped S2c-3 slice); immersion-only, no economy/state impact.
+  - **✅ CAPABILITY LANDED 2026-07-11 · @driver (fan-out wave-1 Lane B, `e49209d5`):** position-preserving
+    `PauseSpokenAudio`/`ResumeSpokenAudio` added to the Avalonia avatar — `IAudioPlayer.Pause()/Resume()` no-op DIM
+    defaults (frozen `WpfAudioPlayer` untouched), `AvaloniaAudioPlayer` LibVLC `SetPause(true)`/`Play()` guarded by
+    `State`, `AvatarTubeWindow.PauseSpokenAudio/ResumeSpokenAudio` (does NOT touch `_isSpeakingAudio`). +2 Core tests.
+    **STILL PENDING: wire `DtrhNativeEffects.SetWorldFrozen` → these methods** (the S2c-3 driver mini-slice, now
+    unblocked). `port-parity-auditor`: REWORK→absence-on-disk only; re-implemented under driver control from the gold
+    recon spec (executor's claimed diff was ephemeral — worktree torn down).
 - **SUB-PART 7 “In-world integration edits” VERIFY COMPLETE 2026-07-11 · @driver** (docs-only). Audited WPF commit
   `8343e1e0` (“gaze-click follows camera; glitch/cascade draw the flash pool”) for standalone (non-DTRH)
   flash/video/gaze behavior needing an independent Avalonia port. Three changes; disposition:
@@ -1006,11 +1015,50 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   the one seam addition needed. Recommend `avalonia-research` + `wpf-parity` + advisor before implementing; run
   `port-parity-auditor` specifically against the privacy invariant. Standalone (non-DTRH) — tracked here because the
   sub-part-7 verify surfaced it, but it is its own feature, not gated on DTRH web-boot.
-  - **NEXT:** the gaze-autostart row above + the avatar-freeze future seam. **All other row-#6 phase-1–7 appendix
+  - **NEXT:** gaze-autostart (Lane A, `843500a8`) + avatar-freeze capability (Lane B, `e49209d5`) are BOTH LANDED.
+    Remaining row-#6 tail: **wire `DtrhNativeEffects.SetWorldFrozen` → avatar Pause/ResumeSpokenAudio** (S2c-3 driver
+    mini-slice, now unblocked by Lane B). **All other row-#6 phase-1–7 appendix
     sub-parts are LANDED or verify-resolved** (web bundle = csproj Content-link at Windows head `:61`; host+bridge =
     S2c; telemetry = S1; meta deltas done; Lab launch = S2c-2c; in-world = this verify). **Live web-boot
     verification of phases 1–7 remains an owner-headed gate; phase 8 native-chaos decommission stays out of
     autonomous scope.**
+
+### 🌊 FAN-OUT WAVE-1 RETROSPECTIVE (2026-07-11 · @driver)
+
+Ran ONE background `pi-dynamic-workflows` run (`isolation: "worktree"`, 11 agents, 4 phases). **3 code lanes LANDED
+under driver control; tooling was costly + degraded.**
+
+- **Lanes landed** (gates on merged tree — slnf 0 err · WPF head 0 err · Core 590→604 · smoke 44 tabs / 0 unhandled /
+  Findings 16 ⊆ benign band): A gaze-autostart (`843500a8`), C skip-classification (`4002b282`), B avatar
+  pause/resume capability (`e49209d5`). **All three executor diffs were EPHEMERAL** (worktrees + `pi/wf/*` branches
+  torn down on completion, discarding the unstaged work); the driver **re-materialised each from report + audit +
+  ground truth**, re-gated, and committed surgically-scoped.
+- **Audits (port-parity-auditor):** A = SHIP-WITH-FIXES (privacy invariant mechanically verified — activates via
+  camera-free `Activate()`, never `Start()`/`StartTracking`; `RevokeConsent`→`IsRunning=false`→stop, so **the OPEN
+  SEAM QUESTION is RESOLVED: no consent seam added — consent is implicit once `IsRunning`**). B/C = STOP/REWORK
+  **purely absence-on-disk**; quoted code confirmed correct (C predicate byte-identical to WPF `:622`; B WPF cites
+  `Speech.cs:1655/1663/1619` accurate).
+- **⚠️ TOOLING FAILURES (fix before wave-2):** (1) **worktree durability** — teardown discards unstaged lane work;
+  reports are the ONLY durable artifact. (2) **agentType silently ignored** (only `.pi/agents/*.md` register) —
+  fell back to a default capable agent (benign; discipline was inline). (3) **read-only recon agent went ROGUE** —
+  the vision agent wrote a partial Awareness Core seam to the MAIN tree (read-only agents get no worktree) and
+  paused for interactive approval; quarantined (wave-2 below). (4) **cost blowout: 21.4M tokens / ~43 min** — the 3
+  companion-recon agents on `kimi:xhigh` looped to 6.9M/6.2M/2.4M tokens with 2-of-3 NON-deliverables. **Lesson: never
+  fan out open-ended recon on xhigh tiers unattended; bound every recon with a strict output contract + token cap.**
+
+### 🌊 FAN-OUT WAVE-2 (companion) — STATUS
+
+- **W2-V Vision/Awareness — 🟡 QUARANTINED, OWNER-GATED.** The rogue recon agent's partial Core seam (`App.cs`
+  `IKeywordTriggerService.GetRecentFires()/MuteKeywordEcho()` + new `IWindowTitleProvider`/`AppClusterMap`/
+  `IAppClusterMap`) is preserved in `git stash@{0}` ("wave2-vision-seam-quarantine"), NOT committed; committed HEAD
+  builds 0 err without it. **Owner sign-off required** (AGENTS.md §7) before the head-side `WindowsAwarenessService` +
+  `Program.cs` DI registration; needs a `wpf-archaeologist` parity pass first.
+- **W2-S Speech-out — 🔴 BLOCKED (recon failed).** Agent returned "Acknowledged. Standing by." (zero content).
+  Re-dispatch recon with a strict output contract. **Hard sequencing:** touches `AvatarTubeWindow` speech files
+  (Lane B's file) — sole-owner lane.
+- **W2-C Chat-in — 🔴 BLOCKED (recon failed + product-gated).** Agent returned a status ping. AI companion is
+  Patreon-gated on the cloud endpoint — behavior/gating changes are an owner product decision. Re-dispatch recon;
+  keep footprint on services/viewmodels (disjoint from W2-S).
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
