@@ -270,6 +270,33 @@ native-interop-timing) fault, observed on THIS machine (run via `dotnet run -c R
     so ONE clean run is NOT proof (run 1 was clean and it still crashes). Tier: JUDGMENT (fable-5); touches the
     core video teardown path. This is the concrete, root-caused replacement for this row's original "capture a
     dump" first step.
+  - **RESOLVED 2026-07-11 · @driver — `fix(video)` commit below. Fix landed, adversarially reviewed, and
+    verified with 3 consecutive clean Release `--max-benchmark` runs (vs ~1-in-2 crash pre-fix).** Implemented
+    exactly the prescribed fix, grounded in the WPF `#479` contract (wpf-archaeologist pass on
+    `Services/Video/VideoService.cs`): WPF NEVER calls `player.Stop()` inline on the UI thread — `CloseAll`
+    (`VideoService.cs:2517-2534`) offloads Stop to `Task.Run` and blocks the UI thread on a bounded
+    `Task.WaitAll(500ms)`, then defers `Dispose()` ~1s off-thread (the `#479` use-after-free mitigation). Ported
+    to `VideoLayer.Stop()`: the synchronous UI-thread `try { player?.Stop(); } catch { }` is replaced by
+    `Task.Run(() => player.Stop())` + a bounded `stopTask.Wait(500)` on the UI thread (a MANAGED wait — no native
+    SEH crosses the UI thread), and the pre-existing deferred teardown now `await`s that stop-task before
+    `player.Dispose()`/`Marshal.FreeHGlobal`. The vmem `Lock`/`Display` callbacks only take `_bufferLock` (never
+    dispatch to the UI thread), so the bounded wait cannot deadlock; buffers are still retired only after the
+    player has stopped, preserving the one-player-at-a-time invariant. Gates: Debug slnf 0 err, WPF sln 0 err,
+    Core 543/543, smoke 44 tabs/0 unhandled/16 benign. `port-parity-auditor` verdict: **SHIP** (native UAF closed,
+    no deadlock, rapid-replay downgraded to a bounded non-crash tradeoff WPF also accepts, all callers bounded and
+    strictly better than the old UNBOUNDED inline stop). Release verification: runs 1/2/3 all reached the full
+    `[BENCH] Max-intensity` summary + wrote a fresh report; NO crash dumps. HONEST BOUND: an intermittent fault's
+    absence across 3 runs is strong supporting evidence, not conclusive proof — but the fix mechanistically removes
+    the exact faulting frame (`libvlc_media_player_stop` on the UI thread, per the dump triage) and mirrors the
+    WPF mitigation, so this is a root-cause fix, not a lucky non-repro. WER stays armed.
+  - **FOLLOW-UP (pre-existing, out of scope for the fix above) — latent `LockCallback` null-plane 2026-07-11 · STANDARD/JUDGMENT.**
+    The `port-parity-auditor` flagged that `VideoLayer.LockCallback` (~`VideoLayer.cs:497`) writes `IntPtr.Zero`
+    to the plane and returns `IntPtr.Zero` when `!_bufferValid`/`_buffers==null`. VLC vmem has no documented
+    "skip" contract, so a decoder that dereferences a null plane during the stop window could fault. This window
+    (`_bufferValid=false` at the top of `Stop()` until VLC actually stops) exists identically before AND after the
+    fix above — NOT a regression, and it is apparently not the crash the dump captured. Safer would be to hand back
+    the still-allocated `buffers[_decodeIdx]` (as during playback) rather than NULL. Small, isolated; verify with
+    the same Release `--max-benchmark` loop.
   - **#2/#3/#4 status correction:** the Release harness now REACHES window-show and runs the full session (so it
     is no longer window-show-blocked), but it crashes at teardown ~1-in-2, so an END-OF-RUN report (AvgFps/MinFps)
     cannot be reliably captured until the LibVLC-stop fix lands. #2/#3/#4 are **partially** unblocked, not fully.

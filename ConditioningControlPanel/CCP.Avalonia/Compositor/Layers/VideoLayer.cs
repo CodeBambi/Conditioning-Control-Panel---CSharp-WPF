@@ -354,7 +354,21 @@ public class VideoLayer : BaseLayer, IDisposable
             player.LengthChanged -= OnLengthChanged;
             player.TimeChanged -= OnTimeChanged;
         }
-        try { player?.Stop(); } catch { }
+        // Stop the player OFF the UI thread. Calling libvlc_media_player_stop synchronously on
+        // the UI thread intermittently access-violates (a native SEH fault the try/catch cannot
+        // catch in .NET Core) - the WPF #479 hazard: VideoService.cs:2517 offloads Stop to
+        // Task.Run for this exact reason and never calls it inline on the dispatcher. The
+        // Lock/Display vmem callbacks run on VLC decoder threads and only take _bufferLock (they
+        // never dispatch to the UI thread), so stopping off-thread while the UI thread briefly
+        // waits below cannot deadlock against this method.
+        var stopTask = player != null
+            ? Task.Run(() => { try { player.Stop(); } catch { } })
+            : Task.CompletedTask;
+        // Bounded UI-side wait on the MANAGED task (no native call crosses the UI thread)
+        // preserves the invariant the old synchronous Stop() gave us: the player has ceased its
+        // vmem callbacks before the buffers it decoded into are retired below (or a new Play()
+        // allocates fresh ones). Mirrors WPF's bounded Task.WaitAll(500ms) at VideoService.cs:2534.
+        try { stopTask.Wait(500); } catch { }
 
         IntPtr[]? buffers;
         SKImage?[]? images;
@@ -391,7 +405,12 @@ public class VideoLayer : BaseLayer, IDisposable
             var previousTeardown = _teardownTask;
             var thisTeardown = Task.Run(async () =>
             {
-                await Task.Delay(400);
+                // Ensure the off-UI-thread Stop has fully completed (even if the bounded UI-side
+                // Wait above timed out) before disposing - disposing a player mid-Stop is itself a
+                // native crash path. Then the existing settle delay lets any last in-flight vout
+                // callback drain before the pinned buffers it wrapped are freed.
+                try { await stopTask.ConfigureAwait(false); } catch { }
+                await Task.Delay(400).ConfigureAwait(false);
                 try { player?.Dispose(); } catch { }
                 try { media?.Dispose(); } catch { }
                 if (images != null)
