@@ -526,6 +526,29 @@ public interface IBarkService
     void NotifyChaosTeaseClicked() { }
     /// <summary>5+ Teases denied in a single run. ctx: denied_count (WPF BarkService.cs:318 "ChaosTeaseDeniedStreak").</summary>
     void NotifyChaosTeaseDeniedStreak(int deniedCount) { }
+
+    // ---- S2c-2a bubble-economy / lesson / run-end barks (WPF Services/Companion/BarkService.cs).
+    //      Default no-op bodies so existing implementers/fakes keep compiling (S2b-1 precedent). ----
+    /// <summary>A benign treat bubble was popped. ctx: variant, payload, combo.</summary>
+    void NotifyChaosBenignPopped(string variant, string payload, int combo) { }
+    /// <summary>A live bubble was defused in time. ctx: combo, variant, difficulty.</summary>
+    void NotifyChaosBubbleDefused(int combo, string variant, string difficulty) { }
+    /// <summary>A live bubble detonated (fuse expired undefused). ctx: variant, strength, runDetonations, combo, difficulty.</summary>
+    void NotifyChaosBubbleDetonated(string variant, double strength, double runDetonations, int combo, string difficulty) { }
+    /// <summary>A detonation was absorbed by a shield. ctx: variant, strength, runDetonations, combo, difficulty, shields.</summary>
+    void NotifyChaosBubbleDetonatedAbsorbed(string variant, double strength, double runDetonations, int combo, string difficulty, int shields) { }
+    /// <summary>First-ever defuse (teach beat).</summary>
+    void NotifyChaosDefuseFirst() { }
+    /// <summary>Defused with no focus meter (teach beat).</summary>
+    void NotifyChaosDefuseNoFocus() { }
+    /// <summary>Defused by releasing (teach beat).</summary>
+    void NotifyChaosDefuseRelease() { }
+    /// <summary>A bubble was detonated by a direct click (teach beat).</summary>
+    void NotifyChaosClickDetonate() { }
+    /// <summary>A lesson card was completed. ctx: lesson id.</summary>
+    void NotifyChaosLessonComplete(string id) { }
+    /// <summary>Run complete voice cue. ctx: finalXp, difficulty (WPF DtrhHostService.cs:448).</summary>
+    void NotifyChaosRunCompleted(int finalXp, string difficulty) { }
 }
 
 public interface IVideoInfo

@@ -3538,6 +3538,17 @@ public sealed class AvaloniaBarkService : IBarkService
     public void NotifyChaosTeaseDenied(int deniedCount) => RaiseBark("chaos.teasedenied");
     public void NotifyChaosTeaseClicked() => RaiseBark("chaos.teaseclicked");
     public void NotifyChaosTeaseDeniedStreak(int deniedCount) => RaiseBark("chaos.teasedeniedstreak");
+    // S2c-2a bubble-economy / lesson / run-end barks (WPF Services/Companion/BarkService.cs).
+    public void NotifyChaosBenignPopped(string variant, string payload, int combo) => RaiseBark("chaos.benignpopped");
+    public void NotifyChaosBubbleDefused(int combo, string variant, string difficulty) => RaiseBark("chaos.defused");
+    public void NotifyChaosBubbleDetonated(string variant, double strength, double runDetonations, int combo, string difficulty) => RaiseBark("chaos.detonated");
+    public void NotifyChaosBubbleDetonatedAbsorbed(string variant, double strength, double runDetonations, int combo, string difficulty, int shields) => RaiseBark("chaos.detonatedabsorbed");
+    public void NotifyChaosDefuseFirst() => RaiseBark("chaos.defusefirst");
+    public void NotifyChaosDefuseNoFocus() => RaiseBark("chaos.defusenofocus");
+    public void NotifyChaosDefuseRelease() => RaiseBark("chaos.defuserelease");
+    public void NotifyChaosClickDetonate() => RaiseBark("chaos.clickdetonate");
+    public void NotifyChaosLessonComplete(string id) => RaiseBark("chaos.lessoncomplete");
+    public void NotifyChaosRunCompleted(int finalXp, string difficulty) => RaiseBark("chaos.runcompleted");
 
     private void RaiseBark(string kind)
     {
