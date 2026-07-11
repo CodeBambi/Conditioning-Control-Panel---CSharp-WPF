@@ -1935,7 +1935,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const skipped = draftRoomSkip || (choice && choice.skipped);
     draftRoomSkip = false;
     if (skipped) { resolveDraft(null, false); return; }
-    if (choice && choice.timedOut) { bark('draft-autopick'); resolveDraft(null, true); return; }
+    // A timeout dives the coaxed door (junctions.commit -> tubesPick), so its
+    // winner.desc carries a real boon - award it ("she chose for you") instead of
+    // leaving you empty-handed. Falls through to the gold-pouch fallback below when
+    // that door had no boon, exactly like a clicked boon-less door.
+    const timedOut = !!(choice && choice.timedOut);
+    if (timedOut) bark('draft-autopick');
     // the engine's empty-entrance fallback (junctions.buildVein): a door that
     // couldn't carry a boon card carries a 100-gold pouch instead - bank it
     if (!b.boon && b.reward && b.reward.kind === 'gold') {
@@ -1944,7 +1949,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       hudUi.announce(`🪙 +${gold} gold`, 'powerup', 1600);
       sfx('golden_pop', 0.55);
     }
-    resolveDraft(b.boon || null, false);
+    resolveDraft(b.boon || null, timedOut);
   }
 
   /** Per-RunTick: Lust Bleed (the tube blushes with the LUST bar; a held full
@@ -2092,7 +2097,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // Once-ever heat teach: name the burn the first time it visibly climbs.
     if (!flags.seenHeatTeach && st.heat >= 0.15) {
       setFlag('seenHeatTeach');
-      hudUi.announce('lust climbs while you perform. it pays up to x2', 'depth', 3200);
+      hudUi.announce('lust climbs while you perform — it pays up to x2, and eases on its own when you let up', 'depth', 3600);
     }
     // rh_focus_low: a sustained dry spell with no ripple in the tank -> one bark per run.
     if (!focusLowBarked) {
@@ -3262,6 +3267,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         },
         onExit: () => { if (requestExit) requestExit(); else bridge.send({ type: 'exit' }); },
         onOptions: ctx.openOptions,
+        onReportBug: () => bridge.send({ type: 'report-bug' }),
         fullscreen: ctx.fullscreenSupported
           ? { toggle: ctx.toggleFullscreen, isActive: ctx.isFullscreen, onChange: ctx.onFullscreenChange }
           : null,

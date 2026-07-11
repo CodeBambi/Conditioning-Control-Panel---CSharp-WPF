@@ -375,6 +375,48 @@ public class AchievementService : IDisposable
         App.Quests?.TrackBubblePopped();
     }
 
+    /// <summary>
+    /// Credit a whole run's worth of popped bubbles at once. Same accounting as
+    /// <see cref="TrackBubblePopped"/> but collapsed: one increment, every 100-bubble
+    /// sparkle-point milestone crossed is granted in a single save, and at most one
+    /// milestone popup fires so a big Rabbit Hole run can't spam notifications.
+    /// Used by the DtRH web port, which reports its bubblesPopped total on run-end
+    /// rather than per-pop.
+    /// </summary>
+    public void TrackBubblesPopped(int count)
+    {
+        if (count <= 0) return;
+
+        int before = _progress.TotalBubblesPopped;
+        _progress.TotalBubblesPopped += count;
+        int after = _progress.TotalBubblesPopped;
+        _isDirty = true;
+
+        if (before < 1000 && after >= 1000)
+        {
+            TryUnlock("pop_the_thought");
+        }
+
+        // 1 sparkle point per 100 bubbles — award every milestone crossed in one go.
+        int milestones = after / 100 - before / 100;
+        if (milestones > 0)
+        {
+            var settings = App.Settings?.Current;
+            if (settings != null)
+            {
+                settings.SkillPoints += milestones;
+                App.Settings?.Save();
+                App.Logger?.Information("Bubble milestone (batch)! {Total} bubbles popped — awarded {N} sparkle point(s) (total: {Points})",
+                    after, milestones, settings.SkillPoints);
+                // one popup for the highest 100-boundary reached this run
+                ShowBubbleMilestoneNotification(after - after % 100);
+            }
+        }
+
+        // Track for quests (advance by the full batch, not one)
+        App.Quests?.TrackBubblesPopped(count);
+    }
+
     private void ShowBubbleMilestoneNotification(int totalBubbles)
     {
         try

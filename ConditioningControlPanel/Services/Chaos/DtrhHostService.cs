@@ -263,6 +263,9 @@ internal static class DtrhHostService
             case "boot-error":
                 OnBootError((string?)o["msg"]);
                 break;
+            case "report-bug":   // the hub dock's 🐛 button (no title bar to hang one on)
+                OpenBugReport();
+                break;
             case "exit":       // page-initiated (Esc held): it winds itself down, then exit-done
                 _exiting = true;
                 ArmExitWatchdog();
@@ -274,6 +277,27 @@ internal static class DtrhHostService
                 _lastHeartbeatUtc = DateTime.UtcNow;
                 break;
         }
+    }
+
+    /// <summary>The hub's dock 🐛 button: this window has a native (buttonless) title bar,
+    /// so the bug affordance lives in-game and posts here. Opens the same modal dialog the
+    /// rest of the app uses (MainWindow's title-bar 🐛), owned by the DtRH window so it sits
+    /// on top even in fullscreen.</summary>
+    private static void OpenBugReport()
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null) return;
+        disp.BeginInvoke(() =>
+        {
+            try
+            {
+                var dlg = new BugReportWindow();
+                var owner = _host?.Window;
+                if (owner != null && owner.IsLoaded) dlg.Owner = owner;
+                dlg.ShowDialog();
+            }
+            catch (Exception ex) { App.Logger?.Warning("DtrhHost.report-bug: {E}", ex.Message); }
+        });
     }
 
     /// <summary>request-run {setup?} -> persist the hub's Descent-tab choices into AppSettings
@@ -437,6 +461,16 @@ internal static class DtrhHostService
             {
                 try { App.Progression?.AddXP(baseXp, XPSource.Chaos); }
                 catch (Exception ex) { App.Logger?.Debug("DtrhHost payout AddXP: {E}", ex.Message); }
+                // Restore V1 behavior: a run's popped bubbles feed the GLOBAL bubble
+                // count and its per-100 sparkle-point milestones. The web port had been
+                // recording bubblesPopped only into the local stats store; this credits
+                // it to the same sink the native chaos mode uses. Additive to score XP.
+                try
+                {
+                    int bubblesPopped = (int?)(o["sessionStats"]?["bubblesPopped"]) ?? 0;
+                    if (bubblesPopped > 0) App.Achievements?.TrackBubblesPopped(bubblesPopped);
+                }
+                catch (Exception ex) { App.Logger?.Debug("DtrhHost bubble credit: {E}", ex.Message); }
                 try { RevealService.Sync("run_end"); } catch { }
                 try
                 {

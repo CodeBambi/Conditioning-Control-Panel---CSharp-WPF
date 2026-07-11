@@ -119,7 +119,7 @@ export const LIFETIME_BOONS = [
     capstone: 'each whistle also calls a storm — eight more rabbits over the next ten seconds.',
     activeUse: true, cooldownSec: 45 },
   { id: 'e_stim', cat: 'skill', rankFloor: RANK.Curious, name: 'E-Stim', glyph: '⚡',
-    desc: 'press to charge your next 3/4/5 clicks by level. a charged pop arcs lightning into up to 3 bubbles within 600px, snapping any live ones. nothing in reach? the charge keeps. 30s cooldown. even uncharged, every pop has a 10/15/20% chance (30% maxed) to arc on its own.',
+    desc: 'press to charge your next 3/4/5 clicks by level. a charged pop arcs lightning into up to 3 bubbles within 600px, snapping any live ones. if no bubbles are in range, the charge isn't spent. 30s cooldown. even uncharged, every pop has a 10/15/20% chance (30% maxed) to arc on its own.',
     flavor: 'the current knows exactly where you’re tender.',
     unlockCost: 600, upgradeCosts: [900, 1300], levelValues: [3, 4, 5],
     value: (v) => `${v.toFixed(0)} charged pops`,
@@ -471,7 +471,7 @@ export const HOWTO_CARDS = [
   ] },
   { title: 'The two bars', image: 'howto_3', lines: [
     { lead: 'FOCUS', body: 'your nerve. Snapping live bubbles spends it; popping treats refills it. Run dry and you can’t snap — so keep feeding.' },
-    { lead: 'HEAT', body: 'the burn. It climbs every time something triggers. Let it run high and the descent gets harder to resist.' },
+    { lead: 'HEAT', body: 'the burn. It climbs every time something triggers and pays out up to **double**, so it’s meant to run high — there’s no button to cool it. It eases on its own when you let up between triggers, and drops a little when a live bubble goes off and burns through one of your resists.' },
   ] },
   { title: 'A descent', image: 'howto_4', lines: [
     { body: 'Four chambers, then it ends. Between chambers she offers you a **mantra** — pick one and it bends the rules for that run only. **Power-up cards drift through the tube** as you fall: grab one to keep it — toys dock at the bottom to fire, charms and accessories cling on the moment you touch them. Finish the whole descent for the full reward; slip out early and you forfeit it.' },

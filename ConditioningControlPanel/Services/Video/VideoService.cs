@@ -1909,7 +1909,13 @@ namespace ConditioningControlPanel.Services
         {
             if (strict)
             {
-                win.Closing += (s, e) => { if (_videoPlaying) e.Cancel = true; };
+                // Veto user-initiated closes (Alt+F4 etc.) ONLY while the video is
+                // genuinely playing. Once CloseAll() begins teardown it sets
+                // _isCleaningUp (and clears _videoPlaying) up front, so a real teardown
+                // is never vetoed — otherwise a strict window whose _videoPlaying was
+                // left true becomes permanently un-closable and renders solid black
+                // (the "video ended, black window won't close" report).
+                win.Closing += (s, e) => { if (_videoPlaying && !_isCleaningUp) e.Cancel = true; };
                 win.PreviewKeyDown += (s, e) =>
                 {
                     // In strict mode, block panic key, Alt+F4, and system keys
@@ -2476,6 +2482,11 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
                 _isCleaningUp = true;
+                // Make CloseAll self-sufficient: clear the "playing" flag here rather than
+                // relying on every caller to do it first. This guarantees the strict
+                // Closing veto (SetupStrictHandlers) can never block the window teardown
+                // below, even if a caller forgot to clear it.
+                _videoPlaying = false;
             }
 
             // Credit the minutes actually watched, on EVERY teardown (natural end, manual stop, panic,

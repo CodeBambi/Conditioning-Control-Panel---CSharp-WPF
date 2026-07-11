@@ -1121,6 +1121,11 @@ img.rh-fx-spiralspin {
           mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
 }
 .cf-bubble.is-channeling .cf-bubble-body { filter: brightness(1.25) drop-shadow(0 0 14px #7ae0ff); }
+/* Lift the bubble you're holding above its siblings: bubbles are flat absolute
+   siblings (paint order = DOM order), so a treat drifting over the one you're
+   channeling would become the top hit target, fire pointerleave, and break the
+   hold. Raising it keeps the cursor "over" the held bubble the whole channel. */
+.cf-bubble.is-channeling { z-index: 30; }
 
 /* pop / detonate / fade exits */
 .cf-bubble.is-pop { animation: cfPop 0.3s ease-out forwards; }
@@ -2091,7 +2096,26 @@ img.rh-fx-spiralspin {
   animation: wrFallBreath 3.4s ease-in-out infinite alternate;
   margin-bottom: 2px;
 }
+/* The caption is a real <button> so a click always falls, even if the 3D portal
+   raycast misses. Strip the native button chrome; keep the caption's glow. */
+.wr-fall-cap--btn {
+  pointer-events: auto; cursor: pointer;
+  background: none; border: 0; margin: 0 0 2px; padding: 4px 12px;
+  font-family: inherit; border-radius: 12px;
+  transition: transform 0.15s, text-shadow 0.15s;
+}
+.wr-fall-cap--btn:hover { transform: scale(1.06);
+  text-shadow: 0 0 26px rgba(232,67,147,1), 0 0 60px rgba(139,92,246,0.85); }
+.wr-fall-cap--btn:focus-visible { outline: 2px solid rgba(232,67,147,0.85); outline-offset: 4px; }
 @keyframes wrFallBreath { from { opacity: 0.82; } to { opacity: 1; } }
+.wr-fall-hint {
+  font-size: 0.74rem; letter-spacing: 0.08em; color: rgba(255,255,255,0.62);
+  margin: -4px 0 4px; text-shadow: 0 0 10px rgba(232,67,147,0.5);
+  animation: wrFallBreath 3.4s ease-in-out infinite alternate;
+  pointer-events: auto; cursor: pointer;
+  background: none; border: 0; font-family: inherit;
+}
+.wr-fall-hint:hover { color: rgba(255,255,255,0.92); }
 .wr-pills--center { justify-content: center; }
 .wr-fall .wr-seg { pointer-events: auto; }
 .wr-seg--small { padding: 3px 11px; font-size: 0.72rem; }
