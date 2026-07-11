@@ -424,6 +424,8 @@ are not swept. This is essentially the whole remaining Linux gap (head overall ~
 
 ### #6 — DTRH web roguelite port epic (dollhouse rewrite) · **JUDGMENT** (NOT seam-blocked; re-inventoried after merge `a06509eb` 2026-07-10)
 
+**OWNER RULING 2026-07-11 (stronger end-state; supersedes the 2026-07-10 "web-first, delete-second" ordering):** verbatim — "DTRH should be removed from avalonia and from the tests. then the new web version should be implemented." End state = native/Avalonia DTRH (chaos-run game, hub/HUD/boon windows, run-specific Core services) fully REMOVED, DTRH test coverage REMOVED, and the web version stood up as the only DTRH path in the Avalonia head. Two load-bearing points are being clarified with the owner before dispatch: **(1)** whether "removed from the tests" authorizes editing the otherwise-forbidden `SmokeTestRunner.cs` (it currently drives a live ChaosRun — the smoke `[Info] ChaosRun` findings; removal cannot complete without touching it); **(2)** whether the "new web version" builds on the already-landed row #6 phases 1-7 web work (`WebView2BrowserHost` + `Resources/web/dtrh/**` + `DtrhHostService`/bridge) or is a from-scratch rebuild. **OWNER DECISIONS CONFIRMED 2026-07-11:** (1) BUILD ON the already-landed web work — keep `WebView2BrowserHost` + `Resources/web/dtrh/**` + `DtrhHostService`/bridge; remove ONLY the native/Skia chaos-run game (hub/HUD/boon-bar windows + run-specific Core services), then VERIFY the web game boots (headed/owner-gated). Head never loses the feature. (2) Surgical `SmokeTestRunner.cs` edit AUTHORIZED — remove ONLY the DTRH/ChaosRun exercise (the smoke `[Info] ChaosRun` findings), nothing else; this is a one-time owner-lifted exception to the never-edit-SmokeTestRunner guardrail, scoped to DTRH removal. **Status: CLAIMED @driver 2026-07-11 — advisor → dispatch (native-strip autonomous; web-boot verify is a headed gate).**
+
 **SUPERSEDED / RE-INVENTORIED 2026-07-10 (merge `a06509eb`, main `6e55bcc3`):** the earlier "The Fall"
 snapshot this row was written against has been replaced upstream by the **dollhouse rewrite** — an
 in-ambient 3D hub, gold economy (SchemaVersion 3), Four Chambers identity, journey rooms + 16 biomes,
@@ -1390,6 +1392,14 @@ a JUDGMENT (fable-5) agent (hit its turn limit during research; driver implement
   0 err, smoke 44 tabs / 0 unhandled / Findings 17 (authed benign band) / 0 avatar+menu findings. Menu
   appearance + reappear behavior are NOT smoke-exercised — flagged for user verification.
 
+### AvatarTube — **PORT FAILED → FULL-MODULE REDO** (owner ruling 2026-07-11 · 2nd) · **JUDGMENT / big-tier**
+
+**2026-07-11 owner ruling — retest of the TubeAnchorController windowing rebuild (section below) FAILED; the whole AvatarTube port is declared FAILED.** Owner retested the ground-up windowing rebuild on the live head and rejects it. Verbatim: "avatartube needs a redo it does not work like expected. its laggy, freezes. avatar does not always appear in the same spot in the center. I will call this port failed. set docs to failed, full redo, delete old code, make new version. don't care how it works under the hood. it should keep the functional contract — which it does not right now." Scope is now the WHOLE AvatarTube module (not just windowing). Directive = **delete the old Avalonia AvatarTube code and build a new version that keeps the FUNCTIONAL CONTRACT** — avatar renders centered + stable; video tube plays smoothly (no lag/freeze); attach/detach + follow-the-main-window + speech/chat/pose/emote/reactions/bubbles all still work — with full implementation latitude under the hood. WPF `AvatarTube*` is the behavior reference (reference-only). HARD CONSTRAINT unless the owner lifts it: the new module preserves the public API surface `SmokeTestRunner.cs` consumes (never edit SmokeTestRunner.cs). Everything below this banner is SUPERSEDED history, kept for root-cause context (the physical-px anchor math, single-writer controller, and WM-hook follow-cadence findings are load-bearing input to the rebuild). **OWNER SCOPE CONFIRMED 2026-07-11:** rebuild the BROKEN CORE from scratch — windowing/positioning, video/tube rendering, and lifecycle — while PRESERVING the peripheral features that already work (chat, Circe emotes, reactions, speech, bubbles) reused into the new shell; NOT a whole-module wipe. New core must keep the `SmokeTestRunner.cs`-consumed public API (`Attach/Detach/SetDetached/UpdatePosition`, ctor) so the smoke harness stays untouched. **Status: CLAIMED @driver 2026-07-11 — advisor → dispatch.**
+
+---
+
+#### Prior (pre-full-redo) history
+
 ### AvatarTube attached positioning — **SUPERSEDED → GROUND-UP REBUILD** (owner ruling 2026-07-11) · **JUDGMENT**
 
 **2026-07-11 owner ruling — rewrite the WINDOWING concern from scratch.** Owner tested `5d4efbdc` AND the
@@ -1505,6 +1515,11 @@ IntPtr lParam, ref bool handled)` — HOLD it in a field so it isn't GC'd. HWND 
 no lag/detach; minimize+restore, exclusive-fullscreen exit, theme switch → tube lands in the WPF spot.
 
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
+**QUEUE RE-OPENED BY OWNER 2026-07-11 (2nd) · @driver — two owner directives create two new claimable rows.** Fresh-driver full-gate certification at `8dbc42ed` (before this session's work): **slnf 0 err · WPF sln 0 err · Core 604/604 · smoke 44 tabs / 0 unhandled / Findings 15 ⊆ recorded benign drift** (1 StartSession baseline blocker + 9 subjects loc-key misfires + 1 ConnectCommand + 4 ChaosRun `[Info]`). **604 is the authoritative Core floor** — supersedes the stale `543` copied into several older ledger entries (incl. `1ff8bd49`); those were floor-pin copy-paste, not live counts. Advisor-validated sequencing:
+  1. **DTRH native-strip** — *CLAIMED @driver, in flight.* Remove native/Skia chaos-run only (hub/HUD/boon-bar windows + run-specific Core services + DI + native Lab launch path); KEEP all web-path code (`WebView2BrowserHost`, `Resources/web/dtrh/**`, `DtrhHostService`/bridge, asset manifest/telemetry, S2c-3 freeze wiring) and ambient chaos payload layers (`ChaosFlashOverlay`/`ChaosGifCascade` — UCE carve-outs, NO glob-delete of `Chaos*`). Surgical `SmokeTestRunner.cs` edit AUTHORIZED (ChaosRun exercise ONLY). Lower the Core floor in the same commit (enumerate deleted tests). Web-boot verify = headed/owner gate (`BLOCKED:` task).
+  2. **AvatarTube core redo** — *pending (2nd).* Rebuild the broken core (windowing/positioning, video/tube rendering, lifecycle) from telemetry evidence of the failed retest; preserve working peripherals (chat/emote/reactions/speech/bubbles) + the `SmokeTestRunner.cs`-consumed public API. Lands → owner headed retest (cannot close autonomously).
+
+_(Historical re-exhaustion banner retained below for provenance.)_
 **ROW #6 PHASES 1–7 COMPLETE 2026-07-11 · @driver — AUTONOMOUS QUEUE RE-EXHAUSTED under the broader bar.**
 The RE-OPEN below claimed row #6 phases 1–7 (DTRH web port) under the broader objective bar (JUDGMENT rows
 included when executable without product decisions). That claim is now SATISFIED: the full appendix chain
