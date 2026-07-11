@@ -3340,6 +3340,11 @@ public sealed class AvaloniaAvatarWindowService : IAvatarWindowService
     public bool IsSpeaking => _window?.IsSpeaking ?? false;
     public bool IsSpeakingAudio => _window?.IsSpeakingAudio ?? false;
 
+    // World-freeze pause/resume of the spoken voice line — forwards to the tube's Lane-B seam
+    // (position-preserving; does NOT hard-stop the line). Overrides the IAvatarWindowService DIM no-ops.
+    public void PauseSpokenAudio() => _window?.PauseSpokenAudio();
+    public void ResumeSpokenAudio() => _window?.ResumeSpokenAudio();
+
     public void ShowTube()
     {
         try

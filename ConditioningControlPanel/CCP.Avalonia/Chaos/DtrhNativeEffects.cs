@@ -85,19 +85,26 @@ public sealed class DtrhNativeEffects : IDtrhNativeEffects
     /// <inheritdoc/>
     public void SetWorldFrozen(bool frozen)
     {
-        // WPF ApplyWorldFreeze (DtrhHostService.cs:566-573) does TWO things: pause/resume the primary
-        // (audio-bearing ambient) video AND pause/resume the avatar's spoken audio.
-        //   • Video half — wired faithfully: PausePrimary/PlayPrimary pause only the ambient _videoLayer
-        //     in place (SetPause), never the mandatory/strict layer (WPF parity).
-        //   • Avatar-spoken-audio half — HONEST DEFERRAL (board S2c-3 avatar-freeze): the Avalonia
-        //     AvatarTubeWindow exposes only StopSpokenAudio (a hard stop that kills the voice line and
-        //     cannot resume), not WPF's position-preserving Pause/ResumeSpokenAudio. A faithful port needs
-        //     a NEW avatar Pause/ResumeSpokenAudio seam; substituting Stop would be a behavioral deviation.
-        //     Video-only freeze is narrower immersion during a game modal, not a crash.
+        // WPF ApplyWorldFreeze (DtrhHostService.cs:566-573) pauses/resumes BOTH the primary
+        // (audio-bearing ambient) video AND the avatar's spoken voice line, position-preserving.
+        //   • Video half: PausePrimary/PlayPrimary pause only the ambient _videoLayer in place
+        //     (SetPause), never the mandatory/strict layer (WPF parity).
+        //   • Avatar half (S2c-3 mini-slice, Lane B seam): PauseSpokenAudio/ResumeSpokenAudio hold the
+        //     voice line mid-word and resume from position (IAvatarWindowService DIM → AvatarTubeWindow →
+        //     IAudioPlayer.Pause/Resume via LibVLC SetPause). Resolved via the static Avatar accessor
+        //     (DtrhNativeEffects takes no avatar dependency); no-op if the avatar service is absent.
         try
         {
-            if (frozen) _video?.PausePrimary();
-            else _video?.PlayPrimary();
+            if (frozen)
+            {
+                _video?.PausePrimary();
+                AvaloniaChaosApp.Avatar?.PauseSpokenAudio();
+            }
+            else
+            {
+                _video?.PlayPrimary();
+                AvaloniaChaosApp.Avatar?.ResumeSpokenAudio();
+            }
         }
         catch (Exception ex)
         {

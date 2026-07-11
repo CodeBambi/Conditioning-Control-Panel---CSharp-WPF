@@ -460,6 +460,14 @@ public interface IAvatarWindowService
 
     /// <summary>True while the avatar is playing linked speech audio. Default false; overridden.</summary>
     bool IsSpeakingAudio => false;
+
+    /// <summary>Position-preserving pause of the avatar's spoken voice line for DTRH world-freeze
+    /// (WPF ApplyWorldFreeze, DtrhHostService.cs:566-573). Default no-op so head services that cannot
+    /// pause inherit safe behavior; the real window service overrides. Does NOT stop the line.</summary>
+    void PauseSpokenAudio() { }
+
+    /// <summary>Resume the avatar's spoken voice line after a world-freeze pause. Default no-op; overridden.</summary>
+    void ResumeSpokenAudio() { }
     void ShowTube();
     void HideTube();
     void SetMuteAvatar(bool muted);
