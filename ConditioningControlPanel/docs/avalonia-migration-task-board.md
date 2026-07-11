@@ -807,6 +807,24 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   unhandled / 18 findings (⊆ benign, ZERO new — orchestrator unconstructed). Seam split held exactly as the
   S2c-1 design banked: INJECT Core services, route all natives/bark/reveal/run-config through
   `IDtrhNativeEffects`.
+- **S2c-2a LANDED 2026-07-11 · @driver** (`5be61dda`, 4 files / +302): Avalonia head impl of the S2c-1 seam,
+  built via a `port-slice-executor` workflow (user steer: use workflows + advisor) then driver-gated & committed.
+  * `DtrhNativeEffects.cs` (CCP.Avalonia/Chaos) — all 12 `IDtrhNativeEffects` members over INJECTED head
+    interfaces (`IBarkService`/`IModService`/`ISettingsService`/`IRevealService`/`IChaosMetaService`) + ctor
+    `Action` callbacks for window ops (2b wires). FirePayload→`AvaloniaEffectPayloadFactory.ForVariant`+`Strength`
+    +`Fire()` (does NOT touch static `GlobalDurationMult` — advisor 2026-07-11, VideoPayload/AudioPayload don't
+    consume it). RouteBark→full 31-case typed `NotifyChaos*` switch (WPF `:498-548`). BuildRunConfigJson→~40-field
+    object + nested `flags`, Newtonsoft camelCase + catch-fallback (WPF `:808-891`). `SetWorldFrozen`→honest
+    documented interim no-op (S2c-3). Fault-isolated everywhere.
+  * `ChaosMetaStoreAdapter.cs` — backs Core `IChaosMetaStore` over head `IChaosMetaService`.
+  * `IBarkService` (Core `App.cs`) — 10 ADDITIVE DIM no-op chaos-bark methods (decision A, S2b-1 precedent,
+    non-breaking); `AvaloniaBarkService` (`AvaloniaHeadStubs.cs`) gives each a `RaiseBark("chaos.*")` one-liner.
+  * **Not DI-registered / no window yet** (2b/2c) → ZERO smoke drift. **N1-N3 deferred to S2c-2b** (they are
+    game-window/video-event concerns: `<0.90` skip, `RestoreMainWindow` self-guard, `Recover` once-per-session).
+  * Advisor consulted (world-freeze interim + additive DIMs APPROVED; FirePayload verify-then-decide → confirmed
+    no static mutation; DI = inject interfaces not static facades). Driver line-by-line reviewed the impl vs WPF
+    cites (parity). Gates: slnf 0 err/0 warn · WPF head 0 err · Core **590/590** · smoke 44 tabs / 0 unhandled /
+    Findings 17 (⊆ benign, ZERO new).
   - **🔴 S2c-2 HEAD-CONTRACT CARRY-FORWARDS (auditor N1-N3 — the head impl MUST honor these or drift):**
     - **N1 — video-skip 0.90 threshold is now head-side.** WPF counted a skip in `OnVideoWatchCredited` when
       `WatchedSec/DurationSec < 0.90` (`DtrhHostService.cs:625`). The Core seam split this into
@@ -876,8 +894,10 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
       `ChaosWebGameEnabled` (`LabTabViewModel.cs:26`). Smoke must stay 44/0/⊆benign (headless launch guard so
       `--smoke-test` never opens the game window). MECHANICAL.
     - **S2c-3** — world-freeze seam (`IVideoService`/avatar pause-resume + guards). Separate JUDGMENT slice.
-  - **NEXT:** confirm world-freeze interim + decisions A/B owner-acceptable, then S2c-2a (workflow) → S2c-2b
-    (driver) → S2c-2c (mechanical) → S2c-3.
+  - **NEXT:** ✅ S2c-2a LANDED (`5be61dda`). Now **S2c-2b** (game Window, JUDGMENT — `avalonia-research` prepped:
+    v12 `WindowDecorations="None"` borderless, `WindowState` set in code not styles, `Topmost=false`, opaque black
+    so no transparency, normal focusable window = NOT overlay-clickthrough, HWND via `TryGetPlatformHandle()`)
+    → S2c-2c (mechanical DI+Lab launch) → S2c-3 (world-freeze). N1-N3 land in S2c-2b.
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
