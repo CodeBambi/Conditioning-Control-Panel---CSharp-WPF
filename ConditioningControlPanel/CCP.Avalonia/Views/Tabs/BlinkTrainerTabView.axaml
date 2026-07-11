@@ -205,7 +205,7 @@
                                 CornerRadius="8"
                                 Padding="12,10"
                                 Margin="0,4">
-                          <Grid ColumnDefinitions="*,Auto">
+                          <Grid ColumnDefinitions="*,Auto,Auto">
                             <TextBlock Grid.Column="0"
                                        Text="{Binding Name}"
                                        Foreground="{DynamicResource TextLightBrush}"
@@ -216,6 +216,17 @@
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        FontSize="11"
                                        VerticalAlignment="Center" />
+                            <Button Grid.Column="2"
+                                    Content="×"
+                                    Command="{Binding $parent[ItemsControl].((vm:BlinkTrainerTabViewModel)DataContext).RemoveFolderCommand}"
+                                    CommandParameter="{Binding Path}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Foreground="{DynamicResource TextMutedBrush}"
+                                    Padding="6,0"
+                                    FontSize="16"
+                                    Cursor="Hand"
+                                    VerticalAlignment="Center" />
                           </Grid>
                         </Border>
                       </DataTemplate>

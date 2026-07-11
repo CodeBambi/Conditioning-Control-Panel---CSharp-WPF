@@ -89,7 +89,7 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
         ConsentStatusText = Loc.Get("blink_trainer_consent_required");
         CalibrationStatusText = Loc.Get("blink_trainer_calibration_none");
 
-        AssetFolders.Add(new AssetFolderItem("Default", Loc.Get("blink_trainer_folder_empty_or_invalid")));
+        AssetFolders.Add(new AssetFolderItem("Default", Loc.Get("blink_trainer_folder_empty_or_invalid"), string.Empty));
     }
 
     private void SubscribeToService()
@@ -656,7 +656,7 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
         var folders = _settingsService?.Current?.BlinkTrainerFolders;
         if (folders == null || folders.Count == 0)
         {
-            AssetFolders.Add(new AssetFolderItem("Default", Loc.Get("blink_trainer_folder_empty_or_invalid")));
+            AssetFolders.Add(new AssetFolderItem("Default", Loc.Get("blink_trainer_folder_empty_or_invalid"), string.Empty));
             return;
         }
 
@@ -679,8 +679,24 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
             {
                 status = Loc.Get("blink_trainer_folder_empty_or_invalid");
             }
-            AssetFolders.Add(new AssetFolderItem(name, status));
+            AssetFolders.Add(new AssetFolderItem(name, status, folder));
         }
+    }
+    /// <summary>
+    /// Removes a Blink Trainer asset folder by path (WPF
+    /// BtnBlinkTrainerRemoveFolderCard_Click parity). Ordinal-ignore-case match so a
+    /// path chosen with different casing still clears; persists via Save() and
+    /// refreshes the card list. No-op when settings, the folder list, or the path is
+    /// null/empty (e.g. the placeholder "Default" row carries an empty Path).
+    /// </summary>
+    [RelayCommand]
+    private void RemoveFolder(string path)
+    {
+        var s = _settingsService?.Current;
+        if (s?.BlinkTrainerFolders == null || string.IsNullOrWhiteSpace(path)) return;
+        s.BlinkTrainerFolders.RemoveAll(f => string.Equals(f, path, StringComparison.OrdinalIgnoreCase));
+        Save();
+        RefreshAssetFolders();
     }
 
     /// <summary>
@@ -741,4 +757,4 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
 
 public sealed record WebcamDeviceOption(int Index, string Name);
 public sealed record MonitorOption(string DeviceName, string Label);
-public sealed record AssetFolderItem(string Name, string Status);
+public sealed record AssetFolderItem(string Name, string Status, string Path);
