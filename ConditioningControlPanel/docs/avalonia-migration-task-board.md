@@ -821,6 +821,34 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
     non-breaking); `AvaloniaBarkService` (`AvaloniaHeadStubs.cs`) gives each a `RaiseBark("chaos.*")` one-liner.
   * **Not DI-registered / no window yet** (2b/2c) → ZERO smoke drift. **N1-N3 deferred to S2c-2b** (they are
     game-window/video-event concerns: `<0.90` skip, `RestoreMainWindow` self-guard, `Recover` once-per-session).
+- **S2c-2b LANDED 2026-07-11 · @driver** (`0f922ca9`, 2 files / +261): the DTRH web-game Window + host controller,
+  written DRIVER-LEVEL (lifecycle-JUDGMENT slice, full contract in-context — S2c-1 precedent; cheaper than a giant
+  context-free executor + no concurrent-writer risk with the 2a workflow's possible fix stage).
+  * `IChaosWebGameService.cs` (Core) — additive launch seam (`Launch`/`Close`/`IsRunning`) mirroring
+    `IChaosTunnelService`; Windows head implements, other heads resolve null.
+  * `DtrhGameHostService.cs` (Windows head) — owns `Window` + `WebView2BrowserHost` + `DtrhHostOrchestrator`.
+    Window: opaque black, `Topmost=false`, `ShowActivated`/`Focusable`/taskbar=true, normal decorations,
+    CenterScreen, launches WINDOWED; `FullscreenChanged`→`WindowState.FullScreen/Normal` in code-behind,
+    UI-marshaled (owner ruling 2026-07-10). Virtual hosts ccp.game=Deny/ccp.assets=Allow/ccp.art=Allow (WPF
+    `:82-94`); anti-MPO + `--autoplay-policy=no-user-gesture-required`. WebMessage→HandleMessage; Closed→close;
+    RecoverRequested→relaunch-once/session (**N3**); Closed→DisposeAll (idempotent, re-entrancy-safe).
+    **N2** `restoreMainWindow` self-guards on `_minimizedMainWindow` (false — game is a separate window).
+    **N1** `OnVideoWatchCredited`/`OnVideoSkipped` INTENTIONALLY not wired — see the deferral row below.
+  * `port-parity-auditor`: **SHIP** (10/10 A–J Verified vs WPF ground truth + orchestrator/precedent contracts;
+    every ruled decision honored; zero forbidden-zone edits/TODOs/privacy regressions). Advisor consulted first
+    (N1 deferral APPROVED w/ conditions; "close WebView2 attachment + window-ctor recon before dispatching").
+    Gates: slnf 0 err (2b files 0 warn) · WPF head 0 err · Core **590/590** · smoke 44 tabs / 0 unhandled /
+    Findings 16 (⊆ benign, ZERO new — not DI-registered, window never opens).
+  * **🔴 DEFERRED SEAM — N1 video-watch-credit (fold into S2c-3 or a new S2c-4 row):** Avalonia Core
+    `IVideoService` exposes only `VideoAboutToStart`/`VideoStarted`/`VideoEnded` — NO `VideoWatchCredited` event,
+    and `VideoWatchInfoEventArgs` (WatchedSec/DurationSec) exists NOWHERE outside the WPF head. So the
+    orchestrator's `OnVideoWatchCredited(sec)`/`OnVideoSkipped()` have no head event source. **Future work:** add
+    `event ...VideoWatchCredited` (+ a `(watchedSec,durationSec)` args type) to Core `IVideoService` +
+    `AvaloniaVideoService`, then wire the game window → `OnVideoWatchCredited`/`OnVideoSkipped` with the WPF
+    `<0.90` skip rule (`DtrhHostService.cs:618-623`). **Advisor conditions honored:** do NOT approximate WatchedSec
+    from wall-clock `VideoStarted`→`VideoEnded` (WPF crediting is pause-aware inside its video service); no
+    speculative `VideoEnded` subscription (orchestrator owns teardown). Impact is **telemetry-only** — run
+    video watch/skip counters stay 0; XP is `min(score,capBase)*skillMult` with NO video term, so no economy drift.
   * Advisor consulted (world-freeze interim + additive DIMs APPROVED; FirePayload verify-then-decide → confirmed
     no static mutation; DI = inject interfaces not static facades). Driver line-by-line reviewed the impl vs WPF
     cites (parity). Gates: slnf 0 err/0 warn · WPF head 0 err · Core **590/590** · smoke 44 tabs / 0 unhandled /
@@ -893,11 +921,15 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
     - **S2c-2c** — Program.cs DI (host+effects+meta-store+`ChaosCrashSentinel`) + Lab-tab launch on
       `ChaosWebGameEnabled` (`LabTabViewModel.cs:26`). Smoke must stay 44/0/⊆benign (headless launch guard so
       `--smoke-test` never opens the game window). MECHANICAL.
-    - **S2c-3** — world-freeze seam (`IVideoService`/avatar pause-resume + guards). Separate JUDGMENT slice.
-  - **NEXT:** ✅ S2c-2a LANDED (`5be61dda`). Now **S2c-2b** (game Window, JUDGMENT — `avalonia-research` prepped:
-    v12 `WindowDecorations="None"` borderless, `WindowState` set in code not styles, `Topmost=false`, opaque black
-    so no transparency, normal focusable window = NOT overlay-clickthrough, HWND via `TryGetPlatformHandle()`)
-    → S2c-2c (mechanical DI+Lab launch) → S2c-3 (world-freeze). N1-N3 land in S2c-2b.
+    - **S2c-3** — world-freeze seam (`IVideoService`/avatar pause-resume + guards) + N1 video-watch-credit seam.
+      Separate JUDGMENT slice(s).
+  - **NEXT:** ✅ S2c-2a (`5be61dda`) + ✅ S2c-2b (`0f922ca9`) LANDED. Now **S2c-2c** (MECHANICAL): register
+    `IChaosWebGameService → DtrhGameHostService` in `CCP.Avalonia.Desktop.Windows/Program.cs` (factory lambda
+    beside the tunnel at `:98`; `GetRequiredService` for settings/env/loggerFactory, `GetService` for the nullable
+    optionals `bark/mods/reveal/meta/progression/skillTree`) + a Lab-tab launch hook gated on `ChaosWebGameEnabled`
+    (`LabTabViewModel.cs:26`) that injects `IChaosWebGameService?` and calls `Launch()`. **Headless guard:**
+    `--smoke-test` must NEVER open the game window — either the Lab hook checks the smoke flag or Launch is only
+    invoked from a real user action; smoke must stay 44/0/⊆benign. Then **S2c-3** (world-freeze + N1 seam).
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
