@@ -4,6 +4,24 @@ namespace ConditioningControlPanel.Core.Services.Chaos;
 /// ordinals mirror WPF <c>ChaosRanks.cs</c> exactly (Entranced before Devoted; no Lost).</summary>
 public enum ChaosRank { Curious = 0, Tempted = 1, Slipping = 2, Entranced = 3, Devoted = 4, Claimed = 5 }
 
+/// <summary>Pure rank-threshold math: lifetime completed descents → depth rank. Mirrors the head
+/// <c>ChaosRanks.For</c> (AvaloniaChaosStubs.cs:634) and WPF <c>ChaosRanks.cs:22</c> exactly. Portable
+/// so the DTRH orchestrator's run-end rank-up check needs no head coupling.</summary>
+public static class ChaosRankThresholds
+{
+    /// <summary>Lifetime completed-descent counts that unlock each successive rank.</summary>
+    public static int[] Thresholds { get; } = { 0, 3, 10, 25, 50, 100 };
+
+    /// <summary>The rank earned for <paramref name="runsCompleted"/> lifetime descents.</summary>
+    public static ChaosRank For(int runsCompleted)
+    {
+        var r = ChaosRank.Curious;
+        for (int i = Thresholds.Length - 1; i >= 0; i--)
+            if (runsCompleted >= Thresholds[i]) { r = (ChaosRank)i; break; }
+        return r;
+    }
+}
+
 /// <summary>
 /// Bench / console purchase identifiers (dollhouse convenience extras). Portable to Core so the
 /// DTRH meta bridge's <c>bench-buy</c> whitelist and the reveal gates share one source of truth
