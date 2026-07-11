@@ -97,6 +97,9 @@ class Program
             // Opt-in 3D Chaos tunnel background (WebView2). Resolved as null on heads without a browser host.
             services.AddSingleton<ConditioningControlPanel.Core.Services.Chaos.IChaosTunnelService,
                                   ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Chaos.ChaosTunnelService>();
+            // DTRH ("Down the Rabbit Hole") web roguelite game window (WebView2). Null on heads without a browser host.
+            services.AddSingleton<ConditioningControlPanel.Core.Services.Chaos.IChaosWebGameService,
+                                  ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Chaos.DtrhGameHostService>();
             // Offline keyword wake (sherpa-onnx KWS). Preferred over grammar wake when the model drop-in is present; null on heads without sherpa.
             services.AddSingleton<ConditioningControlPanel.Core.Services.Speech.ISpeechWakeService,
                                   ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Speech.SherpaWakeService>();

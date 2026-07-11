@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 using ConditioningControlPanel.Avalonia.Windows;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Core.Services.Chaos;
 using ConditioningControlPanel.Core.Services.Quiz;
 using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Core.Services.Webcam;
@@ -36,6 +37,7 @@ public partial class LabTabViewModel : TabItemViewModel
     private readonly IPopQuizService? _popQuiz;
     private readonly IQuizService? _quizService;
     private readonly IFrameSource? _frameSource;
+    private readonly IChaosWebGameService? _webGame;
     private readonly ILogger<LabTabViewModel>? _logger;
     private readonly Random _random = new();
     private readonly System.Collections.Generic.Dictionary<string, QuizHistoryEntry> _historyByLabel = new();
@@ -68,7 +70,8 @@ public partial class LabTabViewModel : TabItemViewModel
         IPopQuizService popQuiz,
         ILogger<LabTabViewModel> logger,
         IQuizService? quizService = null,
-        IFrameSource? frameSource = null) : base("lab", "Lab", "🧪")
+        IFrameSource? frameSource = null,
+        IChaosWebGameService? webGame = null) : base("lab", "Lab", "🧪")
     {
         _settingsService = settingsService;
         _dialogService = dialogService;
@@ -79,6 +82,7 @@ public partial class LabTabViewModel : TabItemViewModel
         _popQuiz = popQuiz;
         _quizService = quizService;
         _frameSource = frameSource;
+        _webGame = webGame;
         _logger = logger;
         LockdownDurations = new ObservableCollection<int> { 5, 10, 15, 30, 60 };
         PastQuizzes = new ObservableCollection<PastQuizViewModel>();
@@ -459,10 +463,28 @@ public partial class LabTabViewModel : TabItemViewModel
     private async Task StartChaosAsync()
     {
         _logger?.LogInformation("Chaos mode requested");
+
+        // Web-only DTRH roguelite (owner ruling 2026-07-10): launch the dedicated WebView2 game window when the
+        // feature is enabled and a head implementation is present. Never launch during a harness run (the
+        // --smoke-test/--benchmark/--verify-* passes must not open the game window). Falls back to the parity
+        // "not available" notice on heads without a browser host (IChaosWebGameService resolves null).
+        if (_settingsService?.Current?.ChaosWebGameEnabled == true && _webGame != null && !IsHarnessRun())
+        {
+            _webGame.Launch();
+            return;
+        }
+
         await (_dialogService?.ShowMessageAsync(
             Loc.Get("lab_chaos_title"),
             Loc.Get("lab_chaos_not_available")) ?? Task.CompletedTask);
     }
+
+    /// <summary>True during a --smoke-test/--benchmark/--verify-* harness run, which owns its own lifecycle and
+    /// must never open the interactive DTRH game window.</summary>
+    private static bool IsHarnessRun()
+        => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Args?
+            .Any(a => a is "--smoke-test" or "--benchmark" or "--max-benchmark"
+                        or "--verify-spiral" or "--verify-video" or "--verify-layers" or "--verify-visible") == true;
 
     [RelayCommand]
     private async Task QuickStartChaosAsync()
