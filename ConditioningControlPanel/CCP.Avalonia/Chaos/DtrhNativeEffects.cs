@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Core.Services.Chaos;
 using ConditioningControlPanel.Core.Services.Settings;
+using ConditioningControlPanel.Core.Services.Video;
 
 namespace ConditioningControlPanel.Avalonia.Chaos;
 
@@ -24,6 +25,7 @@ public sealed class DtrhNativeEffects : IDtrhNativeEffects
     private readonly ISettingsService? _settings;
     private readonly IRevealService? _reveal;
     private readonly IChaosMetaService? _meta;
+    private readonly IVideoService? _video;
     private readonly ILogger<DtrhNativeEffects>? _log;
     private readonly Action? _reclaimFocus;
     private readonly Action? _restoreMainWindow;
@@ -38,13 +40,15 @@ public sealed class DtrhNativeEffects : IDtrhNativeEffects
         IChaosMetaService? meta = null,
         ILogger<DtrhNativeEffects>? log = null,
         Action? reclaimFocus = null,
-        Action? restoreMainWindow = null)
+        Action? restoreMainWindow = null,
+        IVideoService? video = null)
     {
         _bark = bark;
         _mods = mods;
         _settings = settings;
         _reveal = reveal;
         _meta = meta;
+        _video = video;
         _log = log;
         _reclaimFocus = reclaimFocus;
         _restoreMainWindow = restoreMainWindow;
@@ -81,12 +85,24 @@ public sealed class DtrhNativeEffects : IDtrhNativeEffects
     /// <inheritdoc/>
     public void SetWorldFrozen(bool frozen)
     {
-        // S2c-2a INTERIM: the world-freeze seam (IVideoService/avatar pause-resume) is not yet built
-        // (board row S2c-3, a state-mutating JUDGMENT slice). Post-2026-cutover the game fires native
-        // video/audio only rarely, so a native payload continuing under a game modal is a narrow,
-        // tracked degradation, not a crash.
-        try { _log?.LogDebug("DtrhNativeEffects.SetWorldFrozen({Frozen}) - interim no-op pending S2c-3 world-freeze seam", frozen); }
-        catch { /* logging must never throw */ }
+        // WPF ApplyWorldFreeze (DtrhHostService.cs:566-573) does TWO things: pause/resume the primary
+        // (audio-bearing ambient) video AND pause/resume the avatar's spoken audio.
+        //   • Video half — wired faithfully: PausePrimary/PlayPrimary pause only the ambient _videoLayer
+        //     in place (SetPause), never the mandatory/strict layer (WPF parity).
+        //   • Avatar-spoken-audio half — HONEST DEFERRAL (board S2c-3 avatar-freeze): the Avalonia
+        //     AvatarTubeWindow exposes only StopSpokenAudio (a hard stop that kills the voice line and
+        //     cannot resume), not WPF's position-preserving Pause/ResumeSpokenAudio. A faithful port needs
+        //     a NEW avatar Pause/ResumeSpokenAudio seam; substituting Stop would be a behavioral deviation.
+        //     Video-only freeze is narrower immersion during a game modal, not a crash.
+        try
+        {
+            if (frozen) _video?.PausePrimary();
+            else _video?.PlayPrimary();
+        }
+        catch (Exception ex)
+        {
+            try { _log?.LogDebug(ex, "DtrhNativeEffects.SetWorldFrozen({Frozen}) failed", frozen); } catch { /* logging must never throw */ }
+        }
     }
 
     /// <inheritdoc/>

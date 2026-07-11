@@ -90,4 +90,18 @@ public interface IVideoService
 
     /// <summary>Raised when a video has finished playing.</summary>
     event EventHandler? VideoEnded;
+
+    /// <summary>
+    /// Pauses the primary (audio-bearing ambient) video in place without teardown, preserving playback
+    /// position, for the DTRH world-freeze mechanic. Mirrors WPF <c>VideoService.PausePrimary</c>
+    /// (VideoService.cs:164), which pauses only the audio-bearing player and never the mandatory/strict
+    /// window. Default no-op for heads without pausable primary playback.
+    /// </summary>
+    void PausePrimary() { }
+
+    /// <summary>
+    /// Resumes primary video previously paused by <see cref="PausePrimary"/>. Mirrors WPF
+    /// <c>VideoService.PlayPrimary</c> (VideoService.cs:171). Default no-op.
+    /// </summary>
+    void PlayPrimary() { }
 }

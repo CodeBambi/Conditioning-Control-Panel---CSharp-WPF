@@ -11,6 +11,7 @@ using ConditioningControlPanel.Avalonia.Chaos;        // DtrhNativeEffects, Chao
 using ConditioningControlPanel.Core.Platform;         // IAppEnvironment, BrowserHostResourceAccess
 using ConditioningControlPanel.Core.Services.Chaos;   // orchestrator, stores, sentinel, IChaosMetaStore, IChaosWebGameService
 using ConditioningControlPanel.Core.Services.Settings;// ISettingsService
+using ConditioningControlPanel.Core.Services.Video;   // IVideoService (world-freeze + watch-credit)
 using ConditioningControlPanel.Avalonia.Desktop.Windows.Platform; // WebView2BrowserHost
 
 namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Chaos;
@@ -43,6 +44,7 @@ public sealed class DtrhGameHostService : IChaosWebGameService
         "--autoplay-policy=no-user-gesture-required";
 
     private readonly ISettingsService _settings;
+    private readonly IVideoService? _video;
     private readonly IAppEnvironment _env;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<DtrhGameHostService>? _logger;
@@ -73,9 +75,11 @@ public sealed class DtrhGameHostService : IChaosWebGameService
         IChaosMetaService? meta = null,
         IProgressionService? progression = null,
         ISkillTreeService? skillTree = null,
+        IVideoService? video = null,
         ILogger<DtrhGameHostService>? logger = null)
     {
         _settings = settings;
+        _video = video;
         _env = env;
         _loggerFactory = loggerFactory;
         _bark = bark;
@@ -148,7 +152,7 @@ public sealed class DtrhGameHostService : IChaosWebGameService
         var effects = new DtrhNativeEffects(
             _bark, _mods, _settings, _reveal, _meta,
             _loggerFactory.CreateLogger<DtrhNativeEffects>(),
-            reclaimFocus, restoreMainWindow);
+            reclaimFocus, restoreMainWindow, _video);
 
         var store = new ChaosMetaStoreAdapter(_meta!);
         var manifest = new DtrhAssetManifest(_env, _loggerFactory.CreateLogger<DtrhAssetManifest>());

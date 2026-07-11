@@ -172,6 +172,18 @@ public class VideoLayer : BaseLayer, IDisposable
     }
 
     /// <summary>
+    /// Pauses or resumes decode in place without teardown, for the DTRH world-freeze mechanic. Uses
+    /// LibVLC <c>SetPause(bool)</c> (explicit, not toggle <c>Pause()</c>) so repeated calls are
+    /// idempotent and a redundant resume can never restart stopped media. Position-preserving; a
+    /// null/stopped player is a safe no-op. Narrow by design — the layer still never exposes its player.
+    /// </summary>
+    public void SetPaused(bool paused)
+    {
+        try { _player?.SetPause(paused); }
+        catch (Exception ex) { _logger?.LogDebug("VideoLayer: SetPaused({Paused}) failed: {Error}", paused, ex.Message); }
+    }
+
+    /// <summary>
     /// Applies volume, mute, and preferred output device to the active player (Phase B audio
     /// parity). Service-driven at playback start; the layer stores no settings (services own
     /// state). For live volume-slider updates use <see cref="ApplyVolume"/> — it skips the

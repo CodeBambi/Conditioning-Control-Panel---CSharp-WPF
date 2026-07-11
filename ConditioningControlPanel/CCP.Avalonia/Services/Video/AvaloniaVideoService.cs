@@ -319,17 +319,24 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         }
     }
 
-    /// <summary>Pause the primary player. No-op if none.</summary>
+    /// <summary>
+    /// World-freeze: pause the ambient primary video in place (DTRH). The UCE removed the separate
+    /// audio-bearing primary window (Phase E3, <see cref="PrimaryMediaPlayer"/> is null), so this pauses
+    /// the ambient compositor <c>_videoLayer</c> decode via LibVLC SetPause. Mirrors WPF PausePrimary
+    /// (VideoService.cs:164), which pauses only the audio-bearing player and never the mandatory/strict
+    /// layer — so <c>_mandatoryVideoLayer</c> is intentionally left rolling. Position-preserving.
+    /// </summary>
     public void PausePrimary()
     {
-        try { PrimaryMediaPlayer?.Pause(); }
+        try { _videoLayer?.SetPaused(true); }
         catch (Exception ex) { _logger?.LogDebug("AvaloniaVideoService.PausePrimary failed: {Error}", ex.Message); }
     }
 
-    /// <summary>Resume the primary player. No-op if none.</summary>
+    /// <summary>Resume the ambient primary video paused by <see cref="PausePrimary"/> (WPF PlayPrimary,
+    /// VideoService.cs:171). Explicit SetPause(false) so a redundant resume is a safe idempotent no-op.</summary>
     public void PlayPrimary()
     {
-        try { PrimaryMediaPlayer?.Play(); }
+        try { _videoLayer?.SetPaused(false); }
         catch (Exception ex) { _logger?.LogDebug("AvaloniaVideoService.PlayPrimary failed: {Error}", ex.Message); }
     }
 
