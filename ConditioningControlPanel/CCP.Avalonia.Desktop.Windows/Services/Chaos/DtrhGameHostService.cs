@@ -167,6 +167,10 @@ public sealed class DtrhGameHostService : IChaosWebGameService
             _progression, _skillTree, sentinel, _settings, _bark, testMode: false);
         _orchestrator.Closed += OnOrchestratorClosed;
         _orchestrator.RecoverRequested += OnRecoverRequested;
+        // N1 watch-credit: feed the orchestrator's telemetry counters from real video teardown credits.
+        // AvaloniaVideoService is a long-lived singleton, so this MUST be unsubscribed in DisposeAll
+        // (else a leaked handler keeps the closed host alive and ghost-credits future videos).
+        if (_video != null) _video.VideoWatchCredited += OnVideoWatchCredited;
 
         _window = new Window
         {
@@ -209,6 +213,20 @@ public sealed class DtrhGameHostService : IChaosWebGameService
     private void OnOrchestratorClosed()
         => Dispatcher.UIThread.Post(() => { try { _window?.Close(); } catch { DisposeAll(); } });
 
+    // Translate a credited video watch into the orchestrator's run telemetry, mirroring WPF
+    // DtrhHostService.OnVideoWatchCredited (DtrhHostService.cs:618-623): accumulate watched seconds, and
+    // count the watch as a SKIP when under 90% of duration. The DurationSec>0 guard is behaviour-identical
+    // to WPF's Infinity case (division guarded away). Telemetry-only — no XP term.
+    private void OnVideoWatchCredited(object? sender, VideoWatchInfoEventArgs e)
+    {
+        try
+        {
+            _orchestrator?.OnVideoWatchCredited(e.WatchedSec);
+            if (e.DurationSec > 0 && e.WatchedSec / e.DurationSec < 0.90) _orchestrator?.OnVideoSkipped();
+        }
+        catch (Exception ex) { _logger?.LogDebug(ex, "DTRH OnVideoWatchCredited failed"); }
+    }
+
     private void OnRecoverRequested(string reason)
     {
         Dispatcher.UIThread.Post(() =>
@@ -229,6 +247,7 @@ public sealed class DtrhGameHostService : IChaosWebGameService
 
     private void DisposeAll()
     {
+        try { if (_video != null) _video.VideoWatchCredited -= OnVideoWatchCredited; } catch { }
         try { _orchestrator?.Dispose(); } catch { }
         try { _host?.Dispose(); } catch { }
         _orchestrator = null;

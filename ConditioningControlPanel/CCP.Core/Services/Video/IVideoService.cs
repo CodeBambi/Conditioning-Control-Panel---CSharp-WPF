@@ -104,4 +104,30 @@ public interface IVideoService
     /// <c>VideoService.PlayPrimary</c> (VideoService.cs:171). Default no-op.
     /// </summary>
     void PlayPrimary() { }
+
+    /// <summary>
+    /// Raised once per video at teardown when a watch is credited, carrying the pause-aware watched
+    /// position and media duration. Mirrors WPF <c>VideoService.VideoWatchCredited</c> raised from
+    /// <c>FinalizeWatchCredit</c> (VideoService.cs:100/2450). Consumers (e.g. the DTRH host) derive
+    /// skip classification from <c>WatchedSec/DurationSec</c>. Default empty add/remove for heads that
+    /// never credit watches.
+    /// </summary>
+    event EventHandler<VideoWatchInfoEventArgs>? VideoWatchCredited { add { } remove { } }
+}
+
+/// <summary>
+/// Payload for <see cref="IVideoService.VideoWatchCredited"/>. Mirrors the WPF
+/// <c>VideoWatchInfoEventArgs</c> (VideoService.cs:28-34) exactly: watched seconds (pause-aware,
+/// position-based), media duration seconds, and whether the video reached the natural-end threshold.
+/// </summary>
+public sealed class VideoWatchInfoEventArgs : EventArgs
+{
+    /// <summary>Pause-aware watched position in seconds (LibVLC playback time, not wall-clock).</summary>
+    public double WatchedSec { get; set; }
+
+    /// <summary>Media duration in seconds (0 when unknown).</summary>
+    public double DurationSec { get; set; }
+
+    /// <summary>True when the watch reached >= 90% of duration (duration must be &gt; 0).</summary>
+    public bool EndedNaturally { get; set; }
 }

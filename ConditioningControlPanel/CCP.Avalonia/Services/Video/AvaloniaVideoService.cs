@@ -388,6 +388,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     public event EventHandler? VideoAboutToStart;
     public event EventHandler? VideoStarted;
     public event EventHandler? VideoEnded;
+    /// <summary>Raised once per video at teardown from <see cref="FinalizeWatchCredit"/> (WPF
+    /// VideoService.cs:100/2450). Pause-aware watched position + duration; consumers derive skip.</summary>
+    public event EventHandler<VideoWatchInfoEventArgs>? VideoWatchCredited;
 
     public void Start()
     {
@@ -1588,6 +1591,27 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             {
                 _creditedWatchSeconds = watchedSec;
                 _achievements?.TrackVideoWatched(uncredited);
+
+                // WPF FinalizeWatchCredit (VideoService.cs:2450) also raises VideoWatchCredited here, in
+                // its OWN try/catch so a throwing subscriber cannot break achievement crediting. Duration
+                // is live-read (mandatory layer has no DurationMs), falling back to the mandatory-fed
+                // length watermark; <=0 duration forces EndedNaturally=false (WPF _duration>0 guard).
+                try
+                {
+                    var durMs = _videoLayer?.DurationMs ?? -1;
+                    if (durMs <= 0) durMs = _layerLengthMs;
+                    var durationSec = durMs > 0 ? durMs / 1000.0 : 0.0;
+                    VideoWatchCredited?.Invoke(this, new VideoWatchInfoEventArgs
+                    {
+                        WatchedSec = watchedSec,
+                        DurationSec = durationSec,
+                        EndedNaturally = durationSec > 0 && watchedSec >= durationSec * 0.90,
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogDebug("AvaloniaVideoService.VideoWatchCredited handler error: {Error}", ex.Message);
+                }
             }
         }
         catch (Exception ex)
