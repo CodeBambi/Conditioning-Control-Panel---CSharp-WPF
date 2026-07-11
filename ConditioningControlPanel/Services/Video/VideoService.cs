@@ -508,10 +508,11 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    if (!player.Mute) // Only update unmuted players (primary audio)
-                    {
-                        player.Volume = effectiveVolume;
-                    }
+                    // Set Volume on every player. The old `if (!player.Mute)` skip broke live
+                    // drags: player.Mute reads true while no audio output exists yet (transient),
+                    // so the primary player got skipped. Volume and Mute are independent in
+                    // LibVLC - setting Volume never unmutes, and no-audio secondaries ignore it.
+                    player.Volume = effectiveVolume;
                 }
                 catch (Exception ex)
                 {
@@ -1670,6 +1671,16 @@ namespace ConditioningControlPanel.Services
             {
                 mediaPlayer.Mute = false;
                 mediaPlayer.Volume = GetEffectiveVolume();
+                // Play() is async: LibVLC hasn't created the audio output yet, so the
+                // Volume set above silently no-ops (libvlc_audio_set_volume fails with no
+                // aout) and the video starts at 100% regardless of the slider. Re-apply
+                // once playback actually begins and the aout exists - only then does the
+                // Video Volume slider land (matches DualMonitorVideoService/MiniPlayerWindow).
+                mediaPlayer.Playing += (s, e) =>
+                {
+                    try { mediaPlayer.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: volume apply on Playing failed"); }
+                };
                 App.Logger?.Information("LibVLC audio: Volume={Vol}, Mute={Mute}",
                     mediaPlayer.Volume, mediaPlayer.Mute);
             }
@@ -1910,7 +1921,13 @@ namespace ConditioningControlPanel.Services
         {
             if (strict)
             {
-                win.Closing += (s, e) => { if (_videoPlaying) e.Cancel = true; };
+                // Veto user-initiated closes (Alt+F4 etc.) ONLY while the video is
+                // genuinely playing. Once CloseAll() begins teardown it sets
+                // _isCleaningUp (and clears _videoPlaying) up front, so a real teardown
+                // is never vetoed — otherwise a strict window whose _videoPlaying was
+                // left true becomes permanently un-closable and renders solid black
+                // (the "video ended, black window won't close" report).
+                win.Closing += (s, e) => { if (_videoPlaying && !_isCleaningUp) e.Cancel = true; };
                 win.PreviewKeyDown += (s, e) =>
                 {
                     // In strict mode, block panic key, Alt+F4, and system keys
@@ -2477,6 +2494,11 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
                 _isCleaningUp = true;
+                // Make CloseAll self-sufficient: clear the "playing" flag here rather than
+                // relying on every caller to do it first. This guarantees the strict
+                // Closing veto (SetupStrictHandlers) can never block the window teardown
+                // below, even if a caller forgot to clear it.
+                _videoPlaying = false;
             }
 
             // Credit the minutes actually watched, on EVERY teardown (natural end, manual stop, panic,

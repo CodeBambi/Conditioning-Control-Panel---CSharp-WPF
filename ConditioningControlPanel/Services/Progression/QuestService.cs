@@ -643,6 +643,16 @@ public class QuestService : IDisposable
     }
 
     /// <summary>
+    /// Advance bubble-pop quests by a whole batch at once (DtRH web run reporting
+    /// its total on completion).
+    /// </summary>
+    public void TrackBubblesPopped(int count)
+    {
+        if (count <= 0) return;
+        UpdateQuestProgress(QuestCategory.Bubbles, count);
+    }
+
+    /// <summary>
     /// Track video minutes watched
     /// </summary>
     public void TrackVideoMinutes(double minutes)

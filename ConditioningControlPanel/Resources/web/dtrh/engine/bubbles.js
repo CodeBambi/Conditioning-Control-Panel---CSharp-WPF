@@ -29,6 +29,12 @@ const LUCKY_XP = 100;
 const POP_SFX = ['Pop.mp3', 'Pop2.mp3', 'Pop3.mp3'];
 const CHIME_SFX = ['chime1.mp3', 'chime2.mp3', 'chime3.mp3'];
 const DROP_BASE = BASE + 'drops/';
+// The default spiral overlay is now a POOL: one of these animated gifs/webp is
+// picked at random each time a spiral bubble fires (a user-set custom spiral,
+// if any, still wins). All animate natively in an <img>, so no webm decoder
+// cold-start on the pop frame. Files live in assets/bubbles/effects/spirals/.
+const SPIRAL_POOL = ['sp1.gif', 'sp2.webp', 'sp3.gif', 'sp4.webp', 'sp5.gif', 'sp6.gif', 'sp7.gif', 'sp8.gif']
+  .map((f) => BASE + 'effects/spirals/' + f);
 // slug a subliminal word to its drop key (matches gen_sub_drops.py: lowercase,
 // runs of non-alphanumerics -> '_', trimmed).
 const dropSlug = (w) => String(w).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -359,10 +365,9 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
         const custom = getCustomSpiral();
         if (custom && custom.isVideo) overlayVideo(custom.url, 'rh-fx-spiralvid', FLASH_MAX_MS, true, S.spiralOpacity);
         else if (custom) overlayImage(custom.url, 'rh-fx-spiralvid', FLASH_MAX_MS, S.spiralOpacity);
-        // phones: a compositor-spun spiral image instead of cold-starting a
-        // webm decoder on the pop frame (that spin-up is a guaranteed skip)
-        else if (mobile) overlayImage(BASE + 'effects/spiral.png', 'rh-fx-spiralvid rh-fx-spiralspin', FLASH_MAX_MS, S.spiralOpacity);
-        else overlayVideo(BASE + 'spiral.webm', 'rh-fx-spiralvid', FLASH_MAX_MS, true, S.spiralOpacity);
+        // no custom spiral: pull one animated spiral at random from the pool
+        // (gif/webp animate natively in an <img> - no pop-frame decoder stall)
+        else overlayImage(pick(SPIRAL_POOL), 'rh-fx-spiralvid', FLASH_MAX_MS, S.spiralOpacity);
         playVoice(FLASH_VOICES);
         break;
       }
@@ -511,10 +516,47 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
     }
   }
 
+  // Emote rain: Emotes are the run currency, so a pop weeps a few of them out.
+  // Each glyph is flattened to a flat monocolour SILHOUETTE via the
+  // `color:transparent + text-shadow:0 0 0 <tint>` trick (works on colour emoji
+  // in Chromium/WebView2), tinted per-emotion so the fall is a soft rain of
+  // mixed-colour feelings drifting down at ~10% opacity. Same DOM lifecycle as
+  // sparkleBurst: append to the fx layer, self-remove on animationend.
+  const EMORAIN = [
+    { e: '😀', c: '#ffd34d' }, // joy   - gold
+    { e: '😢', c: '#5fb7ff' }, // sad   - blue
+    { e: '😠', c: '#ff5a5a' }, // anger - red
+    { e: '😮', c: '#7ff0e0' }, // shock - cyan
+    { e: '😍', c: '#ff6fd0' }, // love  - pink
+    { e: '😴', c: '#b58cff' }, // sleep - violet
+    { e: '😭', c: '#4d8dff' }, // cry   - deep blue
+    { e: '😳', c: '#ff8fb0' }, // flush - rose
+  ];
+  function emojiRain(x, y) {
+    const n = 5 + ((Math.random() * 4) | 0); // DEBUG loud: 5-8 glyphs (final: 2-4)
+    for (let i = 0; i < n; i++) {
+      const pickEm = pick(EMORAIN);
+      const s = document.createElement('span');
+      s.className = 'rh-emorain';
+      s.textContent = pickEm.e;
+      s.style.left = `${x}px`;
+      s.style.top = `${y}px`;
+      s.style.setProperty('--tint', pickEm.c);
+      s.style.setProperty('--dx', `${rand(-70, 70)}px`);
+      s.style.setProperty('--fall', `${rand(200, 360)}px`);
+      s.style.setProperty('--rot', `${rand(-40, 40)}deg`);
+      s.style.setProperty('--dur', `${rand(2.2, 3.4)}s`);
+      s.style.fontSize = `${rand(30, 44) | 0}px`;
+      fx.appendChild(s);
+      s.addEventListener('animationend', () => s.remove(), { once: true });
+    }
+  }
+
   function pop(rec, x, y) {
     rec.popped = true;
     rec.bubble.classList.add('is-pop');
     sparkleBurst(x, y, rec.kind);
+    emojiRain(x, y);
 
     const t = now();
     combo = (t - lastPop <= COMBO_WINDOW) ? combo + 1 : 1;

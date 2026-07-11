@@ -257,6 +257,9 @@ internal sealed class DtrhMetaBridge
                     long value = (long?)o["value"] ?? 0;
                     if (key == "lastRankSeen" && value > S.LastRankSeen && value < 64)
                     { S.LastRankSeen = (int)value; applied = true; }
+                    // the Cheshire tutorial arc: climbs only (0..16), reset-onboarding rewinds it
+                    else if (key == "tutorialStage" && value > S.TutorialStage && value <= 16)
+                    { S.TutorialStage = (int)value; applied = true; }
                     break;
                 }
                 case "map-set":
@@ -285,6 +288,12 @@ internal sealed class DtrhMetaBridge
                     S.BubbleHintsLearned.Clear();
                     S.SeenReveals.Remove("dollhouse");
                     S.PendingReveals.Remove("dollhouse");
+                    // the Cheshire arc: rewind the stage + purge her namespaced once-lines
+                    // and pooled cooldowns (other narrative rows stay untouched)
+                    S.TutorialStage = 0;
+                    S.SeenNarrativeLines.RemoveWhere(id => id.StartsWith("cheshire:", StringComparison.Ordinal));
+                    foreach (var k in S.NarrativeCooldownEnds.Keys.Where(k => k.StartsWith("cheshire:", StringComparison.Ordinal)).ToList())
+                        S.NarrativeCooldownEnds.Remove(k);
                     S.ForceScriptedRun = true;
                     applied = true;
                     break;

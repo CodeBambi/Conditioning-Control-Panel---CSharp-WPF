@@ -1,0 +1,24 @@
+v6.3.1 - Deeper Down
+
+6.3.0 rebuilt Down the Rabbit Hole into a guided descent through four chambers and
+sixteen biomes, with a Warren leveling hub, boon drafts, and full voiceover. 6.3.1
+keeps refining that rework - smoothing the onboarding, the HUD, and the rough edges.
+
+FEATURES
+- Down the Rabbit Hole: brand-new Cheshire visual-novel tutorial that walks you in, replacing the old lesson cards.
+- 3 local save slots you pick before the hole opens, so multiple runs stay separate.
+- Full biome-drift voiceover now rendered across the descent.
+
+UI/UX
+- Emote stack icon and HUD/VN polish pass.
+- Spiral overlay now pulls from a pool of 8 animated effects at random.
+- New boon card art.
+- 2-second reveal delay plus a spotlight halo on whatever a lesson or Cheshire is explaining.
+- De-stormed narration cooldown so voice lines stop overlapping.
+
+BUG FIXES
+- Fixed a boot hang where the game loader spun forever (stray backtick in a CSS template).
+- Fixed a video black-screen crash during runs.
+- Boon draft now auto-picks a random card on timeout instead of leaving you with nothing.
+
+Season: Jelly July

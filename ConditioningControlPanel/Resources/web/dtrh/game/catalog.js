@@ -119,7 +119,7 @@ export const LIFETIME_BOONS = [
     capstone: 'each whistle also calls a storm — eight more rabbits over the next ten seconds.',
     activeUse: true, cooldownSec: 45 },
   { id: 'e_stim', cat: 'skill', rankFloor: RANK.Curious, name: 'E-Stim', glyph: '⚡',
-    desc: 'press to charge your next 3/4/5 clicks by level. a charged pop arcs lightning into up to 3 bubbles within 600px, snapping any live ones. nothing in reach? the charge keeps. 30s cooldown. even uncharged, every pop has a 10/15/20% chance (30% maxed) to arc on its own.',
+    desc: 'press to charge your next 3/4/5 clicks by level. a charged pop arcs lightning into up to 3 bubbles within 600px, snapping any live ones. if no bubbles are in range, the charge isn’t spent. 30s cooldown. even uncharged, every pop has a 10/15/20% chance (30% maxed) to arc on its own.',
     flavor: 'the current knows exactly where you’re tender.',
     unlockCost: 600, upgradeCosts: [900, 1300], levelValues: [3, 4, 5],
     value: (v) => `${v.toFixed(0)} charged pops`,
@@ -370,7 +370,7 @@ export const DIARY_VERBS = [
 // source of player copy).
 const diaryVerb = (n) => DIARY_VERBS.find((v) => v.name === n);
 export const HUD_TIPS = {
-  score: { glyph: '✦', name: 'score', desc: 'what the fall pays. every pop banks points × your total multiplier — streak, lust, mantras, chamber depth, all of it compounds.' },
+  score: { glyph: '✦', name: 'emotes', desc: 'the currency the fall pays out — spend it at the dollhouse. it rises live as you pop; the small grey number is your raw score (points × total multiplier: streak, lust, mantras, chamber depth, all of it compounds).' },
   mult: { glyph: '×', name: 'the multiplier', desc: 'your total run multiplier: drafted mantras × streak × lust. the streak climbs +1 a pop and catches fire at 15 / 25 / 50 / 100. a treat left to rot HALVES it; a trigger landing in your face breaks it to zero.' },
   shields: { glyph: '♥', name: 'resistance', desc: 'each ♥ eats one unblocked trigger for you. out of hearts, the payload lands. 📿 is the collar — it steps in on its own that many more times.' },
   focus: diaryVerb('focus'),
@@ -471,7 +471,7 @@ export const HOWTO_CARDS = [
   ] },
   { title: 'The two bars', image: 'howto_3', lines: [
     { lead: 'FOCUS', body: 'your nerve. Snapping live bubbles spends it; popping treats refills it. Run dry and you can’t snap — so keep feeding.' },
-    { lead: 'HEAT', body: 'the burn. It climbs every time something triggers. Let it run high and the descent gets harder to resist.' },
+    { lead: 'HEAT', body: 'the burn. It climbs every time something triggers and pays out up to **double**, so it’s meant to run high — there’s no button to cool it. It eases on its own when you let up between triggers, and drops a little when a live bubble goes off and burns through one of your resists.' },
   ] },
   { title: 'A descent', image: 'howto_4', lines: [
     { body: 'Four chambers, then it ends. Between chambers she offers you a **mantra** — pick one and it bends the rules for that run only. **Power-up cards drift through the tube** as you fall: grab one to keep it — toys dock at the bottom to fire, charms and accessories cling on the moment you touch them. Finish the whole descent for the full reward; slip out early and you forfeit it.' },
@@ -536,6 +536,10 @@ export function metaView(meta) {
     seenDollhouse: !!m.seenDollhouse,
     seenWarrenWelcome: !!m.seenWarrenWelcome,
     seenFirstReturn: !!m.seenFirstReturn,
+    // the Cheshire tutorial arc position (0..6; 6 = done) + the reset-onboarding
+    // one-shot, read by cheshireGuide's self-heal
+    tutorialStage: m.tutorialStage | 0,
+    forceScriptedRun: !!m.forceScriptedRun,
 
     atLeast: (r) => rankIndex >= r,
     isOwned: (id) => purchased.has(id),

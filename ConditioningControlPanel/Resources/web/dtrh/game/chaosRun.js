@@ -57,6 +57,9 @@ import { createHappyPath } from './happyPath.js';
 import { createVnPortrait } from './vnPortrait.js';
 import { createLessonCard } from './lessonCard.js';
 import { createHubGuide } from './hubGuide.js';
+import { createCheshireVn, CHESHIRE_DISABLED } from './cheshireVn.js';
+import { createCheshireGuide } from './cheshireGuide.js';
+import { CHESHIRE } from '../assets/vn/cheshire_script.js';
 import { setDucked, isMuted } from '../shared/audioMute.js';
 import { lessonById, boonDefById, DIARY_CODEX, DIARY_VERBS, RANKS } from './catalog.js';
 
@@ -164,6 +167,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       toyKeys: rc.toyKeys || ['Q', 'E'],
       consumableSlots: clamp(rc.consumableSlots ?? 1, 1, 9),
       thoughtTexts: (rc.thoughtTexts && rc.thoughtTexts.length ? rc.thoughtTexts : ['GIVE IN']),
+      // The always-on habits (Warren upgrades) trained this run - surfaced in the
+      // HUD's dim left rail. They never change mid-run, so the HUD reads this once.
+      ownedHabitIds: rc.ownedHabitIds || [],
     };
     // Per-item dollhouse levels: id -> level (>=1 discovered). A grab reads this to know
     // the strength to apply; absent/0 means "never discovered" (first grab unlocks at L1).
@@ -191,6 +197,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let field = null, ffx = null, hudUi = null, overlays = null, payloadFx = null;
   let bMech = null;    // the biome mechanic controller (game/biomeMech.js), built in attach
   let warren = null, lessons = null, happy = null, vn = null, lessonCardUi = null, hubGuide = null;
+  let chesh = null, guide = null;   // the Cheshire VN engine + tutorial director (null when CHESHIRE_DISABLED)
   let rippleCastCount = 0;   // per-run: feeds the classroom's "try the ripple" prompt
   const metrics = createSessionMetrics();   // per-run engagement counters (local-only telemetry)
   let state = 'boot';  // boot -> warren -> requesting -> countdown -> running -> drafting -> recap
@@ -205,6 +212,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function freshState() {
     return {
       score: 0, combo: 0, bestCombo: 0, heat: 0, focus: FOCUS_START,
+      gold: 0,   // run-gold running total (banked to meta Gold; drives the HUD gold ticker)
       defused: 0, detonated: 0, effectsFired: 0, spawned: 0,
       elapsedSec: 0, runDurationSec: cfg.durationSec,
       waveIndex: 1, waveCount: cfg.waveCount, actIndex: 1,
@@ -304,6 +312,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       trustExercise: false,    // Trust Exercise duo: pops sonar-ping the blindfold's dimmed bubbles
       milkingMachine: false,   // Milking Machine duo: pump suction holds the ink fresh; pump end detonates it
       chargedRipple: false,    // Skinny Dipping duo: ripple-wave pops arc lightning onward
+      rippleFlingsRabbits: false, // Riptide duo: the ripple wave smacks (flings) rabbits it washes over
+      dvdScaleMult: 1, dvdSpeedMult: 1, dvdLifeMult: 1, // Racing Thoughts duo: bigger/faster/longer bouncing text
+      dvdElectrified: false,   // Short Circuit duo: bouncing logo crackles + arcs chain lightning on bounce
       thoughtOrbit: false,     // One-Track Mind duo: intrusive thoughts orbit the cursor
       weatherGirl: false,      // Weather Girl duo: every new sky fires a themed entrance event
       midas: false,            // Midas Ricochet duo: lucky pops gild nearby treats (gilded pops tip gold)
@@ -362,6 +373,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   /** All LUST gains flow through here so Her Perfume can sweeten them. */
   const addHeat = (x) => { st.heat = Math.min(1.0, st.heat + x * wxHeatGain()); };
   const basePoints = (strength) => 40 + strength * 1.6;
+  // Emote rain: one falling feeling-glyph per ✦ emote the pop actually banks -
+  // i.e. exactly the "+N" the HUD ✦ counter ticks up by. Callers snapshot
+  // emotesLive() across the score bump and rain the integer delta, so 3 emotes
+  // earned == 3 emoji fall, 5 == 5, and a scoreless pop rains nothing.
   /** The descent's "how deep are we" signal (0..1), read by spawn cadence, the
    * bubble build strength, the director mood and the FX ceilings.
    *
@@ -448,7 +463,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (isMuted()) return;
     bridge.send({ type: 'sfx', name, scale: (scale ?? 0.6) * 0.5 * getLevel('fx') });
   };
-  const bark = (event, data) => bridge.send({ type: 'bark', event, ...(data || {}) });
+  // Every bark tees through the Cheshire first: a claimed event plays HER
+  // commentary line and the native (WPF-voiced) bark stands down - one voice
+  // at a time. Unclaimed events pass through untouched.
+  const bark = (event, data) => {
+    try { if (guide && guide.onEvent(event, data)) return; } catch (e) { /* the tee must never eat a bark */ }
+    bridge.send({ type: 'bark', event, ...(data || {}) });
+  };
   // The boon draft plays IN the tube (engine/boonPick.js): the fall parks, themed
   // cards hang ahead, click one to shatter-and-drop-through. Same callback
   // contract as the old DOM overlay (overlays.showDraft), which stays as a
@@ -501,12 +522,25 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   const heavyActive = () => covered || performance.now() < heavyUntil;
   const bankGold = (amount, x, y) => {
     if (amount <= 0) return;
+    st.gold = (st.gold || 0) + amount;
     bridge.send({ type: 'meta-command', op: 'add-gold', amount });
     if (x != null) field.floatText(`+${amount} 🪙`, x, y + 30, 'cf-pop--gold');
+    hudUi.bumpGold(amount, st.gold);   // top-left ticker: "+N", count the total up, then fade
     if (setFlag('seenGoldFirst')) {
       hudUi.toast('🪙 gold. she takes it at her bench.');
       bark('gold-first');
     }
+  };
+  // Shared narration cooldown: one voice at a time across the Cheshire VN/VO and
+  // the lesson cards. When either speaks it stamps the gate; a new explainer that
+  // wants to fire inside the window is DROPPED (not queued) so it re-triggers the
+  // next time the player naturally meets it. Native barks intentionally don't stamp
+  // (they're too frequent - counting them would starve lesson cards). Reset per run.
+  const NARRATION_CD_MS = 20000;
+  let lastNarrationAt = -Infinity;
+  const narration = {
+    ready: () => (performance.now() - lastNarrationAt) >= NARRATION_CD_MS,
+    stamp: () => { lastNarrationAt = performance.now(); },
   };
   // Queue one first-discovery explainer. `copy` = { glyph, name, desc, flavor?, accent? }.
   // No-op if the card layer isn't up yet or the copy is empty. Extra = { kicker?, onDismiss? }.
@@ -518,13 +552,39 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       kicker: extra && extra.kicker, onDismiss: extra && extra.onDismiss,
     });
   };
-  const markDiscovered = (codexId) => {
-    if (discovered.has(codexId)) return;
+  // Record the discovery in the ledger (persisted). Split out from markDiscovered so
+  // a cooldown-DROPPED lesson is NOT recorded - it must re-trigger next encounter.
+  const commitDiscovery = (codexId) => {
     discovered.add(codexId);
     bridge.send({ type: 'meta-command', op: 'add-to-set', set: 'discoveredCodexIds', id: codexId });
-    // First time ever: pause + explain (bubbles/pickups/weather). Draft boons are
-    // excluded - the in-tube draft already parks the fall and shows the card + desc.
-    if (!codexId.startsWith('boon:') && CODEX_COPY[codexId]) teach(CODEX_COPY[codexId]);
+  };
+  // How long the reveal holds before the explainer speaks: enough for the newly
+  // discovered object to fall into view. The field rings it during this window so
+  // the eye lands on the new thing before the lesson/VN card explains it.
+  const REVEAL_DELAY_MS = 2000;
+  const markDiscovered = (codexId) => {
+    if (discovered.has(codexId)) return;
+    // Codex-only entries (draft boons, or anything with no teach copy): record, no
+    // lesson, no cooldown - the in-tube draft already shows the card + desc.
+    if (codexId.startsWith('boon:') || !CODEX_COPY[codexId]) { commitDiscovery(codexId); return; }
+    // While the Cheshire arc runs, NO lesson card fires (her beats cover the
+    // mechanics); record so it never cards later. Intentional, not a cooldown-drop.
+    if (guide && guide.suppressLessons()) { commitDiscovery(codexId); return; }
+    // Shared 20s gate (drop-not-queue): if the VN/VO or another card spoke in the
+    // window, DROP this one (don't record) so the next encounter re-triggers it.
+    if (!narration.ready()) return;
+    // Committed to explaining it: record + stamp NOW so the channel stays held
+    // through the reveal delay. Spotlight the object as it enters, then after ~2s
+    // let her claim it (held card) or fall back to the plain lesson card.
+    const copy = CODEX_COPY[codexId];
+    commitDiscovery(codexId);
+    narration.stamp();
+    field.highlightDiscovery?.(codexId, REVEAL_DELAY_MS);
+    window.setTimeout(() => {
+      if (state !== 'running') return;
+      if (guide && guide.handleDiscovery(codexId, copy)) return;
+      teach(copy);
+    }, REVEAL_DELAY_MS);
   };
   const pulse = (rgb, strength) => { if (cfg.colorFlashes) hudUi?.pulse(rgb, strength); };
   const showPopScore = (pts, x, y) => {
@@ -595,6 +655,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     field.phys.rabbitTrailSec = st.rabbitTrailSec;
     field.phys.trailBounce = !!st.wandBounce;
     field.phys.thoughtOrbit = !!st.thoughtOrbit;
+    field.phys.rippleFlingsRabbits = !!st.rippleFlingsRabbits;
+    field.phys.dvdElectrified = !!st.dvdElectrified;
   };
 
   // Sticky Fingers capstone: releasing a held card hurls it down the tube; the impact
@@ -790,8 +852,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (st.combo > st.bestCombo) st.bestCombo = st.combo;
       addHeat(0.05);
       const prismPts = basePoints(spec.strength) * 10.0 * totalMult() * st.blindfoldPayMult;
+      const emotesBefore = emotesLive();
       st.score += prismPts;
       showPopScore(prismPts, x, y);
+      field.emojiRain(x, y, emotesLive() - emotesBefore);   // one glyph per ✦ earned
       hudUi.announce(`🔮 the colors! 10x — it was ${NAME_OF[spec.mimicId] || spec.mimicId}`, 'bad', 2200, { artKey: 'bright_colors' });
       pulse('200,168,255', 0.40);
       // P2: the prism scrambles the tube's palette for a few seconds.
@@ -836,9 +900,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       pts *= bm;
       noteBiomePay(bm, x, y);
     }
+    const emotesBefore = emotesLive();
     st.score += pts;
     bankDripFeed();
     showPopScore(pts, x, y);
+    field.emojiRain(x, y, emotesLive() - emotesBefore);   // one glyph per ✦ earned
     pulse('255,200,235', 0.10);
     if (spec.payMult > 1) hudUi.toast('🪨 heavy drop! x3');
     rollCamGirlTip(x, y);
@@ -1190,6 +1256,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       level: t.level ?? 1,
       maxed: !!t.maxed,
       chargesLeft: (t.cooldownSec ?? 0) <= 0 ? Math.max(3, Math.round(t.power ?? 0)) : -1,
+      chargesMax: (t.cooldownSec ?? 0) <= 0 ? Math.max(3, Math.round(t.power ?? 0)) : -1,
       cooldownLeft: 0,
       effectActive: false,
     }));
@@ -1223,9 +1290,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         hudUi.toast('❄ everything holds still');
         break;
       case 'porn_dvd': {
-        const speed = t.level === 1 ? 0.7 : t.level === 2 ? 0.85 : 1.0;
-        const scale = t.level === 1 ? 0.8 : t.level === 2 ? 0.9 : 1.0;
-        field.launchDvd({ durationSec: Math.max(5, t.power), speed, scale,
+        const speed = (t.level === 1 ? 0.7 : t.level === 2 ? 0.85 : 1.0) * st.dvdSpeedMult;
+        const scale = (t.level === 1 ? 0.8 : t.level === 2 ? 0.9 : 1.0) * st.dvdScaleMult;
+        field.launchDvd({ durationSec: Math.max(5, t.power) * st.dvdLifeMult, speed, scale,
           count: t.maxed ? 2 : 1, splitBounces: st.dvdSplitBounces });
         sfx('dvd_launch', 0.55);
         t.cooldownLeft = t.cooldownSec;
@@ -1364,7 +1431,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       thoughtAccum += dt;
       if (thoughtAccum >= 5.0) {
         thoughtAccum = 0;
-        field.launchDvd({ durationSec: st.intrusiveThoughtsSec, speed: 1.3, scale: 0.8,
+        field.launchDvd({ durationSec: st.intrusiveThoughtsSec * st.dvdLifeMult, speed: 1.3 * st.dvdSpeedMult, scale: 0.8 * st.dvdScaleMult,
           count: 1, text: cfg.thoughtTexts[(Math.random() * cfg.thoughtTexts.length) | 0] });
       }
     }
@@ -1549,11 +1616,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       kind: 'condensation',
       spriteUrl: 'https://ccp.art/bubbles/gold_droplet.png',
       w: 1.1, aheadDepth: 45, ttlSec: 14, glowColor: 0xffd700,
-      onClick: () => {
+      onClick: (rec, sx, sy) => {
         if (!st || state !== 'running') return;
         const n = randInt(2, 5);
         st.trickleDrops += n;
         sfx('golden_pop', 0.45);
+        // a positioned gold burst on the droplet - the wall pickup used to only
+        // toast, so a droplet grabbed off/behind a wall gave no gold feedback.
+        if (sx != null) {
+          field.sparkleBurst(sx, sy, 'golden', 130);
+          field.floatText(`💧 +${n}✦`, sx, sy, 'cf-pop--gold');
+        }
         hudUi.toast(`💧 +${n}✦ condensed off the wall`);
         markDiscovered('pickup:condensation');
       },
@@ -1935,7 +2008,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const skipped = draftRoomSkip || (choice && choice.skipped);
     draftRoomSkip = false;
     if (skipped) { resolveDraft(null, false); return; }
-    if (choice && choice.timedOut) { bark('draft-autopick'); resolveDraft(null, true); return; }
+    // A timeout dives the coaxed door (junctions.commit -> tubesPick), so its
+    // winner.desc carries a real boon - award it ("she chose for you") instead of
+    // leaving you empty-handed. Falls through to the gold-pouch fallback below when
+    // that door had no boon, exactly like a clicked boon-less door.
+    const timedOut = !!(choice && choice.timedOut);
+    if (timedOut) bark('draft-autopick');
     // the engine's empty-entrance fallback (junctions.buildVein): a door that
     // couldn't carry a boon card carries a 100-gold pouch instead - bank it
     if (!b.boon && b.reward && b.reward.kind === 'gold') {
@@ -1944,7 +2022,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       hudUi.announce(`🪙 +${gold} gold`, 'powerup', 1600);
       sfx('golden_pop', 0.55);
     }
-    resolveDraft(b.boon || null, false);
+    resolveDraft(b.boon || null, timedOut);
   }
 
   /** Per-RunTick: Lust Bleed (the tube blushes with the LUST bar; a held full
@@ -2092,7 +2170,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // Once-ever heat teach: name the burn the first time it visibly climbs.
     if (!flags.seenHeatTeach && st.heat >= 0.15) {
       setFlag('seenHeatTeach');
-      hudUi.announce('lust climbs while you perform. it pays up to x2', 'depth', 3200);
+      hudUi.announce('lust climbs while you perform — it pays up to x2, and eases on its own when you let up', 'depth', 3600);
     }
     // rh_focus_low: a sustained dry spell with no ripple in the tank -> one bark per run.
     if (!focusLowBarked) {
@@ -2136,6 +2214,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     lessons.sampleCursor();                          // the_pull's rest witness
     lessons.noteChannelTotal(field.channelSeconds()); // slow_fuses
     happy.tickRun(hpIo);                             // scripted first-descent beats
+    // the Cheshire's arc schedule rides the same tick (frac is MONOTONIC
+    // elapsed/duration, not the sawtooth intensity - triggers must always land)
+    if (guide) guide.tick({ frac: st.elapsedSec / Math.max(1, st.runDurationSec), wave: st.waveIndex });
 
     if (!st.endingSoonFired && st.runDurationSec - st.elapsedSec <= 10) {
       st.endingSoonFired = true;
@@ -2213,8 +2294,20 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     });
   };
 
+  // Live projection of the emotes (✦) this run will bank, mirroring the C# payout
+  // (ChaosUpgrades.AwardRunRewards): 1.5·√score + a time-scaled completion bonus,
+  // times the spark-gain mult, plus the Drip Feed trickle. Omits the end-only Drip
+  // 10% tip and first-fall bonus, so the recap lands at or just above the HUD number
+  // (a small pleasant surprise, never a letdown). Monotonic in score -> always rises.
+  const emotesLive = () => {
+    const durMin = Math.max(0, st.elapsedSec) / 60;
+    const completionBonus = 35 * cfg.difficultyMult * Math.min(1, durMin / 3);
+    const scorePart = 1.5 * Math.sqrt(Math.max(0, st.score));
+    return Math.max(0, Math.round((scorePart + completionBonus) * cfg.sparkGainMult) + (st.trickleDrops | 0));
+  };
+
   const hudState = () => ({
-    score: st.score, totalMult: totalMult(), combo: st.combo,
+    score: st.score, emotes: emotesLive(), totalMult: totalMult(), combo: st.combo,
     focus: st.focus, elapsedSec: st.elapsedSec, runDurationSec: st.runDurationSec,
     waveIndex: st.waveIndex, waveCount: st.waveCount,
     rippleCost: st.rippleFocusCost,
@@ -2248,6 +2341,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     state = 'drafting';
     syncHeld();
     field.clearAll(true);
+    ctx.powerupDrops?.clearLive();   // fade any live drop so it can't hang ungrabbable through the draft
     sfx('wave_clear', 0.6);
     pulse('150,200,255', 0.30);
     bark('wave-cleared', { wave: st.waveIndex });
@@ -2292,6 +2386,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     state = 'drafting';
     syncHeld();
     field.clearAll(true);
+    ctx.powerupDrops?.clearLive();   // the Landing parks the fall: don't strand a drop ungrabbable beside it
     sfx('wave_clear', 0.6);
     pulse('150,200,255', 0.30);
     bark('wave-cleared', { wave: st.waveIndex });
@@ -2369,9 +2464,24 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function addConsumable(id, level) {
     const def = boonDefById(id);
     if (!def || !def.levelValues || !def.levelValues.length) return;
+    // Recharge path: already holding this active -> top its charges back up instead
+    // of docking a duplicate. When the dock is full, the drop picker offers a recharge
+    // of a partly-spent held toy (see canOfferPowerup) rather than a toy with no slot.
+    const held = toys.find((t) => t.id === id);
+    if (held) {
+      held.chargesLeft = held.chargesMax;
+      held.cooldownLeft = 0;
+      if (held.pickRef) held.pickRef.spent = false;   // un-grey the ribbon tile if it had drained
+      hudUi.setPicks(st.runPicks);
+      hudUi.updateToys(toys, toyStatus());
+      return true;   // signals a recharge (vs a fresh dock) to the grab toast
+    }
     if (toys.length >= st.consumableSlots) return;   // dock full (canOfferPowerup should have vetoed)
     const lvl = Math.max(1, level | 0);
     const power = def.levelValues[Math.min(lvl, def.levelValues.length) - 1];
+    // Consumables dock with 3 uses (charge-based toys keep their levelled charge
+    // count when it's higher — e.g. a deepened wand still brings 4).
+    const chargesMax = (def.cooldownSec ?? 0) <= 0 ? Math.max(3, Math.round(power)) : 3;
     // The pickup also lands in the run ribbon (an active vanishes from the dock
     // when spent - the ribbon tile stays as the record, greying out on the last
     // charge). The toy record keeps a ref so the spend site can flip it.
@@ -2381,9 +2491,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       key: String(toys.length + 1),                       // slot 1 -> "1", etc.
       cooldownSec: def.cooldownSec ?? 0,
       power, level: lvl, maxed: lvl >= def.levelValues.length,
-      // Consumables dock with 3 uses (charge-based toys keep their levelled charge
-      // count when it's higher — e.g. a deepened wand still brings 4).
-      chargesLeft: (def.cooldownSec ?? 0) <= 0 ? Math.max(3, Math.round(power)) : 3,
+      chargesLeft: chargesMax, chargesMax,
       cooldownLeft: 0, effectActive: false, consumable: true, pickRef: pick,
     });
     st.runEquipment.add(id);
@@ -2413,14 +2521,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
     const acquire = () => {
       if (state !== 'running') return;   // card dismissed after the run ended: skip the apply/anim
+      let recharged = false;
       if (kind === 'consumable') {
-        addConsumable(id, level);
+        recharged = addConsumable(id, level) === true;
         try { hudUi.flyArtToSlot(id, screenPos, 'consumable'); } catch (e) { /* ignore */ }
       } else {
         applyGrabbedPassive(id);
         try { hudUi.flyArtToSlot(id, screenPos, 'relic'); } catch (e) { /* ignore */ }
       }
-      hudUi.toast('◈ ' + def.name);
+      hudUi.toast('◈ ' + def.name + (recharged ? ' recharged' : ''));
     };
 
     if (first) {
@@ -2834,7 +2943,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
      * id (resolves the active persona's emote + line + voiceover) or an explicit
      * {emote,line,voUrl}. Returns a promise; safe to fire-and-forget. No-op if the
      * VN overlay isn't built. */
-    vnBeat: (beat) => (vn ? vn.beat(beat) : Promise.resolve(false)),
+    vnBeat: (beat) => (guide ? guide.happyBeat(beat)
+      : (vn ? vn.beat(beat) : Promise.resolve(false))),
     spawnScriptedThreat(fuseMult) {
       const pink = VARIANTS.find((v) => v.id === 'pink');
       if (!pink) return;
@@ -2855,6 +2965,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       state = 'drafting';
       syncHeld();
       field.clearAll(true);
+      ctx.powerupDrops?.clearLive();   // scripted table parks the fall too - clear any live drop
       sfx('wave_clear', 0.6);
       pulse('150,200,255', 0.30);
       pendingWave = st.waveIndex;
@@ -2943,6 +3054,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     lessons.seed(hostState ? hostState.meta : null, cfg.allowCurses);
     metrics.reset();   // fresh per-run engagement counters
     happy.onRunStarted(cfg.runsCompleted, cfg.scriptedFirstRun);
+    lastNarrationAt = -Infinity;   // fresh descent: never pre-suppressed by a hub-scene line
+    if (guide) guide.onRunStarted(cfg);   // deal this descent's Cheshire schedule (or none)
 
     // A pre-equipped start boon enters the run already active (before wave 1) -
     // except on the scripted first descent, where it stands down (the classroom).
@@ -2959,6 +3072,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.update(hudState());
     hudUi.updateToys(toys, toyStatus());
     hudUi.setPicks(st.runPicks);
+    hudUi.setHabits(st.ownedHabitIds);   // the always-on habits rail (left, dim until hover)
     hudUi.setVisible(true);
     if (!short) sfx('fall_in', 0.28);
     overlays.showCountdown({
@@ -3007,6 +3121,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     field.setVibe(false);
     lessons.onRunCompleted(st.shields, cfg.difficulty, ranFullCourse);
     happy.onRunEnded();
+    if (guide) guide.onRunEnded();   // drop any pending Cheshire beats before the recap
     if (ranFullCourse) awardLoopTip();   // the final loop ends at the run clock
     field.clearAll();
     clearAmbient();
@@ -3068,6 +3183,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     overlays.hideCountdown();
     hudUi.setVisible(false);
     hudUi.setPicks([]);
+    hudUi.setHabits([]);
     field.clearAll();
     clearAmbient();
     if (bMech) bMech.reset();   // a run aborted mid-chamber must not leak its biome mechanic into the hub
@@ -3196,7 +3312,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           if (draftRoomActive) showDraftRoomChrome();
         };
       }
-      // a voice-button click in the audio panel applies to the very next line
+      // a voice-button click in the audio panel swaps live - driftChain cuts a
+      // mid-play biome line and re-picks in the new voice on the spot
       offVoice = onVoice((v) => { try { if (ctx.drift && ctx.drift.setVoice) ctx.drift.setVoice(v); } catch (e) { /* ignore */ } });
       // THE BIOMES: grab arbitration. The Gallery melts a denied grab in your
       // hands; every grab that holds feeds the run-wide tally the Coronation
@@ -3238,18 +3355,42 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       lessons = createLessonTracker({ bridge, onComplete: onLessonComplete, onFirstTime: onFirstTimeAwarded });
       lessons.setCoveredProbe(() => covered || heavyActive());
       happy = createHappyPath();
-      // The Warren's FTUE director: welcome beats on the first-ever hub open, guided
-      // spend on the first return. Reads flags from the metaView warren hands it per
-      // call; persists via a direct set-flag (NOT the per-run `flags` mirror, which
-      // doesn't carry hub flags).
-      hubGuide = createHubGuide({
+      // The Cheshire (FTUE overhaul): her VN engine + tutorial director replace
+      // the old hubGuide + lesson cards for the first three descents. Kill-switch:
+      // CHESHIRE_DISABLED restores the legacy path byte-identically below.
+      if (!CHESHIRE_DISABLED) {
+        chesh = createCheshireVn(ctx.hud, {
+          haltTunnel, duckAudio,
+          driftDuck: (m) => { try { if (ctx.drift && ctx.drift.setDuck) ctx.drift.setDuck(m); } catch (e) { /* ignore */ } },
+          send: (msg) => bridge.send(msg),
+          script: CHESHIRE,
+        });
+        try { chesh.prime(); } catch (e) { /* poses warm lazily on first beat */ }
+        guide = createCheshireGuide({
+          vn: chesh, bridge, narration,
+          getMeta: () => (hostState ? hostState.meta : null),
+          isFieldHeld: () => heldNow(),
+          isDriftSpeaking: () => { try { return !!(ctx.drift && ctx.drift.isSpeaking && ctx.drift.isSpeaking()); } catch (e) { return false; } },
+          // a beat's `covers` stamps the discovery ledger exactly like a spawn would
+          coverDiscovered: (id) => {
+            if (discovered.has(id)) return;
+            discovered.add(id);
+            bridge.send({ type: 'meta-command', op: 'add-to-set', set: 'discoveredCodexIds', id });
+          },
+          log: (m) => bridge.log(m),
+        });
+      }
+      // The legacy Warren FTUE director: welcome beats on the first-ever hub open,
+      // guided spend on the first return. Only built when the Cheshire is off -
+      // her hub director supersedes it via the identical contract.
+      hubGuide = CHESHIRE_DISABLED ? createHubGuide({
         vnBeat: (b) => (vn ? vn.beat(b) : Promise.resolve(false)),
         vnCancel: () => { try { if (vn) vn.hide(); } catch (e) { /* ignore */ } },
         teach,
         teachBusy: () => !!(lessonCardUi && lessonCardUi.isBusy()),
         setFlag: (k) => bridge.send({ type: 'meta-command', op: 'set-flag', key: k }),
         log: (m) => bridge.log(m),
-      });
+      }) : null;
       warren = createWarren({
         hud: ctx.hud, bridge,
         stations: ctx.hubStations,
@@ -3262,11 +3403,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         },
         onExit: () => { if (requestExit) requestExit(); else bridge.send({ type: 'exit' }); },
         onOptions: ctx.openOptions,
+        onReportBug: () => bridge.send({ type: 'report-bug' }),
         fullscreen: ctx.fullscreenSupported
           ? { toggle: ctx.toggleFullscreen, isActive: ctx.isFullscreen, onChange: ctx.onFullscreenChange }
           : null,
-        guide: hubGuide,
+        guide: guide ? guide.hub : hubGuide,
       });
+      // Guide is built before warren, so hand its tutorial surface over now: this
+      // lets Cheshire's card-tour beats open + highlight the real dollhouse cards.
+      try { if (guide && guide.hub && guide.hub.attachWarren) guide.hub.attachWarren(warren.tutorial); } catch (e) { /* ignore */ }
       window.addEventListener('pointerdown', onPointerDownGlobal, true);
       window.addEventListener('pointerdown', onGlobalPointerDownCapture, true);
       window.addEventListener('contextmenu', onContextMenu);
@@ -3307,6 +3452,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
      *  classroom. The snapshot rebroadcast re-fires the hub welcome live. */
     resetOnboarding() {
       bridge.send({ type: 'meta-command', op: 'reset-onboarding' });
+      // direct signal (not snapshot-sniffing): rewind the Cheshire arc + drop her
+      // local once-line mirrors so the full tutorial replays, scripted run included
+      try { if (guide && guide.onReset) guide.onReset(); } catch (e) { /* ignore */ }
       sfx('ui_unlock', 0.55);
     },
 
@@ -3414,12 +3562,21 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // ---- grab-in-the-tube power-ups (engine/powerupDrops.js) ----
     /** The raw meta snapshot the drop picker reads (rank + discovered levels). */
     getMeta() { return hostState ? hostState.meta : null; },
-    /** Veto an offer: only while running, never re-offer this run, and a consumable
-     *  needs a free dock slot (passives always fit - they pin to the relic strip). */
+    /** Veto an offer: only while running, and passives/new toys never re-offer this
+     *  run. A consumable with a free dock slot is offered fresh; once the dock is full
+     *  we instead offer a RECHARGE of a partly-spent held active (grabbing it refills
+     *  that toy - see addConsumable) rather than a toy there's no room for. Passives
+     *  always fit - they pin to the relic strip. */
     canOfferPowerup(id, kind) {
       if (state !== 'running' || !st) return false;
-      if (st.runEquipment.has(id)) return false;
-      if (kind === 'consumable') return toys.length < st.consumableSlots;
+      const held = st.runEquipment.has(id);
+      if (kind === 'consumable') {
+        if (!held) return toys.length < st.consumableSlots;   // fresh toy needs an open pocket
+        if (toys.length < st.consumableSlots) return false;   // room to spare: prefer new toys, not a refill
+        const t = toys.find((x) => x.id === id);              // pockets full: offer a recharge...
+        return !!t && t.chargesLeft < t.chargesMax;           // ...only if this one has a spent charge
+      }
+      if (held) return false;   // passives never re-offer
       return true;
     },
     /** Duo bait: multiply an offer's weight when grabbing that item would unlock

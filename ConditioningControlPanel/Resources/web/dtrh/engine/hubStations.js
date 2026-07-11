@@ -70,13 +70,17 @@ function makeFrameTex() {
 }
 // the FALL IN portal ring: concentric soft strokes + a faint inner swirl
 function makeRingTex() {
-  const s = 256, c = document.createElement('canvas'); c.width = c.height = s;
+  // 1024px source (was 256): the portal ring upscales to ~4.2 world units, so a
+  // low-res texture read visibly pixelated on 2K/hi-DPI monitors. k keeps every
+  // stroke weight proportional to the original 256px look — same art, crisper.
+  const s = 1024, c = document.createElement('canvas'); c.width = c.height = s;
+  const k = s / 256;
   const x = c.getContext('2d');
   x.translate(s / 2, s / 2);
   x.strokeStyle = '#ffffff';
-  x.lineWidth = 10; x.globalAlpha = 0.95;
+  x.lineWidth = 10 * k; x.globalAlpha = 0.95;
   x.beginPath(); x.arc(0, 0, s * 0.44, 0, Math.PI * 2); x.stroke();
-  x.lineWidth = 3; x.globalAlpha = 0.5;
+  x.lineWidth = 3 * k; x.globalAlpha = 0.5;
   x.beginPath(); x.arc(0, 0, s * 0.36, 0, Math.PI * 2); x.stroke();
   x.globalAlpha = 0.35;
   // three swirl arms spiralling inward
@@ -89,9 +93,11 @@ function makeRingTex() {
       const px = Math.cos(ang) * rr, py = Math.sin(ang) * rr;
       if (t === 0) x.moveTo(px, py); else x.lineTo(px, py);
     }
-    x.lineWidth = 4; x.stroke();
+    x.lineWidth = 4 * k; x.stroke();
   }
-  return new THREE.CanvasTexture(c);
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 8;   // keep the ring sharp at the oblique portal angle
+  return tex;
 }
 // fallback content: glyph + wrapped label on a dark panel, tinted per station
 function makeNamePanelTex(def, hexFrame) {
@@ -125,9 +131,14 @@ function drawBadge(canvas, n) {
   const s = 96, x = canvas.getContext('2d');
   x.clearRect(0, 0, s, s);
   if (n > 0) {
-    x.fillStyle = '#ff69b4';
+    // Deeper magenta + a soft dark rim: the old #ff69b4 washed out against the
+    // pale hub bloom, so the "you can upgrade" count was hard to read.
+    x.save();
+    x.shadowColor = 'rgba(0,0,0,0.6)'; x.shadowBlur = 9;
+    x.fillStyle = '#d6187a';
     x.beginPath(); x.arc(s / 2, s / 2, s * 0.42, 0, Math.PI * 2); x.fill();
-    x.strokeStyle = 'rgba(255,255,255,0.85)'; x.lineWidth = 5; x.stroke();
+    x.restore();
+    x.strokeStyle = 'rgba(255,255,255,0.92)'; x.lineWidth = 5; x.stroke();
     x.fillStyle = '#fff';
     x.font = 'bold 46px "Segoe UI", sans-serif';
     x.textAlign = 'center'; x.textBaseline = 'middle';
@@ -158,8 +169,10 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
 
   // default cross-section slots (binormal = x, normal = y); defs may override
   const DEFAULT_SLOTS = {
-    toybox:  { x: -3.4, y: 1.4 },
-    dials:   { x: 3.4,  y: 1.4 },
+    // Pulled in from ±3.4: at the old spread the side stations sat near the tube
+    // wall radius, so their glow halos bled past it and read as "cut off."
+    toybox:  { x: -2.9, y: 1.4 },
+    dials:   { x: 2.9,  y: 1.4 },
     vanity:  { x: 0,    y: 2.15 },   // ducks under the DOM logo marquee
     portal:  { x: 0,    y: -0.4 },
   };
@@ -179,7 +192,9 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
       map: glowTex, color: new THREE.Color(glowCol), transparent: true, opacity: 0,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     const glow = new THREE.Mesh(unitPlane, glowMat);
-    glow.scale.set(w * 1.7, h * 1.6, 1); glow.position.z = -0.08; group.add(glow);
+    // Slightly tighter halo (was 1.7×1.6) so the side stations' glow stays inside
+    // the tube bore and isn't clipped by the wall mesh.
+    glow.scale.set(w * 1.55, h * 1.5, 1); glow.position.z = -0.08; group.add(glow);
     // the halo bleeds far past the card (the portal's reaches under the side
     // stations) - it must never catch the pointer, only the card/ring may
     glow.raycast = () => {};

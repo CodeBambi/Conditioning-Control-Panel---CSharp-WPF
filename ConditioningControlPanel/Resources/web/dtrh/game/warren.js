@@ -71,7 +71,7 @@ const STATION_META = {
   vanity: { label: 'VANITY', glyph: '📔', accent: 0xc178ff, sub: 'the mirror' },
 };
 
-export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, runSetup, onDescend, onExit, onOptions, fullscreen, guide }) {
+export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, runSetup, onDescend, onExit, onOptions, onReportBug, fullscreen, guide }) {
   const root = document.createElement('div');
   root.className = 'wr-root';
   root.hidden = true;
@@ -92,7 +92,10 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   // ending in a boon Landing. Only difficulty + length are picked here at the
   // portal; the rest of the old DESCENT tab lives in ⚙ options now (settings.js
   // run* keys, edited in panel.js and folded back in by buildSetup()).
-  const CHAMBER_TOTALS = [720, 960, 1200];   // 12 / 16 / 20 min (3 / 4 / 5 min per chamber)
+  // 240 is the short "taster" fall (back by request): still the full four chambers,
+  // just ~60s each, so the ACT I-IV identity + region VO all survive. 12/16/20 are
+  // the standard descents.
+  const CHAMBER_TOTALS = [240, 720, 960, 1200];   // 4 / 12 / 16 / 20 min (60 / 180 / 240 / 300s per chamber)
   const setup = {
     difficulty: (runSetup && runSetup.difficulty) || 'Easy',
     durationSec: (runSetup && runSetup.durationSec) || 960,
@@ -139,6 +142,8 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   let visible = false;
   let openId = null;         // station whose panes are open (null = idle)
   let descending = false;    // a request-run is in flight
+  let descendWatchdog = null;   // re-arm timer: fires if the host never answers request-run
+  const DESCEND_WATCHDOG_MS = 6000;   // "she opens the hole…" must not hang forever
   let modal = null;          // open modal element (howto / intro)
   const revealEls = new Map();       // reveal id -> DOM element to flash (rows or whole panes)
   // reveal id -> station to flash in 3D (station-level surfaces)
@@ -472,6 +477,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       if (fullscreen.onChange) fullscreen.onChange(() => { fsBtn.textContent = label(); });
     }
     btn('wr-dock-btn', 'how to play', () => openHowTo(), dock);
+    if (onReportBug) btn('wr-dock-btn wr-dock-btn--dim', '🐛 report bug', () => onReportBug(), dock);
     btn('wr-dock-btn wr-dock-btn--dim', 'wake up (exit)', () => onExit(), dock);
 
     // bottom hint line
@@ -492,8 +498,17 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
 
     // FALL IN caption + chips under the portal
     chrome.fall.innerHTML = '';
-    el('wr-fall-cap', chrome.fall, descending ? 'she opens the hole…' : 'FALL IN');
-    if (!descending) {
+    if (descending) {
+      el('wr-fall-cap', chrome.fall, 'she opens the hole…');
+    } else {
+      // The center spiral IS the play button, but a click that lands off its ring
+      // (the portal's square frame corners, or the portrait) misses the raycast and
+      // does nothing - testers hunted for a button and got stuck. Make the caption +
+      // hint real DOM buttons that fall too: a guaranteed, non-raycast way in.
+      const cap = btn('wr-fall-cap wr-fall-cap--btn', 'FALL IN', () => portalClicked(), chrome.fall);
+      cap.setAttribute('aria-label', 'fall in — start the descent');
+      // A faint arrow points back up at the portal; clicking it falls, too.
+      btn('wr-fall-hint', '↑ click the spiral (or here) to drop in', () => portalClicked(), chrome.fall);
       const diffRow = el('wr-pills wr-pills--center', chrome.fall);
       let effDiff = setup.difficulty;
       const diffAvailable = DIFF_PILLS.filter((d) => (!d.revealGate || reveals.isUnlocked(d.revealGate, v)));
@@ -601,8 +616,9 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     return win;
   }
 
-  function openStation(id) {
+  function openStation(id, o) {
     if (!STATION_META[id]) return;
+    const tutorial = !!(o && o.tutorial);
     const v = view();
     closeSheet();
     openId = id;
@@ -632,12 +648,16 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       buildWindow(d, v, n++);
     }
 
-    // first-ever station visit: her welcome + the reveal pass
-    if (!v.seenDollhouse) {
-      setFlag('seenDollhouse');
-      bark('dollhouse-first-open');
+    // first-ever station visit: her welcome + the reveal pass. The tutorial tour
+    // opens cards silently (it does its own targeted highlight) and must NOT burn
+    // the player's real first-open moment or fire the broad reveal pass.
+    if (!tutorial) {
+      if (!v.seenDollhouse) {
+        setFlag('seenDollhouse');
+        bark('dollhouse-first-open');
+      }
+      runRevealFlashes('hub_open');
     }
-    runRevealFlashes('hub_open');
   }
 
   /** A freshly-gated-in pane lands at its def-order spot in its column. */
@@ -1085,6 +1105,21 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
 
   // ============================ descend ============================
 
+  function clearDescendWatchdog() {
+    if (descendWatchdog) { clearTimeout(descendWatchdog); descendWatchdog = null; }
+  }
+
+  /** Re-arm the hub in place: rebuild the shattered portal and drop `descending`.
+   *  Shared by the host-driven descendFailed() and the no-answer watchdog. */
+  function reArmHub(hint) {
+    clearDescendWatchdog();
+    descending = false;
+    if (!visible) return;
+    if (stations) stations.show(buildStationDefs(view()));   // rebuild the shattered portal
+    refreshChrome(view());
+    if (hint && chrome && chrome.hint) chrome.hint.textContent = hint;
+  }
+
   function beginDescend() {
     if (descending) return;
     descending = true;
@@ -1092,6 +1127,18 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     if (stations) stations.portalDive('portal');
     onDescend(buildSetup());
     refreshChrome(view());
+    // Safety net: if the host never answers request-run (OnRequestRun threw or the
+    // reply was lost), the hub would sit on "she opens the hole…" forever with the
+    // portal shattered and no way back. Re-arm after a beat so nobody is stranded.
+    // A real run-start hides the hub (onRunConfig -> warren.hide), so the guard
+    // below no-ops on success.
+    clearDescendWatchdog();
+    descendWatchdog = setTimeout(() => {
+      descendWatchdog = null;
+      if (!visible || !descending) return;   // run started (hub hidden) or already re-armed
+      try { sfx('ui_denied', 0.3); } catch (e) { /* ignore */ }
+      reArmHub('the hole didn’t open. click the spiral to try again.');
+    }, DESCEND_WATCHDOG_MS);
   }
 
   function portalClicked() {
@@ -1112,6 +1159,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       root.hidden = false;
       hud.classList.add('wr-open'); // hides the scene's score/meters under the hub chrome
       descending = false;
+      clearDescendWatchdog();
       openId = null;
       revealEls.clear();
       const v = view();
@@ -1126,6 +1174,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     hide() {
       visible = false;
       root.hidden = true;
+      clearDescendWatchdog();
       hud.classList.remove('wr-open');
       if (guide) guide.onInterrupt();   // a descend/teardown drops any pending beats
       closeSheet();
@@ -1146,10 +1195,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     },
     /** The descend request failed / was superseded - re-arm the hub. */
     descendFailed() {
-      descending = false;
-      if (!visible) return;
-      if (stations) stations.show(buildStationDefs(view()));   // rebuild the shattered portal
-      refreshChrome(view());
+      reArmHub();
     },
     /** scene.js pointer routing: a station (or the portal) was clicked. */
     onStationPick(id) {
@@ -1175,6 +1221,24 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       if (modal) { closeModal(); return true; }
       if (openId) { closeSheet(); return true; }
       return true;
+    },
+    /** Tutorial-tour surface: the Cheshire guide drives real cards during a hub
+     * scene. These bypass onStationPick's guide.onInterrupt() (which would cancel
+     * the very scene driving them) and open silently (no first-visit bark/flag). */
+    tutorial: {
+      open: (id) => openStation(id, { tutorial: true }),
+      close: () => closeSheet(),
+      // respects the real station gates (a locked Vanity isn't tourable yet)
+      canOpen: (id) => visible && !descending && buildStationDefs(view()).some((s) => s.id === id),
+      hasPane: (paneId) => openWins.has(paneId),
+      highlightPane(paneId, ms) {
+        const rec = openWins.get(paneId);
+        if (!rec || !rec.winEl) return;
+        const el = rec.winEl;
+        el.classList.add('wr-reveal-flash');
+        window.setTimeout(() => el.classList.remove('wr-reveal-flash'), ms || 2600);
+        try { sfx('reveal_chime', 0.5); } catch (e) { /* ignore */ }
+      },
     },
     dispose() { hud.classList.remove('wr-open'); root.remove(); },
   };

@@ -33,6 +33,7 @@ const BLOCKS_MIN = 4;           // blocks per cycle before the resolve fires
 const BLOCKS_MAX = 8;
 const CLIP_MAX_MS = 25000;      // a lost 'ended' can't stall the chain
 const RETRY_GAP_MS = 600;
+const VOICE_SWAP_GAP_MS = 150;  // near-instant re-pick when the voice toggle flips
 const FAIL_HOLD_MS = 3000;      // reschedule after a failed play (self-heal)
 const WATCHDOG_MS = 4000;       // idle watchdog: guarantees the voice loops forever
 const SENSORY_DEPTH_REF = 4000; // depth where the sensory weighting saturates
@@ -137,12 +138,44 @@ export function createDriftChain({ getDepth }) {
     && (!b.biome || (b.biome === curBiome && (b.mod || 'sissy') === curVoice));
   function setRegion(n) { curRegion = (n | 0) || 0; }
   function setBiome(id) { curBiome = id || null; }
-  function setVoice(v) { curVoice = v === 'circe' ? 'circe' : 'sissy'; }
+  // Voice swap. Only biome lines are dual-voiced; the shared backbone is sissy
+  // only. So flipping the toggle audibly changes output ONLY when we're on (or
+  // can move onto) a biome line. To make it feel instant, if the clip playing
+  // right now would sound different under the new voice, cut it and re-pick
+  // immediately instead of waiting out the current sentence - but leave a
+  // backbone line running when the switch can't actually change what's heard
+  // (no circe alternative for it), so we don't chop sentences for nothing.
+  function setVoice(v) {
+    const next = v === 'circe' ? 'circe' : 'sissy';
+    if (next === curVoice) return;
+    curVoice = next;
+    if (!started || disposed || document.hidden || isMuted()) return;
+    const cur = currentBark;
+    if (!cur) return;
+    const curIsCirce = cur.biome && (cur.mod || 'sissy') === 'circe';
+    // switch->circe: jump onto a circe biome line only if one fits the dressed
+    // biome; switch->sissy: bail off the circe line back to the shared voice.
+    const willChange = next === 'circe' ? (!curIsCirce && !!curBiome) : curIsCirce;
+    if (!willChange) return;
+    try { el.pause(); el.onended = null; } catch (e) { /* ignore */ }
+    clearSafety();
+    clearGap();
+    pendingResume = false;
+    scheduleNext(VOICE_SWAP_GAP_MS);
+  }
 
   function pick(poolId) {
     const pool = FALL_DRIFT[poolId];
     if (!pool || !pool.length) return null;
-    const eligible = pool.map((_, i) => i).filter((i) => inRegion(pool[i]) && keyOf(pool[i]) !== lastKey);
+    let eligible = pool.map((_, i) => i).filter((i) => inRegion(pool[i]) && keyOf(pool[i]) !== lastKey);
+    // Circe's VO ships ONLY as biome lines. When any are eligible, foreground
+    // them over the shared (sissy) backbone so the circe toggle is actually
+    // heard - fall back to the backbone only when no circe line fits the
+    // current biome (between biomes / classic runs), rather than going silent.
+    if (curVoice === 'circe') {
+      const circeElig = eligible.filter((i) => pool[i].biome);
+      if (circeElig.length) eligible = circeElig;
+    }
     if (!eligible.length) return null;
     let idx;
     if (eligible.length === 1) {
@@ -182,6 +215,7 @@ export function createDriftChain({ getDepth }) {
   let firstStart = true;
   let pendingResume = false; // a clip was cut mid-sentence (stop/mute/hidden)
   let currentIsResolve = false; // what the playing clip is, for advance()
+  let currentBark = null;    // the bark object now playing, for live voice swaps
   let disposed = false;
   let gapTimer = null;
   let safetyTimer = null;
@@ -223,6 +257,7 @@ export function createDriftChain({ getDepth }) {
     const bark = isResolve ? pick('resolve') : pick(pickPool());
     if (!bark) { scheduleNext(FAIL_HOLD_MS); return; }
     lastKey = keyOf(bark);
+    currentBark = bark;
     try {
       el.pause();
       el.currentTime = 0;

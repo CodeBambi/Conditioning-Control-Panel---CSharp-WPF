@@ -19,7 +19,10 @@
  * ==========================================================================*/
 
 const KEY = 'sf-audio-levels';
-const DEFAULTS = { video: 0.45, voice: 0.85, fx: 0.48, drops: 0.4, music: 1 };
+// tutorial = the Cheshire FTUE visual-novel narration (cheshireVn.js), its own
+// voice separate from the biome drift 'voice' group so the guide can be ducked
+// independently of the in-run narration.
+const DEFAULTS = { video: 0.45, voice: 0.85, tutorial: 0.85, fx: 0.48, drops: 0.4, music: 1 };
 
 // Most groups are 0..1 gains. 'music' is a MULTIPLIER over the speed-following
 // drone bed, so it clamps to 0..2 - 100% is the default curve, 200% doubles it,
@@ -56,6 +59,7 @@ export function audioGroups() {
   return [
     { key: 'video', label: 'video' },
     { key: 'voice', label: 'voice' },
+    { key: 'tutorial', label: 'tutorial' },
     { key: 'fx', label: 'effects' },
     { key: 'drops', label: 'subliminals' },
     { key: 'music', label: 'music' },
@@ -72,6 +76,11 @@ export function onLevels(fn) { subs.add(fn); return () => subs.delete(fn); }
 // here overrides it and persists, so the player can listen to either voice
 // regardless of which mod is dressed.
 const VOICE_KEY = 'sf-voice-set';
+// Circe's VO is biome-only right now (no backbone render), so the swap is only
+// partial - keep her out of the picker AND out of the effective voice until the
+// backbone is rendered. Flip to true to re-expose it everywhere (voiceSets +
+// getVoice both gate on this). See the dtrh-circe-vo memory.
+const CIRCE_VO_READY = false;
 let voiceDefault = 'sissy';   // persona-derived, runtime only (not persisted)
 let voicePref = null;         // the player's explicit choice, persisted
 try {
@@ -83,14 +92,19 @@ const voiceSubs = new Set();
 const pingVoice = () => voiceSubs.forEach((fn) => { try { fn(getVoice()); } catch (e) { /* ignore */ } });
 
 export function voiceSets() {
-  return [
-    { key: 'sissy', label: 'sissy / bambi' },
-    { key: 'circe', label: 'circe' },
-  ];
+  const sets = [{ key: 'sissy', label: 'sissy / bambi' }];
+  if (CIRCE_VO_READY) sets.push({ key: 'circe', label: 'circe' });
+  return sets;
 }
 
-/** The effective voice: the player's pick, else the persona default. */
-export function getVoice() { return voicePref || voiceDefault; }
+/** The effective voice: the player's pick, else the persona default. While
+ * circe isn't ready it's clamped to sissy so a stale pick or the Circe's Lock
+ * persona default can't strand playback on the half-rendered circe set. */
+export function getVoice() {
+  const v = voicePref || voiceDefault;
+  if (v === 'circe' && !CIRCE_VO_READY) return 'sissy';
+  return v;
+}
 
 export function setVoice(key) {
   if (key !== 'sissy' && key !== 'circe') return;

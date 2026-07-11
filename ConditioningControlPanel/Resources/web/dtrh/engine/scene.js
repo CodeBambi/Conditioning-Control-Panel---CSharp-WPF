@@ -940,33 +940,39 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
   // voiceover set: the biome VO ships in two voices (sissy/bambi share one,
   // Circe's Lock has her own) - two buttons swap between them live. The
   // highlighted one is the EFFECTIVE voice (persona default until picked).
-  const voiceRow = document.createElement('div');
-  voiceRow.className = 'sf-audio-row sf-voice-row';
-  const voiceHead = document.createElement('div');
-  voiceHead.className = 'sf-audio-rowhead';
-  const voiceName = document.createElement('span');
-  voiceName.textContent = 'voiceover';
-  voiceHead.appendChild(voiceName);
-  const voiceBtns = document.createElement('div');
-  voiceBtns.className = 'sf-voice-btns';
-  const voiceEls = new Map();
-  const syncVoice = () => {
-    const cur = getVoice();
-    for (const [key, b] of voiceEls) b.classList.toggle('is-on', key === cur);
-  };
-  for (const v of voiceSets()) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'sf-voice-btn';
-    b.textContent = v.label;
-    b.addEventListener('click', () => { setVoice(v.key); syncVoice(); });
-    voiceEls.set(v.key, b);
-    voiceBtns.appendChild(b);
+  // The picker is shown only when more than one voice is actually available:
+  // Circe's set is biome-only (no backbone render yet), so it stays gated out
+  // of voiceSets() until it's complete and this row simply doesn't render.
+  let offVoiceSync = () => {};
+  if (voiceSets().length > 1) {
+    const voiceRow = document.createElement('div');
+    voiceRow.className = 'sf-audio-row sf-voice-row';
+    const voiceHead = document.createElement('div');
+    voiceHead.className = 'sf-audio-rowhead';
+    const voiceName = document.createElement('span');
+    voiceName.textContent = 'voiceover';
+    voiceHead.appendChild(voiceName);
+    const voiceBtns = document.createElement('div');
+    voiceBtns.className = 'sf-voice-btns';
+    const voiceEls = new Map();
+    const syncVoice = () => {
+      const cur = getVoice();
+      for (const [key, b] of voiceEls) b.classList.toggle('is-on', key === cur);
+    };
+    for (const v of voiceSets()) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sf-voice-btn';
+      b.textContent = v.label;
+      b.addEventListener('click', () => { setVoice(v.key); syncVoice(); });
+      voiceEls.set(v.key, b);
+      voiceBtns.appendChild(b);
+    }
+    voiceRow.append(voiceHead, voiceBtns);
+    audioPanel.appendChild(voiceRow);
+    offVoiceSync = onVoice(syncVoice);   // persona default can land after build
+    syncVoice();
   }
-  voiceRow.append(voiceHead, voiceBtns);
-  audioPanel.appendChild(voiceRow);
-  const offVoiceSync = onVoice(syncVoice);   // persona default can land after build
-  syncVoice();
   caretBtn.addEventListener('click', () => {
     const open = audioPanel.hidden;
     audioPanel.hidden = !open;

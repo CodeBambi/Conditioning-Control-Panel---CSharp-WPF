@@ -11,11 +11,37 @@
  * ==========================================================================*/
 
 import { createHudTips } from './hudTips.js';
-import { HUD_TIPS } from './catalog.js';
+import { HUD_TIPS, upgradeById } from './catalog.js';
 
 const DEFUSE_COST = 30; // FOCUS bar low-threshold (ChaosTuning.DEFUSE_COST)
 const RIPPLE_COST = 30; // the ripple spends this much focus per cast (chaosRun RIPPLE_FOCUS_COST)
 const ART = 'https://ccp.art/';
+
+// The emotes currency mark: three *different* feeling-faces fanned like a hand
+// of cards - a yellow sad face behind, a blue surprised face, and a pink plain
+// smiley leaning in front - so it reads as a stack of assorted emotes, not one
+// flat diamond. Distinct expressions (sad / surprised / smile) keep them telling
+// apart even under the colour tint; the standard 🙂 (not the toothy 😀) fronts
+// it. Fully opaque; scales to the font-size it sits in. Replaces the old '✦'.
+const EMOTE_STACK = [
+  { glyph: '😢', tint: 'grayscale(1) sepia(1) saturate(6) hue-rotate(2deg) brightness(1.08)',  x: -0.30, r: -15 }, // yellow (back)
+  { glyph: '😮', tint: 'grayscale(1) sepia(1) saturate(7) hue-rotate(178deg) brightness(1.02)', x: 0,     r: 0 },   // blue (middle)
+  { glyph: '🙂', tint: 'grayscale(1) sepia(1) saturate(7) hue-rotate(300deg) brightness(1.04)', x: 0.30,  r: 15 },  // pink (front)
+];
+function buildEmoteStack() {
+  const wrap = document.createElement('span');
+  wrap.className = 'cf-emote-icon';
+  wrap.setAttribute('aria-hidden', 'true');
+  for (const layer of EMOTE_STACK) {
+    const e = document.createElement('span');
+    e.className = 'cf-emote-chip';
+    e.textContent = layer.glyph;
+    e.style.filter = layer.tint;
+    e.style.transform = `translateX(${layer.x}em) rotate(${layer.r}deg)`;
+    wrap.appendChild(e);
+  }
+  return wrap;
+}
 
 export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } = {}) {
   const root = document.createElement('div');
@@ -34,11 +60,94 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
     return d;
   };
 
+  // ---- the run's takings: EMOTES (the banked currency) are the hero number,
+  // raw score rides secondary. The point of the fall is watching your currency
+  // climb, so this is what the eye should land on. ----
   const scoreRow = mk('cf-hud-score');
+  const emoteVal = document.createElement('span');
+  emoteVal.className = 'cf-emote-val';
+  const emoteIcon = buildEmoteStack();          // the fanned 3-emoji currency mark (replaces the old ✦)
+  const emoteNum = document.createElement('span');
+  emoteNum.className = 'cf-emote-num';
+  emoteNum.textContent = '0';
+  emoteVal.append(emoteIcon, emoteNum);
   const scoreVal = document.createElement('span');
   scoreVal.className = 'cf-score-val';
-  scoreVal.textContent = '0';
-  scoreRow.append(scoreVal);
+  scoreVal.textContent = '0 pts';
+  scoreRow.append(emoteVal, scoreVal);
+
+  // ---- the gold ticker (top-left): pops "+N", counts the running total up, then
+  // fades out. Gold is spent at Cheshire's bench, so a grabbed coin should feel
+  // like it lands somewhere real rather than blipping once at the pop site. ----
+  const goldRow = mk('cf-hud-gold');
+  goldRow.style.display = 'none';
+  const goldIcon = document.createElement('span');
+  goldIcon.className = 'cf-gold-icon';
+  goldIcon.textContent = '🪙';
+  const goldTotal = document.createElement('span');
+  goldTotal.className = 'cf-gold-total';
+  goldTotal.textContent = '0';
+  const goldDelta = document.createElement('span');
+  goldDelta.className = 'cf-gold-delta';
+  goldRow.append(goldIcon, goldTotal, goldDelta);
+
+  // ---- rising-number tickers: emotes ease up to the live target; gold counts up
+  // on a bump then auto-hides. Driven by a self-terminating rAF loop that only
+  // spins while there's a delta to close (idle cost = zero). ----
+  let emoteTarget = 0, emoteShown = 0;
+  let goldTarget = 0, goldShown = 0;
+  let goldHideT1 = 0, goldHideT2 = 0;
+  let tickerRaf = 0;
+  function runTicker() {
+    tickerRaf = 0;
+    let busy = false;
+    if (Math.abs(emoteTarget - emoteShown) > 0.5) {
+      emoteShown += (emoteTarget - emoteShown) * 0.18;
+      if (Math.abs(emoteTarget - emoteShown) < 0.5) emoteShown = emoteTarget; else busy = true;
+      emoteNum.textContent = Math.round(emoteShown).toLocaleString();
+    }
+    if (Math.abs(goldTarget - goldShown) > 0.5) {
+      goldShown += (goldTarget - goldShown) * 0.22;
+      if (Math.abs(goldTarget - goldShown) < 0.5) goldShown = goldTarget; else busy = true;
+      goldTotal.textContent = Math.round(goldShown).toLocaleString();
+    }
+    if (busy) tickerRaf = requestAnimationFrame(runTicker);
+  }
+  const ensureTicker = () => { if (!tickerRaf) tickerRaf = requestAnimationFrame(runTicker); };
+  function setEmotes(target) {
+    const t = Math.max(0, target | 0);
+    if (t > emoteTarget) {   // a gain: pulse the hero number so the climb reads
+      emoteVal.classList.remove('is-gain'); void emoteVal.offsetWidth; emoteVal.classList.add('is-gain');
+    }
+    emoteTarget = t;
+    ensureTicker();
+  }
+  function bumpGold(delta, total) {
+    goldTarget = Math.max(0, total | 0);
+    clearTimeout(goldHideT1); clearTimeout(goldHideT2);
+    goldRow.style.display = '';
+    goldRow.classList.remove('is-fading');
+    if (delta > 0) {
+      goldDelta.textContent = `+${delta | 0}`;
+      goldDelta.classList.remove('is-pop'); void goldDelta.offsetWidth; goldDelta.classList.add('is-pop');
+    }
+    goldRow.classList.remove('is-bump'); void goldRow.offsetWidth; goldRow.classList.add('is-bump');
+    ensureTicker();
+    // hold ~2.4s past the last coin, then fade the whole chip away
+    goldHideT1 = window.setTimeout(() => {
+      goldRow.classList.add('is-fading');
+      goldHideT2 = window.setTimeout(() => { goldRow.style.display = 'none'; goldRow.classList.remove('is-fading'); }, 480);
+    }, 2400);
+  }
+  function resetTickers() {
+    clearTimeout(goldHideT1); clearTimeout(goldHideT2);
+    cancelAnimationFrame(tickerRaf); tickerRaf = 0;
+    emoteTarget = emoteShown = 0; goldTarget = goldShown = 0;
+    emoteNum.textContent = '0'; emoteVal.classList.remove('is-gain');
+    goldTotal.textContent = '0';
+    goldRow.style.display = 'none';
+    goldRow.classList.remove('is-fading', 'is-bump');
+  }
 
   // ---- the biome banner: current place name + its live effect, up top so the
   // player always knows which room's rules are in force ----
@@ -148,6 +257,12 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
 
   const rippleRow = mk('cf-hud-ripple');
 
+  // ---- the active-habits rail: the always-on Warren upgrades trained this run,
+  // stacked 2-up under the score/heat block. Near-transparent until hovered (the
+  // drafted modifiers ride the top ribbon; this surfaces the otherwise-invisible
+  // habits). Populated once at run start via setHabits(). ----
+  const habitsRow = mk('cf-hud-actives');
+
   // ---- hover tooltips for the mechanic readouts (rect-tested; see hudTips.js) ----
   const FIRE_TIERS = [15, 25, 50, 100];
   tips.attach(scoreRow, () => HUD_TIPS.score);
@@ -216,6 +331,33 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
       img.addEventListener('error', () => { img.remove(); tile.textContent = p.glyph || (p.curse ? '☠' : '◈'); });
       tile.appendChild(img);
       picksWrap.appendChild(tile);
+    }
+  }
+
+  // ---- the active-habits rail (2-column glyph tiles, dim until hover). Habits
+  // carry no card art, so each tile is its glyph + name, mapped from catalog.js
+  // UPGRADES. Tooltip via the shared rect-hit-test bubble (like the pick tiles). ----
+  function setHabits(ids) {
+    habitsRow.innerHTML = '';
+    const list = Array.isArray(ids) ? ids : [];
+    for (const id of list) {
+      const u = upgradeById(id);
+      if (!u) continue;
+      const tile = document.createElement('div');
+      tile.className = 'cf-hud-active-item';
+      tips.attach(tile, () => ({
+        glyph: u.glyph || '✦', kicker: 'habit',
+        name: u.name, desc: u.desc || '', flavor: u.flavor || '',
+        accent: '156,232,160',
+      }));
+      const g = document.createElement('span');
+      g.className = 'cf-hud-active-glyph';
+      g.textContent = u.glyph || '✦';
+      const n = document.createElement('span');
+      n.className = 'cf-hud-active-name';
+      n.textContent = u.name;
+      tile.append(g, n);
+      habitsRow.appendChild(tile);
     }
   }
 
@@ -379,10 +521,13 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
     toast,
     pulse,
     setPicks,
+    setHabits,
     updateToys,
+    bumpGold,
     update(st) {
       lastSt = st;
-      scoreVal.textContent = Math.floor(st.score).toLocaleString();
+      if (typeof st.emotes === 'number') setEmotes(st.emotes);
+      scoreVal.textContent = `${Math.floor(st.score).toLocaleString()} pts`;
       multVal.textContent = `×${st.totalMult.toFixed(1)}`;
       streakVal.textContent = st.combo > 1 ? `streak ${st.combo}` : '';
       const c = st.combo | 0;
@@ -538,6 +683,7 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
       picksWrap.style.display = v ? '' : 'none';
       dock.style.display = v ? '' : 'none';
       eyeBtn.style.display = v ? '' : 'none';
+      if (v) resetTickers();   // fresh run/recap "Again": start the counters at 0, no phantom count-down
       if (!v) {
         // leaving a run: clear the Eye's hide state so the next run starts shown
         hud.classList.remove('dtrh-hud-hidden');
@@ -548,6 +694,8 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
     },
     dispose() {
       clearTimeout(pulseTimer);
+      clearTimeout(goldHideT1); clearTimeout(goldHideT2);
+      cancelAnimationFrame(tickerRaf);
       clearInterval(emberTimer);
       tips.dispose();
       root.remove(); annWrap.remove(); toastWrap.remove(); pulseEl.remove();

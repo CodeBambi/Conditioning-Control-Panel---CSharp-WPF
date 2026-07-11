@@ -103,6 +103,8 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     dimOpacity: 1.0,      // Blindfold: plain bubbles render at this opacity
     residueZones: false,  // Aftermath drafted: poll fx.inResidue per bubble
     rabbitTrailSec: 0,    // Tail-Plug: rabbits drag a popping sparkle trail
+    rippleFlingsRabbits: false, // Riptide duo: the ripple smacks (flings) rabbits it washes over
+    dvdElectrified: false, // Short Circuit duo: bouncing logo crackles + arcs chain lightning on bounce
     pumpPull: 0,          // The Pump (toy): temporary suction, sweet kinds only
     trailBounce: false,   // Hopscotch duo: rabbits ricochet off the Wand's ink
     thoughtOrbit: false,  // One-Track Mind duo: intrusive thoughts orbit the cursor
@@ -430,6 +432,48 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       p.style.setProperty('--fall', `${rand(28, 64)}px`);
       fxLayer.appendChild(p);
       p.addEventListener('animationend', () => p.remove(), { once: true });
+    }
+  }
+
+  // Emote rain: Emotes are the run currency, so a pop weeps a few of them out.
+  // The glyph keeps its real shape (eyes/mouth stay readable) but is recoloured
+  // to ONE per-emotion hue: grayscale(1) flattens the colour emoji to luminance,
+  // then sepia+saturate+hue-rotate tints that grey face a single colour. So the
+  // fall is a spread of small, fast, near-faded mixed-colour feelings drifting
+  // down. Same DOM lifecycle as sparkleBurst: append to fx layer, self-remove.
+  const EMO_TINT = 'grayscale(1) sepia(1) ';
+  const EMORAIN = [
+    { e: '😀', f: EMO_TINT + 'saturate(4) hue-rotate(11deg) brightness(1.05)' },  // joy   - gold
+    { e: '😢', f: EMO_TINT + 'saturate(5) hue-rotate(173deg)' },                  // sad   - blue
+    { e: '😠', f: EMO_TINT + 'saturate(6) hue-rotate(-34deg)' },                  // anger - red
+    { e: '😮', f: EMO_TINT + 'saturate(5) hue-rotate(135deg)' },                  // shock - cyan
+    { e: '😍', f: EMO_TINT + 'saturate(6) hue-rotate(290deg)' },                  // love  - pink
+    { e: '😴', f: EMO_TINT + 'saturate(5) hue-rotate(226deg)' },                  // sleep - violet
+    { e: '😭', f: EMO_TINT + 'saturate(6) hue-rotate(185deg)' },                  // cry   - deep blue
+    { e: '😳', f: EMO_TINT + 'saturate(5) hue-rotate(308deg) brightness(1.05)' }, // flush - rose
+  ];
+  // count scales with the score the pop paid (driven by chaosRun); clamped so a
+  // huge combo pop can't dump hundreds of glyphs. Falls back to a small handful.
+  function emojiRain(x, y, count) {
+    // Exactly one glyph per ✦ emote earned: 0 emotes -> no rain, capped so a
+    // monster combo can't dump hundreds of spans at once.
+    const n = Math.max(0, Math.min(30, count | 0));
+    if (n === 0) return;
+    for (let i = 0; i < n; i++) {
+      const em = pickOf(EMORAIN);
+      const s = document.createElement('span');
+      s.className = 'rh-emorain';
+      s.textContent = em.e;
+      s.style.left = `${x}px`;
+      s.style.top = `${y}px`;
+      s.style.setProperty('--filt', em.f);
+      s.style.setProperty('--dx', `${rand(-140, 140)}px`);   // wider spread
+      s.style.setProperty('--fall', `${rand(240, 420)}px`);
+      s.style.setProperty('--rot', `${rand(-50, 50)}deg`);
+      s.style.setProperty('--dur', `${rand(0.9, 1.6)}s`);    // faster
+      s.style.fontSize = `${rand(15, 24) | 0}px`;            // smaller
+      fxLayer.appendChild(s);
+      s.addEventListener('animationend', () => s.remove(), { once: true });
     }
   }
 
@@ -876,8 +920,15 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
             d.splitsLeft--;
             spawnDvd({ durationSec: d.lifeLeft, speed: d.speed, scale: d.scale, splitBounces: 0, text: d.text, x: d.x, y: d.y });
           }
+          // Short Circuit duo: the shorted-out logo arcs chain lightning off each wall it hits.
+          if (phys.dvdElectrified && performance.now() > (d.arcCdUntil || 0)) {
+            d.arcCdUntil = performance.now() + 250;
+            dischargeAt(d.x, d.y, { maxTargets: 3, reach: 520, chain: true });
+          }
         }
       }
+      // Short Circuit duo: crackling static rides the logo while the duo is live.
+      d.el.classList.toggle('cf-dvd--electric', !!phys.dvdElectrified);
       d.el.style.transform = `translate3d(${d.x - d.w / 2}px, ${d.y - d.h / 2}px, 0)`;
       // Mow: treats pop, lives snap, immune kinds slide off.
       for (const b of Array.from(live)) {
@@ -902,6 +953,23 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     return false;
   }
 
+  // The ripple ring animates with CSS `ease-out` = cubic-bezier(0,0,0.58,1): its
+  // radius is front-loaded (fast, then decelerating), so it reaches any given
+  // radius EARLIER than linear time would. Scheduling smacks on a linear
+  // radius->time map fired them a beat AFTER the visible ring had already passed
+  // the target ("flings the rabbit later, not when the circle touches it"). Map a
+  // radius fraction (progress on the bezier's y axis) back to the wall-clock time
+  // fraction (its x axis): solve for param s with y(s)=p, then t=x(s).
+  function rippleTimeForRadius(p) {
+    if (p <= 0) return 0;
+    if (p >= 1) return 1;
+    const bezY = (s) => 3 * (1 - s) * s * s + s * s * s;      // P1y=0, P2y=1
+    const bezX = (s) => 1.74 * (1 - s) * s * s + s * s * s;   // P1x=0, P2x=0.58
+    let lo = 0, hi = 1, s = p;
+    for (let i = 0; i < 24; i++) { s = (lo + hi) / 2; if (bezY(s) < p) lo = s; else hi = s; }
+    return bezX(s);
+  }
+
   /** Expanding wavefront: treats pop PAID, lives snap clean (no focus cost).
    * treatsOnly = the Size Queen snap ring. Tease/Brittle/freeze/rabbits stay
    * cursor-only; hits land as the ring passes each bubble. */
@@ -917,15 +985,23 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
 
     const hits = [];
     for (const b of live) {
-      if (TOY_IMMUNE.has(b.spec.kind) || isShielded(b)) continue;
+      // Riptide duo: rabbits are normally toy-immune, but the wave smacks them off.
+      const isFlingRabbit = phys.rippleFlingsRabbits && !treatsOnly
+        && b.spec.kind === 'darter' && b.telegraphLeft <= 0 && !isShielded(b);
+      if ((TOY_IMMUNE.has(b.spec.kind) || isShielded(b)) && !isFlingRabbit) continue;
       if (treatsOnly && b.spec.kind === 'live') continue;
       const dx = b.x - x, dy = b.y - y;
       const d = Math.hypot(dx, dy);
-      if (d <= radiusPx + b.size / 2) hits.push({ b, at: Math.max(0, (d / radiusPx)) * lifeMs });
+      if (d <= radiusPx + b.size / 2) {
+        // clamp f<=1 so an outer-band hit fires as the ring peaks, not after it ends
+        const f = Math.min(1, d / radiusPx);
+        hits.push({ b, at: rippleTimeForRadius(f) * lifeMs, fling: isFlingRabbit });
+      }
     }
     for (const h of hits) {
       window.setTimeout(() => {
         if (h.b.state !== 'live') return;
+        if (h.fling) { smack(h.b, x, y); h.b.rippleTrailUntil = performance.now() + 2000; return; }
         if (h.b.spec.kind === 'live') defuse(h.b, false);
         else popBenign(h.b, h.b.x, h.b.y, 'ripple');
       }, h.at);
@@ -1205,6 +1281,9 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       return false;
     }
 
+    // Riptide duo: a rabbit the ripple just flung drags a short sparkle wake (cosmetic).
+    if (b.rippleTrailUntil && performance.now() < b.rippleTrailUntil) fx.addSparkle(b.x, b.y);
+
     // Tail-Plug: the rabbit drags a sparkling trail that pops what it grazes.
     if (phys.rabbitTrailSec > 0) {
       fx.addSparkle(b.x, b.y);
@@ -1280,10 +1359,49 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     fxLayer.remove();
   }
 
+  // ---- discovery spotlight ----------------------------------------------------
+  // The lesson/VN reveal delay (chaosRun) rings the just-arrived bubble it's about
+  // to explain, so the eye lands on the new thing while it falls into view. The
+  // ring is a child of the bubble's wrap, so it tracks the bubble as it drifts and
+  // vanishes with it if the bubble pops before the window closes.
+  function spotlightBubble(b, ms) {
+    if (!b || !b.wrap) return;
+    if (b.spotEl) { try { b.spotEl.remove(); } catch (e) {} b.spotEl = null; }
+    const el = document.createElement('div');
+    el.className = 'cf-spotlight';
+    b.wrap.appendChild(el);
+    b.spotEl = el;
+    requestAnimationFrame(() => { if (b.spotEl === el) el.classList.add('cf-spotlight--in'); });
+    window.setTimeout(() => {
+      if (b.spotEl !== el) return;
+      el.classList.remove('cf-spotlight--in');
+      el.classList.add('cf-spotlight--out');
+      window.setTimeout(() => { try { el.remove(); } catch (e) {} if (b.spotEl === el) b.spotEl = null; }, 340);
+    }, Math.max(400, ms | 0));
+  }
+  // Ring the newest live bubble matching a discovery codex id (bubble:/pickup:).
+  // Best-effort: no-op (returns false) when nothing in-field matches - weather,
+  // junctions and 3D tunnel pickups have no field object to ring.
+  function highlightDiscovery(codexId, ms = 2000) {
+    const m = /^(?:bubble|pickup):(.+)$/.exec(codexId || '');
+    if (!m) return false;
+    const key = m[1];
+    let hit = null;   // Set keeps insertion order, so the last match is the newest
+    for (const b of live) {
+      if (b.state !== 'live') continue;
+      if (b.spec.kind === key || b.spec.variantId === key) hit = b;
+    }
+    if (!hit) return false;
+    spotlightBubble(hit, ms);
+    return true;
+  }
+
   return {
+    highlightDiscovery,
     spawn,
     update,
     floatText,
+    sparkleBurst,
     playChime,
     castRipple,
     nearAny,
@@ -1322,6 +1440,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     inkDetonate,   // Milking Machine: the pump's end detonates the drawing
     sonarAt,       // Trust Exercise: reveal-ping the Blindfold's dimmed bubbles
     gildNear,      // Midas Ricochet: gild treats near a popped lucky bubble
+    emojiRain,     // Emote rain: N tinted feeling-glyphs, N scaled to the pop's score
     enrageNear,    // Searchlight biome: the light finds the fused
     flipDrift,     // Vertigo biome: reverse every drifter's vertical on the spot
     /** Radius pop at (x,y) - the Pump's arrival burst (formerly the Wand's beam).

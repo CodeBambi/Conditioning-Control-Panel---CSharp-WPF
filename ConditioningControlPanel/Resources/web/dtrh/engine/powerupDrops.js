@@ -244,6 +244,12 @@ export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, s
     // pointer raycast targets (scene.grabPointerDown)
     getPickables() { return (card && !card.isFading()) ? [card.group] : []; },
 
+    // A boon draft is opening: the fall parks (in-tube presenter) or approaches a
+    // draft room, so any live drop would hang in the bore ungrabbable (onGrab is
+    // vetoed while state !== 'running') and never cull (the camera stops advancing).
+    // Fade it out so a draft never leaves a stray "unpickable grabbable" behind.
+    clearLive() { if (card && !card.isFading()) card.startFade(); },
+
     // grab the live card: hand its id/kind + on-screen position to the game, then fly it away
     grab(group) {
       if (!card || card.group !== group || card.isFading()) return false;
