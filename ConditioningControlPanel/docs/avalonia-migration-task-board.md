@@ -1505,6 +1505,22 @@ IntPtr lParam, ref bool handled)` — HOLD it in a field so it isn't GC'd. HWND 
 no lag/detach; minimize+restore, exclusive-fullscreen exit, theme switch → tube lands in the WPF spot.
 
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
+**ROW #6 PHASES 1–7 COMPLETE 2026-07-11 · @driver — AUTONOMOUS QUEUE RE-EXHAUSTED under the broader bar.**
+The RE-OPEN below claimed row #6 phases 1–7 (DTRH web port) under the broader objective bar (JUDGMENT rows
+included when executable without product decisions). That claim is now SATISFIED: the full appendix chain
+S1 → S2a-1/2 → S2b-1/2a → S2c-0/1/2/3 landed, and the tail slice (`DtrhNativeEffects.SetWorldFrozen` →
+avatar Pause/ResumeSpokenAudio) landed this session as `1ff8bd49` — see the row-#6 body ("All other row-#6
+phase-1–7 appendix work complete", ~:598). **Residual on #6 is NON-autonomous:** live Three.js/WebGL
+web-boot verification of phases 1–7 is an owner-headed gate, and phase 8 (native chaos-run decommission) is
+hard-gated on a user-verified live web boot — both explicitly OUT of autonomous scope. With #6/1–7 closed,
+the autonomous queue is EXHAUSTED again on BOTH bars (narrow + broad): every OPEN row now needs a
+JUDGMENT/owner product decision (#1 mask, #3 libmpv spike, #6 phase 8, wave-2 Vision/Speech/Chat DI +
+Patreon), a headed-human visual/runtime session (#4 parity re-verify, #7 3a runtime, #8a residual, #8b), or
+a Linux environment (#5, DTRH-Linux/macOS assets). NEXT autonomous work re-opens only when one of those
+gates is lifted by the owner / a headed session / a Linux session.
+
+_(Historical claim retained below for provenance.)_
+
 **RE-OPENED 2026-07-11 (later, continuous-mode driver, broader completion bar) · @driver — claiming row
 #6 phases 1–7 (DTRH web port).** The prior GOAL-COMPLETE certification below self-scoped "autonomous
 tiers" to STANDARD/MECHANICAL-with-deterministic-verification and EXCLUDED all JUDGMENT rows. This
