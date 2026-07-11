@@ -320,7 +320,7 @@ public partial class App : Application
                 // an auto-started engine would skew their assertions and measurements).
                 var isHarnessRun = desktop.Args?.Any(a =>
                     a is "--smoke-test" or "--benchmark" or "--max-benchmark"
-                    or "--verify-spiral" or "--verify-video" or "--verify-layers" or "--verify-visible") == true;
+                    or "--verify-spiral" or "--verify-video" or "--verify-layers" or "--verify-visible" or "--verify-avatartube") == true;
                 if (!isHarnessRun && desktop.MainWindow is MainWindow dashboardWindow)
                 {
                     EventHandler? applyLaunchBehaviors = null;

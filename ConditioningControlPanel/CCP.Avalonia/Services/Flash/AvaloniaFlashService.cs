@@ -46,6 +46,7 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
     private readonly IProgressionService _progression;
     private readonly ILogger<AvaloniaFlashService>? _logger;
     private readonly Random _random = new();
+    private int _lastFlashIndex = -1;   // 1-deep no-repeat guard for random image picks
     private readonly object _sync = new();
     private readonly CompositorEngine? _compositor;
     private readonly FlashLayer? _flashLayer;
@@ -548,7 +549,10 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         var files = GetImageFiles();
         if (files.Count == 0) return null;
 
-        var path = files[_random.Next(files.Count)];
+        var idx = _random.Next(files.Count);
+        if (idx == _lastFlashIndex && files.Count > 1) idx = (idx + 1) % files.Count;   // 1-deep no-repeat (mirrors AvaloniaBlinkTrainerService.ShowRandom)
+        _lastFlashIndex = idx;
+        var path = files[idx];
         try
         {
             var (pxW, pxH) = ProbeImagePixelSize(path);
@@ -764,7 +768,10 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         {
             var files = GetImageFiles();
             if (files.Count == 0) return;
-            path = files[_random.Next(files.Count)];
+            var idx = _random.Next(files.Count);
+            if (idx == _lastFlashIndex && files.Count > 1) idx = (idx + 1) % files.Count;   // 1-deep no-repeat (mirrors AvaloniaBlinkTrainerService.ShowRandom)
+            _lastFlashIndex = idx;
+            path = files[idx];
         }
 
         var (pxW, pxH) = ProbeImagePixelSize(path);

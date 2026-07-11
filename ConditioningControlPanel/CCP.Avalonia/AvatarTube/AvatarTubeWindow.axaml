@@ -12,7 +12,7 @@
         ShowInTaskbar="False"
         ShowActivated="False"
         CanResize="False"
-        SizeToContent="WidthAndHeight"
+        SizeToContent="Manual"
         WindowStartupLocation="Manual"
         UseLayoutRounding="True"
         FontFamily="Inter, Segoe UI"
@@ -70,7 +70,10 @@
   </Window.Resources>
 
   <Grid>
-    <Viewbox x:Name="ContentViewbox" Stretch="Uniform" ClipToBounds="False" SizeChanged="ContentViewbox_SizeChanged">
+    <!-- The window is SizeToContent=Manual from birth: TubeGeometryController is the single
+         writer of both this Viewbox's size and the window size (always identical), so the
+         speech bubble/content can never resize the window (WPF anti-freeze invariant). -->
+    <Viewbox x:Name="ContentViewbox" Stretch="Uniform" ClipToBounds="False">
       <Grid Width="780" Height="1080" ClipToBounds="False" UseLayoutRounding="True">
 
         <!-- Tube frame -->
@@ -450,5 +453,40 @@
 
       </Grid>
     </Viewbox>
+
+    <!-- Detached-only corner resize grips (NEW owner contract 2026-07-11, obs #6 fix 3c).
+         They live OUTSIDE the Viewbox so they stay pinned to the window corners at any
+         zoom. Hidden + inert while attached (Attach()/Detach() toggle IsVisible); they
+         drive TubeGeometryController.SetUserScale so the controller stays the single
+         writer of the window size. Theme accent via DynamicResource (dashboard-design
+         rule 1: never hardcode an accent hex). -->
+    <Border x:Name="GripTopLeft" Width="22" Height="22" ZIndex="30"
+            HorizontalAlignment="Left" VerticalAlignment="Top"
+            Background="Transparent" BorderBrush="{DynamicResource PinkBrush}"
+            BorderThickness="3,3,0,0" CornerRadius="4,0,0,0" Opacity="0.75"
+            IsVisible="False" Cursor="TopLeftCorner" Tag="TL"
+            PointerPressed="Grip_PointerPressed" PointerMoved="Grip_PointerMoved"
+            PointerReleased="Grip_PointerReleased"/>
+    <Border x:Name="GripTopRight" Width="22" Height="22" ZIndex="30"
+            HorizontalAlignment="Right" VerticalAlignment="Top"
+            Background="Transparent" BorderBrush="{DynamicResource PinkBrush}"
+            BorderThickness="0,3,3,0" CornerRadius="0,4,0,0" Opacity="0.75"
+            IsVisible="False" Cursor="TopRightCorner" Tag="TR"
+            PointerPressed="Grip_PointerPressed" PointerMoved="Grip_PointerMoved"
+            PointerReleased="Grip_PointerReleased"/>
+    <Border x:Name="GripBottomLeft" Width="22" Height="22" ZIndex="30"
+            HorizontalAlignment="Left" VerticalAlignment="Bottom"
+            Background="Transparent" BorderBrush="{DynamicResource PinkBrush}"
+            BorderThickness="3,0,0,3" CornerRadius="0,0,0,4" Opacity="0.75"
+            IsVisible="False" Cursor="BottomLeftCorner" Tag="BL"
+            PointerPressed="Grip_PointerPressed" PointerMoved="Grip_PointerMoved"
+            PointerReleased="Grip_PointerReleased"/>
+    <Border x:Name="GripBottomRight" Width="22" Height="22" ZIndex="30"
+            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+            Background="Transparent" BorderBrush="{DynamicResource PinkBrush}"
+            BorderThickness="0,0,3,3" CornerRadius="0,0,4,0" Opacity="0.75"
+            IsVisible="False" Cursor="BottomRightCorner" Tag="BR"
+            PointerPressed="Grip_PointerPressed" PointerMoved="Grip_PointerMoved"
+            PointerReleased="Grip_PointerReleased"/>
   </Grid>
 </Window>

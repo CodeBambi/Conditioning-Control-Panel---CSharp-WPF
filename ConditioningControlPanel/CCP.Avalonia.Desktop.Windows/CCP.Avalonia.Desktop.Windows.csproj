@@ -71,6 +71,7 @@
     <Compile Include="..\tests\CCP.Avalonia.Desktop.Windows.Smoke\SpiralVerification.cs" Link="SmokeTest\SpiralVerification.cs" Condition="'$(Configuration)' == 'Debug'" />
     <Compile Include="..\tests\CCP.Avalonia.Desktop.Windows.Smoke\VideoVerification.cs" Link="SmokeTest\VideoVerification.cs" Condition="'$(Configuration)' == 'Debug'" />
     <Compile Include="..\tests\CCP.Avalonia.Desktop.Windows.Smoke\LayerVerification.cs" Link="SmokeTest\LayerVerification.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="..\tests\CCP.Avalonia.Desktop.Windows.Smoke\AvatarTubeVerification.cs" Link="SmokeTest\AvatarTubeVerification.cs" Condition="'$(Configuration)' == 'Debug'" />
     <Compile Include="..\tests\CCP.Avalonia.Desktop.Windows.Smoke\VisibleOverlayVerification.cs" Link="SmokeTest\VisibleOverlayVerification.cs" Condition="'$(Configuration)' == 'Debug'" />
   </ItemGroup>
 

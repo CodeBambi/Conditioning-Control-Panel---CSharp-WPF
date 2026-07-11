@@ -185,39 +185,73 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             if (ImgAvatarAnimatedB != null) ImgAvatarAnimatedB.IsVisible = false;
             if (ImgAvatar != null) ImgAvatar.IsVisible = true;
             if (ImgAvatarB != null) ImgAvatarB.IsVisible = false;
+
+            // Mirror WPF AvatarTubeWindow.CirceEmotes.cs LeaveCirceEmoteMode (which calls
+            // ApplyTubeLayoutOffsets to revert). Now that _circeEngine.IsActive is false,
+            // EmoteLayoutActive is false, so this recomputes the neutral pose scale + AvatarBorder
+            // margin (mod-only layout, no emote delta). Also drops any per-image emote transform.
+            ApplyAvatarTransform(_currentAvatarSet);
+            ApplyTubeLayoutOffsets();
+            ClearEmoteImageTransform(ImgAvatarAnimated);
+            ClearEmoteImageTransform(ImgAvatarAnimatedB);
         }
 
         private void ReassertCirceEmoteVisuals()
         {
             if (_circeEngine?.IsActive != true || ImgAvatarAnimated == null) return;
 
-            double baseScale = 1.0;
-            double scaleMul = _circeEngine.EffScaleMul;
-            int offX = _isAttached ? _circeEngine.EffOffsetX : _circeEngine.EffDetachedOffsetX;
-            int offY = _isAttached ? _circeEngine.EffOffsetY : _circeEngine.EffDetachedOffsetY;
+            // Mirror WPF AvatarTubeWindow.CirceEmotes.cs ReassertCirceEmoteVisuals: the emote
+            // layers share the SAME scale + AvatarBorder.Margin as the neutral pose. WPF achieves
+            // this by putting ONE ScaleTransform(EffAvatarScale) as a LayoutTransform on all three
+            // avatar images (ApplyTubeLayoutOffsets, AvatarTubeWindow.Avatar.cs:712-715, comment
+            // "Circe emote crossfade layer must match") and the offset on AvatarBorder.Margin —
+            // there is NO separate per-image emote transform in WPF.
+            //
+            // The prior Avalonia port diverged here: it applied a SEPARATE RenderTransform via
+            // ApplyImageTransform(baseScale=1.0 * scaleMul, raw offX/offY) onto ImgAvatarAnimated
+            // and ImgAvatarAnimatedB. baseScale=1.0 IGNORED the mod avatar scale (so the emote
+            // rendered at 1.0*0.855 instead of modScale*0.855 => LARGER than the pose), the
+            // center-origin ScaleTransform lifted the bottom-anchored figure ("shifted up"), and
+            // the raw _emoteOffY TranslateTransform double-shifted on top of the margin. That is
+            // the owner-repro "enlarged + shifted up" bug (Engram obs #6).
+            //
+            // Fix: route through the SHARED pose path. EffAvatarScale/Offset now fold the emote
+            // delta (AvatarTubeWindow.Avatar.cs EmoteLayoutActive + Eff* accessors, mirroring WPF
+            // CirceEmotes.cs:388-393), so ApplyAvatarTransform scales all three images identically
+            // (via their common AvatarBorder, bottom-center origin) and ApplyTubeLayoutOffsets
+            // positions the border with the folded margin. The emote frames now land at exactly
+            // the pose's scale/position, with only the layout delta applied.
+            ApplyAvatarTransform(_currentAvatarSet);
+            ApplyTubeLayoutOffsets();
 
-            ApplyImageTransform(ImgAvatarAnimated, baseScale * scaleMul, offX, offY);
-            ApplyImageTransform(ImgAvatarAnimatedB, baseScale * scaleMul, offX, offY);
+            // Drop any per-image RenderTransform left by the old ApplyImageTransform path so the
+            // emote images rely exclusively on the shared AvatarBorder transform. The XAML
+            // declares a no-op TranslateTransform(Y=0) on these layers; reset to that.
+            ClearEmoteImageTransform(ImgAvatarAnimated);
+            ClearEmoteImageTransform(ImgAvatarAnimatedB);
 
             ImgAvatarAnimated.IsVisible = true;
-            ImgAvatarAnimatedB.IsVisible = true;
+            if (ImgAvatarAnimatedB != null) ImgAvatarAnimatedB.IsVisible = true;
 
             if (ImgAvatar != null) ImgAvatar.IsVisible = false;
             if (ImgAvatarB != null) ImgAvatarB.IsVisible = false;
         }
 
-        private static void ApplyImageTransform(Image img, double scale, int offX, int offY)
+        // Reset an animated emote layer to the XAML-declared no-op TranslateTransform(0,0) so no
+        // stale ScaleTransform/TranslateTransform from a prior divergent path enlarges or shifts
+        // the frame. The shared AvatarBorder transform (ApplyAvatarTransform) owns all scale/offset.
+        private static void ClearEmoteImageTransform(Image? img)
         {
-            var group = new TransformGroup();
-            group.Children.Add(new ScaleTransform(scale, scale));
-            group.Children.Add(new TranslateTransform(offX, offY));
-            img.RenderTransform = group;
+            if (img == null) return;
+            img.RenderTransform = new TranslateTransform(0, 0);
+            img.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
         }
 
         private void OnCirceClipStarted(string clip)
         {
             if (_circeEngine?.HasLayout != true || ImgAvatarAnimated == null) return;
             ReassertCirceEmoteVisuals();
+            LogContentGeometry("circe-clip");
         }
 
         private void CircePlayEmote(string? emotionLineId, string? audioPath, string? text, string? mood)

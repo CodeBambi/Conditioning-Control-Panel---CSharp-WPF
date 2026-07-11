@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Services.Avatar;
+using ConditioningControlPanel.Core.Services.AvatarTube;
 using ConditioningControlPanel.Core.Services.Companion;
 using ConditioningControlPanel.Avalonia.Services.Mod;
 using ConditioningControlPanel.Models;
@@ -572,7 +573,19 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 if (Math.Abs(setOffsetX) > 0.001)
                     group.Children.Add(new TranslateTransform(setOffsetX * layoutScale, 0));
                 AvatarBorder.RenderTransform = group;
-                AvatarBorder.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+                // WPF ApplyTubeLayoutOffsets (AvatarTubeWindow.Avatar.cs:712-715) sets ONE
+                // ScaleTransform(EffAvatarScale) as a LayoutTransform on ALL THREE avatar images
+                // (ImgAvatar + ImgAvatarAnimated + ImgAvatarAnimatedB, comment "Circe emote
+                // crossfade layer must match"). WPF's LayoutTransform participates in layout, so
+                // for a bottom-aligned figure the feet stay anchored (the scaled slot grows
+                // upward). Avalonia has NO LayoutTransform, so the mod avatar scale is applied as
+                // a RenderTransform on AvatarBorder (the shared parent of all three images —
+                // identical to ImgAvatar by construction). RenderTransformOrigin = bottom-center
+                // (0.5,1.0) is the faithful approximation of WPF's bottom-anchoring LayoutTransform:
+                // scaling around the bottom edge keeps the feet planted instead of lifting the
+                // figure (center-origin scaling was the "shifted up" half of the emote bug,
+                // Engram obs #6). The per-set nudge (setScale, +12%) composes onto the same origin.
+                AvatarBorder.RenderTransformOrigin = new RelativePoint(0.5, 1.0, RelativeUnit.Relative);
             }
             else
             {
@@ -611,6 +624,19 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 }
 
                 _useAnimatedAvatar = HasAnimatedAvatar(_currentAvatarSet);
+
+                // 2026-07-11 rebuild (board REBUILD SPEC invariant 6): theme/reskin restyles
+                // IN PLACE. Clear every secondary avatar layer BEFORE the mode dispatch so a
+                // residual layer from the previous mode (portrait crossfade B-layer, mist,
+                // animated B-layer) can never keep rendering under/over the new avatar — the
+                // owner-visible "old avatar + new smaller one over it" on theme switch.
+                // Live bubbles die FIRST (obs #6 retest-2 fix 2: dispose-before-recreate) so
+                // a reskin never leaves orphaned bubble windows/timers from the old skin.
+                AvatarRandomBubble.DestroyAll();
+                CancelCrossfade();
+                if (ImgAvatarB != null) { ImgAvatarB.IsVisible = false; ImgAvatarB.Opacity = 0; }
+                if (ImgAvatarAnimatedB != null) { ImgAvatarAnimatedB.IsVisible = false; ImgAvatarAnimatedB.Opacity = 0; }
+                if (MistOverlay != null) MistOverlay.IsVisible = false;
 
                 if (UsePortraitSystem())
                 {
@@ -700,7 +726,12 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
 
                 var tubeName = useAlternative ? "tube2.png" : "tube.png";
                 if (ImgTubeFrame != null && _resourceResolver != null)
+                {
                     ImgTubeFrame.Source = _resourceResolver.ResolveBitmap(tubeName);
+                    // Refresh the detached per-pixel hit-test cache alongside the art
+                    // (obs #6 retest-2 fix 3b) - SetTubeStyle is the single Source writer.
+                    CacheTubeArtPixels(tubeName);
+                }
                 _logger?.LogInformation("Tube style changed to: {Style}", tubeName);
             }
             catch (Exception ex)
@@ -715,17 +746,51 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 && _resourceResolver?.HasModOverride("tube2.png") != true;
         }
 
-        internal double EffAvatarScale() => _modService?.GetAvatarScale() ?? 1.0;
-        internal int EffAvatarOffsetX() => _modService?.GetAvatarOffsetX() ?? 0;
-        internal int EffAvatarOffsetY() => _modService?.GetAvatarOffsetY() ?? 0;
-        internal int EffAvatarDetachedOffsetX() => _modService?.GetAvatarDetachedOffsetX() ?? 0;
-        internal int EffAvatarDetachedOffsetY() => _modService?.GetAvatarDetachedOffsetY() ?? 0;
+        // Effective layout = the mod's global TubeLayout + the engaged Circe emote set's optional
+        // layout delta. Mirrors WPF AvatarTubeWindow.CirceEmotes.cs:388-393 (EmoteLayoutActive =>
+        // fold _emoteScaleMul / _emoteOff[X|Y|DetX|DetY] into the effective values) via the pure
+        // AvatarTubeLayoutFold helper. Before this fold the Avalonia emote path applied a SEPARATE
+        // center-origin ScaleTransform(baseScale=1.0,...) onto each emote image, IGNORING the mod
+        // avatar scale and lifting the bottom-anchored figure — the "avatar enlarged + shifted up
+        // during Circe emotes" bug (Engram obs #6). Now both pose and emote layers resolve to the
+        // SAME effective scale/offset through ApplyAvatarTransform + ApplyTubeLayoutOffsets.
+        //
+        // Active = a Circe emote set with a layout delta is currently engaged. WPF CirceEmotes.cs:388
+        // defines EmoteLayoutActive = _circeEmoteMode && _emoteHasLayout; the Avalonia engine owns
+        // both signals (IsActive tracks engagement, HasLayout tracks _emoteHasLayout).
+        private bool EmoteLayoutActive => _circeEngine?.IsActive == true && _circeEngine.HasLayout;
+
+        internal double EffAvatarScale()
+            => AvatarTubeLayoutFold.Scale(_modService?.GetAvatarScale() ?? 1.0,
+                                          EmoteLayoutActive, _circeEngine?.EffScaleMul ?? 1.0);
+        internal int EffAvatarOffsetX()
+            => AvatarTubeLayoutFold.OffsetX(_modService?.GetAvatarOffsetX() ?? 0,
+                                            EmoteLayoutActive, _circeEngine?.EffOffsetX ?? 0);
+        internal int EffAvatarOffsetY()
+            => AvatarTubeLayoutFold.OffsetY(_modService?.GetAvatarOffsetY() ?? 0,
+                                            EmoteLayoutActive, _circeEngine?.EffOffsetY ?? 0);
+        internal int EffAvatarDetachedOffsetX()
+            => AvatarTubeLayoutFold.OffsetX(_modService?.GetAvatarDetachedOffsetX() ?? 0,
+                                            EmoteLayoutActive, _circeEngine?.EffDetachedOffsetX ?? 0);
+        internal int EffAvatarDetachedOffsetY()
+            => AvatarTubeLayoutFold.OffsetY(_modService?.GetAvatarDetachedOffsetY() ?? 0,
+                                            EmoteLayoutActive, _circeEngine?.EffDetachedOffsetY ?? 0);
 
         // ════════════════════════════════════════════════════════════════════════════════
         //  EMOTIVE PORTRAIT AVATAR
         // ════════════════════════════════════════════════════════════════════════════════
 
-        private bool UsePortraitSystem() => _portraitService?.HasManifestForActiveMod() ?? false;
+        // OWNER RULING 2026-07-11: portrait mode is DISABLED in the Avalonia AvatarTube. When
+        // active it assigned AvatarBorder.RenderTransform = new TranslateTransform(PortraitShiftX=10,
+        // -PortraitRaisePx=-30) (a RenderTransform, invisible to geometry checks, the "shifts up" half
+        // of the owner repro bug), used a close-up portrait skin that fills the tube (the "enlarged"
+        // half), and stopped pose cycling (_poseTimer only starts when !_portraitMode, the "freezes"
+        // half). Owner wants the avatar to ALWAYS be the full-body, centered, pose-cycling legacy
+        // avatar, so portrait mode is unreachable here and every portrait branch below is dead code.
+        // The WPF head KEEPS portrait mode ON (UsePortraitSystem AvatarTubeWindow.Avatar.cs:899-902
+        // returns Services.AvatarPortraitLoader.HasManifestForActiveMod()) - this is an intentional
+        // cross-head divergence per the owner ruling, NOT a port regression.
+        private bool UsePortraitSystem() => false;
 
         private void TryEnterPortraitMode()
         {
@@ -1008,6 +1073,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             int first = _seqOrder.Length > 0 ? _seqOrder[0] : 0;
             _emotionPoseIndex = first;
             CrossfadeTo(LoadPortraitBitmap(bucket[first]), preempt: true);
+            LogContentGeometry("emotion-seq");
 
             bool firstIsLast = _seqOrder.Length <= 1;
             _poseSeqTimer.Interval = TimeSpan.FromMilliseconds(firstIsLast ? _seqLastMs : _seqStepMs);

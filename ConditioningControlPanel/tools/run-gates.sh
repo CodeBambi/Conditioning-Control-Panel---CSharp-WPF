@@ -12,7 +12,7 @@
 # =============================================================================
 set -u
 
-CORE_TEST_FLOOR=496          # raise when adding tests; NEVER lower (owner-authorized drop 604->496 with the 2026-07-11 native-DTRH strip: ChaosDraftPool/ChaosScoring/ChaosSpawnDirector test files removed; ChaosRunRulesTests KEPT - web-path config rules)
+CORE_TEST_FLOOR=550          # raise when adding tests; NEVER lower (2026-07-11 AvatarTube retest-2 fixes added 19 TubeGeometryMath tests: drag both-axes, corner resize, seed/ratio transient immunity; prior owner-authorized drop 604->496 with the native-DTRH strip)
 SMOKE_TABS_EXPECTED=44
 SMOKE_FINDINGS_EXPECTED=5
 
@@ -62,6 +62,27 @@ else
   else
     say "FAIL: smoke tabs=${TABS:-?} findings=${FINDINGS:-?} unhandled=${UNHANDLED}. Log: $SMOKE_LOG"
     FAIL=1
+  fi
+
+  # ---- Conditional AvatarTube visual+assertion gate ------------------------------
+  # Runs ONLY when the working-tree diff touches the avatar-tube geometry surface,
+  # so a routine Core/UI change never pays the headed-verify cost. Match set: anything
+  # under ConditioningControlPanel/CCP.Avalonia/AvatarTube/** (window, controller,
+  # bubbles, emotes) OR any TubeGeometry* path (the Core math + its tests). Both
+  # tracked edits (vs HEAD) and untracked new files are checked, so the gate fires the
+  # moment one of those files is touched.
+  AV_DIFF=$(git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null)
+  if printf '%s\n' "$AV_DIFF" | grep -qiE 'CCP\.Avalonia/AvatarTube/|TubeGeometry'; then
+    say "=== GATE 4b: AvatarTube verify (diff touches AvatarTube/** or TubeGeometry*) ==="
+    AV_LOG="${TMPDIR:-/tmp}/ccp-avatartube-$$.log"
+    dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -c Debug -- --verify-avatartube > "$AV_LOG" 2>&1
+    AV_EXIT=$?
+    if [ "$AV_EXIT" = "0" ]; then
+      say "PASS: --verify-avatartube exit 0 (avatar geometry held across 10 bubbles)"
+    else
+      say "FAIL: --verify-avatartube exit ${AV_EXIT} (avatar geometry drifted across bubbles = REAL finding, not a harness bug). Log: $AV_LOG"
+      FAIL=1
+    fi
   fi
 fi
 
