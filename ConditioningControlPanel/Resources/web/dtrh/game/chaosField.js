@@ -103,6 +103,8 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     dimOpacity: 1.0,      // Blindfold: plain bubbles render at this opacity
     residueZones: false,  // Aftermath drafted: poll fx.inResidue per bubble
     rabbitTrailSec: 0,    // Tail-Plug: rabbits drag a popping sparkle trail
+    rippleFlingsRabbits: false, // Riptide duo: the ripple smacks (flings) rabbits it washes over
+    dvdElectrified: false, // Short Circuit duo: bouncing logo crackles + arcs chain lightning on bounce
     pumpPull: 0,          // The Pump (toy): temporary suction, sweet kinds only
     trailBounce: false,   // Hopscotch duo: rabbits ricochet off the Wand's ink
     thoughtOrbit: false,  // One-Track Mind duo: intrusive thoughts orbit the cursor
@@ -876,8 +878,15 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
             d.splitsLeft--;
             spawnDvd({ durationSec: d.lifeLeft, speed: d.speed, scale: d.scale, splitBounces: 0, text: d.text, x: d.x, y: d.y });
           }
+          // Short Circuit duo: the shorted-out logo arcs chain lightning off each wall it hits.
+          if (phys.dvdElectrified && performance.now() > (d.arcCdUntil || 0)) {
+            d.arcCdUntil = performance.now() + 250;
+            dischargeAt(d.x, d.y, { maxTargets: 3, reach: 520, chain: true });
+          }
         }
       }
+      // Short Circuit duo: crackling static rides the logo while the duo is live.
+      d.el.classList.toggle('cf-dvd--electric', !!phys.dvdElectrified);
       d.el.style.transform = `translate3d(${d.x - d.w / 2}px, ${d.y - d.h / 2}px, 0)`;
       // Mow: treats pop, lives snap, immune kinds slide off.
       for (const b of Array.from(live)) {
@@ -917,15 +926,19 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
 
     const hits = [];
     for (const b of live) {
-      if (TOY_IMMUNE.has(b.spec.kind) || isShielded(b)) continue;
+      // Riptide duo: rabbits are normally toy-immune, but the wave smacks them off.
+      const isFlingRabbit = phys.rippleFlingsRabbits && !treatsOnly
+        && b.spec.kind === 'darter' && b.telegraphLeft <= 0 && !isShielded(b);
+      if ((TOY_IMMUNE.has(b.spec.kind) || isShielded(b)) && !isFlingRabbit) continue;
       if (treatsOnly && b.spec.kind === 'live') continue;
       const dx = b.x - x, dy = b.y - y;
       const d = Math.hypot(dx, dy);
-      if (d <= radiusPx + b.size / 2) hits.push({ b, at: Math.max(0, (d / radiusPx)) * lifeMs });
+      if (d <= radiusPx + b.size / 2) hits.push({ b, at: Math.max(0, (d / radiusPx)) * lifeMs, fling: isFlingRabbit });
     }
     for (const h of hits) {
       window.setTimeout(() => {
         if (h.b.state !== 'live') return;
+        if (h.fling) { smack(h.b, x, y); h.b.rippleTrailUntil = performance.now() + 2000; return; }
         if (h.b.spec.kind === 'live') defuse(h.b, false);
         else popBenign(h.b, h.b.x, h.b.y, 'ripple');
       }, h.at);
@@ -1204,6 +1217,9 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       vanish(b);   // flew off after its third bounce
       return false;
     }
+
+    // Riptide duo: a rabbit the ripple just flung drags a short sparkle wake (cosmetic).
+    if (b.rippleTrailUntil && performance.now() < b.rippleTrailUntil) fx.addSparkle(b.x, b.y);
 
     // Tail-Plug: the rabbit drags a sparkling trail that pops what it grazes.
     if (phys.rabbitTrailSec > 0) {

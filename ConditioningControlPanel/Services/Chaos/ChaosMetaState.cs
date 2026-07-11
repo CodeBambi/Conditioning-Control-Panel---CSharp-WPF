@@ -118,6 +118,11 @@ public sealed class ChaosMetaState
     /// <summary>Highest rank index the player has been shown a rank card for (0 = curious).</summary>
     public int LastRankSeen { get; set; } = 0;
 
+    /// <summary>The Cheshire tutorial arc position (0 = fresh .. 6 = arc done). Climb-only
+    /// via set-num; zeroed by reset-onboarding for a full replay. Existing saves self-heal
+    /// to done page-side (runsCompleted &gt; 0 stamps 6 before any suppression decision).</summary>
+    public int TutorialStage { get; set; } = 0;
+
     // ---- narrative layer (the Madam): seen-once story lines + per-line cooldown ends ----
     /// <summary>Narrative cue ids that have played and must never repeat (mode == once). Accretes across descents.</summary>
     public HashSet<string> SeenNarrativeLines { get; set; } = new();

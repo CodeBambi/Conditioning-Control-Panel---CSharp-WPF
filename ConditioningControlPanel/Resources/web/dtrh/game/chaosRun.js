@@ -57,6 +57,9 @@ import { createHappyPath } from './happyPath.js';
 import { createVnPortrait } from './vnPortrait.js';
 import { createLessonCard } from './lessonCard.js';
 import { createHubGuide } from './hubGuide.js';
+import { createCheshireVn, CHESHIRE_DISABLED } from './cheshireVn.js';
+import { createCheshireGuide } from './cheshireGuide.js';
+import { CHESHIRE } from '../assets/vn/cheshire_script.js';
 import { setDucked, isMuted } from '../shared/audioMute.js';
 import { lessonById, boonDefById, DIARY_CODEX, DIARY_VERBS, RANKS } from './catalog.js';
 
@@ -191,6 +194,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let field = null, ffx = null, hudUi = null, overlays = null, payloadFx = null;
   let bMech = null;    // the biome mechanic controller (game/biomeMech.js), built in attach
   let warren = null, lessons = null, happy = null, vn = null, lessonCardUi = null, hubGuide = null;
+  let chesh = null, guide = null;   // the Cheshire VN engine + tutorial director (null when CHESHIRE_DISABLED)
   let rippleCastCount = 0;   // per-run: feeds the classroom's "try the ripple" prompt
   const metrics = createSessionMetrics();   // per-run engagement counters (local-only telemetry)
   let state = 'boot';  // boot -> warren -> requesting -> countdown -> running -> drafting -> recap
@@ -304,6 +308,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       trustExercise: false,    // Trust Exercise duo: pops sonar-ping the blindfold's dimmed bubbles
       milkingMachine: false,   // Milking Machine duo: pump suction holds the ink fresh; pump end detonates it
       chargedRipple: false,    // Skinny Dipping duo: ripple-wave pops arc lightning onward
+      rippleFlingsRabbits: false, // Riptide duo: the ripple wave smacks (flings) rabbits it washes over
+      dvdScaleMult: 1, dvdSpeedMult: 1, dvdLifeMult: 1, // Racing Thoughts duo: bigger/faster/longer bouncing text
+      dvdElectrified: false,   // Short Circuit duo: bouncing logo crackles + arcs chain lightning on bounce
       thoughtOrbit: false,     // One-Track Mind duo: intrusive thoughts orbit the cursor
       weatherGirl: false,      // Weather Girl duo: every new sky fires a themed entrance event
       midas: false,            // Midas Ricochet duo: lucky pops gild nearby treats (gilded pops tip gold)
@@ -448,7 +455,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (isMuted()) return;
     bridge.send({ type: 'sfx', name, scale: (scale ?? 0.6) * 0.5 * getLevel('fx') });
   };
-  const bark = (event, data) => bridge.send({ type: 'bark', event, ...(data || {}) });
+  // Every bark tees through the Cheshire first: a claimed event plays HER
+  // commentary line and the native (WPF-voiced) bark stands down - one voice
+  // at a time. Unclaimed events pass through untouched.
+  const bark = (event, data) => {
+    try { if (guide && guide.onEvent(event, data)) return; } catch (e) { /* the tee must never eat a bark */ }
+    bridge.send({ type: 'bark', event, ...(data || {}) });
+  };
   // The boon draft plays IN the tube (engine/boonPick.js): the fall parks, themed
   // cards hang ahead, click one to shatter-and-drop-through. Same callback
   // contract as the old DOM overlay (overlays.showDraft), which stays as a
@@ -508,6 +521,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       bark('gold-first');
     }
   };
+  // Shared narration cooldown: one voice at a time across the Cheshire VN/VO and
+  // the lesson cards. When either speaks it stamps the gate; a new explainer that
+  // wants to fire inside the window is DROPPED (not queued) so it re-triggers the
+  // next time the player naturally meets it. Native barks intentionally don't stamp
+  // (they're too frequent - counting them would starve lesson cards). Reset per run.
+  const NARRATION_CD_MS = 20000;
+  let lastNarrationAt = -Infinity;
+  const narration = {
+    ready: () => (performance.now() - lastNarrationAt) >= NARRATION_CD_MS,
+    stamp: () => { lastNarrationAt = performance.now(); },
+  };
   // Queue one first-discovery explainer. `copy` = { glyph, name, desc, flavor?, accent? }.
   // No-op if the card layer isn't up yet or the copy is empty. Extra = { kicker?, onDismiss? }.
   const teach = (copy, extra) => {
@@ -518,13 +542,31 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       kicker: extra && extra.kicker, onDismiss: extra && extra.onDismiss,
     });
   };
-  const markDiscovered = (codexId) => {
-    if (discovered.has(codexId)) return;
+  // Record the discovery in the ledger (persisted). Split out from markDiscovered so
+  // a cooldown-DROPPED lesson is NOT recorded - it must re-trigger next encounter.
+  const commitDiscovery = (codexId) => {
     discovered.add(codexId);
     bridge.send({ type: 'meta-command', op: 'add-to-set', set: 'discoveredCodexIds', id: codexId });
-    // First time ever: pause + explain (bubbles/pickups/weather). Draft boons are
-    // excluded - the in-tube draft already parks the fall and shows the card + desc.
-    if (!codexId.startsWith('boon:') && CODEX_COPY[codexId]) teach(CODEX_COPY[codexId]);
+  };
+  const markDiscovered = (codexId) => {
+    if (discovered.has(codexId)) return;
+    // Codex-only entries (draft boons, or anything with no teach copy): record, no
+    // lesson, no cooldown - the in-tube draft already shows the card + desc.
+    if (codexId.startsWith('boon:') || !CODEX_COPY[codexId]) { commitDiscovery(codexId); return; }
+    // While the Cheshire arc runs, NO lesson card fires (her beats cover the
+    // mechanics); record so it never cards later. Intentional, not a cooldown-drop.
+    if (guide && guide.suppressLessons()) { commitDiscovery(codexId); return; }
+    // Post-arc she may claim a first-discovery as her own held card - but only if the
+    // narration channel is free. On a claim: record + stamp. (false => fall through.)
+    if (guide && narration.ready() && guide.handleDiscovery(codexId, CODEX_COPY[codexId])) {
+      commitDiscovery(codexId); narration.stamp(); return;
+    }
+    // Plain lesson card - the shared 20s gate. If the VN/VO or another card spoke in
+    // the window, DROP this one (don't record) so the next encounter re-triggers it.
+    if (!narration.ready()) return;
+    commitDiscovery(codexId);
+    teach(CODEX_COPY[codexId]);
+    narration.stamp();
   };
   const pulse = (rgb, strength) => { if (cfg.colorFlashes) hudUi?.pulse(rgb, strength); };
   const showPopScore = (pts, x, y) => {
@@ -595,6 +637,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     field.phys.rabbitTrailSec = st.rabbitTrailSec;
     field.phys.trailBounce = !!st.wandBounce;
     field.phys.thoughtOrbit = !!st.thoughtOrbit;
+    field.phys.rippleFlingsRabbits = !!st.rippleFlingsRabbits;
+    field.phys.dvdElectrified = !!st.dvdElectrified;
   };
 
   // Sticky Fingers capstone: releasing a held card hurls it down the tube; the impact
@@ -1223,9 +1267,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         hudUi.toast('❄ everything holds still');
         break;
       case 'porn_dvd': {
-        const speed = t.level === 1 ? 0.7 : t.level === 2 ? 0.85 : 1.0;
-        const scale = t.level === 1 ? 0.8 : t.level === 2 ? 0.9 : 1.0;
-        field.launchDvd({ durationSec: Math.max(5, t.power), speed, scale,
+        const speed = (t.level === 1 ? 0.7 : t.level === 2 ? 0.85 : 1.0) * st.dvdSpeedMult;
+        const scale = (t.level === 1 ? 0.8 : t.level === 2 ? 0.9 : 1.0) * st.dvdScaleMult;
+        field.launchDvd({ durationSec: Math.max(5, t.power) * st.dvdLifeMult, speed, scale,
           count: t.maxed ? 2 : 1, splitBounces: st.dvdSplitBounces });
         sfx('dvd_launch', 0.55);
         t.cooldownLeft = t.cooldownSec;
@@ -1364,7 +1408,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       thoughtAccum += dt;
       if (thoughtAccum >= 5.0) {
         thoughtAccum = 0;
-        field.launchDvd({ durationSec: st.intrusiveThoughtsSec, speed: 1.3, scale: 0.8,
+        field.launchDvd({ durationSec: st.intrusiveThoughtsSec * st.dvdLifeMult, speed: 1.3 * st.dvdSpeedMult, scale: 0.8 * st.dvdScaleMult,
           count: 1, text: cfg.thoughtTexts[(Math.random() * cfg.thoughtTexts.length) | 0] });
       }
     }
@@ -2141,6 +2185,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     lessons.sampleCursor();                          // the_pull's rest witness
     lessons.noteChannelTotal(field.channelSeconds()); // slow_fuses
     happy.tickRun(hpIo);                             // scripted first-descent beats
+    // the Cheshire's arc schedule rides the same tick (frac is MONOTONIC
+    // elapsed/duration, not the sawtooth intensity - triggers must always land)
+    if (guide) guide.tick({ frac: st.elapsedSec / Math.max(1, st.runDurationSec), wave: st.waveIndex });
 
     if (!st.endingSoonFired && st.runDurationSec - st.elapsedSec <= 10) {
       st.endingSoonFired = true;
@@ -2839,7 +2886,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
      * id (resolves the active persona's emote + line + voiceover) or an explicit
      * {emote,line,voUrl}. Returns a promise; safe to fire-and-forget. No-op if the
      * VN overlay isn't built. */
-    vnBeat: (beat) => (vn ? vn.beat(beat) : Promise.resolve(false)),
+    vnBeat: (beat) => (guide ? guide.happyBeat(beat)
+      : (vn ? vn.beat(beat) : Promise.resolve(false))),
     spawnScriptedThreat(fuseMult) {
       const pink = VARIANTS.find((v) => v.id === 'pink');
       if (!pink) return;
@@ -2948,6 +2996,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     lessons.seed(hostState ? hostState.meta : null, cfg.allowCurses);
     metrics.reset();   // fresh per-run engagement counters
     happy.onRunStarted(cfg.runsCompleted, cfg.scriptedFirstRun);
+    lastNarrationAt = -Infinity;   // fresh descent: never pre-suppressed by a hub-scene line
+    if (guide) guide.onRunStarted(cfg);   // deal this descent's Cheshire schedule (or none)
 
     // A pre-equipped start boon enters the run already active (before wave 1) -
     // except on the scripted first descent, where it stands down (the classroom).
@@ -3012,6 +3062,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     field.setVibe(false);
     lessons.onRunCompleted(st.shields, cfg.difficulty, ranFullCourse);
     happy.onRunEnded();
+    if (guide) guide.onRunEnded();   // drop any pending Cheshire beats before the recap
     if (ranFullCourse) awardLoopTip();   // the final loop ends at the run clock
     field.clearAll();
     clearAmbient();
@@ -3243,18 +3294,42 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       lessons = createLessonTracker({ bridge, onComplete: onLessonComplete, onFirstTime: onFirstTimeAwarded });
       lessons.setCoveredProbe(() => covered || heavyActive());
       happy = createHappyPath();
-      // The Warren's FTUE director: welcome beats on the first-ever hub open, guided
-      // spend on the first return. Reads flags from the metaView warren hands it per
-      // call; persists via a direct set-flag (NOT the per-run `flags` mirror, which
-      // doesn't carry hub flags).
-      hubGuide = createHubGuide({
+      // The Cheshire (FTUE overhaul): her VN engine + tutorial director replace
+      // the old hubGuide + lesson cards for the first three descents. Kill-switch:
+      // CHESHIRE_DISABLED restores the legacy path byte-identically below.
+      if (!CHESHIRE_DISABLED) {
+        chesh = createCheshireVn(ctx.hud, {
+          haltTunnel, duckAudio,
+          driftDuck: (m) => { try { if (ctx.drift && ctx.drift.setDuck) ctx.drift.setDuck(m); } catch (e) { /* ignore */ } },
+          send: (msg) => bridge.send(msg),
+          script: CHESHIRE,
+        });
+        try { chesh.prime(); } catch (e) { /* poses warm lazily on first beat */ }
+        guide = createCheshireGuide({
+          vn: chesh, bridge, narration,
+          getMeta: () => (hostState ? hostState.meta : null),
+          isFieldHeld: () => heldNow(),
+          isDriftSpeaking: () => { try { return !!(ctx.drift && ctx.drift.isSpeaking && ctx.drift.isSpeaking()); } catch (e) { return false; } },
+          // a beat's `covers` stamps the discovery ledger exactly like a spawn would
+          coverDiscovered: (id) => {
+            if (discovered.has(id)) return;
+            discovered.add(id);
+            bridge.send({ type: 'meta-command', op: 'add-to-set', set: 'discoveredCodexIds', id });
+          },
+          log: (m) => bridge.log(m),
+        });
+      }
+      // The legacy Warren FTUE director: welcome beats on the first-ever hub open,
+      // guided spend on the first return. Only built when the Cheshire is off -
+      // her hub director supersedes it via the identical contract.
+      hubGuide = CHESHIRE_DISABLED ? createHubGuide({
         vnBeat: (b) => (vn ? vn.beat(b) : Promise.resolve(false)),
         vnCancel: () => { try { if (vn) vn.hide(); } catch (e) { /* ignore */ } },
         teach,
         teachBusy: () => !!(lessonCardUi && lessonCardUi.isBusy()),
         setFlag: (k) => bridge.send({ type: 'meta-command', op: 'set-flag', key: k }),
         log: (m) => bridge.log(m),
-      });
+      }) : null;
       warren = createWarren({
         hud: ctx.hud, bridge,
         stations: ctx.hubStations,
@@ -3271,7 +3346,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         fullscreen: ctx.fullscreenSupported
           ? { toggle: ctx.toggleFullscreen, isActive: ctx.isFullscreen, onChange: ctx.onFullscreenChange }
           : null,
-        guide: hubGuide,
+        guide: guide ? guide.hub : hubGuide,
       });
       window.addEventListener('pointerdown', onPointerDownGlobal, true);
       window.addEventListener('pointerdown', onGlobalPointerDownCapture, true);
@@ -3313,6 +3388,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
      *  classroom. The snapshot rebroadcast re-fires the hub welcome live. */
     resetOnboarding() {
       bridge.send({ type: 'meta-command', op: 'reset-onboarding' });
+      // direct signal (not snapshot-sniffing): rewind the Cheshire arc + drop her
+      // local once-line mirrors so the full tutorial replays, scripted run included
+      try { if (guide && guide.onReset) guide.onReset(); } catch (e) { /* ignore */ }
       sfx('ui_unlock', 0.55);
     },
 
