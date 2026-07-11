@@ -489,6 +489,22 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
 | **In-world integration edits** | `Chaos/ChaosFlashOverlay.cs`, `ChaosGifCascadeOverlay.cs`, `Services/Flash/FlashService.cs` (+15), `Services/Video/VideoService.cs` (+26), `Services/Tracking/GazeFocusService.cs` (+102, gaze-click follows camera), `GazeDebugCursorService.cs` (+28), `App.xaml.cs`, `AvatarTube/AvatarTubeWindow.Speech.cs`, `MainWindow.RemoteControl.cs` | mostly `CCP.Core` / `CCP.Avalonia` chaos + gaze + flash services | Commit `8343e1e0` "render bubble effects in-world; gaze-click follows camera; glitch/cascade draw the flash pool". VERIFY whether any standalone (non-DTRH) flash/video/gaze behavior changed and needs an independent port. |
 | **Native chaos-run DECOMMISSION (LAST phase — only after the web port is live and user-verified)** | n/a (deletion in the Avalonia head, not a WPF port) | delete dead run-game code: `CCP.Avalonia/Chaos/` run-specific files (~12k lines total in the folder — `ChaosHubWindow.*` (hub, ~3.3k), `ChaosHudWindow`, `ChaosBoonBarOverlay`, `ChaosIntroWindow`, `ChaosUnlockCardOverlay`/`AvaloniaChaosUnlockCards`, `ChaosHappyPath`, `ChaosLessons`, `ChaosNarrativeDirector`, `ChaosBackdropService`, `AvaloniaChaosCatalogs`, `AvaloniaChaosStubs`, …) + run-specific `CCP.Core/Services/Chaos/` (`ChaosDraftPool`, `ChaosEconomy`, `ChaosScoring`, `ChaosSpawnDirector`, `ChaosSpawnCatalog`, `ChaosRunRules`, `ChaosRunKnobs`, …) + run-only compositor chaos layers | **Confirm-then-delete per file** (grep zero live refs before each removal; never bulk-delete). **CARVE-OUTS — shared with ambient/non-DTRH features, keep:** `BubbleEngine`/`BubbleState`/`IBubbleService`/`BubbleLayer` (ambient trigger-bubbles), gif-cascade + DVD + any layer reachable from ambient effects (#493 Gif Rain row #8a uses the cascade), `ChaosImagePool` (facade consumers), `ChaosCrashSentinel` (VERIFY), `ChaosMetaState`/meta persistence (likely becomes the web game's C# meta store via the bridge — VERIFY against `DtrhMetaBridge` before deleting anything meta). Each deletion commit runs full gates incl `--verify-layers`. |
 
+**Claim ledger (append-only):**
+- **CLAIM 2026-07-11 · wip @driver (continuous-mode session, broader completion bar):** claimed phases
+  1–7 (the DTRH **web port**); phase 8 (native decommission) explicitly OUT of scope (owner-gated on a
+  user-verified live web boot). Advisor-validated the pivot from the prior GOAL-COMPLETE certification (that
+  note excluded JUDGMENT rows; this session's bar includes JUDGMENT rows executable without product
+  decisions — #6 qualifies, zero pending product decisions). Plan: (1) parallel `workflow`-tool discovery —
+  two `wpf-archaeologist` passes (host+bridge+webview-host contracts; asset/telemetry stores + meta/model
+  deltas + Lab-tab launch hook) + one STANDARD Avalonia-seam inventory (`IBrowserHost` 11 members,
+  `WebView2BrowserHost`, `ChaosTunnelService` three.js precedent, `Resources/web/dtrh` boot/bridge message
+  surface); (2) ONE JUDGMENT (fable-5) slicing pass → committable slice plan with per-slice acceptance;
+  (3) implement slice-by-slice, one commit each, full gates, `port-parity-auditor` on any state/economy diff,
+  Core-test floor 543 never decreasing. Privacy: per-asset engagement telemetry stays local (row's contract).
+  No web-boot-failure fallback to native (recorded owner-approved deviation — error surface only). The live
+  Three.js/WebGL boot itself is flagged for owner eyes (headed gate), mirroring this session's AvatarTube/
+  Enhancements/dashboard precedent.
+
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
 Five WPF-window- or Windows-installer-specific fixes from v6.2.11. The portable fixes (2b quiz #501 + 2c
@@ -895,7 +911,23 @@ IntPtr lParam, ref bool handled)` — HOLD it in a field so it isn't GC'd. HWND 
 no lag/detach; minimize+restore, exclusive-fullscreen exit, theme switch → tube lands in the WPF spot.
 
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
-**AUTONOMOUS-TIER QUEUE EXHAUSTED 2026-07-11 · @driver — zero claimable OPEN rows remain for autonomous
+**RE-OPENED 2026-07-11 (later, continuous-mode driver, broader completion bar) · @driver — claiming row
+#6 phases 1–7 (DTRH web port).** The prior GOAL-COMPLETE certification below self-scoped "autonomous
+tiers" to STANDARD/MECHANICAL-with-deterministic-verification and EXCLUDED all JUDGMENT rows. This
+session runs under the broader objective bar: *"zero claimable OPEN/improvement rows remain for
+autonomous tiers (**JUDGMENT rows included when executable without product decisions**)."* Under that
+bar the queue is NOT exhausted: **row #6 (DTRH web port) is a JUDGMENT row with ZERO pending product
+decisions** — the 2026-07-10 owner ruling fixes direction (web-only), window contract
+(`ChaosWebViewHost.cs:112-113`/`:138-154`, `DtrhHostService.cs:101`), and binding order (web port FIRST,
+decommission SECOND). Claimable scope = appendix **phases 1–7** (portable Core stores/models/bridge +
+Avalonia game window over `IBrowserHost` + Lab-tab hook + in-world integration verify); **phase 8 (native
+decommission) stays OUT of autonomous scope** — it is hard-gated on a *user-verified* live web boot
+(headed/owner gate). Advisor-validated pivot. `port-session-prompt.md` unchanged (no protocol fact
+changed). Precedent for shipping headed-verified visual features autonomously: AvatarTube / Enhancements /
+dashboard redesigns this session (implement → gate → flag for owner eyes). Row #3 (libmpv) stays
+UNCLAIMED (optional/conditional; one-row-per-session).
+
+**[SUPERSEDED for this session by the RE-OPEN banner above] AUTONOMOUS-TIER QUEUE EXHAUSTED 2026-07-11 · @driver — zero claimable OPEN rows remain for autonomous
 tiers (STANDARD/MECHANICAL with deterministic verification).** Exhaustive row-by-row audit this session:
 every remaining OPEN row is gated on JUDGMENT, headed-human visual verification, owner product decisions,
 or a Linux environment, so none is driver-completable. Specifically — #1 (JUDGMENT + human-in-loop mask
