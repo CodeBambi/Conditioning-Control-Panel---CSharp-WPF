@@ -60,9 +60,13 @@ public sealed class ChaosMetaState
     public int ToyPockets { get; set; } = 0;
     public int AccessoryPockets { get; set; } = 0;
 
+    /// <summary>Hard cap on <see cref="ConsumableSlots"/> (WPF <c>ChaosMeta.MAX_CONSUMABLE_SLOTS</c>,
+    /// ChaosUpgrades.cs:333). The dollhouse <c>buy-consumable-slot</c> op stops selling at this ceiling.</summary>
+    public const int MaxConsumableSlots = 5;
+
     /// <summary>Grab-in-the-tube rework (2026-07): consumable (active-toy) HUD slots the player
     /// can hold at once during a fall. Starts at 1; the dollhouse sews more with Sparks up to
-    /// <see cref="ChaosMeta.MAX_CONSUMABLE_SLOTS"/>. Defaults to 1 so old saves get a working slot.</summary>
+    /// <see cref="MaxConsumableSlots"/>. Defaults to 1 so old saves get a working slot.</summary>
     public int ConsumableSlots { get; set; } = 1;
 
     /// <summary>Gold purchases at her bench (non-power conveniences): id -> owned.</summary>

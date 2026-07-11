@@ -570,6 +570,30 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   `AwardRunRewards(in ChaosRunRewardInput)` + `ChaosRunRewardInput`/`MAX_CONSUMABLE_SLOTS`/first-time
   amounts Core-side), port `DtrhMetaBridge` over it, head adapts its `IChaosMetaService`, economy pinning
   tests, `port-parity-auditor` on the diff. Seam-design is driver-level; executor implements.
+- **S2b SEAM LOCKED + S2b-1 LANDED 2026-07-11 · @driver** (economy archaeology + additive Core contract).
+  Read the frozen WPF `DtrhMetaBridge.cs` (406L) + `ChaosMeta.AwardRunRewards(in ChaosRunRewardInput)`
+  (ChaosUpgrades.cs:517-548) + Core `ChaosEconomy.SparkReward` (ChaosEconomy.cs:60). **Key findings:** (1)
+  the real run-banking is pure `State` math + `Save()` — `ChaosEconomy.SparkReward(...,firstFall)` already
+  encapsulates the frozen spark formula incl. the +25 first-fall guard, so the bridge banks itself and the
+  seam needs NO award method; (2) the bridge's test-mode `ComputeSparksOnly` DELIBERATELY diverges from the
+  real path (NO first-fall, bumps only Sparks/RunsCompleted/BestScore vs the real path's +BestCombo/
+  TotalDefused/TotalRunSeconds) — must be preserved verbatim; (3) `ChaosRunRewardInput` has ZERO head refs
+  (defined fresh in Core); (4) Core `IBarkService` lacks `NotifyChaosFirstTime` — added as an additive
+  default-no-op method (S5-bark precedent); (5) head bark impl `AvaloniaHeadStubs.cs:3518` has
+  `NotifyChaosGiftGiven` but not first-time. **Final seam = `IChaosMetaStore { State; RankIndex; Save() }`**
+  (advisor Option 3, even narrower). S2b-1 shipped the pure-additive Core contract, ZERO call sites / zero
+  behavior change: new `IChaosMetaStore.cs`, `ChaosFirstTimes.cs` (data-only ids+Amounts{5,10,10,15,15}+
+  Labels), `ChaosRunRewardInput` record struct (in ChaosMetaPrimitives.cs, WPF-verbatim 9 fields),
+  `ChaosMetaState.MaxConsumableSlots = 5` const (also fixes the S2a-1 dangling cref), and the additive
+  `IBarkService.NotifyChaosFirstTime(string id) {}`. **Gates:** slnf 0 err · WPF sln 0 err · Core **557/557**
+  · smoke 44 tabs / 0 unhandled / Findings 16 (⊆ benign). **Next = S2b-2** (executor + `port-parity-auditor`):
+  port `DtrhMetaBridge` → `public sealed` Core over the seam (all ~18 ops verbatim; bank via SparkReward;
+  preserve test/real divergence + `chaos_meta.test.json` isolation; `DispatcherTimer` 500ms debounce →
+  Core `System.Threading.Timer`, off-thread best-effort save per S1 pattern; `App.Bark`→IBarkService?,
+  `App.UserDataPath`→IAppEnvironment, `App.Logger`→ILogger); head IChaosMetaStore adapter over `ChaosMeta`
+  facade + wire `NotifyChaosFirstTime`; economy pinning tests (affordability never-negative, purchase/
+  gift/first-time idempotency, feral-dial rank gate, one-way flags, boon climb-by-one, bench whitelist,
+  reset-onboarding preserves grants, real-bank first-fall-once + all-field bumps, test-mode divergence).
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 

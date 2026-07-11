@@ -483,6 +483,10 @@ public interface IBarkService
     void NotifyChaosGiftGiven();
     void NotifyChaosDraftAutopick();
     void NotifyChaosRunStarted(string difficulty);
+    /// <summary>A one-time "first X" drops bonus fired over the DtRH meta bridge (mirrors WPF
+    /// <c>App.Bark?.NotifyChaosFirstTime</c>). Default no-op body so existing implementers/fakes keep
+    /// compiling; heads may override to surface a bark. ctx: the first-time id (e.g. "first_taste").</summary>
+    void NotifyChaosFirstTime(string id) { }
 
     // ---- S5 draft/wave choreography barks (WPF Services/Companion/BarkService.cs:247-290).
     //      Default no-op bodies so existing implementers/fakes keep compiling. ----
