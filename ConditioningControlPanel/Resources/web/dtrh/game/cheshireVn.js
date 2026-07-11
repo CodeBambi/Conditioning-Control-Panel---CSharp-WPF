@@ -46,8 +46,11 @@ const POSE_URL = (pose) => '/dtrh/assets/vn/cheshire/' + pose + '.webp';
 // Real field sprites where we have them, emoji where we don't.
 const SPRITES = '/dtrh/assets/bubbles/';
 const PROP_ART = {
-  pink:       { img: SPRITES + 'effects/pinkfilter.png' },
-  live:       { img: SPRITES + 'bubble.png', glow: 1 },
+  // the actual soap-bubble sprite the fall uses; `bubble` picks the glow class so
+  // the "pop the soft pink ones" beat reads pink and the "live ones glow" beat
+  // reads electric - NOT the pink-filter EFFECT overlay (which is a defuse live).
+  pink:       { img: SPRITES + 'bubble.png', bubble: 'pop' },
+  live:       { img: SPRITES + 'bubble.png', bubble: 'live' },
   spiral:     { img: SPRITES + 'effects/spiral.png', spin: 1 },
   braindrain: { img: SPRITES + 'effects/braindrain.png' },
   golden:     { img: SPRITES + 'effects/golden.png', glow: 1 },
@@ -56,7 +59,7 @@ const PROP_ART = {
   glitch:     { img: SPRITES + 'effects/glitch.png' },
   prism:      { img: SPRITES + 'effects/prism.png' },
   gold:       { emoji: '🪙' },
-  emotes:     { emoji: '✨' },
+  emotes:     { stack: true },   // the HUD's fanned smiley currency mark (not a sparkle)
   purses:     { emoji: '✨🪙' },
   rabbit:     { emoji: '🐇' },
   doors:      { emoji: '🚪' },
@@ -71,6 +74,31 @@ const PROP_ART = {
   boom:       { emoji: '💥' },
   streak:     { emoji: '🔥' },
 };
+
+// The emotes currency mark: the SAME fanned three feeling-faces the HUD uses
+// (chaosHud.js EMOTE_STACK) - a yellow sad face behind, a blue surprised face, a
+// pink smiley in front - so the tutorial prop matches the currency on screen.
+// Mirrored here (not imported) to keep the VN engine standalone, the FALL_DRIFT
+// duplication precedent; reuses the global .cf-emote-icon/.cf-emote-chip styles.
+const EMOTE_STACK = [
+  { glyph: '😢', tint: 'grayscale(1) sepia(1) saturate(6) hue-rotate(2deg) brightness(1.08)',  x: -0.30, r: -15 },
+  { glyph: '😮', tint: 'grayscale(1) sepia(1) saturate(7) hue-rotate(178deg) brightness(1.02)', x: 0,     r: 0 },
+  { glyph: '🙂', tint: 'grayscale(1) sepia(1) saturate(7) hue-rotate(300deg) brightness(1.04)', x: 0.30,  r: 15 },
+];
+function buildEmoteStack() {
+  const wrap = document.createElement('span');
+  wrap.className = 'cf-emote-icon';
+  wrap.setAttribute('aria-hidden', 'true');
+  for (const layer of EMOTE_STACK) {
+    const e = document.createElement('span');
+    e.className = 'cf-emote-chip';
+    e.textContent = layer.glyph;
+    e.style.filter = layer.tint;
+    e.style.transform = `translateX(${layer.x}em) rotate(${layer.r}deg)`;
+    wrap.appendChild(e);
+  }
+  return wrap;
+}
 
 const ARM_MS = 300;      // overlay: ignore dismiss input this long (a grab click won't bounce it)
 const RESUME_MS = 400;   // matches vnPortrait/lessonCard: hold across back-to-back beats
@@ -101,6 +129,20 @@ const CSS = `
 @keyframes chPropSpin{to{transform:rotate(360deg)}}
 @keyframes chPropGlow{0%,100%{box-shadow:0 0 18px rgba(${ACCENT_A},.35), 0 10px 26px rgba(0,0,0,.5)}
   50%{box-shadow:0 0 40px rgba(${ACCENT_A},.75), 0 10px 26px rgba(0,0,0,.5)}}
+
+/* bubble props: the translucent soap-bubble png is near-clear, so a radial fill
+   tints its body and a coloured drop-shadow haloes the rim. 'pop' = a soft pink
+   poppable treat; 'live' = a bright, pulsing electric glow you HOLD to defuse. */
+.ch-prop--pop img,.ch-prop--live img{border-radius:50%}
+.ch-prop--pop img{
+  background:radial-gradient(circle at 50% 45%, rgba(255,150,200,.5), rgba(255,110,180,.18) 60%, transparent 72%);
+  filter:drop-shadow(0 4px 10px rgba(0,0,0,.55)) drop-shadow(0 0 11px rgba(255,140,195,.75))}
+.ch-prop--live img{
+  background:radial-gradient(circle at 50% 45%, rgba(140,240,255,.55), rgba(64,200,255,.22) 60%, transparent 72%);
+  animation:chLiveBubble 1.3s ease-in-out infinite}
+@keyframes chLiveBubble{
+  0%,100%{filter:drop-shadow(0 4px 10px rgba(0,0,0,.55)) drop-shadow(0 0 8px rgba(130,240,255,.75)) drop-shadow(0 0 16px rgba(64,200,255,.5))}
+  50%{filter:drop-shadow(0 4px 10px rgba(0,0,0,.55)) drop-shadow(0 0 18px rgba(160,248,255,1)) drop-shadow(0 0 36px rgba(90,215,255,.95))}}
 
 /* ---------- beat dissolve (fade out -> swap pose/text -> fade in) ---------- */
 .chs-fig,.cho-fig{transition:opacity .6s ease}
@@ -271,15 +313,25 @@ export function createCheshireVn(hud, opts = {}) {
     const img = el.querySelector('img'), sp = el.querySelector('span');
     if (!rec) {
       el.hidden = true;
-      el.classList.remove('ch-prop-glow', 'ch-prop-spin');
+      el.classList.remove('ch-prop-glow', 'ch-prop-spin', 'ch-prop--pop', 'ch-prop--live');
       img.removeAttribute('src'); sp.textContent = '';
       return;
     }
     el.hidden = false;
     el.classList.toggle('ch-prop-glow', !!rec.glow);
     el.classList.toggle('ch-prop-spin', !!rec.spin);
-    if (rec.img) { img.src = rec.img; img.style.display = ''; sp.style.display = 'none'; sp.textContent = ''; }
-    else { img.removeAttribute('src'); img.style.display = 'none'; sp.style.display = ''; sp.textContent = rec.emoji; }
+    el.classList.toggle('ch-prop--pop', rec.bubble === 'pop');
+    el.classList.toggle('ch-prop--live', rec.bubble === 'live');
+    sp.textContent = '';   // also drops any previously-injected emote stack
+    if (rec.stack) {
+      img.removeAttribute('src'); img.style.display = 'none';
+      sp.style.display = ''; sp.appendChild(buildEmoteStack());
+    } else if (rec.img) {
+      img.src = rec.img; img.style.display = ''; sp.style.display = 'none';
+    } else {
+      img.removeAttribute('src'); img.style.display = 'none';
+      sp.style.display = ''; sp.textContent = rec.emoji || '';
+    }
   }
   function prime() {
     try { for (const p of Object.keys(script.poses || {})) poseInfo(p); } catch (e) { /* ignore */ }
