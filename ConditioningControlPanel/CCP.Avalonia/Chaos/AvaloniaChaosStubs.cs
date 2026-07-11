@@ -20,18 +20,12 @@ namespace ConditioningControlPanel.Avalonia.Chaos;
 // so the portable DTRH meta bridge shares one source of truth; consumed here via the
 // `using ConditioningControlPanel.Core.Services.Chaos;` above.
 public enum ChaosBranch { Control, Greed, Depth }
-public enum ChaosRarity { Common, Uncommon, Rare }
-public enum ChaosSpeaker { Madam, Rabbit, Hatter, Doll, Enemy }
-
-// ---- narrative layer enums (mirror WPF ChaosNarrativeModels) ----
-public enum ChaosBand { Ambient = 0, Reactive = 1, Story = 2 }
-public enum ChaosLineMode { Once, Pooled }
-public enum ChaosRegister { Hub, DescentHigh, DescentLow }
-public enum ChaosDepthMatch { Min, Exact, Range }
-public enum ChaosConversationMode { Once, Repeatable }
-
 public enum ChaosDifficulty { Easy, Medium, Hard, Extreme }
 
+// Relocated from the deleted native-run AvaloniaChaosUnlockCards.cs (native DTRH strip
+// 2026-07-11): the lifetime-boon pocket categories are META data the kept dollhouse economy
+// (ChaosMetaService pockets/slots) still keys on (WPF Services/Chaos/ChaosLifetimeBoons.cs:8).
+public enum ChaosBoonCategory { Skill, Accessory, Utility }
 public static class RevealIds
 {
     public const string Dollhouse          = "dollhouse";            // the hub itself (first descent done)
@@ -55,41 +49,9 @@ public static class RevealIds
 }
 
 // BenchIds relocated to CCP.Core/Services/Chaos/ChaosMetaPrimitives.cs (web-port S2a-2).
-
-public static class ChaosGlyphs
-{
-    public const string Xp = "🕰";
-    public const string Drops = "✦";
-    public const string Gold = "🪙";
-}
-
 #endregion
 
 #region models
-
-public sealed class ChaosBoon : IChaosDraftCard
-{
-    public string Id { get; set; } = "";
-    public string Name { get; set; } = "";
-    public string Desc { get; set; } = "";
-    public string? Flavor { get; set; }
-    public bool IsCurse { get; set; }
-    public ChaosRarity Rarity { get; set; } = ChaosRarity.Common;
-    public string[]? RequiresAny { get; set; }
-    public string[]? RequiresAll { get; set; }
-
-    /// <summary>Run-multiplier bonus added when this boon is taken (WPF parity).</summary>
-    public double RunMultBonus { get; set; }
-
-    /// <summary>Effect applied when this boon is drafted or equipped as a start boon.</summary>
-    public Action<ChaosRunState>? Apply { get; set; }
-
-    /// <summary>Curse-only: the sin's upside when Surrender's capstone waives the drawback.</summary>
-    public Action<ChaosRunState>? ApplyShielded { get; set; }
-
-    /// <summary>One-shot boons: can only be taken once per run.</summary>
-    public bool Unique { get; set; }
-}
 
 public sealed class ChaosUpgrade
 {
@@ -128,112 +90,6 @@ public sealed class ChaosLifetimeBoon
     public ChaosRank RankFloor { get; set; } = ChaosRank.Curious;
     public string? CapstoneDesc { get; set; }
 
-    /// <summary>Effect applied when this lifetime boon is active at run start; the double is the level value.</summary>
-    public Action<ChaosRunState, double>? Apply { get; set; }
-
-    /// <summary>Capstone-only alternate apply when Surrender shields a sin drawback.</summary>
-    public Action<ChaosRunState, double>? ApplyShielded { get; set; }
-}
-
-public sealed class ChaosConversationLine
-{
-    public string Text { get; set; } = "";
-    public string? AudioKey { get; set; }
-    public bool Emphasis { get; set; }
-}
-
-public sealed class ChaosConversation
-{
-    public string Id { get; set; } = "";
-    public string Trigger { get; set; } = "";
-    public ChaosSpeaker Speaker { get; set; } = ChaosSpeaker.Madam;
-    public string? Title { get; set; }
-    public ChaosRegister Register { get; set; } = ChaosRegister.Hub;
-    public ChaosConversationMode Mode { get; set; } = ChaosConversationMode.Once;
-    public ChaosLineGate? Gates { get; set; }
-    public string PortraitId { get; set; } = "madam";
-    public bool PortraitOnLeft { get; set; }
-    public List<ChaosConversationLine> Lines { get; set; } = new();
-}
-
-public sealed class ChaosLineGate
-{
-    public int RankMin { get; set; }
-    public ChaosDepthMatch? DepthMatch { get; set; }
-    public int DepthA { get; set; }
-    public int DepthB { get; set; }
-    public bool? FirstTime { get; set; }
-    public string? ItemOwned { get; set; }
-    public string? SinId { get; set; }
-    public string? RunStatKey { get; set; }
-    public double RunStatMin { get; set; }
-}
-
-public sealed class ChaosNarrativeCue
-{
-    public string Id { get; set; } = "";
-    public string Trigger { get; set; } = "";
-    public ChaosSpeaker Speaker { get; set; } = ChaosSpeaker.Madam;
-    public ChaosBand Band { get; set; } = ChaosBand.Reactive;
-    public ChaosLineMode Mode { get; set; } = ChaosLineMode.Pooled;
-    public ChaosRegister Register { get; set; } = ChaosRegister.DescentHigh;
-    public ChaosLineGate? Gates { get; set; }
-    public int CooldownMs { get; set; }
-    public int Weight { get; set; } = 1;
-    public string Text { get; set; } = "";
-    public string? AudioKey { get; set; }
-}
-
-public sealed class ChaosToyState : INotifyPropertyChanged
-{
-    public string Id { get; set; } = "";
-    public string Glyph { get; set; } = "◈";
-    public string KeyLabel { get; set; } = "Q";
-    public string Name { get; set; } = "";
-    public string Desc { get; set; } = "";
-    public string? CapstoneDesc { get; set; }
-    public string? Flavor { get; set; }
-    public double CooldownSec { get; set; }
-
-    private int _chargesLeft = -1;
-    public int ChargesLeft
-    {
-        get => _chargesLeft;
-        set { _chargesLeft = value; Refresh(); }
-    }
-
-    private double _cooldownRemainingSec;
-    public double CooldownRemainingSec
-    {
-        get => _cooldownRemainingSec;
-        set { _cooldownRemainingSec = Math.Max(0, value); Refresh(); }
-    }
-
-    private bool _isEffectActive;
-    public bool IsEffectActive
-    {
-        get => _isEffectActive;
-        set { if (_isEffectActive == value) return; _isEffectActive = value; OnChanged(nameof(IsEffectActive)); Refresh(); }
-    }
-
-    public bool IsReady => CooldownRemainingSec <= 0 && ChargesLeft != 0;
-    public string StatusText => ChargesLeft >= 0
-        ? (ChargesLeft == 0 ? "spent" : $"{ChargesLeft} left")
-        : CooldownRemainingSec > 0 ? $"{Math.Ceiling(CooldownRemainingSec):0}s" : "ready";
-    public string ButtonLabel => $"{Glyph} {Name} · {KeyLabel}";
-
-    private void Refresh()
-    {
-        OnChanged(nameof(ChargesLeft));
-        OnChanged(nameof(CooldownRemainingSec));
-        OnChanged(nameof(IsReady));
-        OnChanged(nameof(StatusText));
-    }
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-    public void RaiseChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-    private void OnChanged([System.Runtime.CompilerServices.CallerMemberName] string? name = null)
-        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
 public sealed class ChaosRunConfig
@@ -346,186 +202,6 @@ public sealed class ChaosRunConfig
         return list;
     }
 }
-
-public sealed class ChaosRunState : INotifyPropertyChanged
-{
-    public int Shields { get; set; }
-    public bool FocusLow { get; set; }
-    public int Combo { get; set; }
-    public double BoonMult { get; set; } = 1.0;
-    public double Heat { get; set; }
-
-    // ---- multiplier stack (WPF ChaosModels.cs:524-535): chaos-local, computed live;
-    //      skill/pink-rush applied once at payout ----
-    /// <summary>Base of the stack — Golden Touch writes <c>Config.BaseMult</c> at boon-apply time (WPF ChaosModels.cs:524).</summary>
-    public double BaseMult => Config.BaseMult;
-    /// <summary>Streak multiplier: +0.08 per combo step, capped at x6 (WPF ChaosModels.cs:525).</summary>
-    public double ComboMult => Math.Min(1.0 + Combo * 0.08, 6.0);
-    /// <summary>Per-difficulty payout scalar, read from the run config (WPF ChaosModels.cs:526).</summary>
-    public double DifficultyMult => Config.DifficultyMult;
-    /// <summary>Up to x2 at full heat (WPF ChaosModels.cs:527).</summary>
-    public double HeatMult => 1.0 + Heat;
-    /// <summary>The full chaos-local multiplier stack (WPF ChaosModels.cs:530).</summary>
-    public double TotalMult => BaseMult * ComboMult * DifficultyMult * HeatMult * BoonMult * UrgeMult;
-    /// <summary>Skill-tree multiplier (incl. Pink Rush) — informational; applied once at payout (WPF ChaosModels.cs:535).</summary>
-    public double SkillMult => App.Services?.GetService<ISkillTreeService>()?.GetTotalXpMultiplier() ?? 1.0;
-    public bool RippleReady { get; set; }
-    public string ClockText { get; set; } = "0:00";
-    public string ScoreText { get; set; } = "0";
-    public string TotalMultText { get; set; } = "x1.0";
-    public string FocusText { get; set; } = "50 / 100";
-    public double Focus { get; set; } = 50;
-    public double FocusMax { get; set; } = 100;
-    public string RippleText { get; set; } = "READY";
-    public string ShieldText { get; set; } = "0 ♥";
-
-    // ---- hold-to-defuse channel state ----
-    public bool IsChanneling { get; set; }
-    public DateTime ChannelStartTime { get; set; }
-    public string? ChannelTargetBubbleId { get; set; }
-    public double ChannelHeldSec { get; set; }
-    public string ChannelText { get; set; } = "";
-
-    /// <summary>Run completion 0..1, computed from the clock (WPF ChaosModels.cs:485).</summary>
-    public double RunProgress => Math.Clamp(ElapsedSec / Math.Max(1.0, RunDurationSec), 0, 1);
-    /// <summary>0..1 escalation curve used to scale spawn rate, fuse, strength, live-share (WPF ChaosModels.cs:487).</summary>
-    public double RunIntensity => RunProgress;
-    public string RunTimeText { get; set; } = "0:00";
-    public string ActWaveText { get; set; } = "I · 1";
-    public double RunDurationSec { get; set; } = 180;
-    public int WaveCount { get; set; } = 5;
-    public double ElapsedSec { get; set; }
-
-    /// <summary>Relapse sin: bolt one more loop onto the end of the run. That loop pays
-    /// double drops and gold (<see cref="RelapseLoopActive"/> read at every gold/drop bank).
-    /// Verbatim WPF ChaosModels.cs:494-502.</summary>
-    public void ExtendOneLoop()
-    {
-        int waveLen = (int)Math.Round((double)RunDurationSec / Math.Max(1, WaveCount));
-        WaveCount += 1;
-        RunDurationSec += waveLen;
-        RelapseLoopActive = true;
-    }
-    public int ActIndex { get; set; } = 1;
-    public int WaveIndex { get; set; } = 1;
-    public int BestCombo { get; set; }
-    public int Defused { get; set; }
-    public int Detonated { get; set; }
-    public int EffectsFired { get; set; }
-    public double Score { get; set; }
-    public ChaosRunConfig Config { get; set; } = new();
-
-    public List<ChaosSidebarBoon> ActiveSidebarToys { get; set; } = new();
-    public List<ChaosSidebarBoon> ActiveSidebarAccessories { get; set; } = new();
-    public List<ChaosSidebarBoon> RunPickTiles { get; set; } = new();
-    public List<ChaosSidebarBoon> RunModifiers { get; set; } = new();
-    public List<ChaosBoon> ActiveBoons { get; set; } = new();
-    public List<ChaosBoon> ActiveCurses { get; set; } = new();
-    public List<ChaosToyState> ActiveToys { get; set; } = new();
-    public List<string> RecentEvents { get; set; } = new();
-
-    #region boon / curse tuning knobs
-
-    public double FuseTimeMult { get; set; } = 1.0;
-    public bool MagnetEnabled { get; set; }
-    public double DefuseInvulnMs { get; set; }
-    public bool AllLiveNextWave { get; set; }
-    public double ChainReactionReach { get; set; } = 1.0;
-    public double LuckBonus { get; set; }
-    public HashSet<string> MaxedBoons { get; set; } = new();
-    public Dictionary<string, double> ToyPower { get; set; } = new();
-    public int CollarSaves { get; set; }
-    public double SlowMoBonusSec { get; set; }
-    public double BlindfoldPayMult { get; set; } = 1.0;
-    public bool BlindfoldActive { get; set; }
-    public double BlindfoldOpacity { get; set; } = 1.0;
-    public double SinExtraMult { get; set; }
-    public bool SurrenderShieldUsed { get; set; }
-    public double RabbitRateMult { get; set; } = 1.0;
-    public double LastBreathWindowSec { get; set; }
-    public double LastBreathPayMult { get; set; } = 1.0;
-    public double ChanceDoubleOdds { get; set; }
-    public int RerollsLeft { get; set; }
-    public double CursorPullStrength { get; set; }
-    public bool SpankerActive { get; set; }
-    public double SpankGrowFactor { get; set; } = 1.0;
-    public double IntrusiveThoughtsSec { get; set; }
-    public double GoldenChance { get; set; } = 0.005;
-    public int DropPerPop { get; set; }
-    public long TrickleDrops { get; set; }
-    public bool ShowPopScores { get; set; }
-    public bool ShowWaveTimer { get; set; }
-    public int ShieldRegenPops { get; set; }
-    public double BenignBaseline { get; set; } = 0.4;
-    public double BubbleScale { get; set; } = 1.0;
-    public int StartShields { get; set; }
-    public double RippleRechargeSec { get; set; } = 15.0;
-    public double RippleRadiusPx { get; set; } = 400.0;
-    public double RippleLifeMs { get; set; } = 1200.0;
-
-    // ---- run-boon (mantra / sin) flags ----
-    public bool GoldDiggerEnabled { get; set; }
-    public bool WelcomeShowerEnabled { get; set; }
-    public int HeavyDropEvery { get; set; }
-    public double GgRabbitChance { get; set; }
-    public bool RippleEnabled { get; set; }
-    public bool AftermathEnabled { get; set; }
-    public int EStimChargeMult { get; set; } = 1;
-    public double AfterglowSec { get; set; }
-    public int DvdSplitBounces { get; set; }
-    public double RabbitTrailSec { get; set; }
-    public bool UnleashedEnabled { get; set; }
-    public bool ElectrifiedRabbits { get; set; }
-    public double EStimShockwaveChance { get; set; }
-    public double PendulumPayMult { get; set; } = 1.0;
-    public double DetonationDurationMult { get; set; } = 1.0;
-    public bool LastSecondGoldEnabled { get; set; }
-    public double PrismChance { get; set; }
-    public bool PrismTreatOnly { get; set; }
-    public double CamGirlFlee { get; set; }
-    public double CamGirlTipChance { get; set; }
-    public double UrgeMult { get; set; } = 1.0;
-    public bool ActivesDisabled { get; set; }
-    public bool RelapseLoopArmed { get; set; }
-    public bool RelapseLoopActive { get; set; }
-
-    // ---- generic runtime bonuses for the minimal common-effect boons ----
-    public double ComboMultBonus { get; set; }
-
-    #endregion
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-    public void RaiseChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-
-    public void PushEvent(string text)
-    {
-        RecentEvents.Add(text);
-        if (RecentEvents.Count > 40) RecentEvents.RemoveAt(0);
-    }
-
-    /// <summary>Applies a drafted boon or start-boon effect to this run state, pushes the
-    /// HUD-strip pick tile and the feed line (verbatim WPF ChaosModels.cs:598-620).</summary>
-    public void ApplyBoon(ChaosBoon boon, bool shieldDrawback = false)
-    {
-        if (boon == null) return;
-        if (shieldDrawback) boon.ApplyShielded?.Invoke(this);
-        else boon.Apply?.Invoke(this);
-        BoonMult += boon.RunMultBonus;
-        (boon.IsCurse ? ActiveCurses : ActiveBoons).Add(boon);
-        RunPickTiles.Add(new ChaosSidebarBoon
-        {
-            Id = boon.Id,   // carry the id so the ribbon tile colors by payload family (WPF ChaosModels.cs:610)
-            Icon = ChaosArt.Resolve("boons", boon.Id),
-            Glyph = boon.IsCurse ? "☠" : "◈",
-            Name = boon.Name,
-            Desc = boon.Desc,
-            Flavor = boon.Flavor ?? "",
-            IsCurse = boon.IsCurse,
-        });
-        PushEvent($"{(boon.IsCurse ? "☠" : "◈")} {boon.Name}");
-    }
-}
-
 public sealed class BubblePreset
 {
     public string Name { get; set; } = "";
@@ -567,7 +243,6 @@ public static class ChaosMeta
     /// <summary>Apply every owned-and-switched-on upgrade's effect to a freshly-built run config
     /// (WPF ChaosUpgrades.cs:312-318).</summary>
     public static void ApplyTo(ChaosRunConfig config) => Service?.ApplyTo(config);
-    public static void ApplyLifetimeBoons(ChaosRunState run) => Service?.ApplyLifetimeBoons(run);
     public static void MarkDiscovered(string codexId) => Service?.MarkDiscovered(codexId);
     public static bool IsDiscovered(string codexId) => Service?.IsDiscovered(codexId) ?? false;
     public static bool IsOwned(string id) => Service?.IsOwned(id) ?? false;
@@ -593,7 +268,6 @@ public static class ChaosMeta
     public static (string Name, bool Affordable, string? LessonId, int Cost)? NextGoal() => Service?.NextGoal();
     public static void DebugResetState() => Service?.DebugResetState();
 }
-
 public static class RevealService
 {
     private static IRevealService? Service => App.Services?.GetService<IRevealService>();
@@ -620,7 +294,6 @@ public static class RevealService
     public static IReadOnlyList<string> PendingIds() => Service?.PendingIds() ?? new List<string>();
     public static void MarkSeen(string id) => Service?.MarkSeen(id);
 }
-
 public static class ChaosRanks
 {
     // ---- thresholds (lifetime completed descents) — WPF parity (ChaosRanks.cs:22) ----
@@ -681,13 +354,11 @@ public static class ChaosRanks
         return $"unlocks at {Name(needed)}: {need} descents finished. you've finished {have}.";
     }
 }
-
 public static class ChaosUpgrades
 {
     public static List<ChaosUpgrade> All { get; } = new();
     public static ChaosUpgrade? ById(string id) => All.FirstOrDefault(x => x.Id == id);
 }
-
 public static class ChaosLifetimeBoons
 {
     public static List<ChaosLifetimeBoon> All { get; } = new();
@@ -711,27 +382,6 @@ public static class ChaosLifetimeBoons
         _    => (20, 40),   // level 4: the gold doubles
     };
 }
-
-public static class ChaosBoonPool
-{
-    public static List<ChaosBoon> All { get; } = new();
-
-    private static readonly Random _rng = new();   // WPF ChaosModels.cs:400
-
-    /// <summary>
-    /// Deal a draft from the seeded pool — thin head-side wrapper over the Core dealer
-    /// (<see cref="ChaosDraftPool"/>): the WPF <c>ChaosBoonPool.Draft</c> surface verbatim
-    /// (WPF ChaosModels.cs:404-431) with the head's ChaosMeta reads plugged into ReqMet.
-    /// </summary>
-    public static List<ChaosBoon> Draft(bool allowCurses = true, int choices = 3, bool guaranteeCurse = false,
-                                        IReadOnlyCollection<string>? takenIds = null, double sinChance = 0.5)
-        => ChaosDraftPool.Draft(All, ReqMet, _rng, allowCurses, choices, guaranteeCurse, takenIds, sinChance);
-
-    /// <summary>A requirement id may name a lifetime boon OR a trained habit/upgrade
-    /// (WPF ChaosModels.cs:407-409 verbatim).</summary>
-    private static bool ReqMet(string id) => ChaosMeta.IsBoonActive(id) || ChaosMeta.IsUpgradeActive(id);
-}
-
 public static class ChaosBubbleVariants
 {
     public sealed class Variant
@@ -846,333 +496,6 @@ public static class ChaosBubbleVariants
             TintR = v.Tint.R, TintG = v.Tint.G, TintB = v.Tint.B,
             EffectIntensity = effectIntensity,
         };
-    }
-}
-
-public static class ChaosArt
-{
-    public static IImage? Resolve(string kind, string id) => AvaloniaChaosArt.Resolve(kind, id);
-    public static IImage? ResolveBanner() => ResolveThemeFile("banner.png");
-    public static IImage? ResolveMenu() => AvaloniaChaosArt.ResolveMenu();
-    public static IImage? ResolveMenuFrame(int n) => AvaloniaChaosArt.ResolveMenuFrame(n);
-    public static IImage? ResolveRecap() => ResolveThemeFile("recap.png");
-    public static IImage? TryLoad(string? path) => AvaloniaChaosArt.TryLoad(path);
-    public static string? PathFor(string kind, string id) => AvaloniaChaosArt.PathFor(kind, id);
-    public static string? FilePath(string fileName) => AvaloniaChaosArt.FilePath(fileName);
-    public static string? MenuFramePath(int n) => AvaloniaChaosArt.MenuFramePath(n);
-
-    private static IImage? ResolveThemeFile(string fileName)
-    {
-        var modService = App.Services?.GetService<global::ConditioningControlPanel.IModService>();
-        var modPath = modService?.ActiveMod?.InstalledPath;
-        if (!string.IsNullOrEmpty(modPath))
-        {
-            var modFile = Path.Combine(modPath, "assets", "Chaos", fileName);
-            var modImg = AvaloniaChaosArt.TryLoad(modFile);
-            if (modImg != null) return modImg;
-        }
-        foreach (var root in new[] { AvaloniaChaosEnv.EffectiveAssetsPath, AppContext.BaseDirectory })
-        {
-            if (string.IsNullOrEmpty(root)) continue;
-            var path = Path.Combine(root, "assets", "Chaos", fileName);
-            var img = AvaloniaChaosArt.TryLoad(path);
-            if (img != null) return img;
-        }
-        return null;
-    }
-}
-
-public static class ChaosTips
-{
-    /// <summary>
-    /// Attaches a styled tooltip to a Chaos UI element. Falls back gracefully when inputs are empty.
-    /// </summary>
-    public static void Attach(Control element, string title, string? desc, string? extra = null,
-                              Color? accent = null, string? flavor = null)
-    {
-        if (element == null) return;
-
-        var panel = new StackPanel { Spacing = 4, MaxWidth = 320 };
-
-        IBrush titleBrush = accent.HasValue ? new SolidColorBrush(accent.Value) : Brushes.White;
-        panel.Children.Add(new TextBlock
-        {
-            Text = title,
-            FontWeight = FontWeight.Bold,
-            Foreground = titleBrush,
-            TextWrapping = TextWrapping.Wrap,
-        });
-
-        if (!string.IsNullOrWhiteSpace(desc))
-        {
-            panel.Children.Add(new TextBlock
-            {
-                Text = desc,
-                Foreground = Brushes.LightGray,
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 12,
-            });
-        }
-
-        if (!string.IsNullOrWhiteSpace(extra))
-        {
-            panel.Children.Add(new TextBlock
-            {
-                Text = extra,
-                Foreground = Brushes.Gray,
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 11,
-            });
-        }
-
-        if (!string.IsNullOrWhiteSpace(flavor))
-        {
-            panel.Children.Add(new TextBlock
-            {
-                Text = flavor,
-                Foreground = Brushes.HotPink,
-                FontStyle = FontStyle.Italic,
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 11,
-                Margin = new Thickness(0, 4, 0, 0),
-            });
-        }
-
-        ToolTip.SetTip(element, panel);
-    }
-}
-
-public static class ChaosNarrator
-{
-    private const int MIN_DWELL_MS = 2400;
-    private const int MAX_DWELL_MS = 7000;
-
-    /// <summary>True while the Madam is approximately still speaking.</summary>
-    public static bool IsPlaying { get; private set; }
-
-    /// <summary>
-    /// Speak a single cue: show the on-screen subtitle, mark the narrator busy, and
-    /// play the matching narrator clip if one exists.
-    /// </summary>
-    public static void Speak(ChaosNarrativeCue cue, bool interrupt)
-    {
-        try
-        {
-            if (cue == null) return;
-            int durMs = EstimateDurationMs(cue.Text);
-            IsPlaying = true;
-            (AvaloniaChaosApp.Chaos as global::ConditioningControlPanel.Avalonia.Services.AvaloniaChaosService)
-                ?.AnnounceChaosNarrator(cue.Text, (int)cue.Band, interrupt, durMs);
-            PlayCardLine(cue.AudioKey, cue.Text);
-            _ = ResetAfterAsync(durMs + 220);
-        }
-        catch (Exception ex)
-        {
-            LogDebug("ChaosNarrator.Speak failed: {E}", ex.Message);
-        }
-    }
-
-    /// <summary>Play one conversation-card line's narrator clip, if the file exists.</summary>
-    public static void PlayCardLine(string? audioKey, string text)
-    {
-        if (string.IsNullOrWhiteSpace(audioKey)) return;
-        var path = ResolveNarratorPath(audioKey);
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
-        try
-        {
-            var player = App.Services?.GetService<global::ConditioningControlPanel.Core.Platform.IAudioPlayer>();
-            if (player == null) return;
-            player.SetVolume(0.75f);
-            _ = player.PlayAsync(path);
-        }
-        catch (Exception ex)
-        {
-            LogDebug("ChaosNarrator.PlayCardLine failed: {E}", ex.Message);
-        }
-    }
-
-    private static string? ResolveNarratorPath(string audioKey)
-    {
-        var relative = $"assets/Chaos/narrator/{audioKey}.mp3";
-        var modService = App.Services?.GetService<global::ConditioningControlPanel.IModService>();
-        var modPath = modService?.ActiveMod?.InstalledPath;
-        if (!string.IsNullOrEmpty(modPath))
-        {
-            var modOverride = Path.Combine(modPath, relative);
-            if (File.Exists(modOverride)) return modOverride;
-        }
-        foreach (var root in new[] { AvaloniaChaosEnv.EffectiveAssetsPath, AppContext.BaseDirectory })
-        {
-            if (string.IsNullOrEmpty(root)) continue;
-            var candidate = Path.Combine(root, relative);
-            if (File.Exists(candidate)) return candidate;
-        }
-        return null;
-    }
-
-    /// <summary>Release the card's speaking hold.</summary>
-    public static void EndCard() => Reset();
-
-    /// <summary>Force-stop any speaking state (run teardown).</summary>
-    public static void Reset() => IsPlaying = false;
-
-    private static async System.Threading.Tasks.Task ResetAfterAsync(int delayMs)
-    {
-        try
-        {
-            await System.Threading.Tasks.Task.Delay(delayMs);
-            IsPlaying = false;
-        }
-        catch { }
-    }
-
-    private static int EstimateDurationMs(string text)
-    {
-        int est = 1200 + (text?.Length ?? 0) * 55;
-        return Math.Clamp(est, MIN_DWELL_MS, MAX_DWELL_MS);
-    }
-
-    private static void LogDebug(string message, params object?[] args)
-    {
-        try { App.Services?.GetRequiredService<ILogger<object>>().LogDebug(message, args); } catch { }
-    }
-}
-
-/// <summary>
-/// Static in-run/hub dispatch for the narrative layer. Mirrors the WPF
-/// <c>ChaosNarrativeHooks</c> shape but with Avalonia-specific display wiring.
-/// </summary>
-public static class ChaosNarrativeHooks
-{
-    private static bool _active;
-    private static bool _sawBareDeto;
-    private static bool _sawFirstPop;
-    private static bool _sawFirstDefuse;
-    private static bool _sawFirstDetonation;
-
-    public static void Init() => ChaosNarrativeDirector.Init();
-
-    public static void OnRunStarted(ChaosNarrativeContext ctx)
-    {
-        _active = true;
-        _sawBareDeto = false;
-        _sawFirstPop = false;
-        _sawFirstDefuse = false;
-        _sawFirstDetonation = false;
-        ctx.Trigger = "run_start";
-        if (ChaosHappyPath.IsScripting) return;
-        ChaosNarrativeDirector.Fire(ctx);
-    }
-
-    public static void OnRunEnded(ChaosNarrativeContext ctx, double score, bool ranFullCourse)
-    {
-        _active = false;
-        _sawBareDeto = false;
-        _sawFirstPop = false;
-        _sawFirstDefuse = false;
-        _sawFirstDetonation = false;
-        ChaosNarrator.Reset();
-    }
-
-    /// <summary>Hub-side moment (no live run). Picks and displays a conversation standalone.</summary>
-    public static ChaosOverlayWindow? OnHubMoment(string moment, ChaosNarrativeContext ctx)
-    {
-        try
-        {
-            ctx.Trigger = moment;
-            ctx.Depth = 0;
-            var convo = ChaosNarrativeDirector.Pick(ctx, moment);
-            if (convo == null) return null;
-            return ShowStandaloneConversation(convo);
-        }
-        catch (Exception ex)
-        {
-            LogDebug("ChaosNarrativeHooks.OnHubMoment: {E}", ex.Message);
-            return null;
-        }
-    }
-
-    public static void OnWaveStart(int waveIndex, ChaosNarrativeContext ctx)
-    {
-        if (!_active || ChaosHappyPath.IsScripting) return;
-        ctx.Trigger = "zone_border";
-        ctx.Depth = waveIndex;
-        ChaosNarrativeDirector.Fire(ctx);
-    }
-
-    public static void OnBoonDraft(int waveIndex, ChaosNarrativeContext ctx)
-    {
-        if (!_active) return;
-        // Reserved hook: no default narrator line while the draft UI is open.
-    }
-
-    public static void OnFirstPop(ChaosNarrativeContext ctx)
-    {
-        if (!_active || _sawFirstPop || ChaosHappyPath.IsScripting) return;
-        _sawFirstPop = true;
-        ctx.Trigger = "first_pop";
-        ChaosNarrativeDirector.Fire(ctx);
-    }
-
-    public static void OnFirstDefuse(ChaosNarrativeContext ctx)
-    {
-        if (!_active || _sawFirstDefuse || ChaosHappyPath.IsScripting) return;
-        _sawFirstDefuse = true;
-        ctx.Trigger = "first_defuse";
-        ChaosNarrativeDirector.Fire(ctx);
-    }
-
-    public static void OnFirstDetonation(ChaosNarrativeContext ctx)
-    {
-        if (!_active || _sawFirstDetonation || ChaosHappyPath.IsScripting) return;
-        _sawFirstDetonation = true;
-        ctx.Trigger = "first_bare_deto";
-        ChaosNarrativeDirector.Fire(ctx);
-    }
-
-    public static void OnBrinkDefuse(ChaosNarrativeContext ctx)
-    {
-        if (!_active || ChaosHappyPath.IsScripting) return;
-        ctx.Trigger = "brink_defuse";
-        ChaosNarrativeDirector.Fire(ctx);
-    }
-
-    public static void OnSinAccepted(string sinId, ChaosNarrativeContext ctx)
-    {
-        if (!_active || ChaosHappyPath.IsScripting) return;
-        ctx.Trigger = "sin_accepted";
-        ctx.SinId = sinId;
-        ChaosNarrativeDirector.Fire(ctx);
-    }
-
-    /// <summary>True the first time a bare detonation lands in this run (false thereafter).</summary>
-    public static bool TryFirstBareDeto()
-    {
-        if (_sawBareDeto) return false;
-        _sawBareDeto = true;
-        return true;
-    }
-
-    private static ChaosOverlayWindow? ShowStandaloneConversation(ChaosConversation convo)
-    {
-        try
-        {
-            var win = new ChaosOverlayWindow();
-            var bg = ChaosArt.Resolve("hub", "backdrop") ?? ChaosArt.Resolve("backdrops", "depth1");
-            win.Show();
-            win.ShowConversation(convo, bg, onComplete: () => { try { win.Close(); } catch { } });
-            return win;
-        }
-        catch (Exception ex)
-        {
-            LogDebug("ChaosNarrativeHooks.ShowStandaloneConversation: {E}", ex.Message);
-            return null;
-        }
-    }
-
-    private static void LogDebug(string message, params object?[] args)
-    {
-        try { App.Services?.GetRequiredService<ILogger<object>>().LogDebug(message, args); } catch { }
     }
 }
 

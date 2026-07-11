@@ -12,7 +12,7 @@
 # =============================================================================
 set -u
 
-CORE_TEST_FLOOR=542          # raise when adding tests; NEVER lower
+CORE_TEST_FLOOR=496          # raise when adding tests; NEVER lower (owner-authorized drop 604->496 with the 2026-07-11 native-DTRH strip: ChaosDraftPool/ChaosScoring/ChaosSpawnDirector test files removed; ChaosRunRulesTests KEPT - web-path config rules)
 SMOKE_TABS_EXPECTED=44
 SMOKE_FINDINGS_EXPECTED=5
 
