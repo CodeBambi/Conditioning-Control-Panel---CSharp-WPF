@@ -71,6 +71,7 @@ public sealed class ChaosGifCascadeLayer : BaseLayer
     private double _lifeRemainingMs;
     private int _generation;               // orphans in-flight decodes across restart/clear
     private int _animatedAlive;            // guarded by _sync
+    private int _lastIndex = -1;           // 1-deep no-repeat guard for SpawnOneLocked picks
 
     private sealed class Faller
     {
@@ -113,6 +114,7 @@ public sealed class ChaosGifCascadeLayer : BaseLayer
         {
             StopAndClearLocked();
             _files = files;
+            _lastIndex = -1;   // reset no-repeat guard: pool changed
             _stage = stagePx;
             _scale = screenScale > 0 ? screenScale : 1.0;
             _gifSizePx = Math.Clamp(gifSize, 40, 600) * _scale;
@@ -150,7 +152,10 @@ public sealed class ChaosGifCascadeLayer : BaseLayer
         if (_fallers.Count >= MaxConcurrent) return;   // never let clips pile up into an OOM
         try
         {
-            var path = _files[_rng.Next(_files.Count)];
+            var idx = _rng.Next(_files.Count);
+            if (idx == _lastIndex && _files.Count > 1) idx = (idx + 1) % _files.Count;   // 1-deep no-repeat (mirrors AvaloniaBlinkTrainerService.ShowRandom)
+            _lastIndex = idx;
+            var path = _files[idx];
 
             // A gif/animated-webp only animates while the animated budget has room and it
             // isn't huge; otherwise it falls as a display-size still (WPF SpawnOne). The
