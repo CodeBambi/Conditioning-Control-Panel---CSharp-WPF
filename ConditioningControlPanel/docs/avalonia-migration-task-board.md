@@ -594,6 +594,26 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   facade + wire `NotifyChaosFirstTime`; economy pinning tests (affordability never-negative, purchase/
   gift/first-time idempotency, feral-dial rank gate, one-way flags, boon climb-by-one, bench whitelist,
   reset-onboarding preserves grants, real-bank first-fall-once + all-field bumps, test-mode divergence).
+- **S2b-2a LANDED 2026-07-11 · @driver (executor+auditor)**: ported the frozen WPF `DtrhMetaBridge`
+  (406L) → `public sealed` Core instance service `CCP.Core/Services/Chaos/DtrhMetaBridge.cs` (454L) over
+  the S2b-1 seam, ZERO head churn. Constructor injects `IChaosMetaStore, IAppEnvironment,
+  ILogger<DtrhMetaBridge>, Action<object> broadcast, bool testMode=false, IBarkService? bark`. All ~18
+  ops verbatim; non-test `AwardRun` inlines the frozen `ChaosUpgrades.cs:522-546` banking via
+  `ChaosEconomy.SparkReward` (firstFall once + 6 field bumps); test-mode keeps `ComputeSparksOnly` (no
+  first-fall, 3 bumps) + `chaos_meta.test.json` isolation — divergence exact. `DispatcherTimer` 500ms
+  debounce → lock-guarded restartable `System.Threading.Timer` one-shot (approved deviation; off-thread
+  best-effort save per S1). Impl by budget-capped medium `port-slice-executor` via `workflow` (came in
+  2.12M tokens — NOTE: a single long agent is NOT bounded mid-run by the workflow tokenBudget, only
+  further agent() calls are; size single-agent dispatches accordingly). **`port-parity-auditor` verdict:
+  SHIP** — 21/21 economy behaviors Verified vs WPF ground truth, no negative-balance/double-award/skip-
+  guard path, all clamps correct (100000/36000/64/128/5); driver added the 4 auditor-flagged guard pins
+  (spend-gold negative guard, add-gold cap, set-num<64, add-channel-seconds<36000). 19 economy `[Fact]`s.
+  **Gates:** slnf 0 err · WPF sln 0 err · Core **576/576** (was 557, +19) x3 stable · smoke 44 tabs / 0
+  unhandled / Findings 16 (⊆ benign). **Next = S2b-2b** (head integration): head `IChaosMetaStore` adapter
+  over the `ChaosMeta` facade (State/RankIndex/Save) + DI registration; wire `IBarkService.
+  NotifyChaosFirstTime` in `AvaloniaHeadStubs.cs` bark impl; connect the bridge to the DTRH WebView
+  message pump (broadcast → `IBrowserHost` post; inbound meta-command → `Handle`). Then S2c = `DtrhHostService`
+  914L split.
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
