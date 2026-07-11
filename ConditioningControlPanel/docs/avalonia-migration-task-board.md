@@ -793,6 +793,33 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
     registration + Core tests (router dispatch, XP formula+cap, clamps, ordering-invariant sequencing via a
     fake effects/browser, queue-until-ready). `port-parity-auditor` gate on the diff. S2c-2 = head Window +
     `IDtrhNativeEffects` impl + WebView2 config + Lab-tab launch hook (unchanged plan).
+- **S2c-1 LANDED 2026-07-11 · @driver** (`5920b582`): Core `DtrhHostOrchestrator.cs` (~520L, `public sealed`,
+  the WPF `DtrhHostService` router+lifecycle+XP+watchdogs+teardown) + `IDtrhNativeEffects.cs` (the single
+  head-callback seam, all DIM no-op defaults) + `ChaosRankThresholds.For` in `ChaosMetaPrimitives.cs` (pure
+  rank math) + `DtrhHostOrchestratorTests.cs` (14 `[Fact]`s: ready/init, queue-until-ready, vn-gates-sfx,
+  fire-payload clamps, meta-command→bridge, freeze dedup, XP cap+skillMult, run-end sync→rebroadcast→payout
+  ordering window, testMode gating, force-scripted spend-at-deal, PersistRunSetup clamps, teardown). Written
+  DRIVER-LEVEL (held the full verbatim contract; cheaper than a 700-900K executor dispatch on invariant-dense
+  code). **Core-only slice — no head DI/wiring yet** (deferred to S2c-2). **`port-parity-auditor`: SHIP-WITH-
+  FIXES** — all 9 behavior groups + rank math Verified; folded **F1** (call `_fx.ReclaimBrowserFocus()` in
+  `OnPageReady`, WPF `:161-163` — without it the fullscreen topmost head traps the user with a dead Esc-exit
+  from frame one). Gates: slnf 0 err · WPF head 0 err · Core **590/590** (floor 576→590) · smoke 44 tabs / 0
+  unhandled / 18 findings (⊆ benign, ZERO new — orchestrator unconstructed). Seam split held exactly as the
+  S2c-1 design banked: INJECT Core services, route all natives/bark/reveal/run-config through
+  `IDtrhNativeEffects`.
+  - **🔴 S2c-2 HEAD-CONTRACT CARRY-FORWARDS (auditor N1-N3 — the head impl MUST honor these or drift):**
+    - **N1 — video-skip 0.90 threshold is now head-side.** WPF counted a skip in `OnVideoWatchCredited` when
+      `WatchedSec/DurationSec < 0.90` (`DtrhHostService.cs:625`). The Core seam split this into
+      `OnVideoWatchCredited(double sec)` (seconds only) + a separate `OnVideoSkipped()`; S2c-2's video-event
+      wiring must reproduce the `<0.90` ratio decision and call `OnVideoSkipped()` itself.
+    - **N2 — `RestoreMainWindow()` is called UNCONDITIONALLY on teardown.** WPF gated tray-restore on
+      `_minimizedMainWindow` (only if it minimized at launch, `:790`). The orchestrator has no minimize state,
+      so the head `IDtrhNativeEffects.RestoreMainWindow` impl MUST self-guard (no-op if it never minimized) or
+      it pops the main window on every teardown.
+    - **N3 — `Recover` once-per-session guard is head-side.** WPF's `_relaunchedOnce` (`:745`) limited relaunch
+      to once per app session. The orchestrator fires `RecoverRequested` + disposes (at most once per
+      instance); the session-level “relaunch only once” guard must live in the head's `RecoverRequested`
+      handler that constructs a fresh orchestrator.
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
