@@ -923,13 +923,27 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
       `--smoke-test` never opens the game window). MECHANICAL.
     - **S2c-3** — world-freeze seam (`IVideoService`/avatar pause-resume + guards) + N1 video-watch-credit seam.
       Separate JUDGMENT slice(s).
-  - **NEXT:** ✅ S2c-2a (`5be61dda`) + ✅ S2c-2b (`0f922ca9`) LANDED. Now **S2c-2c** (MECHANICAL): register
-    `IChaosWebGameService → DtrhGameHostService` in `CCP.Avalonia.Desktop.Windows/Program.cs` (factory lambda
-    beside the tunnel at `:98`; `GetRequiredService` for settings/env/loggerFactory, `GetService` for the nullable
-    optionals `bark/mods/reveal/meta/progression/skillTree`) + a Lab-tab launch hook gated on `ChaosWebGameEnabled`
-    (`LabTabViewModel.cs:26`) that injects `IChaosWebGameService?` and calls `Launch()`. **Headless guard:**
-    `--smoke-test` must NEVER open the game window — either the Lab hook checks the smoke flag or Launch is only
-    invoked from a real user action; smoke must stay 44/0/⊆benign. Then **S2c-3** (world-freeze + N1 seam).
+- **S2c-2c LANDED 2026-07-11 · @driver** (`06239f2f`, 2 files / +26): DTRH web game now reachable from the UI.
+  * `Program.cs` — `AddSingleton<IChaosWebGameService, DtrhGameHostService>()` beside the tunnel (type-based;
+    `ActivatorUtilities` honors the ctor's nullable-optional params → `bark/mods/reveal/meta/progression/skillTree`
+    resolve-or-null, exactly like the tunnel ctor). Null on heads without a browser host.
+  * `LabTabViewModel.StartChaosAsync` — when `ChaosWebGameEnabled` && a head impl is present && NOT a harness run,
+    `_webGame.Launch()`; else the parity "not available" notice. `IChaosWebGameService?` injected as a trailing
+    optional ctor param. **Headless guard** `IsHarnessRun()` blocks Launch under `--smoke-test/--benchmark/--verify-*`
+    (defense-in-depth: the smoke harness drives `IChaosService` directly via `ExerciseChaosRunAsync`
+    (`SmokeTestRunner.cs:1167`) and NEVER invokes the Lab `StartChaos` command — so the window can't open in smoke).
+  * Gates: slnf 0 err (383 warn = baseline) · WPF head 0 err · Core **590/590** · smoke 44 tabs / 0 unhandled /
+    Findings 16 (⊆ benign, ZERO new — game window verified NOT opened: no "DTRH web game window up" log).
+  - **🎉 S2c-2 CHAIN COMPLETE (2a+2b+2c):** the ported `DtrhHostOrchestrator` is now fully constructed, wired to a
+    real focusable WebView2 game Window, and launchable from the Lab tab. Remaining S2c work = **S2c-3** only.
+  - **NEXT:** **S2c-3** (JUDGMENT, two deferred seams — both genuine new-seam additions, advisor-approved as interim
+    honest no-ops in the shipped code): (1) **world-freeze** — faithful `SetWorldFrozen(bool)` needs NEW
+    `IVideoService`/avatar pause-resume seams (currently a tracked no-op in `DtrhNativeEffects`); (2) **N1
+    video-watch-credit** — add `VideoWatchCredited(watchedSec,durationSec)` to Core `IVideoService` +
+    `AvaloniaVideoService`, then wire the game window → `OnVideoWatchCredited`/`OnVideoSkipped` with the WPF `<0.90`
+    skip rule (`DtrhHostService.cs:618-623`). Both are telemetry/immersion-only (no economy drift — XP has no video
+    term). Then appendix head slices (row #6 phases 2–7). **Live web-boot verification of phases 1–7 remains an
+    owner-headed gate; phase 8 native-chaos decommission stays out of autonomous scope.**
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
