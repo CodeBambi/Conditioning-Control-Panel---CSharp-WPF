@@ -1,0 +1,137 @@
+<Window x:Class="ConditioningControlPanel.ChaosSlotPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Down the Rabbit Hole"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" WindowStartupLocation="CenterOwner"
+        SizeToContent="Manual" Width="720" Height="560" FontFamily="Segoe UI">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" GlassFrameThickness="0" CornerRadius="0"/>
+    </shell:WindowChrome.WindowChrome>
+    <Window.Resources>
+        <SolidColorBrush x:Key="Pink" Color="#FFE84393"/>
+        <SolidColorBrush x:Key="Purple" Color="#FF8B5CF6"/>
+        <SolidColorBrush x:Key="Bg" Color="#FF14122A"/>
+        <SolidColorBrush x:Key="TextDim" Color="#AAB8B8D0"/>
+        <SolidColorBrush x:Key="TextMut" Color="#88A0A0C0"/>
+        <LinearGradientBrush x:Key="Brand" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#FFE84393" Offset="0"/>
+            <GradientStop Color="#FF8B5CF6" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Ghost / flat button (Cancel, Open Folder) -->
+        <Style x:Key="GhostBtn" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+            <Setter Property="Background" Value="#22FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#33E84393"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="16,9"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#33FFFFFF"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Primary CTA (Descend) -->
+        <Style x:Key="PrimaryBtn" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="{StaticResource Brand}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="30,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="9"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border CornerRadius="16" Background="{StaticResource Bg}" BorderBrush="#55E84393" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" BlurRadius="28" ShadowDepth="0" Opacity="0.7"/>
+        </Border.Effect>
+        <Grid Margin="26,22,26,22">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header (also the drag handle) -->
+            <Grid Grid.Row="0" x:Name="HeaderBar" Background="Transparent">
+                <StackPanel HorizontalAlignment="Left">
+                    <TextBlock Text="🐇 Down the Rabbit Hole" FontSize="13" Foreground="{StaticResource Pink}"
+                               FontWeight="SemiBold" Opacity="0.85"/>
+                    <TextBlock Text="Choose your save" FontSize="26" FontWeight="Bold" Foreground="White" Margin="0,2,0,0"/>
+                    <TextBlock Text="Pick a slot to descend into. Each keeps its own progress." FontSize="13"
+                               Foreground="{StaticResource TextDim}" Margin="0,3,0,0"/>
+                </StackPanel>
+                <Button x:Name="BtnClose" Content="✕" Width="34" Height="34" VerticalAlignment="Top"
+                        HorizontalAlignment="Right" Style="{StaticResource GhostBtn}" Padding="0"
+                        FontSize="15" Click="BtnClose_Click" ToolTip="Cancel"/>
+            </Grid>
+
+            <!-- Slot cards get built in code-behind -->
+            <StackPanel Grid.Row="1" x:Name="SlotsPanel" Orientation="Horizontal"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+            <!-- Local-storage note -->
+            <Border Grid.Row="2" Background="#1AFFFFFF" CornerRadius="9" Padding="14,10" Margin="0,4,0,14">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="🔒" FontSize="14" VerticalAlignment="Center" Margin="0,0,9,0"/>
+                    <StackPanel>
+                        <TextBlock Text="All saves are stored locally on this PC" FontSize="12.5"
+                                   Foreground="{StaticResource TextDim}" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="PathText" FontSize="11" Foreground="{StaticResource TextMut}"
+                                   TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+                    </StackPanel>
+                    <Button x:Name="BtnOpenFolder" Content="Open folder" Style="{StaticResource GhostBtn}"
+                            Padding="12,6" FontSize="12" Margin="14,0,0,0" VerticalAlignment="Center"
+                            Click="BtnOpenFolder_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Actions -->
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Cancel" Style="{StaticResource GhostBtn}" Click="BtnClose_Click" Margin="0,0,10,0"/>
+                <Button x:Name="BtnDescend" Content="Descend  ↓" Style="{StaticResource PrimaryBtn}" Click="BtnDescend_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

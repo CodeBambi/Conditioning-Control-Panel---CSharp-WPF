@@ -106,18 +106,33 @@ namespace ConditioningControlPanel
                 // DtRH browser game (default ON since M6): the whole experience lives in the web
                 // page — hub, run and all. The legacy WPF path below stays for the Lab toggle and
                 // as the automatic fallback when the page reported a WebGL boot-error this session.
-                if (App.Settings?.Current?.ChaosWebGameEnabled == true
-                    && !Services.Chaos.DtrhHostService.BootFailedThisSession)
+                bool webPath = App.Settings?.Current?.ChaosWebGameEnabled == true
+                               && !Services.Chaos.DtrhHostService.BootFailedThisSession;
+
+                // Already down the hole? Just focus it — never re-pick a save mid-session.
+                if (webPath && Services.Chaos.DtrhHostService.IsActive)
                 {
                     Services.Chaos.DtrhHostService.Launch();
                     return;
                 }
-                if (App.Chaos == null || App.Chaos.IsRunning) return;
+                if (!webPath && (App.Chaos == null || App.Chaos.IsRunning)) return;
+
+                // Save slots: choose which of the three local saves to descend into, right before
+                // the hole opens. Cancel backs out; the pick becomes the live slot for this session.
+                var slot = ChaosSlotPickerWindow.Pick(this);
+                if (slot == null) return;
+                Services.Chaos.ChaosMeta.SwitchSlot(slot.Value);
+
+                if (webPath)
+                {
+                    Services.Chaos.DtrhHostService.Launch();
+                    return;
+                }
                 // Happy path run 1: the Dollhouse stays shut until the first descent is done.
                 // FALL IN drops straight into the scripted naked run instead.
                 if (Services.Chaos.ChaosMeta.State.RunsCompleted == 0)
                 {
-                    App.Chaos.StartRun(Services.Chaos.ChaosHappyPath.BuildFirstRunConfig());
+                    App.Chaos!.StartRun(Services.Chaos.ChaosHappyPath.BuildFirstRunConfig());
                     return;
                 }
                 if (ChaosHubWindow.Current != null) { ChaosHubWindow.Current.Activate(); return; }
@@ -142,6 +157,8 @@ namespace ConditioningControlPanel
             try
             {
                 // DtRH browser game: same surface as the hero card — see BtnStartChaos_Click.
+                // Quick Start skips the save picker by design (that's the "quick" part) and reuses
+                // the last-chosen slot, already live in ChaosMeta.State.
                 if (App.Settings?.Current?.ChaosWebGameEnabled == true
                     && !Services.Chaos.DtrhHostService.BootFailedThisSession)
                 {

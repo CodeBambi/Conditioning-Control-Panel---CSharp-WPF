@@ -214,6 +214,54 @@ public static class ChaosMeta
     /// <summary>Persist the current state (after a mutation made directly on State).</summary>
     public static void Save() => ChaosMetaStore.Save(State);
 
+    // ---- save slots (three independent local saves; picked before the hole opens) ----
+
+    /// <summary>The live save slot (1-3). Backed by <see cref="Models.AppSettings.ChaosActiveSlot"/>.</summary>
+    public static int ActiveSlot => ChaosMetaStore.ActiveSlot;
+
+    /// <summary>Commit the chosen save slot for this descent: remember it, then load that slot's
+    /// file authoritatively (or a fresh state if the slot is empty) and re-run the on-load
+    /// refunds/sanitize so the swapped-in save is as clean as one loaded at startup.
+    ///
+    /// This deliberately does NOT bank the outgoing slot first — the picker only opens when the
+    /// hole is closed, so the active slot's file is already current from the last session's flush,
+    /// and banking here would resurrect a slot the player just deleted. Loading is always
+    /// file-driven so "delete the active save, then descend into it" correctly starts fresh.</summary>
+    public static void SwitchSlot(int slot)
+    {
+        if (slot < 1 || slot > ChaosMetaStore.SlotCount) slot = 1;
+        if (App.Settings?.Current != null)
+        {
+            App.Settings.Current.ChaosActiveSlot = slot;
+            try { App.Settings.Save(); } catch (Exception ex) { App.Logger?.Warning("ChaosMeta.SwitchSlot: settings save failed ({E})", ex.Message); }
+        }
+        State = ChaosMetaStore.Load(slot);
+        RefundRetiredBoons();
+        SanitizePockets();
+        App.Logger?.Information("ChaosMeta: live save is now slot {Slot}", slot);
+    }
+
+    /// <summary>Headline stats for every slot, for the pre-descent picker. Pure read — the active
+    /// slot's file is already current (flushed when the hole last closed), so this never writes
+    /// and a just-deleted slot stays gone.</summary>
+    public static List<SlotSummary> AllSlotSummaries()
+    {
+        var list = new List<SlotSummary>();
+        for (int s = 1; s <= ChaosMetaStore.SlotCount; s++) list.Add(ChaosMetaStore.ReadSummary(s));
+        return list;
+    }
+
+    /// <summary>Erase a slot's file back to "New Journey". Does not touch the in-memory state:
+    /// the next <see cref="SwitchSlot"/> reloads from disk, so deleting the active slot and then
+    /// descending into it starts fresh, while descending into a different slot is unaffected.
+    /// Returns true if a save was removed.</summary>
+    public static bool DeleteSlot(int slot)
+    {
+        bool removed = ChaosMetaStore.Delete(slot);
+        if (removed) App.Logger?.Information("ChaosMeta: deleted save slot {Slot}", slot);
+        return removed;
+    }
+
     /// <summary>Rank derived from lifetime <see cref="ChaosMetaState.RunsCompleted"/> (monotonic, simple).</summary>
     public static string Rank => ChaosRanks.Name(RankIndex);
 

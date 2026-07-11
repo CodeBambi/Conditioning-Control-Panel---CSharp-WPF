@@ -2424,6 +2424,18 @@ namespace ConditioningControlPanel.Models
             set { _chaosWebGameEnabled = value; OnPropertyChanged(); }
         }
 
+        private int _chaosActiveSlot = 1;
+        /// <summary>Which of the 3 local save slots the Rabbit Hole is currently playing on
+        /// (1-3). Chosen in the slot picker shown before the hole opens; persisted so Quick
+        /// Start and the next session reuse the last pick. Backs
+        /// <see cref="Services.Chaos.ChaosMeta.ActiveSlot"/> — each slot has its own
+        /// chaos_meta.slotN.json.</summary>
+        public int ChaosActiveSlot
+        {
+            get => _chaosActiveSlot;
+            set { _chaosActiveSlot = value < 1 || value > 3 ? 1 : value; OnPropertyChanged(); }
+        }
+
         private string _chaosAccessoryKey1 = "Q";
         /// <summary>Keybind for accessory pocket 1 (reserved: active-use accessories are a future system).</summary>
         public string ChaosAccessoryKey1
