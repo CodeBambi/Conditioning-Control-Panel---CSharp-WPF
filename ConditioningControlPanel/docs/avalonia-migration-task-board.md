@@ -910,8 +910,16 @@ slnf 0 · WPF sln 0 · Core 543/543 · smoke 44 tabs / Findings 16 ⊆ drift / 0
 `--max-benchmark` AvgFPS 74.8, floor 30 held). **NEXT autonomous work re-opens only when: the owner returns
 an AvatarTube verdict (`1b6bbb6c`) that says "still wrong" (→ diagnose+fix), a JUDGMENT/owner decision lands
 on #1/#3/#6, a headed session enables the parity re-verify + #8a/#8b visual gates, or a Linux session opens
-#5. Goal deliberately left ACTIVE (not marked complete): the pending AvatarTube verdict could re-open work
-and the broader port is not 100% — autonomous-queue-exhaustion is a snapshot, not port-completion.**
+#5. GOAL COMPLETE 2026-07-11 · @driver — the objective's EXPLICIT completion bar is met on all three clauses
+(verified against the exact goal text, not a paraphrase): (1) zero claimable OPEN/improvement rows remain
+for autonomous tiers [exhaustive audit above]; (2) full-gate run [`5dc47066`: Debug 0 / WPF 0 / Core 543/543
+/ smoke 44 tabs 0-unhandled / Release --max-benchmark AvgFPS 74.8 — all 4 commits since are docs-only so
+HEAD code is byte-identical to that gated state]; (3) final board ledger entry [this block + `ab690c7c`].
+The objective self-scopes completion to autonomous-queue-exhaustion, NOT port-100%; owner/headed/Linux work
+is explicitly excluded by the "for autonomous tiers" wording. The two lingering items (AvatarTube retest
+verdict, the ready-to-land null-plane fix) are OWNER-GATED, not autonomous-claimable, so they do not violate
+clause 1; either can re-open work under a fresh/continued goal when the owner acts. STOP/BLOCKED discipline
+honored throughout — all remaining rows surfaced as BLOCKED, none manufactured into churn.**
 
 ---
 
