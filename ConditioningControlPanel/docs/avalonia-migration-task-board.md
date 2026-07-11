@@ -968,7 +968,47 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
     DEFERRAL (documented in `DtrhNativeEffects.SetWorldFrozen`). **Future work:** add position-preserving
     `PauseSpokenAudio`/`ResumeSpokenAudio` to the Avalonia avatar, then extend `SetWorldFrozen` to call them. Touches
     the avatar audio subsystem (out of the video-scoped S2c-3 slice); immersion-only, no economy/state impact.
-  - **NEXT:** appendix head slices (row #6 phases 2–7) + the avatar-freeze future seam above. **Live web-boot
+- **SUB-PART 7 “In-world integration edits” VERIFY COMPLETE 2026-07-11 · @driver** (docs-only). Audited WPF commit
+  `8343e1e0` (“gaze-click follows camera; glitch/cascade draw the flash pool”) for standalone (non-DTRH)
+  flash/video/gaze behavior needing an independent Avalonia port. Three changes; disposition:
+  1. **`GazeFocusService` consumer-driven auto-start (+101) — GENUINE PARITY GAP → filed as row below.** WPF now
+     runs the shared dwell engine whenever ANY per-feature gaze flag (`FlashGazePopEnabled`/`FlashGazeLingerEnabled`/
+     `VideoGazeClickEnabled`) is on AND the webcam is already running — not only when the Lab “Focus Gaze” master is
+     armed (“camera on + look at a flash → it pops” without arming the master). Avalonia `AvaloniaGazeFocusService`
+     has `Start()`/`IsActive`/dwell engine but is called ONLY from the explicit master path
+     (`BlinkTrainerTabViewModel.cs:204`); it has no `MasterEnabled`/`EvaluateDesiredState`/consumer-or-webcam
+     subscription. The per-feature gaze *consumption* IS wired (`AvaloniaFlashService.cs:790`,
+     `AvaloniaVideoService.cs:361`) — only the engine *lifecycle* auto-start is missing.
+  2. **`FlashService.GetChaosImagePaths(int)` (+15) — NO PORT (decommission-adjacent).** Returns `GetNextImages(count)`
+     from the enabled flash pool so the native Chaos glitch/cascade overlays match disabled-set + content-packs.
+     Consumed only by native-chaos-run overlays (`ChaosFlashOverlay`/`ChaosGifCascadeOverlay`) which are phase-8
+     decommission candidates under the web-only DTRH ruling; the web game requests images through its own
+     asset-host virtual mount, not this method. Intentionally absent — revisit only if an ambient (non-chaos)
+     consumer ever needs an enabled-pool image draw.
+  3. **`GazeDebugCursorService` topmost re-assert (+28) — NO PORT (debug-only, arch-divergent).** WPF re-asserts
+     `SetWindowPos(HWND_TOPMOST)` every ~200ms so the debug dot stays above continuously-topmost video windows.
+     Avalonia’s debug cursor is a compositor layer (single per-monitor topmost window, z-ordered layers), so the
+     WPF window-band z-order thrash does not exist. Debug-tool parity only; no user-facing impact.
+- **🔴 NEW ROW (filed by the sub-part-7 verify) — Gaze dwell-engine consumer-driven auto-start · JUDGMENT (privacy-sensitive):**
+  Port WPF `GazeFocusService`’s consumer-driven lifecycle to `AvaloniaGazeFocusService`. **Confirmed feasible with
+  EXISTING seams — no interface change:** `IWebcamService.OnTrackingStateChanged` exists (`IWebcamService.cs:36`),
+  Core `AppSettings : INotifyPropertyChanged` raises `PropertyChanged` on setters, all three gaze flags exist
+  (default-ON). **Shape:** add `MasterEnabled` prop + `EvaluateDesiredState()` (single source of truth) + subscribe
+  `settings.PropertyChanged` (the 3 gaze flags) + `_webcam.OnTrackingStateChanged`; start when `wants (master OR any
+  consumer) && canRun`, stop otherwise; UI-thread-marshalled; unsubscribe in Dispose. Rewire the master toggle
+  (`BlinkTrainerTabViewModel.cs:204`) to set `MasterEnabled` instead of calling `Start()` directly.
+  **⚠️ HARD PRIVACY INVARIANT (WPF `GazeFocusService.cs` bolded design):** the default-ON per-feature flags must
+  NEVER power the camera on — `canRun` REQUIRES `_webcam.IsRunning` already true (ride along; the engine follows the
+  camera, never powers it); auto-start must NEVER prompt for consent (the explicit master toggle owns that dialog);
+  `canRun` also gates on calibration present (`GetCalibratedScreen() != null`) + consent current. **OPEN SEAM
+  QUESTION for pickup:** confirm whether `IWebcamService` exposes a consent-current check equivalent to WPF
+  `WebcamTrackingService.IsConsentCurrent()` (or whether consent is implicit once `IsRunning`); if absent, that is
+  the one seam addition needed. Recommend `avalonia-research` + `wpf-parity` + advisor before implementing; run
+  `port-parity-auditor` specifically against the privacy invariant. Standalone (non-DTRH) — tracked here because the
+  sub-part-7 verify surfaced it, but it is its own feature, not gated on DTRH web-boot.
+  - **NEXT:** the gaze-autostart row above + the avatar-freeze future seam. **All other row-#6 phase-1–7 appendix
+    sub-parts are LANDED or verify-resolved** (web bundle = csproj Content-link at Windows head `:61`; host+bridge =
+    S2c; telemetry = S1; meta deltas done; Lab launch = S2c-2c; in-world = this verify). **Live web-boot
     verification of phases 1–7 remains an owner-headed gate; phase 8 native-chaos decommission stays out of
     autonomous scope.**
 
