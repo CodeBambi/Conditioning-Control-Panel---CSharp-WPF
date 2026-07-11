@@ -201,6 +201,15 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
 
         if (value)
         {
+            // Arm the consumer-driven master toggle so the shared dwell engine stays
+            // alive under the auto-start logic even if the camera later cycles
+            // (WPF parity: GazeFocusService MasterEnabled, GazeFocusService.cs:90).
+            // MasterEnabled on its own NEVER powers the camera — it only rides along.
+            if (_gazeFocus != null)
+                _gazeFocus.MasterEnabled = true;
+
+            // Start() is the ONLY path that powers the camera, and it returns the
+            // bool that drives the calibration/starting feedback UX — preserved as-is.
             if (_gazeFocus?.Start() == true)
             {
                 AppendLog(Loc.Get("label_focus_gaze_active"));
@@ -214,7 +223,12 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
         }
         else
         {
-            _gazeFocus?.Stop();
+            // Disarm the master consumer and let EvaluateDesiredState decide whether
+            // to stop — a still-enabled per-feature consumer (flash gaze-pop / linger /
+            // video gaze-click) keeps the engine running, matching WPF intent. Do NOT
+            // call Stop() directly here (WPF parity: GazeFocusService.cs:90-98 setter).
+            if (_gazeFocus != null)
+                _gazeFocus.MasterEnabled = false;
             _gazeCursor?.Hide("blinktrainer");
         }
     }
