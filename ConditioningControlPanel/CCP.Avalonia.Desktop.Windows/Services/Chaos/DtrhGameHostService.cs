@@ -222,7 +222,7 @@ public sealed class DtrhGameHostService : IChaosWebGameService
         try
         {
             _orchestrator?.OnVideoWatchCredited(e.WatchedSec);
-            if (e.DurationSec > 0 && e.WatchedSec / e.DurationSec < 0.90) _orchestrator?.OnVideoSkipped();
+            if (ChaosSkipClassification.IsSkip(e.WatchedSec, e.DurationSec)) _orchestrator?.OnVideoSkipped();
         }
         catch (Exception ex) { _logger?.LogDebug(ex, "DTRH OnVideoWatchCredited failed"); }
     }
