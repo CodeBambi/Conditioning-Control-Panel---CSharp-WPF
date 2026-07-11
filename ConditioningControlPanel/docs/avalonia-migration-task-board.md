@@ -820,6 +820,64 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
       to once per app session. The orchestrator fires `RecoverRequested` + disposes (at most once per
       instance); the session-level “relaunch only once” guard must live in the head's `RecoverRequested`
       handler that constructs a fresh orchestrator.
+- **S2c-2 RECON COMPLETE 2026-07-11 · @driver** (this entry docs-only): full head-wiring feasibility mapped
+  via `wpf-archaeologist` (exact WPF native-effect bodies) + `Explore` (Avalonia-head existence verdicts) +
+  driver greps. **Result: ~85% of the seam is wireable now; ONE hard blocker (world-freeze, absent seam).**
+  - **WPF native-effect bodies (frozen ref `Services/Chaos/DtrhHostService.cs`):** FirePayload→
+    `EffectPayloadFactory.Build(Video|Audio)` + `payload.Strength`(0-100)/`.DurationMult`(0.1-10) + `Fire()`,
+    audio path `_runSubliminalsHeard++` when runActive (`:368-398`). World-freeze→ `App.Video.PausePrimary()`+
+    `AvatarWindow.PauseSpokenAudio()` / `PlayPrimary()`+`ResumeSpokenAudio()` (`:566-573`, UI-thread, dedup).
+    RouteBark→PARSE + typed `App.Bark.NotifyChaos*(...)` switch per `event` string (~30 events), gated
+    `_testMode`+`_vnSpeaking` (`:498-547`). Run-start natives (non-test): `ChaosCrashSentinel.Mark`+
+    `Bark.NotifyChaosRunStarted(diff)`. Run-end natives: `Bark.NotifyChaosRunCompleted((int)finalXp,diff)`+
+    `sentinel.Clear`+`Rebroadcast`. Video hooks on `App.Video`; **N1 `<0.90` skip decision at `:618-623`**;
+    `NoteVoicelineHeard` from `BarkService.Speak` (`:639-644`). Focus=`ChaosWebViewHost.FocusWeb()`
+    (window.Activate+web.Focus). Tray: `MainWindow.MinimizeToTrayForChaos()` at launch (`_minimizedMainWindow`
+    guard) / `ShowFromTray()` at teardown (`:114-124`,`:788-793`). RunConfig: scripted→`ChaosHappyPath.`
+    `BuildFirstRunConfig()`, normal→`ChaosRunConfig.FromSettings()` then `BuildRunConfig(cfg)` ~40-field object +
+    nested `flags` (`:808-902`). ActiveModId=`App.Mods.ActiveModId` else `"builtin-sissyhypno"`. Extra browser
+    arg the DtRH host adds = `--autoplay-policy=no-user-gesture-required` (anti-MPO/occlusion baked in host).
+  - **Avalonia-head verdicts:** `WebView2BrowserHost` exposes all needed — `CreateBrowserControl()`,
+    **`FullscreenChanged` event** (page Fullscreen API → head toggles window mode), `AdditionalBrowserArguments`,
+    3-arg `SetVirtualHostToFolder` (S2c-0), `NavigateAsync`, and the `WebMessageReceived`/`PostWebMessageAsJson`
+    pair the orchestrator SELF-subscribes in its ctor (head just constructs + navigates). READY:
+    `AvaloniaChaosSfx.Play` · `RevealService.Sync` (`AvaloniaChaosStubs.cs:597`) · `ChaosMeta` State/RankIndex/
+    Save (`:539`,`ChaosServices.cs:89/131`) → trivial `IChaosMetaStore` adapter · `ChaosRunConfig.FromSettings`
+    + **`ChaosHappyPath.BuildFirstRunConfig()`** (`ChaosHappyPath.cs:69`) · `AvaloniaEffectPayloadFactory.`
+    `ForVariant("video"|"audio")`+`Fire()` · `ModService.ActiveMod.Id` · `ChaosCrashSentinel` (ctor
+    `(IAppEnvironment,ILogger?)`, needs DI reg) · `ChaosWebGameEnabled` (`AppSettings.cs:2441`, default true) ·
+    tray `AvaloniaTrayIcon` (restore glue needed) · Program.cs DI site ~`:98`.
+  - **🟡 TWO INTERFACE-GAP DECISIONS (bounded, S2b-1 additive-DIM precedent):**
+    - **(A) Bark gap.** Core `IBarkService` has ~27 `NotifyChaos*` methods but **ABSENT: `NotifyChaosRunCompleted`,**
+      **`NotifyChaosBenignPopped`, `NotifyChaosBubbleDetonated`, `NotifyChaosBubbleDetonatedAbsorbed`**. Add as
+      ADDITIVE DIM no-ops on `IBarkService`; give `AvaloniaBarkService` real bodies where it can speak; a
+      RouteBark `event` with no method logs `unrouted` (WPF default-case parity).
+    - **(B) Effect-payload model differs.** WPF sets per-instance `payload.Strength`/`.DurationMult`; Avalonia
+      payloads read STATIC `EffectPayload.GlobalDurationMult` + `Scale(min,max)`, NO per-instance Strength. So
+      `FirePayload(kind,strength,durationMult)` = factory `ForVariant(kind)` + set `GlobalDurationMult` around
+      `Fire()`; `strength` 0-100 has no direct sink yet (confirm intensity input on `EffectPayload` base at impl).
+  - **🔴 HARD BLOCKER — world-freeze seam ABSENT.** No `IVideoService.Pause/Resume`, no avatar pause-resume
+    (`IVideoService` has only `Stop()`/`TriggerVideo()`; avatar anim is window-lifecycle-bound). Faithful
+    `SetWorldFrozen(bool)` needs NEW pause/resume seams + playback/tick guards — state-mutating JUDGMENT.
+    **DRIVER RULING (technical, not product): split into S2c-3; S2c-2a ships `SetWorldFrozen` as an HONEST
+    tracked interim no-op** (post-cutover the game fires native video/audio rarely, so a native payload
+    continuing under a game modal is a narrow degradation, not a crash). Owner may veto → demand S2c-3-first.
+  - **PROPOSED SLICING:**
+    - **S2c-2a** — `IChaosMetaStore` head adapter + `DtrhNativeEffects` impl (all seam methods EXCEPT
+      world-freeze = interim no-op) + additive bark DIMs (A) + FirePayload via factory (B). Bulk; unit-testable.
+      Good `port-slice-executor`-workflow candidate.
+    - **S2c-2b** — `DtrhGameWindow`/host controller: Avalonia `Window` (opaque black, `Topmost=false`,
+      `ShowActivated`/`Focusable`=true, windowed ↔ borderless via `WebView2BrowserHost.FullscreenChanged`),
+      constructs `DtrhHostOrchestrator`+`WebView2BrowserHost` (autoplay+anti-MPO+anti-occlusion args), maps
+      ccp.game=Deny/ccp.assets=Allow/ccp.art=Allow, wires `Closed`→dispose + `RecoverRequested`→relaunch-once
+      (N3), hooks head video events→`OnVideo*` with N1 `<0.90` skip, `RestoreMainWindow` self-guarded (N2),
+      `ReclaimBrowserFocus`→window.Activate. v12 windowing — `avalonia-research` mandatory. JUDGMENT.
+    - **S2c-2c** — Program.cs DI (host+effects+meta-store+`ChaosCrashSentinel`) + Lab-tab launch on
+      `ChaosWebGameEnabled` (`LabTabViewModel.cs:26`). Smoke must stay 44/0/⊆benign (headless launch guard so
+      `--smoke-test` never opens the game window). MECHANICAL.
+    - **S2c-3** — world-freeze seam (`IVideoService`/avatar pause-resume + guards). Separate JUDGMENT slice.
+  - **NEXT:** confirm world-freeze interim + decisions A/B owner-acceptable, then S2c-2a (workflow) → S2c-2b
+    (driver) → S2c-2c (mechanical) → S2c-3.
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
