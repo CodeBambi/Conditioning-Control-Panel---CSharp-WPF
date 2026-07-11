@@ -26,9 +26,13 @@
  *     never come back up" once (gr_05). No Hatter, no DreamCast.
  *
  * Beat shape:
- *   { id, pose, text, mood?, hold?, covers?, sub?, prop? }
+ *   { id, pose, text, mood?, hold?, covers?, sub?, prop?, demo? }
  *   `prop` = a PROP_ART key in cheshireVn.js (pink/live/gold/rabbit/...) -
  *   floats the matching sprite/emoji over the bubble as a visual aid.
+ *   `demo` = a card-tour hook (hub scenes only): { card:'toybox'|'dials'|'vanity',
+ *   pane?:'<paneId>', panes?:['<paneId>',...], dwell?:ms }. The scene fades out,
+ *   the guide opens the REAL warren card + pulses the pane(s), then fades back.
+ *   Locked cards/panes are skipped gracefully. Pure data - no functions.
  * Run-schedule entry shape:
  *   { at: {progress}|{event}|{wave}, mode: 'say'|'overlay', ...beat }
  * ==========================================================================*/
@@ -43,7 +47,9 @@ export const CHESHIRE = {
   // disk but nothing references it)
   poses: {
     base: 1, seated: 1, standing: 1, lean_fwd: 1, table_lean: 1,
-    couch_invite: 1, curled: 1, bed_sheets: 1, bed_bare: 1, bed_prone: 1,
+    couch_invite: 1, curled: 1,
+    // bed_sheets / bed_bare / bed_prone retired 2026-07-11 - no beat uses an
+    // in-bed pose anymore; cutouts stay on disk but nothing references them.
     embarrassed: 1, dizzy: 1, dizzy_drool: 1,
   },
 
@@ -104,9 +110,9 @@ export const CHESHIRE = {
         text: 'And heavier pockets, mm? Your emotes banked the moment you surfaced. Told you I’m fair.' },
       { id: 'pr103', pose: 'base', mood: 'conspiratorial shrug',
         text: 'You’ll notice the burrow grew while you were down. It does that. Don’t think about it too hard.' },
-      { id: 'pr104', pose: 'standing', mood: 'presenting, saleswoman', prop: 'toybox',
+      { id: 'pr104', pose: 'standing', mood: 'presenting, saleswoman', prop: 'toybox', demo: { card: 'toybox', pane: 'hands' },
         text: 'That chest is the TOYBOX. Your emotes spend inside it. Whatever you grabbed in the fall, deepen it there. Make it yours. Forever, kitten.' },
-      { id: 'pr105', pose: 'table_lean', mood: 'the gift line lands low and slow', prop: 'dials',
+      { id: 'pr105', pose: 'table_lean', mood: 'the gift line lands low and slow', prop: 'dials', demo: { card: 'dials', pane: 'ladder' },
         text: 'And the console with the little dials? Gold spends THERE. Buy them back one at a time... and if you’re short on your first, I’ll cover you. My one gift. [low] Don’t waste it.' },
       { id: 'pr106', pose: 'seated', mood: 'teaching a catechism, playful', prop: 'purses',
         text: 'Two purses, two shops. Emotes level. Gold unlocks. Say it back in your head a few times, hon.' },
@@ -130,7 +136,7 @@ export const CHESHIRE = {
         text: 'The desk keeps your lessons. Little habits the hole wants you practicing. Finish them and they pay, same as everything here.' },
       { id: 'pr204', pose: 'seated', mood: 'nudging, mercantile',
         text: 'Bought your first dial yet? The console’s waiting, and gold burns a hole in a pocket, kitten.' },
-      { id: 'pr205', pose: 'base', mood: 'trailing off deliberately',
+      { id: 'pr205', pose: 'base', mood: 'trailing off deliberately', demo: { card: 'vanity', panes: ['rank', 'stats'] },
         text: 'Your rank grows with every finished fall, by the way. Curious now. Then tempted. Then slipping. Then... [low] further words.' },
       { id: 'pr206', pose: 'lean_fwd', mood: 'setting up the goodbye',
         text: 'One more guided fall, sweet thing. After that I stop narrating... and start just watching.' },
@@ -321,7 +327,7 @@ export const CHESHIRE = {
       ],
       'weather:perfume': [
         { id: 'd_wperf1', pose: 'couch_invite', mood: 'breathing it in', text: 'Mm. Her Perfume. The fog’s gone sweet and pink. Everything pays a little more, and the heat climbs faster. [low] Enjoy it.' },
-        { id: 'd_wperf2', pose: 'bed_sheets', mood: 'languid', text: 'Smell that? Perfume weather. Sweeter pops, hotter blood. It’s everyone’s favorite sky for a reason.' },
+        { id: 'd_wperf2', pose: 'curled', mood: 'languid', text: 'Smell that? Perfume weather. Sweeter pops, hotter blood. It’s everyone’s favorite sky for a reason.' },
       ],
       'weather:static': [
         { id: 'd_wstat1', pose: 'standing', mood: 'crackling energy', text: 'Static, kitten. Stray current in the tube. Every few seconds a bolt pops a treat FOR you... though one in ten bites a live fuse short instead.' },

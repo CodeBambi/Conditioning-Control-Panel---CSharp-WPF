@@ -167,6 +167,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       toyKeys: rc.toyKeys || ['Q', 'E'],
       consumableSlots: clamp(rc.consumableSlots ?? 1, 1, 9),
       thoughtTexts: (rc.thoughtTexts && rc.thoughtTexts.length ? rc.thoughtTexts : ['GIVE IN']),
+      // The always-on habits (Warren upgrades) trained this run - surfaced in the
+      // HUD's dim left rail. They never change mid-run, so the HUD reads this once.
+      ownedHabitIds: rc.ownedHabitIds || [],
     };
     // Per-item dollhouse levels: id -> level (>=1 discovered). A grab reads this to know
     // the strength to apply; absent/0 means "never discovered" (first grab unlocks at L1).
@@ -209,6 +212,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function freshState() {
     return {
       score: 0, combo: 0, bestCombo: 0, heat: 0, focus: FOCUS_START,
+      gold: 0,   // run-gold running total (banked to meta Gold; drives the HUD gold ticker)
       defused: 0, detonated: 0, effectsFired: 0, spawned: 0,
       elapsedSec: 0, runDurationSec: cfg.durationSec,
       waveIndex: 1, waveCount: cfg.waveCount, actIndex: 1,
@@ -369,6 +373,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   /** All LUST gains flow through here so Her Perfume can sweeten them. */
   const addHeat = (x) => { st.heat = Math.min(1.0, st.heat + x * wxHeatGain()); };
   const basePoints = (strength) => 40 + strength * 1.6;
+  // Emote rain: one falling feeling-glyph per ✦ emote the pop actually banks -
+  // i.e. exactly the "+N" the HUD ✦ counter ticks up by. Callers snapshot
+  // emotesLive() across the score bump and rain the integer delta, so 3 emotes
+  // earned == 3 emoji fall, 5 == 5, and a scoreless pop rains nothing.
   /** The descent's "how deep are we" signal (0..1), read by spawn cadence, the
    * bubble build strength, the director mood and the FX ceilings.
    *
@@ -514,8 +522,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   const heavyActive = () => covered || performance.now() < heavyUntil;
   const bankGold = (amount, x, y) => {
     if (amount <= 0) return;
+    st.gold = (st.gold || 0) + amount;
     bridge.send({ type: 'meta-command', op: 'add-gold', amount });
     if (x != null) field.floatText(`+${amount} 🪙`, x, y + 30, 'cf-pop--gold');
+    hudUi.bumpGold(amount, st.gold);   // top-left ticker: "+N", count the total up, then fade
     if (setFlag('seenGoldFirst')) {
       hudUi.toast('🪙 gold. she takes it at her bench.');
       bark('gold-first');
@@ -842,8 +852,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (st.combo > st.bestCombo) st.bestCombo = st.combo;
       addHeat(0.05);
       const prismPts = basePoints(spec.strength) * 10.0 * totalMult() * st.blindfoldPayMult;
+      const emotesBefore = emotesLive();
       st.score += prismPts;
       showPopScore(prismPts, x, y);
+      field.emojiRain(x, y, emotesLive() - emotesBefore);   // one glyph per ✦ earned
       hudUi.announce(`🔮 the colors! 10x — it was ${NAME_OF[spec.mimicId] || spec.mimicId}`, 'bad', 2200, { artKey: 'bright_colors' });
       pulse('200,168,255', 0.40);
       // P2: the prism scrambles the tube's palette for a few seconds.
@@ -888,9 +900,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       pts *= bm;
       noteBiomePay(bm, x, y);
     }
+    const emotesBefore = emotesLive();
     st.score += pts;
     bankDripFeed();
     showPopScore(pts, x, y);
+    field.emojiRain(x, y, emotesLive() - emotesBefore);   // one glyph per ✦ earned
     pulse('255,200,235', 0.10);
     if (spec.payMult > 1) hudUi.toast('🪨 heavy drop! x3');
     rollCamGirlTip(x, y);
@@ -1242,6 +1256,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       level: t.level ?? 1,
       maxed: !!t.maxed,
       chargesLeft: (t.cooldownSec ?? 0) <= 0 ? Math.max(3, Math.round(t.power ?? 0)) : -1,
+      chargesMax: (t.cooldownSec ?? 0) <= 0 ? Math.max(3, Math.round(t.power ?? 0)) : -1,
       cooldownLeft: 0,
       effectActive: false,
     }));
@@ -1601,11 +1616,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       kind: 'condensation',
       spriteUrl: 'https://ccp.art/bubbles/gold_droplet.png',
       w: 1.1, aheadDepth: 45, ttlSec: 14, glowColor: 0xffd700,
-      onClick: () => {
+      onClick: (rec, sx, sy) => {
         if (!st || state !== 'running') return;
         const n = randInt(2, 5);
         st.trickleDrops += n;
         sfx('golden_pop', 0.45);
+        // a positioned gold burst on the droplet - the wall pickup used to only
+        // toast, so a droplet grabbed off/behind a wall gave no gold feedback.
+        if (sx != null) {
+          field.sparkleBurst(sx, sy, 'golden', 130);
+          field.floatText(`💧 +${n}✦`, sx, sy, 'cf-pop--gold');
+        }
         hudUi.toast(`💧 +${n}✦ condensed off the wall`);
         markDiscovered('pickup:condensation');
       },
@@ -2273,8 +2294,20 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     });
   };
 
+  // Live projection of the emotes (✦) this run will bank, mirroring the C# payout
+  // (ChaosUpgrades.AwardRunRewards): 1.5·√score + a time-scaled completion bonus,
+  // times the spark-gain mult, plus the Drip Feed trickle. Omits the end-only Drip
+  // 10% tip and first-fall bonus, so the recap lands at or just above the HUD number
+  // (a small pleasant surprise, never a letdown). Monotonic in score -> always rises.
+  const emotesLive = () => {
+    const durMin = Math.max(0, st.elapsedSec) / 60;
+    const completionBonus = 35 * cfg.difficultyMult * Math.min(1, durMin / 3);
+    const scorePart = 1.5 * Math.sqrt(Math.max(0, st.score));
+    return Math.max(0, Math.round((scorePart + completionBonus) * cfg.sparkGainMult) + (st.trickleDrops | 0));
+  };
+
   const hudState = () => ({
-    score: st.score, totalMult: totalMult(), combo: st.combo,
+    score: st.score, emotes: emotesLive(), totalMult: totalMult(), combo: st.combo,
     focus: st.focus, elapsedSec: st.elapsedSec, runDurationSec: st.runDurationSec,
     waveIndex: st.waveIndex, waveCount: st.waveCount,
     rippleCost: st.rippleFocusCost,
@@ -2308,6 +2341,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     state = 'drafting';
     syncHeld();
     field.clearAll(true);
+    ctx.powerupDrops?.clearLive();   // fade any live drop so it can't hang ungrabbable through the draft
     sfx('wave_clear', 0.6);
     pulse('150,200,255', 0.30);
     bark('wave-cleared', { wave: st.waveIndex });
@@ -2352,6 +2386,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     state = 'drafting';
     syncHeld();
     field.clearAll(true);
+    ctx.powerupDrops?.clearLive();   // the Landing parks the fall: don't strand a drop ungrabbable beside it
     sfx('wave_clear', 0.6);
     pulse('150,200,255', 0.30);
     bark('wave-cleared', { wave: st.waveIndex });
@@ -2429,9 +2464,24 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function addConsumable(id, level) {
     const def = boonDefById(id);
     if (!def || !def.levelValues || !def.levelValues.length) return;
+    // Recharge path: already holding this active -> top its charges back up instead
+    // of docking a duplicate. When the dock is full, the drop picker offers a recharge
+    // of a partly-spent held toy (see canOfferPowerup) rather than a toy with no slot.
+    const held = toys.find((t) => t.id === id);
+    if (held) {
+      held.chargesLeft = held.chargesMax;
+      held.cooldownLeft = 0;
+      if (held.pickRef) held.pickRef.spent = false;   // un-grey the ribbon tile if it had drained
+      hudUi.setPicks(st.runPicks);
+      hudUi.updateToys(toys, toyStatus());
+      return true;   // signals a recharge (vs a fresh dock) to the grab toast
+    }
     if (toys.length >= st.consumableSlots) return;   // dock full (canOfferPowerup should have vetoed)
     const lvl = Math.max(1, level | 0);
     const power = def.levelValues[Math.min(lvl, def.levelValues.length) - 1];
+    // Consumables dock with 3 uses (charge-based toys keep their levelled charge
+    // count when it's higher — e.g. a deepened wand still brings 4).
+    const chargesMax = (def.cooldownSec ?? 0) <= 0 ? Math.max(3, Math.round(power)) : 3;
     // The pickup also lands in the run ribbon (an active vanishes from the dock
     // when spent - the ribbon tile stays as the record, greying out on the last
     // charge). The toy record keeps a ref so the spend site can flip it.
@@ -2441,9 +2491,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       key: String(toys.length + 1),                       // slot 1 -> "1", etc.
       cooldownSec: def.cooldownSec ?? 0,
       power, level: lvl, maxed: lvl >= def.levelValues.length,
-      // Consumables dock with 3 uses (charge-based toys keep their levelled charge
-      // count when it's higher — e.g. a deepened wand still brings 4).
-      chargesLeft: (def.cooldownSec ?? 0) <= 0 ? Math.max(3, Math.round(power)) : 3,
+      chargesLeft: chargesMax, chargesMax,
       cooldownLeft: 0, effectActive: false, consumable: true, pickRef: pick,
     });
     st.runEquipment.add(id);
@@ -2473,14 +2521,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
     const acquire = () => {
       if (state !== 'running') return;   // card dismissed after the run ended: skip the apply/anim
+      let recharged = false;
       if (kind === 'consumable') {
-        addConsumable(id, level);
+        recharged = addConsumable(id, level) === true;
         try { hudUi.flyArtToSlot(id, screenPos, 'consumable'); } catch (e) { /* ignore */ }
       } else {
         applyGrabbedPassive(id);
         try { hudUi.flyArtToSlot(id, screenPos, 'relic'); } catch (e) { /* ignore */ }
       }
-      hudUi.toast('◈ ' + def.name);
+      hudUi.toast('◈ ' + def.name + (recharged ? ' recharged' : ''));
     };
 
     if (first) {
@@ -2916,6 +2965,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       state = 'drafting';
       syncHeld();
       field.clearAll(true);
+      ctx.powerupDrops?.clearLive();   // scripted table parks the fall too - clear any live drop
       sfx('wave_clear', 0.6);
       pulse('150,200,255', 0.30);
       pendingWave = st.waveIndex;
@@ -3022,6 +3072,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.update(hudState());
     hudUi.updateToys(toys, toyStatus());
     hudUi.setPicks(st.runPicks);
+    hudUi.setHabits(st.ownedHabitIds);   // the always-on habits rail (left, dim until hover)
     hudUi.setVisible(true);
     if (!short) sfx('fall_in', 0.28);
     overlays.showCountdown({
@@ -3132,6 +3183,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     overlays.hideCountdown();
     hudUi.setVisible(false);
     hudUi.setPicks([]);
+    hudUi.setHabits([]);
     field.clearAll();
     clearAmbient();
     if (bMech) bMech.reset();   // a run aborted mid-chamber must not leak its biome mechanic into the hub
@@ -3260,7 +3312,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           if (draftRoomActive) showDraftRoomChrome();
         };
       }
-      // a voice-button click in the audio panel applies to the very next line
+      // a voice-button click in the audio panel swaps live - driftChain cuts a
+      // mid-play biome line and re-picks in the new voice on the spot
       offVoice = onVoice((v) => { try { if (ctx.drift && ctx.drift.setVoice) ctx.drift.setVoice(v); } catch (e) { /* ignore */ } });
       // THE BIOMES: grab arbitration. The Gallery melts a denied grab in your
       // hands; every grab that holds feeds the run-wide tally the Coronation
@@ -3356,6 +3409,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           : null,
         guide: guide ? guide.hub : hubGuide,
       });
+      // Guide is built before warren, so hand its tutorial surface over now: this
+      // lets Cheshire's card-tour beats open + highlight the real dollhouse cards.
+      try { if (guide && guide.hub && guide.hub.attachWarren) guide.hub.attachWarren(warren.tutorial); } catch (e) { /* ignore */ }
       window.addEventListener('pointerdown', onPointerDownGlobal, true);
       window.addEventListener('pointerdown', onGlobalPointerDownCapture, true);
       window.addEventListener('contextmenu', onContextMenu);
@@ -3506,12 +3562,21 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // ---- grab-in-the-tube power-ups (engine/powerupDrops.js) ----
     /** The raw meta snapshot the drop picker reads (rank + discovered levels). */
     getMeta() { return hostState ? hostState.meta : null; },
-    /** Veto an offer: only while running, never re-offer this run, and a consumable
-     *  needs a free dock slot (passives always fit - they pin to the relic strip). */
+    /** Veto an offer: only while running, and passives/new toys never re-offer this
+     *  run. A consumable with a free dock slot is offered fresh; once the dock is full
+     *  we instead offer a RECHARGE of a partly-spent held active (grabbing it refills
+     *  that toy - see addConsumable) rather than a toy there's no room for. Passives
+     *  always fit - they pin to the relic strip. */
     canOfferPowerup(id, kind) {
       if (state !== 'running' || !st) return false;
-      if (st.runEquipment.has(id)) return false;
-      if (kind === 'consumable') return toys.length < st.consumableSlots;
+      const held = st.runEquipment.has(id);
+      if (kind === 'consumable') {
+        if (!held) return toys.length < st.consumableSlots;   // fresh toy needs an open pocket
+        if (toys.length < st.consumableSlots) return false;   // room to spare: prefer new toys, not a refill
+        const t = toys.find((x) => x.id === id);              // pockets full: offer a recharge...
+        return !!t && t.chargesLeft < t.chargesMax;           // ...only if this one has a spent charge
+      }
+      if (held) return false;   // passives never re-offer
       return true;
     },
     /** Duo bait: multiply an offer's weight when grabbing that item would unlock

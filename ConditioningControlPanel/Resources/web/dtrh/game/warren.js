@@ -616,8 +616,9 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     return win;
   }
 
-  function openStation(id) {
+  function openStation(id, o) {
     if (!STATION_META[id]) return;
+    const tutorial = !!(o && o.tutorial);
     const v = view();
     closeSheet();
     openId = id;
@@ -647,12 +648,16 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       buildWindow(d, v, n++);
     }
 
-    // first-ever station visit: her welcome + the reveal pass
-    if (!v.seenDollhouse) {
-      setFlag('seenDollhouse');
-      bark('dollhouse-first-open');
+    // first-ever station visit: her welcome + the reveal pass. The tutorial tour
+    // opens cards silently (it does its own targeted highlight) and must NOT burn
+    // the player's real first-open moment or fire the broad reveal pass.
+    if (!tutorial) {
+      if (!v.seenDollhouse) {
+        setFlag('seenDollhouse');
+        bark('dollhouse-first-open');
+      }
+      runRevealFlashes('hub_open');
     }
-    runRevealFlashes('hub_open');
   }
 
   /** A freshly-gated-in pane lands at its def-order spot in its column. */
@@ -1216,6 +1221,24 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       if (modal) { closeModal(); return true; }
       if (openId) { closeSheet(); return true; }
       return true;
+    },
+    /** Tutorial-tour surface: the Cheshire guide drives real cards during a hub
+     * scene. These bypass onStationPick's guide.onInterrupt() (which would cancel
+     * the very scene driving them) and open silently (no first-visit bark/flag). */
+    tutorial: {
+      open: (id) => openStation(id, { tutorial: true }),
+      close: () => closeSheet(),
+      // respects the real station gates (a locked Vanity isn't tourable yet)
+      canOpen: (id) => visible && !descending && buildStationDefs(view()).some((s) => s.id === id),
+      hasPane: (paneId) => openWins.has(paneId),
+      highlightPane(paneId, ms) {
+        const rec = openWins.get(paneId);
+        if (!rec || !rec.winEl) return;
+        const el = rec.winEl;
+        el.classList.add('wr-reveal-flash');
+        window.setTimeout(() => el.classList.remove('wr-reveal-flash'), ms || 2600);
+        try { sfx('reveal_chime', 0.5); } catch (e) { /* ignore */ }
+      },
     },
     dispose() { hud.classList.remove('wr-open'); root.remove(); },
   };

@@ -31,6 +31,8 @@
  *      chesh.isBusy(); chesh.isHolding(); chesh.cancel(); chesh.dispose();
  * ==========================================================================*/
 
+import { getLevel, onLevels } from '../engine/audioLevels.js';
+
 // Kill-switch: true = this engine never mounts, chaosRun falls back to the old
 // hubGuide + vnPortrait + lesson cards byte-identically. (See cheshireGuide.js,
 // which gates on the same constant.)
@@ -101,14 +103,18 @@ const CSS = `
   50%{box-shadow:0 0 40px rgba(${ACCENT_A},.75), 0 10px 26px rgba(0,0,0,.5)}}
 
 /* ---------- beat dissolve (fade out -> swap pose/text -> fade in) ---------- */
-.chs-fig,.cho-fig{transition:opacity .3s ease}
+.chs-fig,.cho-fig{transition:opacity .6s ease}
 .chs-fig.ch-fade,.cho-fig.ch-fade{opacity:0}
-.chs-text{transition:opacity .24s ease}
+.chs-text{transition:opacity .48s ease}
 .chs-bubble.ch-dissolve .chs-text,.chs-bubble.ch-dissolve .ch-prop{opacity:0}
 
 /* ---------- scene (fullscreen) ---------- */
-.chs-root{position:absolute;inset:0;z-index:41;pointer-events:none;overflow:hidden;opacity:0;transition:opacity .45s ease}
+.chs-root{position:absolute;inset:0;z-index:41;pointer-events:none;overflow:hidden;opacity:0;transition:opacity .9s ease}
 .chs-root.ch-on{opacity:1;pointer-events:auto;cursor:pointer}
+/* cutaway: fade the scene away to reveal the live warren card beneath, while a
+   transparent full-screen shield swallows stray clicks during the auto-demo.
+   MUST stay after .ch-on so equal-specificity source order lets it win. */
+.chs-root.ch-cutaway{opacity:0;transition:opacity .35s ease;pointer-events:auto;cursor:default}
 .chs-dim{position:absolute;inset:0;background:
   radial-gradient(80% 90% at 24% 55%, rgba(${ACCENT_A},.14), transparent 60%),
   radial-gradient(60% 70% at 70% 20%, rgba(150,80,255,.12), transparent 65%),
@@ -119,7 +125,7 @@ const CSS = `
              radial-gradient(70% 55% at 65% 30%,rgba(150,80,255,.18),transparent 70%);
   filter:saturate(1.1);animation:chsBack 24s ease-in-out infinite alternate}
 @keyframes chsBack{from{transform:scale(1)}to{transform:scale(1.08) translateY(-2%)}}
-.chs-bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity .6s}
+.chs-bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity 1.2s}
 .chs-bg.ch-on{opacity:.85}
 .chs-fig{position:absolute;left:3%;bottom:-4vh;height:94vh;z-index:2;animation:chBreathe 6s ease-in-out infinite;transform-origin:50% 100%}
 .chs-fig img{height:100%;width:auto;display:block}
@@ -130,7 +136,7 @@ const CSS = `
   color:rgba(255,255,255,.5);text-shadow:0 1px 6px #000;opacity:0;transition:opacity .5s;pointer-events:none}
 .chs-root.ch-on .chs-skip{opacity:.85;transition-delay:.7s}
 .chs-bubble{position:absolute;right:4.5%;top:50%;transform:translateY(-46%) scale(.96);
-  width:min(63vw,1160px);z-index:6;opacity:0;transition:opacity .3s ease, transform .3s cubic-bezier(.2,.8,.2,1);
+  width:min(63vw,1160px);z-index:6;opacity:0;transition:opacity .6s ease, transform .6s cubic-bezier(.2,.8,.2,1);
   background:rgba(12,4,20,.93);border:3px solid rgb(${ACCENT_A});border-radius:24px;padding:30px 38px 34px;
   box-shadow:0 0 46px rgba(${ACCENT_A},.5), 0 18px 50px rgba(0,0,0,.6), inset 0 0 34px rgba(${ACCENT_A},.13)}
 .chs-root.ch-wide-root .chs-bubble{width:min(55vw,880px)}
@@ -142,7 +148,7 @@ const CSS = `
 
 /* ---------- say (corner commentary, non-pausing) ---------- */
 .chc-root{position:absolute;left:0;bottom:0;z-index:38;pointer-events:none;opacity:0;
-  transition:opacity .35s ease;display:flex;align-items:flex-end;gap:0;padding:0 0 1.2vh 1vh;max-width:56vw}
+  transition:opacity .7s ease;display:flex;align-items:flex-end;gap:0;padding:0 0 1.2vh 1vh;max-width:56vw}
 .chc-root.ch-on{opacity:1}
 .chc-fig{height:24vh;flex:0 0 auto;animation:chBreathe 6s ease-in-out infinite;transform-origin:50% 100%}
 .chc-fig img{height:100%;width:auto;display:block}
@@ -158,7 +164,7 @@ const CSS = `
 .chc-text{font-size:clamp(15px,2vh,20px);line-height:1.4;color:#fdf1ff;font-weight:600;text-shadow:0 1px 8px #000}
 
 /* ---------- overlay (world-hold pause card) ---------- */
-.cho-root{position:absolute;inset:0;z-index:40;pointer-events:none;overflow:hidden;opacity:0;transition:opacity .38s ease}
+.cho-root{position:absolute;inset:0;z-index:40;pointer-events:none;overflow:hidden;opacity:0;transition:opacity .76s ease}
 .cho-root.ch-on{opacity:1;pointer-events:auto;cursor:pointer}
 .cho-dim{position:absolute;inset:0;background:
   radial-gradient(70% 80% at 50% 42%, rgba(${ACCENT_A},.14), transparent 62%),
@@ -168,7 +174,7 @@ const CSS = `
 .cho-fig.ch-wide{height:auto;width:min(46vw,80vh);bottom:-1vh}
 .cho-fig.ch-wide img{width:100%;height:auto}
 .cho-card{position:absolute;left:53%;top:50%;transform:translate(-50%,-46%) scale(.965);
-  width:min(64vw,620px);z-index:3;opacity:0;transition:opacity .3s ease, transform .34s cubic-bezier(.2,.8,.2,1);
+  width:min(64vw,620px);z-index:3;opacity:0;transition:opacity .6s ease, transform .68s cubic-bezier(.2,.8,.2,1);
   background:rgba(12,4,20,.94);border:2.5px solid rgb(${ACCENT_A});border-radius:22px;padding:30px 38px 26px;
   box-shadow:0 0 44px rgba(${ACCENT_A},.45), 0 18px 50px rgba(0,0,0,.6), inset 0 0 30px rgba(${ACCENT_A},.11)}
 .cho-root.ch-on .cho-card{opacity:1;transform:translate(-50%,-50%) scale(1)}
@@ -296,6 +302,12 @@ export function createCheshireVn(hud, opts = {}) {
       audioEl.addEventListener('ended', endVoice);
       // a missing/blocked mp3 must unblock the beat immediately
       audioEl.addEventListener('error', endVoice);
+      // dragging the 'tutorial' slider mid-line retargets the live gain (only
+      // while actually speaking, so a slider move can't stomp the fade-in ramp)
+      onLevels((group) => {
+        if (group !== 'tutorial' || !gain || !actx || !voicePlaying) return;
+        try { gain.gain.setTargetAtTime(getLevel('tutorial'), actx.currentTime, 0.05); } catch (e) { /* ignore */ }
+      });
     } catch (e) { actx = null; }
   }
   function voUrl(beat) {
@@ -308,7 +320,10 @@ export function createCheshireVn(hud, opts = {}) {
     ensureVoiceGraph(); if (!actx || !url) return;
     try {
       if (actx.state === 'suspended') actx.resume();
-      if (gain) { try { gain.gain.cancelScheduledValues(actx.currentTime); gain.gain.setValueAtTime(1, actx.currentTime); } catch (e) {} }
+      // brief 0.6s fade-in so the voice eases up instead of snapping to full,
+      // ramping to the 'tutorial' slider level (audioLevels.js) not a hardcoded 1
+      const lvl = getLevel('tutorial');
+      if (gain) { try { const t0 = actx.currentTime; gain.gain.cancelScheduledValues(t0); gain.gain.setValueAtTime(0.0001, t0); gain.gain.linearRampToValueAtTime(lvl, t0 + 0.6); } catch (e) {} }
       audioEl.src = url; audioEl.currentTime = 0; voicePlaying = true;
       // play() rejecting (404/autoplay) must resolve the wait, not hang the beat
       audioEl.play().catch(() => { voicePlaying = false; if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); } });
@@ -448,6 +463,13 @@ export function createCheshireVn(hud, opts = {}) {
     bubble.classList.add('ch-on');
     let completed = true;
     let lastPose = null;
+    // cutaway controls handed to a demo beat's onBeat hook: fade the whole scene
+    // out (revealing the live warren beneath) and back, plus a liveness check.
+    const ctrl = {
+      alive: () => tk === token,
+      async cutawayOut() { sceneRoot.classList.add('ch-cutaway'); await sleep(380); },
+      async cutawayIn() { sceneRoot.classList.remove('ch-cutaway'); await sleep(380); },
+    };
     try {
       for (const beat of beats) {
         if (tk !== token) { completed = false; break; }
@@ -455,7 +477,7 @@ export function createCheshireVn(hud, opts = {}) {
         if (lastPose != null) {
           if (beat.pose !== lastPose) fig.classList.add('ch-fade');
           bubble.classList.add('ch-dissolve');
-          await sleep(270);
+          await sleep(540);
           if (tk !== token) { completed = false; break; }
           body.textContent = '';
         }
@@ -473,9 +495,27 @@ export function createCheshireVn(hud, opts = {}) {
         // SECOND click (or, on auto-hold beats, the hold playing out) to advance.
         await Promise.race([Promise.all([typed, waitVoice()]), clickP]);
         if (tk !== token) { completed = false; break; }
+        const isDemo = beat.demo && typeof sceneOpts.onBeat === 'function';
         if (clicked) {
-          fadeVoice(240); await typed;
+          fadeVoice(600); await typed;
           if (tk !== token) { completed = false; break; }
+        }
+        let demoRan = false;
+        if (isDemo) {
+          // card cutaway: fade the scene away, let the guide open + highlight the
+          // real warren card, then fade back. Auto-advances (no extra click) when
+          // it actually ran; if the guide skipped it (card locked), fall through
+          // to the normal click-to-advance below.
+          if (!clicked) fadeVoice(600);
+          sceneAdvance = null;   // swallow stray clicks while the demo runs
+          try { demoRan = await sceneOpts.onBeat(beat, ctrl); } catch (e) { /* ignore */ }
+          if (tk !== token) { completed = false; break; }
+        }
+        if (demoRan) {
+          /* the cutaway auto-advances */
+        } else if (isDemo || clicked) {
+          // a skipped demo (its clickP was detached above) or a finished-by-click
+          // line: wait on a FRESH advance promise for the next click
           sceneClickArm = performance.now() + 150;
           await new Promise((res) => { sceneAdvance = res; });
         } else {
@@ -499,12 +539,13 @@ export function createCheshireVn(hud, opts = {}) {
   function hideScene() {
     sceneUp = false;
     sceneRoot.classList.remove('ch-on');
+    sceneRoot.classList.remove('ch-cutaway');   // never leave the root stuck transparent
     $s('.chs-bubble').classList.remove('ch-on');
     $s('.chs-bubble').classList.remove('ch-dissolve');
     $s('.chs-fig').classList.remove('ch-fade');
-    fadeVoice(280);
+    fadeVoice(600);
     scheduleResume();
-    setTimeout(() => { if (!sceneUp) sceneRoot.hidden = true; }, 470);
+    setTimeout(() => { if (!sceneUp) sceneRoot.hidden = true; }, 940);
   }
 
   // ============================ SAY (corner commentary) ============================
@@ -557,20 +598,20 @@ export function createCheshireVn(hud, opts = {}) {
         if (beat.onDone) { try { beat.onDone(); } catch (e) { /* ignore */ } }
         if (sayQueue.length) { await sleep(SAY_GAP_MS); continue; }
         sayRoot.classList.remove('ch-on');
-        await sleep(380);
+        await sleep(760);
       }
     } finally {
       sayActive = false;
       setSpeaking(false);
       sayRoot.classList.remove('ch-on');
-      setTimeout(() => { if (!sayActive) sayRoot.hidden = true; }, 380);
+      setTimeout(() => { if (!sayActive) sayRoot.hidden = true; }, 760);
     }
   }
   function cancelSay() {
     sayQueue.length = 0;
     setSpeaking(false);
     sayRoot.classList.remove('ch-on');
-    setTimeout(() => { if (!sayActive) sayRoot.hidden = true; }, 380);
+    setTimeout(() => { if (!sayActive) sayRoot.hidden = true; }, 760);
   }
 
   // ============================ OVERLAY (world-hold pause card) ============================
@@ -582,9 +623,9 @@ export function createCheshireVn(hud, opts = {}) {
     if (!overlayUp) return;
     overlayUp = false;
     overlayRoot.classList.remove('ch-on');
-    fadeVoice(240);
+    fadeVoice(600);
     scheduleResume();
-    setTimeout(() => { if (!overlayUp) overlayRoot.hidden = true; }, 460);
+    setTimeout(() => { if (!overlayUp) overlayRoot.hidden = true; }, 920);
     if (overlayResolve) { const r = overlayResolve; overlayResolve = null; r(true); }
   }
   overlayRoot.addEventListener('pointerdown', () => {

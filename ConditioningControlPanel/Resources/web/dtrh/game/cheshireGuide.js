@@ -60,6 +60,8 @@ export function createCheshireGuide(opts) {
   let stage = -1;          // -1 = not yet read from meta
   let hubRunning = false;  // a hub scene sequence is in flight
   let cancelToken = 0;
+  let warrenTut = null;    // warren.tutorial handle, attached post-construction (hub.attachWarren)
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // ---- per-run schedule state ----
   let schedule = null;     // the active run's beat list (script.runs[n])
@@ -262,6 +264,32 @@ export function createCheshireGuide(opts) {
 
   /* ======================== the hub (warren's guide contract) ======================== */
 
+  /** A card-tour beat (data field `demo:{card, pane|panes, dwell?}`): fade the
+   * scene out, open the REAL warren card, pulse the pane(s) the line names,
+   * dwell, then close + fade the scene back. Skips gracefully when warren isn't
+   * ready or the pane isn't unlocked ("demo each when unlocked"). */
+  async function demoBeat(beat, ctrl) {
+    const d = beat && beat.demo;
+    const wt = warrenTut;
+    // skipped (warren not ready / card still locked) -> false: the scene falls
+    // back to normal click-to-advance instead of auto-skipping the beat.
+    if (!d || !wt || !d.card || !wt.canOpen(d.card)) return false;
+    try {
+      await ctrl.cutawayOut();                         // fade the scene away
+      if (!ctrl.alive() || !wt.canOpen(d.card)) return true;
+      wt.open(d.card);                                 // simulate the user click
+      const panes = d.panes || (d.pane ? [d.pane] : []);
+      const dwell = d.dwell || 2600;
+      for (const p of panes) { if (wt.hasPane(p)) wt.highlightPane(p, dwell); }  // skip locked panes
+      await sleep(dwell);
+    } catch (e) { log('cheshire: demoBeat ' + (beat && beat.id) + ': ' + (e && e.message)); }
+    finally {
+      try { wt.close(); } catch (e) { /* ignore */ }
+      try { await ctrl.cutawayIn(); } catch (e) { /* ignore */ }   // fade the scene back
+    }
+    return true;
+  }
+
   async function playHubScene(key, nextStage, flashPass) {
     hubRunning = true;
     const t = ++cancelToken;
@@ -272,7 +300,7 @@ export function createCheshireGuide(opts) {
     try {
       const beats = script.scenes && script.scenes[key];
       if (beats && beats.length) {
-        const done = await vn.scene(beats);
+        const done = await vn.scene(beats, { onBeat: demoBeat });
         // covers stamp even on a skip-out: she said enough, and the ledger
         // write is what keeps the card system from re-teaching it
         stampCovers(beats);
@@ -339,6 +367,9 @@ export function createCheshireGuide(opts) {
      * Stage was set up-front, so nothing re-fires. */
     onInterrupt() { cancelToken++; hubRunning = false; try { vn.cancel(); } catch (e) { /* ignore */ } },
     isBusy: () => hubRunning,
+    /** warren hands its tutorial surface here post-construction (guide is built
+     * before warren), so card-tour beats can open/highlight the real cards. */
+    attachWarren(t) { warrenTut = t || null; },
     dispose() { cancelToken++; hubRunning = false; },
   };
 

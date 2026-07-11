@@ -1230,19 +1230,26 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   function spawnPickup({ kind = 'pickup', spriteUrl, w = 1.5, aheadDepth = 55, ttlSec = 12,
     speed = 0, glowColor = 0xffd700, spin = 0, onClick = null, onGone = null }) {
     const group = new THREE.Group();
+    // Pickups are placed toward the tube wall (rec.rad), so on a curve or behind a
+    // wall poster/junction-room wall they'd get depth-occluded and vanish while the
+    // click raycast (pickups-only) still grabs them - "grabbed an invisible droplet,
+    // no gold shows". depthTest:false + a high renderOrder draws them OVER the wall so
+    // the gold droplet + glow stay visible wherever they sit (cf. junctions.js text).
     const glowMat = new THREE.MeshBasicMaterial({
       map: glowTex, color: new THREE.Color(glowColor), transparent: true,
-      depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     });
     const glow = new THREE.Mesh(unitPlane, glowMat);
     glow.scale.set(w * 2.1, w * 2.1, 1);
     glow.position.z = -0.05;
+    glow.renderOrder = 20;
     group.add(glow);
     const mat = new THREE.MeshBasicMaterial({
-      map: loadTexture(spriteUrl), transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      map: loadTexture(spriteUrl), transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide,
     });
     const mesh = new THREE.Mesh(unitPlane, mat);
     mesh.scale.set(w, w, 1);
+    mesh.renderOrder = 21;
     group.add(mesh);
     const rec = {
       group, depth: camDepthNow + aheadDepth, kind, pickup: true, billboard: true,
@@ -1499,7 +1506,11 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         const rec = o && o.userData.rec;
         if (rec && rec.pickup && !rec.dead) {
           const idx = live.indexOf(rec);
-          if (rec.onPickupClick) { try { rec.onPickupClick(rec); } catch (e) { /* ignore */ } }
+          // hand the onClick the grab's window-px location (canvas fills the window)
+          // so it can pop a positioned burst right on the droplet it was clicked on.
+          const sx = (ndcX + 1) * 0.5 * window.innerWidth;
+          const sy = (1 - ndcY) * 0.5 * window.innerHeight;
+          if (rec.onPickupClick) { try { rec.onPickupClick(rec, sx, sy); } catch (e) { /* ignore */ } }
           if (idx >= 0) removeCard(idx);
           return true;
         }

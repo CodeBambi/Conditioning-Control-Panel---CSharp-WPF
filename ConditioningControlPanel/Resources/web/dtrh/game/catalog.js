@@ -370,7 +370,7 @@ export const DIARY_VERBS = [
 // source of player copy).
 const diaryVerb = (n) => DIARY_VERBS.find((v) => v.name === n);
 export const HUD_TIPS = {
-  score: { glyph: '✦', name: 'score', desc: 'what the fall pays. every pop banks points × your total multiplier — streak, lust, mantras, chamber depth, all of it compounds.' },
+  score: { glyph: '✦', name: 'emotes', desc: 'the currency the fall pays out — spend it at the dollhouse. it rises live as you pop; the small grey number is your raw score (points × total multiplier: streak, lust, mantras, chamber depth, all of it compounds).' },
   mult: { glyph: '×', name: 'the multiplier', desc: 'your total run multiplier: drafted mantras × streak × lust. the streak climbs +1 a pop and catches fire at 15 / 25 / 50 / 100. a treat left to rot HALVES it; a trigger landing in your face breaks it to zero.' },
   shields: { glyph: '♥', name: 'resistance', desc: 'each ♥ eats one unblocked trigger for you. out of hearts, the payload lands. 📿 is the collar — it steps in on its own that many more times.' },
   focus: diaryVerb('focus'),

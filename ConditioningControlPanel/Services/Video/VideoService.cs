@@ -507,10 +507,11 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    if (!player.Mute) // Only update unmuted players (primary audio)
-                    {
-                        player.Volume = effectiveVolume;
-                    }
+                    // Set Volume on every player. The old `if (!player.Mute)` skip broke live
+                    // drags: player.Mute reads true while no audio output exists yet (transient),
+                    // so the primary player got skipped. Volume and Mute are independent in
+                    // LibVLC - setting Volume never unmutes, and no-audio secondaries ignore it.
+                    player.Volume = effectiveVolume;
                 }
                 catch (Exception ex)
                 {
@@ -1669,6 +1670,16 @@ namespace ConditioningControlPanel.Services
             {
                 mediaPlayer.Mute = false;
                 mediaPlayer.Volume = GetEffectiveVolume();
+                // Play() is async: LibVLC hasn't created the audio output yet, so the
+                // Volume set above silently no-ops (libvlc_audio_set_volume fails with no
+                // aout) and the video starts at 100% regardless of the slider. Re-apply
+                // once playback actually begins and the aout exists - only then does the
+                // Video Volume slider land (matches DualMonitorVideoService/MiniPlayerWindow).
+                mediaPlayer.Playing += (s, e) =>
+                {
+                    try { mediaPlayer.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: volume apply on Playing failed"); }
+                };
                 App.Logger?.Information("LibVLC audio: Volume={Vol}, Mute={Mute}",
                     mediaPlayer.Volume, mediaPlayer.Mute);
             }

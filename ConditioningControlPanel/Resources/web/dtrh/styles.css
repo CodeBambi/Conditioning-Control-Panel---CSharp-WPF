@@ -637,6 +637,26 @@ html, body {
   100% { transform: translate(var(--dx), calc(var(--dy) + var(--fall))) scale(0.2); opacity: 0; }
 }
 
+/* Emote rain: real emoji glyphs (eyes/mouth intact) recoloured to one
+   per-emotion hue via the --filt filter (grayscale->sepia->hue-rotate), raining
+   down small, fast, and near-faded. A flat silhouette of a face is just a disc,
+   so we tint the glyph rather than fill its outline. */
+.rh-emorain {
+  position: absolute;
+  margin: -0.5em 0 0 -0.5em;
+  line-height: 1;
+  pointer-events: none;
+  filter: var(--filt);
+  will-change: transform, opacity;
+  animation: rhEmojiFall var(--dur) ease-in forwards;
+}
+@keyframes rhEmojiFall {
+  0%   { transform: translate(0, 0) rotate(0); opacity: 0; }
+  20%  { opacity: 0.12; } /* almost faded */
+  60%  { opacity: 0.09; }
+  100% { transform: translate(var(--dx), var(--fall)) rotate(var(--rot)); opacity: 0; }
+}
+
 /* Full-screen, non-interactive layer for pop FX. */
 .rh-bubble-fx {
   position: absolute;
@@ -1291,7 +1311,66 @@ img.rh-fx-spiralspin {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 .cf-hud-score { display: flex; align-items: baseline; gap: 10px; }
-.cf-score-val { font-size: 1.7rem; font-weight: 800; letter-spacing: 0.03em; }
+/* EMOTES = the hero. Big, warm-gold, glowing - the number people watch climb. */
+.cf-emote-val {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 2.1rem; font-weight: 900; letter-spacing: 0.02em;
+  color: #ffe8a6;
+  text-shadow: 0 0 14px rgba(255, 214, 120, 0.75), 0 0 4px rgba(255, 224, 150, 0.9), 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+/* the fanned 3-emoji currency mark - a stack of feeling-faces standing in for
+   the old ✦. Sized to the surrounding font; each chip tinted + tilted inline. */
+.cf-emote-icon {
+  position: relative;
+  display: inline-block;
+  width: 1.35em; height: 1em;
+  flex: 0 0 auto;
+  vertical-align: -0.12em;
+}
+.cf-emote-icon .cf-emote-chip {
+  position: absolute; left: 50%; top: 50%;
+  margin: -0.5em 0 0 -0.5em;          /* centre each 1em glyph on the box */
+  width: 1em; height: 1em; line-height: 1em;
+  font-size: 0.86em;
+  text-align: center;
+  transform-origin: 50% 60%;
+  filter: none;                        /* per-chip tint set inline */
+  -webkit-filter: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+/* a gain pulse: the hero number kicks up a touch whenever the target rises */
+.cf-emote-val.is-gain { animation: cfEmoteGain 0.42s ease-out; }
+@keyframes cfEmoteGain {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.14); text-shadow: 0 0 22px rgba(255, 230, 150, 0.95), 0 0 8px rgba(255, 236, 170, 1), 0 1px 3px rgba(0, 0, 0, 0.85); }
+  100% { transform: scale(1); }
+}
+/* SCORE = secondary. Small, dim, sits beside the emotes as raw "pts". */
+.cf-score-val { font-size: 1.0rem; font-weight: 700; letter-spacing: 0.03em; opacity: 0.62; }
+
+/* ---- the gold ticker: "+N", the running total, then it fades away ---- */
+.cf-hud-gold {
+  display: flex; align-items: baseline; gap: 7px;
+  font-weight: 800; color: #ffd700;
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.7), 0 1px 2px rgba(0, 0, 0, 0.8);
+  transition: opacity 0.45s ease;
+}
+.cf-hud-gold.is-fading { opacity: 0; }
+.cf-hud-gold.is-bump { animation: cfGoldBump 0.4s ease-out; }
+@keyframes cfGoldBump { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
+.cf-gold-icon { font-size: 1.1rem; }
+.cf-gold-total { font-size: 1.25rem; letter-spacing: 0.02em; }
+.cf-gold-delta {
+  font-size: 0.95rem; font-weight: 900; color: #fff2b0;
+  text-shadow: 0 0 10px rgba(255, 230, 120, 0.95);
+}
+.cf-gold-delta.is-pop { animation: cfGoldDelta 1.1s ease-out; }
+@keyframes cfGoldDelta {
+  0% { opacity: 0; transform: translateY(6px) scale(0.9); }
+  20% { opacity: 1; transform: translateY(0) scale(1.1); }
+  70% { opacity: 1; transform: translateY(-2px) scale(1); }
+  100% { opacity: 0; transform: translateY(-8px) scale(1); }
+}
 
 /* ---- the multiplier badge (Balatro-style chip; fire tiers ride the streak) ---- */
 .cf-mult-badge {
@@ -1734,6 +1813,38 @@ img.rh-fx-spiralspin {
 .cf-pick--sin { border-color: rgba(255, 138, 138, 0.65); color: #ff8a8a; background: rgba(40, 12, 16, 0.6); }
 .cf-pick--toy { border-color: rgba(102, 224, 208, 0.6); color: #66e0d0; background: rgba(14, 34, 32, 0.55); }
 .cf-pick--spent { border-color: rgba(150, 158, 168, 0.35); filter: grayscale(1); opacity: 0.45; animation: none; }
+
+/* ---- the active-habits rail: the always-on Warren upgrades trained this run,
+   stacked 2-up in the left HUD column under the score/heat block. Near-transparent
+   until a tile is hovered (the drafted modifiers ride the .cf-picks ribbon up top).
+   Nested in .cf-hud, so the Eye toggle folds it away for free. ---- */
+.cf-hud-actives {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 6px;
+  margin-top: 6px;
+  max-width: 16rem;
+}
+.cf-hud-actives:empty { display: none; }
+.cf-hud-active-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(156, 232, 160, 0.35);
+  background: rgba(20, 30, 20, 0.4);
+  color: #cfeecf;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  opacity: 0.22;
+  pointer-events: auto;   /* re-enable hover inside the pointer-events:none .cf-hud */
+  transition: opacity 0.15s ease;
+  animation: cfToastIn 0.25s ease-out;
+}
+.cf-hud-active-item:hover { opacity: 1; }
+.cf-hud-active-glyph { font-size: 0.95rem; flex: none; }
+.cf-hud-active-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- the Eye: hide/show the run HUD (bottom-right) ---- */
 .cf-eye-btn {

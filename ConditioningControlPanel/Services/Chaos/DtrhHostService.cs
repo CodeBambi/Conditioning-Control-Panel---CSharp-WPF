@@ -887,6 +887,15 @@ internal static class DtrhHostService
                 magnetEnabled = cfg.MagnetEnabled,
                 popupHeartEnabled = cfg.PopupHeartEnabled,
                 pendulumSwing = cfg.PendulumSwing,
+                // The persistent habits (Warren upgrades) that actually shape this run,
+                // surfaced in the left-rail HUD (the drafted modifiers already ride the
+                // top ribbon). extreme_tier only unlocks a difficulty tier - no in-run
+                // effect - so it's filtered out.
+                ownedHabitIds = meta.PurchasedUpgrades
+                    .Where(id => ChaosMeta.IsUpgradeActive(id)
+                                 && id != "extreme_tier"
+                                 && ChaosUpgrades.ById(id) != null)
+                    .ToList(),
                 rankIndex = (int)ChaosMeta.RankIndex,
                 runsCompleted = meta.RunsCompleted,
                 equippedStartBoon = meta.EquippedStartBoon,
