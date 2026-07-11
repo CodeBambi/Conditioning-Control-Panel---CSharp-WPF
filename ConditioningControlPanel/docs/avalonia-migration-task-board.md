@@ -155,6 +155,9 @@ environmentally invalidate the "not-worse than benchmark-optimized.json" compari
   Idle/Active path runs clean (that is where the IMP-2 141.6/144.2 numbers came from); only the Release
   max-intensity full-session window-show path crashes. A fresh MaxIntensity re-baseline cannot be captured on
   this machine until that crash is fixed — see the new row directly below.
+  **UPDATE 2026-07-11:** that SIGSEGV is **no longer reproducible at HEAD `1b6bbb6c`** (full clean 240s
+  `--max-benchmark`, exit 0 — see the SIGSEGV row's LIVE-REPRO RESULT). The harness runs again; the remaining
+  blocker for an *env-valid* re-baseline is the undecodable `youtube.com/watch` stress URLs, not the crash.
 
 ### Release Windows head SIGSEGV at window-show (flag-independent) · **JUDGMENT (native crash) — BLOCKS row #2 re-baseline + all Release verification** (filed 2026-07-10)
 
@@ -210,6 +213,29 @@ native-interop-timing) fault, observed on THIS machine (run via `dotnet run -c R
     exits, launch the Release head to repro, let WER capture the SIGSEGV dump, then dispatch the fable-5
     JUDGMENT triage on THAT dump (LibVLC-init vs Skia-context) — root-causing without the real dump would
     be speculation. Tooling is staged: `dotnet-dump` installed to `ConditioningControlPanel/.tools`.
+  - **LIVE-REPRO RESULT 2026-07-11 · @driver — NOT REPRODUCIBLE AT HEAD `1b6bbb6c`. ROW EFFECTIVELY
+    RESOLVED (monitoring).** The owner's retest build had sat idle 8h+ (telemetry: zero interaction since
+    launch), so — with advisor sign-off — the idle Debug PID 20240 was SIGKILLed to free the shared
+    `.instance.lock` (retest surface is relaunchable byte-for-byte from the same on-disk `1b6bbb6c` exe), the
+    Release head was launched with `--max-benchmark` (env `DOTNET_DbgEnableMiniDump=1`/`Type=4` PLUS the armed
+    WER, belt-and-braces), and the instance was relaunched immediately after. **Outcome: no SIGSEGV.** The
+    exact prior crash point now SUCCEEDS — `[BENCH] MainWindow shown at 2691.8 ms`, then a full clean 4-min
+    MAX-INTENSITY run: PHASE 1 + PHASE 2 (web video) + PHASE 3 (Chaos) all COMPLETE, `AvgFps=76.7 MaxFps=143
+    AvgCPU=25.2% PeakCPU=70.7% WorkingSet=2475MB Managed=747MB`, report written to
+    `bin/Release/…/benchmark-report.json`, **process exited 0, no dump, no crash.log**. The pre-existing crash
+    (2/2 at `00ea03ad`, 1/1 at `c9475bdd`) has been **fixed by intervening work between `c9475bdd` and
+    `1b6bbb6c`** (no bisect done — not worth it now that it's gone). WER stays ARMED to auto-catch any
+    regression. **This UNBLOCKS row #2 (re-baseline) and all Release verification** — the Release perf harness
+    runs end-to-end again.
+  - **Owner retest surface restored:** Debug `1b6bbb6c` relaunched as PID 27484 (no rebuild); fresh telemetry
+    shows a healthy `TubeAnchor attached=true finalScale=0.738` settle (byte-identical to pre-kill), no
+    crash.log. AvatarTube retest still pending owner eyes — the instance was merely cycled, same build.
+  - **Perf COMPARISON still environmentally invalid on this box (expected, not a regression):** AvgFps 76.7
+    is below the 07-05 run's 138.7, but both are dragged by the SAME confound the 07-05 analysis already
+    root-caused — Phase 2's 120s web video (the 3 `youtube.com/watch` URLs in `BenchmarkContext.cs`) fails to
+    decode here → LibVLC retry storm → CPU burn + the `MinFps=0` stall. The **FPS floor HELD** (76.7 ≫ 30).
+    The bundled `BenchmarkContext.cs` URL swap (below) is now the clear enabling step for an env-valid 240s
+    re-baseline; that is a code change and will need a kill→gate→relaunch exe cycle around PID 27484.
 
 ### #3 — WP2b optional libmpv render-API engine-swap spike · **JUDGMENT (spike, benchmark-gated)**
 
