@@ -147,14 +147,14 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private const double MaxScale = 1.5;
         private const double ScaleStep = 0.25;
 
-        private const double DesignWidth = 780;
-        private const double DesignHeight = 1020;
-        private const double BaseOffsetFromParent = -350;
-        private const double VerticalOffset = 20;
+        // Design canvas / anchor constants (780x1020, -350 overlap, +20 vertical) live in
+        // TubeAnchorController - the single owner of the windowing concern.
         private const double FloatDistance = 4;
         private const double FloatDuration = 2.0;
 
-        private double _scaleFactor = 1.0;
+        // Windowing concern (sizing + anchoring + parent follow) - single owner.
+        // See TubeAnchorController: the ONLY writer of Position and ContentViewbox size.
+        private TubeAnchorController? _anchor;
         private double _currentScale = 1.0;
         private double _floatPhase;
         private bool _hiddenForFullscreen;
@@ -189,11 +189,17 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         {
             InitializeComponent();
 
+            _logger = App.Services.GetRequiredService<ILogger<AvatarTubeWindow>>();
+            _parentWindow = parentWindow;
+            // Do not set Owner - it causes black-window/minimize artifacts.
+            // Z-order and visibility are managed manually via parent events and Win32 topmost toggles.
+
+            // All windowing (sizing, anchoring, parent follow) is owned by TubeAnchorController.
             // Size the content before the window is shown so SizeToContent doesn't blow up
             // to the unbounded Viewbox desired size.
-            CalculateScaleFactor();
-
-            _logger = App.Services.GetRequiredService<ILogger<AvatarTubeWindow>>();
+            _anchor = new TubeAnchorController(this, ContentViewbox, parentWindow, _logger);
+            _anchor.RecomputeScreenScale();
+            _anchor.ApplySizing();
             _settings = App.Services.GetRequiredService<global::ConditioningControlPanel.Core.Services.Settings.ISettingsService>();
             _audioPlayer = App.Services.GetService<IAudioPlayer>();
             _progression = App.Services.GetService<IProgressionService>();
@@ -207,10 +213,6 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             _portraitService = App.Services.GetService<IAvatarPortraitService>();
             if (_modService != null)
                 _modService.ActiveModChanged += OnModChanged;
-_parentWindow = parentWindow;
-            // Do not set Owner - it causes black-window/minimize artifacts.
-            // Z-order and visibility are managed manually via parent events and Win32 topmost toggles.
-
             _poseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
             _poseTimer.Tick += (_, _) => PoseTimer_Tick();
 
@@ -260,7 +262,13 @@ _parentWindow = parentWindow;
             SetTubeStyle(!_isAttached);
             ApplyTubeLayoutOffsets();
 
-            WireParentEvents();
+            // Behavioral responses to parent transitions (show/hide, gif pause, z-order);
+            // the synchronous position/size follow itself lives inside the controller.
+            _anchor.ParentActivated += (_, _) => OnParentActivated();
+            _anchor.ParentWindowStateChanged += (_, state) => OnParentWindowStateChanged(state);
+            _anchor.ParentIsVisibleChanged += (_, visible) => OnParentVisibleChanged(visible);
+            _anchor.ParentClosed += (_, _) => OnParentClosed();
+            _anchor.Start();
 
             _achievementService = global::ConditioningControlPanel.Avalonia.App.Services?.GetService<IAchievementService>();
             if (_achievementService != null)
@@ -385,21 +393,6 @@ _parentWindow = parentWindow;
             }
         }
 
-        private void WireParentEvents()
-        {
-            if (_parentWindow == null) return;
-            _parentWindow.PositionChanged += ParentWindow_PositionChanged;
-            _parentWindow.PropertyChanged += ParentWindow_PropertyChanged;
-            // WPF parity (AvatarTube/AvatarTubeWindow.xaml.cs L189-194): the WPF head also
-            // wires parent SizeChanged and Activated to reposition. A resize (user drag,
-            // theme/mod relayout) changes ClientSize WITHOUT firing PositionChanged, and
-            // Activated is the settled "second chance" pass after minimize/restore and
-            // fullscreen exits - without both, the tube rests in a stale spot.
-            _parentWindow.SizeChanged += ParentWindow_SizeChanged;
-            _parentWindow.Activated += ParentWindow_Activated;
-            _parentWindow.Closed += ParentWindow_Closed;
-        }
-
         private bool IsEffectivelyMinimized()
         {
             return _parentWindow?.WindowState == WindowState.Minimized || !IsVisible;
@@ -417,17 +410,9 @@ _parentWindow = parentWindow;
             // WPF parity (AvatarTube/AvatarTubeWindow.xaml.cs L534-539): the tube window is a
             // FIXED size pinned to the deterministic ContentViewbox.Width/Height (design x scale),
             // so the speech bubble stays a pure in-design-space overlay and can never resize the
-            // window. Without this pin the window kept its first-render ClientSize while
-            // ContentViewbox changed (user grow/shrink via ApplyScale, mod relayout, or a greeting
-            // bubble that inflated the auto-size): the Uniform Viewbox then rescaled the avatar
-            // (shrink) and the centering math parked it high (drift up), and resizing the
-            // layered/topmost window mid-session stalled the render (freeze). Only act after the
-            // first-render freeze to Manual so this does not fight the initial auto-size pass.
-            if (ContentViewbox == null || SizeToContent != SizeToContent.Manual) return;
-            double w = ContentViewbox.Width, h = ContentViewbox.Height;
-            if (double.IsNaN(w) || w <= 0 || double.IsNaN(h) || h <= 0) return;
-            if (Math.Abs(Width - w) > 0.5) Width = w;
-            if (Math.Abs(Height - h) > 0.5) Height = h;
+            // window. The pin lives in the controller (single owner of window sizing) and only
+            // acts after the first-render freeze to Manual.
+            _anchor?.PinWindowToContent();
         }
 
         private void SpeechBubble_MouseEnter(object? sender, PointerEventArgs e)
@@ -475,10 +460,13 @@ _parentWindow = parentWindow;
             if (!_isDragging) return;
             var pos = e.GetPosition(this);
             var delta = pos - _dragStartPointerPos;
-            Position = new PixelPoint(
-                _dragStartWindowPos.X + (int)delta.X,
-                _dragStartWindowPos.Y + (int)delta.Y);
-            ClampAvatarPosition();
+            // Pointer deltas are LOGICAL units while Position is PHYSICAL px - convert via
+            // RenderScaling or the drag lags the cursor on >100% DPI monitors. The write goes
+            // through the controller (single writer of Position), which also clamps to screen.
+            double s = RenderScaling;
+            _anchor?.MoveTo(new PixelPoint(
+                _dragStartWindowPos.X + (int)Math.Round(delta.X * s),
+                _dragStartWindowPos.Y + (int)Math.Round(delta.Y * s)));
         }
 
         private void Window_PointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -499,7 +487,7 @@ _parentWindow = parentWindow;
                 if (next != _currentScale)
                 {
                     _currentScale = next;
-                    ApplyScale();
+                    _anchor?.SetUserScale(_currentScale);
                     UpdateResizeMenuState();
                 }
                 e.Handled = true;
@@ -564,7 +552,7 @@ _parentWindow = parentWindow;
             if (!_isAttached && _currentScale > MinScale)
             {
                 _currentScale = Math.Max(MinScale, _currentScale - ScaleStep);
-                ApplyScale();
+                _anchor?.SetUserScale(_currentScale);
                 UpdateResizeMenuState();
             }
         }
@@ -573,7 +561,7 @@ _parentWindow = parentWindow;
             if (!_isAttached && _currentScale < MaxScale)
             {
                 _currentScale = Math.Min(MaxScale, _currentScale + ScaleStep);
-                ApplyScale();
+                _anchor?.SetUserScale(_currentScale);
                 UpdateResizeMenuState();
             }
         }
@@ -1707,7 +1695,8 @@ _parentWindow = parentWindow;
         private void OnLoaded(object? sender, RoutedEventArgs e)
         {
             Topmost = false;
-            CalculateScaleFactor();
+            _anchor?.RecomputeScreenScale();
+            _anchor?.ApplySizing();
             Dispatcher.UIThread.Post(() =>
             {
                 if (_parentWindow?.IsVisible == true && _parentWindow.WindowState != WindowState.Minimized)
@@ -1737,22 +1726,10 @@ _parentWindow = parentWindow;
             // scale), NOT the transient ClientSize: OnLoaded posts ShowGreeting(), so a greeting
             // speech bubble can already have inflated the SizeToContent=WidthAndHeight ClientSize
             // by first render - freezing to that oversized value letterboxes the avatar smaller
-            // and high in a too-big window. WPF freezes to ContentViewbox and keeps it pinned via
-            // ContentViewbox_SizeChanged (xaml.cs L534-539). Set Manual BEFORE assigning
-            // Width/Height - Avalonia discards explicit sizes while auto-sizing is still active.
-            double freezeW = ContentViewbox?.Width ?? double.NaN;
-            double freezeH = ContentViewbox?.Height ?? double.NaN;
-            if (double.IsNaN(freezeW) || freezeW <= 0 || double.IsNaN(freezeH) || freezeH <= 0)
-            {
-                freezeW = ClientSize.Width;
-                freezeH = ClientSize.Height;
-            }
-            SizeToContent = SizeToContent.Manual;
-            if (freezeW > 0 && freezeH > 0)
-            {
-                Width = freezeW;
-                Height = freezeH;
-            }
+            // and high in a too-big window. The freeze (Manual BEFORE Width/Height) and the
+            // follow-up anchor are owned by the controller.
+            _anchor?.FreezeWindowSize();
+            _anchor?.UpdatePosition();
             InvalidateVisual();
         }
 
@@ -1771,14 +1748,7 @@ _parentWindow = parentWindow;
             _zOrderRefreshTimer?.Stop();
             StopVoiceLineAudio();
             UnwireCompanionReactionEvents();
-            if (_parentWindow != null)
-            {
-                _parentWindow.PositionChanged -= ParentWindow_PositionChanged;
-                _parentWindow.PropertyChanged -= ParentWindow_PropertyChanged;
-                _parentWindow.SizeChanged -= ParentWindow_SizeChanged;
-                _parentWindow.Activated -= ParentWindow_Activated;
-                _parentWindow.Closed -= ParentWindow_Closed;
-            }
+            _anchor?.Dispose();
             if (_achievementService != null)
             {
                 _achievementService.AchievementUnlocked -= OnAchievementUnlocked;
@@ -1801,27 +1771,14 @@ _parentWindow = parentWindow;
             base.OnClosed(e);
         }
 
-        // ===== Parent window event handlers =====
-        private void ParentWindow_PositionChanged(object? sender, EventArgs e)
-        {
-            if (_parentWindow?.WindowState == WindowState.Minimized) return;
-            // Follow the parent synchronously for lag-free glue. Do NOT reassert z-order here: WPF's
-            // LocationChanged handler doesn't, and calling BringAttachedPairToFront() on every move
-            // event issues a SetWindowPos per mouse-move during a drag, which visibly stutters the
-            // follow. Z-order is kept fresh by _zOrderRefreshTimer and the attach/activate/reappear
-            // paths instead.
-            UpdatePosition();
-        }
+        // ===== Parent window behavioral responses =====
+        // The synchronous position/size FOLLOW lives inside TubeAnchorController (it
+        // subscribes PositionChanged/SizeChanged/PropertyChanged/Activated itself and, on
+        // Windows, a WndProc hook that tracks the OS move loop). These callbacks own only
+        // the behavioral side: show/hide, gif pause, z-order, and the deferred
+        // second-chance passes after minimize/restore.
 
-        private void ParentWindow_SizeChanged(object? sender, SizeChangedEventArgs e)
-        {
-            // WPF parity: parent SizeChanged -> reposition. Synchronous like PositionChanged
-            // so the pair stays glued during a live resize; no z-order work here either.
-            if (_parentWindow?.WindowState == WindowState.Minimized) return;
-            UpdatePosition();
-        }
-
-        private void ParentWindow_Activated(object? sender, EventArgs e)
+        private void OnParentActivated()
         {
             // WPF parity: Activated fires right after minimize/restore and exclusive-
             // fullscreen exits, once the -32000 restore parking position has settled -
@@ -1842,18 +1799,10 @@ _parentWindow = parentWindow;
             }, DispatcherPriority.Background);
         }
 
-        private void ParentWindow_PropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
-        {
-            if (e.Property == Window.WindowStateProperty)
-                ParentWindow_StateChanged(sender, e);
-            else if (e.Property == Visual.IsVisibleProperty)
-                ParentWindow_IsVisibleChanged(sender, e);
-        }
-
-        private void ParentWindow_StateChanged(object? sender, EventArgs e)
+        private void OnParentWindowStateChanged(WindowState state)
         {
             if (_parentWindow == null) return;
-            switch (_parentWindow.WindowState)
+            switch (state)
             {
                 case WindowState.Minimized:
                     PauseAvatarGif();
@@ -1871,8 +1820,8 @@ _parentWindow = parentWindow;
                             BringAttachedPairToFront();
                             // Second pass: at the instant WindowState flips back the platform
                             // can still report the minimized -32000 parking position, which the
-                            // out-of-range guard rejects. Re-anchor once the restore settled
-                            // (WPF gets this pass for free from its Activated wiring).
+                            // controller's transient guard skips. Re-anchor once the restore
+                            // settled (WPF gets this pass for free from its Activated wiring).
                             Dispatcher.UIThread.Post(() =>
                             {
                                 if (_isAttached && _parentWindow?.IsVisible == true
@@ -1888,10 +1837,9 @@ _parentWindow = parentWindow;
             }
         }
 
-        private void ParentWindow_IsVisibleChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+        private void OnParentVisibleChanged(bool visible)
         {
             if (_parentWindow == null) return;
-            bool visible = (bool)e.NewValue!;
             if (visible && _parentWindow.WindowState != WindowState.Minimized && _settings?.Current?.AvatarEnabled == true)
             {
                 ResumeAvatarGif();
@@ -1905,7 +1853,7 @@ _parentWindow = parentWindow;
             }
         }
 
-        private void ParentWindow_Closed(object? sender, EventArgs e)
+        private void OnParentClosed()
         {
             if (_isAttached)
             {

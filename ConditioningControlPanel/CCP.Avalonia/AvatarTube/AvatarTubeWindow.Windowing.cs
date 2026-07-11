@@ -16,15 +16,17 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ConditioningControlPanel.Avalonia.AvatarTube
 {
+    // NOTE (2026-07 windowing rewrite): all sizing + anchoring + parent-follow logic
+    // lives in TubeAnchorController (the single writer of Window.Position and of
+    // ContentViewbox.Width/Height). This partial keeps only NON-anchoring window
+    // behavior: fullscreen auto-hide, float animation, attach/detach orchestration,
+    // z-order helpers, and the chaos-run park/reattach hooks.
     public partial class AvatarTubeWindow
     {
         private IntPtr _tubeHandle;
         private IntPtr _parentHandle;
-        private bool _reassertingAboveParent;
         private IScreenProvider? _screenProvider;
         private string _diagLastFullscreenWindow = "(none)";
-        private int _anchorRetryCount;
-        private const int MaxAnchorRetries = 3;
 
         // Win32 constants (kept for reference; P/Invoke calls are Windows-only and stubbed here).
         private const uint SWP_NOMOVE = 0x0002;
@@ -87,10 +89,8 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 // Mirror the WPF head (AvatarTube/AvatarTubeWindow.Windowing.cs): only clear the
                 // flag and Show() once the parent is actually visible and NOT minimized. During
                 // exclusive-fullscreen exit the parent is transiently minimized and reports
-                // Position ~(-32000,-32000); showing then makes UpdatePosition() anchor off-screen,
-                // hit its out-of-range guard, silently skip the move, and leave the tube parked in
-                // the wrong spot with nothing to re-trigger it ("reappears in the wrong place").
-                // Keeping the flag set retries on the next tick until the parent settles.
+                // Position ~(-32000,-32000); showing then would anchor off a transient parking
+                // spot. Keeping the flag set retries on the next tick until the parent settles.
                 bool parentReady = _parentWindow?.IsVisible == true
                                    && _parentWindow.WindowState != WindowState.Minimized;
                 if (parentReady && _wasAttachedBeforeFullscreen && _settings?.Current?.AvatarEnabled == true)
@@ -98,14 +98,15 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                     _hiddenForFullscreen = false;
                     Show();
                     // Defer the anchor one dispatcher pass so the just-shown window has a settled
-                    // size/scale before UpdatePosition() reads RenderScaling (running synchronously
-                    // here can sample a pre-layout transient). Re-derive scale too in case the
-                    // monitor/DPI changed while we were hidden. Design-size anchoring is untouched.
+                    // size/scale before the controller reads RenderScaling (running synchronously
+                    // here can sample a pre-layout transient). Re-derive the screen-fit scale too
+                    // in case the monitor/DPI changed while we were hidden.
                     Dispatcher.UIThread.Post(() =>
                     {
                         if (_isAttached)
                         {
-                            CalculateScaleFactor();
+                            _anchor?.RecomputeScreenScale();
+                            _anchor?.ApplySizing();
                             UpdatePosition();
                         }
                         BringAttachedPairToFront(true);
@@ -228,112 +229,13 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
 #endif
         }
 
-        private void CalculateScaleFactor()
-        {
-            try
-            {
-                // WPF parity (AvatarTube/AvatarTubeWindow.Windowing.cs CalculateScaleFactor):
-                // the WPF head sizes against Screen.PrimaryScreen.WorkingArea converted to
-                // LOGICAL units (divided by the DPI scale). Prefer the primary screen for the
-                // same basis, and divide Avalonia's physical-pixel WorkingArea by Scaling -
-                // otherwise a >100% DPI monitor computes an inflated scale factor.
-                var screen = Screens.Primary ?? Screens.ScreenFromWindow(this);
-                if (screen != null)
-                {
-                    double scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
-                    double workH = screen.WorkingArea.Height / scaling;
-                    double workW = screen.WorkingArea.Width / scaling;
-                    double maxHeightScale = (workH * 0.85) / DesignHeight;
-                    double maxWidthScale = (workW * 0.3) / DesignWidth;
-                    _scaleFactor = Math.Max(0.4, Math.Min(1.0, Math.Min(maxHeightScale, maxWidthScale)));
-                }
-                else
-                {
-                    _scaleFactor = 0.7;
-                }
-            }
-            catch
-            {
-                _scaleFactor = 0.7;
-            }
-
-            if (ContentViewbox != null)
-            {
-                ContentViewbox.Width = DesignWidth * _scaleFactor;
-                ContentViewbox.Height = DesignHeight * _scaleFactor;
-            }
-        }
-
-        private void ApplyScale()
-        {
-            if (ContentViewbox != null)
-            {
-                ContentViewbox.Width = DesignWidth * _scaleFactor * _currentScale;
-                ContentViewbox.Height = DesignHeight * _scaleFactor * _currentScale;
-            }
-            ClampAvatarPosition();
-        }
-
-        private void ClampAvatarPosition()
-        {
-            if (_screenProvider == null) return;
-            var screens = _screenProvider.GetAllScreens();
-            var screen = screens.FirstOrDefault(s => s.Bounds.X <= Position.X && Position.X < s.Bounds.Right
-                                                  && s.Bounds.Y <= Position.Y && Position.Y < s.Bounds.Bottom)
-                        ?? _screenProvider.GetPrimaryScreen();
-            if (screen == null) return;
-
-            int w = (int)Math.Max(1, Width);
-            int h = (int)Math.Max(1, Height);
-            int x = Math.Clamp(Position.X, (int)screen.WorkingArea.X, (int)(screen.WorkingArea.Right - w));
-            int y = Math.Clamp(Position.Y, (int)screen.WorkingArea.Y, (int)(screen.WorkingArea.Bottom - h));
-            Position = new PixelPoint(x, y);
-        }
-
+        /// <summary>
+        /// Re-anchors the attached tube to the parent's left edge. Delegates to
+        /// <see cref="TubeAnchorController"/> - the single writer of Window.Position.
+        /// </summary>
         public void UpdatePosition()
         {
-            if (!_isAttached || _parentWindow == null) return;
-            if (_parentWindow.ClientSize.Height <= 0 || _parentWindow.ClientSize.Width <= 0) return;
-            if (_parentWindow.Position.X == 0 && _parentWindow.Position.Y == 0 && _parentWindow.ClientSize.Height < 100) return;
-
-            // Anchor on the DETERMINISTIC design size (the same values ContentViewbox is
-            // sized with in CalculateScaleFactor) instead of the live ClientSize: the window
-            // opens with SizeToContent=WidthAndHeight and only freezes to Manual on first
-            // render, so ClientSize is timing-dependent - late-loading tube art or an open
-            // speech bubble inflating it made this centering math park the tube too HIGH,
-            // where it stayed ("avatar drifts up"). Design-based anchoring keeps the tube
-            // put no matter what transient content does to the window size.
-            double tubeWidth = DesignWidth * _scaleFactor;
-            double tubeHeight = DesignHeight * _scaleFactor;
-            double scaledOffset = BaseOffsetFromParent * _scaleFactor;
-
-            // Window.Position is PHYSICAL pixels while ClientSize and the design constants
-            // are LOGICAL units - convert via the parent's scaling or the pair drifts apart
-            // on monitors above 100% DPI (attached tube shares the parent's monitor).
-            double s = _parentWindow.RenderScaling;
-
-            double newLeft = _parentWindow.Position.X - (tubeWidth + scaledOffset) * s;
-            double newTop = _parentWindow.Position.Y + ((_parentWindow.ClientSize.Height - tubeHeight) / 2 + VerticalOffset * _scaleFactor) * s;
-            if (newTop < -500 || newTop > 5000 || newLeft < -2000 || newLeft > 5000)
-            {
-                // Transient parent geometry (e.g. the -32000 minimized parking spot while a
-                // restore is still in flight). Never strand the tube where Show() parked it:
-                // retry on a short one-shot timer until the parent settles. Bounded so a
-                // parent legitimately parked out of range cannot spin this forever.
-                if (_anchorRetryCount < MaxAnchorRetries)
-                {
-                    _anchorRetryCount++;
-                    var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
-                    retry.Tick += (_, _) => { retry.Stop(); UpdatePosition(); };
-                    retry.Start();
-                }
-                return;
-            }
-            _anchorRetryCount = 0;
-
-            // Round rather than truncate: (int) floors, which accumulates a sub-pixel up/left bias
-            // versus the WPF head (which positions in logical DIPs without truncation).
-            Position = new PixelPoint((int)Math.Round(newLeft), (int)Math.Round(newTop));
+            _anchor?.UpdatePosition();
         }
 
         private void StartFloatingAnimation()
@@ -372,10 +274,14 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             else Attach();
         }
 
-        private void Attach()
+        public void Attach()
         {
             _isAttached = true;
             Topmost = false;
+
+            // Controller resumes parent-follow sizing (parent ratio, user zoom off)
+            // and re-anchors immediately.
+            _anchor?.SetAttached(true);
 
             // Switch back to original tube image and attached layout.
             SetTubeStyle(false);
@@ -386,10 +292,13 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             BringAttachedPairToFront(true);
         }
 
-        private void Detach()
+        public void Detach()
         {
             _isAttached = false;
             Topmost = true;
+
+            // Controller stops parent-ratio sizing; detached user zoom applies.
+            _anchor?.SetAttached(false);
 
             // Switch to alternative tube image and detached layout.
             SetTubeStyle(true);
@@ -440,10 +349,11 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
 #if WINDOWS
                 try
                 {
-                    var helper = new WindowInteropHelper(this);
-                    var parentHelper = new WindowInteropHelper(_parentWindow);
-                    SetWindowPos(helper.Handle, new IntPtr(-1), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-                    SetWindowPos(parentHelper.Handle, new IntPtr(-1), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                    IntPtr tube = _tubeHandle != IntPtr.Zero ? _tubeHandle : (this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero);
+                    IntPtr parent = _parentHandle != IntPtr.Zero ? _parentHandle : (_parentWindow.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero);
+                    if (tube == IntPtr.Zero || parent == IntPtr.Zero) return;
+                    SetWindowPos(tube, new IntPtr(-1), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                    SetWindowPos(parent, new IntPtr(-1), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
                 }
                 catch { }
 #endif
@@ -456,13 +366,14 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
 #if WINDOWS
             try
             {
-                var helper = new WindowInteropHelper(this);
-                int exStyle = GetWindowLong(helper.Handle, GWL_EXSTYLE);
+                IntPtr handle = _tubeHandle != IntPtr.Zero ? _tubeHandle : (this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero);
+                if (handle == IntPtr.Zero) return;
+                int exStyle = GetWindowLong(handle, GWL_EXSTYLE);
                 int newExStyle = isToolWindow
                     ? exStyle | WS_EX_TOOLWINDOW
                     : exStyle & ~WS_EX_TOOLWINDOW;
-                SetWindowLong(helper.Handle, GWL_EXSTYLE, newExStyle);
-                SetWindowPos(helper.Handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                SetWindowLong(handle, GWL_EXSTYLE, newExStyle);
+                SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
             }
             catch { }
 #endif
@@ -485,16 +396,6 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             return true;
         }
 
-        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            return IntPtr.Zero;
-        }
-
-        private IntPtr ParentWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            return IntPtr.Zero;
-        }
-
         public void SetChaosRunActive(bool active)
         {
             _chaosRunActive = active;
@@ -505,7 +406,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             }
             else if (_reattachAfterChaos)
             {
-                if (_settings?.Current?.AvatarEnabled == true && PlatformImpl != null)
+                if (_settings?.Current?.AvatarEnabled == true && this.TryGetPlatformHandle() != null)
                 {
                     Show();
                     UpdatePosition();

@@ -602,6 +602,33 @@ dead/wrong parent reference after session auto-resume.
 owner-visible symptom** — kept only as a correct WPF-invariant base for the rebuild. The rewrite below
 supersedes this file's windowing logic wholesale.
 
+**REBUILD LANDED (this commit — needs owner retest with telemetry live).** New single-responsibility
+`CCP.Avalonia/AvatarTube/TubeAnchorController.cs` (SINGLE writer of `Window.Position` + `ContentViewbox`
+size); `AvatarTubeWindow.Windowing.cs` slimmed 521→422, windowing bits in `axaml.cs` delegate to it; public
+API (`Attach/Detach/SetDetached/UpdatePosition`, ctor) + AXAML look/feel + speech/chat/pose/emote untouched.
+Root-cause fixes: **(a) "static / not following"** = WPF LOGICAL `-500/5000/-2000` bounds guard was copied
+into Avalonia PHYSICAL-px space, tripped, and stranded the tube at its `Show()` spot — REMOVED; replaced by
+transient-only guards (Minimized / empty `ClientSize` / `≤ -30000` sentinel) + bounded 3×150ms self-healing
+retry (resets on success, external re-anchor via Activated/StateChanged). **(b) "smaller / top-of-center"** =
+physical-px anchor math via `parent.RenderScaling` (overlap `350*finalScale`, vertical center `+20*finalScale`).
+**(c) "laggy"** = Windows `Win32Properties.AddWndProcHookCallback` on the PARENT (`WM_MOVING=0x0216` /
+`WM_WINDOWPOSCHANGED=0x0047`) repositions the tube in the same OS compose pass (field-held delegate,
+`OperatingSystem.IsWindows()`-guarded, observe-only, silent fallback to `PositionChanged`; Linux/macOS use
+`PositionChanged`). **NEW owner requirement — tube scales WITH the main window:** `finalScale =
+clamp(screenScale * parentClientHeight / ReferenceParentHeight(=1000), 0.30, screenScale) * detachedUserZoom`
+— at the default main size `finalScale == screenScale` (looks like today), grows/shrinks proportionally as
+the main window resizes, hard-capped by the old screen-fit clamp so it never exceeds the monitor. Debug
+anchor-trace telemetry on every reposition (parent Position/ClientSize/RenderScaling, screenScale,
+parentRatio, finalScale, tube size, newLeft/newTop, guard branch) — a failed retest is a log read, not a
+guess. **Gates:** slnf 0 err, WPF sln 0 err, Core 543/543, smoke 44 tabs/0 unhandled/Findings 17.
+**`port-parity-auditor` verdict: SAFE TO COMMIT** (every WPF invariant Verified w/ correct physical-px
+conversion; single-writer airtight; lifecycle symmetric subscribe-once/dispose-once; 3 deliberate deviations
+clean). **Owner reproducer:** drag main window fast + resize it bigger/smaller + wait for speech text → tube
+tracks with no lag, stays correctly sized/centered, scales with the window. **Non-blocking N1:**
+`ReferenceParentHeight=1000` = MainWindow declared Height; the "looks like today at default" guarantee holds
+if default `ClientSize.Height ≈ 1000` — eyeball at default size (the clamp makes any error strictly
+conservative, never oversized).
+
 ---
 
 #### Prior (pre-rebuild) history
