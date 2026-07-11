@@ -1117,6 +1117,22 @@ falls off the active screen on multi-monitor rigs. Target: `CCP.Avalonia/Composi
 (compositor lane — `unified-compositor-engine` skill mandatory). WPF fix spans the full virtual screen
 + a `_spawnLeft/_spawnWidth` spawn-band. Visual-verification gated.
 
+- **PARTIAL 2026-07-11 · @driver — core drift already RESOLVED; residual is trigger-context policy, visual-gated.**
+  Grounded live: `AvaloniaGifCascadeService.ShowChaosGifCascade` (`AvaloniaHeadStubs.cs:2955`) already computes a
+  **dual-aware union stage** via `ComputeEffectStagePx()` (`:2894`) → reads `DualMonitorEnabled`, calls
+  `_screenProvider.GetEffectScreens(dual)` (primary-only when off, ALL screens when on), and unions their bounds
+  into the full virtual-screen span; `ChaosGifCascadeLayer.Restart` then spawns clips across
+  `[gifSize/2, stageWidth - gifSize/2]` of that union (`ChaosGifCascadeLayer.cs:159`). **The legacy "forced-primary"
+  drift #8a targets is GONE** — on a dual rig with DualMonitor on, rain already spans the whole virtual width, so
+  "rain falls off the active screen" no longer reproduces for the common multi-monitor case. **Residual gap:** the
+  monitor set keys off the `DualMonitorEnabled` SETTING, not the TRIGGER SOURCE — the spec wants "all monitors for a
+  dashboard trigger OR chaos+DualMonitor; primary-only for a single-screen chaos run." A single-screen chaos run
+  with DualMonitor on would currently span both. Closing that needs (1) WPF archaeology of
+  `ChaosGifCascadeOverlay.StageBounds` + `_spawnLeft/_spawnWidth` to learn the exact per-trigger policy (do NOT guess
+  — wpf-parity), then (2) a monitor-set-policy param threaded from each caller, then (3) side-by-side visual
+  verification vs WPF. Visual-gated + needs archaeology → **defer to a focused headed session**; NOT autonomous-tier
+  claimable. Autonomous half (union-stage) confirmed present.
+
 ### #8b — #493 dashboard bubble motion-override · **STANDARD**
 
 `ChaosMotionMode` (Mixed/FloatUp/RainDown/RoamBounce instead of always FloatUp) for **ambient** dashboard
