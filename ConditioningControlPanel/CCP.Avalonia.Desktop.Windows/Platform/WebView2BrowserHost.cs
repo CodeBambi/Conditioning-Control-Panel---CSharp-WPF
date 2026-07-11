@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -83,9 +84,10 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
     public event EventHandler<bool>? FullscreenChanged;
     public event EventHandler<string>? WebMessageReceived;
 
-    // Pending virtual-host mapping (applied once the embedded CoreWebView2 initializes).
-    private string? _virtualHostName;
-    private string? _virtualHostFolder;
+    // Pending virtual-host mappings (applied once the embedded CoreWebView2 initializes). Multiple mappings are
+    // supported (e.g. DTRH maps its page root Deny + asset roots Allow); re-registering a host replaces it.
+    private readonly List<(string Host, string Folder, BrowserHostResourceAccess Access)> _virtualHostMappings = new();
+    private readonly object _virtualHostLock = new();
     private bool _messagingWired;
 
     /// <summary>Optional extra Chromium command-line flags applied when the environment is first created
@@ -185,15 +187,31 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
         return uri.ToString();
     }
 
-    /// <summary>Serve a local folder under a virtual host name (WebView2 SetVirtualHostNameToFolderMapping).</summary>
+    /// <summary>Serve a local folder under a virtual host name with the historical <c>Deny</c> access kind.</summary>
     public void SetVirtualHostToFolder(string hostName, string folder)
+        => SetVirtualHostToFolder(hostName, folder, BrowserHostResourceAccess.Deny);
+
+    /// <summary>Serve a local folder under a virtual host name with an explicit cross-origin access kind
+    /// (WebView2 <c>SetVirtualHostNameToFolderMapping</c>). Supports multiple simultaneous mappings; a repeat
+    /// host name replaces its prior mapping.</summary>
+    public void SetVirtualHostToFolder(string hostName, string folder, BrowserHostResourceAccess access)
     {
-        _virtualHostName = hostName;
-        _virtualHostFolder = folder;
+        lock (_virtualHostLock)
+        {
+            _virtualHostMappings.RemoveAll(m => string.Equals(m.Host, hostName, StringComparison.OrdinalIgnoreCase));
+            _virtualHostMappings.Add((hostName, folder, access));
+        }
         // Apply immediately if the core is already up (e.g. set after a Navigate).
         if (_embeddedHost?.WebView?.CoreWebView2 is { } core)
             ApplyVirtualHostAndMessaging(core);
     }
+
+    private static CoreWebView2HostResourceAccessKind ToWebView2Access(BrowserHostResourceAccess access) => access switch
+    {
+        BrowserHostResourceAccess.DenyCors => CoreWebView2HostResourceAccessKind.DenyCors,
+        BrowserHostResourceAccess.Allow => CoreWebView2HostResourceAccessKind.Allow,
+        _ => CoreWebView2HostResourceAccessKind.Deny,
+    };
 
     /// <summary>Post a JSON message from host → page.</summary>
     public void PostWebMessageAsJson(string json)
@@ -208,10 +226,20 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
         try
         {
             core.Settings.IsWebMessageEnabled = true;
-            if (!string.IsNullOrEmpty(_virtualHostName) && !string.IsNullOrEmpty(_virtualHostFolder))
+            (string Host, string Folder, BrowserHostResourceAccess Access)[] mappings;
+            lock (_virtualHostLock)
+                mappings = _virtualHostMappings.ToArray();
+            foreach (var (host, folder, access) in mappings)
             {
-                core.SetVirtualHostNameToFolderMapping(
-                    _virtualHostName, _virtualHostFolder, CoreWebView2HostResourceAccessKind.Deny);
+                if (string.IsNullOrEmpty(host) || string.IsNullOrEmpty(folder))
+                    continue;
+                if (!Directory.Exists(folder))
+                {
+                    // WPF parity (ChaosWebViewHost): skip + note a missing virtual-host folder instead of throwing.
+                    Debug.WriteLine($"WebView2BrowserHost: virtual host '{host}' folder missing: {folder}");
+                    continue;
+                }
+                core.SetVirtualHostNameToFolderMapping(host, folder, ToWebView2Access(access));
             }
             if (!_messagingWired)
             {

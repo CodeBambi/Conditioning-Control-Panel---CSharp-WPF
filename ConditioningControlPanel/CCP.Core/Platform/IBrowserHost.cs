@@ -71,6 +71,37 @@ public interface IBrowserHost
     /// Serve a local <paramref name="folder"/> under a virtual host <paramref name="hostName"/> so the page
     /// can load local assets/scripts via <c>https://hostName/...</c> (ESM + import maps resolve). Required by
     /// web-hosted effects like the Chaos tunnel. Default no-op on hosts without virtual-host support.
+    /// Delegates to the access-kind overload with <see cref="BrowserHostResourceAccess.Deny"/>, preserving the
+    /// historical single-mapping behavior.
     /// </summary>
-    void SetVirtualHostToFolder(string hostName, string folder) { }
+    void SetVirtualHostToFolder(string hostName, string folder)
+        => SetVirtualHostToFolder(hostName, folder, BrowserHostResourceAccess.Deny);
+
+    /// <summary>
+    /// Serve a local <paramref name="folder"/> under a virtual host <paramref name="hostName"/> with an explicit
+    /// cross-origin <paramref name="access"/> kind. Hosts may register MULTIPLE simultaneous mappings (e.g. the
+    /// DTRH game maps its page root <c>Deny</c> plus asset roots <c>Allow</c> so WebGL texture uploads are
+    /// CORS-clean). Re-registering the same <paramref name="hostName"/> replaces its prior mapping. Default
+    /// no-op on hosts without virtual-host support.
+    /// </summary>
+    void SetVirtualHostToFolder(string hostName, string folder, BrowserHostResourceAccess access) { }
+}
+
+/// <summary>
+/// Cross-origin access kind for a virtual-host-to-folder mapping, mirroring WebView2's
+/// <c>CoreWebView2HostResourceAccessKind</c> so the portable seam need not reference WebView2 types.
+/// </summary>
+public enum BrowserHostResourceAccess
+{
+    /// <summary>Cross-origin sub-resource access (script/img <c>src</c>) allowed, but JS cross-origin requests
+    /// (XHR/Fetch) are CORS-blocked. Maps to WebView2 <c>DenyCors</c>.</summary>
+    DenyCors,
+
+    /// <summary>All cross-origin resource access denied, including sub-resource <c>src</c>. Maps to WebView2
+    /// <c>Deny</c> — the historical single-mapping default.</summary>
+    Deny,
+
+    /// <summary>All cross-origin access allowed, including JS XHR/Fetch — required for WebGL/canvas media
+    /// uploads to be CORS-clean. Maps to WebView2 <c>Allow</c>.</summary>
+    Allow,
 }
