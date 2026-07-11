@@ -498,7 +498,7 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
     try { after && after(); } catch (e) { /* ignore */ }
   }
 
-  function pick(index) {
+  function pick(index, auto = false) {
     if (state !== 'active' || !cards[index]) return;
     const chosen = cards[index];
     const boon = chosen.boon;
@@ -521,11 +521,16 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
     cards.splice(index, 1);           // ownership moves to the shatter
     spawnShatter(chosen);
     for (const c of cards) c.startFade();   // the losers fade
-    resolve(() => opts.onPick(boon, false));
+    resolve(() => opts.onPick(boon, auto));
   }
 
   function fireTimeout() {
     if (state !== 'active') return;
+    // Until the skip affordance is unlocked (runs 3+), a timeout must never leave
+    // you empty-handed: the hole chooses for you — auto-pick a random offered card
+    // (routes through onPick(boon, true), so the "she chose for you" bark fires).
+    // Once skip is unlocked, a timeout banks +1 resistance via onSkip instead.
+    if (!opts.allowSkip && cards.length) { pick((Math.random() * cards.length) | 0, true); return; }
     for (const c of cards) c.startFade();
     // onSkip owns the outcome: normal drafts bank +1 resistance (and the game
     // layer flies a shield into the HUD from resolveDraft); the scripted table
