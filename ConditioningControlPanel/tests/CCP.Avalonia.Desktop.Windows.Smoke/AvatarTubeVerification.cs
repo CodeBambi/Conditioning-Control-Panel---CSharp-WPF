@@ -156,6 +156,14 @@ internal static class AvatarTubeVerification
             Add(checks, "baseline", "single AvatarTubeWindow instance",
                 CountTubes(lifetime) == 1 ? "PASS" : "FAIL",
                 $"count={CountTubes(lifetime)}");
+            // OWNER RULING 2026-07-11: portrait mode is disabled, so in steady state AvatarBorder must
+            // NOT carry the portrait translate (TranslateTransform(10, -30) - the "shifts up" bug).
+            // Steady = null or a transform with no upward Y translation (legacy scale/X-offset are fine).
+            Add(checks, "baseline", "AvatarBorder transform steady (portrait mode disabled)",
+                tube.VerifyAvatarBorderTransformIsSteady ? "PASS" : "FAIL",
+                tube.VerifyAvatarBorderTransformIsSteady
+                    ? "no portrait Y-shift on AvatarBorder"
+                    : "portrait Y-translate present on AvatarBorder");
 
             // (c)+(d) Fire 10 consecutive speech bubbles via the PUBLIC entry, asserting geometry
             // holds after each. This is the exact owner repro (a bubble appears -> avatar must NOT

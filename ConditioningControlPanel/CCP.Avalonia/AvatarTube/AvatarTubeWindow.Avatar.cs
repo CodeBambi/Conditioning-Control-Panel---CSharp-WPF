@@ -743,7 +743,17 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         //  EMOTIVE PORTRAIT AVATAR
         // ════════════════════════════════════════════════════════════════════════════════
 
-        private bool UsePortraitSystem() => _portraitService?.HasManifestForActiveMod() ?? false;
+        // OWNER RULING 2026-07-11: portrait mode is DISABLED in the Avalonia AvatarTube. When
+        // active it assigned AvatarBorder.RenderTransform = new TranslateTransform(PortraitShiftX=10,
+        // -PortraitRaisePx=-30) (a RenderTransform, invisible to geometry checks, the "shifts up" half
+        // of the owner repro bug), used a close-up portrait skin that fills the tube (the "enlarged"
+        // half), and stopped pose cycling (_poseTimer only starts when !_portraitMode, the "freezes"
+        // half). Owner wants the avatar to ALWAYS be the full-body, centered, pose-cycling legacy
+        // avatar, so portrait mode is unreachable here and every portrait branch below is dead code.
+        // The WPF head KEEPS portrait mode ON (UsePortraitSystem AvatarTubeWindow.Avatar.cs:899-902
+        // returns Services.AvatarPortraitLoader.HasManifestForActiveMod()) - this is an intentional
+        // cross-head divergence per the owner ruling, NOT a port regression.
+        private bool UsePortraitSystem() => false;
 
         private void TryEnterPortraitMode()
         {

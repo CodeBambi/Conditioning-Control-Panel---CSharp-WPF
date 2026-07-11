@@ -236,6 +236,31 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             return (fs, winW, winH, vbW, vbH, ax, ay, aw, ah);
         }
 
+        /// <summary>OWNER RULING 2026-07-11: portrait mode is disabled (UsePortraitSystem()==false), so
+        /// AvatarBorder must NEVER carry the portrait translate (TranslateTransform(PortraitShiftX=10,
+        /// -PortraitRaisePx=-30) at AvatarTubeWindow.Avatar.cs:538/:825 - the "shifts up 30px" half of the
+        /// owner-repro shift-up+enlarged+freeze bug). True when RenderTransform is null (the common
+        /// centered case) OR a transform with no upward Y translation. The legitimate legacy transforms
+        /// all pass: null, a centered scale-only group (Circe's 0.864, the per-set 1.12 nudge), and the
+        /// X-only set offset TranslateTransform(setOffsetX, 0). Only a non-zero Y translate - the portrait
+        /// raise - fails. WPF reference: ApplyAvatarTransform portrait branch AvatarTubeWindow.Avatar.cs:830-833.</summary>
+        public bool VerifyAvatarBorderTransformIsSteady
+        {
+            get
+            {
+                var t = AvatarBorder?.RenderTransform;
+                if (t == null) return true;
+                if (t is TranslateTransform tt) return Math.Abs(tt.Y) < 0.001;
+                if (t is TransformGroup g)
+                {
+                    foreach (var child in g.Children)
+                        if (child is TranslateTransform ctt && Math.Abs(ctt.Y) > 0.001) return false;
+                    return true;
+                }
+                return true; // scale/rotate/skew only - centered, no translate
+            }
+        }
+
         /// <summary>True once the detached art-only WM_NCHITTEST hook is installed (registered in
         /// OnFirstContentRendered via Windowing.RegisterHitTestHook; removed OnClosed).</summary>
         public bool VerifyHitTestHookRegistered => _hitTestHook != null;
@@ -325,6 +350,15 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 TryEnterPortraitMode();
             else
                 TryUpdateCirceEmoteMode();
+
+            // OWNER RULING 2026-07-11 safety guard: portrait mode is disabled (UsePortraitSystem()
+            // above returns false), so the portrait translate assigned at AvatarTubeWindow.Avatar.cs:538
+            // and :825 (a bare TranslateTransform(PortraitShiftX, -PortraitRaisePx)) can never run. This
+            // one-time guard guarantees AvatarBorder never starts with that portrait shift regardless of
+            // future init ordering: a bare TranslateTransform on AvatarBorder is exclusively the portrait
+            // signature, while the legacy path uses null or a scale/translate TransformGroup.
+            if (!_portraitMode && AvatarBorder?.RenderTransform is TranslateTransform)
+                AvatarBorder.RenderTransform = null;
 
             // Apply the active mod's tube art and layout offsets on startup.
             SetTubeStyle(!_isAttached);
