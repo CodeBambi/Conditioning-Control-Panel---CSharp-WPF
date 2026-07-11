@@ -98,7 +98,7 @@ public sealed class DtrhSessionStatsStore
     private readonly object _lock = new();
     private readonly object _writeLock = new();   // WPF DtrhSessionStatsStore.cs:86 — serializes the background disk write so overlapping flushes never interleave
     private Root? _root;
-    private Task? _pendingWrite;                   // ONLY behavioral addition: exposes the last background write for tests
+    private Task _pendingWrite = Task.CompletedTask;   // background writes are CHAINED (FIFO) off this; also the test-visible flush handle
 
     public DtrhSessionStatsStore(IAppEnvironment environment, ILogger<DtrhSessionStatsStore> logger)
     {
@@ -106,8 +106,8 @@ public sealed class DtrhSessionStatsStore
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    /// <summary>Resolves when the most recent background write has completed (best-effort; never throws).</summary>
-    internal Task WhenSaved => _pendingWrite ?? Task.CompletedTask;
+    /// <summary>Resolves when all queued background writes have completed (best-effort; never throws).</summary>
+    internal Task WhenSaved => _pendingWrite;
 
     private string FilePath => Path.Combine(_environment.UserDataPath, "dtrh_session_stats.json");   // WPF: App.UserDataPath
 
@@ -201,13 +201,16 @@ public sealed class DtrhSessionStatsStore
         try { json = JsonConvert.SerializeObject(_root, Formatting.Indented); }
         catch (Exception ex) { _logger.LogWarning("DtrhSessionStatsStore serialize failed: {E}", ex.Message); return; }
         var path = FilePath;
-        _pendingWrite = Task.Run(() =>
+        // Chain each write off the previous so they run in enqueue order (latest snapshot wins) and
+        // WhenSaved awaits the whole chain. Independent Task.Run calls gave no ordering guarantee across
+        // overlapping saves, letting a stale snapshot land last under threadpool contention.
+        _pendingWrite = _pendingWrite.ContinueWith(_ =>
         {
             lock (_writeLock)
             {
                 try { File.WriteAllText(path, json); }
                 catch (Exception ex) { _logger.LogWarning("DtrhSessionStatsStore save failed: {E}", ex.Message); }
             }
-        });
+        }, TaskScheduler.Default);
     }
 }
