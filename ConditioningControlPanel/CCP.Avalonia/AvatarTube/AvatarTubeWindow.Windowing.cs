@@ -1,14 +1,17 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Core.Platform;
 using Microsoft.Extensions.DependencyInjection;
+using SkiaSharp;
 
 namespace ConditioningControlPanel.Avalonia.AvatarTube
 {
@@ -31,7 +34,176 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private IScreenProvider? _screenProvider;
         private string _diagLastFullscreenWindow = "(none)";
 
+        // ===== Detached per-region hit-testing (obs #6 retest-2 fix 3b) =====
+        // WPF layered windows hit-test per-pixel for free (alpha-0 pixels are click-
+        // through at the OS level), so the WPF detached tube never blocked the main
+        // window. Avalonia windows hit-test their whole rect (overlay-clickthrough skill
+        // rule 5), so the detached tube's transparent dead-zones swallowed clicks. The
+        // WM_NCHITTEST hook below restores per-pixel behavior: everything except the tube
+        // art returns HTTRANSPARENT while detached. Registered via Avalonia's own
+        // Win32Properties hook list - NOT SetWindowSubclass, which is banned on v12 HWNDs
+        // (native 0xC0000005 race, CompositorWindow.axaml.cs:115-122).
+        private Win32Properties.CustomWndProcHookCallback? _hitTestHook;
+        private byte[]? _tubeArtPixels;      // BGRA8888 copy of the current tube art
+        private PixelSize _tubeArtPixelSize;
+        private int _tubeArtRowBytes;
+        private const byte TubeArtAlphaThreshold = 16; // ~6% opacity counts as painted
+
+        private void RegisterHitTestHook()
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            try
+            {
+                _hitTestHook = TubeWndProcHook;
+                Win32Properties.AddWndProcHookCallback(this, _hitTestHook);
+            }
+            catch (Exception ex)
+            {
+                _hitTestHook = null;
+                _logger?.LogDebug("AvatarTube: hit-test hook registration failed ({Error}) - detached dead-zones stay clickable", ex.Message);
+            }
+        }
+
+        private void RemoveHitTestHook()
+        {
+            if (_hitTestHook == null) return;
+            try { Win32Properties.RemoveWndProcHookCallback(this, _hitTestHook); }
+            catch { /* window already torn down */ }
+            _hitTestHook = null;
+        }
+
+        private IntPtr TubeWndProcHook(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            // Attached mode keeps default hit-testing: the attached tube deliberately
+            // overlaps the main window's left edge and its z-order pair-raise depends on
+            // clicks landing on it. Only the detached tube goes art-only (the spec scope).
+            if (msg != WM_NCHITTEST || _isAttached) return IntPtr.Zero;
+            try
+            {
+                long lp = lParam.ToInt64();
+                int screenX = unchecked((short)(lp & 0xFFFF));
+                int screenY = unchecked((short)((lp >> 16) & 0xFFFF));
+                var client = this.PointToClient(new PixelPoint(screenX, screenY));
+                if (!IsPointOnTubeArt(client))
+                {
+                    // HTTRANSPARENT forwards the hit to the next window in this thread
+                    // (the main window) and lets clicks fall through the dead-zones.
+                    handled = true;
+                    return new IntPtr(HTTRANSPARENT);
+                }
+            }
+            catch
+            {
+                // Fail open: default hit-testing (clicks land on the tube). Never let an
+                // exception escape into the WndProc.
+            }
+            return IntPtr.Zero;
+        }
+
+        /// <summary>
+        /// True when the client-space point lands on interactive tube content: any real
+        /// control (avatar, speech bubble, title box, chat input, resize grips), or a
+        /// PAINTED pixel of the vessel art. The window's own Background=Transparent makes
+        /// the whole rect framework-hit-testable, so a hit on the Window itself IS a
+        /// dead-zone; the vessel image hit-tests its bounds rect, so it is refined by the
+        /// cached per-pixel alpha (WPF layered-window parity).
+        /// </summary>
+        private bool IsPointOnTubeArt(global::Avalonia.Point client)
+        {
+            var hit = this.InputHitTest(client);
+            if (hit is null || ReferenceEquals(hit, this)) return false;
+            if (!ReferenceEquals(hit, ImgTubeFrame)) return true;
+
+            var pixels = _tubeArtPixels;
+            if (pixels == null || ImgTubeFrame == null) return true; // no cache: whole vessel rect stays clickable (conservative)
+            var local = this.TranslatePoint(client, ImgTubeFrame);
+            if (local is not { } imagePoint) return true;
+            var bounds = ImgTubeFrame.Bounds;
+            if (bounds.Width <= 0 || bounds.Height <= 0) return true;
+
+            // Image uses Stretch=Uniform and measures to the bitmap aspect, so its bounds
+            // ARE the drawn bitmap rect; a linear map lands on the exact source pixel.
+            int px = (int)(imagePoint.X / bounds.Width * _tubeArtPixelSize.Width);
+            int py = (int)(imagePoint.Y / bounds.Height * _tubeArtPixelSize.Height);
+            if (px < 0 || py < 0 || px >= _tubeArtPixelSize.Width || py >= _tubeArtPixelSize.Height)
+                return false;
+            int alphaIndex = py * _tubeArtRowBytes + px * 4 + 3;
+            return alphaIndex < pixels.Length && pixels[alphaIndex] >= TubeArtAlphaThreshold;
+        }
+
+        /// <summary>
+        /// Caches the tube art's BGRA pixels for the per-pixel hit-test above. Called by
+        /// SetTubeStyle (the single ImgTubeFrame.Source writer), so theme switches and
+        /// attach/detach art swaps refresh the cache automatically. Decodes with
+        /// SkiaSharp (the repo-established pixel-access path, AvaloniaChaosCompat.cs) into
+        /// a fully managed byte copy. On any failure the cache is cleared and the vessel
+        /// falls back to bounds-rect hit-testing (conservative: captures clicks, never
+        /// traps the desktop).
+        /// </summary>
+        private void CacheTubeArtPixels(string resourcePath)
+        {
+            _tubeArtPixels = null;
+            _tubeArtPixelSize = default;
+            _tubeArtRowBytes = 0;
+            try
+            {
+                using var stream = OpenTubeArtStream(resourcePath);
+                if (stream == null) return;
+                using var decoded = SKBitmap.Decode(stream);
+                if (decoded == null || decoded.Width <= 0 || decoded.Height <= 0) return;
+
+                SKBitmap bgra = decoded;
+                bool converted = false;
+                if (decoded.ColorType != SKColorType.Bgra8888)
+                {
+                    var copy = decoded.Copy(SKColorType.Bgra8888);
+                    if (copy == null) return;
+                    bgra = copy;
+                    converted = true;
+                }
+                try
+                {
+                    _tubeArtPixels = bgra.Bytes; // managed copy
+                    _tubeArtRowBytes = bgra.RowBytes;
+                    _tubeArtPixelSize = new PixelSize(bgra.Width, bgra.Height);
+                }
+                finally
+                {
+                    if (converted) bgra.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                _tubeArtPixels = null;
+                _tubeArtPixelSize = default;
+                _tubeArtRowBytes = 0;
+                _logger?.LogDebug("AvatarTube: tube art alpha cache failed ({Error}) - vessel bounds treated as art", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Opens the raw stream behind a tube art resource, honoring the active mod's
+        /// override exactly like AvaloniaModResourceResolver.ResolveBitmap does.
+        /// </summary>
+        private Stream? OpenTubeArtStream(string resourcePath)
+        {
+            var uri = _resourceResolver?.ResolveUri(resourcePath);
+            if (string.IsNullOrEmpty(uri)) return null;
+
+            if (uri.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+            {
+                var local = new Uri(uri).LocalPath;
+                return File.Exists(local) ? File.OpenRead(local) : null;
+            }
+
+            var assetLoader = App.Services.GetService<IAssetLoader>();
+            var avares = new Uri(uri, UriKind.Absolute);
+            return assetLoader?.Exists(avares) == true ? assetLoader.Open(avares) : null;
+        }
+
         // Win32 constants.
+        private const uint WM_NCHITTEST = 0x0084;
+        private const int HTTRANSPARENT = -1;
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOACTIVATE = 0x0010;
@@ -291,6 +463,18 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             SetTubeStyle(false);
             ApplyTubeLayoutOffsets();
 
+            // Attach restores NoResize (owner contract 2026-07-11, obs #6 fix 3c):
+            // corner grips disappear and the vessel goes back to non-interactive
+            // (WPF Windowing.cs:1529-1531: ImgTubeFrame.IsHitTestVisible = false).
+            CanResize = false;
+            SetCornerGripsVisible(false);
+            if (ImgTubeFrame != null)
+            {
+                ImgTubeFrame.IsHitTestVisible = false;
+                ImgTubeFrame.Cursor = Cursor.Default;
+            }
+            ApplyDetachedCursors(false);
+
             Show();
             UpdatePosition();
             BringAttachedPairToFront(true);
@@ -309,6 +493,18 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             SetTubeStyle(true);
             ApplyTubeLayoutOffsets();
 
+            // Detached = corner-drag resizable (NEW owner contract 2026-07-11, obs #6
+            // fix 3c) + the visible vessel becomes a drag handle
+            // (WPF Windowing.cs:1477-1485: SizeAll cursors + ImgTubeFrame hit-test ON).
+            CanResize = true;
+            SetCornerGripsVisible(true);
+            if (ImgTubeFrame != null)
+            {
+                ImgTubeFrame.IsHitTestVisible = true;
+                ImgTubeFrame.Cursor = new Cursor(StandardCursorType.SizeAll);
+            }
+            ApplyDetachedCursors(true);
+
             // Speech bubble stays at same position in both modes (right side of tube, clearly visible).
             if (SpeechBubble?.IsVisible == true && !string.IsNullOrEmpty(TxtSpeech?.Text))
             {
@@ -318,6 +514,27 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             Show();
             ReassertTopmost();
             ReassertCirceEmoteVisuals();
+        }
+
+        private void SetCornerGripsVisible(bool visible)
+        {
+            if (GripTopLeft != null) GripTopLeft.IsVisible = visible;
+            if (GripTopRight != null) GripTopRight.IsVisible = visible;
+            if (GripBottomLeft != null) GripBottomLeft.IsVisible = visible;
+            if (GripBottomRight != null) GripBottomRight.IsVisible = visible;
+        }
+
+        /// <summary>
+        /// Move cursor over the draggable visuals while detached, defaults while attached
+        /// (WPF Windowing.cs:1477-1480 / 1524-1527). AvatarBorder keeps its Hand cursor
+        /// attached (it is the click/menu target, per the AXAML).
+        /// </summary>
+        private void ApplyDetachedCursors(bool detached)
+        {
+            var move = detached ? new Cursor(StandardCursorType.SizeAll) : null;
+            if (AvatarBorder != null) AvatarBorder.Cursor = move ?? new Cursor(StandardCursorType.Hand);
+            if (SpeechBubble != null) SpeechBubble.Cursor = move ?? Cursor.Default;
+            if (TitleBox != null) TitleBox.Cursor = move ?? Cursor.Default;
         }
 
         /// <summary>

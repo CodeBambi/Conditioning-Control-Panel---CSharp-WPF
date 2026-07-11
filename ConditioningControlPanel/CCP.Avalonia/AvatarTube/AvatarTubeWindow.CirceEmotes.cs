@@ -218,6 +218,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         {
             if (_circeEngine?.HasLayout != true || ImgAvatarAnimated == null) return;
             ReassertCirceEmoteVisuals();
+            LogContentGeometry("circe-clip");
         }
 
         private void CircePlayEmote(string? emotionLineId, string? audioPath, string? text, string? mood)

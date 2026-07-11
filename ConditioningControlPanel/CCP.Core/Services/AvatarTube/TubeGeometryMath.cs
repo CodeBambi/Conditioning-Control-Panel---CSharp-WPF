@@ -199,6 +199,93 @@ public static class TubeGeometryMath
     }
 
     /// <summary>
+    /// Seeds the parent-height feed before the first SizeChanged event arrives
+    /// (obs #6 retest-2 fix 1: the startup 0.527&lt;-&gt;0.738 settle came from reading a
+    /// not-yet-settled parent client size at tube construction). The DECLARED height
+    /// (the Window.Height property - axaml value or restored size) is preferred: at
+    /// construction time the live ClientSize still holds the platform's pre-layout
+    /// default (~714 on Win32, measured), which is garbage, while Height already holds
+    /// the real target. Live ClientSize is only the fallback when no height is declared.
+    /// </summary>
+    public static double ResolveSeedParentHeight(double liveClientHeight, double declaredHeight)
+    {
+        if (!double.IsNaN(declaredHeight) && declaredHeight > 0)
+            return declaredHeight;
+        if (!double.IsNaN(liveClientHeight) && liveClientHeight > 0)
+            return liveClientHeight;
+        return double.NaN;
+    }
+
+    /// <summary>
+    /// Parent ratio with transient-read immunity (obs #6 retest-2 fix 1): an invalid or
+    /// transient parent height (NaN/zero/negative — minimized, mid-restore, pre-layout)
+    /// KEEPS the last applied ratio instead of collapsing to 1.0. Collapsing to 1.0 was
+    /// the only path by which the attached scale could jump to the screen-fit cap and
+    /// produce the 0.527&lt;-&gt;0.738 re-settle without a real resize.
+    /// </summary>
+    public static double ResolveParentRatio(double parentClientHeight, double lastRatio)
+    {
+        if (double.IsNaN(parentClientHeight) || parentClientHeight <= 0)
+            return double.IsNaN(lastRatio) || lastRatio <= 0 ? 1.0 : lastRatio;
+        return QuantizeParentRatio(parentClientHeight);
+    }
+
+    /// <summary>
+    /// Detached free-drag position in PHYSICAL screen pixels, BOTH axes (owner contract
+    /// obs #7 / retest-2 fix 3a). WPF parity: OnMouseMove computes
+    /// Left/Top = dragStart + (currentScreenPoint - dragStartScreenPoint)
+    /// (WPF AvatarTube/AvatarTubeWindow.Windowing.cs:1748-1766) — screen-space deltas,
+    /// immune to the window moving under the pointer mid-drag.
+    /// </summary>
+    public static (int X, int Y) ComputeDragPosition(
+        int startWindowX, int startWindowY,
+        int startPointerX, int startPointerY,
+        int currentPointerX, int currentPointerY)
+        => (startWindowX + (currentPointerX - startPointerX),
+            startWindowY + (currentPointerY - startPointerY));
+
+    /// <summary>
+    /// Detached corner-drag resize (NEW owner contract 2026-07-11, obs #6 fix 3c — no WPF
+    /// precedent; WPF only had Ctrl+wheel/menu zoom). The user scale is driven by the
+    /// vertical drag delta against the window's starting physical height (aspect is fixed
+    /// by the uniform viewbox, so one axis fully determines the size). Grips on the TOP
+    /// edge grow the tube when dragged UP. Result is clamped to the detached zoom range.
+    /// </summary>
+    public static double ComputeCornerResizeUserScale(
+        double startUserScale, double startHeightPhysical, double deltaYPhysical, bool topEdge)
+    {
+        if (double.IsNaN(startUserScale) || startUserScale <= 0)
+            startUserScale = 1.0;
+        if (double.IsNaN(startHeightPhysical) || startHeightPhysical <= 0
+            || double.IsNaN(deltaYPhysical))
+        {
+            return Math.Clamp(startUserScale, MinUserScale, MaxUserScale);
+        }
+
+        double dh = topEdge ? -deltaYPhysical : deltaYPhysical;
+        double factor = (startHeightPhysical + dh) / startHeightPhysical;
+        if (double.IsNaN(factor) || double.IsInfinity(factor) || factor <= 0)
+            factor = double.Epsilon; // fully collapsed drag -> clamp floor below
+        return Math.Clamp(startUserScale * factor, MinUserScale, MaxUserScale);
+    }
+
+    /// <summary>
+    /// Keeps the corner OPPOSITE the dragged grip anchored during a detached corner
+    /// resize (obs #6 fix 3c): a top-edge grip keeps the bottom edge fixed, a left-edge
+    /// grip keeps the right edge fixed. All values in physical pixels.
+    /// </summary>
+    public static (int X, int Y) ComputeCornerAnchorPosition(
+        int startX, int startY,
+        double startWidthPhysical, double startHeightPhysical,
+        double newWidthPhysical, double newHeightPhysical,
+        bool anchorRight, bool anchorBottom)
+    {
+        int x = anchorRight ? startX + (int)Math.Round(startWidthPhysical - newWidthPhysical) : startX;
+        int y = anchorBottom ? startY + (int)Math.Round(startHeightPhysical - newHeightPhysical) : startY;
+        return (x, y);
+    }
+
+    /// <summary>
     /// Clamps a physical-pixel window origin into a physical working area so a detached
     /// drag/zoom can never strand the tube fully off-screen.
     /// </summary>

@@ -167,9 +167,20 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private bool _reattachAfterChaos;
         private bool _chaosRunActive;
 
+        // Detached free-drag state - SCREEN-space anchors (WPF Windowing.cs:1702-1706).
         private bool _isDragging;
         private PixelPoint _dragStartWindowPos;
-        private global::Avalonia.Point _dragStartPointerPos;
+        private PixelPoint _dragStartScreenPoint;
+
+        // Detached corner-resize state (NEW owner contract 2026-07-11, obs #6 fix 3c).
+        private bool _isCornerResizing;
+        private bool _resizeTopEdge;
+        private bool _resizeLeftEdge;
+        private PixelPoint _resizeStartScreenPoint;
+        private PixelPoint _resizeStartWindowPos;
+        private double _resizeStartWidthPhysical;
+        private double _resizeStartHeightPhysical;
+        private double _resizeStartUserScale;
 
         private bool IsAvatarVisibleOnScreen => IsVisible && !IsEffectivelyMinimized();
 
@@ -411,6 +422,26 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             if (_avatarPoses.Length <= 1 || _useAnimatedAvatar || _portraitMode) return;
             _currentPoseIndex = (_currentPoseIndex + 1) % _avatarPoses.Length;
             if (ImgAvatar != null) ImgAvatar.Source = _avatarPoses[_currentPoseIndex];
+            LogContentGeometry("pose-change");
+        }
+
+        /// <summary>
+        /// Content-side geometry telemetry (obs #6 retest-2 fix 1-i): one write-only line
+        /// per speech show/hide and pose/emote change proving the avatar's rendered size,
+        /// the window geometry, and the live bubble count at that instant. The controller
+        /// telemetry only sees its own writes; this line makes any content-triggered
+        /// re-settle (avatar moves up / shrinks on a bubble) provable in app-*.log.
+        /// </summary>
+        private void LogContentGeometry(string evt)
+        {
+            if (_logger == null) return;
+            var avatarBounds = AvatarBorder?.Bounds ?? default;
+            _logger.LogDebug(
+                "TubeContent: {Event} finalScale={FinalScale:F3} win={WW:F1}x{WH:F1} pos={Pos} viewbox={VW:F1}x{VH:F1} avatar={AW:F1}x{AH:F1} bubbles={Bubbles}/{Pooled}",
+                evt, _geometry?.FinalScale ?? double.NaN, Width, Height, Position,
+                ContentViewbox?.Width ?? double.NaN, ContentViewbox?.Height ?? double.NaN,
+                avatarBounds.Width, avatarBounds.Height,
+                AvatarRandomBubble.LiveCount, AvatarRandomBubble.PooledWindowCount);
         }
 
         private void SpeechBubble_MouseEnter(object? sender, PointerEventArgs e)
@@ -437,12 +468,36 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             var point = e.GetCurrentPoint(this);
             if (point.Properties.IsLeftButtonPressed && !_isAttached)
             {
-                _isDragging = true;
-                _dragStartPointerPos = point.Position;
-                _dragStartWindowPos = Position;
-                e.Pointer.Capture(this);
-                e.Handled = true;
-                return;
+                // Dead-zone guard (WPF Windowing.cs:1707-1727, #346): only a click that
+                // lands on a visible part of the tube (art, speech bubble, name tag, or
+                // the tube vessel - hit-test-enabled while detached) starts a drag; the
+                // transparent margins around the corner-positioned art never do.
+                var hit = e.Source as Visual;
+                bool onArt = IsDescendantOf(hit, AvatarBorder)
+                             || IsDescendantOf(hit, SpeechBubble)
+                             || IsDescendantOf(hit, TitleBox)
+                             || IsDescendantOf(hit, ImgTubeFrame);
+                if (onArt)
+                {
+                    // PointToScreen can throw while the presentation source is torn
+                    // down/rebuilt - exactly when a drag crosses onto a monitor with a
+                    // different DPI (WPF Windowing.cs:1728-1740, #477). A failed
+                    // conversion means "drag didn't start".
+                    try
+                    {
+                        _dragStartScreenPoint = this.PointToScreen(point.Position);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        _logger?.LogDebug("Avatar drag start: PointToScreen failed ({Error})", ex.Message);
+                        return;
+                    }
+                    _isDragging = true;
+                    _dragStartWindowPos = Position;
+                    e.Pointer.Capture(this);
+                    e.Handled = true;
+                    return;
+                }
             }
 
             if (_isInputVisible && InputPanel != null)
@@ -455,16 +510,31 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
 
         private void Window_PointerMoved(object? sender, PointerEventArgs e)
         {
-            if (!_isDragging) return;
-            var pos = e.GetPosition(this);
-            var delta = pos - _dragStartPointerPos;
-            // Pointer deltas are LOGICAL units while Position is PHYSICAL px - convert via
-            // RenderScaling or the drag lags the cursor on >100% DPI monitors. The write goes
-            // through the controller (single writer of Position), which also clamps to screen.
-            double s = RenderScaling;
-            _geometry?.MoveTo(new PixelPoint(
-                _dragStartWindowPos.X + (int)Math.Round(delta.X * s),
-                _dragStartWindowPos.Y + (int)Math.Round(delta.Y * s)));
+            if (!_isDragging || _isAttached) return;
+            // SCREEN-space drag math, both axes (WPF Windowing.cs:1748-1766 parity). The
+            // pre-fix handler anchored a WINDOW-relative pointer position against the
+            // fixed drag-start origin: once the window moved, the relative position
+            // shifted with it and the computed target rubber-banded back toward the
+            // origin (the owner-visible "drag is locked" defect, obs #6 fix 3a).
+            // PointToScreen tracks the true cursor no matter where the window is.
+            PixelPoint currentScreen;
+            try
+            {
+                currentScreen = this.PointToScreen(e.GetPosition(this));
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Same DPI-transition guard as the drag start (#477): skip this tick.
+                _logger?.LogDebug("Avatar drag move: PointToScreen failed ({Error})", ex.Message);
+                return;
+            }
+            var (x, y) = TubeGeometryMath.ComputeDragPosition(
+                _dragStartWindowPos.X, _dragStartWindowPos.Y,
+                _dragStartScreenPoint.X, _dragStartScreenPoint.Y,
+                currentScreen.X, currentScreen.Y);
+            // The write goes through the controller (single writer of Position), which
+            // also clamps to the working area.
+            _geometry?.MoveTo(new PixelPoint(x, y));
         }
 
         private void Window_PointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -474,6 +544,82 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 _isDragging = false;
                 e.Pointer.Capture(null);
             }
+        }
+
+        // ===== Detached corner-drag resize (NEW owner contract 2026-07-11, obs #6 fix 3c;
+        // no WPF precedent - WPF only had Ctrl+wheel and the grow/shrink menu). Grips
+        // drive SetUserScale so TubeGeometryController stays the single writer of the
+        // window/viewbox size; an OS BeginResizeDrag would resize the window under the
+        // pinned viewbox and break the anti-freeze invariant (WPF xaml.cs:483-520).
+
+        private void Grip_PointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (_isAttached || sender is not Border grip || grip.Tag is not string corner) return;
+            var point = e.GetCurrentPoint(this);
+            if (!point.Properties.IsLeftButtonPressed) return;
+            try
+            {
+                _resizeStartScreenPoint = this.PointToScreen(point.Position);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger?.LogDebug("Avatar corner resize start: PointToScreen failed ({Error})", ex.Message);
+                return;
+            }
+            _isCornerResizing = true;
+            _resizeTopEdge = corner is "TL" or "TR";
+            _resizeLeftEdge = corner is "TL" or "BL";
+            _resizeStartWindowPos = Position;
+            double s = RenderScaling;
+            _resizeStartWidthPhysical = Math.Max(1, (double.IsNaN(Width) ? ClientSize.Width : Width) * s);
+            _resizeStartHeightPhysical = Math.Max(1, (double.IsNaN(Height) ? ClientSize.Height : Height) * s);
+            _resizeStartUserScale = _currentScale;
+            e.Pointer.Capture(grip);
+            e.Handled = true;
+        }
+
+        private void Grip_PointerMoved(object? sender, PointerEventArgs e)
+        {
+            if (!_isCornerResizing || _isAttached) return;
+            PixelPoint currentScreen;
+            try
+            {
+                currentScreen = this.PointToScreen(e.GetPosition(this));
+            }
+            catch (InvalidOperationException)
+            {
+                return; // #477 DPI-transition guard: skip this tick, the next lands.
+            }
+
+            double deltaY = currentScreen.Y - _resizeStartScreenPoint.Y;
+            double next = TubeGeometryMath.ComputeCornerResizeUserScale(
+                _resizeStartUserScale, _resizeStartHeightPhysical, deltaY, _resizeTopEdge);
+            if (Math.Abs(next - _currentScale) > 0.0001)
+            {
+                _currentScale = next;
+                _geometry?.SetUserScale(next); // resizes window + viewbox together
+            }
+
+            // Keep the corner OPPOSITE the grip anchored: read back the APPLIED size
+            // (SetUserScale quantizes/clamps) and shift the origin by the size delta.
+            double s = RenderScaling;
+            double newW = (double.IsNaN(Width) ? ClientSize.Width : Width) * s;
+            double newH = (double.IsNaN(Height) ? ClientSize.Height : Height) * s;
+            var (x, y) = TubeGeometryMath.ComputeCornerAnchorPosition(
+                _resizeStartWindowPos.X, _resizeStartWindowPos.Y,
+                _resizeStartWidthPhysical, _resizeStartHeightPhysical,
+                newW, newH,
+                anchorRight: _resizeLeftEdge, anchorBottom: _resizeTopEdge);
+            _geometry?.MoveTo(new PixelPoint(x, y));
+            e.Handled = true;
+        }
+
+        private void Grip_PointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            if (!_isCornerResizing) return;
+            _isCornerResizing = false;
+            e.Pointer.Capture(null);
+            UpdateResizeMenuState();
         }
 
         private void Window_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
@@ -1067,6 +1213,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             PopulateSpeechBubble(text);
             AdjustBubbleSize(text);
             if (SpeechBubble != null) SpeechBubble.IsVisible = true;
+            LogContentGeometry("speech-show");
 
             StartZOrderRefreshTimer();
             BringAttachedPairToFront();
@@ -1132,6 +1279,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                     _speechTimer.Stop();
                     StopZOrderRefreshTimer();
                     if (SpeechBubble != null) SpeechBubble.IsVisible = false;
+                    LogContentGeometry("speech-hide");
                     _isShowingAiBubble = false;
                     _lastSpeechEndTime = DateTime.Now;
                     _lastSpeechSource = capturedSource;
@@ -1461,9 +1609,18 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 {
                     try
                     {
+                        // Hard concurrency ceiling (obs #6 retest-2 fix 2): never let live
+                        // bubble windows/timers accumulate past the pool size.
+                        if (!AvatarRandomBubble.CanSpawn)
+                        {
+                            _logger?.LogDebug("RandomBubble: live cap reached ({Cap}) - spawn skipped", AvatarRandomBubble.MaxLive);
+                            return;
+                        }
                         var pixelPos = AvatarBorder.PointToScreen(new global::Avalonia.Point(AvatarBorder.Bounds.Width / 2, AvatarBorder.Bounds.Height / 2));
                         var pos = new global::Avalonia.Point(pixelPos.X, pixelPos.Y);
                         var bubble = new AvatarRandomBubble(pos, _random, OnRandomBubblePopped);
+                        _logger?.LogDebug("RandomBubble: spawned (live={Live}, pooled={Pooled})",
+                            AvatarRandomBubble.LiveCount, AvatarRandomBubble.PooledWindowCount);
                     }
                     catch (Exception ex)
                     {
@@ -1753,6 +1910,14 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             _tubeHandle = this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
             _parentHandle = _parentWindow?.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
 
+            // Detached per-region hit-testing (obs #6 retest-2 fix 3b): WPF layered windows
+            // give free per-pixel click-through on alpha-0 pixels; Avalonia windows do NOT,
+            // so the detached tube's transparent dead-zones swallowed clicks meant for the
+            // main window. The hook makes everything except the tube art click-through.
+            // Registered here - after the native handle is fully realized - per the
+            // overlay-clickthrough two-level rule (OS-level work happens at Opened).
+            RegisterHitTestHook();
+
             // No size freeze needed: the window runs SizeToContent=Manual from birth with
             // an analytically computed Width/Height (controller ctor), so there is no
             // transient auto-size to capture (the WPF freeze dance in xaml.cs:483-520
@@ -1768,6 +1933,12 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             // callbacks from a disposed predecessor.
             _poseTimer?.Stop();
             _fullscreenCheckTimer?.Stop();
+            // Every live bubble dies WITH the tube and the keep-alive pool drains to zero
+            // (obs #6 retest-2 fix 2): a recreated tube can never inherit orphaned bubble
+            // windows or their 50ms timers.
+            AvatarRandomBubble.DestroyAll();
+            AvatarRandomBubble.DrainPool();
+            RemoveHitTestHook();
             StopFloatingAnimation();
             _animatedAvatarGif?.Dispose();
             _animatedAvatarGif = null;

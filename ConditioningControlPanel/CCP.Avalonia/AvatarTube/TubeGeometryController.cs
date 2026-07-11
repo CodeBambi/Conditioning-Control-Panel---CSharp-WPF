@@ -170,6 +170,19 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             _contentViewbox = contentViewbox ?? throw new ArgumentNullException(nameof(contentViewbox));
             _parent = parent;
             _logger = logger;
+
+            // Seed the parent-height feed BEFORE the first SizeChanged arrives (obs #6
+            // retest-2 fix 1): reading a not-yet-settled parent client size at construction
+            // was the startup 0.527<->0.738 settle. The DECLARED Height (MainWindow.axaml
+            // Height="1000" / restored size) wins over the live ClientSize, which at this
+            // point still holds the platform's pre-layout default (~714 measured) - so the
+            // first ApplySizing computes from the real target height and the first real
+            // SizeChanged lands inside the dead-band: ONE scale from birth, no flash.
+            if (_parent != null)
+            {
+                _pendingParentHeight = TubeGeometryMath.ResolveSeedParentHeight(
+                    _parent.ClientSize.Height, _parent.Height);
+            }
         }
 
         // ================= Lifecycle =================
@@ -312,7 +325,11 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                         : _parent.ClientSize.Height;
                 }
 
-                candidateRatio = TubeGeometryMath.QuantizeParentRatio(parentHeight);
+                // Transient-read immunity (obs #6 retest-2 fix 1): an invalid height keeps
+                // the LAST ratio instead of collapsing to 1.0 - collapsing was the only path
+                // by which the scale could jump to the screen-fit cap (0.738) and re-settle
+                // back (0.527) without any real resize.
+                candidateRatio = TubeGeometryMath.ResolveParentRatio(parentHeight, _parentRatio);
                 candidateFinal = TubeGeometryMath.ComposeAttachedScale(_screenScale, candidateRatio);
                 effective = candidateFinal;
             }
@@ -587,7 +604,10 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private void OnParentSizeChanged(object? sender, SizeChangedEventArgs e)
         {
             // Scale-with-main-window feed: the event's NewSize is a settled layout value.
-            _pendingParentHeight = e.NewSize.Height;
+            // A zero/negative height (mid-minimize layout artifact) is TRANSIENT - never
+            // let it into the feed (obs #6 retest-2 fix 1).
+            if (e.NewSize.Height > 0)
+                _pendingParentHeight = e.NewSize.Height;
 
             // Leading edge (throttled) so the tube visibly tracks during a continuous resize...
             if ((DateTime.UtcNow - _lastScaleApplyUtc).TotalMilliseconds >= ScaleLeadingThrottleMs)
@@ -600,7 +620,14 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 _scaleSettleTimer.Tick += (_, _) =>
                 {
                     _scaleSettleTimer?.Stop();
-                    _pendingParentHeight = double.NaN; // settled: read live geometry once
+                    // Settled: take ONE live read at this quiet moment and keep it as the
+                    // feed value. The feed is never reset to NaN anymore - a NaN reset made
+                    // every later explicit ApplySizing (fullscreen-exit, attach) re-read
+                    // LIVE geometry at an arbitrary instant, which is exactly the transient
+                    // parent-height vector behind the mid-session re-settle (obs #6 fix 1).
+                    double settled = _parent?.ClientSize.Height ?? double.NaN;
+                    if (!double.IsNaN(settled) && settled > 0)
+                        _pendingParentHeight = settled;
                     ApplySizingCore("resize-settled");
                 };
             }

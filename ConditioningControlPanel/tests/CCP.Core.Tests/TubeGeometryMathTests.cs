@@ -269,4 +269,174 @@ public class TubeGeometryMathTests
     {
         Assert.Equal((0, 0), TubeGeometryMath.ClampToWorkArea(300, 300, 0, 0, 1920, 1080, 3000, 3000));
     }
+
+    // ================================================================
+    // ResolveSeedParentHeight (obs #6 retest-2 fix 1: no 0.527 startup flash)
+
+    [Fact]
+    public void SeedHeight_DeclaredHeight_Wins()
+    {
+        // The live ClientSize at construction is the platform's pre-layout default
+        // (~714 on Win32, measured in the 2026-07-11 smoke run) - the declared Height
+        // is the settled truth, so it wins (kills the 0.527 startup flash, obs #6).
+        Assert.Equal(1000, TubeGeometryMath.ResolveSeedParentHeight(714, 1000));
+    }
+
+    [Fact]
+    public void SeedHeight_NoDeclaredHeight_FallsBackToLive()
+    {
+        Assert.Equal(714, TubeGeometryMath.ResolveSeedParentHeight(714, double.NaN));
+        Assert.Equal(714, TubeGeometryMath.ResolveSeedParentHeight(714, 0));
+        Assert.Equal(714, TubeGeometryMath.ResolveSeedParentHeight(714, -5));
+    }
+
+    [Fact]
+    public void SeedHeight_NothingValid_IsNaN()
+    {
+        Assert.True(double.IsNaN(TubeGeometryMath.ResolveSeedParentHeight(double.NaN, double.NaN)));
+        Assert.True(double.IsNaN(TubeGeometryMath.ResolveSeedParentHeight(0, 0)));
+    }
+
+    // ================================================================
+    // ResolveParentRatio (obs #6 retest-2 fix 1: transient reads keep the last ratio,
+    // never collapse to 1.0 -> the 0.527<->0.738 flip is unreachable without a resize)
+
+    [Fact]
+    public void ParentRatio_ValidHeight_Quantizes()
+    {
+        Assert.Equal(0.714, TubeGeometryMath.ResolveParentRatio(714, 0.9));
+    }
+
+    [Fact]
+    public void ParentRatio_TransientHeight_KeepsLastRatio()
+    {
+        Assert.Equal(0.714, TubeGeometryMath.ResolveParentRatio(double.NaN, 0.714));
+        Assert.Equal(0.714, TubeGeometryMath.ResolveParentRatio(0, 0.714));
+        Assert.Equal(0.714, TubeGeometryMath.ResolveParentRatio(-32000, 0.714));
+    }
+
+    [Fact]
+    public void ParentRatio_TransientHeightWithNoHistory_DefaultsToOne()
+    {
+        Assert.Equal(1.0, TubeGeometryMath.ResolveParentRatio(double.NaN, double.NaN));
+        Assert.Equal(1.0, TubeGeometryMath.ResolveParentRatio(0, 0));
+    }
+
+    // ================================================================
+    // ComputeDragPosition (obs #6 retest-2 fix 3a: detached drag applies BOTH axes,
+    // WPF screen-space parity, Windowing.cs:1748-1766)
+
+    [Fact]
+    public void Drag_AppliesBothAxes()
+    {
+        Assert.Equal((150, 260), TubeGeometryMath.ComputeDragPosition(100, 200, 500, 500, 550, 560));
+    }
+
+    [Fact]
+    public void Drag_NegativeDeltas_MoveUpAndLeft()
+    {
+        Assert.Equal((60, 130), TubeGeometryMath.ComputeDragPosition(100, 200, 500, 500, 460, 430));
+    }
+
+    [Fact]
+    public void Drag_NoPointerMovement_IsIdentity()
+    {
+        Assert.Equal((100, 200), TubeGeometryMath.ComputeDragPosition(100, 200, 500, 500, 500, 500));
+    }
+
+    [Fact]
+    public void Drag_IsCumulativeFromStart_NotFromLastSample()
+    {
+        // The regression this pins: the pre-fix handler recomputed from the LAST window
+        // position, rubber-banding the tube back to its origin. Screen-space math from
+        // the drag START must track total displacement.
+        var (x, y) = TubeGeometryMath.ComputeDragPosition(0, 0, 1000, 1000, 1300, 1250);
+        Assert.Equal((300, 250), (x, y));
+    }
+
+    // ================================================================
+    // ComputeCornerResizeUserScale (obs #6 fix 3c: detached corner-drag resize,
+    // NEW owner contract 2026-07-11)
+
+    [Fact]
+    public void CornerResize_BottomGrip_DragDownGrows()
+    {
+        // 800px tall, dragged 200px down on a bottom grip -> 25% larger.
+        Assert.Equal(1.25, TubeGeometryMath.ComputeCornerResizeUserScale(1.0, 800, 200, topEdge: false), 6);
+    }
+
+    [Fact]
+    public void CornerResize_TopGrip_DragUpGrows()
+    {
+        // Top grip dragged UP (negative dy) grows the tube.
+        Assert.Equal(1.25, TubeGeometryMath.ComputeCornerResizeUserScale(1.0, 800, -200, topEdge: true), 6);
+    }
+
+    [Fact]
+    public void CornerResize_BottomGrip_DragUpShrinks()
+    {
+        Assert.Equal(0.75, TubeGeometryMath.ComputeCornerResizeUserScale(1.0, 800, -200, topEdge: false), 6);
+    }
+
+    [Fact]
+    public void CornerResize_ClampsToDetachedZoomRange()
+    {
+        // Massive drags clamp to the owner-widened 0.25..2.5 range (board REBUILD SPEC).
+        Assert.Equal(TubeGeometryMath.MaxUserScale,
+            TubeGeometryMath.ComputeCornerResizeUserScale(1.0, 800, 99999, topEdge: false));
+        Assert.Equal(TubeGeometryMath.MinUserScale,
+            TubeGeometryMath.ComputeCornerResizeUserScale(1.0, 800, -99999, topEdge: false));
+    }
+
+    [Fact]
+    public void CornerResize_DegenerateInputs_ClampCurrentScale()
+    {
+        // Invalid start height / NaN delta: no resize, just the clamped current scale.
+        Assert.Equal(1.0, TubeGeometryMath.ComputeCornerResizeUserScale(1.0, 0, 50, topEdge: false));
+        Assert.Equal(1.0, TubeGeometryMath.ComputeCornerResizeUserScale(1.0, double.NaN, 50, topEdge: false));
+        Assert.Equal(1.0, TubeGeometryMath.ComputeCornerResizeUserScale(1.0, 800, double.NaN, topEdge: false));
+        Assert.Equal(1.0, TubeGeometryMath.ComputeCornerResizeUserScale(double.NaN, 800, 0, topEdge: false));
+    }
+
+    // ================================================================
+    // ComputeCornerAnchorPosition (obs #6 fix 3c: opposite corner stays anchored)
+
+    [Fact]
+    public void CornerAnchor_BottomRightGrip_KeepsTopLeft()
+    {
+        // anchorRight=false, anchorBottom=false: window origin is already the anchor.
+        Assert.Equal((100, 200), TubeGeometryMath.ComputeCornerAnchorPosition(
+            100, 200, 400, 800, 500, 1000, anchorRight: false, anchorBottom: false));
+    }
+
+    [Fact]
+    public void CornerAnchor_TopLeftGrip_KeepsBottomRight()
+    {
+        // Growing 100x200 while anchoring right+bottom shifts the origin up-left.
+        Assert.Equal((0, 0), TubeGeometryMath.ComputeCornerAnchorPosition(
+            100, 200, 400, 800, 500, 1000, anchorRight: true, anchorBottom: true));
+    }
+
+    [Fact]
+    public void CornerAnchor_TopRightGrip_KeepsBottomLeft()
+    {
+        Assert.Equal((100, 0), TubeGeometryMath.ComputeCornerAnchorPosition(
+            100, 200, 400, 800, 500, 1000, anchorRight: false, anchorBottom: true));
+    }
+
+    [Fact]
+    public void CornerAnchor_BottomLeftGrip_KeepsTopRight()
+    {
+        Assert.Equal((0, 200), TubeGeometryMath.ComputeCornerAnchorPosition(
+            100, 200, 400, 800, 500, 1000, anchorRight: true, anchorBottom: false));
+    }
+
+    [Fact]
+    public void CornerAnchor_Shrinking_ShiftsTowardAnchor()
+    {
+        // Shrinking 400x800 -> 300x600 from the top-left grip (bottom-right anchored)
+        // moves the origin down-right by the size delta.
+        Assert.Equal((200, 400), TubeGeometryMath.ComputeCornerAnchorPosition(
+            100, 200, 400, 800, 300, 600, anchorRight: true, anchorBottom: true));
+    }
 }

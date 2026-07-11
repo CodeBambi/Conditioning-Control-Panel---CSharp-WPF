@@ -617,6 +617,9 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 // residual layer from the previous mode (portrait crossfade B-layer, mist,
                 // animated B-layer) can never keep rendering under/over the new avatar — the
                 // owner-visible "old avatar + new smaller one over it" on theme switch.
+                // Live bubbles die FIRST (obs #6 retest-2 fix 2: dispose-before-recreate) so
+                // a reskin never leaves orphaned bubble windows/timers from the old skin.
+                AvatarRandomBubble.DestroyAll();
                 CancelCrossfade();
                 if (ImgAvatarB != null) { ImgAvatarB.IsVisible = false; ImgAvatarB.Opacity = 0; }
                 if (ImgAvatarAnimatedB != null) { ImgAvatarAnimatedB.IsVisible = false; ImgAvatarAnimatedB.Opacity = 0; }
@@ -710,7 +713,12 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
 
                 var tubeName = useAlternative ? "tube2.png" : "tube.png";
                 if (ImgTubeFrame != null && _resourceResolver != null)
+                {
                     ImgTubeFrame.Source = _resourceResolver.ResolveBitmap(tubeName);
+                    // Refresh the detached per-pixel hit-test cache alongside the art
+                    // (obs #6 retest-2 fix 3b) - SetTubeStyle is the single Source writer.
+                    CacheTubeArtPixels(tubeName);
+                }
                 _logger?.LogInformation("Tube style changed to: {Style}", tubeName);
             }
             catch (Exception ex)
@@ -1018,6 +1026,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             int first = _seqOrder.Length > 0 ? _seqOrder[0] : 0;
             _emotionPoseIndex = first;
             CrossfadeTo(LoadPortraitBitmap(bucket[first]), preempt: true);
+            LogContentGeometry("emotion-seq");
 
             bool firstIsLast = _seqOrder.Length <= 1;
             _poseSeqTimer.Interval = TimeSpan.FromMilliseconds(firstIsLast ? _seqLastMs : _seqStepMs);

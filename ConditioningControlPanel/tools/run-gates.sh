@@ -12,7 +12,7 @@
 # =============================================================================
 set -u
 
-CORE_TEST_FLOOR=496          # raise when adding tests; NEVER lower (owner-authorized drop 604->496 with the 2026-07-11 native-DTRH strip: ChaosDraftPool/ChaosScoring/ChaosSpawnDirector test files removed; ChaosRunRulesTests KEPT - web-path config rules)
+CORE_TEST_FLOOR=550          # raise when adding tests; NEVER lower (2026-07-11 AvatarTube retest-2 fixes added 19 TubeGeometryMath tests: drag both-axes, corner resize, seed/ratio transient immunity; prior owner-authorized drop 604->496 with the native-DTRH strip)
 SMOKE_TABS_EXPECTED=44
 SMOKE_FINDINGS_EXPECTED=5
 
