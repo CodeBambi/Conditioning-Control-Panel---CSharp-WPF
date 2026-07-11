@@ -138,7 +138,11 @@ environmentally invalidate the "not-worse than benchmark-optimized.json" compari
   ~+15–17% avg AND higher minimums, i.e. the scheduling-starvation component of the render gap is real and
   now removed. The LibVLC decode-retry component of MinFps=0 is SEPARATE and still owned by this row's
   re-baseline (the two were always additive, not exclusive).
-- **MinFps=0 ROOT-CAUSED (this session) — benchmark-input defect, not a UCE/product bug:** the MaxIntensity
+- **[SUPERSEDED 2026-07-11 — this whole YouTube-decode-storm theory is WRONG. Real root cause is a
+  BenchmarkFrameCounter final-partial-bucket measurement artifact; see the `MinFps=0 ROOT-CAUSED 2026-07-11`
+  block on the SIGSEGV row below. The web path never streamed ANY http URL at HEAD (it fast-fails instantly, no
+  storm), so this could not have been the cause. Retained for history.]**
+- **MinFps=0 [WRONG THEORY, SUPERSEDED] — benchmark-input defect, not a UCE/product bug:** the MaxIntensity
   video-stress segments all feed `video.PlayUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ")`
   (`BenchmarkContext.cs:387,411,445`) — a YouTube **watch-page** URL. `PlayUrl`→`PlayUrlCore`→
   `VideoLayer.PlayVideo` hands the URL straight to LibVLC (WPF-parity contract, `AvaloniaVideoService.cs:1080-1103`;
@@ -306,10 +310,32 @@ native-interop-timing) fault, observed on THIS machine (run via `dotnet run -c R
     web-video stress path does NOT stream ANY http URL at HEAD; it treats the URL as a local file. Consequences:
     (a) the 07-05 "youtube decode-retry storm → MinFps=0" theory is **DEAD at HEAD** (there is no storm — it
     fast-fails instantly), (b) swapping the URL changes nothing (I built + ran the Blender swap and reverted it —
-    both behave identically), (c) `MaxIntensityMinFps=0` has a DIFFERENT cause, still open, and (d) there is a real
+    both behave identically), (c) `MaxIntensityMinFps=0` ROOT-CAUSED 2026-07-11 as a benchmark MEASUREMENT
+    artifact (not a product/video/render stall) — see the dedicated block below, and (d) there is a real
     **parity gap: web/URL video streaming in the Avalonia `VideoLayer`** (`PlayUrl` → file-existence check rejects
     http). Whether production web video (hypnotube/autonomy) routes URLs elsewhere (WebView2) or is likewise broken
     needs its own investigation — NOT folded into this crash row.
+  - **`MinFps=0` ROOT-CAUSED 2026-07-11 · @driver — a benchmark MEASUREMENT-HARNESS artifact, NOT a product,
+    video, render, GC, or UCE stall. Supersedes BOTH prior theories on this row (the IMP-2 scheduling-starvation
+    half AND the YouTube decode-storm half — the latter already declared dead at HEAD above).** Read
+    `BenchmarkFrameCounter.MeasureAsync` (`CCP.Avalonia/Infrastructure/BenchmarkFrameCounter.cs:26-74`):
+    `MinimumFps = perSecond.Min()` over 1-second frame-count buckets. The loop closes a full-second bucket at
+    each `>= 1.0s` boundary, but when `sw.Elapsed >= duration` (240s) it appends ONE FINAL bucket
+    (`buckets.Add(bucketFrames)`, the `else` branch ~L52) covering only the PARTIAL sub-second between the last
+    boundary and the cutoff. That trailing partial window holds just the few frames that landed in its few ms,
+    yet it is divided by the full `BucketSeconds=1.0` — so it reads as a whole "second" of 0-1 fps and becomes
+    the run minimum. PROOF: (1) MinFPS is ALWAYS exactly 0.0 or 1.0 across every run, never an intermediate
+    value (20-40) a real GC/decode/render hitch would produce; (2) the 0<->1 flip between the 3 clean post-SIGSEGV-fix
+    Release runs (run1=1.0, run2=0.0, run3=1.0) is exactly the timing jitter of where the final partial bucket
+    lands vs the 240s cutoff; (3) `AverageFps` uses `frames / effectiveDuration` (total-based) so it is
+    UNAFFECTED — consistent with the ~78 avg holding steady while Min reads 0/1. So the historic `MinFps=0`
+    across sessions was never a real ≥1s freeze; the FPS floor genuinely held the whole run.
+    **QUEUED ONE-LINE FIX (STANDARD, not landed — defer to next gate window; needs a code build + `--smoke-test`
+    which requires killing the owner's live AvatarTube retest surface, disproportionate for a metric-only
+    correction):** drop the trailing partial bucket from `perSecond` (remove/guard the final `buckets.Add` in the
+    `else` branch, or normalize it by its true elapsed fraction). `TotalFrames`/`AverageFps` are total-based and
+    stay correct; only Min/Max stop being polluted. Zero product-behavior change. Verify: one Release
+    `--max-benchmark` should then report a real full-second MinFPS (expect ~30-70, not 0/1).
   - **WEB/URL STREAMING GAP RESOLVED 2026-07-11 · @driver — `feat(video)` commit below.** Investigated: the
     gap is real and NOT benchmark-only — THREE production callers pass URLs to `PlayUrl` and all were
     silently dropped as "file not found": `MainWindowViewModel.cs:786` (browser fullscreen direct-video
