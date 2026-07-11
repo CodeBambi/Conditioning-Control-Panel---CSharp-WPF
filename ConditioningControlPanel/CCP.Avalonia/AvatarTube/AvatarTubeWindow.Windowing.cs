@@ -10,17 +10,20 @@ using Avalonia.Threading;
 using ConditioningControlPanel.Core.Platform;
 using Microsoft.Extensions.DependencyInjection;
 
-#pragma warning disable CS0169 // Avalonia port: unused stub fields kept for future companion/avatar work
-#pragma warning disable CS0414
-#pragma warning disable CS0649
-
 namespace ConditioningControlPanel.Avalonia.AvatarTube
 {
-    // NOTE (2026-07 windowing rewrite): all sizing + anchoring + parent-follow logic
-    // lives in TubeAnchorController (the single writer of Window.Position and of
-    // ContentViewbox.Width/Height). This partial keeps only NON-anchoring window
-    // behavior: fullscreen auto-hide, float animation, attach/detach orchestration,
-    // z-order helpers, and the chaos-run park/reattach hooks.
+    // NOTE (2026-07-11 core rebuild): all sizing + anchoring + parent-follow + the shared
+    // z-order funnel live in TubeGeometryController (the single writer of Window.Position
+    // and of the ContentViewbox/window size). This partial keeps only NON-geometry window
+    // behavior: fullscreen auto-hide, the float/liveness animation, attach/detach
+    // orchestration, the platform pair-raise implementation, and the chaos-run
+    // park/reattach hooks.
+    //
+    // Platform note: CCP.Avalonia targets plain net8.0, so the pre-rebuild "#if WINDOWS"
+    // blocks here NEVER compiled — the pair raise, topmost reassert, foreground gate and
+    // fullscreen detection were silently inert in the Avalonia head. The rebuild uses the
+    // repo's established shared-assembly pattern instead (ChaosWin32Helper.cs): P/Invoke
+    // declarations always compiled, every call runtime-guarded by OperatingSystem.IsWindows().
     public partial class AvatarTubeWindow
     {
         private IntPtr _tubeHandle;
@@ -28,14 +31,11 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private IScreenProvider? _screenProvider;
         private string _diagLastFullscreenWindow = "(none)";
 
-        // Win32 constants (kept for reference; P/Invoke calls are Windows-only and stubbed here).
+        // Win32 constants.
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOACTIVATE = 0x0010;
-        private const uint SWP_SHOWWINDOW = 0x0040;
-        private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_FRAMECHANGED = 0x0020;
-        private const uint GW_HWNDPREV = 3;
         private const int GWL_EXSTYLE = -20;
         private const int GWL_STYLE = -16;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -43,15 +43,16 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private const uint WS_POPUP = 0x80000000;
         private const uint WS_CAPTION = 0x00C00000;
 
-#if WINDOWS
+        // WPF AvatarTubeWindow.Windowing.cs:132-133 — HWND_TOP places a window at the top
+        // of the NON-topmost band; HWND_TOPMOST is reserved for the detached tube only.
+        private static readonly IntPtr HWND_TOP = IntPtr.Zero;
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+
+        // GetForegroundWindow / GetWindowThreadProcessId are declared once in the
+        // ChatInput partial (same class); the remaining imports live here.
         [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-        [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
         [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
         [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-        [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
-        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool fAttach);
-        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetForegroundWindow(IntPtr hWnd);
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)] private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
@@ -63,7 +64,6 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             public int Right;
             public int Bottom;
         }
-#endif
 
         private void StartFullscreenDetection()
         {
@@ -97,30 +97,21 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 {
                     _hiddenForFullscreen = false;
                     Show();
-                    // Defer the anchor one dispatcher pass so the just-shown window has a settled
-                    // size/scale before the controller reads RenderScaling (running synchronously
-                    // here can sample a pre-layout transient). Re-derive the screen-fit scale too
-                    // in case the monitor/DPI changed while we were hidden.
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (_isAttached)
-                        {
-                            _anchor?.RecomputeScreenScale();
-                            _anchor?.ApplySizing();
-                            UpdatePosition();
-                        }
-                        BringAttachedPairToFront(true);
-                    }, DispatcherPriority.Background);
+                    // Re-derive the screen-fit scale in case the monitor/DPI changed while we
+                    // were hidden, then re-anchor. The controller coalesces the actual writes.
+                    _geometry?.RecomputeScreenScale();
+                    _geometry?.ApplySizing();
+                    UpdatePosition();
+                    BringAttachedPairToFront(true);
                 }
             }
         }
 
         private bool IsOtherAppFullscreen()
         {
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (!OperatingSystem.IsWindows())
                 return false;
 
-#if WINDOWS
             try
             {
                 IntPtr foregroundWindow = GetForegroundWindow();
@@ -138,6 +129,8 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 GetClassName(foregroundWindow, className, className.Capacity);
                 string windowClass = className.ToString();
 
+                // WPF parity (Windowing.cs:259-274): browsers and common media apps use
+                // "fake" fullscreen that covers the screen but is not exclusive.
                 string[] safeClasses =
                 {
                     "Chrome_WidgetWin",
@@ -224,19 +217,24 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             {
                 return false;
             }
-#else
-            return false;
-#endif
         }
 
         /// <summary>
         /// Re-anchors the attached tube to the parent's left edge. Delegates to
-        /// <see cref="TubeAnchorController"/> - the single writer of Window.Position.
+        /// <see cref="TubeGeometryController"/> — the single writer of Window.Position.
+        /// Idempotent, coalesced to at most one pass per frame, no-op unless attached.
         /// </summary>
         public void UpdatePosition()
         {
-            _anchor?.UpdatePosition();
+            _geometry?.UpdatePosition();
         }
+
+        // ================= Float / liveness animation =================
+        // WPF parity (Windowing.cs:501-518): a 16ms timer writes ONLY a +/-4px sine bob
+        // to an INNER TranslateTransform — never Window position/size. This is the
+        // owner-desired liveness cue ("gives the idea it's doing stuff", obs #7) and is
+        // deliberately KEPT while the size-oscillation bug is dead: it is cosmetic and
+        // orthogonal to window geometry.
 
         private void StartFloatingAnimation()
         {
@@ -245,7 +243,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             _floatTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
             _floatTimer.Tick += (_, _) =>
             {
-                _floatPhase += 0.05;
+                _floatPhase += 0.05; // WPF Windowing.cs:516 — oscillation speed
                 double y = Math.Sin(_floatPhase) * FloatDistance;
                 ApplyFloatOffset(ImgAvatar, y);
                 ApplyFloatOffset(ImgAvatarAnimated, y);
@@ -268,6 +266,8 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             _floatTimer = null;
         }
 
+        // ================= Attach / detach orchestration =================
+
         public void SetDetached(bool detached)
         {
             if (detached) Detach();
@@ -277,11 +277,15 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         public void Attach()
         {
             _isAttached = true;
-            Topmost = false;
+            Topmost = false; // WPF contract: Topmost=false attached (board REBUILD SPEC)
 
-            // Controller resumes parent-follow sizing (parent ratio, user zoom off)
-            // and re-anchors immediately.
-            _anchor?.SetAttached(true);
+            // WPF parity: re-attaching resets the detached user zoom to 1.0
+            // (WPF Windowing.cs — Attach resets _currentScale; board spec).
+            _currentScale = 1.0;
+            _geometry?.SetUserScale(1.0);
+
+            // Controller resumes scale-with-main-window sizing and re-anchors.
+            _geometry?.SetAttached(true);
 
             // Switch back to original tube image and attached layout.
             SetTubeStyle(false);
@@ -295,10 +299,11 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         public void Detach()
         {
             _isAttached = false;
-            Topmost = true;
+            Topmost = true; // WPF contract: Topmost=true detached
 
-            // Controller stops parent-ratio sizing; detached user zoom applies.
-            _anchor?.SetAttached(false);
+            // Controller stops parent-ratio sizing; detached free user zoom applies
+            // (owner contract: independent of the main window, no reverse coupling).
+            _geometry?.SetAttached(false);
 
             // Switch to alternative tube image and detached layout.
             SetTubeStyle(true);
@@ -315,13 +320,22 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             ReassertCirceEmoteVisuals();
         }
 
+        /// <summary>
+        /// Detached-only topmost reassertion (WPF Windowing.cs:1306-1308 uses
+        /// SetWindowPos(HWND_TOPMOST) because the framework Topmost flag alone can lose
+        /// to other topmost windows created later).
+        /// </summary>
         private void ReassertTopmost()
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (OperatingSystem.IsWindows())
             {
-#if WINDOWS
-                // Windows-specific topmost reassertion would go here via platform helpers.
-#endif
+                try
+                {
+                    IntPtr tube = _tubeHandle != IntPtr.Zero ? _tubeHandle : (this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero);
+                    if (tube != IntPtr.Zero)
+                        SetWindowPos(tube, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
+                catch { }
             }
             else
             {
@@ -331,6 +345,8 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             }
         }
 
+        // ================= Z-order (strictly separated from position) =================
+
         private void BringToFrontTemporarily()
         {
             if (!_isAttached) return;
@@ -339,31 +355,52 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
 
         public void RaiseAttachedTubeAboveOwner() => BringAttachedPairToFront(true);
 
+        /// <summary>
+        /// Requests the attached pair raise through the controller's ONE throttled +
+        /// coalesced funnel (board REBUILD SPEC invariant 3). The actual platform raise
+        /// happens in <see cref="OnRaiseRequested"/>.
+        /// </summary>
         private void BringAttachedPairToFront(bool force = false)
         {
             if (!_isAttached || _parentWindow == null || !_parentWindow.IsVisible || _parentWindow.WindowState == WindowState.Minimized)
                 return;
+            _geometry?.RequestRaise(force);
+        }
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        /// <summary>
+        /// The platform pair raise, WPF BringAttachedPairToFront parity
+        /// (WPF Windowing.cs:1031-1067): parent to HWND_TOP first, then the tube above it,
+        /// so they stay paired without entering the TOPMOST band. Passive raises are gated
+        /// on our process owning the foreground (:1051-1060) so we never steal z-order
+        /// from other apps; force=true callers are deliberately foregrounding us
+        /// (:1022-1029). Runs inside the controller's re-entrancy guard, so the
+        /// WM_WINDOWPOSCHANGED these SetWindowPos calls generate cannot loop back.
+        /// </summary>
+        private void OnRaiseRequested(object? sender, bool force)
+        {
+            if (!_isAttached || _parentWindow == null || !_parentWindow.IsVisible || _parentWindow.WindowState == WindowState.Minimized)
+                return;
+            if (!OperatingSystem.IsWindows())
+                return;
+
+            try
             {
-#if WINDOWS
-                try
-                {
-                    IntPtr tube = _tubeHandle != IntPtr.Zero ? _tubeHandle : (this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero);
-                    IntPtr parent = _parentHandle != IntPtr.Zero ? _parentHandle : (_parentWindow.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero);
-                    if (tube == IntPtr.Zero || parent == IntPtr.Zero) return;
-                    SetWindowPos(tube, new IntPtr(-1), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-                    SetWindowPos(parent, new IntPtr(-1), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-                }
-                catch { }
-#endif
+                IntPtr tube = _tubeHandle != IntPtr.Zero ? _tubeHandle : (this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero);
+                IntPtr parent = _parentHandle != IntPtr.Zero ? _parentHandle : (_parentWindow.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero);
+                if (tube == IntPtr.Zero || parent == IntPtr.Zero) return;
+
+                if (!force && !IsOurAppForeground())
+                    return;
+
+                SetWindowPos(parent, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                SetWindowPos(tube, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
+            catch { }
         }
 
         private void SetToolWindowStyle(bool isToolWindow)
         {
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
-#if WINDOWS
+            if (!OperatingSystem.IsWindows()) return;
             try
             {
                 IntPtr handle = _tubeHandle != IntPtr.Zero ? _tubeHandle : (this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero);
@@ -376,24 +413,22 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
             }
             catch { }
-#endif
         }
 
         private bool IsOurAppForeground()
         {
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return true;
-#if WINDOWS
+            if (!OperatingSystem.IsWindows()) return true;
             try
             {
                 var fg = GetForegroundWindow();
                 if (fg == IntPtr.Zero) return false;
-                uint pid;
-                GetWindowThreadProcessId(fg, out pid);
-                return pid == (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                GetWindowThreadProcessId(fg, out uint pid);
+                return pid == (uint)Process.GetCurrentProcess().Id;
             }
-            catch { }
-#endif
-            return true;
+            catch
+            {
+                return true;
+            }
         }
 
         public void SetChaosRunActive(bool active)
@@ -416,7 +451,3 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         }
     }
 }
-
-#pragma warning restore CS0169
-#pragma warning restore CS0414
-#pragma warning restore CS0649

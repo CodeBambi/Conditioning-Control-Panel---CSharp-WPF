@@ -612,6 +612,16 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
 
                 _useAnimatedAvatar = HasAnimatedAvatar(_currentAvatarSet);
 
+                // 2026-07-11 rebuild (board REBUILD SPEC invariant 6): theme/reskin restyles
+                // IN PLACE. Clear every secondary avatar layer BEFORE the mode dispatch so a
+                // residual layer from the previous mode (portrait crossfade B-layer, mist,
+                // animated B-layer) can never keep rendering under/over the new avatar — the
+                // owner-visible "old avatar + new smaller one over it" on theme switch.
+                CancelCrossfade();
+                if (ImgAvatarB != null) { ImgAvatarB.IsVisible = false; ImgAvatarB.Opacity = 0; }
+                if (ImgAvatarAnimatedB != null) { ImgAvatarAnimatedB.IsVisible = false; ImgAvatarAnimatedB.Opacity = 0; }
+                if (MistOverlay != null) MistOverlay.IsVisible = false;
+
                 if (UsePortraitSystem())
                 {
                     TryEnterPortraitMode();

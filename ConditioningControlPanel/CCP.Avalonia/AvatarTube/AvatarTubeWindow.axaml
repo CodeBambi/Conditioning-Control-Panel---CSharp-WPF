@@ -12,7 +12,7 @@
         ShowInTaskbar="False"
         ShowActivated="False"
         CanResize="False"
-        SizeToContent="WidthAndHeight"
+        SizeToContent="Manual"
         WindowStartupLocation="Manual"
         UseLayoutRounding="True"
         FontFamily="Inter, Segoe UI"
@@ -70,7 +70,10 @@
   </Window.Resources>
 
   <Grid>
-    <Viewbox x:Name="ContentViewbox" Stretch="Uniform" ClipToBounds="False" SizeChanged="ContentViewbox_SizeChanged">
+    <!-- The window is SizeToContent=Manual from birth: TubeGeometryController is the single
+         writer of both this Viewbox's size and the window size (always identical), so the
+         speech bubble/content can never resize the window (WPF anti-freeze invariant). -->
+    <Viewbox x:Name="ContentViewbox" Stretch="Uniform" ClipToBounds="False">
       <Grid Width="780" Height="1080" ClipToBounds="False" UseLayoutRounding="True">
 
         <!-- Tube frame -->

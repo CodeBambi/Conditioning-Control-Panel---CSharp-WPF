@@ -143,18 +143,22 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private const double PerCharDelaySeconds = 0.02;
         private const double SpeechLeadInSeconds = 0.6;
         private const int MaxChatHistorySize = 100;
-        private const double MinScale = 0.5;
-        private const double MaxScale = 1.5;
-        private const double ScaleStep = 0.25;
+
+        // Detached manual-zoom bounds: owner-widened beyond WPF's 0.5-1.5 (board REBUILD
+        // SPEC 2026-07-11, "as small or big as we want"); single source in TubeGeometryMath.
+        private const double MinScale = TubeGeometryMath.MinUserScale;
+        private const double MaxScale = TubeGeometryMath.MaxUserScale;
+        private const double ScaleStep = TubeGeometryMath.UserScaleStep;
 
         // Design canvas / anchor constants (780x1020, -350 overlap, +20 vertical) live in
-        // TubeAnchorController - the single owner of the windowing concern.
+        // TubeGeometryMath (CCP.Core, unit-tested).
         private const double FloatDistance = 4;
         private const double FloatDuration = 2.0;
 
-        // Windowing concern (sizing + anchoring + parent follow) - single owner.
-        // See TubeAnchorController: the ONLY writer of Position and ContentViewbox size.
-        private TubeAnchorController? _anchor;
+        // Windowing concern (sizing + anchoring + parent follow + z-order funnel) -
+        // single owner. See TubeGeometryController: the ONLY writer of Position and of
+        // the ContentViewbox/window size (2026-07-11 core rebuild).
+        private TubeGeometryController? _geometry;
         private double _currentScale = 1.0;
         private double _floatPhase;
         private bool _hiddenForFullscreen;
@@ -194,12 +198,13 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             // Do not set Owner - it causes black-window/minimize artifacts.
             // Z-order and visibility are managed manually via parent events and Win32 topmost toggles.
 
-            // All windowing (sizing, anchoring, parent follow) is owned by TubeAnchorController.
-            // Size the content before the window is shown so SizeToContent doesn't blow up
-            // to the unbounded Viewbox desired size.
-            _anchor = new TubeAnchorController(this, ContentViewbox, parentWindow, _logger);
-            _anchor.RecomputeScreenScale();
-            _anchor.ApplySizing();
+            // All windowing (sizing, anchoring, parent follow, z-order funnel) is owned by
+            // TubeGeometryController. The window runs SizeToContent=Manual from birth and is
+            // sized ANALYTICALLY here, before Show — a transparent window is never auto-sized
+            // (WPF AvatarTubeWindow.xaml.cs:483-520 anti-freeze lesson).
+            _geometry = new TubeGeometryController(this, ContentViewbox, parentWindow, _logger);
+            _geometry.RecomputeScreenScale();
+            _geometry.ApplySizing();
             _settings = App.Services.GetRequiredService<global::ConditioningControlPanel.Core.Services.Settings.ISettingsService>();
             _audioPlayer = App.Services.GetService<IAudioPlayer>();
             _progression = App.Services.GetService<IProgressionService>();
@@ -263,12 +268,15 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             ApplyTubeLayoutOffsets();
 
             // Behavioral responses to parent transitions (show/hide, gif pause, z-order);
-            // the synchronous position/size follow itself lives inside the controller.
-            _anchor.ParentActivated += (_, _) => OnParentActivated();
-            _anchor.ParentWindowStateChanged += (_, state) => OnParentWindowStateChanged(state);
-            _anchor.ParentIsVisibleChanged += (_, visible) => OnParentVisibleChanged(visible);
-            _anchor.ParentClosed += (_, _) => OnParentClosed();
-            _anchor.Start();
+            // the coalesced position/size follow itself lives inside the controller.
+            _geometry.ParentActivated += (_, _) => OnParentActivated();
+            _geometry.ParentWindowStateChanged += (_, state) => OnParentWindowStateChanged(state);
+            _geometry.ParentIsVisibleChanged += (_, visible) => OnParentVisibleChanged(visible);
+            _geometry.ParentClosed += (_, _) => OnParentClosed();
+            // The ONE shared z-order raise funnel executes the platform pair-raise here
+            // (WPF Windowing.cs:1031-1067 parity; see OnRaiseRequested).
+            _geometry.RaiseRequested += OnRaiseRequested;
+            _geometry.Start();
 
             _achievementService = global::ConditioningControlPanel.Avalonia.App.Services?.GetService<IAchievementService>();
             if (_achievementService != null)
@@ -405,16 +413,6 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             if (ImgAvatar != null) ImgAvatar.Source = _avatarPoses[_currentPoseIndex];
         }
 
-        private void ContentViewbox_SizeChanged(object? sender, SizeChangedEventArgs e)
-        {
-            // WPF parity (AvatarTube/AvatarTubeWindow.xaml.cs L534-539): the tube window is a
-            // FIXED size pinned to the deterministic ContentViewbox.Width/Height (design x scale),
-            // so the speech bubble stays a pure in-design-space overlay and can never resize the
-            // window. The pin lives in the controller (single owner of window sizing) and only
-            // acts after the first-render freeze to Manual.
-            _anchor?.PinWindowToContent();
-        }
-
         private void SpeechBubble_MouseEnter(object? sender, PointerEventArgs e)
         {
             _isMouseOverSpeechBubble = true;
@@ -464,7 +462,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             // RenderScaling or the drag lags the cursor on >100% DPI monitors. The write goes
             // through the controller (single writer of Position), which also clamps to screen.
             double s = RenderScaling;
-            _anchor?.MoveTo(new PixelPoint(
+            _geometry?.MoveTo(new PixelPoint(
                 _dragStartWindowPos.X + (int)Math.Round(delta.X * s),
                 _dragStartWindowPos.Y + (int)Math.Round(delta.Y * s)));
         }
@@ -487,7 +485,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 if (next != _currentScale)
                 {
                     _currentScale = next;
-                    _anchor?.SetUserScale(_currentScale);
+                    _geometry?.SetUserScale(_currentScale);
                     UpdateResizeMenuState();
                 }
                 e.Handled = true;
@@ -552,7 +550,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             if (!_isAttached && _currentScale > MinScale)
             {
                 _currentScale = Math.Max(MinScale, _currentScale - ScaleStep);
-                _anchor?.SetUserScale(_currentScale);
+                _geometry?.SetUserScale(_currentScale);
                 UpdateResizeMenuState();
             }
         }
@@ -561,7 +559,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             if (!_isAttached && _currentScale < MaxScale)
             {
                 _currentScale = Math.Min(MaxScale, _currentScale + ScaleStep);
-                _anchor?.SetUserScale(_currentScale);
+                _geometry?.SetUserScale(_currentScale);
                 UpdateResizeMenuState();
             }
         }
@@ -1488,8 +1486,21 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         }
         private void StartZOrderRefreshTimer()
         {
-            _zOrderRefreshTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
-            _zOrderRefreshTimer.Tick += (_, _) => BringAttachedPairToFront();
+            // WPF parity (Windowing.cs:1316-1343): a 300ms backstop that keeps the speech
+            // bubble above main while it is visible. Created ONCE and the Tick handler
+            // subscribed ONCE — the pre-rebuild version re-subscribed the handler on every
+            // speech event, accumulating raise callbacks per tick (the leaked per-ShowGiggle
+            // timer of obs #6). The raise itself goes through the controller's throttled
+            // funnel, so even a busy tick can never storm.
+            if (_zOrderRefreshTimer == null)
+            {
+                _zOrderRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+                _zOrderRefreshTimer.Tick += (_, _) =>
+                {
+                    if (_isAttached && SpeechBubble?.IsVisible == true && IsOurAppForeground())
+                        BringAttachedPairToFront();
+                };
+            }
             _zOrderRefreshTimer.Start();
         }
         private void StartThinkingAnimation()
@@ -1713,8 +1724,10 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private void OnLoaded(object? sender, RoutedEventArgs e)
         {
             Topmost = false;
-            _anchor?.RecomputeScreenScale();
-            _anchor?.ApplySizing();
+            // Screen metrics are reliable now; re-derive the screen-fit scale once. The
+            // controller's dead-band keeps this a no-op when nothing actually changed.
+            _geometry?.RecomputeScreenScale();
+            _geometry?.ApplySizing();
             Dispatcher.UIThread.Post(() =>
             {
                 if (_parentWindow?.IsVisible == true && _parentWindow.WindowState != WindowState.Minimized)
@@ -1740,19 +1753,19 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             _tubeHandle = this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
             _parentHandle = _parentWindow?.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
 
-            // Freeze to the DETERMINISTIC content size (ContentViewbox.Width/Height = design x
-            // scale), NOT the transient ClientSize: OnLoaded posts ShowGreeting(), so a greeting
-            // speech bubble can already have inflated the SizeToContent=WidthAndHeight ClientSize
-            // by first render - freezing to that oversized value letterboxes the avatar smaller
-            // and high in a too-big window. The freeze (Manual BEFORE Width/Height) and the
-            // follow-up anchor are owned by the controller.
-            _anchor?.FreezeWindowSize();
-            _anchor?.UpdatePosition();
+            // No size freeze needed: the window runs SizeToContent=Manual from birth with
+            // an analytically computed Width/Height (controller ctor), so there is no
+            // transient auto-size to capture (the WPF freeze dance in xaml.cs:483-520
+            // existed only because WPF derived the size from the first paint).
+            _geometry?.UpdatePosition();
             InvalidateVisual();
         }
 
         protected override void OnClosed(EventArgs e)
         {
+            // Full teardown (board REBUILD SPEC invariant 6): every timer, hook and
+            // subscription dies with the window so a recreated tube can never receive
+            // callbacks from a disposed predecessor.
             _poseTimer?.Stop();
             _fullscreenCheckTimer?.Stop();
             StopFloatingAnimation();
@@ -1760,13 +1773,23 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             _animatedAvatarGif = null;
             _speechTimer?.Stop();
             _speechDelayTimer?.Stop();
+            _speechLeadInTimer?.Stop();
             _idleTimer?.Stop();
             _triggerTimer?.Stop();
             _randomBubbleTimer?.Stop();
             _zOrderRefreshTimer?.Stop();
+            _thinkingTimer?.Stop();
+            _typewriterTimer?.Stop();
+            _mutedIndicatorTimer?.Stop();
+            _companionGreetingDebounce?.Stop();
+            _cooldownTickTimer?.Stop();
             StopVoiceLineAudio();
             UnwireCompanionReactionEvents();
-            _anchor?.Dispose();
+            if (_geometry != null)
+            {
+                _geometry.RaiseRequested -= OnRaiseRequested;
+                _geometry.Dispose();
+            }
             if (_achievementService != null)
             {
                 _achievementService.AchievementUnlocked -= OnAchievementUnlocked;
@@ -1790,7 +1813,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         }
 
         // ===== Parent window behavioral responses =====
-        // The synchronous position/size FOLLOW lives inside TubeAnchorController (it
+        // The coalesced position/size FOLLOW lives inside TubeGeometryController (it
         // subscribes PositionChanged/SizeChanged/PropertyChanged/Activated itself and, on
         // Windows, a WndProc hook that tracks the OS move loop). These callbacks own only
         // the behavioral side: show/hide, gif pause, z-order, and the deferred
@@ -1887,6 +1910,7 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         public void ShowTube()
         {
             _hiddenForFullscreen = false;
+            CloseStrayTubes();
             Show();
             if (_parentWindow?.IsVisible == true && _parentWindow.WindowState != WindowState.Minimized)
             {
@@ -1910,6 +1934,26 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         public void HideTube()
         {
             Hide();
+        }
+
+        /// <summary>
+        /// Deterministic single-instance lifecycle (board REBUILD SPEC invariant 6):
+        /// if any OTHER tube window is alive (theme-switch recreation race, service
+        /// fallback path), close it before this one shows — never two tubes on screen
+        /// (the owner-visible double avatar of obs #6).
+        /// </summary>
+        private void CloseStrayTubes()
+        {
+            if (global::Avalonia.Application.Current?.ApplicationLifetime
+                is not global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime lifetime)
+                return;
+
+            foreach (var stray in lifetime.Windows.OfType<AvatarTubeWindow>()
+                         .Where(w => !ReferenceEquals(w, this)).ToList())
+            {
+                _logger?.LogWarning("AvatarTube: closing stray duplicate tube instance before show");
+                try { stray.Close(); } catch { /* already closing */ }
+            }
         }
 
         public void SetMuted(bool muted)
