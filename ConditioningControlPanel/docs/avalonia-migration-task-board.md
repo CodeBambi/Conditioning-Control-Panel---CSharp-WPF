@@ -504,6 +504,26 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   No web-boot-failure fallback to native (recorded owner-approved deviation — error surface only). The live
   Three.js/WebGL boot itself is flagged for owner eyes (headed gate), mirroring this session's AvatarTube/
   Enhancements/dashboard precedent.
+- **S1 LANDED 2026-07-11 · @driver** (appendix phase "Asset + session telemetry"): ported the three DTRH
+  telemetry/manifest helpers to portable `CCP.Core/Services/Chaos/` — `DtrhAssetManifest.cs`,
+  `DtrhAssetStatsStore.cs`, `DtrhSessionStatsStore.cs`. Transform: `internal static` → `public sealed`
+  instance services injecting `IAppEnvironment` (+ `ILogger<T>`), replacing WPF-head `App.UserDataPath`/
+  `App.EffectiveAssetsPath`/`App.Logger` statics; nested model/record types made `public` with **frozen JSON
+  property names** (`dtrh_asset_stats.json` / `dtrh_session_stats.json` on-disk schema unchanged so existing
+  saves keep loading). Behavior byte-for-byte: OrdinalIgnoreCase dicts, `Math.Max(0,…)` clamps, TopAssets
+  ranking `Weighted + Grabs*8 + Pops*2`, `BestComboEver` = max, `EffectsByKind` merge, `HistoryCap=25` trim,
+  manifest caps/exts/`IsMediaLike` skip/`https://ccp.assets/` escaping/Fisher-Yates downsample. Sole
+  behavioral addition: `internal Task WhenSaved` (test-only handle on the best-effort background write).
+  **Zero head wiring, zero DI registration this slice** (nothing consumes them yet — deferred to the bridge
+  slice). Privacy honored: per-asset engagement stays local (file only, never network). 10 pinning tests
+  (`tests/CCP.Core.Tests/DtrhStoresTests.cs`, reusing the `TestAppEnvironment` fake). Dispatched to a
+  medium-tier `port-slice-executor` via the `workflow` tool (936K tokens, budget-capped 1.5M); driver
+  independently re-ran the full gate set, spot-checked schema fidelity, and confirmed zero WPF-head edits.
+  **Gates:** slnf 0 err · WPF sln 0 err · Core **553/553** (was 543, +10) · smoke 44 tabs / 0 unhandled /
+  Findings 17 (⊆ recorded authed benign band: 1 StartSession baseline blocker + 4 ChaosRun telemetry + 11
+  availablesubjects loc-key misfires + 1 ConnectCommand). **Next slice (S2)** = `DtrhMetaBridge` JS↔C#
+  message-bridge + run/session orchestration to portable Core, then the Avalonia game window over
+  `IBrowserHost`, the Lab-tab launch hook, and in-world integration verify (appendix phases 2–7).
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
