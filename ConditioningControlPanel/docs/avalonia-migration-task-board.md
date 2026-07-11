@@ -1088,6 +1088,27 @@ already done. These five remain:
 - **3e** update-restart #499: N/A until the Avalonia head has a production installer; when it ships one,
   port the equivalent via the `IUpdateInstaller` seam.
 
+- **✅ VERIFY COMPLETE 2026-07-11 · @driver** (docs-only; **no code port required**). Dispositions:
+  - **3a lock-card repeat — CODE PRESENT, runtime headed-gate.** `LockCardWindow.IsAnyOpen()` (:99) +
+    `ForceCloseAll()` (:144) exist and are consumed (`AvaloniaLockCardService.cs:83`,
+    `BubbleCountResultWindow.axaml.cs:340`); the WPF `Application.Current.Windows`-lingering-pool bug class is
+    structurally addressed. Live repeat-guard behavior remains headed-unverified (no headless harness) — no code work.
+  - **3b overlay z-order #497 — VERIFIED structurally absent.** `CompositorLayers`: Video=10 < MandatoryVideo=15 <
+    Spiral=60 < PinkTint=70 on ONE Skia surface; the WPF "filter WINDOW buries the video WINDOW" band-inversion class
+    cannot occur — spiral/pink composite *over* live session video by design (intended ambient effect).
+  - **3c bounce-in-tray #503 — VERIFIED clean.** `MainWindow.OnClosing` (:391-411) minimize-to-tray path
+    (`e.Cancel=true; WindowState=Minimized`) has NO `BouncingText.Stop()`/subliminal stop; bouncing/subliminal text
+    render as compositor layers independent of window state. The WPF stray-`App.BouncingText?.Stop()` bug is absent.
+  - **3d weekly-quest "stuck on Loading" #496 — VERIFIED structurally handled.** `GetWeeklyDefinition()` (:817) is a
+    PURE stored-`DefinitionId` lookup (remote pool → local set → null) with NO regeneration, so the double-reward
+    risk is absent; `WeeklyCompletedVisible = progress.WeeklyQuest?.IsCompleted` is driven by STORED progress
+    (completed card shows even when the definition no longer resolves); the name falls back to `label_weekly_quest`,
+    NOT a blank Loading placeholder. Functionally equivalent to the WPF fix. **Optional non-blocking polish:** WPF
+    shows a specific "complete — new one Monday" copy; Avalonia shows the generic weekly card + completed overlay.
+  - **3e update-restart #499 — N/A (deferred).** Correct until the Avalonia head ships a production installer; port
+    via the `IUpdateInstaller` seam then.
+  - **NET: row #7 fully verify-resolved — no code port required.** 3a runtime + live web-boot remain headed gates.
+
 ### #8a — #493 Gif Rain cascade multi-monitor · **STANDARD**
 
 From the v6.2.10 release (its catalogue was deleted 2026-07-10; the work now lives here). The cascade must spawn across the correct monitor set (all monitors for a
