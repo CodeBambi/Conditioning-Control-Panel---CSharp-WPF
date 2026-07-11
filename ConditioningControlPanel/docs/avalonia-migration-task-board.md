@@ -301,6 +301,29 @@ native-interop-timing) fault, observed on THIS machine (run via `dotnet run -c R
     fix above — NOT a regression, and it is apparently not the crash the dump captured. Safer would be to hand back
     the still-allocated `buffers[_decodeIdx]` (as during playback) rather than NULL. Small, isolated; verify with
     the same Release `--max-benchmark` loop.
+    - **UPGRADED to a grounded, ready-to-implement finding 2026-07-11 · @driver (read-only code trace, no edit).**
+      Traced the full buffer lifecycle in `VideoLayer.cs`. **Reachability is REAL, not theoretical:** `Stop()` sets
+      `_bufferValid=false` at `:339` but does NOT null `_buffers` until after the bounded `stopTask.Wait(500)` (`:380`).
+      For up to 500ms while off-thread `player.Stop()` completes, LibVLC's decode thread can still invoke
+      `LockCallback` with `_bufferValid==false && _buffers!=null` → current code writes a NULL plane → LibVLC writes
+      the in-flight decoded frame to address 0 → the SAME native teardown-write SIGSEGV class fixed in `9aab5206`
+      (a SIBLING vector, not the one the dump captured). The pinned buffers stay live until the deferred teardown
+      (strictly after `stopTask` + 400ms), so `buffers[_decodeIdx]` is a valid scratch target throughout the window.
+      **Exact minimal fix (ready):** in `LockCallback`, keep the `buffers == null` early-out (writes IntPtr.Zero —
+      still correct once buffers are retired), but when `buffers != null` write `buffers[_decodeIdx]` even if
+      `!_bufferValid`, and gate `_locksOutstanding++` on `_bufferValid` so `DisplayCallback` (which won't rotate
+      while `!_bufferValid`) keeps consistent accounting. **Both prior deferral reservations are RETIRED by the
+      trace:** (1) the "null-`_buffers` NRE" fear is already covered by the retained `buffers == null` guard; the
+      decode slot is distinct from the render's front slot (triple-buffered) and `LockCallback` is serialized
+      against the `_buffers=null` retirement under `_bufferLock`. (2) NO hot-path perf cost — the normal
+      `_bufferValid==true` per-frame path stays byte-identical; only the teardown branch changes.
+      **WHY STILL OWNER-GATED (the decisive fork):** this IS the vmem `LockCallback` that **row #3's libmpv
+      engine-swap spike deletes wholesale** ("libmpv replaces this pipeline wholesale; never do both"). Hardening
+      it now is throwaway if the owner takes the libmpv fork. So the owner call is not "is the fix right" (it is,
+      and it's ready above) but "harden the LibVLC vmem path now, or wait and let the libmpv swap obsolete it."
+      Autonomous driver did NOT implement it: non-manifesting + architectural-fork-dependent, and the fix cannot
+      be empirically PROVEN (intermittent, like `9aab5206`) so it would ship on mechanism + gates + stability runs
+      only. Recorded ready-to-land for a one-turn implementation the moment the owner says go (and picks LibVLC-stays).
   - **#2/#3/#4 status correction:** the Release harness now REACHES window-show and runs the full session (so it
     is no longer window-show-blocked), but it crashes at teardown ~1-in-2, so an END-OF-RUN report (AvgFps/MinFps)
     cannot be reliably captured until the LibVLC-stop fix lands. #2/#3/#4 are **partially** unblocked, not fully.
