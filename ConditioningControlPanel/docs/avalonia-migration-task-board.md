@@ -728,6 +728,71 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
     from the page's `run-ended` message). This keeps the Core/head line clean and dodges the smoke prohibition
     entirely. Lesson: **a fully-qualified type reference in an uneditable file pins that type's namespace** —
     check `grep -rn "Namespace.Path.Type" SmokeTestRunner.cs` BEFORE planning any type relocation.
+- **S2c-1 CONTRACT + SEAM DESIGN 2026-07-11 · @driver** (`wpf-archaeologist` full extraction of
+  `DtrhHostService.cs` 914L, read-only; Avalonia DTRH orchestration confirmed **100% greenfield** — zero
+  existing wiring). Recon settled every inject-vs-seam decision. **S2c-pre is DISSOLVED** (all prereqs done /
+  confirmed present / folded into S2c-1).
+  - **Router (`OnPageMessage` switch, `DtrhHostService.cs:204-278`):** `switch((string?)o["type"])`, NO
+    default (unknown types dropped). `ready`+`log` are intercepted in the transport, never reach the switch.
+    Cases → disposition: `vn-speaking`(flag `_vnSpeaking`) · `sfx`(seam, early-break if `_vnSpeaking`) ·
+    `fire-payload`(seam) · `freeze-state`(seam) · `meta-command`(`_meta.Handle(o)`) · `request-run`(portable
+    + seam cfg build) · `run-started`(portable + seam sentinel/bark) · `run-ended`(portable + seam) ·
+    `bark`(seam, early-break if `_vnSpeaking`) · `heartbeat`/`pong`(`_lastHeartbeatUtc=UtcNow`) ·
+    `asset-stats`(store.Merge) · `boot-error`(**DROP** per web-only ruling — surface+close, no WPF fallback) ·
+    `exit`(arm 1200ms watchdog) · `exit-done`(DisposeAll).
+  - **XP (run-ended `:406-417`, verbatim):** `score=o["score"]??0`; `durationSec=Max(1,o["durationSec"]??60)`;
+    `elapsedSec=Clamp(o["elapsedSec"]??durationSec,0,durationSec*2)`; `diffMult=Clamp(o["difficultyMult"]??1,
+    0.5,5)`; `sparkGainMult=Clamp(o["sparkGainMult"]??1,0.5,5)`; `durMin=durationSec/60`;
+    `capBase=250*durMin*diffMult`; `baseXp=Min(score,capBase)`; `skillMult=ISkillTree.GetTotalXpMultiplier()??1`;
+    `finalXp=baseXp*skillMult`. **All inputs from message `o` except skillMult (progression service).**
+  - **Ordering invariants (run-ended `OnRunEnded :400-496`, MUST preserve):** freeze-resume `ApplyWorldFreeze(false)`
+    (`:403`) → `previousBest` read (`:419`, `0` in testMode) → **AwardRun banks+saves** (`:424`, `ChaosRunRewardInput`)
+    → non-test block in order: `IProgression.AddXP((int)baseXp,Chaos)` (`:439`, banks **baseXp not finalXp**) →
+    **`SyncReveals("run_end")`** (`:441`) → rank-up check `ChaosRanks.For(RunsCompleted)` vs `LastRankSeen`
+    (`:443-447`) → `NotifyRunCompleted((int)finalXp,diff)` (`:448`) → `sentinel.Clear()` (`:449`) →
+    **`_meta.Rebroadcast()`** (`:452`) → session-stats `Record` (`:470`) → **`payout-result` posted LAST**
+    (`:477`, `{baseXp,skillMult,finalXp,sparksEarned,previousBest,rankUp,dryRun}`). `Rebroadcast` BEFORE payout.
+  - **request-run DEAL (`:285-307`):** `PersistRunSetup(o["setup"])` (portable, clamps→AppSettings, no save) →
+    `force=!test && State.ForceScriptedRun` → `scripted=!test && (RunsCompleted==0||force)` → cfg = seam
+    `BuildRunConfigJson(scripted)` → **`ForceScriptedRun` SPENT HERE** (`:298-300`: clear+Save+Rebroadcast,
+    NOT at run-end — run-end has too many exit paths) → post `{type:"run-config",runConfig:<cfg>}`.
+  - **PersistRunSetup clamps (`:311-333`, only-if-present):** durationSec `Clamp(_,60,1200)`; waveCount
+    `Clamp(_,1,12)`; effectIntensity `Clamp(_,0.2,1.5)`; difficulty/motion/key1/key2 strings; variants
+    null-or-`List<string>`; colorFlashes/boonDraft/allowCurses/darters `bool??true`. **FirePayload clamps
+    (`:389-390`):** `Strength=Clamp(o["strength"]??60,0,100)`, `DurationMult=Clamp(o["durationMult"]??1,0.1,10)`;
+    only `video`/`audio` kinds survive (audio → `_runSubliminalsHeard++` if runActive).
+  - **Watchdogs (`System.Threading.Timer`, NOT DispatcherTimer — Core precedent `DtrhMetaBridge:381`):**
+    heartbeat 5s tick, silence limit `_runActive?10:20`s → `Recover`; `Recover` relaunches ONCE per session
+    (`_relaunchedOnce`); exit watchdog 1200ms one-shot → DisposeAll. Timer callbacks touch natives/browser →
+    seam impls marshal to UI thread.
+  - **Teardown (`DisposeAll :769-795`, verbatim order):** cancel exit wd → stop heartbeat → unhook video →
+    **freeze force-resume if `_worldFrozen`** (`:775`) → **`_meta.FlushSave()` on EVERY path** (`:776`) →
+    `sentinel.Clear()` if runActive&&!test → `_runActive=false` → dispose host → **`RestoreMainWindow()`**
+    (`ShowFromTray` `:792`). DisposeAll is the single teardown funnel (CloseActive/exit-done/watchdog/Recover/
+    boot-error all route through it).
+  - **Outbound (Post serializes Newtonsoft, queue-until-page-`ready` OWNED BY ORCHESTRATOR in port — WPF had
+    it in `ChaosWebViewHost`):** `init`{protocol=1,settings.masterVolume,modId,runSetup,m2Test} · meta
+    (bridge.SnapshotMessage) · `manifest`(DtrhAssetManifest.Build) · `favorites`(store.TopAssets(12), only if
+    >0) · `run-config`(seam cfg) · `payout-result` · `payload-state`{kind:video,on} (video events) · `end-run`
+    {reason:host} (graceful close). **BuildRunConfig `:808-891`** (~40 fields incl 20 seen-once `flags` off
+    `ChaosMeta.State`) reads head `ChaosRunConfig` → **head builds via seam `BuildRunConfigJson`**.
+  - **FINALISED SEAM SPLIT.** INJECT (Core, portable): `IBrowserHost`; `IChaosMetaStore`→orchestrator
+    constructs `DtrhMetaBridge(store,env,logger,broadcast:PostObject,testMode,bark)` internally;
+    `IProgressionService.AddXP(int,XPSource)` + `ISkillTreeService.GetTotalXpMultiplier()` (both `App.cs`);
+    `ChaosCrashSentinel`(Mark/Clear); `ISettingsService` (Core AppSettings has ALL `Chaos*`+`MasterVolume` →
+    PersistRunSetup/BuildRunSetup portable); ported stores `DtrhAssetManifest`/`DtrhAssetStatsStore`(Merge/
+    TopAssets)/`DtrhSessionStatsStore`(Record); `IAppEnvironment`+`ILogger`. SEAM `IDtrhNativeEffects` (head,
+    the ONE head-callback interface): `PlaySfx(name,scale)` · `FirePayload(kind,strength,durationMult)` ·
+    `SetWorldFrozen(bool)` · `ReclaimBrowserFocus()` · `RouteBark(string json)` · `NotifyRunStarted(diff)` ·
+    `NotifyRunCompleted(finalXp,diff)` · `SyncReveals(reason)` · `BuildRunConfigJson(bool scripted)` ·
+    `RestoreMainWindow()`. Orchestrator owns `_worldFrozen` dedup (seam called only on transition). ~40 bark
+    Notify* stay HEAD (RouteBark parses json head-side) — Core needs NO chaos bark surface. Public orchestrator
+    API for head to wire: `HandleMessage(string json)`←`IBrowserHost.WebMessageReceived`, `OnVideoStarted/
+    Ended/WatchCredited`, `NoteVoicelineHeard(double)`, `Dispose()`.
+  - **Slices:** S2c-1 = Core `DtrhHostOrchestrator` + `IDtrhNativeEffects` seam + Avalonia no-op fallback
+    registration + Core tests (router dispatch, XP formula+cap, clamps, ordering-invariant sequencing via a
+    fake effects/browser, queue-until-ready). `port-parity-auditor` gate on the diff. S2c-2 = head Window +
+    `IDtrhNativeEffects` impl + WebView2 config + Lab-tab launch hook (unchanged plan).
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
