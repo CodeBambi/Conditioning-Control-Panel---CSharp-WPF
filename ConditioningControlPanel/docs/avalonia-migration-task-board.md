@@ -524,6 +524,31 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   availablesubjects loc-key misfires + 1 ConnectCommand). **Next slice (S2)** = `DtrhMetaBridge` JS↔C#
   message-bridge + run/session orchestration to portable Core, then the Avalonia game window over
   `IBrowserHost`, the Lab-tab launch hook, and in-world integration verify (appendix phases 2–7).
+- **ADVISOR RULING 2026-07-11 (S2 architecture fork):** the meta/economy primitives (`ChaosMeta` facade +
+  `IChaosMetaService`, `ChaosRank`/`BenchIds`/`ChaosFirstTimes`, `AwardRunRewards`) currently live in
+  **CCP.Avalonia** (from the already-ported native run, `AvaloniaChaosStubs.cs`/`ChaosServices.cs`/
+  `ChaosLessons.cs`/`AvaloniaHeadStubs.cs`) — much of it decommission-candidate, but the meta store is a
+  carve-out KEEP. The portable `DtrhMetaBridge` needs them Core-side. **Direction: Option 3** — minimal Core
+  seam (`IChaosMetaStore`: `State`/`RankIndex`/`Save()`/`AwardRunRewards`) + move only the PURE value types to
+  Core; do NOT drag `IChaosMetaService`/reveal/narrative machinery into Core (defer full consolidation to
+  phase 8 when the native consumers die), do NOT leave the bridge in the head. Sliced S2 → **S2a-1** (Core
+  model v3 deltas), **S2a-2** (pure value-type relocation w/ head-consumer churn), **S2b** (bridge over the
+  new seam + economy pinning tests + `port-parity-auditor`), **S2c** (`DtrhHostService` 914L split). The v3
+  **pocket-refund migration** belongs to the store-seam layer (S2b), NOT the model.
+- **S2a-1 LANDED 2026-07-11 · @driver** (appendix phase "meta/progression model deltas", first sub-slice):
+  synced `CCP.Core/Services/Chaos/ChaosMetaState.cs` to WPF **SchemaVersion 3** — bumped the version + added
+  the 5 Core-missing props **WPF-verbatim** (types/defaults/XML docs): `PurchasedDials` (HashSet), 
+  `ConsumableSlots` (int, **default 1** — old saves get a working slot), `ForceScriptedRun`,
+  `SeenFirstReturn`, `SeenWarrenWelcome` (bools). Fixes the bridge's reflection-based `set-flag`/`reset-
+  onboarding` ops silently no-op'ing on absent props. **Purely additive + neutral defaults ⇒ v2 saves load
+  idempotently**; the v3 pocket-refund migration is deferred to the store seam (not this model). ZERO head
+  changes (grep confirmed no pre-existing head reference to the 5 props on the Core type). 4 pinning tests
+  (`tests/CCP.Core.Tests/ChaosMetaStateV3Tests.cs`: fresh-state schema=3, ConsumableSlots default 1, v2
+  idempotent load w/ neutral defaults + byte-stable round-trip, all-new-props persist). Medium-tier
+  `port-slice-executor` via `workflow` (692K tokens, cap 1M); driver re-ran full gates + verified diff.
+  **Gates:** slnf 0 err · WPF sln 0 err · Core **557/557** (was 553, +4) · smoke 44 tabs / 0 unhandled /
+  Findings 17 (⊆ recorded authed benign band). **Next = S2a-2** (relocate `ChaosRank`/`BenchIds`/
+  `ChaosRunRewardInput`/`MAX_CONSUMABLE_SLOTS` + data-only `ChaosFirstTimes` to Core, update head consumers).
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
