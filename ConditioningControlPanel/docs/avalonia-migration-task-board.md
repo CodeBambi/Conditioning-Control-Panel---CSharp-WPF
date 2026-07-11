@@ -705,6 +705,29 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
     and pass in — per the seam above, passing in is preferred, so B may be a no-op). RevealService → S2c-1.
   - Verify-only remaining: progression `AddXP` (Core=15) + skill-tree total-multiplier (Core=11) confirmed
     present by census; the orchestrator's XP formula can call them directly.
+- **S2c-pre-A ATTEMPTED → REVERTED (SEAM FLIPPED) 2026-07-11 · @driver** — tried moving `ChaosRunConfig`
+  (pure DTO) + `ChaosPlayMode` to Core with the head-coupled factory relocated to a head
+  `ChaosRunConfigFactory`. Built clean EXCEPT one hard-blocker: **`SmokeTestRunner.cs:1218` references the
+  type by FULLY-QUALIFIED name** `new ConditioningControlPanel.Avalonia.Chaos.ChaosRunConfig { ... }`, and that
+  file is under the **hard no-edit prohibition**. A fully-qualified name can ONLY be satisfied by a real type
+  declared in that exact namespace — no `using`/global-alias/`[TypeForwardedTo]` can redirect a namespace-
+  qualified reference (type-forwarding preserves `Namespace.Type`; aliases only affect UNqualified names). So
+  `ChaosRunConfig` **cannot leave `ConditioningControlPanel.Avalonia.Chaos`** without either editing the
+  prohibited smoke file or an ugly hack (a CCP.Core type masquerading under an `Avalonia.Chaos` namespace).
+  Reverted the move wholesale (2 new files deleted, 5 head files `git checkout`ed — tree back to `c0880f65`).
+  - **SEAM DECISION (supersedes the `c0880f65` “move pure DTO to Core” recommendation):** `ChaosRunConfig`
+    **STAYS head-side** (`AvaloniaChaosStubs.cs:239`, `Avalonia.Chaos`). The Core `DtrhHostOrchestrator`
+    receives config as (a) a **serialized run-config payload** (a `JObject`/string the head builds for the
+    outbound page `run-config` message) + (b) the **two scalars** it needs for the XP cap: `RunDurationSec`
+    and `DifficultyMult`. The head owns ALL config construction (`FromSettings`/`BuildFirstRunConfig`/
+    `ChaosMeta.ApplyTo`) — which is correct anyway: settings + owned-upgrade application + reveal clamps are
+    head concerns. No typed `ChaosRunConfig` in Core; no `ChaosPlayMode`/`ChaosDifficulty` move needed.
+  - **S2c-1 impact:** the orchestrator's outbound run-config `Build*` assembles only the ENVELOPE
+    (`{ type:"run-config", config:<headPayload> }`); the head produces `<headPayload>`. `request-run` hands the
+    orchestrator `(configPayload, runDurationSec, difficultyMult)` (or the orchestrator reads duration back
+    from the page's `run-ended` message). This keeps the Core/head line clean and dodges the smoke prohibition
+    entirely. Lesson: **a fully-qualified type reference in an uneditable file pins that type's namespace** —
+    check `grep -rn "Namespace.Path.Type" SmokeTestRunner.cs` BEFORE planning any type relocation.
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
