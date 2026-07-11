@@ -484,7 +484,7 @@ public partial class LabTabViewModel : TabItemViewModel
     private static bool IsHarnessRun()
         => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Args?
             .Any(a => a is "--smoke-test" or "--benchmark" or "--max-benchmark"
-                        or "--verify-spiral" or "--verify-video" or "--verify-layers" or "--verify-visible") == true;
+                        or "--verify-spiral" or "--verify-video" or "--verify-layers" or "--verify-visible" or "--verify-avatartube") == true;
 
     [RelayCommand]
     private async Task QuickStartChaosAsync()

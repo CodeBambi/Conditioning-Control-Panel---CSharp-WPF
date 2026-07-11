@@ -198,6 +198,58 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         public bool IsSpeakingAudio => _isSpeakingAudio;
         public int CurrentAvatarSet => _currentAvatarSet;
 
+        // ===== --verify-avatartube harness test seams ==========================================
+        // Read-only state plus the detached-drag MoveTo entry. NO behavior change. These exist
+        // so the sibling verify harness (tests/CCP.Avalonia.Desktop.Windows.Smoke/
+        // AvatarTubeVerification.cs) can prove the 0f338f87 fix: firing speech bubbles no
+        // longer re-settles tube geometry (the 0.527<->0.738 finalScale oscillation =
+        // shift-up + shrink + freeze). The harness lives in a different assembly, so it
+        // cannot reach the x:Name fields (internal) directly — it goes through these.
+
+        /// <summary>Composed attached scale (TubeGeometryController.FinalScale). NaN until first sizing.</summary>
+        public double VerifyFinalScale => _geometry?.FinalScale ?? double.NaN;
+
+        /// <summary>One read-only geometry snapshot for the harness: finalScale, tube window size,
+        /// ContentViewbox size, and the avatar's rendered rect in WINDOW space. The avatar rect
+        /// translates AvatarBorder's corners through every transform incl. the Viewbox stretch,
+        /// so a window/viewbox resize — exactly what the oscillation bug produced — surfaces here.
+        /// NaN fields mean the visual is not yet in the tree.</summary>
+        public (double finalScale, double winW, double winH, double viewboxW, double viewboxH,
+                double avatarX, double avatarY, double avatarW, double avatarH) VerifyGeometrySnapshot()
+        {
+            double fs = _geometry?.FinalScale ?? double.NaN;
+            double winW = Width, winH = Height;
+            double vbW = ContentViewbox?.Width ?? double.NaN;
+            double vbH = ContentViewbox?.Height ?? double.NaN;
+            double ax = double.NaN, ay = double.NaN, aw = double.NaN, ah = double.NaN;
+            if (AvatarBorder != null)
+            {
+                var tl = AvatarBorder.TranslatePoint(new global::Avalonia.Point(0, 0), this);
+                var br = AvatarBorder.TranslatePoint(
+                    new global::Avalonia.Point(AvatarBorder.Bounds.Width, AvatarBorder.Bounds.Height), this);
+                if (tl.HasValue && br.HasValue)
+                {
+                    var r = new global::Avalonia.Rect(tl.Value, br.Value);
+                    ax = r.X; ay = r.Y; aw = r.Width; ah = r.Height;
+                }
+            }
+            return (fs, winW, winH, vbW, vbH, ax, ay, aw, ah);
+        }
+
+        /// <summary>True once the detached art-only WM_NCHITTEST hook is installed (registered in
+        /// OnFirstContentRendered via Windowing.RegisterHitTestHook; removed OnClosed).</summary>
+        public bool VerifyHitTestHookRegistered => _hitTestHook != null;
+
+        /// <summary>Currently live (animating) random bubbles (AvatarRandomBubble.LiveCount). UI-thread only.</summary>
+        public static int VerifyRandomBubbleLiveCount => AvatarRandomBubble.LiveCount;
+
+        /// <summary>Hard ceiling on concurrently live random bubbles (AvatarRandomBubble.MaxLive).</summary>
+        public static int VerifyRandomBubbleMaxLive => AvatarRandomBubble.MaxLive;
+
+        /// <summary>Detached free-drag move entry (TubeGeometryController.MoveTo, clamped to the work
+        /// area). The harness simulates a detached drag to prove both axes move independently.</summary>
+        public void VerifyMoveTo(global::Avalonia.PixelPoint position) => _geometry?.MoveTo(position);
+
         public AvatarTubeWindow() : this(null) { }
 
         public AvatarTubeWindow(Window? parentWindow)

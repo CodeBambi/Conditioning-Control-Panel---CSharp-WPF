@@ -35,6 +35,7 @@ class Program
         var maxBenchmark = args.Contains("--max-benchmark");
         var verifySpiral = args.Contains("--verify-spiral");
         var verifyLayers = args.Contains("--verify-layers");
+        var verifyAvatarTube = args.Contains("--verify-avatartube");
         var verifyVideoIndex = Array.IndexOf(args, "--verify-video");
         var verifyVideo = verifyVideoIndex >= 0;
         string? verifyVideoPath = null;
@@ -134,6 +135,10 @@ class Program
         else if (verifyLayers)
         {
             LayerVerification.Attach(builder);
+        }
+        else if (verifyAvatarTube)
+        {
+            AvatarTubeVerification.Attach(builder);
         }
         else if (verifyVisible)
         {
