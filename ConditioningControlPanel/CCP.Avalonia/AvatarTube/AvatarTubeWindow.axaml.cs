@@ -1549,6 +1549,24 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             catch { }
         }
 
+        // Position-preserving pause/resume of the spoken voice line for DTRH world-freeze
+        // (WPF parity: AvatarTubeWindow.Speech.cs:1655/1663 PauseSpokenAudio/ResumeSpokenAudio).
+        // Deliberately does NOT touch _isSpeakingAudio: in Avalonia that flag is driven by the
+        // speech-bubble timer / mute path, not the audio clip, so a paused line keeps the
+        // speaking-wobble alive exactly as WPF's Stopped-keyed play-loop does. _audioPlayer is
+        // interface-typed so the IAudioPlayer.Pause/Resume DIM dispatches to the LibVLC override.
+        public void PauseSpokenAudio()
+        {
+            try { _audioPlayer?.Pause(); }
+            catch { }
+        }
+
+        public void ResumeSpokenAudio()
+        {
+            try { _audioPlayer?.Resume(); }
+            catch { }
+        }
+
         private void StopVoiceLineAudio() => StopSpokenAudio();
 
         // ===== Helpers =====

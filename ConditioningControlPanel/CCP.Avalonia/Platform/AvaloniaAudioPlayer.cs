@@ -60,6 +60,29 @@ public sealed class AvaloniaAudioPlayer : IAudioPlayer
 
     public void Stop() => StopInternal();
 
+    // Position-preserving pause/resume of the current voice line for DTRH world-freeze
+    // (WPF parity: AvatarTubeWindow.Speech.cs:1655/1663 PauseSpokenAudio/ResumeSpokenAudio,
+    // which drive NAudio Pause()/Play()). LibVLC holds the buffer position across
+    // SetPause(true); Play() resumes from that position. Guarded by State so both are
+    // idempotent no-ops when idle / already in the target state — never toggling.
+    public void Pause()
+    {
+        lock (_lock)
+        {
+            if (_player is { State: VLCState.Playing })
+                _player.SetPause(true);
+        }
+    }
+
+    public void Resume()
+    {
+        lock (_lock)
+        {
+            if (_player is { State: VLCState.Paused })
+                _player.Play();
+        }
+    }
+
     public void SetVolume(double volume)
     {
         volume = Math.Clamp(volume, 0.0, 1.0);
