@@ -213,8 +213,8 @@ native-interop-timing) fault, observed on THIS machine (run via `dotnet run -c R
     exits, launch the Release head to repro, let WER capture the SIGSEGV dump, then dispatch the fable-5
     JUDGMENT triage on THAT dump (LibVLC-init vs Skia-context) — root-causing without the real dump would
     be speculation. Tooling is staged: `dotnet-dump` installed to `ConditioningControlPanel/.tools`.
-  - **LIVE-REPRO RESULT 2026-07-11 · @driver — NOT REPRODUCIBLE AT HEAD `1b6bbb6c`. ROW EFFECTIVELY
-    RESOLVED (monitoring).** The owner's retest build had sat idle 8h+ (telemetry: zero interaction since
+  - **LIVE-REPRO RESULT 2026-07-11 · @driver — [PARTIALLY SUPERSEDED: see ROOT CAUSE below — the crash
+    is INTERMITTENT, not resolved; it reproduced on the very next run and is now root-caused].** The owner's retest build had sat idle 8h+ (telemetry: zero interaction since
     launch), so — with advisor sign-off — the idle Debug PID 20240 was SIGKILLed to free the shared
     `.instance.lock` (retest surface is relaunchable byte-for-byte from the same on-disk `1b6bbb6c` exe), the
     Release head was launched with `--max-benchmark` (env `DOTNET_DbgEnableMiniDump=1`/`Type=4` PLUS the armed
@@ -236,6 +236,53 @@ native-interop-timing) fault, observed on THIS machine (run via `dotnet run -c R
     decode here → LibVLC retry storm → CPU burn + the `MinFps=0` stall. The **FPS floor HELD** (76.7 ≫ 30).
     The bundled `BenchmarkContext.cs` URL swap (below) is now the clear enabling step for an env-valid 240s
     re-baseline; that is a code change and will need a kill→gate→relaunch exe cycle around PID 27484.
+  - **CORRECTION + ROOT CAUSE 2026-07-11 · @driver — the SIGSEGV is INTERMITTENT and is now ROOT-CAUSED to a
+    native AV in `libvlc_media_player_stop` on the UI thread during video teardown.** The "not reproducible"
+    call above was from ONE clean run (run 1). A second Release `--max-benchmark` immediately after (run 2, pid
+    32620) ran the full 4-min session to `Session completed` then **CRASHED during teardown/report finalization**
+    (no `[BENCH] AvgFps` summary, no report write). So run 1 clean / run 2 crash = **intermittent native fault**,
+    not fixed. A real full dump was captured this time (`%LOCALAPPDATA%\CrashDumps\ccp-release-rebase.32620.dmp`,
+    3.1 GB, via `DOTNET_DbgEnableMiniDump`). **`dotnet-dump` triage (`clrthreads`/`pe`/`clrstack`):** the
+    faulting thread is **OS thread 0 (the UI thread)**, **no managed exception** (`pe`: "no current managed
+    exception"), top frame native:
+    ```
+    LibVLCSharp.Shared.MediaPlayer+Native.LibVLCMediaPlayerStop(IntPtr)     <- native AV in libvlc_media_player_stop
+    VideoLayer.Stop()                              VideoLayer.cs @ 352   (`try { player?.Stop(); } catch { }`)
+    AvaloniaVideoService.CleanupInternal(false)    AvaloniaVideoService.cs @ 1503
+    AvaloniaVideoService.<Stop>b__115_0()          AvaloniaVideoService.cs @ 433  (Dispatcher.UIThread.Invoke lambda)
+    AvaloniaVideoService.Stop()                    AvaloniaVideoService.cs @ 427
+    AvaloniaSessionEffectOrchestrator.StopEffects  @ 221
+    MainWindowViewModel.WireSessionEvents...b__8   @ 1037   (session-completed handler)
+    ```
+    **Diagnosis:** `AvaloniaVideoService.Stop()` marshals `CleanupInternal` onto the UI thread
+    (`Dispatcher.UIThread.Invoke`), which calls `VideoLayer.Stop()` → synchronous native
+    `libvlc_media_player_stop` **on the UI thread**. LibVLCSharp 3.x's `Stop()` is synchronous and
+    state/timing-dependent; calling it on the UI thread is a documented deadlock/AV hazard, which is why it is
+    intermittent (run 1 stopped cleanly, run 2 AV'd). The `try/catch` at `VideoLayer.cs:352` does NOT save it —
+    a native SEH access violation is not catchable by a managed `catch` in .NET Core, so the process dies.
+    Events are already detached before `player.Stop()` (so it is NOT callback re-entrancy) — the remaining
+    hazard is purely the synchronous UI-thread native stop. **No Windows WER Event-1000** logged (the CLR's
+    `DbgEnableMiniDump` handler took it), consistent with a native AV surfaced through the runtime.
+  - **PRESCRIBED FIX (JUDGMENT, native-interop threading):** move the native `player.Stop()` (and player dispose)
+    OFF the UI thread — e.g. run the LibVLC stop/dispose on a background thread while keeping the render-thread
+    buffer/`SKImage` teardown in `VideoLayer.Stop()` correctly ordered (no use-after-free of the pinned buffers).
+    **Verification must be MULTIPLE consecutive clean Release `--max-benchmark` runs** — the fault is intermittent,
+    so ONE clean run is NOT proof (run 1 was clean and it still crashes). Tier: JUDGMENT (fable-5); touches the
+    core video teardown path. This is the concrete, root-caused replacement for this row's original "capture a
+    dump" first step.
+  - **#2/#3/#4 status correction:** the Release harness now REACHES window-show and runs the full session (so it
+    is no longer window-show-blocked), but it crashes at teardown ~1-in-2, so an END-OF-RUN report (AvgFps/MinFps)
+    cannot be reliably captured until the LibVLC-stop fix lands. #2/#3/#4 are **partially** unblocked, not fully.
+  - **Row #2 "swap the youtube URL" prescription is OBSOLETE at HEAD — filed as a separate finding.** The Avalonia
+    `VideoLayer` logs `file not found` for BOTH `youtube.com/watch?v=dQw4w9WgXcQ` (run 1, 02:57) AND a direct-stream
+    MP4 `download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4` (run 2, 03:20) — i.e. the
+    web-video stress path does NOT stream ANY http URL at HEAD; it treats the URL as a local file. Consequences:
+    (a) the 07-05 "youtube decode-retry storm → MinFps=0" theory is **DEAD at HEAD** (there is no storm — it
+    fast-fails instantly), (b) swapping the URL changes nothing (I built + ran the Blender swap and reverted it —
+    both behave identically), (c) `MaxIntensityMinFps=0` has a DIFFERENT cause, still open, and (d) there is a real
+    **parity gap: web/URL video streaming in the Avalonia `VideoLayer`** (`PlayUrl` → file-existence check rejects
+    http). Whether production web video (hypnotube/autonomy) routes URLs elsewhere (WebView2) or is likewise broken
+    needs its own investigation — NOT folded into this crash row.
 
 ### #3 — WP2b optional libmpv render-API engine-swap spike · **JUDGMENT (spike, benchmark-gated)**
 
