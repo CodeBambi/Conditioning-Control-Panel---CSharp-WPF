@@ -671,9 +671,40 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
   design-review subagent (verdict SHIP-WITH-FIXES); folded all 4 fixes (replace-by-host dedup, lock-guarded
   list + snapshot-on-apply, `Directory.Exists` skip+log per WPF `ChaosWebViewHost` parity, both concrete 2-arg
   and 3-arg methods retained). Gates: slnf 0 err · WPF sln 0 err · Core 576/576 · smoke 44 tabs / 0 unhandled /
-  18 findings (all benign, ZERO new — seam is orthogonal to startup). **Next = S2c-pre** (port
-  `ChaosHappyPath.BuildFirstRunConfig` / `RevealService.Sync` / `ChaosRanks.For` to Core — all Core=0 today;
-  verify `ChaosRunConfig.FromSettings` / progression `AddXP` / skill-tree multiplier / `ChaosCrashSentinel`).
+  18 findings (all benign, ZERO new — seam is orthogonal to startup).
+- **S2c-pre DEPENDENCY MAP CORRECTED 2026-07-11 · @driver** (census, no code): the earlier “port these 3 to
+  Core, all Core=0” note was built on a STALE map. Ground truth:
+  - `ChaosCrashSentinel` — ✅ already in Core (`CCP.Core/Services/Chaos/ChaosCrashSentinel.cs:19`). No work.
+  - `ChaosRank` **enum** — ✅ in Core (`ChaosMetaPrimitives.cs:5`), BUT the **`ChaosRanks` helper** (`.For` /
+    `.Name` / `.Thresholds` / `.RankSpecifics` / `.NameLower`) is HEAD-ONLY (`AvaloniaChaosStubs.cs:624`). The
+    prior census matched the enum, not the helper. Pure logic — portable when/if the orchestrator's meta
+    snapshot needs rank names.
+  - `ChaosRunConfig` — ❌ NOT in Core. It is a HEAD type (`AvaloniaChaosStubs.cs:239`, `public sealed class`,
+    ~30 data props). The two Core references (`ChaosDraftPool.cs`, `ChaosRunRules.cs`) are **comment-only**
+    WPF-parity notes, not real usages. Its `FromSettings()` factory (`:281`) is HEAD-COUPLED:
+    `ChaosMeta.State`/`ApplyTo`, `App.Services`+`ISettingsService`, `AvaloniaChaosMode.StoryModeEnabled`,
+    enums `ChaosPlayMode`/`ChaosDifficulty`/`ChaosMotion`, `ClampDifficulty`/`ClampVariants`.
+  - `ChaosHappyPath` — HEAD mid-run **director** (`CCP.Avalonia/Chaos/ChaosHappyPath.cs`), coupled to the
+    announcer compositor layer (`AvaloniaChaosService.AnnounceChaos`), bubble spawner, and bark. NOT a port
+    target. Only `BuildFirstRunConfig()` (`:69`, pure literals) is a candidate — but it RETURNS the head
+    `ChaosRunConfig`, so it cannot move until the DTO does. Sole non-def caller: `AvaloniaHeadStubs.cs:328`.
+  - `RevealService` — reveal registry (`ChaosServices.cs:576 RevealServiceImpl : IRevealService`) over the head
+    `IChaosMetaService` (`meta.State`/`RankIndex`/`Save()`). Pure predicates + a `Pending` event driving head
+    UI. Porting it to Core requires an `IChaosMetaStore` **head adapter** — exactly the adapter deferred out of
+    the cancelled S2b-2b → belongs IN **S2c-1**, not a “pre” step.
+  - **Recommended seam (JUDGMENT — make deliberately, don't rush):** move ONLY a **pure** `ChaosRunConfig` DTO
+    (data props, no factory) to Core; leave ALL head-coupled construction (`FromSettings`, `BuildFirstRunConfig`,
+    `ApplyTo`, `ClampDifficulty`, `AvaloniaChaosMode`) HEAD-side; the Core `DtrhHostOrchestrator` RECEIVES a
+    `ChaosRunConfig` and posts it, rather than building it. This respects placement doctrine (settings/upgrade
+    application is head-facing) and avoids a DTO+factory+enum cascade. Enums `ChaosPlayMode`/`ChaosDifficulty`/
+    `ChaosMotion` come along only if the pure DTO references them (verify; likely `ChaosMotion?`/`ChaosPlayMode`
+    are used as prop types → those two enums must move too).
+  - **Refined S2c-pre slices:** (A) extract pure `ChaosRunConfig` DTO + its referenced enums to Core, head
+    `class ChaosRunConfig` becomes the Core type (partial or full move; keep `FromSettings`/`ApplyTo` as head
+    extension/static); (B) port `BuildFirstRunConfig()` literals to Core once the DTO lands (or keep head-side
+    and pass in — per the seam above, passing in is preferred, so B may be a no-op). RevealService → S2c-1.
+  - Verify-only remaining: progression `AddXP` (Core=15) + skill-tree total-multiplier (Core=11) confirmed
+    present by census; the orchestrator's XP formula can call them directly.
 
 ### #7 — v6.2.11 verify-set · **VERIFY**
 
