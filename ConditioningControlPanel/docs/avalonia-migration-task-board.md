@@ -283,6 +283,24 @@ native-interop-timing) fault, observed on THIS machine (run via `dotnet run -c R
     **parity gap: web/URL video streaming in the Avalonia `VideoLayer`** (`PlayUrl` → file-existence check rejects
     http). Whether production web video (hypnotube/autonomy) routes URLs elsewhere (WebView2) or is likewise broken
     needs its own investigation — NOT folded into this crash row.
+  - **WEB/URL STREAMING GAP RESOLVED 2026-07-11 · @driver — `feat(video)` commit below.** Investigated: the
+    gap is real and NOT benchmark-only — THREE production callers pass URLs to `PlayUrl` and all were
+    silently dropped as "file not found": `MainWindowViewModel.cs:786` (browser fullscreen direct-video
+    handoff, `IsDirectVideoUrl` gate), `AvaloniaRemoteCommandExecutor.cs:270` (remote-control hypnotube URL),
+    `AvaloniaAutonomyService.cs:682` (autonomy web video). Root cause: `PlayUrl` → `PlayUrlCore` →
+    `VideoLayer.PlayVideo` which unconditionally did `File.Exists(path)` + `Media(..., FromType.FromPath)`,
+    so every http(s) URL failed the file gate. Fix (WPF-exact parity, `VideoService.cs:1159` uses
+    `FromType.FromLocation` for URLs with no File.Exists and no scheme gate): added `isUrl` to
+    `VideoLayer.PlayVideo` — when set, skip `File.Exists` and open via `FromType.FromLocation`;
+    `PlayUrlCore` passes `isUrl: true`. Local-file path byte-for-byte unchanged (`isUrl` defaults false).
+    Extended `--verify-video <path>` to accept an http(s) URL (probes the plain VideoLayer Z=10 + routes
+    `PlayUrl`) as a deterministic acceptance + regression probe. **Verified:** `--verify-video <blenderMP4>`
+    → PASS (log: `VideoLayer: started https://download.blender.org/...BigBuckBunny...mp4` + `first frame
+    presented 1920x1080 (Z=10)` + frames advancing); `--verify-video <local mp4>` → PASS (mandatory path,
+    no regression). Gates: Debug slnf 0 err, WPF sln 0 err, Core 543/543, smoke 44 tabs/0 unhandled/16
+    benign. NOTE: `--verify-video` (headed Debug) intermittently crashes at init in the SAME native band as
+    this row (run 1 crashed post-layer-registration, run 2 clean) — same intermittent native fault, tracked
+    by the LibVLC-stop fix (todo #4); it does not affect the URL fix, which run 2 verified end-to-end.
 
 ### #3 — WP2b optional libmpv render-API engine-swap spike · **JUDGMENT (spike, benchmark-gated)**
 

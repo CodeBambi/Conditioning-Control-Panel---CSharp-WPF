@@ -251,14 +251,19 @@ public class VideoLayer : BaseLayer, IDisposable
         _logger = logger;
     }
 
-    public void PlayVideo(string path, bool withAudio = true, bool loop = false)
+    public void PlayVideo(string path, bool withAudio = true, bool loop = false, bool isUrl = false)
     {
         if (_disposed) return;
         Stop();
 
         try
         {
-            if (!File.Exists(path))
+            // Local-file playback validates existence and opens via FromType.FromPath. URL/network
+            // playback (WPF PlayUrl parity, VideoService.cs:1159 opens URLs via FromType.FromLocation)
+            // skips the File.Exists gate and opens the location directly, so http(s)/stream URLs play
+            // instead of being dropped as "file not found" (the caller decides which via isUrl, exactly
+            // as WPF distinguishes PlayVideo/FromPath from PlayUrl/FromLocation).
+            if (!isUrl && !File.Exists(path))
             {
                 _logger?.LogWarning("VideoLayer: file not found {Path}", path);
                 return;
@@ -299,7 +304,7 @@ public class VideoLayer : BaseLayer, IDisposable
                 _bufferValid = true;
             }
 
-            _media = new Media(_libVlc, path, FromType.FromPath);
+            _media = new Media(_libVlc, path, isUrl ? FromType.FromLocation : FromType.FromPath);
             if (loop) _media.AddOption(":input-repeat=65535");
 
             _player = new VlcMediaPlayer(_libVlc) { Mute = !withAudio };

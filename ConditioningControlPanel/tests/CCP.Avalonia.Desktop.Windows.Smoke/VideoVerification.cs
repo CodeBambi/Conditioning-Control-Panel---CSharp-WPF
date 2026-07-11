@@ -55,9 +55,16 @@ internal static class VideoVerification
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath))
+            // A local file exercises PlaySpecificVideo (FromType.FromPath, MandatoryVideoLayer);
+            // an http(s) URL exercises PlayUrl (FromType.FromLocation, plain VideoLayer). The URL
+            // path skips the File.Exists gate exactly as VideoLayer.PlayVideo(isUrl: true) does.
+            var isUrl = !string.IsNullOrWhiteSpace(videoPath)
+                && Uri.TryCreate(videoPath, UriKind.Absolute, out var parsedUri)
+                && (parsedUri.Scheme == Uri.UriSchemeHttp || parsedUri.Scheme == Uri.UriSchemeHttps);
+
+            if (string.IsNullOrWhiteSpace(videoPath) || (!isUrl && !File.Exists(videoPath)))
             {
-                Console.WriteLine($"[VIDEO] Usage: --verify-video <existing local video file>. Got: '{videoPath}'.");
+                Console.WriteLine($"[VIDEO] Usage: --verify-video <existing local video file OR http(s):// URL>. Got: '{videoPath}'.");
                 return;
             }
 
@@ -78,19 +85,31 @@ internal static class VideoVerification
                 return;
             }
 
-            if (engine.GetLayer(CompositorLayers.MandatoryVideo) is not MandatoryVideoLayer videoLayer)
+            // The URL/network path (PlayUrl) renders on the plain VideoLayer (Z=Video); the local
+            // mandatory path (PlaySpecificVideo) renders on the MandatoryVideoLayer (Z=MandatoryVideo,
+            // a VideoLayer subclass). Probe whichever layer the tested path actually uses.
+            var layerZ = isUrl ? CompositorLayers.Video : CompositorLayers.MandatoryVideo;
+            if (engine.GetLayer(layerZ) is not VideoLayer videoLayer)
             {
                 Console.WriteLine(
-                    "[VIDEO] MandatoryVideoLayer is not registered with the compositor engine. " +
+                    $"[VIDEO] Video layer (Z={layerZ}) is not registered with the compositor engine. " +
                     "CCP_UCE_VIDEO=1 must be set before AvaloniaVideoService construction (Program.cs does " +
                     "this for --verify-video); if it was, the ctor registration path is broken.");
                 return;
             }
-            Console.WriteLine("[VIDEO] MandatoryVideoLayer registered at Z=" + CompositorLayers.MandatoryVideo + ".");
+            Console.WriteLine($"[VIDEO] {videoLayer.GetType().Name} registered at Z={layerZ}.");
 
             var framesBefore = videoLayer.FramesCopied;
-            videoService.PlaySpecificVideo(videoPath, strictMode: false);
-            Console.WriteLine($"[VIDEO] PlaySpecificVideo issued for {Path.GetFileName(videoPath)}.");
+            if (isUrl)
+            {
+                videoService.PlayUrl(videoPath);
+                Console.WriteLine($"[VIDEO] PlayUrl issued for {videoPath}.");
+            }
+            else
+            {
+                videoService.PlaySpecificVideo(videoPath, strictMode: false);
+                Console.WriteLine($"[VIDEO] PlaySpecificVideo issued for {Path.GetFileName(videoPath)}.");
+            }
 
             // Stage 2: wait for the first decoded frame. Budget covers the service's 1.3s
             // pre-announce timer + LibVLC open/decode; a timeout here means frame delivery is
@@ -186,7 +205,7 @@ internal static class VideoVerification
                 (videoService as ConditioningControlPanel.Avalonia.Services.Video.AvaloniaVideoService)?.LayerOrchestrationArmed;
             Console.WriteLine($"[VIDEO] Diagnostic (non-gating): layer orchestration armed = {orchestrationArmed?.ToString() ?? "unknown (service type mismatch)"}.");
 
-            Console.WriteLine("[VIDEO] PASS: mandatory video decodes, publishes frames, and composites on every expected monitor.");
+            Console.WriteLine($"[VIDEO] PASS: {(isUrl ? "URL/network" : "mandatory")} video decodes, publishes frames, and composites on every expected monitor.");
             pass = true;
         }
         catch (Exception ex)

@@ -1097,7 +1097,7 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _currentStrictMode = false;
             _layerOrchestrationActive = false;
             _layerLengthMs = -1;
-            _videoLayer.PlayVideo(url, withAudio: true, loop: false);
+            _videoLayer.PlayVideo(url, withAudio: true, loop: false, isUrl: true);
             // Phase B audio parity: apply volume/mute/output device to the layer's player.
             _videoLayer.ApplyAudioSettings(_settings.Current);
             return;
