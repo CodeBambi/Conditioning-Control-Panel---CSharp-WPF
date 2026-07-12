@@ -362,7 +362,9 @@
                    via layout rather than a render-transform). -->
               <Border Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True">
                 <Grid RowDefinitions="Auto,Auto,*">
-                  <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Padding="6,2">
+                  <!-- Compact (2026-07-12): zero vertical padding so the browser iframe below
+                       gets maximum room; the Enhance checkbox + match status stay on one tight row. -->
+                  <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Padding="6,0">
                     <Grid ColumnDefinitions="Auto,*">
                       <CheckBox Grid.Column="0" Content="{loc:Str browser_enhance_label}"
                                 IsChecked="{Binding BrowserEnhanceIfPossible, Mode=TwoWay}"
@@ -375,10 +377,12 @@
                     </Grid>
                   </Border>
 
-                  <!-- Haptic Audio Sync latency/intensity panel -->
-                  <Border Grid.Row="1" Background="{DynamicResource PanelBgBrush}" Padding="6,3"
+                  <!-- Haptic Audio Sync latency/intensity panel. Compact (2026-07-12): zero vertical
+                       padding + tightened inter-slider gap so the two sliders sit on one minimal row
+                       and the browser iframe below grows. Bindings/visibility unchanged. -->
+                  <Border Grid.Row="1" Background="{DynamicResource PanelBgBrush}" Padding="6,0"
                           IsVisible="{Binding AudioSyncLatencyPanelVisible}">
-                    <Grid ColumnDefinitions="*,8,*">
+                    <Grid ColumnDefinitions="*,6,*">
                       <Grid Grid.Column="0" ColumnDefinitions="Auto,*,Auto">
                         <TextBlock Text="{loc:Str label_delay}" Foreground="{DynamicResource TextDimBrush}" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0" />
                         <Slider Grid.Column="1" Minimum="-600" Maximum="600"
