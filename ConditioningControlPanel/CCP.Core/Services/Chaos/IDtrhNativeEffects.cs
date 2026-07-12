@@ -29,6 +29,13 @@ public interface IDtrhNativeEffects
     /// (WPF <c>_host.FocusWeb()</c> DtrhHostService.cs:654).</summary>
     void ReclaimBrowserFocus() { }
 
+    /// <summary>Borderless-fullscreen the game window on the page's request. The page drives
+    /// fullscreen over the bridge (<c>fullscreen-set</c>) instead of the browser HTML5 Fullscreen
+    /// API, which would hijack Esc away from the game's Esc ladder. The head marshals to the UI
+    /// thread and toggles the window state. WPF <c>ApplyHostFullscreen</c>
+    /// DtrhHostService.cs:286-302 / <c>ChaosWebViewHost.SetFullscreen</c> ChaosWebViewHost.cs:163-175.</summary>
+    void SetHostFullscreen(bool on) { }
+
     /// <summary>Route a <c>bark</c> page message to the head voice service. The head parses the JSON and
     /// dispatches the ~40 <c>App.Bark.NotifyChaos*</c> calls (WPF <c>RouteBark</c> DtrhHostService.cs:498-548).</summary>
     void RouteBark(string barkJson) { }

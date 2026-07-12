@@ -192,6 +192,9 @@ public sealed class DtrhHostOrchestrator : IDisposable
                 _log.LogError("dtrh boot-error (WebGL/GPU init failed): {Msg}", (string?)o["msg"]);
                 DisposeAll();
                 break;
+            case "fullscreen-set":                                     // :270-272 dock [ ] button + Esc ladder
+                ApplyHostFullscreen((bool?)o["on"] ?? false);
+                break;
             case "exit":                                               // :267-270
                 _exiting = true;
                 ArmExitWatchdog();
@@ -356,6 +359,20 @@ public sealed class DtrhHostOrchestrator : IDisposable
             _fx.FirePayload(kind!, strength, durationMult);
         }
         catch (Exception ex) { _log.LogWarning(ex, "DtrhHostOrchestrator: fire-payload failed"); }
+    }
+
+    /// <summary>Page-driven fullscreen: the game asks the host to borderless-toggle its own window —
+    /// the page deliberately does NOT use the browser HTML5 Fullscreen API, which would hijack Esc
+    /// away from the game's Esc ladder. The head applies the window state via the seam; then the
+    /// state is echoed back so the page's dock button + Esc ladder stay in sync. WPF
+    /// <c>ApplyHostFullscreen</c> DtrhHostService.cs:286-302. The echo value matches WPF :298
+    /// byte-for-byte: WPF read <c>_host.IsFullscreen</c> immediately after <c>SetFullscreen(on)</c>,
+    /// which had just synchronously set it to the same value (ChaosWebViewHost.cs:154), so the
+    /// requested state IS the resulting state.</summary>
+    private void ApplyHostFullscreen(bool on)
+    {
+        _fx.SetHostFullscreen(on);                // seam throw skips the echo (WPF :295-300 try scope)
+        Post(new { type = "fullscreen", on });    // :298 {"type":"fullscreen","on":...}
     }
 
     private void ApplyWorldFreeze(bool on)   // WPF ApplyWorldFreeze DtrhHostService.cs:555-579
