@@ -107,7 +107,15 @@ public sealed class AvaloniaBlinkTrainerService : IBlinkTrainerService, IDisposa
             var settings = _settings.Current;
             if (settings == null) { LastError = "Settings not loaded."; return false; }
 
-            if (!settings.WebcamConsentGiven)
+            // Consent gate: require BOTH the flag AND a current consent version, mirroring
+            // the IWebcamService consumers' IsConsentCurrent() check
+            // (WebcamConsent.ConsentVersion). A stale version (left over from before a
+            // privacy-contract bump) must fail fast here with the no-consent message
+            // instead of passing the gate, then silently timing out at the 8s
+            // WaitForWebcamReady below because the webcam service itself refuses a
+            // stale consent.
+            if (!settings.WebcamConsentGiven
+                || settings.WebcamConsentVersion != WebcamConsent.ConsentVersion)
             {
                 LastError = Loc.Get("blink_trainer_error_no_consent");
                 return false;
