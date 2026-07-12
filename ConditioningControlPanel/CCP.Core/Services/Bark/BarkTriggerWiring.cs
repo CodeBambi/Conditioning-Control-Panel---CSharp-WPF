@@ -78,6 +78,7 @@ public sealed class BarkTriggerWiring : IDisposable
     private readonly EventHandler<SessionStoppedEventArgs> _onSessionStopped;
     private readonly EventHandler<SessionCompletedEventArgs> _onSessionCompleted;
     private readonly EventHandler<SessionPhaseChangedEventArgs> _onSessionPhaseChanged;
+    private readonly EventHandler _onVideoAboutToStart;
     private readonly EventHandler _onVideoStarted;
     private readonly EventHandler _onVideoEnded;
     private readonly EventHandler<int> _onLevelUp;
@@ -207,7 +208,8 @@ public sealed class BarkTriggerWiring : IDisposable
             ctx.Set("phase_is_deepener", IsDeepenerPhaseName(e.Phase?.Name));
         });
 
-        _onVideoStarted = (_, _) => Raise("VideoStarted");   // WPF BarkService.cs:427 wired events
+        _onVideoAboutToStart = (_, _) => Raise("VideoAboutToStart");   // WPF BarkService.cs:467-468 (bare, no ctx)
+        _onVideoStarted = (_, _) => Raise("VideoStarted");             // WPF BarkService.cs:469-470 wired events
         _onVideoEnded = (_, _) => Raise("VideoEnded");
 
         // Progression/achievement/quest — WPF WireSubscriptions wired events (BarkService.cs:427).
@@ -330,6 +332,7 @@ public sealed class BarkTriggerWiring : IDisposable
             }
             if (_video != null)
             {
+                _video.VideoAboutToStart += _onVideoAboutToStart;
                 _video.VideoStarted += _onVideoStarted;
                 _video.VideoEnded += _onVideoEnded;
             }
@@ -435,6 +438,7 @@ public sealed class BarkTriggerWiring : IDisposable
             }
             if (_video != null)
             {
+                _video.VideoAboutToStart -= _onVideoAboutToStart;
                 _video.VideoStarted -= _onVideoStarted;
                 _video.VideoEnded -= _onVideoEnded;
             }

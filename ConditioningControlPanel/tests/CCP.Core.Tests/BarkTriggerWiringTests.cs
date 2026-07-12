@@ -6,6 +6,7 @@ using ConditioningControlPanel.Core.Services.Bark;
 using ConditioningControlPanel.Core.Services.BlinkTrainer;
 using ConditioningControlPanel.Core.Services.Mantra;
 using ConditioningControlPanel.Core.Services.Settings;
+using ConditioningControlPanel.Core.Services.Video;
 using ConditioningControlPanel.Models;
 using Xunit;
 
@@ -306,6 +307,42 @@ public class BarkTriggerWiringTests
         public void FireNow() { }
         public void RaiseFail() => OnFail?.Invoke();
         public void RaisePass() => OnPass?.Invoke();
+    }
+
+    private sealed class FakeVideo : IVideoService
+    {
+        public bool IsRunning => false;
+        public bool IsPlaying => false;
+        public string? LastVideoPath => null;
+        public event EventHandler? VideoAboutToStart;
+        public event EventHandler? VideoStarted;
+        public event EventHandler? VideoEnded;
+        public void Start() { }
+        public void Stop() { }
+        public void RefreshVideosPath() { }
+        public void PlaySpecificVideo(string videoPath, bool strictMode) { }
+        public void PlayRandomVideo() { }
+        public void PlayUrl(string url) { }
+        public void TriggerVideo() { }
+        public void ForceCleanup() { }
+        public void UpdateVolume() { }
+        public void RaiseAboutToStart() => VideoAboutToStart?.Invoke(this, EventArgs.Empty);
+    }
+
+    [Fact]
+    public void VideoAboutToStart_RaisesTrigger()
+    {
+        // BARK-2 deviation fix: the WPF head wires VideoAboutToStart bare (BarkService.cs:467-468), but
+        // BARK-2 had wired only VideoStarted/VideoEnded and dropped VideoAboutToStart. Verify the
+        // now-added wiring raises the trigger (bare, no ctx) exactly like WPF.
+        var h = new EngineHarness(Rule("v", "VideoAboutToStart"));
+        var video = new FakeVideo();
+        using var wiring = new BarkTriggerWiring(h.Engine, video: video);
+        wiring.Start();
+
+        video.RaiseAboutToStart();
+        Assert.Single(h.Speaker.Calls);
+        Assert.Equal("VideoAboutToStart", h.Speaker.Calls[0].Trigger);
     }
 
     [Fact]
