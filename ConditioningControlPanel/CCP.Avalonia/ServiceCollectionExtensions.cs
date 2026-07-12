@@ -190,6 +190,10 @@ public static class ServiceCollectionExtensions
         // AI-triggers-effects dispatcher (AllowAiToControlEffects). Resolves LAZILY to IAiService via
         // IServiceProvider (providers inject IAiCommandService? optional → no ctor cycle). Phase 3a.
         services.AddSingleton<IAiCommandService, AiCommandService>();
+        // AI-7: the Companion-tab "Live actions" feed — one DI singleton shared by the producer
+        // (AiCommandService appends) and the consumer (CompanionTabViewModel binds). The port's
+        // DI equivalent of WPF's static App.AiLiveActions collection.
+        services.AddSingleton<IAiLiveActionsFeed, AiLiveActionsFeed>();
         services.AddSingleton<CoreAiService>();
         services.AddSingleton<LocalAiService>();
         services.AddSingleton<OpenAiService>();

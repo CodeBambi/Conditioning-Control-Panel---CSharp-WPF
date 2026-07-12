@@ -59,6 +59,9 @@ public sealed class AiCommandService : IAiCommandService
     private readonly ISettingsService _settings;
     private readonly IAppEnvironment _env;
     private readonly IServiceProvider _services;
+    // AI-7: the Companion-tab "Live actions" feed. Optional so the dispatcher still constructs
+    // in tests/heads that don't surface the feed; null-guarded at the call site.
+    private readonly IAiLiveActionsFeed? _feed;
     private readonly ILogger<AiCommandService>? _logger;
 
     private int _batchCount;
@@ -72,11 +75,11 @@ public sealed class AiCommandService : IAiCommandService
         IFlashService flash, IBubbleService bubbles, ISubliminalService subliminal, IOverlayService overlay,
         IVideoService video, IAudioPlayer audio, IHapticsService haptics, IBouncingTextService bouncing,
         ILockCardService lockCard, ISettingsService settings, IAppEnvironment env, IServiceProvider services,
-        ILogger<AiCommandService>? logger = null)
+        IAiLiveActionsFeed? feed = null, ILogger<AiCommandService>? logger = null)
     {
         _flash = flash; _bubbles = bubbles; _subliminal = subliminal; _overlay = overlay;
         _video = video; _audio = audio; _haptics = haptics; _bouncing = bouncing;
-        _lockCard = lockCard; _settings = settings; _env = env; _services = services; _logger = logger;
+        _lockCard = lockCard; _settings = settings; _env = env; _services = services; _feed = feed; _logger = logger;
     }
 
     /// <inheritdoc/>
@@ -100,6 +103,13 @@ public sealed class AiCommandService : IAiCommandService
 
             // PER-BATCH cap (counted only for commands that passed both gates)
             if (Interlocked.Increment(ref _batchCount) > MaxCommandsPerResponse) { _logger?.LogDebug("AiCommandService: batch cap ({Cap}) reached; drop {Cmd}.", MaxCommandsPerResponse, commandData.Command); return; }
+
+            // AI-7: surface a human-readable line in the Companion "Live actions" feed. Mirrors WPF
+            // AiCommandService.cs:67 — AppendLiveAction(FormatLiveAction(c)) is called AFTER the gates
+            // + per-batch cap pass and BEFORE token tracking/dispatch, so only commands that will
+            // actually fire appear in the feed. The line describes the ACTION only (e.g.
+            // "Flash · 5 images for 10s"); never the AI prompt or raw command JSON.
+            _feed?.Append(AiLiveActionFormatter.Format(commandData));
 
             // TOKEN tracking (getbacktome only)
             var token = commandData.Data.Token;
