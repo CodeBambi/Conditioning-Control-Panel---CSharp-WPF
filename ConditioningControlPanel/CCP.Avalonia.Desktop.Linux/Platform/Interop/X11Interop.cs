@@ -51,7 +51,7 @@ internal static class X11Interop
     /// <c>_NET_ACTIVE_WINDOW</c> and <c>_NET_WM_NAME</c>/<c>WM_NAME</c>). Returns <see cref="Success"/>
     /// on completion; X errors (e.g. BadWindow from a window destroyed mid-read) are delivered
     /// ASYNCHRONOUSLY to the Xlib error handler, NOT via this return value — the caller must run
-    /// inside a scoped <see cref="XlibErrorTrap"/> and consult <see cref="XlibErrorTrap.LastErrorCode"/>
+    /// inside a scoped <see cref="XlibErrorTrap"/> and consult <see cref="XlibErrorTrap.GetLastErrorCode"/>
     /// after <see cref="XSync"/>. long_offset/long_length are in 32-BIT UNITS (not bytes).
     /// </summary>
     [DllImport(LibX11)]

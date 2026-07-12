@@ -320,6 +320,18 @@ public sealed class X11BasicFrameSourceBackend : ILinuxFrameSourceBackend
         int destY = cy - reqY;
         int rowBytes = capW * 4;
 
+        // Partial capture (rect clamped by a hot-plug/resize race): the out-of-bounds padding
+        // must be OPAQUE black, not transparent black — pre-fill its alpha before the row
+        // copies overwrite the in-bounds region. (For depth-24 sources the depth==24 pass
+        // below covers the whole buffer anyway; this handles depth-32 partial captures.)
+        if (depth != 24 && (destX > 0 || destY > 0 || capW < reqW || capH < reqH))
+        {
+            for (int i = 3; i < output.Length; i += 4)
+            {
+                output[i] = 0xFF;
+            }
+        }
+
         // Copy each captured row honoring bytes_per_line (rows may be padded). Out-of-bounds
         // pixels remain zero (black). This is the corrected repack vs the draft's straight
         // Marshal.Copy of width*height*4 bytes (contract §3.3).
