@@ -17,6 +17,7 @@ using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Help;
 using ConditioningControlPanel.Core.Services.Settings;
+using ConditioningControlPanel.Core.Services.Sessions;
 using ConditioningControlPanel.Core.Services.Video;
 
 namespace ConditioningControlPanel.Avalonia.ViewModels.Tabs;
@@ -36,6 +37,7 @@ public partial class SettingsTabViewModel : TabItemViewModel
     private readonly IAudioPlayer? _audioPlayer;
     private readonly IAudioDeviceService? _audioDeviceService;
     private readonly IVideoService? _videoService;
+    private readonly ISessionService? _sessionService;
     private bool _populatingAudioOutputs;
 
     /// <summary>
@@ -55,7 +57,8 @@ public partial class SettingsTabViewModel : TabItemViewModel
         IBrowserHost browserHost,
         IAudioPlayer audioPlayer,
         IAudioDeviceService audioDeviceService,
-        IVideoService? videoService = null) : base("settings", "Dashboard", "📊")
+        IVideoService? videoService = null,
+        ISessionService? sessionService = null) : base("settings", "Dashboard", "📊")
     {
         _settingsService = settingsService;
         _dialogService = dialogService;
@@ -64,6 +67,7 @@ public partial class SettingsTabViewModel : TabItemViewModel
         _audioPlayer = audioPlayer;
         _audioDeviceService = audioDeviceService;
         _videoService = videoService;
+        _sessionService = sessionService;
         _audioOutputDevices = new ObservableCollection<AudioDeviceInfo>();
         RefreshAudioOutputDevices();
         RefreshFromSettings();
@@ -697,6 +701,17 @@ public partial class SettingsTabViewModel : TabItemViewModel
     /// </summary>
     public event EventHandler? BrowserAttachRequested;
 
+    /// <summary>
+    /// Raised when a running session navigates the browser to an online-video page, so the view
+    /// can auto-enter the browser fullscreen window (owner requirement: "when the engine is
+    /// started and it plays an online video it should auto go into fullscreen mirrored copied to
+    /// all screens"). The fullscreen window in turn activates the multi-monitor mirror. Mirrors
+    /// the WPF <c>NavigateToUrlInBrowser(url, autoPlayFullscreen: true)</c> contract used by
+    /// AutonomyService/EffectPayload. Only fires while a session is Running so manual browsing
+    /// outside a session is not hijacked.
+    /// </summary>
+    public event EventHandler? BrowserAutoFullscreenRequested;
+
     /// <summary>Wires browser-host events and seeds the mute glyph from persisted settings.</summary>
     private void SubscribeBrowserEvents()
     {
@@ -712,6 +727,20 @@ public partial class SettingsTabViewModel : TabItemViewModel
                     BrowserStatusText = Loc.Get("label_connected_2");
                     BrowserStatusBrush = new SolidColorBrush(Color.FromRgb(0, 230, 118));
                 });
+
+                // Owner requirement: when the engine is running and the browser lands on an online
+                // video page, auto-enter the browser fullscreen window (which activates the
+                // multi-monitor mirror). Only while a session is Running so manual browsing is not
+                // hijacked; the view's EnterBrowserFullscreen is idempotent so duplicate raises
+                // (redirects) are harmless. Mirrors WPF NavigateToUrlInBrowser(autoPlayFullscreen:true).
+                try
+                {
+                    if (_sessionService?.State == SessionState.Running && IsOnlineVideoUrl(uri))
+                    {
+                        Dispatcher.UIThread.Post(() => BrowserAutoFullscreenRequested?.Invoke(this, EventArgs.Empty));
+                    }
+                }
+                catch { /* auto-fullscreen is best-effort; never block navigation */ }
             };
 
             // WPF parity (MainWindow.Browser.cs:83-98 BrowserProcessFailed handler): a Chromium
@@ -728,6 +757,31 @@ public partial class SettingsTabViewModel : TabItemViewModel
         }
 
         BrowserMuteGlyph = (_settingsService?.Current?.BrowserVideoMuted ?? false) ? "🔇" : "🔊";
+    }
+
+    /// <summary>
+    /// Online-video heuristic for auto-fullscreen: a known video host (HypnoTube/BambiCloud) or a
+    /// direct media extension. Mirrors the WPF hosts the engine navigates to via
+    /// NavigateToUrlInBrowser(autoPlayFullscreen:true) and the direct-extension set the URL-player
+    /// path recognises (MainWindowViewModel.IsDirectVideoUrl).
+    /// </summary>
+    private static bool IsOnlineVideoUrl(Uri uri)
+    {
+        var host = (uri.Host ?? string.Empty).ToLowerInvariant();
+        if (host.Contains("hypnotube") || host.Contains("bambicloud") || host.Contains("pornhub")
+            || host.Contains("xvideos") || host.Contains("xhamster") || host.Contains("spankbang")
+            || host.Contains("vimeo") || host.Contains("dailymotion") || host.Contains("youtube")
+            || host.Contains("youtu.be"))
+            return true;
+
+        var path = uri.AbsolutePath;
+        var directExtensions = new[] { ".mp4", ".webm", ".mkv", ".avi", ".mov", ".m4v", ".flv", ".m3u8", ".m3u" };
+        foreach (var ext in directExtensions)
+        {
+            if (path.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

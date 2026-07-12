@@ -13,6 +13,12 @@ public static class CompositorLayers
     /// <summary>Mandatory video attention-check layer.</summary>
     public const int MandatoryVideo = 15;
 
+    /// <summary>Browser fullscreen video mirror layer. Screen-captures the monitor the browser is
+    /// fullscreen on and paints a stretched-to-fill copy on every OTHER monitor's compositor window
+    /// (the source monitor is skipped to avoid a self-capture feedback freeze). Sits just above
+    /// mandatory video so a co-active direct-URL LibVLC render is occluded by the live capture.</summary>
+    public const int BrowserMirrorVideo = 16;
+
     /// <summary>Lock card overlay.</summary>
     public const int LockCard = 20;
 
