@@ -30,8 +30,13 @@ Every WPF-side change classified below with WPF `file:line` and the Avalonia dis
 - **#6 DTRH C#-owned fullscreen** — WPF `Services/Chaos/DtrhHostService.cs:281-284,567-584`: web v2 **posts `{type:"fullscreen-set", on}`** (deliberately not the HTML5 Fullscreen API, which would hijack Esc); host sets fullscreen then echoes `{type:"fullscreen", on}` back. In Avalonia, `DtrhHostOrchestrator.Route()` had **no `fullscreen-set` case** (silently dropped) and `DtrhGameHostService.OnFullscreenChanged` used the now-dead HTML5 path → the DTRH fullscreen toggle + the fullscreen leg of the Esc-ladder were **broken with web v2**. Fix adds the Core route case + `IDtrhNativeEffects.SetHostFullscreen(bool)` + Windows-head `WindowState.FullScreen` handler + the echo (byte-for-byte with WPF). Windows-head-only (Linux/macOS have no DTRH WebView host yet).
 - **#7 DTRH web v2 assets** — the `<Content Include="..\Resources\web\**\*">` glob (Windows csproj:61, Linux:36, macOS:26) covers `dtrh/**`, so `manifest.js`/`bubbles.js`/`panel.js`/`scene.js`/`settings.js`/`chaosRun.js`/`cheshireGuide.js`/`warren.js`/`styles.css` + `.webm` swaps ship to output and load via the `ccp.game`→`webRoot` virtual host. The only forced C# bridge change is #6's `fullscreen-set`.
 
+## Minor residual (non-blocking)
+
+- **Localized version-out badge** — `MainWindowViewModel.cs:551,2136` looks up `btn_v{version}_is_out` / `tooltip_v{version}_deeper_down`; the shared `Localization/Languages/*.json` (linked into Core via `CCP.Core.csproj:50`, used by both heads) only has the `v6_3_1` keys, so the 6.3.2 badge **falls back to the bare `"v6.3.2"`** string (harmless). The **update popup itself is fixed** (Core `UpdateService.CurrentVersion`/`AppVersion` = 6.3.2). Follow-up: add `btn_v6_3_2_is_out` + `tooltip_v6_3_2_deeper_down` to all 9 language files (mirror the 6.3.1 entries) for a localized badge — fold into a later batch.
+
 ## Status
 - [x] Merge (`b0247c66`), heads build, Core 861
+- [x] Version bump 6.3.2 merged (`f403261d`) — popup fixed; localized badge key = minor residual above
 - [~] Version bump 6.3.2 (in flight) — fixes update popup
 - [~] #5 gaze-close (in flight, GLM)
 - [~] #6 DTRH fullscreen-set (in flight, fable-5)
