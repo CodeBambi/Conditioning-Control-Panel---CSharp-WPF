@@ -100,5 +100,8 @@ public sealed class AvaloniaBrowserHost : IBrowserHost
     public bool IsFullscreen => false;
     public event EventHandler<bool>? FullscreenChanged { add { } remove { } }
 
-    public Control? CreateBrowserControl() => null;
+    // Signature must match IBrowserHost.CreateBrowserControl exactly (object?, not Control?):
+    // a covariant return does NOT implement the interface member, so interface dispatch would
+    // silently fall through to the default-interface-method and always return null.
+    public object? CreateBrowserControl() => null;
 }

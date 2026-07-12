@@ -60,7 +60,12 @@ public partial class SettingsTabView : UserControl
     {
         LoadLogo();
         InitializeMarquee();
-        AttachEmbeddedBrowser();
+        // WPF lazy click-to-load contract: the browser control is attached by the navigation
+        // path (BrowserAttachRequested), never eagerly. Re-attach here only when a previous
+        // view instance already initialized the browser (tab switches recreate this view via
+        // DataTemplate, and WPF keeps the browser visible across tab switches).
+        WireBrowserAttachRequested();
+        ReattachInitializedBrowser();
         WireBrowserFullscreenEvents();
         InitPremiumRail();
 
@@ -76,6 +81,7 @@ public partial class SettingsTabView : UserControl
 
         ShutdownPremiumRail();
 
+        UnwireBrowserAttachRequested();
         UnwireBrowserFullscreenEvents();
         ExitBrowserFullscreen();
 
@@ -87,7 +93,8 @@ public partial class SettingsTabView : UserControl
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
         UnwireBrowserFullscreenEvents();
-        AttachEmbeddedBrowser();
+        WireBrowserAttachRequested();
+        ReattachInitializedBrowser();
         WireBrowserFullscreenEvents();
     }
 
@@ -513,9 +520,9 @@ public partial class SettingsTabView : UserControl
         if (DataContext is not ViewModels.Tabs.SettingsTabViewModel vm)
             return;
 
-        // The embedded control is attached automatically on Windows. On platforms where
-        // embedding is unavailable, the placeholder remains and clicking it triggers navigation
-        // through the platform fallback (system browser or popup window).
+        // WPF parity (MainWindow.Browser.cs BrowserLoadingText_Click): clicking the placeholder
+        // lazily creates + parents + navigates the embedded browser (default site). On platforms
+        // without embedding the same command falls back to the system browser.
         vm.InitializeBrowserCommand.Execute(null);
     }
 
@@ -524,17 +531,77 @@ public partial class SettingsTabView : UserControl
     private Control? _browserControl;
     private Window? _browserFullscreenWindow;
     private bool _browserFullscreenEventsWired;
+    private ViewModels.Tabs.SettingsTabViewModel? _attachWiredVm;
+    private double _preBrowserFullscreenZoom = 1.0;
+
+    private void WireBrowserAttachRequested()
+    {
+        if (DataContext is not ViewModels.Tabs.SettingsTabViewModel vm)
+            return;
+        if (ReferenceEquals(_attachWiredVm, vm))
+            return;
+
+        UnwireBrowserAttachRequested();
+        vm.BrowserAttachRequested += OnBrowserAttachRequested;
+        if (vm.BrowserHost is { } host)
+            host.ProcessFailed += OnBrowserProcessFailed;
+        _attachWiredVm = vm;
+    }
+
+    private void UnwireBrowserAttachRequested()
+    {
+        if (_attachWiredVm == null)
+            return;
+        _attachWiredVm.BrowserAttachRequested -= OnBrowserAttachRequested;
+        if (_attachWiredVm.BrowserHost is { } host)
+            host.ProcessFailed -= OnBrowserProcessFailed;
+        _attachWiredVm = null;
+    }
+
+    private void OnBrowserAttachRequested(object? sender, EventArgs e) => AttachEmbeddedBrowser();
 
     /// <summary>
-    /// Requests an embedded browser control from the view-model and places it inside the
-    /// dashboard's <see cref="BrowserContainer"/>. No-op if the platform host does not
-    /// support visual embedding (e.g. Linux/macOS fallback) or the control is already attached.
+    /// WPF parity (MainWindow.Browser.cs:83-98): after a Chromium process crash the dead browser
+    /// control is REMOVED from the container - the native HWND always paints above Avalonia
+    /// content, so leaving it parented would hide the "Browser crashed - click a site to restart"
+    /// placeholder the view-model restores. The next site click re-attaches and re-initializes.
+    /// </summary>
+    private void OnBrowserProcessFailed(object? sender, EventArgs e)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_browserControl == null)
+                return;
+
+            if (_browserFullscreenWindow != null)
+                ExitBrowserFullscreen();
+
+            BrowserContainer.Children.Remove(_browserControl);
+        });
+    }
+
+    /// <summary>
+    /// Re-attaches an ALREADY-initialized browser after this view was recreated (tab switch).
+    /// Never triggers the first-time creation - that stays behind the user's click
+    /// (WPF click-to-load contract, Views/Tabs/SettingsTabView.xaml:1162-1169).
+    /// </summary>
+    private void ReattachInitializedBrowser()
+    {
+        if (DataContext is ViewModels.Tabs.SettingsTabViewModel { BrowserInitialized: true })
+            AttachEmbeddedBrowser();
+    }
+
+    /// <summary>
+    /// Requests the embedded browser control from the platform host and parents it inside the
+    /// dashboard's <see cref="BrowserContainer"/>, detaching it from any previous parent first
+    /// (the host returns a singleton control that may still sit in a recreated view's container
+    /// or another window). Called from the navigation path immediately BEFORE NavigateAsync
+    /// (create -> parent -> navigate, WPF MainWindow.Browser.cs:99-107). No-op when the platform
+    /// host does not support visual embedding (Linux/macOS fallback) or while the control is
+    /// reparented into the HTML5 fullscreen window.
     /// </summary>
     private void AttachEmbeddedBrowser()
     {
-        if (_browserControl != null)
-            return;
-
         if (DataContext is not ViewModels.Tabs.SettingsTabViewModel vm)
             return;
 
@@ -542,7 +609,29 @@ public partial class SettingsTabView : UserControl
             return;
 
         _browserControl = control;
-        BrowserContainer.Child = control;
+
+        // Navigations while the browser rides in the HTML5 fullscreen window keep it there.
+        if (_browserFullscreenWindow != null)
+            return;
+
+        if (ReferenceEquals(control.Parent, BrowserContainer))
+            return;
+
+        switch (control.Parent)
+        {
+            case Panel panel:
+                panel.Children.Remove(control);
+                break;
+            case Border border when ReferenceEquals(border.Child, control):
+                border.Child = null;
+                break;
+            case ContentControl contentControl when ReferenceEquals(contentControl.Content, control):
+                contentControl.Content = null;
+                break;
+        }
+
+        if (control.Parent == null && !BrowserContainer.Children.Contains(control))
+            BrowserContainer.Children.Add(control);
     }
 
     private void WireBrowserFullscreenEvents()
@@ -603,8 +692,26 @@ public partial class SettingsTabView : UserControl
         };
 
         var container = (Panel)window.Content;
-        BrowserContainer.Child = null;
+        BrowserContainer.Children.Remove(_browserControl);
         container.Children.Add(_browserControl);
+
+        // WPF parity (MainWindow.Browser.cs EnterBrowserFullscreen): fullscreen video renders at
+        // 100% zoom and the dashboard cell shows a "browser is in fullscreen" placeholder.
+        if (DataContext is ViewModels.Tabs.SettingsTabViewModel vm)
+        {
+            if (vm.BrowserHost is { } host)
+            {
+                try
+                {
+                    _preBrowserFullscreenZoom = host.ZoomFactor;
+                    host.ZoomFactor = 1.0;
+                }
+                catch { /* zoom unsupported on this host */ }
+            }
+
+            vm.BrowserLoadingText = "\ud83c\udf10 Browser in fullscreen";
+            vm.BrowserLoadingVisible = true;
+        }
 
         window.Closed += OnBrowserFullscreenWindowClosed;
         _browserFullscreenWindow = window;
@@ -627,11 +734,36 @@ public partial class SettingsTabView : UserControl
         if (window.Content is Panel container && _browserControl != null)
         {
             container.Children.Remove(_browserControl);
-            BrowserContainer.Child = _browserControl;
+            if (!BrowserContainer.Children.Contains(_browserControl))
+                BrowserContainer.Children.Add(_browserControl);
         }
+
+        RestoreBrowserAfterFullscreen();
 
         try { window.Close(); }
         catch { /* window may already be closing */ }
+    }
+
+    /// <summary>
+    /// WPF parity (MainWindow.Browser.cs ExitBrowserFullscreen): restore the pre-fullscreen zoom
+    /// and hide the "browser is in fullscreen" placeholder again.
+    /// </summary>
+    private void RestoreBrowserAfterFullscreen()
+    {
+        if (DataContext is not ViewModels.Tabs.SettingsTabViewModel vm)
+            return;
+
+        if (vm.BrowserHost is { } host)
+        {
+            try { host.ZoomFactor = _preBrowserFullscreenZoom; }
+            catch { /* zoom unsupported on this host */ }
+        }
+
+        if (vm.BrowserInitialized)
+        {
+            vm.BrowserLoadingText = "";
+            vm.BrowserLoadingVisible = false;
+        }
     }
 
     /// <summary>
@@ -648,8 +780,11 @@ public partial class SettingsTabView : UserControl
         if (sender is Window window && window.Content is Panel container && _browserControl != null)
         {
             container.Children.Remove(_browserControl);
-            BrowserContainer.Child = _browserControl;
+            if (!BrowserContainer.Children.Contains(_browserControl))
+                BrowserContainer.Children.Add(_browserControl);
         }
+
+        RestoreBrowserAfterFullscreen();
 
         // If the browser still believes it is fullscreen, request exit via script.
         if (DataContext is ViewModels.Tabs.SettingsTabViewModel vm && vm.BrowserHost is { IsFullscreen: true })

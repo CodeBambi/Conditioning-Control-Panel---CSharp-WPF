@@ -320,8 +320,9 @@
                         CommandParameter="{Binding IsBambiCloudSelected, Converter={StaticResource BoolToBrowserSiteConverter}}"
                         ToolTip.Tip="{loc:Str tooltip_browser_reload}" />
 
+                <!-- WPF parity: pink while idle/loading, green once connected, red on error/crash. -->
                 <TextBlock Grid.Column="3" Text="{Binding BrowserStatusText}"
-                           Foreground="{DynamicResource PinkBrush}" FontSize="10"
+                           Foreground="{Binding BrowserStatusBrush}" FontSize="10"
                            VerticalAlignment="Center" Margin="0,0,8,0" />
 
                 <!-- Deeper auto-bind badge -->
@@ -397,13 +398,20 @@
                     </Grid>
                   </Border>
 
-                  <Border Grid.Row="2" x:Name="BrowserContainer">
-                    <TextBlock Text="{loc:Str label_click_to_load_browser}"
+                  <!-- WPF parity (SettingsTabView.xaml:1164-1169): Grid container + click-to-load
+                       placeholder. The WebView2 native host is added lazily by the navigation path
+                       (create -> parent -> navigate); the placeholder stays until init succeeds and
+                       comes back on process-crash / error (text + visibility are VM-driven). -->
+                  <Grid Grid.Row="2" x:Name="BrowserContainer">
+                    <TextBlock x:Name="BrowserLoadingText"
+                               Text="{Binding BrowserLoadingText}"
+                               IsVisible="{Binding BrowserLoadingVisible}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="520"
                                Cursor="Hand"
                                PointerPressed="BrowserLoadingText_PointerPressed" />
-                  </Border>
+                  </Grid>
                 </Grid>
               </Border>
             </Grid>

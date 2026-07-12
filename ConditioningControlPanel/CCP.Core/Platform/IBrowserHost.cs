@@ -37,6 +37,21 @@ public interface IBrowserHost
     event EventHandler<bool>? FullscreenChanged { add { } remove { } }
 
     /// <summary>
+    /// Browser zoom factor (1.0 = 100%). WPF parity: the dashboard browser initializes at 0.75
+    /// (BrowserService.cs WebView_Loaded) and drops to 0.5 on site-toggle navigation
+    /// (MainWindow.Browser.cs BrowserSiteToggle_Changed). Default no-op for hosts without zoom.
+    /// </summary>
+    double ZoomFactor { get => 1.0; set { } }
+
+    /// <summary>
+    /// Raised after the underlying browser process crashed and the host reset itself for a lazy
+    /// re-initialization on the next navigation (WPF BrowserService.BrowserProcessFailed parity).
+    /// Consumers should restore their click-to-load placeholder and clear any initialized flag.
+    /// Default is never raised.
+    /// </summary>
+    event EventHandler? ProcessFailed { add { } remove { } }
+
+    /// <summary>
     /// Creates an Avalonia control that hosts the browser, if visual embedding is supported
     /// on the current platform. Returns null when the host uses a separate window or shell
     /// execution instead. The returned object, when non-null, is an Avalonia <see cref="Avalonia.Controls.Control"/>.

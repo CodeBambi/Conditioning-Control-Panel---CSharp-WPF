@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ConditioningControlPanel.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -586,7 +588,10 @@ public partial class SettingsTabViewModel : TabItemViewModel
         try
         {
             if (_browserHost != null)
-                await _browserHost.NavigateAsync(new Uri(url));
+                // Route through the embedded-browser path so the control is attached (create ->
+                // parent -> navigate) before navigating; a bare NavigateAsync on a never-attached
+                // host would load the page into an unparented, invisible control.
+                await OpenBrowserAsync(url);
             else
                 Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
@@ -685,11 +690,42 @@ public partial class SettingsTabViewModel : TabItemViewModel
     // the page the user is actually viewing instead of the default site.
     private string? _lastBrowserUrl;
 
+    /// <summary>
+    /// Raised at the start of every embedded navigation so the view can create + parent the
+    /// browser control BEFORE NavigateAsync runs (WPF lazy click-to-load contract,
+    /// MainWindow.Browser.cs:99-107: create -> parent -> navigate).
+    /// </summary>
+    public event EventHandler? BrowserAttachRequested;
+
     /// <summary>Wires browser-host events and seeds the mute glyph from persisted settings.</summary>
     private void SubscribeBrowserEvents()
     {
         if (_browserHost != null)
-            _browserHost.Navigated += (_, uri) => _lastBrowserUrl = uri.ToString();
+        {
+            _browserHost.Navigated += (_, uri) =>
+            {
+                _lastBrowserUrl = uri.ToString();
+                // WPF parity (MainWindow.Browser.cs NavigationCompleted handler): flip the status
+                // row to "Connected" green only once a navigation actually completes.
+                Dispatcher.UIThread.Post(() =>
+                {
+                    BrowserStatusText = Loc.Get("label_connected_2");
+                    BrowserStatusBrush = new SolidColorBrush(Color.FromRgb(0, 230, 118));
+                });
+            };
+
+            // WPF parity (MainWindow.Browser.cs:83-98 BrowserProcessFailed handler): a Chromium
+            // process crash restores the click-to-load placeholder and resets the initialized
+            // flag so the next site click lazily re-creates the browser.
+            _browserHost.ProcessFailed += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                BrowserInitialized = false;
+                BrowserLoadingVisible = true;
+                BrowserLoadingText = "Browser crashed - click a site to restart";
+                BrowserStatusText = Loc.Get("label_disconnected");
+                BrowserStatusBrush = new SolidColorBrush(Color.FromRgb(230, 80, 80));
+            });
+        }
 
         BrowserMuteGlyph = (_settingsService?.Current?.BrowserVideoMuted ?? false) ? "🔇" : "🔊";
     }
@@ -725,8 +761,39 @@ public partial class SettingsTabViewModel : TabItemViewModel
     [ObservableProperty]
     private string _browserStatusText = Loc.Get("label_disconnected");
 
+    // WPF parity: status row is theme-pink while idle/loading, green when connected,
+    // red on error/crash (MainWindow.Browser.cs hardcodes the green/red values).
     [ObservableProperty]
-    private string _browserLoadingText = Loc.Get("label_initializing_webview2");
+    private IBrush _browserStatusBrush = ThemePinkBrush();
+
+    // WPF parity (SettingsTabView.xaml:1164-1169): the placeholder shows "Click to load browser"
+    // until the user triggers the lazy load, then tracks init progress / error text.
+    [ObservableProperty]
+    private string _browserLoadingText = Loc.Get("label_click_to_load_browser");
+
+    [ObservableProperty]
+    private bool _browserLoadingVisible = true;
+
+    /// <summary>Theme pink for the idle/loading status text (WPF FindResource("PinkBrush") parity).</summary>
+    private static IBrush ThemePinkBrush()
+    {
+        try
+        {
+            var app = global::Avalonia.Application.Current;
+            if (app != null &&
+                app.TryGetResource("PinkBrush", app.ActualThemeVariant, out var res) &&
+                res is IBrush brush)
+            {
+                return brush;
+            }
+        }
+        catch
+        {
+            // resources unavailable in design-time/unit-test contexts
+        }
+
+        return new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4));
+    }
 
     [ObservableProperty]
     private bool _isBambiCloudSelected = true;
@@ -832,20 +899,82 @@ public partial class SettingsTabViewModel : TabItemViewModel
         var targetUrl = ResolveBrowserUrl(url);
         IsBambiCloudSelected = targetUrl.Contains("bambicloud.com", StringComparison.OrdinalIgnoreCase);
 
+        var firstInit = !BrowserInitialized;
+        var hasEmbeddedControl = _browserHost?.CreateBrowserControl() != null;
+
+        // WPF lazy click-to-load contract (MainWindow.Browser.cs:99-107): the control is created
+        // and parented into the dashboard container immediately BEFORE navigation, never eagerly.
+        BrowserAttachRequested?.Invoke(this, EventArgs.Empty);
+
+        BrowserStatusText = Loc.Get("label_loading");
+        BrowserStatusBrush = ThemePinkBrush();
+        if (firstInit && hasEmbeddedControl)
+        {
+            BrowserLoadingVisible = true;
+            BrowserLoadingText = Loc.Get("label_initializing_webview2");
+        }
+
         try
         {
+            if (firstInit && hasEmbeddedControl)
+                BrowserLoadingText = Loc.Get("label_creating_browser");
+
+            // WPF zoom parity: 0.75 on first init (BrowserService.cs WebView_Loaded), 0.5 on
+            // subsequent site navigations (MainWindow.Browser.cs BrowserSiteToggle_Changed).
+            if (_browserHost != null && hasEmbeddedControl)
+            {
+                try { _browserHost.ZoomFactor = firstInit ? 0.75 : 0.5; }
+                catch (Exception zoomEx) { _logger?.LogDebug(zoomEx, "Failed to set browser zoom"); }
+            }
+
             _logger?.LogInformation("Navigating browser to {Url}", targetUrl);
             await (_browserHost?.NavigateAsync(new Uri(targetUrl)) ?? Task.CompletedTask);
             _lastBrowserUrl = targetUrl;
             // B5: re-apply the saved mute preference now that the browser core exists.
             ApplyBrowserMute(_settingsService?.Current?.BrowserVideoMuted ?? false);
-            BrowserStatusText = Loc.Get("label_connected");
-            BrowserInitialized = true;
+
+            if (hasEmbeddedControl)
+            {
+                // WPF parity: collapse the placeholder once the browser control is live; the
+                // status row flips to "Connected" green when Navigated fires.
+                BrowserInitialized = true;
+                BrowserLoadingText = "";
+                BrowserLoadingVisible = false;
+            }
+            else
+            {
+                // Fallback hosts (Linux/macOS stubs) open externally; keep the placeholder so
+                // the click affordance survives, but report the launch as connected.
+                BrowserStatusText = Loc.Get("label_connected");
+            }
+        }
+        catch (InvalidOperationException invEx)
+        {
+            // WPF parity (MainWindow.Browser.cs InvalidOperationException branch): the
+            // WebView2-runtime-missing path shows the install hint in the placeholder.
+            _logger?.LogError(invEx, "Browser initialization failed for {Url}", targetUrl);
+            BrowserLoadingVisible = true;
+            BrowserLoadingText = $"\u274c {invEx.Message}";
+            BrowserStatusText = Loc.Get("label_not_installed");
+            BrowserStatusBrush = new SolidColorBrush(Color.FromRgb(255, 107, 107));
+            BrowserInitialized = false;
+            if (firstInit)
+                await (_dialogService?.ShowMessageAsync(Loc.Get("title_webview2_not_installed"), invEx.Message) ?? Task.CompletedTask);
         }
         catch (Exception ex)
         {
+            // WPF parity (MainWindow.Browser.cs generic catch): error text in the placeholder,
+            // red "Error" status, and reset for a lazy re-init on the next site click.
             _logger?.LogError(ex, "Failed to navigate browser to {Url}", targetUrl);
-            BrowserStatusText = Loc.Get("label_failed");
+            BrowserStatusText = Loc.Get("label_error_2");
+            BrowserStatusBrush = new SolidColorBrush(Color.FromRgb(255, 107, 107));
+            BrowserInitialized = false;
+            if (firstInit && hasEmbeddedControl)
+            {
+                BrowserLoadingVisible = true;
+                BrowserLoadingText = $"\u274c {ex.GetType().Name}\n{ex.Message}";
+                await (_dialogService?.ShowMessageAsync(Loc.Get("title_browser_error"), ex.Message) ?? Task.CompletedTask);
+            }
         }
     }
 
@@ -858,12 +987,8 @@ public partial class SettingsTabViewModel : TabItemViewModel
             return;
         }
 
-        BrowserStatusText = Loc.Get("label_loading");
-        BrowserLoadingText = Loc.Get("label_creating_browser");
-
+        // OpenBrowserAsync owns the full status/placeholder lifecycle (WPF InitializeBrowserAsync parity).
         await OpenBrowserAsync(startUrl);
-
-        BrowserLoadingText = "";
     }
 
     [RelayCommand]

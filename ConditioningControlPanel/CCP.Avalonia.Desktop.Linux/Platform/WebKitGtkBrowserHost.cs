@@ -48,5 +48,7 @@ public sealed class WebKitGtkBrowserHost : IBrowserHost
     public bool IsFullscreen => false;
     public event EventHandler<bool>? FullscreenChanged { add { } remove { } }
 
-    public Control? CreateBrowserControl() => null;
+    // object? (not Control?): a covariant return does not implement the interface member and
+    // interface dispatch would silently use the IBrowserHost default (always null).
+    public object? CreateBrowserControl() => null;
 }
