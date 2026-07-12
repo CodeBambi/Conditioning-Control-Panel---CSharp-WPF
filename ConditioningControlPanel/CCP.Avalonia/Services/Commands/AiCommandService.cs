@@ -132,15 +132,26 @@ public sealed class AiCommandService : IAiCommandService
         switch (c.Command)
         {
             case AICommandType.flash_image when c.Data is FlashImage f:
-                // Flash engine is a stub seam in the Avalonia head — TriggerFlash uses the configured
-                // FlashImages count. amount/size/opacity have no home until the engine ports (filed gap).
+                // SEAM GAP (AI-6): WPF FlashImageCommand.cs:25-33 clamps Amount(0-8) / Duration(0-10s,
+                // *1000->ms) / Size(0-150) and calls App.Flash.TriggerFlashOnce(amount, durationMs, size)
+                // (WPF FlashService.cs:309 -- the multi-image AI one-shot; note the model also has Opacity
+                // but WPF FlashImageCommand does NOT read it). The Core IFlashService seam has no
+                // equivalent: TriggerFlash() is argless (uses the configured FlashImages count) and
+                // TriggerFlashOnce(imagePath, durationMs, playSound, suppressHaptic) is the SINGLE-image
+                // Deeper variant (WPF TriggerFlashOnceWithImage, FlashService.cs:347), not the AI flash.
+                // Threading duration through TriggerFlashOnce would change semantics (1 image vs N), so
+                // nothing is threaded; amount/duration/size filed as a follow-up row (seam + Avalonia impl).
                 await Dispatcher.UIThread.InvokeAsync(() => _flash.TriggerFlash());
                 break;
 
             case AICommandType.bubbles when c.Data is Bubbles b:
-                // TODO(AiCommandService/bubbles): the WPF AI command passes a runtime frequency override
-                // (Start(true, freq)); the Core/Avalonia spawn rate is settings-driven with no runtime
-                // override seam. Best-effort Start()/Stop() here — file a row for the override seam.
+                // WPF BubbleCommand.cs:24-30 clamps Frequency(0-10) and derives shouldStart = On||freq>0
+                // (ported below), then calls App.Bubbles.Start(true, frequency>0?frequency:null) where the
+                // bool is bypassLevelCheck (WPF BubbleService.cs:160 Start(bool, int? frequency)). SEAM GAP
+                // (AI-6): Core IBubbleService.Start() is argless -- there is no runtime spawn-rate override
+                // and no bypassLevelCheck on the seam (RefreshFrequency() re-reads settings; SpawnOnce()
+                // spawns one bubble). The start/stop decision IS ported with parity; the per-call frequency
+                // override is filed as a follow-up row (seam + Avalonia impl + settings-driven spawn rate).
                 var frequency = Math.Clamp(b.Frequency, 0, 10);
                 var shouldStart = b.On || frequency > 0;
                 await Dispatcher.UIThread.InvokeAsync(() =>
@@ -151,7 +162,15 @@ public sealed class AiCommandService : IAiCommandService
                 break;
 
             case AICommandType.subliminal when c.Data is SubliminalCmdData s:
-                // Subliminal engine is a stub seam; opacity (WPF 0-60) has no home — dropped. Text clamp 80.
+                // WPF SubliminalCommand.cs:22-31 clamps Opacity(0-60) and calls
+                // App.Subliminal.FlashSubliminalCustom(text, opacity). WPF signature (SubliminalService.cs:241):
+                // FlashSubliminalCustom(text, int? opacity, int? overrideDurationMs, bool suppressHaptic).
+                // SEAM GAP (AI-6): the Core ISubliminalService.FlashSubliminalCustom seam is
+                // (text, int? overrideDurationMs, bool suppressHaptic) -- it has NO opacity parameter and
+                // its 2nd positional arg is overrideDurationMs, NOT opacity. Naively threading opacity
+                // there would pass a 0-60 opacity as a millisecond duration (bug), so it is intentionally
+                // NOT threaded. Text clamp(80) is ported with parity; opacity filed as a follow-up row
+                // (add opacity to the seam + Avalonia impl).
                 var text = (s.Text ?? "").Trim();
                 if (text.Length > 80) text = text.Substring(0, 80);
                 if (!string.IsNullOrEmpty(text))
