@@ -445,7 +445,21 @@ public partial class AssetsTabViewModel : TabItemViewModel
                 IEnumerable<string> raw;
                 try
                 {
-                    raw = Directory.EnumerateFiles(fullPath);
+                    // Recursive load: the selected folder files AND every descendant
+                    // subfolder file. Owner-requested so selecting `videos` shows all
+                    // 810 files across its 16 subfolders (and `images` shows the top
+                    // 116 + every subfolder). IgnoreInaccessible=true is REQUIRED on a
+                    // network drive (Z:) so one unreadable subdir does not abort the
+                    // whole scan (it would otherwise throw UnauthorizedAccessException
+                    // mid-enumeration and lose every file after the bad subdir).
+                    raw = Directory.EnumerateFiles(
+                        fullPath,
+                        "*",
+                        new EnumerationOptions
+                        {
+                            RecurseSubdirectories = true,
+                            IgnoreInaccessible = true
+                        });
                 }
                 catch (Exception ex) when (ex is DirectoryNotFoundException or UnauthorizedAccessException or IOException)
                 {
