@@ -1,0 +1,123 @@
+name: Avalonia Linux Smoke
+
+# ---------------------------------------------------------------------------
+# Headless smoke lane for the Avalonia Linux bring-up (feat/crossplatform).
+#
+# Builds the Linux Avalonia head in Debug and runtime-exercises the 44-tab
+# smoke harness under a virtual X display (xvfb), then uploads the smoke
+# report + crash/app logs as the verification backbone for Linux bring-up.
+#
+# Relationship to build.yml:
+#   - build.yml's `desktop` matrix builds the heads (Release) and runs
+#     CCP.Core.Tests on ubuntu/macos/windows. This lane does NOT duplicate that.
+#   - It adds a Debug, runtime-exercised Linux run scoped to the port branch,
+#     reusing the same checkout / setup-dotnet / apt patterns.
+#
+# !!! DIAGNOSTIC LANE, NOT A GATE YET !!!
+# The first runs are expected to flush Windows-only assumptions out of the
+# smoke harness; that output IS the Linux feature-gap list. The job sets
+# continue-on-error: true so gaps never fail the workflow. Once the Linux
+# sweep is green, DELETE `continue-on-error: true` to promote this to a gate.
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [ feat/crossplatform, main, master ]
+  pull_request:
+    branches: [ feat/crossplatform, main, master ]
+  workflow_dispatch:
+
+jobs:
+  linux-smoke:
+    name: Linux headless smoke (44-tab harness)
+    runs-on: ubuntu-latest
+    # Non-blocking until the Linux sweep is green. See header comment.
+    continue-on-error: true
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install Linux native + GUI/display dependencies
+        # Mirrors ConditioningControlPanel/build-linux.sh:
+        #   - libvlc/libvlccore/vlc  (LibVLC for video; system-installed on Linux)
+        #   - Avalonia/Skia runtime deps (libgtk-3-0, libgl1, libxrandr2, ...)
+        # Adds:
+        #   - xvfb + xauth           (virtual X display for headless run)
+        #   - libwebkit2gtk-4.1-dev  (forward-compat for WebKitGtkBrowserHost,
+        #                             currently a stub that shells out to xdg-open)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libvlc-dev libvlccore-dev vlc \
+            libicu-dev libfontconfig1 libfreetype6 libgl1 libgtk-3-0 \
+            libice6 libsm6 libx11-6 libxcursor1 libxext6 libxi6 \
+            libxinerama1 libxrandr2 libxss1 libxt6 libxxf86vm1 \
+            xvfb xauth \
+            libwebkit2gtk-4.1-dev
+
+      - name: Build Linux head (Debug)
+        # Debug build: the smoke harness is Debug-only (matches the Windows
+        # head's --smoke-test switch). Paths mirror the existing build.yml
+        # (unprefixed, checkout-root-relative).
+        run: dotnet build ConditioningControlPanel/CCP.Avalonia.Desktop.Linux/CCP.Avalonia.Desktop.Linux.csproj -c Debug
+
+      - name: Run 44-tab smoke harness under virtual X display
+        # Invocation mirrors build-linux.sh: build, then run the produced DLL
+        # directly (not `dotnet run`, which would rebuild). Wrapped in
+        # xvfb-run for a virtual display and `timeout` so a harness that does
+        # not self-terminate (the current Linux state) is reaped cleanly.
+        # Software rendering env vars come straight from build-linux.sh.
+        env:
+          AVALONIA_D3D11_DISABLED: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          AVALONIA_LOG_LEVEL: Debug
+          LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu
+        run: |
+          set +e
+          timeout 120s xvfb-run -a -s '-screen 0 1920x1080x24' \
+            dotnet ConditioningControlPanel/CCP.Avalonia.Desktop.Linux/bin/Debug/net8.0/CCP.Desktop.Linux.dll --smoke-test
+          CODE=$?
+          set -e
+          echo "Linux smoke exit code: $CODE"
+          # 124 = timeout reaped a non-self-terminating run (expected during
+          # bring-up, since the smoke runner is not yet wired into the Linux
+          # head). Any other non-zero is a Linux gap we capture via artifacts,
+          # not a workflow failure (job-level continue-on-error covers it too).
+          if [ "$CODE" != "0" ] && [ "$CODE" != "124" ]; then
+            echo "::warning::Linux smoke exited $CODE - see uploaded report/crash artifacts."
+          fi
+          exit 0
+
+      - name: Collect smoke report + crash/app logs
+        if: always()
+        run: |
+          mkdir -p artifacts
+          # smoke-test-report.json is written to AppDomain.CurrentDomain.BaseDirectory
+          # (the head's bin/Debug/net8.0 output dir).
+          find . -name 'smoke-test-report.json' -print -exec cp --parents {} artifacts/ \; 2>/dev/null || true
+          # The Avalonia head logs to LocalApplicationData/ConditioningControlPanel/logs
+          # (~/.local/share/ConditioningControlPanel/logs on Linux): Serilog app-*.log
+          # plus any crash.log written by the global exception handlers.
+          if [ -d "$HOME/.local/share/ConditioningControlPanel/logs" ]; then
+            mkdir -p artifacts/user-logs
+            cp -r "$HOME/.local/share/ConditioningControlPanel/logs/." artifacts/user-logs/ 2>/dev/null || true
+          fi
+          # Repo-relative logs/ written by some subsystems next to CWD.
+          find . -type f -path '*/logs/*' \( -name '*.log' -o -name 'crash.log*' \) -print -exec cp --parents {} artifacts/ \; 2>/dev/null || true
+          echo "=== Collected artifacts ==="
+          find artifacts -type f || true
+
+      - name: Upload Linux smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-smoke-report
+          path: artifacts/
+          if-no-files-found: warn
