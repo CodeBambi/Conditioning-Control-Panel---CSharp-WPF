@@ -117,6 +117,16 @@ namespace ConditioningControlPanel
                     if (_voiceMode) Focus(); else TxtInput.Focus();
                 }), DispatcherPriority.Input);
             };
+
+            // Re-assert full-screen physical-pixel coverage whenever this window is activated. Clicking a
+            // card on a second (different-DPI) monitor as it pops was leaving it under-covering the screen
+            // (#539): we swallow WM_DPICHANGED to avoid the #494 render-thread deadlock, which also denies
+            // WPF the DPI update, so the DIP-computed bounds render at the wrong scale. Re-covering in
+            // device pixels here restores full coverage regardless of WPF's (possibly stale) DPI.
+            Activated += (s, e) =>
+            {
+                if (IsVisible) ApplyPhysicalBounds();
+            };
         }
 
         /// <summary>
@@ -231,6 +241,26 @@ namespace ConditioningControlPanel
             Top = screen.Bounds.Top / scale;
             Width = screen.Bounds.Width / scale;
             Height = screen.Bounds.Height / scale;
+
+            // Lock in exact coverage at the OS level (see ApplyPhysicalBounds). The WPF DIP sizing above
+            // is enough to realize the window on the right monitor; this guarantees pixel-exact cover even
+            // when WPF's per-monitor DPI is stale (we swallow WM_DPICHANGED for the #494 deadlock).
+            ApplyPhysicalBounds();
+        }
+
+        /// <summary>
+        /// Force the window to cover its target monitor exactly, in DEVICE PIXELS, via SetWindowPos.
+        /// WPF's DIP-based sizing can under-cover a second monitor on a mixed-DPI rig because we swallow
+        /// WM_DPICHANGED (to dodge the #494 render-thread deadlock), leaving WPF at a stale scale. The
+        /// dark overlay Grid stretches to fill the client area, so a pixel-exact window rect = full-screen
+        /// cover regardless of what DPI WPF thinks it is rendering at (#539).
+        /// </summary>
+        private void ApplyPhysicalBounds()
+        {
+            if (_hwnd == IntPtr.Zero || _screen == null) return;
+            var b = _screen.Bounds;
+            try { SetWindowPos(_hwnd, HWND_TOPMOST, b.Left, b.Top, b.Width, b.Height, SWP_SHOWWINDOW); }
+            catch (Exception ex) { App.Logger?.Debug("LockCardWindow.ApplyPhysicalBounds: {E}", ex.Message); }
         }
 
         private void ApplyColors()
@@ -304,7 +334,7 @@ namespace ConditioningControlPanel
             // deadlocks the UI thread on a backed-up render thread (the same #494 mechanism). Fired only
             // on cross-DPI-monitor moves, so dropping it never affects the initial render.
             if (_hwnd != IntPtr.Zero)
-                HwndSource.FromHwnd(_hwnd)?.AddHook(SwallowDpiChanged);
+                HwndSource.FromHwnd(_hwnd)?.AddHook(HandleDpiChanged);
         }
 
         // XAML still wires Loaded="Window_Loaded"; keep a no-op so the binding resolves. All realization
@@ -312,10 +342,18 @@ namespace ConditioningControlPanel
         private void Window_Loaded(object sender, RoutedEventArgs e) { }
 
         // WndProc hook: drop WM_DPICHANGED so WPF never runs its auto DPI-rescale (which deadlocks under
-        // a backed-up render thread). Mirrors FlashService.SwallowDpiChanged.
-        private static IntPtr SwallowDpiChanged(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        // a backed-up render thread). Mirrors FlashService.SwallowDpiChanged. Instance (not static) so we
+        // can re-cover the monitor in device pixels afterward: swallowing alone left WPF at a stale DPI,
+        // which under-covered a second monitor on a mixed-DPI rig (#539). Re-assert async so no work runs
+        // synchronously inside the message hook.
+        private IntPtr HandleDpiChanged(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            if (msg == WM_DPICHANGED) handled = true;   // consume it; WPF's HwndTarget never sees the resize
+            if (msg == WM_DPICHANGED)
+            {
+                handled = true;   // consume it; WPF's HwndTarget never sees the deadlock-prone resize
+                if (IsVisible)
+                    Dispatcher.BeginInvoke(new Action(ApplyPhysicalBounds), DispatcherPriority.Background);
+            }
             return IntPtr.Zero;
         }
 
@@ -323,6 +361,10 @@ namespace ConditioningControlPanel
         // that used to live in Window_Loaded. Called from ShowOnAllMonitors after Show().
         private void OnShown()
         {
+            // Every card window (primary AND each mirror) must cover its whole monitor — the shrink in
+            // #539 was on the SECONDARY screen, so this can't sit behind the primary-only guard below.
+            ApplyPhysicalBounds();
+
             if (!_isPrimary) return;
 
             if (_hwnd != IntPtr.Zero)
