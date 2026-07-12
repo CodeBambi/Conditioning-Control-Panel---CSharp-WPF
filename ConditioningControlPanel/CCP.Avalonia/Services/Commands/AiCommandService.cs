@@ -175,13 +175,16 @@ public sealed class AiCommandService : IAiCommandService
                 break;
 
             case AICommandType.haptic when c.Data is HapticCommandData h:
-                // Adapter: no ApplyVibrationModeAsync on the seam. Synthesize a pulse via TestAsync
-                // (intensityPercent, durationMs). Intensity clamped to MaxAiHapticIntensity (default 0.6).
+                // WPF HapticCommand.cs:14-24 — clamp duration to 0..10s and intensity to the
+                // user's MaxAiHapticIntensity ceiling, then apply the Pulse vibration MODE (a
+                // pattern of 50ms on / 30ms off, not the one-shot Test buzz the adapter used
+                // before this seam existed). Intensity stays a 0..1 fraction: WPF passes the
+                // fraction directly to ApplyVibrationModeAsync (HapticCommand.cs:24); it is NOT
+                // the percent TestAsync takes.
                 var maxIntensity = _settings.Current?.CompanionPrompt?.MaxAiHapticIntensity ?? 0.6;
                 var hIntensity = Math.Clamp(h.Intensity, 0, maxIntensity);
                 var hDurationMs = Math.Clamp(h.Duration, 0, 10) * 1000;
-                if (hDurationMs > 0)
-                    _ = _haptics.TestAsync((int)Math.Round(hIntensity * 100), hDurationMs);
+                _ = _haptics.ApplyVibrationModeAsync(hIntensity, hDurationMs, VibrationMode.Pulse);
                 break;
 
             case AICommandType.mantra_lockscreen when c.Data is MantraLockscreen m:
