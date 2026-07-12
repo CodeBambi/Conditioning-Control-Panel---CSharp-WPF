@@ -53,6 +53,10 @@ const DEFAULTS = {
   runDarters: true,          // white rabbits
   runVariantsOff: [],        // bubble-pool variant ids switched OFF (empty = all on)
   runSeeded: 0,              // 1 once the host's saved runSetup seeded these keys
+  // ---- the guide -------------------------------------------------------------
+  hideTutorial: false,       // true = silence the Cheshire guide entirely (no
+                             // portrait, no scenes, no tutorial VO). cheshireGuide
+                             // no-ops every fire point when set (read live).
 };
 
 export const MOTIONS = ['Mixed', 'FloatUp', 'RainDown', 'RoamBounce'];

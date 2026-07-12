@@ -843,6 +843,8 @@ img.rh-fx-spiralspin {
   z-index: 20;
 }
 .sf-pause[hidden] { display: none; }
+.sf-pause-hint { opacity: 0.6; font-size: 0.82em; margin-top: 0.4em; letter-spacing: 0.02em; }
+.sf-pause-hint[hidden] { display: none; }
 /* while paused, lift the controls above the pause dim (z 20) so options stay usable */
 .sf-hud.sf-paused .sf-dock,
 .sf-hud.sf-paused .sf-uitoggle { z-index: 21; }

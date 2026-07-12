@@ -46,6 +46,26 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _safetyTimer;
         private DispatcherTimer? _fallbackSafetyTimer;
 
+        // ---- UI-thread wedge watchdog (freeze/lockout rescue, #529/#532 storm) ----
+        // The _safetyTimer/_fallbackSafetyTimer above are DispatcherTimers: dead weight the moment
+        // the dispatcher itself blocks (native LibVLC detach/attach or a layered-window render
+        // deadlock while creating the next fullscreen video window). Those are the "final frame froze
+        // and locked out my whole computer for minutes" reports. This watchdog lives OFF the UI thread:
+        // a UI-thread heartbeat bumps _uiHeartbeatTicks; a threadpool timer notices when it goes stale
+        // while a video is playing and force-breaks the wedge (off-thread player.Stop, the same call
+        // CloseAll already makes from background tasks) + posts a teardown so the machine recovers on
+        // its own instead of needing a hard shutdown. Armed at the very top of PlayVideo — BEFORE any
+        // window is created — because the wedge frequently happens mid-creation, before the safety
+        // timers are even armed.
+        private System.Threading.Timer? _wedgeWatchdog;
+        private DispatcherTimer? _heartbeatTimer;
+        private long _uiHeartbeatTicks;
+        private volatile bool _wedgeRescueFired;
+        // Fire only after a long, unambiguous stall — this targets the multi-minute lockouts, never a
+        // UI thread that's merely busy for a beat. The legitimate ~4s teardown pump-wait keeps the
+        // heartbeat ticking (it pumps Background-priority work), so it won't trip this.
+        private const int WedgeStallMs = 22000;
+
         // Watch-time crediting for stats/quests (#447). _lastWatchPositionMs tracks the current video's
         // latest playback position (LibVLC TimeChanged); _creditedWatchSeconds is a watermark of what's
         // already been credited so repeated teardown calls can't double-count.
@@ -56,6 +76,11 @@ namespace ConditioningControlPanel.Services
         private bool _videoPlaying;
         private bool _triggerInProgress; // Guards the 800ms freeze delay window in TriggerVideo
         private bool _strictActive;
+        // True while THIS video holds an audio-duck ref (App.Audio.Duck is ref-counted). Balanced
+        // 1:1 with the Duck in PlayVideo by an Unduck in CloseAll — every teardown path (natural end,
+        // attention retry / troll "watch again" loop, engine Stop, ForceCleanup) runs through CloseAll,
+        // so the duck can never leak the ref count and pin other apps at the ducked level (#526).
+        private bool _didDuck;
         private string? _retryPath;
         private DateTime _startTime;
         private double _duration;
@@ -148,31 +173,48 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void SeekPrimary(long ms)
         {
-            try
+            // Mirror the seek to EVERY screen's player, not just the primary — otherwise a Deeper
+            // blink/rewind ("pull backward") rewinds the primary monitor while the secondary clone
+            // keeps playing, so the two screens desync (#527). Only the primary raises events, but
+            // all players must track the same position.
+            var target = Math.Max(0, ms);
+            foreach (var p in SnapshotPlayers())
             {
-                var p = _primaryMediaPlayer;
-                if (p == null) return;
-                if (!p.IsSeekable) return;
-                p.Time = Math.Max(0, ms);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("VideoService.SeekPrimary failed: {Error}", ex.Message);
+                try
+                {
+                    if (p.IsSeekable) p.Time = target;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("VideoService.SeekPrimary failed: {Error}", ex.Message);
+                }
             }
         }
 
-        /// <summary>Pause the primary player. No-op if none.</summary>
+        /// <summary>Pause every screen's player (kept in lockstep for multi-monitor). No-op if none.</summary>
         public void PausePrimary()
         {
-            try { _primaryMediaPlayer?.Pause(); }
-            catch (Exception ex) { App.Logger?.Debug("VideoService.PausePrimary failed: {Error}", ex.Message); }
+            foreach (var p in SnapshotPlayers())
+            {
+                try { p.SetPause(true); }
+                catch (Exception ex) { App.Logger?.Debug("VideoService.PausePrimary failed: {Error}", ex.Message); }
+            }
         }
 
-        /// <summary>Resume the primary player. No-op if none.</summary>
+        /// <summary>Resume every screen's player (kept in lockstep for multi-monitor). No-op if none.</summary>
         public void PlayPrimary()
         {
-            try { _primaryMediaPlayer?.Play(); }
-            catch (Exception ex) { App.Logger?.Debug("VideoService.PlayPrimary failed: {Error}", ex.Message); }
+            foreach (var p in SnapshotPlayers())
+            {
+                try { p.SetPause(false); }
+                catch (Exception ex) { App.Logger?.Debug("VideoService.PlayPrimary failed: {Error}", ex.Message); }
+            }
+        }
+
+        /// <summary>Thread-safe snapshot of all active players (all screens) for lockstep control.</summary>
+        private List<LibVLCSharp.Shared.MediaPlayer> SnapshotPlayers()
+        {
+            lock (_mediaPlayersLock) { return _mediaPlayers.ToList(); }
         }
 
         /// <summary>
@@ -584,6 +626,7 @@ namespace ConditioningControlPanel.Services
             _safetyTimer?.Stop();
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
+            StopWedgeWatchdog();
 
             try { Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch; }
             catch { }
@@ -1247,6 +1290,10 @@ namespace ConditioningControlPanel.Services
             _hits = _total = 0;
             _spawnTimes.Clear();
 
+            // Arm the off-thread wedge watchdog NOW, before any window is created — the freeze often
+            // strikes mid window-creation of this video, before the safety timers get a chance to arm.
+            StartWedgeWatchdog();
+
             // Update Discord presence
             App.DiscordRpc?.SetVideoActivity();
 
@@ -1256,9 +1303,14 @@ namespace ConditioningControlPanel.Services
             // Stop flashes during video
             App.Flash?.Stop();
 
-            // Duck other apps
+            // Duck other apps. Record that we took a duck ref so CloseAll releases exactly one
+            // matching Unduck on teardown — otherwise a retry/troll "watch again" loop ducks again
+            // each pass and only Cleanup unducks once, leaking the ref count (#526).
             if (App.Settings.Current.AudioDuckingEnabled)
+            {
                 App.Audio?.Duck(App.Settings.Current.DuckingLevel);
+                _didDuck = true;
+            }
 
             // Delay video start by 1.3 seconds to allow avatar to announce
             App.Logger?.Debug("VideoService: Starting 1.3s delay before playback");
@@ -2440,6 +2492,94 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Debug("VideoService: Fallback safety timer started for {Duration}s", MaxVideoFallbackSeconds);
         }
 
+        /// <summary>
+        /// Arms the off-thread wedge watchdog for the current video. Idempotent (safe to call again on
+        /// a retry/troll replay). Must be called on the UI thread, before window creation.
+        /// </summary>
+        private void StartWedgeWatchdog()
+        {
+            _wedgeRescueFired = false;
+            System.Threading.Interlocked.Exchange(ref _uiHeartbeatTicks, DateTime.UtcNow.Ticks);
+
+            // UI-thread heartbeat: proves the dispatcher is still draining. Background priority so a
+            // genuine native block (which does NOT pump) lets it go stale, while the legitimate
+            // teardown pump-wait (which pumps Background work) keeps it fresh — no false positives.
+            _heartbeatTimer?.Stop();
+            _heartbeatTimer = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _heartbeatTimer.Tick += (s, e) =>
+                System.Threading.Interlocked.Exchange(ref _uiHeartbeatTicks, DateTime.UtcNow.Ticks);
+            _heartbeatTimer.Start();
+
+            _wedgeWatchdog?.Dispose();
+            _wedgeWatchdog = new System.Threading.Timer(_ => WedgeWatchdogTick(), null, 3000, 3000);
+        }
+
+        private void StopWedgeWatchdog()
+        {
+            try { _wedgeWatchdog?.Dispose(); } catch { }
+            _wedgeWatchdog = null;
+            try { _heartbeatTimer?.Stop(); } catch { }
+            _heartbeatTimer = null;
+        }
+
+        /// <summary>
+        /// Runs on a threadpool thread every ~3s. If a video is playing but the UI thread stopped
+        /// heart-beating for <see cref="WedgeStallMs"/>, the dispatcher is wedged (frozen final frame,
+        /// topmost window holding the screen). Break it off-thread and queue a teardown so the app
+        /// recovers without a hard shutdown. Fires at most once per playback.
+        /// </summary>
+        private void WedgeWatchdogTick()
+        {
+            try
+            {
+                if (!_videoPlaying || _wedgeRescueFired) return;
+
+                var last = System.Threading.Interlocked.Read(ref _uiHeartbeatTicks);
+                var stallMs = (DateTime.UtcNow.Ticks - last) / TimeSpan.TicksPerMillisecond;
+                if (stallMs < WedgeStallMs) return;
+
+                _wedgeRescueFired = true;
+                App.Logger?.Error(
+                    "VideoService: UI thread wedged {StallMs}ms during video playback — off-thread rescue (freeze/lockout guard)",
+                    stallMs);
+
+                // Stop native players off-thread. LibVLC Stop() is thread-safe (CloseAll already calls
+                // it from Task.Run) and can unblock a stuck decode/render that's holding the UI thread.
+                // Harmless when the list is empty (e.g. the wedge is mid window-recreate before the new
+                // player is registered — the posted teardown below still recovers it once unblocked).
+                List<LibVLCSharp.Shared.MediaPlayer> players;
+                lock (_mediaPlayersLock) { players = _mediaPlayers.ToList(); }
+                foreach (var p in players)
+                {
+                    try { p.Stop(); }
+                    catch (Exception ex) { App.Logger?.Debug("Wedge rescue: player.Stop failed - {Error}", ex.Message); }
+                }
+
+                // Queue a real teardown + reschedule for the instant the dispatcher drains again, so a
+                // multi-minute lockout collapses to a brief stutter instead of stranding the frozen
+                // frame until the user kills the app or the next scheduled video jolts it loose.
+                try
+                {
+                    var dispatcher = Application.Current?.Dispatcher;
+                    if (dispatcher != null && !dispatcher.HasShutdownStarted)
+                        dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            try { ForceCleanup(); }
+                            catch (Exception ex) { App.Logger?.Warning(ex, "Wedge rescue: ForceCleanup threw"); }
+                            if (_isRunning) ScheduleNext();
+                        }));
+                }
+                catch (Exception ex) { App.Logger?.Debug("Wedge rescue: dispatch failed - {Error}", ex.Message); }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("WedgeWatchdogTick error: {Error}", ex.Message);
+            }
+        }
+
         #endregion
 
         #region Cleanup
@@ -2687,6 +2827,20 @@ namespace ConditioningControlPanel.Services
             }
             finally
             {
+                // Video is torn down — the wedge watchdog has nothing left to guard.
+                StopWedgeWatchdog();
+
+                // Release the audio-duck ref taken in PlayVideo, exactly once per teardown. Balancing
+                // it here (not only in Cleanup) covers the paths that tear down WITHOUT Cleanup — the
+                // attention retry / troll loop (ShowMessage → CloseAll → next PlayVideo) and engine
+                // Stop() — so the ref count returns to 0 and other apps' volume is restored (#526).
+                if (_didDuck)
+                {
+                    _didDuck = false;
+                    try { App.Audio?.Unduck(); }
+                    catch (Exception ex) { App.Logger?.Debug("CloseAll: Unduck failed - {Error}", ex.Message); }
+                }
+
                 lock (_cleanupLock)
                 {
                     _isCleaningUp = false;
@@ -2734,7 +2888,9 @@ namespace ConditioningControlPanel.Services
             CloseAll();
 
             App.Logger?.Information("VideoService: Cleanup() - CloseAll completed, _windows now={WinCount}", _windows.Count);
-            App.Audio?.Unduck();
+            // Audio unduck now happens inside CloseAll (above) so every teardown path releases the
+            // duck ref exactly once (#526). No Unduck here — a second call would decrement a duck ref
+            // that another consumer (subliminal/session) may legitimately hold.
             _strictActive = false;
             _penalties = 0;
 

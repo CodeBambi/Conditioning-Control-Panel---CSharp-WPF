@@ -30,6 +30,7 @@
  * ==========================================================================*/
 
 import { CHESHIRE } from '../assets/vn/cheshire_script.js';
+import { S } from '../engine/settings.js';
 
 export const TUTORIAL_STAGE = {
   NEW: 0,          // nothing seen
@@ -176,6 +177,7 @@ export function createCheshireGuide(opts) {
   /** 250ms run tick. io = { frac (elapsed/duration 0..1), wave }. */
   function tick(io) {
     try {
+      if (S.hideTutorial) return;   // guide silenced: no scheduled beats
       if (!schedule || !io) return;
       if (vn.isHolding() || isFieldHeld()) return;   // beats wait out any hold
       for (const b of schedule) {
@@ -192,6 +194,7 @@ export function createCheshireGuide(opts) {
    * pools take over, throttled + persisted. */
   function onEvent(event, data) {
     try {
+      if (S.hideTutorial) return false;   // guide silenced: native bark keeps the event
       if (!ensureInit()) return false;
       // arc: this run's schedule may be waiting on the event
       if (schedule) {
@@ -225,7 +228,10 @@ export function createCheshireGuide(opts) {
   /** markDiscovered's first gate: while the arc runs, NO lesson card fires
    * (discoveries are still recorded upstream; beats' covers close the gaps). */
   function suppressLessons() {
-    try { ensureInit(); return stage >= 0 && stage < ARC_DONE; } catch (e) { return false; }
+    try {
+      if (S.hideTutorial) return false;   // guide silenced: let the plain lesson cards teach
+      ensureInit(); return stage >= 0 && stage < ARC_DONE;
+    } catch (e) { return false; }
   }
 
   /** markDiscovered's second gate (post-arc): a first-discovery the Cheshire
@@ -233,6 +239,7 @@ export function createCheshireGuide(opts) {
    * instead of the plain lesson card. Returns true when claimed. */
   function handleDiscovery(codexId, copy) {
     try {
+      if (S.hideTutorial) return false;   // guide silenced: fall through to the plain lesson card
       if (!ensureInit()) return false;
       if (stage < ARC_DONE) return false;   // arc: suppressLessons already ate it
       const pool = script.reactive && script.reactive.discovery && script.reactive.discovery[codexId];
@@ -251,6 +258,7 @@ export function createCheshireGuide(opts) {
    * scheduled r113 commentary - both resolve immediately. */
   function happyBeat(beatId) {
     try {
+      if (S.hideTutorial) return Promise.resolve(false);   // guide silenced: no run-1 opening scene
       ensureInit();
       if (beatId === 'intro1') {
         const beats = script.scenes && script.scenes.r1_open;
@@ -338,6 +346,7 @@ export function createCheshireGuide(opts) {
      * after its scene). Contract-identical to the old hubGuide. */
     maybeStart(v, io) {
       try {
+        if (S.hideTutorial) return false;   // guide silenced: no hub scenes / ambient lines
         if (!v || hubRunning || !ensureInit()) return false;
         const flashPass = io && io.flashPass;
         if (stage === TUTORIAL_STAGE.NEW) {

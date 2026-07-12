@@ -36,9 +36,29 @@ public sealed class ChaosFlashOverlay : Window
     /// at <paramref name="opacity"/> (0..1). No-op if no images are available.</summary>
     public static void Show(int durationMs = DEFAULT_DURATION_MS, double opacity = DEFAULT_OPACITY)
     {
+        // Fetch the image OFF the UI thread: PickImage -> GetChaosImagePaths can do a synchronous
+        // content-pack AES decrypt-to-temp under the FlashService lock, and a "glitch"/braindrain
+        // trigger-bubble pop fires this ON the UI thread — that decrypt froze the dashboard bubble
+        // game for pack users. Mirrors ChaosGifCascadeOverlay.Show's off-thread fetch.
         try
         {
-            var pick = PickImage();
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                string? pick;
+                try { pick = PickImage(); } catch { pick = null; }
+                Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                    ShowWithPick(pick, durationMs, opacity)));
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ChaosFlashOverlay.Show: {E}", ex.Message); }
+    }
+
+    /// <summary>UI-thread continuation of <see cref="Show"/> once the image has been picked
+    /// (off-thread, because a pack pick decrypts on demand).</summary>
+    private static void ShowWithPick(string? pick, int durationMs, double opacity)
+    {
+        try
+        {
             if (pick == null) { App.Logger?.Debug("ChaosFlashOverlay: no images in pool — nothing to wash (glitch)"); return; }
             if (_active == null) { _active = new ChaosFlashOverlay(); ((Window)_active).Show(); }
             else if (!_active.IsVisible) { try { ((Window)_active).Show(); } catch { } }   // idles hidden between washes
@@ -48,7 +68,7 @@ public sealed class ChaosFlashOverlay : Window
             if (App.Chaos?.IsRunning != true) ChaosWindowZ.ForceTopmost(_active);
             _active.Display(pick, durationMs, opacity);
         }
-        catch (Exception ex) { App.Logger?.Debug("ChaosFlashOverlay.Show: {E}", ex.Message); }
+        catch (Exception ex) { App.Logger?.Debug("ChaosFlashOverlay.ShowWithPick: {E}", ex.Message); }
     }
 
     /// <summary>Re-stack the live window above a mandatory video (see ChaosWindowZ). UI thread only.</summary>

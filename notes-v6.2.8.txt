@@ -1,0 +1,31 @@
+v6.2.8 - Tunnel Vision
+
+STABILITY & MEMORY
+- Fixed the slow memory climb that could push the app past 3GB and crash
+  with an empty log. Flashes and glitch effects now decode with a hard
+  memory cap and stop leaking native memory as they cycle.
+- Popping a glitch bubble no longer crashes the app.
+- Dragging the avatar between two monitors that use different display
+  scaling no longer freezes the app.
+- The avatar quick-menu Stop Engine now respects lockdown and will not
+  kill the app while a mandatory video or bubble-count is finishing.
+- The "Enhanced videos detected" prompt no longer stacks behind the
+  update popup and locks up input on startup.
+- Minimize-to-tray restores on a single click now, and re-centers the
+  window if its saved spot is off-screen.
+
+BUG FIXES
+- Timeline "start at minute X" now works for every feature (flashes,
+  subliminals, whispers, bouncing text, mandatory videos, lock cards,
+  bubble count and mind wipe), not just a handful. The rest used to
+  start right away.
+- The corner GIF can be changed mid-session now: swap the file, move it,
+  or resize it without restarting.
+- Web video takeover stops at the video's real length instead of running
+  on when a site auto-plays the next clip.
+- Takeover timing labels match the sliders on startup instead of showing
+  stale defaults.
+- The quests header no longer shows last month's season name after a
+  failed refresh.
+
+Season: Jelly July

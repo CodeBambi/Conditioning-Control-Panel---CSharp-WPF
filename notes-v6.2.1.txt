@@ -1,0 +1,53 @@
+🎤 She can hear you now. Say "Hey Bambi", talk to her and she talks back: give commands out loud, solve lock cards by voice, say your mantras and let her answer. (And it's all 100% offline, nothing ever leaves your PC.)
+
+🫧 New "Trigger Bubbles" minigame on the dashboard: pop a bubble, set off an effect.
+
+⚡ A quick-toggle rail on the dashboard so your favourite features are one tap away.
+
+··· Everything since 6.1.7 ···
+
+🎤 SHE'S LISTENING (new tab, Patreon)
+- "Hey Bambi" wake word: say her name and she perks up and listens (only while active).
+- Push-to-talk: hold a hotkey (default F8) to talk to her any time, no wake word needed.
+- 500+ ways to phrase the commands: toggle subliminals, spiral, pink filter, bubbles, mind wipe, pop-quiz or triggers, or ask her to "flash me", "lock me", "freeze", "count for me", "go deeper", "again", and more. Say "what can I say?" for help.
+- She talks back: spoken wake-greeting and voiced confirmations, themed per mod (Bambi / Sissy / Circe).
+- 100% offline: every word is processed on your own PC, no cloud, nothing sent anywhere.
+- Consent-first: a clear opt-in dialog the first time, OFF by default at startup, and a real disarm. The privacy pill / Voice chip actually cuts the mic, not just pauses it.
+
+🎴 VOICE LOCK CARDS
+- Say the phrase out loud to clear a lock card instead of typing it.
+- Live mic meter, "I heard..." transcript, and instant feedback. Typing always works as a fallback (ESC still works too).
+
+🗣️ SPOKEN MANTRAS (Patreon)
+- She prompts a mantra, you say it back, she responds. 50 per mod, fully voiced.
+
+🎬 DEEPER GOES VOICE
+- The voice features are in the timeline editor now too: a new "Speak (voice)" effect pauses a video and asks you to say a phrase out loud, with praise/scold feedback and a rep counter before it lets you continue.
+
+🌀 TAKEOVER REWORK
+- A much-needed overhaul. When she takes over, the screen now shows you what's happening (the takeover text + effect), instead of leaving you guessing.
+- New voice control hooks (wake word + push-to-talk tie straight into Takeover) plus extra functions and behaviour.
+- The cue itself got some shine: glow, sparkle and a little shake when she takes over, and it lingers long enough to read.
+- Squashed a pile of takeover bugs along the way (start/stop reliability, mic handoff, and more).
+
+🫧 TRIGGER BUBBLES
+- New dashboard minigame: a slice of your ambient bubbles (slider, default 10%) become "trigger" bubbles that fire an effect when popped: flash, subliminal, pink filter, spiral, glitch, GIF rain or video.
+- Same XP / sound / haptic feedback as normal pops, plus a new bubble Speed slider.
+- Completely separate from Chaos mode, and keep an eye out, your companion might want to play too... 👀
+
+⚡ DASHBOARD QUICK ACTIONS
+- Quick-toggle rail: one-tap chips for Takeover, Awareness, Haptics and Voice, plus launchers for Lockdown (set a duration + live countdown), Blink Trainer and Remote (go available without leaving the dashboard). (Patreon)
+- 🎲 Jump Right In: a one-tap button that randomizes a fun setup and starts immediately.
+- ⭐ Remember: snapshot your current setup and recall it any time (never touches your XP/level/streak).
+- 🔊 Browser mute toggle for HypnoTube / integrated browser audio.
+
+🎭 COMPANION
+- Avatar no longer goes blank or freezes for a few seconds when swapping reactions/emotes. That's fixed.
+- Hundreds of new voicelines (279) so Sissy and Circe match Bambi, plus previously-silent moments now speak and a batch of fresh idle chatter for all three.
+
+🔧 FIXES
+- Log Out now fully logs out SubscribeStar too. Premium can no longer survive a logout.
+- Videos fill the whole second monitor on mixed-DPI multi-monitor setups (no more half-covered screen).
+- Mandatory videos and browser videos no longer stack on top of each other (no more doubled video/audio).
+- The autonomy interval slider is honest now: your set time is the real average, not a wild guess.
+- Voice polish since the 6.2.0 preview: steadier wake-word detection, one-breath commands, a mic input-device picker and a Webcam & Mic pill, plus pop quizzes no longer close themselves when the window is in the background and audio now ducks on every output device, not just the default.

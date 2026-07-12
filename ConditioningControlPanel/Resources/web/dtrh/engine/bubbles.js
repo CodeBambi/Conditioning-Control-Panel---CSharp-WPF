@@ -13,7 +13,7 @@
  * fall-styles.css). All audio honours the shared master mute (audioMute.js).
  * ==========================================================================*/
 
-import { FLASH_CLIPS, FLASH_VOICES, SUB_VOICES, SUBLIMINAL_DROPS } from '/dtrh/assets/bubbles/manifest.js';
+import { FLASH_VOICES, SUB_VOICES, SUBLIMINAL_DROPS } from '/dtrh/assets/bubbles/manifest.js';
 import { S, activeWords, getCustomSpiral } from './settings.js';
 import { getLevel } from './audioLevels.js';
 import { makeSfxPlayer } from './audioBus.js';
@@ -82,7 +82,7 @@ const now = () => performance.now() / 1000;
 // AudioBuffers on the one fall-wide context are near-free to fire on the pop
 // frame, overlap naturally, and - unlike element clones - actually respect the
 // volume they're given on iOS.
-export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo }) {
+export function createBubbles({ hud, canvas, media, onPop, onMiss, onEffect, onCombo }) {
   const mobile = window.innerWidth < 640;
   const COUNT_MIN = mobile ? 4 : 5;
   const COUNT_MAX = mobile ? 9 : 16;
@@ -255,13 +255,30 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
   // Trigger flash clips at RANDOM positions, CLICKABLE: popping one spawns two
   // more (the hydra) for FLASH_MAX_GEN generations.
   const flashLive = new Set();
+  // The flash bubbles pull from the player's own media pool (hostMedia). No pool =>
+  // callers fall back to the built-in CSS flash. No bundled flash clips ship.
+  const hasFlashMedia = () => !!(media && media.hasUserMedia && media.hasUserMedia());
   const FLASH_LIVE_CAP = mobile ? 3 : 20; // cap concurrent flash-clip decoders (raised so the 'flash gifs' slider can reach 10 + hydra children; phones stay conservative)
   function spawnFlash(gen) {
     if (flashLive.size >= FLASH_LIVE_CAP) return; // too many decoders live: skip this one
-    const v = document.createElement('video');
+    // Flash bubbles draw from the PLAYER's own media pool (no bundled clips ship).
+    // Resolve a URL async, then build the clickable clip; an empty pool spawns
+    // nothing and fireEffect falls back to the built-in CSS flash.
+    const picked = (media && media.hasUserMedia && media.hasUserMedia() && media.draw) ? media.draw() : null;
+    if (!picked || !picked.acquire) return;
+    picked.acquire().then((a) => { if (a && a.url) buildFlashClip(gen, picked.kind, a.url); }).catch(() => {});
+  }
+
+  // Build one clickable flash clip from a resolved user-media URL. A video plays
+  // once and ends; an image just holds for the timeout. Both share the hydra pop +
+  // ripple-fling teardown (releasePlayer no-ops on the <img>).
+  function buildFlashClip(gen, kind, url) {
+    if (flashLive.size >= FLASH_LIVE_CAP) return;   // re-check: the acquire resolved async
+    const isVideo = kind === 'video';
+    const v = document.createElement(isVideo ? 'video' : 'img');
     v.className = 'rh-fx-flashclip';
-    v.src = BASE + 'flash/' + pick(FLASH_CLIPS);
-    v.muted = true; v.autoplay = true; v.loop = false; v.playsInline = true;
+    v.src = url;
+    if (isVideo) { v.muted = true; v.autoplay = true; v.loop = false; v.playsInline = true; }
     const sizeVw = (gen >= 2 ? 19 : gen === 1 ? 26 : 34) * 0.7 * S.gifSize; // 30% smaller base (bubbles + tube-zone flashes)
     v.style.setProperty('--w', `${sizeVw.toFixed(1)}vw`);
     v.style.setProperty('--gifop', String(S.gifOpacity));
@@ -273,7 +290,7 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
     let timer = 0, done = false;
     const finish = () => { if (done) return; done = true; window.clearTimeout(timer); releasePlayer(v); v.remove(); flashLive.delete(v); };
     v._flashFinish = finish;   // the ripple's fling reuses this exact teardown
-    v.addEventListener('ended', finish, { once: true });
+    if (isVideo) v.addEventListener('ended', finish, { once: true });   // <img> has no 'ended'
     timer = window.setTimeout(finish, FLASH_MAX_MS);
     v.addEventListener('pointerdown', (e) => {
       // Right-click belongs to the ripple. chaosRun's onPointerDownGlobal is a
@@ -304,7 +321,7 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
         } else { spawnFlash(gen + 1); spawnFlash(gen + 1); }
       }
     });
-    v.play().catch(() => {});
+    if (isVideo) v.play().catch(() => {});
   }
 
   function simpleFx(cls, ms, fxop) {
@@ -353,12 +370,12 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
   function fireEffect(kind) {
     switch (kind) {
       case 'flash':
-        if (FLASH_CLIPS.length) {
+        if (hasFlashMedia()) {
           // phones: push the clip's decoder cold-start off the pop frame, so
           // the pop animation + sfx land clean and the video joins a beat later
           if (mobile) window.setTimeout(() => { if (!frozen && !paused) spawnFlash(0); }, 60);
           else spawnFlash(0);
-        } else simpleFx('rh-fx-flash', 0, S.pinkOpacity);
+        } else simpleFx('rh-fx-flash', 0, S.pinkOpacity);   // no user media: abstract CSS flash
         playVoice(FLASH_VOICES);
         break;
       case 'spiral': {
@@ -375,15 +392,21 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
         if (S.glitch > 0.25) glitchCanvas();
         flashWords(3); playVoice(SUB_VOICES);
         break;
-      case 'glitch':
+      case 'glitch': {
         if (S.glitch > 0.02) { // at 0 the glitch bubble only scores
           if (S.glitch > 0.25) glitchCanvas();
           // phones use the cheap CSS wash rather than cold-starting a video
-          // decoder on the pop frame (that decoder spin-up is the skip).
-          if (FLASH_CLIPS.length && !mobile) overlayVideo(BASE + 'flash/' + pick(FLASH_CLIPS), 'rh-fx-glitchvid', FLASH_MAX_MS, true, 0.3 * S.glitch);
-          else simpleFx('rh-fx-glitch');
+          // decoder on the pop frame (that decoder spin-up is the skip). Desktop
+          // pulls a looping user VIDEO if the pool has one, else the CSS glitch.
+          const vid = (!mobile && hasFlashMedia() && media.drawKind) ? media.drawKind('video') : null;
+          if (vid && vid.acquire) {
+            vid.acquire()
+              .then((a) => { if (a && a.url) overlayVideo(a.url, 'rh-fx-glitchvid', FLASH_MAX_MS, true, 0.3 * S.glitch); else simpleFx('rh-fx-glitch'); })
+              .catch(() => simpleFx('rh-fx-glitch'));
+          } else simpleFx('rh-fx-glitch');
         }
         break;
+      }
       case 'braindrain':
         simpleFx('rh-fx-drain', FLASH_MAX_MS); flashWords(1); playVoice(FLASH_VOICES);
         break;
@@ -436,7 +459,7 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
   // gifs' slider (S.flashCount, 1-10); spawnFlash self-caps via FLASH_LIVE_CAP and
   // the pop-split honours S.hydraGen exactly like a veil clip.
   function flashBurst(n) {
-    if (frozen || !FLASH_CLIPS.length) return;
+    if (frozen || !hasFlashMedia()) return;
     const count = Math.max(1, (n != null ? n : S.flashCount) | 0);
     for (let i = 0; i < count; i++) {
       // stagger cold <video> starts so N decoders don't all land on one frame

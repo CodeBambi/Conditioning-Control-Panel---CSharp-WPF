@@ -158,3 +158,6 @@ nul
 # seeds, scratch GIFs). The produced Resources\*_emotes\ assets ARE committed; the
 # scripts that make them are not. See tools/avatar-emotes/README.md (local only).
 tools/
+
+# Redistributables (re-downloadable from Microsoft; do not bloat the repo)
+redist/

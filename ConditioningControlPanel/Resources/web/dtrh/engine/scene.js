@@ -30,6 +30,7 @@ import { createDriftChain } from './driftChain.js';
 import { getLevel, setLevel, audioGroups, getVoice, setVoice, voiceSets, onVoice } from './audioLevels.js';
 import { getAudioCtx, getMasterOut, closeAudioBus } from './audioBus.js';
 import { S, updateSetting, onSettings, THEME_COLORS, THEME_PRESETS, applyThemePreset, intToHex, hexToInt } from './settings.js';
+import * as bridge from '../bridge.js';
 
 const DRONE_URL = '/dtrh/assets/audio/drone1.mp3'; // Explore uses drift-under-glass; the fall gets its own bed
 const DRONE_FLOOR = 0.16;      // ambient music bed; the speed curve lifts it toward DRONE_MAX
@@ -47,17 +48,46 @@ const SPEED_REF = 28;          // speed that maps to full drone volume / speed m
 // Fullscreen: standard API with a webkit fallback (older/desktop Safari). iOS
 // Safari on iPhone exposes no element fullscreen at all, so `supported` is
 // false there and the dock button hides itself rather than sit dead.
+//
+// HOSTED (WPF ChaosWebViewHost): the browser Fullscreen API hard-eats the first
+// Esc to exit fullscreen (unpreventable), which stole the game's Esc. So when
+// running inside the host we DON'T use the browser API - `enter()`/`leave()` ask
+// C# to borderless-toggle its own window (bridge), and Esc never leaves our grip.
+// `subscribe(fn)` is the unified change hook (host echo when hosted, DOM event
+// otherwise) and returns an unsubscribe fn.
 const FS = (() => {
   const root = document.documentElement;
   const request = root.requestFullscreen || root.webkitRequestFullscreen || root.webkitRequestFullScreen;
   const exit = document.exitFullscreen || document.webkitExitFullscreen;
   const enabled = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+
+  if (bridge.isHosted) {
+    let on = false;
+    const listeners = new Set();
+    // C# echoes the actual window state after every toggle (and it starts windowed).
+    bridge.on('fullscreen', (m) => {
+      on = !!m.on;
+      for (const fn of listeners) { try { fn(); } catch (e) { /* ignore */ } }
+    });
+    return {
+      supported: true,
+      hosted: true,
+      isActive: () => on,
+      enter() { bridge.send({ type: 'fullscreen-set', on: true }); },
+      leave() { bridge.send({ type: 'fullscreen-set', on: false }); },
+      subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+    };
+  }
+
+  const event = ('onwebkitfullscreenchange' in document) ? 'webkitfullscreenchange' : 'fullscreenchange';
   return {
     supported: !!(request && exit && enabled),
-    event: ('onwebkitfullscreenchange' in document) ? 'webkitfullscreenchange' : 'fullscreenchange',
+    hosted: false,
+    event,
     isActive: () => !!(document.fullscreenElement || document.webkitFullscreenElement),
     enter() { const r = request && request.call(root); if (r && r.catch) r.catch(() => {}); },
     leave() { const r = exit && exit.call(document); if (r && r.catch) r.catch(() => {}); },
+    subscribe(fn) { document.addEventListener(event, fn); return () => document.removeEventListener(event, fn); },
   };
 })();
 
@@ -312,7 +342,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
 
   // ---- the bubble game (main mechanic) ----------------------------------------
   const bubbles = createBubbles({
-    hud, canvas,
+    hud, canvas, media,
     onPop: (kind, gain, combo) => {
       director.notePop(kind, gain, combo);
       hudBits.setScore(bubbles.getScore(), combo);
@@ -354,12 +384,46 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       }
     }
   }
+  // ---- fullscreen <-> pause reconciliation -------------------------------------
+  // In element-fullscreen, Chromium/WebView2 eats the FIRST Esc to EXIT fullscreen
+  // (a mandated behavior we can't disable), so it never reaches onKeyDown - the
+  // player had to press Esc twice to pause. We instead treat that fullscreen-exit
+  // as the pause: on any exit during a live run, open the pause card. A DELIBERATE
+  // un-fullscreen (dock button / F11) sets suppressExitPause so it doesn't pause.
+  let suppressExitPause = false;
+  function toggleFullscreen() {
+    if (FS.isActive()) {
+      suppressExitPause = true;
+      FS.leave();
+      setTimeout(() => { suppressExitPause = false; }, 400); // self-heal if the exit event never fires
+    } else FS.enter();
+  }
+  FS.subscribe(() => {
+    if (FS.isActive()) return;                                  // only the EXIT edge
+    if (suppressExitPause) { suppressExitPause = false; return; } // we left on purpose
+    // Standalone browser only: the browser ate the first Esc to exit fullscreen,
+    // so turn that exit into the pause. Hosted owns Esc directly (onKeyDown ladder).
+    if (!FS.hosted && game && runActive && !gamePaused && !director.isOver()) setGamePaused(true);
+  });
+
   function onKeyDown(e) {
+    if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); return; }  // F11 toggles fullscreen
     if (e.key !== 'Escape') return;
     if (panel.isOpen()) { panel.close(); return; }
     // M5: while the Warren is up it owns Esc (backs out of the dollhouse /
     // closes its modals) - the engine pause card belongs to live descents.
     if (game && game.onEsc && game.onEsc()) return;
+
+    // Hosted (WPF): the browser no longer eats Esc for fullscreen, so we own the
+    // whole ladder - 1) pause (stay fullscreen)  2) drop fullscreen (stay paused)
+    // 3) leave the game gracefully. The panic-key double-tap is suppressed C#-side
+    // while the DtRH window is up, so these presses never kill the app.
+    if (FS.hosted) {
+      if (!director.isOver() && !gamePaused) { setGamePaused(true); return; }   // 1) pause
+      if (FS.isActive()) { toggleFullscreen(); return; }                        // 2) exit fullscreen
+      bridge.send({ type: 'exit' });                                            // 3) graceful close
+      return;
+    }
     setGamePaused(!gamePaused);
   }
   window.addEventListener('keydown', onKeyDown);
@@ -588,6 +652,10 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
 
   function setRunActive(on) {
     runActive = !!on;
+    // The options panel is session-lived and shared hub<->descent: force it shut
+    // on a run transition so opening it in the Warren (or leaving it open) never
+    // strands it over the descent/hub.
+    try { if (panel.isOpen()) panel.close(); } catch (e) { /* ignore */ }
     // In game mode the hub (Warren) owns its own chrome, so suppress the Fall's
     // redundant dock + gear there (the "double options" bug); a live descent
     // keeps them (that's the in-run gear the Eye toggle leaves visible).
@@ -618,8 +686,8 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       // the hub - see the sf-hub CSS - so the hub carries its own).
       fullscreenSupported: FS.supported,
       isFullscreen: () => FS.isActive(),
-      toggleFullscreen: () => { FS.isActive() ? FS.leave() : FS.enter(); },
-      onFullscreenChange: (cb) => { document.addEventListener(FS.event, cb); return () => document.removeEventListener(FS.event, cb); },
+      toggleFullscreen: () => toggleFullscreen(),
+      onFullscreenChange: (cb) => FS.subscribe(cb),
       // Reveal earned option-panel dials from the meta snapshot (purchased "Dials").
       syncOptionUnlocks: (ids) => panel.setUnlocks(ids),
       // Live meta-rank for the panel's DESCENT section (deep pool variants).
@@ -1062,12 +1130,11 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
       fsBtn.classList.toggle('is-on', on);
       fsBtn.textContent = on ? '] [' : '[ ]';
       fsBtn.setAttribute('aria-label', on ? 'exit fullscreen' : 'go fullscreen');
-      fsBtn.title = on ? 'exit fullscreen' : 'go fullscreen';
+      fsBtn.title = on ? 'exit fullscreen (F11)' : 'go fullscreen (F11)';
     };
     syncFs();
-    fsBtn.addEventListener('click', () => { FS.isActive() ? FS.leave() : FS.enter(); });
-    document.addEventListener(FS.event, syncFs);
-    fsCleanup = () => document.removeEventListener(FS.event, syncFs);
+    fsBtn.addEventListener('click', () => toggleFullscreen());
+    fsCleanup = FS.subscribe(syncFs);
     dock.appendChild(fsBtn);
   } else if (IS_IOS && !navigator.standalone) {
     const fsBtn = document.createElement('button');
@@ -1137,12 +1204,28 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
   pauseH.textContent = 'paused';
   const pauseP = document.createElement('p');
   pauseP.textContent = 'the fall waits for you';
+  // Hosted-only Esc ladder hint: tells the player the next Esc drops fullscreen,
+  // then (once windowed) leaves. Hidden in the standalone browser build.
+  const pauseHint = document.createElement('p');
+  pauseHint.className = 'sf-pause-hint';
+  pauseHint.hidden = true;
+  const refreshPauseHint = () => {
+    pauseHint.hidden = !FS.hosted;
+    if (FS.hosted) pauseHint.textContent = FS.isActive()
+      ? 'Press Esc again to exit fullscreen mode'
+      : 'Press Esc again to leave';
+  };
   const pauseBtn = document.createElement('button');
   pauseBtn.type = 'button';
   pauseBtn.className = 'sf-btn sf-btn-primary';
   pauseBtn.textContent = 'keep falling';
   pauseBtn.addEventListener('click', onResume);
-  pauseCard.append(pauseH, pauseP, pauseBtn);
+  pauseCard.append(pauseH, pauseP, pauseHint, pauseBtn);
+  // Stage-2 Esc drops fullscreen asynchronously (host round-trip), so keep the
+  // hint in step when the state actually flips while the pause card is open.
+  const stopHintSync = FS.subscribe(() => { if (!pause.hidden) refreshPauseHint(); });
+  const priorFsCleanup = fsCleanup;
+  fsCleanup = () => { try { if (priorFsCleanup) priorFsCleanup(); } finally { stopHintSync(); } };
   if (onSurface) {
     const surfaceBtn = document.createElement('button');
     surfaceBtn.type = 'button';
@@ -1198,6 +1281,7 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
     hideResults() { results.hidden = true; },
     showPause(v) {
       pause.hidden = !v;
+      if (v) refreshPauseHint();
       // Keep the controls (⚙ options / audio / theme) reachable while paused:
       // reveal the chrome and (via .sf-paused CSS) lift it above the pause dim.
       // On resume, restore the player's own show/hide toggle state.

@@ -1873,10 +1873,63 @@ namespace ConditioningControlPanel.Services
         /// This is what lets the Chaos "glitch" wash and "cascade" gif-rain match the user's live
         /// preset — previously they re-listed the raw images folder (ChaosImagePool), which ignored
         /// both disabled assets and content packs, so they silently drew nothing for pack/curated
-        /// users while flashes worked. Picks are with replacement (duplicates possible). May do disk
-        /// I/O (pack decrypt) — call OFF the UI thread when requesting more than a couple.
+        /// users while flashes worked. Picks are DISTINCT (unlike the flash pipeline's independent,
+        /// with-replacement picks): a single wash/rain that repeats the same image 2-3x looks broken,
+        /// so dedup on the source identity here. May do disk I/O (pack decrypt, one per chosen pack
+        /// image) — call OFF the UI thread when requesting more than a couple.
         /// </summary>
-        public List<string> GetChaosImagePaths(int count) => GetNextImages(Math.Max(0, count));
+        public List<string> GetChaosImagePaths(int count)
+        {
+            count = Math.Max(0, count);
+            if (count == 0) return new List<string>();
+            lock (_lockObj)
+            {
+                if (_tempPackFiles.Count > 50) CleanupTempPackFiles();
+                if (_imageList.Count == 0 && _packImageList.Count == 0) RefreshImageLists();
+                if (_imageList.Count == 0 && _packImageList.Count == 0) return new List<string>();
+
+                // Dedup on the SOURCE index (disk image / pack entry), not the resulting path: a pack
+                // image decrypts to a fresh temp path each call, so path-level dedup would neither
+                // catch pack dupes nor stop us re-decrypting the same file. Distinct sources also mean
+                // each chosen pack image decrypts exactly once. Cap at the pool size.
+                int poolSize = _imageList.Count + _packImageList.Count;
+                int want = Math.Min(count, poolSize);
+                var chosenDisk = new HashSet<int>();
+                var chosenPack = new HashSet<int>();
+                var result = new List<string>(want);
+                int guard = 0, maxGuard = poolSize * 8 + 16;   // backstop vs. random-collision / decrypt-fail retries
+
+                while (result.Count < want && guard++ < maxGuard)
+                {
+                    bool usePackImage = false;
+                    if (_imageList.Count > 0 && _packImageList.Count > 0)
+                        usePackImage = _random.Next(poolSize) >= _imageList.Count;   // weighted by count
+                    else if (_packImageList.Count > 0)
+                        usePackImage = true;
+
+                    if (usePackImage && _packImageList.Count > 0)
+                    {
+                        var index = _random.Next(_packImageList.Count);
+                        if (!chosenPack.Add(index)) continue;   // already drew this pack entry
+                        var packImage = _packImageList[index];
+                        var tempPath = App.ContentPacks?.GetPackFileTempPath(packImage.PackId, packImage.File);
+                        if (!string.IsNullOrEmpty(tempPath))
+                        {
+                            _tempPackFiles.Add(tempPath);   // track for cleanup
+                            result.Add(tempPath);
+                        }
+                        // decrypt failed → index stays marked chosen so we don't retry a broken entry
+                    }
+                    else if (_imageList.Count > 0)
+                    {
+                        var index = _random.Next(_imageList.Count);
+                        if (!chosenDisk.Add(index)) continue;   // already drew this disk image
+                        result.Add(_imageList[index]);
+                    }
+                }
+                return result;
+            }
+        }
 
         /// <summary>
         /// Refreshes both image lists (regular and pack images) from disk cache.

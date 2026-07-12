@@ -472,8 +472,9 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     const dock = el('wr-dock', root);
     if (onOptions) btn('wr-dock-btn', '⚙ options', () => onOptions(), dock);
     if (fullscreen && fullscreen.toggle) {
-      const label = () => (fullscreen.isActive && fullscreen.isActive() ? '⤢ exit fullscreen' : '⤢ fullscreen');
+      const label = () => (fullscreen.isActive && fullscreen.isActive() ? '⤢ exit fullscreen (F11)' : '⤢ fullscreen (F11)');
       const fsBtn = btn('wr-dock-btn', label(), () => fullscreen.toggle(), dock);
+      fsBtn.title = 'toggle fullscreen — or press F11';
       if (fullscreen.onChange) fullscreen.onChange(() => { fsBtn.textContent = label(); });
     }
     btn('wr-dock-btn', 'how to play', () => openHowTo(), dock);
