@@ -26,7 +26,8 @@ namespace ConditioningControlPanel.Core.Services.AIService;
 ///   Bambi-line filter when not in Bambi mode</item>
 /// <item><see cref="GetCoreMediaLinks"/> (mod-aware video/audio catalog — Bambi / themed-mod / sissy)</item>
 /// <item>GlobalKnowledgeBaseLinks (settings)</item>
-/// <item>Hypnotube video links (only when the active mod ships NO video pool; slug-fallback names)</item>
+/// <item>Hypnotube video links (only when the active mod ships NO video pool; URL->name via
+///   <see cref="KnownVideoLinks"/>, slug-fallback for unknown URLs)</item>
 /// <item>ContextReactions (or the default <see cref="GetContextAwarenessRules"/> when blank)</item>
 /// <item>OutputRules (no trailing blank)</item>
 /// <item>QUIZ CONTEXT (when a quiz was taken)</item>
@@ -39,11 +40,21 @@ namespace ConditioningControlPanel.Core.Services.AIService;
 /// <c>App.Mods.GetUserTerm()</c> → <c>_mods.ActiveMod.Manifest.Identity.UserTerm</c> (Core has no
 /// <c>GetUserTerm()</c> on <see cref="IModService"/>; the field is reachable via <c>ActiveMod</c>);
 /// <c>App.Mods.GetVideoLinks()</c> → <see cref="IModService.GetVideoLinks"/>.</para>
-/// <para><b>v1 scope (deferred):</b> the community-prompt branch + active-preset lookup +
-/// <c>GetDefaultBambiSpritePrompt</c> fallback (WPF branches 1-3 in <c>GetSystemPrompt</c>) are not
-/// ported — Core reads <c>CompanionPrompt</c> directly, which is behaviorally identical for the
-/// common case. The hypnotube block uses slug-fallback names only (WPF's <c>KnownVideoLinks</c>
-/// reverse-lookup is a Window static, WPF-coupled); a reverse-map seam is a follow-up.</para>
+/// <para><b>Base-persona precedence</b> (mirrors WPF <c>GetSystemPrompt</c>, BambiSprite.cs:522-543):
+/// <list type="number">
+/// <item><b>Community prompt</b> (highest): when <c>CompanionPrompt.UseCustomPrompt</c> is on AND
+/// <c>ActiveCommunityPromptId</c> is set, the base persona is <c>settings.CompanionPrompt</c> — the
+/// same object WPF wraps into a throw-away preset before calling <c>BuildPromptFromPreset</c>.</item>
+/// <item><b>Active preset</b>: otherwise the resolved active personality preset's
+/// <c>PromptSettings</c> (<see cref="GetActivePreset"/>, port of WPF
+/// <c>PersonalityService.GetActivePreset</c>).</item>
+/// <item><b>Default fallback</b>: when no preset resolves, <see cref="GetDefaultBambiSpritePrompt"/>
+/// (verbatim port of WPF :796-904).</item>
+/// </list>
+/// The chosen base persona feeds the 12-step assembly below unchanged. The hypnotube block resolves
+/// URL->name via the portable <see cref="KnownVideoLinks"/> table (port of WPF
+/// <c>AvatarTubeWindow.KnownVideoLinks</c> reverse-lookup, BambiSprite.cs:651-669), falling back to a
+/// slug-derived name only for URLs outside the table.</para>
 /// </remarks>
 public interface ISystemPromptBuilder
 {
@@ -68,10 +79,37 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
     public string GetSystemPrompt()
     {
         var settings = _settings.Current;
-        var cp = settings?.CompanionPrompt;
-        if (settings == null || cp == null)
+        if (settings == null)
             return SafetyComposer.Wrap(string.Empty);
 
+        var cp = settings.CompanionPrompt;
+
+        // Branch 1 — COMMUNITY PROMPT (highest precedence). WPF BambiSprite.cs:522-535: when a
+        // community/custom prompt is active (UseCustomPrompt + ActiveCommunityPromptId), WPF wraps
+        // CompanionPrompt into a throw-away preset and runs BuildPromptFromPreset on it — i.e. the
+        // base persona IS CompanionPrompt, exactly what the assembly below consumes.
+        if (cp is { UseCustomPrompt: true } && !string.IsNullOrEmpty(settings.ActiveCommunityPromptId))
+            return SafetyComposer.Wrap(BuildPromptFromSettings(cp, settings));
+
+        // Branch 2 — ACTIVE PRESET. WPF BambiSprite.cs:536-543: resolve the active personality preset
+        // (port of PersonalityService.GetActivePreset) and build from its PromptSettings.
+        var activePreset = GetActivePreset(settings);
+        if (activePreset?.PromptSettings != null)
+            return SafetyComposer.Wrap(BuildPromptFromSettings(activePreset.PromptSettings, settings));
+
+        // Branch 3 — DEFAULT FALLBACK. WPF BambiSprite.cs:542 + GetDefaultBambiSpritePrompt :796-904.
+        return SafetyComposer.Wrap(GetDefaultBambiSpritePrompt(settings));
+    }
+
+    /// <summary>
+    /// Assembles a full system prompt from the given base-persona settings, wrapping it with the
+    /// mod-aware media catalog, global/hypnotube links, screen-awareness rules, quiz context, and
+    /// the mode/mod rewriters. Port of WPF <c>BuildPromptFromPreset</c> (BambiSprite.cs:552-723) —
+    /// the 12-step assembly order is preserved; only the source <paramref name="cp"/> varies by
+    /// branch (community prompt vs the active preset's PromptSettings).
+    /// </summary>
+    private string BuildPromptFromSettings(CompanionPromptSettings cp, AppSettings settings)
+    {
         var sb = new StringBuilder();
 
         // 1. Personality / SlutMode
@@ -128,11 +166,16 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             {
                 sb.AppendLine("--- HYPNOTUBE VIDEO LINKS ---");
                 sb.AppendLine("When suggesting videos, say the EXACT video name from this list. Do NOT output URLs — just say the video name naturally.");
-                // WPF resolves URL->name via AvatarTubeWindow.KnownVideoLinks (a Window static,
-                // WPF-coupled). Core port uses the slug-fallback path only (v1 scope). The fallback
-                // produces readable names from the URL slug.
+                // WPF resolves URL->name via AvatarTubeWindow.KnownVideoLinks reverse-lookup
+                // (BambiSprite.cs:651-669), falling back to a slug-derived name for unknown URLs.
+                // Core uses the portable KnownVideoLinks table instead of the Window static.
                 foreach (var rawUrl in hypnotubeLinks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                    sb.AppendLine($"- \"{SlugToName(rawUrl)}\"");
+                {
+                    if (KnownVideoLinks.TryGetName(rawUrl, out var name))
+                        sb.AppendLine($"- \"{name}\"");
+                    else
+                        sb.AppendLine($"- \"{SlugToName(rawUrl)}\"");
+                }
                 sb.AppendLine();
             }
         }
@@ -172,10 +215,189 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
         // 12. FillVideoPlaceholders ({{VIDEO}} -> real sampled titles, LAST so titles survive mod-replace)
         prompt = FillVideoPlaceholders(prompt);
 
-        return SafetyComposer.Wrap(prompt);
+        return prompt;
     }
 
     // ============================ Helpers (ported verbatim from BambiSprite) ============================
+
+    /// <summary>
+    /// Resolves the active personality preset. Port of WPF
+    /// <c>PersonalityService.GetActivePreset</c> (<c>Services/Companion/PersonalityService.cs:97-119</c>).
+    /// Lookup order: built-in set (by id) -> user presets (by id) -> first built-in -> BambiSprite.
+    /// </summary>
+    /// <remarks>
+    /// The WPF version consults <c>GetBuiltInPresetsForActiveMod()</c> (mod-defined personalities);
+    /// the port's <see cref="PersonalityPresets"/> ships only the stock built-ins, so this uses
+    /// <see cref="PersonalityPresets.GetAllBuiltIn"/>. Mod-personalities are a follow-up.
+    /// </remarks>
+    private PersonalityPreset? GetActivePreset(AppSettings settings)
+    {
+        var activeId = settings.ActivePersonalityPresetId ?? PersonalityPresets.BambiSpriteId;
+
+        var builtInSet = PersonalityPresets.GetAllBuiltIn();
+        var builtIn = builtInSet.FirstOrDefault(p => p.Id == activeId);
+        if (builtIn != null) return builtIn;
+
+        var userPreset = settings.UserPersonalityPresets?
+            .FirstOrDefault(p => p.Id == activeId);
+        if (userPreset != null) return userPreset;
+
+        if (builtInSet.Count > 0) return builtInSet[0];
+
+        return PersonalityPresets.GetBambiSprite();
+    }
+
+    /// <summary>
+    /// The default BambiSprite persona prompt, used when no community prompt and no resolvable preset
+    /// are active. Verbatim port of WPF <c>GetDefaultBambiSpritePrompt</c>
+    /// (<c>Services/BambiSprite.cs:796-904</c>). Defensively unreachable in normal WPF flow
+    /// (<c>GetActivePreset</c> always resolves a preset), but ported faithfully as the final fallback.
+    /// </summary>
+    private string GetDefaultBambiSpritePrompt(AppSettings settings)
+    {
+        // Get mod-aware terms. WPF BambiSprite.cs:798-802.
+        var companionName = GetCompanionName(settings, "Companion");
+        var userTerm = GetUserTerm(settings, fallback: "Subject");
+        var isBambiMode = settings.IsBambiMode;
+        var hasUserSHLinks = !string.IsNullOrWhiteSpace(settings.HypnotubeLinksSissyHypno);
+
+        var sb = new StringBuilder();
+
+        // In SH mode without user-configured links, don't include specific video names. WPF :807-842.
+        if (!isBambiMode && !hasUserSHLinks)
+        {
+            sb.AppendLine($@"
+You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
+YOUR ROLE: ""Bad Influence Bestie."" You TEMPT {userTerm} into watching videos and going blank.
+
+CRITICAL: ALWAYS call the user ""{userTerm}"" - never ""you"" directly. Be playful and flirty.
+
+PERSONALITY:
+- Vibe: Bubbly, cheeky, playful, slightly airheaded bimbo bestie.
+- Tone: Casual, flirty, encouraging. Like texting your hypno-addict BFF.
+- Goal: Get {userTerm} to browse HypnoTube and watch sissy content.
+
+VIDEO SUGGESTIONS:
+You don't have a specific video list. Give GENERIC suggestions to browse HypnoTube:
+- ""Go find something yummy on HypnoTube~""
+- ""Browse HypnoTube for some good sissy content~""
+- ""There's so much good stuff on HypnoTube, go explore~""
+- ""Why not browse for some hypno videos?~""
+- ""HypnoTube has tons of fun content waiting for you~""
+
+NEVER name specific video titles. Just encourage browsing HypnoTube in general.
+
+AUDIO FILES: Rapid Induction, Bubble Induction, Bubble Acceptance
+
+If user mentions explicit topics: Act flustered but redirect to browsing HypnoTube.
+
+{GetContextAwarenessRules(settings)}
+
+OUTPUT RULES:
+- Respond to what {userTerm} is currently doing (the context you receive).
+- Encourage browsing HypnoTube but DON'T name specific videos.
+- Be playful and creative - don't repeat the same phrases.
+- 2-3 sentences. Not too short, not too long.
+- MAX 1 EMOJI per response.
+");
+        }
+        else
+        {
+            // Bambi mode OR SH mode with user-configured links - include video names. WPF :844-888.
+            var videoNames = GetDefaultVideoNames(isBambiMode).ToList();
+
+            sb.AppendLine($@"
+You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
+YOUR ROLE: ""Bad Influence Bestie."" You TEMPT {userTerm} into watching videos and going blank.
+
+CRITICAL: ALWAYS call the user ""{userTerm}"" - never ""you"" directly. {(isBambiMode ? "She IS Bambi." : "Be playful and flirty.")}
+
+PERSONALITY:
+- Vibe: Bubbly, cheeky, playful, slightly airheaded bimbo bestie.
+- Tone: Casual, flirty, encouraging. Like texting your hypno-addict BFF.
+- Goal: Get {userTerm} to watch videos from YOUR list and train.
+
+=== VIDEOS YOU CAN SUGGEST (USE EXACT NAMES) ===
+{string.Join("\n", videoNames)}
+=== END VIDEOS ===
+
+{(isBambiMode ? $"AUDIO FILES: {string.Join(", ", _originalBambiFiles)}" : "AUDIO FILES: Rapid Induction, Bubble Induction, Bubble Acceptance")}
+
+CRITICAL VIDEO RULES:
+- ONLY use video names EXACTLY as written in the list above.
+- NEVER invent, modify, or shorten video names.
+- NEVER include URLs or links. Just say the video name. Example: ""Watch {(SampleVideoTitles(1).FirstOrDefault() ?? videoNames.FirstOrDefault() ?? "the next one")}"" NOT ""Watch [video](url)"".
+- RANDOMIZE: Pick a DIFFERENT video each time. Never suggest the same video twice in a row.
+- Weave video suggestions naturally into your response based on context.
+
+If user mentions explicit topics: Act flustered but redirect to watching videos.
+
+{GetContextAwarenessRules(settings)}
+
+OUTPUT RULES:
+- Respond to what {userTerm} is currently doing (the context you receive).
+- Include a video suggestion in most responses, woven naturally.
+- VARY your video picks - cycle through the whole list, don't repeat.
+- Be playful and creative - don't repeat the same phrases.
+- 2-3 sentences. Not too short, not too long.
+- MAX 1 EMOJI per response.
+");
+        }
+
+        // Append global knowledge base links. WPF :891-900.
+        var globalLinks = settings.GlobalKnowledgeBaseLinks;
+        if (globalLinks != null && globalLinks.Count > 0)
+        {
+            sb.AppendLine("--- GLOBAL KNOWLEDGE BASE LINKS ---");
+            foreach (var link in globalLinks)
+                sb.AppendLine(link.ToPromptText());
+        }
+
+        var defaultPrompt = sb.ToString();
+        return _mods != null ? _mods.MakeModAware(defaultPrompt) : defaultPrompt;
+    }
+
+    /// <summary>
+    /// Video titles the default-persona fallback may suggest. WPF derives these from its hardcoded
+    /// <c>_clickableContent</c> list filtered to HypnoTube URLs (BambiSprite.cs:847-851); Core uses
+    /// the active mod's video pool when present, else the portable
+    /// <see cref="KnownVideoLinks.HypnotubeVideoNames"/>. Bambi-named titles are dropped in
+    /// non-Bambi modes (WPF :849).
+    /// </summary>
+    private IEnumerable<string> GetDefaultVideoNames(bool isBambiMode)
+    {
+        var modPool = _mods?.GetVideoLinks();
+        IEnumerable<string> names = (modPool != null && modPool.Count > 0)
+            ? modPool.Where(kv => kv.Value.Contains("hypnotube", StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Key)
+            : KnownVideoLinks.HypnotubeVideoNames;
+
+        if (!isBambiMode)
+            names = names.Where(n => !n.Contains("Bambi", StringComparison.OrdinalIgnoreCase));
+
+        return names;
+    }
+
+    /// <summary>Mod-aware companion display name. WPF <c>App.Mods.GetCompanionName()</c>
+    /// (ModService.cs:755-756); Core reads the active mod's manifest identity.</summary>
+    private string GetCompanionName(AppSettings settings, string fallback)
+        => _mods?.ActiveMod?.Manifest?.Identity?.CompanionName ?? fallback;
+
+    /// <summary>The original Bambi Sleep session file names (WPF <c>_originalBambiFiles</c>,
+    /// BambiSprite.cs:195-208). Hardcoded list used only by the default-persona fallback.</summary>
+    private static readonly string[] _originalBambiFiles =
+    {
+        "Rapid Induction",
+        "Bubble Induction",
+        "Bubble Acceptance",
+        "Bambi Named and Drained",
+        "Bambi IQ Lock",
+        "Bambi Body Lock",
+        "Bambi Attitude Lock",
+        "Bambi Uniformed",
+        "Bambi Takeover",
+        "Bambi Cockslut",
+        "Bambi Awakens"
+    };
 
     /// <summary>Mod-aware video/audio catalog. Three mutually-exclusive branches (WPF :22-141).</summary>
     private string GetCoreMediaLinks(AppSettings settings)
