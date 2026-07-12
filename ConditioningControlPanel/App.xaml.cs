@@ -1143,6 +1143,7 @@ namespace ConditioningControlPanel
             // in crash.log — but the chaos sentinel file is still on disk. Report+consume it so the
             // crash self-documents (with last-known context) in this session's log.
             Services.Chaos.ChaosCrashSentinel.ConsumeAndReport(Logger);
+            Services.EngineCrashSentinel.ConsumeAndReport(Logger);
 
             // React to monitor topology / resolution changes (unplug, res change, DPI): drop the stale
             // screen cache AND pause layered-window spawns briefly so we don't create fresh surfaces
@@ -3106,15 +3107,21 @@ Application State:
             }
         }
 
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern IntPtr GetCurrentProcess();
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool TerminateProcess(IntPtr hProcess, uint uExitCode);
+
         protected override void OnExit(ExitEventArgs e)
         {
             Logger?.Information("Application shutting down...");
 
             try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
 
-            // A clean shutdown — even mid-run — is NOT a crash. Clear the chaos sentinel so the next
-            // launch doesn't false-report it as an abnormal exit.
+            // A clean shutdown — even mid-run — is NOT a crash. Clear both dirty-shutdown
+            // sentinels so the next launch doesn't false-report an abnormal exit.
             try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
+            try { Services.EngineCrashSentinel.Clear(); } catch { }
 
             // DtRH browser game: dispose the WebView2 window/process if it's up.
             try { Services.Chaos.DtrhHostService.CloseActive(); } catch { }
@@ -3259,8 +3266,17 @@ Application State:
 
             base.OnExit(e);
 
-            // Force exit to ensure no background threads keep process alive
-            Environment.Exit(0);
+            // Force exit so no background threads keep the process alive — but NOT via
+            // Environment.Exit: that still raises AppDomain.ProcessExit, where WPF's own
+            // C++/CLI DirectWriteForwarder module uninitializer JITs its CRT-teardown stubs
+            // on a half-shut-down runtime and throws DllNotFoundException on another thread
+            // (0xe0434352 — WER dumps 5/28-6/28 all show <CrtImplementationDetails>.
+            // ModuleUninitializer.SingletonDomainUnload with the main thread parked in
+            // OnExit; users saw it as "crash on close"). Everything that must persist is
+            // already flushed above (SaveImmediate, CloseAndFlush), so hard-terminate:
+            // TerminateProcess skips ProcessExit handlers and finalizers entirely.
+            TerminateProcess(GetCurrentProcess(), 0);
+            Environment.Exit(0);   // unreachable fallback if TerminateProcess is refused
         }
     }
 }

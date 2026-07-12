@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -57,14 +58,33 @@ internal static class AnimatedWebp
         catch { return false; }
     }
 
+    // Global gate on concurrent Skia decodes, across ALL callers (flash bursts, chaos
+    // wash/cascade, tease bubbles). The per-decode memory budget below is only per-decode:
+    // a flash burst used to fire N unthrottled Task.Run decodes at once, each holding a
+    // srcW×srcH×4 composition canvas (up to 64MB at the 4096² guard) + kept frames — a
+    // 15-wide GIF burst spiked private bytes +1.1GB in ~2s and died with 0xc0000374 native
+    // heap corruption inside SkiaSharp (no crash.log; WER dump 28788 shows two threads
+    // concurrently in DecodeFrames, one mid GetPixels, one freeing an SKFileStream).
+    // Two permits bounds the aggregate at ~190MB worst-case; the same burst config that
+    // crashed at 228s survived a 15-min soak with burst width capped to 2 (A/B, 2026-07-12).
+    private static readonly SemaphoreSlim _decodeGate = new(2, 2);
+
     /// <summary>
     /// Decode an animated webp into fully-composed, frozen BGRA frames, downscaled so the
     /// longest edge is at most <paramref name="maxDim"/> and subsampled (evenly, GIF-loader
     /// style) so the kept set fits <paramref name="maxMemoryMb"/> / <paramref name="maxFrames"/>.
     /// Returns null for still/undecodable files so callers can fall back to their static path.
-    /// Heavy — call off the UI thread.
+    /// Heavy — call off the UI thread (also blocks on the global decode gate).
     /// </summary>
     public static (List<BitmapSource> Frames, TimeSpan FrameDelay)? DecodeFrames(
+        string path, int maxDim, int maxFrames, double maxMemoryMb)
+    {
+        _decodeGate.Wait();
+        try { return DecodeFramesCore(path, maxDim, maxFrames, maxMemoryMb); }
+        finally { _decodeGate.Release(); }
+    }
+
+    private static (List<BitmapSource> Frames, TimeSpan FrameDelay)? DecodeFramesCore(
         string path, int maxDim, int maxFrames, double maxMemoryMb)
     {
         using var codec = SKCodec.Create(path);
