@@ -146,6 +146,12 @@ public partial class WebcamGazeTrackerWindow : Window
 
     private void BtnErrorClose_Click(object? sender, RoutedEventArgs e) => Close();
 
+    // Always-visible close button — mirrors the WPF window's BtnClose
+    // (Windows/WebcamGazeTrackerWindow.xaml:37-44). A pointer click bypasses
+    // the lockdown keyboard hook that swallows Escape/Alt+F4 (#528), so the
+    // user is never stranded inside this borderless-maximized Topmost window.
+    private void BtnClose_Click(object? sender, RoutedEventArgs e) => Close();
+
     private void ShowError(string detail)
     {
         DotCanvas.IsVisible = false;

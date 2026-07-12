@@ -33,6 +33,15 @@
                  Foreground="{DynamicResource TextDimBrush}" FontSize="13" Margin="0,8,0,0" HorizontalAlignment="Center" />
       <TextBlock x:Name="TxtCoords" Text="" Foreground="#00B0FF" FontSize="12"
                  Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas" />
+      <!-- Always-visible, mouse-clickable close. Lockdown's global keyboard hook
+           swallows Escape/Alt+F4 (#528), so a key-based exit can strand the user
+           inside this borderless-maximized Topmost test window; a button click
+           bypasses the keyboard hook entirely. Mirrors the WPF window's BtnClose
+           (Windows/WebcamGazeTrackerWindow.xaml:37-44). -->
+      <Button x:Name="BtnClose" Content="{loc:Str window_webcam_gaze_tracker_close_content}" Padding="20,8" Margin="0,16,0,0"
+              Background="#00B0FF" Foreground="Black" BorderThickness="0"
+              FontWeight="Bold" Click="BtnClose_Click"
+              HorizontalAlignment="Center" />
     </StackPanel>
 
     <Border x:Name="ErrorPanel" IsVisible="False"
