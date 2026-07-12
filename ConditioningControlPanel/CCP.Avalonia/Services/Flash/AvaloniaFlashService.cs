@@ -11,6 +11,7 @@ using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Compositor;
 using ConditioningControlPanel.Avalonia.Compositor.Layers;
 using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Core.Services.Audio;
 using ConditioningControlPanel.Core.Services.Flash;
 using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.Settings;
@@ -51,6 +52,10 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
     private readonly CompositorEngine? _compositor;
     private readonly FlashLayer? _flashLayer;
     private readonly IMouseHook? _mouseHook;
+    // Whisper voice audio for the one-shot flash path (WPF parity: FlashService.cs:387/896-903).
+    // Null when the head did not wire the audio deps — TriggerFlashOnce then ignores playSound.
+    private readonly IModService? _mods;
+    private readonly WhisperVoicePlayer? _whisperVoice;
     private readonly Dictionary<string, (List<string> files, DateTime lastScan)> _fileCache = new();
     private readonly Dictionary<Guid, FlashClickData> _clickData = new();
     // LRU decode cache (WPF FlashService._imageDecodeCache parity): one decode per file,
@@ -76,7 +81,9 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         IProgressionService progression,
         ILogger<AvaloniaFlashService>? logger = null,
         CompositorEngine? compositor = null,
-        IMouseHook? mouseHook = null)
+        IMouseHook? mouseHook = null,
+        IModService? mods = null,
+        WhisperVoicePlayer? whisperVoice = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
@@ -86,6 +93,8 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         _logger = logger;
         _compositor = compositor;
         _mouseHook = mouseHook;
+        _mods = mods;
+        _whisperVoice = whisperVoice;
         // Avalonia always renders flashes on the single shared compositor canvas (FlashLayer) — there
         // is no per-window flash path. This is exactly what WPF's opt-in FlashSolidMode achieves (one
         // shared overlay host instead of many layered windows), so the feature is inherently always-on
@@ -781,6 +790,29 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
             return;
         }
 
+        // WPF flash whisper sound (FlashService.cs:387/896-903): play a random flashes_audio
+        // clip when playSound is set, FlashAudioEnabled is on, and master isn't muted. Played
+        // AFTER the image probe so a failed image never emits sound; marks the bark-gate window
+        // for the clip duration (FlashService.cs:903). Spec guardrail: master-muted ⇒ no audio.
+        // (The WPF once-per-event guard and FlashAudioPlaying avatar-bubble event are noted gaps
+        // for the one-shot path.)
+        if (playSound && _whisperVoice != null && settings.FlashAudioEnabled && settings.MasterVolume > 0)
+        {
+            var soundPath = GetNextFlashSound();
+            if (!string.IsNullOrEmpty(soundPath))
+            {
+                // WPF PlaySound curve (FlashService.cs:2146): Max(0.05, pow(masterVol, 1.5));
+                // caller passes MasterVolume (FlashService.cs:901).
+                var vol = Math.Max(0.05, Math.Pow(settings.MasterVolume / 100.0, 1.5));
+                _whisperVoice.Play(soundPath,
+                    whispersEnabled: settings.FlashAudioEnabled,
+                    masterMuted: settings.MasterVolume <= 0,
+                    volume01: vol,
+                    duckEnabled: settings.AudioDuckingEnabled,
+                    duckLevel: settings.DuckingLevel);
+            }
+        }
+
         // Same WPF sizing/positioning contract as scheduled flashes (CalculateGeometry).
         var monitor = GetRandomMonitor();
         var geom = CalculateGeometry(pxW, pxH, monitor);
@@ -788,6 +820,48 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         var maxOpacity = settings.FlashOpacity / 100.0;
         SpawnDecoded(path, geom, monitor, maxOpacity, durationMs, settings.FlashClickable,
             hydraGeneration: 0, oneShot: true);
+    }
+
+    // Pick a random flashes_audio clip for the one-shot flash whisper (WPF parity:
+    // FlashService.cs:1923-1938 GetNextSound, sourced from CompanionPhraseService.VoiceLineFolder).
+    private string? GetNextFlashSound()
+    {
+        try
+        {
+            var folder = ResolveFlashSoundsFolder();
+            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return null;
+            var files = Directory.GetFiles(folder)
+                .Where(f => f.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase)
+                         || f.EndsWith(".wav", StringComparison.OrdinalIgnoreCase)
+                         || f.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (files.Count == 0) return null;
+            return files[_random.Next(files.Count)];
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug("AvaloniaFlashService: GetNextFlashSound failed: {Error}", ex.Message);
+            return null;
+        }
+    }
+
+    // 3-tier flashes_audio resolution (WPF CompanionPhraseService.cs:33-47; port mirror
+    // AvaloniaCompanionPhraseService.cs:188-207): mod override → embedded per-mod → embedded base.
+    private string ResolveFlashSoundsFolder()
+    {
+        var activeMod = _mods?.ActiveMod;
+        if (!string.IsNullOrEmpty(activeMod?.InstalledPath))
+        {
+            var modDir = Path.Combine(activeMod.InstalledPath!, "resources", "sounds", "flashes_audio");
+            if (Directory.Exists(modDir)) return modDir;
+        }
+        var baseDir = _environment.BaseDirectory;
+        if (!string.IsNullOrEmpty(activeMod?.Id))
+        {
+            var embeddedMod = Path.Combine(baseDir, "Resources", "sounds", "companion_audio", "mods", activeMod.Id, "flashes_audio");
+            if (Directory.Exists(embeddedMod)) return embeddedMod;
+        }
+        return Path.Combine(baseDir, "Resources", "sounds", "flashes_audio");
     }
 
     public bool GazePop(ConditioningControlPanel.Core.Platform.PixelRect rect)

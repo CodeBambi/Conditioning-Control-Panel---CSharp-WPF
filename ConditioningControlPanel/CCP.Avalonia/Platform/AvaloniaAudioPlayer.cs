@@ -66,6 +66,48 @@ public sealed class AvaloniaAudioPlayer : IAudioPlayer
         return Task.CompletedTask;
     }
 
+    // One-shot whisper/trigger voice clip that ALSO returns its duration so callers can mark
+    // the bark-gate window (WPF parity: SubliminalService.cs:510/534 + FlashService.cs:2140/2156
+    // read AudioFileReader.TotalTime from a dedicated NAudio reader). Mirrors PlayAsync's
+    // structure (EnsurePlayer → StopInternal → ApplyPreferredOutputDevice → new Media → Play)
+    // and inserts a bounded local-file duration probe before Play (port precedent:
+    // BubbleCountWindow.axaml.cs:326 `media.Parse(MediaParseOptions.ParseLocal, 2000)` and
+    // AvaloniaKeywordTriggerService.cs:1114-1115). Volume is applied per-clip; the shared
+    // LibVLC player keeps the last-set volume, which is fine here because the bark gate keeps
+    // the companion silent for the clip's duration and the next consumer resets it.
+    public double PlayOneShot(string filePath, double volume01)
+    {
+        volume01 = Math.Clamp(volume01, 0.0, 1.0);
+        try
+        {
+            EnsurePlayer();
+            StopInternal();
+            ApplyPreferredOutputDevice();
+            var libVlc = _libVlcProvider.Value;
+            _currentMedia = new Media(libVlc, filePath);
+
+            double duration = 0;
+            try
+            {
+                _currentMedia.Parse(MediaParseOptions.ParseLocal, 2000);
+                if (_currentMedia.Duration > 0)
+                    duration = _currentMedia.Duration / 1000.0;
+            }
+            catch
+            {
+                // Duration unknown — playback still proceeds; caller's mark becomes a no-op.
+            }
+
+            SetVolume(volume01);
+            _player!.Play(_currentMedia);
+            return duration;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
     public void Stop() => StopInternal();
 
     // Position-preserving pause/resume of the current voice line for DTRH world-freeze
