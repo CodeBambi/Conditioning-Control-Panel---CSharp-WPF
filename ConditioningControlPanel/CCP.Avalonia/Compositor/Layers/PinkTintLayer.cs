@@ -23,11 +23,18 @@ public sealed class PinkTintLayer : BaseLayer
 
     public override int ZIndex => CompositorLayers.PinkTint;
 
+    // MAX_FILTER_OPACITY (owner ruling 2026-07-12): the theme color filter / spiral must
+    // NEVER cover more than 50% of the content beneath it. A ramp (session start/end,
+    // IntensityRamp, deeper enhancement) that would push the tint above this cap is clamped
+    // at the layer setter itself, so no caller or ramp can ever exceed 50%. The mirrored
+    // web video (and everything else beneath) stays at least 50% visible at all times.
+    public const double MaxOpacity = 0.5;
+
     /// <summary>
     /// AMBIENT click-through (per-region rule 2026-07-09): the theme color filter is tinted
     /// glass the user works THROUGH, so its painted region is excluded from the capture mask
-    /// and clicks pass to the app behind. Rendered semi-transparent (opacity &lt; 1) by the
-    /// service so the desktop stays visible beneath it.
+    /// and clicks pass to the app behind. Rendered semi-transparent (opacity &lt;= 0.5, capped
+    /// by <see cref="MaxOpacity"/>) by the service so the desktop stays visible beneath it.
     /// </summary>
     public override bool IsAmbientClickThrough => true;
 
@@ -36,9 +43,15 @@ public sealed class PinkTintLayer : BaseLayer
     /// <summary>Current tint color (read-only; test/diagnostic only — the service owns all state).</summary>
     public Color CurrentColor => _color;
 
+    /// <summary>Current effective opacity (read-only; test/diagnostic only).</summary>
+    public double CurrentOpacity => _opacity;
+
     public void SetColor(Color color, double opacity)
     {
-        var clamped = Math.Clamp(opacity, 0, 1);
+        // CAP at 50% (owner ruling): clamp BEFORE storing so no ramp/caller can exceed the
+        // max. This is the single enforcement point — every SetColor path (session ramp,
+        // IntensityRamp, deeper enhancement, manual) flows through here.
+        var clamped = Math.Clamp(opacity, 0, MaxOpacity);
         if (_color != color || Math.Abs(clamped - _opacity) > 0.0005)
             _dirty = true;
         _color = color;
