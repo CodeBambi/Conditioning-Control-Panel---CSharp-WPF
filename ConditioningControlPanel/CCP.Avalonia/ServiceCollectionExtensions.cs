@@ -171,8 +171,10 @@ public static class ServiceCollectionExtensions
         //        V2; Local = Ollama + persistent history; OpenAI = OpenAI-compatible transport + ISecretStore
         //        key + the moderation sandwich the WPF provider omits. All 5 reactions on every provider.
         //        AI command execution (AllowAiToControlEffects): the dispatcher (AiCommandService) is
-        //        registered below; enrichment+dispatch is WIRED for OpenAiService (Phase 3a) and PENDING
-        //        for Local/Cloud providers. The OpenAI key-entry UI is a documented follow-up.
+        //        registered below; command dispatch is WIRED for LocalAiService (LocalAiService.cs:218-221)
+        //        and OpenAiService (OpenAiService.cs:402-405, Phase 3a). Cloud (CoreAiService) intentionally
+        //        omits dispatch — WPF parity (the WPF cloud AiService.cs path has no command dispatch).
+        //        The OpenAI key-entry UI is a documented follow-up.
         services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
         services.AddSingleton<IAiResponseParser>(sp =>
         {

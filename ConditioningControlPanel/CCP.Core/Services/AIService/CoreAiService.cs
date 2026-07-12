@@ -42,8 +42,9 @@ namespace ConditioningControlPanel.Core.Services.AIService;
 /// <item>The legacy Patreon bearer fallback (<c>/ai/chat</c>) is not ported — no Patreon-token
 ///   seam in Core yet. V2 404 → null (logged).</item>
 /// <item>The dedicated <c>ModerationLog</c> compliance file is written via the injected
-///   <c>IModerationLog</c> seam (faithful to WPF <c>App.ModerationLog</c>); Serilog is the fallback
-///   only when the seam is absent.</item>
+///   <c>IModerationLog</c> seam — faithfully ported in the Avalonia head (<c>AvaloniaModerationLog</c>
+///   writes the append-only <c>{UserDataPath}/logs/moderation.log</c>, matching WPF
+///   <c>App.ModerationLog</c>); Serilog is the fallback only when the seam is absent.</item>
 /// </list>
 /// </remarks>
 public sealed class CoreAiService : IAiService
