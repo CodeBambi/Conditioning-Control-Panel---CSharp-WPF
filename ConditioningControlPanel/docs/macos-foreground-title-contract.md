@@ -98,9 +98,13 @@ There is one window system; what varies at runtime is which permissions the user
 granted. Preflight both SILENTLY (neither preflight prompts):
 
 - `AXIsProcessTrusted()` — Accessibility granted?
-- `CGPreflightScreenCaptureAccess()` — Screen Recording granted? (macOS 10.15+
-  **[confidence: medium-high — API introduced with the Catalina TCC wave; verify exact
-  availability, §7.1 row 3]**)
+- `CGPreflightScreenCaptureAccess()` — Screen Recording granted? **REFUTED as 10.15
+  (web pass 2026-07-12, §7.1 row 3): the docs say 10.15 but the function is NOT
+  actually implemented on Catalina — calling it on 10.15 crashes (Apple-confirmed bug
+  r.72786842; workaround is to restrict use to macOS 11+). Design fix: the interop
+  wrapper resolves the symbol via `dlsym` and gates on `operatingSystemVersion >= 11`;
+  when unavailable, treat as ungranted. Moot in practice for CCP (min supported macOS
+  for the port is ≥ 12), but the guard is cheap and prevents a crash class.**
 
 ```
 MacOSTitleProviderBackendSelector (at provider init; re-probed on feature enable and
@@ -215,7 +219,10 @@ Notes:
   — one fewer ObjC hop but returns the focused *application* element anyway; the
   NSWorkspace route is simpler to marshal. Either is acceptable; pick one in Slice B.
 - `kAXErrorAPIDisabled`/`kAXErrorNotImplemented` per-call are the untrusted/unsupported
-  signals — map to `null`, count toward demotion (§3.2). Some apps (notably some games
+  signals — map to `null`, count toward demotion (§3.2). **Web-verified addendum:
+  untrusted processes also commonly get `kAXErrorCannotComplete` from
+  `AXUIElementCopyAttributeValue` (developer.apple.com/forums/thread/794253) — treat
+  all three as the not-trusted/unavailable family.** Some apps (notably some games
   and Electron configurations) return no AX title — `null`, classify Unknown.
 - **Sandbox note:** AXUIElement APIs for other apps do not work from a sandboxed app;
   CCP ships unsandboxed (direct download, not App Store) — record this as a
@@ -240,9 +247,9 @@ Per refresh, pure C API on CoreGraphics:
 
 Notes:
 - Front-to-back ordering of `kCGWindowListOptionOnScreenOnly` makes "first matching
-  layer-0 window of the frontmost app" a sound foreground proxy **[confidence:
-  medium-high — documented ordering; verify against edge cases like app-modal sheets,
-  §7.1 row 5]**.
+  layer-0 window of the frontmost app" a sound foreground proxy **[ordering VERIFIED
+  §7.1 row 5 — the SDK header states "in order from front to back"; sheet/modal edge
+  cases remain Slice C unit-probe territory]**.
 - **Never prompts** (verified — §7.1-VERIFIED row 1): with Screen Recording ungranted,
   `kCGWindowName` is simply absent. The selector's preflight prevents ever selecting
   this backend ungranted, so "absent name" in a selected backend means "untitled
@@ -298,22 +305,30 @@ An AMBIENT app cannot spam permission prompts. Normative policy, owned by the sh
    `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility`
    (or `?Privacy_ScreenCapture`). No re-prompt loop; re-request only on another
    explicit click.
-4. **Grant timing reality (first-run vs deferred):**
-   - Accessibility grants take effect for NEW AX calls promptly (no relaunch)
-     **[confidence: medium — historically flaky per-process caching; verify per
-     current macOS, §7.1 row 6]**.
-   - Screen Recording grants historically require an **app relaunch** to take effect
-     **[confidence: high]** — the notice must say so ("restart CCP to finish enabling").
+4. **Grant timing reality (first-run vs deferred) — corrected after web verification:**
+   - Accessibility: **do NOT promise no-relaunch pickup.** Current reporting (filed
+     against Sequoia in 2025, still present in macOS 26/Tahoe per fazm.ai's
+     production-failure-modes writeup) is that `AXIsProcessTrusted` reads from a
+     **per-process cache populated at first call** — a grant made after the process
+     first probed may not be observed until relaunch. Design fix: the degrade notice
+     for the AX path says "if titles don't appear after granting, restart CCP"; the
+     60s re-probe is kept (it works when the cache behaves) but is NOT relied on
+     (§7.1 row 6).
+   - Screen Recording grants require an **app relaunch** to take effect — VERIFIED
+     (ubiquitous current guidance, e.g. Electron ecosystem + multiple 2025-2026 macOS
+     permission guides) — the notice must say so ("restart CCP to finish enabling").
    - The selector re-probes on: explicit enable, notice click, and a slow (60s)
-     re-check timer while awareness is enabled-but-degraded — so a user who grants in
-     System Settings out-of-band gets picked up without restart where the OS allows.
+     re-check timer while awareness is enabled-but-degraded — best-effort out-of-band
+     pickup, with the relaunch caveat surfaced honestly for BOTH permissions.
 5. **TCC identity gotcha (dev vs shipped):** TCC grants key on the responsible binary.
    `dotnet run` attributes the grant to the `dotnet` host binary — grants made during
    development do NOT carry to the bundled `.app`, and vice versa. The shipped macOS
    head must be a proper `.app` bundle with a stable bundle identifier for grants to
    persist across updates **[confidence: high — standard TCC behavior]**. No
    usage-description Info.plist key is required for Accessibility or Screen Recording
-   (unlike camera/mic) **[confidence: medium-high — verify, §7.1 row 7]**.
+   (unlike camera/mic) — **VERIFIED: no such plist key exists for Screen Recording
+   (stackoverflow.com/questions/62641652) or Accessibility; the TCC dialogs for these
+   services are system-worded, not app-worded (§7.1 row 7)**.
 
 ---
 
@@ -448,17 +463,19 @@ interface doc update included in the slice). Until then: no code.
 
 ### 7.1 Claims to verify before the relevant slice lands ([confidence:] tags; driver has web tools)
 
-| # | Claim | Confidence | Verify via | Blocks |
+All rows re-verified in the 2026-07-12 §7.1 web pass (evidence in §7.1-VERIFIED).
+
+| # | Claim | Verdict (web pass 2026-07-12) | Source / evidence | Blocks |
 |---|---|---|---|---|
-| 1 | `kCGWindowName` requires Screen Recording (10.15+); the call itself never prompts | **VERIFIED** | see §7.1-VERIFIED | — |
-| 2 | AXAPI cross-app reads require TCC Accessibility; `AXIsProcessTrustedWithOptions` prompt option shows the system dialog | High | Apple AX docs; ubiquitous in shipping apps | B, D |
-| 3 | `CGPreflightScreenCaptureAccess`/`CGRequestScreenCaptureAccess` availability (10.15 vs 11.0) | Medium-high | Apple CoreGraphics headers/docs | A, D |
-| 4 | AX API thread-safety off the main thread (refresher placement) | Medium | Apple docs / community; design already assumes main-thread via §3.1, so non-blocking | B (optimization only) |
-| 5 | `kCGWindowListOptionOnScreenOnly` returns front-to-back order; first layer-0 window of frontmost PID ≈ focused window (sheets/modals edge cases) | Medium-high | CGWindowList docs + Slice C unit/CI probes | C |
-| 6 | Accessibility grants take effect without app relaunch; Screen Recording requires relaunch | Medium / High | real-Mac manual (Slice D checklist) | D (notice wording) |
-| 7 | No Info.plist usage-description key required for Accessibility/Screen Recording | Medium-high | Apple TCC docs | D |
-| 8 | `tccutil reset` usable in CI for the revocation negative test | Medium | runner image docs | B |
-| 9 | CI TCC.db sqlite grant recipe works on the CURRENT macos-latest image (schema drift) | Medium (recipe verified to exist) | overlay contract §7.1-VERIFIED row 2; prove in lane setup | B, C |
+| 1 | `kCGWindowName` requires Screen Recording (10.15+); the call itself never prompts | **VERIFIED (incl. current OS)** — titles silently omitted without the grant on 10.15 through current macOS; layer/bounds/owner-PID stay available without any TCC; no prompt is ever triggered by the enumeration itself | ryanthomson.net Catalina permissions article; stackoverflow.com/questions/56597221 + /59337022; Apple Support screen-recording TCC guide (no behavior change reported through Sequoia) | — |
+| 2 | AXAPI cross-app reads require TCC Accessibility; `AXIsProcessTrustedWithOptions` prompt option shows the system dialog | **VERIFIED** — untrusted reads fail (`kAXErrorAPIDisabled`/`kAXErrorCannotComplete`); prompt-option flow is the standard shipping pattern | developer.apple.com/forums/thread/794253; Apple AX docs | B, D |
+| 3 | `CGPreflightScreenCaptureAccess`/`CGRequestScreenCaptureAccess` availability (10.15 vs 11.0) | **REFUTED as 10.15** — documented 10.15 but not implemented there (crashes on Catalina; Apple bug r.72786842); functional macOS 11+. §2.1 design-fixed: dlsym + version gate | developer.apple.com/forums/thread/683860; stackoverflow.com/questions/56597221 (comments) | A, D |
+| 4 | AX API thread-safety off the main thread (refresher placement) | **UNCERTAIN** — Apple docs remain silent; community mixed; §3.1 main-thread snapshot design already absorbs this, so non-blocking | — | B (optimization only) |
+| 5 | `kCGWindowListOptionOnScreenOnly` returns front-to-back order; first layer-0 window of frontmost PID ≈ focused window | **VERIFIED (ordering)** — SDK header + docs literally state "ordered from front to back"; sheets/modal edge cases remain Slice C unit-probe territory | CoreGraphics `CGWindow.h` ("in order from front to back"); stackoverflow.com/questions/5286274 | C |
+| 6 | Accessibility grants take effect without app relaunch; Screen Recording requires relaunch | **REFUTED (AX half) / VERIFIED (SR half)** — `AXIsProcessTrusted` uses a per-process cache populated at first call (Sequoia-era bug, still current), so mid-session grant pickup is NOT reliable; SR relaunch requirement confirmed. §5.4 wording design-fixed | fazm.ai/t/macos-accessibility-automation; multiple 2025-2026 SR permission guides + Electron reports | D (notice wording) |
+| 7 | No Info.plist usage-description key required for Accessibility/Screen Recording | **VERIFIED** — no such key exists for either service (unlike camera/mic) | stackoverflow.com/questions/62641652 | D |
+| 8 | `tccutil reset` usable in CI for the revocation negative test | **UNCERTAIN** — standard system tool and runners have passwordless sudo, but not directly proven on the current image; keep continue-on-error | — | B |
+| 9 | CI TCC.db sqlite grant recipe works on the CURRENT macos-latest image (schema drift) | **VERIFIED (recipe exists; image-sensitive)** — same posture as overlay row 2; one report of a Screen-Recording grant not taking effect for Terminal exists (#8951), reinforcing the assert-the-preflight lane design | actions/runner-images #7792, #8951, #8214 | B, C |
 
 ### 7.2 Genuine Unknowns (real-desktop only)
 
@@ -468,7 +485,7 @@ interface doc update included in the slice). Until then: no code.
 | TCC grant caching across app updates (path/signature changes) | Grants silently lost after update → sudden Unknown | Stable bundle id + signing; degrade notice re-appears by design |
 | Fullscreen apps/Spaces: frontmost app with zero layer-0 on-screen windows on the active Space | CG backend returns null while AX still answers | AX outranks CG when both granted; accept null otherwise |
 | 1s refresh vs rapid title churn (browser tabs) | Slight lag | Awareness change-detection already debounces (Linux §7.2 parity) |
-| macOS 15+ TCC UX changes (weekly re-authorization for screen capture) | Recurring degrade for the CG backend | Re-probe timer + notice already handle it; prefer AX path in user guidance **[confidence: low-medium — verify current macOS re-auth policy]** |
+| macOS 15+ TCC re-authorization for screen capture — **VERIFIED: MONTHLY re-confirm** (weekly in early Sequoia betas, relaxed to monthly in beta 6 and shipped that way; reboot-prompts dropped) | Recurring degrade for the CG backend when the user misses the re-confirm | Re-probe timer + notice already handle it; prefer AX path in user guidance (AX has no re-auth cycle) — sources: 9to5mac.com/2024/08/14 monthly-prompt report; tidbits.com Sequoia permissions coverage |
 
 ### 7.3 Configuration Notes
 
@@ -534,8 +551,13 @@ drifted, the job reports "recipe broken" instead of a false red.
 - Apple: AXUIElement (ApplicationServices), CGWindowListCopyWindowInfo,
   AXIsProcessTrustedWithOptions, CGPreflightScreenCaptureAccess
 
-### 7.1-VERIFIED (web research, 2026-07-12 — this drafting pass)
+### 7.1-VERIFIED (web research, 2026-07-12 — drafting pass + full §7.1 verify pass)
 | Claim | Result | Source |
 |-------|--------|--------|
-| `kCGWindowName` gated by **Screen Recording** (not Accessibility) since macOS 10.15; `CGWindowListCopyWindowInfo` itself never triggers the permission dialog — names are silently omitted when ungranted | **VERIFIED** | ryanthomson.net "Screen Recording Permissions in Catalina are a Mess"; stackoverflow.com/questions/56597221 + /59337022 (kCGWindowName omitted without the grant; "doesn't trigger the privacy alert") |
+| `kCGWindowName` gated by **Screen Recording** (not Accessibility) since macOS 10.15; `CGWindowListCopyWindowInfo` itself never triggers the permission dialog — names are silently omitted when ungranted | **VERIFIED** — and re-confirmed current: the redaction model (title omitted, layer/bounds/PID available, zero prompt) is unchanged through Sonoma/Sequoia; the §2.1 Screen-Recording preflight gate is the correct design | ryanthomson.net "Screen Recording Permissions in Catalina are a Mess"; stackoverflow.com/questions/56597221 + /59337022 (kCGWindowName omitted without the grant; "doesn't trigger the privacy alert") |
 | GitHub macOS runner TCC.db sqlite grant recipe | **VERIFIED (exists; image-sensitive)** | carried from `macos-overlay-contract.md` §7.1-VERIFIED (actions/runner-images #9529) |
+| `CGPreflightScreenCaptureAccess` on 10.15 | **REFUTED** — crashes on Catalina despite documented 10.15 availability (Apple bug r.72786842); restrict to macOS 11+ | developer.apple.com/forums/thread/683860 |
+| `AXIsProcessTrusted` per-process caching breaks mid-session grant pickup | **CONFIRMED CURRENT** (Sequoia 2025 → macOS 26) — §5.4 notice wording updated to include an AX relaunch caveat | fazm.ai/t/macos-accessibility-automation |
+| CGWindowList front-to-back ordering | **VERIFIED** | CoreGraphics `CGWindow.h` header comment; stackoverflow.com/questions/5286274 |
+| No usage-description plist key for AX/SR | **VERIFIED** | stackoverflow.com/questions/62641652 |
+| macOS 15 screen-capture re-authorization is MONTHLY | **VERIFIED** | 9to5mac.com/2024/08/14; daringfireball.net 2024-08-17; tidbits.com Sequoia coverage |

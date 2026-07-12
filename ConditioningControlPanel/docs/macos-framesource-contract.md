@@ -113,7 +113,7 @@ never assume from version alone (Linux registry-probe-is-authoritative rule).
 | Priority | Backend | Capabilities | When Selected |
 |---|---|---|---|
 | 1 | `ScreenCaptureKitBackend` | Modern: GPU-efficient stream, per-display content filter, excluded-windows support, sustained-FPS-friendly | Granted + macOS ≥ 12.3 + framework probe OK (Slice D onward) |
-| 2 | `CGDisplayImageBackend` | Universal one-shot: `CGDisplayCreateImage(displayId)` — synchronous, plain C, deprecated in macOS 14 SDK but functional **[confidence: medium-high — verify current-SDK status + macOS 15/16 runtime behavior, §7.1 row 2]** | Granted; SCK unavailable or its slice not yet landed |
+| 2 | `CGDisplayImageBackend` | Universal one-shot: `CGDisplayCreateImage(displayId)` — synchronous, plain C, deprecated in the macOS 14 SDK wave but functional. **VERIFIED (§7.1 row 2), with a Sequoia caveat: on macOS 15+, apps using deprecated CG capture APIs can trigger EXTRA system warning alerts ("can collect detailed information about the user") on top of the monthly re-auth — reinforces SCK as the primary and CG as bring-up/fallback only** | Granted; SCK unavailable or its slice not yet landed |
 | 3 | `FallbackFrameSource` | Black frame + reason logged once | Ungranted, or all probes/backends fail |
 
 **Rejected: `CGDisplayStream`** — push-model continuous callback (dispatch-queue +
@@ -187,10 +187,14 @@ Per capture, inside the lock, after cancellation check:
   within budget on any supported Mac **[confidence: medium — measure in the Slice B
   soak; if Retina 5K readback + repack breaks the budget, that becomes the concrete
   motivation to prioritize Slice D]**.
-- Deprecation posture: deprecated in the macOS 14 SDK in favor of SCK; still present
-  and functional through current OS versions **[confidence: medium-high — §7.1 row 2;
-  if a future macOS hard-removes it, the selector's arm-2 SCK path is the answer, and
-  the probe (`dlsym` check) must detect absence rather than crash]**.
+- Deprecation posture: deprecated in the macOS 14 SDK wave in favor of SCK
+  (VERIFIED — the CG capture family carries "first deprecated in macOS 14.0" markers);
+  still present and functional through current OS versions. **Sequoia UX caveat
+  (web-verified): macOS 15+ can show extra "this app may collect detailed
+  information" alerts for apps using the deprecated capture APIs — acceptable for a
+  bring-up backend, one more reason Slice D (SCK) is the target state.** If a future
+  macOS hard-removes it, the selector's arm-2 SCK path is the answer, and the probe
+  (`dlsym` check) must detect absence rather than crash.
 
 ### 3.2 BGRA repack (shared by both backends)
 
@@ -261,8 +265,9 @@ Interop notes:
 - Completion handlers are ObjC **blocks**: build block literals with the libobjc block
   ABI (`_NSConcreteStackBlock`/global block + descriptor + invoke fn ptr) — a small,
   well-trodden trampoline; keep it inside `ScreenCaptureKitInterop.cs`
-  **[confidence: medium-high — the block ABI is stable and documented; the risk is
-  implementation fiddliness, not feasibility, §7.1 row 4]**.
+  **[VERIFIED (feasibility) §7.1 row 4 — objc_msgSend-family P/Invoke is an
+  officially recognized .NET interop path with Xamarin/.NET-macOS precedent; the
+  residual risk is implementation fiddliness, not feasibility]**.
 - The stream delegate + output object must be a real ObjC object: allocate via
   `objc_allocateClassPair` with IMPs pointing at rooted managed delegates (same
   lifetime rule as §2.4).
@@ -272,13 +277,24 @@ Interop notes:
 - Menu-bar capture indicator: macOS shows a recording indicator while a stream runs —
   correct and honest; the idle teardown (step 9) bounds it to actual feature use.
 
-### 3.5 Capture-exclusion interaction (overlay contract cross-link)
+### 3.5 Capture-exclusion interaction (overlay contract cross-link) — design corrected after web verification
 
-Brain-drain windows set `sharingType = none` (`macos-overlay-contract.md` §3.7); both
-CG and SCK capture honor it, so CCP's own capture will not see those overlay layers —
-same self-consistency as Windows (`WDA_EXCLUDEFROMCAPTURE` vs GDI capture). SCK's
-`SCContentFilter` could alternatively exclude windows explicitly; not needed while
-`sharingType` does the job.
+Brain-drain windows set `sharingType = none` (`macos-overlay-contract.md` §3.7
+revised). **REFUTED as sufficient (§7.1 row 9): on macOS 15+, ScreenCaptureKit
+IGNORES `sharingType`** (Apple-confirmed; see overlay contract §3.7 revised for full
+evidence) — only legacy CG capture still honors it. Per-backend consequences:
+
+- **CGDisplayImageBackend:** honors `sharingType=none` natively on all OS versions —
+  brain-drain layers stay absent from CCP's own CG captures. No change.
+- **ScreenCaptureKitBackend:** MUST exclude CCP's protected windows EXPLICITLY —
+  build the filter as `SCContentFilter(display, excludingWindows: <our
+  sharingType=none windows>)`, resolving our own window numbers at session
+  establishment (and on stream rebuild). This is now REQUIRED for self-consistency
+  (Windows-parity: our own capture must not see brain-drain), not an optional
+  alternative. Slice D acceptance updated.
+
+Third-party SCK-based capture apps on macOS 15+ WILL see the brain-drain window — an
+accepted, documented parity gap owned by the overlay contract (§3.7 revised there).
 
 ---
 
@@ -289,8 +305,10 @@ Policy owner: the shared `MacOSPermissionService`
 
 1. **No prompt-free path exists** on macOS (unlike Linux wlr-screencopy). Every
    capture backend needs TCC Screen Recording. Therefore the FIRST capture attempt is
-   itself prompt-triggering **[confidence: medium-high — the OS auto-prompts once on
-   first ungranted capture attempt; §7.1 row 3]** — which means the seam MUST NOT
+   itself prompt-triggering **[VERIFIED — calling any screen-record API while
+   ungranted triggers the system prompt; the documented trigger-on-purpose trick is a
+   1px `CGWindowListCreateImage` (stackoverflow.com/questions/59337022); §7.1 row
+   3]** — which means the seam MUST NOT
    attempt a real capture until the grant is confirmed: **preflight-gate every
    backend selection** (§2.1 arm 1). The prompt happens only via the explicit-enable
    flow: `CGRequestScreenCaptureAccess()` when the user turns on a screen-dependent
@@ -299,18 +317,21 @@ Policy owner: the shared `MacOSPermissionService`
    notice ("screen features are paused — click to grant screen recording"), deep link
    `x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture`.
    No re-prompt loop; re-request only on explicit click.
-3. **Relaunch reality:** Screen Recording grants historically take effect only after
-   app relaunch **[confidence: high]** — the notice says "restart CCP to finish
-   enabling". The 60s degraded re-probe (title contract §5.4) picks up out-of-band
-   grants where the OS allows.
+3. **Relaunch reality:** Screen Recording grants take effect only after app relaunch
+   — **VERIFIED (current guidance across the Electron ecosystem and 2025-2026 macOS
+   permission guides: the app must be fully quit and relaunched)** — the notice says
+   "restart CCP to finish enabling". The 60s degraded re-probe (title contract §5.4)
+   picks up out-of-band grants where the OS allows.
 4. **Grant synergy (design intent, both directions):** one Screen Recording grant
    serves BOTH this seam and the CGWindowList title backend — the enable flow surfaces
    that ("also enables window awareness titles"). First-run: never request; the
    request rides the first explicit feature enable, whenever that is.
-5. **macOS 15+ periodic re-authorization** (monthly/weekly re-confirm dialogs for
-   screen capture apps) **[confidence: low-medium — policy still shifting; §7.1 row
-   7]**: treat a re-auth lapse exactly like a revocation — degrade + notice, never a
-   spontaneous prompt.
+5. **macOS 15+ periodic re-authorization — VERIFIED: MONTHLY re-confirm dialogs**
+   (weekly in early Sequoia betas, relaxed to monthly in beta 6 and shipped; the
+   every-reboot prompt was dropped; policy held through Sequoia's release cycle —
+   9to5mac.com/2024/08/14, daringfireball.net 2024-08-17, tidbits.com coverage;
+   §7.1 row 7): treat a re-auth lapse exactly like a revocation — degrade + notice,
+   never a spontaneous prompt.
 6. **TCC identity:** grants key on the bundle identity — dev `dotnet run` grants
    attach to the `dotnet` host, not the shipped `.app` (title contract §5.5; same
    caveat, same mitigation: stable bundle id + signing).
@@ -448,6 +469,9 @@ dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.macOS -- --sm
 **Acceptance:**
 - [ ] 32BGRA negotiated (or repacked via §3.2 when not) honoring
       `CVPixelBufferGetBytesPerRow`
+- [ ] `SCContentFilter(display, excludingWindows:)` excludes CCP's own
+      `sharingType=none` windows (§3.5 revised — REQUIRED on macOS 15+ where SCK
+      ignores sharingType; re-resolved on every stream rebuild)
 - [ ] Blocks/delegates rooted for native lifetime (no GC-collection crash under soak)
 - [ ] Idle teardown bounds the OS capture indicator to active feature use
 - [ ] Version/framework probe: 12.3 gate + `dlopen` check; cascade to CG proven
@@ -479,17 +503,19 @@ dual-monitor incl. one Retina + one 1x):
 
 ### 7.1 Claims to verify before the relevant slice lands ([confidence:] tags; driver has web tools)
 
-| # | Claim | Confidence | Verify via | Blocks |
+All rows re-verified in the 2026-07-12 §7.1 web pass (evidence in §7.1-VERIFIED).
+
+| # | Claim | Verdict (web pass 2026-07-12) | Source / evidence | Blocks |
 |---|---|---|---|---|
-| 1 | CI TCC.db sqlite grant works for `kTCCServiceScreenCapture` on current macos-latest | **VERIFIED (recipe exists; image-sensitive)** | overlay §7.1-VERIFIED row 2 (runner-images #9529 — recipe is literally for ScreenCapture) | B, D |
-| 2 | `CGDisplayCreateImage` deprecated (macOS 14 SDK) but present + functional on macOS 14/15/16 runtimes | Medium-high | Apple docs/headers; runtime probe in Slice B CI is the empirical answer | B |
-| 3 | First ungranted capture attempt auto-triggers the system TCC prompt (hence preflight-gating is mandatory) | Medium-high | Apple TCC behavior docs / community; Slice A CI negative assert proves our gating regardless | A |
-| 4 | ObjC block ABI trampolines from C# (libobjc `_NSConcreteGlobalBlock` layout) are stable/viable for SCK completion handlers | Medium-high | libobjc block ABI docs; existing .NET/Xamarin interop precedent | D |
-| 5 | CoreGraphics display-services calls (CGDisplayCreateImage etc.) are safe off the main thread | Medium-high | Apple docs; CG is not AppKit | B |
-| 6 | Avalonia macOS `Screens` reports physical-pixel `PixelRect` + `Scaling` = backingScaleFactor | Medium | Avalonia.Native source (avalonia-research protocol); Slice B dimension assert is the empirical check | B |
-| 7 | macOS 15+ periodic screen-capture re-authorization policy (frequency, API surface) | Low-medium | Apple release notes / current reporting | C (notice wording) |
-| 8 | SCK minimum version 12.3; `SCScreenshotManager` 14.0+ (we use the stream, so only 12.3 matters) | High | Apple SCK docs | D |
-| 9 | `sharingType=none` windows absent from both CG and SCK capture (self-exclusion consistency) | Medium | overlay contract §7.1 row 9 (shared claim) | D (cross-link assert) |
+| 1 | CI TCC.db sqlite grant works for `kTCCServiceScreenCapture` on current macos-latest | **VERIFIED (recipe exists; image-sensitive)** — literal `kTCCServiceScreenCapture` insert published; one no-effect report exists (#8951) → keep assert-the-preflight lane design | actions/runner-images #7792, #8951; overlay §7.1-VERIFIED row 2 | B, D |
+| 2 | `CGDisplayCreateImage` deprecated (macOS 14 SDK) but present + functional on macOS 14/15/16 runtimes | **VERIFIED** — CG capture family carries macOS 14.0 deprecation markers and remains functional; Sequoia may add extra "detailed information" warning alerts for deprecated-API captures (design note added §2.2/§3.1) | stackoverflow.com/questions/76181646 (Xcode 14.3 deprecation wave); getsentry/sentry-unreal#1126 ("first deprecated in macOS 14.0"); r/MacOSBeta Sequoia alert reports | B |
+| 3 | First ungranted capture attempt auto-triggers the system TCC prompt (hence preflight-gating is mandatory) | **VERIFIED** — any screen-record API call triggers the prompt; 1px `CGWindowListCreateImage` is the canonical deliberate trigger | stackoverflow.com/questions/59337022 | A |
+| 4 | ObjC block ABI trampolines from C# are stable/viable for SCK completion handlers | **VERIFIED (feasibility)** — objc_msgSend-family P/Invoke is an officially recognized .NET path; block ABI stable; Xamarin/.NET-macOS precedent | learn.microsoft.com/dotnet/ios/advanced-concepts/exception-marshaling; mikeash.com objc_msgSend ABI articles | D |
+| 5 | CoreGraphics display-services calls are safe off the main thread | **UNCERTAIN** — no authoritative doc found either way; CG is not AppKit and community usage is off-main; the backend's single-lock serialization stands as the safety net | — | B |
+| 6 | Avalonia macOS `Screens` reports physical-pixel `PixelRect` + `Scaling` = backingScaleFactor | **UNCERTAIN** — Avalonia-specific; not settled by this pass; Slice B dimension assert (captured px vs `system_profiler`) remains the empirical check | avalonia-research protocol | B |
+| 7 | macOS 15+ periodic screen-capture re-authorization policy | **VERIFIED — MONTHLY** (weekly in early betas → monthly from beta 6; reboot prompts dropped; shipped that way) | 9to5mac.com/2024/08/14; daringfireball.net 2024-08-17; tidbits.com Sequoia coverage | C (notice wording) |
+| 8 | SCK minimum version 12.3; `SCScreenshotManager` 14.0+ | **VERIFIED** — SCK availability macOS 12.3+; SCScreenshotManager + SCContentSharingPicker are 14.0+ (we use the stream, so only 12.3 matters) | developer.apple.com/documentation/screencapturekit; ecosystem bindings (screencapturekit crate) gate screenshot-manager behind 14.0 | D |
+| 9 | `sharingType=none` windows absent from both CG and SCK capture (self-exclusion consistency) | **REFUTED for SCK on macOS 15+** — SCK ignores sharingType; CG still honors it. §3.5 design-fixed: SCK backend explicitly excludes our windows via `SCContentFilter(excludingWindows:)` | developer.apple.com/forums/thread/792152; tauri-apps/tauri#14200 (Apple-confirmed) | D (cross-link assert) |
 
 ### 7.2 Genuine Unknowns (real-desktop only)
 
@@ -566,8 +592,12 @@ itself CI-proves the §4.4 synergy claim.
 - Apple: ScreenCaptureKit (SCStream/SCContentFilter/SCShareableContent),
   CGDisplayCreateImage, CGWindowLevel/CGDisplay services, TCC Screen Recording
 
-### 7.1-VERIFIED (web research, 2026-07-12 — this drafting pass)
+### 7.1-VERIFIED (web research, 2026-07-12 — drafting pass + full §7.1 verify pass)
 | Claim | Result | Source |
 |-------|--------|--------|
 | CI TCC grant for `kTCCServiceScreenCapture` scriptable on GitHub macOS runners | **VERIFIED (recipe exists)** — sqlite inserts into system+user TCC.db, incl. Sonoma's 4 extra schema columns; image-version-sensitive, prove per image | actions/runner-images #9529 (recipe), #7792, #7818 (carried via overlay contract) |
 | Avalonia macOS platform handle = NSWindow (interop foundation these backends share) | **VERIFIED** | carried from `macos-overlay-contract.md` §7.1-VERIFIED (docs.avaloniaui.net) |
+| SCK ignores `sharingType=none` on macOS 15+ (self-exclusion broken for the SCK backend without an explicit filter) | **REFUTED claim / design fixed** — §3.5 now REQUIRES `SCContentFilter(excludingWindows:)` for our own protected windows | developer.apple.com/forums/thread/792152; tauri-apps/tauri#14200; developer.apple.com/documentation/appkit/nswindow/sharingtype-swift.enum/none |
+| macOS 15 screen-capture re-auth is MONTHLY | **VERIFIED** | 9to5mac.com/2024/08/14; daringfireball.net 2024-08-17 |
+| First ungranted capture triggers the TCC prompt | **VERIFIED** | stackoverflow.com/questions/59337022 |
+| CG capture family deprecated in the macOS 14 wave, still functional; Sequoia adds extra warning alerts for deprecated-API capture | **VERIFIED** | stackoverflow.com/questions/76181646; getsentry/sentry-unreal#1126; r/MacOSBeta Sequoia reports |
