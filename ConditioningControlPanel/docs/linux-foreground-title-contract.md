@@ -1,25 +1,36 @@
 # Linux IForegroundWindowTitleProvider Implementation Contract
 
-**Date:** 2026-07-12  
-**Scope:** Hard-seam Linux foreground window title for awareness engine  
-**Status:** Judgment-tier design document (read-only research artifact)  
-**Closes:** Linux side of AI-1/AI-2/AI-10 (awareness feature bring-up)
+**Date:** 2026-07-12 (hardened judgment-tier revision — supersedes the same-day draft)  
+**Scope:** Hard-seam Linux foreground window title for the awareness engine  
+**Status:** Authoritative design contract (read-only research artifact; no code changes)  
+**Closes:** Linux side of AI-1/AI-2/AI-10 (awareness feature bring-up, readiness map item #3)
 
 This document specifies the behavior contract, backend architecture, and implementation
 slices for Linux foreground window title detection (`IForegroundWindowTitleProvider`).
 X11 and Wayland are CO-EQUAL first-class backends. Per owner directive (2026-07-12), the
-implementation **must work on ANY Linux system** — multi-backend with graceful fallback.
+implementation **must work on ANY Linux system** — multi-backend, runtime-selected,
+graceful fallback, CI-verified per backend.
 
-**CRITICAL Wayland judgment:** Most Wayland compositors do NOT expose other windows to
-clients for privacy reasons. This document captures the honest reality: full functionality
-on X11 and wlroots, graceful degrade to "unknown" on locked-down GNOME.
+> **Revision note:** this version fixes a critical backend-selection ordering bug in the
+> draft (X11-before-Wayland — which would misroute every Wayland desktop through XWayland
+> and see only X11 windows), removes a fabricated KDE D-Bus API, corrects the KDE
+> compatibility matrix (KWin implements wlr-foreign-toplevel-management — KDE is a
+> full-function target, not a D-Bus special case), replaces a wrong Xlib thread-safety
+> claim, adds the mandatory Xlib error trap (the default handler kills the process on a
+> BadWindow race), and redesigns the Wayland event-pumping model (the draft's
+> `dispatch_pending`-only sketch never reads the socket). Claims not re-verified against
+> upstream docs in this pass are marked **[confidence: …]**.
+
+**The honest Wayland reality (kept from the draft, sharpened):** wlroots compositors AND
+KDE expose foreign-toplevel info → full functionality. GNOME exposes nothing to native
+clients by policy → graceful "unknown" unless the user installs a Shell extension.
 
 ---
 
 ## 1. IForegroundWindowTitleProvider Behavior Contract
 
-The `IForegroundWindowTitleProvider` interface (`CCP.Core/Platform/IForegroundWindowTitleProvider.cs`)
-defines the platform-agnostic foreground window title seam.
+The interface lives at `CCP.Core/Platform/IForegroundWindowTitleProvider.cs` (namespace
+`ConditioningControlPanel.Core.Platform` — note: *Platform*, not *Services/Awareness*).
 
 ### 1.1 Interface Definition
 
@@ -36,41 +47,54 @@ public interface IForegroundWindowTitleProvider
 }
 ```
 
-### 1.2 Behavioral Requirements (cited from WindowsForegroundWindowTitleProvider.cs)
+The seam is **synchronous and cheap-per-call**: the awareness engine polls it every 1.5s
+from a `System.Threading.Timer` threadpool callback
+(`CCP.Core/Services/Awareness/AwarenessService.cs` — `PollInterval` 1.5s). This shapes
+the whole Linux design: the call must be a fast in-memory or single-round-trip read, and
+it must tolerate being invoked from *different* (and, if a poll ever runs long,
+overlapping) threadpool threads.
+
+### 1.2 Behavioral Requirements (cited from `CCP.Avalonia.Desktop.Windows/Platform/WindowsForegroundWindowTitleProvider.cs`)
 
 | Requirement | Windows Implementation | Citation |
 |-------------|------------------------|----------|
-| **Title only** | Returns window title text, NOT process name or PID | `WindowsForegroundWindowTitleProvider.cs:10-12` |
-| **UTF-8/Unicode** | Uses Unicode API (`GetWindowTextW` via `CharSet.Unicode`) | `WindowsForegroundWindowTitleProvider.cs:20` |
-| **Buffer size** | 512-character buffer for title text | `WindowsForegroundWindowTitleProvider.cs:28` |
-| **Null-safe** | Returns `null` when no foreground window exists | `WindowsForegroundWindowTitleProvider.cs:26-27` |
-| **Synchronous** | Direct Win32 call, no async | implicit |
+| **Title only** | Window title text — NO process name, NO PID | `WindowsForegroundWindowTitleProvider.cs:12,14` (doc + class), interface doc |
+| **Unicode** | `GetWindowText` with `CharSet.Unicode` | `WindowsForegroundWindowTitleProvider.cs:20-21` |
+| **Bounded read** | 512-char buffer — long titles truncate, never overrun | `WindowsForegroundWindowTitleProvider.cs:29-30` |
+| **Null-safe** | `null` when no foreground window | `WindowsForegroundWindowTitleProvider.cs:26-27` |
+| **Synchronous, no allocation-heavy work** | Direct Win32 call | whole method `:23-32` |
 
-### 1.3 Privacy Contract (HARD CONSTRAINT)
+Linux backends adopt the same bounds: cap returned titles at **512 chars** (truncate,
+don't fail) for parity and to bound the memory the privacy contract governs.
 
-From the interface doc and `AwarenessService.cs:19-23`:
+### 1.3 Privacy Contract (HARD CONSTRAINT — extended for Wayland)
 
-> **Privacy (hard contract):** the raw foreground title lives in memory only for change
-> detection. It is never written to disk, never sent over the network, and never logged.
+From the interface doc and `AwarenessService.cs` header:
 
-This constraint applies to ALL platform implementations:
-- **Memory-only:** Title string exists only in RAM, never serialized
-- **No disk persistence:** Never written to settings, logs, or temp files
-- **No network transmission:** The title itself never leaves the machine
-- **Derived data only:** Only the derived `ActivityCategory` / `DetectedName` may be logged or sent
+> the raw foreground title lives in memory only for change detection. It is never
+> written to disk, never sent over the network, and never logged — log lines carry the
+> derived detected name only. (The WPF debug line that logged the raw title was
+> deliberately NOT ported.)
 
-Any implementation violating these constraints is a **security bug**.
+**Wayland extension (NEW — the draft missed this):** foreign-toplevel protocols do not
+let you ask for "the active title" on demand — the compositor *pushes* title/state events
+for **every** toplevel, so a Wayland backend necessarily holds an in-memory map of ALL
+open window titles, not just the foreground one. The hard line therefore covers the
+whole map:
+
+- The toplevel map (titles, app_ids, handles) is memory-only. Never serialized, never
+  logged (not even at trace level), never exposed beyond `GetForegroundWindowTitle()`.
+- `app_id` may be *used* internally to disambiguate, but the seam returns the TITLE
+  string only — no app_id, no PID, matching the Windows title-only contract.
+- Handles/entries are dropped on `closed`; `Dispose()` clears the map.
+- Fallback/selector logging carries backend names and reasons ONLY — never title content.
+
+Violating any of this is a security bug of the same class as the webcam rule.
 
 ### 1.4 Consumer Integration (AwarenessService)
 
-The `AwarenessService` (`CCP.Core/Services/Awareness/AwarenessService.cs`) consumes the provider:
-
 ```csharp
-// AwarenessService.cs:31-32
-private readonly IForegroundWindowTitleProvider? _titleProvider;
-
-// AwarenessService.cs:101-106
-// Platform gap guard: no foreground-title seam registered on this head (Linux/macOS).
+// AwarenessService.Start() — platform gap guard
 if (_titleProvider is null)
 {
     _logger?.LogInformation("WindowAwareness: no foreground window title provider on this platform - not starting");
@@ -78,695 +102,562 @@ if (_titleProvider is null)
 }
 ```
 
-**Graceful degrade:** When no provider is registered, the awareness engine **refuses to start**
-(logs and returns from `Start()`). This is correct behavior — the feature is simply off,
-not broken.
+Two distinct degrade levels, both correct:
+- **No provider registered** → engine refuses to start (feature off).
+- **Provider registered but backend returns null/""** → engine runs, classifies
+  `Unknown`, no reactions fire. This is what the Linux fallback backend produces.
+
+Once the Linux provider exists, prefer the second mode: register the provider
+unconditionally and let the backend chain degrade — the user sees a consistent
+"awareness on, activity unknown" rather than a feature that silently refuses to start,
+and a session-type change (e.g. login to X11 instead of Wayland) changes capability
+without changing wiring.
 
 ---
 
 ## 2. Linux Backend Architecture
 
-### 2.1 Runtime Backend Selection
+### 2.1 Runtime Backend Selection (ORDER CORRECTED — the draft's critical bug)
 
-The Linux title provider uses a runtime backend selector. Unlike overlay/capture where
-we need compositor cooperation for effects, title detection has a simpler but bleaker
-fallback chain:
+The draft selected X11 first ("`XDG_SESSION_TYPE == "x11"` OR `DISPLAY` set"). On
+virtually every Wayland desktop `DISPLAY` is *also* set (XWayland), so that predicate
+routes ALL Wayland sessions to the X11 backend — which sees only XWayland windows and
+reports wrong/no titles for native Wayland apps. **Wayland must be probed first**,
+consistent with the overlay and framesource contracts. Reuse
+`CCP.Core/Platform/LinuxSessionType.cs` + `LinuxSessionDetector.cs` (already landed on
+`feature/linux-overlay`).
 
 ```
-│                    LinuxTitleProviderBackendSelector              │
-│  │ Detection order:                                              ││
-│  │ 1. XDG_SESSION_TYPE == "x11" OR DISPLAY set                  ││
-│  │    → X11TitleProvider (full functionality)                    ││
-│  │ 2. XDG_SESSION_TYPE == "wayland" + WAYLAND_DISPLAY set       ││
-│  │    → WaylandBackendProbe                                      ││
-│  │ 3. Neither                                                    ││
-│  │    → FallbackTitleProvider (returns null/"")                  ││
+LinuxTitleProviderBackendSelector (selection once, at provider init)
+  1. Wayland session (WAYLAND_DISPLAY set, or XDG_SESSION_TYPE == "wayland")
+       → WaylandBackendProbe
+  2. X11 session (DISPLAY set)
+       → X11TitleBackend (full functionality)
+  3. Neither
+       → FallbackTitleBackend (returns null)
 
-WaylandBackendProbe:
-  ├─ ext-foreign-toplevel-list-v1 in registry? → WaylandForeignToplevelProvider
-  ├─ wlr-foreign-toplevel-management in registry? → WlrForeignToplevelProvider
-  ├─ GNOME Shell D-Bus active? → (CRITICAL: see section 4.4)
-  └─ Otherwise → FallbackTitleProvider (returns null/"")
+WaylandBackendProbe (registry is ground truth):
+  ├─ zwlr_foreign_toplevel_manager_v1 in registry?
+  │     → WlrForeignToplevelBackend        (sway, Hyprland, river, wayfire, KDE KWin)
+  ├─ ext_foreign_toplevel_list_v1 in registry AND a usable activation signal? (§4.3)
+  │     → ExtForeignToplevelBackend        (title source only — see honest limits)
+  ├─ GNOME session + known title extension answering on D-Bus?
+  │     → GnomeExtensionDbusBackend        (best-effort, opt-in)
+  └─ None
+       → FallbackTitleBackend (returns null; awareness classifies Unknown)
 ```
 
-### 2.2 Backend Fallback Chain
+**Deliberate non-fallback:** when a Wayland probe finds nothing, do NOT fall back to the
+X11 (XWayland) backend as the primary. XWayland's root `_NET_ACTIVE_WINDOW` is maintained
+by the compositor's XWM *for X11 windows only*; when a native Wayland window is focused
+it points at none. That produces *misleading* data (stale X11 app reported as foreground)
+— worse for awareness classification than an honest `null`. **[Judgment call: prefer
+honest Unknown over plausible-but-wrong activity.]** An optional XWayland-assist mode may
+be revisited later if real-desktop testing shows the staleness is detectable.
+
+### 2.2 Backend Fallback Chain (matrix-corrected)
 
 | Priority | Backend | Capabilities | When Selected |
 |----------|---------|--------------|---------------|
-| 1 | `X11TitleProvider` | Full: `_NET_ACTIVE_WINDOW` + `_NET_WM_NAME`/`WM_NAME` | X11 session |
-| 2 | `WlrForeignToplevelProvider` | Full: wlroots foreign-toplevel-management | Wayland + wlroots (sway, Hyprland) |
-| 3 | `WaylandForeignToplevelProvider` | Full: ext-foreign-toplevel-list-v1 (future standard) | Wayland + ext-ftl (Plasma 6.1+, future compositors) |
-| 4 | `GnomeShellDbusProvider` | Partial: Extension-dependent, unstable | GNOME with specific extension (see 4.4) |
-| 5 | `FallbackTitleProvider` | None: returns `null`/`""` | Unknown session or all probes fail |
+| 1 | `X11TitleBackend` | Full: `_NET_ACTIVE_WINDOW` + `_NET_WM_NAME`/`WM_NAME` | X11 session |
+| 2 | `WlrForeignToplevelBackend` | Full: titles + `activated` state | Wayland with `zwlr_foreign_toplevel_manager_v1` — wlroots family AND KDE KWin (KWin implements this protocol, ~Plasma 5.22+ **[confidence: medium-high — registry probe is authoritative]**) |
+| 3 | `ExtForeignToplevelBackend` | Titles only — the protocol has **no activated state**; needs a pairing signal for focus (§4.3) | Wayland with `ext_foreign_toplevel_list_v1` and a usable focus signal |
+| 4 | `GnomeExtensionDbusBackend` | Best-effort: depends on a user-installed Shell extension | GNOME with a known extension present |
+| 5 | `FallbackTitleBackend` | Returns `null` | Everything else (stock GNOME, Weston, unknown) |
 
-**Guarantee:** The fallback chain ensures no crash. On GNOME (without extension) and unknown
-environments, the provider returns `null` or empty string; the awareness engine no-ops gracefully.
+**Guarantee:** never crash; stock GNOME and unknown environments give `null` → awareness
+runs with `Unknown` activity.
 
-### 2.3 Seam Structure
+### 2.3 Seam Structure (aligned with the landed overlay-branch layout)
 
 ```
 CCP.Core/Platform/
-├── IForegroundWindowTitleProvider.cs   # Unchanged interface
-└── LinuxSessionType.cs                 # Shared: session detection enum
+├── IForegroundWindowTitleProvider.cs        # UNCHANGED
+├── LinuxSessionType.cs                      # EXISTS (overlay slices)
+└── LinuxSessionDetector.cs                  # EXISTS (overlay slices)
 
 CCP.Avalonia.Desktop.Linux/Platform/
-├── LinuxForegroundWindowTitleProvider.cs    # IForegroundWindowTitleProvider impl
-├── LinuxTitleProviderBackendSelector.cs     # Runtime selection
+├── LinuxForegroundWindowTitleProvider.cs    # seam impl delegating to selected backend
+├── LinuxTitleProviderBackendSelector.cs
 ├── TitleProviderBackends/
-│   ├── ILinuxTitleProviderBackend.cs        # Backend abstraction
-│   ├── X11TitleProvider.cs                  # X11 via _NET_ACTIVE_WINDOW
-│   ├── WlrForeignToplevelProvider.cs        # wlr-foreign-toplevel-management
-│   ├── WaylandForeignToplevelProvider.cs    # ext-foreign-toplevel-list-v1
-│   ├── GnomeShellDbusProvider.cs            # GNOME Shell D-Bus (limited)
-│   └── FallbackTitleProvider.cs             # Returns null/empty
+│   ├── ILinuxTitleProviderBackend.cs        # + IDisposable
+│   ├── X11TitleBackend.cs
+│   ├── WlrForeignToplevelBackend.cs
+│   ├── ExtForeignToplevelBackend.cs
+│   ├── GnomeExtensionDbusBackend.cs
+│   └── FallbackTitleBackend.cs
 └── Interop/
-    └── X11Interop.cs                        # XLib P/Invoke (shared)
+    ├── X11Interop.cs                        # EXISTS (overlay) — extend, do not fork
+    ├── WaylandInterop.cs                    # EXISTS (overlay) — extend (registry, dispatch thread)
+    ├── WlrForeignToplevelInterop.cs         # NEW
+    └── ExtForeignToplevelInterop.cs         # NEW
 ```
+
+The Wayland dispatch-thread infrastructure is SHARED with the framesource backends
+(`linux-framesource-contract.md` §4.1) — one connection-owning event thread per process,
+not one per seam.
 
 ---
 
 ## 3. X11 Backend Design
 
-### 3.1 Overview
+### 3.1 Connection, Threading, and Error Traps (corrected)
 
-X11 provides standardized window manager hints (EWMH/ICCCM) that expose the active window
-and its title to any client. This is the most reliable path on Linux.
+The draft claimed "`XGetWindowProperty` is thread-safe within a single display
+connection" — **wrong**. Xlib is not thread-safe without `XInitThreads()` (which must be
+the first Xlib call in the process — un-guaranteeable next to Avalonia's own X11 use),
+and `System.Threading.Timer` callbacks run on *different* threadpool threads and can
+overlap if a poll stalls. Design:
 
-### 3.2 Get Active Window via _NET_ACTIVE_WINDOW
+- One dedicated `XOpenDisplay(null)` owned by the backend; **all access serialized by a
+  lock**. A single connection touched by one thread at a time needs no Xlib-internal
+  locking.
+- **Mandatory scoped error trap** (shared helper with the framesource backend, see
+  `linux-framesource-contract.md` §3.2): the active window can be destroyed between
+  reading `_NET_ACTIVE_WINDOW` and reading its `_NET_WM_NAME` — that's a `BadWindow`,
+  and the **default Xlib error handler terminates the process**. For a 1.5s ambient
+  poll this race WILL eventually fire. Trap → return `null` for that poll. The handler
+  is process-global: install once, chain to the previous handler for foreign displays.
+- Poll cost: two `XGetWindowProperty` round trips per 1.5s — negligible. A
+  `PropertyNotify`-based push model is possible but unnecessary for this cadence; the
+  synchronous read matches the seam. (Draft's recommendation kept.)
 
-The active (focused) window is identified by the `_NET_ACTIVE_WINDOW` property on the
-root window:
+### 3.2 Active Window via `_NET_ACTIVE_WINDOW` (EWMH)
 
 ```csharp
-// Step 1: Get atoms
-var netActiveWindow = XInternAtom(display, "_NET_ACTIVE_WINDOW", false);
-var actualTypeReturn = IntPtr.Zero;
-int actualFormatReturn = 0;
-ulong nItemsReturn = 0, bytesAfterReturn = 0;
-IntPtr propReturn = IntPtr.Zero;
+var netActiveWindow = XInternAtom(display, "_NET_ACTIVE_WINDOW", only_if_exists: true);
+if (netActiveWindow == IntPtr.Zero) return null;   // WM does not implement EWMH
 
-// Step 2: Read _NET_ACTIVE_WINDOW from root window
 var root = XDefaultRootWindow(display);
-var result = XGetWindowProperty(display, root, netActiveWindow,
+// long_length is in 32-BIT UNITS (we want 1 item). XA_WINDOW = 33.
+var status = XGetWindowProperty(display, root, netActiveWindow,
     0, 1, false, XA_WINDOW,
-    out actualTypeReturn, out actualFormatReturn,
-    out nItemsReturn, out bytesAfterReturn, out propReturn);
-
-if (result != Success || nItemsReturn == 0 || propReturn == IntPtr.Zero)
-    return null; // No active window
-
-// Step 3: Extract the Window ID
-var activeWindow = Marshal.ReadIntPtr(propReturn);
-XFree(propReturn);
-
-if (activeWindow == IntPtr.Zero)
-    return null; // No active window (desktop focused)
+    out var type, out var format, out var nItems, out var after, out var prop);
+if (status != Success || nItems == 0 || prop == IntPtr.Zero) return null;
+var activeWindow = Marshal.ReadIntPtr(prop);        // format 32 → item marshaled as long
+XFree(prop);
+if (activeWindow == IntPtr.Zero) return null;        // desktop focused / none
 ```
 
-### 3.3 Get Window Title via _NET_WM_NAME / WM_NAME
+Requirements the draft implied but must be explicit:
+- `_NET_ACTIVE_WINDOW` exists only under an **EWMH-compliant window manager**. Bare X
+  (Xvfb with no WM) has no such property → `null` → Unknown. Correct behavior; the CI
+  recipe therefore runs a WM (openbox).
+- Intern atoms **once** at backend init, not per poll.
+- On 64-bit, a `format=32` property item occupies 8 bytes in the returned buffer (Xlib
+  long-ification) — read as `IntPtr`/long, not int32.
 
-Once we have the active window, read its title:
+### 3.3 Title via `_NET_WM_NAME` (UTF8_STRING), fallback `WM_NAME`
+
+Preference order per EWMH: `_NET_WM_NAME` (type `UTF8_STRING`) first; legacy `WM_NAME`
+(ICCCM `TEXT` — may be `STRING`/Latin-1 or `COMPOUND_TEXT`) second.
 
 ```csharp
-// Preference order (EWMH → ICCCM):
-// 1. _NET_WM_NAME (UTF-8, EWMH standard)
-// 2. WM_NAME (legacy, may be Latin-1)
-
-string? GetWindowTitle(IntPtr display, IntPtr window)
+string? GetWindowTitle(IntPtr display, IntPtr window)   // called inside the error trap
 {
-    // Try _NET_WM_NAME first (UTF-8)
-    var netWmName = XInternAtom(display, "_NET_WM_NAME", false);
-    var utf8String = XInternAtom(display, "UTF8_STRING", false);
-    
-    var result = XGetWindowProperty(display, window, netWmName,
-        0, 1024, false, utf8String,
-        out var type, out var format, out var nitems, out var after, out var data);
-    
-    if (result == Success && nitems > 0 && data != IntPtr.Zero)
+    // _NET_WM_NAME, request up to 512 chars: long_length is in 32-bit units → 128 units
+    var status = XGetWindowProperty(display, window, _atomNetWmName,
+        0, 128, false, _atomUtf8String,
+        out var type, out var format, out var nItems, out var after, out var data);
+    if (status == Success && data != IntPtr.Zero)
     {
-        var title = Marshal.PtrToStringUTF8(data);
-        XFree(data);
-        return title;
+        try { if (nItems > 0 && type == _atomUtf8String) return Marshal.PtrToStringUTF8(data); }
+        finally { XFree(data); }
     }
-    
-    // Fall back to WM_NAME (ICCCM, may be XA_STRING/Latin-1)
-    var wmName = XInternAtom(display, "WM_NAME", false);
-    result = XGetWindowProperty(display, window, wmName,
-        0, 1024, false, AnyPropertyType,
-        out type, out format, out nitems, out after, out data);
-    
-    if (result == Success && nitems > 0 && data != IntPtr.Zero)
+
+    // WM_NAME fallback (AnyPropertyType). On Unix .NET, PtrToStringAnsi decodes UTF-8;
+    // genuine Latin-1/COMPOUND_TEXT titles may mojibake — acceptable degrade (memory-only
+    // classification input, no persistence). Modern toolkits all set _NET_WM_NAME.
+    status = XGetWindowProperty(display, window, _atomWmName,
+        0, 128, false, AnyPropertyType,
+        out type, out format, out nItems, out after, out data);
+    if (status == Success && data != IntPtr.Zero)
     {
-        // Note: May be Latin-1; Marshal.PtrToStringAnsi handles ASCII subset
-        var title = Marshal.PtrToStringAnsi(data);
-        XFree(data);
-        return title;
+        try { if (nItems > 0) return Marshal.PtrToStringAnsi(data); }
+        finally { XFree(data); }
     }
-    
     return null;
 }
 ```
 
-### 3.4 X11 P/Invoke Declarations
+Corrections vs draft: `long_length` is counted in **32-bit multiples** (the draft's 1024
+requested 4KB — harmless but wrong for a 512-char cap); `XFree` in `finally`; verify the
+returned `type` for the UTF-8 path; truncate to 512 chars post-decode.
+
+### 3.4 P/Invoke Additions
+
+Extend the overlay branch's `Interop/X11Interop.cs` (it already carries
+`XInternAtom`-class helpers for the overlay work — verify before adding duplicates):
 
 ```csharp
-[DllImport("libX11.so.6")]
-static extern IntPtr XOpenDisplay(string? display_name);
-
-[DllImport("libX11.so.6")]
-static extern int XCloseDisplay(IntPtr display);
-
-[DllImport("libX11.so.6")]
-static extern IntPtr XDefaultRootWindow(IntPtr display);
-
-[DllImport("libX11.so.6")]
-static extern IntPtr XInternAtom(IntPtr display, string atom_name, bool only_if_exists);
-
-[DllImport("libX11.so.6")]
-static extern int XGetWindowProperty(
+[DllImport("libX11.so.6")] static extern int XGetWindowProperty(
     IntPtr display, IntPtr window, IntPtr property,
-    long long_offset, long long_length, bool delete,
-    IntPtr req_type,
-    out IntPtr actual_type_return, out int actual_format_return,
-    out ulong nitems_return, out ulong bytes_after_return,
-    out IntPtr prop_return);
-
-[DllImport("libX11.so.6")]
-static extern int XFree(IntPtr data);
-
-// Constants
+    long long_offset, long long_length, bool delete, IntPtr req_type,
+    out IntPtr actual_type, out int actual_format,
+    out ulong nitems, out ulong bytes_after, out IntPtr prop);
+[DllImport("libX11.so.6")] static extern int XFree(IntPtr data);
+// XOpenDisplay/XCloseDisplay/XDefaultRootWindow/XInternAtom/XSetErrorHandler: shared.
 const int Success = 0;
-const long XA_WINDOW = 33;
-const long AnyPropertyType = 0;
+static readonly IntPtr XA_WINDOW = (IntPtr)33;
+static readonly IntPtr AnyPropertyType = IntPtr.Zero;
 ```
 
-### 3.5 Thread Safety
+### 3.5 XWayland (kept, sharpened)
 
-`XGetWindowProperty` is thread-safe within a single display connection, but each call
-should be fast (no long blocking). Since `GetForegroundWindowTitle()` is called from
-the awareness engine's background timer (every 1.5s), thread safety is not a concern
-if we use a dedicated display connection.
-
-**Recommendation:** Open a dedicated display connection in the backend constructor,
-reuse it for all calls, and close it on dispose.
-
-### 3.6 XWayland Compatibility
-
-When running under XWayland, `_NET_ACTIVE_WINDOW` may NOT reflect the true Wayland
-active window — it only tracks X11 windows in the XWayland instance. This means:
-- X11 apps under XWayland: titles detected correctly
-- Native Wayland apps: NOT detected (XWayland doesn't see them)
-
-**Detection:** If `XDG_SESSION_TYPE == "wayland"` but `DISPLAY` is set, we're on XWayland.
-The X11 backend can still be used but will only see XWayland windows.
+Under XWayland the X11 backend sees only X11 windows; `_NET_ACTIVE_WINDOW` is maintained
+by the compositor's XWM and does not reflect native-Wayland focus. This is why the
+selector never routes Wayland sessions here (§2.1) and why the Wayland probe's terminal
+fallback is `null`, not X11.
 
 ---
 
 ## 4. Wayland Backend Design
 
-### 4.1 The Wayland Window Enumeration Problem
+### 4.1 Connection and Event-Pump Model (redesigned — draft was broken)
 
-**CRITICAL:** Wayland intentionally hides other windows from clients for privacy/security.
-Unlike X11 where any client can enumerate all windows, standard Wayland provides NO
-way to see other applications' windows.
+The draft's `GetForegroundWindowTitle()` called `wl_display_dispatch_pending()` then read
+state. `dispatch_pending` only dispatches **already-read** events; nothing ever reads the
+socket → the state never updates. Correct design, which also fits the synchronous seam
+perfectly:
 
-**The honest reality:**
-- **wlroots compositors (sway, Hyprland):** Implement `wlr-foreign-toplevel-management`
-  which DOES expose window titles — full functionality available
-- **KDE Plasma 6.1+:** Implements `ext-foreign-toplevel-list-v1` — full functionality
-- **GNOME/Mutter:** Does NOT expose other windows via any standard protocol —
-  **no title detection possible without a Shell extension**
-- **Older KDE, Weston, others:** No standardized way — graceful fallback
+- A **dedicated dispatch thread** owns the `wl_display` connection and blocks in
+  `wl_display_dispatch()` (shared infrastructure with the framesource Wayland backends).
+- Event handlers maintain the toplevel map and an `_activeTitle` snapshot **under a
+  lock** (or as an immutable string swapped atomically).
+- `GetForegroundWindowTitle()` performs a **lock-protected snapshot read only** — no
+  Wayland calls on the polling thread at all. O(1), thread-safe, and always as fresh as
+  the compositor's last event.
+- `Dispose()`: wake the thread (`wl_display` fd + pipe in `poll`, or
+  `wl_display_disconnect` semantics), join, clear the map (§1.3).
 
-### 4.2 wlr-foreign-toplevel-management (wlroots)
+### 4.2 wlr-foreign-toplevel-management (wlroots family AND KDE)
 
-The `wlr-foreign-toplevel-management-unstable-v1` protocol provides window listing on
-wlroots-based compositors:
+`zwlr_foreign_toplevel_management_unstable_v1` — the primary Wayland backend:
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ wlr-foreign-toplevel-management Flow                                      │
-│                                                                          │
-│  1. Bind zwlr_foreign_toplevel_manager_v1 from wl_registry               │
-│  2. Listen for toplevel events:                                          │
-│     - toplevel(toplevel_handle) — new window appeared                    │
-│     - toplevel.title(string) — window title changed                      │
-│     - toplevel.state(array) — includes ACTIVATED state                   │
-│     - toplevel.done() — batch of property changes complete               │
-│     - toplevel.closed() — window closed                                  │
-│  3. Track which toplevel has ACTIVATED state (= focused window)          │
-│  4. Return that toplevel's title                                         │
-└──────────────────────────────────────────────────────────────────────────┘
+1. Bind zwlr_foreign_toplevel_manager_v1 from the registry
+2. manager.toplevel(handle) → track new toplevel
+3. handle events: title(string) | app_id(string) | state(wl_array of uint32,
+   contains ACTIVATED=2) | done() | closed()
+4. Apply title/state changes ONLY on done() (protocol contract: events between
+   done()s are a batch — the draft applied them immediately)
+5. Maintain: map<handle, (title, activated)>; _activeTitle = title of the handle
+   whose last done()-committed state contains ACTIVATED
+6. closed() → remove from map; if it was active, _activeTitle = null
+7. manager.finished() → compositor is withdrawing the protocol: clear map, report
+   null from then on (degrade, don't crash)
 ```
 
-**Key events on `zwlr_foreign_toplevel_handle_v1`:**
-- `title(string)` — the window title (what we need)
-- `state(array<uint>)` — includes `ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_ACTIVATED`
-- `done()` — signals end of property batch
+Corrections/additions vs draft: batch-commit on `done()`; handle `manager.finished`;
+multiple outputs can in principle yield transient multi-activated states — last
+`done()`-committed ACTIVATED wins; cap stored titles at 512 chars.
 
-**Implementation pattern:**
-```csharp
-class WlrForeignToplevelProvider : ILinuxTitleProviderBackend
-{
-    private readonly Dictionary<IntPtr, ToplevelInfo> _toplevels = new();
-    private IntPtr _activeToplevel = IntPtr.Zero;
-    
-    public string? GetForegroundWindowTitle()
-    {
-        // Dispatch any pending Wayland events
-        wl_display_dispatch_pending(_display);
-        
-        if (_activeToplevel == IntPtr.Zero)
-            return null;
-            
-        return _toplevels.TryGetValue(_activeToplevel, out var info) ? info.Title : null;
-    }
-    
-    // Event handlers populate _toplevels and track _activeToplevel
-}
-```
+**KDE matrix correction (draft error):** the draft listed KDE as "wlr-foreign-toplevel:
+No" and invented an `org.kde.KWin`/`activeClient` D-Bus API (KWin's real D-Bus surface
+has `queryWindowInfo` — *interactive*, requires a user click — and the scripting API;
+neither is a poll API — the draft's code sketch does not correspond to a real interface
+and is removed). In reality **KWin implements `zwlr_foreign_toplevel_manager_v1`**
+(added ~Plasma 5.22 **[confidence: medium-high; verify with `wayland-info` on Plasma
+before relying on the version number — the runtime registry probe makes the exact
+version moot]**). So Plasma 5.22+ takes backend #2 with full titles + activated state,
+and no KDE-specific code path exists at all. KWin also offers its own
+`org_kde_plasma_window_management` protocol (taskbar protocol: titles + active state) as
+a spare if wlr-ftm is ever dropped **[confidence: medium]**.
 
-### 4.3 ext-foreign-toplevel-list-v1 (Future Standard)
+### 4.3 ext-foreign-toplevel-list-v1 (honest demotion)
 
-The `ext-foreign-toplevel-list-v1` protocol is the emerging standard for cross-compositor
-window listing. As of 2026:
-- **KDE Plasma 6.1+**: Implements ext-foreign-toplevel-list
-- **GNOME**: Does NOT implement it (security policy)
-- **wlroots**: Plans to support alongside wlr-foreign-toplevel
+`ext_foreign_toplevel_list_v1` (wayland-protocols staging) provides `title`, `app_id`,
+`identifier`, `done`, `closed` — **and no activated/focused state** (the draft knew this
+but still labeled the backend "full functionality"; it is not). Titles without focus
+cannot answer "what is the FOREGROUND window".
 
-The protocol is similar to wlr-foreign-toplevel:
-```
-ext_foreign_toplevel_list_v1 → ext_foreign_toplevel_handle_v1
-  - title(string)
-  - identifier(string)  
-  - done()
-  - closed()
-```
+Status: implemented by wlroots 0.18+ and KDE Plasma 6.x **[confidence: medium]** — but
+both of those *also* expose better options (wlr-ftm), so ext-ftl's practical value today
+is only for future compositors that adopt the ext- protocol family exclusively. A
+companion state protocol (ext-foreign-toplevel-state) has been proposed but is not
+standardized **[confidence: medium — re-check wayland-protocols when this slice is
+picked up]**.
 
-**Note:** ext-foreign-toplevel does NOT include an "activated" state — tracking the
-focused window may require compositor-specific D-Bus queries or best-effort heuristics.
+**Ruling:** implement `ExtForeignToplevelBackend` LAST (slice ordering §6), and only
+activate it when a usable focus signal exists (companion protocol, or a
+compositor-specific activation hint). Until then a registry hit on ext-ftl *alone* still
+selects `FallbackTitleBackend` — honest `null` beats guessing focus by
+most-recently-changed-title heuristics, which misfire on background tab-title updates
+(media players, chat unread counters). **[Judgment: heuristics rejected — awareness
+drives user-visible AI reactions; wrong-activity reactions are worse than none.]**
 
-### 4.4 GNOME Shell: The Honest Answer
+### 4.4 GNOME: The Honest Answer (kept, sharpened)
 
-**GNOME/Mutter does NOT expose other windows to clients.** This is an intentional
-security/privacy decision. There is no standard Wayland protocol that GNOME implements
-for window enumeration.
+GNOME/Mutter exposes neither foreign-toplevel protocol, by policy. Native options:
 
-**Potential workarounds (each with serious limitations):**
+| Approach | Reality |
+|----------|---------|
+| `org.gnome.Shell.Introspect` D-Bus | Exists but **restricted** since GNOME 41 — allowlisted callers (portal implementations) or unsafe-mode only. NOT available to us. **[confidence: high]** |
+| Shell extension exposing a D-Bus interface | Works. Real extensions exist (e.g. "Window Calls", "Focused Window D-Bus") but each has its own interface and GNOME-version compatibility churn. User must install one. |
+| AT-SPI accessibility bus | Genuine best-effort possibility (focus events + accessible names, toolkit-dependent coverage). Investigation-only; NOT a slice. |
+| Mutter private D-Bus | DO NOT USE (undocumented, version-coupled). |
 
-| Approach | Feasibility | Limitations |
-|----------|-------------|-------------|
-| **GNOME Shell extension** | Works | Requires user to install an extension; CCP cannot ship one in-process |
-| **D-Bus `org.gnome.Shell.Extensions`** | Works if extension installed | Extension must expose a D-Bus interface; fragile, breaks across GNOME versions |
-| **AT-SPI accessibility APIs** | May work | Intended for accessibility; may not provide focused window reliably |
-| **Mutter private D-Bus** | DO NOT USE | Completely undocumented, changes without notice, not for apps |
+**Ruling:** stock GNOME = `FallbackTitleBackend` → awareness runs with `Unknown`.
+`GnomeExtensionDbusBackend` is a best-effort adapter that probes a SHORT allowlist of
+known extension D-Bus names at init (title-only reads, same 512 cap, same privacy rules)
+and is clearly marked in settings/docs:
 
-**Recommendation for GNOME:**
-1. Detect GNOME session (`XDG_CURRENT_DESKTOP == "GNOME"` or `gnome-shell --version`)
-2. Check if a compatible extension is installed (probe D-Bus for known interface)
-3. If present, use extension's D-Bus interface
-4. If absent, return `null`/`""` — awareness feature is unavailable on this desktop
+> "Window awareness has limited support on GNOME. Install a compatible Shell extension
+> (e.g. 'Window Calls') to enable it."
 
-**User-facing message:**
-> "Window awareness is not available on GNOME. Install the 'Window Title Reporter'
-> extension from extensions.gnome.org to enable this feature."
+Do not ship or auto-install an extension; do not scrape; accept the degrade.
 
-### 4.5 KDE/KWin Options
+### 4.5 Compositor Compatibility Matrix (corrected)
 
-**KDE Plasma 6.1+:** Implements `ext-foreign-toplevel-list-v1` — use that protocol.
+| Compositor | wlr-ftm | ext-ftl | Foreground title available |
+|------------|---------|---------|----------------------------|
+| sway | Yes | ≥1.10 | **YES** (wlr-ftm) |
+| Hyprland | Yes | version-dependent | **YES** (wlr-ftm) |
+| river / wayfire | Yes | wlroots-version-dependent | **YES** (wlr-ftm) |
+| KDE Plasma 5.22+ / 6.x | **Yes** (draft said No) | 6.x **[unverified]** | **YES** (wlr-ftm) |
+| KDE Plasma < 5.22 | No | No | NO → fallback (the draft's D-Bus path was not real) |
+| GNOME / Mutter | No | No | NO → fallback; YES with user-installed extension |
+| Weston | No | No | NO → fallback |
 
-**Older KDE/KWin:** May support:
-- `org.kde.KWin` D-Bus interface with `activeClient` property
-- KWin scripting API (complex, requires script installation)
-
-```csharp
-// KWin D-Bus approach (Plasma 5.x)
-var connection = new Connection(Address.Session);
-var kwin = connection.CreateProxy<IKWin>("org.kde.KWin", "/KWin");
-var activeClient = await kwin.GetActiveClientAsync();
-// activeClient contains caption/title
-```
-
-**Recommendation:** Prefer `ext-foreign-toplevel-list-v1` on Plasma 6+; fall back to
-D-Bus on Plasma 5.x; degrade gracefully on very old versions.
-
-### 4.6 Wayland Compositor Compatibility Matrix
-
-| Compositor | wlr-foreign-toplevel | ext-foreign-toplevel | D-Bus | Title Available |
-|------------|---------------------|---------------------|-------|-----------------|
-| sway | Yes (native) | No | N/A | **YES** |
-| Hyprland | Yes (native) | No | N/A | **YES** |
-| river | Yes (native) | No | N/A | **YES** |
-| wayfire | Yes (native) | No | N/A | **YES** |
-| KDE Plasma 6.1+ | No | Yes | Yes | **YES** |
-| KDE Plasma 5.x | No | No | Yes | **YES** (D-Bus) |
-| GNOME/Mutter | No | No | Extension-only | **NO** (fallback) |
-| Weston | No | No | No | **NO** (fallback) |
+Registry probe at runtime is authoritative; the matrix is documentation, not logic.
 
 ---
 
 ## 5. Graceful Fallback Design
 
-### 5.1 Fallback Title Provider
-
-When no detection method is available, return null/empty:
+### 5.1 FallbackTitleBackend
 
 ```csharp
-public sealed class FallbackTitleProvider : ILinuxTitleProviderBackend
+public sealed class FallbackTitleBackend : ILinuxTitleProviderBackend
 {
     private readonly string _reason;
-    private bool _logged;
-    
-    public FallbackTitleProvider(string reason) => _reason = reason;
-    
+    private int _logged;
+
+    public FallbackTitleBackend(string reason) => _reason = reason;
+
     public string? GetForegroundWindowTitle()
     {
-        if (!_logged)
-        {
-            // Log exactly once — don't spam logs every 1.5s
-            Log.Information("Window title detection unavailable: {Reason}. " +
-                "Awareness features will not function on this desktop environment.",
-                _reason);
-            _logged = true;
-        }
-        
-        return null; // Awareness engine handles null gracefully
+        if (Interlocked.Exchange(ref _logged, 1) == 0)
+            _logger.LogInformation("Foreground title detection unavailable: {Reason}. " +
+                "Awareness will classify activity as Unknown on this desktop.", _reason);
+        return null;
     }
 }
 ```
 
-### 5.2 Consumer Degrade Behavior (AwarenessService)
+Reason strings name the backend/probe outcome only — never title content (§1.3). Also
+the demotion target if a live backend's connection dies (compositor restart): swap to
+fallback, keep the app alive.
 
-From `AwarenessService.cs:101-106`:
+### 5.2 Consumer Degrade
 
-```csharp
-if (_titleProvider is null)
-{
-    _logger?.LogInformation("WindowAwareness: no foreground window title provider on this platform - not starting");
-    return; // Engine stays off, feature degrades gracefully
-}
-```
-
-When `GetForegroundWindowTitle()` returns `null`/`""`:
-- Activity classified as `Unknown`
-- No awareness reactions triggered
-- AI companion receives no activity context
-- User experience: awareness features simply off, no crash or error
+With the provider registered and returning `null`: activity `Unknown`, no reactions, no
+AI activity context, no crash. With the provider unregistered the engine refuses to
+start (`AwarenessService.Start()` guard) — after this contract lands, the Linux head
+always registers the provider and degrades via the backend chain (§1.4).
 
 ---
 
 ## 6. Implementation Slice Plan
 
-Each slice is independently committable with its own verification gate.
+All files under `CCP.Avalonia.Desktop.Linux/Platform/…` (§2.3). Standard repo gates
+(slnf 0 errors, Core tests, smoke) apply to every slice in addition to the listed CI.
 
-### Slice A: Backend Selection + Fallback (Foundation)
+### Slice A: Selector + Fallback + DI (Foundation — DI moved up from the draft's Slice F)
 
-**Goal:** Runtime backend detection and graceful fallback returning null.
+Registering the provider early means every later backend lands as a pure capability
+upgrade with wiring already proven.
 
 **Files:**
-- `CCP.Avalonia.Desktop.Linux/Platform/LinuxForegroundWindowTitleProvider.cs` — main impl
-- `CCP.Avalonia.Desktop.Linux/Platform/LinuxTitleProviderBackendSelector.cs` — detection logic
-- `CCP.Avalonia.Desktop.Linux/Platform/TitleProviderBackends/ILinuxTitleProviderBackend.cs` — interface
-- `CCP.Avalonia.Desktop.Linux/Platform/TitleProviderBackends/FallbackTitleProvider.cs` — null return
+- `Platform/LinuxForegroundWindowTitleProvider.cs`
+- `Platform/LinuxTitleProviderBackendSelector.cs`
+- `Platform/TitleProviderBackends/ILinuxTitleProviderBackend.cs`
+- `Platform/TitleProviderBackends/FallbackTitleBackend.cs`
+- `Program.cs` — `services.AddSingleton<IForegroundWindowTitleProvider, LinuxForegroundWindowTitleProvider>()`
 
-**Verification (CI):**
+**CI (headless, no display):**
 ```bash
-# Headless (no display) — fallback path
-unset DISPLAY WAYLAND_DISPLAY XDG_SESSION_TYPE
-dotnet run --project CCP.Avalonia.Desktop.Linux -- --smoke-test --verify-titleprovider-fallback
-# Assert: "Window title detection unavailable" logged, null returned, no crash
+env -u DISPLAY -u WAYLAND_DISPLAY -u XDG_SESSION_TYPE \
+  dotnet run --project CCP.Avalonia.Desktop.Linux -- --smoke-test --verify-titleprovider-fallback
+# Assert: "unavailable" logged once; null returned; AwarenessService.Start() proceeds
+# past the null-provider guard (provider IS registered) and runs with Unknown activity
 ```
 
 **Acceptance:**
-- [ ] Session type correctly detected from environment
-- [ ] Fallback returns null on unknown sessions
-- [ ] Reason logged exactly once
-- [ ] Awareness engine handles null gracefully (doesn't crash)
+- [ ] Wayland-before-X11 selection order with unit tests over env permutations (incl.
+      the XWayland trap: both `WAYLAND_DISPLAY` and `DISPLAY` set → Wayland probe)
+- [ ] Null returned; reason logged exactly once; never any title content in logs
+- [ ] Awareness engine starts and classifies Unknown without crashing
 
----
-
-### Slice B: X11 Title Provider
-
-**Goal:** Full title detection on X11 via `_NET_ACTIVE_WINDOW` + `_NET_WM_NAME`.
+### Slice B: X11 Backend
 
 **Files:**
-- `CCP.Avalonia.Desktop.Linux/Interop/X11Interop.cs` — XInternAtom, XGetWindowProperty (extend if needed)
-- `CCP.Avalonia.Desktop.Linux/Platform/TitleProviderBackends/X11TitleProvider.cs` — X11 impl
+- `Platform/Interop/X11Interop.cs` (extend: `XGetWindowProperty`, `XFree`; shared error trap)
+- `Platform/TitleProviderBackends/X11TitleBackend.cs`
 
-**Verification (CI):**
+**CI (Xvfb + EWMH WM):**
 ```bash
-# X11 via Xvfb + xdotool
-Xvfb :99 -screen 0 1920x1080x24 &
-export DISPLAY=:99
-openbox &  # EWMH-compliant WM
-sleep 1
-
-# Create a window with a known title
-xterm -T "Test Window Title 12345" &
-XTERM_PID=$!
-sleep 1
-
-# Focus it
-xdotool search --name "Test Window Title 12345" windowactivate
-sleep 0.5
-
-# Run title detection
+Xvfb :99 -screen 0 1920x1080x24 & export DISPLAY=:99
+openbox & sleep 1                                  # EWMH WM — REQUIRED for _NET_ACTIVE_WINDOW
+xterm -T "Test Window Title 12345" & sleep 1
+xdotool search --name "Test Window Title 12345" windowactivate; sleep 0.5
 TITLE=$(dotnet run --project CCP.Avalonia.Desktop.Linux -- --smoke-test --get-foreground-title)
-kill $XTERM_PID
-
-# Assert
 [[ "$TITLE" == *"Test Window Title 12345"* ]] || exit 1
-echo "PASS: Title detected correctly"
+# Negative tests:
+#  - destroy the focused window, poll again → null, process alive (BadWindow trapped)
+#  - kill openbox, poll → null (no EWMH), process alive
 ```
 
 **Acceptance:**
-- [ ] X11 display opened successfully
-- [ ] `_NET_ACTIVE_WINDOW` read from root window
-- [ ] `_NET_WM_NAME` (UTF-8) read from active window
-- [ ] Falls back to `WM_NAME` when `_NET_WM_NAME` absent
-- [ ] Returns null when no active window
-- [ ] CI passes on ubuntu-latest with Xvfb + openbox + xdotool
+- [ ] `_NET_ACTIVE_WINDOW` → `_NET_WM_NAME` (UTF8_STRING, type-checked) → `WM_NAME` fallback
+- [ ] Atoms interned once; `long_length` in 32-bit units; 512-char truncation
+- [ ] BadWindow race trapped → null, no process death (explicit CI negative test)
+- [ ] Dedicated display + lock; disposed cleanly
+- [ ] UTF-8 title with emoji/CJK survives round trip (xdotool can set such a title)
 
----
-
-### Slice C: wlr-foreign-toplevel Provider (wlroots)
-
-**Goal:** Full title detection on wlroots compositors (sway, Hyprland).
+### Slice C: wlr-foreign-toplevel Backend (wlroots + KDE)
 
 **Files:**
-- `CCP.Avalonia.Desktop.Linux/Interop/WaylandInterop.cs` — base Wayland bindings (shared)
-- `CCP.Avalonia.Desktop.Linux/Interop/WlrForeignToplevelInterop.cs` — protocol bindings
-- `CCP.Avalonia.Desktop.Linux/Platform/TitleProviderBackends/WlrForeignToplevelProvider.cs` — impl
+- `Platform/Interop/WaylandInterop.cs` (extend: shared dispatch thread if the framesource
+  work hasn't landed it yet — whichever slice lands first builds it)
+- `Platform/Interop/WlrForeignToplevelInterop.cs`
+- `Platform/TitleProviderBackends/WlrForeignToplevelBackend.cs`
 
-**Verification (CI):**
+**CI (sway headless):**
 ```bash
-# sway in headless mode with a test window
-WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 sway &
-export WAYLAND_DISPLAY=wayland-0
-sleep 2
-
-# Create a terminal with known title (foot is sway-native)
-foot --title "Test Wayland Title 67890" &
-FOOT_PID=$!
-sleep 1
-
-# Focus it via swaymsg
-swaymsg '[title="Test Wayland Title 67890"] focus'
-sleep 0.5
-
-# Run title detection
+export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 XDG_RUNTIME_DIR=/tmp/xdg
+sway -c /dev/null & sleep 2; export WAYLAND_DISPLAY=$(ls $XDG_RUNTIME_DIR | grep '^wayland-[0-9]$')
+foot --title "Test Wayland Title 67890" & sleep 1        # foot: native Wayland terminal
+swaymsg '[title="Test Wayland Title 67890"] focus'; sleep 0.5
 TITLE=$(dotnet run --project CCP.Avalonia.Desktop.Linux -- --smoke-test --get-foreground-title)
-kill $FOOT_PID
-
-# Assert
 [[ "$TITLE" == *"Test Wayland Title 67890"* ]] || exit 1
-echo "PASS: wlr-foreign-toplevel title detected"
+# Also: open a second foot, switch focus via swaymsg, assert the snapshot follows;
+# close the focused window, assert null-or-new-focus (no stale title); kill sway,
+# assert provider degrades to null without crashing the app
 ```
 
 **Acceptance:**
-- [ ] `zwlr_foreign_toplevel_manager_v1` bound from registry
-- [ ] Toplevel handles tracked with titles
-- [ ] Activated state detected correctly
-- [ ] Returns title of activated toplevel
-- [ ] CI passes on ubuntu-latest with sway headless
+- [ ] Batch-commit on `done()`; ACTIVATED tracking; `closed()` clears active
+- [ ] `manager.finished` → degrade to null (no crash)
+- [ ] Snapshot read is O(1), no Wayland calls on the polling thread
+- [ ] Focus-follow and window-close CI assertions pass on sway headless
+- [ ] Map cleared on dispose; no title strings in any log output (grep the CI log for
+      the test title as a NEGATIVE assertion — it must appear only in the harness's own
+      stdout, never in app logs)
 
----
-
-### Slice D: ext-foreign-toplevel Provider (KDE Plasma 6+)
-
-**Goal:** Title detection on KDE Plasma 6.1+ via `ext-foreign-toplevel-list-v1`.
+### Slice D: GNOME Extension D-Bus Backend (best-effort, optional)
 
 **Files:**
-- `CCP.Avalonia.Desktop.Linux/Interop/ExtForeignToplevelInterop.cs` — protocol bindings
-- `CCP.Avalonia.Desktop.Linux/Platform/TitleProviderBackends/WaylandForeignToplevelProvider.cs` — impl
+- `Platform/TitleProviderBackends/GnomeExtensionDbusBackend.cs` (Tmds.DBus.Protocol;
+  probes a short allowlist of known extension bus names, e.g. Window Calls)
 
-**Verification (CI):**
-```bash
-# KDE Plasma in CI is complex — KWin headless mode
-# This requires manual verification on a real Plasma 6.1+ desktop
-# CI verification is compile + mock-based unit test only
-
-dotnet build CCP.Avalonia.Desktop.Linux
-dotnet test CCP.Core.Tests --filter "TitleProvider"
-# Assert: Code compiles, mock tests pass
-```
-
-**Manual verification (Plasma 6.1+):**
-- [ ] ext-foreign-toplevel-list bound from registry
-- [ ] Toplevel handles tracked with titles
-- [ ] Active window detection works (may need heuristics)
-- [ ] Returns correct title
+**CI:** compile + unit tests with a mocked D-Bus (no GNOME session in CI). Manual
+checklist on a real GNOME box: extension absent → clean fallback; extension present →
+correct title; extension uninstalled mid-session → degrade to null.
 
 **Acceptance:**
-- [ ] Compiles without error
-- [ ] Protocol bindings complete
-- [ ] Graceful fallback when protocol unavailable
+- [ ] No probe traffic unless the session is GNOME
+- [ ] Absent/broken extension → FallbackTitleBackend, single log line
+- [ ] Settings/user-docs carry the extension guidance text (§4.4)
 
----
-
-### Slice E: GNOME D-Bus Provider (Extension-Dependent)
-
-**Goal:** Best-effort title detection on GNOME when a compatible extension is installed.
+### Slice E: ext-foreign-toplevel Backend (deferred until a focus signal exists)
 
 **Files:**
-- `CCP.Avalonia.Desktop.Linux/Platform/TitleProviderBackends/GnomeShellDbusProvider.cs` — D-Bus client
+- `Platform/Interop/ExtForeignToplevelInterop.cs`
+- `Platform/TitleProviderBackends/ExtForeignToplevelBackend.cs`
 
-**Verification (CI):**
-```bash
-# GNOME Shell in CI is not feasible without a full session
-# This slice is compile + unit test only in CI
+**Gate to even start this slice:** a standardized activation/state companion to
+ext-foreign-toplevel-list exists (check wayland-protocols), OR a target compositor ships
+ext-ftl *without* wlr-ftm plus a usable focus signal. Until then this slice stays parked
+— documented here so nobody "helpfully" implements it with a focus heuristic (§4.3).
 
-dotnet build CCP.Avalonia.Desktop.Linux
-# Assert: Compiles, falls back gracefully when D-Bus unavailable
-```
-
-**Manual verification (GNOME):**
-- [ ] Detects when extension is NOT installed (returns null, no crash)
-- [ ] When extension installed, queries D-Bus correctly
-- [ ] Returns title from extension's interface
-
-**Acceptance:**
-- [ ] Compiles without error
-- [ ] Graceful fallback when GNOME extension absent
-- [ ] Clear user-facing message about extension requirement
+**Acceptance (when unparked):**
+- [ ] Focus signal is protocol-based, not heuristic
+- [ ] Same CI shape as Slice C on a compositor shipping the protocol pair
 
 ---
 
-### Slice F: DI Registration + Awareness Integration
+## 7. Risk / Unknowns
 
-**Goal:** Wire the provider into the Linux head's DI and verify awareness engine integration.
+### 7.1 Claims to re-verify before the relevant slice lands (web verification was
+unavailable in this revision pass)
 
-**Files:**
-- `CCP.Avalonia.Desktop.Linux/Program.cs` — register `IForegroundWindowTitleProvider`
-- Unit tests for `AwarenessService` with Linux provider
+| Claim | Confidence | Verify via |
+|-------|------------|-----------|
+| KWin implements zwlr_foreign_toplevel_manager_v1 (~Plasma 5.22+) | Medium-high | `wayland-info` on a Plasma box; KWin release notes. Non-fatal either way: registry probe decides |
+| org.gnome.Shell.Introspect restricted since GNOME 41 | High | GNOME Shell release notes / issue tracker |
+| "Window Calls" / "Focused Window D-Bus" extension interfaces + GNOME-version coverage | Medium | extensions.gnome.org + their repos, at Slice D time |
+| ext-foreign-toplevel state/activation companion protocol status | Medium | wayland-protocols repo, at Slice E gate check |
+| wlroots ships ext-ftl since 0.18 | Medium-high | wlroots changelog |
 
-**Verification (CI):**
-```bash
-# Full integration test on X11
-Xvfb :99 -screen 0 1920x1080x24 &
-export DISPLAY=:99
-openbox &
-
-dotnet run --project CCP.Avalonia.Desktop.Linux -- --smoke-test --verify-awareness-starts
-# Assert: "WindowAwareness: Started monitoring" in logs (not "no foreground window title provider")
-```
-
-**Acceptance:**
-- [ ] `IForegroundWindowTitleProvider` registered in Linux head DI
-- [ ] `AwarenessService` starts successfully with provider
-- [ ] Activity changes detected and classified
-- [ ] AI-1/AI-2/AI-10 behavior functional on Linux X11
-
----
-
-## 7. Risk/Unknowns Section
-
-These items CANNOT be settled without running on a real Linux desktop or additional research:
-
-### 7.1 Genuine Unknowns
+### 7.2 Genuine Unknowns (real-desktop only)
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| **GNOME extension ecosystem** | No reliable extension for window titles may exist | Document as GNOME limitation; accept graceful degrade |
-| **GNOME 45+ API breakage** | Shell D-Bus interfaces change between versions | Test on GNOME 42, 44, 45, 46; version-guard code paths |
-| **KDE ext-ftl focus tracking** | ext-foreign-toplevel has no "activated" state | Use KWin D-Bus for active window, or heuristic (most-recently-updated) |
-| **wlr-ftm version differences** | Protocol versions vary across wlroots versions | Query protocol version, handle gracefully |
-| **XWayland split-brain** | X11 provider only sees XWayland windows under Wayland | Detect XWayland, prefer native Wayland provider, document limitation |
-| **Title encoding edge cases** | Non-UTF-8 titles in WM_NAME, emoji, RTL text | Handle encoding errors gracefully, return partial title |
+| Rapid window switching / title churn (browser tabs) vs 1.5s poll + event snapshot | Awareness lag or flapping | Engine already debounces via change detection; verify on real desktops |
+| Compositor restart (sway reload, KWin crash-restart) kills the wl_display | Backend goes dead silently | Connection-death detection → demote to fallback + optional re-probe timer |
+| Fullscreen games (especially XWayland games on Wayland) | Title missing or generic | Accept; classification falls back to Unknown/Gaming heuristics at the classifier level |
+| Non-UTF-8 `WM_NAME` titles (legacy X11 apps) | Mojibake in classification input | Accepted degrade (§3.3); modern apps set `_NET_WM_NAME` |
+| Multiple seats/outputs with independent focus | Ambiguous "the" foreground window | Last `done()`-committed ACTIVATED wins; revisit only if real reports arrive |
+| GNOME extension interface churn across GNOME versions | Slice D breakage | Allowlist + version probe; treat every failure as fallback, never crash |
 
-### 7.2 Requires Real Desktop Testing
+### 7.3 Desktop-Environment Notes
 
-- GNOME Shell extension discovery and D-Bus invocation
-- Plasma 6.1 ext-foreign-toplevel with various window managers
-- Hyprland/sway title updates during rapid window switching
-- Fullscreen games and their title behavior
-- Multi-monitor focus tracking
-- Title changes during tab switches (browser titles)
-
-### 7.3 Desktop Environment-Specific Notes (Track as Found)
-
-| Desktop | Notes | Workarounds |
-|---------|-------|-------------|
-| GNOME | No native support | Requires extension |
-| KDE Plasma 5.x | D-Bus only, no ext-ftl | Use `org.kde.KWin` D-Bus |
-| i3 (X11) | Works via X11 | — |
-| Cinnamon | Works via X11 | — |
-| MATE | Works via X11 | — |
-| XFCE | Works via X11 | — |
+| Desktop | Path | Notes |
+|---------|------|-------|
+| i3 / XFCE / MATE / Cinnamon (X11) | X11 backend | Full function |
+| KDE Plasma (Wayland, ≥5.22) | wlr-ftm backend | Full function (matrix corrected) |
+| KDE Plasma (X11 mode) | X11 backend | Full function |
+| GNOME (Wayland) | fallback / extension | Unknown activity unless extension installed |
+| GNOME (Xorg mode) | X11 backend | Full function — worth noting in user docs as the zero-extension GNOME option |
 
 ---
 
 ## 8. CI Verification Matrix
 
-| Slice | X11 (Xvfb) | Wayland (sway) | KDE/GNOME | Notes |
-|-------|------------|----------------|-----------|-------|
-| A (Fallback) | N/A | N/A | N/A | Headless no-display test |
-| B (X11) | Required | N/A | N/A | xdotool sets known title |
-| C (wlr-ftm) | N/A | Required | N/A | sway headless + foot |
-| D (ext-ftl) | N/A | N/A | Manual | Plasma 6.1+ required |
-| E (GNOME D-Bus) | N/A | N/A | Manual | Real GNOME session |
-| F (Integration) | Required | Optional | N/A | Full DI integration |
+| Slice | No display | X11 (Xvfb+openbox+xdotool) | sway headless (+foot) | Mocked D-Bus | Manual |
+|-------|-----------|----------------------------|------------------------|--------------|--------|
+| A Selector+Fallback+DI | Required | — | — | — | — |
+| B X11 | — | Required (+ BadWindow & no-WM negative tests) | — | — | — |
+| C wlr-ftm | — | — | Required (+ focus-follow, close, compositor-kill, log-privacy negative) | — | — |
+| D GNOME extension | — | — | — | Required | Once, real GNOME |
+| E ext-ftl (parked) | — | — | (future) | — | — |
 
-**CI job additions needed:**
-1. `ubuntu-latest` with Xvfb + openbox + xdotool (X11 tests) — **existing, extend**
-2. `ubuntu-latest` with sway headless + foot (wlr-ftm test)
-3. Manual verification documented for KDE/GNOME
+CI job additions: extend the existing Xvfb job with openbox+xdotool+xterm; reuse the
+sway-headless job from the framesource contract (same compositor instance can host both
+suites). KDE/GNOME cannot be CI-proven — their residual checks are the explicit manual
+checklists in slices C (KDE = same wlr-ftm code path, verify once on Plasma) and D.
 
 ---
 
 ## 9. Summary
 
-This document defines:
-- **6 implementation slices** (A through F), each independently committable
-- **5 Linux backends** in a priority fallback chain
-- **Per-backend CI verification** using headless compositors where possible
-- **Honest GNOME coverage** — no native support, extension-dependent, graceful fallback
-
-The X11 path provides full coverage for X11 sessions (including most traditional desktops).
-The wlroots path provides full coverage on sway/Hyprland/river/wayfire.
-The KDE path provides coverage on Plasma 6.1+ (ext-ftl) and older Plasma (D-Bus).
-GNOME users without a Shell extension see awareness features disabled with a clear message.
-
-**Total slice count:** 6
-
-**Critical path:** Slices A → B (X11) can proceed immediately and provide the most coverage.
-Slices C → D (Wayland) can proceed in parallel after A.
-Slice E (GNOME) is best-effort and may remain minimal.
-Slice F (integration) depends on at least one backend being complete.
-
-**AI-1/AI-2/AI-10 closure:** When slices A + B + F land, the awareness feature is functional
-on Linux X11 desktops. Additional Wayland backends expand coverage to more environments.
+- **5 slices**; DI + fallback land FIRST so every backend is a pure capability upgrade.
+- **Backend chain (corrected):** X11 EWMH ‖ wlr-foreign-toplevel (wlroots AND KDE — the
+  draft's fabricated KDE D-Bus path is removed) → GNOME extension best-effort →
+  honest `null`.
+- **Selection order fixed:** Wayland before X11 — the draft's DISPLAY-first check would
+  have broken every Wayland desktop via XWayland.
+- **No focus heuristics:** ext-ftl (no activated state) stays parked until a real focus
+  signal exists; wrong-activity AI reactions are worse than none.
+- **Privacy hardened:** the Wayland toplevel-title map (all windows, pushed by the
+  compositor) is inside the memory-only/no-log hard line; CI includes a negative
+  log-content assertion.
+- **AI-1/AI-2/AI-10 closure:** slices A + B make awareness functional on every X11
+  desktop; slice C adds sway/Hyprland/river/wayfire AND KDE Plasma Wayland. Stock GNOME
+  degrades to Unknown, honestly, with a documented extension path.
 
 ---
 
 ## Sources
 
-- `CCP.Core/Platform/IForegroundWindowTitleProvider.cs` — interface definition
-- `CCP.Avalonia.Desktop.Windows/Platform/WindowsForegroundWindowTitleProvider.cs` — Windows impl
-- `CCP.Core/Services/Awareness/AwarenessService.cs:19-23,101-106` — privacy contract, null guard
-- `linux-overlay-contract.md` — template for backend architecture
-- `linux-macos-readiness-map.md` — governing multi-backend principle
-- EWMH specification — https://specifications.freedesktop.org/wm-spec/wm-spec-latest.html
+- `CCP.Core/Platform/IForegroundWindowTitleProvider.cs` — interface + privacy doc
+- `CCP.Avalonia.Desktop.Windows/Platform/WindowsForegroundWindowTitleProvider.cs` — reference impl
+- `CCP.Core/Services/Awareness/AwarenessService.cs` — poll cadence, privacy header, null guard
+- `docs/linux-overlay-contract.md` — template + landed `Platform/` seam layout
+- `docs/linux-framesource-contract.md` §3.2/§4.1 — shared error-trap + Wayland dispatch thread
+- `docs/linux-macos-readiness-map.md` — governing multi-backend principle
+- EWMH — https://specifications.freedesktop.org/wm-spec/wm-spec-latest.html
+  (`_NET_ACTIVE_WINDOW`, `_NET_WM_NAME`/UTF8_STRING)
 - wlr-foreign-toplevel-management — https://wayland.app/protocols/wlr-foreign-toplevel-management-unstable-v1
 - ext-foreign-toplevel-list — https://wayland.app/protocols/ext-foreign-toplevel-list-v1
-- KDE KWin D-Bus — https://api.kde.org/frameworks/kwin/html/
