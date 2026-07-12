@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ConditioningControlPanel.Avalonia.Dialogs;
+using ConditioningControlPanel.Avalonia.Services.BlinkTrainer;
 using ConditioningControlPanel.Avalonia.Windows;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Platform;
@@ -39,16 +40,35 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
     // ── Demo preview loop (WPF MainWindow.BlinkTrainer.cs:33-175 parity) ──
     // Cycles 4 SFW abstract gradient PNGs every 2s with a ~200ms cross-fade
     // between two overlapping Image controls (StageImageA/StageImageB in the
-    // AXAML). DEMO MODE ONLY — the live-preview OnBlink seam
-    // (IBlinkTrainerService) is a separate board follow-up. The cross-fade is
-    // driven by bound opacity props; an Avalonia DoubleTransition on each
-    // Image animates the value change over ~200ms.
+    // AXAML). DEMO MODE ONLY — the live-preview OnBlink seam is wired in
+    // LivePreview/LiveSession modes (see the stage-mode region below). The
+    // cross-fade is driven by bound opacity props; an Avalonia DoubleTransition
+    // on each Image animates the value change over ~200ms.
     private DispatcherTimer? _demoTimer;
     private List<IImage> _demoAssets = new();
     private int _demoIndex;
     private bool _demoUsingA = true;
     private bool _isTabSelected;
     private bool _demoAssetsLoaded;
+
+    // ── Stage mode (WPF MainWindow.BlinkTrainer.cs:239-261 parity) ──
+    // Demo = no premium / no consent / no folders; LivePreview = ready but no
+    // session running (each real blink swaps a folder asset into the tab stage);
+    // LiveSession = session running (the tab stage keeps mirroring blinks while
+    // the full-screen overlay is the real conditioning surface).
+    private enum BlinkTrainerStageMode { Demo, LivePreview, LiveSession }
+
+    private BlinkTrainerStageMode _currentStageMode = BlinkTrainerStageMode.Demo;
+    private bool _liveSubscribed;
+
+    // Live-preview pool cache. Token combines the folder list + IncludeVideos;
+    // rebuild whenever it changes. Built image-only because the tab stage only
+    // exposes the two cross-fade Images (no inline video surface) — the
+    // full-screen session overlay (AvaloniaBlinkTrainerService) honours
+    // IncludeVideos and plays videos.
+    private BlinkTrainerAssetPool? _livePool;
+    private string _livePoolToken = "";
+    private string? _liveLastPickedPath;
 
     public BlinkTrainerTabViewModel() : base("blinktrainer", "Blink Trainer", "💫")
     {
@@ -346,6 +366,9 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
     partial void OnConsentGrantedChanged(bool value)
     {
         ConsentStatusText = value ? Loc.Get("blink_trainer_consent_granted") : Loc.Get("blink_trainer_consent_required");
+        // Consent is an input to DetermineBlinkTrainerStageMode; re-evaluate so a
+        // freshly-granted consent flips Demo -> LivePreview without a tab re-select.
+        UpdateDemoTimer();
     }
 
     [RelayCommand]
@@ -687,6 +710,8 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
         if (folders == null || folders.Count == 0)
         {
             AssetFolders.Add(new AssetFolderItem("Default", Loc.Get("blink_trainer_folder_empty_or_invalid"), string.Empty));
+            InvalidateLivePool();
+            UpdateDemoTimer();
             return;
         }
 
@@ -711,6 +736,13 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
             }
             AssetFolders.Add(new AssetFolderItem(name, status, folder));
         }
+
+        // Folder list changed: invalidate the cached live pool (the next blink
+        // rebuilds) and re-evaluate the stage mode (folders is an input to
+        // DetermineBlinkTrainerStageMode — adding the first folder flips
+        // Demo -> LivePreview once consent is current).
+        InvalidateLivePool();
+        UpdateDemoTimer();
     }
     /// <summary>
     /// Removes a Blink Trainer asset folder by path (WPF
@@ -809,17 +841,243 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
     }
 
     /// <summary>
-    /// Starts or stops the demo loop based on tab visibility and session state.
-    /// The demo runs only while the tab is visible AND no session is running —
-    /// mirrors WPF's ApplyBlinkTrainerStageMode(Demo) gating without the
-    /// live-preview tiers (a separate board follow-up).
+    /// Reconciles the stage preview to the resolved stage mode, branching on
+    /// Demo / LivePreview / LiveSession (WPF MainWindow.BlinkTrainer.cs:312-342
+    /// ApplyBlinkTrainerStageMode parity). Called whenever an input to
+    /// <see cref="DetermineBlinkTrainerStageMode"/> changes: tab visibility,
+    /// session start/stop, consent grant/revoke, and folder add/remove.
     /// </summary>
     private void UpdateDemoTimer()
     {
-        if (_isTabSelected && !IsSessionRunning)
-            StartBlinkTrainerDemo();
-        else
+        // Off-screen: tear everything down so an invisible tab does not cycle the
+        // demo timer or keep a live OnBlink subscription alive (CPU + needless
+        // bitmap swaps). Reset the recorded mode so the next OnSelected
+        // re-transitions from a known Demo baseline.
+        if (!_isTabSelected)
+        {
             StopBlinkTrainerDemo();
+            UnsubscribeLivePreview();
+            _currentStageMode = BlinkTrainerStageMode.Demo;
+            return;
+        }
+
+        ApplyStageMode(DetermineBlinkTrainerStageMode());
+    }
+
+    // ── Stage mode state machine (WPF MainWindow.BlinkTrainer.cs:239-501 parity) ──
+
+    /// <summary>
+    /// Resolves the current stage mode. Mirrors WPF
+    /// DetermineBlinkTrainerStageMode (MainWindow.BlinkTrainer.cs:246-261):
+    /// non-premium users always see Demo; otherwise LiveSession while a session
+    /// is running, LivePreview when consented with at least one folder, else
+    /// Demo. Uses the VM's existing IsConsentCurrent() (flag + version), NOT
+    /// WebcamConsentGiven alone.
+    /// </summary>
+    private BlinkTrainerStageMode DetermineBlinkTrainerStageMode()
+    {
+        // Phase E: non-premium users always see the demo loop (WPF :247-249).
+        if (IsPremiumLocked)
+            return BlinkTrainerStageMode.Demo;
+
+        bool consented = IsConsentCurrent();
+        bool hasFolders = (_settingsService?.Current?.BlinkTrainerFolders?.Count ?? 0) > 0;
+        bool running = _blinkTrainer?.IsRunning == true;
+
+        if (running) return BlinkTrainerStageMode.LiveSession;
+        if (consented && hasFolders) return BlinkTrainerStageMode.LivePreview;
+        return BlinkTrainerStageMode.Demo;
+    }
+
+    /// <summary>
+    /// Idempotent transition. Stops the loop/subscription owned by the outgoing
+    /// mode and starts the incoming one. Both LivePreview and LiveSession use
+    /// the same OnBlink subscription, so transitioning between them is a no-op
+    /// (WPF :326-342).
+    /// </summary>
+    private void ApplyStageMode(BlinkTrainerStageMode mode)
+    {
+        if (mode == _currentStageMode) return;
+
+        bool wasLive = _currentStageMode != BlinkTrainerStageMode.Demo;
+        bool nowLive = mode != BlinkTrainerStageMode.Demo;
+
+        if (wasLive && !nowLive)
+        {
+            // Live -> Demo: tear down the blink subscription and restart the demo.
+            UnsubscribeLivePreview();
+            StartBlinkTrainerDemo();
+        }
+        else if (!wasLive && nowLive)
+        {
+            // Demo -> Live: stop the demo timer (do NOT leave the stage frozen on
+            // the last demo frame) and arm the live blink subscription.
+            StopBlinkTrainerDemo();
+            ResetStageForLive();
+            SubscribeLivePreview();
+        }
+
+        _currentStageMode = mode;
+        _logger?.LogInformation("BlinkTrainer stage mode -> {Mode}", mode);
+    }
+
+    /// <summary>
+    /// Parks both stage images at opacity 0 and clears the last-picked path so
+    /// the first live blink lands on a clean slate (WPF
+    /// ResetBlinkTrainerStageForLive, MainWindow.BlinkTrainer.cs:344-371).
+    /// </summary>
+    private void ResetStageForLive()
+    {
+        StageImageAOpacity = 0;
+        StageImageBOpacity = 0;
+        _liveLastPickedPath = null;
+        _demoUsingA = true; // first live pick goes to A as the incoming slot
+    }
+
+    /// <summary>
+    /// Drops the cached live pool so the next blink rebuilds (WPF
+    /// InvalidateBlinkTrainerLivePool, MainWindow.BlinkTrainer.cs:408-412).
+    /// Called on folder add/remove (RefreshAssetFolders).
+    /// </summary>
+    private void InvalidateLivePool()
+    {
+        _livePool = null;
+        _livePoolToken = "";
+        _liveLastPickedPath = null;
+    }
+
+    private void SubscribeLivePreview()
+    {
+        if (_liveSubscribed) return;
+        if (_webcam == null) return;
+        _webcam.OnBlink += OnStagePreviewBlink;
+        _liveSubscribed = true;
+    }
+
+    private void UnsubscribeLivePreview()
+    {
+        if (!_liveSubscribed) return;
+        if (_webcam != null)
+            _webcam.OnBlink -= OnStagePreviewBlink;
+        _liveSubscribed = false;
+    }
+
+    /// <summary>
+    /// Returns the cached live pool, rebuilding when the folder list (or
+    /// IncludeVideos) changes. Built image-only because the tab stage exposes
+    /// only the two cross-fade Images (no inline video surface) — the
+    /// full-screen session overlay honours IncludeVideos and plays videos.
+    /// (WPF GetOrBuildBlinkTrainerLivePool, MainWindow.BlinkTrainer.cs:414-429.)
+    /// </summary>
+    private BlinkTrainerAssetPool GetOrBuildLivePool()
+    {
+        var s = _settingsService?.Current;
+        var folders = s?.BlinkTrainerFolders ?? new List<string>();
+        // Always image-only for the in-tab preview surface (see method summary).
+        var token = string.Join("|", folders) + "::False";
+        if (_livePool == null || _livePoolToken != token)
+        {
+            _livePool = BlinkTrainerAssetPool.Build(folders, includeVideos: false);
+            _livePoolToken = token;
+            _liveLastPickedPath = null;
+        }
+        return _livePool;
+    }
+
+    /// <summary>
+    /// Hard-cut swap on every real blink: pick a random folder asset, decode it
+    /// off the UI thread (a network-drive read must not hitch the UI), then
+    /// cross-fade it into the inactive stage image reusing the exact
+    /// AdvanceBlinkTrainerDemo pattern. Mirrors WPF
+    /// OnBlinkTrainerStagePreviewBlink + ApplyBlinkTrainerLiveImage
+    /// (MainWindow.BlinkTrainer.cs:434-501).
+    /// </summary>
+    private void OnStagePreviewBlink()
+    {
+        // OnBlink is marshalled to the UI thread by the webcam provider, but guard
+        // anyway (WPF :441-445).
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(OnStagePreviewBlink);
+            return;
+        }
+
+        try
+        {
+            var pool = GetOrBuildLivePool();
+            if (pool.IsEmpty) return;
+            var path = pool.PickRandom(_liveLastPickedPath);
+            if (string.IsNullOrEmpty(path)) return;
+            _liveLastPickedPath = path;
+
+            // The preview pool is image-only (see GetOrBuildLivePool), so IsVideo
+            // is always false here; keep the guard for defence-in-depth.
+            if (BlinkTrainerAssetPool.IsVideo(path)) return;
+
+            // Decode off the UI thread (network drive / large GIFs would hitch),
+            // then marshal the cross-fade back. Avalonia Bitmaps are not
+            // thread-affine, so decoding on a worker and assigning on the UI
+            // thread is safe (same pattern as AssetsTabViewModel thumbnails).
+            var capturedPath = path;
+            _ = Task.Run(() =>
+            {
+                Bitmap? bmp = LoadLiveBitmap(capturedPath);
+                Dispatcher.UIThread.Post(() => ApplyLiveImage(bmp));
+            });
+        }
+        catch (Exception ex)
+        {
+            // Don't crash the blink pipeline; skip this swap.
+            _logger?.LogWarning(ex, "OnStagePreviewBlink failed");
+        }
+    }
+
+    /// <summary>
+    /// Cross-fades the decoded live bitmap into the inactive stage image,
+    /// reusing the exact AdvanceBlinkTrainerDemo opacity-flip pattern. The
+    /// ~200ms fade is animated by the Avalonia DoubleTransition declared on
+    /// each Image's Opacity in the AXAML (WPF ApplyBlinkTrainerLiveImage,
+    /// MainWindow.BlinkTrainer.cs:466-501).
+    /// </summary>
+    private void ApplyLiveImage(Bitmap? bmp)
+    {
+        if (bmp == null) return;
+
+        if (_demoUsingA)
+        {
+            // Incoming = B, outgoing = A.
+            StageImageBSource = bmp;
+            StageImageBOpacity = 1;
+            StageImageAOpacity = 0;
+        }
+        else
+        {
+            // Incoming = A, outgoing = B.
+            StageImageASource = bmp;
+            StageImageAOpacity = 1;
+            StageImageBOpacity = 0;
+        }
+
+        _demoUsingA = !_demoUsingA;
+    }
+
+    /// <summary>
+    /// Decodes a live asset to a bounded width (keeps decode + memory cheap on
+    /// the small stage box; large source images are downsampled). Returns null
+    /// on any I/O/decode error so the caller silently skips the swap.
+    /// </summary>
+    private static Bitmap? LoadLiveBitmap(string path)
+    {
+        try
+        {
+            if (!System.IO.File.Exists(path)) return null;
+            using var stream = System.IO.File.OpenRead(path);
+            return Bitmap.DecodeToWidth(stream, 800, BitmapInterpolationMode.HighQuality);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
