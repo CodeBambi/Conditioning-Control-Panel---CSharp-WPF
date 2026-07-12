@@ -90,7 +90,9 @@ public sealed class SpiralLayer : BaseLayer, IDisposable
     /// </summary>
     public void SetSource(string? path, double opacity)
     {
-        var newOpacity = Math.Clamp(opacity, 0, 1);
+        // Hard ceiling: the spiral is ambient tinted glass the user works THROUGH, so it can
+        // never exceed 50% — content beneath (video) always stays at least 50% visible.
+        var newOpacity = Math.Clamp(opacity, 0, 0.5);
 
         if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path))
         {

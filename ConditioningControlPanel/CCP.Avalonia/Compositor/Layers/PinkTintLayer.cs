@@ -15,6 +15,13 @@ namespace ConditioningControlPanel.Avalonia.Compositor.Layers;
 /// </summary>
 public sealed class PinkTintLayer : BaseLayer
 {
+    /// <summary>
+    /// Hard ceiling on tint opacity. The theme color filter is tinted glass the user works
+    /// THROUGH, so it can never exceed 50% — content beneath (video) always stays at least
+    /// 50% visible. SetColor clamps incoming opacity to this value.
+    /// </summary>
+    public const double MaxOpacity = 0.5;
+
     // Reused paint (UCE rule: no per-frame allocations). Only touched inside Render.
     private readonly SKPaint _paint = new();
     private Color _color = Colors.Transparent;
@@ -38,7 +45,7 @@ public sealed class PinkTintLayer : BaseLayer
 
     public void SetColor(Color color, double opacity)
     {
-        var clamped = Math.Clamp(opacity, 0, 1);
+        var clamped = Math.Clamp(opacity, 0, MaxOpacity);
         if (_color != color || Math.Abs(clamped - _opacity) > 0.0005)
             _dirty = true;
         _color = color;
