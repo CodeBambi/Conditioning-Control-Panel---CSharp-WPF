@@ -362,6 +362,20 @@ public sealed class CompositorEngine : IDisposable
     /// <summary>All currently registered layers, ordered by z-index.</summary>
     public IReadOnlyList<IAvaloniaLayer> Layers => _layerSnapshot;
 
+    /// <summary>
+    /// Immediately rebuild and publish the capture mask from the current layer states, without
+    /// waiting for the next engine tick. Call this from a layer-activation path (e.g. video
+    /// PlayVideo) that needs the mask armed the instant a capturing layer becomes active, so
+    /// there is no ~16ms tick window where clicks over the newly-active capturing layer could
+    /// leak to the desktop. Safe to call any time; a no-op when no capturing layer is active
+    /// (the mask just stays empty). The next tick rebuilds it again as normal.
+    /// </summary>
+    public void RebuildCaptureMaskNow()
+    {
+        if (_disposed) return;
+        BuildAndPublishCaptureMask(_layerSnapshot);
+    }
+
     /// <summary>Number of main-surface compositor windows (one per monitor).</summary>
     public int WindowCount => _windows.Count;
 

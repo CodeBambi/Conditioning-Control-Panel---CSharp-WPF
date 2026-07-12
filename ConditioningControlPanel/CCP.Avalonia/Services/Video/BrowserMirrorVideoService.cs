@@ -88,6 +88,9 @@ public sealed class BrowserMirrorVideoService : IDisposable
         // Wake the engine to the active cadence immediately (same-tick wake instead of the ~250ms
         // idle-watchdog latency) so the first captured frame paints without delay.
         _compositor.Start();
+        // BUG-1 fix (per-region capture): arm the capture mask IMMEDIATELY for the mirror's
+        // non-source monitors too — same start-gap closure as the mandatory/URL video paths.
+        _compositor.RebuildCaptureMaskNow();
 
         var targets = CountNonSourceScreens(source);
         _logger?.LogInformation("BrowserMirrorVideoService: mirror started, source={Source}, target monitor(s)={Count}", source.Name, targets);

@@ -74,6 +74,7 @@
     <Compile Include="..\tests\CCP.Avalonia.Desktop.Windows.Smoke\AvatarTubeVerification.cs" Link="SmokeTest\AvatarTubeVerification.cs" Condition="'$(Configuration)' == 'Debug'" />
     <Compile Include="..\tests\CCP.Avalonia.Desktop.Windows.Smoke\VisibleOverlayVerification.cs" Link="SmokeTest\VisibleOverlayVerification.cs" Condition="'$(Configuration)' == 'Debug'" />
     <Compile Include="..\tests\CCP.Avalonia.Desktop.Windows.Smoke\BrowserMirrorVerification.cs" Link="SmokeTest\BrowserMirrorVerification.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="..\tests\CCP.Avalonia.Desktop.Windows.Smoke\MandatoryCaptureMirrorVerification.cs" Link="SmokeTest\MandatoryCaptureMirrorVerification.cs" Condition="'$(Configuration)' == 'Debug'" />
   </ItemGroup>
 
   <!-- WebView2's managed targets always reference the WPF assembly for .NET 5+ projects.
