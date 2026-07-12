@@ -329,6 +329,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ILockCardService, AvaloniaLockCardService>();
         services.AddSingleton<ISubliminalService, AvaloniaSubliminalService>();
         services.AddSingleton<IVideoService, AvaloniaVideoService>();
+        // Browser fullscreen-video multi-monitor mirror (screen-capture via IFrameSource, rendered on
+        // every per-monitor compositor window like MandatoryVideoLayer). Resolves to null seams on
+        // heads without capture, where Start() is a safe no-op.
+        services.AddSingleton<BrowserMirrorVideoService>();
         services.AddSingleton<IMindWipeService, AvaloniaMindWipeService>();
         services.AddSingleton<IBouncingTextService, AvaloniaBouncingTextService>();
         services.AddSingleton<IOverlayService, AvaloniaOverlayService>();

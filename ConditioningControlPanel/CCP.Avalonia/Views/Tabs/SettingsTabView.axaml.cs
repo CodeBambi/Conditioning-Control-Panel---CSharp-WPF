@@ -644,6 +644,7 @@ public partial class SettingsTabView : UserControl
             return;
 
         vm.BrowserHost.FullscreenChanged += OnBrowserFullscreenChanged;
+        vm.BrowserAutoFullscreenRequested += OnBrowserAutoFullscreenRequested;
         _browserFullscreenEventsWired = true;
     }
 
@@ -657,6 +658,7 @@ public partial class SettingsTabView : UserControl
             return;
 
         vm.BrowserHost.FullscreenChanged -= OnBrowserFullscreenChanged;
+        vm.BrowserAutoFullscreenRequested -= OnBrowserAutoFullscreenRequested;
         _browserFullscreenEventsWired = false;
     }
 
@@ -669,6 +671,17 @@ public partial class SettingsTabView : UserControl
             else
                 ExitBrowserFullscreen();
         });
+    }
+
+    /// <summary>
+    /// Engine-initiated online video during a running session: auto-enter the browser fullscreen
+    /// window (which starts the multi-monitor mirror). Owner requirement: "when the engine is
+    /// started and it plays an online video it should auto go into fullscreen mirrored".
+    /// EnterBrowserFullscreen is idempotent (guards on an existing fullscreen window).
+    /// </summary>
+    private void OnBrowserAutoFullscreenRequested(object? sender, EventArgs e)
+    {
+        Dispatcher.UIThread.Post(EnterBrowserFullscreen);
     }
 
     /// <summary>
@@ -716,6 +729,19 @@ public partial class SettingsTabView : UserControl
         window.Closed += OnBrowserFullscreenWindowClosed;
         _browserFullscreenWindow = window;
         window.Show();
+
+        // Multi-monitor mirror (owner requirement): a fullscreen browser video is copied to every
+        // OTHER monitor. The mirror layer captures this (primary) window's monitor and paints a
+        // stretched copy on each other compositor window. Started after the fullscreen window is
+        // shown so the very first capture samples the fullscreen video, not the dashboard cell.
+        try
+        {
+            App.Services?.GetService<Avalonia.Services.Video.BrowserMirrorVideoService>()?.Start();
+        }
+        catch (Exception ex)
+        {
+            App.Services?.GetRequiredService<ILogger<SettingsTabView>>().LogWarning(ex, "Failed to start browser mirror");
+        }
     }
 
     /// <summary>
@@ -724,6 +750,14 @@ public partial class SettingsTabView : UserControl
     /// </summary>
     private void ExitBrowserFullscreen()
     {
+        // Tear the mirror down first so it stops capturing/clears its frame before the browser
+        // control leaves the fullscreen window (avoids one stale mirrored frame after exit).
+        try
+        {
+            App.Services?.GetService<Avalonia.Services.Video.BrowserMirrorVideoService>()?.Stop();
+        }
+        catch { /* best effort */ }
+
         var window = _browserFullscreenWindow;
         if (window == null)
             return;
