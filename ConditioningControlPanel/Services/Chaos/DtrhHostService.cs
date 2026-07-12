@@ -266,6 +266,9 @@ internal static class DtrhHostService
             case "report-bug":   // the hub dock's 🐛 button (no title bar to hang one on)
                 OpenBugReport();
                 break;
+            case "fullscreen-set":   // page's Esc ladder / dock button: C# owns the borderless toggle
+                ApplyHostFullscreen((bool?)o["on"] ?? false);
+                break;
             case "exit":       // page-initiated (Esc held): it winds itself down, then exit-done
                 _exiting = true;
                 ArmExitWatchdog();
@@ -277,6 +280,24 @@ internal static class DtrhHostService
                 _lastHeartbeatUtc = DateTime.UtcNow;
                 break;
         }
+    }
+
+    /// <summary>Page-driven fullscreen: the game asks C# to borderless-toggle its own
+    /// window (we do NOT use the browser Fullscreen API, which would hijack Esc). Echo the
+    /// resulting window state back so the page's dock button + Esc ladder stay in sync.</summary>
+    private static void ApplyHostFullscreen(bool on)
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || disp.HasShutdownStarted) return;
+        disp.BeginInvoke(() =>
+        {
+            try
+            {
+                _host?.SetFullscreen(on);
+                _host?.Post(new { type = "fullscreen", on = _host.IsFullscreen });
+            }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost.fullscreen: {E}", ex.Message); }
+        });
     }
 
     /// <summary>The hub's dock 🐛 button: this window has a native (buttonless) title bar,

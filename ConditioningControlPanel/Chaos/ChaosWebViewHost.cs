@@ -154,8 +154,12 @@ internal sealed class ChaosWebViewHost : IDisposable
         _isFullscreen = fullscreen;
     }
 
-    /// <summary>Toggle borderless fullscreen. Driven by the page's Fullscreen API (the dock button)
-    /// via <c>ContainsFullScreenElementChanged</c>, so the JS side and the window stay in sync.</summary>
+    /// <summary>True while the window is borderless-fullscreen (host-owned, not the browser API).</summary>
+    public bool IsFullscreen => _isFullscreen;
+
+    /// <summary>Toggle borderless fullscreen. The DtRH page drives this over the bridge
+    /// (<c>fullscreen-set</c>) instead of the browser Fullscreen API, so Esc stays the game's
+    /// to own; the passive tunnel backdrop still rides <c>ContainsFullScreenElementChanged</c>.</summary>
     public void SetFullscreen(bool on)
     {
         if (_window == null || _isFullscreen == on) return;

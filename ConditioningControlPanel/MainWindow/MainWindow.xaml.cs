@@ -760,6 +760,12 @@ namespace ConditioningControlPanel
             // fell into the "not running" branch below — where a second press EXITS the app.
             if (App.Chaos?.IsDescending == true) return;
 
+            // The web DtRH game (its own WebView2 window) owns Esc while it's up: the page
+            // runs a pause → exit-fullscreen → close ladder. Swallow the panic double-tap so
+            // those presses can't fall into the "not running" branch and exit the whole app.
+            // Reactivates on its own once the game window closes (IsActive flips false).
+            if (Services.Chaos.DtrhHostService.IsActive) return;
+
             // Let the companion say a calm, persona-neutral safety line (highest priority,
             // bypasses the bark gate). Fired before the stop flow so it's not suppressed.
             App.Bark?.NotifyPanic();
