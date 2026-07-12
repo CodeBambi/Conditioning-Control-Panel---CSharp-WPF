@@ -2,6 +2,7 @@
 
 
 
+using System.Text;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Avalonia.Controls;
@@ -29,6 +30,7 @@ public partial class CompanionTabViewModel : TabItemViewModel
     private readonly ICompanionService? _companionService;
     private readonly ICommunityPromptService? _promptService;
     private readonly IAvatarWindowService? _avatarWindowService;
+    private readonly ISecretStore? _secretStore;
 
     public CompanionTabViewModel() : base("companion", "Companion", "🤖")
     {
@@ -44,7 +46,8 @@ public partial class CompanionTabViewModel : TabItemViewModel
         IModService modService,
         ICompanionService companionService,
         ICommunityPromptService promptService,
-        IAvatarWindowService avatarWindowService) : base("companion", "Companion", "🤖")
+        IAvatarWindowService avatarWindowService,
+        ISecretStore secretStore) : base("companion", "Companion", "🤖")
     {
         _settingsService = settingsService;
         _dialogService = dialogService;
@@ -53,6 +56,7 @@ public partial class CompanionTabViewModel : TabItemViewModel
         _companionService = companionService;
         _promptService = promptService;
         _avatarWindowService = avatarWindowService;
+        _secretStore = secretStore;
         _companions = new ObservableCollection<CompanionCardViewModel>();
         _installedPrompts = new ObservableCollection<CommunityPromptRowViewModel>();
         SyncUi();
@@ -134,6 +138,14 @@ public partial class CompanionTabViewModel : TabItemViewModel
 
     [ObservableProperty]
     private bool _isDetached;
+
+    /// <summary>
+    /// True when an OpenAI-compatible API key is present in the <see cref="ISecretStore"/>.
+    /// Drives the non-secret status chip ("key set" / "no key set"); the key itself is never
+    /// surfaced to the UI or bindings.
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasOpenAiKey;
 
     [ObservableProperty]
     private string _activePromptName = Loc.Get("label_default_built_in");
@@ -348,6 +360,90 @@ public partial class CompanionTabViewModel : TabItemViewModel
         await Task.CompletedTask;
     }
 
+    /// <summary>
+    /// OpenAI-compatible API key entry (AI-5). The key is written to the platform
+    /// <see cref="ISecretStore"/> under exactly <c>"openai-api-key"</c> — the literal the Core
+    /// <c>OpenAiService</c> reads (<c>CCP.Core/Services/AIService/OpenAiService.cs:67</c>, field
+    /// <c>SecretKey</c>; consumed by <c>OpenAiService.GetApiKey</c> via <c>Encoding.UTF8.GetString</c>).
+    /// It is NEVER written to <c>settings.json</c>, NEVER logged, and NEVER shown back after save
+    /// (the entry field is always cleared and never pre-populated). Mirrors the WPF head's masked
+    /// PasswordBox handler (<c>MainWindow/MainWindow.Patreon.cs:1387-1394</c>,
+    /// <c>TxtOpenAiApiKey_PasswordChanged</c>) but persists via the cross-platform ISecretStore
+    /// seam (DPAPI on Windows) instead of the Windows-only DPAPI settings blob, per the
+    /// <c>OpenAiService</c> design notes.
+    /// </summary>
+    private const string OpenAiApiKeySecretKey = "openai-api-key";
+
+    /// <summary>
+    /// Stores the entered OpenAI API key in the <see cref="ISecretStore"/>. UTF-8 encoded to match
+    /// <c>OpenAiService.GetApiKey</c>'s decode. An empty/whitespace entry is a no-op (not a clear);
+    /// use <see cref="ClearOpenAiKey"/> to remove the stored secret.
+    /// </summary>
+    public void SaveOpenAiKey(string plainKey)
+    {
+        if (_secretStore == null)
+        {
+            _logger?.LogWarning("SaveOpenAiKey: ISecretStore unavailable (design-time?).");
+            return;
+        }
+
+        var trimmed = (plainKey ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+
+        try
+        {
+            _secretStore.Store(OpenAiApiKeySecretKey, Encoding.UTF8.GetBytes(trimmed));
+            // Key value intentionally never logged — only the fact that it was stored.
+            _logger?.LogInformation("OpenAI API key saved to ISecretStore.");
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "SaveOpenAiKey: failed to store the OpenAI API key.");
+        }
+        RefreshOpenAiKeyStatus();
+    }
+
+    /// <summary>
+    /// Deletes the stored OpenAI API key from the <see cref="ISecretStore"/>.
+    /// </summary>
+    public void ClearOpenAiKey()
+    {
+        if (_secretStore == null)
+        {
+            _logger?.LogWarning("ClearOpenAiKey: ISecretStore unavailable (design-time?).");
+            return;
+        }
+
+        try
+        {
+            _secretStore.Delete(OpenAiApiKeySecretKey);
+            _logger?.LogInformation("OpenAI API key cleared from ISecretStore.");
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "ClearOpenAiKey: failed to delete the OpenAI API key.");
+        }
+        RefreshOpenAiKeyStatus();
+    }
+
+    /// <summary>
+    /// Refreshes <see cref="HasOpenAiKey"/> from the secret store. Checks presence/length only —
+    /// the key bytes are never decoded to a string or shown in the UI.
+    /// </summary>
+    private void RefreshOpenAiKeyStatus()
+    {
+        if (_secretStore == null) { HasOpenAiKey = false; return; }
+        try
+        {
+            var bytes = _secretStore.Retrieve(OpenAiApiKeySecretKey);
+            HasOpenAiKey = bytes != null && bytes.Length > 0;
+        }
+        catch
+        {
+            HasOpenAiKey = false;
+        }
+    }
+
     private void SyncUi()
     {
         try
@@ -367,6 +463,7 @@ public partial class CompanionTabViewModel : TabItemViewModel
 
             RefreshCompanionCards();
             RefreshPrompts();
+            RefreshOpenAiKeyStatus();
         }
         catch (Exception ex)
         {
