@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Awareness;
 using ConditioningControlPanel.Core.Services.Bark;
+using ConditioningControlPanel.Core.Services.BlinkTrainer;
+using ConditioningControlPanel.Core.Services.Mantra;
 using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Models;
 using Xunit;
@@ -238,5 +241,176 @@ public class BarkTriggerWiringTests
         var h = new EngineHarness(Rule("r", "ChaosRunStarted"));
         Assert.True(h.Engine.HasTrigger("ChaosRunStarted"));
         Assert.False(h.Engine.HasTrigger("ChaosMystery"));
+    }
+
+    // ------------------------------------------------------------------
+    // BARK-2: remaining contract-E triggers. Each rule is condition-keyed so it fires ONLY when the
+    // wiring stamped the contract-E ctx var correctly (proof the var was set, not just the trigger).
+    // ------------------------------------------------------------------
+
+    private sealed class FakeBlinkTrainer : IBlinkTrainerService
+    {
+        public bool IsRunning { get; set; }
+        public string LastError { get; } = "";
+        public TimeSpan Remaining { get; } = TimeSpan.Zero;
+        public bool Start() => true;
+        public void Stop() { }
+        public event Action? StateChanged;
+        public void RaiseStateChanged(bool running) { IsRunning = running; StateChanged?.Invoke(); }
+    }
+
+    private sealed class FakeMantra : IMantraService
+    {
+        public string? CurrentMantra { get; } = null;
+        public int Streak { get; set; }
+        public int BestStreak { get; set; }
+        public int Completions { get; set; }
+        public int TargetCount { get; set; }
+        public bool IsActive { get; set; }
+        public event Action<int>? StreakChanged;
+        public event Action? StreakBroken;
+        public event Action? MantraCompleted;
+        public event Action<int, int>? SessionComplete;
+        public void StartSession(int targetReps) { }
+        public bool TryCompleteMantra() => true;
+        public void BreakStreak() { }
+        public void EndSession() { }
+        public void RaiseStreak(int s) => StreakChanged?.Invoke(s);
+        public void RaiseCompleted() => MantraCompleted?.Invoke();
+    }
+
+    private sealed class FakeLockdown : ILockdownService
+    {
+        public bool IsActive { get; set; }
+        public TimeSpan Remaining { get; set; }
+        public TimeSpan LastActiveDuration { get; set; }
+        public event Action? LockdownActivated;
+        public event Action? LockdownDeactivated;
+        public event Action<TimeSpan>? CountdownTick;
+        public void Activate(TimeSpan duration) { }
+        public void Deactivate() { }
+        public bool TryExitWithPhrase(string phrase) => false;
+        public void RecoverIfNeeded() { }
+        public void RaiseTick(TimeSpan remaining) => CountdownTick?.Invoke(remaining);
+        public void RaiseActivated() => LockdownActivated?.Invoke();
+        public void Dispose() { }
+    }
+
+    private sealed class FakeAttentionCheck : IAttentionCheckService
+    {
+        public bool IsRunning { get; set; }
+        public event Action? OnPass;
+        public event Action? OnFail;
+        public void Start() { }
+        public void Stop() { }
+        public void FireNow() { }
+        public void RaiseFail() => OnFail?.Invoke();
+        public void RaisePass() => OnPass?.Invoke();
+    }
+
+    [Fact]
+    public void BlinkTrainerStateChanged_StampsRunningCtx()
+    {
+        var h = new EngineHarness(Rule("b", "BlinkTrainerStateChanged", new() { ["running"] = true }));
+        var bt = new FakeBlinkTrainer();
+        using var wiring = new BarkTriggerWiring(h.Engine, blinkTrainer: bt);
+        wiring.Start();
+
+        bt.RaiseStateChanged(true);   // running matches → fires
+        Assert.Single(h.Speaker.Calls);
+        Assert.Equal("BlinkTrainerStateChanged", h.Speaker.Calls[0].Trigger);
+    }
+
+    [Fact]
+    public void MantraStreakChanged_StampsStreakCtx()
+    {
+        var h = new EngineHarness(Rule("s", "StreakChanged", new() { ["streak_gte"] = 3.0 }));
+        var m = new FakeMantra();
+        using var wiring = new BarkTriggerWiring(h.Engine, mantra: m);
+        wiring.Start();
+
+        m.RaiseStreak(5);   // 5 >= 3 → fires
+        Assert.Single(h.Speaker.Calls);
+        Assert.Equal("StreakChanged", h.Speaker.Calls[0].Trigger);
+    }
+
+    [Fact]
+    public void MantraCompleted_RaisesTrigger()
+    {
+        var h = new EngineHarness(Rule("m", "MantraCompleted"));
+        var m = new FakeMantra();
+        using var wiring = new BarkTriggerWiring(h.Engine, mantra: m);
+        wiring.Start();
+
+        m.RaiseCompleted();
+        Assert.Single(h.Speaker.Calls);
+        Assert.Equal("MantraCompleted", h.Speaker.Calls[0].Trigger);
+    }
+
+    [Fact]
+    public void LockdownCountdownTick_StampsRemainingSecCtx()
+    {
+        var h = new EngineHarness(Rule("l", "LockdownCountdownTick", new() { ["remaining_sec_lte"] = 30.0 }));
+        var ld = new FakeLockdown();
+        using var wiring = new BarkTriggerWiring(h.Engine, lockdown: ld);
+        wiring.Start();
+
+        ld.RaiseTick(TimeSpan.FromSeconds(10));   // 10 <= 30 → fires
+        Assert.Single(h.Speaker.Calls);
+        Assert.Equal("LockdownCountdownTick", h.Speaker.Calls[0].Trigger);
+    }
+
+    [Fact]
+    public void LockdownActivated_RaisesTrigger()
+    {
+        var h = new EngineHarness(Rule("l", "LockdownActivated"));
+        var ld = new FakeLockdown();
+        using var wiring = new BarkTriggerWiring(h.Engine, lockdown: ld);
+        wiring.Start();
+
+        ld.RaiseActivated();
+        Assert.Single(h.Speaker.Calls);
+        Assert.Equal("LockdownActivated", h.Speaker.Calls[0].Trigger);
+    }
+
+    [Fact]
+    public void AttentionCheckFail_RaisesExemptedTrigger()
+    {
+        // AttentionCheckFail is the global-gap exemption (engine skips the 60s min-gap by trigger name).
+        var h = new EngineHarness(Rule("a", "AttentionCheckFail"));
+        var ac = new FakeAttentionCheck();
+        using var wiring = new BarkTriggerWiring(h.Engine, attentionCheck: ac);
+        wiring.Start();
+
+        ac.RaiseFail();
+        Assert.Single(h.Speaker.Calls);
+        Assert.Equal("AttentionCheckFail", h.Speaker.Calls[0].Trigger);
+    }
+
+    [Fact]
+    public void NotifyUserMessage_RaisesUserMessageSentTrigger()
+    {
+        // The MUST requirement: the chat send path calls NotifyUserMessage so the chat-suppression
+        // window opens AND the UserMessageSent trigger fires (WPF BarkService.cs:427).
+        var h = new EngineHarness(Rule("u", "UserMessageSent"));
+        using var wiring = new BarkTriggerWiring(h.Engine);
+        wiring.Start();
+
+        wiring.NotifyUserMessage();
+        Assert.Single(h.Speaker.Calls);
+        Assert.Equal("UserMessageSent", h.Speaker.Calls[0].Trigger);
+    }
+
+    [Fact]
+    public void Dispose_UnsubscribesBark2Sources_NoBarkAfterShutdown()
+    {
+        var h = new EngineHarness(Rule("l", "LockdownCountdownTick", new() { ["remaining_sec_lte"] = 30.0 }));
+        var ld = new FakeLockdown();
+        var wiring = new BarkTriggerWiring(h.Engine, lockdown: ld);
+        wiring.Start();
+        wiring.Dispose();
+
+        ld.RaiseTick(TimeSpan.FromSeconds(10));
+        Assert.Empty(h.Speaker.Calls); // unsubscribed → no bark after shutdown (no leak)
     }
 }

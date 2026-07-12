@@ -187,6 +187,10 @@ public static class ServiceCollectionExtensions
         // BARK-1 slice 3: owns engine Start() + the awareness→Raise pair (closes AI-10) + the
         // readily-available session/video/progression/achievement/quest triggers + ModChanged reload.
         // Resolved + Start()-ed in App.OnFrameworkInitializationCompleted after the active mod is known.
+        // BARK-2: the trailing optional deps are the remaining contract-E trigger sources (webcam,
+        // gaze, blink trainer, bubbles, flash, mantra, roadmap, quiz, lock card, update, keyword,
+        // skill-tree, lockdown, remote-control, attention-check). Each resolves to null on a head
+        // that does not register it → that subscription is skipped (safe degradation).
         services.AddSingleton(sp => new ConditioningControlPanel.Core.Services.Bark.BarkTriggerWiring(
             sp.GetRequiredService<ConditioningControlPanel.Core.Services.Bark.BarkEngine>(),
             sp.GetService<ConditioningControlPanel.Core.Services.Awareness.IAwarenessService>(),
@@ -196,6 +200,21 @@ public static class ServiceCollectionExtensions
             sp.GetService<IProgressionService>(),
             sp.GetService<IAchievementService>(),
             sp.GetService<IQuestService>(),
+            webcam: sp.GetService<ConditioningControlPanel.Core.Services.Webcam.IWebcamService>(),
+            blinkTrainer: sp.GetService<ConditioningControlPanel.Core.Services.BlinkTrainer.IBlinkTrainerService>(),
+            gaze: sp.GetService<ConditioningControlPanel.Core.Services.BlinkTrainer.IGazeFocusService>(),
+            bubbles: sp.GetService<ConditioningControlPanel.Core.Services.Chaos.IBubbleService>(),
+            flash: sp.GetService<ConditioningControlPanel.Core.Services.Flash.IFlashService>(),
+            mantra: sp.GetService<ConditioningControlPanel.Core.Services.Mantra.IMantraService>(),
+            roadmap: sp.GetService<ConditioningControlPanel.Core.Services.Roadmap.IRoadmapService>(),
+            quiz: sp.GetService<ConditioningControlPanel.Core.Services.Quiz.IQuizService>(),
+            lockCard: sp.GetService<ConditioningControlPanel.Core.Services.LockCard.ILockCardService>(),
+            update: sp.GetService<ConditioningControlPanel.Core.Services.Update.IUpdateService>(),
+            keywords: sp.GetService<ConditioningControlPanel.IKeywordTriggerService>(),
+            skills: sp.GetService<ConditioningControlPanel.ISkillTreeService>(),
+            lockdown: sp.GetService<ConditioningControlPanel.Core.Platform.ILockdownService>(),
+            remoteControl: sp.GetService<ConditioningControlPanel.Core.Platform.IRemoteControlService>(),
+            attentionCheck: sp.GetService<ConditioningControlPanel.IAttentionCheckService>(),
             logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<ConditioningControlPanel.Core.Services.Bark.BarkTriggerWiring>>()));
 
         // Spoken-mantra dataset for the Takeover "say it for me" fallback. Audio-duration provider
