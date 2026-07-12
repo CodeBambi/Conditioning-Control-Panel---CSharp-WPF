@@ -63,6 +63,24 @@ public sealed class BrowserMirrorVideoLayer : BaseLayer, IDisposable
     private int _frameStride;
     private bool _hasFrontFrame;
 
+    // Deferred-free slot for the PREVIOUS buffer set that AllocateBuffers replaced. The render
+    // thread reads FRONT outside the lock (see Render); disposing that SKImage the instant a
+    // resize lands would make the in-flight DrawImage throw, and the engine's try/catch would
+    // then abort the render after the opaque black fill had already been painted — leaving a
+    // solid dark-pink screen once the 50% PinkTint is composited over the exposed black. We
+    // instead park the displaced buffers/images here and free them 400ms later from the UI
+    // tick (VideoLayer's deferred-teardown discipline), by which point the render thread is
+    // sampling the new FRONT and the old reference is unreachable.
+    private DeferredBufferSet? _deferredSet;
+    private DateTime _deferredSince;
+    private const double DeferredFreeMs = 400;
+
+    private sealed class DeferredBufferSet
+    {
+        public SKImage?[]? Images;
+        public IntPtr[]? Buffers;
+    }
+
     // Capture-loop state. _source is the monitor the browser fullscreen window sits on; the
     // layer skips painting on the compositor window whose screen equals it.
     private ScreenInfo? _source;
@@ -121,7 +139,12 @@ public sealed class BrowserMirrorVideoLayer : BaseLayer, IDisposable
     public void Start(ScreenInfo source)
     {
         if (_disposed) return;
-        _source = source;
+        // _source is read by the render thread inside Render() under _bufferLock; write it under
+        // the same lock so the render thread always observes the current value (not a stale null
+        // from before Start landed). A stale-null read disabled the source-skip and let the mirror
+        // paint the captured frame back onto the source monitor — a self-capture feedback loop
+        // that converged to a solid pink cover once the PinkTint was composited on top.
+        lock (_bufferLock) _source = source;
         if (_active)
         {
             _dirty = true;
@@ -174,7 +197,12 @@ public sealed class BrowserMirrorVideoLayer : BaseLayer, IDisposable
 
             if (frame != null && frame.Width > 0 && frame.Height > 0 && frame.BgraData.Length >= frame.Width * frame.Height * 4)
             {
-                HandoffFrame(frame);
+                // Handoff can resize/reallocate buffers; a transient failure (e.g. SKImage
+                // allocation under memory pressure) MUST NOT kill the capture loop — that would
+                // freeze the last presented frame forever. Log and keep capturing so the next
+                // frame recovers.
+                try { HandoffFrame(frame); }
+                catch (Exception ex) { _logger?.LogDebug(ex, "BrowserMirrorVideoLayer: handoff failed (will retry next frame)"); }
             }
 
             try { await Task.Delay(33, ct).ConfigureAwait(false); } // ~30fps capture ceiling
@@ -219,8 +247,15 @@ public sealed class BrowserMirrorVideoLayer : BaseLayer, IDisposable
 
     private void AllocateBuffers(int width, int height, int stride)
     {
-        // Called under _bufferLock. Frees any prior buffers/images first.
-        FreeBuffers();
+        // Called under _bufferLock. Rather than freeing the previous buffers/images immediately,
+        // stage them in the deferred-free slot — a concurrent Render() may still hold a reference
+        // to the previous FRONT SKImage (it reads front under the lock, then draws outside it).
+        // Disposing that image now would make DrawImage throw and (under the engine's try/catch)
+        // leave the render blank for that frame. The UI tick frees the deferred set 400ms later
+        // (DeferredFreeMs), after the render thread has moved on to the new FRONT. If a resize
+        // lands while a previous set is still deferred, that set is freed now (the render thread
+        // has had at least one full tick to move off it).
+        StageDeferredFromCurrent();
         var size = stride * height;
         var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque);
         _buffers = new IntPtr[BufferCount];
@@ -239,11 +274,49 @@ public sealed class BrowserMirrorVideoLayer : BaseLayer, IDisposable
         _hasFrontFrame = false;
     }
 
+    /// <summary>
+    /// Moves the live buffer/image arrays into the deferred-free slot (under _bufferLock). The
+    /// UI tick (Update) drains the slot after <see cref="DeferredFreeMs"/>. Native memory stays
+    /// alive until then so a concurrent Render can finish its DrawImage on the previous FRONT.
+    /// </summary>
+    private void StageDeferredFromCurrent()
+    {
+        if ((_images == null || _images.Length == 0) && (_buffers == null || _buffers.Length == 0))
+            return;
+        // If a previous deferred set is still outstanding (rapid back-to-back resize), free it
+        // now rather than leaking it: at least one render tick has run since it was staged, so the
+        // render thread has sampled the then-new FRONT by now.
+        DisposeDeferredSet(_deferredSet);
+        _deferredSet = new DeferredBufferSet { Images = _images, Buffers = _buffers };
+        _deferredSince = DateTime.UtcNow;
+        _images = null;
+        _buffers = null;
+    }
+
+    private static void DisposeDeferredSet(DeferredBufferSet? set)
+    {
+        if (set == null) return;
+        if (set.Images != null)
+        {
+            foreach (var image in set.Images)
+            {
+                try { image?.Dispose(); } catch { /* ignore */ }
+            }
+        }
+        if (set.Buffers != null)
+        {
+            foreach (var buffer in set.Buffers)
+            {
+                if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
+            }
+        }
+    }
+
     private void FreeBuffers()
     {
-        // Frees the pinned buffers + their SKImage wrappers. Safe to call when nothing samples them
-        // (Dispose path) or under _bufferLock during a resize (the capture thread is the only writer
-        // and AllocateBuffers is called from HandoffFrame on that same thread).
+        // Frees the pinned buffers + their SKImage wrappers IMMEDIATELY. Only safe when nothing
+        // samples them (Dispose path) or when the caller first staged them as deferred and the
+        // render thread has moved on. Used by Dispose; the resize path uses StageDeferredFromCurrent.
         if (_images != null)
         {
             foreach (var image in _images)
@@ -277,6 +350,16 @@ public sealed class BrowserMirrorVideoLayer : BaseLayer, IDisposable
                 _hasFrontFrame = true;
                 presented = true;
             }
+
+            // Drain the deferred-free slot 400ms after a resize replaced it. By now the render
+            // thread has sampled the new FRONT and the previous SKImage/buffer set is unreachable
+            // from the render path, so disposing is safe (no DrawImage-into-disposed-image race).
+            if (_deferredSet != null && (DateTime.UtcNow - _deferredSince).TotalMilliseconds > DeferredFreeMs)
+            {
+                var stage = _deferredSet;
+                _deferredSet = null;
+                DisposeDeferredSet(stage);
+            }
         }
         if (presented) _dirty = true;
     }
@@ -296,31 +379,38 @@ public sealed class BrowserMirrorVideoLayer : BaseLayer, IDisposable
     {
         SKImage? front;
         int width, height;
+        ScreenInfo? source;
         lock (_bufferLock)
         {
             if (!_hasFrontFrame || _images == null) return;
             front = _images[_frontIdx];
             width = _frameWidth;
             height = _frameHeight;
+            source = _source; // read under the lock (Start writes it under the same lock)
         }
         if (front == null || width <= 0 || height <= 0) return;
 
         // Skip the source monitor: painting the captured frame back onto the very screen it was
-        // captured from would freeze the mirror once the compositor window sits above the browser
-        // (self-capture feedback). The source keeps showing the live browser video underneath the
-        // transparent compositor window; every OTHER monitor gets the stretched copy. ScreenInfo is
-        // a record, so value equality on Bounds/Name identifies the same monitor across the engine's
-        // per-monitor windows.
-        if (screen != null && _source != null && Equals(screen, _source)) return;
+        // captured from is a self-capture feedback loop — each capture samples the mirror's own
+        // previous output, converging to a solid color within a few frames (and once the 50%
+        // PinkTint is composited on top, that reads as a SOLID pink cover). Bounds comparison
+        // (not full record equality) identifies the source monitor robustly: it matches
+        // CollectCaptureRegions below and does not depend on Name/WorkingArea/Scaling matching
+        // across the engine's per-window screen enumeration.
+        if (screen != null && source != null && screen.Bounds == source.Bounds) return;
 
-        // Opaque black fill first so no desktop bleeds through (Fill stretch leaves no letterbox, but
-        // this is a harmless safety net for a 0-size edge).
-        using (var bg = new SKPaint { Color = SKColors.Black })
-            canvas.DrawRect(ToSkRect(bounds), bg);
-
-        // STRETCH to fill (Fill, not Uniform): the owner wants a landscape browser video to fill a
-        // portrait monitor's width without zoom/crop, so non-uniform scaling is intentional. On a
-        // landscape monitor whose aspect matches the capture this is visually identical to Uniform.
+        // Draw the captured frame STRETCHED to fill the monitor bounds. NO opaque black fill is
+        // painted first: BrainDrainLayer (the other screen-capture layer) deliberately draws nothing
+        // until its image is ready, and the mirror follows the same rule. An opaque black
+        // background drawn before the image used to be left exposed if DrawImage threw (a disposed
+        // SKImage during a resize race, caught by the engine's per-layer try/catch) — composited
+        // with the 50% PinkTint that reads as a SOLID pink cover. With the black fill gone, a
+        // failed/missing image draws nothing (transparent), so the worst the user ever sees over a
+        // glitch frame is the desktop tinted at the capped 50% — never a solid color. In steady
+        // state the Fill-stretched image already covers the entire bounds, so removing the fill
+        // changes nothing visually while the capture loop is live. The backing memory is also kept
+        // alive 400ms after a resize (deferred-free in Update/AllocateBuffers) so the render thread
+        // never races with disposal mid-draw.
         canvas.DrawImage(front, ToSkRect(bounds));
     }
 
@@ -337,6 +427,9 @@ public sealed class BrowserMirrorVideoLayer : BaseLayer, IDisposable
         lock (_bufferLock)
         {
             FreeBuffers();
+            // Drain any deferred set too so a resize-then-shutdown does not leak native memory.
+            DisposeDeferredSet(_deferredSet);
+            _deferredSet = null;
         }
         _cts?.Dispose();
         _cts = null;
