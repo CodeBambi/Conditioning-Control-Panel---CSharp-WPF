@@ -4,11 +4,16 @@ using System.Collections.Generic;
 namespace ConditioningControlPanel.Core.Platform;
 
 /// <summary>
-/// Backend abstraction for Linux overlay surfaces. Each backend implements topmost
-/// and click-through behavior using a specific display protocol (X11/Wayland) and
-/// protocol extensions (XFixes, wlr-layer-shell, etc.).
+/// Backend abstraction for Linux overlay surfaces.
+/// Per docs/linux-overlay-contract.md §7.1-RESOLVED (web-verified 2026-07-12): this project
+/// pins Avalonia 12.0.x, which is X11-only on Linux (Wayland sessions run via XWayland, so
+/// the overlay window is ALWAYS an X11 window). The only backends are therefore
+/// X11 (XFixes input shape + EWMH topmost) and the no-X fallback. Native Wayland backends
+/// are dead code for this project and must not be added while Avalonia stays X11-only.
+/// Backends own native resources (an Xlib display connection) and are IDisposable
+/// (contract §6.0 item 5); <c>LinuxOverlaySurface.Close()</c> disposes the backend.
 /// </summary>
-public interface ILinuxOverlayBackend
+public interface ILinuxOverlayBackend : IDisposable
 {
     /// <summary>Backend name for diagnostics and logging.</summary>
     string Name { get; }
@@ -19,7 +24,11 @@ public interface ILinuxOverlayBackend
     /// <summary>Capability: supports per-region click-through (vs full-window only).</summary>
     bool SupportsPerRegionInputShape { get; }
 
-    /// <summary>Capability: supports guaranteed topmost (vs best-effort).</summary>
+    /// <summary>
+    /// Capability: supports guaranteed topmost (vs best-effort).
+    /// Capability flags are a contract (linux-overlay-contract.md §1.1): a backend
+    /// MUST NOT report a capability it does not deliver.
+    /// </summary>
     bool SupportsTopmost { get; }
 
     /// <summary>Shows the overlay window.</summary>

@@ -4,7 +4,6 @@ using Avalonia;
 using ConditioningControlPanel.Avalonia;
 using ConditioningControlPanel.Avalonia.Desktop;
 using ConditioningControlPanel.Avalonia.Desktop.Linux.Platform;
-using ConditioningControlPanel.Avalonia.Desktop.Linux.Platform.Backends;
 using ConditioningControlPanel.Avalonia.Infrastructure;
 using ConditioningControlPanel.Core.Platform;
 using Microsoft.Extensions.DependencyInjection;

@@ -10,23 +10,33 @@ using ILinuxOverlayBackend = ConditioningControlPanel.Core.Platform.ILinuxOverla
 namespace ConditioningControlPanel.Avalonia.Desktop.Linux.Platform.Backends;
 
 /// <summary>
-/// Last-resort overlay backend (Tier 5). Creates a basic always-on-top window with
-/// no click-through support. Guarantees the overlay is visible but all clicks are captured.
+/// Last-resort overlay backend. Pure Avalonia (ZERO P/Invokes — always constructs), used
+/// when no X display is reachable or the X11 probe failed.
 /// </summary>
 /// <remarks>
-/// This backend is used when:
-/// - Session type is unknown (neither X11 nor Wayland detected)
-/// - X11 session but XFixes extension unavailable
-/// - Wayland session but no layer-shell or input region support (GNOME with security restrictions)
-/// 
-/// Documented degrade: SetClickThrough is a no-op. All input is captured by the overlay.
-/// User must close the overlay to interact with the desktop.
+/// <para><b>Never-trap rule (linux-overlay-contract.md §1.4, normative):</b> this backend
+/// cannot honor <c>SetClickThrough(true)</c>, so it MUST NOT display the surface while
+/// ambient mode is requested — an invisible, transparent, topmost window that captures all
+/// input locks the user out of their desktop. When ambient click-through is requested the
+/// surface is hidden/refused with one logged reason. Full-capture mode
+/// (<c>SetClickThrough(false)</c> — mandatory video, lock card) MAY show: capturing input
+/// is then the intended behavior. The draft's "user must close the overlay" degrade is
+/// rejected by the contract.</para>
+///
+/// <para>Capability flags are honest (contract §1.1): no per-region input shape, and
+/// <see cref="SupportsTopmost"/> is false — Avalonia's <c>Topmost</c> is set best-effort,
+/// but with no display-server-level mechanism behind it this backend must not claim a
+/// guaranteed capability it cannot deliver.</para>
 /// </remarks>
 public sealed class FallbackBackend : ILinuxOverlayBackend
 {
     private readonly string _fallbackReason;
     private readonly ILogger? _logger;
     private Window? _window;
+    private bool _clickThroughRequested;
+    private bool _showRequested;
+    private bool _refusalLogged;
+    private bool _disposed;
 
     public FallbackBackend(string fallbackReason, ILogger<FallbackBackend>? logger = null)
     {
@@ -35,39 +45,76 @@ public sealed class FallbackBackend : ILinuxOverlayBackend
     }
 
     public string Name => "FallbackBackend";
-    public bool IsAvailable => true; // Always available
+    public bool IsAvailable => true; // Always available — zero P/Invokes, always constructs
     public bool SupportsPerRegionInputShape => false;
-    public bool SupportsTopmost => true; // Best-effort via Avalonia Topmost property
+    public bool SupportsTopmost => false; // Best-effort Avalonia Topmost only — do not overstate
 
     public bool IsVisible => _window?.IsVisible ?? false;
 
     public void Show()
     {
+        _showRequested = true;
+
+        if (_clickThroughRequested)
+        {
+            // §1.4: ambient mode requested but click-through is impossible here.
+            // Refuse to show instead of trapping input behind an invisible wall.
+            LogRefusalOnce();
+            _window?.Hide();
+            return;
+        }
+
         EnsureWindow();
         _window!.Show();
-        _logger?.LogDebug("FallbackBackend: Show (reason: {Reason})", _fallbackReason);
+        _logger?.LogDebug("FallbackBackend: Show (full-capture mode; reason: {Reason})", _fallbackReason);
     }
 
     public void Hide()
     {
+        _showRequested = false;
         _window?.Hide();
         _logger?.LogDebug("FallbackBackend: Hide");
     }
 
     public void Close()
     {
+        _showRequested = false;
         _window?.Close();
         _window = null;
         _logger?.LogDebug("FallbackBackend: Close");
     }
 
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        Close();
+    }
+
     public void SetClickThrough(bool enabled)
     {
-        // No-op: click-through not supported in fallback mode
-        // This is a documented degrade - all clicks are captured by the overlay
-        _logger?.LogTrace(
-            "FallbackBackend: SetClickThrough({Enabled}) - no-op (click-through unavailable in fallback mode)",
-            enabled);
+        _clickThroughRequested = enabled;
+
+        if (enabled)
+        {
+            // §1.4: cannot honor ambient click-through → hide the surface now if visible.
+            if (_window is { IsVisible: true })
+            {
+                _window.Hide();
+            }
+            LogRefusalOnce();
+        }
+        else
+        {
+            // Full-capture mode is honest here (capturing is intended). Re-show if the
+            // caller still wants the surface visible.
+            _refusalLogged = false;
+            if (_showRequested)
+            {
+                EnsureWindow();
+                _window!.Show();
+            }
+        }
     }
 
     public void SetBounds(CorePixelRect rect)
@@ -80,11 +127,21 @@ public sealed class FallbackBackend : ILinuxOverlayBackend
 
     public void SetInputCaptureRegions(IReadOnlyList<CorePixelRect> captureRegions)
     {
-        // No-op: per-region input shaping not supported
-        // Entire window captures all input
+        // Per-region input shaping is not supported (honest capability flag). Regions only
+        // matter in ambient mode, which this backend refuses to display anyway (§1.4).
         _logger?.LogTrace(
             "FallbackBackend: SetInputCaptureRegions({Count} regions) - no-op (per-region unavailable)",
             captureRegions.Count);
+    }
+
+    private void LogRefusalOnce()
+    {
+        if (_refusalLogged) return;
+        _refusalLogged = true;
+        _logger?.LogWarning(
+            "FallbackBackend: ambient click-through requested but unavailable — overlay surface hidden " +
+            "(never-trap rule, linux-overlay-contract.md §1.4). Reason: {Reason}",
+            _fallbackReason);
     }
 
     private void EnsureWindow()
@@ -107,7 +164,7 @@ public sealed class FallbackBackend : ILinuxOverlayBackend
 
         _logger?.LogInformation(
             "FallbackBackend: Created fallback window (reason: {Reason}). " +
-            "Click-through is NOT available - all input will be captured by the overlay.",
+            "Full-capture overlays only; ambient click-through mode hides the surface (§1.4).",
             _fallbackReason);
     }
 }

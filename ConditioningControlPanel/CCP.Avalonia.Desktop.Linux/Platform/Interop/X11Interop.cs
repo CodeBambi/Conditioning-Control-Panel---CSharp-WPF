@@ -26,6 +26,23 @@ internal static class X11Interop
     [DllImport(LibX11)]
     public static extern int XFlush(IntPtr display);
 
+    /// <summary>
+    /// Flushes the output buffer and waits until all requests have been processed by the
+    /// server. Used as the error-collection point of the scoped Xlib error trap
+    /// (linux-overlay-contract.md §3.1): reset trap → issue requests → XSync → read trap.
+    /// </summary>
+    [DllImport(LibX11)]
+    public static extern int XSync(IntPtr display, bool discard);
+
+    /// <summary>
+    /// Installs a process-global Xlib error handler and returns the previous handler's
+    /// function pointer (IntPtr.Zero when the Xlib DEFAULT handler was installed).
+    /// The default handler TERMINATES THE PROCESS on any X error (e.g. BadWindow from a
+    /// shape call racing window destruction on monitor hot-unplug) — see XlibErrorTrap.
+    /// </summary>
+    [DllImport(LibX11)]
+    public static extern IntPtr XSetErrorHandler(XErrorHandlerDelegate? handler);
+
     [DllImport(LibX11)]
     public static extern IntPtr XInternAtom(IntPtr display, string atomName, bool onlyIfExists);
 
@@ -63,6 +80,15 @@ internal static class X11Interop
 
     [DllImport(LibXfixes)]
     public static extern int XFixesQueryExtension(IntPtr display, out int eventBase, out int errorBase);
+
+    /// <summary>
+    /// Negotiates and returns the XFixes protocol version. Input-shape regions
+    /// (XFixesCreateRegion / XFixesSetWindowShapeRegion) require protocol version >= 2
+    /// (linux-overlay-contract.md §3.1 / §7.1 row 4 — fixesproto: regions are v2 additions),
+    /// so the probe must gate on major >= 2, not just extension presence.
+    /// </summary>
+    [DllImport(LibXfixes)]
+    public static extern int XFixesQueryVersion(IntPtr display, out int majorVersion, out int minorVersion);
 
     [DllImport(LibXfixes)]
     public static extern IntPtr XFixesCreateRegion(IntPtr display, XRectangle[] rectangles, int nrectangles);
@@ -121,7 +147,34 @@ internal static class X11Interop
         }
     }
 
+    /// <summary>
+    /// Xlib error handler signature: int (*)(Display*, XErrorEvent*).
+    /// </summary>
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate int XErrorHandlerDelegate(IntPtr display, ref XErrorEvent errorEvent);
+
+    /// <summary>
+    /// Matches Xlib's XErrorEvent (Xlib.h). LP64 layout — the Linux head is x64-only.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
+    public struct XErrorEvent
+    {
+        public int Type;
+        public IntPtr Display;
+        public UIntPtr ResourceId;   // XID of the failed resource
+        public UIntPtr Serial;       // serial number of the failed request
+        public byte ErrorCode;       // e.g. BadWindow = 3, BadMatch = 8
+        public byte RequestCode;     // major opcode
+        public byte MinorCode;       // minor opcode
+    }
+
+    /// <summary>
+    /// Matches Xlib's XClientMessageEvent. Size is pinned to 192 bytes because XSendEvent
+    /// takes an XEvent* and Xlib copies sizeof(XEvent) — the full event UNION, defined as
+    /// "long pad[24]" = 192 bytes on LP64. Without the explicit size Xlib reads past the
+    /// end of this 96-byte struct (stack garbage; latent memory-safety bug).
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, Size = 192)]
     public struct XClientMessageEvent
     {
         public int Type;           // Always ClientMessage (33)
