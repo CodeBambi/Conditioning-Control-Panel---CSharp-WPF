@@ -866,3 +866,30 @@ explicit residual manual checklist in its slice — no slice lands compile-only
 | Claim | Result | Source |
 |-------|--------|--------|
 | Avalonia v12 X11 handle access | **VERIFIED** — `TopLevel.GetTopLevel(x)?.TryGetPlatformHandle()` → `.Handle` (IntPtr XID) + `.HandleDescriptor == "XID"` on Linux/X11. The X11 backend keys off this. | docs.avaloniaui.net native-interop / window-handles (verified for the framesource + title contracts) |
+
+### 7.1-RESOLVED — THE FORK (web-verified 2026-07-12, driver): Avalonia 12.0 is X11-ONLY on Linux
+**Decisive:** this project references **Avalonia 12.0.5** (NOT 12.1) and has **zero** `Avalonia.Wayland` /
+`UseWayland` usage — the Linux head builds via `ProgramShared.BuildAvaloniaApp()` with default platform
+detect = **X11**. Per Avalonia docs, "Avalonia targets X11 directly on Linux; Wayland support is in private
+preview"; the native Wayland backend is **experimental, 12.1-only, opt-in** (`Avalonia.Wayland` package +
+`UseWayland()`), and NOT selected by `UsePlatformDetect()`.
+
+**Consequence — the entire native-Wayland (wlr-layer-shell) backend is OUT OF SCOPE / DEAD CODE for this
+project:**
+- On an **X11 session**, Avalonia creates a native X11 window → the X11 XFixes-shape backend applies.
+- On a **Wayland session**, Avalonia runs under **XWayland** → the window is still an X11 (XWayland) window
+  → the SAME X11 XFixes-shape backend applies. Avalonia never creates a native `wl_surface`, so there is
+  nothing for a layer-shell backend to attach to (and attaching post-creation is the role-exclusivity
+  crash fable-5 flagged).
+- **Implement ONLY: the X11 backend (XFixes input shape + `_NET_WM_STATE` topmost) + the FallbackBackend
+  (no-X).** Selector: X-display present (native or XWayland) → X11 backend; else → fallback. Do NOT ship
+  `WaylandLayerShellBackend`/`WaylandInputRegionBackend`/`WaylandDegradeBackend` — remove/park them; they
+  cannot be selected because Avalonia's surface is always X11 here.
+- **Only residual (row 3, real-Wayland-only):** whether the compositor routes an X11 input-shape on an
+  XWayland window as pass-through to NATIVE Wayland windows beneath. XWayland surfaces participate in
+  compositor input routing and honor input regions, so this is expected to work; pure-X11 Xvfb CI proves
+  the X11 half — the XWayland-underneath half needs a real Wayland+XWayland manual check (one row).
+- Revisit the Wayland-native path ONLY if the project later adopts `Avalonia.Wayland` (12.1+, opt-in).
+
+**IMPL-AUDIT DIRECTIVE:** the in-flight opus-4-5 overlay impl builds Wayland backends too — the fable-5
+impl-audit KEEPS/hardens X11 + selector + fallback and DELETES the Wayland-native backends as dead code.
