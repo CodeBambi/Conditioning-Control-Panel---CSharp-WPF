@@ -24,4 +24,22 @@ public interface IAudioPlayer : IAsyncDisposable
     /// no-op when idle or already playing.
     /// </summary>
     void Resume() { }
+
+    /// <summary>
+    /// True while a subliminal/flash "whisper" is (approximately) still audible (WPF parity:
+    /// App.Audio.IsWhisperAudioPlaying, Services/AudioService.cs:737-744). Consulted by the bark
+    /// gate so the companion won't talk over a whisper (BarkService.cs:1342). Default false so
+    /// heads/fakes without the busy window inherit safe non-blocking behavior; the LibVLC-backed
+    /// player overrides this (delegating to <see cref="Services.Audio.WhisperAudioBusyness"/>).
+    /// </summary>
+    bool IsWhisperAudioPlaying => false;
+
+    /// <summary>
+    /// Record that a whisper clip of <paramref name="durationSeconds"/> just started so
+    /// <see cref="IsWhisperAudioPlaying"/> reports busy until it finishes (+ a 0.25s tail)
+    /// (WPF parity: App.Audio.MarkWhisperAudio, Services/AudioService.cs:752-761). Default no-op;
+    /// the LibVLC-backed player overrides this. Only ever EXTENDS the window — a shorter
+    /// concurrent clip can't cut a longer one short; no-op for non-positive/NaN durations.
+    /// </summary>
+    void MarkWhisperAudio(double durationSeconds) { }
 }

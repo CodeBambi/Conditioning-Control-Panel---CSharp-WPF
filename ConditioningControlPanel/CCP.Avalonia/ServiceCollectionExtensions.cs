@@ -167,7 +167,8 @@ public static class ServiceCollectionExtensions
                 logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<AvatarBarkSpeaker>>()));
         services.AddSingleton<ConditioningControlPanel.Core.Services.Bark.IBarkGateSignals>(sp =>
             new ConditioningControlPanel.Core.Services.Bark.BarkGateSignals(
-                sp.GetService<IAvatarWindowService>()));
+                sp.GetService<IAvatarWindowService>(),
+                sp.GetService<IAudioPlayer>()));
         services.AddSingleton<ConditioningControlPanel.Core.Services.Bark.IBarkLiveFields>(sp =>
             new ConditioningControlPanel.Core.Services.Bark.BarkLiveFields(
                 sp.GetService<ISettingsService>(),
