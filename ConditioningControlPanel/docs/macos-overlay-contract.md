@@ -42,13 +42,13 @@ public interface IOverlaySurface
 
 | Requirement | Windows Implementation | Citation | macOS disposition |
 |---|---|---|---|
-| **Topmost** | `Topmost = true` in base ctor; `HWND_TOPMOST` reassertion probe | `AvaloniaOverlaySurface.cs:14`, `CompositorWindow.axaml.cs:149-175` | `NSWindow.level` (§3.2). Level-based stacking is *stable* — no Win32-style z-order races, so the reassertion timer is expected to be a no-op **[confidence: medium — verify nothing (incl. Avalonia) resets our level; §7.1 row 4]** |
+| **Topmost** | `Topmost = true` in base ctor; `HWND_TOPMOST` reassertion probe | `AvaloniaOverlaySurface.cs:14`, `CompositorWindow.axaml.cs:149-175` | `NSWindow.level` (§3.2). Level-based stacking is *stable* — no Win32-style z-order races, so the reassertion timer is expected to be a no-op **[web-verified §7.1 row 4: Avalonia's only level write is `SetTopMost` (→ floating/normal) — no spontaneous resets in source, but re-assert our level after any `Topmost` property write; Slice B watch stays]** |
 | **Click-through toggle** | `SetClickThrough(true)` ORs `WS_EX_TRANSPARENT \| WS_EX_LAYERED`; `false` clears `TRANSPARENT` | `WindowsOverlaySurface.cs:24-40` | `NSWindow.ignoresMouseEvents` (§3.3) |
 | **Per-region click-through** | Window always transparent; global `WH_MOUSE_LL` hook swallows clicks inside the capture mask | overlay-clickthrough skill; 2026-07-09 team review | Dynamic `ignoresMouseEvents` toggling driven by a permission-free mouse-location poller (§3.4) — NOT an event tap (TCC-gated, rejected §3.4) |
 | **Focus non-stealing** | `ShowActivated=false`, `Focusable=false`, `IsHitTestVisible=false`; `WS_EX_NOACTIVATE` | `AvaloniaOverlaySurface.cs:17-20` | Same Avalonia flags; verify the NSWindow never becomes key on click-capture (§3.6). NO class swizzling to force `canBecomeKey=false` — mirror of the `SetWindowSubclass` ban |
 | **Taskbar/Alt-Tab exclusion** | `ShowInTaskbar=false`; `WS_EX_TOOLWINDOW` | `AvaloniaOverlaySurface.cs:15` | `collectionBehavior` `ignoresCycle` (Cmd-Tab shows apps not windows on macOS; Mission Control exclusion via `stationary`) §3.5 |
 | **Transparency** | `WindowDecorations=None`, `TransparencyLevelHint=[Transparent]` | `AvaloniaOverlaySurface.cs:11-13` | Same Avalonia flags; Quartz composites alpha natively — no "no compositor" degrade case exists on macOS |
-| **Screen-capture exclusion** | `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` for brain-drain only | `CompositorWindow.axaml.cs:115-120` | `NSWindow.sharingType = NSWindowSharingNone` (§3.7) — a REAL equivalent exists on macOS, unlike Linux |
+| **Screen-capture exclusion** | `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` for brain-drain only | `CompositorWindow.axaml.cs:115-120` | `NSWindow.sharingType = NSWindowSharingNone` (§3.7) — **BEST-EFFORT ONLY: on macOS 15+, ScreenCaptureKit IGNORES `sharingType` (web-REFUTED §7.1 row 9)**; still blocks legacy CG capture. Honest parity gap recorded |
 | **Multi-monitor** | One window per monitor; `SetBounds(PixelRect)` | `CompositorEngine.cs:127-134` | One window per `NSScreen`; positioning stays in Avalonia (§3.8) — native code never moves the window |
 | **All-Spaces / fullscreen coverage** | N/A (Windows has no Spaces) | — | `collectionBehavior` `canJoinAllSpaces \| fullScreenAuxiliary` (§3.5) — REQUIRED or the overlay vanishes when the user switches Spaces or an app goes fullscreen |
 
@@ -115,8 +115,8 @@ replace the window's class or delegate — Avalonia.Native owns the window lifec
 - **AppKit is main-thread-only.** Every NSWindow property mutation (`level`,
   `ignoresMouseEvents`, `collectionBehavior`, `sharingType`) must run on the AppKit
   main thread. On macOS, Avalonia's `Dispatcher.UIThread` IS the AppKit main thread
-  **[confidence: high — Avalonia.Native runs the NSApplication run loop on the main
-  thread; verify via Avalonia.Native source, §7.1 row 5]** — marshal with
+  **[VERIFIED §7.1 row 5 — Avalonia has one main UI thread and its macOS backend runs
+  NSApplication on the process main thread (docs.avaloniaui.net threading)]** — marshal with
   `Dispatcher.UIThread.Post/InvokeAsync`; never block a threadpool thread waiting on it.
 - `NSEvent.mouseLocation` (class property) and pure CoreGraphics queries used by the
   poller are callable off-main **[confidence: medium-high — CG APIs are thread-safe;
@@ -207,7 +207,7 @@ Quartz window levels (from `CGWindowLevelForKey`):
 | Level key | Value | Notes |
 |---|---|---|
 | `kCGNormalWindowLevel` | 0 | ordinary windows |
-| `kCGFloatingWindowLevel` | 3 | `NSWindow.Level.floating`; what Avalonia likely maps `Topmost=true` to **[confidence: medium — verify in Avalonia.Native, §7.1 row 4]** |
+| `kCGFloatingWindowLevel` | 3 | `NSWindow.Level.floating`; **VERIFIED — Avalonia maps `Topmost=true` to exactly this**: `WindowBaseImpl::SetTopMost` does `[Window setLevel:value ? NSFloatingWindowLevel : NSNormalWindowLevel]` (Avalonia.Native `WindowBaseImpl.mm`; §7.1 row 4). Consequence: ANY later write to the Avalonia `Topmost` property re-fires `SetTopMost` and clobbers our custom level back to 3 — re-assert the custom level after any `Topmost` write, and keep the Slice B level-reset watch |
 | `kCGStatusWindowLevel` | 25 | above menu bar items |
 | `kCGPopUpMenuWindowLevel` | 101 | above open menus |
 | `kCGScreenSaverWindowLevel` | 1000 | above practically everything |
@@ -223,7 +223,9 @@ settings-selectable compromise — record the outcome in §7.3.
 - Set the level AFTER `Show()` (window must exist; also some AppKit paths reset level
   on ordering-in **[confidence: low-medium — the classic gotcha is orderFront resetting
   custom levels set pre-show; verify empirically in Slice B]**). Re-apply on every
-  `Opened` since Avalonia may recreate the native window.
+  `Opened` since Avalonia may recreate the native window. **Verified reset vector
+  (§7.1 row 4):** Avalonia's `SetTopMost` sets `level` directly — re-assert our level
+  after any code path that writes the `Topmost` property.
 - **No reassertion timer initially:** level-based stacking has no HWND_TOPMOST-style
   racing. Keep the Windows head's 500ms probe DISABLED on macOS unless Slice B's headed
   CI shows the level being reset (Avalonia touching `level` on
@@ -240,8 +242,11 @@ SetClickThrough(false) → window.setIgnoresMouseEvents(false)  // window receiv
 This is the exact analogue of `WS_EX_TRANSPARENT` and works at the window-server level:
 events in the window's frame are delivered to whatever is beneath. Note: once
 `setIgnoresMouseEvents:` has been called explicitly with ANY value, AppKit's implicit
-per-transparent-pixel pass-through is disabled for that window **[confidence: medium —
-long-standing documented AppKit behavior; verify, §7.1 row 6]** — irrelevant to us
+per-transparent-pixel pass-through is disabled for that window **[VERIFIED — Loom's
+ElectronMacOSClickThrough README documents exactly this tri-state: "a borderless
+NSWindow will register clicks in opaque regions AND pass clicks through in transparent
+regions UNLESS you set ignoresMouseEvents at which point all clicks register … or all
+pass through" (github.com/loomhq/ElectronMacOSClickThrough); §7.1 row 6]** — irrelevant to us
 (our ambient layers paint visible pixels, so we never relied on alpha pass-through),
 but worth knowing when debugging.
 
@@ -254,7 +259,7 @@ Candidate mechanisms, evaluated:
 | **`contentView.hitTest` override** | REJECTED | `hitTest` runs only AFTER the window server has already routed the event to our window; returning nil re-routes within our app, it does NOT forward the click to another app's window. Cannot implement pass-through. Also requires subclassing Avalonia's view (banned, §2.1) |
 | **Per-pixel alpha pass-through** | REJECTED | Only fully-transparent pixels pass; the ambient tint/spiral paint visible alpha. Also disabled once `setIgnoresMouseEvents:` is used (§3.3) |
 | **`CGEventTap` global hook (Windows-hook mirror)** | REJECTED | An event tap that observes/blocks clicks requires **TCC Accessibility (Input Monitoring)** — an ambient app must not demand Accessibility just to draw overlays (TCC judgment: see title contract §5). Also listen-only taps get disabled by the OS under event pressure |
-| **Dynamic `ignoresMouseEvents` toggling from a mouse-location poller** | **PRIMARY** | Zero TCC. `NSEvent.mouseLocation` is readable without any permission. Poll ~60Hz (or on a global `mouseMoved` monitor **[confidence: medium — global NSEvent monitors for mouse-moved are permission-free, unlike key events; verify, §7.1 row 7]**): pointer inside capture-mask union → `ignoresMouseEvents=false`; outside → `true` |
+| **Dynamic `ignoresMouseEvents` toggling from a mouse-location poller** | **PRIMARY** | Zero TCC. `NSEvent.mouseLocation` is readable without any permission (VERIFIED — used freely in permissionless sample code, e.g. stackoverflow.com/questions/31931403). Poll ~60Hz (or on a global `mouseMoved` monitor **[VERIFIED — mouse-moved global monitors work even when `AXIsProcessTrusted()` is false; only KEY-event monitors need Accessibility (stackoverflow.com/questions/49716420 + Apple "Monitoring Events" archive doc); §7.1 row 7]**): pointer inside capture-mask union → `ignoresMouseEvents=false`; outside → `true` |
 | **Transparent input-catcher child NSWindows over capture regions** | PARKED (Slice F) | Robust (no boundary race, true per-region at the window server), zero TCC, but per-mask-update window churn and event re-routing complexity. Unpark if the poller's race proves user-visible |
 
 **Poller design (`MouseRegionTracker`):**
@@ -285,6 +290,10 @@ collectionBehavior = canJoinAllSpaces (1<<0)      // overlay follows every Space
                    | ignoresCycle (1<<6)          // excluded from window cycling
 ```
 
+Flag raw values VERIFIED against the AppKit SDK header (`NSWindow.h`):
+`CanJoinAllSpaces = 1<<0`, `Stationary = 1<<4`, `IgnoresCycle = 1<<6`,
+`FullScreenAuxiliary = 1<<8`.
+
 Without `canJoinAllSpaces` the overlay silently disappears when the user switches
 Spaces — the macOS-specific failure Windows/Linux don't have. `fullScreenAuxiliary`
 plus a level above `kCGNormalWindowLevel` is what lets the overlay draw over a
@@ -292,26 +301,51 @@ fullscreen app **[confidence: medium — fullscreen Spaces + auxiliary windows i
 varies by macOS version; headed CI can't create a fullscreen third-party app easily —
 manual checklist row, §7.2]**.
 
+**Avalonia-touches-collectionBehavior warning (web-verified from Avalonia.Native
+`WindowBaseImpl.mm`):** (1) `Show()` reads `collectionBehavior`, strips
+`FullScreenPrimary` for the duration of the show, then RESTORES the pre-show value —
+so flags set mid-`Show()` can be lost; (2) `SetParent` hard-OVERWRITES
+`collectionBehavior` with `FullScreenAuxiliary` alone. **Rules:** apply our
+collectionBehavior AFTER `Show()` returns (on `Opened`), and NEVER parent overlay
+windows to another window.
+
 ### 3.6 Focus non-stealing
 
 Avalonia's `ShowActivated=false` / `Focusable=false` carry over. The residual macOS
 risk: when a capture-region click is delivered, AppKit may make the window key/main and
 activate the app (bouncing the Dock icon, deactivating the user's app). Mitigations in
-order: (1) verify Avalonia's non-activating flags map to AppKit correctly
-**[confidence: low-medium — Avalonia.Native activation policy is unverified; §7.1 row
-8]**; (2) if the app activates on capture clicks, `NSApp.deactivate` after handling is
+order: (1) Avalonia's non-activating SHOW path is web-verified — `Show(activate:false)`
+uses bare `orderFront:` with no makeKey/activate (`WindowBaseImpl.mm`); CLICK-time
+activation remains the open half **[UNCERTAIN — §7.1 row 8; Slice D CI assert]**;
+(2) if the app activates on capture clicks, `NSApp.deactivate` after handling is
 a crude repair — record findings in §7.3 before choosing. NO `canBecomeKey` swizzle.
 
-### 3.7 Screen-capture exclusion via `sharingType`
+### 3.7 Screen-capture exclusion via `sharingType` — BEST-EFFORT on macOS 15+ (design corrected after web verification)
 
-`window.setSharingType(NSWindowSharingNone /* 0 */)` — the genuine macOS equivalent of
-`WDA_EXCLUDEFROMCAPTURE` (Linux has none; macOS does). Applied to the brain-drain
-window only, mirroring `CompositorWindow.axaml.cs:115-120` gating. Caveats:
-ScreenCaptureKit and legacy CGWindowList capture both honor `sharingType=none`
-**[confidence: medium — macOS 15 changed some sharing semantics (deprecation of
-sharingType readback); verify current behavior per OS version, §7.1 row 9]**. Note the
-interaction with our OWN framesource: excluded windows will also be missing from CCP's
-own screen capture — same as Windows, correct parity.
+`window.setSharingType(NSWindowSharingNone /* 0 */)` — enum values VERIFIED from the
+AppKit SDK header (`None=0, ReadOnly=1 (default), ReadWrite=2`). Applied to the
+brain-drain window only, mirroring `CompositorWindow.axaml.cs:115-120` gating.
+
+**REFUTED as a full equivalent (§7.1 row 9):** on **macOS 15+ (Sequoia),
+ScreenCaptureKit IGNORES `sharingType = .none`** — Apple confirmed via developer
+forums that all window contents are composited into a single framebuffer which SCK
+captures regardless of sharing flags; Apple's own docs now describe
+`NSWindow.SharingType.none` as "a legacy constant that macOS no longer uses"
+(developer.apple.com/documentation/appkit/nswindow/sharingtype-swift.enum/none;
+developer.apple.com/forums/thread/792152; tauri-apps/tauri#14200 — no known
+workaround, matches Electron #48258). On macOS ≤ 14 it works; on 15+ it still blocks
+**legacy CG capture paths** (CGWindowList/CGDisplay image APIs) but NOT SCK-based
+capture (which includes QuickTime/system screenshot flows on current macOS).
+
+**Revised design:** still SET `sharingType=none` on brain-drain windows (harmless,
+blocks legacy capture, full exclusion on ≤ 14), but the Windows-parity claim is
+downgraded to **best-effort**: on macOS 15+ third-party SCK capture WILL see the
+brain-drain layer. Record this as an honest parity gap in the readiness map — do NOT
+chase compositor hacks (CGShieldingWindowLevel etc. are confirmed ineffective).
+Self-consistency with CCP's OWN framesource is handled on the framesource side:
+its SCK backend explicitly excludes CCP's protected windows via
+`SCContentFilter(excludingWindows:)` (see `macos-framesource-contract.md` §3.5
+revised), and its CG backend honors `sharingType` natively.
 
 ### 3.8 Multi-monitor
 
@@ -473,14 +507,18 @@ dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.macOS -- --sm
 # With the framesource TCC grant (screen-recording row from the sibling lane):
 # capture the screen via the sibling's CGDisplayCreateImage path with the brain-drain
 # window shown+excluded → assert the known-color test pattern under it is visible in
-# the capture (window absent). Focus: post capture-region click → assert the harness's
-# previously-key helper window is STILL key (NSApp not activated).
+# the capture (window absent). NOTE: this assert is valid ONLY via the legacy CG path —
+# sharingType still blocks CG capture on macOS 15+; an SCK-path capture on macos-latest
+# (≥15) WILL show the window (expected per §3.7 revised — assert that too, as the
+# documented-gap regression canary). Focus: post capture-region click → assert the
+# harness's previously-key helper window is STILL key (NSApp not activated).
 ```
-Manual rows: real screen-share app (Zoom/QuickTime) exclusion check; §3.6 activation
-behavior on a real desktop.
+Manual rows: real screen-share app (Zoom/QuickTime) exclusion check — EXPECTED VISIBLE
+on macOS 15+ SCK-based apps per §3.7 revised; §3.6 activation behavior on a real desktop.
 
 **Acceptance:**
-- [ ] `sharingType=none` applied only to brain-drain windows (parity with Windows gating)
+- [ ] `sharingType=none` applied only to brain-drain windows (best-effort per §3.7
+      revised — legacy-CG exclusion asserted; SCK visibility on 15+ documented, not fought)
 - [ ] CI capture assert green or recorded continue-on-error residual
 - [ ] Focus non-steal assert green; findings recorded in §7.3 either way
 
@@ -518,19 +556,25 @@ events routed to the compositor hit-test; the main overlay window stays permanen
 
 ### 7.1 Claims to verify before the relevant slice lands ([confidence:] tags; driver has web tools)
 
-| # | Claim | Confidence | Verify via | Blocks |
+All rows re-verified against current sources in the 2026-07-12 §7.1 web pass
+(annotations below; full evidence in §7.1-VERIFIED).
+
+| # | Claim | Verdict (web pass 2026-07-12) | Source / evidence | Blocks |
 |---|---|---|---|---|
-| 1 | `TryGetPlatformHandle()` → NSWindow ptr, descriptor "NSWindow" on macOS | **VERIFIED (doc)** — runtime-confirm in Slice A | docs.avaloniaui.net (see §7.1-VERIFIED) | A |
-| 2 | GitHub macos runner TCC.db editable via sqlite for Accessibility/ScreenCapture grants | **VERIFIED (recipe exists)** — image-version-sensitive; prove on current image | actions/runner-images #9529, #7792 (see §7.1-VERIFIED) | B/C/D input asserts |
-| 3 | `kCGScreenSaverWindowLevel` overlay coexists acceptably with menu bar/Dock/Notification Center | Medium | headed CI + real-Mac manual | B |
-| 4 | Avalonia.Native maps `Topmost` to floating level and does NOT re-set `level` after we change it (activation, fullscreen transitions) | Medium | Avalonia.Native source (`WindowImpl`/`SetTopmost`); empirically Slice B level-reset watch | B |
-| 5 | Avalonia `Dispatcher.UIThread` == AppKit main thread on macOS | High | Avalonia.Native run-loop source | A |
-| 6 | Explicit `setIgnoresMouseEvents:` disables implicit per-transparent-pixel pass-through | Medium | AppKit docs/archaeology; empirically harmless either way | C (debugging only) |
-| 7 | Global `NSEvent` mouse-moved monitors are permission-free (unlike key monitors) | Medium | AppKit docs; fallback is the 16ms timer poll which needs nothing | C |
-| 8 | Avalonia `ShowActivated=false` prevents app activation on macOS capture-clicks | Low-medium | Avalonia.Native activation policy source; Slice D CI assert | D |
-| 9 | `sharingType=none` honored by ScreenCaptureKit + CGWindowList capture on macOS 13/14/15 | Medium | Apple docs + real screen-share manual check; macOS 15 sharing-semantics changes | D |
-| 10 | `fullScreenAuxiliary` + high level draws over fullscreen apps' Spaces | Medium | real-Mac manual (CI can't fullscreen a third-party app) | B (manual row) |
-| 11 | No scriptable multi-display on hosted macOS runners | High | runner-images docs | E (manual row) |
+| 1 | `TryGetPlatformHandle()` → NSWindow ptr, descriptor "NSWindow" on macOS | **VERIFIED** — runtime-confirm in Slice A stays | docs.avaloniaui.net/xpf/interop/native-window-handles (literal `case "NSWindow":`); Avalonia.Native `WindowBaseImpl.mm` `ObtainNSWindowHandle` returns the NSWindow | A |
+| 2 | GitHub macos runner TCC.db editable via sqlite for Accessibility/ScreenCapture grants | **VERIFIED (recipe exists; image-sensitive)** | actions/runner-images #7792 (workflow recipe), #8951 (`kTCCServiceScreenCapture` insert; also documents a case where the grant didn't take effect — keep continue-on-error), #8214 (Accessibility/AppleEvents insert) | B/C/D input asserts |
+| 3 | `kCGScreenSaverWindowLevel` overlay coexists acceptably with menu bar/Dock/Notification Center | **UNCERTAIN** — real-desktop judgment; level value 1000 itself VERIFIED (SDK `CGWindowLevel.h`) | headed CI + real-Mac manual | B |
+| 4 | Avalonia.Native maps `Topmost` to floating level and does NOT re-set `level` after we change it | **VERIFIED (mapping)** — `SetTopMost` → `setLevel:NSFloatingWindowLevel/NSNormalWindowLevel`; no spontaneous re-set found in source, BUT any `Topmost` property write re-fires it → re-assert level after `Topmost` writes; keep the Slice B watch | github.com/AvaloniaUI/Avalonia `native/Avalonia.Native/src/OSX/WindowBaseImpl.mm` | B |
+| 5 | Avalonia `Dispatcher.UIThread` == AppKit main thread on macOS | **VERIFIED** — Avalonia has one main UI thread; the macOS backend runs NSApplication on the process main thread (AppKit enforces via main-thread checker) | docs.avaloniaui.net/docs/app-development/threading; Avalonia.Native architecture | A |
+| 6 | Explicit `setIgnoresMouseEvents:` disables implicit per-transparent-pixel pass-through | **VERIFIED** — tri-state behavior documented verbatim by Loom's production workaround | github.com/loomhq/ElectronMacOSClickThrough README | C (debugging only) |
+| 7 | Global `NSEvent` mouse-moved monitors are permission-free (unlike key monitors) | **VERIFIED** — mouse-move global monitors fire with `AXIsProcessTrusted()==false`; only key monitors need Accessibility | stackoverflow.com/questions/49716420; Apple "Monitoring Events" (Cocoa Event Handling Guide) | C |
+| 8 | Avalonia `ShowActivated=false` prevents app activation on macOS capture-clicks | **UNCERTAIN (show-path VERIFIED)** — `Show(activate:false)` uses bare `orderFront:` (no makeKey/activate) per source; CLICK-time activation behavior still needs the Slice D assert | Avalonia.Native `WindowBaseImpl.mm` `Show()` | D |
+| 9 | `sharingType=none` honored by ScreenCaptureKit + CGWindowList capture on macOS 13/14/15 | **REFUTED for macOS 15+** — SCK ignores `sharingType`; only legacy CG capture still honors it; Apple calls `.none` a legacy constant. §3.7 redesigned to best-effort | developer.apple.com/forums/thread/792152; tauri-apps/tauri#14200; developer.apple.com/documentation/appkit/nswindow/sharingtype-swift.enum/none | D |
+| 10 | `fullScreenAuxiliary` + high level draws over fullscreen apps' Spaces | **UNCERTAIN** — real-Mac manual (CI can't fullscreen a third-party app); flag value 1<<8 VERIFIED (SDK header) | AppKit `NSWindow.h`; manual row | B (manual row) |
+| 11 | No scriptable multi-display on hosted macOS runners | **UNCERTAIN (no contrary evidence found)** — treat as true; manual row stands | runner-images hardware docs | E (manual row) |
+| 12 | Quartz level constants: floating=3, status=25, popup=101, screensaver=1000 | **VERIFIED** | AppKit/CG SDK headers (`CGWindowLevel.h` values; `NSWindow.h` maps NS levels to kCG levels) | B |
+| 13 | `objc_msgSend` P/Invoke from .NET 8 on osx-arm64/x64; no `_stret` variant on arm64 | **VERIFIED (feasibility)** — .NET officially intercepts P/Invokes to the objc_msgSend family; cast-per-signature is the documented pattern; arm64 ABI has no stret split | learn.microsoft.com/dotnet/ios/advanced-concepts/exception-marshaling; mikeash.com "objc_msgSend's New Prototype" | A |
+| 14 | `NSEvent.mouseLocation` readable with zero TCC | **VERIFIED** — used permissionlessly in mainstream samples; no TCC service gates cursor position | stackoverflow.com/questions/31931403 (and ubiquitous usage) | C |
 
 ### 7.2 Genuine Unknowns (real-desktop only)
 
@@ -580,7 +624,10 @@ SHARED with the title/framesource contracts (one job hosts all three suites).
   math); event taps REJECTED (TCC Accessibility); hitTest overrides REJECTED (cannot
   forward to other apps); input-catcher child windows PARKED as Slice F.
 - **Zero TCC for the overlay** — a hard constraint the mechanism selection satisfies;
-  capture exclusion gets a REAL equivalent (`sharingType=none`), better than Linux.
+  capture exclusion via `sharingType=none` is **best-effort**: full on macOS ≤ 14 and
+  against legacy CG capture, but IGNORED by ScreenCaptureKit on macOS 15+ (web-refuted
+  §3.7/§7.1 row 9) — still better than Linux (which has nothing), honestly documented
+  as a parity gap.
 - **Never-trap rule inherited:** degrade hides the surface; poller failure fails OPEN
   (fully ambient), never trapping.
 - **CI:** headed macos-smoke lane on macos-latest with permission-free CGWindowList
@@ -605,8 +652,15 @@ SHARED with the title/framesource contracts (one job hosts all three suites).
 - `overlay-clickthrough` skill — per-region contract (2026-07-09 team review)
 - `.pi/skills/avalonia-research/SKILL.md` — v12 verification protocol
 
-### 7.1-VERIFIED (web research, 2026-07-12 — this drafting pass)
+### 7.1-VERIFIED (web research, 2026-07-12 — drafting pass + full §7.1 verify pass)
 | Claim | Result | Source |
 |-------|--------|--------|
 | Avalonia macOS handle | **VERIFIED** — `TryGetPlatformHandle()` returns the NSWindow pointer; `HandleDescriptor == "NSWindow"` (docs show the exact `case "NSWindow":` switch alongside "HWND"/"XID") | docs.avaloniaui.net window-handles + native-interop; AvaloniaUI/Avalonia discussion #13174 |
 | GitHub macOS runner TCC grants scriptable | **VERIFIED (recipe exists)** — `sudo sqlite3` inserts into system+user `TCC.db` (e.g. `kTCCServiceScreenCapture`) work on runner images; Sonoma adds 4 schema columns; SIP status varies by image version — treat as image-sensitive, prove per image | actions/runner-images #9529 (working recipe), #7792, #1567, #8951 |
+| Avalonia `Topmost` mapping + collectionBehavior interference | **VERIFIED** — `SetTopMost` → `setLevel:NSFloatingWindowLevel(3)/NSNormalWindowLevel(0)`; `Show()` save/strip-FullScreenPrimary/restore on `collectionBehavior`; `SetParent` overwrites `collectionBehavior` with `FullScreenAuxiliary` only (→ §3.5 rules: set behavior after Show, never parent overlays) | AvaloniaUI/Avalonia `native/Avalonia.Native/src/OSX/WindowBaseImpl.mm` (fetched 2026-07-12) |
+| `sharingType=none` vs ScreenCaptureKit | **REFUTED for macOS 15+** — SCK captures the composited framebuffer and ignores `sharingType`/content-protection flags (Apple-confirmed; Electron/Tauri track it as upstream-unfixable); legacy CG capture still honors it; Apple docs call `.none` "a legacy constant that macOS no longer uses" | developer.apple.com/forums/thread/792152; tauri-apps/tauri#14200; electron/electron#48258; developer.apple.com/documentation/appkit/nswindow/sharingtype-swift.enum/none |
+| collectionBehavior flag raw values | **VERIFIED** — `CanJoinAllSpaces=1<<0`, `Stationary=1<<4`, `IgnoresCycle=1<<6`, `FullScreenAuxiliary=1<<8`; sharingType `None=0/ReadOnly=1/ReadWrite=2` | AppKit SDK `NSWindow.h` (phracker/MacOSX-SDKs mirror, macOS 11.3 SDK) |
+| Window level values | **VERIFIED** — screensaver=1000, popup=101, status=25, floating=3 | SDK `CGWindowLevel.h` mirrors (ampede, xpwn); stackoverflow.com/questions/24168257 |
+| Mouse-moved global monitors + `mouseLocation` permission-free | **VERIFIED** — mouse-move monitors and `NSEvent.mouseLocation` need no TCC; only key-event monitors require Accessibility | stackoverflow.com/questions/49716420; Apple Cocoa Event Handling Guide "Monitoring Events" |
+| Explicit `setIgnoresMouseEvents:` kills per-pixel pass-through | **VERIFIED** | github.com/loomhq/ElectronMacOSClickThrough (production Electron workaround built on exactly this behavior) |
+| objc_msgSend P/Invoke viability from .NET | **VERIFIED** — objc_msgSend-family P/Invoke is an officially recognized .NET interop path; per-signature typed declarations; arm64 has no `_stret` | learn.microsoft.com/dotnet/ios/advanced-concepts/exception-marshaling; mikeash.com/pyblog/objc_msgsends-new-prototype.html |
