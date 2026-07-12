@@ -330,16 +330,34 @@ public class OverlayService : IDisposable
                 }
             }
 
-            // Restore after 1 second
+            // Restore after 1 second. When a session/Deeper ramp owns an overlay's opacity,
+            // Update*Opacity() deliberately early-returns (it must not fight the live ramp) — so
+            // routing the restore through it left the overlay stuck at the *boosted* value, up to
+            // fully opaque, recoverable only by toggling the overlay off/on (#535). Restore to the
+            // ramp's own value when a ramp is active; otherwise fall back to the user's settings.
             Task.Delay(1000).ContinueWith(_ =>
             {
                 try
                 {
                     DispatcherHelper.RunOnUISync(() =>
                     {
-                        if (hasPink) UpdatePinkFilterOpacity();
-                        if (hasSpiral) UpdateSpiralOpacity();
-                        if (hasBrainDrain) UpdateBrainDrainBlurOpacity(_currentBrainDrainIntensity);
+                        if (hasPink)
+                        {
+                            if (_rampPinkOpacity.HasValue) ApplyPinkOpacityDirect(_rampPinkOpacity.Value);
+                            else UpdatePinkFilterOpacity();
+                        }
+                        if (hasSpiral)
+                        {
+                            if (_rampSpiralOpacity.HasValue) ApplySpiralOpacityDirect(_rampSpiralOpacity.Value);
+                            else UpdateSpiralOpacity();
+                        }
+                        if (hasBrainDrain)
+                        {
+                            if (_rampBrainDrainOpacity.HasValue)
+                                UpdateBrainDrainBlurOpacity(Math.Max(1, (int)Math.Round(_rampBrainDrainOpacity.Value * 100)));
+                            else
+                                UpdateBrainDrainBlurOpacity(_currentBrainDrainIntensity);
+                        }
                     });
                 }
                 catch { /* Window may have closed */ }
