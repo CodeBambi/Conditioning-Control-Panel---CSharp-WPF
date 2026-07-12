@@ -910,3 +910,21 @@ NOT help and adds risk.**
 - **Revisit ONLY** the 12.1 **X11** perf wins (>60fps refresh uncap, stencil buffers, XDND) as a separate future
   upgrade after the port stabilizes — independent of Wayland.
 CONCLUSION: overlay stays X11-only (XFixes shape + _NET_WM_STATE), universal via XWayland, CI-provable via Xvfb.
+
+
+### 7.1-DECISION SUPERSEDED — OWNER OVERRIDE 2026-07-12: UPGRADE to Avalonia 12.1 (X11 backend, NOT native Wayland)
+Owner directive: upgrade anyway for 12.1's good new features. REFINED PLAN (gets the features, avoids the risk):
+- **Bump all `Avalonia.*` package refs 12.0.x → 12.1.x** (Directory.Build.props + every csproj: the grep showed
+  mixed 12.0.0/12.0.1/12.0.5 refs — normalize ALL to the same 12.1.x). Core 12.1 packages remain MIT.
+- **Stay on the X11 backend** (`UsePlatformDetect` → X11). Do NOT reference `Avalonia.Wayland` or call
+  `UseWayland()`. Rationale unchanged: the native Wayland backend is experimental, exposes none of the overlay's
+  topmost/layer-shell/input-region needs, and is the only piece carrying the AGPL question. Referencing only the
+  core 12.1 packages does NOT trigger AGPL.
+- **Features gained (Wayland-independent, on X11):** >60fps refresh-rate uncap (#18558), stencil buffers on by
+  default, faster bitmap-from-pixels, cross-process XDND drag-and-drop (#20926), TableView control, EGL/NVIDIA fixes.
+- **Overlay design UNCHANGED:** still X11-only (XFixes shape + _NET_WM_STATE), universal via XWayland. The
+  wlr-layer-shell backends remain dead code. `TryGetPlatformHandle()`→"XID" still the handle path.
+- **Sequencing:** land the in-flight overlay + whisper-voice workflows FIRST (they build against 12.0.5), then run
+  the 12.1 upgrade as its own workflow (bump → build all heads → Core tests → Windows smoke). 12.1 is 4 days old;
+  treat breaking-change fallout as gate failures.
+- Native Wayland stays a future opt-in (one-line `UseWayland()` + package ref) if ever desired.
