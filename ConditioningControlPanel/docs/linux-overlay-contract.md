@@ -893,3 +893,20 @@ project:**
 
 **IMPL-AUDIT DIRECTIVE:** the in-flight opus-4-5 overlay impl builds Wayland backends too — the fable-5
 impl-audit KEEPS/hardens X11 + selector + fallback and DELETES the Wayland-native backends as dead code.
+
+### 7.1-DECISION — DO NOT upgrade to Avalonia 12.1 native Wayland (web-researched 2026-07-12, driver + owner "support all users")
+Owner asked whether upgrading Avalonia to gain native Wayland would "support all users." Researched Avalonia's
+own Wayland deep-dive + the 12.1 release notes (2026-07-08). **Decision: stay on X11 (12.0.5). Upgrading does
+NOT help and adds risk.**
+- **X11/XWayland already reaches every Linux user** (Avalonia: "XWayland is installed by default on virtually
+  every desktop Linux distribution … your existing Avalonia applications will continue to work … whether they
+  use X11 or Wayland"). X11-only is not an under-support gap.
+- **12.1's Wayland backend is experimental, embedded-first, opt-in (`UseWayland()`, not `UsePlatformDetect`),**
+  and supports only CORE windowing (mouse/kbd/clipboard/DnD). It exposes NONE of the overlay's needs
+  (topmost/always-on-top, layer-shell, per-region input) — Wayland has no window positioning and overlay
+  features are compositor-specific extensions Avalonia does not surface. The overlay would be worse, not better.
+- **Possible AGPL dual-licensing** of the Wayland backend — a licensing risk for a distributed app.
+- Would force dual X11+Wayland maintenance on a 4-day-old backend, mid-port, unverifiable-locally.
+- **Revisit ONLY** the 12.1 **X11** perf wins (>60fps refresh uncap, stencil buffers, XDND) as a separate future
+  upgrade after the port stabilizes — independent of Wayland.
+CONCLUSION: overlay stays X11-only (XFixes shape + _NET_WM_STATE), universal via XWayland, CI-provable via Xvfb.
