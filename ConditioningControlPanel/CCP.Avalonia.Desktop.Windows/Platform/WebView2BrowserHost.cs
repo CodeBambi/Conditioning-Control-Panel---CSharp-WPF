@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Avalonia.Controls;
 using ConditioningControlPanel.Core.Platform;
+using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -35,7 +36,6 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Platform;
 /// </remarks>
 public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
 {
-    private readonly string _userDataFolder;
     private CoreWebView2Environment? _environment;
     private WebView2NativeControlHost? _embeddedHost;
     private BrowserWindow? _popupWindow;
@@ -48,17 +48,54 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
     private const string DefaultBrowserArguments =
         "--autoplay-policy=no-user-gesture-required --disable-direct-composition-video-overlays";
 
-    public WebView2BrowserHost()
+    public WebView2BrowserHost(ILogger<WebView2BrowserHost>? logger = null)
     {
-        _userDataFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel",
-            "avalonia_browser_data");
-        Directory.CreateDirectory(_userDataFolder);
+        Logger = logger;
 
         // B2: default the dashboard browser to WPF's video flags. Overridable via the
         // object initializer (the Chaos tunnel sets its own anti-MPO args, which replaces this).
         AdditionalBrowserArguments = DefaultBrowserArguments;
+    }
+
+    /// <summary>
+    /// Per-host WebView2 user-data folder <em>name</em>, resolved under
+    /// <c>%LOCALAPPDATA%/ConditioningControlPanel/</c> by <see cref="GetUserDataFolderPath"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each host MUST use a distinct folder. WebView2 takes a process-exclusive lock on the user-data
+    /// folder at <see cref="CoreWebView2Environment.CreateAsync"/>, so sharing one folder across the
+    /// dashboard / Chaos tunnel / DTRH hosts makes the 2nd and 3rd host throw "already in use". That
+    /// exception used to be swallowed (Debug.WriteLine only), leaving the dashboard browser blank (#4).
+    /// </para>
+    /// <para>
+    /// WPF parity: the legacy head uses distinct <c>browser_data</c> vs <c>browser_data_dtrh</c> folders
+    /// (<c>Chaos/ChaosWebViewHost.cs</c>). The dashboard DI singleton keeps this default; the Chaos tunnel
+    /// and DTRH hosts override it via the object initializer.
+    /// </para>
+    /// </remarks>
+    public string UserDataFolder { get; set; } = "avalonia_browser_data";
+
+    /// <summary>
+    /// Optional logger surfaced from DI (dashboard singleton) or the object initializer (Chaos tunnel /
+    /// DTRH hosts). When set, environment/navigation failures are logged as warnings instead of being
+    /// swallowed via <c>Debug.WriteLine</c> (the zero-log swallow was itself a defect — #4).
+    /// </summary>
+    public ILogger? Logger { get; set; }
+
+    /// <summary>
+    /// Resolves <see cref="UserDataFolder"/> to its full path under
+    /// <c>%LOCALAPPDATA%/ConditioningControlPanel/</c> and ensures it exists. Called lazily, right before
+    /// <see cref="CoreWebView2Environment.CreateAsync"/>, so a host that is never navigated never creates a folder.
+    /// </summary>
+    private string GetUserDataFolderPath()
+    {
+        var path = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ConditioningControlPanel",
+            UserDataFolder);
+        Directory.CreateDirectory(path);
+        return path;
     }
 
     /// <summary>
@@ -136,7 +173,10 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to initialize embedded WebView2 for {url}; falling back to popup: {ex.Message}");
+            // #4: this used to be a Debug.WriteLine-only swallow, so environment failures (e.g. the
+            // process-exclusive user-data folder lock that fired when hosts shared one folder) left the
+            // dashboard browser silently blank. Surface it as a real warning so future failures are diagnosable.
+            Logger?.LogWarning(ex, "WebView2BrowserHost: failed to initialize embedded WebView2 for {Url}; falling back to popup", url);
             await PopOutAsync(url);
             return;
         }
@@ -149,7 +189,7 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
             var safe = SanitizeNavigationUrl(url.ToString());
             if (safe == null)
             {
-                Debug.WriteLine($"Blocked unsafe navigation URL: {url}");
+                Logger?.LogWarning("WebView2BrowserHost: blocked unsafe navigation URL: {Url}", url);
                 return;
             }
             core.Navigate(safe);
@@ -309,12 +349,13 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
 
     private async Task<CoreWebView2Environment> CreateEnvironmentAsync()
     {
+        var userDataFolder = GetUserDataFolderPath();
         if (!string.IsNullOrWhiteSpace(AdditionalBrowserArguments))
         {
             var options = new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = AdditionalBrowserArguments };
-            return await CoreWebView2Environment.CreateAsync(browserExecutableFolder: null, userDataFolder: _userDataFolder, options: options);
+            return await CoreWebView2Environment.CreateAsync(browserExecutableFolder: null, userDataFolder: userDataFolder, options: options);
         }
-        return await CoreWebView2Environment.CreateAsync(userDataFolder: _userDataFolder);
+        return await CoreWebView2Environment.CreateAsync(userDataFolder: userDataFolder);
     }
 
     private async Task EnsureBrowserWindowAsync()
@@ -322,7 +363,8 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
         if (_popupWindow != null)
             return;
 
-        _environment ??= await CoreWebView2Environment.CreateAsync(userDataFolder: _userDataFolder);
+        var userDataFolder = GetUserDataFolderPath();
+        _environment ??= await CoreWebView2Environment.CreateAsync(userDataFolder: userDataFolder);
         _popupWindow = new BrowserWindow(_environment);
         WirePopupEvents();
         await _popupWindow.WebView.EnsureCoreWebView2Async(_environment);
