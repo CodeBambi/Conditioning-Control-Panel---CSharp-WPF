@@ -37,9 +37,15 @@ public sealed class AvaloniaPlatformCapabilities : IPlatformCapabilities
         // is unavailable, but AvaloniaTrayIcon degrades gracefully rather than crashing.
         SupportsSystemTray = IsDesktop;
 
-        // Click-through requires native interop (WS_EX_TRANSPARENT on Windows).
-        // TODO: Add Linux/macOS desktop head support and update this check.
-        SupportsClickThrough = IsWindows;
+        // Click-through requires native interop: WS_EX_TRANSPARENT on Windows; on Linux
+        // the X11 overlay backend (XFixes >= 2 input shape), detected via a cheap static
+        // probe rather than by resolving the DI-registered IOverlaySurface (which would
+        // risk a capability<->backend construction cycle and couple this shared project
+        // to a head-specific registration). macOS has no overlay backend yet -> false.
+        // NOTE: this only makes click-through features SELECTABLE in the UI; it never
+        // enables any conditioning feature by itself (features stay default-off, opt-in).
+        SupportsClickThrough = ClickThroughCapabilityPlan.Compute(
+            IsWindows, IsLinux, IsLinux && LinuxClickThroughProbe.IsX11InputShapeAvailable());
 
         // WebView2 is Windows-only. The Avalonia head currently falls back to the
         // system default browser everywhere.
