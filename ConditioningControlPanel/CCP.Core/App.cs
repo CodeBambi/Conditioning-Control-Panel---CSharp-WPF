@@ -325,6 +325,14 @@ public interface IKeywordTriggerService
 
     void PreviewAudioClip(string filePath, int volume);
 
+    /// <summary>
+    /// Temporarily mute a phrase so the keyword/OCR pipeline ignores it for <paramref name="muteMs"/>.
+    /// Used as the bark self-echo guard so a spoken bark line cannot trip awareness/OCR off its own
+    /// bubble text (WPF KeywordTriggers.MuteKeywordEcho, BarkService.cs:1627). Default no-op so
+    /// heads/fakes that have no keyword pipeline keep compiling and degrade safely.
+    /// </summary>
+    void MuteKeywordEcho(string text, int muteMs) { }
+
     event EventHandler<KeywordTrigger>? TriggerFired;
 }
 
