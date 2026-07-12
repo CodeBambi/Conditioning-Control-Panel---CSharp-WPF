@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Buttplug.Client;
 using Buttplug.Client.Connectors.WebsocketConnector;
 using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Services.Haptics;
 
@@ -148,6 +149,41 @@ public sealed class AvaloniaHapticsService : IHapticsService, IAsyncDisposable
 
         await VibrateAsync(intensity, durationMs);
         return true;
+    }
+
+    /// <summary>
+    /// Apply a named vibration <paramref name="mode"/> (pattern) at <paramref name="intensity"/>
+    /// for <paramref name="durationMs"/>. Faithful port of WPF
+    /// <c>HapticService.ApplyVibrationModeAsync</c> (Services/Haptics/HapticService.cs:230):
+    /// the per-mode step structure (counts, intensities, durations, gap placement) comes from
+    /// the shared <see cref="VibrationModePlanner"/> so every head plays the identical pattern.
+    /// The device command is fire-and-forget (Buttplug sets a speed, the wrapper schedules an
+    /// auto-stop), so each step is awaited for its full duration to keep adjacent pulses/gaps
+    /// from collapsing into the last command. A 0-intensity step is a silence gap
+    /// (<c>VibrateAsync(0, G)</c> stops the motor for G ms).
+    /// </summary>
+    public async Task ApplyVibrationModeAsync(double intensity, int durationMs, VibrationMode mode, CancellationToken? token = null)
+    {
+        // WPF HapticService.cs:232 — no-op when not connected.
+        if (!IsConnected) return;
+
+        var ct = token ?? CancellationToken.None;
+        _logger?.LogInformation("Haptics vibration mode {Mode} (intensity {Intensity:P0}, duration {Duration}ms)",
+            mode, intensity, durationMs);
+
+        var steps = VibrationModePlanner.Plan(intensity, durationMs, mode);
+        foreach (var step in steps)
+        {
+            // WPF HapticService.cs:237/252/266/284/300/312 — cancel between steps.
+            if (ct.IsCancellationRequested) break;
+
+            // Send the step then actually play it for its duration. Intensity 0 stops the
+            // motor (silence gap). Awaiting the duration is required because VibrateAsync
+            // returns as soon as the command is posted, not after the device plays it.
+            await VibrateAsync(step.Intensity, step.DurationMs);
+            try { await Task.Delay(step.DurationMs, ct); }
+            catch (OperationCanceledException) { break; }
+        }
     }
 
     public Task SetSyncPatternAsync(float[] samples, int durationMs)
