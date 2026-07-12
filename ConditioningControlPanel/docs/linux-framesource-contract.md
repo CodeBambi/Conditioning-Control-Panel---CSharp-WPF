@@ -785,3 +785,10 @@ in its slice — no slice lands "compile-only" (readiness-map rule).
 - ScreenCast portal (persist_mode/restore_token, OpenPipeWireRemote) —
   https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html
 - PipeWire — https://docs.pipewire.org/ (`pw_context_connect_fd`)
+
+### 7.1-VERIFIED (web research, 2026-07-12 — driver)
+| Claim | Result | Source |
+|-------|--------|--------|
+| Portal ScreenCast `persist_mode` enum + token semantics | **VERIFIED** — default 0; 0=none, 1=transient (while app runs), 2=persistent (token in permissions store until user revokes). Restore token is **single-use, rotates** on each Start response — persist per-use. Known caveat: monitor selection not always preserved across restore (xdp #1371). | flatpak.github.io/xdg-desktop-portal ScreenCast docs ; xdg-desktop-portal PR#638 |
+| Avalonia v12 X11 handle access | **VERIFIED** — `TopLevel.TryGetPlatformHandle()` → `.Handle` + `.HandleDescriptor == "XID"` (Linux). | docs.avaloniaui.net native-interop |
+| KWin implements `ext-image-copy-capture-v1` | **STILL UNVERIFIED** — registry probe makes it non-fatal; portal path is the KDE fallback either way. Re-probe at Slice E. | (deferred to CI registry probe) |

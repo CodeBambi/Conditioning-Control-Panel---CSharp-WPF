@@ -661,3 +661,10 @@ checklists in slices C (KDE = same wlr-ftm code path, verify once on Plasma) and
   (`_NET_ACTIVE_WINDOW`, `_NET_WM_NAME`/UTF8_STRING)
 - wlr-foreign-toplevel-management — https://wayland.app/protocols/wlr-foreign-toplevel-management-unstable-v1
 - ext-foreign-toplevel-list — https://wayland.app/protocols/ext-foreign-toplevel-list-v1
+
+### 7.1-VERIFIED (web research, 2026-07-12 — driver)
+| Claim | Result | Source |
+|-------|--------|--------|
+| KWin implements `zwlr_foreign_toplevel_manager_v1` | **VERIFIED** — KWin exposes it at **v3** (wayland-info dumps). KDE (Wayland) gets FULL awareness via wlr-ftm; the draft's `org.kde.KWin` D-Bus API was correctly removed. | wayland.app/protocols/wlr-foreign-toplevel-management-unstable-v1 ; Arch BBS wayland-info dump (id=283804) |
+| `org.gnome.Shell.Introspect` restricted since GNOME 41 | **VERIFIED** — `GetWindows` → `AccessDenied` unless unsafe-mode/allowlisted (confirmed GNOME 42.9). GNOME (Wayland) = honest fallback/extension-only. | discourse.gnome.org/t/…/21201 ; gnome-shell MR!1970 |
+| Avalonia v12 X11 handle access | **VERIFIED** — `TopLevel.GetTopLevel(x)?.TryGetPlatformHandle()` → `.Handle` (IntPtr) + `.HandleDescriptor == "XID"` on Linux. Use for the X11 backend. | docs.avaloniaui.net native-interop / window-handles |
