@@ -2836,16 +2836,20 @@ namespace ConditioningControlPanel.Models
             set { _autoPerformanceMode = value; OnPropertyChanged(); }
         }
 
-        private bool _videoHardwareDecoding = true;
+        private bool _videoForceHardwareDecoding = false;
         /// <summary>
-        /// Use GPU (DXVA) hardware decoding for mandatory videos. Default on; LibVLC falls back
-        /// to software automatically if a GPU's hardware decode path is unavailable. Provided as
-        /// an escape hatch for the rare systems with flaky hardware decoders.
+        /// Force GPU (DXVA) hardware decoding for mandatory videos. Default OFF — mandatory videos
+        /// software-decode, because the LibVLC hardware path intermittently renders a white screen
+        /// and wedges cleanup on Windows 11 (build 26200) and some Win10 machines (#533/#537/#540).
+        /// These are short attention-check clips, so software decode costs little. This is an opt-in
+        /// escape hatch for users on good hardware who want GPU decode back.
+        /// NOTE: property was renamed from the old default-ON "VideoHardwareDecoding" precisely so
+        /// existing users' persisted true value stops binding and everyone lands on software decode.
         /// </summary>
-        public bool VideoHardwareDecoding
+        public bool VideoForceHardwareDecoding
         {
-            get => _videoHardwareDecoding;
-            set { _videoHardwareDecoding = value; OnPropertyChanged(); }
+            get => _videoForceHardwareDecoding;
+            set { _videoForceHardwareDecoding = value; OnPropertyChanged(); }
         }
 
         #endregion

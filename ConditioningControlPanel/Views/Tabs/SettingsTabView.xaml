@@ -780,10 +780,10 @@
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="Auto performance" Margin="6,0,0,0"/>
                             </StackPanel>
                             <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="Use GPU hardware decoding for mandatory videos. Leave on unless videos fail to play; LibVLC falls back to software automatically.">
+                                        ToolTip="Force GPU hardware decoding for mandatory videos. Off by default — mandatory videos software-decode to avoid a white-screen bug on some Windows machines. Only turn this on if you want GPU decode and your videos play fine.">
                                 <CheckBox x:Name="ChkVideoHwDecode" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
                                           Checked="ChkVideoHwDecode_Changed" Unchecked="ChkVideoHwDecode_Changed"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Video GPU decode" Margin="6,0,0,0"/>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Force video GPU decode" Margin="6,0,0,0"/>
                             </StackPanel>
                         </Grid>
     

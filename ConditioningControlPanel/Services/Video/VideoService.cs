@@ -1495,13 +1495,17 @@ namespace ConditioningControlPanel.Services
                     Background = Brushes.Black
                 };
 
-                // Create media player for this video
+                // Create media player for this video.
                 mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC!);
-                // Use GPU (DXVA) hardware decoding, matching the app's other players
-                // (InlineLoopVideo / HelpVideoWindow / MiniPlayerWindow). LibVLC falls back to
-                // software automatically if the GPU path is unavailable; the user setting is an
-                // escape hatch for the rare systems with broken hardware decoders.
-                mediaPlayer.EnableHardwareDecoding = App.Settings?.Current?.VideoHardwareDecoding ?? true;
+                // Mandatory-video windows default to SOFTWARE decoding. On Windows 11 (build 26200)
+                // and some Win10 machines the LibVLC hardware (DXVA/D3D11) path intermittently fails
+                // to present a frame — the window stays white and MediaEnded never fires, wedging
+                // cleanup. It hit the *primary* (audio + HW) player on both single-monitor (#537) and
+                // dual-monitor (#533, #540) setups, so it is the hardware decoder itself failing, not
+                // GPU contention between the two mirror decoders. These are short attention-check
+                // clips, so software decode is a negligible cost and eliminates the whole white-screen
+                // class. Users who want GPU decode back can flip VideoForceHardwareDecoding on (opt-in).
+                mediaPlayer.EnableHardwareDecoding = App.Settings?.Current?.VideoForceHardwareDecoding ?? false;
                 lock (_mediaPlayersLock)
                 {
                     _mediaPlayers.Add(mediaPlayer);
@@ -1709,7 +1713,19 @@ namespace ConditioningControlPanel.Services
             // Secondaries skip audio decoding entirely. Setting Mute=true after Play() opened
             // a second WASAPI session on the same MMDevice; Windows collapsed both into one
             // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
-            if (!withAudio) media.AddOption(":no-audio");
+            if (!withAudio)
+            {
+                media.AddOption(":no-audio");
+            }
+
+            // Force software video decode at the media level (belt-and-suspenders with
+            // EnableHardwareDecoding=false above) to dodge the LibVLC white-screen/wedge on the
+            // hardware path (#533/#537/#540). Skipped only when the user has explicitly opted into
+            // GPU decode, in which case we honour their choice and leave the HW path enabled.
+            if (!(App.Settings?.Current?.VideoForceHardwareDecoding ?? false))
+            {
+                media.AddOption(":avcodec-hw=none");
+            }
 
             // Play the media
             mediaPlayer.Play(media);
