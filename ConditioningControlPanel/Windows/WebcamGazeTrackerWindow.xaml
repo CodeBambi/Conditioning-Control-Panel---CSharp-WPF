@@ -31,10 +31,17 @@
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
             <TextBlock Text="Gaze Tracker Test" Foreground="White"
                        FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
-            <TextBlock Text="Look around the screen. The cyan dot should follow your gaze. ESC to close."
+            <TextBlock Text="Look around the screen. The cyan dot should follow your gaze."
                        Foreground="#AAAAAA" FontSize="13" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             <TextBlock x:Name="TxtCoords" Text="" Foreground="#00B0FF" FontSize="12"
                        Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas"/>
+            <!-- Always-visible, mouse-clickable close. Lockdown's global keyboard hook swallows
+                 Escape/Alt+F4 (#528), so a key-based exit can strand the user inside this test
+                 window; a button click bypasses the keyboard hook entirely. -->
+            <Button x:Name="BtnClose" Content="✕ Close Test" Padding="20,8" Margin="0,16,0,0"
+                    Background="#00B0FF" Foreground="Black" BorderThickness="0"
+                    FontWeight="Bold" Cursor="Hand" Click="BtnErrorClose_Click"
+                    HorizontalAlignment="Center"/>
         </StackPanel>
 
         <Border x:Name="ErrorPanel" Visibility="Collapsed"
