@@ -329,10 +329,16 @@ public sealed class AiCommandService : IAiCommandService
     }
 
     // ---- per-effect gate map (WPF IsEffectAllowed) ----
-    private static bool IsEffectAllowed(AICommandType cmd, CompanionPromptSettings s) => cmd switch
+    // Instance (not static) so the video case can read the master video-feature switch
+    // via the injected ISettingsService, mirroring WPF's reach to App.Settings?.Current.
+    private bool IsEffectAllowed(AICommandType cmd, CompanionPromptSettings s) => cmd switch
     {
         AICommandType.flash_image => s.AllowAiFlash,
-        AICommandType.video => s.AllowAiVideo,
+        // Videos also require the master video-feature toggle (MandatoryVideosEnabled),
+        // mirroring WPF AiCommandService.cs:189 — the AI must not play videos while the
+        // user has the video feature turned OFF (bug #512). MandatoryVideosEnabled is the
+        // same property the Video feature card reads (VideoFeatureControl.axaml.cs:110).
+        AICommandType.video => s.AllowAiVideo && _settings.Current?.MandatoryVideosEnabled == true,
         AICommandType.audio => s.AllowAiAudio,
         AICommandType.bubbles => s.AllowAiBubbles,
         AICommandType.subliminal => s.AllowAiSubliminal,
