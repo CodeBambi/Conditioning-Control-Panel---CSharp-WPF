@@ -360,13 +360,16 @@
               <ScrollViewer VerticalScrollBarVisibility="Auto"
                             HorizontalScrollBarVisibility="Disabled"
                             IsVisible="{Binding HasCurrentFiles}">
-                <ItemsControl ItemsSource="{Binding CurrentFiles}">
-                  <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                      <WrapPanel />
-                    </ItemsPanelTemplate>
-                  </ItemsControl.ItemsPanel>
-                  <ItemsControl.ItemTemplate>
+                <ItemsRepeater ItemsSource="{Binding CurrentFiles}">
+                  <ItemsRepeater.Layout>
+                    <!-- UniformGridLayout virtualizes (WrapPanel does not) so only visible
+                         tiles are realized + measured; required for thousands of files. -->
+                    <UniformGridLayout MinItemWidth="108"
+                                       MinItemHeight="128"
+                                       MinColumnSpacing="0"
+                                       MinRowSpacing="0" />
+                  </ItemsRepeater.Layout>
+                  <ItemsRepeater.ItemTemplate>
                     <DataTemplate DataType="models:AssetFileItem">
                       <Border Width="100"
                               Height="120"
@@ -379,11 +382,11 @@
                         <Border.ContextMenu>
                           <ContextMenu>
                             <MenuItem Header="{Binding [section_preview], Source={x:Static loc:LocalizationManager.Instance}}"
-                                      Command="{Binding $parent[ItemsControl].((vm:AssetsTabViewModel)DataContext).OpenAssetPreviewCommand}"
+                                      Command="{Binding $parent[ItemsRepeater].((vm:AssetsTabViewModel)DataContext).OpenAssetPreviewCommand}"
                                       CommandParameter="{Binding}" />
                             <Separator />
                             <MenuItem Header="{Binding [section_open_in_explorer], Source={x:Static loc:LocalizationManager.Instance}}"
-                                      Command="{Binding $parent[ItemsControl].((vm:AssetsTabViewModel)DataContext).OpenAssetInExplorerCommand}"
+                                      Command="{Binding $parent[ItemsRepeater].((vm:AssetsTabViewModel)DataContext).OpenAssetInExplorerCommand}"
                                       CommandParameter="{Binding}" />
                           </ContextMenu>
                         </Border.ContextMenu>
@@ -393,7 +396,7 @@
                                   CornerRadius="6,6,0,0"
                                   ClipToBounds="True">
                             <Grid>
-                              <Image Source="{Binding FullPath, Converter={StaticResource PackUriToBitmapConverter}}"
+                              <Image Source="{Binding Thumbnail}"
                                      Stretch="UniformToFill" />
                               <StackPanel HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
@@ -417,7 +420,7 @@
 
                           <CheckBox Grid.Row="0"
                                     IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                    Command="{Binding $parent[ItemsControl].((vm:AssetsTabViewModel)DataContext).ToggleFileCheckCommand}"
+                                    Command="{Binding $parent[ItemsRepeater].((vm:AssetsTabViewModel)DataContext).ToggleFileCheckCommand}"
                                     CommandParameter="{Binding}"
                                     HorizontalAlignment="Left"
                                     VerticalAlignment="Top"
@@ -436,8 +439,8 @@
                         </Grid>
                       </Border>
                     </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                  </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
               </ScrollViewer>
 
               <!-- Empty state -->

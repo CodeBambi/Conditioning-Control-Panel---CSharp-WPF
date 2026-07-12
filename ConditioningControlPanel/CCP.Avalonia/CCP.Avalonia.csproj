@@ -101,6 +101,10 @@
     <PackageReference Include="Avalonia.HarfBuzz" Version="12.0.5" />
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.0.1" />
     <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.0.5" />
+    <!-- ItemsRepeater + UniformGridLayout: the only v12-correct virtualizing panel for the
+         Assets thumbnail grid (stock WrapPanel does not virtualize). This is the first-party
+         Avalonia package (AvaloniaUI/Avalonia.Controls.ItemsRepeater), v12.0.0 targets Avalonia 12. -->
+    <PackageReference Include="Avalonia.Controls.ItemsRepeater" Version="12.0.0" />
     <PackageReference Include="LibVLCSharp.Avalonia" Version="3.9.7.1" />
     <PackageReference Include="MessageBox.Avalonia" Version="12.0.0" />
     <!-- Pin WindowsAppSDK (transitive from LibVLCSharp) to prevent WebView2 downgrade errors. -->
