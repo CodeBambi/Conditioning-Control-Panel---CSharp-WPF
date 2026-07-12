@@ -1,0 +1,29 @@
+v6.2.4 - Jelly July
+
+NEW
+- Takeover countdown bar: a thin pink bar under your companion drains toward the
+  next surprise Takeover, so you can see it coming. Toggle it in the Takeover tab.
+- Smarter microphone. An adaptive noise gate and high-pass filter make wake words
+  and spoken mantras far more reliable in noisy rooms.
+
+BUG FIXES
+- Re-logging into the same account no longer wipes your progression and level.
+- Stopped unnecessary re-copying of your assets folder on some launches.
+- Season recap now shows the correct month.
+- Sessions keep your timeline segments, credit videos you actually watched, and
+  respect ramp vs preset settings.
+- Fixed overlays clobbering your pink-opacity setting, web videos showing a black
+  screen, and closing to the tray with the X button.
+- Muting keeps ambient bubbles, the animated avatar pins correctly, and the
+  tutorial no longer gets stuck.
+- Dashboard remote toggle, webcam mouth sensitivity, and picking your mic by name
+  all work again.
+- Takeover on-screen cues stay above other overlays.
+
+PERFORMANCE & STABILITY
+- Big freeze fixes: less layered-window pressure and smoother handling when moving
+  between monitors or when DPI changes.
+- Fixed startup freezes when relaunching the app several times in a row.
+- crash.log now rotates per version, so bug reports carry the right logs.
+
+Season: Jelly July

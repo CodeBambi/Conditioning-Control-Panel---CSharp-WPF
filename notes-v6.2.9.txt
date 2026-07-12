@@ -1,0 +1,22 @@
+v6.2.9 - The Fall
+
+NEW: THE FALL
+Our latest side project is live and free for everyone: an endless rabbit hole visualizer powered by YOUR media. Drop in a folder or zip of your pictures and videos and watch them spiral into an endless descent. Pop the bubbles, sink deeper. It runs entirely in your browser, so your media never leaves your device.
+Try it: https://cclabs.app/fall.html
+
+BUG FIXES
+- Lock card phrases now change with your mode. Switching between Sissy Hypno, Circe's Lock, Bambi Sleep and the rest finally shows that mode's own phrases instead of always showing Circe's. Backups that were already scrambled by the old bug are healed automatically.
+- Updating no longer wipes your lock card and subliminal phrases. Phrase loading is resilient now, and a corrupt file is kept safe instead of reset. Added export / import in the Phrase Manager so you can back up and move your phrase sets.
+- Bambi Takeover respects the interval slider again. When she is briefly busy she retries within seconds instead of skipping a whole cycle, and the "time aware" toggle now actually works.
+- The Takeover quest counts your real active time again. A 15-minute quest no longer drags out to an hour when the app is in the background or running a fullscreen takeover.
+- Fixed a Takeover slot leak that could leave her silent for minutes.
+- A mandatory video no longer jumps in front of the bubbles when clicked.
+
+PERFORMANCE & STABILITY
+- Fixed the flash-window hangs that could freeze the app mid-session, plus a new internal harness to catch these before they ship.
+- Revived the season shimmer that had stopped rendering.
+
+UI/UX
+- Settings tidied up: advanced audio options collapse into their own section, and logout is easier to find.
+
+Season: Jelly July

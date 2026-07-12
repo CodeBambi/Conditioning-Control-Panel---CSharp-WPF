@@ -1,0 +1,15 @@
+v6.2.3 - Loud and Clear
+
+A quick hotfix on top of 6.2.2 that gets the voice features behaving and tidies up a few dashboard and dialog rough edges.
+
+🔧 BUG FIXES
+- Spoken mantras trigger reliably again. They no longer get hijacked by other voice commands ("sound", "mantra", etc. now route correctly).
+- "Go pink" / "spiral" voice commands stay on screen instead of flashing and vanishing a moment later.
+- Your companion's voice is no longer silenced by the subliminal-audio toggle. She speaks as long as master volume is up.
+- Fixed the dashboard "glitch" and "cascade" trigger bubbles.
+- The What's New dialog scrolls now, and broken "source" links are fixed.
+
+⚡ PERFORMANCE & STABILITY
+- Faster startup. The offline voice models warm up in the background instead of blocking launch.
+
+Season: Juicy June

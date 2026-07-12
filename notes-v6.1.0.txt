@@ -1,0 +1,31 @@
+🐇 A new little game: "Down the Rabbit Hole" is available in testing for the Prime Subject.
+
+🎭 Companion animations: first attempt at animating the companion (hope you girls like it, tho I know it has a lot of room to improve).
+
+🔊 Added "some" extra voicelines :3
+
+— Everything else since 6.0.8 —
+
+🎭 COMPANION
+- Animated emotive portraits for all three mods (Bambi / Sissy / Circe), replacing the old static images.
+- Fixed mod-switch freeze, the avatar getting stuck hidden after fullscreen apps, and dragging from invisible dead-zones.
+
+🔊 VOICELINES
+- Reactive bark system — your companion knows what app you're in and reacts to the moment.
+- More idle variety, fresh reactions that don't pile up stale, and proper coordination so she won't talk over whispers (and goes quiet when whispers are muted).
+
+✨ DEEPER (TIMELINE EDITOR)
+- Three dedicated lanes — Regions / Effects / Haptics.
+- Overlay opacity ramp (fade across a region).
+- Per-effect "don't buzz on pop" for flash & subliminal.
+- A round of editor quality-of-life fixes plus a darker restyle.
+
+⚡ PERFORMANCE & STABILITY
+- Tier-aware flash decode/scaling/glow and GPU video decode for smoother playback on lower-end machines.
+- Window pooling to stop render-thread hangs during heavy sessions.
+
+🔧 FIXES & EXTRAS
+- Webcam capture crash fixed (bundled the missing VC++ runtime).
+- Mindwipe custom audio-clip selector.
+- Spiral library preview plus folder picker.
+- Refresh assets without restarting the app.
