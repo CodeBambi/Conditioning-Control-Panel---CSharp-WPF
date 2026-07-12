@@ -29,6 +29,7 @@ public sealed class DtrhNativeEffects : IDtrhNativeEffects
     private readonly ILogger<DtrhNativeEffects>? _log;
     private readonly Action? _reclaimFocus;
     private readonly Action? _restoreMainWindow;
+    private readonly Action<bool>? _setHostFullscreen;
 
     /// <summary>Construct the native-effects bridge. Every dependency is nullable so unit/2b wiring
     /// can supply only the surface it exercises; S2c-2c resolves the real singletons from DI.</summary>
@@ -41,7 +42,8 @@ public sealed class DtrhNativeEffects : IDtrhNativeEffects
         ILogger<DtrhNativeEffects>? log = null,
         Action? reclaimFocus = null,
         Action? restoreMainWindow = null,
-        IVideoService? video = null)
+        IVideoService? video = null,
+        Action<bool>? setHostFullscreen = null)
     {
         _bark = bark;
         _mods = mods;
@@ -52,6 +54,7 @@ public sealed class DtrhNativeEffects : IDtrhNativeEffects
         _log = log;
         _reclaimFocus = reclaimFocus;
         _restoreMainWindow = restoreMainWindow;
+        _setHostFullscreen = setHostFullscreen;
     }
 
     /// <inheritdoc/>
@@ -117,6 +120,13 @@ public sealed class DtrhNativeEffects : IDtrhNativeEffects
     {
         try { _reclaimFocus?.Invoke(); }
         catch (Exception ex) { _log?.LogDebug(ex, "DtrhNativeEffects.ReclaimBrowserFocus failed"); }
+    }
+
+    /// <inheritdoc/>
+    public void SetHostFullscreen(bool on)  // WPF ApplyHostFullscreen DtrhHostService.cs:286-302
+    {
+        try { _setHostFullscreen?.Invoke(on); }
+        catch (Exception ex) { _log?.LogDebug(ex, "DtrhNativeEffects.SetHostFullscreen({On}) failed", on); }
     }
 
     /// <inheritdoc/>

@@ -26,8 +26,11 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Chaos;
 /// NOT the tunnel's click-through sink-to-bottom ambient background).
 ///
 /// Owner ruling 2026-07-10: web-only, dedicated Window, NEVER Topmost, launches windowed, borderless-
-/// fullscreen ONLY on the page Fullscreen API toggle. Not DI-registered until S2c-2c (Program.cs + Lab
-/// launch hook) — until then this type is inert and cannot affect the smoke test.
+/// fullscreen ONLY on the page's request — web v2 drives it over the bridge ({type:"fullscreen-set", on},
+/// routed via <see cref="IDtrhNativeEffects.SetHostFullscreen"/>) and deliberately does NOT use the
+/// browser HTML5 Fullscreen API, which would hijack Esc away from the game's Esc ladder (WPF
+/// DtrhHostService.cs:286-288). Not DI-registered until S2c-2c (Program.cs + Lab launch hook) — until
+/// then this type is inert and cannot affect the smoke test.
 /// </summary>
 public sealed class DtrhGameHostService : IChaosWebGameService
 {
@@ -143,7 +146,11 @@ public sealed class DtrhGameHostService : IChaosWebGameService
             Logger = _logger,
         };
         _host.WebMessageReceived += OnWebMessageReceived;
-        _host.FullscreenChanged += OnFullscreenChanged;
+        // NO FullscreenChanged subscription: web v2 never enters HTML5 element fullscreen (it posts
+        // fullscreen-set over the bridge instead, keeping Esc game-owned). A live HTML5 handler would be
+        // a second fullscreen authority with browser-owned Esc — exactly the hijack the bridge protocol
+        // avoids — so the old wiring is removed rather than kept as a fallback (WPF parity: the WPF DTRH
+        // host has no ContainsFullScreenElementChanged wiring either, ChaosWebViewHost.cs:160-162).
 
         // Page root Deny (WPF :86) + asset roots Allow (WPF :89/:94) — matches SetVirtualHostToFolder's
         // cross-origin access kinds so WebGL uploads are CORS-clean.
@@ -156,6 +163,13 @@ public sealed class DtrhGameHostService : IChaosWebGameService
         //  - reclaimFocus: bring the game window back to front after a native overlay steals focus (WPF FocusWeb).
         //  - restoreMainWindow: N2 self-guard — only acts if we minimized the main window (we don't, so no-op).
         Action reclaimFocus = () => Dispatcher.UIThread.Post(() => { try { _window?.Activate(); } catch { } });
+        // Page-driven borderless fullscreen (WPF ApplyHostFullscreen DtrhHostService.cs:286-302):
+        // WindowState must be set from code-behind in v12; WindowState.FullScreen is inherently borderless.
+        Action<bool> setHostFullscreen = on => Dispatcher.UIThread.Post(() =>
+        {
+            try { if (_window != null) _window.WindowState = on ? WindowState.FullScreen : WindowState.Normal; }
+            catch (Exception ex) { _logger?.LogDebug(ex, "DTRH fullscreen toggle failed"); }
+        });
         Action restoreMainWindow = () => Dispatcher.UIThread.Post(() =>
         {
             if (!_minimizedMainWindow) return;
@@ -166,7 +180,7 @@ public sealed class DtrhGameHostService : IChaosWebGameService
         var effects = new DtrhNativeEffects(
             _bark, _mods, _settings, _reveal, _meta,
             _loggerFactory.CreateLogger<DtrhNativeEffects>(),
-            reclaimFocus, restoreMainWindow, _video);
+            reclaimFocus, restoreMainWindow, _video, setHostFullscreen);
 
         var store = new ChaosMetaStoreAdapter(_meta!);
         var manifest = new DtrhAssetManifest(_env, _loggerFactory.CreateLogger<DtrhAssetManifest>());
@@ -210,18 +224,6 @@ public sealed class DtrhGameHostService : IChaosWebGameService
         if (string.IsNullOrEmpty(json)) return;
         try { _orchestrator?.HandleMessage(json); }
         catch (Exception ex) { _logger?.LogDebug(ex, "DTRH HandleMessage failed"); }
-    }
-
-    private void OnFullscreenChanged(object? sender, bool fullscreen)
-    {
-        // Owner ruling: windowed by default, borderless-fullscreen ONLY when the page toggles the HTML5
-        // Fullscreen API. WindowState is set from code-behind (Avalonia v12 cannot set it from styles);
-        // WindowState.FullScreen is inherently borderless.
-        Dispatcher.UIThread.Post(() =>
-        {
-            try { if (_window != null) _window.WindowState = fullscreen ? WindowState.FullScreen : WindowState.Normal; }
-            catch (Exception ex) { _logger?.LogDebug(ex, "DTRH fullscreen toggle failed"); }
-        });
     }
 
     private void OnOrchestratorClosed()

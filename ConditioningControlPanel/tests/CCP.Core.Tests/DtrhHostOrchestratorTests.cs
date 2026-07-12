@@ -73,6 +73,7 @@ public class DtrhHostOrchestratorTests
         public int FireCount;
         public int RestoreMainWindowCount;
         public int NotifyRunCompletedCount;
+        public List<bool> HostFullscreenCalls = new();
 
         public void PlaySfx(string name, float scale) => SfxCount++;
         public void FirePayload(string kind, int strength, double durationMult)
@@ -81,6 +82,7 @@ public class DtrhHostOrchestratorTests
         }
         public void SetWorldFrozen(bool frozen) => Log?.Add(frozen ? "freeze-on" : "freeze-off");
         public void ReclaimBrowserFocus() { }
+        public void SetHostFullscreen(bool on) => HostFullscreenCalls.Add(on);
         public void RouteBark(string barkJson) => Log?.Add("bark");
         public void NotifyRunStarted(string difficulty) { }
         public void NotifyRunCompleted(int finalXp, string difficulty) => NotifyRunCompletedCount++;
@@ -368,6 +370,42 @@ public class DtrhHostOrchestratorTests
     }
 
     // ---- teardown --------------------------------------------------------------------------------
+
+    [Fact]
+    public void FullscreenSet_InvokesSeamAndEchoesWpfShape()
+    {
+        // WPF ApplyHostFullscreen (DtrhHostService.cs:286-302): fullscreen-set -> host window toggle,
+        // then echo {type:"fullscreen", on} back so the page dock button + Esc ladder stay in sync (:298).
+        var h = new Harness().Build();
+        h.Orch.HandleMessage(Msg(new { type = "ready" }));
+        h.Browser.Posts.Clear();
+
+        h.Orch.HandleMessage(Msg(new { type = "fullscreen-set", on = true }));
+        Assert.Equal(new[] { true }, h.Fx.HostFullscreenCalls);
+        // Byte-for-byte WPF echo shape/casing (DtrhHostService.cs:298).
+        Assert.Contains("{\"type\":\"fullscreen\",\"on\":true}", h.Browser.Posts);
+
+        h.Orch.HandleMessage(Msg(new { type = "fullscreen-set", on = false }));
+        Assert.Equal(new[] { true, false }, h.Fx.HostFullscreenCalls);
+        Assert.Contains("{\"type\":\"fullscreen\",\"on\":false}", h.Browser.Posts);
+
+        // Missing 'on' defaults to false (WPF :271 (bool?)o["on"] ?? false).
+        h.Orch.HandleMessage(Msg(new { type = "fullscreen-set" }));
+        Assert.Equal(new[] { true, false, false }, h.Fx.HostFullscreenCalls);
+    }
+
+    [Fact]
+    public void FullscreenSet_BeforeReady_QueuesEchoUntilFlush()
+    {
+        // The echo rides the standard queue-until-ready outbound buffer (WPF ChaosWebViewHost.Post).
+        var h = new Harness().Build();
+        h.Orch.HandleMessage(Msg(new { type = "fullscreen-set", on = true }));
+        Assert.Equal(new[] { true }, h.Fx.HostFullscreenCalls);   // seam fires immediately
+        Assert.Empty(h.Browser.Posts);                            // echo queued, page not ready
+
+        h.Orch.HandleMessage(Msg(new { type = "ready" }));
+        Assert.Contains("{\"type\":\"fullscreen\",\"on\":true}", h.Browser.Posts);
+    }
 
     [Fact]
     public void ExitDone_TearsDown_ResumesFreeze_RestoresWindow()
