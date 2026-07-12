@@ -20,17 +20,26 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.3.1";
+        public const string AppVersion = "6.3.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.3.1 - Deeper Down
+        public const string CurrentPatchNotes = @"v6.3.2 - Deeper Down
 
 6.3.0 rebuilt Down the Rabbit Hole into a guided descent through four chambers and
 sixteen biomes, with a Warren leveling hub, boon drafts, and full voiceover. 6.3.1
-keeps refining that rework - smoothing the onboarding, the HUD, and the rough edges.
+kept refining that rework. 6.3.2 is a hotfix on top - breaking a freeze that could
+lock your PC and smoothing the last rough edges.
+
+🩹 HOTFIX
+- Fixed a mandatory-video freeze that could hard-lock your PC; an off-thread watchdog now breaks the wedge and releases you.
+- Fixed a Rabbit Hole hang when flash-pool images decrypted on the main thread.
+- Down the Rabbit Hole: Esc now steps out cleanly (pause, then exit fullscreen, then close), with C#-owned fullscreen.
+- Rabbit Hole play-test batch: opt out of Cheshire, flash from your own media, plus video and pause fixes.
+- Webcam gaze-test window now has a mouse-clickable close button.
+- Animated tease-bubble cap now scales with your performance tier.
 
 ✨ FEATURES
 - Down the Rabbit Hole: brand-new Cheshire visual-novel tutorial that walks you in, replacing the old lesson cards.
