@@ -412,6 +412,48 @@ public sealed class AchievementService : IAchievementService, IDisposable
         TryQuestTrack("TrackBubblePopped");
     }
 
+    /// <inheritdoc />
+    /// <remarks>Ported from WPF <c>AchievementService.TrackBubblesPopped</c>
+    /// (Services/Progression/AchievementService.cs:378-418). One batch increment; every
+    /// 100-bubble sparkle-point milestone crossed is granted in a single save; at most one
+    /// milestone popup fires so a big Rabbit Hole run can't spam notifications.
+    /// <para>NOTE: the WPF method ends with <c>App.Quests?.TrackBubblesPopped(count)</c> — that
+    /// forward is deliberately OMITTED here. <see cref="DtrhHostOrchestrator"/> calls
+    /// <see cref="IAchievementService"/> AND <see cref="IQuestService"/> directly at run-end,
+    /// so forwarding here too would double-count quest progress. Net behavior is identical to
+    /// WPF (single credit); the quest dispatch just moved from inside the achievement service
+    /// to the orchestrator (the port's split-call seam).</para></remarks>
+    public void TrackBubblesPopped(int count)
+    {
+        if (count <= 0) return;
+
+        int before = _progress.TotalBubblesPopped;
+        _progress.TotalBubblesPopped += count;
+        int after = _progress.TotalBubblesPopped;
+        _isDirty = true;
+
+        if (before < 1000 && after >= 1000)
+        {
+            TryUnlock("pop_the_thought");
+        }
+
+        // 1 sparkle point per 100 bubbles — award every milestone crossed in one go.
+        int milestones = after / 100 - before / 100;
+        if (milestones > 0)
+        {
+            var settings = CoreApp.Settings?.Current;
+            if (settings != null)
+            {
+                settings.SkillPoints += milestones;
+                CoreApp.Settings?.Save();
+                _logger.LogInformation("Bubble milestone (batch)! {Total} bubbles popped — awarded {N} sparkle point(s) (total: {Points})",
+                    after, milestones, settings.SkillPoints);
+                // one popup for the highest 100-boundary reached this run
+                ShowBubbleMilestoneNotification(after - after % 100);
+            }
+        }
+    }
+
     private void ShowBubbleMilestoneNotification(int totalBubbles)
     {
         try

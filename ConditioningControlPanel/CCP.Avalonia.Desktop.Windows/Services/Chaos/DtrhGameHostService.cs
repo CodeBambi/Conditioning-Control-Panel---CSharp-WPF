@@ -10,6 +10,7 @@ using ConditioningControlPanel;                       // IBarkService, IModServi
 using ConditioningControlPanel.Avalonia.Chaos;        // DtrhNativeEffects, ChaosMetaStoreAdapter, IRevealService, IChaosMetaService
 using ConditioningControlPanel.Core.Platform;         // IAppEnvironment, BrowserHostResourceAccess
 using ConditioningControlPanel.Core.Services.Chaos;   // orchestrator, stores, sentinel, IChaosMetaStore, IChaosWebGameService
+using ConditioningControlPanel.Core.Services.Progression;// IAchievementService, IQuestService (DtRH web-run bubble credit)
 using ConditioningControlPanel.Core.Services.Settings;// ISettingsService
 using ConditioningControlPanel.Core.Services.Video;   // IVideoService (world-freeze + watch-credit)
 using ConditioningControlPanel.Avalonia.Desktop.Windows.Platform; // WebView2BrowserHost
@@ -54,6 +55,8 @@ public sealed class DtrhGameHostService : IChaosWebGameService
     private readonly IChaosMetaService? _meta;
     private readonly IProgressionService? _progression;
     private readonly ISkillTreeService? _skillTree;
+    private readonly IAchievementService? _achievements;   // DtRH web-run bubble credit (WPF DtrhHostService.cs:469-474)
+    private readonly IQuestService? _quests;               // DtRH web-run bubble credit (v6.3.1 parity)
 
     private Window? _window;
     private WebView2BrowserHost? _host;
@@ -75,6 +78,8 @@ public sealed class DtrhGameHostService : IChaosWebGameService
         IChaosMetaService? meta = null,
         IProgressionService? progression = null,
         ISkillTreeService? skillTree = null,
+        IAchievementService? achievements = null,
+        IQuestService? quests = null,
         IVideoService? video = null,
         ILogger<DtrhGameHostService>? logger = null)
     {
@@ -88,6 +93,8 @@ public sealed class DtrhGameHostService : IChaosWebGameService
         _meta = meta;
         _progression = progression;
         _skillTree = skillTree;
+        _achievements = achievements;
+        _quests = quests;
         _logger = logger;
     }
 
@@ -164,7 +171,7 @@ public sealed class DtrhGameHostService : IChaosWebGameService
             _host, effects, store, manifest, assetStats, sessionStats, _env,
             _loggerFactory.CreateLogger<DtrhHostOrchestrator>(),
             _loggerFactory.CreateLogger<DtrhMetaBridge>(),
-            _progression, _skillTree, sentinel, _settings, _bark, testMode: false);
+            _progression, _skillTree, _achievements, _quests, sentinel, _settings, _bark, testMode: false);
         _orchestrator.Closed += OnOrchestratorClosed;
         _orchestrator.RecoverRequested += OnRecoverRequested;
         // N1 watch-credit: feed the orchestrator's telemetry counters from real video teardown credits.

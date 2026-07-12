@@ -59,6 +59,17 @@ public interface IAchievementService : IAsyncDisposable
     void TrackBubblePopped();
 
     /// <summary>
+    /// Credit a whole run's worth of popped bubbles at once (the DtRH web port reports its
+    /// <c>bubblesPopped</c> total on run-end rather than per-pop). Same accounting as
+    /// <see cref="TrackBubblePopped"/> but collapsed: one increment, every 100-bubble
+    /// sparkle-point milestone crossed is granted in a single save, and at most one milestone
+    /// popup fires so a big run can't spam notifications. Default no-op so existing fakes
+    /// compile; the real service overrides.
+    /// WPF parity: AchievementService.TrackBubblesPopped.
+    /// </summary>
+    void TrackBubblesPopped(int count) { }
+
+    /// <summary>
     /// Track a bubble-count game result.
     /// </summary>
     void TrackBubbleCountResult(bool correct);

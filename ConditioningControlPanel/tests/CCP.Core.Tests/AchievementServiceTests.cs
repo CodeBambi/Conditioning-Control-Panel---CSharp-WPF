@@ -244,6 +244,76 @@ public class AchievementServiceTests
         Assert.Equal(0.0, AchievementService.ComputeAutonomyTickCredit(-1.0), 6);
     }
 
+    [AvaloniaFact]
+    public void TrackBubblesPopped_CreditsBatchAndAwardsCrossedMilestones()
+    {
+        // A whole DtRH web run's bubbles collapse into one batch: one increment, every crossed
+        // 100-bubble sparkle boundary awarded in a single save. 250 pops from 0 crosses the 100 and
+        // 200 boundaries => 2 sparkle points (WPF AchievementService.TrackBubblesPopped).
+        var env = new TestAppEnvironment();
+        try
+        {
+            CoreApp.Settings = new TestSettingsService();
+            var service = new AchievementService(env, new DebugLogger<AchievementService>());
+            var startingPoints = CoreApp.Settings.Current.SkillPoints;
+
+            service.TrackBubblesPopped(250);
+
+            Assert.Equal(250, service.Progress.TotalBubblesPopped);
+            Assert.Equal(startingPoints + 2, CoreApp.Settings.Current.SkillPoints);
+        }
+        finally
+        {
+            CoreApp.Settings = null;
+            env.Cleanup();
+        }
+    }
+
+    [AvaloniaFact]
+    public void TrackBubblesPopped_UnlocksPopTheThoughtWhenCrossing1000()
+    {
+        var env = new TestAppEnvironment();
+        try
+        {
+            CoreApp.Settings = new TestSettingsService();
+            var service = new AchievementService(env, new DebugLogger<AchievementService>());
+            Assert.False(service.Progress.IsUnlocked("pop_the_thought"));
+
+            service.TrackBubblesPopped(1000);
+
+            Assert.Equal(1000, service.Progress.TotalBubblesPopped);
+            Assert.True(service.Progress.IsUnlocked("pop_the_thought"));
+        }
+        finally
+        {
+            CoreApp.Settings = null;
+            env.Cleanup();
+        }
+    }
+
+    [AvaloniaFact]
+    public void TrackBubblesPopped_ZeroOrNegativeIsNoOp()
+    {
+        var env = new TestAppEnvironment();
+        try
+        {
+            CoreApp.Settings = new TestSettingsService();
+            var service = new AchievementService(env, new DebugLogger<AchievementService>());
+            var startingPoints = CoreApp.Settings.Current.SkillPoints;
+
+            service.TrackBubblesPopped(0);
+            service.TrackBubblesPopped(-5);
+
+            Assert.Equal(0, service.Progress.TotalBubblesPopped);
+            Assert.Equal(startingPoints, CoreApp.Settings.Current.SkillPoints);
+        }
+        finally
+        {
+            CoreApp.Settings = null;
+            env.Cleanup();
+        }
+    }
+
     private class TestSettingsService : IAppSettingsService
     {
         public AppSettings Current { get; } = new();
