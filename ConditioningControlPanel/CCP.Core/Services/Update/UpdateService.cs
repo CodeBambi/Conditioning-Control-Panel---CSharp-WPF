@@ -35,23 +35,32 @@ public class UpdateService : IUpdateService, IDisposable
     public bool IsDownloading { get; private set; }
 
     /// <inheritdoc />
-    public string CurrentVersion => "6.3.1";   // WPF Services/Update/UpdateService.cs (v6.3.1 bump)
+    public string CurrentVersion => "6.3.2";   // WPF Services/Update/UpdateService.cs (v6.3.2 bump)
 
     /// <summary>
     /// Hard-coded current application version (single source for heads that need a const,
     /// e.g. the What's-New dialog title). Mirrors the WPF UpdateService.AppVersion constant.
     /// </summary>
-    public const string AppVersion = "6.3.1";   // WPF Services/Update/UpdateService.cs:23
+    public const string AppVersion = "6.3.2";   // WPF Services/Update/UpdateService.cs:23
 
     /// <summary>
     /// Patch notes for the current version — shown in the update/what's-new dialogs and used as a
     /// fallback when GitHub release notes are unavailable. Update together with <see cref="AppVersion"/>.
     /// </summary>
-    public const string CurrentPatchNotes = @"v6.3.1 - Deeper Down
+    public const string CurrentPatchNotes = @"v6.3.2 - Deeper Down
 
 6.3.0 rebuilt Down the Rabbit Hole into a guided descent through four chambers and
 sixteen biomes, with a Warren leveling hub, boon drafts, and full voiceover. 6.3.1
-keeps refining that rework - smoothing the onboarding, the HUD, and the rough edges.
+kept refining that rework. 6.3.2 is a hotfix on top - breaking a freeze that could
+lock your PC and smoothing the last rough edges.
+
+🩹 HOTFIX
+- Fixed a mandatory-video freeze that could hard-lock your PC; an off-thread watchdog now breaks the wedge and releases you.
+- Fixed a Rabbit Hole hang when flash-pool images decrypted on the main thread.
+- Down the Rabbit Hole: Esc now steps out cleanly (pause, then exit fullscreen, then close), with C#-owned fullscreen.
+- Rabbit Hole play-test batch: opt out of Cheshire, flash from your own media, plus video and pause fixes.
+- Webcam gaze-test window now has a mouse-clickable close button.
+- Animated tease-bubble cap now scales with your performance tier.
 
 ✨ FEATURES
 - Down the Rabbit Hole: brand-new Cheshire visual-novel tutorial that walks you in, replacing the old lesson cards.
@@ -70,7 +79,7 @@ keeps refining that rework - smoothing the onboarding, the HUD, and the rough ed
 - Fixed a video black-screen crash during runs.
 - Boon draft now auto-picks a random card on timeout instead of leaving you with nothing.
 
-Season: Jelly July";   // WPF Services/Update/UpdateService.cs:26-50 (verbatim)
+Season: Jelly July";   // WPF Services/Update/UpdateService.cs:29-61 (verbatim)
 
     public UpdateService(IUpdateInstaller installer, ISettingsService settingsService, ILogger<UpdateService>? logger = null)
     {
