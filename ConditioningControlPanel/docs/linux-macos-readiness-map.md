@@ -42,6 +42,22 @@ all three heads compile green via `CCP.Desktop.slnf`; Core 750 tests pass cross-
 | Window chrome | `WindowsWindowChrome` | custom chrome Windows-only |
 | Audio duration provider | `NAudioDurationProvider` (win) | affects bark whisper-gate timing off Windows — verify shared default |
 
+## GOVERNING PRINCIPLE (owner directive 2026-07-12): must work on ANY Linux system
+The owner does not have a specific Linux test machine and will NOT be the verification constraint —
+end users run arbitrary distros/display servers/DEs. Therefore EVERY Linux platform-seam impl is
+**multi-backend by construction**, behind one seam, selected at runtime, with a fallback chain that
+never hard-fails:
+- **X11** backend (Xlib/XCB) — covers most DEs incl. XWayland.
+- **Wayland** backend — wlr-layer-shell / foreign-toplevel / PipeWire-portal where the protocol allows
+  (sway/Hyprland/wlroots full-strength; GNOME-Mutter / KDE best-effort).
+- **Graceful fallback** — a reduced-but-usable path so an unknown environment still gets *something*
+  (e.g. plain always-on-top window; "unknown" activity; no-op with logged reason) rather than a crash.
+- Runtime detection via `XDG_SESSION_TYPE` / `WAYLAND_DISPLAY` / `DISPLAY`.
+- **Verification is CI-based, per backend** (owner-independent): X11 via `xvfb`, Wayland via a headless
+  compositor (`weston --backend=headless` or `sway` headless). No slice lands "compile-only."
+Applies to: `IOverlaySurface`, `IForegroundWindowTitleProvider`, `IFrameSource`, screen OCR, audio
+ducking — each is a backend family, not a single impl. "Multiple versions" = these backends.
+
 ## Bring-up leverage order (highest first — pending judgment-tier sequencing)
 1. **Overlay surface / click-through (X11 first, Wayland best-effort)** — unblocks the entire ambient
    conditioning surface; it is the WS4 judgment core (board row #5).
