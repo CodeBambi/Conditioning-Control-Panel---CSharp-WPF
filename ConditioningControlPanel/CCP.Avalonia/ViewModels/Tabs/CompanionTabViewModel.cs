@@ -4,6 +4,7 @@
 
 using System.Text;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -12,6 +13,7 @@ using ConditioningControlPanel;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Companion;
+using ConditioningControlPanel.Core.Services.Commands;
 using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Models;
 
@@ -31,6 +33,10 @@ public partial class CompanionTabViewModel : TabItemViewModel
     private readonly ICommunityPromptService? _promptService;
     private readonly IAvatarWindowService? _avatarWindowService;
     private readonly ISecretStore? _secretStore;
+    // AI-7: the live-actions feed singleton (null at design time). Bound via LiveActions below.
+    private readonly IAiLiveActionsFeed? _liveActionsFeed;
+    // Design-time-only fallback so LiveActions returns a real (empty) collection when no feed is injected.
+    private readonly ObservableCollection<string> _designLiveActions = new();
 
     public CompanionTabViewModel() : base("companion", "Companion", "🤖")
     {
@@ -47,7 +53,8 @@ public partial class CompanionTabViewModel : TabItemViewModel
         ICompanionService companionService,
         ICommunityPromptService promptService,
         IAvatarWindowService avatarWindowService,
-        ISecretStore secretStore) : base("companion", "Companion", "🤖")
+        ISecretStore secretStore,
+        IAiLiveActionsFeed? liveActionsFeed = null) : base("companion", "Companion", "🤖")
     {
         _settingsService = settingsService;
         _dialogService = dialogService;
@@ -57,6 +64,7 @@ public partial class CompanionTabViewModel : TabItemViewModel
         _promptService = promptService;
         _avatarWindowService = avatarWindowService;
         _secretStore = secretStore;
+        _liveActionsFeed = liveActionsFeed;
         _companions = new ObservableCollection<CompanionCardViewModel>();
         _installedPrompts = new ObservableCollection<CommunityPromptRowViewModel>();
         SyncUi();
@@ -76,26 +84,59 @@ public partial class CompanionTabViewModel : TabItemViewModel
 
     private void AttachEvents()
     {
-        if (_companionService == null) return;
-        _companionService.CompanionSwitched += OnCompanionEvent;
-        _companionService.XPAwarded += OnCompanionXpEvent;
-        _companionService.LevelUp += OnCompanionLevelEvent;
-        _companionService.XPDrained += OnCompanionXpDrainEvent;
+        if (_companionService != null)
+        {
+            _companionService.CompanionSwitched += OnCompanionEvent;
+            _companionService.XPAwarded += OnCompanionXpEvent;
+            _companionService.LevelUp += OnCompanionLevelEvent;
+            _companionService.XPDrained += OnCompanionXpDrainEvent;
+        }
+
+        // AI-7: keep the "Live actions" placeholder in sync with the singleton feed. The feed's Items
+        // outlive this transient VM, so subscribe on select / unsubscribe on deselect (mirrors WPF
+        // MainWindow.Patreon.cs:1776 CollectionChanged -> UpdateLiveActionsPlaceholder). The -== guard
+        // makes repeated select/deselect idempotent.
+        if (_liveActionsFeed != null)
+        {
+            _liveActionsFeed.Items.CollectionChanged -= OnLiveActionsChanged;
+            _liveActionsFeed.Items.CollectionChanged += OnLiveActionsChanged;
+            HasLiveActions = _liveActionsFeed.Items.Count > 0;
+        }
     }
 
     private void DetachEvents()
     {
-        if (_companionService == null) return;
-        _companionService.CompanionSwitched -= OnCompanionEvent;
-        _companionService.XPAwarded -= OnCompanionXpEvent;
-        _companionService.LevelUp -= OnCompanionLevelEvent;
-        _companionService.XPDrained -= OnCompanionXpDrainEvent;
+        if (_companionService != null)
+        {
+            _companionService.CompanionSwitched -= OnCompanionEvent;
+            _companionService.XPAwarded -= OnCompanionXpEvent;
+            _companionService.LevelUp -= OnCompanionLevelEvent;
+            _companionService.XPDrained -= OnCompanionXpDrainEvent;
+        }
+
+        if (_liveActionsFeed != null)
+            _liveActionsFeed.Items.CollectionChanged -= OnLiveActionsChanged;
     }
 
     private void OnCompanionEvent(object? sender, CompanionId e) => SyncUi();
     private void OnCompanionXpEvent(object? sender, (CompanionId Companion, double Amount, double Modifier) e) => SyncUi();
     private void OnCompanionLevelEvent(object? sender, (CompanionId Companion, int NewLevel) e) => SyncUi();
     private void OnCompanionXpDrainEvent(object? sender, double e) => SyncUi();
+
+    private void OnLiveActionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => HasLiveActions = (_liveActionsFeed?.Items.Count ?? 0) > 0;
+
+    /// <summary>
+    /// The singleton live-actions feed (AI-7): the most recent AI-driven effect actions, bound to the
+    /// scrolling "Live actions" list on this tab. Returns the shared feed's Items at runtime; an
+    /// empty local collection at design time. Mirrors WPF <c>App.AiLiveActions</c> (the static
+    /// ObservableCollection bound in MainWindow.Patreon.cs:1774). Newest-last ordering matches WPF.
+    /// </summary>
+    public ObservableCollection<string> LiveActions => _liveActionsFeed?.Items ?? _designLiveActions;
+
+    /// <summary>True when the feed has at least one action line (hides the empty placeholder).</summary>
+    [ObservableProperty]
+    private bool _hasLiveActions;
 
     [ObservableProperty]
     private ObservableCollection<CompanionCardViewModel> _companions;
@@ -464,6 +505,8 @@ public partial class CompanionTabViewModel : TabItemViewModel
             RefreshCompanionCards();
             RefreshPrompts();
             RefreshOpenAiKeyStatus();
+            // AI-7: seed the live-actions placeholder state from the (possibly pre-populated) feed.
+            HasLiveActions = (_liveActionsFeed?.Items.Count ?? 0) > 0;
         }
         catch (Exception ex)
         {

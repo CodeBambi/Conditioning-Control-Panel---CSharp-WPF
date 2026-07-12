@@ -182,6 +182,35 @@
         </StackPanel>
       </Border>
 
+      <!-- AI-7 Live actions feed: scrolling list of the most recent AI-driven effect actions,
+           bound to the singleton IAiLiveActionsFeed via the VM. Newest-last ordering matches WPF
+           (App.AiLiveActions, bound in MainWindow.Patreon.cs:1774-1782). Themed via DynamicResource
+           keys so it re-skins across all 5 mods (dashboard-design). Mirrors the ObservableCollection<string>
+           + ListBox pattern used by the Remote Control command log. Each line describes the ACTION
+           only — never the AI prompt (WPF FormatLiveAction parity, AiCommandService.cs:140-180). -->
+      <Border Background="{DynamicResource SurfaceBgBrush}"
+              BorderBrush="{DynamicResource TransparentPinkBrush}"
+              BorderThickness="1"
+              CornerRadius="12"
+              Padding="18">
+        <StackPanel Spacing="12">
+          <TextBlock Text="{loc:Str label_live_actions}"
+                     FontSize="16"
+                     FontWeight="Bold"
+                     Foreground="{DynamicResource TextLightBrush}" />
+          <ListBox ItemsSource="{Binding LiveActions}"
+                   Background="Transparent"
+                   MaxHeight="180"
+                   IsVisible="{Binding HasLiveActions}" />
+          <TextBlock Text="{loc:Str label_live_actions_placeholder}"
+                     Foreground="{DynamicResource TextMutedBrush}"
+                     FontSize="13"
+                     FontStyle="Italic"
+                     TextWrapping="Wrap"
+                     IsVisible="{Binding !HasLiveActions}" />
+        </StackPanel>
+      </Border>
+
       <!-- Active prompt -->
       <Border Background="{DynamicResource SurfaceBgBrush}"
               BorderBrush="{DynamicResource TransparentPinkBrush}"
