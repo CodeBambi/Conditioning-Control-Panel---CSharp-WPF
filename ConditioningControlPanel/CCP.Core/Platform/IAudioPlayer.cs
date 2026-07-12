@@ -11,6 +11,23 @@ public interface IAudioPlayer : IAsyncDisposable
     void SetVolume(double volume);
 
     /// <summary>
+    /// Play a one-shot whisper/trigger voice clip at <paramref name="volume01"/> (0..1) and
+    /// return its duration in seconds (WPF parity: <c>SubliminalService.PlayWhisperAudio</c>
+    /// and <c>FlashService.PlaySound</c> play via NAudio and read
+    /// <c>AudioFileReader.TotalTime</c> for the bark-gate mark — SubliminalService.cs:510/534,
+    /// FlashService.cs:2140/2156). Callers feed the returned duration to
+    /// <see cref="MarkWhisperAudio"/>. Default implementation applies the volume and plays
+    /// fire-and-forget (duration unknown → returns 0, so the mark becomes a no-op); the
+    /// LibVLC-backed player overrides this to probe the clip duration first. Never blocks.
+    /// </summary>
+    double PlayOneShot(string filePath, double volume01)
+    {
+        try { SetVolume(volume01); _ = PlayAsync(filePath); }
+        catch { /* best-effort one-shot; callers tolerate a 0 duration */ }
+        return 0;
+    }
+
+    /// <summary>
     /// Position-preserving pause of the current playback (WPF parity:
     /// AvatarTubeWindow.Speech.cs:1655 PauseSpokenAudio). Default no-op so implementations
     /// that cannot (or need not) pause inherit safe behavior; the LibVLC-backed player

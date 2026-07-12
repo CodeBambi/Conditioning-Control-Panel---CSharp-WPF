@@ -36,6 +36,8 @@ using ConditioningControlPanel.Core.Services.Speech;
 using ConditioningControlPanel.Avalonia.Compositor;
 using ConditioningControlPanel.Avalonia.Compositor.Layers;
 using ConditioningControlPanel.Avalonia.Services.Avatar;
+using ConditioningControlPanel.Core.Services.Audio;
+using ConditioningControlPanel.Core.Services.AvatarTube;
 using ConditioningControlPanel.Avalonia.Services.Auth;
 using ConditioningControlPanel.Core.Services.Avatar;
 using ConditioningControlPanel.Core.Services.Auth;
@@ -116,6 +118,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISystemAudioDucker, AvaloniaSystemAudioDucker>();
         services.AddSingleton<IAudioDeviceService, AvaloniaAudioDeviceService>();
         services.AddSingleton<IAudioPlayer, AvaloniaAudioPlayer>();
+        // Whisper voice playback (subliminal/flash/session) + the companion-menu mute seam.
+        // WhisperVoicePlayer wraps IAudioPlayer + ISystemAudioDucker; both are registered above.
+        services.AddSingleton<WhisperVoicePlayer>();
+        services.AddSingleton<IWhisperService, SettingsBackedWhisperService>();
         services.AddSingleton<IHapticsService, AvaloniaHapticsService>();
 
         services.AddSingleton<IInputHook, AvaloniaInputHook>();
