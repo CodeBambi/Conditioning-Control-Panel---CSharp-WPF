@@ -1169,6 +1169,11 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             var input = TxtUserInput?.Text?.Trim();
             if (string.IsNullOrEmpty(input)) return;
 
+            // BARK-2: stamp the chat-suppression window so the avatar does not interrupt with a bark
+            // during this chat exchange, then raise the UserMessageSent trigger (WPF BarkService.cs:427).
+            try { App.Services.GetService<ConditioningControlPanel.Core.Services.Bark.BarkTriggerWiring>()?.NotifyUserMessage(); }
+            catch { /* never block a chat send on a bark hook */ }
+
             var counter = App.Services.GetService<IModerationCounter>();
             var counterState = counter?.GetState();
             if (counterState?.CooldownActive == true)
