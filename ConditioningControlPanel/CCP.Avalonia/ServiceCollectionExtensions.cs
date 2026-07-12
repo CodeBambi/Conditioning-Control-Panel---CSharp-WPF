@@ -12,6 +12,7 @@ using ConditioningControlPanel.Avalonia.Services.Flash;
 using ConditioningControlPanel.Avalonia.Services.Haptics;
 using ConditioningControlPanel.Avalonia.Services.InteractionQueue;
 using ConditioningControlPanel.Avalonia.Services.KeywordTriggers;
+using ConditioningControlPanel.Core.Services.Awareness;
 using ConditioningControlPanel.Avalonia.Services.LockCard;
 using ConditioningControlPanel.Avalonia.Services.Lockdown;
 
@@ -290,6 +291,10 @@ public static class ServiceCollectionExtensions
         // impl uses only cross-platform Avalonia APIs, so CCP.Avalonia owns it directly (like
         // AvaloniaOverlayService/AvaloniaFlashService) rather than a per-head override.
         services.AddSingleton<IScreenShakeService, AvaloniaScreenShakeService>();
+        // AI-1: portable window-awareness engine (WPF Services/UI/WindowAwarenessService.cs).
+        // Depends on the optional IForegroundWindowTitleProvider head seam; on heads without
+        // one (Linux/macOS today) Start() no-ops and the feature stays off gracefully.
+        services.AddSingleton<IAwarenessService, AwarenessService>();
         services.AddSingleton<ISessionLogService, SessionLogService>();
 
         services.AddSingleton<IKeywordTriggerPresetService, AvaloniaKeywordTriggerPresetService>();

@@ -89,6 +89,9 @@ class Program
             services.AddSingleton<IWindowChrome, WindowsWindowChrome>();
             services.AddSingleton<IAudioDeviceService, WindowsAudioDeviceService>();
             services.AddSingleton<IStartupRegistration, WindowsStartupRegistration>();
+            // AI-1 awareness engine seam: foreground window TITLE only (no process name/PID).
+            // Linux/macOS register nothing, so the Core engine no-ops there.
+            services.AddSingleton<IForegroundWindowTitleProvider, WindowsForegroundWindowTitleProvider>();
             services.AddSingleton<IBrowserHost, WebView2BrowserHost>();
             services.AddSingleton<IAudioWaveformProvider, NAudioWaveformProvider>();
             services.AddSingleton<AvaloniaWebcamTrackingService>();
