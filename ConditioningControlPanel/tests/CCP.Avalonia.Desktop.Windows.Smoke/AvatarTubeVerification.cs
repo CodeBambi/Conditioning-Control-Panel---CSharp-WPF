@@ -211,7 +211,8 @@ internal static class AvatarTubeVerification
             Add(checks, "detach", "CanResize==true after Detach",
                 tube.CanResize ? "PASS" : "FAIL", $"CanResize={tube.CanResize}");
             // The art-only WM_NCHITTEST hook (Windowing.cs TubeWndProcHook) returns HTTRANSPARENT
-            // for non-art points ONLY when !_isAttached; CanResize==true is the detached indicator.
+            // for non-art points in BOTH modes (#cards fix: attached dead-zones fall through to
+            // the dashboard's left-column cards); CanResize==true is the detached indicator.
             // Combined with hook registration, that is the "art-only active" state.
             Add(checks, "detach", "WM_NCHITTEST art-only hook active while detached",
                 (tube.VerifyHitTestHookRegistered && tube.CanResize) ? "PASS" : "FAIL",

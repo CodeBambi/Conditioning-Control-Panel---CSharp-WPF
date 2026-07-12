@@ -34,13 +34,13 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private IScreenProvider? _screenProvider;
         private string _diagLastFullscreenWindow = "(none)";
 
-        // ===== Detached per-region hit-testing (obs #6 retest-2 fix 3b) =====
+        // ===== Per-region hit-testing (obs #6 retest-2 fix 3b; both modes, #cards) =====
         // WPF layered windows hit-test per-pixel for free (alpha-0 pixels are click-
-        // through at the OS level), so the WPF detached tube never blocked the main
+        // through at the OS level), so the WPF tube never blocked the main
         // window. Avalonia windows hit-test their whole rect (overlay-clickthrough skill
-        // rule 5), so the detached tube's transparent dead-zones swallowed clicks. The
+        // rule 5), so the tube's transparent dead-zones swallowed clicks. The
         // WM_NCHITTEST hook below restores per-pixel behavior: everything except the tube
-        // art returns HTTRANSPARENT while detached. Registered via Avalonia's own
+        // art returns HTTRANSPARENT in both attached and detached modes. Registered via Avalonia's own
         // Win32Properties hook list - NOT SetWindowSubclass, which is banned on v12 HWNDs
         // (native 0xC0000005 race, CompositorWindow.axaml.cs:115-122).
         private Win32Properties.CustomWndProcHookCallback? _hitTestHook;
@@ -74,10 +74,14 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
 
         private IntPtr TubeWndProcHook(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            // Attached mode keeps default hit-testing: the attached tube deliberately
-            // overlaps the main window's left edge and its z-order pair-raise depends on
-            // clicks landing on it. Only the detached tube goes art-only (the spec scope).
-            if (msg != WM_NCHITTEST || _isAttached) return IntPtr.Zero;
+            // Per-pixel hit-testing runs in BOTH modes (#cards fix): the attached tube
+            // deliberately overlaps the main window's left edge (~350*scale px,
+            // TubeGeometryMath.BaseOffsetFromParent), so its transparent dead-zone must
+            // return HTTRANSPARENT and let clicks fall through to the dashboard's
+            // left-column feature cards, while tube art (avatar, speech bubble, title
+            // box, chat input, resize grips, painted vessel pixels) stays interactive —
+            // WPF layered-window parity, where alpha-0 pixels are click-through for free.
+            if (msg != WM_NCHITTEST) return IntPtr.Zero;
             try
             {
                 long lp = lParam.ToInt64();
