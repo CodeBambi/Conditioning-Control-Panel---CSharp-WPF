@@ -40,6 +40,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CCP.Avalonia.Desktop\CCP.Avalonia.Desktop.csproj" />
+
+    <!-- Smoke test harness (shared with the Windows head, source-linked unedited):
+         SmokeTestRunner + SmokeTestLogSink are cross-platform (Avalonia + CCP.Avalonia
+         types only) and drive the CI lane .github/workflows/linux-smoke.yml under xvfb.
+         Only linked into Debug builds so the smoke-test switch stays inert in Release. The
+         remaining files in the Smoke folder (Spiral/Video/Layer/AvatarTube/VisibleOverlay
+         verifications) are Windows-head verification harnesses and are NOT linked here. -->
+    <Compile Include="..\tests\CCP.Avalonia.Desktop.Windows.Smoke\SmokeTestLogSink.cs" Link="SmokeTest\SmokeTestLogSink.cs" Condition="'$(Configuration)' == 'Debug'" />
+    <Compile Include="..\tests\CCP.Avalonia.Desktop.Windows.Smoke\SmokeTestRunner.cs" Link="SmokeTest\SmokeTestRunner.cs" Condition="'$(Configuration)' == 'Debug'" />
   </ItemGroup>
 
   <ItemGroup>

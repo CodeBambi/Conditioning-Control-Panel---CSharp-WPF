@@ -23,8 +23,14 @@ public static class ProgramShared
     /// Shared entry point for Linux and macOS desktop heads. Handles single-instance
     /// enforcement and wires up the common desktop platform services, then lets the
     /// head inject any additional services via <paramref name="configurePlatformServices"/>.
+    /// <paramref name="configureBuilder"/> runs after <see cref="BuildAvaloniaApp"/> and
+    /// before the lifetime starts, so heads can attach Debug-only harnesses (e.g. the
+    /// smoke-test runner) exactly the way the Windows head does with its own builder.
     /// </summary>
-    public static void Run(string[] args, Action<IServiceCollection>? configurePlatformServices = null)
+    public static void Run(
+        string[] args,
+        Action<IServiceCollection>? configurePlatformServices = null,
+        Action<AppBuilder>? configureBuilder = null)
     {
         using var singleInstance = new DesktopSingleInstanceService();
         if (!singleInstance.IsFirstInstance)
@@ -42,8 +48,9 @@ public static class ProgramShared
             services.AddSingleton<ISingleInstanceService>(singleInstance);
         };
 
-        BuildAvaloniaApp()
-            .StartWithClassicDesktopLifetime(args);
+        var builder = BuildAvaloniaApp();
+        configureBuilder?.Invoke(builder);
+        builder.StartWithClassicDesktopLifetime(args);
     }
 
     public static AppBuilder BuildAvaloniaApp()
