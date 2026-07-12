@@ -184,6 +184,20 @@ public static class ServiceCollectionExtensions
                 sp.GetService<ConditioningControlPanel.Core.Services.Bark.IBarkManifestService>(),
                 logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<ConditioningControlPanel.Core.Services.Bark.BarkEngine>>()));
 
+        // BARK-1 slice 3: owns engine Start() + the awareness→Raise pair (closes AI-10) + the
+        // readily-available session/video/progression/achievement/quest triggers + ModChanged reload.
+        // Resolved + Start()-ed in App.OnFrameworkInitializationCompleted after the active mod is known.
+        services.AddSingleton(sp => new ConditioningControlPanel.Core.Services.Bark.BarkTriggerWiring(
+            sp.GetRequiredService<ConditioningControlPanel.Core.Services.Bark.BarkEngine>(),
+            sp.GetService<ConditioningControlPanel.Core.Services.Awareness.IAwarenessService>(),
+            sp.GetService<IModService>(),
+            sp.GetService<ISessionService>(),
+            sp.GetService<IVideoService>(),
+            sp.GetService<IProgressionService>(),
+            sp.GetService<IAchievementService>(),
+            sp.GetService<IQuestService>(),
+            logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<ConditioningControlPanel.Core.Services.Bark.BarkTriggerWiring>>()));
+
         // Spoken-mantra dataset for the Takeover "say it for me" fallback. Audio-duration provider
         // defaults to no-op; the Windows head overrides it with NAudio.
         services.AddSingleton<ConditioningControlPanel.Core.Platform.IAudioDurationProvider,
@@ -324,7 +338,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAuthProvider>(sp => sp.GetRequiredService<AvaloniaSubscribeStarProvider>());
         services.AddSingleton<IChaosService, AvaloniaChaosService>();
         services.AddSingleton<IAvatarWindowService, AvaloniaAvatarWindowService>();
-        services.AddSingleton<IBarkService, AvaloniaBarkService>();
+        services.AddSingleton<IBarkService>(sp => new AvaloniaBarkService(sp.GetService<ConditioningControlPanel.Core.Services.Bark.BarkEngine>()));
         services.AddSingleton<IVideoInfo, AvaloniaVideoInfo>();
         services.AddSingleton<IMainWindowService, AvaloniaMainWindowService>();
         // Screen-shake seam (Q15): TranslateTransform jitter on the main window content root,
