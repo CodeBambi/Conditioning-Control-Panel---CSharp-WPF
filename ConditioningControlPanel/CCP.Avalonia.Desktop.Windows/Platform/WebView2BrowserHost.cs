@@ -121,6 +121,33 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
     public event EventHandler<bool>? FullscreenChanged;
     public event EventHandler<string>? WebMessageReceived;
 
+    /// <summary>
+    /// Raised after the embedded browser process crashed and the native host reset itself for a
+    /// lazy re-init on the next navigation (WPF BrowserService.BrowserProcessFailed parity).
+    /// </summary>
+    public event EventHandler? ProcessFailed;
+
+    /// <summary>
+    /// Remembered zoom factor, or null when never explicitly set. Nullable so hosts that never set a
+    /// zoom (Chaos tunnel, DTRH, Deeper preview) keep WebView2's default 1.0 untouched.
+    /// </summary>
+    private double? _zoomFactor;
+
+    /// <summary>
+    /// Embedded browser zoom (WPF parity: 0.75 on init, 0.5 on site navigation). Remembered and
+    /// re-applied after a fresh CoreWebView2 initializes (e.g. process-crash recovery).
+    /// </summary>
+    public double ZoomFactor
+    {
+        get => _embeddedHost?.WebView?.ZoomFactor ?? _zoomFactor ?? 1.0;
+        set
+        {
+            _zoomFactor = value;
+            if (_embeddedHost?.WebView is { } webView)
+                webView.ZoomFactor = value;
+        }
+    }
+
     // Pending virtual-host mappings (applied once the embedded CoreWebView2 initializes). Multiple mappings are
     // supported (e.g. DTRH maps its page root Deny + asset roots Allow); re-registering a host replaces it.
     private readonly List<(string Host, string Folder, BrowserHostResourceAccess Access)> _virtualHostMappings = new();
@@ -134,8 +161,12 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
     /// <summary>
     /// Creates an Avalonia control that hosts WebView2. The first call initializes the
     /// embedded WebView2 asynchronously; subsequent calls return the same control instance.
+    /// Declared as <c>object?</c> to exactly match <see cref="IBrowserHost.CreateBrowserControl"/>:
+    /// a covariant <c>Control?</c> return does NOT implement the interface member, so interface
+    /// dispatch silently fell through to the default-interface-method and returned null - which
+    /// left every interface-typed consumer (dashboard, Deeper preview) without an embeddable control.
     /// </summary>
-    public global::Avalonia.Controls.Control? CreateBrowserControl()
+    public object? CreateBrowserControl()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -145,6 +176,7 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
         _embeddedHost = new WebView2NativeControlHost(_environment);
         _embeddedHost.TitleChanged += (_, title) => TitleChanged?.Invoke(this, title);
         _embeddedHost.Navigated += (_, uri) => Navigated?.Invoke(this, uri);
+        _embeddedHost.ProcessFailed += (_, _) => ProcessFailed?.Invoke(this, EventArgs.Empty);
         _embeddedHost.FullscreenChanged += (_, fullscreen) =>
         {
             IsFullscreen = fullscreen;
@@ -176,10 +208,24 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
             // #4: this used to be a Debug.WriteLine-only swallow, so environment failures (e.g. the
             // process-exclusive user-data folder lock that fired when hosts shared one folder) left the
             // dashboard browser silently blank. Surface it as a real warning so future failures are diagnosable.
-            Logger?.LogWarning(ex, "WebView2BrowserHost: failed to initialize embedded WebView2 for {Url}; falling back to popup", url);
-            await PopOutAsync(url);
-            return;
+            //
+            // WPF parity (MainWindow.Browser.cs InitializeBrowserAsync catch blocks): initialization
+            // failures must reach the caller so the dashboard can show the WebView2-runtime error UX
+            // in the placeholder + status row, instead of silently popping out a detached window.
+            Logger?.LogWarning(ex, "WebView2BrowserHost: failed to initialize embedded WebView2 for {Url}", url);
+            if (ex is WebView2RuntimeNotFoundException)
+            {
+                // Same message shape as WPF BrowserService.CreateBrowserAsync.
+                throw new InvalidOperationException(
+                    $"WebView2 Runtime is not installed. Please install it from: go.microsoft.com/fwlink/p/?LinkId=2124703\n\nError: {ex.Message}", ex);
+            }
+            throw;
         }
+
+        // Re-apply the remembered zoom on the (possibly freshly recreated) WebView2 control
+        // before navigating, mirroring WPF's ZoomFactor-before-Navigate ordering.
+        if (_zoomFactor is { } zoom && _embeddedHost?.WebView is { } zoomView)
+            zoomView.ZoomFactor = zoom;
 
         if (_embeddedHost?.WebView?.CoreWebView2 is { } core)
         {
@@ -367,6 +413,10 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
         _environment ??= await CoreWebView2Environment.CreateAsync(userDataFolder: userDataFolder);
         _popupWindow = new BrowserWindow(_environment);
         WirePopupEvents();
+        // Show the form BEFORE awaiting CoreWebView2 init: the WinForms WebView2 needs a live
+        // HWND to bind to, and awaiting EnsureCoreWebView2Async on a never-shown form hangs
+        // forever (silently - the pop-out window then never appears).
+        _popupWindow.Show();
         await _popupWindow.WebView.EnsureCoreWebView2Async(_environment);
     }
 

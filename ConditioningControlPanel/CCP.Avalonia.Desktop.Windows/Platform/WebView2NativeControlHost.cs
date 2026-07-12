@@ -108,6 +108,13 @@ public sealed class WebView2NativeControlHost : NativeControlHost, IDisposable
     public event EventHandler<bool>? FullscreenChanged;
 
     /// <summary>
+    /// Raised after the Chromium browser/render process crashed and this host reset itself
+    /// so the next <see cref="EnsureInitializedAsync"/> lazily recreates the WebView2
+    /// (WPF BrowserService.BrowserProcessFailed parity).
+    /// </summary>
+    public event EventHandler? ProcessFailed;
+
+    /// <summary>
     /// Ensures the WebView2 core is initialized with the supplied environment.
     /// Safe to call multiple times; subsequent calls return the same task.
     /// </summary>
@@ -390,6 +397,8 @@ public sealed class WebView2NativeControlHost : NativeControlHost, IDisposable
             // Allow a fresh init on next navigation.
             _initTask = null;
         }
+
+        ProcessFailed?.Invoke(this, EventArgs.Empty);
     }
 
     public void Dispose()
