@@ -424,6 +424,45 @@ public partial class App : Application
             }
             catch { }
 
+            // AI-1: window-awareness engine (free feature, consent-gated). Start iff BOTH flags
+            // are set (WPF Services/UI/WindowAwarenessService.cs:336-342) and keep reacting to
+            // the two settings toggles changing from any surface (awareness tab master switch
+            // mirrors WPF MainWindow.Patreon.cs:1142-1143 by auto-granting consent on enable).
+            try
+            {
+                var settingsService = Services.GetRequiredService<ISettingsService>();
+                var awareness = Services.GetRequiredService<global::ConditioningControlPanel.Core.Services.Awareness.IAwarenessService>();
+
+                void SyncAwareness()
+                {
+                    var s = settingsService.Current;
+                    if (s?.AwarenessModeEnabled == true && s.AwarenessConsentGiven)
+                        awareness.Start(); // no-ops on heads without a foreground-title provider
+                    else
+                        awareness.Stop();
+                }
+
+                void HookAwarenessSettings()
+                {
+                    var s = settingsService.Current;
+                    if (s == null) return;
+                    s.PropertyChanged += (_, e) =>
+                    {
+                        if (e.PropertyName is nameof(global::ConditioningControlPanel.Models.AppSettings.AwarenessModeEnabled)
+                            or nameof(global::ConditioningControlPanel.Models.AppSettings.AwarenessConsentGiven))
+                        {
+                            SyncAwareness();
+                        }
+                    };
+                }
+
+                HookAwarenessSettings();
+                // Settings instance can be swapped (cloud restore/reset) - re-bind or the toggle goes dead.
+                settingsService.CurrentReplaced += () => { HookAwarenessSettings(); SyncAwareness(); };
+                SyncAwareness();
+            }
+            catch { }
+
             base.OnFrameworkInitializationCompleted();
         }
         catch (Exception ex)

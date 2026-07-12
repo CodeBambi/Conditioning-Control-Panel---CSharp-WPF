@@ -7,12 +7,19 @@ namespace ConditioningControlPanel.Core.Services.Awareness;
 /// window and categorizes their activity. Privacy-focused: only categorizes,
 /// never logs or stores window titles.
 /// </summary>
+/// <remarks>
+/// Threading contract: the portable engine polls on a <see cref="System.Threading.Timer"/>
+/// (not a UI dispatcher timer), so <see cref="ActivityChanged"/> and
+/// <see cref="StillOnActivity"/> fire on a background thread-pool thread. Consumers must
+/// marshal to their UI thread before touching UI state (the WPF consumers already marshal,
+/// so the consumer-side contract is unchanged by the port).
+/// </remarks>
 public interface IAwarenessService
 {
-    /// <summary>Raised when the active activity category changes.</summary>
+    /// <summary>Raised when the active activity category changes. May fire on a background thread.</summary>
     event EventHandler<ActivityChangedEventArgs>? ActivityChanged;
 
-    /// <summary>Raised periodically when the user remains on a recognized activity.</summary>
+    /// <summary>Raised periodically when the user remains on a recognized activity. May fire on a background thread.</summary>
     event EventHandler<ActivityChangedEventArgs>? StillOnActivity;
 
     /// <summary>Current detected activity category.</summary>

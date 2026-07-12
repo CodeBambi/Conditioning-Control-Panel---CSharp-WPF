@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Core.Services.Awareness;
 using ConditioningControlPanel.Core.Services.Settings;
 
 namespace ConditioningControlPanel.Avalonia.ViewModels.Tabs;
@@ -25,6 +26,7 @@ public partial class AwarenessTabViewModel : TabItemViewModel
     private readonly ILogger<KeywordTriggerViewModel>? _keywordTriggerLogger;
     private readonly IKeywordTriggerService? _keywordService;
     private readonly IScreenOcrService? _ocrService;
+    private readonly IAwarenessService? _awarenessService;
 
     public AwarenessTabViewModel() : base("awareness", "Awareness", "👁")
     {
@@ -44,7 +46,8 @@ public partial class AwarenessTabViewModel : TabItemViewModel
         ILogger<AwarenessTabViewModel> logger,
         ILogger<KeywordTriggerViewModel> keywordTriggerLogger,
         IKeywordTriggerService keywordService,
-        IScreenOcrService? ocrService = null) : base("awareness", "Awareness", "👁")
+        IScreenOcrService? ocrService = null,
+        IAwarenessService? awarenessService = null) : base("awareness", "Awareness", "👁")
     {
         _settingsService = settingsService;
         _dialogService = dialogService;
@@ -52,6 +55,7 @@ public partial class AwarenessTabViewModel : TabItemViewModel
         _keywordTriggerLogger = keywordTriggerLogger;
         _keywordService = keywordService;
         _ocrService = ocrService;
+        _awarenessService = awarenessService;
         Triggers = new ObservableCollection<KeywordTriggerViewModel>();
         VisualEffectOptions = new ObservableCollection<string>(Enum.GetNames(typeof(KeywordVisualEffect)));
         OcrConfirmationOptions = new ObservableCollection<string> { "1 scan", "2 scans", "3 scans" };
@@ -236,6 +240,10 @@ public partial class AwarenessTabViewModel : TabItemViewModel
     {
         if (_settingsService?.Current == null) return;
         _settingsService.Current.AwarenessModeEnabled = value;
+        // WPF MainWindow.Patreon.cs:1142-1143: enabling via the UI auto-grants consent in the
+        // SAME handler (plain bool, no dialog, no consent version). The App-level settings
+        // subscription starts/stops the window-awareness engine off these two flags.
+        _settingsService.Current.AwarenessConsentGiven = value;
         Save();
         UpdateKeywordServiceState();
         UpdateOcrServiceState();
@@ -320,7 +328,12 @@ public partial class AwarenessTabViewModel : TabItemViewModel
 
     private void UpdateStatus()
     {
-        if (IsAwarenessMasterEnabled && (KeywordTriggersEnabled || ScreenOcrEnabled))
+        // AI-1: the chip reflects the REAL window-awareness engine state (IsRunning) rather
+        // than the raw toggle mix - on heads without a foreground-title provider the engine
+        // stays off and the chip truthfully shows off. Keyword/OCR liveness still lights it
+        // for premium users running those surfaces with the engine unavailable.
+        var engineLive = _awarenessService?.IsRunning == true;
+        if (engineLive || (IsAwarenessMasterEnabled && (KeywordTriggersEnabled || ScreenOcrEnabled)))
         {
             StatusText = Loc.Get("tab_awareness_status_on");
             StatusColor = "#00E676";
