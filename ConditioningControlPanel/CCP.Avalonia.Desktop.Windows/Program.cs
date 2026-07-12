@@ -37,6 +37,7 @@ class Program
         var verifyLayers = args.Contains("--verify-layers");
         var verifyAvatarTube = args.Contains("--verify-avatartube");
         var verifyBrowserMirror = args.Contains("--verify-browser-mirror");
+        var verifyPinkCover = args.Contains("--verify-pink-cover");
         var verifyVideoIndex = Array.IndexOf(args, "--verify-video");
         var verifyVideo = verifyVideoIndex >= 0;
         string? verifyVideoPath = null;
@@ -147,6 +148,10 @@ class Program
         else if (verifyBrowserMirror)
         {
             BrowserMirrorVerification.Attach(builder);
+        }
+        else if (verifyPinkCover)
+        {
+            PinkCoverVerification.Attach(builder);
         }
         else if (verifyVisible)
         {
