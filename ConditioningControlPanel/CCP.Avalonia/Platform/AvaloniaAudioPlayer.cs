@@ -1,5 +1,6 @@
 using LibVLCSharp.Shared;
 using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Core.Services.Audio;
 
 namespace ConditioningControlPanel.Avalonia.Platform;
 
@@ -16,6 +17,13 @@ public sealed class AvaloniaAudioPlayer : IAudioPlayer
     private Media? _currentMedia;
     private double _pendingVolume = 1.0;
     private bool _disposed;
+
+    // Whisper-audio busy window consulted by the bark gate (WPF parity: AudioService.cs:37
+    // _whisperBusyUntilTicks + IsWhisperAudioPlaying/MarkWhisperAudio, AudioService.cs:737-761).
+    // The port's subliminal/flash whisper playback is not yet wired, so nothing calls
+    // MarkWhisperAudio today; the gate is INERT-BUT-READY and lights up automatically when
+    // whisper voice audio is ported (mirror WPF FlashService.cs:903 / SubliminalService.cs:534).
+    private readonly WhisperAudioBusyness _whisper = new();
 
     public AvaloniaAudioPlayer(ILibVlcProvider libVlcProvider, IAudioDeviceService? audioDeviceService = null)
     {
@@ -82,6 +90,13 @@ public sealed class AvaloniaAudioPlayer : IAudioPlayer
                 _player.Play();
         }
     }
+
+    // Whisper-audio busy window exposed on the IAudioPlayer seam (WPF parity:
+    // AudioService.cs:737-761 IsWhisperAudioPlaying/MarkWhisperAudio). Delegates to the
+    // shared WhisperAudioBusyness so the algorithm stays in one place (see that type).
+    public bool IsWhisperAudioPlaying => _whisper.IsBusy;
+
+    public void MarkWhisperAudio(double durationSeconds) => _whisper.Mark(durationSeconds);
 
     public void SetVolume(double volume)
     {

@@ -1,4 +1,5 @@
 using System;
+using ConditioningControlPanel.Core.Platform;
 
 namespace ConditioningControlPanel.Core.Services.Bark;
 
@@ -12,7 +13,8 @@ namespace ConditioningControlPanel.Core.Services.Bark;
 public interface IBarkGateSignals
 {
     /// <summary>A subliminal/flash whisper is audible (WPF App.Audio.IsWhisperAudioPlaying,
-    /// BarkService.cs:1342). Default false — the Avalonia head has no whisper-audio flag yet.</summary>
+    /// BarkService.cs:1342). Default false — the port's whisper-busy window is consulted from
+    /// the shared <see cref="IAudioPlayer"/> when one is registered (see <see cref="BarkGateSignals"/>).</summary>
     bool IsWhisperAudioPlaying => false;
 
     /// <summary>The Chaos narrator holds the floor (WPF ChaosNarrator.IsPlaying, BarkService.cs:1347).
@@ -30,14 +32,27 @@ public interface IBarkGateSignals
 
 /// <summary>
 /// Default gate signals for the Avalonia head: avatar speech maps to the existing
-/// <see cref="IAvatarWindowService.IsSpeaking"/> seam; whisper/narrator keep their non-blocking
-/// interface defaults until the port grows those subsystems (noted on the task board).
+/// <see cref="IAvatarWindowService.IsSpeaking"/> seam; whisper-audio maps to
+/// <see cref="IAudioPlayer.IsWhisperAudioPlaying"/> (WPF parity: App.Audio.IsWhisperAudioPlaying,
+/// BarkService.cs:1342). Narrator keeps its non-blocking default — DTRH/Chaos went web-only in
+/// the port, so there is no native narrator to hold the floor (noted on the task board).
 /// </summary>
 public sealed class BarkGateSignals : IBarkGateSignals
 {
     private readonly IAvatarWindowService? _avatar;
+    private readonly IAudioPlayer? _audio;
 
-    public BarkGateSignals(IAvatarWindowService? avatar = null) => _avatar = avatar;
+    public BarkGateSignals(IAvatarWindowService? avatar = null, IAudioPlayer? audio = null)
+    {
+        _avatar = avatar;
+        _audio = audio;
+    }
+
+    // BARK-3: whisper-audio busy window from the shared audio player (WPF parity:
+    // App.Audio.IsWhisperAudioPlaying, BarkService.cs:1342). The port's subliminal/flash
+    // whisper playback is not yet wired, so nothing marks the window today — the gate is
+    // INERT-BUT-READY and lights up automatically when whisper voice audio is ported.
+    public bool IsWhisperAudioPlaying => _audio?.IsWhisperAudioPlaying ?? false;
 
     public bool IsAvatarSpeaking => _avatar?.IsSpeaking ?? false;
 }
