@@ -15,16 +15,9 @@ public static class CompositorLayers
 
     /// <summary>Browser fullscreen video mirror layer. Screen-captures the monitor the browser is
     /// fullscreen on and paints a stretched-to-fill copy on every OTHER monitor's compositor window
-    /// (the source monitor is skipped to avoid a self-capture feedback freeze). Z=80 sits ABOVE the
-    /// ambient PinkTint (70) and Spiral (60) so the mirrored video is the DOMINANT VISIBLE layer on
-    /// every target monitor while mirroring is active — the owner must SEE the mirrored video
-    /// clearly (not covered by a color), and a tint rendered on top at even 50% opacity still
-    /// washes the video. This z-lift applies ONLY to the mirror layer; when the mirror is inactive
-    /// the ambient overlays stack normally (PinkTint/Spiral on top of nothing), so global ambient
-    /// stacking is not affected. The PinkTint/Spiral MaxOpacity=0.5 cap (added separately as a
-    /// safety net) stays in place — it bounds the tint on every OTHER path where the mirror is NOT
-    /// active.</summary>
-    public const int BrowserMirrorVideo = 80;
+    /// (the source monitor is skipped to avoid a self-capture feedback freeze). Sits just above
+    /// mandatory video so a co-active direct-URL LibVLC render is occluded by the live capture.</summary>
+    public const int BrowserMirrorVideo = 16;
 
     /// <summary>Lock card overlay.</summary>
     public const int LockCard = 20;

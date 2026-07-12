@@ -52,7 +52,6 @@ class Program
         var verifyVisibleIndex = Array.IndexOf(args, "--verify-visible");
         var verifyVisible = verifyVisibleIndex >= 0;
         string? verifyVisiblePath = null;
-        var verifyMandatoryCaptureMirror = args.Contains("--verify-mandatory-capture-mirror");
         if (verifyVisible)
         {
             if (verifyVisibleIndex + 1 < args.Length && !args[verifyVisibleIndex + 1].StartsWith("--", StringComparison.Ordinal))
@@ -152,10 +151,6 @@ class Program
         else if (verifyVisible)
         {
             VisibleOverlayVerification.Attach(builder, verifyVisiblePath);
-        }
-        else if (verifyMandatoryCaptureMirror)
-        {
-            MandatoryCaptureMirrorVerification.Attach(builder);
         }
 #endif
 

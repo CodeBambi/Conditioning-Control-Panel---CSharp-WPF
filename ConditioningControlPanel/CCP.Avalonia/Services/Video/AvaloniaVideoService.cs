@@ -1073,13 +1073,6 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
                 _mandatoryVideoLayer.PlayVideo(filePath, withAudio: true, loop: false);
                 // Phase B audio parity: apply volume/mute/output device to the layer's player.
                 _mandatoryVideoLayer.ApplyAudioSettings(_settings.Current);
-                // BUG-1 fix (per-region capture): arm the capture mask IMMEDIATELY — the layer's
-                // IsActive just went true (PlayVideo set _bufferValid), but the engine tick that
-                // would normally build+publish the mask runs up to ~16ms later (longer if the
-                // engine was idle at 250ms cadence). Rebuilding the mask here closes that window
-                // so clicks over the mandatory video never leak to the desktop during the start
-                // gap. The next tick rebuilds it again as normal.
-                _compositor?.RebuildCaptureMaskNow();
                 // Ambient bubbles pause + clear so they don't fight the video for clicks or
                 // z-order (WPF StartVideoPlayback, VideoService.cs:1270).
                 try { _bubbles?.PauseAndClear(); } catch { /* best effort */ }
@@ -1117,9 +1110,6 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _videoLayer.PlayVideo(url, withAudio: true, loop: false, isUrl: true);
             // Phase B audio parity: apply volume/mute/output device to the layer's player.
             _videoLayer.ApplyAudioSettings(_settings.Current);
-            // BUG-1 fix (per-region capture): same immediate mask rebuild as the mandatory path
-            // above — close the start gap so URL/web video clicks never leak either.
-            _compositor?.RebuildCaptureMaskNow();
             return;
         }
 

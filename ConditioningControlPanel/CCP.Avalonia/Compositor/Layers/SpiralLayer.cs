@@ -83,26 +83,14 @@ public sealed class SpiralLayer : BaseLayer, IDisposable
         get { lock (_sync) { return _frames?.IsAnimated == true ? _frameIndex : (int)_rotationAngle; } }
     }
 
-    // MAX_SPIRAL_OPACITY (owner ruling 2026-07-12): the spiral must NEVER cover more than
-    // 50% of the content beneath it. Mirrors the PinkTintLayer cap — no ramp/caller can
-    // exceed 50%, so the mirrored web video (and everything else beneath) stays at least
-    // 50% visible at all times. Applied in the layer setter so session ramps and manual
-    // show paths are both bounded.
-    public const double MaxOpacity = 0.5;
-
     /// <summary>
     /// Show the spiral from <paramref name="path"/> at the given opacity (0..1, applied 1:1
     /// as paint alpha — the service owns the WPF 0.1 "very subtle" reduction). A repeat call
     /// with the cached path only updates opacity: no I/O, no decode, animation keeps running.
-    /// The opacity is CAPPED at <see cref="MaxOpacity"/> (50%) per the owner ruling so the
-    /// content beneath stays at least 50% visible.
     /// </summary>
     public void SetSource(string? path, double opacity)
     {
-        // CAP at 50% (owner ruling): clamp BEFORE storing so no ramp/caller can exceed the
-        // max. This is the single enforcement point — every SetSource path (session ramp,
-        // manual show) flows through here.
-        var newOpacity = Math.Clamp(opacity, 0, MaxOpacity);
+        var newOpacity = Math.Clamp(opacity, 0, 1);
 
         if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path))
         {
