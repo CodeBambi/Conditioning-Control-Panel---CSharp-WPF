@@ -80,6 +80,27 @@ public sealed class BrowserMirrorVideoLayer : BaseLayer, IDisposable
     // frame even when a co-active static layer keeps activeCount > 0 (IMP-1 parity with VideoLayer).
     public override bool IsActive => _active || _dirty;
 
+    /// <summary>
+    /// CAPTURE-REGION: the mirror paints a stretched-to-fill frame on every monitor EXCEPT the
+    /// source (the source monitor shows the live browser video underneath the transparent
+    /// compositor window, so its clicks already pass natively to the browser fullscreen window).
+    /// Capturing the non-source monitors matches the per-region rule (the mirror is session
+    /// content the user interacts with, not ambient tinted glass) while preserving the
+    /// self-capture-feedback avoidance that skipping the source monitor guarantees.
+    /// </summary>
+    public override void CollectCaptureRegions(
+        ConditioningControlPanel.Core.Services.Compositor.CaptureMaskBuilder builder,
+        System.Collections.Generic.IReadOnlyList<ScreenInfo> screens)
+    {
+        var source = _source;
+        for (int i = 0; i < screens.Count; i++)
+        {
+            var s = screens[i];
+            if (source != null && s.Bounds == source.Bounds) continue; // skip the browser-fullscreen source
+            builder.Add(s.Bounds);
+        }
+    }
+
     public BrowserMirrorVideoLayer(IFrameSource frameSource, ILogger? logger = null)
     {
         _frameSource = frameSource;

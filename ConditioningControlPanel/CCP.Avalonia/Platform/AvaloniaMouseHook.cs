@@ -27,6 +27,7 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 public sealed class AvaloniaMouseHook : IMouseHook
 {
     private readonly ILogger<AvaloniaMouseHook>? _logger;
+    private readonly ConditioningControlPanel.Core.Services.Compositor.CaptureMaskState? _captureMaskState;
     private readonly object _sync = new();
     private int _refCount;
 
@@ -34,9 +35,12 @@ public sealed class AvaloniaMouseHook : IMouseHook
     private LowLevelMouseProc? _mouseProc;
     private IntPtr _mouseHook = IntPtr.Zero;
 
-    public AvaloniaMouseHook(ILogger<AvaloniaMouseHook>? logger = null)
+    public AvaloniaMouseHook(
+        ILogger<AvaloniaMouseHook>? logger = null,
+        ConditioningControlPanel.Core.Services.Compositor.CaptureMaskState? captureMaskState = null)
     {
         _logger = logger;
+        _captureMaskState = captureMaskState;
     }
 
     public event EventHandler<HookPoint>? LeftButtonDown;
@@ -118,6 +122,20 @@ public sealed class AvaloniaMouseHook : IMouseHook
 
     private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
+        // PER-REGION CLICK-THROUGH (team review 2026-07-09, overlay-clickthrough skill). The
+        // compositor publishes a per-frame CAPTURE MASK (union of every non-ambient active
+        // layer's painted region). A click whose point falls INSIDE the mask is SWALLOWED
+        // (return non-zero without calling CallNextHookEx) so it lands on the capturing layer
+        // and never reaches the app behind; a click OUTSIDE the mask (ambient-only region or
+        // bare desktop) is PASSED via CallNextHookEx. Ambient layers (filter/spiral/blink) never
+        // contribute to the mask, so their regions always pass input.
+        //
+        // Consumer events are raised BEFORE the swallow decision so the bubble-pop / flash-pop
+        // handlers still see the click (they marshal to the UI thread and hit-test the layer).
+        // The hold-to-defuse exception is enforced at the MASK: a live chaos bubble is NOT in
+        // the mask (BubbleLayer excludes HoldToDefuse items), so its click passes through to
+        // GetAsyncKeyState exactly as WPF's GlobalMouseHook does (WPF parity).
+        bool swallow = false;
         if (nCode >= 0 && lParam != IntPtr.Zero)
         {
             // Filter on wParam BEFORE marshaling the struct (WPF GlobalMouseHook parity):
@@ -150,13 +168,27 @@ public sealed class AvaloniaMouseHook : IMouseHook
                 {
                     _logger?.LogWarning(ex, "Exception in low-level mouse hook handler");
                 }
+
+                // Swallow only button events whose point falls inside the compositor's capture
+                // mask. The mask is an immutable snapshot read lock-free; Contains is a cheap
+                // linear scan with no allocation, safe under the LowLevelHooksTimeout budget.
+                if (_captureMaskState != null && _captureMaskState.CurrentMask.Contains(pt.X, pt.Y))
+                {
+                    swallow = true;
+                    _logger?.LogDebug("MouseHook: SWALLOW {Msg} at ({X},{Y}) — inside capture mask", msg, pt.X, pt.Y);
+                }
+                else
+                {
+                    _logger?.LogDebug("MouseHook: PASS {Msg} at ({X},{Y}) — ambient/desktop region", msg, pt.X, pt.Y);
+                }
             }
         }
 
-        // WS2 (known gap): clicks that pop a flash/bubble are not swallowed — the swallow
-        // path (return 1 for handled hits, hold-to-defuse passes through) is the WS2
-        // mouse-hook work item.
-        return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+        // Swallow = return non-zero WITHOUT calling CallNextHookEx (WPF GlobalMouseHook parity:
+        // return the 1 from the handled-hit callback). This prevents both the rest of the hook
+        // chain and the target window from seeing the click. A passed click falls through to
+        // CallNextHookEx so it reaches the app behind normally.
+        return swallow ? new IntPtr(1) : CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
     }
 
     private const int WH_MOUSE_LL = 14;

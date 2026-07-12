@@ -220,6 +220,21 @@ public class VideoLayer : BaseLayer, IDisposable
     public override bool IsActive => _bufferValid || _dirty;
 
     /// <summary>
+    /// CAPTURE-REGION: a presenting video paints the FULL monitor bounds on every effect
+    /// screen (a video frame plus opaque letterbox <see cref="BackgroundColor"/> occludes the
+    /// whole monitor), so clicks anywhere on the monitor must land on the video, not the app
+    /// behind. The 2026-07-09 per-region rule makes video a capturing layer. Inherited by
+    /// <see cref="MandatoryVideoLayer"/> (mandatory video is always opaque).
+    /// </summary>
+    public override void CollectCaptureRegions(
+        ConditioningControlPanel.Core.Services.Compositor.CaptureMaskBuilder builder,
+        System.Collections.Generic.IReadOnlyList<ConditioningControlPanel.Core.Platform.ScreenInfo> screens)
+    {
+        for (int i = 0; i < screens.Count; i++)
+            builder.Add(screens[i].Bounds);
+    }
+
+    /// <summary>
     /// Opaque color used to fill the monitor around a letterboxed video so the desktop never
     /// shows through the bars. Defaults to black (conventional letterbox).
     /// <see cref="MandatoryVideoLayer"/> overrides this so a mandatory video fully occludes the

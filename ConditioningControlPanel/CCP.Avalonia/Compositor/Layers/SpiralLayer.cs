@@ -50,6 +50,14 @@ public sealed class SpiralLayer : BaseLayer, IDisposable
 
     public override int ZIndex => CompositorLayers.Spiral;
 
+    /// <summary>
+    /// AMBIENT click-through (per-region rule 2026-07-09): the spiral is tinted glass the user
+    /// works THROUGH, so its painted region is excluded from the capture mask and clicks pass
+    /// to the app behind. Rendered semi-transparent (the service applies a 90% reduction, so
+    /// the 0-50 setting maps to 0-5% on-screen alpha) by <c>AvaloniaOverlayService</c>.
+    /// </summary>
+    public override bool IsAmbientClickThrough => true;
+
     public override bool IsActive
     {
         get { lock (_sync) { return _visible && _opacity > 0 && (_frames != null || _pendingPath != null); } }

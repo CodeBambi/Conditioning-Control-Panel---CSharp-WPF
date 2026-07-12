@@ -195,14 +195,15 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
     }
 
     public void AddBubble(Guid id, double x, double y, double size, double opacity, double scale,
-        string? label, (byte r, byte g, byte b)? tint, bool isChaos, double fuseFraction, bool clickable)
+        string? label, (byte r, byte g, byte b)? tint, bool isChaos, double fuseFraction, bool clickable,
+        bool holdToDefuse = false)
     {
         lock (_sync)
         {
             if (_itemsById.Remove(id, out var stale))
                 _items.Remove(stale);
             var item = new BubbleItem(id, x, y, size, opacity, scale, label, tint, isChaos,
-                Math.Clamp(fuseFraction, 0, 1), clickable);
+                Math.Clamp(fuseFraction, 0, 1), clickable, holdToDefuse);
             _items.Add(item);
             _itemsById[id] = item;
             _dirty = true;
@@ -319,6 +320,30 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
         }
     }
 
+    /// <summary>
+    /// CAPTURE-REGION: each bubble captures clicks over the square bounds of its circle (the
+    /// disc's bounding box), so clicking a bubble lands on the bubble, not the app behind.
+    /// HOLD-TO-DEFUSE EXCEPTION (WPF parity, overlay-clickthrough skill): live chaos bubbles
+    /// (<see cref="BubbleItem.HoldToDefuse"/>) are EXCLUDED from the mask so their clicks pass
+    /// through to <c>GetAsyncKeyState</c> — swallowing would make the held button invisible and
+    /// the bubble would detonate the instant the channel starts.
+    /// </summary>
+    public override void CollectCaptureRegions(
+        ConditioningControlPanel.Core.Services.Compositor.CaptureMaskBuilder builder,
+        System.Collections.Generic.IReadOnlyList<ConditioningControlPanel.Core.Platform.ScreenInfo> screens)
+    {
+        lock (_sync)
+        {
+            for (int i = 0; i < _items.Count; i++)
+            {
+                var item = _items[i];
+                if (item.HoldToDefuse) continue; // let the held click reach GetAsyncKeyState
+                var half = item.Size * item.Scale; // full diameter (item.X/Y is top-left)
+                builder.Add(item.X, item.Y, half, half);
+            }
+        }
+    }
+
     public override void Update(TimeSpan deltaTime)
     {
         // Service drives updates; layer is a thin render adapter (UCE rule: layer state is service-owned).
@@ -431,9 +456,18 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
         public bool IsChaos { get; }
         public double FuseFraction { get; set; }
         public bool Clickable { get; }
+        /// <summary>
+        /// HOLD-TO-DEFUSE (WPF parity, overlay-clickthrough skill): a live chaos bubble whose
+        /// click should NOT be swallowed by the capture mask. The low-level hook lets these
+        /// clicks pass through so <c>GetAsyncKeyState</c> can read the held button and the
+        /// Core BubbleEngine's hold channel can time the defuse. Ambient (click-to-pop)
+        /// bubbles set this false and capture normally. Default false.
+        /// </summary>
+        public bool HoldToDefuse { get; }
 
         public BubbleItem(Guid id, double x, double y, double size, double opacity, double scale,
-            string? label, (byte r, byte g, byte b)? tint, bool isChaos, double fuseFraction, bool clickable)
+            string? label, (byte r, byte g, byte b)? tint, bool isChaos, double fuseFraction, bool clickable,
+            bool holdToDefuse = false)
         {
             Id = id;
             X = x;
@@ -446,6 +480,7 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
             IsChaos = isChaos;
             FuseFraction = fuseFraction;
             Clickable = clickable;
+            HoldToDefuse = holdToDefuse;
         }
     }
 }

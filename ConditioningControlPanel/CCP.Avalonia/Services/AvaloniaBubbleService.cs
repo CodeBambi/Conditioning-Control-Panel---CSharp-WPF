@@ -508,11 +508,19 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
             var fuseFraction = state.Spec is { IsLive: true, FuseMs: > 0 }
                 ? Math.Clamp(state.FuseRemainingMs / state.Spec.FuseMs, 0.0, 1.0)
                 : 1.0;
+            // HOLD-TO-DEFUSE capture-mask carve-out (overlay-clickthrough skill): a live chaos
+            // bubble must NOT be in the compositor's capture mask — its click has to pass through
+            // the hook so GetAsyncKeyState can read the held button and the Core BubbleEngine can
+            // time the defuse channel. WPF's GlobalMouseHook mirrors this by returning false
+            // (do not swallow) for the live-hold path. Shielded live bubbles pop instantly and so
+            // capture normally; the Core engine's OnSharedHostLeftDown already treats shielded
+            // live as not-live-hold.
+            var holdToDefuse = state.Spec is { IsLive: true };
 
             var s = state.Scaling > 0 ? state.Scaling : 1.0;
             _bubbleLayer?.AddBubble(
                 state.Id, state.X * s, state.Y * s, state.Size * s, state.Opacity, state.Scale,
-                state.Spec?.Label, tint, isChaos, fuseFraction, state.Clickable);
+                state.Spec?.Label, tint, isChaos, fuseFraction, state.Clickable, holdToDefuse);
         });
     }
 

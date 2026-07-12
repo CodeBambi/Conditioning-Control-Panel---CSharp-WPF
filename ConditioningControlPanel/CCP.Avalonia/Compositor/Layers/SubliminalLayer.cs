@@ -47,6 +47,41 @@ public sealed class SubliminalLayer : BaseLayer
     }
 
     /// <summary>
+    /// CAPTURE-REGION: a subliminal flash paints either a full-screen opaque card (opaque bg,
+    /// <see cref="SubliminalItem.BgTransparent"/> == false) or just centered text on a transparent
+    /// background. The opaque card captures the whole monitor; the transparent variant captures a
+    /// centered rectangle around the drawn text (estimated from TextSize + text length). Only the
+    /// most-recent item is drawn (<see cref="Render"/>), so only that one contributes.
+    /// </summary>
+    public override void CollectCaptureRegions(
+        ConditioningControlPanel.Core.Services.Compositor.CaptureMaskBuilder builder,
+        System.Collections.Generic.IReadOnlyList<ConditioningControlPanel.Core.Platform.ScreenInfo> screens)
+    {
+        lock (_sync)
+        {
+            if (_items.Count == 0) return;
+            var item = _items[^1];
+            if (!item.BgTransparent)
+            {
+                for (int i = 0; i < screens.Count; i++)
+                    builder.Add(screens[i].Bounds);
+                return;
+            }
+            // Transparent-bg variant: estimate the centered text rect per screen.
+            var textSize = _textPaint.TextSize > 0 ? _textPaint.TextSize : 120;
+            var text = item.Text.AsSpan();
+            var charCount = text.IsEmpty ? 1 : text.Length;
+            var w = charCount * textSize * 0.6;
+            var h = textSize * 1.6;
+            for (int i = 0; i < screens.Count; i++)
+            {
+                var b = screens[i].Bounds;
+                builder.Add(b.X + (b.Width - w) / 2.0, b.Y + (b.Height - h) / 2.0, w, h);
+            }
+        }
+    }
+
+    /// <summary>
     /// Queue a new subliminal flash. Multiple flashes can be active concurrently.
     /// <paramref name="durationMs"/> is the hold time; the 50ms fades are added on top
     /// (WPF parity: fade-in + hold + fade-out storyboard). <paramref name="targetOpacity"/>

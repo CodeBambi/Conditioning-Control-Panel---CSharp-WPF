@@ -54,6 +54,21 @@ public sealed class BrainDrainLayer : BaseLayer, IDisposable
     public override bool IsActive => _intensity > 0;
 
     /// <summary>
+    /// CAPTURE-REGION: brain drain is a full-screen blur that paints the entire monitor, so
+    /// clicks anywhere on the monitor must land on it (per-region rule 2026-07-09 — brain
+    /// drain moved to capture-by-default; it is no longer static click-through). Lives on the
+    /// capture-EXCLUDED surface (<see cref="ExcludeFromCapture"/>), but the capture mask is
+    /// about INPUT, not screen capture: a brain-drain region still swallows pointer input.
+    /// </summary>
+    public override void CollectCaptureRegions(
+        ConditioningControlPanel.Core.Services.Compositor.CaptureMaskBuilder builder,
+        System.Collections.Generic.IReadOnlyList<ConditioningControlPanel.Core.Platform.ScreenInfo> screens)
+    {
+        for (int i = 0; i < screens.Count; i++)
+            builder.Add(screens[i].Bounds);
+    }
+
+    /// <summary>
     /// GUARDRAIL (WPF parity, OverlayService.cs:1685): brain drain must never appear in
     /// screenshots, streams, recordings, or the app's own screen captures (keyword OCR and
     /// this layer's own blur source). The engine therefore routes it to the capture-excluded
