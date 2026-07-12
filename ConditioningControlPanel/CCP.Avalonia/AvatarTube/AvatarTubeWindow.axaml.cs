@@ -452,8 +452,10 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             if (_progression != null)
                 _progression.LevelUp += OnLevelUp;
 
-            // Awareness has no registered implementation in the port yet; guarded so this becomes
-            // live automatically once an IAwarenessService seam is registered.
+            // Awareness engine (AI-1): IAwarenessService is registered in CCP.Avalonia's DI
+            // (ServiceCollectionExtensions), so this resolves live and subscribes the reaction
+            // consumers. Start() is a no-op unless AwarenessModeEnabled && AwarenessConsentGiven —
+            // gating stays in the engine, not here.
             _awarenessService = services.GetService<global::ConditioningControlPanel.Core.Services.Awareness.IAwarenessService>();
             if (_awarenessService != null)
             {
