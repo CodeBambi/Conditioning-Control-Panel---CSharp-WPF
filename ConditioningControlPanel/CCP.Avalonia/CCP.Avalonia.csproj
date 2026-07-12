@@ -12,6 +12,11 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <!-- Blink Trainer demo slideshow PNGs (WPF assets/BlinkTrainer/Demo parity).
+         Linked under Assets/ so they resolve as avares://CCP.Avalonia/Assets/BlinkTrainer/Demo/demo_0X.png. -->
+    <AvaloniaResource Include="..\assets\BlinkTrainer\Demo\**\*">
+      <Link>Assets\BlinkTrainer\Demo\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </AvaloniaResource>
     <Content Include="..\assets\Chaos\**\*" Exclude="..\assets\Chaos\**\_staging*\**">
       <Link>assets\Chaos\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

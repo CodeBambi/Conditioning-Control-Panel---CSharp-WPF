@@ -128,15 +128,32 @@
               <Border Background="{DynamicResource SurfaceBgBrush}"
                       CornerRadius="10"
                       ClipToBounds="True">
+                <!-- Two overlapping Images for the demo cross-fade slideshow (WPF
+                     Views/Tabs/BlinkTrainerTabView.xaml BlinkTrainerStageImageA/B parity).
+                     The ViewModel cycles 4 demo PNGs every 2s, swapping which image is
+                     "active" by flipping the bound Opacity props; a 200ms DoubleTransition
+                     on each Image animates the fade automatically. -->
                 <Grid>
-                  <Image Source="avares://CCP.Avalonia/Assets/features/blink_trainer.png"
+                  <Image x:Name="StageImageA"
+                         Source="{Binding StageImageASource, Mode=OneWay}"
                          Stretch="UniformToFill"
-                         Opacity="0.35" />
-                  <TextBlock Text="{Binding PreviewLabel}"
-                             Foreground="{DynamicResource TextDimBrush}"
-                             FontSize="13"
-                             HorizontalAlignment="Center"
-                             VerticalAlignment="Center" />
+                         Opacity="{Binding StageImageAOpacity, Mode=OneWay}">
+                    <Image.Transitions>
+                      <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+                      </Transitions>
+                    </Image.Transitions>
+                  </Image>
+                  <Image x:Name="StageImageB"
+                         Source="{Binding StageImageBSource, Mode=OneWay}"
+                         Stretch="UniformToFill"
+                         Opacity="{Binding StageImageBOpacity, Mode=OneWay}">
+                    <Image.Transitions>
+                      <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+                      </Transitions>
+                    </Image.Transitions>
+                  </Image>
                 </Grid>
               </Border>
             </Border>
