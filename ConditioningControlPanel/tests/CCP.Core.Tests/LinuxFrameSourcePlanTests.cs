@@ -5,10 +5,10 @@ namespace ConditioningControlPanel.Core.Tests;
 
 /// <summary>
 /// Pins the frame-source backend-selection invariant
-/// (linux-framesource-contract.md §2.1 / §2.2): Wayland-first. Only a NATIVE X11 session
-/// with a reachable X display selects the X11 capture backend; Wayland/XWayland must NOT
-/// (the X11 root holds only XWayland content — a black root — so XGetImage would silently
-/// return the wrong image). Unknown sessions and failed X probes fall back. This is the
+/// (linux-framesource-contract.md §2.1 / §2.2): Wayland-first, with the 3-way X11 priority
+/// MIT-SHM &gt; XGetImage-basic &gt; fallback. Only a NATIVE X11 session with a reachable X display
+/// selects an X11 capture backend; Wayland/XWayland must NOT (the X11 root holds only XWayland
+/// content — a black root — so capture would silently return the wrong image). This is the
 /// CAPTURE-side rule and intentionally differs from the overlay selector
 /// (<see cref="LinuxOverlayBackendPlanTests"/>), which routes Wayland sessions to X11 because
 /// the overlay window is OUR X11 window.
@@ -16,20 +16,40 @@ namespace ConditioningControlPanel.Core.Tests;
 public class LinuxFrameSourcePlanTests
 {
     [Fact]
-    public void Choose_NativeX11_WithDisplay_SelectsX11()
+    public void Choose_NativeX11_ShmAvailable_SelectsX11Shm()
     {
+        // SHM probed usable → fast path selected even when basic is also available.
         Assert.Equal(
-            LinuxFrameSourceBackendKind.X11,
-            LinuxFrameSourcePlan.Choose(LinuxSessionType.X11, x11BackendAvailable: true));
+            LinuxFrameSourceBackendKind.X11Shm,
+            LinuxFrameSourcePlan.Choose(LinuxSessionType.X11, x11BasicAvailable: true, x11ShmAvailable: true));
     }
 
     [Fact]
-    public void Choose_NativeX11_NoDisplay_SelectsFallback()
+    public void Choose_NativeX11_ShmAvailable_BasicFalse_StillSelectsX11Shm()
     {
-        // Native X11 session but the X backend probe failed (no libX11, X closed) → fallback.
+        // SHM implies the X11 path is reachable; the selector never probes basic when SHM is
+        // usable, so basic=false here is normal and SHM still wins.
+        Assert.Equal(
+            LinuxFrameSourceBackendKind.X11Shm,
+            LinuxFrameSourcePlan.Choose(LinuxSessionType.X11, x11BasicAvailable: false, x11ShmAvailable: true));
+    }
+
+    [Fact]
+    public void Choose_NativeX11_BasicOnly_SelectsX11Basic()
+    {
+        // SHM unavailable (remote display / disabled / probe failed) but basic XGetImage works.
+        Assert.Equal(
+            LinuxFrameSourceBackendKind.X11Basic,
+            LinuxFrameSourcePlan.Choose(LinuxSessionType.X11, x11BasicAvailable: true, x11ShmAvailable: false));
+    }
+
+    [Fact]
+    public void Choose_NativeX11_NeitherUsable_SelectsFallback()
+    {
+        // Native X11 session but both X11 probes failed (no libX11/libXext, X closed) → fallback.
         Assert.Equal(
             LinuxFrameSourceBackendKind.Fallback,
-            LinuxFrameSourcePlan.Choose(LinuxSessionType.X11, x11BackendAvailable: false));
+            LinuxFrameSourcePlan.Choose(LinuxSessionType.X11, x11BasicAvailable: false, x11ShmAvailable: false));
     }
 
     [Theory]
@@ -37,15 +57,18 @@ public class LinuxFrameSourcePlanTests
     [InlineData(LinuxSessionType.XWayland)]
     public void Choose_WaylandOrXWayland_AlwaysFallback_NeverX11(LinuxSessionType session)
     {
-        // Contract §2.1 XWayland note: never fall from a Wayland probe to the X11 backend.
-        // Even if an X display is technically reachable (XWayland sets DISPLAY), the X11 root
-        // is black on a Wayland desktop — XGetImage would return the wrong image.
+        // Contract §2.1 XWayland note: never fall from a Wayland probe to the X11 backend,
+        // regardless of which X11 probe "succeeded" (the X11 root is black on a Wayland
+        // desktop — XGetImage/XShmGetImage would return the wrong image).
         Assert.Equal(
             LinuxFrameSourceBackendKind.Fallback,
-            LinuxFrameSourcePlan.Choose(session, x11BackendAvailable: true));
+            LinuxFrameSourcePlan.Choose(session, x11BasicAvailable: true, x11ShmAvailable: true));
         Assert.Equal(
             LinuxFrameSourceBackendKind.Fallback,
-            LinuxFrameSourcePlan.Choose(session, x11BackendAvailable: false));
+            LinuxFrameSourcePlan.Choose(session, x11BasicAvailable: true, x11ShmAvailable: false));
+        Assert.Equal(
+            LinuxFrameSourceBackendKind.Fallback,
+            LinuxFrameSourcePlan.Choose(session, x11BasicAvailable: false, x11ShmAvailable: false));
     }
 
     [Fact]
@@ -53,20 +76,30 @@ public class LinuxFrameSourcePlanTests
     {
         Assert.Equal(
             LinuxFrameSourceBackendKind.Fallback,
-            LinuxFrameSourcePlan.Choose(LinuxSessionType.Unknown, x11BackendAvailable: false));
+            LinuxFrameSourcePlan.Choose(LinuxSessionType.Unknown, x11BasicAvailable: false, x11ShmAvailable: false));
         Assert.Equal(
             LinuxFrameSourceBackendKind.Fallback,
-            LinuxFrameSourcePlan.Choose(LinuxSessionType.Unknown, x11BackendAvailable: true));
+            LinuxFrameSourcePlan.Choose(LinuxSessionType.Unknown, x11BasicAvailable: true, x11ShmAvailable: true));
     }
 
     [Fact]
-    public void BackendKind_HasX11AndFallbackOnly()
+    public void Choose_ShmStrictlyPreferredOverBasic()
     {
-        // Slice A+B scope: only X11 + Fallback members. Wave 2 (MIT-SHM) and slices D-F
-        // (Wayland backends) extend this enum — update this test when they land.
+        // Priority invariant (contract §2.2): when both probes succeed, SHM wins.
+        Assert.Equal(
+            LinuxFrameSourceBackendKind.X11Shm,
+            LinuxFrameSourcePlan.Choose(LinuxSessionType.X11, x11BasicAvailable: true, x11ShmAvailable: true));
+    }
+
+    [Fact]
+    public void BackendKind_HasExactlyShmBasicFallback()
+    {
+        // Slice A+B+C scope: X11Shm + X11Basic + Fallback. Slices D-F (Wayland backends)
+        // extend this enum when they land — update this test then.
         var names = System.Enum.GetNames(typeof(LinuxFrameSourceBackendKind));
-        Assert.Equal(2, names.Length);
-        Assert.Contains(nameof(LinuxFrameSourceBackendKind.X11), names);
+        Assert.Equal(3, names.Length);
+        Assert.Contains(nameof(LinuxFrameSourceBackendKind.X11Shm), names);
+        Assert.Contains(nameof(LinuxFrameSourceBackendKind.X11Basic), names);
         Assert.Contains(nameof(LinuxFrameSourceBackendKind.Fallback), names);
     }
 }

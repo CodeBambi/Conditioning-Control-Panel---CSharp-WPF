@@ -136,8 +136,8 @@ internal static class X11Interop
 
     /// <summary>
     /// Returns the geometry of a drawable. Used to defensively clamp the capture rect to
-    /// the root window before XGetImage (contract §3.5: monitor layouts change between the
-    /// ScreenInfo snapshot and capture). Returns 0 (failure) on a trapped error.
+    /// the root window before XGetImage/XShmGetImage (contract §3.5: monitor layouts change
+    /// between the ScreenInfo snapshot and capture). Returns 0 (failure) on a trapped error.
     /// </summary>
     [DllImport(LibX11)]
     public static extern int XGetGeometry(
@@ -168,6 +168,181 @@ internal static class X11Interop
 
     /// <summary>Xlib byte order: most-significant byte first (big-endian; out of scope, §3.3).</summary>
     public const int MSBFirst = 1;
+
+    // --- X11 frame-source helpers (root visual/depth + display-string locality) ---
+
+    /// <summary>Default screen number for the display (the root window's screen).</summary>
+    [DllImport(LibX11)]
+    public static extern int XDefaultScreen(IntPtr display);
+
+    /// <summary>
+    /// Default visual of a screen — the visual of the root window. Needed by
+    /// <see cref="XShmCreateImage"/>: the root-window capture image must match the root's
+    /// visual so the pixel layout is B,G,R,X on a little-endian TrueColor server
+    /// (contract §3.3), matching the RawFrame BGRA contract directly.
+    /// </summary>
+    [DllImport(LibX11)]
+    public static extern IntPtr XDefaultVisual(IntPtr display, int screen);
+
+    /// <summary>Default depth of a screen — the depth of the root window (typically 24 or 32).</summary>
+    [DllImport(LibX11)]
+    public static extern int XDefaultDepth(IntPtr display, int screen);
+
+    /// <summary>
+    /// Returns the display connection string (e.g. <c>":0"</c> local, <c>"host:0"</c> remote).
+    /// Used by the MIT-SHM backend's locality guard (contract §3.4: MIT-SHM only works when
+    /// client and server share a machine; the attach round-trip is the authoritative probe,
+    /// this is a cheap pre-filter for the obvious remote/SSH-forwarded case).
+    /// </summary>
+    [DllImport(LibX11)]
+    public static extern IntPtr XDisplayString(IntPtr display);
+
+    // --- MIT-SHM shared-memory capture (libXext.so.6, linux-framesource-contract.md §3.4/§3.6) ---
+    // NOTE: every XShm* symbol lives in libXext, NOT libX11 (contract §3.4 correction #1).
+
+    private const string LibXext = "libXext.so.6";
+
+    /// <summary>
+    /// Queries whether the server supports the MIT-SHM extension. Presence does NOT guarantee
+    /// usability — a remote display (SSH forwarding) may report the extension present yet fail
+    /// the attach (contract §3.4); the attach round-trip is the authoritative probe.
+    /// </summary>
+    [DllImport(LibXext)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool XShmQueryExtension(IntPtr display);
+
+    /// <summary>
+    /// Allocates an XImage whose pixel storage is a (caller-provided) SysV shared-memory
+    /// segment. <paramref name="data"/> is IntPtr.Zero here — the caller sets image-&gt;data AND
+    /// shminfo-&gt;shmaddr to the shmat() address AFTER shmget/shmat (contract §3.4 lifecycle).
+    /// The <paramref name="shminfo"/> pointer is stored in the image (image-&gt;obdata) and must
+    /// remain valid for the image's lifetime, so the backend keeps it in STABLE UNMANAGED
+    /// memory (Marshal.AllocHGlobal), never a movable managed field (a GC compaction would
+    /// dangle the pointer that XShmGetImage dereferences).
+    /// </summary>
+    [DllImport(LibXext)]
+    public static extern IntPtr XShmCreateImage(
+        IntPtr display,
+        IntPtr visual,
+        uint depth,
+        int format,
+        IntPtr data,
+        IntPtr shminfo,
+        uint width,
+        uint height);
+
+    /// <summary>
+    /// Tells the server to attach the shared-memory segment. Raises <c>BadAccess</c>
+    /// ASYNCHRONOUSLY (delivered on the next XSync) when the server refuses (remote display /
+    /// SHM policy) — must run inside a scoped Xlib error trap (contract §3.2/§3.4); on failure
+    /// the backend tears the segment down and falls back to the XGetImage basic path silently.
+    /// </summary>
+    [DllImport(LibXext)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool XShmAttach(IntPtr display, IntPtr shminfo);
+
+    /// <summary>
+    /// Captures <paramref name="drawable"/> (the root window) into the shared-memory-backed
+    /// <paramref name="image"/> at root coords (<paramref name="x"/>,<paramref name="y"/>).
+    /// Returns false (and/or raises <c>BadMatch</c> on XSync) when the rect is not fully inside
+    /// the drawable — must run inside a scoped Xlib error trap (contract §3.2/§3.4).
+    /// </summary>
+    [DllImport(LibXext)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool XShmGetImage(
+        IntPtr display,
+        IntPtr drawable,
+        IntPtr image,
+        int x,
+        int y,
+        ulong planeMask);
+
+    /// <summary>
+    /// Detaches the server from the shared-memory segment. Called on dispose / size change
+    /// BEFORE shmdt (contract §3.4 teardown order: XShmDetach → shmdt → XDestroyImage).
+    /// </summary>
+    [DllImport(LibXext)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool XShmDetach(IntPtr display, IntPtr shminfo);
+
+    /// <summary>
+    /// Native <c>XShmSegmentInfo</c> (X11/extensions/XShm.h):
+    /// <c>{ ShmSeg shmseg; int shmid; char* shmaddr; Bool readOnly; }</c> with
+    /// <c>typedef unsigned long ShmSeg</c>. LP64 layout: shmseg@0 (8 bytes), shmid@8,
+    /// shmaddr@16, readOnly@24, size 32 (verified against the x.org XShm(3) man page —
+    /// the leading <see cref="Shmseg"/> resource id MUST be modeled; without it every field
+    /// lands at the wrong native offset and XShmAttach reads a garbage shmid and reads
+    /// readOnly past the end of the allocation). Passed to XShmCreateImage/XShmAttach as a
+    /// POINTER into stable unmanaged memory (the image holds this pointer in
+    /// image-&gt;obdata across calls — a movable managed copy would dangle after a GC).
+    /// <c>Bool</c> is <c>int</c> on X11, so the 4-byte <see cref="ReadOnly"/> maps 1:1.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct XShmSegmentInfo
+    {
+        /// <summary>
+        /// X resource id (<c>ShmSeg</c> = unsigned long, 8 bytes on LP64). WRITTEN BY
+        /// XShmAttach (it allocates the XID) and read back by XShmDetach — leave 0 before
+        /// attach; never overwrite it between attach and detach.
+        /// </summary>
+        public UIntPtr Shmseg;
+        /// <summary>SysV shared-memory segment id returned by shmget.</summary>
+        public int Shmid;
+        /// <summary>Mapped address returned by shmat (also stored in image-&gt;data).</summary>
+        public IntPtr Shmaddr;
+        /// <summary>False — capture segments are read-write from the client.</summary>
+        public bool ReadOnly;
+    }
+
+    // --- libc SysV shared memory (linux-framesource-contract.md §3.6) ---
+
+    private const string LibC = "libc";
+
+    /// <summary>shmget <c>key_t</c>: <c>IPC_PRIVATE</c> (0) — create a new private segment.</summary>
+    public const int IPC_PRIVATE = 0;
+
+    /// <summary>shmget flag: create the segment if it does not exist.</summary>
+    public const int IPC_CREAT = 0b001_000_000_000; // octal 01000 == 512
+
+    /// <summary>shmctl command: mark the segment for removal (refcount-gated deletion).</summary>
+    public const int IPC_RMID = 0;
+
+    /// <summary>
+    /// shmget mode: OWNER READ/WRITE ONLY (octal 0600 == 384). The draft's 0777 left screen
+    /// pixels in a world-readable-writable segment — corrected to 0600
+    /// (contract §3.4 correction #3).
+    /// </summary>
+    public const int ShmMode0600 = 0b110_000_000; // octal 0600 == 384
+
+    /// <summary>
+    /// Allocates a SysV shared-memory segment of <paramref name="size"/> bytes. Returns the
+    /// shmid (&gt;= 0) or -1 on failure. Use <see cref="IPC_PRIVATE"/> +
+    /// <see cref="IPC_CREAT"/> | <see cref="ShmMode0600"/> (contract §3.4).
+    /// </summary>
+    [DllImport(LibC, SetLastError = true)]
+    public static extern int shmget(int key, UIntPtr size, int shmflg);
+
+    /// <summary>
+    /// Maps the segment at an arbitrary address. Returns the address, or <c>(IntPtr)(-1)</c>
+    /// on failure. Pass <see cref="IntPtr.Zero"/> for <paramref name="shmaddr"/> (let the
+    /// kernel choose).
+    /// </summary>
+    [DllImport(LibC, SetLastError = true)]
+    public static extern IntPtr shmat(int shmid, IntPtr shmaddr, int shmflg);
+
+    /// <summary>Unmaps the segment from the calling process's address space.</summary>
+    [DllImport(LibC, SetLastError = true)]
+    public static extern int shmdt(IntPtr shmaddr);
+
+    /// <summary>
+    /// Control operation. <see cref="IPC_RMID"/> marks the segment for deletion — call
+    /// IMMEDIATELY after the server attach is confirmed (contract §3.4 correction #4) so the
+    /// kernel reclaims the segment even if the process dies; the segment lives until BOTH
+    /// server and client detach (refcount-gated), so the post-attach mark never frees a
+    /// still-attached segment.
+    /// </summary>
+    [DllImport(LibC, SetLastError = true)]
+    public static extern int shmctl(int shmid, int cmd, IntPtr buf);
 
     // --- XFixes Extension (input shape for click-through) ---
 
