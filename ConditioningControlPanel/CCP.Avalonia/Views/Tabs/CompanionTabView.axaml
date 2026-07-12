@@ -128,6 +128,60 @@
         </StackPanel>
       </Border>
 
+      <!-- OpenAI-compatible API key (AI-5): masked entry writing ISecretStore secret "openai-api-key".
+           Mirrors WPF MainWindow/MainWindow.Patreon.cs:1387-1394 (TxtOpenAiApiKey_PasswordChanged);
+           the field is never pre-populated and is cleared immediately after Save/Clear so the secret
+           is never retained in the UI or bindings. Themed via DynamicResource keys (5-theme reskin). -->
+      <Border Background="{DynamicResource SurfaceBgBrush}"
+              BorderBrush="{DynamicResource TransparentPinkBrush}"
+              BorderThickness="1"
+              CornerRadius="12"
+              Padding="18">
+        <StackPanel Spacing="12">
+          <TextBlock Text="{loc:Str label_custom_ai_config}"
+                     FontSize="16"
+                     FontWeight="Bold"
+                     Foreground="{DynamicResource TextLightBrush}" />
+          <TextBlock Text="{loc:Str hint_openai_api_key}"
+                     FontSize="12"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextMutedBrush}" />
+          <StackPanel Spacing="4">
+            <TextBlock Text="{loc:Str label_custom_api_key}"
+                       FontSize="12"
+                       Foreground="{DynamicResource TextLightBrush}" />
+            <TextBox x:Name="TxtOpenAiKey"
+                     PasswordChar="●"
+                     Watermark="{loc:Str hint_openai_api_key_placeholder}"
+                     Background="{DynamicResource PanelBgBrush}"
+                     Foreground="{DynamicResource TextLightBrush}"
+                     BorderBrush="{DynamicResource PinkBrush}"
+                     BorderThickness="1"
+                     Padding="8,6" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button Content="{loc:Str btn_save}"
+                    Click="SaveOpenAiKey_Click" />
+            <Button Content="{loc:Str btn_clear}"
+                    Click="ClearOpenAiKey_Click" />
+            <!-- Non-secret status only: "key set" (accent) vs "no key set" (muted). The key itself
+                 is NEVER shown back. Two TextBlocks toggled by HasOpenAiKey avoids needing a
+                 bool->brush converter (DynamicResource cannot feed converter props in v12). -->
+            <TextBlock Text="{loc:Str label_openai_key_set}"
+                       VerticalAlignment="Center"
+                       FontSize="12"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource PinkBrush}"
+                       IsVisible="{Binding HasOpenAiKey}" />
+            <TextBlock Text="{loc:Str label_openai_key_not_set}"
+                       VerticalAlignment="Center"
+                       FontSize="12"
+                       Foreground="{DynamicResource TextMutedBrush}"
+                       IsVisible="{Binding !HasOpenAiKey}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
       <!-- Active prompt -->
       <Border Background="{DynamicResource SurfaceBgBrush}"
               BorderBrush="{DynamicResource TransparentPinkBrush}"
