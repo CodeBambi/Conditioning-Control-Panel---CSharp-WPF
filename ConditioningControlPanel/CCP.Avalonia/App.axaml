@@ -202,6 +202,36 @@
       </Style>
     </ControlTheme>
 
+    <!-- Compact circular neon icon button (dashboard browser toolbar, Discord quick link).
+         All brushes are theme-rewritten keys so the button re-skins across all five mods. -->
+    <ControlTheme x:Key="NeonIconButton" TargetType="Button">
+      <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="13" />
+      <Setter Property="Width" Value="26" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{TemplateBinding CornerRadius}"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Content="{TemplateBinding Content}" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover">
+        <Setter Property="Background" Value="{DynamicResource PinkBrush}" />
+      </Style>
+    </ControlTheme>
+
     <!-- Platform capability badge used by feature controls to explain degraded options -->
     <ControlTheme x:Key="PlatformInfoBadge" TargetType="Border">
       <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}" />

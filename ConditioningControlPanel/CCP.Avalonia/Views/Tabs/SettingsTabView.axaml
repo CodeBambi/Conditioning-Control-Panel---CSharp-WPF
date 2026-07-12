@@ -278,27 +278,28 @@
              popup, which already hosts it (SystemFeatureControl 'Assets folder') — 2026-07-10. -->
         <Grid Grid.Column="1" Margin="5" RowDefinitions="*,Auto">
 
-          <!-- Browser -->
-          <Border Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,5"
+          <!-- Browser (redesigned 2026-07-12: single compact toolbar row + icon buttons so the
+               browser iframe gets ~90% of the right column; owner request) -->
+          <Border Grid.Row="0" CornerRadius="12" Padding="6" Margin="0,0,0,4"
                   Background="{DynamicResource ElevatedSurfaceBrush}"
                   BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
             <Grid RowDefinitions="Auto,*">
               <Grid Grid.Row="0" Margin="0,0,0,4" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                   <TextBlock Text="{loc:Str label_browser}"
-                             Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                             Foreground="{DynamicResource TextLightBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
                   <Button Content="{loc:Str label_help_symbol}"
                           Command="{Binding ShowHelpSectionCommand}" CommandParameter="Browser"
                           Background="{DynamicResource TransparentPinkBrush}"
                           Foreground="{DynamicResource TextLightBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                          CornerRadius="11" Padding="0" Width="22" Height="22" Margin="8,0,0,0"
+                          CornerRadius="10" Padding="0" Width="20" Height="20" Margin="6,0,0,0"
                           HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                          FontSize="11" FontWeight="Bold"
+                          FontSize="10" FontWeight="Bold"
                           ToolTip.Tip="{loc:Str btn_help}" />
                 </StackPanel>
 
                 <!-- Site toggle -->
-                <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="2" Margin="10,0,0,0" VerticalAlignment="Center">
+                <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="2" Margin="8,0,0,0" VerticalAlignment="Center">
                   <StackPanel Orientation="Horizontal">
                     <RadioButton Content="{loc:Str btn_bambicloud}"
                                  GroupName="BrowserSite"
@@ -315,41 +316,43 @@
                   </StackPanel>
                 </Border>
 
-                <Button Grid.Column="2" Content="{loc:Str btn_reload}" Padding="6,3" Margin="8,0,0,0"
+                <!-- Status + Deeper auto-bind badge share the flexible middle column.
+                     WPF parity: pink while idle/loading, green once connected, red on error/crash. -->
+                <Grid Grid.Column="2" Margin="8,0" ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding BrowserStatusText}"
+                             Foreground="{Binding BrowserStatusBrush}" FontSize="10"
+                             VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  <Border Grid.Column="1"
+                          IsVisible="{Binding DeeperBrowserBadgeVisible}"
+                          Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                          BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                          CornerRadius="3" Padding="6,1"
+                          VerticalAlignment="Center"
+                          ToolTip.Tip="{Binding DeeperBrowserBadgeToolTip}">
+                    <TextBlock Text="{Binding DeeperBrowserBadgeText}"
+                               Foreground="{DynamicResource DeeperAccentBrush}"
+                               FontSize="9" FontWeight="SemiBold" />
+                  </Border>
+                </Grid>
+
+                <!-- Compact neon icon buttons (owner request 2026-07-12): reload, webcam tracking,
+                     mute, pop-out. Same commands/handlers as the old text buttons, tooltips carry
+                     the full labels. -->
+                <Button Grid.Column="3" Theme="{StaticResource NeonIconButton}" Content="↻" Margin="0,0,4,0"
                         Command="{Binding OpenBrowserCommand}"
                         CommandParameter="{Binding IsBambiCloudSelected, Converter={StaticResource BoolToBrowserSiteConverter}}"
                         ToolTip.Tip="{loc:Str tooltip_browser_reload}" />
 
-                <!-- WPF parity: pink while idle/loading, green once connected, red on error/crash. -->
-                <TextBlock Grid.Column="3" Text="{Binding BrowserStatusText}"
-                           Foreground="{Binding BrowserStatusBrush}" FontSize="10"
-                           VerticalAlignment="Center" Margin="0,0,8,0" />
-
-                <!-- Deeper auto-bind badge -->
-                <Border Grid.Column="3"
-                        IsVisible="{Binding DeeperBrowserBadgeVisible}"
-                        Background="{DynamicResource DeeperAccentTransparent20Brush}"
-                        BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
-                        CornerRadius="3" Padding="6,1" Margin="0,0,8,0"
-                        HorizontalAlignment="Right" VerticalAlignment="Center"
-                        ToolTip.Tip="{Binding DeeperBrowserBadgeToolTip}">
-                  <TextBlock Text="{Binding DeeperBrowserBadgeText}"
-                             Foreground="{DynamicResource DeeperAccentBrush}"
-                             FontSize="9" FontWeight="SemiBold" />
-                </Border>
-
-                <Button Grid.Column="4" Content="{loc:Str btn_browser_webcam_tracking_off}"
+                <Button Grid.Column="4" Theme="{StaticResource NeonIconButton}" Content="📷" Margin="0,0,4,0"
                         Click="BrowserWebcamTracking_Click"
-                        Padding="6,3" Margin="0,0,6,0" VerticalAlignment="Center"
                         ToolTip.Tip="{loc:Str tooltip_browser_webcam_tracking_off}" />
 
                 <!-- B5: mute the embedded browser's audio (persists to AppSettings.BrowserVideoMuted) -->
-                <Button Grid.Column="5" Content="{Binding BrowserMuteGlyph}" Padding="6,3" Margin="0,0,6,0"
-                        VerticalAlignment="Center"
+                <Button Grid.Column="5" Theme="{StaticResource NeonIconButton}" Content="{Binding BrowserMuteGlyph}" Margin="0,0,4,0"
                         Command="{Binding ToggleBrowserMuteCommand}"
                         ToolTip.Tip="Mute / unmute browser audio" />
 
-                <Button Grid.Column="6" Content="{loc:Str btn_pop_out_plain}" Padding="6,3"
+                <Button Grid.Column="6" Theme="{StaticResource NeonIconButton}" Content="⧉"
                         Command="{Binding PopOutBrowserCommand}"
                         ToolTip.Tip="{loc:Str tooltip_pop_out_browser_to_resizable_window}" />
               </Grid>
@@ -359,15 +362,16 @@
                    via layout rather than a render-transform). -->
               <Border Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True">
                 <Grid RowDefinitions="Auto,Auto,*">
-                  <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Padding="8,4">
+                  <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Padding="6,2">
                     <Grid ColumnDefinitions="Auto,*">
                       <CheckBox Grid.Column="0" Content="{loc:Str browser_enhance_label}"
                                 IsChecked="{Binding BrowserEnhanceIfPossible, Mode=TwoWay}"
-                                Foreground="{DynamicResource TextLightBrush}" FontSize="11" VerticalAlignment="Center"
+                                Foreground="{DynamicResource TextLightBrush}" FontSize="10" VerticalAlignment="Center"
+                                MinHeight="0" Padding="4,0,0,0"
                                 ToolTip.Tip="{loc:Str browser_enhance_tooltip}" />
                       <TextBlock Grid.Column="1" Text="{Binding EnhanceMatchStatusText}"
                                  Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
-                                 VerticalAlignment="Center" Margin="12,0,0,0" />
+                                 VerticalAlignment="Center" Margin="10,0,0,0" TextTrimming="CharacterEllipsis" />
                     </Grid>
                   </Border>
 
@@ -417,24 +421,29 @@
             </Grid>
           </Border>
 
-          <!-- Audio + Quick Links -->
+          <!-- Audio + Quick Links (compacted 2026-07-12: each card is one tight row so the
+               browser above gets ~90% of the column; owner request) -->
           <Grid Grid.Row="1" ColumnDefinitions="*,5,*">
-            <!-- Audio (compacted 2026-07-10: single header row carries title + duck toggle +
-                 advanced chevron + help, Master slider sits right under it; advanced options stay
-                 collapsed behind BtnAudioAdvanced per v6.2.9 #9) -->
-            <Border Grid.Column="0" CornerRadius="12" Padding="10,6" Margin="0,5,0,6"
+            <!-- Audio: single row = title + duck toggle + master slider + % + advanced chevron +
+                 help. Advanced options stay collapsed behind BtnAudioAdvanced per v6.2.9 #9. -->
+            <Border Grid.Column="0" CornerRadius="12" Padding="8,3" Margin="0,4,0,0"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
               <StackPanel Spacing="2">
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto">
                   <TextBlock Grid.Column="0" Text="{loc:Str label_audio}"
-                             Foreground="{DynamicResource TextLightBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="2" Text="{loc:Str label_duck}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,2,0" />
-                  <ToggleSwitch Grid.Column="3" IsChecked="{Binding AudioDuckEnabled, Mode=TwoWay}"
-                                OnContent="" OffContent="" VerticalAlignment="Center" />
+                             Foreground="{DynamicResource TextLightBrush}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0" />
+                  <TextBlock Grid.Column="1" Text="{loc:Str label_duck}" Foreground="{DynamicResource TextMutedBrush}" FontSize="9" VerticalAlignment="Center" Margin="0,0,2,0" />
+                  <ToggleSwitch Grid.Column="2" IsChecked="{Binding AudioDuckEnabled, Mode=TwoWay}"
+                                OnContent="" OffContent="" VerticalAlignment="Center" MinHeight="0" Padding="0" Margin="0,0,4,0" />
+                  <Slider Grid.Column="3" Value="{Binding MasterVolume, Mode=TwoWay}" Minimum="0" Maximum="100"
+                          VerticalAlignment="Center" Margin="2,0,6,0" MinWidth="60"
+                          ToolTip.Tip="{loc:Str setting_master}" />
+                  <TextBlock Grid.Column="4" Text="{Binding MasterVolumeText}"
+                             Foreground="{DynamicResource PinkBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,2,0" />
                   <!-- v6.2.9 #9: collapse/expand the advanced audio options (WPF SettingsTabView.xaml:1193-1247). Master volume + duck-enable stay always visible. -->
-                  <ToggleButton Grid.Column="4" x:Name="BtnAudioAdvanced" Background="Transparent" BorderThickness="0" Padding="4,1"
-                                Cursor="Hand" VerticalAlignment="Center" Margin="2,0,6,0"
+                  <ToggleButton Grid.Column="5" x:Name="BtnAudioAdvanced" Background="Transparent" BorderThickness="0" Padding="4,1"
+                                Cursor="Hand" VerticalAlignment="Center" Margin="2,0,4,0"
                                 ToolTip.Tip="Show advanced audio options (video &amp; duck volume, output device, ducking)">
                     <Panel>
                       <TextBlock Text="▾" FontSize="13" Foreground="{DynamicResource PinkBrush}"
@@ -443,7 +452,7 @@
                                  IsVisible="{Binding #BtnAudioAdvanced.IsChecked}" />
                     </Panel>
                   </ToggleButton>
-                  <Button Grid.Column="5" Content="{loc:Str label_help_symbol}"
+                  <Button Grid.Column="6" Content="{loc:Str label_help_symbol}"
                           Command="{Binding ShowHelpSectionCommand}" CommandParameter="Audio"
                           Background="{DynamicResource TransparentPinkBrush}"
                           Foreground="{DynamicResource TextLightBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
@@ -452,9 +461,6 @@
                           FontSize="10" FontWeight="Bold" VerticalAlignment="Center"
                           ToolTip.Tip="{loc:Str btn_help}" />
                 </Grid>
-
-                <controls:SliderHeader Label="{loc:Str setting_master}" ValueText="{Binding MasterVolumeText}" />
-                <Slider Value="{Binding MasterVolume, Mode=TwoWay}" Minimum="0" Maximum="100" />
 
                 <!-- Advanced audio options, collapsed by default; toggled by BtnAudioAdvanced (v6.2.9 #9) -->
                 <StackPanel IsVisible="{Binding #BtnAudioAdvanced.IsChecked}" Spacing="2">
@@ -499,68 +505,68 @@
               </StackPanel>
             </Border>
 
-            <!-- Quick Links (compacted 2026-07-10: tighter paddings, Join-Discord and the Rich
-                 Presence toggle share one row so the card matches the slimmed Audio card height) -->
-            <Border Grid.Column="2" CornerRadius="12" Padding="10,6" Margin="0,5,0,6"
+            <!-- Quick Links: single row = title + login/account (flex) + Discord icon + RP toggle
+                 + help. The full-text Join-Discord button became a compact icon button using the
+                 bundled discord.png (tooltip keeps loc label_join_discord). -->
+            <Border Grid.Column="2" CornerRadius="12" Padding="8,3" Margin="0,4,0,0"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-              <StackPanel Spacing="5">
-                <Grid>
-                  <TextBlock Text="{loc:Str label_quick_links}"
-                             Foreground="{DynamicResource TextLightBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
-                  <Button Content="{loc:Str label_help_symbol}"
-                          Command="{Binding ShowHelpSectionCommand}" CommandParameter="QuickLinks"
-                          HorizontalAlignment="Right" VerticalAlignment="Center"
-                          Background="{DynamicResource TransparentPinkBrush}"
-                          Foreground="{DynamicResource TextLightBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                          CornerRadius="10" Padding="0" Width="20" Height="20"
-                          HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                          FontSize="10" FontWeight="Bold"
-                          ToolTip.Tip="{loc:Str btn_help}" />
-                </Grid>
+              <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" VerticalAlignment="Center">
+                <TextBlock Grid.Column="0" Text="{loc:Str label_quick_links}"
+                           Foreground="{DynamicResource TextLightBrush}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0" />
 
-                <Button Content="{loc:Str btn_login}"
-                        Command="{Binding UnifiedLoginCommand}"
-                        IsVisible="{Binding IsNotLoggedIn}"
-                        Padding="8,6" HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        ToolTip.Tip="{loc:Str tooltip_login_with_discord_or_patreon}" />
+                <!-- Login button and logged-in chip share the flexible column (visibility-toggled) -->
+                <Panel Grid.Column="1" VerticalAlignment="Center">
+                  <Button Content="{loc:Str btn_login}"
+                          Command="{Binding UnifiedLoginCommand}"
+                          IsVisible="{Binding IsNotLoggedIn}"
+                          Padding="8,3" FontSize="10" HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Center"
+                          ToolTip.Tip="{loc:Str tooltip_login_with_discord_or_patreon}" />
 
-                <Border IsVisible="{Binding IsLoggedIn}"
-                        Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="8,4">
-                  <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel VerticalAlignment="Center">
-                      <TextBlock Text="{loc:Str label_logged_in_as}"
-                                 Foreground="{DynamicResource TextMutedBrush}" FontSize="9" />
+                  <Border IsVisible="{Binding IsLoggedIn}"
+                          Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="6,2">
+                    <Grid ColumnDefinitions="*,Auto">
                       <TextBlock Text="{Binding LoggedInDisplayName}"
-                                 Foreground="{DynamicResource TextLightBrush}" FontWeight="Bold" FontSize="11"
-                                 TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
-                    <!-- v6.2.9 #10: prominent, high-contrast Logout button (WPF SettingsTabView.xaml:1406) -->
-                    <Button Grid.Column="1" Content="{loc:Str btn_logout}"
-                            Command="{Binding LogoutCommand}"
-                            Padding="12,4" Background="{DynamicResource PinkBrush}" Foreground="White"
-                            BorderThickness="0" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" />
-                  </Grid>
-                </Border>
+                                 Foreground="{DynamicResource TextLightBrush}" FontWeight="Bold" FontSize="10"
+                                 TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                 ToolTip.Tip="{loc:Str label_logged_in_as}" />
+                      <!-- v6.2.9 #10: prominent, high-contrast Logout button (WPF SettingsTabView.xaml:1406) -->
+                      <Button Grid.Column="1" Content="{loc:Str btn_logout}"
+                              Command="{Binding LogoutCommand}"
+                              Padding="8,2" Margin="4,0,0,0" Background="{DynamicResource PinkBrush}" Foreground="White"
+                              BorderThickness="0" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
+                    </Grid>
+                  </Border>
+                </Panel>
 
-                <!-- Join Discord + Rich Presence toggle share one compact row -->
-                <Grid ColumnDefinitions="*,Auto">
-                  <Button Content="{loc:Str label_join_discord}"
-                          Command="{Binding OpenDiscordCommand}"
-                          Padding="8,6"
-                          Background="{DynamicResource DiscordBlueBrush}"
-                          Foreground="{DynamicResource TextLightBrush}"
-                          FontWeight="Bold" FontSize="11"
-                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                          VerticalAlignment="Center" />
-                  <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
-                    <ToggleSwitch IsChecked="{Binding DiscordRichPresenceEnabled, Mode=TwoWay}"
-                                  OnContent="" OffContent="" />
-                    <TextBlock Text="{loc:Str label_rp}" Foreground="{DynamicResource TextMutedBrush}" FontSize="9" VerticalAlignment="Center" Margin="2,0,0,0" />
-                  </StackPanel>
-                </Grid>
-              </StackPanel>
+                <!-- Discord icon button (owner request 2026-07-12: replaces the full-text
+                     'Join our Discord community' button; same command, loc key as tooltip) -->
+                <Button Grid.Column="2" Theme="{StaticResource NeonIconButton}"
+                        Background="{DynamicResource DiscordBlueBrush}"
+                        BorderBrush="{DynamicResource DiscordBlueDarkBrush}"
+                        Margin="6,0,0,0"
+                        Command="{Binding OpenDiscordCommand}"
+                        ToolTip.Tip="{loc:Str label_join_discord}">
+                  <Image Source="avares://CCP.Avalonia/Assets/discord.png" Width="16" Height="16" />
+                </Button>
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,4,0">
+                  <ToggleSwitch IsChecked="{Binding DiscordRichPresenceEnabled, Mode=TwoWay}"
+                                OnContent="" OffContent="" MinHeight="0" Padding="0" />
+                  <TextBlock Text="{loc:Str label_rp}" Foreground="{DynamicResource TextMutedBrush}" FontSize="9" VerticalAlignment="Center" Margin="2,0,0,0" />
+                </StackPanel>
+
+                <Button Grid.Column="4" Content="{loc:Str label_help_symbol}"
+                        Command="{Binding ShowHelpSectionCommand}" CommandParameter="QuickLinks"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource TransparentPinkBrush}"
+                        Foreground="{DynamicResource TextLightBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                        CornerRadius="10" Padding="0" Width="20" Height="20"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        FontSize="10" FontWeight="Bold"
+                        ToolTip.Tip="{loc:Str btn_help}" />
+              </Grid>
             </Border>
           </Grid>
 

@@ -82,6 +82,9 @@
     <AvaloniaResource Include="..\Resources\logo2.png">
       <Link>Assets\logo2.png</Link>
     </AvaloniaResource>
+    <AvaloniaResource Include="..\Resources\discord.png">
+      <Link>Assets\discord.png</Link>
+    </AvaloniaResource>
     <AvaloniaResource Include="..\Resources\quests\**\*">
       <Link>Assets\quests\%(RecursiveDir)%(Filename)%(Extension)</Link>
     </AvaloniaResource>
