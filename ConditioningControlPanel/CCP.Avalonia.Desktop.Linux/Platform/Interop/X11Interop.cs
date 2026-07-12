@@ -266,15 +266,26 @@ internal static class X11Interop
     public static extern bool XShmDetach(IntPtr display, IntPtr shminfo);
 
     /// <summary>
-    /// Native <c>XShmSegmentInfo</c> (X11/extensions/shm.h). LP64 layout: shmid@0, shmaddr@8,
-    /// readOnly@16, size 24. Passed to XShmCreateImage/XShmAttach as a POINTER into stable
-    /// unmanaged memory (the image holds this pointer in image-&gt;obdata across calls — a
-    /// movable managed copy would dangle after a GC). <c>Bool</c> is <c>int</c> on X11, so the
-    /// 4-byte <see cref="ReadOnly"/> maps 1:1 to the native field.
+    /// Native <c>XShmSegmentInfo</c> (X11/extensions/XShm.h):
+    /// <c>{ ShmSeg shmseg; int shmid; char* shmaddr; Bool readOnly; }</c> with
+    /// <c>typedef unsigned long ShmSeg</c>. LP64 layout: shmseg@0 (8 bytes), shmid@8,
+    /// shmaddr@16, readOnly@24, size 32 (verified against the x.org XShm(3) man page —
+    /// the leading <see cref="Shmseg"/> resource id MUST be modeled; without it every field
+    /// lands at the wrong native offset and XShmAttach reads a garbage shmid and reads
+    /// readOnly past the end of the allocation). Passed to XShmCreateImage/XShmAttach as a
+    /// POINTER into stable unmanaged memory (the image holds this pointer in
+    /// image-&gt;obdata across calls — a movable managed copy would dangle after a GC).
+    /// <c>Bool</c> is <c>int</c> on X11, so the 4-byte <see cref="ReadOnly"/> maps 1:1.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct XShmSegmentInfo
     {
+        /// <summary>
+        /// X resource id (<c>ShmSeg</c> = unsigned long, 8 bytes on LP64). WRITTEN BY
+        /// XShmAttach (it allocates the XID) and read back by XShmDetach — leave 0 before
+        /// attach; never overwrite it between attach and detach.
+        /// </summary>
+        public UIntPtr Shmseg;
         /// <summary>SysV shared-memory segment id returned by shmget.</summary>
         public int Shmid;
         /// <summary>Mapped address returned by shmat (also stored in image-&gt;data).</summary>
