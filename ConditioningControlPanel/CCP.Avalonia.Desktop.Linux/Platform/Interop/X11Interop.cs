@@ -46,6 +46,35 @@ internal static class X11Interop
     [DllImport(LibX11)]
     public static extern IntPtr XInternAtom(IntPtr display, string atomName, bool onlyIfExists);
 
+    /// <summary>
+    /// Reads a window property (linux-foreground-title-contract.md §3.2-3.4: EWMH
+    /// <c>_NET_ACTIVE_WINDOW</c> and <c>_NET_WM_NAME</c>/<c>WM_NAME</c>). Returns <see cref="Success"/>
+    /// on completion; X errors (e.g. BadWindow from a window destroyed mid-read) are delivered
+    /// ASYNCHRONOUSLY to the Xlib error handler, NOT via this return value — the caller must run
+    /// inside a scoped <see cref="XlibErrorTrap"/> and consult <see cref="XlibErrorTrap.LastErrorCode"/>
+    /// after <see cref="XSync"/>. long_offset/long_length are in 32-BIT UNITS (not bytes).
+    /// </summary>
+    [DllImport(LibX11)]
+    public static extern int XGetWindowProperty(
+        IntPtr display,
+        IntPtr window,
+        IntPtr property,
+        long long_offset,
+        long long_length,
+        bool delete,
+        IntPtr req_type,
+        out IntPtr actual_type,
+        out int actual_format,
+        out ulong nitems,
+        out ulong bytes_after,
+        out IntPtr prop);
+
+    /// <summary>
+    /// Frees data returned by <see cref="XGetWindowProperty"/> (the caller owns the buffer).
+    /// </summary>
+    [DllImport(LibX11)]
+    public static extern int XFree(IntPtr data);
+
     [DllImport(LibX11)]
     public static extern int XChangeProperty(
         IntPtr display,
@@ -223,4 +252,21 @@ internal static class X11Interop
     public const long NET_WM_STATE_REMOVE = 0;
     public const long NET_WM_STATE_ADD = 1;
     public const long NET_WM_STATE_TOGGLE = 2;
+
+    // --- XGetWindowProperty constants (linux-foreground-title-contract.md §3.2-3.4) ---
+
+    /// <summary>Xlib request-success status (the return value of XGetWindowProperty).</summary>
+    public const int Success = 0;
+
+    /// <summary>
+    /// Predefined atom XA_WINDOW (33) — the property type of <c>_NET_ACTIVE_WINDOW</c>.
+    /// </summary>
+    public static readonly IntPtr XA_WINDOW = (IntPtr)33;
+
+    /// <summary>
+    /// <c>AnyPropertyType</c> sentinel (Xlib's <c>XInternAtom(..., "ANY")</c> is not used; this is
+    /// the literal <c>None</c> passed as req_type to accept any property type). Used for the
+    /// <c>WM_NAME</c> fallback read (§3.3).
+    /// </summary>
+    public static readonly IntPtr AnyPropertyType = IntPtr.Zero;
 }
