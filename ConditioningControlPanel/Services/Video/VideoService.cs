@@ -84,6 +84,25 @@ namespace ConditioningControlPanel.Services
         private DateTime _startTime;
         private double _duration;
 
+        // #536: a Deeper enhancement (VideoEnhancementBridge) can loop or hold the clip past its
+        // declared duration (loop_region, SpeakHoldMode.LoopRegion, speak-pauses). While one is
+        // bound the safety timer switches from a duration guillotine to a progress-based stall
+        // watch (see StartSafetyTimer) so real playback isn't cut "after the original time is over".
+        private volatile bool _enhancementDriving;
+        private long _lastSafetyTimeMs = -1;
+        private DateTime _lastSafetyProgressUtc = DateTime.MinValue;
+        // Recheck cadence + no-progress grace used only while an enhancement is driving.
+        private static readonly TimeSpan EnhancementRecheckInterval = TimeSpan.FromSeconds(15);
+        private const double EnhancementStallGraceSeconds = 90;
+
+        /// <summary>
+        /// Set by <see cref="Services.Deeper.VideoEnhancementBridge"/> while a Deeper enhancement is
+        /// bound to the primary player. Such an enhancement can loop/hold the clip well past its
+        /// declared duration, so the duration-keyed safety timer must not force-close a video that is
+        /// still genuinely advancing. Cleared on unbind and defensively in CloseAll. (#536)
+        /// </summary>
+        public void SetEnhancementDriving(bool active) => _enhancementDriving = active;
+
         // Cleanup synchronization to prevent race conditions
         private readonly object _cleanupLock = new();
         private volatile bool _isCleaningUp;
@@ -2467,9 +2486,52 @@ namespace ConditioningControlPanel.Services
             // Add 5 second buffer beyond video duration
             var timeoutSeconds = videoDurationSeconds + 5;
 
+            _lastSafetyTimeMs = -1;
+            _lastSafetyProgressUtc = DateTime.UtcNow;
+
             _safetyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(timeoutSeconds) };
             _safetyTimer.Tick += (s, e) =>
             {
+                if (!_videoPlaying) { _safetyTimer?.Stop(); return; }
+
+                // #536: while a Deeper enhancement drives the clip it can loop or hold well past the
+                // declared duration (loop_region, SpeakHoldMode.LoopRegion, speak-pauses), so a plain
+                // duration guillotine cuts the video "after the original time is over". Switch to a
+                // progress-based stall watch: keep the video alive while playback is still advancing,
+                // slide the InteractionQueue stuck window forward too, and only force-close once it has
+                // shown zero progress for the grace window (a genuine wedge, not an intended pause).
+                if (_enhancementDriving)
+                {
+                    long curMs = -1;
+                    try { curMs = _primaryMediaPlayer?.Time ?? -1; } catch { curMs = -1; }
+
+                    var now = DateTime.UtcNow;
+                    bool advancing = curMs >= 0 && curMs != _lastSafetyTimeMs;
+                    if (advancing || _lastSafetyTimeMs < 0)
+                    {
+                        _lastSafetyTimeMs = curMs;
+                        _lastSafetyProgressUtc = now;
+                        // Keep the secondary InteractionQueue stuck-recovery backstop from cutting the
+                        // loop either (its window is min 5 min / duration+30s — a long loop can reach it).
+                        try { App.InteractionQueue?.ExtendTimeout(_duration > 0 ? _duration : MaxVideoFallbackSeconds, InteractionQueueService.InteractionType.Video); }
+                        catch (Exception ex) { App.Logger?.Debug("VideoService: safety-timer ExtendTimeout failed: {E}", ex.Message); }
+                        if (_safetyTimer != null) _safetyTimer.Interval = EnhancementRecheckInterval;
+                        return;
+                    }
+
+                    if ((now - _lastSafetyProgressUtc).TotalSeconds < EnhancementStallGraceSeconds)
+                    {
+                        if (_safetyTimer != null) _safetyTimer.Interval = EnhancementRecheckInterval;
+                        return; // paused (e.g. speak-hold) but within grace — not a wedge
+                    }
+
+                    _safetyTimer?.Stop();
+                    App.Logger?.Warning("VideoService: Enhancement-driven video stalled ~{Grace}s with no playback progress. Forcing cleanup.", EnhancementStallGraceSeconds);
+                    Cleanup();
+                    return;
+                }
+
+                // Non-enhanced video: unchanged one-shot guillotine at duration+5s.
                 _safetyTimer?.Stop();
                 if (_videoPlaying)
                 {
@@ -2689,6 +2751,10 @@ namespace ConditioningControlPanel.Services
                 // engine read sees null rather than a half-disposed handle.
                 _primaryMediaPlayer = null;
                 _primaryVideoWindow = null;
+                // The enhancement is torn down with the video; clear the driving flag so a later
+                // non-enhanced video gets the normal duration guillotine even if the bridge's
+                // Unbind races the teardown (panic/CloseAll doesn't raise VideoEnded). (#536)
+                _enhancementDriving = false;
 
                 // Stop all players in parallel with timeout to prevent one hanging player from blocking others
                 if (playersCopy.Count > 0)

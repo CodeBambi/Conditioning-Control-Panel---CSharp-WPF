@@ -109,6 +109,11 @@ namespace ConditioningControlPanel.Services.Deeper
                     return;
                 }
 
+                // Tell VideoService a Deeper enhancement now owns the clip's lifetime: it can loop or
+                // hold the video past its declared duration, so the safety timer must switch from a
+                // duration guillotine to a progress-based stall watch. (#536)
+                _video.SetEnhancementDriving(true);
+
                 App.Logger?.Information("VideoEnhancementBridge: bound enhancement ({Source}) for {File}",
                     resolved.Source, Path.GetFileName(path));
             }
@@ -130,6 +135,8 @@ namespace ConditioningControlPanel.Services.Deeper
 
         private void Unbind()
         {
+            // Restore the normal duration guillotine for any subsequent non-enhanced video. (#536)
+            try { _video.SetEnhancementDriving(false); } catch { }
             try { _host.UnbindEngine(); } catch { }
             try { _host.Unload(); } catch { }
             try { _source?.Dispose(); } catch { }
