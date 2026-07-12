@@ -182,7 +182,7 @@ public class DtrhHostOrchestratorTests
             Orch = new DtrhHostOrchestrator(
                 Browser, Fx, Store, manifest, assetStats, sessionStats, Env,
                 NullLogger<DtrhHostOrchestrator>.Instance, NullLogger<DtrhMetaBridge>.Instance,
-                Progression, SkillTree, sentinel, Settings, bark: null, testMode: testMode);
+                Progression, SkillTree, null, null, sentinel, Settings, bark: null, testMode: testMode);
             return this;
         }
 

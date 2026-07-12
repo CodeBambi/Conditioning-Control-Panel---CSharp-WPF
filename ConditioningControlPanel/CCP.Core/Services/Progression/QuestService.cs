@@ -543,6 +543,16 @@ public sealed class QuestService : IQuestService, IDisposable
     /// <inheritdoc />
     public void TrackBubblePopped() => AddProgress(QuestCategory.Bubbles, 1);
 
+    /// <summary>
+    /// Advance bubble-pop quests by a whole batch at once (DtRH web run reporting
+    /// its total on completion). WPF QuestService.cs:645-650.
+    /// </summary>
+    public void TrackBubblesPopped(int count)
+    {
+        if (count <= 0) return;
+        AddProgress(QuestCategory.Bubbles, count);
+    }
+
     /// <inheritdoc />
     public void TrackSessionCompleted() => AddProgress(QuestCategory.Session, 1);
 

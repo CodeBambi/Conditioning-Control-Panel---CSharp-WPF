@@ -157,4 +157,32 @@ public class QuestServiceLot7Tests
             env.Cleanup();
         }
     }
+
+    [AvaloniaFact]
+    public void TrackBubblesPopped_AdvancesBubbleQuestByBatch()
+    {
+        // DtRH web run reports its total popped bubbles on completion; TrackBubblesPopped advances a
+        // bubble quest by the full batch in one call (not one at a time).
+        var env = new TestAppEnvironment();
+        try
+        {
+            var settingsService = new FakeSettingsService();
+            var service = new QuestService(settingsService, new FakeSkillTreeService(), env);
+            // Seed an active daily Bubbles quest (pop_parade_d: Pop 40 bubbles).
+            service.Progress.DailyQuest = new ActiveQuest("pop_parade_d");
+
+            service.TrackBubblesPopped(10);
+
+            Assert.Equal(10, service.Progress.DailyQuest.CurrentProgress);
+            Assert.False(service.Progress.DailyQuest.IsCompleted);
+
+            // zero/negative is a no-op.
+            service.TrackBubblesPopped(0);
+            Assert.Equal(10, service.Progress.DailyQuest.CurrentProgress);
+        }
+        finally
+        {
+            env.Cleanup();
+        }
+    }
 }

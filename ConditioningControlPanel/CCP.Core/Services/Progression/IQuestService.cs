@@ -97,6 +97,13 @@ public interface IQuestService
     void TrackBubblePopped();
 
     /// <summary>
+    /// Advance bubble-pop quests by a whole batch at once (DtRH web run reporting its total
+    /// on completion). Default no-op so existing fakes compile; the real service overrides.
+    /// WPF parity: QuestService.TrackBubblesPopped.
+    /// </summary>
+    void TrackBubblesPopped(int count) { }
+
+    /// <summary>
     /// Records video watch time in minutes.
     /// </summary>
     void TrackVideoMinutes(double minutes);

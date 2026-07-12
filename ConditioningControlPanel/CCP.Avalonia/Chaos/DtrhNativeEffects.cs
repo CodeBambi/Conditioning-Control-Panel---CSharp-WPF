@@ -238,6 +238,15 @@ public sealed class DtrhNativeEffects : IDtrhNativeEffects
                 magnetEnabled = cfg.MagnetEnabled,
                 popupHeartEnabled = cfg.PopupHeartEnabled,
                 pendulumSwing = cfg.PendulumSwing,
+                // The persistent habits (Warren upgrades) that actually shape this run,
+                // surfaced in the left-rail HUD (the drafted modifiers already ride the
+                // top ribbon). extreme_tier only unlocks a difficulty tier - no in-run
+                // effect - so it's filtered out. (WPF DtrhHostService.cs:884-892)
+                ownedHabitIds = (meta.PurchasedUpgrades ?? new HashSet<string>())
+                    .Where(id => (_meta?.IsUpgradeActive(id) ?? false)
+                                 && id != "extreme_tier"
+                                 && ChaosUpgrades.ById(id) != null)
+                    .ToList(),
                 rankIndex = rankIndex,
                 runsCompleted = meta.RunsCompleted,
                 equippedStartBoon = meta.EquippedStartBoon,

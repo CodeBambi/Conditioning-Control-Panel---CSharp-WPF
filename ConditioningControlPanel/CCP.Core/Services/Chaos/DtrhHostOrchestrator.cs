@@ -5,6 +5,7 @@ using System.Threading;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.Settings;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -35,6 +36,8 @@ public sealed class DtrhHostOrchestrator : IDisposable
     private readonly DtrhSessionStatsStore _sessionStats;
     private readonly IProgressionService? _progression;
     private readonly ISkillTreeService? _skillTree;
+    private readonly IAchievementService? _achievements;   // DtRH web-run bubble credit (WPF DtrhHostService.cs:469-474)
+    private readonly IQuestService? _quests;               // DtRH web-run bubble credit (v6.3.1 parity)
     private readonly ChaosCrashSentinel? _sentinel;
     private readonly ISettingsService? _settings;
     private readonly ILogger<DtrhHostOrchestrator> _log;
@@ -85,6 +88,8 @@ public sealed class DtrhHostOrchestrator : IDisposable
         ILogger<DtrhMetaBridge> bridgeLogger,
         IProgressionService? progression = null,
         ISkillTreeService? skillTree = null,
+        IAchievementService? achievements = null,
+        IQuestService? quests = null,
         ChaosCrashSentinel? sentinel = null,
         ISettingsService? settings = null,
         IBarkService? bark = null,
@@ -99,6 +104,8 @@ public sealed class DtrhHostOrchestrator : IDisposable
         _log = logger ?? throw new ArgumentNullException(nameof(logger));
         _progression = progression;
         _skillTree = skillTree;
+        _achievements = achievements;
+        _quests = quests;
         _sentinel = sentinel;
         _settings = settings;
         _testMode = testMode;
@@ -261,6 +268,20 @@ public sealed class DtrhHostOrchestrator : IDisposable
             if (!_testMode)   // non-test side effects, exact order (:437-453)
             {
                 _progression?.AddXP((int)baseXp, XPSource.Chaos);     // :439 banks baseXp, NOT finalXp
+                // Restore V1 behavior: a run's popped bubbles feed the GLOBAL bubble count and its
+                // per-100 sparkle-point milestones. The web port records bubblesPopped only into the
+                // local stats store; this credits it to the same sinks the native chaos mode uses.
+                // Additive to score XP. (WPF DtrhHostService.cs:461-474)
+                try
+                {
+                    int bubblesPopped = (int?)(o["sessionStats"]?["bubblesPopped"]) ?? 0;
+                    if (bubblesPopped > 0)
+                    {
+                        _achievements?.TrackBubblesPopped(bubblesPopped);
+                        _quests?.TrackBubblesPopped(bubblesPopped);
+                    }
+                }
+                catch (Exception ex) { _log.LogDebug("DtrhHost bubble credit: {E}", ex.Message); }
                 _fx.SyncReveals("run_end");                           // :441 BEFORE Rebroadcast
                 var nowRank = ChaosRankThresholds.For(_store.State.RunsCompleted);   // :443
                 if ((int)nowRank > _store.State.LastRankSeen) rankUp = nowRank;
