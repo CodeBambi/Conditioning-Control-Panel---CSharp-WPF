@@ -4300,7 +4300,7 @@ internal class Bubble
                 && path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase)
                 && AnimatedWebp.IsAnimated(path);
             if ((isGif || isAnimatedWebp)
-                && _teaseAnimatedAlive < ChaosTuning.TEASE_MAX_ANIMATED)
+                && _teaseAnimatedAlive < PerformanceProfile.MaxAnimatedTeaseBubbles(PerformanceProfile.CurrentTier))
             {
                 long len = 0;
                 try { len = new FileInfo(path).Length; } catch { }

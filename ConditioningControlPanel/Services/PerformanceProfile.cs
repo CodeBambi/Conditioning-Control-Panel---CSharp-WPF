@@ -69,6 +69,21 @@ public static class PerformanceProfile
         _ => BitmapScalingMode.LowQuality,
     };
 
+    /// <summary>
+    /// Max tease bubbles running a REAL animated decode at once, per tier. The old flat cap of 2
+    /// (ChaosTuning.TEASE_MAX_ANIMATED) left every extra tease bubble frozen on its first frame —
+    /// visible on flash-heavy presets as "only the first gif animates" (#523). Frames are decoded
+    /// once per path and shared (AnimatedWebp.DecodeCached), so additional same-gif bubbles only add
+    /// a lightweight animation clock; scale the budget up on capable machines, keep it tight on weak
+    /// ones. The per-file byte ceiling (TEASE_ANIMATED_MAX_BYTES) still guards huge gifs regardless.
+    /// </summary>
+    public static int MaxAnimatedTeaseBubbles(PerformanceTier tier) => tier switch
+    {
+        PerformanceTier.Performance => Chaos.ChaosTuning.TEASE_MAX_ANIMATED, // weak GPU: keep the safe floor
+        PerformanceTier.Balanced => 6,
+        _ => 10,
+    };
+
     /// <summary>Whether decorative glow (DropShadow) is allowed at all, per tier.</summary>
     public static bool AllowGlow(PerformanceTier tier) => tier != PerformanceTier.Performance;
 
