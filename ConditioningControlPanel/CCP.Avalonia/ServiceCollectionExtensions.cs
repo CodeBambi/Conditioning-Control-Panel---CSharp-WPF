@@ -147,6 +147,33 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ConditioningControlPanel.Core.Services.Bark.IBarkManifestService,
                               ConditioningControlPanel.Core.Services.Bark.BarkManifestService>();
 
+        // BARK-1 slice 1: the ported bark DECISION engine (WPF Services/Companion/BarkService.cs;
+        // contract docs/bark-engine-contract.md). Registered but NOT started — Speak delivery is
+        // slice 2 (NullBarkSpeaker default) and trigger wiring is slice 3; the existing
+        // AvaloniaBarkService NotifyChaos*→BarkRequested bare-string path stays the live consumer
+        // until then. Factory lambdas because the engine ctor takes optional seams.
+        services.AddSingleton<ConditioningControlPanel.Core.Services.Bark.IBarkSpeaker>(sp =>
+            new ConditioningControlPanel.Core.Services.Bark.NullBarkSpeaker(
+                sp.GetService<Microsoft.Extensions.Logging.ILogger<ConditioningControlPanel.Core.Services.Bark.NullBarkSpeaker>>()));
+        services.AddSingleton<ConditioningControlPanel.Core.Services.Bark.IBarkGateSignals>(sp =>
+            new ConditioningControlPanel.Core.Services.Bark.BarkGateSignals(
+                sp.GetService<IAvatarWindowService>()));
+        services.AddSingleton<ConditioningControlPanel.Core.Services.Bark.IBarkLiveFields>(sp =>
+            new ConditioningControlPanel.Core.Services.Bark.BarkLiveFields(
+                sp.GetService<ISettingsService>(),
+                sp.GetService<IVideoInfo>(),
+                sp.GetService<IWebcamService>(),
+                sp.GetService<ISessionService>()));
+        services.AddSingleton(sp =>
+            new ConditioningControlPanel.Core.Services.Bark.BarkEngine(
+                sp.GetService<ISettingsService>(),
+                sp.GetService<ConditioningControlPanel.Core.Services.Bark.IBarkSpeaker>(),
+                sp.GetService<ConditioningControlPanel.Core.Services.Bark.IBarkLiveFields>(),
+                sp.GetService<ConditioningControlPanel.Core.Services.Bark.IBarkGateSignals>(),
+                sp.GetService<IModService>(),
+                sp.GetService<ConditioningControlPanel.Core.Services.Bark.IBarkManifestService>(),
+                logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<ConditioningControlPanel.Core.Services.Bark.BarkEngine>>()));
+
         // Spoken-mantra dataset for the Takeover "say it for me" fallback. Audio-duration provider
         // defaults to no-op; the Windows head overrides it with NAudio.
         services.AddSingleton<ConditioningControlPanel.Core.Platform.IAudioDurationProvider,
