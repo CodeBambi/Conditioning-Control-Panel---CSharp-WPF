@@ -76,6 +76,70 @@ internal static class X11Interop
         long eventMask,
         ref XClientMessageEvent eventSend);
 
+    // --- X11 Frame-Source (XGetImage screen capture, linux-framesource-contract.md §3.3/§3.6) ---
+
+    /// <summary>
+    /// Captures a rectangular region of <paramref name="drawable"/> (the root window) into
+    /// a newly-allocated XImage. Returns IntPtr.Zero on failure. Raises BadMatch
+    /// asynchronously (delivered on the next XSync) when the rect is not fully inside the
+    /// drawable — must run inside a scoped Xlib error trap (contract §3.2).
+    /// </summary>
+    /// <param name="planeMask">AllPlanes (~0) for every plane.</param>
+    /// <param name="format">ZPixmap (2) for a contiguous-pixel layout matching BGRA.</param>
+    [DllImport(LibX11)]
+    public static extern IntPtr XGetImage(
+        IntPtr display,
+        IntPtr drawable,
+        int x,
+        int y,
+        uint width,
+        uint height,
+        ulong planeMask,
+        int format);
+
+    /// <summary>
+    /// Frees an XImage AND its data buffer. libX11 exports this as a symbol despite it
+    /// being a Xutil.h macro historically; Avalonia's own X11 backend P/Invokes it the same
+    /// way (contract §3.3 / §7.1 — high confidence, anchored on Avalonia's interop).
+    /// </summary>
+    [DllImport(LibX11)]
+    public static extern int XDestroyImage(IntPtr ximage);
+
+    /// <summary>
+    /// Returns the geometry of a drawable. Used to defensively clamp the capture rect to
+    /// the root window before XGetImage (contract §3.5: monitor layouts change between the
+    /// ScreenInfo snapshot and capture). Returns 0 (failure) on a trapped error.
+    /// </summary>
+    [DllImport(LibX11)]
+    public static extern int XGetGeometry(
+        IntPtr display,
+        IntPtr drawable,
+        out IntPtr rootReturn,
+        out int xReturn,
+        out int yReturn,
+        out uint widthReturn,
+        out uint heightReturn,
+        out uint borderWidthReturn,
+        out uint depthReturn);
+
+    // --- XGetImage format / plane constants (Xlib.h) ---
+
+    /// <summary>All bits set — capture every plane (Xlib AllPlanes).</summary>
+    public const ulong AllPlanes = ~0UL;
+
+    /// <summary>
+    /// ZPixmap format: scanlines are contiguous pixels (not bit planes). On little-endian
+    /// servers a standard TrueColor 32bpp ZPixmap lays out as B,G,R,X in memory, matching
+    /// the RawFrame BGRA contract directly (contract §3.3).
+    /// </summary>
+    public const int ZPixmap = 2;
+
+    /// <summary>Xlib byte order: least-significant byte first (every x86/ARM desktop).</summary>
+    public const int LSBFirst = 0;
+
+    /// <summary>Xlib byte order: most-significant byte first (big-endian; out of scope, §3.3).</summary>
+    public const int MSBFirst = 1;
+
     // --- XFixes Extension (input shape for click-through) ---
 
     [DllImport(LibXfixes)]
