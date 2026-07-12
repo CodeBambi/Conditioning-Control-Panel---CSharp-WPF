@@ -12,6 +12,14 @@ namespace ConditioningControlPanel.Core.Services.Bark
     /// </summary>
     public class BarkContext
     {
+        /// <summary>
+        /// ctx.Values key under which the bark engine stamps the matched rule's <see cref="BarkClass"/>
+        /// for the delivery seam (BARK-1 slice 2). Stamped AFTER {key} substitution so it can never
+        /// leak as a token. Lets the mute-egg special-case (WPF BarkService.cs:1595) detect EasterEgg
+        /// without widening <c>IBarkSpeaker.Speak</c>.
+        /// </summary>
+        public const string RuleClassKey = "__BarkClass";
+
         public string Trigger { get; }
 
         /// <summary>Flat value bag. Numbers stored as double, flags as bool, labels as string.</summary>

@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Services;
 using ConditioningControlPanel.Avalonia.Services.AttentionCheck;
+using ConditioningControlPanel.Avalonia.Services.Bark;
 using ConditioningControlPanel.Avalonia.Services.BouncingText;
 using ConditioningControlPanel.Avalonia.Services.BubbleCount;
 using ConditioningControlPanel.Avalonia.Services.Commands;
@@ -148,13 +149,22 @@ public static class ServiceCollectionExtensions
                               ConditioningControlPanel.Core.Services.Bark.BarkManifestService>();
 
         // BARK-1 slice 1: the ported bark DECISION engine (WPF Services/Companion/BarkService.cs;
-        // contract docs/bark-engine-contract.md). Registered but NOT started — Speak delivery is
-        // slice 2 (NullBarkSpeaker default) and trigger wiring is slice 3; the existing
-        // AvaloniaBarkService NotifyChaos*→BarkRequested bare-string path stays the live consumer
-        // until then. Factory lambdas because the engine ctor takes optional seams.
+        // contract docs/bark-engine-contract.md). Registered but NOT started — trigger wiring is
+        // slice 3; the existing AvaloniaBarkService NotifyChaos*→BarkRequested bare-string path stays
+        // the live consumer until then. Factory lambdas because the engine ctor takes optional seams.
+        //
+        // BARK-1 slice 2: the AvatarTube-backed IBarkSpeaker REPLACES the NullBarkSpeaker default —
+        // decided barks now route to the speech bubble (Giggle/GigglePriority), with the mute-egg,
+        // {0} focused-app substitution and self-echo guard (WPF BarkService.cs:1578-1628). Optional
+        // seams resolve to null on heads without them; the speaker degrades safely.
         services.AddSingleton<ConditioningControlPanel.Core.Services.Bark.IBarkSpeaker>(sp =>
-            new ConditioningControlPanel.Core.Services.Bark.NullBarkSpeaker(
-                sp.GetService<Microsoft.Extensions.Logging.ILogger<ConditioningControlPanel.Core.Services.Bark.NullBarkSpeaker>>()));
+            new AvatarBarkSpeaker(
+                sp.GetService<IAvatarWindowService>(),
+                sp.GetService<ConditioningControlPanel.Core.Services.Awareness.IAwarenessService>(),
+                sp.GetService<ConditioningControlPanel.Core.Platform.IForegroundWindowTitleProvider>(),
+                sp.GetService<IKeywordTriggerService>(),
+                sp.GetService<ISettingsService>(),
+                logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<AvatarBarkSpeaker>>()));
         services.AddSingleton<ConditioningControlPanel.Core.Services.Bark.IBarkGateSignals>(sp =>
             new ConditioningControlPanel.Core.Services.Bark.BarkGateSignals(
                 sp.GetService<IAvatarWindowService>()));

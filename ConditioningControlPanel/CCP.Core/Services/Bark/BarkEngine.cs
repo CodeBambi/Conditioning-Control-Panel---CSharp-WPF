@@ -744,6 +744,11 @@ public sealed class BarkEngine
         // Route by class/priority (WPF :1619).
         bool priority = rule.Class != BarkClass.Normal || rule.Priority >= PriorityBarkThreshold;
 
+        // Expose the matched rule's class to the delivery seam so the slice-2 mute-egg special-case
+        // (WPF BarkService.cs:1595) can detect EasterEgg without widening IBarkSpeaker.Speak. Stamped
+        // AFTER ApplySubstitutions ran above so it can never leak as a {key} token.
+        ctx.Set(BarkContext.RuleClassKey, rule.Class);
+
         try { _speaker?.Speak(line, audioPath, priority, rule.Mood, ctx); }
         catch (Exception ex) { _logger?.LogWarning(ex, "BarkEngine: speaker seam failed for rule {Rule}", rule.Id); }
     }
