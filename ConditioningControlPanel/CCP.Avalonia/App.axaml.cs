@@ -226,6 +226,21 @@ public partial class App : Application
                 Log.Logger?.Error(ex, "Failed to initialize mod service or apply theme");
             }
 
+            // BARK-1 slice 3: start the bark rule engine and wire its Core triggers (the awareness
+            // pair closes AI-10; session/video/progression/achievement/quest; ModChanged reload).
+            // Runs after mod init so the rule loader sees the merged active-mod manifest. Start() is
+            // idempotent and the engine self-guards its gates; failures are non-fatal (bark is cosmetic).
+            ConditioningControlPanel.Core.Services.Bark.BarkTriggerWiring? barkWiring = null;
+            try
+            {
+                barkWiring = Services.GetService<ConditioningControlPanel.Core.Services.Bark.BarkTriggerWiring>();
+                barkWiring?.Start();
+            }
+            catch (Exception ex)
+            {
+                Log.Logger?.Warning(ex, "BarkTriggerWiring start failed (non-fatal)");
+            }
+
             // Subscribe to achievement unlocks, quest completions, and Pink Rush so the
             // Avalonia head can show popup toasts.
             var achievements = Services.GetRequiredService<IAchievementService>();
@@ -280,7 +295,11 @@ public partial class App : Application
                 // OS logoff), but only the Exit menu flushed settings, and nothing
                 // disposed the achievement/quest services, losing up to 30s of dirty
                 // counters that WPF preserves via OnExit disposal.
-                desktop.Exit += (_, _) => FlushPersistentState();
+                desktop.Exit += (_, _) =>
+                {
+                    FlushPersistentState();
+                    try { barkWiring?.Dispose(); } catch { /* best-effort bark unsubscribe on exit */ }
+                };
 
                 desktop.MainWindow = desktop.Args switch
                 {

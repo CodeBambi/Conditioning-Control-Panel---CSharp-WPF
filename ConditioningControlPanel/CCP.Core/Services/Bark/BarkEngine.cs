@@ -316,6 +316,20 @@ public sealed class BarkEngine
     }
 
     // ------------------------------------------------------------------
+    /// <summary>
+    /// True if at least one rule is registered for <paramref name="trigger"/> (WPF ForTrigger non-empty,
+    /// BarkService.cs:777). Hosts use this to route a trigger through the rule engine when a rule
+    /// exists, or fall back to a random-phrase bark otherwise, so an un-ruled trigger never goes
+    /// silent (BARK-1 slice 3 regression guard). Safe before <see cref="Start"/>: the default empty
+    /// rule set yields false. Takes the gate lock for a consistent snapshot of <see cref="_rules"/>.
+    /// </summary>
+    public bool HasTrigger(string trigger)
+    {
+        BarkRuleSet rules;
+        lock (_gate) rules = _rules;
+        return rules.ForTrigger(trigger).Count > 0;
+    }
+
     // Condition matching (WPF BarkService.cs:1038-1170)
     // ------------------------------------------------------------------
 
