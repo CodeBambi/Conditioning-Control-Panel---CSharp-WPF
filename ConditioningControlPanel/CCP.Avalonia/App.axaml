@@ -250,7 +250,7 @@
 
     <!-- Primary nav active state (uses accent gradient) -->
     <ControlTheme x:Key="TabButtonActivePrimary" TargetType="ToggleButton" BasedOn="{StaticResource TabButton}">
-      <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}" />
+      <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}" />
       <Setter Property="Foreground" Value="White" />
       <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}" />
       <Style Selector="^:pointerover">

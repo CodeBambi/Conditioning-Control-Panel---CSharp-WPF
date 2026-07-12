@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -34,6 +35,20 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
     private readonly ILogger<BlinkTrainerTabViewModel>? _logger;
 
     private DispatcherTimer? _statusTimer;
+
+    // ── Demo preview loop (WPF MainWindow.BlinkTrainer.cs:33-175 parity) ──
+    // Cycles 4 SFW abstract gradient PNGs every 2s with a ~200ms cross-fade
+    // between two overlapping Image controls (StageImageA/StageImageB in the
+    // AXAML). DEMO MODE ONLY — the live-preview OnBlink seam
+    // (IBlinkTrainerService) is a separate board follow-up. The cross-fade is
+    // driven by bound opacity props; an Avalonia DoubleTransition on each
+    // Image animates the value change over ~200ms.
+    private DispatcherTimer? _demoTimer;
+    private List<IImage> _demoAssets = new();
+    private int _demoIndex;
+    private bool _demoUsingA = true;
+    private bool _isTabSelected;
+    private bool _demoAssetsLoaded;
 
     public BlinkTrainerTabViewModel() : base("blinktrainer", "Blink Trainer", "💫")
     {
@@ -84,7 +99,6 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
         SessionButtonText = Loc.Get("blink_trainer_start_session");
         StatusText = Loc.Get("blink_trainer_status_ready");
         StatusColor = new SolidColorBrush(Color.Parse("#FFFF69B4"));
-        PreviewLabel = Loc.Get("blink_trainer_preview_demo_label");
         ConsentGranted = false;
         ConsentStatusText = Loc.Get("blink_trainer_consent_required");
         CalibrationStatusText = Loc.Get("blink_trainer_calibration_none");
@@ -179,8 +193,20 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
     [ObservableProperty]
     private bool _includeVideos;
 
+    // Stage preview images for the demo cross-fade slideshow. Source is an
+    // IImage (decoded Bitmap) loaded from avares; Opacity is flipped between
+    // 1/0 by AdvanceBlinkTrainerDemo and animated by the AXAML DoubleTransition.
     [ObservableProperty]
-    private string _previewLabel = "";
+    private IImage? _stageImageASource;
+
+    [ObservableProperty]
+    private double _stageImageAOpacity = 1.0;
+
+    [ObservableProperty]
+    private IImage? _stageImageBSource;
+
+    [ObservableProperty]
+    private double _stageImageBOpacity = 0.0;
 
     [ObservableProperty]
     private bool _consentGranted;
@@ -280,6 +306,10 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
             : Loc.Get("blink_trainer_status_ready");
         UpdateStatusColor();
         StartOrStopStatusTimer(value);
+        // Stop the demo under a live session; resume it when the session ends
+        // (only if the tab is visible). Avoids cycling images that the live
+        // preview would otherwise fight, and avoids off-screen CPU burn.
+        UpdateDemoTimer();
     }
 
     partial void OnSessionDurationChanged(double value)
@@ -752,6 +782,157 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
                 : Loc.Get("blink_trainer_counter_format");
         };
         _statusTimer.Start();
+    }
+
+    // ── Demo preview loop (WPF MainWindow.BlinkTrainer.cs:33-175 parity) ──
+
+    /// <summary>
+    /// Called when this tab becomes the selected tab. Starts the demo loop so
+    /// the stage preview animates while visible (and no session is running).
+    /// </summary>
+    public override void OnSelected()
+    {
+        base.OnSelected();
+        _isTabSelected = true;
+        UpdateDemoTimer();
+    }
+
+    /// <summary>
+    /// Called when the user navigates away from this tab. Stops the demo loop
+    /// to avoid cycling images (and burning CPU) while off-screen.
+    /// </summary>
+    public override void OnDeselected()
+    {
+        base.OnDeselected();
+        _isTabSelected = false;
+        UpdateDemoTimer();
+    }
+
+    /// <summary>
+    /// Starts or stops the demo loop based on tab visibility and session state.
+    /// The demo runs only while the tab is visible AND no session is running —
+    /// mirrors WPF's ApplyBlinkTrainerStageMode(Demo) gating without the
+    /// live-preview tiers (a separate board follow-up).
+    /// </summary>
+    private void UpdateDemoTimer()
+    {
+        if (_isTabSelected && !IsSessionRunning)
+            StartBlinkTrainerDemo();
+        else
+            StopBlinkTrainerDemo();
+    }
+
+    /// <summary>
+    /// Lazily loads the 4 demo PNGs from avares URIs and shuffles them
+    /// (Fisher-Yates) so the play order isn't predictable. Cached for the app
+    /// session; the decoded Bitmaps outlive every tab visit (WPF parity).
+    /// </summary>
+    private void EnsureDemoAssetsLoaded()
+    {
+        if (_demoAssetsLoaded) return;
+        _demoAssetsLoaded = true;
+
+        var loaded = new List<IImage>(4);
+        for (int i = 1; i <= 4; i++)
+        {
+            try
+            {
+                var uri = new Uri($"avares://CCP.Avalonia/Assets/BlinkTrainer/Demo/demo_{i:00}.png");
+                if (!global::Avalonia.Platform.AssetLoader.Exists(uri))
+                {
+                    _logger?.LogWarning("BlinkTrainer demo asset demo_{Index:00}.png not found in resources", i);
+                    continue;
+                }
+                using var stream = global::Avalonia.Platform.AssetLoader.Open(uri);
+                loaded.Add(new Bitmap(stream));
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "BlinkTrainer demo asset demo_{Index:00}.png failed to load", i);
+            }
+        }
+
+        // Fisher-Yates shuffle so the first run isn't always demo_01 -> 02 -> ...
+        var rng = Random.Shared;
+        for (int i = loaded.Count - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            (loaded[i], loaded[j]) = (loaded[j], loaded[i]);
+        }
+
+        _demoAssets = loaded;
+    }
+
+    /// <summary>
+    /// Starts the 2s cross-fade cycle on the stage preview. Idempotent — if
+    /// already running, returns immediately. Sets the initial frame
+    /// synchronously so the user never sees an empty stage. Mirrors WPF
+    /// StartBlinkTrainerDemoLoop (MainWindow.BlinkTrainer.cs:91-130).
+    /// </summary>
+    private void StartBlinkTrainerDemo()
+    {
+        if (_demoTimer != null) return; // already running
+
+        EnsureDemoAssetsLoaded();
+        if (_demoAssets.Count == 0)
+        {
+            _logger?.LogWarning("BlinkTrainer demo loop skipped — no demo assets loaded");
+            return;
+        }
+
+        _demoIndex = 0;
+        _demoUsingA = true;
+        StageImageASource = _demoAssets[0];
+        StageImageAOpacity = 1;
+        StageImageBSource = null;
+        StageImageBOpacity = 0;
+
+        _demoTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.0) };
+        _demoTimer.Tick += (_, _) => AdvanceBlinkTrainerDemo();
+        _demoTimer.Start();
+    }
+
+    /// <summary>
+    /// Stops the demo timer. Idempotent. Keeps the cached assets for the next
+    /// tab visit (WPF parity: StopBlinkTrainerDemoLoop).
+    /// </summary>
+    private void StopBlinkTrainerDemo()
+    {
+        if (_demoTimer == null) return;
+        _demoTimer.Stop();
+        _demoTimer = null;
+    }
+
+    /// <summary>
+    /// Advances to the next demo asset, loading it into the inactive Image and
+    /// cross-fading opacity. The ~200ms fade is handled by the Avalonia
+    /// DoubleTransition declared on each Image's Opacity in the AXAML, so
+    /// flipping the bound opacity values here is all that's needed. Mirrors WPF
+    /// AdvanceBlinkTrainerDemo (MainWindow.BlinkTrainer.cs:153-175).
+    /// </summary>
+    private void AdvanceBlinkTrainerDemo()
+    {
+        if (_demoAssets.Count == 0) return;
+
+        _demoIndex = (_demoIndex + 1) % _demoAssets.Count;
+        var next = _demoAssets[_demoIndex];
+
+        if (_demoUsingA)
+        {
+            // Incoming = B, outgoing = A.
+            StageImageBSource = next;
+            StageImageBOpacity = 1;
+            StageImageAOpacity = 0;
+        }
+        else
+        {
+            // Incoming = A, outgoing = B.
+            StageImageASource = next;
+            StageImageAOpacity = 1;
+            StageImageBOpacity = 0;
+        }
+
+        _demoUsingA = !_demoUsingA;
     }
 }
 

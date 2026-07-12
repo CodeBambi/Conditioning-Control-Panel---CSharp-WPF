@@ -127,7 +127,14 @@ public sealed class DtrhGameHostService : IChaosWebGameService
 
     private void Build()
     {
-        _host = new WebView2BrowserHost { AdditionalBrowserArguments = BrowserArgs };
+        _host = new WebView2BrowserHost
+        {
+            AdditionalBrowserArguments = BrowserArgs,
+            // Distinct user-data folder so the DTRH game's WebView2 environment does not collide with the
+            // dashboard or tunnel hosts' process-exclusive folder lock (#4). WPF parity: browser_data_dtrh.
+            UserDataFolder = "avalonia_browser_data_dtrh",
+            Logger = _logger,
+        };
         _host.WebMessageReceived += OnWebMessageReceived;
         _host.FullscreenChanged += OnFullscreenChanged;
 

@@ -44,6 +44,27 @@ public partial class AssetsTabViewModel : TabItemViewModel
 
     private bool _isUpdatingCheckState;
 
+    // --- Thumbnail decode (off-UI-thread, bounded, LRU-cached, cancellable) ---
+    // The old XAML bound each tile's Image.Source to FullPath via PackUriToBitmapConverter,
+    // which synchronously ran one full new Bitmap(path) decode PER realized tile on the UI
+    // thread. Over a network folder with thousands of files + a non-virtualized WrapPanel,
+    // that realized-and-decoded every tile up front and froze the tab. These fields drive
+    // the replacement: decode ~120px thumbnails on worker threads, capped to 4 concurrent,
+    // cached by full-path+mtime, and cancelled when the selected folder changes.
+    private const int ThumbnailDecodeWidth = 120;
+    private const int MaxThumbnailCacheEntries = 200;
+    private static readonly SemaphoreSlim _thumbnailSemaphore = new(4);
+    private static readonly Dictionary<string, ThumbnailCacheEntry> _thumbnailCache = new();
+    private static readonly object _thumbnailCacheLock = new();
+    private static long _thumbnailAccessCounter;
+    private CancellationTokenSource? _thumbnailCts;
+
+    private sealed class ThumbnailCacheEntry
+    {
+        public Bitmap? Bitmap;
+        public long LastAccess;
+    }
+
     public AssetsTabViewModel() : base("assets", "Assets", "📁")
     {
         _assetTree = new ObservableCollection<AssetTreeItem>();
@@ -75,7 +96,7 @@ public partial class AssetsTabViewModel : TabItemViewModel
         _assetPresets = new ObservableCollection<AssetPreset>();
 
         InitializeDefaultPreset();
-        RefreshAssetTree();
+        _ = RefreshAssetTreeAsync();
         RefreshAssetPresets();
     }
 
@@ -116,54 +137,93 @@ public partial class AssetsTabViewModel : TabItemViewModel
 
     partial void OnSelectedFolderChanged(AssetTreeItem? value)
     {
-        LoadFolderFiles(value);
+        // Cancel any in-flight thumbnail batch for the previously-selected folder so we do
+        // not keep decoding tiles whose items have already been cleared/replaced.
+        _thumbnailCts?.Cancel();
+        _thumbnailCts = new CancellationTokenSource();
+        _ = LoadFolderFilesAsync(value, _thumbnailCts.Token);
     }
 
     partial void OnSelectedAssetPresetChanged(AssetPreset? value)
     {
         if (_isLoadingPreset || value == null) return;
-        ApplyAssetPreset(value);
+        _ = ApplyAssetPresetAsync(value);
     }
 
     #region Asset Tree
 
     [RelayCommand]
-    private void RefreshAssetTree()
+    private async Task RefreshAssetTreeAsync()
     {
-        AssetTree.Clear();
-        var assetsPath = _appEnvironment?.EffectiveAssetsPath;
-        if (string.IsNullOrWhiteSpace(assetsPath)) return;
-
+        IsBusy = true;
         try
         {
-            Directory.CreateDirectory(assetsPath);
-            Directory.CreateDirectory(Path.Combine(assetsPath, "images"));
-            Directory.CreateDirectory(Path.Combine(assetsPath, "videos"));
+            var assetsPath = _appEnvironment?.EffectiveAssetsPath;
+            if (string.IsNullOrWhiteSpace(assetsPath)) return;
+
+            try
+            {
+                Directory.CreateDirectory(assetsPath);
+                Directory.CreateDirectory(Path.Combine(assetsPath, "images"));
+                Directory.CreateDirectory(Path.Combine(assetsPath, "videos"));
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to ensure asset directories");
+            }
+
+            var imagesFolder = Path.Combine(assetsPath, "images");
+            var videosFolder = Path.Combine(assetsPath, "videos");
+            var basePath = assetsPath;
+            var disabled = SnapshotDisabledPaths();
+            var imagesLabel = Loc.Get("asset_folder_images");
+            var videosLabel = Loc.Get("asset_folder_videos");
+            var hasImages = Directory.Exists(imagesFolder);
+            var hasVideos = Directory.Exists(videosFolder);
+
+            // Build the recursive folder tree off the UI thread. Directory.EnumerateFiles /
+            // GetDirectories over a network drive is the slow path that used to freeze the
+            // tab on construction/refresh; the AssetTreeItem graph is plain data and safe to
+            // build on a worker, then we attach it to the bound collection in one UI pass.
+            AssetTreeItem? imagesNode = null;
+            AssetTreeItem? videosNode = null;
+            await Task.Run(() =>
+            {
+                if (hasImages) imagesNode = BuildFolderTree(imagesFolder, imagesLabel, basePath, disabled);
+                if (hasVideos) videosNode = BuildFolderTree(videosFolder, videosLabel, basePath, disabled);
+            });
+
+            AssetTree.Clear();
+            if (imagesNode != null)
+            {
+                imagesNode.IsExpanded = true;
+                AssetTree.Add(imagesNode);
+            }
+            if (videosNode != null)
+            {
+                videosNode.IsExpanded = true;
+                AssetTree.Add(videosNode);
+            }
+
+            AddContentPackVirtualFolders();
+
+            UpdateAssetCounts();
         }
-        catch (Exception ex)
+        finally
         {
-            _logger?.LogWarning(ex, "Failed to ensure asset directories");
+            IsBusy = false;
         }
+    }
 
-        var imagesFolder = Path.Combine(assetsPath, "images");
-        if (Directory.Exists(imagesFolder))
-        {
-            var imagesNode = BuildFolderTree(imagesFolder, Loc.Get("asset_folder_images"));
-            imagesNode.IsExpanded = true;
-            AssetTree.Add(imagesNode);
-        }
-
-        var videosFolder = Path.Combine(assetsPath, "videos");
-        if (Directory.Exists(videosFolder))
-        {
-            var videosNode = BuildFolderTree(videosFolder, Loc.Get("asset_folder_videos"));
-            videosNode.IsExpanded = true;
-            AssetTree.Add(videosNode);
-        }
-
-        AddContentPackVirtualFolders();
-
-        UpdateAssetCounts();
+    /// <summary>
+    /// Snapshots the disabled-asset set so off-thread enumeration/classification does not
+    /// race with a concurrent UI-thread toggle. StringComparer.Ordinal matches the
+    /// DisabledAssetPaths set's semantics.
+    /// </summary>
+    private HashSet<string>? SnapshotDisabledPaths()
+    {
+        var src = _settingsService?.Current?.DisabledAssetPaths;
+        return src == null ? null : new HashSet<string>(src, StringComparer.Ordinal);
     }
 
     private void AddContentPackVirtualFolders()
@@ -260,7 +320,7 @@ public partial class AssetsTabViewModel : TabItemViewModel
         return packNode;
     }
 
-    private AssetTreeItem BuildFolderTree(string path, string name)
+    private AssetTreeItem BuildFolderTree(string path, string name, string basePath, HashSet<string>? disabled)
     {
         var node = new AssetTreeItem
         {
@@ -272,7 +332,8 @@ public partial class AssetsTabViewModel : TabItemViewModel
         List<string> files;
         try
         {
-            files = Directory.GetFiles(path)
+            // EnumerateFiles is lazier than GetFiles and keeps peak memory low on huge dirs.
+            files = Directory.EnumerateFiles(path)
                 .Where(f => ValidExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
                 .ToList();
         }
@@ -283,13 +344,32 @@ public partial class AssetsTabViewModel : TabItemViewModel
             return node;
         }
 
-        node.FileCount = files.Count;
-        var basePath = _appEnvironment?.EffectiveAssetsPath ?? "";
-        node.CheckedFileCount = files.Count(f =>
+        // Classify image/video + active state once, while we already hold the file list,
+        // so CountAssetsRecursive can sum stored counts instead of re-enumerating later.
+        var imageCount = 0;
+        var videoCount = 0;
+        var checkedImage = 0;
+        var checkedVideo = 0;
+        foreach (var f in files)
         {
-            var relativePath = GetRelativePath(basePath, f);
-            return !(_settingsService?.Current?.DisabledAssetPaths.Contains(relativePath) ?? false);
-        });
+            var ext = Path.GetExtension(f).ToLowerInvariant();
+            var isImage = ImageExtensions.Contains(ext);
+            var isVideo = VideoExtensions.Contains(ext);
+            if (isImage) imageCount++;
+            if (isVideo) videoCount++;
+
+            var isActive = disabled == null || !disabled.Contains(GetRelativePath(basePath, f));
+            if (!isActive) continue;
+            if (isImage) checkedImage++;
+            if (isVideo) checkedVideo++;
+        }
+
+        node.FileCount = files.Count;
+        node.ImageCount = imageCount;
+        node.VideoCount = videoCount;
+        node.CheckedFileCount = checkedImage + checkedVideo;
+        node.CheckedImageCount = checkedImage;
+        node.CheckedVideoCount = checkedVideo;
 
         string[] subDirs;
         try
@@ -304,7 +384,7 @@ public partial class AssetsTabViewModel : TabItemViewModel
 
         foreach (var dir in subDirs)
         {
-            var child = BuildFolderTree(dir, Path.GetFileName(dir));
+            var child = BuildFolderTree(dir, Path.GetFileName(dir), basePath, disabled);
             child.Parent = node;
             node.Children.Add(child);
         }
@@ -313,8 +393,11 @@ public partial class AssetsTabViewModel : TabItemViewModel
         return node;
     }
 
-    private void LoadFolderFiles(AssetTreeItem? folder)
+    private async Task LoadFolderFilesAsync(AssetTreeItem? folder, CancellationToken ct)
     {
+        // Invoked on the UI thread from OnSelectedFolderChanged. After each await we resume
+        // on the UI thread via the Dispatcher synchronization context, so direct mutations
+        // of CurrentFiles (ObservableCollection) and the item INPC properties are safe.
         CurrentFiles.Clear();
         EmptyThumbnailsText = "";
 
@@ -345,36 +428,83 @@ public partial class AssetsTabViewModel : TabItemViewModel
             return;
         }
 
-        var files = Directory.GetFiles(folder.FullPath)
-            .Where(f => ValidExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-            .OrderBy(Path.GetFileName)
-            .ToList();
+        var basePath = _appEnvironment?.EffectiveAssetsPath ?? "";
+        var disabled = SnapshotDisabledPaths();
+        var fullPath = folder.FullPath;
 
-        if (files.Count == 0)
+        List<AssetFileItem> items;
+        try
+        {
+            // Enumerate the folder off the UI thread; a network drive's directory scan is
+            // exactly the synchronous I/O that froze the tab before.
+            items = await Task.Run(() =>
+            {
+                ct.ThrowIfCancellationRequested();
+                var result = new List<AssetFileItem>();
+
+                IEnumerable<string> raw;
+                try
+                {
+                    raw = Directory.EnumerateFiles(fullPath);
+                }
+                catch (Exception ex) when (ex is DirectoryNotFoundException or UnauthorizedAccessException or IOException)
+                {
+                    _logger?.LogWarning("LoadFolderFiles: cannot enumerate {Path}: {Error}", fullPath, ex.Message);
+                    return result;
+                }
+
+                var ordered = raw
+                    .Where(f => ValidExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                    .OrderBy(Path.GetFileName)
+                    .ToList();
+
+                foreach (var file in ordered)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var relativePath = GetRelativePath(basePath, file);
+                    var isActive = disabled == null || !disabled.Contains(relativePath);
+                    var entry = new AssetFileItem
+                    {
+                        FullPath = file,
+                        RelativePath = relativePath,
+                        IsChecked = isActive
+                    };
+                    try { entry.SizeBytes = new FileInfo(file).Length; }
+                    catch { /* size is best-effort */ }
+                    result.Add(entry);
+                }
+
+                return result;
+            }, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "LoadFolderFiles failed for {Path}", fullPath);
+            EmptyThumbnailsText = Loc.Get("label_no_media_files_in_this_folder");
+            HasCurrentFiles = false;
+            return;
+        }
+
+        if (items.Count == 0)
         {
             EmptyThumbnailsText = Loc.Get("label_no_media_files_in_this_folder");
             HasCurrentFiles = false;
             return;
         }
 
-        var basePath = _appEnvironment?.EffectiveAssetsPath ?? "";
-        foreach (var file in files)
-        {
-            var relativePath = GetRelativePath(basePath, file);
-            var isActive = !(_settingsService?.Current?.DisabledAssetPaths.Contains(relativePath) ?? false);
-            var item = new AssetFileItem
-            {
-                FullPath = file,
-                RelativePath = relativePath,
-                IsChecked = isActive
-            };
-            try { item.SizeBytes = new FileInfo(file).Length; }
-            catch { /* ignore */ }
-
-            CurrentFiles.Add(item);
-        }
-
+        // Batch-add in one UI-thread pass so the virtualized panel realizes tiles together.
+        foreach (var entry in items)
+            CurrentFiles.Add(entry);
         HasCurrentFiles = CurrentFiles.Count > 0;
+
+        // Fire off the thumbnail batch; each task is bounded by _thumbnailSemaphore and
+        // observes the folder's cancellation token (cancelled on the next folder change).
+        foreach (var entry in items)
+            _ = LoadThumbnailAsync(entry, ct);
     }
 
     private void LoadPackFolderFiles(string packId, string fileType)
@@ -414,6 +544,134 @@ public partial class AssetsTabViewModel : TabItemViewModel
         }
 
         HasCurrentFiles = CurrentFiles.Count > 0;
+    }
+
+    /// <summary>
+    /// Decodes one tile's thumbnail off the UI thread, gated by a bounded semaphore
+    /// (max 4 concurrent decodes) and backed by an LRU cache keyed by full path + mtime.
+    /// Mirrors the WPF MainWindow.Assets LoadThumbnailAsync pattern. The task is started on
+    /// the UI thread and resumes on the UI thread after each await (Dispatcher sync context),
+    /// so the INPC writes (item.Thumbnail / IsLoadingThumbnail) are marshalled correctly.
+    /// </summary>
+    private async Task LoadThumbnailAsync(AssetFileItem item, CancellationToken ct)
+    {
+        // Videos render the 🎙 overlay (no raster thumbnail to decode).
+        if (item.IsVideo)
+            return;
+
+        item.IsLoadingThumbnail = true;
+
+        Bitmap? decoded = null;
+        try
+        {
+            await _thumbnailSemaphore.WaitAsync(ct);
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                decoded = await Task.Run(() =>
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var key = BuildThumbnailKey(item.FullPath);
+                    var cached = GetCachedThumbnail(key);
+                    if (cached != null)
+                        return cached;
+
+                    var bmp = TryDecodeThumbnail(item.FullPath);
+                    if (bmp != null)
+                        StoreCachedThumbnail(key, bmp);
+                    return bmp;
+                }, ct);
+            }
+            finally
+            {
+                _thumbnailSemaphore.Release();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Folder changed mid-decode; leave the placeholder state as-is.
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Thumbnail decode failed for {Path}", item.FullPath);
+        }
+
+        item.Thumbnail = decoded;
+        item.IsLoadingThumbnail = false;
+    }
+
+    private static string BuildThumbnailKey(string fullPath)
+    {
+        try
+        {
+            var mtime = new FileInfo(fullPath).LastWriteTimeUtc.Ticks;
+            return string.Concat(fullPath, "|", mtime);
+        }
+        catch
+        {
+            return string.Concat(fullPath, "|0");
+        }
+    }
+
+    private static Bitmap? GetCachedThumbnail(string key)
+    {
+        lock (_thumbnailCacheLock)
+        {
+            if (_thumbnailCache.TryGetValue(key, out var entry))
+            {
+                entry.LastAccess = Interlocked.Increment(ref _thumbnailAccessCounter);
+                return entry.Bitmap;
+            }
+            return null;
+        }
+    }
+
+    private static void StoreCachedThumbnail(string key, Bitmap bmp)
+    {
+        lock (_thumbnailCacheLock)
+        {
+            if (_thumbnailCache.TryGetValue(key, out var existing))
+            {
+                existing.Bitmap = bmp;
+                existing.LastAccess = Interlocked.Increment(ref _thumbnailAccessCounter);
+                return;
+            }
+
+            while (_thumbnailCache.Count >= MaxThumbnailCacheEntries)
+            {
+                var lruKey = _thumbnailCache
+                    .Aggregate((a, b) => a.Value.LastAccess <= b.Value.LastAccess ? a : b).Key;
+                _thumbnailCache.Remove(lruKey);
+            }
+
+            _thumbnailCache[key] = new ThumbnailCacheEntry
+            {
+                Bitmap = bmp,
+                LastAccess = Interlocked.Increment(ref _thumbnailAccessCounter)
+            };
+        }
+    }
+
+    /// <summary>
+    /// Decodes a memory-efficient ~120px thumbnail (DecodeToWidth keeps aspect ratio and
+    /// only decodes to the requested width). Avalonia Bitmaps are not thread-affine, so this
+    /// is safe to run on a worker; the resulting Bitmap is assigned on the UI thread.
+    /// </summary>
+    private static Bitmap? TryDecodeThumbnail(string fullPath)
+    {
+        try
+        {
+            if (!File.Exists(fullPath))
+                return null;
+            using var stream = File.OpenRead(fullPath);
+            return Bitmap.DecodeToWidth(stream, ThumbnailDecodeWidth, BitmapInterpolationMode.HighQuality);
+        }
+        catch
+        {
+            // Missing/unsupported/corrupt files: silently render no thumbnail.
+            return null;
+        }
     }
 
     [RelayCommand]
@@ -542,12 +800,16 @@ public partial class AssetsTabViewModel : TabItemViewModel
         }
 
         folder.CheckedFileCount = isChecked ? folder.FileCount : 0;
+        folder.CheckedImageCount = isChecked ? folder.ImageCount : 0;
+        folder.CheckedVideoCount = isChecked ? folder.VideoCount : 0;
     }
 
     private void SetFolderAndChildrenChecked(AssetTreeItem folder, bool isChecked)
     {
         folder.IsChecked = isChecked;
         folder.CheckedFileCount = isChecked ? folder.FileCount : 0;
+        folder.CheckedImageCount = isChecked ? folder.ImageCount : 0;
+        folder.CheckedVideoCount = isChecked ? folder.VideoCount : 0;
         foreach (var child in folder.Children)
         {
             SetFolderAndChildrenChecked(child, isChecked);
@@ -579,8 +841,9 @@ public partial class AssetsTabViewModel : TabItemViewModel
     private void UpdateParentFolderCheckState()
     {
         if (SelectedFolder == null) return;
-        var checkedCount = CurrentFiles.Count(f => f.IsChecked);
-        SelectedFolder.CheckedFileCount = checkedCount;
+        SelectedFolder.CheckedFileCount = CurrentFiles.Count(f => f.IsChecked);
+        SelectedFolder.CheckedImageCount = CurrentFiles.Count(f => f.IsChecked && !f.IsVideo);
+        SelectedFolder.CheckedVideoCount = CurrentFiles.Count(f => f.IsChecked && f.IsVideo);
         SelectedFolder.UpdateCheckState();
     }
 
@@ -653,24 +916,14 @@ public partial class AssetsTabViewModel : TabItemViewModel
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(folder.FullPath) && Directory.Exists(folder.FullPath))
-            {
-                var basePath = _appEnvironment?.EffectiveAssetsPath ?? "";
-                var files = Directory.GetFiles(folder.FullPath);
-                foreach (var file in files)
-                {
-                    var ext = Path.GetExtension(file).ToLowerInvariant();
-                    var isImage = ImageExtensions.Contains(ext);
-                    var isVideo = VideoExtensions.Contains(ext);
-                    if (isImage) totalImages++;
-                    if (isVideo) totalVideos++;
-
-                    var relativePath = GetRelativePath(basePath, file);
-                    var isActive = !(disabledPaths?.Contains(relativePath) ?? false);
-                    if (isActive && isImage) activeImages++;
-                    if (isActive && isVideo) activeVideos++;
-                }
-            }
+            // Disk folders: reuse the image/video counts already classified during the
+            // off-thread BuildFolderTree pass (and maintained on toggle). This removes the
+            // Directory.GetFiles re-enumeration that used to run on the UI thread here for
+            // every refresh / toggle (the duplicate-I/O line called out in the bug report).
+            totalImages += folder.ImageCount;
+            totalVideos += folder.VideoCount;
+            activeImages += folder.CheckedImageCount;
+            activeVideos += folder.CheckedVideoCount;
 
             CountAssetsRecursive(folder.Children, ref totalImages, ref totalVideos, ref activeImages, ref activeVideos);
         }
@@ -725,14 +978,14 @@ public partial class AssetsTabViewModel : TabItemViewModel
         _isLoadingPreset = false;
     }
 
-    private void ApplyAssetPreset(AssetPreset preset)
+    private async Task ApplyAssetPresetAsync(AssetPreset preset)
     {
         if (_settingsService?.Current == null) return;
         preset.ApplyToSettings();
         _settingsService.Current.CurrentAssetPresetId = preset.Id;
         _settingsService.Save();
 
-        RefreshAssetTree();
+        await RefreshAssetTreeAsync();
         RefreshThumbnailCheckboxes();
         UpdateAssetCounts();
         InvalidateAssetPools();

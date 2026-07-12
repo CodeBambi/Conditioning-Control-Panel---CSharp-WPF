@@ -56,6 +56,37 @@ namespace ConditioningControlPanel.Models
             set { _checkedFileCount = value; OnPropertyChanged(); }
         }
 
+        // Per-folder (non-recursive) image/video counts, classified once during the off-thread
+        // BuildFolderTree pass. CountAssetsRecursive sums these instead of re-calling
+        // Directory.GetFiles on the UI thread for every refresh/toggle.
+        private int _imageCount;
+        public int ImageCount
+        {
+            get => _imageCount;
+            set { _imageCount = value; OnPropertyChanged(); }
+        }
+
+        private int _videoCount;
+        public int VideoCount
+        {
+            get => _videoCount;
+            set { _videoCount = value; OnPropertyChanged(); }
+        }
+
+        private int _checkedImageCount;
+        public int CheckedImageCount
+        {
+            get => _checkedImageCount;
+            set { _checkedImageCount = value; OnPropertyChanged(); }
+        }
+
+        private int _checkedVideoCount;
+        public int CheckedVideoCount
+        {
+            get => _checkedVideoCount;
+            set { _checkedVideoCount = value; OnPropertyChanged(); }
+        }
+
         public string FileCountDisplay => FileCount > 0 ? $"({FileCount} files)" : "";
 
         public ObservableCollection<AssetTreeItem> Children { get; } = new();

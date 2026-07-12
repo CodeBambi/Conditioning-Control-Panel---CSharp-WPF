@@ -152,7 +152,14 @@ public sealed class ChaosTunnelService : IChaosTunnelService, IDisposable
         _ready = false;
         _pending.Clear();
 
-        _host = new WebView2BrowserHost { AdditionalBrowserArguments = AntiMpoArgs };
+        _host = new WebView2BrowserHost
+        {
+            AdditionalBrowserArguments = AntiMpoArgs,
+            // Distinct user-data folder so the tunnel's WebView2 environment does not collide with the
+            // dashboard or DTRH hosts' process-exclusive folder lock (#4).
+            UserDataFolder = "avalonia_browser_data_tunnel",
+            Logger = _logger,
+        };
         _host.WebMessageReceived += OnWebMessageReceived;
         _host.SetVirtualHostToFolder(VirtualHost, Path.Combine(AppContext.BaseDirectory, "Resources", "web"));
 

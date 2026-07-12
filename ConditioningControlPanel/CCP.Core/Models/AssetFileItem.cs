@@ -74,6 +74,9 @@ namespace ConditioningControlPanel.Models
             set { _isGif = value; OnPropertyChanged(); }
         }
 
+        // Holds the decoded thumbnail. Kept object? because this model is shared with the
+        // WPF head (which assigns System.Windows.Media.ImageSource); the Avalonia head
+        // assigns an Avalonia.Media.Imaging.Bitmap here. Image.Source binds to it directly.
         private object? _thumbnail;
         public object? Thumbnail
         {
