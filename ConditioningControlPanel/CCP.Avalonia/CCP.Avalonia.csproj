@@ -94,12 +94,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.0.5" />
+    <!-- Avalonia 12.1.0 bump (2026-07-12). Core framework + Skia/HarfBuzz/DataGrid all ship 12.1.0.
+         Themes.Fluent, Fonts.Inter, ColorPicker, ItemsRepeater have NO 12.1.0 published (max 12.0.5/12.0.0);
+         they declare Avalonia(>=12.0.x) as a floor, so they remain forward-compatible with 12.1.0 and
+         produce no NU16xx conflict. Bumping them to a non-existent 12.1.0 would NU1602. Leave at published max. -->
+    <PackageReference Include="Avalonia" Version="12.1.0" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.5" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.5" />
-    <PackageReference Include="Avalonia.Skia" Version="12.0.5" />
-    <PackageReference Include="Avalonia.HarfBuzz" Version="12.0.5" />
-    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.0.1" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.0" />
+    <PackageReference Include="Avalonia.HarfBuzz" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.0" />
     <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.0.5" />
     <!-- ItemsRepeater + UniformGridLayout: the only v12-correct virtualizing panel for the
          Assets thumbnail grid (stock WrapPanel does not virtualize). This is the first-party
