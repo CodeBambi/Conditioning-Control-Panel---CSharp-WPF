@@ -96,7 +96,11 @@ internal sealed class X11TitleBackend : ILinuxTitleProviderBackend
                 // §3.1: one scoped error trap wraps the active-window read AND the title read.
                 // The BadWindow race is between these two reads; XSync at the end delivers any
                 // pending X error, and a non-zero code → null for this poll (no process death).
-                XlibErrorTrap.Reset();
+                // PER-DISPLAY overload: the legacy parameterless Reset()/LastErrorCode pair
+                // targets the FIRST-registered display, which is whichever backend (overlay,
+                // title, frame-source) happened to construct first in DI — reading it here
+                // would miss this display's errors AND clear another backend's trap scope.
+                XlibErrorTrap.Reset(_display);
 
                 IntPtr activeWindow = ReadActiveWindowLocked();
                 string? title = activeWindow == IntPtr.Zero
@@ -104,7 +108,7 @@ internal sealed class X11TitleBackend : ILinuxTitleProviderBackend
                     : ReadWindowTitleLocked(activeWindow);
 
                 X11Interop.XSync(_display, false);
-                int err = XlibErrorTrap.LastErrorCode;
+                int err = XlibErrorTrap.GetLastErrorCode(_display);
                 if (err != 0)
                 {
                     // §3.1: trapped error (e.g. BadWindow = 3 when the active window was
@@ -143,13 +147,20 @@ internal sealed class X11TitleBackend : ILinuxTitleProviderBackend
             _display, _root, _atomNetActiveWindow,
             0, 1, false, X11Interop.XA_WINDOW,
             out IntPtr type, out int format, out ulong nItems, out _, out IntPtr prop);
-        if (status != X11Interop.Success || nItems == 0 || prop == IntPtr.Zero)
+        // XFree whenever Xlib handed us a buffer — on Success with a TYPE MISMATCH Xlib
+        // still allocates (nItems == 0, prop != NULL); the free must not be gated on nItems.
+        if (prop == IntPtr.Zero)
         {
             return IntPtr.Zero;
         }
 
         try
         {
+            if (status != X11Interop.Success || nItems == 0)
+            {
+                return IntPtr.Zero;
+            }
+
             // format 32 → each item is an 8-byte long on LP64; read as IntPtr.
             return Marshal.ReadIntPtr(prop);
         }
@@ -184,13 +195,17 @@ internal sealed class X11TitleBackend : ILinuxTitleProviderBackend
             _display, window, property,
             0, TitleLongLength, false, expectedType,
             out IntPtr type, out _, out ulong nItems, out _, out IntPtr prop);
-        if (status != X11Interop.Success || nItems == 0 || prop == IntPtr.Zero)
+        // XFree whenever Xlib handed us a buffer — on Success with a TYPE MISMATCH (property
+        // exists but is not UTF8_STRING) Xlib still allocates a buffer with nItems == 0;
+        // gating the free on nItems leaked it once per 1.5s poll on such windows.
+        if (prop == IntPtr.Zero)
         {
             return null;
         }
 
         try
         {
+            if (status != X11Interop.Success || nItems == 0) return null;
             if (type != expectedType) return null; // §3.3: verify returned type for the UTF-8 path
             return Marshal.PtrToStringUTF8(prop);
         }
@@ -209,13 +224,16 @@ internal sealed class X11TitleBackend : ILinuxTitleProviderBackend
             _display, window, property,
             0, TitleLongLength, false, X11Interop.AnyPropertyType,
             out _, out _, out ulong nItems, out _, out IntPtr prop);
-        if (status != X11Interop.Success || nItems == 0 || prop == IntPtr.Zero)
+        // XFree whenever Xlib handed us a buffer (see ReadUtf8PropertyLocked — never gate
+        // the free on nItems).
+        if (prop == IntPtr.Zero)
         {
             return null;
         }
 
         try
         {
+            if (status != X11Interop.Success || nItems == 0) return null;
             return Marshal.PtrToStringAnsi(prop);
         }
         finally

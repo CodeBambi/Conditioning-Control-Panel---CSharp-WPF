@@ -40,9 +40,10 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Linux.Platform.Interop;
 ///
 /// Usage pattern (caller holds its own per-display lock so trap scopes on that display
 /// never interleave): Reset(display) → issue Xlib requests → XSync(display, false) →
-/// GetLastErrorCode(display). The legacy parameterless Reset()/LastErrorCode pair (used by
-/// the overlay backend) targets the FIRST-registered display, which is the overlay's
-/// connection at app startup.
+/// GetLastErrorCode(display). Every caller (overlay, fg-title, frame-source) passes its OWN
+/// display explicitly — the former parameterless "first-registered display" shim was removed
+/// because which backend registers first is a DI-resolution-order accident, and reading the
+/// wrong slot both misses the caller's errors and clears another backend's trap scope.
 /// </summary>
 internal static class XlibErrorTrap
 {
@@ -60,11 +61,6 @@ internal static class XlibErrorTrap
     // (taking a monitor lock inside an Xlib error handler risks deadlock). Writes are rare
     // (only on errors); reads happen once per trap scope after XSync.
     private static readonly ConcurrentDictionary<IntPtr, int> _codesByDisplay = new();
-
-    // First display registered, targeted by the legacy parameterless Reset()/LastErrorCode
-    // API (the overlay backend). The overlay registers at app startup, before any frame
-    // source; frame-source backends use the explicit per-display overloads.
-    private static IntPtr _legacyDisplay;
 
     /// <summary>
     /// Registers a display connection we own. Installs the process-global handler on
@@ -90,13 +86,6 @@ internal static class XlibErrorTrap
                 next[^1] = display;
                 _ownedDisplays = next;
             }
-
-            // First registration wins — the overlay backend registers first at app startup,
-            // so the parameterless Reset()/LastErrorCode pair keeps targeting its display.
-            if (_legacyDisplay == IntPtr.Zero)
-            {
-                _legacyDisplay = display;
-            }
         }
     }
 
@@ -121,20 +110,12 @@ internal static class XlibErrorTrap
             _ownedDisplays = next;
 
             _codesByDisplay.TryRemove(display, out _);
-
-            // If the legacy display is going away, repoint the parameterless API at the next
-            // remaining owned display (or zero, making the legacy calls no-ops). Keeps the
-            // overlay's parameterless API valid as long as ANY owned display is live.
-            if (display == _legacyDisplay)
-            {
-                _legacyDisplay = _ownedDisplays.Length > 0 ? _ownedDisplays[0] : IntPtr.Zero;
-            }
         }
     }
 
     /// <summary>
     /// Clears the recorded error code for <paramref name="display"/>. Call at the start of a
-    /// trap scope (per-display overload — used by the frame-source backend).
+    /// trap scope. Every backend passes its OWN display.
     /// </summary>
     public static void Reset(IntPtr display)
     {
@@ -145,23 +126,10 @@ internal static class XlibErrorTrap
     /// <summary>
     /// The last X error code recorded for <paramref name="display"/> since the matching
     /// <see cref="Reset(IntPtr)"/> (0 = none). Read AFTER XSync so pending errors have been
-    /// delivered (per-display overload — used by the frame-source backend).
+    /// delivered.
     /// </summary>
     public static int GetLastErrorCode(IntPtr display)
         => display != IntPtr.Zero && _codesByDisplay.TryGetValue(display, out int code) ? code : 0;
-
-    /// <summary>
-    /// Clears the recorded error code for the first-registered (legacy) display. Legacy
-    /// parameterless API — used by the overlay backend; prefer the per-display overload.
-    /// </summary>
-    public static void Reset() => Reset(System.Threading.Volatile.Read(ref _legacyDisplay));
-
-    /// <summary>
-    /// The last X error code recorded for the first-registered (legacy) display since
-    /// <see cref="Reset()"/> (0 = none). Read AFTER XSync. Legacy parameterless API — used
-    /// by the overlay backend; prefer the per-display overload.
-    /// </summary>
-    public static int LastErrorCode => GetLastErrorCode(System.Threading.Volatile.Read(ref _legacyDisplay));
 
     private static int HandleError(IntPtr display, ref X11Interop.XErrorEvent errorEvent)
     {

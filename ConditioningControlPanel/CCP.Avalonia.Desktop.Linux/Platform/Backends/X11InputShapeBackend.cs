@@ -390,7 +390,7 @@ public sealed class X11InputShapeBackend : ILinuxOverlayBackend
             {
                 if (_display == IntPtr.Zero) return;
 
-                XlibErrorTrap.Reset();
+                XlibErrorTrap.Reset(_display);
 
                 var root = XDefaultRootWindow(_display);
                 var netWmState = XInternAtom(_display, NET_WM_STATE, false);
@@ -407,7 +407,7 @@ public sealed class X11InputShapeBackend : ILinuxOverlayBackend
                 SendNetWmStateMessage(root, netWmState, NET_WM_STATE_ADD, netWmStateSkipPager);
 
                 XSync(_display, false);
-                int err = XlibErrorTrap.LastErrorCode;
+                int err = XlibErrorTrap.GetLastErrorCode(_display);
                 if (err != 0)
                 {
                     RecordXError(err, "_NET_WM_STATE client messages");
@@ -463,7 +463,7 @@ public sealed class X11InputShapeBackend : ILinuxOverlayBackend
             {
                 if (_display == IntPtr.Zero) return false;
 
-                XlibErrorTrap.Reset();
+                XlibErrorTrap.Reset(_display);
 
                 if (!_clickThroughEnabled)
                 {
@@ -487,7 +487,7 @@ public sealed class X11InputShapeBackend : ILinuxOverlayBackend
                 // observes any BadWindow/BadMatch from THIS sequence (contract §3.3).
                 XSync(_display, false);
 
-                int err = XlibErrorTrap.LastErrorCode;
+                int err = XlibErrorTrap.GetLastErrorCode(_display);
                 if (err != 0)
                 {
                     RecordXError(err, "input shape");
