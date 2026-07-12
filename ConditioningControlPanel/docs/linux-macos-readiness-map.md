@@ -70,3 +70,33 @@ ducking — each is a backend family, not a single impl. "Multiple versions" = t
 > **Hard constraint:** the driver has no Linux host. Every impl here is compile-only until exercised on a
 > real Linux desktop (or CI with an X display). Sequencing must pair each slice with a concrete
 > verification path (CI headless / owner Linux test), or it is unverifiable.
+
+## Landing log — Linux/macOS bring-up (2026-07-12, @driver via workflows)
+
+Order of attack was hardest-first per the leverage list; every impl fable-5-hardened where judgment-sensitive.
+
+- **[DONE] Foreground-title provider (Linux X11)** — `6dc22c30`. `LinuxForegroundWindowTitleProvider` +
+  `X11TitleBackend` (own `XOpenDisplay`, atoms interned, per-display chained `XlibErrorTrap` on both
+  `_NET_ACTIVE_WINDOW` root read + `_NET_WM_NAME`/`WM_NAME` UTF8 read; `XFree` on every buffer incl
+  type-mismatch). Registered in Linux `Program.cs`. **Lights up awareness AI-1/2/10 on X11/XWayland.**
+  Limitation: an X11 connection on a native-Wayland session sees only XWayland titles → native-Wayland
+  apps return "unknown" honestly; `wlr-foreign-toplevel-management` backend remains a documented wave-3 gap
+  (NOT stripped). Privacy: titles memory-only, never disk/net/logs, no PID enum (`AwarenessTitlePrivacyTests`).
+- **[DONE, wiring in flight] Screen capture (Linux X11 `IFrameSource`)** — `6dc22c30`. `LinuxFrameSource` +
+  `X11BasicFrameSourceBackend` (`XGetImage` + stride/bit-order/alpha repack to the tight-packed `RawFrame`
+  contract, `XDestroyImage` every image, scoped trap, black-frame fallback = opaque black incl partial
+  hot-plug clamp). Privacy: frames memory-only, never disk/net/logs, no idle capture (consumer-pull only;
+  `FrameSourcePrivacyTests`). DI registration deferred to the wave-2 smoke-harness owner (in flight).
+- **[IN FLIGHT] Overlay activation (Linux X11)** — the X11 overlay backend (XFixes input-shape click-through +
+  `_NET_WM_STATE_ABOVE`, per-region = union of CAPTURING layers) landed earlier (`f643fa91`); wave-2a wires
+  `AvaloniaPlatformCapabilities.SupportsClickThrough` (was hardcoded `IsWindows`) to an X11-availability
+  probe so the click-through feature becomes SELECTABLE on Linux (stays default-OFF).
+- **[IN FLIGHT] CI smoke-harness (Linux)** — making the repo-root `linux-smoke.yml` xvfb lane actually
+  exercise the head (boot→tabs→exit0) instead of boot+timeout; `SmokeTestRunner.cs` stays untouched.
+- **[DONE] DTRH web-asset bundling (Linux + macOS)** — `7b684d45`. `Content Include=..\Resources\web\**` mirror.
+- **[DONE] macOS hard-seam contracts** — `63aafd55`. fable-5 designs for overlay (`NSWindow.level` +
+  `ignoresMouseEvents` per-region poller), foreground-title (AXAPI/CGWindowList), framesource (ScreenCaptureKit
+  vs CGDisplayStream), preflight-gated never-prompt-from-seam TCC strategy, macos-latest headed-smoke CI recipe.
+  Impl pending §7.1 web-verification pass. **Cross-platform base: Avalonia 12.1.0, X11 backend (no native Wayland).**
+
+Core test floor progression this wave: 820 → 833 (fg-title) → 835 (framesource) → 848 (merge) → 851 (fable-5 harden).
