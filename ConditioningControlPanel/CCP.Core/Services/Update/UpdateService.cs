@@ -35,64 +35,42 @@ public class UpdateService : IUpdateService, IDisposable
     public bool IsDownloading { get; private set; }
 
     /// <inheritdoc />
-    public string CurrentVersion => "6.3.0";
+    public string CurrentVersion => "6.3.1";   // WPF Services/Update/UpdateService.cs (v6.3.1 bump)
 
     /// <summary>
     /// Hard-coded current application version (single source for heads that need a const,
     /// e.g. the What's-New dialog title). Mirrors the WPF UpdateService.AppVersion constant.
     /// </summary>
-    public const string AppVersion = "6.3.0";
+    public const string AppVersion = "6.3.1";   // WPF Services/Update/UpdateService.cs:23
 
     /// <summary>
     /// Patch notes for the current version — shown in the update/what's-new dialogs and used as a
     /// fallback when GitHub release notes are unavailable. Update together with <see cref="AppVersion"/>.
     /// </summary>
-    public const string CurrentPatchNotes = @"v6.3.0 - Deeper Down
+    public const string CurrentPatchNotes = @"v6.3.1 - Deeper Down
 
-The Rabbit Hole is reborn as a real game. What used to be a screen full of
-popping bubbles is now a 3D descent you fall through, room by room, all the
-way down.
+6.3.0 rebuilt Down the Rabbit Hole into a guided descent through four chambers and
+sixteen biomes, with a Warren leveling hub, boon drafts, and full voiceover. 6.3.1
+keeps refining that rework - smoothing the onboarding, the HUD, and the rough edges.
 
-✨ THE FALL (all-new Rabbit Hole)
-- Descend a living 3D tunnel that reacts to you as you drop.
-- A full roguelite loop - draft boons, grab toys, build a loadout, cash out.
-- The Warren: a hub to spend what you earn, unlock dials, and learn the ropes.
-- THE WEATHER: mood zones that change how the tunnel plays.
-- Clickable pickups, in-world effects, and ambient reactivity everywhere.
+✨ FEATURES
+- Down the Rabbit Hole: brand-new Cheshire visual-novel tutorial that walks you in, replacing the old lesson cards.
+- 3 local save slots you pick before the hole opens, so multiple runs stay separate.
+- Full biome-drift voiceover now rendered across the descent.
 
-🗺️ THE DESCENT
-- Four Chambers, each with its own palette, shaders, and voice.
-- 16 biomes on a kink-discovery arc, each with its own look and particles.
-- Acts I through IV, gated by a 16-square casino reveal.
-- Real forking junctions and 3-door draft rooms - pick your path.
-- Boons are picked inside the tube now: reach out and shatter the card.
+🎨 UI/UX
+- Emote stack icon and HUD/VN polish pass.
+- Spiral overlay now pulls from a pool of 8 animated effects at random.
+- New boon card art.
+- 2-second reveal delay plus a spotlight halo on whatever a lesson or Cheshire is explaining.
+- De-stormed narration cooldown so voice lines stop overlapping.
 
-🏠 THE DOLLHOUSE
-- The hub is now a 3D room you stand inside.
-- Gold economy: earn gold, unlock dials, drop your level for more.
-- Options and dials are earned through play, not handed to you.
+🔧 BUG FIXES
+- Fixed a boot hang where the game loader spun forever (stray backtick in a CSS template).
+- Fixed a video black-screen crash during runs.
+- Boon draft now auto-picks a random card on timeout instead of leaving you with nothing.
 
-🎁 BOONS, TOYS and TOUCH
-- Fresh card art for all 20 boons and power-ups.
-- 10 new duo boons and a reworked wand ink trail.
-- Grab toys mid-fall, fling flash clips with a ripple, paddle cards with your cursor.
-- Hold a wall gif to swing the camera onto it.
-- Consumable actives ride the run-pick ribbon and grey out when spent.
-
-🗣️ VOICE
-- 400 region voice clips plus triple biome drift narration.
-- A full Circe voice set (576 lines) with a clean voice gate.
-- The hole picks for you, and tells you so.
-
-📦 ALSO IN THIS RELEASE
-- Link your phone: scan a QR to sign the mobile app into your account.
-- Daily settings backups so a bad edit never costs you your setup.
-- Discord share prompt when you link, plus refreshed share UX.
-- Fixes: quiz category leak, lockdown key hook, haptics, AI effects, a startup
-  crash guard, and update-restart finally landing.
-- Sync fix: an empty server read no longer resets you to level 1.
-
-Season: Jelly July";
+Season: Jelly July";   // WPF Services/Update/UpdateService.cs:26-50 (verbatim)
 
     public UpdateService(IUpdateInstaller installer, ISettingsService settingsService, ILogger<UpdateService>? logger = null)
     {
