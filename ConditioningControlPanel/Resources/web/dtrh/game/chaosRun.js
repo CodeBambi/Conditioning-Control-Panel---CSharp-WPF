@@ -2337,11 +2337,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     }
 
     // The draft table: hold the field, clear it with a burst, deal the cards.
+    clearRoomHazards();   // grant a live drop + stop any video BEFORE the run parks
     drafting = true;
     state = 'drafting';
     syncHeld();
     field.clearAll(true);
-    ctx.powerupDrops?.clearLive();   // fade any live drop so it can't hang ungrabbable through the draft
+    ctx.powerupDrops?.clearLive();   // safety net: fade any drop clearRoomHazards didn't take
     sfx('wave_clear', 0.6);
     pulse('150,200,255', 0.30);
     bark('wave-cleared', { wave: st.waveIndex });
@@ -2381,12 +2382,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function beginFinalLanding() {
     lessons.onLoopCompleted();
     bark('wave-escalated', { wave: st.waveIndex });
+    clearRoomHazards();   // grant a live drop + stop any video BEFORE the Landing parks
     finalLandingActive = true;
     drafting = true;
     state = 'drafting';
     syncHeld();
     field.clearAll(true);
-    ctx.powerupDrops?.clearLive();   // the Landing parks the fall: don't strand a drop ungrabbable beside it
+    ctx.powerupDrops?.clearLive();   // safety net: fade any drop clearRoomHazards didn't take
     sfx('wave_clear', 0.6);
     pulse('150,200,255', 0.30);
     bark('wave-cleared', { wave: st.waveIndex });
@@ -2504,6 +2506,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // (consumable) or apply it (passive), flying the art from the tube point to its HUD slot.
   // The FIRST time you ever grab an item, a pause+explain card fires and the dock/apply is
   // DEFERRED until you dismiss it - so the art flies into the HUD after you've read what it is.
+  // A boon room is opening. Call this while state is still 'running': it stops any
+  // in-flight mandatory-video card (else it plays on behind the parked room) and
+  // auto-grants a live power-up drop instead of letting it fade away ungrabbable.
+  function clearRoomHazards() {
+    try { payloadFx?.cancelHeavy(); } catch (e) { /* ignore */ }
+    try {
+      const live = ctx.powerupDrops?.getPickables?.() || [];
+      if (live.length) ctx.powerupDrops.grab(live[0]);   // grant while state==='running'
+    } catch (e) { /* ignore */ }
+  }
+
   function handlePowerupGrab(id, kind, screenPos) {
     const def = boonDefById(id);
     if (!def) return;
@@ -2772,6 +2785,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   function spawnTick() {
+    // Only spawn while the run is actually live - never into the recap/hub/menu.
+    if (state !== 'running') { spawnWait = 0.3; return; }
     // Held (paused / covered / drafting / the persona mid-line): hold the field and
     // retry shortly. Guards the same-frame case where the empty-field rescue zeroes
     // spawnWait in tick() just as a VN beat sets the hold.
@@ -2793,13 +2808,16 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const behavioralSpawned = room && !cfg.scriptedFirstRun && trySpawnBehavioral(effIntensity);
 
     if (!behavioralSpawned && room) {
-      // Be gentle with the tape: no video bubble while a heavy effect runs, and
-      // none when the loop/run is too close to its end for the fuse + 15s slice.
+      // Be gentle with the tape: no video bubble while a heavy effect runs, none
+      // when the loop/run is too close to its end for the fuse + 15s slice, and
+      // none once the finish countdown / terminal Landing is armed (a video that
+      // starts there would still be playing as we surface to the menu).
       let enabled = gateGiants(cfg.enabledVariants);
       const waveLen = st.runDurationSec / st.waveCount;
       const waveLeft = waveLen - (st.elapsedSec % waveLen);
       const runLeft = st.runDurationSec - st.elapsedSec;
-      if ((!enabled || enabled.includes('video')) && (heavyActive() || waveLeft < 14 || runLeft < 18)) {
+      if ((!enabled || enabled.includes('video'))
+          && (heavyActive() || waveLeft < 14 || runLeft < 18 || st.finishing || st.finalLandingDone)) {
         enabled = (enabled || ALL_IDS).filter((id) => id !== 'video');
       }
       if ((!enabled || enabled.includes('htlink')) && heavyActive()) {
@@ -3123,6 +3141,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     happy.onRunEnded();
     if (guide) guide.onRunEnded();   // drop any pending Cheshire beats before the recap
     if (ranFullCourse) awardLoopTip();   // the final loop ends at the run clock
+    // A mandatory-video card is an in-world DOM node (payloadFx front layer); the
+    // field teardown doesn't touch it, so stop it here or it overlays the recap + hub.
+    try { payloadFx?.cancelHeavy(); } catch (e) { /* ignore */ }
     field.clearAll();
     clearAmbient();
     if (ctx.spawner) ctx.spawner.setAutoSpotlight(true); // the idling tunnel may feature again
@@ -3184,6 +3205,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.setVisible(false);
     hudUi.setPicks([]);
     hudUi.setHabits([]);
+    try { payloadFx?.cancelHeavy(); } catch (e) { /* ignore */ }   // kill any lingering video card before the hub
     field.clearAll();
     clearAmbient();
     if (bMech) bMech.reset();   // a run aborted mid-chamber must not leak its biome mechanic into the hub

@@ -312,7 +312,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
 
   // ---- the bubble game (main mechanic) ----------------------------------------
   const bubbles = createBubbles({
-    hud, canvas,
+    hud, canvas, media,
     onPop: (kind, gain, combo) => {
       director.notePop(kind, gain, combo);
       hudBits.setScore(bubbles.getScore(), combo);
@@ -354,7 +354,28 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       }
     }
   }
+  // ---- fullscreen <-> pause reconciliation -------------------------------------
+  // In element-fullscreen, Chromium/WebView2 eats the FIRST Esc to EXIT fullscreen
+  // (a mandated behavior we can't disable), so it never reaches onKeyDown - the
+  // player had to press Esc twice to pause. We instead treat that fullscreen-exit
+  // as the pause: on any exit during a live run, open the pause card. A DELIBERATE
+  // un-fullscreen (dock button / F11) sets suppressExitPause so it doesn't pause.
+  let suppressExitPause = false;
+  function toggleFullscreen() {
+    if (FS.isActive()) {
+      suppressExitPause = true;
+      FS.leave();
+      setTimeout(() => { suppressExitPause = false; }, 400); // self-heal if the exit event never fires
+    } else FS.enter();
+  }
+  document.addEventListener(FS.event, () => {
+    if (FS.isActive()) return;                                  // only the EXIT edge
+    if (suppressExitPause) { suppressExitPause = false; return; } // we left on purpose
+    if (game && runActive && !gamePaused && !director.isOver()) setGamePaused(true);
+  });
+
   function onKeyDown(e) {
+    if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); return; }  // F11 toggles fullscreen
     if (e.key !== 'Escape') return;
     if (panel.isOpen()) { panel.close(); return; }
     // M5: while the Warren is up it owns Esc (backs out of the dollhouse /
@@ -588,6 +609,10 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
 
   function setRunActive(on) {
     runActive = !!on;
+    // The options panel is session-lived and shared hub<->descent: force it shut
+    // on a run transition so opening it in the Warren (or leaving it open) never
+    // strands it over the descent/hub.
+    try { if (panel.isOpen()) panel.close(); } catch (e) { /* ignore */ }
     // In game mode the hub (Warren) owns its own chrome, so suppress the Fall's
     // redundant dock + gear there (the "double options" bug); a live descent
     // keeps them (that's the in-run gear the Eye toggle leaves visible).
@@ -618,7 +643,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       // the hub - see the sf-hub CSS - so the hub carries its own).
       fullscreenSupported: FS.supported,
       isFullscreen: () => FS.isActive(),
-      toggleFullscreen: () => { FS.isActive() ? FS.leave() : FS.enter(); },
+      toggleFullscreen: () => toggleFullscreen(),
       onFullscreenChange: (cb) => { document.addEventListener(FS.event, cb); return () => document.removeEventListener(FS.event, cb); },
       // Reveal earned option-panel dials from the meta snapshot (purchased "Dials").
       syncOptionUnlocks: (ids) => panel.setUnlocks(ids),
@@ -1062,10 +1087,10 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
       fsBtn.classList.toggle('is-on', on);
       fsBtn.textContent = on ? '] [' : '[ ]';
       fsBtn.setAttribute('aria-label', on ? 'exit fullscreen' : 'go fullscreen');
-      fsBtn.title = on ? 'exit fullscreen' : 'go fullscreen';
+      fsBtn.title = on ? 'exit fullscreen (F11)' : 'go fullscreen (F11)';
     };
     syncFs();
-    fsBtn.addEventListener('click', () => { FS.isActive() ? FS.leave() : FS.enter(); });
+    fsBtn.addEventListener('click', () => toggleFullscreen());
     document.addEventListener(FS.event, syncFs);
     fsCleanup = () => document.removeEventListener(FS.event, syncFs);
     dock.appendChild(fsBtn);

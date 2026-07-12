@@ -13,21 +13,10 @@
  * ==========================================================================*/
 
 // Flash-image clips shown by Trigger bubbles (filenames under assets/bubbles/flash/).
-// Empty = Trigger bubbles fall back to the built-in CSS flash.
-export const FLASH_CLIPS = [
-  '20240328_163344_.webm',
-  '20241021_110458_.webm',
-  'c1b77x9zpb8g1_.webm',
-  'SPOILER_zx2ku23ddn_.webm',
-  'TrackMatteDFC_.webm',
-  'SPOILER_Tumblr_l_358184837126956_.webm',
-  'Tumblr_l_879195283460911_.webm',
-  '0_bambi2_.webm',
-  '8csmnbzhgt8g1_.webm',
-  'bg3_.webm',
-  'UG9zdDpiNzNkMmMwMGYxMDlkMDc3ZTVmODg0NDkwOGUyNmQw.webm',
-  'user3318173_39186c0bc51f_.webm',
-];
+// Empty by design: in the in-app DtRH game the flash bubbles draw from the PLAYER's
+// own media pool (hostMedia.js) instead of any bundled clips - nothing personal
+// ships. When there is no user media the flash falls back to the built-in CSS flash.
+export const FLASH_CLIPS = [];
 
 // Spoken voice lines under assets/bubbles/voices/. Voices are OFF by default; the
 // visitor must flip the "Voices" toggle. FLASH_VOICES play on Flash/Trigger pops,

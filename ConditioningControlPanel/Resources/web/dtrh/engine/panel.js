@@ -11,6 +11,7 @@ import { S, updateSetting, resetOptions, allWords, activeWords, setWordOn, addCu
   rungForKey, rungForFeature, UNLOCK_LADDER, RANK_NAMES, MOTIONS } from './settings.js';
 import { POOL_VARIANTS, POOL_PRESETS } from '../game/catalog.js';
 import { peekAudioState } from './audioBus.js';
+import { audioGroups, getLevel, setLevel, onLevels } from './audioLevels.js';
 
 const SLIDERS = [
   { key: 'bubbleDensity', label: 'bubbles', min: 0, max: 1.25, step: 0.05, fmt: (v) => v <= 0 ? 'off' : `${Math.round(v * 100)}%` },
@@ -152,6 +153,49 @@ export function createPanel(hud) {
       lockRefreshers.push(refreshLock);
     }
   }
+
+  // ---- audio (per-group volumes) ----------------------------------------------
+  // The same groups the in-descent audio dock exposes, surfaced here so they're
+  // reachable from the MAIN MENU too (the dock is hidden in the hub). Reads/writes
+  // audioLevels.js live; onLevels keeps these in sync if the dock moves a level.
+  const audioHead = document.createElement('div');
+  audioHead.className = 'sf-row-label sf-words-head';
+  const audioName = document.createElement('span');
+  audioName.textContent = 'audio';
+  audioHead.appendChild(audioName);
+  panel.appendChild(audioHead);
+  const audioRefreshers = [];
+  for (const g of audioGroups()) {
+    const max = g.key === 'music' ? 2 : 1;   // music is a 0..2 multiplier
+    const row = document.createElement('div');
+    row.className = 'sf-row';
+    const lab = document.createElement('div');
+    lab.className = 'sf-row-label';
+    const name = document.createElement('span');
+    name.textContent = g.label;
+    const val = document.createElement('span');
+    const fmt = (v) => `${Math.round(v * 100)}%`;
+    val.textContent = fmt(getLevel(g.key));
+    lab.append(name, val);
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = '0'; input.max = String(max); input.step = '0.05';
+    input.value = String(getLevel(g.key));
+    input.addEventListener('input', () => {
+      const v = parseFloat(input.value);
+      setLevel(g.key, v);
+      val.textContent = fmt(getLevel(g.key));
+    });
+    row.append(lab, input);
+    panel.appendChild(row);
+    audioRefreshers.push((key) => {
+      if (key && key !== g.key) return;
+      input.value = String(getLevel(g.key));
+      val.textContent = fmt(getLevel(g.key));
+    });
+  }
+  // Keep the panel's sliders live if the in-descent dock moves a level.
+  onLevels((key) => audioRefreshers.forEach((fn) => fn(key)));
 
   // ---- THE DESCENT (the old Warren run-setup tab, now regular options) --------
   // Motion / effect intensity / moods / bubble pool. These write the run* keys in
@@ -452,7 +496,22 @@ export function createPanel(hud) {
     lessonsBtn.classList.add('is-on');
     lessonsRevert = window.setTimeout(() => { lessonsRevert = 0; lessonsIdle(); }, 4000);
   });
-  lessonsWrap.append(lessonsHead, lessonsBtn);
+  // Opt out of the Cheshire guide entirely (some players find the portrait
+  // unsettling). ON = no portrait, no scenes, no tutorial voice; the plain
+  // lesson cards teach in her place. cheshireGuide reads S.hideTutorial live.
+  const hideGuideBtn = document.createElement('button');
+  hideGuideBtn.type = 'button';
+  const hideGuideLabel = 'hide the guide (Cheshire)';
+  const syncHideGuide = () => {
+    hideGuideBtn.className = 'sf-chip sf-chip--wide' + (S.hideTutorial ? ' is-on' : '');
+    hideGuideBtn.textContent = `${S.hideTutorial ? '☑' : '☐'}  ${hideGuideLabel}`;
+  };
+  syncHideGuide();
+  hideGuideBtn.addEventListener('click', () => {
+    updateSetting('hideTutorial', !S.hideTutorial);
+    syncHideGuide();
+  });
+  lessonsWrap.append(lessonsHead, lessonsBtn, hideGuideBtn);
   panel.appendChild(lessonsWrap);
 
   // ---- diagnostics -------------------------------------------------------------
