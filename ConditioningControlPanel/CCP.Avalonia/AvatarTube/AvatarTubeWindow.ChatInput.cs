@@ -10,16 +10,123 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Services.AIService;
+using CoreActivityCategory = ConditioningControlPanel.Core.Services.Awareness.ActivityCategory;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ConditioningControlPanel.Avalonia.AvatarTube
 {
     public partial class AvatarTubeWindow
     {
+        /// <summary>
+        /// Trigger a comment based on current activity or a random thought (double-click action).
+        /// Mirrors WPF AvatarTube/AvatarTubeWindow.ChatInput.cs:188-311. NOT CanReact-gated — this is
+        /// user-initiated, so the cooldown gates from the automatic reaction path do not apply here.
+        /// </summary>
         private async Task TriggerActivityCommentAsync()
         {
-            await Task.Yield();
-            Giggle(GetRandomBambiPhrase());
+            // 1. Trigger Mode Enabled: always prioritize a custom trigger (WPF ChatInput.cs:190-200).
+            if (_settings?.Current?.TriggerModeEnabled == true)
+            {
+                var triggers = _settings?.Current?.CustomTriggers;
+                if (triggers != null && triggers.Count > 0)
+                {
+                    var trigger = triggers[_random.Next(triggers.Count)];
+                    GigglePriority(trigger, aiGenerated: false);
+                    return;
+                }
+            }
+
+            // 2. Trigger Mode Disabled: 1-in-4 logic — 3/4 = preset phrase, 1/4 = AI/awareness context
+            //    (WPF ChatInput.cs:202-213).
+            _interactionCount++;
+            if (_interactionCount % 4 != 0)
+            {
+                GigglePriority(GetRandomBambiPhrase(), aiGenerated: false);
+                return;
+            }
+
+            // --- AI / awareness logic (1-in-4 chance) (WPF ChatInput.cs:215-310) ---
+            string reaction = GetRandomBambiPhrase();
+            var ai = App.Services.GetService<IAiService>();
+            bool isAiAvailable = _settings?.Current?.AiChatEnabled == true && ai is { IsAvailable: true };
+            bool gotAiResponse = false;
+
+            // Read the CURRENT awareness context via the engine's current-state accessors, falling back
+            // to the last ActivityChanged payload cached in the window (WPF ChatInput.cs:222-227).
+            var category = _awarenessService?.CurrentActivity ?? CoreActivityCategory.Unknown;
+            var detectedName = _awarenessService?.CurrentDetectedName ?? _lastAwarenessArgs?.DetectedName ?? "";
+            var serviceName = _awarenessService?.CurrentServiceName ?? _lastAwarenessArgs?.ServiceName ?? "";
+            var pageTitle = _awarenessService?.CurrentPageTitle ?? _lastAwarenessArgs?.PageTitle ?? "";
+
+            // Recognized activity -> activity comment; Unknown/Idle -> random thought (WPF ChatInput.cs:233).
+            bool isRecognizedActivity = category != CoreActivityCategory.Unknown && category != CoreActivityCategory.Idle;
+
+            if (isRecognizedActivity)
+            {
+                if (isAiAvailable && ai != null)
+                {
+                    try
+                    {
+                        if (!_isGiggling) Giggle("Hmm...");
+                        var aiReaction = await ai.GetAwarenessReactionAsync(detectedName, category.ToString(), serviceName, pageTitle);
+                        if (!string.IsNullOrEmpty(aiReaction))
+                        {
+                            reaction = aiReaction;
+                            gotAiResponse = true;
+                        }
+                        else
+                        {
+                            // Fallback to preset if AI returns empty.
+                            reaction = GetPhraseForCategory(ToLocalCategory(category), detectedName);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Failed to get AI awareness reaction on double-click");
+                        reaction = GetPhraseForCategory(ToLocalCategory(category), detectedName);
+                    }
+                }
+                else
+                {
+                    // No AI available -> use the preset.
+                    reaction = GetPhraseForCategory(ToLocalCategory(category), detectedName);
+                }
+            }
+            else
+            {
+                // Unrecognized/Idle/Desktop -> random thought (WPF ChatInput.cs:269-300).
+                if (isAiAvailable && ai != null)
+                {
+                    try
+                    {
+                        if (!_isGiggling) Giggle("Hmm...");
+                        var aiResult = await ai.GetBambiReplyExAsync("Say something random and ditzy about what we're doing (or not doing) right now.");
+                        if (aiResult.Refusal != null)
+                        {
+                            // Silent drop — fall through to the preset reaction below.
+                        }
+                        else if (!string.IsNullOrEmpty(aiResult.Text))
+                        {
+                            reaction = aiResult.Text;
+                            gotAiResponse = aiResult.IsAiGenerated;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Failed to get AI random thought on double-click");
+                    }
+                }
+            }
+
+            // Double bounce for AI responses to attract attention (WPF ChatInput.cs:302-306).
+            if (gotAiResponse)
+            {
+                PlayDoubleBounce();
+            }
+
+            // Display with priority; the badge only fires for an actual AI-generated reaction — preset
+            // fallbacks are unmarked (WPF ChatInput.cs:308-310).
+            GigglePriority(reaction, aiGenerated: gotAiResponse);
         }
 
         private void ImgAvatar_MouseLeftButtonDown()
