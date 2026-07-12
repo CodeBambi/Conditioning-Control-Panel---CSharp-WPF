@@ -34,6 +34,30 @@ public sealed class BouncingTextLayer : BaseLayer
         }
     }
 
+    /// <summary>
+    /// CAPTURE-REGION: each bouncing phrase captures clicks over its drawn glyph rect (the
+    /// 2026-07-09 rule moved bouncing text to capture-by-default). Item X/Y is the text baseline
+    /// (DrawText anchor for a Left-aligned paint); width/height are estimated from FontSize and
+    /// text length, anchored above the baseline so the rect covers the glyphs.
+    /// </summary>
+    public override void CollectCaptureRegions(
+        ConditioningControlPanel.Core.Services.Compositor.CaptureMaskBuilder builder,
+        System.Collections.Generic.IReadOnlyList<ConditioningControlPanel.Core.Platform.ScreenInfo> screens)
+    {
+        lock (_sync)
+        {
+            foreach (var item in _items)
+            {
+                var fs = item.FontSize > 0 ? item.FontSize : 32;
+                var text = item.Text.AsSpan();
+                var charCount = text.IsEmpty ? 1 : text.Length;
+                var w = charCount * fs * 0.6;
+                var h = fs * 1.4;
+                builder.Add(item.X, item.Y - fs, w, h);
+            }
+        }
+    }
+
     /// <summary>Screen bounds for edge collision (updated by service).</summary>
     public double MinX { get; set; } = 0;
     public double MinY { get; set; } = 0;

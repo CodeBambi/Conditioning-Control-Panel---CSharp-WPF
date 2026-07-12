@@ -196,6 +196,27 @@ public sealed class FlashLayer : BaseLayer
         return false;
     }
 
+    /// <summary>
+    /// CAPTURE-REGION: each flash disc captures clicks over the rect it paints (the 2026-07-09
+    /// rule moved flash to capture-by-default — clicking a flash must NOT leak to the app
+    /// behind). Every live item contributes its bounds rect, regardless of <see cref="FlashItem.Clickable"/>:
+    /// a non-clickable flash still blocks the region it occupies (a click on it should pop the
+    /// flash via the hook event path, not reach the desktop).
+    /// </summary>
+    public override void CollectCaptureRegions(
+        ConditioningControlPanel.Core.Services.Compositor.CaptureMaskBuilder builder,
+        System.Collections.Generic.IReadOnlyList<ConditioningControlPanel.Core.Platform.ScreenInfo> screens)
+    {
+        lock (_sync)
+        {
+            for (int i = 0; i < _items.Count; i++)
+            {
+                var item = _items[i];
+                builder.Add(item.X, item.Y, item.Width, item.Height);
+            }
+        }
+    }
+
     public sealed class FlashItem
     {
         public Guid Id { get; }

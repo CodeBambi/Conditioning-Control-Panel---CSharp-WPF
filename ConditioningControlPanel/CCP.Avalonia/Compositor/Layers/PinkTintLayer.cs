@@ -23,6 +23,14 @@ public sealed class PinkTintLayer : BaseLayer
 
     public override int ZIndex => CompositorLayers.PinkTint;
 
+    /// <summary>
+    /// AMBIENT click-through (per-region rule 2026-07-09): the theme color filter is tinted
+    /// glass the user works THROUGH, so its painted region is excluded from the capture mask
+    /// and clicks pass to the app behind. Rendered semi-transparent (opacity &lt; 1) by the
+    /// service so the desktop stays visible beneath it.
+    /// </summary>
+    public override bool IsAmbientClickThrough => true;
+
     public override bool IsActive => _opacity > 0;
 
     /// <summary>Current tint color (read-only; test/diagnostic only — the service owns all state).</summary>

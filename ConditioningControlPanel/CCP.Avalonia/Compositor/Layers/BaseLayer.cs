@@ -47,6 +47,28 @@ public abstract class BaseLayer : IAvaloniaLayer
 
     public abstract void Render(SKCanvas canvas, ConditioningControlPanel.Core.Platform.PixelRect bounds, TimeSpan deltaTime);
 
+    /// <summary>
+    /// AMBIENT CLICK-THROUGH AFFINITY bridge (see <see cref="IAvaloniaLayer.IsAmbientClickThrough"/>).
+    /// Only <c>PinkTintLayer</c> and <c>SpiralLayer</c> override this to true; every other
+    /// active layer captures pointer input over its painted region and exposes that region via
+    /// <see cref="CollectCaptureRegions"/>. Declared here (not only as the interface default)
+    /// so derived-class overrides participate in interface dispatch.
+    /// </summary>
+    public virtual bool IsAmbientClickThrough => false;
+
+    /// <summary>
+    /// CAPTURE-REGION bridge (see <see cref="IAvaloniaLayer.CollectCaptureRegions"/>).
+    /// Default contributes nothing; a non-ambient layer overrides this to expose its painted
+    /// region(s) so the global mouse hook swallows clicks over them. Declared here (not only as
+    /// the interface default) so derived-class overrides participate in interface dispatch.
+    /// </summary>
+    public virtual void CollectCaptureRegions(
+        ConditioningControlPanel.Core.Services.Compositor.CaptureMaskBuilder builder,
+        System.Collections.Generic.IReadOnlyList<ConditioningControlPanel.Core.Platform.ScreenInfo> screens)
+    {
+        // Non-ambient layers override to add their painted region(s).
+    }
+
     /// <summary>Lerp helper: map value 0..1 onto [min,max].</summary>
     protected static double Lerp(double min, double max, double t) => min + (max - min) * Math.Clamp(t, 0, 1);
 

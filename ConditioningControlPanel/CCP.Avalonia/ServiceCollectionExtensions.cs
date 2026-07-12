@@ -108,6 +108,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAssetLoader, AvaloniaAssetLoader>();
         services.AddSingleton<IPointerState, AvaloniaPointerState>();
         services.AddSingleton<ISfxPlayer, AvaloniaSfxPlayer>();
+        // PER-REGION CLICK-THROUGH wiring: a single CaptureMaskState bridges the compositor
+        // (writer, UI thread) and the low-level mouse hook (reader, system hook thread),
+        // decoupling them so the hook can depend on the mask source without a DI cycle with
+        // the engine (which owns the hook's install/uninstall lifecycle for the mask).
+        services.AddSingleton<ConditioningControlPanel.Core.Services.Compositor.CaptureMaskState>();
+        services.AddSingleton<ConditioningControlPanel.Core.Services.Compositor.ICaptureMaskSource>(sp => sp.GetRequiredService<ConditioningControlPanel.Core.Services.Compositor.CaptureMaskState>());
         services.AddSingleton<IMouseHook, AvaloniaMouseHook>();
         services.AddSingleton<IBubbleService, AvaloniaBubbleService>();
         services.AddSingleton<IBrowserHost, AvaloniaBrowserHost>();
@@ -142,8 +148,15 @@ public static class ServiceCollectionExtensions
         // not registered globally. Consumers should create AvaloniaVideoSurface directly:
         //   var surface = new AvaloniaVideoSurface(videoView);
 
-        // Unified compositor engine (replaces multi-window overlay architecture)
-        services.AddSingleton<CompositorEngine>();
+        // Unified compositor engine (replaces multi-window overlay architecture). Takes the
+        // CaptureMaskState + IMouseHook (both DI-resolved above) so it can publish the per-frame
+        // capture mask and own the hook's install lifecycle for the mask.
+        services.AddSingleton<CompositorEngine>(sp => new CompositorEngine(
+            sp.GetService<Microsoft.Extensions.Logging.ILogger<CompositorEngine>>(),
+            sp.GetService<ConditioningControlPanel.Core.Platform.IScreenProvider>(),
+            sp.GetService<ConditioningControlPanel.Core.Services.Settings.ISettingsService>(),
+            sp.GetService<ConditioningControlPanel.Core.Services.Compositor.CaptureMaskState>(),
+            sp.GetService<ConditioningControlPanel.Core.Platform.IMouseHook>()));
 
         // Offline speech recognition seam. Default = no-op (unavailable); the Windows head
         // overrides with the real Vosk/NAudio implementation in App.ConfigurePlatformServices.
