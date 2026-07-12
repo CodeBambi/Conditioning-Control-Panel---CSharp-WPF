@@ -491,4 +491,51 @@ public class DtrhMetaBridgeTests
         Assert.True(bridge.Handle(new JObject { ["op"] = "add-channel-seconds", ["seconds"] = 12.5 }));
         Assert.Equal(12.5, store.State.TotalChannelSeconds);
     }
+
+    [Fact]
+    public void SetNum_TutorialStage_OnlyClimbsUpToSixteen()
+    {
+        // The Cheshire VN tutorial arc: climb-only (0..16), mirroring lastRankSeen's one-way guard.
+        var store = new FakeChaosMetaStore { State = { TutorialStage = 2 } };
+        var bridge = MakeBridge(store);
+        // not greater than current: rejected.
+        Assert.False(bridge.Handle(new JObject { ["op"] = "set-num", ["key"] = "tutorialStage", ["value"] = 2 }));
+        Assert.Equal(2, store.State.TutorialStage);
+        // > 16 out-of-range: rejected.
+        Assert.False(bridge.Handle(new JObject { ["op"] = "set-num", ["key"] = "tutorialStage", ["value"] = 17 }));
+        Assert.Equal(2, store.State.TutorialStage);
+        // in-range climb: accepted.
+        Assert.True(bridge.Handle(new JObject { ["op"] = "set-num", ["key"] = "tutorialStage", ["value"] = 6 }));
+        Assert.Equal(6, store.State.TutorialStage);
+        // exactly 16 (ceiling): accepted.
+        Assert.True(bridge.Handle(new JObject { ["op"] = "set-num", ["key"] = "tutorialStage", ["value"] = 16 }));
+        Assert.Equal(16, store.State.TutorialStage);
+    }
+
+    [Fact]
+    public void ResetOnboarding_ZeroesTutorialStage_PurgesCheshireNarrative()
+    {
+        // reset-onboarding rewinds the Cheshire arc AND purges her namespaced once-lines + pooled
+        // cooldowns, while leaving other narrative rows untouched.
+        var store = new FakeChaosMetaStore();
+        store.State.TutorialStage = 5;
+        store.State.SeenNarrativeLines.Add("cheshire:intro");
+        store.State.SeenNarrativeLines.Add("cheshire:goodbye");
+        store.State.SeenNarrativeLines.Add("madam:welcome");   // must survive
+        store.State.NarrativeCooldownEnds["cheshire:hint"] = 12345L;
+        store.State.NarrativeCooldownEnds["madam:pool"] = 999L;   // must survive
+
+        var bridge = MakeBridge(store);
+        Assert.True(bridge.Handle(Cmd("reset-onboarding")));
+
+        Assert.Equal(0, store.State.TutorialStage);
+        // cheshire: once-lines purged.
+        Assert.DoesNotContain(store.State.SeenNarrativeLines, id => id.StartsWith("cheshire:", StringComparison.Ordinal));
+        // other narrative lines untouched.
+        Assert.Contains("madam:welcome", store.State.SeenNarrativeLines);
+        // cheshire: pooled cooldowns purged.
+        Assert.DoesNotContain(store.State.NarrativeCooldownEnds.Keys, k => k.StartsWith("cheshire:", StringComparison.Ordinal));
+        // other pooled cooldowns untouched.
+        Assert.True(store.State.NarrativeCooldownEnds.ContainsKey("madam:pool"));
+    }
 }
