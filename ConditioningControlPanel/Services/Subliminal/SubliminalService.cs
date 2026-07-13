@@ -46,6 +46,12 @@ namespace ConditioningControlPanel.Services
             public double Scale = 1.0;            // physical px per card-local DIP
         }
         private readonly List<HostedCard> _hostedCards = new();
+        // COMPOSITOR (unified overlay host): when the flag is on, cards render as a layer on
+        // the shared per-monitor Skia host - no per-screen window OR host canvas churn at all.
+        // Focus-steal still falls back to the classic windows (the host is NOACTIVATE).
+        private Compositor.SubliminalLayer? _layer;
+        private static bool UseCompositor =>
+            (App.CompositorForced || App.Settings?.Current?.UnifiedOverlayHost == true) && App.Compositor != null;
         // One ref-counted hold on the shared host while any card could be up — NOT per show
         // (host churn is exactly what solid mode exists to remove). Released on Stop/Dispose,
         // or when a one-shot's card fades out with the service not running.
@@ -120,6 +126,11 @@ namespace ConditioningControlPanel.Services
             // (removing canvas children is safe mid-run — only window churn deadlocks).
             RemoveHostedCard(_ => true);
             ReleaseHostRef();
+
+            // Compositor: drop any live layer card (activity-check, not the flag — a mid-run
+            // flag flip must not strand a fading card on the shared host).
+            if (_layer?.IsActive == true)
+                _layer.Clear();
 
             StopAudio();
 
@@ -616,6 +627,18 @@ namespace ConditioningControlPanel.Services
                 : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
             var stealsFocus = App.Settings.Current.SubliminalStealsFocus;
 
+            // Compositor: one layer call covers every target screen (solid-mode and classic
+            // rendering both collapse into the layer - bgTransparent handles the difference).
+            // Focus-steal can't come from a NOACTIVATE host, so it stays on the classic windows;
+            // a layer failure falls through to the legacy paths so a flash is never lost.
+            if (UseCompositor && !stealsFocus &&
+                ShowCompositorSubliminal(screens, text, bgColor, textColor, borderColor,
+                    bgTransparent, targetOpacity, durationMs))
+            {
+                App.InvalidateCcpWindowRectsCache();
+                return;
+            }
+
             // Solid mode can't steal focus (the shared host is NOACTIVATE by contract), so the
             // StealsFocus opt-in falls back to the classic per-screen windows.
             var useHost = App.Settings.Current.SubliminalSolidMode && !stealsFocus;
@@ -650,6 +673,48 @@ namespace ConditioningControlPanel.Services
         }
 
         private const int WS_EX_LAYERED = 0x00080000;
+
+        /// <summary>
+        /// COMPOSITOR: hand one fully resolved card (all screens at once) to the shared-host
+        /// subliminal layer. The service keeps ALL scheduling/state; the layer runs the 50ms
+        /// fade envelope itself on the engine tick. Returns false on any failure so the caller
+        /// renders classically instead - a subliminal must never be silently invisible.
+        /// </summary>
+        private bool ShowCompositorSubliminal(System.Windows.Forms.Screen?[] screens, string text,
+            Color bgColor, Color textColor, Color borderColor, bool bgTransparent,
+            double targetOpacity, int durationMs)
+        {
+            try
+            {
+                var placements = new List<Compositor.SubliminalLayer.Placement>(screens.Length);
+                foreach (var screen in screens)
+                {
+                    if (screen == null) continue;
+                    var scale = GetMonitorDpi(screen) / 96.0;
+                    var b = screen.Bounds;   // physical px
+                    placements.Add(new Compositor.SubliminalLayer.Placement(
+                        new SkiaSharp.SKRectI(b.X, b.Y, b.Right, b.Bottom), (float)scale));
+                }
+                if (placements.Count == 0) return false;
+
+                if (_layer == null)
+                {
+                    _layer = new Compositor.SubliminalLayer(App.Compositor!);
+                    App.Compositor!.RegisterLayer(_layer);
+                }
+                _layer.Flash(placements, text,
+                    new SkiaSharp.SKColor(bgColor.R, bgColor.G, bgColor.B),
+                    new SkiaSharp.SKColor(textColor.R, textColor.G, textColor.B),
+                    new SkiaSharp.SKColor(borderColor.R, borderColor.G, borderColor.B),
+                    bgTransparent, targetOpacity, durationMs);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Subliminal compositor flash failed, falling back: {E}", ex.Message);
+                return false;
+            }
+        }
 
         /// <summary>
         /// SOLID MODE (#461): render one subliminal card for <paramref name="screen"/> as a child
@@ -1073,6 +1138,11 @@ namespace ConditioningControlPanel.Services
                     if (right > left && bottom > top)
                         rects.Add(new System.Drawing.Rectangle(left, top, right - left, bottom - top));
                 }
+
+                // Compositor: the layer computes its own padded text rects (world px) from the
+                // metrics it measured at Flash time.
+                if (_layer?.IsActive == true)
+                    rects.AddRange(_layer.GetActiveTextRectsPx());
             }
             catch (Exception ex)
             {
@@ -1254,6 +1324,7 @@ namespace ConditioningControlPanel.Services
             _disposed = true;
 
             Stop();
+            try { _layer?.Clear(); } catch { }
             // App shutdown: the only place the keep-alive windows actually close.
             foreach (var win in _screenWindows.Values)
             {
