@@ -280,7 +280,29 @@ public class CompositorEngine : IDisposable
         foreach (var layer in layers) // already z-sorted; lower draws first
         {
             if (!layer.IsActive || layer.ExcludeFromCapture != window.IsExcludedSurface) continue;
-            try { layer.Render(canvas, boundsPx, dpiScale, elapsed); }
+            try
+            {
+                if (layer.WorldSpacePx)
+                {
+                    // World-space layers draw in virtual-desktop device px. The surface is
+                    // normally exactly device-px sized (ApplyNativeState stamps physical
+                    // bounds); if WPF rasterized the SKElement at a stale scale during a
+                    // mixed-DPI transition, the scale factor re-squares it.
+                    var sb = window.ScreenBoundsPx;
+                    if (sb.Width <= 0 || sb.Height <= 0) continue;
+                    canvas.Save();
+                    if (e.Info.Width != sb.Width || e.Info.Height != sb.Height)
+                        canvas.Scale(e.Info.Width / (float)sb.Width, e.Info.Height / (float)sb.Height);
+                    canvas.Translate(-sb.X, -sb.Y);
+                    layer.Render(canvas, new SKRectI(sb.X, sb.Y, sb.X + sb.Width, sb.Y + sb.Height),
+                                 dpiScale, elapsed);
+                    canvas.Restore();
+                }
+                else
+                {
+                    layer.Render(canvas, boundsPx, dpiScale, elapsed);
+                }
+            }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "CompositorEngine: layer Render failed ({Layer})", layer.GetType().Name);

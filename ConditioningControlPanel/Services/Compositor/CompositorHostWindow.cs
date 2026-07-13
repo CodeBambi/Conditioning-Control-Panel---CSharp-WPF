@@ -26,6 +26,10 @@ public class CompositorHostWindow : Window
     /// <summary>True when this host is the capture-excluded surface (brain drain et al.).</summary>
     public bool IsExcludedSurface => _excludeFromCapture;
 
+    /// <summary>This host's monitor rectangle in device pixels (world-space layers render
+    /// relative to it — see IWpfLayer.WorldSpacePx).</summary>
+    public System.Drawing.Rectangle ScreenBoundsPx => _screenBoundsPx;
+
     /// <summary>Raised by the SKElement when the surface repaints; the engine draws the layers.</summary>
     public event Action<CompositorHostWindow, SKPaintSurfaceEventArgs>? PaintSurface;
 
@@ -125,7 +129,7 @@ public class CompositorHostWindow : Window
         }
     }
 
-    private static double GetDpiScaleForScreen(System.Windows.Forms.Screen screen)
+    internal static double GetDpiScaleForScreen(System.Windows.Forms.Screen screen)
     {
         try
         {

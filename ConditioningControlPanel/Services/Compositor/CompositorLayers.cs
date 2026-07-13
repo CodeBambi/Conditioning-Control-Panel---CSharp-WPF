@@ -13,6 +13,9 @@ public static class CompositorLayers
     public const int Flash = 30;
     public const int Subliminal = 40;
     public const int Bubbles = 45;
+    // WPF-side addition (not yet in the Avalonia table — coordinate before porting): the chaos
+    // FX particle field (pop bursts / trails / bolts / ripples), above bubbles, below text.
+    public const int Fx = 48;
     public const int BouncingText = 50;
     public const int BrainDrain = 55;
     public const int Spiral = 60;

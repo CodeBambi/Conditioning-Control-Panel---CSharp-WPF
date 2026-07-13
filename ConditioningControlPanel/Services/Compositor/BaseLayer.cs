@@ -22,6 +22,8 @@ public abstract class BaseLayer : IWpfLayer
 
     public virtual bool ExcludeFromCapture => false;
 
+    public virtual bool WorldSpacePx => false;
+
     /// <summary>
     /// Flip layer activity. Safe from any thread; wakes the parked engine so the first frame
     /// renders promptly. The engine invokes OnActivated/OnDeactivated on the UI thread.

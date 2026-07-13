@@ -30,6 +30,15 @@ public interface IWpfLayer
     /// </summary>
     bool ExcludeFromCapture => false;
 
+    /// <summary>
+    /// True = this layer draws in VIRTUAL-DESKTOP device pixels (positional effects that span
+    /// monitors, e.g. pop bursts at a bubble's screen point). The engine translates the canvas so
+    /// world (0,0) is the desktop origin and passes <c>boundsPx</c> as THIS monitor's rectangle
+    /// in that same world space (for culling). Default (false) = monitor-local rendering:
+    /// (0,0) is the monitor's top-left and boundsPx starts at zero.
+    /// </summary>
+    bool WorldSpacePx => false;
+
     /// <summary>Called on the UI thread when IsActive transitions false -&gt; true.</summary>
     void OnActivated();
 
