@@ -41,7 +41,17 @@ public class BubbleService : IDisposable
     private readonly List<Bubble> _bubbles = new();
     private readonly Random _random = new();
     private DispatcherTimer? _spawnTimer;
-    private DispatcherTimer? _animationTimer; // Single shared animation timer for all bubbles
+    // Single shared animation driver for all bubbles. Driven off CompositionTarget.Rendering (the
+    // composition clock) rather than a DispatcherTimer: a DispatcherTimer at Render priority gets
+    // STARVED under UI-thread load (a mandatory video decoding + chaos FX overlays), then fires its
+    // backlog of Ticks back-to-back once the thread frees — which reads as the field lurching/jumping
+    // exactly when it's busiest. Rendering coalesces to one callback per rendered frame and simply
+    // DROPS frames under load instead of bunching, so motion stays smooth-then-degrades-gracefully.
+    // We gate the logical step to ~STEP_MS so the existing 30fps-tuned motion math is untouched.
+    private bool _animDriverHooked;                 // true while OnAnimationRenderTick is subscribed
+    private long _lastStepMs;                        // _stepClock timestamp of the last logical step
+    private const double STEP_MS = 30.0;             // logical-step gate (~30fps; was a 32ms timer)
+    private static readonly System.Diagnostics.Stopwatch _stepClock = System.Diagnostics.Stopwatch.StartNew();
     private bool _isRunning;
     private BitmapImage? _bubbleImage;
     private string _assetsPath = "";
@@ -183,13 +193,8 @@ public class BubbleService : IDisposable
         _spawnTimer.Tick += (s, e) => SpawnBubble();
         _spawnTimer.Start();
 
-        // Single shared animation timer for all bubbles (32ms = ~30 FPS, sufficient for floating bubbles)
-        _animationTimer = new DispatcherTimer(DispatcherPriority.Render)
-        {
-            Interval = TimeSpan.FromMilliseconds(32)
-        };
-        _animationTimer.Tick += AnimateAllBubbles;
-        _animationTimer.Start();
+        // Single shared animation driver for all bubbles (~30 FPS logical step, composition-clock driven)
+        StartAnimationDriver();
 
         // Spawn first bubble immediately
         SpawnBubble();
@@ -708,11 +713,10 @@ public class BubbleService : IDisposable
         _spawnTimer?.Stop();
         _spawnTimer = null;
 
-        _animationTimer?.Stop();
-        _animationTimer = null;
+        StopAnimationDriver();
 
-        // DispatcherTimer ticks are synchronous on the UI thread and won't
-        // fire after Stop(), so no delay is needed here.
+        // The Rendering handler is detached synchronously above and won't fire
+        // after this point, so no delay is needed here.
 
         // Pop all remaining bubbles
         PopAllBubbles();
@@ -894,16 +898,8 @@ public class BubbleService : IDisposable
                 if (_bubbleImage == null)
                     LoadBubbleImage();
 
-                // Ensure animation timer is running to animate the spawned bubble
-                if (_animationTimer == null || !_animationTimer.IsEnabled)
-                {
-                    _animationTimer = new DispatcherTimer(DispatcherPriority.Render)
-                    {
-                        Interval = TimeSpan.FromMilliseconds(32)
-                    };
-                    _animationTimer.Tick += AnimateAllBubbles;
-                    _animationTimer.Start();
-                }
+                // Ensure the animation driver is running to animate the spawned bubble
+                StartAnimationDriver();
 
                 var settings = App.Settings.Current;
                 // Baseline spawn: keyword-triggered bubbles follow the same
@@ -1057,10 +1053,9 @@ public class BubbleService : IDisposable
     /// </summary>
     private void StopAnimationTimerIfIdle()
     {
-        if (!_isRunning && !_chaosActive && _bubbles.Count == 0 && _animationTimer != null)
+        if (!_isRunning && !_chaosActive && _bubbles.Count == 0 && _animDriverHooked)
         {
-            _animationTimer.Stop();
-            _animationTimer = null;
+            StopAnimationDriver();
         }
     }
 
@@ -1778,18 +1773,40 @@ public class BubbleService : IDisposable
     private const int VK_LBUTTON = 0x01;
     private const int VK_RBUTTON = 0x02;   // right button is the comfy sweep choice (no stray desktop clicks)
 
-    /// <summary>Ensure the shared 30fps animation timer is running (used by chaos + SpawnOnce).</summary>
-    private void EnsureAnimationTimer()
+    /// <summary>Ensure the shared 30fps animation driver is running (used by chaos + SpawnOnce).</summary>
+    private void EnsureAnimationTimer() => StartAnimationDriver();
+
+    /// <summary>Subscribe the animation step to the composition clock. Idempotent — the
+    /// <see cref="_animDriverHooked"/> guard makes a double-subscribe impossible across the several
+    /// start paths (Start / SpawnOnce / chaos), so the field can never step twice per frame.</summary>
+    private void StartAnimationDriver()
     {
-        if (_animationTimer == null || !_animationTimer.IsEnabled)
-        {
-            _animationTimer = new DispatcherTimer(DispatcherPriority.Render)
-            {
-                Interval = TimeSpan.FromMilliseconds(32)
-            };
-            _animationTimer.Tick += AnimateAllBubbles;
-            _animationTimer.Start();
-        }
+        if (_animDriverHooked) return;
+        _animDriverHooked = true;
+        _lastStepMs = _stepClock.ElapsedMilliseconds;
+        System.Windows.Media.CompositionTarget.Rendering += OnAnimationRenderTick;
+    }
+
+    /// <summary>Detach the animation step from the composition clock. MUST run on teardown/idle —
+    /// a Rendering handler keeps the render loop pumping at refresh rate for as long as it's attached,
+    /// so a stranded subscription is both a leak and wasted per-frame work.</summary>
+    private void StopAnimationDriver()
+    {
+        if (!_animDriverHooked) return;
+        _animDriverHooked = false;
+        System.Windows.Media.CompositionTarget.Rendering -= OnAnimationRenderTick;
+    }
+
+    /// <summary>Composition-clock tick. Fires once per rendered frame (60/120/144Hz), so we gate the
+    /// actual logical step to ~<see cref="STEP_MS"/>. Re-base <see cref="_lastStepMs"/> to the real
+    /// frame time (not += STEP_MS): a late frame must NOT trigger a burst of catch-up steps — dropping
+    /// is exactly the graceful-under-load behaviour a DispatcherTimer failed to give.</summary>
+    private void OnAnimationRenderTick(object? sender, EventArgs e)
+    {
+        long now = _stepClock.ElapsedMilliseconds;
+        if (now - _lastStepMs < STEP_MS) return;
+        _lastStepMs = now;
+        AnimateAllBubbles(sender, e);
     }
 
     private void PlayPopSound(bool isLucky = false, float volumeMult = 1f)
