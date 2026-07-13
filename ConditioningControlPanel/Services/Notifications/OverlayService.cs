@@ -61,6 +61,39 @@ public class OverlayService : IDisposable
     private double? _rampPinkOpacity;
     private double? _rampSpiralOpacity;
     private double? _rampBrainDrainOpacity;
+
+    // Unified overlay host (Settings.UnifiedOverlayHost, experimental): pink/spiral render as
+    // compositor layers on the shared per-monitor Skia host instead of per-effect layered
+    // windows. This service keeps ALL the opacity math (ramps, pulses, holds, settings sync)
+    // and pushes final values; the layers only draw. Layers are created lazily so the engine
+    // stays fully parked when the flag is off. Route checks use "<layer>?.IsActive == true"
+    // rather than the flag so a mid-run flag flip can't strand a visible layer.
+    private Compositor.PinkTintLayer? _pinkLayer;
+    private Compositor.SpiralLayer? _spiralLayer;
+    private static bool UseCompositor =>
+        (App.CompositorForced || App.Settings?.Current?.UnifiedOverlayHost == true) && App.Compositor != null;
+    private Compositor.PinkTintLayer GetPinkLayer()
+    {
+        if (_pinkLayer == null)
+        {
+            _pinkLayer = new Compositor.PinkTintLayer(App.Compositor!);
+            App.Compositor!.RegisterLayer(_pinkLayer);
+        }
+        return _pinkLayer;
+    }
+    private Compositor.SpiralLayer GetSpiralLayer()
+    {
+        if (_spiralLayer == null)
+        {
+            _spiralLayer = new Compositor.SpiralLayer(App.Compositor!);
+            App.Compositor!.RegisterLayer(_spiralLayer);
+        }
+        return _spiralLayer;
+    }
+    // "Is showing" checks must cover BOTH render paths - the 500ms sync and pulse gate on these.
+    private bool PinkShowing => _pinkFilterWindows.Count > 0 || _pinkLayer?.IsActive == true;
+    private bool SpiralShowing => _spiralWindows.Count > 0 || _spiralLayer?.IsShowing == true;
+
     private int _consecutiveTopmostLossCount;
     // Recreate-overlays backoff. Destroying + recreating every layered overlay window on a 3s cadence
     // is a GDI/composition-surface churn engine (feeds the "not enough quota" exhaustion, and the
@@ -244,7 +277,7 @@ public class OverlayService : IDisposable
 
             if (settings.PinkFilterEnabled)
             {
-                if (_pinkFilterWindows.Count == 0)
+                if (!PinkShowing)
                     StartPinkFilter();
                 else
                     UpdatePinkFilterOpacity();
@@ -258,7 +291,7 @@ public class OverlayService : IDisposable
             if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath))
             {
                 _spiralPath = spiralPath;
-                if (_spiralWindows.Count == 0)
+                if (!SpiralShowing)
                     StartSpiral();
                 else
                     UpdateSpiralOpacity();
@@ -273,7 +306,7 @@ public class OverlayService : IDisposable
         });
 
         App.Logger?.Debug("Overlays refreshed - Pink: {Pink}, Spiral: {Spiral}, BrainDrain: {BrainDrain}",
-            _pinkFilterWindows.Count > 0, _spiralWindows.Count > 0, _brainDrainBlurWindows.Count > 0);
+            PinkShowing, SpiralShowing, _brainDrainBlurWindows.Count > 0);
     }
 
     /// <summary>
@@ -286,8 +319,8 @@ public class OverlayService : IDisposable
         DispatcherHelper.RunOnUISync(() =>
         {
             var settings = App.Settings.Current;
-            var hasPink = settings.PinkFilterEnabled && _pinkFilterWindows.Count > 0;
-            var hasSpiral = settings.SpiralEnabled && _spiralWindows.Count > 0;
+            var hasPink = settings.PinkFilterEnabled && PinkShowing;
+            var hasSpiral = settings.SpiralEnabled && SpiralShowing;
             var hasBrainDrain = settings.BrainDrainEnabled && _brainDrainBlurWindows.Count > 0;
 
             if (!hasPink && !hasSpiral && !hasBrainDrain) return;
@@ -298,6 +331,10 @@ public class OverlayService : IDisposable
                 var boosted = Math.Min(settings.PinkFilterOpacity * 2, 100);
                 var alpha = (byte)(boosted / 100.0 * 255);
                 var (fr, fg, fb) = GetFilterRgb();
+                if (_pinkLayer?.IsActive == true)
+                {
+                    _pinkLayer.Set(fr, fg, fb, boosted / 100.0);
+                }
                 foreach (var window in _pinkFilterWindows)
                 {
                     if (window.Content is Border border &&
@@ -312,6 +349,7 @@ public class OverlayService : IDisposable
             if (hasSpiral)
             {
                 var boostedOpacity = Math.Min((settings.SpiralOpacity / 100.0) * 0.1 * 2, 1.0);
+                _spiralLayer?.SetOpacity(boostedOpacity);
                 foreach (var image in _spiralGifImages)
                     image.Opacity = boostedOpacity;
                 foreach (var media in _spiralMediaElements)
@@ -411,30 +449,30 @@ public class OverlayService : IDisposable
     {
         var settings = App.Settings.Current;
 
-        if (settings.PinkFilterEnabled && _pinkFilterWindows.Count == 0)
+        if (settings.PinkFilterEnabled && !PinkShowing)
         {
             StartPinkFilter();
         }
-        else if (!settings.PinkFilterEnabled && _pinkFilterWindows.Count > 0 && _timedPinkHolds == 0 && !_sustainedPinkHeld)
+        else if (!settings.PinkFilterEnabled && PinkShowing && _timedPinkHolds == 0 && !_sustainedPinkHeld)
         {
             StopPinkFilter();
         }
-        else if (_pinkFilterWindows.Count > 0)
+        else if (PinkShowing)
         {
             UpdatePinkFilterOpacity();
         }
 
         var spiralPath = GetSpiralPath();
-        if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath) && _spiralWindows.Count == 0)
+        if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath) && !SpiralShowing)
         {
             _spiralPath = spiralPath;
             StartSpiral();
         }
-        else if (!settings.SpiralEnabled && _spiralWindows.Count > 0 && _timedSpiralHolds == 0 && !_sustainedSpiralHeld)
+        else if (!settings.SpiralEnabled && SpiralShowing && _timedSpiralHolds == 0 && !_sustainedSpiralHeld)
         {
             StopSpiral();
         }
-        else if (_spiralWindows.Count > 0)
+        else if (SpiralShowing)
         {
             UpdateSpiralOpacity();
         }
@@ -613,8 +651,8 @@ public class OverlayService : IDisposable
                 // Both show() and the reconcilers run on this one UI thread, so they can't interleave;
                 // gate on a window actually appearing so a no-op show (e.g. spiral with no asset) doesn't
                 // leave a stale hold that would later block a legitimate teardown.
-                if (kind == "pink_filter") _sustainedPinkHeld = _pinkFilterWindows.Count > 0;
-                else if (kind == "spiral") _sustainedSpiralHeld = _spiralWindows.Count > 0;
+                if (kind == "pink_filter") _sustainedPinkHeld = PinkShowing;
+                else if (kind == "spiral") _sustainedSpiralHeld = SpiralShowing;
             }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlaySustained show: {E}", ex.Message); }
         };
@@ -716,6 +754,8 @@ public class OverlayService : IDisposable
     {
         var (fr, fg, fb) = GetFilterRgb();
         byte a = (byte)Math.Clamp(opacity * 255, 0, 255);
+        if (_pinkLayer?.IsActive == true)
+            _pinkLayer.Set(fr, fg, fb, opacity);
         foreach (var window in _pinkFilterWindows)
             if (window.Content is Border border &&
                 border.Background is System.Windows.Media.SolidColorBrush brush)
@@ -727,6 +767,7 @@ public class OverlayService : IDisposable
     private void ApplySpiralOpacityDirect(double opacity)
     {
         var scaled = opacity * 0.1; // 90% reduction, matching CreateSpiralGifWindow / UpdateSpiralOpacity
+        _spiralLayer?.SetOpacity(scaled);
         foreach (var image in _spiralGifImages) image.Opacity = scaled;
         foreach (var media in _spiralMediaElements) media.Opacity = scaled;
         _lastAppliedSpiralOpacity = -1;
@@ -734,7 +775,13 @@ public class OverlayService : IDisposable
 
     private void ShowPinkFilterAdHoc(int opacityPercent)
     {
-        if (_pinkFilterWindows.Count > 0) return;
+        if (PinkShowing) return;
+        if (UseCompositor)
+        {
+            var (fr, fg, fb) = GetFilterRgb();
+            GetPinkLayer().Show(fr, fg, fb, opacityPercent / 100.0);
+            return;
+        }
         try
         {
             var settings = App.Settings?.Current;
@@ -759,7 +806,7 @@ public class OverlayService : IDisposable
         // Spiral has heavier setup (GIF/video branching, frame timer); reuse the
         // existing path. If settings have no spiral path configured, this is a
         // no-op — Deeper logs at the dispatcher.
-        if (_spiralWindows.Count > 0) return;
+        if (SpiralShowing) return;
         try
         {
             var spiralPath = GetSpiralPath();
@@ -779,7 +826,17 @@ public class OverlayService : IDisposable
 
     private void StartPinkFilter()
     {
-        if (_pinkFilterWindows.Count > 0) return;
+        if (PinkShowing) return;
+
+        if (UseCompositor)
+        {
+            var s = App.Settings.Current;
+            var (fr, fg, fb) = GetFilterRgb();
+            GetPinkLayer().Show(fr, fg, fb, s.PinkFilterOpacity / 100.0);
+            _lastAppliedPinkOpacity = s.PinkFilterOpacity / 100.0;
+            App.Logger?.Debug("Pink filter started on compositor layer at opacity {Opacity}%", s.PinkFilterOpacity);
+            return;
+        }
 
         try
         {
@@ -874,6 +931,7 @@ public class OverlayService : IDisposable
 
     internal void StopPinkFilter()
     {
+        _pinkLayer?.Hide(); // both paths cleared unconditionally - the flag may have flipped mid-run
         foreach (var window in _pinkFilterWindows.ToList())
         {
             try { window.Close(); }
@@ -896,6 +954,11 @@ public class OverlayService : IDisposable
         if (actualOpacity == _lastAppliedPinkOpacity) return;
         _lastAppliedPinkOpacity = actualOpacity;
         var (fr, fg, fb) = GetFilterRgb();
+        if (_pinkLayer?.IsActive == true)
+        {
+            _pinkLayer.Set(fr, fg, fb, actualOpacity);
+            return;
+        }
         foreach (var window in _pinkFilterWindows)
         {
             if (window.Content is Border border)
@@ -914,7 +977,19 @@ public class OverlayService : IDisposable
 
     private void StartSpiral()
     {
-        if (_spiralWindows.Count > 0) return;
+        if (SpiralShowing) return;
+
+        _isGifSpiral = _spiralPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
+
+        // Compositor route covers the GIF/animated path only; video spirals (MediaElement)
+        // have no layer frame source yet and always use the legacy windows.
+        if (UseCompositor && _isGifSpiral)
+        {
+            GetSpiralLayer().Show(_spiralPath, (App.Settings.Current.SpiralOpacity / 100.0) * 0.1);
+            _lastAppliedSpiralOpacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
+            App.Logger?.Debug("Spiral started on compositor layer ({Path})", _spiralPath);
+            return;
+        }
 
         try
         {
@@ -923,8 +998,6 @@ public class OverlayService : IDisposable
             var screens = settings.DualMonitorEnabled
                 ? App.GetAllScreensCached()
                 : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
-
-            _isGifSpiral = _spiralPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
 
             // For GIFs, load frames once and share across all screens
             if (_isGifSpiral)
@@ -1375,6 +1448,7 @@ public class OverlayService : IDisposable
 
     internal void StopSpiral()
     {
+        _spiralLayer?.Hide(); // both paths cleared unconditionally - the flag may have flipped mid-run
         _gifFrameTimer?.Stop();
         _gifFrameTimer = null;
 
@@ -1423,6 +1497,12 @@ public class OverlayService : IDisposable
         var opacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
         if (opacity == _lastAppliedSpiralOpacity) return;
         _lastAppliedSpiralOpacity = opacity;
+
+        if (_spiralLayer?.IsActive == true)
+        {
+            _spiralLayer.SetOpacity(opacity);
+            return;
+        }
 
         // Update GIF images
         foreach (var image in _spiralGifImages)

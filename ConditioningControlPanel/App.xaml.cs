@@ -289,6 +289,9 @@ namespace ConditioningControlPanel
         public static ProgressionService Progression { get; private set; } = null!;
         public static SubliminalService Subliminal { get; private set; } = null!;
         public static Services.Compositor.CompositorEngine? Compositor { get; private set; }
+        /// <summary>Launch-scoped override: `--overlay-host` forces the unified overlay host ON
+        /// without persisting the setting (A/B testing seam).</summary>
+        public static bool CompositorForced { get; private set; }
         public static OverlayService Overlay { get; private set; } = null!;
         public static ScreenShakeService ScreenShake { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
@@ -1667,6 +1670,14 @@ namespace ConditioningControlPanel
             // via env vars so the harness can dial it without a rebuild.
             if (e.Args.Contains("--stress"))
                 StartHangStressMode();
+
+            // `--overlay-host`: force the unified overlay host ON for this launch only (in-memory,
+            // not persisted) so the compositor path can be A/B tested without editing settings.
+            if (e.Args.Contains("--overlay-host"))
+            {
+                CompositorForced = true;
+                Logger?.Information("Unified overlay host FORCED ON via --overlay-host (this launch only)");
+            }
 
             // DtRH browser-game port, M0 spike (`--dtrh-spike`): verifies the WebView2 virtual-host
             // pipeline (Range-seek, CORS->WebGL, payload z-order/focus) against the user's real
