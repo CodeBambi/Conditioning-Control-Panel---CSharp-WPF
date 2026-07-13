@@ -1032,7 +1032,16 @@ public class BubbleService : IDisposable
             return new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable);
         return new Bubble(screen, _bubbleImage, _random, onPop: null, onMiss: OnMiss, onDestroy: OnDestroy,
                           isClickable: isClickable, spec: spec,
-                          onBenignPop: b => { AwardAmbientPop(b); try { b.Spec?.Payload?.Fire(); } catch { } },
+                          onBenignPop: b =>
+                          {
+                              AwardAmbientPop(b);
+                              var sw = System.Diagnostics.Stopwatch.StartNew();
+                              try { b.Spec?.Payload?.Fire(); } catch { }
+                              sw.Stop();
+                              if (sw.ElapsedMilliseconds >= 20)
+                                  App.Logger?.Information("[POPLAG] payload {Kind} Fire() took {Ms}ms",
+                                      b.Spec?.Payload?.DisplayName ?? "?", sw.ElapsedMilliseconds);
+                          },
                           forceWindowMode: true);
     }
 

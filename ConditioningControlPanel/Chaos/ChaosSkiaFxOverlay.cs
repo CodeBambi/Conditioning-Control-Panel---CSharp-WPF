@@ -151,6 +151,13 @@ public sealed class ChaosSkiaFxOverlay : Window
     private TimeSpan _lastRender = TimeSpan.MinValue;
     private double _dpiX = 1, _dpiY = 1;
 
+    // Hiding immediately on idle meant EVERY effect-bubble pop re-Show()ed a fullscreen layered
+    // window (DWM re-composition = a visible frame hitch, and only payload bubbles paid it).
+    // The render loop still parks after ~3 idle frames; the WINDOW stays up through this grace
+    // so back-to-back pops reuse the already-presented (cleared, click-through) surface.
+    private static readonly TimeSpan HideGrace = TimeSpan.FromSeconds(8);
+    private readonly System.Windows.Threading.DispatcherTimer _hideTimer;
+
     // Cached tint filters (modulate the white soft-dot sprite to a colour without per-draw alloc).
     private static readonly SKColorFilter PinkCF = SKColorFilter.CreateBlendMode(PinkBody, SKBlendMode.Modulate);
     private static readonly SKColorFilter AmberCF = SKColorFilter.CreateBlendMode(AmberBody, SKBlendMode.Modulate);
@@ -212,6 +219,13 @@ public sealed class ChaosSkiaFxOverlay : Window
         Content = _sk;
 
         SourceInitialized += (_, _) => { ApplyExStyles(); CacheDpi(); };
+
+        _hideTimer = new System.Windows.Threading.DispatcherTimer { Interval = HideGrace };
+        _hideTimer.Tick += (_, _) =>
+        {
+            _hideTimer.Stop();
+            if (!_rendering) { try { Hide(); } catch { } }
+        };
     }
 
     /// <summary>A soft white radial dot (premultiplied), tinted + additively blended per particle.</summary>
@@ -463,7 +477,15 @@ public sealed class ChaosSkiaFxOverlay : Window
     {
         try
         {
-            if (!IsVisible) Show();
+            _hideTimer.Stop();
+            if (!IsVisible)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                Show();
+                sw.Stop();
+                if (sw.ElapsedMilliseconds >= 20)
+                    App.Logger?.Information("[POPLAG] ChaosSkiaFx window Show() took {Ms}ms", sw.ElapsedMilliseconds);
+            }
             ChaosWindowZ.RaiseAboveVideo(this);
             _idleFrames = 0;
             if (!_rendering)
@@ -549,7 +571,9 @@ public sealed class ChaosSkiaFxOverlay : Window
 
             if (_n == 0 && _bolts.Count == 0 && _ripples.Count == 0 && !_cursorArmed)
             {
-                if (++_idleFrames > 2) { StopRendering(); try { Hide(); } catch { } }
+                // Park the render loop right away (last painted frame is already cleared), but
+                // leave the window visible for HideGrace so the next pop doesn't pay a Show().
+                if (++_idleFrames > 2) { StopRendering(); _hideTimer.Stop(); _hideTimer.Start(); }
             }
             else _idleFrames = 0;
         }
