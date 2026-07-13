@@ -20,32 +20,27 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.3.3";
+        public const string AppVersion = "6.3.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.3.3 - Deeper Down
+        public const string CurrentPatchNotes = @"v6.3.4 - Deeper Down
 
-6.3.3 rebuilds how on-screen effects are drawn. Spirals, pink tint, brain drain,
-subliminals, flashes, and bubbles now share one smooth rendering layer per monitor
-instead of a stack of separate windows, so running several at once no longer stutters
-your mouse or skips frames. Plus a round of stability and video fixes.
+A hotfix for 6.3.3. The new unified overlay could lag the whole app on some setups,
+so it is now off by default while we finish the smoother renderer. Plus a batch of
+Down the Rabbit Hole and multi-monitor fixes.
 
 ⚡ PERFORMANCE & STABILITY
-- Overlays now render through a unified compositor: one shared layer per monitor instead of a stack of separate windows. Spirals, pink tint, brain drain, subliminals, flashes, and bubbles run together far more smoothly, with no more mouse stutter or frame-skipping when several effects fire at once.
-- Bounded the native fan-out from flash decodes and chaos SFX to stop silent crashes under bursty load.
-- Effect windows hold through a short idle grace instead of flickering off and back on between pops.
+- Fixed the new unified overlay making every click, tab change, and keypress lag about a second on some machines (worst with the spiral and pink filter running together). The unified overlay is now off by default and your effects fall back to the proven per-effect windows. (#550)
+- Pink filter and spiral no longer paint your other monitors when multi-monitor overlays are turned off. (#552)
 
 🔧 BUG FIXES
-- Deeper-enhanced mandatory videos no longer get cut off at their raw length.
-- Mandatory videos software-decode by default, fixing blank/white video and PC freezes on some GPUs.
-- Lock cards fully cover a second monitor at mixed DPI.
-- Pulse no longer strands the pink filter, spiral, or brain drain stuck opaque during a ramp.
-- The Takeover HUD banner stays hidden when the announce chance is 0%.
-- Closed an avatar-egg re-attach deadlock and made hang dumps readable.
-- Settings popups no longer reset through the legacy sliders.
+- Fixed a one-frame bubble flash in the top-left corner of the screen. (#553)
+- Down the Rabbit Hole: images and videos you deselect in the Assets tab no longer show up in the tube. (#546)
+- Down the Rabbit Hole: the mandatory video no longer lingers over the recap and hub after a descent ends. (#547)
+- Down the Rabbit Hole: Cheshire's corner comments no longer cover the control dock. (#548)
 
 Season: Jelly July";
 
