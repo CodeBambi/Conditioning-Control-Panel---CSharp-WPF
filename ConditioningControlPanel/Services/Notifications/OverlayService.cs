@@ -92,7 +92,13 @@ public class OverlayService : IDisposable
     }
     // "Is showing" checks must cover BOTH render paths - the 500ms sync and pulse gate on these.
     private bool PinkShowing => _pinkFilterWindows.Count > 0 || _pinkLayer?.IsActive == true;
-    private bool SpiralShowing => _spiralWindows.Count > 0 || _spiralLayer?.IsShowing == true;
+    private bool SpiralShowing => _spiralWindows.Count > 0 || _spiralLayer?.IsShowing == true
+        || _spiralLayerDecodePending != null;
+    // Off-thread spiral decode state for the layer route: the path being decoded right now
+    // (also counts as "showing" so the 500ms sync doesn't re-enter), and the last path that
+    // produced zero frames (routed to the legacy windows instead of retrying forever).
+    private string? _spiralLayerDecodePending;
+    private string? _spiralLayerFailedPath;
 
     private int _consecutiveTopmostLossCount;
     // Recreate-overlays backoff. Destroying + recreating every layered overlay window on a 3s cadence
@@ -983,20 +989,58 @@ public class OverlayService : IDisposable
 
         // Compositor route covers the GIF/animated path only; video spirals (MediaElement)
         // have no layer frame source yet and always use the legacy windows. Frames come from
-        // the LEGACY loader + cache so asset support (pack:// resources, file:// mod overrides,
+        // the LEGACY decoder + cache so asset support (pack:// resources, file:// mod overrides,
         // user paths) is identical to the legacy windows by construction.
-        if (UseCompositor && _isGifSpiral)
+        if (UseCompositor && _isGifSpiral && _spiralPath != _spiralLayerFailedPath)
         {
-            if (LoadSpiralGifFrames())
+            var finalOpacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
+
+            // Cache hit: show immediately (frames are frozen, shared with the legacy cache).
+            if (_spiralFramesCacheKey == _spiralPath && _spiralFramesCache.Count > 0)
             {
-                GetSpiralLayer().ShowFrames(_spiralGifFrames, _gifFrameDelay,
-                    (App.Settings.Current.SpiralOpacity / 100.0) * 0.1);
-                _lastAppliedSpiralOpacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
-                App.Logger?.Debug("Spiral started on compositor layer ({Path})", _spiralPath);
+                GetSpiralLayer().ShowFrames(_spiralFramesCache, _spiralFramesCacheDelay, finalOpacity);
+                _lastAppliedSpiralOpacity = finalOpacity;
+                App.Logger?.Debug("Spiral started on compositor layer ({Path}, cached)", _spiralPath);
                 return;
             }
-            App.Logger?.Warning("Spiral: layer frame load failed for {Path}; using legacy path", _spiralPath);
-            // fall through to the legacy windows below
+
+            // Cache miss: decode OFF the UI thread. The legacy path decodes synchronously and
+            // hitches the whole UI ~1s - felt as a lag spike exactly when a spiral-payload
+            // bubble pops. SpiralShowing counts the pending decode so the sync doesn't re-enter.
+            if (_spiralLayerDecodePending != null) return;
+            var path = _spiralPath;
+            _spiralLayerDecodePending = path;
+            Task.Run(() =>
+            {
+                var (frames, delay) = DecodeGifFrames(path);
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                dispatcher.BeginInvoke(() =>
+                {
+                    _spiralLayerDecodePending = null;
+                    if (frames.Count == 0)
+                    {
+                        // Next StartSpiral routes this path to the legacy windows (no retry churn).
+                        _spiralLayerFailedPath = path;
+                        App.Logger?.Warning("Spiral: layer decode produced no frames for {Path}; legacy path will be used", path);
+                        return;
+                    }
+                    _spiralFramesCache = frames;
+                    _spiralFramesCacheKey = path;
+                    _spiralFramesCacheDelay = delay;
+                    // The user may have turned the spiral off (or swapped assets) mid-decode.
+                    var s = App.Settings.Current;
+                    bool stillWanted = _spiralPath == path
+                        && (s.SpiralEnabled || _timedSpiralHolds > 0 || _sustainedSpiralHeld);
+                    if (stillWanted && UseCompositor)
+                    {
+                        GetSpiralLayer().ShowFrames(frames, delay, (s.SpiralOpacity / 100.0) * 0.1);
+                        _lastAppliedSpiralOpacity = (s.SpiralOpacity / 100.0) * 0.1;
+                        App.Logger?.Debug("Spiral started on compositor layer ({Path}, decoded off-thread)", path);
+                    }
+                });
+            });
+            return;
         }
 
         try
