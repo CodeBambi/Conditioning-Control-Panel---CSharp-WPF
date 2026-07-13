@@ -27,6 +27,12 @@ public class CompositorEngine : IDisposable
     private static readonly TimeSpan IdleGrace = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan MaxDelta = TimeSpan.FromMilliseconds(100);
 
+    // Hiding hosts right at IdleGrace meant every effect trigger after a quiet half-second
+    // re-Show()ed a fullscreen layered window (DWM re-composition = the "first load" hitch the
+    // owner reported). The TICK still parks at IdleGrace (idle engine costs zero per frame);
+    // the WINDOWS stay visible - empty and click-through - through this longer grace.
+    private static readonly TimeSpan WindowHideGrace = TimeSpan.FromSeconds(30);
+
     private readonly object _layerLock = new();
     private readonly List<IWpfLayer> _layers = new();
     private readonly Dictionary<IWpfLayer, bool> _lastActiveState = new();
@@ -41,6 +47,8 @@ public class CompositorEngine : IDisposable
     private DateTime _lastExcludedActiveUtc = DateTime.MinValue;
     private bool _renderingHooked;
     private bool _disposed;
+    private bool _wasMainActive, _wasExcludedActive;
+    private DispatcherTimer? _hideTimer;
 
     public CompositorEngine()
     {
@@ -83,11 +91,38 @@ public class CompositorEngine : IDisposable
             return;
         }
 
+        _hideTimer?.Stop();
         if (!_renderingHooked)
         {
             _renderingHooked = true;
             _lastTickElapsed = _clock.Elapsed;
             CompositionTarget.Rendering += OnRendering;
+        }
+    }
+
+    /// <summary>
+    /// Pay the one-time host costs (window creation, hwnd + ex-styles, Skia surface alloc, paint
+    /// JIT) at startup instead of on the first effect trigger. Creates and shows the main-surface
+    /// hosts (empty, transparent, click-through - invisible to the user), paints one cleared
+    /// frame, then lets the normal idle path park the tick and hide them after the grace.
+    /// Call on the UI thread once the compositor is enabled; no-op otherwise.
+    /// </summary>
+    public void Prewarm()
+    {
+        if (_disposed) return;
+        try
+        {
+            EnsureWindows(_windows, excluded: false);
+            foreach (var w in _windows.Values)
+            {
+                if (!w.IsVisible) w.Show();
+                w.InvalidateSurface();
+            }
+            Wake(); // ticks once, finds nothing active, parks + schedules the window hide
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning(ex, "CompositorEngine: prewarm failed");
         }
     }
 
@@ -146,52 +181,72 @@ public class CompositorEngine : IDisposable
         if (anyMainActive) _lastAnyActiveUtc = nowUtc;
         if (anyExcludedActive) _lastExcludedActiveUtc = nowUtc;
 
-        SyncSurfaceVisibility(_windows, anyMainActive, excluded: false);
-        SyncSurfaceVisibility(_excludedWindows, anyExcludedActive, excluded: true);
+        ShowSurfaceIfActive(_windows, anyMainActive, excluded: false);
+        ShowSurfaceIfActive(_excludedWindows, anyExcludedActive, excluded: true);
 
         if (anyMainActive) foreach (var w in _windows.Values) w.InvalidateSurface();
         if (anyExcludedActive) foreach (var w in _excludedWindows.Values) w.InvalidateSurface();
 
+        // Active -> inactive: paint ONE cleared frame. The hosts stay visible through
+        // WindowHideGrace, and without this the last effect frame would linger on screen.
+        if (_wasMainActive && !anyMainActive) foreach (var w in _windows.Values) w.InvalidateSurface();
+        if (_wasExcludedActive && !anyExcludedActive) foreach (var w in _excludedWindows.Values) w.InvalidateSurface();
+        _wasMainActive = anyMainActive;
+        _wasExcludedActive = anyExcludedActive;
+
         // Fully park when everything has been idle past the grace window: unhook the tick so
-        // an idle compositor costs literally zero per frame.
+        // an idle compositor costs literally zero per frame. The (visible, empty) hosts are
+        // hidden later by the one-shot grace timer, not here.
         if (!anyMainActive && !anyExcludedActive
             && nowUtc - _lastAnyActiveUtc > IdleGrace
             && nowUtc - _lastExcludedActiveUtc > IdleGrace)
         {
             CompositionTarget.Rendering -= OnRendering;
             _renderingHooked = false;
+            ScheduleWindowHide();
         }
     }
 
-    private void SyncSurfaceVisibility(Dictionary<string, CompositorHostWindow> surface, bool active, bool excluded)
+    private void ShowSurfaceIfActive(Dictionary<string, CompositorHostWindow> surface, bool active, bool excluded)
     {
-        if (active)
+        if (!active) return;
+        EnsureWindows(surface, excluded);
+        foreach (var w in surface.Values)
         {
-            EnsureWindows(surface, excluded);
-            foreach (var w in surface.Values)
+            if (!w.IsVisible)
             {
-                if (!w.IsVisible)
-                {
-                    try { w.Show(); }
-                    catch (Exception ex) { App.Logger?.Error(ex, "CompositorEngine: host Show failed"); }
-                }
+                try { w.Show(); }
+                catch (Exception ex) { App.Logger?.Error(ex, "CompositorEngine: host Show failed"); }
             }
         }
-        else
+    }
+
+    /// <summary>Arm the one-shot hide of all (idle, empty) host windows, WindowHideGrace from
+    /// now. Cancelled by any Wake(); re-armed each time the engine parks. UI thread.</summary>
+    private void ScheduleWindowHide()
+    {
+        _hideTimer ??= CreateHideTimer();
+        _hideTimer.Stop();
+        _hideTimer.Start();
+    }
+
+    private DispatcherTimer CreateHideTimer()
+    {
+        var t = new DispatcherTimer { Interval = WindowHideGrace };
+        t.Tick += (_, _) =>
         {
-            var lastActive = excluded ? _lastExcludedActiveUtc : _lastAnyActiveUtc;
-            if (DateTime.UtcNow - lastActive > IdleGrace)
+            t.Stop();
+            if (_disposed || _renderingHooked) return; // re-woke during the grace: stay visible
+            foreach (var w in _windows.Values.Concat(_excludedWindows.Values))
             {
-                foreach (var w in surface.Values)
+                if (w.IsVisible)
                 {
-                    if (w.IsVisible)
-                    {
-                        try { w.Hide(); }
-                        catch (Exception ex) { App.Logger?.Error(ex, "CompositorEngine: host Hide failed"); }
-                    }
+                    try { w.Hide(); }
+                    catch (Exception ex) { App.Logger?.Error(ex, "CompositorEngine: host Hide failed"); }
                 }
             }
-        }
+        };
+        return t;
     }
 
     private void EnsureWindows(Dictionary<string, CompositorHostWindow> surface, bool excluded)
@@ -280,6 +335,7 @@ public class CompositorEngine : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        try { _hideTimer?.Stop(); } catch { }
         try { Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
         if (_renderingHooked)
         {

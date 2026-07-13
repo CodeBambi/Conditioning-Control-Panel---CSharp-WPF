@@ -1679,6 +1679,15 @@ namespace ConditioningControlPanel
                 Logger?.Information("Unified overlay host FORCED ON via --overlay-host (this launch only)");
             }
 
+            // Pay the compositor's one-time host costs (window + hwnd + Skia surface + paint JIT)
+            // after startup settles instead of on the first effect trigger ("first load" hitch).
+            // Deferred to Background priority so launch isn't slowed.
+            if (CompositorForced || Settings?.Current?.UnifiedOverlayHost == true)
+            {
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+                    () => Compositor?.Prewarm());
+            }
+
             // DtRH browser-game port, M0 spike (`--dtrh-spike`): verifies the WebView2 virtual-host
             // pipeline (Range-seek, CORS->WebGL, payload z-order/focus) against the user's real
             // assets folder, writes logs/dtrh-spike.json, then shuts the app down. Throwaway harness
