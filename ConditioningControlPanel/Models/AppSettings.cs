@@ -2294,14 +2294,14 @@ namespace ConditioningControlPanel.Models
             get => _chaosBubbleSharedHost;
             set { _chaosBubbleSharedHost = value; OnPropertyChanged(); }
         }
-        private bool _unifiedOverlayHost;
-        /// <summary>EXPERIMENTAL, default OFF: render the passive fullscreen effects (pink filter,
-        /// spiral, brain drain, then subliminals/flash/bubbles as they migrate) as z-ordered Skia
-        /// layers inside ONE shared click-through compositor window per monitor
+        private bool _unifiedOverlayHost = true;
+        /// <summary>Default ON (owner-confirmed "100x better", 2026-07-13): render the fullscreen
+        /// effects (pink filter, spiral, brain drain, subliminals, flash, bubbles, chaos FX) as
+        /// z-ordered Skia layers inside ONE shared click-through compositor window per monitor
         /// (Services/Compositor/CompositorEngine) instead of one layered Window per effect.
-        /// Concurrent fullscreen layered windows are the root cause of the session-lag /
+        /// Concurrent fullscreen layered windows were the root cause of the session-lag /
         /// mouse-stutter cluster; this is the WPF twin of the Avalonia port's compositor and the
-        /// intended end-state renderer. Falls back to the legacy per-effect windows when off.</summary>
+        /// end-state renderer. Falls back to the legacy per-effect windows when off.</summary>
         public bool UnifiedOverlayHost
         {
             get => _unifiedOverlayHost;
