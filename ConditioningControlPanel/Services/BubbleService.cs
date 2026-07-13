@@ -24,10 +24,10 @@ public class BubbleService : IDisposable
 {
     private const int MAX_BUBBLES = 3;          // per-window fallback cap (SetWindowPos-bound — keep small)
     private const int MAX_BUBBLES_HOST = 40;    // shared-host cap: a dense ambient field is cheap on the Canvas
-    // Trigger/effect bubbles ALWAYS render per-window (forceWindowMode) even with the shared host on,
-    // and each is a WS_EX_LAYERED window repositioned via SetWindowPos every frame. So they must be
-    // capped independently of the (Canvas-cheap) host field cap — otherwise a high trigger chance puts
-    // dozens of layered windows on screen and starves desktop-heap/GPU surfaces (freeze cluster #448/#431).
+    // Trigger/effect bubbles are capped independently of the (Canvas-cheap) host field cap: in the
+    // per-window fallback each is a WS_EX_LAYERED window repositioned via SetWindowPos every frame
+    // (dozens on screen starve desktop-heap/GPU surfaces — freeze cluster #448/#431), and even when
+    // hosted, every pop fires a payload — an uncapped field spams full-screen effects.
     private const int MAX_TRIGGER_WINDOWS = 4;
     /// <summary>Concurrent ambient cap. The per-window path stays at 3 (each move is a SetWindowPos);
     /// the shared-host path repositions via batched Canvas.SetLeft/Top, so it carries a dense field.</summary>
@@ -1030,13 +1030,22 @@ public class BubbleService : IDisposable
     private Bubble CreateAmbientBubble(System.Windows.Forms.Screen screen, bool isClickable)
     {
         var spec = RollTriggerSpec();
-        // Trigger bubbles are per-window layered windows; keep their concurrent count low regardless of
-        // the overall (host-rendered) field cap. Past the ceiling, fall back to a plain bubble so the
-        // dashboard stays lively without a layered-window pileup.
+        // Cap concurrent trigger bubbles regardless of render mode: in per-window fallback each is a
+        // layered window (pileup starves desktop heap — #448/#431), and even hosted, each pop fires a
+        // payload, so an uncapped field spams effects. Past the ceiling, fall back to a plain bubble.
         if (spec != null && _bubbles.Count(b => b.IsAmbientEffectBubble) >= MAX_TRIGGER_WINDOWS)
             spec = null;
         if (spec == null)
             return new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable);
+        // Trigger bubbles ride the shared ambient host like plain bubbles (hook-based pops via the
+        // UsesHost/HostHitClickable snapshots). forceWindowMode was a relic of the host being
+        // chaos-run-only: the per-pop layered-window Show/Close it forced was the residual "small
+        // frame skip on every effect-bubble click", and those topmost windows are exactly the
+        // population the layered-window render deadlock (hang_20260713_110759) lives in. Per-window
+        // is now only the fallback when the host is down or doesn't cover the target screen.
+        bool hostUp = _ambientHost && ChaosBubbleHostOverlay.IsReady
+            && ChaosBubbleHostOverlay.CoversPoint(screen.Bounds.X + screen.Bounds.Width / 2.0,
+                                                  screen.Bounds.Y + screen.Bounds.Height / 2.0);
         return new Bubble(screen, _bubbleImage, _random, onPop: null, onMiss: OnMiss, onDestroy: OnDestroy,
                           isClickable: isClickable, spec: spec,
                           onBenignPop: b =>
@@ -1049,7 +1058,7 @@ public class BubbleService : IDisposable
                                   App.Logger?.Information("[POPLAG] payload {Kind} Fire() took {Ms}ms",
                                       b.Spec?.Payload?.DisplayName ?? "?", sw.ElapsedMilliseconds);
                           },
-                          forceWindowMode: true);
+                          forceWindowMode: !hostUp, ambientTrigger: true);
     }
 
     private void OnMiss(Bubble bubble)
@@ -2530,7 +2539,8 @@ internal class Bubble
                   Action<Bubble>? onTreatExpired = null, Action<Bubble>? onClickPop = null,
                   Func<Bubble, bool>? canChannelDefuse = null, Action<Bubble, string>? onChannelBroken = null,
                   Action<Bubble>? onTeaseTouched = null, Action<Bubble>? onTeaseDenied = null,
-                  Action<Bubble>? onBrittleShattered = null, bool forceWindowMode = false)
+                  Action<Bubble>? onBrittleShattered = null, bool forceWindowMode = false,
+                  bool ambientTrigger = false)
     {
         _random = random;
         _onPop = onPop;
@@ -2609,9 +2619,9 @@ internal class Bubble
         if (spec != null) _speed *= Math.Max(0.1, spec.SpeedMult);   // golden bubbles fly
         if (spec != null) _speed *= ChaosTuning.CHAOS_SPEED_MULT;    // chaos pace bump: travel farther before rotting
         // Dashboard speed slider: up to +500% travel (6x) for the ambient game — BOTH plain and
-        // trigger bubbles — leaving chaos pacing alone (chaos bubbles carry a spec but not
-        // forceWindowMode).
-        if (spec == null || forceWindowMode)
+        // trigger bubbles — leaving chaos pacing alone (chaos bubbles carry a spec but are
+        // never ambientTrigger).
+        if (spec == null || ambientTrigger)
         {
             int speedBoost = App.Settings?.Current?.BubbleSpeedBoost ?? 0;
             if (speedBoost > 0) _speed *= 1.0 + Math.Clamp(speedBoost, 0, 500) / 100.0;
@@ -2809,14 +2819,14 @@ internal class Bubble
         // (recycled hidden shell) rather than newly created — see RentWindow / the pool above.
         // Every per-bubble property below is (re)set on each reuse so a recycled shell carries
         // no state from its previous bubble.
-        // Shared-host A/B (chaos bubbles only): one Canvas host instead of a Window per bubble.
-        // forceWindowMode pins per-window rendering for dashboard trigger bubbles — the shared
-        // ChaosBubbleHostOverlay only exists during a real chaos run.
-        // Chaos effect bubbles ride the host under ChaosBubbleSharedHost; ambient dashboard bubbles
-        // (spec == null) ride it under BubbleSharedHost while the ambient host is standing. Either way
-        // forceWindowMode (dashboard trigger bubbles) pins per-window rendering.
-        bool chaosHost = spec != null && (App.Settings?.Current?.ChaosBubbleSharedHost ?? false);
-        bool ambientHost = spec == null && AmbientHostActive && (App.Settings?.Current?.BubbleSharedHost ?? false);
+        // Shared-host A/B: one Canvas host instead of a Window per bubble.
+        // Chaos effect bubbles ride the host under ChaosBubbleSharedHost; ambient bubbles — plain
+        // (spec == null) AND dashboard trigger bubbles (ambientTrigger) — ride it under
+        // BubbleSharedHost while the ambient host is standing. forceWindowMode pins per-window
+        // rendering: CreateAmbientBubble sets it for a trigger bubble whose target screen the
+        // host can't cover (host down, or spawn on a screen outside its stage bounds).
+        bool chaosHost = spec != null && !ambientTrigger && (App.Settings?.Current?.ChaosBubbleSharedHost ?? false);
+        bool ambientHost = (spec == null || ambientTrigger) && AmbientHostActive && (App.Settings?.Current?.BubbleSharedHost ?? false);
         _useHost = !forceWindowMode && (chaosHost || ambientHost);
 
         // Quantized window side (per-window mode); also a harmless notional size in host mode.
