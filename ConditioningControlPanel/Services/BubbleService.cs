@@ -2550,6 +2550,11 @@ internal class Bubble
             DpiScale = (float)_dpiScale,
             SizeDip = _size,
             HitSizeDip = _hitSize,
+            // Seed the spawn position (BubbleItem.Opacity defaults to 1): SyncLayerItem only runs on
+            // the next animate tick, so a compositor frame between Add() and that first sync would
+            // otherwise draw the bubble at (0,0) - a one-frame flash in the top-left corner (#553).
+            CenterXPx = (_posX + _size / 2.0) * _dpiScale,
+            CenterYPx = (_posY + _size / 2.0) * _dpiScale,
             Sprite = Compositor.BubbleLayer.ResolveSprite(_bubbleImage.Source as System.Windows.Media.Imaging.BitmapSource),
             HasTint = hasTint,
             Tint = tint,

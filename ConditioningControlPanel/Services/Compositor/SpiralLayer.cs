@@ -28,6 +28,11 @@ public class SpiralLayer : BaseLayer
 
     public override int ZIndex => CompositorLayers.Spiral;
 
+    // Fullscreen fill: honor DualMonitorEnabled (the legacy spiral windows did) so it doesn't
+    // upscale onto monitors the user disabled now that the compositor hosts every screen.
+    public override bool ShouldRenderOnScreen(System.Drawing.Rectangle screenBoundsPx)
+        => PrimaryOnlyUnlessDualMonitor(screenBoundsPx);
+
     /// <summary>True while visible OR still decoding - the 500ms settings sync polls this,
     /// so it must cover the async decode window or Show() gets re-fired mid-decode.</summary>
     public bool IsShowing => IsActive || _loading;

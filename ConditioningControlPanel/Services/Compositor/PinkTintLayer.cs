@@ -18,6 +18,11 @@ public class PinkTintLayer : BaseLayer
 
     public override int ZIndex => CompositorLayers.PinkTint;
 
+    // Fullscreen fill: honor DualMonitorEnabled (the legacy pink-filter windows did) so the tint
+    // doesn't leak onto monitors the user disabled now that the compositor hosts every screen.
+    public override bool ShouldRenderOnScreen(System.Drawing.Rectangle screenBoundsPx)
+        => PrimaryOnlyUnlessDualMonitor(screenBoundsPx);
+
     public override bool Dirty => _dirty;
     public override void ClearDirty() => _dirty = false;
 

@@ -39,6 +39,15 @@ public interface IWpfLayer
     /// </summary>
     bool WorldSpacePx => false;
 
+    /// <summary>
+    /// False = skip this layer on the given monitor (its virtual-desktop device-px bounds). The
+    /// engine hosts EVERY screen, so a fullscreen FILL layer (pink tint, spiral) that must honor
+    /// <c>DualMonitorEnabled</c> has to opt out of the non-primary monitors here - otherwise it
+    /// leaks onto screens the user disabled. Positional layers don't need this: their owning
+    /// service already places geometry only on the allowed monitor. Default: draw on every host.
+    /// </summary>
+    bool ShouldRenderOnScreen(System.Drawing.Rectangle screenBoundsPx) => true;
+
     /// <summary>Called on the UI thread when IsActive transitions false -&gt; true.</summary>
     void OnActivated();
 

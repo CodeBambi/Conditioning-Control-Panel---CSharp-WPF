@@ -365,6 +365,9 @@ public class CompositorEngine : IDisposable
         foreach (var layer in layers) // already z-sorted; lower draws first
         {
             if (!layer.IsActive || layer.ExcludeFromCapture != excludedSurface) continue;
+            // Per-monitor opt-out (e.g. fullscreen fill layers honoring DualMonitorEnabled). The
+            // host exists on every screen; a gated-out host just records an empty (transparent) frame.
+            if (!layer.ShouldRenderOnScreen(screenBoundsPx)) continue;
             try
             {
                 if (layer.WorldSpacePx)
