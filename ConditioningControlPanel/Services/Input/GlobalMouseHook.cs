@@ -17,10 +17,20 @@ public sealed class GlobalMouseHook : IDisposable
     private const int WH_MOUSE_LL = 14;
     private const int WM_RBUTTONDOWN = 0x0204;
     private const int WM_LBUTTONDOWN = 0x0201;
+    private const int WM_LBUTTONUP = 0x0202;
+    private const int WM_RBUTTONUP = 0x0205;
 
     private IntPtr _hookId = IntPtr.Zero;
     private readonly LowLevelMouseProc _proc;
     private bool _isDisposed;
+    // When a DOWN is swallowed, its matching UP must be swallowed too. An orphaned UP still
+    // reaches the window under the cursor, and WPF surfaces wired to bare MouseLeftButtonUp
+    // (the dashboard FeatureCards, preset/skill cards) treat it as a click - so popping a
+    // hosted bubble over the dashboard also "clicked" the card beneath it. Right-clicks have
+    // the same shape via context menus, which open on right-UP. Hook-thread only: every
+    // low-level mouse message is delivered sequentially on this hook's message loop.
+    private bool _swallowNextLeftUp;
+    private bool _swallowNextRightUp;
 
     /// <summary>Right button pressed at this PHYSICAL-px screen point. Return true to swallow.</summary>
     public Func<Point, bool>? RightDown;
@@ -55,19 +65,37 @@ public sealed class GlobalMouseHook : IDisposable
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && (wParam == (IntPtr)WM_RBUTTONDOWN || wParam == (IntPtr)WM_LBUTTONDOWN))
+        if (nCode >= 0)
         {
-            try
+            if (wParam == (IntPtr)WM_RBUTTONDOWN || wParam == (IntPtr)WM_LBUTTONDOWN)
             {
-                var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-                var pt = new Point(info.pt.X, info.pt.Y);
-                var cb = wParam == (IntPtr)WM_RBUTTONDOWN ? RightDown : LeftDown;
-                if (cb?.Invoke(pt) == true)
-                    return (IntPtr)1;
+                try
+                {
+                    var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                    var pt = new Point(info.pt.X, info.pt.Y);
+                    bool isRight = wParam == (IntPtr)WM_RBUTTONDOWN;
+                    var cb = isRight ? RightDown : LeftDown;
+                    if (cb?.Invoke(pt) == true)
+                    {
+                        if (isRight) _swallowNextRightUp = true;
+                        else _swallowNextLeftUp = true;
+                        return (IntPtr)1;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Mouse hook callback: {E}", ex.Message);
+                }
             }
-            catch (Exception ex)
+            else if (wParam == (IntPtr)WM_LBUTTONUP && _swallowNextLeftUp)
             {
-                App.Logger?.Debug("Mouse hook callback: {E}", ex.Message);
+                _swallowNextLeftUp = false;
+                return (IntPtr)1;
+            }
+            else if (wParam == (IntPtr)WM_RBUTTONUP && _swallowNextRightUp)
+            {
+                _swallowNextRightUp = false;
+                return (IntPtr)1;
             }
         }
         return CallNextHookEx(_hookId, nCode, wParam, lParam);

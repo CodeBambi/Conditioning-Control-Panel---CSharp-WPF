@@ -463,7 +463,8 @@
                             </StackPanel>
                             <StackPanel Grid.Column="2" ToolTip="{loc:Str tooltip_number_of_images_shown_per_flash_event_multip}">
                                 <Grid><TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_images}" FontSize="11"/><TextBlock x:Name="TxtImages" x:FieldModifier="internal" Style="{StaticResource ValueLabel}" Text="5" HorizontalAlignment="Right"/></Grid>
-                                <Slider x:Name="SliderImages" x:FieldModifier="internal" Minimum="1" Maximum="15" Value="5" Margin="0,1" ValueChanged="SliderImages_Changed"/>
+                                <!-- Range MUST match FlashFeatureControl's SliderImages (1-20): the SaveSettings round-trip clamps otherwise. -->
+                                <Slider x:Name="SliderImages" x:FieldModifier="internal" Minimum="1" Maximum="20" Value="5" Margin="0,1" ValueChanged="SliderImages_Changed"/>
                             </StackPanel>
                         </Grid>
                         
