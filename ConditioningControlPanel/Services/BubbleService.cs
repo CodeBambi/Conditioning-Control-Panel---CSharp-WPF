@@ -739,7 +739,9 @@ public class BubbleService : IDisposable
     private void BeginAmbientHostIfEnabled()
     {
         if (_ambientHost) return;
-        if (App.Settings?.Current?.BubbleSharedHost != true) return;
+        // Stand up when the ambient Canvas host is opted in, OR whenever the compositor is on (the
+        // BubbleLayer needs the same _ambientHost gate + hook that feed the renderer-agnostic pop path).
+        if (App.Settings?.Current?.BubbleSharedHost != true && !Bubble.UseCompositor) return;
         _ambientHost = true;
         Bubble.AmbientHostActive = true;
         ChaosBubbleHostOverlay.EnsureCreated();
@@ -2047,6 +2049,23 @@ internal class Bubble
     /// does, but driven by the AppSettings.BubbleSharedHost flag instead of the chaos one.</summary>
     internal static bool AmbientHostActive;
 
+    // ---- Compositor BubbleLayer (unified overlay host) ----
+    // When the flag is on, a bubble that WOULD ride the shared Canvas host renders on the
+    // compositor's BubbleLayer instead: same hook-pop input contract (UsesHost stays true, hit
+    // discs are renderer-agnostic), just Skia draw calls in place of a WPF _grid on a Canvas.
+    private static Compositor.BubbleLayer? s_layer;
+    internal static bool UseCompositor =>
+        (App.CompositorForced || App.Settings?.Current?.UnifiedOverlayHost == true) && App.Compositor != null;
+    /// <summary>Lazily create + register the shared BubbleLayer. Null if the compositor is off.</summary>
+    private static Compositor.BubbleLayer? EnsureLayer()
+    {
+        if (s_layer != null) return s_layer;
+        if (App.Compositor == null) return null;
+        try { s_layer = new Compositor.BubbleLayer(App.Compositor); App.Compositor.RegisterLayer(s_layer); }
+        catch { s_layer = null; }
+        return s_layer;
+    }
+
     /// <summary>A hidden, reset transparent window shell of exactly <paramref name="bucket"/> px square —
     /// recycled from that bucket or freshly built at that size. Never resized after creation. UI thread only.</summary>
     private static Window RentWindow(int bucket)
@@ -2116,6 +2135,10 @@ internal class Bubble
 
     private readonly Window? _window;   // null in shared-host mode (the grid lives on ChaosBubbleHostOverlay)
     private readonly bool _useHost;     // AppSettings.ChaosBubbleSharedHost && chaos bubble — see the spawn block
+    private readonly bool _useLayer;    // UnifiedOverlayHost: render on the compositor BubbleLayer (also window-less)
+    private Compositor.BubbleLayer.BubbleItem? _layerItem;   // this bubble's draw-state on the layer (null off-layer)
+    private Image? _teaseFaceImg;       // the tease face's frame Image (read per-frame for the layer's current frame)
+    private SkiaSharp.SKPoint[][]? _crackPts;   // brittle crack polylines in DIP (0.._size box) for the layer
     private readonly FrameworkElement _fxTarget;   // where glow/opacity apply: _window (per-window) or _grid (host)
     private double _winDim;   // the (quantized) square window side this bubble uses; held so AnimateFrame can re-centre without resizing the window (see spawn — resizing churns the layered DIB)
     private System.Windows.Input.MouseButtonEventHandler? _winClickHandler;   // removed on death so the pooled window never roots a dead bubble
@@ -2462,10 +2485,11 @@ internal class Bubble
 
     // ---- Shared-host pop hit-testing (mouse-hook path; see BubbleService.OnSharedHostLeftDown) ----
 
-    /// <summary>True when this bubble renders on the shared Canvas host (vs. its own pooled layered
-    /// window). The hook-pop path targets ONLY host bubbles; per-window bubbles keep their WPF handler,
-    /// so this is the guard that prevents a double-pop across the two render paths.</summary>
-    internal bool UsesHost => _useHost;
+    /// <summary>True when this bubble renders window-less on a SHARED surface (the Canvas host OR the
+    /// compositor BubbleLayer) rather than its own pooled layered window. Both share the hook-pop input
+    /// contract (renderer-agnostic hit discs); per-window bubbles keep their WPF handler, so this is the
+    /// guard that prevents a double-pop across the render paths.</summary>
+    internal bool UsesHost => _useHost || _useLayer;
 
     /// <summary>This bubble is currently a valid left-click pop target.</summary>
     internal bool HostHitClickable => _isClickable && _isAlive && !_isDestroyed && !_isPopping && !_claimedByAvatar;
@@ -2487,6 +2511,100 @@ internal class Bubble
     /// <summary>Pop this bubble from a shared-host hook click (UI thread) — routes exactly like a
     /// real press (tease/brittle/channel/benign all handled by OnPlayerPress).</summary>
     internal void HostHookPop() => OnPlayerPress();
+
+    // ---- Compositor BubbleLayer bridge (see Services/Compositor/BubbleLayer.cs) ----
+
+    /// <summary>Build this bubble's compositor draw item from its (static) spawn state. Called once
+    /// from the ctor when _useLayer; the per-frame values are filled by <see cref="SyncLayerItem"/>.
+    /// Mirrors the WPF visual tree built above (base sprite + BuildChaosLayers), resolved from the
+    /// same flags so the two render paths match.</summary>
+    private Compositor.BubbleLayer.BubbleItem BuildLayerItem()
+    {
+        bool hasTint = _spec != null && !_hasVariantSprite;
+        var tint = _spec != null
+            ? new SkiaSharp.SKColor(_spec.Tint.R, _spec.Tint.G, _spec.Tint.B)
+            : new SkiaSharp.SKColor(0xE8, 0xE8, 0xF0);
+
+        // Glow: the DropShadow that wins on the sprite (or the spotlight halo), resolved from flags.
+        bool hasGlow = false; var glowColor = default(SkiaSharp.SKColor); float glowBlur = 0, glowOp = 0;
+        if (_spec != null)
+        {
+            if (_spec.IsSweeper) { glowColor = new SkiaSharp.SKColor(0xFF, 0x8A, 0x14); glowBlur = 36; glowOp = 1.0f; hasGlow = true; }
+            else if (_isDarter) { glowColor = tint; glowBlur = 26; glowOp = 0.9f; hasGlow = true; }
+            else if (_spec.IsGolden) { glowColor = new SkiaSharp.SKColor(0xFF, 0xD7, 0x00); glowBlur = 20; glowOp = 0.55f; hasGlow = true; }
+            else if (_spec.IsBrittle) { glowColor = new SkiaSharp.SKColor(0xBF, 0xE6, 0xFF); glowBlur = 22; glowOp = 0.6f; hasGlow = true; }
+            else if (_spec.Spotlight)
+            {
+                var tier = PerformanceProfile.CurrentTier;
+                if (PerformanceProfile.AllowGlow(tier))
+                {
+                    glowColor = new SkiaSharp.SKColor(0xFF, 0xD7, 0x00);
+                    glowBlur = (float)Math.Min(40, PerformanceProfile.MaxGlowBlurRadius(tier));
+                    glowOp = 0.85f; hasGlow = true;
+                }
+            }
+        }
+
+        var item = new Compositor.BubbleLayer.BubbleItem
+        {
+            DpiScale = (float)_dpiScale,
+            SizeDip = _size,
+            HitSizeDip = _hitSize,
+            Sprite = Compositor.BubbleLayer.ResolveSprite(_bubbleImage.Source as System.Windows.Media.Imaging.BitmapSource),
+            HasTint = hasTint,
+            Tint = tint,
+            Label = (_spec != null && !_hasVariantSprite && !string.IsNullOrEmpty(_spec.Label)) ? _spec.Label : null,
+            LabelFontDip = (float)Math.Max(14, _size * 0.30),
+            HasShine = ChaosSkiaFxOverlay.Enabled && !_hasVariantSprite && _spec != null,
+            IsEcho = _spec?.IsEcho == true,
+            EchoColor = _spec != null ? new SkiaSharp.SKColor(_spec.Tint.R, _spec.Tint.G, _spec.Tint.B, 110) : default,
+            IsTease = _isTease,
+            TeaseInnerDip = (float)(_size * 0.86),
+            HasGlow = hasGlow,
+            GlowColor = glowColor,
+            GlowBlurDip = glowBlur,
+            GlowOpacity = glowOp,
+            PrismGhost = Compositor.BubbleLayer.ResolveSprite(_prismGhost?.Source as System.Windows.Media.Imaging.BitmapSource),
+            Cracks = _crackPts,
+            HintText = (_hintEl?.Child as TextBlock)?.Text,
+            HintYOffDip = (float)(_size / 2.0 + Math.Clamp(_winPad - 24.0, 2.0, 14.0)),
+        };
+        return item;
+    }
+
+    /// <summary>Copy the frame's just-computed visual state onto the draw item. Reads the values the
+    /// (unshown) WPF animation wrote this tick — position, the composed sprite scale/opacity, and each
+    /// variant element's animated scale/colour/opacity — so the layer never re-derives animation.</summary>
+    private void SyncLayerItem(double currentScale, double opacity, double jx, double jy)
+    {
+        var it = _layerItem;
+        if (it == null) return;
+        it.CenterXPx = (_posX + _size / 2.0 + jx) * _dpiScale;
+        it.CenterYPx = (_posY + _size / 2.0 + jy) * _dpiScale;
+        it.Scale = (float)currentScale;
+        it.Angle = (float)_angle;
+        it.Opacity = (float)opacity;
+
+        if (_fuseRing != null)
+        {
+            it.FuseScale = (float)((_fuseRing.RenderTransform as ScaleTransform)?.ScaleX ?? 1.0);
+            it.FuseOpacity = (float)_fuseRing.Opacity;
+            if (_fuseStrokeBrush != null)
+            { var c = _fuseStrokeBrush.Color; it.FuseColor = new SkiaSharp.SKColor(c.R, c.G, c.B); }
+        }
+        if (_telegraphRing != null)
+        {
+            it.TelegraphScale = (float)((_telegraphRing.RenderTransform as ScaleTransform)?.ScaleX ?? 1.0);
+            it.TelegraphOpacity = _telegraphRing.Visibility == Visibility.Visible ? (float)_telegraphRing.Opacity : 0f;
+        }
+        if (_freezeAura != null) it.FreezeAuraOpacity = (float)_freezeAura.Opacity;
+        if (_brittleCracks != null) it.BrittleOpacity = (float)_brittleCracks.Opacity;
+        if (_teaseShine != null) it.TeaseShineOpacity = (float)_teaseShine.Opacity;
+        if (_teaseFaceImg != null) it.TeaseSource = _teaseFaceImg.Source as System.Windows.Media.Imaging.BitmapSource;
+        if (_shieldRing != null) it.ShieldOpacity = (float)_shieldRing.Opacity;
+        if (_prismGhost != null) it.PrismOpacity = (float)_prismGhost.Opacity;
+        if (_hintEl != null) it.HintOpacity = _hintEl.Visibility == Visibility.Visible ? (float)_hintEl.Opacity : 0f;
+    }
 
     /// <summary>The box grown by <paramref name="expand"/> about its centre — the reach of its pop burst.</summary>
     public Rect ChainReach(double expand)
@@ -2825,15 +2943,36 @@ internal class Bubble
         // BubbleSharedHost while the ambient host is standing. forceWindowMode pins per-window
         // rendering: CreateAmbientBubble sets it for a trigger bubble whose target screen the
         // host can't cover (host down, or spawn on a screen outside its stage bounds).
-        bool chaosHost = spec != null && !ambientTrigger && (App.Settings?.Current?.ChaosBubbleSharedHost ?? false);
-        bool ambientHost = (spec == null || ambientTrigger) && AmbientHostActive && (App.Settings?.Current?.BubbleSharedHost ?? false);
-        _useHost = !forceWindowMode && (chaosHost || ambientHost);
+        // Under the unified overlay host the compositor IS the shared host, so a would-be host
+        // bubble rides the BubbleLayer even when the experimental Canvas-host flags are off (the
+        // chaos run's _rippleHook / the ambient _ambientHook already give the hook-pop path).
+        bool chaosHost = spec != null && !ambientTrigger && ((App.Settings?.Current?.ChaosBubbleSharedHost ?? false) || UseCompositor);
+        bool ambientHost = (spec == null || ambientTrigger) && AmbientHostActive && ((App.Settings?.Current?.BubbleSharedHost ?? false) || UseCompositor);
+        bool wantsHost = !forceWindowMode && (chaosHost || ambientHost);
+        // Under the unified overlay host, a would-be host bubble renders on the compositor
+        // BubbleLayer instead of the Canvas host (same window-less, hook-pop contract).
+        _useLayer = wantsHost && UseCompositor && EnsureLayer() != null;
+        _useHost = wantsHost && !_useLayer;
 
         // Quantized window side (per-window mode); also a harmless notional size in host mode.
         double winNeed = Math.Max(_size, _hitSize) + _winPad * 2;
         _winDim = Math.Ceiling(winNeed / 128.0) * 128.0;
 
-        if (_useHost)
+        if (_useLayer)
+        {
+            // COMPOSITOR-LAYER MODE: no per-bubble Window and no Canvas host child. The WPF _grid
+            // tree still exists and is animated by AnimateFrame (unshown), but its computed visual
+            // state is copied into a BubbleLayer.BubbleItem each frame (SyncLayerItem) and drawn in
+            // Skia on the shared overlay host. Pops come from the global mouse hook exactly like the
+            // Canvas host (UsesHost stays true → the disc snapshot includes this bubble).
+            _window = null;
+            _fxTarget = _grid;
+            _grid.Opacity = _baseOpacity;
+            _grid.Effect = null;
+            _layerItem = BuildLayerItem();
+            s_layer?.Add(_layerItem);
+        }
+        else if (_useHost)
         {
             // SHARED-HOST MODE: no per-bubble Window. The grid is a child of the one
             // ChaosBubbleHostOverlay Canvas, repositioned each frame via Canvas.SetLeft/Top — no
@@ -2916,10 +3055,10 @@ internal class Bubble
             try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x8A, 0x14), BlurRadius = 36, ShadowDepth = 0, Opacity = 1.0 }; } catch { }
         }
 
-        // Show + alt-tab hide (per-window mode only — the host is already shown). A recycled shell can be
-        // parked on its previous monitor; reveal chaos bubbles at zero opacity, pin to the target screen
-        // in physical px, then restore opacity, so the first visible frame is on the right monitor.
-        if (!_useHost)
+        // Show + alt-tab hide (per-window mode only — the host/layer is already shown). A recycled shell
+        // can be parked on its previous monitor; reveal chaos bubbles at zero opacity, pin to the target
+        // screen in physical px, then restore opacity, so the first visible frame is on the right monitor.
+        if (!_useHost && !_useLayer)
         {
             if (_spec != null)
             {
@@ -3507,7 +3646,14 @@ internal class Bubble
                 }
             }
             _fxTarget.Opacity = opacity;
-            if (_useHost)
+            if (_useLayer)
+            {
+                // Copy the just-computed visual state onto the compositor draw item (no window, no
+                // Canvas). currentScale/opacity are already applied to the WPF tree above; the rest
+                // (fuse/telegraph/aura/tease/etc.) is read off the elements the animation just wrote.
+                SyncLayerItem(currentScale, opacity, jx, jy);
+            }
+            else if (_useHost)
             {
                 // Cheap Canvas reposition — no SetWindowPos. Grid (_hitSize) centred on the bubble.
                 // PHYSICAL px: the host converts by its own origin/scale (mixed-DPI safe).
@@ -4150,6 +4296,7 @@ internal class Bubble
             var crackBrush = new SolidColorBrush(Color.FromArgb(0xD8, 0xEC, 0xF7, 0xFF));
             crackBrush.Freeze();
             double c = _size / 2.0;
+            var crackPts = new SkiaSharp.SKPoint[3][];   // shared with the compositor layer
             for (int i = 0; i < 3; i++)
             {
                 // Each crack: a jagged 3-segment polyline from near the centre out to the rim.
@@ -4157,19 +4304,24 @@ internal class Bubble
                 double r1 = _size * 0.12, r2 = _size * 0.27, r3 = _size * 0.44;
                 double kink1 = a + (_random.NextDouble() - 0.5) * 0.7;
                 double kink2 = kink1 + (_random.NextDouble() - 0.5) * 0.7;
+                var p0 = new Point(c + Math.Cos(a) * r1, c + Math.Sin(a) * r1);
+                var p1 = new Point(c + Math.Cos(kink1) * r2, c + Math.Sin(kink1) * r2);
+                var p2 = new Point(c + Math.Cos(kink2) * r3, c + Math.Sin(kink2) * r3);
+                crackPts[i] = new[]
+                {
+                    new SkiaSharp.SKPoint((float)p0.X, (float)p0.Y),
+                    new SkiaSharp.SKPoint((float)p1.X, (float)p1.Y),
+                    new SkiaSharp.SKPoint((float)p2.X, (float)p2.Y),
+                };
                 _brittleCracks.Children.Add(new System.Windows.Shapes.Polyline
                 {
-                    Points = new PointCollection
-                    {
-                        new Point(c + Math.Cos(a) * r1,     c + Math.Sin(a) * r1),
-                        new Point(c + Math.Cos(kink1) * r2, c + Math.Sin(kink1) * r2),
-                        new Point(c + Math.Cos(kink2) * r3, c + Math.Sin(kink2) * r3),
-                    },
+                    Points = new PointCollection { p0, p1, p2 },
                     Stroke = crackBrush,
                     StrokeThickness = 1.6,
                     IsHitTestVisible = false,
                 });
             }
+            _crackPts = crackPts;
             _grid.Children.Add(_brittleCracks);
         }
 
@@ -4377,6 +4529,7 @@ internal class Bubble
                     });
                 }
             }
+            _teaseFaceImg = img;   // layer mode reads its current Source each frame for the Skia frame
             face.Children.Add(img);
         }
 
@@ -4504,7 +4657,13 @@ internal class Bubble
         }
         catch { }
 
-        if (_useHost)
+        if (_useLayer)
+        {
+            // Layer mode: drop the draw item (disposes its owned tease frames) — no window, no Canvas child.
+            try { if (_layerItem != null) s_layer?.Remove(_layerItem); } catch { }
+            _layerItem = null;
+        }
+        else if (_useHost)
         {
             // Host mode: pull the grid off the shared Canvas — there's no per-bubble window to recycle.
             try { ChaosBubbleHostOverlay.Remove(_grid); } catch { }
