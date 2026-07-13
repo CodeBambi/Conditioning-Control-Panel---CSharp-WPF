@@ -288,6 +288,7 @@ namespace ConditioningControlPanel
         public static SessionLogService SessionLog { get; private set; } = null!;
         public static ProgressionService Progression { get; private set; } = null!;
         public static SubliminalService Subliminal { get; private set; } = null!;
+        public static Services.Compositor.CompositorEngine? Compositor { get; private set; }
         public static OverlayService Overlay { get; private set; } = null!;
         public static ScreenShakeService ScreenShake { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
@@ -1365,6 +1366,10 @@ namespace ConditioningControlPanel
             Personality.MigrateFromLegacy(Settings.Current);
 
             Subliminal = new SubliminalService();
+            // Unified overlay host (experimental, Settings.UnifiedOverlayHost): shared per-monitor
+            // Skia surface the effect services route to instead of per-effect windows. Inert (no
+            // windows, no render tick) until a layer activates, so constructing it always is free.
+            Compositor = new Services.Compositor.CompositorEngine();
             Overlay = new OverlayService();
             ScreenShake = new ScreenShakeService();
             Bubbles = new BubbleService();
@@ -3176,6 +3181,7 @@ Application State:
             Video?.Dispose();
             Subliminal?.Dispose();
             Overlay?.Dispose();
+            Compositor?.Dispose(); // after effect services so their layers deactivate first
             ScreenShake?.Dispose();
             try { Chaos?.ForceShutdown(); } catch { }
             Bubbles?.Dispose();
