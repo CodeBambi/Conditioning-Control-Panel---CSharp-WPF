@@ -639,6 +639,13 @@ public class BubbleService : IDisposable
 
             // 3) the companion pops it — 50% louder, and the benign callback fires the effect payload
             bubble.PopByAvatar(1.5f);
+
+            // 3b) Let the payload's presentation surge settle before going home: the pop fires
+            // burst sparkles + an overlay/flash show, all damaging layered surfaces at once, and
+            // the re-attach then resizes/re-styles the avatar's OWN layered window. That exact
+            // collision produced a captured render-thread deadlock (hang_20260713_110759: render
+            // thread wedged in CWGXBitmapLockState::LockRead) — give the surge a beat to pass.
+            await Task.Delay(2500, ct);
         }
         catch (OperationCanceledException) { /* run ended / shutdown mid-egg */ }
         catch (Exception ex) { App.Logger?.Debug("Avatar bubble egg failed: {E}", ex.Message); }
