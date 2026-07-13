@@ -93,6 +93,9 @@ public class OverlayService : IDisposable
     // "Is showing" checks must cover BOTH render paths - the 500ms sync and pulse gate on these.
     private bool PinkShowing => _pinkFilterWindows.Count > 0 || _pinkLayer?.IsActive == true;
     private bool SpiralShowing => _spiralWindows.Count > 0 || _spiralLayer?.IsShowing == true;
+    // Path the spiral LAYER failed to decode (exotic GIF SKCodec rejects): the next StartSpiral
+    // for the same path skips the layer and uses the legacy windows instead of retrying forever.
+    private string? _spiralLayerFailedPath;
 
     private int _consecutiveTopmostLossCount;
     // Recreate-overlays backoff. Destroying + recreating every layered overlay window on a 3s cadence
@@ -983,9 +986,16 @@ public class OverlayService : IDisposable
 
         // Compositor route covers the GIF/animated path only; video spirals (MediaElement)
         // have no layer frame source yet and always use the legacy windows.
-        if (UseCompositor && _isGifSpiral)
+        if (UseCompositor && _isGifSpiral && _spiralPath != _spiralLayerFailedPath)
         {
-            GetSpiralLayer().Show(_spiralPath, (App.Settings.Current.SpiralOpacity / 100.0) * 0.1);
+            var failedPath = _spiralPath;
+            GetSpiralLayer().Show(_spiralPath, (App.Settings.Current.SpiralOpacity / 100.0) * 0.1,
+                onFailed: () =>
+                {
+                    // Remember the bad path; the 500ms sync re-enters StartSpiral, which now
+                    // routes this path to the legacy windows (self-healing, no retry churn).
+                    _spiralLayerFailedPath = failedPath;
+                });
             _lastAppliedSpiralOpacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
             App.Logger?.Debug("Spiral started on compositor layer ({Path})", _spiralPath);
             return;

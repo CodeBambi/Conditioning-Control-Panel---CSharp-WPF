@@ -80,14 +80,35 @@ internal static class AnimatedWebp
         string path, int maxDim, int maxFrames, double maxMemoryMb)
     {
         _decodeGate.Wait();
-        try { return DecodeFramesCore(path, maxDim, maxFrames, maxMemoryMb); }
+        try
+        {
+            using var codec = SKCodec.Create(path);
+            return DecodeFramesCore(codec, maxDim, maxFrames, maxMemoryMb);
+        }
+        finally { _decodeGate.Release(); }
+    }
+
+    /// <summary>
+    /// Stream variant of <see cref="DecodeFrames(string,int,int,double)"/> for sources that are
+    /// not on-disk files (pack:// application resources, mod archives). Same global decode gate.
+    /// </summary>
+    public static (List<BitmapSource> Frames, TimeSpan FrameDelay)? DecodeFrames(
+        Stream stream, int maxDim, int maxFrames, double maxMemoryMb)
+    {
+        _decodeGate.Wait();
+        try
+        {
+            using var data = SKData.Create(stream);
+            if (data == null) return null;
+            using var codec = SKCodec.Create(data);
+            return DecodeFramesCore(codec, maxDim, maxFrames, maxMemoryMb);
+        }
         finally { _decodeGate.Release(); }
     }
 
     private static (List<BitmapSource> Frames, TimeSpan FrameDelay)? DecodeFramesCore(
-        string path, int maxDim, int maxFrames, double maxMemoryMb)
+        SKCodec? codec, int maxDim, int maxFrames, double maxMemoryMb)
     {
-        using var codec = SKCodec.Create(path);
         if (codec == null) return null;
         int frameCount = codec.FrameCount;
         if (frameCount <= 1) return null;

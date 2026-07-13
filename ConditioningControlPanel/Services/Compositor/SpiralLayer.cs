@@ -30,12 +30,38 @@ public class SpiralLayer : BaseLayer
     public bool IsShowing => IsActive || _loading;
 
     /// <summary>Decode <paramref name="path"/> off-thread and show when ready. Opacity is the
-    /// FINAL value (caller applies the x0.1 spiral reduction). UI thread.</summary>
-    public void Show(string path, double opacity)
+    /// FINAL value (caller applies the x0.1 spiral reduction). <paramref name="onFailed"/> runs
+    /// on the UI thread if decoding produces no frames (NOT when superseded by a newer Show),
+    /// so the caller can fall back to the legacy render path. UI thread.</summary>
+    public void Show(string path, double opacity, Action? onFailed = null)
     {
         _opacity = Math.Clamp(opacity, 0.0, 1.0);
         int gen = Interlocked.Increment(ref _generation);
         _loading = true;
+
+        // The default spiral resolves to a pack:// application-resource URI (only mods/user
+        // overrides are on-disk files) - SKCodec cannot open those, so materialize the resource
+        // bytes here on the UI thread (cheap, no decode) and let the background task decode
+        // from the stream.
+        byte[]? resourceBytes = null;
+        if (path.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var sri = Application.GetResourceStream(new Uri(path, UriKind.Absolute));
+                if (sri?.Stream != null)
+                {
+                    using var s = sri.Stream;
+                    using var ms = new System.IO.MemoryStream();
+                    s.CopyTo(ms);
+                    resourceBytes = ms.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("SpiralLayer: could not open resource {Path}: {E}", path, ex.Message);
+            }
+        }
 
         Task.Run(() =>
         {
@@ -46,7 +72,15 @@ public class SpiralLayer : BaseLayer
                 // Same decoder + global decode gate as flashes (heap-corruption discipline,
                 // d05d5ae4). Budget mirrors the legacy spiral loader: fullscreen asset, keep
                 // the loop's motion arc.
-                decoded = AnimatedWebp.DecodeFrames(path, maxDim: 1280, maxFrames: 60, maxMemoryMb: 160);
+                if (resourceBytes != null)
+                {
+                    using var ms = new System.IO.MemoryStream(resourceBytes);
+                    decoded = AnimatedWebp.DecodeFrames(ms, maxDim: 1280, maxFrames: 60, maxMemoryMb: 160);
+                }
+                else
+                {
+                    decoded = AnimatedWebp.DecodeFrames(path, maxDim: 1280, maxFrames: 60, maxMemoryMb: 160);
+                }
                 if (decoded != null)
                     frames = decoded.Value.Frames.Select(SkiaWpfInterop.ToSKImage).ToArray();
             }
@@ -74,7 +108,9 @@ public class SpiralLayer : BaseLayer
                 _loading = false;
                 if (frames == null || frames.Length == 0 || decoded == null)
                 {
-                    App.Logger?.Warning("SpiralLayer: no frames decoded from {Path}; spiral not shown", path);
+                    App.Logger?.Warning("SpiralLayer: no frames decoded from {Path}; falling back to legacy path", path);
+                    try { onFailed?.Invoke(); }
+                    catch (Exception ex) { App.Logger?.Error(ex, "SpiralLayer: fallback handler failed"); }
                     return;
                 }
                 DisposeFrames();
