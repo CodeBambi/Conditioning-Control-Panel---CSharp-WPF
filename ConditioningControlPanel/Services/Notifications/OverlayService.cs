@@ -90,8 +90,19 @@ public class OverlayService : IDisposable
         }
         return _spiralLayer;
     }
+    private Compositor.BrainDrainLayer? _brainDrainLayer;
+    private Compositor.BrainDrainLayer GetBrainDrainLayer()
+    {
+        if (_brainDrainLayer == null)
+        {
+            _brainDrainLayer = new Compositor.BrainDrainLayer(App.Compositor!);
+            App.Compositor!.RegisterLayer(_brainDrainLayer);
+        }
+        return _brainDrainLayer;
+    }
     // "Is showing" checks must cover BOTH render paths - the 500ms sync and pulse gate on these.
     private bool PinkShowing => _pinkFilterWindows.Count > 0 || _pinkLayer?.IsActive == true;
+    private bool BrainDrainShowing => _brainDrainBlurWindows.Count > 0 || _brainDrainLayer?.IsActive == true;
     private bool SpiralShowing => _spiralWindows.Count > 0 || _spiralLayer?.IsShowing == true
         || _spiralLayerDecodePending != null;
     // Off-thread spiral decode state for the layer route: the path being decoded right now
@@ -312,7 +323,7 @@ public class OverlayService : IDisposable
         });
 
         App.Logger?.Debug("Overlays refreshed - Pink: {Pink}, Spiral: {Spiral}, BrainDrain: {BrainDrain}",
-            PinkShowing, SpiralShowing, _brainDrainBlurWindows.Count > 0);
+            PinkShowing, SpiralShowing, BrainDrainShowing);
     }
 
     /// <summary>
@@ -327,7 +338,7 @@ public class OverlayService : IDisposable
             var settings = App.Settings.Current;
             var hasPink = settings.PinkFilterEnabled && PinkShowing;
             var hasSpiral = settings.SpiralEnabled && SpiralShowing;
-            var hasBrainDrain = settings.BrainDrainEnabled && _brainDrainBlurWindows.Count > 0;
+            var hasBrainDrain = settings.BrainDrainEnabled && BrainDrainShowing;
 
             if (!hasPink && !hasSpiral && !hasBrainDrain) return;
 
@@ -367,6 +378,8 @@ public class OverlayService : IDisposable
             {
                 var boostedIntensity = Math.Min(_currentBrainDrainIntensity * 2, 200);
                 double blurRadius = boostedIntensity * 0.4;
+                if (_brainDrainLayer?.IsActive == true)
+                    _brainDrainLayer.Pulse(boostedIntensity);
                 foreach (var img in _brainDrainImages.Values)
                 {
                     if (img.Effect is System.Windows.Media.Effects.BlurEffect blur)
@@ -1596,7 +1609,7 @@ public class OverlayService : IDisposable
 
     public void StartBrainDrainBlur(int intensity)
     {
-        if (_brainDrainBlurWindows.Count > 0) return;
+        if (BrainDrainShowing) return;
 
         _currentBrainDrainIntensity = intensity;
 
@@ -1604,6 +1617,15 @@ public class OverlayService : IDisposable
         {
             try
             {
+                if (UseCompositor)
+                {
+                    // Compositor route: capture + blur render on the shared capture-excluded
+                    // host; no per-screen layered windows, no WPF BlurEffect rasterization.
+                    GetBrainDrainLayer().Start(intensity);
+                    App.Logger?.Information("Brain Drain started on compositor layer, intensity {Intensity}%", intensity);
+                    return;
+                }
+
                 var settings = App.Settings.Current;
                 var screens = settings.DualMonitorEnabled
                     ? App.GetAllScreensCached()
@@ -1652,6 +1674,13 @@ public class OverlayService : IDisposable
         try
         {
             _rampBrainDrainOpacity = null; // release any Deeper ramp ownership
+
+            // Layer route (checked by activity, not the flag - mid-run flag flips must not strand it).
+            if (_brainDrainLayer?.IsActive == true)
+            {
+                DispatcherHelper.RunOnUISync(() => _brainDrainLayer.Stop());
+            }
+
             _brainDrainCaptureTimer?.Stop();
             _brainDrainCaptureTimer = null;
 
@@ -1690,6 +1719,10 @@ public class OverlayService : IDisposable
 
         DispatcherHelper.RunOnUISync(() =>
         {
+            if (_brainDrainLayer?.IsActive == true)
+            {
+                _brainDrainLayer.SetIntensity(intensity);
+            }
             foreach (var img in _brainDrainImages.Values)
             {
                 if (img.Effect is System.Windows.Media.Effects.BlurEffect blur)
@@ -2470,7 +2503,7 @@ public class OverlayService : IDisposable
 
         if (settings.BrainDrainEnabled && settings.IsLevelUnlocked(70)) // Level 70 requirement for Brain Drain
         {
-            if (_brainDrainBlurWindows.Count == 0)
+            if (!BrainDrainShowing)
             {
                 StartBrainDrainBlur((int)settings.BrainDrainIntensity);
             }
@@ -2507,6 +2540,7 @@ public class OverlayService : IDisposable
         _gifLoopTimer = null;
         _brainDrainImages.Clear();
         CleanupCaptureResources();
+        try { _brainDrainLayer?.Stop(); } catch { /* shutdown path - GDI freed by OS anyway */ }
 
         // Unsubscribe from settings changes
         if (App.Settings?.Current != null)
