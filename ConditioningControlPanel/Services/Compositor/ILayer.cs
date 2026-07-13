@@ -49,6 +49,20 @@ public interface IWpfLayer
     void Update(TimeSpan delta);
 
     /// <summary>
+    /// True if this layer's visible output changed since the last <see cref="ClearDirty"/>. The
+    /// engine only re-rasters a shared surface when at least one of its active layers is dirty, so
+    /// a slow layer (a ~10fps spiral GIF) or a static one (a steady pink tint) no longer forces the
+    /// fullscreen software surface to re-raster at 60fps on the UI thread (#550). Default true =
+    /// repaint every active frame, which is correct for continuously-animating layers (bubbles,
+    /// chaos FX, flash, subliminal); only slow/static layers override this.
+    /// </summary>
+    bool Dirty => true;
+
+    /// <summary>Engine calls this once per tick after it has queued this frame's surface
+    /// invalidations, so a layer that overrides <see cref="Dirty"/> can reset its flag.</summary>
+    void ClearDirty() { }
+
+    /// <summary>
     /// Draw onto the shared surface. <paramref name="boundsPx"/> is the full monitor surface in
     /// DEVICE PIXELS; <paramref name="dpiScale"/> converts DIP-tuned effect math to pixels.
     /// Called once per host window per tick while active. Draw persistent SKImages, never

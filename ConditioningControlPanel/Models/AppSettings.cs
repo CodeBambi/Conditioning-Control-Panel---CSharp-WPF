@@ -2294,18 +2294,39 @@ namespace ConditioningControlPanel.Models
             get => _chaosBubbleSharedHost;
             set { _chaosBubbleSharedHost = value; OnPropertyChanged(); }
         }
-        private bool _unifiedOverlayHost = true;
-        /// <summary>Default ON (owner-confirmed "100x better", 2026-07-13): render the fullscreen
+        private bool _unifiedOverlayHost = false;
+        /// <summary>Default OFF (reverted 2026-07-13, bug #550): render the fullscreen
         /// effects (pink filter, spiral, brain drain, subliminals, flash, bubbles, chaos FX) as
         /// z-ordered Skia layers inside ONE shared click-through compositor window per monitor
         /// (Services/Compositor/CompositorEngine) instead of one layered Window per effect.
         /// Concurrent fullscreen layered windows were the root cause of the session-lag /
         /// mouse-stutter cluster; this is the WPF twin of the Avalonia port's compositor and the
-        /// end-state renderer. Falls back to the legacy per-effect windows when off.</summary>
+        /// end-state renderer. Was briefly default ON (72456c1e) but the host renders through a
+        /// software SKElement on the UI thread, so a continuously-active fullscreen spiral
+        /// saturates the dispatcher on some machines (~1s input latency, #550). Kept OFF until the
+        /// host moves to GPU raster (SKGLElement) / throttled invalidation. Falls back to the
+        /// legacy per-effect windows when off.</summary>
         public bool UnifiedOverlayHost
         {
             get => _unifiedOverlayHost;
             set { _unifiedOverlayHost = value; OnPropertyChanged(); }
+        }
+        private bool _compositorOffThreadPresent;
+        /// <summary>Default OFF (experimental, #550 proper fix): when the unified overlay host is on,
+        /// render each monitor's layers OFF the UI thread. The UI-thread tick still runs Update() and
+        /// records the active layers into a cheap immutable SKPicture (draw-command capture, no raster);
+        /// a dedicated per-monitor present thread then rasterizes that picture into a DIB-backed surface
+        /// and pushes it with UpdateLayeredWindow(ULW_ALPHA). This removes the fullscreen software raster
+        /// + layered composite from the UI thread (the dispatcher-starvation that made the spiral lag the
+        /// whole app on some machines) while keeping per-pixel alpha, click-through and the layers'
+        /// UI-thread contract intact (SKImage frees route through the engine's deferred-disposal so an
+        /// image referenced by an in-flight picture is never freed under the present thread). No-op when
+        /// the unified host is off. Needs play-test on a high-res / multi-monitor machine before shipping
+        /// on - the win only shows where the UI-thread raster actually saturated.</summary>
+        public bool CompositorOffThreadPresent
+        {
+            get => _compositorOffThreadPresent;
+            set { _compositorOffThreadPresent = value; OnPropertyChanged(); }
         }
         private bool _chaosDvdSharedHost = true;
         /// <summary>Default ON (proven win): render the DVD bouncing-text logos (Porn DVD /
@@ -3731,6 +3752,32 @@ namespace ConditioningControlPanel.Models
             if (_speechLoudnessThreshold >= 0.035 && _speechLoudnessThreshold <= 0.045)
                 _speechLoudnessThreshold = 0.015;
             _loudnessThresholdRelaxed = true;
+        }
+
+        private bool _migratedUnifiedOverlayHostOff;
+        /// <summary>One-shot guard for <see cref="MigrateDisableUnifiedOverlayHost"/> so a user who
+        /// later re-enables the experimental compositor toggle isn't clobbered on the next launch.</summary>
+        [JsonProperty]
+        public bool MigratedUnifiedOverlayHostOff
+        {
+            get => _migratedUnifiedOverlayHostOff;
+            set { _migratedUnifiedOverlayHostOff = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Force the unified overlay host OFF once for users upgrading from 6.3.3, where it was
+        /// briefly default ON (72456c1e). The host renders through a software SKElement on the UI
+        /// thread, so a continuously-active fullscreen spiral saturated the dispatcher on some
+        /// machines (~1s input latency, bug #550). Because the property has no
+        /// DefaultValueHandling.Ignore, every 6.3.3 user has "true" written to settings.json, so a
+        /// default flip alone wouldn't reach them. Nobody enabled it deliberately in the &lt;1 day it
+        /// was default ON, and the in-app toggle can turn it back on — so a one-shot force-off is safe.
+        /// </summary>
+        internal void MigrateDisableUnifiedOverlayHost()
+        {
+            if (_migratedUnifiedOverlayHostOff) return;
+            _unifiedOverlayHost = false;
+            _migratedUnifiedOverlayHostOff = true;
         }
 
         private double _speechWakeThreshold = 0.15;

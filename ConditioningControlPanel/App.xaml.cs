@@ -292,6 +292,13 @@ namespace ConditioningControlPanel
         /// <summary>Launch-scoped override: `--overlay-host` forces the unified overlay host ON
         /// without persisting the setting (A/B testing seam).</summary>
         public static bool CompositorForced { get; private set; }
+        /// <summary>Launch-scoped override: `--overlay-ulw` forces the off-thread (UpdateLayeredWindow)
+        /// present path ON for this launch only, so #550's proper fix can be A/B tested without
+        /// persisting the setting. Implies <see cref="CompositorForced"/>.</summary>
+        public static bool CompositorOffThreadForced { get; private set; }
+        /// <summary>Effective off-thread-present decision: the persisted setting OR the launch flag.</summary>
+        public static bool CompositorOffThreadPresent =>
+            CompositorOffThreadForced || Settings?.Current?.CompositorOffThreadPresent == true;
         public static OverlayService Overlay { get; private set; } = null!;
         public static ScreenShakeService ScreenShake { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
@@ -1677,6 +1684,15 @@ namespace ConditioningControlPanel
             {
                 CompositorForced = true;
                 Logger?.Information("Unified overlay host FORCED ON via --overlay-host (this launch only)");
+            }
+
+            // `--overlay-ulw`: force the off-thread UpdateLayeredWindow present path ON (implies the
+            // unified host) for this launch only, to A/B test the #550 proper fix.
+            if (e.Args.Contains("--overlay-ulw"))
+            {
+                CompositorForced = true;
+                CompositorOffThreadForced = true;
+                Logger?.Information("Compositor OFF-THREAD present FORCED ON via --overlay-ulw (this launch only)");
             }
 
             // Pay the compositor's one-time host costs (window + hwnd + Skia surface + paint JIT)

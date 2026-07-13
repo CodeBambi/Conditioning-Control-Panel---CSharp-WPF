@@ -41,5 +41,11 @@ public abstract class BaseLayer : IWpfLayer
 
     public virtual void Update(TimeSpan delta) { }
 
+    /// <summary>Default true: repaint every active frame. Slow/static layers (spiral, pink tint)
+    /// override this with real change-tracking to throttle the fullscreen surface re-raster (#550).</summary>
+    public virtual bool Dirty => true;
+
+    public virtual void ClearDirty() { }
+
     public abstract void Render(SKCanvas canvas, SKRectI boundsPx, double dpiScale, TimeSpan elapsed);
 }

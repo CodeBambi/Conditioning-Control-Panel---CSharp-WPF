@@ -19,7 +19,10 @@ public class SpiralLayer : BaseLayer
     private double _opacity;
     private int _generation;               // orphans stale async decodes on Show/Hide races
     private volatile bool _loading;
-    private readonly SKPaint _paint = new() { FilterQuality = SKFilterQuality.Medium };
+    private bool _dirty = true;            // #550: throttle the fullscreen re-raster to actual changes
+    // Low (bilinear) not Medium: the spiral GIF (~500px) is UPSCALED to fullscreen, and mipmaps
+    // only help minification - so Low is the same visual result as Medium here for less per-frame cost.
+    private readonly SKPaint _paint = new() { FilterQuality = SKFilterQuality.Low };
 
     public SpiralLayer(CompositorEngine engine) : base(engine) { }
 
@@ -87,13 +90,23 @@ public class SpiralLayer : BaseLayer
                 _frameDelay = delay > TimeSpan.Zero ? delay : TimeSpan.FromMilliseconds(50);
                 _frameIndex = 0;
                 _accum = TimeSpan.Zero;
+                _dirty = true;          // first frame of a freshly-shown spiral must paint
                 SetActive(true);
             });
         });
     }
 
     /// <summary>Push a new FINAL opacity (ramp/pulse/settings already folded in). UI thread.</summary>
-    public void SetOpacity(double opacity) => _opacity = Math.Clamp(opacity, 0.0, 1.0);
+    public void SetOpacity(double opacity)
+    {
+        var v = Math.Clamp(opacity, 0.0, 1.0);
+        if (v == _opacity) return;      // redundant push (e.g. 500ms settings sync): don't force a repaint
+        _opacity = v;
+        _dirty = true;
+    }
+
+    public override bool Dirty => _dirty;
+    public override void ClearDirty() => _dirty = false;
 
     public void Hide()
     {
@@ -107,12 +120,14 @@ public class SpiralLayer : BaseLayer
     public override void Update(TimeSpan delta)
     {
         if (_frames.Length < 2) return;
+        int start = _frameIndex;
         _accum += delta;
         while (_accum >= _frameDelay)
         {
             _accum -= _frameDelay;
             _frameIndex = (_frameIndex + 1) % _frames.Length;
         }
+        if (_frameIndex != start) _dirty = true;   // only repaint the surface when the frame changed
     }
 
     public override void Render(SKCanvas canvas, SKRectI boundsPx, double dpiScale, TimeSpan elapsed)

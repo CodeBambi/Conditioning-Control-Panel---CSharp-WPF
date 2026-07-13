@@ -13,11 +13,12 @@ namespace ConditioningControlPanel.Services.Compositor;
 /// Created once and hidden/re-shown, never destroyed mid-run (layered-window churn deadlocks
 /// the WPF render thread - see the chaos overlay keep-alive rule).
 /// </summary>
-public class CompositorHostWindow : Window
+public class CompositorHostWindow : Window, ICompositorHost
 {
     private readonly SKElement _surface;
     private readonly bool _excludeFromCapture;
     private System.Drawing.Rectangle _screenBoundsPx;
+    private readonly double _dpiScale;
     private IntPtr _hwnd = IntPtr.Zero;
 
     /// <summary>Device name of the screen this host covers (System.Windows.Forms.Screen.DeviceName).</summary>
@@ -25,6 +26,9 @@ public class CompositorHostWindow : Window
 
     /// <summary>True when this host is the capture-excluded surface (brain drain et al.).</summary>
     public bool IsExcludedSurface => _excludeFromCapture;
+
+    /// <summary>Monitor DPI scale at creation (dpi / 96).</summary>
+    public double DpiScale => _dpiScale;
 
     /// <summary>This host's monitor rectangle in device pixels (world-space layers render
     /// relative to it — see IWpfLayer.WorldSpacePx).</summary>
@@ -56,6 +60,7 @@ public class CompositorHostWindow : Window
         // mixed-DPI lesson from the lock card #539 fix: DIP layout renders with a stale scale
         // on secondary monitors, device-pixel bounds do not).
         var dpi = GetDpiScaleForScreen(screen);
+        _dpiScale = dpi;
         Left = screen.Bounds.X / dpi;
         Top = screen.Bounds.Y / dpi;
         Width = screen.Bounds.Width / dpi;

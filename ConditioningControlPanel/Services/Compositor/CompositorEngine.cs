@@ -37,8 +37,13 @@ public class CompositorEngine : IDisposable
     private readonly List<IWpfLayer> _layers = new();
     private readonly Dictionary<IWpfLayer, bool> _lastActiveState = new();
 
-    private readonly Dictionary<string, CompositorHostWindow> _windows = new();
-    private readonly Dictionary<string, CompositorHostWindow> _excludedWindows = new();
+    private readonly Dictionary<string, ICompositorHost> _windows = new();
+    private readonly Dictionary<string, ICompositorHost> _excludedWindows = new();
+
+    // #550 off-thread present path (CompositorOffThreadPresent): latched the first time hosts are
+    // created so a mid-run settings toggle can't mix host types on one engine.
+    private bool _offThreadMode;
+    private bool _modeLatched;
 
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private TimeSpan _lastTickElapsed;
@@ -100,6 +105,9 @@ public class CompositorEngine : IDisposable
         }
     }
 
+    /// <summary>True when this engine presents off the UI thread (the #550 fix path is active).</summary>
+    public bool OffThreadActive => _offThreadMode;
+
     /// <summary>
     /// Pay the one-time host costs (window creation, hwnd + ex-styles, Skia surface alloc, paint
     /// JIT) at startup instead of on the first effect trigger. Creates and shows the main-surface
@@ -114,10 +122,8 @@ public class CompositorEngine : IDisposable
         {
             EnsureWindows(_windows, excluded: false);
             foreach (var w in _windows.Values)
-            {
                 if (!w.IsVisible) w.Show();
-                w.InvalidateSurface();
-            }
+            PresentSurface(_windows, excluded: false); // one (empty) frame realizes the surface + JIT
             Wake(); // ticks once, finds nothing active, parks + schedules the window hide
         }
         catch (Exception ex)
@@ -145,6 +151,12 @@ public class CompositorEngine : IDisposable
         if (delta > MaxDelta) delta = MaxDelta; // hitch: drop time instead of lurching
 
         bool anyMainActive = false, anyExcludedActive = false;
+        // Dirty-gated invalidation (#550): a surface only re-rasters when one of its active layers
+        // reports changed output this frame. The tick still runs at 60fps (cheap Update()s), but a
+        // ~10fps spiral / static pink tint no longer forces a fullscreen software raster + layered
+        // composite on the UI thread every frame. Layers default Dirty=true, so continuously-
+        // animating ones (bubbles/chaos FX/flash/subliminal) keep repainting every frame.
+        bool anyMainDirty = false, anyExcludedDirty = false;
 
         IWpfLayer[] layers;
         lock (_layerLock) layers = _layers.ToArray();
@@ -167,7 +179,8 @@ public class CompositorEngine : IDisposable
             }
 
             if (!active) continue;
-            if (layer.ExcludeFromCapture) anyExcludedActive = true;
+            bool excluded = layer.ExcludeFromCapture;
+            if (excluded) anyExcludedActive = true;
             else anyMainActive = true;
 
             try { layer.Update(delta); }
@@ -175,6 +188,9 @@ public class CompositorEngine : IDisposable
             {
                 App.Logger?.Error(ex, "CompositorEngine: layer Update failed ({Layer})", layer.GetType().Name);
             }
+
+            // Read Dirty AFTER Update so this frame's advance/opacity change counts.
+            if (layer.Dirty) { if (excluded) anyExcludedDirty = true; else anyMainDirty = true; }
         }
 
         var nowUtc = DateTime.UtcNow;
@@ -184,13 +200,22 @@ public class CompositorEngine : IDisposable
         ShowSurfaceIfActive(_windows, anyMainActive, excluded: false);
         ShowSurfaceIfActive(_excludedWindows, anyExcludedActive, excluded: true);
 
-        if (anyMainActive) foreach (var w in _windows.Values) w.InvalidateSurface();
-        if (anyExcludedActive) foreach (var w in _excludedWindows.Values) w.InvalidateSurface();
+        if (anyMainActive && anyMainDirty) PresentSurface(_windows, excluded: false);
+        if (anyExcludedActive && anyExcludedDirty) PresentSurface(_excludedWindows, excluded: true);
+
+        // Reset dirty flags now this frame's invalidations are queued. Only active layers matter;
+        // an inactive layer re-marks itself dirty when it next activates.
+        foreach (var layer in layers)
+        {
+            if (!layer.IsActive) continue;
+            try { layer.ClearDirty(); }
+            catch (Exception ex) { App.Logger?.Error(ex, "CompositorEngine: ClearDirty failed ({Layer})", layer.GetType().Name); }
+        }
 
         // Active -> inactive: paint ONE cleared frame. The hosts stay visible through
         // WindowHideGrace, and without this the last effect frame would linger on screen.
-        if (_wasMainActive && !anyMainActive) foreach (var w in _windows.Values) w.InvalidateSurface();
-        if (_wasExcludedActive && !anyExcludedActive) foreach (var w in _excludedWindows.Values) w.InvalidateSurface();
+        if (_wasMainActive && !anyMainActive) PresentSurface(_windows, excluded: false);
+        if (_wasExcludedActive && !anyExcludedActive) PresentSurface(_excludedWindows, excluded: true);
         _wasMainActive = anyMainActive;
         _wasExcludedActive = anyExcludedActive;
 
@@ -207,7 +232,7 @@ public class CompositorEngine : IDisposable
         }
     }
 
-    private void ShowSurfaceIfActive(Dictionary<string, CompositorHostWindow> surface, bool active, bool excluded)
+    private void ShowSurfaceIfActive(Dictionary<string, ICompositorHost> surface, bool active, bool excluded)
     {
         if (!active) return;
         EnsureWindows(surface, excluded);
@@ -249,20 +274,74 @@ public class CompositorEngine : IDisposable
         return t;
     }
 
-    private void EnsureWindows(Dictionary<string, CompositorHostWindow> surface, bool excluded)
+    private void EnsureWindows(Dictionary<string, ICompositorHost> surface, bool excluded)
     {
         System.Windows.Forms.Screen[] screens;
         try { screens = System.Windows.Forms.Screen.AllScreens; }
         catch { return; }
         if (screens.Length == 0) return; // can be empty during display transitions
 
+        if (!_modeLatched)
+        {
+            _offThreadMode = App.CompositorOffThreadPresent;
+            _modeLatched = true;
+            App.Logger?.Information("CompositorEngine: present mode = {Mode}",
+                _offThreadMode ? "OFF-THREAD (UpdateLayeredWindow)" : "UI-thread SKElement");
+        }
+
         foreach (var screen in screens)
         {
             if (surface.ContainsKey(screen.DeviceName)) continue;
-            var window = new CompositorHostWindow(screen, excluded);
-            window.PaintSurface += OnPaintSurface;
-            surface[screen.DeviceName] = window;
+            if (_offThreadMode)
+            {
+                surface[screen.DeviceName] = new LayeredCompositorHost(screen, excluded);
+            }
+            else
+            {
+                var window = new CompositorHostWindow(screen, excluded);
+                window.PaintSurface += OnPaintSurface;
+                surface[screen.DeviceName] = window;
+            }
         }
+    }
+
+    /// <summary>Present one surface's dirty frame in the active mode: WPF hosts invalidate (UI-thread
+    /// raster via <see cref="OnPaintSurface"/>); off-thread hosts get a freshly recorded picture handed
+    /// to their present thread. Also used for the single cleared frame on the active-&gt;inactive edge
+    /// (records an empty picture) and for prewarm.</summary>
+    private void PresentSurface(Dictionary<string, ICompositorHost> surface, bool excluded)
+    {
+        IWpfLayer[]? layers = null;
+        foreach (var host in surface.Values)
+        {
+            if (host is LayeredCompositorHost lh)
+            {
+                layers ??= SnapshotLayers();
+                lh.PresentPicture(RecordHost(host, layers, excluded));
+            }
+            else if (host is CompositorHostWindow ww)
+            {
+                ww.InvalidateSurface();
+            }
+        }
+    }
+
+    private IWpfLayer[] SnapshotLayers()
+    {
+        lock (_layerLock) return _layers.ToArray();
+    }
+
+    /// <summary>Record a monitor's active layers into an immutable picture, in device px, monitor-
+    /// local. Cheap (draw-command capture only); runs on the UI thread where layer state is safe to
+    /// read. The present thread rasterizes it later.</summary>
+    private SKPicture RecordHost(ICompositorHost host, IWpfLayer[] layers, bool excluded)
+    {
+        var sb = host.ScreenBoundsPx;
+        int w = Math.Max(1, sb.Width), h = Math.Max(1, sb.Height);
+        using var recorder = new SKPictureRecorder();
+        var canvas = recorder.BeginRecording(new SKRect(0, 0, w, h));
+        DrawLayers(canvas, layers, new SKRectI(0, 0, w, h), sb, host.DpiScale, excluded, _clock.Elapsed);
+        return recorder.EndRecording();
     }
 
     private void OnPaintSurface(CompositorHostWindow window, SKPaintSurfaceEventArgs e)
@@ -272,27 +351,32 @@ public class CompositorEngine : IDisposable
 
         var boundsPx = new SKRectI(0, 0, e.Info.Width, e.Info.Height);
         double dpiScale = window.ActualWidth > 0 ? e.Info.Width / window.ActualWidth : 1.0;
-        var elapsed = _clock.Elapsed;
+        IWpfLayer[] layers = SnapshotLayers();
+        DrawLayers(canvas, layers, boundsPx, window.ScreenBoundsPx, dpiScale,
+                   window.IsExcludedSurface, _clock.Elapsed);
+    }
 
-        IWpfLayer[] layers;
-        lock (_layerLock) layers = _layers.ToArray();
-
+    /// <summary>Draw the active layers for one surface onto <paramref name="canvas"/>. Shared by the
+    /// WPF live-raster path (<see cref="OnPaintSurface"/>) and the off-thread record path
+    /// (<see cref="RecordHost"/>) so layer transforms/culling are defined once.</summary>
+    private static void DrawLayers(SKCanvas canvas, IWpfLayer[] layers, SKRectI boundsPx,
+        System.Drawing.Rectangle screenBoundsPx, double dpiScale, bool excludedSurface, TimeSpan elapsed)
+    {
         foreach (var layer in layers) // already z-sorted; lower draws first
         {
-            if (!layer.IsActive || layer.ExcludeFromCapture != window.IsExcludedSurface) continue;
+            if (!layer.IsActive || layer.ExcludeFromCapture != excludedSurface) continue;
             try
             {
                 if (layer.WorldSpacePx)
                 {
                     // World-space layers draw in virtual-desktop device px. The surface is
-                    // normally exactly device-px sized (ApplyNativeState stamps physical
-                    // bounds); if WPF rasterized the SKElement at a stale scale during a
-                    // mixed-DPI transition, the scale factor re-squares it.
-                    var sb = window.ScreenBoundsPx;
+                    // normally exactly device-px sized; if WPF rasterized the SKElement at a
+                    // stale scale during a mixed-DPI transition, the scale factor re-squares it.
+                    var sb = screenBoundsPx;
                     if (sb.Width <= 0 || sb.Height <= 0) continue;
                     canvas.Save();
-                    if (e.Info.Width != sb.Width || e.Info.Height != sb.Height)
-                        canvas.Scale(e.Info.Width / (float)sb.Width, e.Info.Height / (float)sb.Height);
+                    if (boundsPx.Width != sb.Width || boundsPx.Height != sb.Height)
+                        canvas.Scale(boundsPx.Width / (float)sb.Width, boundsPx.Height / (float)sb.Height);
                     canvas.Translate(-sb.X, -sb.Y);
                     layer.Render(canvas, new SKRectI(sb.X, sb.Y, sb.X + sb.Width, sb.Y + sb.Height),
                                  dpiScale, elapsed);
@@ -330,7 +414,7 @@ public class CompositorEngine : IDisposable
         });
     }
 
-    private static void RebuildSurface(Dictionary<string, CompositorHostWindow> surface)
+    private static void RebuildSurface(Dictionary<string, ICompositorHost> surface)
     {
         System.Windows.Forms.Screen[] screens;
         try { screens = System.Windows.Forms.Screen.AllScreens; }
