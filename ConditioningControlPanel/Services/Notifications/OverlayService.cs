@@ -93,9 +93,6 @@ public class OverlayService : IDisposable
     // "Is showing" checks must cover BOTH render paths - the 500ms sync and pulse gate on these.
     private bool PinkShowing => _pinkFilterWindows.Count > 0 || _pinkLayer?.IsActive == true;
     private bool SpiralShowing => _spiralWindows.Count > 0 || _spiralLayer?.IsShowing == true;
-    // Path the spiral LAYER failed to decode (exotic GIF SKCodec rejects): the next StartSpiral
-    // for the same path skips the layer and uses the legacy windows instead of retrying forever.
-    private string? _spiralLayerFailedPath;
 
     private int _consecutiveTopmostLossCount;
     // Recreate-overlays backoff. Destroying + recreating every layered overlay window on a 3s cadence
@@ -985,20 +982,21 @@ public class OverlayService : IDisposable
         _isGifSpiral = _spiralPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
 
         // Compositor route covers the GIF/animated path only; video spirals (MediaElement)
-        // have no layer frame source yet and always use the legacy windows.
-        if (UseCompositor && _isGifSpiral && _spiralPath != _spiralLayerFailedPath)
+        // have no layer frame source yet and always use the legacy windows. Frames come from
+        // the LEGACY loader + cache so asset support (pack:// resources, file:// mod overrides,
+        // user paths) is identical to the legacy windows by construction.
+        if (UseCompositor && _isGifSpiral)
         {
-            var failedPath = _spiralPath;
-            GetSpiralLayer().Show(_spiralPath, (App.Settings.Current.SpiralOpacity / 100.0) * 0.1,
-                onFailed: () =>
-                {
-                    // Remember the bad path; the 500ms sync re-enters StartSpiral, which now
-                    // routes this path to the legacy windows (self-healing, no retry churn).
-                    _spiralLayerFailedPath = failedPath;
-                });
-            _lastAppliedSpiralOpacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
-            App.Logger?.Debug("Spiral started on compositor layer ({Path})", _spiralPath);
-            return;
+            if (LoadSpiralGifFrames())
+            {
+                GetSpiralLayer().ShowFrames(_spiralGifFrames, _gifFrameDelay,
+                    (App.Settings.Current.SpiralOpacity / 100.0) * 0.1);
+                _lastAppliedSpiralOpacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
+                App.Logger?.Debug("Spiral started on compositor layer ({Path})", _spiralPath);
+                return;
+            }
+            App.Logger?.Warning("Spiral: layer frame load failed for {Path}; using legacy path", _spiralPath);
+            // fall through to the legacy windows below
         }
 
         try
@@ -1171,6 +1169,14 @@ public class OverlayService : IDisposable
         {
             Stream? gifStream = null;
             bool needsDispose = false;
+
+            // ModResourceResolver.ResolveUri returns file:// URIs for mod-override assets;
+            // File.Exists() on the raw URI string is always false, so unwrap to a local path.
+            if (path.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+            {
+                try { path = new Uri(path).LocalPath; }
+                catch (Exception ex) { App.Logger?.Debug("Spiral: bad file:// URI {Path}: {E}", path, ex.Message); }
+            }
 
             if (path.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
             {
