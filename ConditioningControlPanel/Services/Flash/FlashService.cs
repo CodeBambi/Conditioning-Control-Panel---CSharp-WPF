@@ -82,6 +82,26 @@ namespace ConditioningControlPanel.Services
         // per flash would reintroduce exactly the churn solid mode exists to remove.
         private bool _hostRefHeld;
         private bool _noImagesWarningShown;
+
+        // COMPOSITOR (unified overlay host): flashes render as items on the shared per-monitor
+        // Skia host - no per-flash window, no pooled shells, no host-canvas churn. The heartbeat
+        // keeps driving fade/frames/dwell through the FlashWindow state bag (same split as solid
+        // mode), so lifetime/hydra/gaze behavior is identical in all three modes.
+        private Compositor.FlashLayer? _flashLayer;
+        private static bool UseCompositor =>
+            (App.CompositorForced || App.Settings?.Current?.UnifiedOverlayHost == true) && App.Compositor != null;
+
+        // Clickable layer flashes: the compositor host is click-through, so clicks arrive via a
+        // global mouse hook hit-testing an immutable snapshot (same pattern as shared-host
+        // bubbles). The hook thread reads ONLY the copied rect values in _layerHits - never
+        // live WPF state. Rebuilt each heartbeat tick.
+        private GlobalMouseHook? _layerHook;
+        private sealed class LayerHit
+        {
+            public FlashWindow Win = null!;
+            public float X, Y, W, H;   // world px
+        }
+        private volatile LayerHit[] _layerHits = Array.Empty<LayerHit>();
         
         // Audio - only ONE sound per flash event
         private WaveOutEvent? _currentSound;
@@ -157,7 +177,7 @@ namespace ConditioningControlPanel.Services
                     {
                         if (w.IsFadingOut) continue;
                         if (w.UsesHost) anyHosted = true;   // no hwnd of its own — raise the shared host instead
-                        else ForceTopmost(w);
+                        else if (!w.UsesLayer) ForceTopmost(w);   // layer: the compositor host re-pins itself
                     }
                 }
                 if (anyHosted) ChaosBubbleHostOverlay.RaiseActive();
@@ -280,6 +300,7 @@ namespace ConditioningControlPanel.Services
             StopCurrentSound();
             CloseAllWindows();
             ReleaseHostRef();
+            ReleaseLayerHook();
 
             // Release cached BitmapSource objects from the LOH on stop
             ClearImageCache();
@@ -1061,6 +1082,12 @@ namespace ConditioningControlPanel.Services
                 // per-flash topmost-layered-window churn that some fullscreen games react to.
                 bool useHost = settings.FlashSolidMode;
 
+                // COMPOSITOR: takes precedence over both classic and solid mode. Same state-bag
+                // trick as solid mode, but the visual is a layer item on the shared Skia host -
+                // and clickability survives (global-hook hit-test), unlike solid mode.
+                bool useLayer = UseCompositor;
+                if (useLayer) useHost = false;
+
                 // Recycled from the pool when possible — all per-spawn state must be (re)set here.
                 // The window comes back already at geom's size (matched from the pool or freshly
                 // created at that size). NEVER assign Width/Height here: changing the size of an
@@ -1071,12 +1098,14 @@ namespace ConditioningControlPanel.Services
                 // True display size (from the image geometry) vs. the bucketed per-window shell that
                 // the pool recycles. Host mode has no window shell, so it stays at true size.
                 int trueW = geom.Width, trueH = geom.Height;
-                int shellW = useHost ? trueW : BucketUp(trueW);
-                int shellH = useHost ? trueH : BucketUp(trueH);
+                int shellW = (useHost || useLayer) ? trueW : BucketUp(trueW);
+                int shellH = (useHost || useLayer) ? trueH : BucketUp(trueH);
 
-                window = useHost
-                    ? new FlashWindow { UsesHost = true, Width = trueW, Height = trueH }
-                    : AcquireFlashWindow(shellW, shellH);
+                window = useLayer
+                    ? new FlashWindow { UsesLayer = true, Width = trueW, Height = trueH }
+                    : useHost
+                        ? new FlashWindow { UsesHost = true, Width = trueW, Height = trueH }
+                        : AcquireFlashWindow(shellW, shellH);
                 window.Left = finalX;
                 window.Top = finalY;
                 window.Frames = imageData.Frames;
@@ -1110,27 +1139,38 @@ namespace ConditioningControlPanel.Services
                     catch { }
                 });
 
-                // Create image control
+                // Create image control (layer mode has no WPF visual tree at all - the layer
+                // draws the SKImage frames directly, and the heartbeat drives FrameIndex).
                 var perfTier = PerformanceProfile.CurrentTier;
-                var image = new Image
+                Image? image = null;
+                if (!useLayer)
                 {
-                    Stretch = Stretch.Uniform,
-                    Source = imageData.Frames[0],
-                    // Pin the display size so centering the flash inside the (larger) bucketed shell
-                    // never rescales it — the visual stays exactly the size/aspect it was before.
-                    Width = trueW,
-                    Height = trueH,
-                };
-                // Cheaper resampling — after decode-at-display-size there is little residual
-                // scaling, so the quality difference is imperceptible while saving GPU fill cost.
-                RenderOptions.SetBitmapScalingMode(image, PerformanceProfile.ScalingMode(perfTier));
-                RenderOptions.SetEdgeMode(image, EdgeMode.Aliased);
+                    image = new Image
+                    {
+                        Stretch = Stretch.Uniform,
+                        Source = imageData.Frames[0],
+                        // Pin the display size so centering the flash inside the (larger) bucketed shell
+                        // never rescales it — the visual stays exactly the size/aspect it was before.
+                        Width = trueW,
+                        Height = trueH,
+                    };
+                    // Cheaper resampling — after decode-at-display-size there is little residual
+                    // scaling, so the quality difference is imperceptible while saving GPU fill cost.
+                    RenderOptions.SetBitmapScalingMode(image, PerformanceProfile.ScalingMode(perfTier));
+                    RenderOptions.SetEdgeMode(image, EdgeMode.Aliased);
 
-                window.ImageControl = image;
+                    window.ImageControl = image;
+                }
 
                 // The visual root: assigned as window.Content in per-window mode, or added to the
                 // shared host canvas in solid mode (an element can't be both — one logical parent).
-                FrameworkElement content;
+                // Stays null in layer mode (no WPF visual), which never reaches the attach branches.
+                FrameworkElement content = null!;
+
+                // Layer-mode glow parameters, filled by the glow branch below and consumed at
+                // the layer spawn (the WPF DropShadow content build is skipped entirely).
+                double layerGlowRadius = 0, layerGlowOpacity = 0;
+                System.Windows.Media.Color layerGlowColor = default;
 
                 // Roll for lucky flash BEFORE show so we can apply visual effects
                 xpAmount = _soundPlayingForCurrentFlash ? 8 : 4;
@@ -1186,6 +1226,23 @@ namespace ConditioningControlPanel.Services
                     // Cap the blur radius per tier (Quality ~24, Balanced ~18).
                     blurRadius = Math.Min(blurRadius, PerformanceProfile.MaxGlowBlurRadius(perfTier));
 
+                    // Layer mode: no WPF effect tree - stash the parameters for the layer item
+                    // and expand the bookkeeping rect exactly like host mode (the glow halo draws
+                    // outside the image, and gaze/overlap read this rect). The lucky pulse runs
+                    // inside the layer's render, so no Forever animations to leak either.
+                    if (useLayer)
+                    {
+                        layerGlowRadius = blurRadius;
+                        layerGlowOpacity = glowOpacity;
+                        layerGlowColor = glowColor;
+                        var layerPad = blurRadius / 2;
+                        window.Width += layerPad * 2;
+                        window.Height += layerPad * 2;
+                        window.Left -= layerPad;
+                        window.Top -= layerPad;
+                    }
+                    else
+                    {
                     var glowEffect = new DropShadowEffect
                     {
                         Color = glowColor,
@@ -1246,8 +1303,9 @@ namespace ConditioningControlPanel.Services
                         glowEffect.BeginAnimation(DropShadowEffect.BlurRadiusProperty, blurAnim);
                         glowEffect.BeginAnimation(DropShadowEffect.OpacityProperty, opacityAnim);
                     }
+                    }   // !useLayer (WPF glow content build)
                 }
-                else
+                else if (!useLayer)
                 {
                     // The image gets the black backing the window shell used to provide directly: the
                     // per-window shell background is Transparent now (so the bucket padding stays
@@ -1255,7 +1313,17 @@ namespace ConditioningControlPanel.Services
                     content = new Border { Background = System.Windows.Media.Brushes.Black, Child = image };
                 }
 
-                if (useHost)
+                if (useLayer)
+                {
+                    // Convert frames + spawn the layer item; the heartbeat drives it from here
+                    // via window.LayerItem (fade, GIF frames, gaze dwell).
+                    SpawnLayerVisual(window, imageData, monitor,
+                        layerGlowColor, layerGlowRadius, layerGlowOpacity, isLucky);
+
+                    if (!suppressHaptic)
+                        _ = App.Haptics?.FlashDecayVibeAsync();
+                }
+                else if (useHost)
                 {
                     // Size the root to the (possibly glow-expanded) bookkeeping rect; the glow
                     // border's own Padding re-insets the image, matching per-window layout.
@@ -1337,13 +1405,18 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
+                        if (window.LayerItem != null)
+                        {
+                            _flashLayer?.Remove(window.LayerItem);
+                            window.LayerItem = null;
+                        }
                         if (window.HostedRoot != null)
                         {
                             ChaosBubbleHostOverlay.Remove(window.HostedRoot);
                             window.HostedRoot = null;
                         }
                         window.LifetimeCts = null;
-                        if (!window.UsesHost) window.Close();
+                        if (!window.UsesHost && !window.UsesLayer) window.Close();
                     }
                     catch { }
                 }
@@ -1357,6 +1430,118 @@ namespace ConditioningControlPanel.Services
             {
                 App.Achievements?.TrackFlashImage();
             }
+        }
+
+        /// <summary>
+        /// COMPOSITOR: convert the decoded frames and spawn this flash's layer item. The
+        /// bookkeeping rect on <paramref name="window"/> (DIPs, already glow-expanded) converts
+        /// to world px with the spawn monitor's own scale — the same math as host mode's Place.
+        /// </summary>
+        private void SpawnLayerVisual(FlashWindow window, LoadedImageData imageData, MonitorInfo monitor,
+            System.Windows.Media.Color glowColor, double glowRadius, double glowOpacity, bool luckyPulse)
+        {
+            if (_flashLayer == null)
+            {
+                _flashLayer = new Compositor.FlashLayer(App.Compositor!);
+                App.Compositor!.RegisterLayer(_flashLayer);
+            }
+
+            // Straight pixel copies of the already-decoded (display-sized, cached) frames — no
+            // SKCodec decode here, so the global decode gate doesn't apply.
+            var frames = new SkiaSharp.SKImage[imageData.Frames.Count];
+            for (int i = 0; i < frames.Length; i++)
+                frames[i] = Compositor.SkiaWpfInterop.ToSKImage(imageData.Frames[i]);
+
+            var dpi = monitor.DpiScale > 0 ? monitor.DpiScale : 1.0;
+            var hasGlow = glowRadius > 0;
+            window.LayerItem = _flashLayer.Spawn(frames,
+                (float)(window.Left * dpi), (float)(window.Top * dpi),
+                (float)(window.Width * dpi), (float)(window.Height * dpi),
+                paddingPx: (float)(hasGlow ? glowRadius / 2 * dpi : 0),
+                cornerRadiusPx: hasGlow ? (float)(12 * dpi) : 0f,
+                new SkiaSharp.SKColor(glowColor.R, glowColor.G, glowColor.B),
+                glowSigmaPx: (float)(glowRadius * dpi / 3.0),   // WPF blur radius -> sigma (R/3)
+                glowOpacity, luckyPulse);
+
+            if (window.IsClickable)
+                EnsureLayerHook();
+        }
+
+        /// <summary>Install the click hook for layer flashes (UI thread — the hook needs this
+        /// thread's message loop). Idempotent; released when no layer flashes remain.</summary>
+        private void EnsureLayerHook()
+        {
+            if (_layerHook != null) return;
+            _layerHook = new GlobalMouseHook { LeftDown = OnLayerFlashLeftDown };
+            _layerHook.Start();
+        }
+
+        private void ReleaseLayerHook()
+        {
+            if (_layerHook == null) return;
+            try { _layerHook.Dispose(); } catch { }
+            _layerHook = null;
+            _layerHits = Array.Empty<LayerHit>();
+        }
+
+        /// <summary>
+        /// HOOK THREAD: hit-test a physical-px click against the layer-flash snapshot, topmost
+        /// (most recent spawn) first. A hit swallows the click — exactly what a clickable flash
+        /// window did by consuming it — and pops on the dispatcher.
+        /// </summary>
+        private bool OnLayerFlashLeftDown(System.Windows.Point px)
+        {
+            var hits = _layerHits;
+            for (int i = hits.Length - 1; i >= 0; i--)
+            {
+                var hit = hits[i];
+                if (px.X < hit.X || px.X > hit.X + hit.W || px.Y < hit.Y || px.Y > hit.Y + hit.H)
+                    continue;
+                var win = hit.Win;
+                System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        // Re-check on the UI thread — the flash may have expired since the snapshot.
+                        if (!win.IsFadingOut && win.LayerItem != null)
+                            OnFlashClicked(win, App.Settings.Current);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Layer flash pop failed: {E}", ex.Message);
+                    }
+                });
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Refresh the hook-thread hit snapshot from the live layer items (heartbeat cadence),
+        /// and drop the hook once the last layer flash is gone.
+        /// </summary>
+        private void RebuildLayerHitSnapshot()
+        {
+            if (_layerHook == null) return;
+            List<LayerHit>? hits = null;
+            bool anyLayer = false;
+            lock (_lockObj)
+            {
+                foreach (var w in _activeWindows)
+                {
+                    if (!w.UsesLayer) continue;
+                    anyLayer = true;
+                    var item = w.LayerItem;
+                    if (item == null || !w.IsClickable || w.IsFadingOut) continue;
+                    (hits ??= new List<LayerHit>()).Add(new LayerHit
+                    {
+                        Win = w,
+                        X = item.X, Y = item.Y, W = item.W, H = item.H
+                    });
+                }
+            }
+            _layerHits = hits?.ToArray() ?? Array.Empty<LayerHit>();
+            if (!anyLayer) ReleaseLayerHook();
         }
 
         private void OnFlashClicked(FlashWindow window, AppSettings settings)
@@ -1541,8 +1726,11 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     // Host-mode flashes have no hwnd — alive means their visual is still on the
-                    // shared canvas. Per-window flashes keep the loaded/visible liveness check.
-                    if (window.UsesHost ? window.HostedRoot == null : (!window.IsLoaded || !window.IsVisible))
+                    // shared canvas (layer mode: still on the compositor). Per-window flashes
+                    // keep the loaded/visible liveness check.
+                    if (window.UsesLayer ? window.LayerItem == null
+                        : window.UsesHost ? window.HostedRoot == null
+                        : (!window.IsLoaded || !window.IsVisible))
                     {
                         toRemove.Add(window);
                         continue;
@@ -1571,7 +1759,7 @@ namespace ConditioningControlPanel.Services
                     }
 
                     // Animate GIF frames
-                    if (window.Frames.Count > 1 && window.ImageControl != null)
+                    if (window.Frames.Count > 1 && (window.ImageControl != null || window.LayerItem != null))
                     {
                         var elapsed = DateTime.Now - window.StartTime;
                         var frameIndex = (int)(elapsed.TotalMilliseconds / window.FrameDelay.TotalMilliseconds) % window.Frames.Count;
@@ -1579,7 +1767,10 @@ namespace ConditioningControlPanel.Services
                         if (frameIndex != window.CurrentFrameIndex)
                         {
                             window.CurrentFrameIndex = frameIndex;
-                            window.ImageControl.Source = window.Frames[frameIndex];
+                            if (window.LayerItem != null)
+                                window.LayerItem.FrameIndex = frameIndex;
+                            else
+                                window.ImageControl!.Source = window.Frames[frameIndex];
                         }
                     }
                 }
@@ -1603,6 +1794,10 @@ namespace ConditioningControlPanel.Services
 
             if (toRemove.Count > 0)
                 App.Overlay?.NotifyTopWindowClosed();
+
+            // Layer flashes: refresh the click-hook hit snapshot (positions are static but
+            // items expire), and release the hook once the last one is gone.
+            RebuildLayerHitSnapshot();
 
             // Clear stale references in snapshot so removed windows can be GC'd
             Array.Clear(_windowsSnapshot, 0, _windowsSnapshot.Length);
@@ -2374,6 +2569,20 @@ namespace ConditioningControlPanel.Services
                     window.GlowEffect = null;
                 }
 
+                // Compositor: detach the layer item — this disposes its SKImage frames
+                // deterministically. No hwnd, nothing to pool.
+                if (window.UsesLayer)
+                {
+                    if (window.LayerItem != null)
+                    {
+                        var item = window.LayerItem;
+                        window.LayerItem = null;
+                        _flashLayer?.Remove(item);
+                    }
+                    window.IsFadingOut = false;
+                    return;
+                }
+
                 // Solid mode: just detach the visual from the shared canvas — there is no hwnd to
                 // hide/close/pool, and the host itself stays alive (see EnsureHostRef/ReleaseHostRef).
                 if (window.UsesHost)
@@ -2509,6 +2718,7 @@ namespace ConditioningControlPanel.Services
         public void Dispose()
         {
             Stop();
+            try { _flashLayer?.Clear(); } catch { }
             // Drain the recycled-window pool — the only place pooled hwnds actually close
             // (app shutdown; nothing else is animating, so the close is safe here).
             while (_windowPool.Count > 0)
@@ -2552,15 +2762,29 @@ namespace ConditioningControlPanel.Services
         public FrameworkElement? HostedRoot { get; set; }
 
         /// <summary>
+        /// Compositor mode: like solid mode, this instance is a pure state bag — the visual is a
+        /// FlashLayer item on the shared compositor host. Same DIP bookkeeping in Left/Top/
+        /// Width/Height, so gaze, hydra and the heartbeat work unchanged.
+        /// </summary>
+        public bool UsesLayer { get; set; }
+
+        /// <summary>Compositor mode only: this flash's layer item (null once torn down).</summary>
+        public Services.Compositor.FlashLayer.FlashItem? LayerItem { get; set; }
+
+        /// <summary>
         /// The fade alpha the heartbeat animates: window Opacity in per-window mode, the hosted
-        /// root's Opacity in solid mode (an unshown Window's Opacity renders nothing).
+        /// root's Opacity in solid mode, the layer item's in compositor mode (an unshown
+        /// Window's Opacity renders nothing).
         /// </summary>
         public double VisualOpacity
         {
-            get => UsesHost ? (HostedRoot?.Opacity ?? 0.0) : Opacity;
+            get => UsesLayer ? (LayerItem?.Opacity ?? 0.0)
+                 : UsesHost ? (HostedRoot?.Opacity ?? 0.0)
+                 : Opacity;
             set
             {
-                if (UsesHost) { if (HostedRoot != null) HostedRoot.Opacity = value; }
+                if (UsesLayer) { if (LayerItem != null) LayerItem.Opacity = value; }
+                else if (UsesHost) { if (HostedRoot != null) HostedRoot.Opacity = value; }
                 else Opacity = value;
             }
         }
@@ -2661,6 +2885,13 @@ namespace ConditioningControlPanel.Services
         public void SetGazeDwellProgress(double t01)
         {
             if (IsFadingOut) return;
+            if (UsesLayer)
+            {
+                // The layer draws the item scaled about its center — same 1.0 → 1.10 inflate.
+                if (LayerItem != null)
+                    LayerItem.DwellScale = 1.0 + Math.Max(0.0, Math.Min(1.0, t01)) * 0.10;
+                return;
+            }
             var fe = UsesHost ? HostedRoot : Content as FrameworkElement;
             if (fe == null) return;
             var clamped = Math.Max(0.0, Math.Min(1.0, t01));
