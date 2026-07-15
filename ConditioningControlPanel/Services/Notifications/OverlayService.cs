@@ -621,9 +621,9 @@ public class OverlayService : IDisposable
                     if (_timedSpiralHolds > 0) _timedSpiralHolds--;
                     if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) hide();
                 }
-                else
+                else // braindrain: don't tear down the user's base Brain Drain when a timed effect ends
                 {
-                    hide();
+                    if (!settings.BrainDrainEnabled) hide();
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlayTimed hide: {E}", ex.Message); }
@@ -670,8 +670,13 @@ public class OverlayService : IDisposable
                 // Both show() and the reconcilers run on this one UI thread, so they can't interleave;
                 // gate on a window actually appearing so a no-op show (e.g. spiral with no asset) doesn't
                 // leave a stale hold that would later block a legitimate teardown.
-                if (kind == "pink_filter") _sustainedPinkHeld = PinkShowing;
-                else if (kind == "spiral") _sustainedSpiralHeld = SpiralShowing;
+                // Park the ramp-ownership hold at the band's opacity so the 500ms settings-sync
+                // (UpdatePinkFilterOpacity/UpdateSpiralOpacity) early-returns and won't stomp a
+                // constant-opacity Deeper band back to the user's saved opacity within half a second
+                // (#563 symptom-1). Ramp bands overwrite this each Update tick; HideOverlaySustained
+                // clears it on band exit, so the lifecycle stays symmetric.
+                if (kind == "pink_filter") { _sustainedPinkHeld = PinkShowing; if (PinkShowing) _rampPinkOpacity = opacity; }
+                else if (kind == "spiral") { _sustainedSpiralHeld = SpiralShowing; if (SpiralShowing) _rampSpiralOpacity = opacity; }
             }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlaySustained show: {E}", ex.Message); }
         };
@@ -693,9 +698,19 @@ public class OverlayService : IDisposable
         var settings = App.Settings.Current;
         Action? hide = kind switch
         {
-            "pink_filter" => () => { _sustainedPinkHeld = false; if (_timedPinkHolds == 0 && !settings.PinkFilterEnabled) StopPinkFilter(); },
-            "spiral"      => () => { _sustainedSpiralHeld = false; if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) StopSpiral(); },
-            "braindrain"  => () => StopBrainDrainBlur(),
+            // Release any Deeper opacity-ramp hold on band exit BEFORE the conditional teardown.
+            // A ramp (SetSustainedOverlayOpacity) parks _rampXOpacity, which makes the 500ms
+            // settings-sync early-return so it won't fight the ramp. If the base overlay feature
+            // is enabled we don't StopPinkFilter/StopSpiral here — so without clearing the hold
+            // the overlay stayed frozen at the ramp's final opacity forever (#563). Clearing it
+            // returns ownership to the reconciler, which re-applies the user's saved opacity next
+            // tick (base-on) or the overlay is torn down (base-off).
+            "pink_filter" => () => { _sustainedPinkHeld = false; _rampPinkOpacity = null; _lastAppliedPinkOpacity = -1; if (_timedPinkHolds == 0 && !settings.PinkFilterEnabled) StopPinkFilter(); },
+            "spiral"      => () => { _sustainedSpiralHeld = false; _rampSpiralOpacity = null; _lastAppliedSpiralOpacity = -1; if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) StopSpiral(); },
+            // Guard braindrain the same way as pink/spiral: a Deeper band exit must not tear down
+            // the user's base Brain Drain feature. Clear ramp ownership, then only stop when the
+            // base feature is off (else RefreshBrainDrainState keeps it alive). (#563 consistency)
+            "braindrain"  => () => { _rampBrainDrainOpacity = null; if (!settings.BrainDrainEnabled) StopBrainDrainBlur(); },
             _ => null
         };
 
