@@ -38,6 +38,10 @@ export const REVEAL_PREDS = {
   variant_htlink:       () => true,
   capstones:            (v) => v.rankIndex >= RANK.Devoted,
   extreme_tier_buyable: (v) => v.rankIndex >= RANK.Devoted,
+  // crafting (THE BOUDOIR): the fourth station sews itself in on the fifth descent.
+  // Web-only id - the native RevealService treats unknown ids as unlocked, and
+  // pending/seen persistence rides the generic set ops like everything above.
+  boudoir:              (v) => v.runs >= 5,
 };
 
 export function isUnlocked(id, view) {

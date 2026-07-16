@@ -99,6 +99,10 @@ public static class ChaosMetaStore
                 summary.Gold = state.Gold;
                 summary.RunsCompleted = state.RunsCompleted;
                 summary.BestScore = state.BestScore;
+                // Crafting Part 2: the dolls stitch slots 2/3 open (any save's craft
+                // unlocks globally — the picker scans every summary).
+                summary.HasRagdoll = state.CraftedItems?.ContainsKey("ragdoll") == true;
+                summary.HasPorcelain = state.CraftedItems?.ContainsKey("porcelain") == true;
             }
         }
         catch (Exception ex)
@@ -244,4 +248,8 @@ public sealed class SlotSummary
     public long BestScore { get; set; }
     /// <summary>File last-write time — shown as "last played".</summary>
     public DateTime? LastPlayedUtc { get; set; }
+    /// <summary>This save owns the Ragdoll craft (stitches slot 2 open).</summary>
+    public bool HasRagdoll { get; set; }
+    /// <summary>This save owns the Porcelain craft (stitches slot 3 open).</summary>
+    public bool HasPorcelain { get; set; }
 }

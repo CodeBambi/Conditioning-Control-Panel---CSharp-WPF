@@ -41,8 +41,8 @@ export function createOverlays(hud) {
     });
   }
 
-  /** The descent's closing beat: 3 · 2 · 1, then onDone (the recap). Distinct
-   * from showCountdown's opening GO! - this one counts the hole SHUT. */
+  /** RETIRED closing beat (3 · 2 · 1, then onDone): replaced by the Surfacing -
+   * showSurfaceWash below + chaosRun's tickSurfacing ramps. Kept callable. */
   function showFinishCountdown(onDone, { onTick } = {}) {
     clearCd();
     cd.hidden = false;
@@ -79,6 +79,44 @@ export function createOverlays(hud) {
       if (onTick) onTick('GO!');
       cdTimers.push(window.setTimeout(() => { cd.hidden = true; if (onResume) onResume(); }, 450));
     }, 900));
+  }
+
+  // ---- surface wash (the run's diegetic close) ----
+  // A soft white-out that replaces the finish 3·2·1: the world bleaches over
+  // inMs, onPeak fires under full white (endRun -> the recap renders beneath
+  // it), then the white lifts over outMs and the recap is simply... there.
+  const wash = document.createElement('div');
+  wash.className = 'cf-surface-wash';
+  wash.hidden = true;
+  hud.appendChild(wash);
+  let washTimers = [];
+  const clearWashTimers = () => { for (const t of washTimers) clearTimeout(t); washTimers = []; };
+
+  function showSurfaceWash(onPeak, { inMs = 3400, holdMs = 300, outMs = 1600 } = {}) {
+    clearWashTimers();
+    wash.hidden = false;
+    wash.style.transition = 'none';
+    wash.style.opacity = '0';
+    void wash.offsetWidth;
+    wash.style.transition = `opacity ${inMs}ms ease-in`;
+    wash.style.opacity = '1';
+    washTimers.push(window.setTimeout(() => {
+      if (onPeak) onPeak();
+      washTimers.push(window.setTimeout(() => {
+        wash.style.transition = `opacity ${outMs}ms ease-out`;
+        wash.style.opacity = '0';
+        washTimers.push(window.setTimeout(() => { wash.hidden = true; }, outMs + 80));
+      }, holdMs));
+    }, inMs));
+  }
+
+  /** Abort the wash (a run torn down mid-close must not leave the screen white
+   * or fire a stale endRun from the pending peak timer). */
+  function cancelSurfaceWash() {
+    clearWashTimers();
+    wash.style.transition = 'none';
+    wash.style.opacity = '0';
+    wash.hidden = true;
   }
 
   // ---- boon draft table ----
@@ -237,11 +275,52 @@ export function createOverlays(hud) {
     line('cf-recap-score', `${Math.floor(stats.score).toLocaleString()} pts`);
     line('', `${DIFF_NAMES[stats.difficulty] || stats.difficulty} · ${stats.waveCount} loops · you sank ${Math.round(stats.depth).toLocaleString()} m`);
     line('', `best streak ×${Math.max(1, stats.bestCombo)} · ${stats.defused} snapped · ${stats.detonated} triggered`);
-    // THE BIOMES: the route this fall took (one rolled place per room)
-    if (stats.biomes && stats.biomes.length) {
+    // THE BIOMES: the route this fall took (one rolled place per room). When THE
+    // COMPACT is owned the route moves into the mirror section below instead.
+    if (!stats.compact && stats.biomes && stats.biomes.length) {
       line('', `the fall took you through ${stats.biomes.map((b) => `${b.glyph} ${b.name}`).join(' → ')}`);
     }
     if (stats.trickleDrops > 0) line('', `💧 drip feed gathered ${Math.floor(stats.trickleDrops)} ✦`);
+    // THE PAPERWALL (Part 3): a torn Lookbook page pinned itself on the way up
+    if (stats.pageTorn) line('cf-recap-page', '🗞 a page tore loose from her Lookbook — it’s pinned in THE BOUDOIR.');
+
+    // THE COMPACT (crafted, Part 2): flip it open - picks, haul, route. Owners
+    // only; without it the recap above is byte-identical to the shipped one.
+    if (stats.compact) {
+      const mirror = document.createElement('div');
+      mirror.className = 'cf-recap-mirror';
+      const mh = document.createElement('p');
+      mh.className = 'cf-recap-mirror-h';
+      mh.textContent = '— the mirror —';
+      mirror.appendChild(mh);
+      if (stats.picks && stats.picks.length) {
+        const chips = document.createElement('div');
+        chips.className = 'cf-recap-mirror-picks';
+        for (const p of stats.picks) {
+          const c = document.createElement('span');
+          c.className = 'cf-recap-mirror-chip'
+            + (p.curse ? ' is-curse' : '') + (p.toy ? ' is-toy' : '');
+          c.textContent = `${p.glyph} ${p.name}`;
+          chips.appendChild(c);
+        }
+        mirror.appendChild(chips);
+      } else {
+        const none = document.createElement('p');
+        none.textContent = 'you took nothing. the mirror remembers that too.';
+        mirror.appendChild(none);
+      }
+      if (stats.materials && stats.materials.length) {
+        const haul = document.createElement('p');
+        haul.textContent = 'the haul: ' + stats.materials.map((m) => `${m.glyph} ×${m.count}`).join(' · ');
+        mirror.appendChild(haul);
+      }
+      if (stats.biomes && stats.biomes.length) {
+        const route = document.createElement('p');
+        route.textContent = `the route: ${stats.biomes.map((b) => `${b.glyph} ${b.name}`).join(' → ')}`;
+        mirror.appendChild(route);
+      }
+      card.appendChild(mirror);
+    }
     payoutSlot = document.createElement('div');
     payoutSlot.className = 'cf-recap-payout';
     payoutSlot.textContent = 'tallying…';
@@ -293,12 +372,14 @@ export function createOverlays(hud) {
     showFinishCountdown,
     showReadyGo,
     hideCountdown() { clearCd(); cd.hidden = true; },
+    showSurfaceWash,
+    cancelSurfaceWash,
     showDraft,
     isDraftUp: () => !dr.hidden,
     showRecap,
     showPayout,
     hideRecap() { rc.hidden = true; payoutSlot = null; },
     isRecapUp: () => !rc.hidden,
-    dispose() { clearCd(); clearDraftTimers(); cd.remove(); dr.remove(); rc.remove(); },
+    dispose() { clearCd(); clearDraftTimers(); clearWashTimers(); cd.remove(); dr.remove(); rc.remove(); wash.remove(); },
   };
 }

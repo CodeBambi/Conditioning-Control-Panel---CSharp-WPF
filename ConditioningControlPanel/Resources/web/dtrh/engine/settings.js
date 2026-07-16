@@ -57,6 +57,10 @@ const DEFAULTS = {
   hideTutorial: false,       // true = silence the Cheshire guide entirely (no
                              // portrait, no scenes, no tutorial VO). cheshireGuide
                              // no-ops every fire point when set (read live).
+  // ---- crafted unlocks (THE BOUDOIR, Part 2) ----------------------------------
+  wordPack: 'bimbo_classic', // HEADPHONES: active word pack id (WORD_PACKS below)
+  bubbleSkin: 'default',     // LIPSTICK: bubble-skin id (game/variants.js BUBBLE_SKINS)
+  musicBox: false,           // THE BALLERINA: the music-box bed under the fall
 };
 
 export const MOTIONS = ['Mixed', 'FloatUp', 'RainDown', 'RoamBounce'];
@@ -201,9 +205,84 @@ export function applyThemePreset(name) {
   for (const k of Object.keys(p)) updateSetting(k, p[k]);
 }
 
+// ---- THE RING BOX (crafted, Part 2): kept Looks -----------------------------
+// Up to 3 saved theme snapshots (the six color keys), own localStorage row so
+// a settings reset never eats them. The paint panel gates the UI on owning
+// the_ring_box; the store itself is dumb.
+const LOOKS_KEY = 'dtrh.looks.v1';
+export function getLooks() {
+  try {
+    const a = JSON.parse(localStorage.getItem(LOOKS_KEY) || '[]');
+    return Array.isArray(a) ? a.slice(0, 3).map((l) => (l && typeof l === 'object' ? l : null)) : [];
+  } catch (e) { return []; }
+}
+function putLooks(looks) {
+  try { localStorage.setItem(LOOKS_KEY, JSON.stringify(looks.slice(0, 3))); } catch (e) { /* private mode */ }
+}
+/** Keep the CURRENT six theme colors in slot 0-2. */
+export function saveLook(slot) {
+  const looks = getLooks();
+  const look = {};
+  for (const c of THEME_COLORS) look[c.key] = S[c.key];
+  looks[slot] = look;
+  putLooks(looks);
+}
+export function clearLook(slot) {
+  const looks = getLooks();
+  looks[slot] = null;
+  putLooks(looks);
+}
+/** Wear a kept look (updateSetting per key so fx re-themes live). */
+export function applyLook(slot) {
+  const look = getLooks()[slot];
+  if (!look) return false;
+  for (const c of THEME_COLORS) {
+    if (typeof look[c.key] === 'number' && isFinite(look[c.key])) updateSetting(c.key, look[c.key]);
+  }
+  return true;
+}
+
+// ---- word packs (HEADPHONES craft, Part 2) ----------------------------------
+// The base word list + the veil punch-through words, as swappable packs. The
+// classic pack IS the shipped default (byte-identical fall for non-owners).
+// Words without a whispered drop flash silently (bubbles.js null-guards).
+export const WORD_PACKS = [
+  { id: 'bimbo_classic', name: 'bimbo classic', desc: 'the words the hole was born with.',
+    veil: { spiral: 'Sink', pinkfilter: 'Drop', glitch: 'Blank', flash: 'Empty' },
+    words: SUBLIMINAL_WORDS },
+  { id: 'good_girl', name: 'good girl', desc: 'soft praise. obedient warmth.',
+    veil: { spiral: 'Obey', pinkfilter: 'Good girl', glitch: 'Submit', flash: 'Pretty' },
+    words: ['Good girl', 'Obey', 'Submit', 'Yes', 'Sweet', 'Pretty', 'Behave', 'Smile', 'Please her'] },
+  { id: 'blank_slate', name: 'blank slate', desc: 'no thoughts. just the fall.',
+    veil: { spiral: 'Deeper', pinkfilter: 'Sleep', glitch: 'Mindless', flash: 'Empty' },
+    words: ['Blank', 'Empty', 'Mindless', 'Sleep', 'Deeper', 'Sink', 'Drop', "Don't think"] },
+];
+const packById = (id) => WORD_PACKS.find((p) => p.id === id) || WORD_PACKS[0];
+export function getWordPack() { return packById(S.wordPack).id; }
+export function setWordPack(id) {
+  updateSetting('wordPack', packById(id).id);
+  emit('words');   // word-card consumers redraw from the new pack
+}
+/** The veil punch-through words of the active pack (bubbles.js triggerVeil). */
+export function getVeilWords() { return packById(S.wordPack).veil; }
+
+// ---- crafted-gate enforcement (slot load) ------------------------------------
+// The crafted picks (word pack / bubble skin / music box) persist in the shared
+// sf-settings row, but OWNERSHIP is per save slot - a slot that never crafted
+// the gate item must not inherit another slot's pick (its revert controls are
+// hidden there). Snaps each un-owned pick back to its shipped default, persisting
+// the reset. Call it only once ownership is reliably KNOWN (the meta snapshot is
+// in) - an ownedFn that answers false because the meta simply hasn't landed yet
+// would wipe a legitimate owner's choices.
+export function enforceCraftedDefaults(ownedFn) {
+  if (S.wordPack !== DEFAULTS.wordPack && !ownedFn('headphones')) setWordPack(DEFAULTS.wordPack);
+  if (S.bubbleSkin !== DEFAULTS.bubbleSkin && !ownedFn('lipstick')) updateSetting('bubbleSkin', DEFAULTS.bubbleSkin);
+  if (S.musicBox !== DEFAULTS.musicBox && !ownedFn('the_ballerina')) updateSetting('musicBox', DEFAULTS.musicBox);
+}
+
 // ---- subliminal word list -------------------------------------------------
 export function allWords() {
-  return [...SUBLIMINAL_WORDS, ...S.customWords];
+  return [...packById(S.wordPack).words, ...S.customWords];
 }
 
 export function activeWords() {

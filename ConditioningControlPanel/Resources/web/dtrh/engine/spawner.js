@@ -1656,9 +1656,24 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   // the fork approach of grabbables.
   let blockedSpan = null;
 
+  // The Surfacing (the run's diegetic ending): 0..1 slumps every wall card -
+  // a widening y-squash with a per-card tilt + sag, eased here per frame so
+  // the 4Hz game tick reads as a continuous droop (and walks back on relapse).
+  let surfMeltT = 0, surfMeltE = 0, surfWasOn = false;
+
   // ---- per-frame update -------------------------------------------------------
   function update(camera, camDepth, dt, t, heat = 1, runTime = 999) {
     camDepthNow = camDepth;
+    surfMeltE += (surfMeltT - surfMeltE) * Math.min(1, dt * 1.5);
+    const surfing = surfMeltE > 0.004;
+    if (surfing) surfWasOn = true;
+    else if (surfWasOn) {
+      // released (relapse / run end): un-slump whatever the loop below touched
+      surfWasOn = false;
+      for (const rec of live) {
+        if (rec.billboard && !rec.pickup && !rec.melting && !rec.veilMat) rec.group.scale.set(1, 1, 1);
+      }
+    }
     // Junction rebase: fallNav zeroes its depth at the vein tail (the chosen
     // branch becomes a FRESH loop), but these cursors were minted on the OLD
     // loop's depths. Left alone they sit past the spawn window for the rest of
@@ -1848,6 +1863,19 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         rec.group.rotateZ(rec.twirlAng);
       }
       if (rec.spin) rec.group.rotation.z += rec.spin * dt;
+
+      // The Surfacing: the wall's cards slump where they hang - each gets its
+      // own tilt sense, squashing down + widening as the melt deepens, sagging
+      // a little lower every second. Applied after billboard/swirl so the tilt
+      // reads absolutely; scale is written fresh each frame so a relapse walk-
+      // back (surfMeltE easing to 0) stands them straight again.
+      if (surfing && rec.billboard && !rec.pickup && !rec.isGrabbed && !rec.melting
+          && !rec.thrown && !rec.veilMat) {
+        if (rec.surfTilt === undefined) rec.surfTilt = (Math.random() < 0.5 ? -1 : 1) * rand(0.12, 0.4);
+        rec.group.rotateZ(rec.surfTilt * surfMeltE);
+        rec.group.scale.set(1 + 0.2 * surfMeltE, Math.max(0.3, 1 - 0.45 * surfMeltE), 1);
+        rec.group.position.y -= dt * 0.9 * surfMeltE;
+      }
 
       // engagement: bank weighted on-screen time for the user asset this card
       // shows - a card that's large + centred (or held) earns far more than one
@@ -2078,6 +2106,8 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     update, reset, dispose, setPaused, warm,
     grabAtPointer, releaseGrab, probeGrab, grabExternalCard,
     setGrabHooks, setMirror, meltAll,
+    // The Surfacing: 0..1 global card slump (see update); 0 stands them back up.
+    setSurfacing: (f) => { surfMeltT = Math.max(0, Math.min(1, f || 0)); },
     setBlockedSpan: (s) => { blockedSpan = s || null; },
     // junction branch-mouth media cards
     createDetachedCard, clearLive,
