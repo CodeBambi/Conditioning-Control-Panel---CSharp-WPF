@@ -1686,6 +1686,50 @@ img.rh-fx-spiralspin {
 /* [hidden] must beat the .cf-overlay display:flex rule (UA attribute rule loses to a class) */
 .cf-overlay[hidden] { display: none; }
 
+/* ---- The Surfacing: the run's diegetic ending -------------------------------
+   chaosRun's tickSurfacing puts .cf-surfacing on the hud root and eases two
+   vars: --surf-melt (0..1 over the run's last ~18s) and --surf-drain (0..1
+   under the white wash). The 2D field over-saturates and smears while the
+   tunnel throbs; the drain then bleaches it as the wash whites the screen. */
+.cf-surfacing .cf-layer,
+.cf-surfacing .sf-pfx,
+.cf-surfacing .sf-pfx-front {
+  filter: saturate(calc(1 + var(--surf-melt, 0) * 0.5 - var(--surf-drain, 0) * 0.9))
+    brightness(calc(1 + var(--surf-drain, 0) * 0.45))
+    blur(calc(var(--surf-melt, 0) * 2.5px));
+  transition: filter 0.4s linear;
+}
+/* bubbles go soft-edged and wobbly - border-radius + filter ONLY (chaosField
+   owns inline transforms on the body for channeling; state animations like
+   is-brink/is-pop out-rank this via their extra class) */
+.cf-surfacing .cf-bubble-body {
+  animation: cfSurfWobble 4.6s ease-in-out infinite;
+}
+@keyframes cfSurfWobble {
+  0%, 100% {
+    border-radius: 50%;
+    filter: drop-shadow(0 0 10px var(--tint, rgba(255, 105, 180, 0.7))) blur(0.4px);
+  }
+  33% {
+    border-radius: 44% 56% 48% 52% / 58% 46% 62% 38%;
+    filter: drop-shadow(0 0 14px var(--tint, rgba(255, 105, 180, 0.7))) blur(1.4px);
+  }
+  66% {
+    border-radius: 58% 42% 60% 40% / 42% 58% 40% 60%;
+    filter: drop-shadow(0 0 12px var(--tint, rgba(255, 105, 180, 0.7))) blur(1px);
+  }
+}
+/* the wash: a warm white-out above every field/HUD layer; overlays.js drives
+   its opacity transition inline (in over ~3.4s, out over ~1.6s) */
+.cf-surface-wash {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 42%, #fff8fc 0%, #ffeaf5 55%, #ffdcee 100%);
+}
+
 /* ============================================================
    M4 — the full roguelite: fieldFx canvas, HUD extensions
    (shields/lust/picks/toy dock), the menagerie's bubble looks,

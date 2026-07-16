@@ -41,8 +41,8 @@ export function createOverlays(hud) {
     });
   }
 
-  /** The descent's closing beat: 3 · 2 · 1, then onDone (the recap). Distinct
-   * from showCountdown's opening GO! - this one counts the hole SHUT. */
+  /** RETIRED closing beat (3 · 2 · 1, then onDone): replaced by the Surfacing -
+   * showSurfaceWash below + chaosRun's tickSurfacing ramps. Kept callable. */
   function showFinishCountdown(onDone, { onTick } = {}) {
     clearCd();
     cd.hidden = false;
@@ -79,6 +79,44 @@ export function createOverlays(hud) {
       if (onTick) onTick('GO!');
       cdTimers.push(window.setTimeout(() => { cd.hidden = true; if (onResume) onResume(); }, 450));
     }, 900));
+  }
+
+  // ---- surface wash (the run's diegetic close) ----
+  // A soft white-out that replaces the finish 3·2·1: the world bleaches over
+  // inMs, onPeak fires under full white (endRun -> the recap renders beneath
+  // it), then the white lifts over outMs and the recap is simply... there.
+  const wash = document.createElement('div');
+  wash.className = 'cf-surface-wash';
+  wash.hidden = true;
+  hud.appendChild(wash);
+  let washTimers = [];
+  const clearWashTimers = () => { for (const t of washTimers) clearTimeout(t); washTimers = []; };
+
+  function showSurfaceWash(onPeak, { inMs = 3400, holdMs = 300, outMs = 1600 } = {}) {
+    clearWashTimers();
+    wash.hidden = false;
+    wash.style.transition = 'none';
+    wash.style.opacity = '0';
+    void wash.offsetWidth;
+    wash.style.transition = `opacity ${inMs}ms ease-in`;
+    wash.style.opacity = '1';
+    washTimers.push(window.setTimeout(() => {
+      if (onPeak) onPeak();
+      washTimers.push(window.setTimeout(() => {
+        wash.style.transition = `opacity ${outMs}ms ease-out`;
+        wash.style.opacity = '0';
+        washTimers.push(window.setTimeout(() => { wash.hidden = true; }, outMs + 80));
+      }, holdMs));
+    }, inMs));
+  }
+
+  /** Abort the wash (a run torn down mid-close must not leave the screen white
+   * or fire a stale endRun from the pending peak timer). */
+  function cancelSurfaceWash() {
+    clearWashTimers();
+    wash.style.transition = 'none';
+    wash.style.opacity = '0';
+    wash.hidden = true;
   }
 
   // ---- boon draft table ----
@@ -293,12 +331,14 @@ export function createOverlays(hud) {
     showFinishCountdown,
     showReadyGo,
     hideCountdown() { clearCd(); cd.hidden = true; },
+    showSurfaceWash,
+    cancelSurfaceWash,
     showDraft,
     isDraftUp: () => !dr.hidden,
     showRecap,
     showPayout,
     hideRecap() { rc.hidden = true; payoutSlot = null; },
     isRecapUp: () => !rc.hidden,
-    dispose() { clearCd(); clearDraftTimers(); cd.remove(); dr.remove(); rc.remove(); },
+    dispose() { clearCd(); clearDraftTimers(); clearWashTimers(); cd.remove(); dr.remove(); rc.remove(); wash.remove(); },
   };
 }

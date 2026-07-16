@@ -219,7 +219,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       rippleCooldown: 0,
       freezeRemainingSec: 0, slowMoRemainingSec: 0,
       ordinarySpawns: 0, spawnSerial: 0, waveDetonations: 0, runDetonations: 0,
-      endingSoonFired: false, finalLoopAnnounced: false, finalLandingDone: false, finishing: false,
+      finalLoopAnnounced: false, finalLandingDone: false, finishing: false,
       lastComboBig: 0, lastActFired: 1,
 
       // ---- THE BIOMES: one rolled id per room (null on legacy/scripted runs) ----
@@ -367,9 +367,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   const wxSpeed = () => wxMult(weatherNow && weatherNow.speedMult);
   const wxSpawnRate = () => wxMult(weatherNow && weatherNow.spawnRate);
   const wxGolden = () => (weatherNow && weatherNow.goldenBonus ? weatherNow.goldenBonus * wxAmp() : 0) + (bx('goldenBonus') || 0);
+  // ---- The Surfacing (the run's diegetic ending; see tickSurfacing) ----
+  let surfPull = 0, surfMelt = 0, surfDrain = 0, surfTimeF = 0, surfHeartIn = 0;
+  let surfBarkDone = false, surfDomOn = false, regionBloomNow = 1;
+
   /** The run's resting time factor (freeze/slow-mo restore to THIS, not 1).
-   * Overstim weather and the Freefall sin both live here. */
-  const baseTime = () => wxSpeed() * (st && st.freefallActive ? 2 : 1);
+   * Overstim weather and the Freefall sin both live here - and the Surfacing's
+   * drag folds in too, so time thickens as the hole closes. */
+  const baseTime = () => wxSpeed() * (st && st.freefallActive ? 2 : 1)
+    * (1 - 0.1 * surfPull - 0.35 * surfMelt);
   /** All LUST gains flow through here so Her Perfume can sweeten them. */
   const addHeat = (x) => { st.heat = Math.min(1.0, st.heat + x * wxHeatGain()); };
   const basePoints = (strength) => 40 + strength * 1.6;
@@ -1464,8 +1470,27 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     ctx.fx.forceZone(lustFullSeen ? 'pinkfog' : weatherZone);
   }
 
+  /** The Surfacing: drop the ending sequence's ramps + DOM dress (run end /
+   * fresh run / a relapse that walked the whole thing back). The wash overlay
+   * is NOT cancelled here - endRun fires at its peak and it must keep fading
+   * out over the recap; only returnToWarren aborts it. */
+  function clearSurfacing() {
+    surfPull = 0; surfMelt = 0; surfDrain = 0; surfTimeF = 0; surfHeartIn = 0;
+    surfBarkDone = false;
+    if (!ctx) return;
+    if (ctx.fx.setSurfacing) ctx.fx.setSurfacing(0, 0);
+    if (ctx.spawner && ctx.spawner.setSurfacing) ctx.spawner.setSurfacing(0);
+    if (surfDomOn) {
+      surfDomOn = false;
+      ctx.hud.classList.remove('cf-surfacing');
+      ctx.hud.style.removeProperty('--surf-melt');
+      ctx.hud.style.removeProperty('--surf-drain');
+    }
+  }
+
   /** Reset every tunnel-reactivity verb (run end / fresh run / back to hub). */
   function clearAmbient() {
+    clearSurfacing();
     tiltSins = 0; lustFullSeen = false; weatherZone = null; comboWarp = 0;
     weatherNow = null; weatherNext = null; weatherRerollUsed = false; staticBoltIn = 0;
     weatherSeen.clear();
@@ -1599,7 +1624,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (ffx && ffx.setRegionPalette) ffx.setRegionPalette(style ? style.field : null);
     // THE BIOMES: the place's ambient weather (confetti / ash / bubbles / ...)
     if (ffx && ffx.setAmbient) ffx.setAmbient(style ? style.ambient : null);
-    if (ctx.setBloomStrength) ctx.setBloomStrength(style && style.bloom ? style.bloom : 1);
+    // remembered so the Surfacing can swell bloom OVER the chamber's weight
+    // (and hand it back if a relapse cancels the ending mid-ramp)
+    regionBloomNow = style && style.bloom ? style.bloom : 1;
+    if (ctx.setBloomStrength) ctx.setBloomStrength(regionBloomNow);
     // THE BIOMES: swap the chamber's mechanic in (exits the old one cleanly).
     if (bMech) bMech.setBiome(regionIndex, biome);
     // ...and show the place's name + effect on the HUD so the player always
@@ -2069,6 +2097,83 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   // ============================ RunTick (0.25s) ============================
 
+  // ============================ The Surfacing ============================
+  // The run's diegetic close: no "ten seconds" banner, no 3·2·1 - the world
+  // itself tells you the hole is closing. Three overlapping ramps keyed to
+  // time-remaining:
+  //   the PULL  (T-40..T-18): time thickens a touch, the wall starts to breathe
+  //   the MELT  (T-18..T-2):  the tube throbs to a heartbeat, bloom swells, the
+  //                           2D field over-saturates + smears, wall cards slump
+  //   the DRAIN (expiry):     color drains (uDesat) under a white wash; endRun
+  //                           fires at full white and the recap surfaces as it lifts
+  // Every target is recomputed from remaining time each tick and everything
+  // eases, so a RELAPSE (the clock extends at expiry) simply walks it all back.
+  const SURF_PULL_LEAD = 40;   // remaining sec: the pull starts (subliminal)
+  const SURF_MELT_LEAD = 18;   // remaining sec: the melt shows its hand
+  const SURF_WASH_MS = 3400;   // white-out ramp; endRun fires at its peak
+
+  function tickSurfacing(dt) {
+    const remain = st.runDurationSec - st.elapsedSec;
+    // held back while a relapse is armed (the end isn't real yet) and while a
+    // draft owns the field (the Court's Landing at T-60 must not melt its table)
+    const arm = state === 'running' && !st.relapseArmed && !drafting;
+    const pullT = st.finishing ? 1
+      : (arm ? clamp((SURF_PULL_LEAD - remain) / (SURF_PULL_LEAD - SURF_MELT_LEAD), 0, 1) : 0);
+    const meltT = st.finishing ? 1
+      : (arm ? clamp((SURF_MELT_LEAD - remain) / (SURF_MELT_LEAD - 2), 0, 1) : 0);
+    const drainT = st.finishing ? 1 : 0;
+    const k = Math.min(1, dt * 1.6);
+    surfPull += (pullT - surfPull) * k;
+    surfMelt += (meltT - surfMelt) * k;
+    surfDrain += (drainT - surfDrain) * Math.min(1, dt * 2.2);
+
+    if (surfPull < 0.004 && surfDrain < 0.004) {
+      if (surfDomOn) {
+        // a relapse walked it all the way back: hand the tube to the chamber
+        clearSurfacing();
+        if (ctx.setBloomStrength) ctx.setBloomStrength(regionBloomNow);
+        if (st.freezeRemainingSec <= 0 && st.slowMoRemainingSec <= 0 && state === 'running'
+            && !(ctx.junctions && ctx.junctions.isBusy())) {
+          ctx.director.setTimeFactor(baseTime());
+        }
+      }
+      return;
+    }
+
+    // tube: knob floors + bloom swell over the chamber's own weight
+    if (ctx.fx.setSurfacing) ctx.fx.setSurfacing(surfMelt, surfDrain);
+    if (ctx.spawner && ctx.spawner.setSurfacing) ctx.spawner.setSurfacing(surfMelt);
+    if (ctx.setBloomStrength) ctx.setBloomStrength(regionBloomNow * (1 + 0.75 * surfMelt));
+
+    // DOM: one class + two eased vars (styles.css does the rest)
+    if (!surfDomOn) { surfDomOn = true; ctx.hud.classList.add('cf-surfacing'); }
+    ctx.hud.style.setProperty('--surf-melt', surfMelt.toFixed(3));
+    ctx.hud.style.setProperty('--surf-drain', surfDrain.toFixed(3));
+
+    // time: the pull/melt drag rides in baseTime; the wash owns the final slide
+    // to a 0.06 near-stop (the drone follows the fall speed down on its own).
+    // Freeze / slow-mo keep their own factors and restore through baseTime; a
+    // live fork's 0.16 read-hover (onJunctionLinger) must not be stomped either.
+    if (st.finishing) {
+      surfTimeF += (0.06 - surfTimeF) * Math.min(1, dt * 2);
+      ctx.director.setTimeFactor(surfTimeF);
+    } else if (st.freezeRemainingSec <= 0 && st.slowMoRemainingSec <= 0 && state === 'running'
+        && !(ctx.junctions && ctx.junctions.isBusy())) {
+      ctx.director.setTimeFactor(baseTime());
+    }
+
+    // the ending's only voice: one bark as the melt shows its hand, then a
+    // heartbeat that quickens with the wall's throb
+    if (!surfBarkDone && meltT > 0) { surfBarkDone = true; bark('ending-soon'); }
+    if (surfMelt > 0.25) {
+      surfHeartIn -= dt;
+      if (surfHeartIn <= 0) {
+        surfHeartIn = 1.35 - 0.55 * surfMelt;
+        sfx('heartbeat', 0.2 + 0.3 * surfMelt);
+      }
+    }
+  }
+
   function tick(dt) {
     st.elapsedSec += dt;
     st.heat = Math.max(0, st.heat - 0.0015);
@@ -2218,11 +2323,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // elapsed/duration, not the sawtooth intensity - triggers must always land)
     if (guide) guide.tick({ frac: st.elapsedSec / Math.max(1, st.runDurationSec), wave: st.waveIndex });
 
-    if (!st.endingSoonFired && st.runDurationSec - st.elapsedSec <= 10) {
-      st.endingSoonFired = true;
-      hudUi.announce('the hole is closing…', 'depth', 2400, { artKey: 'ending_soon', subText: 'ten seconds' });
-      bark('ending-soon');
-    }
+    // The Surfacing replaces the old "the hole is closing… ten seconds" banner:
+    // the world itself closes over the last ~40s (see tickSurfacing above).
+    tickSurfacing(dt);
 
     // The Court's Landing (region IV's boon) is offered ~60s before the close, so
     // a descent NEVER ends on a boon pick: gameplay + the finish countdown carry
@@ -2249,16 +2352,22 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         st.runDurationSec += waveLen;
         hudUi.announce('☠ RELAPSE — one more loop', 'bad', 2600, { artKey: 'relapse', subText: 'one more loop' });
         sfx('sin_accept', 0.6);
+        ctx.fx.pulseFlash(0.8);   // the slam that yanks you back down: the melt walks itself back
         bark('wave-escalated', { wave: st.waveIndex + 1 });
       } else if (!st.finishing) {
-        // The closing beat: a 3·2·1 finish countdown, then the recap - a descent
-        // ends on a counted-down moment, not an abrupt cut. The Court's boon was
-        // already granted ~60s ago, so the run never ends on a pick.
+        // The closing beat: no 3·2·1 - the Surfacing has been building for ~40s
+        // and the clock expiring tips it into the white wash. endRun fires at
+        // full white and the recap surfaces as the white lifts ('sink' answers
+        // the melt going under; endRun's own 'surface' stinger answers it back).
+        // The Court's boon was already granted ~60s ago, so the run never ends
+        // on a pick.
         st.finishing = true;
-        overlays.showFinishCountdown(() => endRun(true), { onTick: (b) => sfx(b === '1' ? 'sink' : 'countdown_tick', 0.5) });
+        surfTimeF = Math.max(0.06, baseTime());
+        sfx('sink', 0.5);
+        overlays.showSurfaceWash(() => endRun(true), { inMs: SURF_WASH_MS });
         return;
       } else {
-        return;   // finish countdown running: endRun fires from its onDone
+        return;   // the wash is rising: endRun fires at its peak
       }
     }
 
@@ -3202,6 +3311,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function returnToWarren() {
     overlays.hideRecap();
     overlays.hideCountdown();
+    // a run torn down while the wash was rising must not strand a white screen
+    // (or fire the peak's stale endRun); the post-recap path is a cheap no-op
+    if (overlays.cancelSurfaceWash) overlays.cancelSurfaceWash();
     hudUi.setVisible(false);
     hudUi.setPicks([]);
     hudUi.setHabits([]);
