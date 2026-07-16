@@ -84,6 +84,25 @@ namespace ConditioningControlPanel.Services
         private DateTime _startTime;
         private double _duration;
 
+        // #536: a Deeper enhancement (VideoEnhancementBridge) can loop or hold the clip past its
+        // declared duration (loop_region, SpeakHoldMode.LoopRegion, speak-pauses). While one is
+        // bound the safety timer switches from a duration guillotine to a progress-based stall
+        // watch (see StartSafetyTimer) so real playback isn't cut "after the original time is over".
+        private volatile bool _enhancementDriving;
+        private long _lastSafetyTimeMs = -1;
+        private DateTime _lastSafetyProgressUtc = DateTime.MinValue;
+        // Recheck cadence + no-progress grace used only while an enhancement is driving.
+        private static readonly TimeSpan EnhancementRecheckInterval = TimeSpan.FromSeconds(15);
+        private const double EnhancementStallGraceSeconds = 90;
+
+        /// <summary>
+        /// Set by <see cref="Services.Deeper.VideoEnhancementBridge"/> while a Deeper enhancement is
+        /// bound to the primary player. Such an enhancement can loop/hold the clip well past its
+        /// declared duration, so the duration-keyed safety timer must not force-close a video that is
+        /// still genuinely advancing. Cleared on unbind and defensively in CloseAll. (#536)
+        /// </summary>
+        public void SetEnhancementDriving(bool active) => _enhancementDriving = active;
+
         // Cleanup synchronization to prevent race conditions
         private readonly object _cleanupLock = new();
         private volatile bool _isCleaningUp;
@@ -103,9 +122,35 @@ namespace ConditioningControlPanel.Services
         private static readonly object _libVLCLock = new();
         private static bool _libVLCInitialized;
         private static bool _libVLCInitializing;
+        private static bool _libVLCCoreLoaded;   // Core.Initialize (native lib load) is once-per-process
         private static readonly TaskCompletionSource<bool> _libVLCReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly List<LibVLCSharp.Shared.MediaPlayer> _mediaPlayers = new();
         private readonly object _mediaPlayersLock = new();  // Thread-safe access to _mediaPlayers
+
+        // ---- LibVLC self-healing (white-screen cluster #557/#558/#559/#560/#574) ----
+        // A Stop() that stays wedged past CloseAll's extended wait leaves a stuck output thread
+        // inside the SHARED LibVLC instance; players created from it afterwards can fail to open
+        // their video/audio outputs — fullscreen white window, no sound — for every later video
+        // until app restart. When detected (wedged stop in CloseAll, or the vout watchdog), the
+        // instance is retired and a fresh one is built. Retired instances/players are parked in
+        // _quarantine and never disposed: Dispose joins the wedged output thread and can block
+        // forever (the old async Dispose in CloseAll did exactly that to a threadpool thread per
+        // wedge), and keeping them rooted also keeps their finalizers from blocking the finalizer
+        // thread. Bounded by wedge count — a leaked player beats a poisoned instance.
+        private static readonly object _quarantineLock = new();
+        private static readonly List<IDisposable> _quarantine = new();
+        private static int _libVLCGeneration;
+
+        // ---- First-frame (vout) watchdog ----
+        // LibVLC raises Vout when the video output actually presents. If it never arrives the
+        // user is staring at a white fullscreen (unpainted vout HWND) for the whole clip — the
+        // safety timer only reacts at duration+5s, and the software-decode default from
+        // #533/#537/#540 doesn't cover output-side (D3D11/WASAPI) failures. One retry on a fresh
+        // LibVLC instance, then skip the video.
+        private const int VoutTimeoutMs = 8000;
+        private volatile bool _voutSeen;
+        private int _whiteRetryCount;
+        private System.Threading.Timer? _voutWatchdog;
 
         // Primary-monitor refs for the Deeper enhancement engine. Set when the
         // audio-bearing video window is created, cleared in CloseAll. Reading
@@ -390,42 +435,48 @@ namespace ConditioningControlPanel.Services
 
                 try
                 {
-                    // Find the libvlc folder - check for libvlc.dll existence, not just folder
-                    var appDir = AppDomain.CurrentDomain.BaseDirectory;
-                    string? libvlcPath = null;
-
-                    // Try paths in order of preference
-                    var pathsToTry = new[]
+                    // Native libs only need loading once per process — a rebuild after
+                    // RetireSharedLibVLC skips straight to creating the new LibVLC instance.
+                    if (!_libVLCCoreLoaded)
                     {
-                        Path.Combine(appDir, "libvlc", "win-x64"),  // NuGet package structure
-                        Path.Combine(appDir, "libvlc"),             // Direct folder
-                        appDir                                       // Same folder as exe
-                    };
+                        // Find the libvlc folder - check for libvlc.dll existence, not just folder
+                        var appDir = AppDomain.CurrentDomain.BaseDirectory;
+                        string? libvlcPath = null;
 
-                    foreach (var path in pathsToTry)
-                    {
-                        var dllPath = Path.Combine(path, "libvlc.dll");
-                        App.Logger?.Information("Checking for LibVLC at: {Path}", dllPath);
-                        if (File.Exists(dllPath))
+                        // Try paths in order of preference
+                        var pathsToTry = new[]
                         {
-                            libvlcPath = path;
-                            App.Logger?.Information("Found libvlc.dll at: {Path}", path);
-                            break;
-                        }
-                    }
+                            Path.Combine(appDir, "libvlc", "win-x64"),  // NuGet package structure
+                            Path.Combine(appDir, "libvlc"),             // Direct folder
+                            appDir                                       // Same folder as exe
+                        };
 
-                    if (libvlcPath != null)
-                    {
-                        // Initialize LibVLCSharp core with explicit path
-                        Core.Initialize(libvlcPath);
-                        App.Logger?.Information("LibVLC core initialized from: {Path}", libvlcPath);
-                    }
-                    else
-                    {
-                        // Try default initialization (may find system-installed VLC)
-                        App.Logger?.Information("libvlc.dll not found in expected locations, trying default initialization");
-                        Core.Initialize();
-                        App.Logger?.Information("LibVLC core initialized from default location");
+                        foreach (var path in pathsToTry)
+                        {
+                            var dllPath = Path.Combine(path, "libvlc.dll");
+                            App.Logger?.Information("Checking for LibVLC at: {Path}", dllPath);
+                            if (File.Exists(dllPath))
+                            {
+                                libvlcPath = path;
+                                App.Logger?.Information("Found libvlc.dll at: {Path}", path);
+                                break;
+                            }
+                        }
+
+                        if (libvlcPath != null)
+                        {
+                            // Initialize LibVLCSharp core with explicit path
+                            Core.Initialize(libvlcPath);
+                            App.Logger?.Information("LibVLC core initialized from: {Path}", libvlcPath);
+                        }
+                        else
+                        {
+                            // Try default initialization (may find system-installed VLC)
+                            App.Logger?.Information("libvlc.dll not found in expected locations, trying default initialization");
+                            Core.Initialize();
+                            App.Logger?.Information("LibVLC core initialized from default location");
+                        }
+                        _libVLCCoreLoaded = true;
                     }
 
                     // Create LibVLC instance with audio and video options.
@@ -475,6 +526,32 @@ namespace ConditioningControlPanel.Services
                     _libVLCReady.TrySetResult(_libVLC != null);
                 }
             }
+        }
+
+        /// <summary>
+        /// Retires the shared LibVLC instance after a wedged stop / white-screen and rebuilds a
+        /// fresh one off-thread. The old instance is parked in _quarantine, NOT disposed —
+        /// disposal joins the wedged output thread and can block forever, and parking keeps its
+        /// finalizer from doing the same on the finalizer thread. SharedLibVLC consumers (bubble
+        /// count, mini player, help videos, Deeper editor) read the property at time-of-use, so
+        /// they pick up the fresh instance as soon as the rebuild completes.
+        /// </summary>
+        private void RetireSharedLibVLC(string reason)
+        {
+            LibVLC? old;
+            lock (_libVLCLock)
+            {
+                old = _libVLC;
+                if (old == null) return;
+                _libVLC = null;
+                _libVLCInitialized = false;
+                _libVLCGeneration++;
+            }
+            lock (_quarantineLock) { _quarantine.Add(old); }
+            App.Logger?.Warning(
+                "VideoService: retired shared LibVLC instance (gen {Gen}) — {Reason}. Rebuilding a fresh instance in the background.",
+                _libVLCGeneration, reason);
+            Task.Run(EnsureLibVLCInitialized);
         }
 
         /// <summary>
@@ -1270,7 +1347,7 @@ namespace ConditioningControlPanel.Services
             _scheduler.Start();
         }
 
-        private void PlayVideo(string path, bool strict)
+        private void PlayVideo(string path, bool strict, bool whiteScreenRetry = false)
         {
             App.Logger?.Information("VideoService: PlayVideo called for {File}", Path.GetFileName(path));
 
@@ -1283,6 +1360,9 @@ namespace ConditioningControlPanel.Services
             }
 
             _videoPlaying = true;
+            // Fresh video = fresh white-screen strikes; a vout-watchdog retry keeps its strike
+            // count so the second failure skips instead of looping.
+            if (!whiteScreenRetry) _whiteRetryCount = 0;
             _strictActive = strict;
             _retryPath = path;
             _startTime = DateTime.Now;
@@ -1367,6 +1447,11 @@ namespace ConditioningControlPanel.Services
                         // Use LibVLC if available (codec-independent), otherwise fall back to MediaElement
                         if (_libVLC != null)
                         {
+                            // Clear BEFORE Play() runs (inside CreateLibVLCVideoWindow) so an
+                            // instant Vout can't be erased by a late reset — that would false-
+                            // positive the watchdog and kill a healthy video.
+                            _voutSeen = false;
+
                             // Create primary screen with LibVLC VideoView (with audio)
                             var primaryWin = CreateLibVLCVideoWindow(path, primary, strict, withAudio: true);
                             _windows.Add(primaryWin);
@@ -1386,6 +1471,8 @@ namespace ConditioningControlPanel.Services
                                 App.Logger?.Information("Skipping {N} secondary video decoder(s) on {Total} monitors to avoid lag (#389); enable 'Fill all monitors with video' to override.",
                                     secondaries.Count, allScreens.Count);
                             }
+
+                            ArmVoutWatchdog();
                         }
                         else
                         {
@@ -1495,13 +1582,17 @@ namespace ConditioningControlPanel.Services
                     Background = Brushes.Black
                 };
 
-                // Create media player for this video
+                // Create media player for this video.
                 mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC!);
-                // Use GPU (DXVA) hardware decoding, matching the app's other players
-                // (InlineLoopVideo / HelpVideoWindow / MiniPlayerWindow). LibVLC falls back to
-                // software automatically if the GPU path is unavailable; the user setting is an
-                // escape hatch for the rare systems with broken hardware decoders.
-                mediaPlayer.EnableHardwareDecoding = App.Settings?.Current?.VideoHardwareDecoding ?? true;
+                // Mandatory-video windows default to SOFTWARE decoding. On Windows 11 (build 26200)
+                // and some Win10 machines the LibVLC hardware (DXVA/D3D11) path intermittently fails
+                // to present a frame — the window stays white and MediaEnded never fires, wedging
+                // cleanup. It hit the *primary* (audio + HW) player on both single-monitor (#537) and
+                // dual-monitor (#533, #540) setups, so it is the hardware decoder itself failing, not
+                // GPU contention between the two mirror decoders. These are short attention-check
+                // clips, so software decode is a negligible cost and eliminates the whole white-screen
+                // class. Users who want GPU decode back can flip VideoForceHardwareDecoding on (opt-in).
+                mediaPlayer.EnableHardwareDecoding = App.Settings?.Current?.VideoForceHardwareDecoding ?? false;
                 lock (_mediaPlayersLock)
                 {
                     _mediaPlayers.Add(mediaPlayer);
@@ -1519,6 +1610,14 @@ namespace ConditioningControlPanel.Services
                     _lastWatchPositionMs = e.Time; // track watched position for quest crediting (#447)
                     try { PrimaryPlaybackTimeMsChanged?.Invoke(e.Time); }
                     catch (Exception ex) { App.Logger?.Debug("PrimaryPlaybackTimeMsChanged handler error: {Error}", ex.Message); }
+                };
+
+                mediaPlayer.Vout += (s, e) =>
+                {
+                    // First frame actually presented — the white-screen watchdog stands down and
+                    // the strike counter resets (a retried video that now renders is healthy).
+                    _voutSeen = true;
+                    _whiteRetryCount = 0;
                 };
 
                 mediaPlayer.LengthChanged += (s, e) =>
@@ -1709,7 +1808,19 @@ namespace ConditioningControlPanel.Services
             // Secondaries skip audio decoding entirely. Setting Mute=true after Play() opened
             // a second WASAPI session on the same MMDevice; Windows collapsed both into one
             // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
-            if (!withAudio) media.AddOption(":no-audio");
+            if (!withAudio)
+            {
+                media.AddOption(":no-audio");
+            }
+
+            // Force software video decode at the media level (belt-and-suspenders with
+            // EnableHardwareDecoding=false above) to dodge the LibVLC white-screen/wedge on the
+            // hardware path (#533/#537/#540). Skipped only when the user has explicitly opted into
+            // GPU decode, in which case we honour their choice and leave the HW path enabled.
+            if (!(App.Settings?.Current?.VideoForceHardwareDecoding ?? false))
+            {
+                media.AddOption(":avcodec-hw=none");
+            }
 
             // Play the media
             mediaPlayer.Play(media);
@@ -2451,9 +2562,57 @@ namespace ConditioningControlPanel.Services
             // Add 5 second buffer beyond video duration
             var timeoutSeconds = videoDurationSeconds + 5;
 
+            _lastSafetyTimeMs = -1;
+            _lastSafetyProgressUtc = DateTime.UtcNow;
+
             _safetyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(timeoutSeconds) };
             _safetyTimer.Tick += (s, e) =>
             {
+                if (!_videoPlaying) { _safetyTimer?.Stop(); return; }
+
+                // #536: while a Deeper enhancement drives the clip it can loop or hold well past the
+                // declared duration (loop_region, SpeakHoldMode.LoopRegion, speak-pauses), so a plain
+                // duration guillotine cuts the video "after the original time is over". Switch to a
+                // progress-based stall watch: keep the video alive while playback is still advancing,
+                // slide the InteractionQueue stuck window forward too, and only force-close once it has
+                // shown zero progress for the grace window (a genuine wedge, not an intended pause).
+                if (_enhancementDriving)
+                {
+                    long curMs = -1;
+                    try { curMs = _primaryMediaPlayer?.Time ?? -1; } catch { curMs = -1; }
+
+                    var now = DateTime.UtcNow;
+                    bool advancing = curMs >= 0 && curMs != _lastSafetyTimeMs;
+                    // Re-arm only on real evidence of progress: advancing, or the first transition
+                    // from unseeded (-1) to a readable time. If the player time is unreadable from
+                    // the very first tick (curMs stays -1), fall through to the stall grace instead —
+                    // re-arming there kept a wedged video alive forever and re-issued ExtendTimeout
+                    // every tick, permanently disarming the InteractionQueue backstop.
+                    if (advancing || (_lastSafetyTimeMs < 0 && curMs >= 0))
+                    {
+                        _lastSafetyTimeMs = curMs;
+                        _lastSafetyProgressUtc = now;
+                        // Keep the secondary InteractionQueue stuck-recovery backstop from cutting the
+                        // loop either (its window is min 5 min / duration+30s — a long loop can reach it).
+                        try { App.InteractionQueue?.ExtendTimeout(_duration > 0 ? _duration : MaxVideoFallbackSeconds, InteractionQueueService.InteractionType.Video); }
+                        catch (Exception ex) { App.Logger?.Debug("VideoService: safety-timer ExtendTimeout failed: {E}", ex.Message); }
+                        if (_safetyTimer != null) _safetyTimer.Interval = EnhancementRecheckInterval;
+                        return;
+                    }
+
+                    if ((now - _lastSafetyProgressUtc).TotalSeconds < EnhancementStallGraceSeconds)
+                    {
+                        if (_safetyTimer != null) _safetyTimer.Interval = EnhancementRecheckInterval;
+                        return; // paused (e.g. speak-hold) but within grace — not a wedge
+                    }
+
+                    _safetyTimer?.Stop();
+                    App.Logger?.Warning("VideoService: Enhancement-driven video stalled ~{Grace}s with no playback progress. Forcing cleanup.", EnhancementStallGraceSeconds);
+                    Cleanup();
+                    return;
+                }
+
+                // Non-enhanced video: unchanged one-shot guillotine at duration+5s.
                 _safetyTimer?.Stop();
                 if (_videoPlaying)
                 {
@@ -2489,6 +2648,76 @@ namespace ConditioningControlPanel.Services
             _fallbackSafetyTimer.Start();
 
             App.Logger?.Debug("VideoService: Fallback safety timer started for {Duration}s", MaxVideoFallbackSeconds);
+        }
+
+        /// <summary>
+        /// Arms the one-shot first-frame watchdog for the current video. Call on the UI thread
+        /// AFTER the video windows are created (Play() has been issued); _voutSeen must be
+        /// cleared before window creation.
+        /// </summary>
+        private void ArmVoutWatchdog()
+        {
+            _voutWatchdog?.Dispose();
+            _voutWatchdog = new System.Threading.Timer(_ => VoutWatchdogFire(), null, VoutTimeoutMs, System.Threading.Timeout.Infinite);
+        }
+
+        /// <summary>
+        /// Fires once, <see cref="VoutTimeoutMs"/> after playback started. If LibVLC never created
+        /// a video output the user is staring at a white fullscreen (output-side D3D11/WASAPI
+        /// failure — the software-decode default from #533/#537/#540 doesn't cover these, see the
+        /// #557-#560/#574 cluster). Retire the shared LibVLC instance and retry once on a fresh
+        /// one; a second strike skips the video so the session recovers instead of white-screening
+        /// for the full clip duration and wedging cleanup.
+        /// </summary>
+        private void VoutWatchdogFire()
+        {
+            try
+            {
+                if (_voutSeen || !_videoPlaying || _isCleaningUp || _wedgeRescueFired) return;
+
+                var path = _retryPath;
+                var strict = _strictActive;
+                bool retry = _whiteRetryCount < 1 && !string.IsNullOrEmpty(path);
+                _whiteRetryCount++;
+
+                App.Logger?.Error(
+                    "VideoService: no video output {Ms}ms after Play — white-screen output failure. {Action}",
+                    VoutTimeoutMs,
+                    retry ? "Retiring LibVLC and retrying once on a fresh instance" : "Second strike — skipping this video");
+
+                RetireSharedLibVLC("no video output within watchdog window (white screen)");
+
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                dispatcher.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        if (!_videoPlaying || _isCleaningUp) return; // torn down while we dispatched
+                        if (retry)
+                        {
+                            // CloseAll (not Cleanup): keeps the InteractionQueue slot claimed so
+                            // the retry continues the same interaction. PlayVideo re-ducks and
+                            // re-arms both watchdogs.
+                            CloseAll();
+                            PlayVideo(path!, strict, whiteScreenRetry: true);
+                        }
+                        else
+                        {
+                            Cleanup(); // full teardown — completes the interaction and moves on
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Error(ex, "VideoService: white-screen recovery failed — forcing cleanup");
+                        try { ForceCleanup(); } catch { /* last resort failed */ }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "VideoService: vout watchdog error");
+            }
         }
 
         /// <summary>
@@ -2648,6 +2877,8 @@ namespace ConditioningControlPanel.Services
             try
             {
                 _attentionTimer?.Stop();
+                _voutWatchdog?.Dispose();
+                _voutWatchdog = null;
                 _segmentArmedAtUtc = DateTime.MinValue;   // random-segment mode is one-shot per video
 
                 lock (_targets)
@@ -2673,6 +2904,10 @@ namespace ConditioningControlPanel.Services
                 // engine read sees null rather than a half-disposed handle.
                 _primaryMediaPlayer = null;
                 _primaryVideoWindow = null;
+                // The enhancement is torn down with the video; clear the driving flag so a later
+                // non-enhanced video gets the normal duration guillotine even if the bridge's
+                // Unbind races the teardown (panic/CloseAll doesn't raise VideoEnded). (#536)
+                _enhancementDriving = false;
 
                 // Stop all players in parallel with timeout to prevent one hanging player from blocking others
                 if (playersCopy.Count > 0)
@@ -2703,9 +2938,25 @@ namespace ConditioningControlPanel.Services
                         while (sw.ElapsedMilliseconds < 4000 && stopTasks.Any(t => !t.IsCompleted))
                             WaitWithMessagePump(150);
                         if (stopTasks.Any(t => !t.IsCompleted))
+                        {
                             App.Logger?.Error("CloseAll: LibVLC player STILL stopping after extended wait — detaching anyway");
+                            // A stop wedged this deep never recovers, and its stuck output thread
+                            // poisons the shared LibVLC instance — every later video comes up as a
+                            // white fullscreen with no sound until app restart (#557/#559). Park
+                            // the stuck players in quarantine (disposing them would block on the
+                            // wedged thread) and retire the instance so the next video gets a
+                            // fresh one.
+                            var wedgedPlayers = new List<LibVLCSharp.Shared.MediaPlayer>();
+                            for (int i = 0; i < stopTasks.Length; i++)
+                                if (!stopTasks[i].IsCompleted) wedgedPlayers.Add(playersCopy[i]);
+                            lock (_quarantineLock) { _quarantine.AddRange(wedgedPlayers); }
+                            playersCopy = playersCopy.Except(wedgedPlayers).ToList();
+                            RetireSharedLibVLC($"{wedgedPlayers.Count} player Stop() wedged in CloseAll");
+                        }
                         else
+                        {
                             App.Logger?.Information("CloseAll: stragglers stopped after extended wait ({Ms}ms)", sw.ElapsedMilliseconds);
+                        }
                     }
                 }
 

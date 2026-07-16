@@ -200,8 +200,14 @@ public static class UiHangWatchdog
     // Every thread's stack + module list + handle data — enough to identify the
     // render-thread deadlocks these hangs are, at tens of MB instead of the 1-2GB
     // that MiniDumpWithPrivateReadWriteMemory produced.
+    // 2026-07-13: the previous set produced a dump WinDbg bucketed as bad_dump!missing_teb —
+    // top-of-stack frames only, no unwind (it still nailed the render thread inside
+    // CWGXBitmapLockState::LockRead, but not who held the write side). Indirectly-referenced
+    // memory + full memory info pulls in the pages the thread stacks point at, which is what
+    // stack unwinding actually needs; dumps land in the tens of MB, still far from full-RW.
     private const uint CompactDumpType = MiniDumpWithDataSegs | MiniDumpWithHandleData
-        | MiniDumpWithUnloadedModules | MiniDumpWithProcessThreadData | MiniDumpWithThreadInfo;
+        | MiniDumpWithUnloadedModules | MiniDumpWithProcessThreadData | MiniDumpWithThreadInfo
+        | MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithFullMemoryInfo;
 
     // The old full-RW dumps left multi-GB files behind (3.8GB observed in one logs folder).
     // Keep the two newest dumps, drop the rest.
@@ -227,6 +233,8 @@ public static class UiHangWatchdog
     private const uint MiniDumpWithUnloadedModules        = 0x00000020;
     private const uint MiniDumpWithProcessThreadData      = 0x00000100;
     private const uint MiniDumpWithThreadInfo             = 0x00001000;
+    private const uint MiniDumpWithIndirectlyReferencedMemory = 0x00000040;
+    private const uint MiniDumpWithFullMemoryInfo         = 0x00000800;
 
     [DllImport("dbghelp.dll", SetLastError = true)]
     private static extern bool MiniDumpWriteDump(IntPtr hProcess, uint processId, SafeFileHandle hFile,

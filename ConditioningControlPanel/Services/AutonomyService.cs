@@ -959,14 +959,14 @@ namespace ConditioningControlPanel.Services
                         }
                         Application.Current?.Dispatcher?.BeginInvoke(() =>
                         {
-                            PerformAction(capturedAction, source, context);
+                            PerformAction(capturedAction, source, context, announce: true);
                         });
                     });
                 }
                 else
                 {
                     App.Logger?.Information("AutonomyService: No announcement, executing action immediately...");
-                    PerformAction(actionType.Value, source, context);
+                    PerformAction(actionType.Value, source, context, announce: false);
                 }
 
                 // Start cooldown
@@ -1174,7 +1174,7 @@ namespace ConditioningControlPanel.Services
             _                                   => null,
         };
 
-        private void PerformAction(AutonomyActionType actionType, AutonomyTriggerSource source, string? context)
+        private void PerformAction(AutonomyActionType actionType, AutonomyTriggerSource source, string? context, bool announce)
         {
             App.Logger?.Information("AutonomyService: PerformAction starting - {Action}", actionType);
 
@@ -1188,12 +1188,17 @@ namespace ConditioningControlPanel.Services
 
                     // On-screen cue so a takeover-driven effect is visibly distinct from an
                     // ordinary engine effect. Fires for every effect except Comment (just a giggle).
-                    try
+                    // Gated on the announce roll (AutonomyAnnouncementChance): at 0% the user wants
+                    // silent, unannounced takeover, so the HUD banner is suppressed too (#534).
+                    if (announce)
                     {
-                        var cue = TakeoverEffectLabel(actionType);
-                        if (cue != null) TakeoverAnnouncerOverlay.Announce(cue);
+                        try
+                        {
+                            var cue = TakeoverEffectLabel(actionType);
+                            if (cue != null) TakeoverAnnouncerOverlay.Announce(cue);
+                        }
+                        catch (Exception cueEx) { App.Logger?.Debug("AutonomyService: takeover cue failed: {E}", cueEx.Message); }
                     }
-                    catch (Exception cueEx) { App.Logger?.Debug("AutonomyService: takeover cue failed: {E}", cueEx.Message); }
 
                     switch (actionType)
                     {

@@ -103,7 +103,10 @@ html, body {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  z-index: 12;
+  /* Above Cheshire's bottom-left corner commentary (.chc-root, z38) so her portrait
+     + chat bubble never bury Settings/audio/fullscreen; still below the full-screen
+     VN + boon-draft modals (z40+), which hide the dock via .sf-chrome-hidden anyway. */
+  z-index: 39;
   pointer-events: none;
 }
 .sf-dock-btn {

@@ -42,49 +42,80 @@ public sealed class ChaosSkiaFxOverlay : Window
 
     private static ChaosSkiaFxOverlay? _active;
 
+    // Compositor routing: when the unified overlay host is on, the whole particle field renders
+    // as a ChaosFxLayer on the shared per-monitor hosts instead of this dedicated fullscreen
+    // layered window (one fewer surface presenting during a pop surge — the "explosion lag when
+    // overlays are stacked"). The layer is created + registered lazily on first use and lives
+    // for the app's lifetime; this window is then never created at all.
+    private static Services.Compositor.ChaosFxLayer? _layer;
+    private static bool UseCompositor => App.CompositorEnabled;
+
     // ---- public keep-alive / draw API (all thread-safe; marshalled to the UI thread) ----
 
     public static void EnsureCreated()
     {
         if (!Enabled) return;
-        OnUi(_ => { });   // OnUi creates the window if needed, then idles hidden
-        OnUi(w => { if (w.IsVisible) w.Hide(); });
+        OnFx(_ => { }, w => { if (w.IsVisible) w.Hide(); });   // realizes the window/layer, then idles
     }
 
     /// <summary>Emit a sparkle burst at a rabbit trail point (physical px). <paramref name="warm"/>
     /// picks the amber GG-sweeper spark over the default Tail-Plug pink. Same call shape as
     /// ChaosFieldFxOverlay.TrailDot so the BubbleService call sites just branch on <see cref="Enabled"/>.</summary>
     public static void TrailDot(Point centerPx, double lifeSec, bool warm = false) =>
-        OnUi(w => w.EmitTrail(centerPx, lifeSec, warm));
+        OnFx(l => l.EmitTrail(centerPx, lifeSec, warm), w => w.EmitTrail(centerPx, lifeSec, warm));
 
     /// <summary>Trail with a travel-direction hint (dx,dy, any scale) so the sparks stream BEHIND the rabbit.</summary>
     public static void TrailDot(Point centerPx, double lifeSec, bool warm, double dirX, double dirY) =>
-        OnUi(w => w.EmitTrail(centerPx, lifeSec, warm, dirX, dirY));
+        OnFx(l => l.EmitTrail(centerPx, lifeSec, warm, dirX, dirY), w => w.EmitTrail(centerPx, lifeSec, warm, dirX, dirY));
 
     /// <summary>E-Stim: draw additive lightning bolts along the given segment endpoints (physical px).</summary>
     public static void Strike(IReadOnlyList<(Point From, Point To)> boltsPx) =>
-        OnUi(w => w.AddStrike(boltsPx));
+        OnFx(l => l.AddStrike(boltsPx), w => w.AddStrike(boltsPx));
 
     /// <summary>Pop burst at a bubble's centre (physical px) in its payload colour: a white core
     /// flash + an expanding ring + radiating shards. <paramref name="scale"/> >1 makes a bigger
     /// release (e.g. a live snap). Colour is any WPF colour; tint filters are cached per colour.</summary>
     public static void Burst(Point centerPx, System.Windows.Media.Color color, double scale = 1.0) =>
-        OnUi(w => w.EmitBurst(centerPx, ChaosBoonColors.ToSk(color), (float)scale));
+        OnFx(l => l.EmitBurst(centerPx, ChaosBoonColors.ToSk(color), (float)scale),
+             w => w.EmitBurst(centerPx, ChaosBoonColors.ToSk(color), (float)scale));
 
     /// <summary>An expanding additive shockwave (the Ripple cast / Size Queen / E-Stim wave). The
     /// leading edge grows LINEARLY to <paramref name="radiusPx"/> over <paramref name="lifeMs"/> so
     /// it matches the gameplay kill-front exactly; <paramref name="strong"/> adds trailing rings, a
     /// chromatic glassy edge and more front sparks for the player's right-click cast.</summary>
     public static void Ripple(Point centerPx, double radiusPx, double lifeMs, bool strong = false) =>
-        OnUi(w => w.EmitRipple(centerPx, radiusPx, lifeMs, strong));
+        OnFx(l => l.EmitRipple(centerPx, radiusPx, lifeMs, strong), w => w.EmitRipple(centerPx, radiusPx, lifeMs, strong));
 
-    public static void ArmCursorGlow() => OnUi(w => { w._cursorArmed = true; w.StartActivity(); });
-    public static void DisarmCursorGlow() => OnUi(w => w._cursorArmed = false);
+    public static void ArmCursorGlow() =>
+        OnFx(l => l.ArmCursor(), w => { w._cursorArmed = true; w.StartActivity(); });
+
+    /// <summary>Disarm on BOTH paths: a mid-run UnifiedOverlayHost flip must not strand an armed
+    /// glow on whichever renderer armed it (the pink/spiral act-on-state lesson).</summary>
+    public static void DisarmCursorGlow()
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    _layer?.DisarmCursor();
+                    if (_active != null) _active._cursorArmed = false;
+                }
+                catch { }
+            });
+        }
+        catch { }
+    }
 
     public static void MoveCursorGlowToPx(double px, double py) =>
-        OnUi(w => { if (w._cursorArmed && w.Local(new Point(px, py)) is Point p) { w._cursorX = (float)p.X; w._cursorY = (float)p.Y; } });
+        OnFx(l => l.MoveCursor(px, py),
+             w => { if (w._cursorArmed && w.Local(new Point(px, py)) is Point p) { w._cursorX = (float)p.X; w._cursorY = (float)p.Y; } });
 
-    /// <summary>Re-stack the live window above a mandatory video (see ChaosWindowZ). UI thread only.</summary>
+    /// <summary>Re-stack the live window above a mandatory video (see ChaosWindowZ). UI thread only.
+    /// Legacy-window path only — the compositor hosts manage their own z-order.</summary>
     public static void RaiseActive() => ChaosWindowZ.RaiseTopmost(_active);
 
     public static void CloseActive()
@@ -97,6 +128,7 @@ public sealed class ChaosSkiaFxOverlay : Window
             {
                 try
                 {
+                    _layer?.Clear();   // the layer stays registered; just drop its state
                     var w = _active;
                     _active = null;
                     w?.StopRendering();
@@ -108,7 +140,9 @@ public sealed class ChaosSkiaFxOverlay : Window
         catch { }
     }
 
-    private static void OnUi(Action<ChaosSkiaFxOverlay> act)
+    /// <summary>Marshal one FX call to the UI thread and route it: compositor layer when the
+    /// unified host is on, else the legacy keep-alive window (created on first use).</summary>
+    private static void OnFx(Action<Services.Compositor.ChaosFxLayer> viaLayer, Action<ChaosSkiaFxOverlay> viaWindow)
     {
         if (!Enabled) return;
         try
@@ -119,13 +153,23 @@ public sealed class ChaosSkiaFxOverlay : Window
             {
                 try
                 {
+                    if (UseCompositor)
+                    {
+                        if (_layer == null)
+                        {
+                            _layer = new Services.Compositor.ChaosFxLayer(App.Compositor!);
+                            App.Compositor!.RegisterLayer(_layer);
+                        }
+                        viaLayer(_layer);
+                        return;
+                    }
                     if (_active == null)
                     {
                         _active = new ChaosSkiaFxOverlay();
                         ((Window)_active).Show();
                         _active.Hide();   // realize the hwnd, then idle hidden until something draws
                     }
-                    act(_active);
+                    viaWindow(_active);
                 }
                 catch (Exception ex) { App.Logger?.Debug("ChaosSkiaFx: {E}", ex.Message); }
             });
@@ -150,6 +194,13 @@ public sealed class ChaosSkiaFxOverlay : Window
     private int _idleFrames;
     private TimeSpan _lastRender = TimeSpan.MinValue;
     private double _dpiX = 1, _dpiY = 1;
+
+    // Hiding immediately on idle meant EVERY effect-bubble pop re-Show()ed a fullscreen layered
+    // window (DWM re-composition = a visible frame hitch, and only payload bubbles paid it).
+    // The render loop still parks after ~3 idle frames; the WINDOW stays up through this grace
+    // so back-to-back pops reuse the already-presented (cleared, click-through) surface.
+    private static readonly TimeSpan HideGrace = TimeSpan.FromSeconds(8);
+    private readonly System.Windows.Threading.DispatcherTimer _hideTimer;
 
     // Cached tint filters (modulate the white soft-dot sprite to a colour without per-draw alloc).
     private static readonly SKColorFilter PinkCF = SKColorFilter.CreateBlendMode(PinkBody, SKBlendMode.Modulate);
@@ -212,6 +263,13 @@ public sealed class ChaosSkiaFxOverlay : Window
         Content = _sk;
 
         SourceInitialized += (_, _) => { ApplyExStyles(); CacheDpi(); };
+
+        _hideTimer = new System.Windows.Threading.DispatcherTimer { Interval = HideGrace };
+        _hideTimer.Tick += (_, _) =>
+        {
+            _hideTimer.Stop();
+            if (!_rendering) { try { Hide(); } catch { } }
+        };
     }
 
     /// <summary>A soft white radial dot (premultiplied), tinted + additively blended per particle.</summary>
@@ -463,7 +521,15 @@ public sealed class ChaosSkiaFxOverlay : Window
     {
         try
         {
-            if (!IsVisible) Show();
+            _hideTimer.Stop();
+            if (!IsVisible)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                Show();
+                sw.Stop();
+                if (sw.ElapsedMilliseconds >= 20)
+                    App.Logger?.Information("[POPLAG] ChaosSkiaFx window Show() took {Ms}ms", sw.ElapsedMilliseconds);
+            }
             ChaosWindowZ.RaiseAboveVideo(this);
             _idleFrames = 0;
             if (!_rendering)
@@ -549,7 +615,9 @@ public sealed class ChaosSkiaFxOverlay : Window
 
             if (_n == 0 && _bolts.Count == 0 && _ripples.Count == 0 && !_cursorArmed)
             {
-                if (++_idleFrames > 2) { StopRendering(); try { Hide(); } catch { } }
+                // Park the render loop right away (last painted frame is already cleared), but
+                // leave the window visible for HideGrace so the next pop doesn't pay a Show().
+                if (++_idleFrames > 2) { StopRendering(); _hideTimer.Stop(); _hideTimer.Start(); }
             }
             else _idleFrames = 0;
         }

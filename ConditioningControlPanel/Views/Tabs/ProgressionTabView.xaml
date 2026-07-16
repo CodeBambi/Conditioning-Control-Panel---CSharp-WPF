@@ -189,7 +189,10 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_per_min}"
                                            ToolTip="{loc:Str tooltip_bubbles_spawned_per_minute}"/>
-                                <Slider Grid.Column="1" x:Name="SliderBubbleFreq" x:FieldModifier="internal" Minimum="1" Maximum="15" Value="5" 
+                                <!-- Range MUST match BubblePopFeatureControl's SliderFreq (1-60): SaveSettings
+                                     round-trips settings through these legacy controls, so a narrower range here
+                                     CLAMPS the popup's value (bubbles snapped to 15 on engine start / panic). -->
+                                <Slider Grid.Column="1" x:Name="SliderBubbleFreq" x:FieldModifier="internal" Minimum="1" Maximum="60" Value="5"
                                         Margin="10,0" ValueChanged="SliderBubbleFreq_Changed"
                                         ToolTip="{loc:Str tooltip_bubble_spawn_rate}"/>
                                 <TextBlock x:Name="TxtBubbleFreq" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="5"/>
@@ -528,7 +531,9 @@
                                 <CheckBox x:Name="ChkBrainDrainEnabled" x:FieldModifier="internal" Visibility="Collapsed"/>
                                 <StackPanel x:Name="BrainDrainSettings" Visibility="Collapsed">
                                     <TextBlock x:Name="TxtBrainDrainIntensity" x:FieldModifier="internal"/>
-                                    <Slider x:Name="SliderBrainDrainIntensity" x:FieldModifier="internal"/>
+                                    <!-- Explicit range: a WPF Slider defaults to Maximum=10, which silently
+                                         clamps this percent value in the SaveSettings round-trip. -->
+                                    <Slider x:Name="SliderBrainDrainIntensity" x:FieldModifier="internal" Minimum="1" Maximum="100"/>
                                     <CheckBox x:Name="ChkBrainDrainHighRefresh" x:FieldModifier="internal"/>
                                 </StackPanel>
                             </StackPanel>

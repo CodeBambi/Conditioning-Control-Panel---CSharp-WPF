@@ -61,6 +61,66 @@ public class OverlayService : IDisposable
     private double? _rampPinkOpacity;
     private double? _rampSpiralOpacity;
     private double? _rampBrainDrainOpacity;
+
+    // #573: a timed overlay fired while the overlay is ALREADY showing (pink/spiral bubble pop
+    // during a base overlay or Deeper band) used to be swallowed whole by the ad-hoc shows'
+    // early-return. Instead we park a temporary intensity bump in _rampXOpacity (so the 500ms
+    // settings-sync can't stomp it) and restore the previous owner when the last timed hold
+    // releases. _bumpPrevRampX remembers what was parked before the first bump (a band's hold,
+    // or null = settings-sync owns it).
+    private bool _bumpPinkActive;
+    private double? _bumpPrevRampPink;
+    private bool _bumpSpiralActive;
+    private double? _bumpPrevRampSpiral;
+
+    // Unified overlay host (Settings.UnifiedOverlayHost, experimental): pink/spiral render as
+    // compositor layers on the shared per-monitor Skia host instead of per-effect layered
+    // windows. This service keeps ALL the opacity math (ramps, pulses, holds, settings sync)
+    // and pushes final values; the layers only draw. Layers are created lazily so the engine
+    // stays fully parked when the flag is off. Route checks use "<layer>?.IsActive == true"
+    // rather than the flag so a mid-run flag flip can't strand a visible layer.
+    private Compositor.PinkTintLayer? _pinkLayer;
+    private Compositor.SpiralLayer? _spiralLayer;
+    private static bool UseCompositor => App.CompositorEnabled;
+    private Compositor.PinkTintLayer GetPinkLayer()
+    {
+        if (_pinkLayer == null)
+        {
+            _pinkLayer = new Compositor.PinkTintLayer(App.Compositor!);
+            App.Compositor!.RegisterLayer(_pinkLayer);
+        }
+        return _pinkLayer;
+    }
+    private Compositor.SpiralLayer GetSpiralLayer()
+    {
+        if (_spiralLayer == null)
+        {
+            _spiralLayer = new Compositor.SpiralLayer(App.Compositor!);
+            App.Compositor!.RegisterLayer(_spiralLayer);
+        }
+        return _spiralLayer;
+    }
+    private Compositor.BrainDrainLayer? _brainDrainLayer;
+    private Compositor.BrainDrainLayer GetBrainDrainLayer()
+    {
+        if (_brainDrainLayer == null)
+        {
+            _brainDrainLayer = new Compositor.BrainDrainLayer(App.Compositor!);
+            App.Compositor!.RegisterLayer(_brainDrainLayer);
+        }
+        return _brainDrainLayer;
+    }
+    // "Is showing" checks must cover BOTH render paths - the 500ms sync and pulse gate on these.
+    private bool PinkShowing => _pinkFilterWindows.Count > 0 || _pinkLayer?.IsActive == true;
+    private bool BrainDrainShowing => _brainDrainBlurWindows.Count > 0 || _brainDrainLayer?.IsActive == true;
+    private bool SpiralShowing => _spiralWindows.Count > 0 || _spiralLayer?.IsShowing == true
+        || _spiralLayerDecodePending != null;
+    // Off-thread spiral decode state for the layer route: the path being decoded right now
+    // (also counts as "showing" so the 500ms sync doesn't re-enter), and the last path that
+    // produced zero frames (routed to the legacy windows instead of retrying forever).
+    private string? _spiralLayerDecodePending;
+    private string? _spiralLayerFailedPath;
+
     private int _consecutiveTopmostLossCount;
     // Recreate-overlays backoff. Destroying + recreating every layered overlay window on a 3s cadence
     // is a GDI/composition-surface churn engine (feeds the "not enough quota" exhaustion, and the
@@ -244,7 +304,7 @@ public class OverlayService : IDisposable
 
             if (settings.PinkFilterEnabled)
             {
-                if (_pinkFilterWindows.Count == 0)
+                if (!PinkShowing)
                     StartPinkFilter();
                 else
                     UpdatePinkFilterOpacity();
@@ -258,7 +318,7 @@ public class OverlayService : IDisposable
             if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath))
             {
                 _spiralPath = spiralPath;
-                if (_spiralWindows.Count == 0)
+                if (!SpiralShowing)
                     StartSpiral();
                 else
                     UpdateSpiralOpacity();
@@ -273,7 +333,7 @@ public class OverlayService : IDisposable
         });
 
         App.Logger?.Debug("Overlays refreshed - Pink: {Pink}, Spiral: {Spiral}, BrainDrain: {BrainDrain}",
-            _pinkFilterWindows.Count > 0, _spiralWindows.Count > 0, _brainDrainBlurWindows.Count > 0);
+            PinkShowing, SpiralShowing, BrainDrainShowing);
     }
 
     /// <summary>
@@ -286,9 +346,9 @@ public class OverlayService : IDisposable
         DispatcherHelper.RunOnUISync(() =>
         {
             var settings = App.Settings.Current;
-            var hasPink = settings.PinkFilterEnabled && _pinkFilterWindows.Count > 0;
-            var hasSpiral = settings.SpiralEnabled && _spiralWindows.Count > 0;
-            var hasBrainDrain = settings.BrainDrainEnabled && _brainDrainBlurWindows.Count > 0;
+            var hasPink = settings.PinkFilterEnabled && PinkShowing;
+            var hasSpiral = settings.SpiralEnabled && SpiralShowing;
+            var hasBrainDrain = settings.BrainDrainEnabled && BrainDrainShowing;
 
             if (!hasPink && !hasSpiral && !hasBrainDrain) return;
 
@@ -298,6 +358,10 @@ public class OverlayService : IDisposable
                 var boosted = Math.Min(settings.PinkFilterOpacity * 2, 100);
                 var alpha = (byte)(boosted / 100.0 * 255);
                 var (fr, fg, fb) = GetFilterRgb();
+                if (_pinkLayer?.IsActive == true)
+                {
+                    _pinkLayer.Set(fr, fg, fb, boosted / 100.0);
+                }
                 foreach (var window in _pinkFilterWindows)
                 {
                     if (window.Content is Border border &&
@@ -312,6 +376,7 @@ public class OverlayService : IDisposable
             if (hasSpiral)
             {
                 var boostedOpacity = Math.Min((settings.SpiralOpacity / 100.0) * 0.1 * 2, 1.0);
+                _spiralLayer?.SetOpacity(boostedOpacity);
                 foreach (var image in _spiralGifImages)
                     image.Opacity = boostedOpacity;
                 foreach (var media in _spiralMediaElements)
@@ -323,6 +388,8 @@ public class OverlayService : IDisposable
             {
                 var boostedIntensity = Math.Min(_currentBrainDrainIntensity * 2, 200);
                 double blurRadius = boostedIntensity * 0.4;
+                if (_brainDrainLayer?.IsActive == true)
+                    _brainDrainLayer.Pulse(boostedIntensity);
                 foreach (var img in _brainDrainImages.Values)
                 {
                     if (img.Effect is System.Windows.Media.Effects.BlurEffect blur)
@@ -330,16 +397,34 @@ public class OverlayService : IDisposable
                 }
             }
 
-            // Restore after 1 second
+            // Restore after 1 second. When a session/Deeper ramp owns an overlay's opacity,
+            // Update*Opacity() deliberately early-returns (it must not fight the live ramp) — so
+            // routing the restore through it left the overlay stuck at the *boosted* value, up to
+            // fully opaque, recoverable only by toggling the overlay off/on (#535). Restore to the
+            // ramp's own value when a ramp is active; otherwise fall back to the user's settings.
             Task.Delay(1000).ContinueWith(_ =>
             {
                 try
                 {
                     DispatcherHelper.RunOnUISync(() =>
                     {
-                        if (hasPink) UpdatePinkFilterOpacity();
-                        if (hasSpiral) UpdateSpiralOpacity();
-                        if (hasBrainDrain) UpdateBrainDrainBlurOpacity(_currentBrainDrainIntensity);
+                        if (hasPink)
+                        {
+                            if (_rampPinkOpacity.HasValue) ApplyPinkOpacityDirect(_rampPinkOpacity.Value);
+                            else UpdatePinkFilterOpacity();
+                        }
+                        if (hasSpiral)
+                        {
+                            if (_rampSpiralOpacity.HasValue) ApplySpiralOpacityDirect(_rampSpiralOpacity.Value);
+                            else UpdateSpiralOpacity();
+                        }
+                        if (hasBrainDrain)
+                        {
+                            if (_rampBrainDrainOpacity.HasValue)
+                                UpdateBrainDrainBlurOpacity(Math.Max(1, (int)Math.Round(_rampBrainDrainOpacity.Value * 100)));
+                            else
+                                UpdateBrainDrainBlurOpacity(_currentBrainDrainIntensity);
+                        }
                     });
                 }
                 catch { /* Window may have closed */ }
@@ -393,30 +478,30 @@ public class OverlayService : IDisposable
     {
         var settings = App.Settings.Current;
 
-        if (settings.PinkFilterEnabled && _pinkFilterWindows.Count == 0)
+        if (settings.PinkFilterEnabled && !PinkShowing)
         {
             StartPinkFilter();
         }
-        else if (!settings.PinkFilterEnabled && _pinkFilterWindows.Count > 0 && _timedPinkHolds == 0 && !_sustainedPinkHeld)
+        else if (!settings.PinkFilterEnabled && PinkShowing && _timedPinkHolds == 0 && !_sustainedPinkHeld)
         {
             StopPinkFilter();
         }
-        else if (_pinkFilterWindows.Count > 0)
+        else if (PinkShowing)
         {
             UpdatePinkFilterOpacity();
         }
 
         var spiralPath = GetSpiralPath();
-        if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath) && _spiralWindows.Count == 0)
+        if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath) && !SpiralShowing)
         {
             _spiralPath = spiralPath;
             StartSpiral();
         }
-        else if (!settings.SpiralEnabled && _spiralWindows.Count > 0 && _timedSpiralHolds == 0 && !_sustainedSpiralHeld)
+        else if (!settings.SpiralEnabled && SpiralShowing && _timedSpiralHolds == 0 && !_sustainedSpiralHeld)
         {
             StopSpiral();
         }
-        else if (_spiralWindows.Count > 0)
+        else if (SpiralShowing)
         {
             UpdateSpiralOpacity();
         }
@@ -515,9 +600,37 @@ public class OverlayService : IDisposable
             try
             {
                 // Mark the timed overlay in-flight so the reconcile loops leave it alone.
-                if (kind == "pink_filter") _timedPinkHolds++;
-                else if (kind == "spiral") _timedSpiralHolds++;
-                show();
+                if (kind == "pink_filter")
+                {
+                    _timedPinkHolds++;
+                    if (PinkShowing)
+                    {
+                        // #573: show() would early-return on an already-showing overlay, silently
+                        // swallowing the boost. Bump the live opacity instead (never downward) and
+                        // park it in the ramp hold so the settings-sync can't stomp it; the hide
+                        // timer restores the previous owner.
+                        if (!_bumpPinkActive) { _bumpPinkActive = true; _bumpPrevRampPink = _rampPinkOpacity; }
+                        double current = _rampPinkOpacity ?? (App.Settings?.Current?.PinkFilterOpacity ?? 0) / 100.0;
+                        double target = Math.Max(current, opacityPercent / 100.0);
+                        _rampPinkOpacity = target;
+                        ApplyPinkOpacityDirect(target);
+                    }
+                    else show();
+                }
+                else if (kind == "spiral")
+                {
+                    _timedSpiralHolds++;
+                    if (SpiralShowing)
+                    {
+                        if (!_bumpSpiralActive) { _bumpSpiralActive = true; _bumpPrevRampSpiral = _rampSpiralOpacity; }
+                        double current = _rampSpiralOpacity ?? (App.Settings?.Current?.SpiralOpacity ?? 0) / 100.0;
+                        double target = Math.Max(current, opacityPercent / 100.0);
+                        _rampSpiralOpacity = target;
+                        ApplySpiralOpacityDirect(target);
+                    }
+                    else show();
+                }
+                else show();
             }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlayTimed show: {E}", ex.Message); }
         };
@@ -539,16 +652,48 @@ public class OverlayService : IDisposable
                 if (kind == "pink_filter")
                 {
                     if (_timedPinkHolds > 0) _timedPinkHolds--;
-                    if (_timedPinkHolds == 0 && !settings.PinkFilterEnabled) hide();
+                    if (_timedPinkHolds == 0)
+                    {
+                        // Undo any #573 intensity bump: hand opacity back to the previous owner (a
+                        // band's parked hold, or the settings-sync). Only touch the ramp hold while
+                        // the overlay is still up — a Stop/panic in between already cleared the
+                        // holds, and re-parking a stale value would freeze a future overlay (#563).
+                        if (_bumpPinkActive)
+                        {
+                            _bumpPinkActive = false;
+                            if (PinkShowing)
+                            {
+                                _rampPinkOpacity = _bumpPrevRampPink;
+                                if (_rampPinkOpacity is double prevPink) ApplyPinkOpacityDirect(prevPink);
+                                else _lastAppliedPinkOpacity = -1; // settings-sync re-applies next tick
+                            }
+                            _bumpPrevRampPink = null;
+                        }
+                        if (!settings.PinkFilterEnabled) hide();
+                    }
                 }
                 else if (kind == "spiral")
                 {
                     if (_timedSpiralHolds > 0) _timedSpiralHolds--;
-                    if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) hide();
+                    if (_timedSpiralHolds == 0)
+                    {
+                        if (_bumpSpiralActive)
+                        {
+                            _bumpSpiralActive = false;
+                            if (SpiralShowing)
+                            {
+                                _rampSpiralOpacity = _bumpPrevRampSpiral;
+                                if (_rampSpiralOpacity is double prevSpiral) ApplySpiralOpacityDirect(prevSpiral);
+                                else _lastAppliedSpiralOpacity = -1; // settings-sync re-applies next tick
+                            }
+                            _bumpPrevRampSpiral = null;
+                        }
+                        if (!settings.SpiralEnabled) hide();
+                    }
                 }
-                else
+                else // braindrain: don't tear down the user's base Brain Drain when a timed effect ends
                 {
-                    hide();
+                    if (!settings.BrainDrainEnabled) hide();
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlayTimed hide: {E}", ex.Message); }
@@ -595,8 +740,13 @@ public class OverlayService : IDisposable
                 // Both show() and the reconcilers run on this one UI thread, so they can't interleave;
                 // gate on a window actually appearing so a no-op show (e.g. spiral with no asset) doesn't
                 // leave a stale hold that would later block a legitimate teardown.
-                if (kind == "pink_filter") _sustainedPinkHeld = _pinkFilterWindows.Count > 0;
-                else if (kind == "spiral") _sustainedSpiralHeld = _spiralWindows.Count > 0;
+                // Park the ramp-ownership hold at the band's opacity so the 500ms settings-sync
+                // (UpdatePinkFilterOpacity/UpdateSpiralOpacity) early-returns and won't stomp a
+                // constant-opacity Deeper band back to the user's saved opacity within half a second
+                // (#563 symptom-1). Ramp bands overwrite this each Update tick; HideOverlaySustained
+                // clears it on band exit, so the lifecycle stays symmetric.
+                if (kind == "pink_filter") { _sustainedPinkHeld = PinkShowing; if (PinkShowing) _rampPinkOpacity = opacity; }
+                else if (kind == "spiral") { _sustainedSpiralHeld = SpiralShowing; if (SpiralShowing) _rampSpiralOpacity = opacity; }
             }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlaySustained show: {E}", ex.Message); }
         };
@@ -618,9 +768,19 @@ public class OverlayService : IDisposable
         var settings = App.Settings.Current;
         Action? hide = kind switch
         {
-            "pink_filter" => () => { _sustainedPinkHeld = false; if (_timedPinkHolds == 0 && !settings.PinkFilterEnabled) StopPinkFilter(); },
-            "spiral"      => () => { _sustainedSpiralHeld = false; if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) StopSpiral(); },
-            "braindrain"  => () => StopBrainDrainBlur(),
+            // Release any Deeper opacity-ramp hold on band exit BEFORE the conditional teardown.
+            // A ramp (SetSustainedOverlayOpacity) parks _rampXOpacity, which makes the 500ms
+            // settings-sync early-return so it won't fight the ramp. If the base overlay feature
+            // is enabled we don't StopPinkFilter/StopSpiral here — so without clearing the hold
+            // the overlay stayed frozen at the ramp's final opacity forever (#563). Clearing it
+            // returns ownership to the reconciler, which re-applies the user's saved opacity next
+            // tick (base-on) or the overlay is torn down (base-off).
+            "pink_filter" => () => { _sustainedPinkHeld = false; _rampPinkOpacity = null; _lastAppliedPinkOpacity = -1; if (_timedPinkHolds == 0 && !settings.PinkFilterEnabled) StopPinkFilter(); },
+            "spiral"      => () => { _sustainedSpiralHeld = false; _rampSpiralOpacity = null; _lastAppliedSpiralOpacity = -1; if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) StopSpiral(); },
+            // Guard braindrain the same way as pink/spiral: a Deeper band exit must not tear down
+            // the user's base Brain Drain feature. Clear ramp ownership, then only stop when the
+            // base feature is off (else RefreshBrainDrainState keeps it alive). (#563 consistency)
+            "braindrain"  => () => { _rampBrainDrainOpacity = null; if (!settings.BrainDrainEnabled) StopBrainDrainBlur(); },
             _ => null
         };
 
@@ -698,6 +858,8 @@ public class OverlayService : IDisposable
     {
         var (fr, fg, fb) = GetFilterRgb();
         byte a = (byte)Math.Clamp(opacity * 255, 0, 255);
+        if (_pinkLayer?.IsActive == true)
+            _pinkLayer.Set(fr, fg, fb, opacity);
         foreach (var window in _pinkFilterWindows)
             if (window.Content is Border border &&
                 border.Background is System.Windows.Media.SolidColorBrush brush)
@@ -709,6 +871,7 @@ public class OverlayService : IDisposable
     private void ApplySpiralOpacityDirect(double opacity)
     {
         var scaled = opacity * 0.1; // 90% reduction, matching CreateSpiralGifWindow / UpdateSpiralOpacity
+        _spiralLayer?.SetOpacity(scaled);
         foreach (var image in _spiralGifImages) image.Opacity = scaled;
         foreach (var media in _spiralMediaElements) media.Opacity = scaled;
         _lastAppliedSpiralOpacity = -1;
@@ -716,7 +879,13 @@ public class OverlayService : IDisposable
 
     private void ShowPinkFilterAdHoc(int opacityPercent)
     {
-        if (_pinkFilterWindows.Count > 0) return;
+        if (PinkShowing) return;
+        if (UseCompositor)
+        {
+            var (fr, fg, fb) = GetFilterRgb();
+            GetPinkLayer().Show(fr, fg, fb, opacityPercent / 100.0);
+            return;
+        }
         try
         {
             var settings = App.Settings?.Current;
@@ -741,7 +910,7 @@ public class OverlayService : IDisposable
         // Spiral has heavier setup (GIF/video branching, frame timer); reuse the
         // existing path. If settings have no spiral path configured, this is a
         // no-op — Deeper logs at the dispatcher.
-        if (_spiralWindows.Count > 0) return;
+        if (SpiralShowing) return;
         try
         {
             var spiralPath = GetSpiralPath();
@@ -761,7 +930,17 @@ public class OverlayService : IDisposable
 
     private void StartPinkFilter()
     {
-        if (_pinkFilterWindows.Count > 0) return;
+        if (PinkShowing) return;
+
+        if (UseCompositor)
+        {
+            var s = App.Settings.Current;
+            var (fr, fg, fb) = GetFilterRgb();
+            GetPinkLayer().Show(fr, fg, fb, s.PinkFilterOpacity / 100.0);
+            _lastAppliedPinkOpacity = s.PinkFilterOpacity / 100.0;
+            App.Logger?.Debug("Pink filter started on compositor layer at opacity {Opacity}%", s.PinkFilterOpacity);
+            return;
+        }
 
         try
         {
@@ -856,6 +1035,7 @@ public class OverlayService : IDisposable
 
     internal void StopPinkFilter()
     {
+        _pinkLayer?.Hide(); // both paths cleared unconditionally - the flag may have flipped mid-run
         foreach (var window in _pinkFilterWindows.ToList())
         {
             try { window.Close(); }
@@ -878,6 +1058,11 @@ public class OverlayService : IDisposable
         if (actualOpacity == _lastAppliedPinkOpacity) return;
         _lastAppliedPinkOpacity = actualOpacity;
         var (fr, fg, fb) = GetFilterRgb();
+        if (_pinkLayer?.IsActive == true)
+        {
+            _pinkLayer.Set(fr, fg, fb, actualOpacity);
+            return;
+        }
         foreach (var window in _pinkFilterWindows)
         {
             if (window.Content is Border border)
@@ -896,7 +1081,65 @@ public class OverlayService : IDisposable
 
     private void StartSpiral()
     {
-        if (_spiralWindows.Count > 0) return;
+        if (SpiralShowing) return;
+
+        _isGifSpiral = _spiralPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
+
+        // Compositor route covers the GIF/animated path only; video spirals (MediaElement)
+        // have no layer frame source yet and always use the legacy windows. Frames come from
+        // the LEGACY decoder + cache so asset support (pack:// resources, file:// mod overrides,
+        // user paths) is identical to the legacy windows by construction.
+        if (UseCompositor && _isGifSpiral && _spiralPath != _spiralLayerFailedPath)
+        {
+            var finalOpacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
+
+            // Cache hit: show immediately (frames are frozen, shared with the legacy cache).
+            if (_spiralFramesCacheKey == _spiralPath && _spiralFramesCache.Count > 0)
+            {
+                GetSpiralLayer().ShowFrames(_spiralFramesCache, _spiralFramesCacheDelay, finalOpacity);
+                _lastAppliedSpiralOpacity = finalOpacity;
+                App.Logger?.Debug("Spiral started on compositor layer ({Path}, cached)", _spiralPath);
+                return;
+            }
+
+            // Cache miss: decode OFF the UI thread. The legacy path decodes synchronously and
+            // hitches the whole UI ~1s - felt as a lag spike exactly when a spiral-payload
+            // bubble pops. SpiralShowing counts the pending decode so the sync doesn't re-enter.
+            if (_spiralLayerDecodePending != null) return;
+            var path = _spiralPath;
+            _spiralLayerDecodePending = path;
+            Task.Run(() =>
+            {
+                var (frames, delay) = DecodeGifFrames(path);
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                dispatcher.BeginInvoke(() =>
+                {
+                    _spiralLayerDecodePending = null;
+                    if (frames.Count == 0)
+                    {
+                        // Next StartSpiral routes this path to the legacy windows (no retry churn).
+                        _spiralLayerFailedPath = path;
+                        App.Logger?.Warning("Spiral: layer decode produced no frames for {Path}; legacy path will be used", path);
+                        return;
+                    }
+                    _spiralFramesCache = frames;
+                    _spiralFramesCacheKey = path;
+                    _spiralFramesCacheDelay = delay;
+                    // The user may have turned the spiral off (or swapped assets) mid-decode.
+                    var s = App.Settings.Current;
+                    bool stillWanted = _spiralPath == path
+                        && (s.SpiralEnabled || _timedSpiralHolds > 0 || _sustainedSpiralHeld);
+                    if (stillWanted && UseCompositor)
+                    {
+                        GetSpiralLayer().ShowFrames(frames, delay, (s.SpiralOpacity / 100.0) * 0.1);
+                        _lastAppliedSpiralOpacity = (s.SpiralOpacity / 100.0) * 0.1;
+                        App.Logger?.Debug("Spiral started on compositor layer ({Path}, decoded off-thread)", path);
+                    }
+                });
+            });
+            return;
+        }
 
         try
         {
@@ -905,8 +1148,6 @@ public class OverlayService : IDisposable
             var screens = settings.DualMonitorEnabled
                 ? App.GetAllScreensCached()
                 : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
-
-            _isGifSpiral = _spiralPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
 
             // For GIFs, load frames once and share across all screens
             if (_isGifSpiral)
@@ -1071,6 +1312,14 @@ public class OverlayService : IDisposable
             Stream? gifStream = null;
             bool needsDispose = false;
 
+            // ModResourceResolver.ResolveUri returns file:// URIs for mod-override assets;
+            // File.Exists() on the raw URI string is always false, so unwrap to a local path.
+            if (path.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+            {
+                try { path = new Uri(path).LocalPath; }
+                catch (Exception ex) { App.Logger?.Debug("Spiral: bad file:// URI {Path}: {E}", path, ex.Message); }
+            }
+
             if (path.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
             {
                 var streamInfo = System.Windows.Application.GetResourceStream(new Uri(path, UriKind.Absolute));
@@ -1108,15 +1357,35 @@ public class OverlayService : IDisposable
 
                 delay = TimeSpan.FromMilliseconds(frameDelayMs);
 
-                var maxFrames = Math.Min(frameCount, 120);
+                // Downscale + budget the frame cache (#572 "3.5 GB / laggy" report): frames were
+                // decoded at the GIF's native size with no cap — a fullscreen-sized custom spiral
+                // (SpiralPath) at 120 Bgra32 frames retains ~1 GB. The spiral is stretched over
+                // the whole screen at low opacity, so capping the long side loses nothing
+                // visually, and the byte budget bounds the worst case regardless of dimensions.
+                const int maxDimension = 1280;
+                const long maxCacheBytes = 300L * 1024 * 1024;
+
+                double frameScale = Math.Min(1.0, (double)maxDimension / Math.Max(gif.Width, gif.Height));
+                int frameW = Math.Max(1, (int)Math.Round(gif.Width * frameScale));
+                int frameH = Math.Max(1, (int)Math.Round(gif.Height * frameScale));
+                long bytesPerFrame = (long)frameW * frameH * 4;
+
+                var maxFrames = (int)Math.Min(Math.Min(frameCount, 120),
+                    Math.Max(8, maxCacheBytes / Math.Max(1, bytesPerFrame)));
                 var step = frameCount > maxFrames ? frameCount / maxFrames : 1;
+                if (maxFrames < Math.Min(frameCount, 120))
+                    App.Logger?.Warning("Spiral: frame cache capped at {Frames} frames ({W}x{H}) to stay under {MB} MB — a smaller spiral GIF will loop smoother",
+                        maxFrames, frameW, frameH, maxCacheBytes / (1024 * 1024));
 
                 for (int i = 0; i < frameCount && frames.Count < maxFrames; i += step)
                 {
                     gif.SelectActiveFrame(dimension, i);
-                    using var frameBitmap = new System.Drawing.Bitmap(gif.Width, gif.Height);
+                    using var frameBitmap = new System.Drawing.Bitmap(frameW, frameH);
                     using (var g = System.Drawing.Graphics.FromImage(frameBitmap))
-                        g.DrawImage(gif, 0, 0, gif.Width, gif.Height);
+                    {
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+                        g.DrawImage(gif, 0, 0, frameW, frameH);
+                    }
 
                     var bitmapSource = ConvertToBitmapSource(frameBitmap);
                     bitmapSource.Freeze();
@@ -1357,6 +1626,7 @@ public class OverlayService : IDisposable
 
     internal void StopSpiral()
     {
+        _spiralLayer?.Hide(); // both paths cleared unconditionally - the flag may have flipped mid-run
         _gifFrameTimer?.Stop();
         _gifFrameTimer = null;
 
@@ -1406,6 +1676,12 @@ public class OverlayService : IDisposable
         if (opacity == _lastAppliedSpiralOpacity) return;
         _lastAppliedSpiralOpacity = opacity;
 
+        if (_spiralLayer?.IsActive == true)
+        {
+            _spiralLayer.SetOpacity(opacity);
+            return;
+        }
+
         // Update GIF images
         foreach (var image in _spiralGifImages)
         {
@@ -1438,7 +1714,7 @@ public class OverlayService : IDisposable
 
     public void StartBrainDrainBlur(int intensity)
     {
-        if (_brainDrainBlurWindows.Count > 0) return;
+        if (BrainDrainShowing) return;
 
         _currentBrainDrainIntensity = intensity;
 
@@ -1446,6 +1722,15 @@ public class OverlayService : IDisposable
         {
             try
             {
+                if (UseCompositor)
+                {
+                    // Compositor route: capture + blur render on the shared capture-excluded
+                    // host; no per-screen layered windows, no WPF BlurEffect rasterization.
+                    GetBrainDrainLayer().Start(intensity);
+                    App.Logger?.Information("Brain Drain started on compositor layer, intensity {Intensity}%", intensity);
+                    return;
+                }
+
                 var settings = App.Settings.Current;
                 var screens = settings.DualMonitorEnabled
                     ? App.GetAllScreensCached()
@@ -1494,6 +1779,13 @@ public class OverlayService : IDisposable
         try
         {
             _rampBrainDrainOpacity = null; // release any Deeper ramp ownership
+
+            // Layer route (checked by activity, not the flag - mid-run flag flips must not strand it).
+            if (_brainDrainLayer?.IsActive == true)
+            {
+                DispatcherHelper.RunOnUISync(() => _brainDrainLayer.Stop());
+            }
+
             _brainDrainCaptureTimer?.Stop();
             _brainDrainCaptureTimer = null;
 
@@ -1532,6 +1824,10 @@ public class OverlayService : IDisposable
 
         DispatcherHelper.RunOnUISync(() =>
         {
+            if (_brainDrainLayer?.IsActive == true)
+            {
+                _brainDrainLayer.SetIntensity(intensity);
+            }
             foreach (var img in _brainDrainImages.Values)
             {
                 if (img.Effect is System.Windows.Media.Effects.BlurEffect blur)
@@ -1938,27 +2234,48 @@ public class OverlayService : IDisposable
             {
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
                 if (hwnd == IntPtr.Zero) continue;
-
-                int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
-
-                if (videoHwnd != IntPtr.Zero && hwnd != videoHwnd)
-                {
-                    // Insert directly below the active video window: stays topmost (above the
-                    // desktop and other apps) but under the video the user is meant to watch.
-                    SetWindowPos(hwnd, videoHwnd, 0, 0, 0, 0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    if (needsPin) anyRecovered = true;
-                }
-                else if (needsPin || force)
-                {
-                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    if (needsPin) anyRecovered = true;
-                }
+                ReassertOne(hwnd, videoHwnd, force, ref anyRecovered);
             }
         }
+
+        // Compositor hosts carry the SAME fullscreen effects when the unified renderer is on,
+        // but only assert HWND_TOPMOST on their show/topology edges — reconcile them exactly
+        // like the legacy windows or a later topmost raise (chaos chrome ~1/s, a mandatory
+        // video) buries every layer; worse, a host re-shown mid-video pins itself above the
+        // deliberately non-re-raising video window (#497's shape all over again).
+        try
+        {
+            if (App.Compositor is { } engine)
+                foreach (var hostHwnd in engine.GetVisibleHostHandles())
+                    ReassertOne(hostHwnd, videoHwnd, force, ref anyRecovered);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ReassertZOrder (compositor hosts) failed: {Error}", ex.Message);
+        }
         return anyRecovered;
+    }
+
+    /// <summary>One window's worth of ReassertZOrder: below the active video, else topmost.</summary>
+    private static void ReassertOne(IntPtr hwnd, IntPtr videoHwnd, bool force, ref bool anyRecovered)
+    {
+        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
+
+        if (videoHwnd != IntPtr.Zero && hwnd != videoHwnd)
+        {
+            // Insert directly below the active video window: stays topmost (above the
+            // desktop and other apps) but under the video the user is meant to watch.
+            SetWindowPos(hwnd, videoHwnd, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            if (needsPin) anyRecovered = true;
+        }
+        else if (needsPin || force)
+        {
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            if (needsPin) anyRecovered = true;
+        }
     }
 
     /// <summary>
@@ -2312,7 +2629,7 @@ public class OverlayService : IDisposable
 
         if (settings.BrainDrainEnabled && settings.IsLevelUnlocked(70)) // Level 70 requirement for Brain Drain
         {
-            if (_brainDrainBlurWindows.Count == 0)
+            if (!BrainDrainShowing)
             {
                 StartBrainDrainBlur((int)settings.BrainDrainIntensity);
             }
@@ -2349,6 +2666,7 @@ public class OverlayService : IDisposable
         _gifLoopTimer = null;
         _brainDrainImages.Clear();
         CleanupCaptureResources();
+        try { _brainDrainLayer?.Stop(); } catch { /* shutdown path - GDI freed by OS anyway */ }
 
         // Unsubscribe from settings changes
         if (App.Settings?.Current != null)

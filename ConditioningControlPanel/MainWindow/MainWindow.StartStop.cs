@@ -252,6 +252,14 @@ namespace ConditioningControlPanel
             App.IsEngineRunning = true;
             UpdateStartButton();
 
+            // Arm the dirty-shutdown sentinel: if the process dies natively mid-session
+            // (no crash.log — the flash-burst 0xc0000374 shape), the next launch reports
+            // it with this context instead of the app just "vanishing".
+            Services.EngineCrashSentinel.Mark(
+                $"started {DateTime.Now:yyyy-MM-dd HH:mm:ss} | flash {settings.FlashFrequency}/min x{settings.SimultaneousImages}" +
+                $" | bubbles {(settings.BubblesEnabled ? "on" : "off")} | video {(settings.MandatoryVideosEnabled ? "on" : "off")}" +
+                $" | subliminal {(settings.SubliminalEnabled ? "on" : "off")}");
+
             // Start conditioning time tracker
             StartConditioningTimeTracker();
 
@@ -345,6 +353,9 @@ namespace ConditioningControlPanel
             _isRunning = false;
             App.IsEngineRunning = false;
             UpdateStartButton();
+
+            // Clean stop — disarm the dirty-shutdown sentinel.
+            Services.EngineCrashSentinel.Clear();
 
             // Fire event for avatar reaction
             EngineStopped?.Invoke(this, EventArgs.Empty);

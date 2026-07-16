@@ -1,0 +1,15 @@
+v6.3.4 - Deeper Down
+
+A hotfix for 6.3.3. The new unified overlay could lag the whole app on some setups, so it is now off by default while we finish the smoother renderer. Plus a batch of Down the Rabbit Hole and multi-monitor fixes.
+
+PERFORMANCE & STABILITY
+- Fixed the new unified overlay making every click, tab change, and keypress lag about a second on some machines (worst with the spiral and pink filter running together). The unified overlay is now off by default and your effects fall back to the proven per-effect windows.
+- Pink filter and spiral no longer paint your other monitors when multi-monitor overlays are turned off.
+
+BUG FIXES
+- Fixed a one-frame bubble flash in the top-left corner of the screen.
+- Down the Rabbit Hole: images and videos you deselect in the Assets tab no longer show up in the tube.
+- Down the Rabbit Hole: the mandatory video no longer lingers over the recap and hub after a descent ends.
+- Down the Rabbit Hole: Cheshire's corner comments no longer cover the control dock.
+
+Season: Jelly July

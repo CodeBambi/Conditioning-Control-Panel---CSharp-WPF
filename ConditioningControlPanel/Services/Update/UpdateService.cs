@@ -20,43 +20,27 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.3.2";
+        public const string AppVersion = "6.3.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.3.2 - Deeper Down
+        public const string CurrentPatchNotes = @"v6.3.4 - Deeper Down
 
-6.3.0 rebuilt Down the Rabbit Hole into a guided descent through four chambers and
-sixteen biomes, with a Warren leveling hub, boon drafts, and full voiceover. 6.3.1
-kept refining that rework. 6.3.2 is a hotfix on top - breaking a freeze that could
-lock your PC and smoothing the last rough edges.
+A hotfix for 6.3.3. The new unified overlay could lag the whole app on some setups,
+so it is now off by default while we finish the smoother renderer. Plus a batch of
+Down the Rabbit Hole and multi-monitor fixes.
 
-🩹 HOTFIX
-- Fixed a mandatory-video freeze that could hard-lock your PC; an off-thread watchdog now breaks the wedge and releases you.
-- Fixed a Rabbit Hole hang when flash-pool images decrypted on the main thread.
-- Down the Rabbit Hole: Esc now steps out cleanly (pause, then exit fullscreen, then close), with C#-owned fullscreen.
-- Rabbit Hole play-test batch: opt out of Cheshire, flash from your own media, plus video and pause fixes.
-- Webcam gaze-test window now has a mouse-clickable close button.
-- Animated tease-bubble cap now scales with your performance tier.
-
-✨ FEATURES
-- Down the Rabbit Hole: brand-new Cheshire visual-novel tutorial that walks you in, replacing the old lesson cards.
-- 3 local save slots you pick before the hole opens, so multiple runs stay separate.
-- Full biome-drift voiceover now rendered across the descent.
-
-🎨 UI/UX
-- Emote stack icon and HUD/VN polish pass.
-- Spiral overlay now pulls from a pool of 8 animated effects at random.
-- New boon card art.
-- 2-second reveal delay plus a spotlight halo on whatever a lesson or Cheshire is explaining.
-- De-stormed narration cooldown so voice lines stop overlapping.
+⚡ PERFORMANCE & STABILITY
+- Fixed the new unified overlay making every click, tab change, and keypress lag about a second on some machines (worst with the spiral and pink filter running together). The unified overlay is now off by default and your effects fall back to the proven per-effect windows. (#550)
+- Pink filter and spiral no longer paint your other monitors when multi-monitor overlays are turned off. (#552)
 
 🔧 BUG FIXES
-- Fixed a boot hang where the game loader spun forever (stray backtick in a CSS template).
-- Fixed a video black-screen crash during runs.
-- Boon draft now auto-picks a random card on timeout instead of leaving you with nothing.
+- Fixed a one-frame bubble flash in the top-left corner of the screen. (#553)
+- Down the Rabbit Hole: images and videos you deselect in the Assets tab no longer show up in the tube. (#546)
+- Down the Rabbit Hole: the mandatory video no longer lingers over the recap and hub after a descent ends. (#547)
+- Down the Rabbit Hole: Cheshire's corner comments no longer cover the control dock. (#548)
 
 Season: Jelly July";
 

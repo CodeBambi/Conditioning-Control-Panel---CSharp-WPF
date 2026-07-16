@@ -288,6 +288,24 @@ namespace ConditioningControlPanel
         public static SessionLogService SessionLog { get; private set; } = null!;
         public static ProgressionService Progression { get; private set; } = null!;
         public static SubliminalService Subliminal { get; private set; } = null!;
+        public static Services.Compositor.CompositorEngine? Compositor { get; private set; }
+        /// <summary>Launch-scoped override: `--overlay-host` forces the unified overlay host ON
+        /// without persisting the setting (A/B testing seam).</summary>
+        public static bool CompositorForced { get; private set; }
+        /// <summary>Launch-scoped override: `--overlay-ulw` forces the off-thread (UpdateLayeredWindow)
+        /// present path ON for this launch only, so #550's proper fix can be A/B tested without
+        /// persisting the setting. Implies <see cref="CompositorForced"/>.</summary>
+        public static bool CompositorOffThreadForced { get; private set; }
+        /// <summary>Effective off-thread-present decision: the persisted setting OR the launch flag.</summary>
+        public static bool CompositorOffThreadPresent =>
+            CompositorOffThreadForced || Settings?.Current?.CompositorOffThreadPresent == true;
+        /// <summary>THE compositor routing gate — the single source of truth every render-path
+        /// fork must use ("do effects go to the unified overlay host or the legacy per-effect
+        /// windows?"). Effective decision: the persisted toggle OR the launch flag, AND the
+        /// engine actually exists. Never inline this predicate at a call site: a per-service
+        /// copy that drifts leaves that feature split-brained on the wrong render path.</summary>
+        public static bool CompositorEnabled =>
+            (CompositorForced || Settings?.Current?.UnifiedOverlayHost == true) && Compositor != null;
         public static OverlayService Overlay { get; private set; } = null!;
         public static ScreenShakeService ScreenShake { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
@@ -1143,6 +1161,7 @@ namespace ConditioningControlPanel
             // in crash.log — but the chaos sentinel file is still on disk. Report+consume it so the
             // crash self-documents (with last-known context) in this session's log.
             Services.Chaos.ChaosCrashSentinel.ConsumeAndReport(Logger);
+            Services.EngineCrashSentinel.ConsumeAndReport(Logger);
 
             // React to monitor topology / resolution changes (unplug, res change, DPI): drop the stale
             // screen cache AND pause layered-window spawns briefly so we don't create fresh surfaces
@@ -1364,6 +1383,10 @@ namespace ConditioningControlPanel
             Personality.MigrateFromLegacy(Settings.Current);
 
             Subliminal = new SubliminalService();
+            // Unified overlay host (default ON, Settings.UnifiedOverlayHost): shared per-monitor
+            // Skia surface the effect services route to instead of per-effect windows. Inert (no
+            // windows, no render tick) until a layer activates, so constructing it always is free.
+            Compositor = new Services.Compositor.CompositorEngine();
             Overlay = new OverlayService();
             ScreenShake = new ScreenShakeService();
             Bubbles = new BubbleService();
@@ -1661,6 +1684,32 @@ namespace ConditioningControlPanel
             // via env vars so the harness can dial it without a rebuild.
             if (e.Args.Contains("--stress"))
                 StartHangStressMode();
+
+            // `--overlay-host`: force the unified overlay host ON for this launch only (in-memory,
+            // not persisted) so the compositor path can be A/B tested without editing settings.
+            if (e.Args.Contains("--overlay-host"))
+            {
+                CompositorForced = true;
+                Logger?.Information("Unified overlay host FORCED ON via --overlay-host (this launch only)");
+            }
+
+            // `--overlay-ulw`: force the off-thread UpdateLayeredWindow present path ON (implies the
+            // unified host) for this launch only, to A/B test the #550 proper fix.
+            if (e.Args.Contains("--overlay-ulw"))
+            {
+                CompositorForced = true;
+                CompositorOffThreadForced = true;
+                Logger?.Information("Compositor OFF-THREAD present FORCED ON via --overlay-ulw (this launch only)");
+            }
+
+            // Pay the compositor's one-time host costs (window + hwnd + Skia surface + paint JIT)
+            // after startup settles instead of on the first effect trigger ("first load" hitch).
+            // Deferred to Background priority so launch isn't slowed.
+            if (CompositorEnabled)
+            {
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+                    () => Compositor?.Prewarm());
+            }
 
             // DtRH browser-game port, M0 spike (`--dtrh-spike`): verifies the WebView2 virtual-host
             // pipeline (Range-seek, CORS->WebGL, payload z-order/focus) against the user's real
@@ -3106,15 +3155,21 @@ Application State:
             }
         }
 
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern IntPtr GetCurrentProcess();
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool TerminateProcess(IntPtr hProcess, uint uExitCode);
+
         protected override void OnExit(ExitEventArgs e)
         {
             Logger?.Information("Application shutting down...");
 
             try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
 
-            // A clean shutdown — even mid-run — is NOT a crash. Clear the chaos sentinel so the next
-            // launch doesn't false-report it as an abnormal exit.
+            // A clean shutdown — even mid-run — is NOT a crash. Clear both dirty-shutdown
+            // sentinels so the next launch doesn't false-report an abnormal exit.
             try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
+            try { Services.EngineCrashSentinel.Clear(); } catch { }
 
             // DtRH browser game: dispose the WebView2 window/process if it's up.
             try { Services.Chaos.DtrhHostService.CloseActive(); } catch { }
@@ -3169,6 +3224,7 @@ Application State:
             Video?.Dispose();
             Subliminal?.Dispose();
             Overlay?.Dispose();
+            Compositor?.Dispose(); // after effect services so their layers deactivate first
             ScreenShake?.Dispose();
             try { Chaos?.ForceShutdown(); } catch { }
             Bubbles?.Dispose();
@@ -3259,8 +3315,17 @@ Application State:
 
             base.OnExit(e);
 
-            // Force exit to ensure no background threads keep process alive
-            Environment.Exit(0);
+            // Force exit so no background threads keep the process alive — but NOT via
+            // Environment.Exit: that still raises AppDomain.ProcessExit, where WPF's own
+            // C++/CLI DirectWriteForwarder module uninitializer JITs its CRT-teardown stubs
+            // on a half-shut-down runtime and throws DllNotFoundException on another thread
+            // (0xe0434352 — WER dumps 5/28-6/28 all show <CrtImplementationDetails>.
+            // ModuleUninitializer.SingletonDomainUnload with the main thread parked in
+            // OnExit; users saw it as "crash on close"). Everything that must persist is
+            // already flushed above (SaveImmediate, CloseAndFlush), so hard-terminate:
+            // TerminateProcess skips ProcessExit handlers and finalizers entirely.
+            TerminateProcess(GetCurrentProcess(), 0);
+            Environment.Exit(0);   // unreachable fallback if TerminateProcess is refused
         }
     }
 }
