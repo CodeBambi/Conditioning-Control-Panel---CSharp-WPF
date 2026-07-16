@@ -151,25 +151,79 @@ namespace ConditioningControlPanel
         // (modId, avatarSet) -> folder, parsed once from avatar_emotes_registry.json.
         private static List<(string modId, int set, string folder)>? _emoteRegistry;
 
-        /// <summary>The folder for the active (mod, set) emote pair, or null if none is registered.</summary>
+        /// <summary>
+        /// The folder for the active (mod, set) emote pair, or null if none exists. Two sources,
+        /// mod-local first: an installed mod may ship {InstalledPath}/resources/emotes/set{N}/
+        /// (returned as an ABSOLUTE path — Path.IsPathRooted is the discriminator everywhere
+        /// downstream), else the embedded registry (bare folder name under pack://Resources/).
+        /// </summary>
         private string? ResolveEmoteFolder()
         {
             var modId = App.Mods?.ActiveModId;
             if (string.IsNullOrEmpty(modId)) return null;
+
+            var local = ModLocalEmoteFolder(_currentAvatarSet);
+            if (local != null) return local;
+
             foreach (var e in LoadEmoteRegistry())
                 if (string.Equals(e.modId, modId, StringComparison.OrdinalIgnoreCase) && e.set == _currentAvatarSet)
                     return e.folder;
             return null;
         }
 
-        /// <summary>Registered emote sets for the active mod, ascending ([1] for BS/Sissy, [1,2,3,4] for Circe).</summary>
+        /// <summary>
+        /// Absolute path of the active mod's own emote folder for a set, or null when the mod
+        /// doesn't ship one. A set folder counts only when its emotes.json exists. Two user mods
+        /// both shipping "set1" resolve to DIFFERENT absolute paths, so the same-folder no-op in
+        /// TryUpdateCirceEmoteMode and the map cache still discriminate correctly between them.
+        /// </summary>
+        private static string? ModLocalEmoteFolder(int set)
+        {
+            try
+            {
+                var installedPath = App.Mods?.ActiveMod?.InstalledPath;
+                if (string.IsNullOrEmpty(installedPath)) return null;
+                var dir = System.IO.Path.Combine(installedPath, "resources", "emotes", $"set{set}");
+                return System.IO.File.Exists(System.IO.Path.Combine(dir, "emotes.json")) ? dir : null;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Emote sets for the active mod (registry ∪ mod-local set{N} folders), ascending.</summary>
         private int[] EmoteSetsForActiveMod()
         {
             var modId = App.Mods?.ActiveModId;
             if (string.IsNullOrEmpty(modId)) return Array.Empty<int>();
-            return LoadEmoteRegistry()
+
+            var sets = LoadEmoteRegistry()
                 .Where(e => string.Equals(e.modId, modId, StringComparison.OrdinalIgnoreCase))
-                .Select(e => e.set).Distinct().OrderBy(x => x).ToArray();
+                .Select(e => e.set);
+
+            var installedPath = App.Mods?.ActiveMod?.InstalledPath;
+            if (!string.IsNullOrEmpty(installedPath))
+            {
+                try
+                {
+                    var emotesRoot = System.IO.Path.Combine(installedPath, "resources", "emotes");
+                    if (System.IO.Directory.Exists(emotesRoot))
+                        sets = sets.Concat(
+                            System.IO.Directory.EnumerateDirectories(emotesRoot, "set*")
+                                .Select(d =>
+                                {
+                                    var name = System.IO.Path.GetFileName(d);
+                                    return int.TryParse(name.AsSpan(3), out var n)
+                                        && System.IO.File.Exists(System.IO.Path.Combine(d, "emotes.json"))
+                                        ? n : -1;
+                                })
+                                .Where(n => n > 0));
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("[EMOTE] mod-local set scan failed: {Error}", ex.Message);
+                }
+            }
+
+            return sets.Distinct().OrderBy(x => x).ToArray();
         }
 
         /// <summary>
@@ -181,7 +235,17 @@ namespace ConditioningControlPanel
         private bool IsSingleEmoteAvatarMod(out int set)
         {
             var sets = EmoteSetsForActiveMod();
-            if (sets.Length == 1) { set = sets[0]; return true; }
+            if (sets.Length == 1)
+            {
+                // A mod with one emote set but OTHER declared avatar sets (static poses via
+                // supportedAvatarSets, or customAvatarSets) must keep the picker — only mods
+                // whose sole avatar IS the emote set (Bambi/Sissy: no declared sets) drop it.
+                var manifest = App.Mods?.ActiveMod?.Manifest;
+                bool hasOtherDeclaredSets =
+                    (manifest?.SupportedAvatarSets?.Any(s => s != sets[0]) ?? false) ||
+                    (manifest?.CustomAvatarSets?.Any(c => c.SetNumber != sets[0]) ?? false);
+                if (!hasOtherDeclaredSets) { set = sets[0]; return true; }
+            }
             set = 0;
             return false;
         }
@@ -1072,14 +1136,21 @@ namespace ConditioningControlPanel
             return pool[0].clip;
         }
 
+        // _emoteFolder is either a bare embedded folder name (pack://Resources/) or, for a
+        // user-installed mod, an absolute directory path — Path.IsPathRooted discriminates.
         private Uri CirceClipUri(string clip)
-            => new Uri($"pack://application:,,,/Resources/{_emoteFolder}/{clip}.gif", UriKind.Absolute);
+            => System.IO.Path.IsPathRooted(_emoteFolder)
+                ? new Uri(System.IO.Path.Combine(_emoteFolder!, clip + ".gif"), UriKind.Absolute)
+                : new Uri($"pack://application:,,,/Resources/{_emoteFolder}/{clip}.gif", UriKind.Absolute);
 
         /// <summary>True if the clip's GIF actually ships in the current pose folder.</summary>
         private bool CirceClipExists(string clip)
         {
             try
             {
+                if (System.IO.Path.IsPathRooted(_emoteFolder))
+                    return System.IO.File.Exists(System.IO.Path.Combine(_emoteFolder!, clip + ".gif"));
+
                 var sri = Application.GetResourceStream(CirceClipUri(clip));
                 if (sri == null) return false;
                 sri.Stream.Dispose();
@@ -1091,13 +1162,18 @@ namespace ConditioningControlPanel
         private bool LoadCirceMap()
         {
             if (string.IsNullOrEmpty(_emoteFolder)) return false;
-            if (_circeMapValid && string.Equals(_loadedEmoteFolder, _emoteFolder, StringComparison.OrdinalIgnoreCase))
+            // Mod-local (rooted) folders skip the parsed-map cache: the JSON is tiny, and a
+            // reinstall of the same mod keeps the same absolute path, which would otherwise
+            // serve a stale map until the next app restart.
+            if (!System.IO.Path.IsPathRooted(_emoteFolder)
+                && _circeMapValid && string.Equals(_loadedEmoteFolder, _emoteFolder, StringComparison.OrdinalIgnoreCase))
                 return true;
             try
             {
-                // Standard map name is emotes.json; fall back to the legacy <folder>.json name.
-                JObject? j = ReadMapJson($"Resources/{_emoteFolder}/emotes.json")
-                          ?? ReadMapJson($"Resources/{_emoteFolder}/{_emoteFolder}.json");
+                // Standard map name is emotes.json; fall back to the legacy <folder>.json name
+                // (embedded sets only — mod-local folders always use emotes.json).
+                JObject? j = ReadEmoteJson("emotes.json")
+                          ?? (System.IO.Path.IsPathRooted(_emoteFolder) ? null : ReadEmoteJson($"{_emoteFolder}.json"));
                 if (j == null) { App.Logger?.Warning("emotes.json not found in {Folder}", _emoteFolder); return false; }
 
                 _circeFadeMs = (int?)j["fadeMs"] ?? 1000;
@@ -1161,7 +1237,7 @@ namespace ConditioningControlPanel
 
                 // Per-clip speaking windows (clip_timing.json, written by the trim tool). Missing -> fallback.
                 _circeTiming.Clear();
-                var tj = ReadMapJson($"Resources/{_emoteFolder}/clip_timing.json");
+                var tj = ReadEmoteJson("clip_timing.json");
                 if (tj != null)
                     foreach (var p in tj.Properties())
                         if (p.Value is JObject o && !p.Name.StartsWith("_", StringComparison.Ordinal))
@@ -1226,6 +1302,25 @@ namespace ConditioningControlPanel
         }
 
         private bool _circeMapValid;
+
+        /// <summary>
+        /// Read a JSON file from the current emote folder: from disk when _emoteFolder is a
+        /// mod-local absolute path, else from the embedded pack resources.
+        /// </summary>
+        private JObject? ReadEmoteJson(string fileName)
+        {
+            if (System.IO.Path.IsPathRooted(_emoteFolder))
+            {
+                try
+                {
+                    var path = System.IO.Path.Combine(_emoteFolder!, fileName);
+                    if (!System.IO.File.Exists(path)) return null;
+                    return JObject.Parse(System.IO.File.ReadAllText(path));
+                }
+                catch { return null; }
+            }
+            return ReadMapJson($"Resources/{_emoteFolder}/{fileName}");
+        }
 
         private static JObject? ReadMapJson(string relativePackPath)
         {
