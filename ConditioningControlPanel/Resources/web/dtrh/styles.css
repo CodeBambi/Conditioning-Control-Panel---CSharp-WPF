@@ -2960,3 +2960,65 @@ img.rh-fx-spiralspin {
 }
 @keyframes sf-pfx-freeze-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes sf-pfx-throb { from { transform: scale(1); } to { transform: scale(1.06); } }
+
+/* ============================ crafting Part 2 ============================ */
+
+/* crafted consumables in the toy dock: boudoir-pink accent */
+.cf-toy.is-crafted { border-color: rgba(255, 138, 194, 0.75); color: #ffd7ec; }
+.cf-toy.is-crafted.is-ready:hover { box-shadow: 0 0 14px rgba(255, 138, 194, 0.45); }
+
+/* THE COMPACT: the recap's mirror section */
+.cf-recap-mirror {
+  margin: 10px auto 2px; padding: 10px 12px 8px; max-width: 520px;
+  border-top: 1px solid rgba(255, 138, 194, 0.35);
+}
+.cf-recap-mirror p { margin: 4px 0; font-size: 0.8rem; color: #cfc7ea; }
+.cf-recap-mirror-h { color: #ff8ac2 !important; letter-spacing: 0.2em; font-size: 0.72rem !important; }
+.cf-recap-mirror-picks { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin: 6px 0; }
+.cf-recap-mirror-chip {
+  padding: 3px 9px; border-radius: 999px; font-size: 0.68rem; font-weight: 700;
+  background: rgba(184, 184, 208, 0.12); border: 1px solid rgba(184, 184, 208, 0.35); color: #d9d4f2;
+}
+.cf-recap-mirror-chip.is-curse { background: rgba(255, 90, 90, 0.14); border-color: rgba(255, 110, 110, 0.5); color: #ffb9b9; }
+.cf-recap-mirror-chip.is-toy { background: rgba(102, 224, 208, 0.12); border-color: rgba(102, 224, 208, 0.45); color: #bdf3ec; }
+
+/* THE HOURGLASS: the soft (un-held) pause card */
+.sf-results-card.sf-pause-soft { border-color: rgba(255, 138, 194, 0.6); }
+.sf-results-card.sf-pause-soft h2 { color: #ff8ac2; }
+
+/* selected chip state (loom styles, headphones/skins rows reuse wr-row) */
+.wr-craft-chip.is-on { background: rgba(255, 138, 194, 0.42); color: #fff; }
+.wr-craft-chip.is-armed { background: rgba(255, 110, 110, 0.35); border-color: rgba(255, 110, 110, 0.7); color: #ffd9d9; }
+
+/* THE RING BOX: kept looks row inside the paint panel */
+.sf-looks-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.sf-looks-head { font-size: 0.68rem; letter-spacing: 0.08em; opacity: 0.8; }
+.sf-look-slot { position: relative; display: inline-flex; }
+.sf-look.is-empty { background: rgba(255, 255, 255, 0.08); color: #cfc7ea; font-size: 0.9rem; line-height: 1; }
+.sf-look-x {
+  position: absolute; top: -7px; right: -7px; width: 16px; height: 16px; border-radius: 50%;
+  border: none; cursor: pointer; font-size: 0.62rem; line-height: 1;
+  background: rgba(20, 16, 34, 0.9); color: #b9b3d8;
+}
+.sf-look-x.is-armed { background: rgba(255, 90, 90, 0.85); color: #fff; }
+
+/* THE LOOM: the studio pane */
+.wr-loom-preview {
+  display: block; margin: 4px auto 10px; width: 288px; height: 288px; max-width: 100%;
+  border-radius: 12px; border: 1px solid rgba(255, 138, 194, 0.4);
+}
+.wr-loom-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; flex-wrap: wrap; }
+.wr-loom-row input[type="range"] { flex: 1; min-width: 120px; accent-color: #ff8ac2; }
+.wr-loom-lbl { width: 52px; font-size: 0.72rem; letter-spacing: 0.06em; color: #b9b3d8; text-transform: lowercase; }
+.wr-loom-val { width: 34px; text-align: right; font-size: 0.72rem; color: #ffd7ec; }
+.wr-loom-swatch { width: 18px; height: 18px; }
+.wr-loom-color { width: 34px; height: 24px; padding: 0; border: none; background: none; cursor: pointer; }
+.wr-loom-name {
+  flex: 1; min-width: 140px; padding: 7px 10px; border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 138, 194, 0.4); color: #ffe9f4;
+}
+.wr-loom-name::placeholder { color: #8a86b8; }
+.wr-loom-save { margin-top: 8px; }
+.wr-loom-progress, .wr-loom-status { font-size: 0.78rem; color: #ffd7ec; font-style: italic; margin-top: 4px; text-align: center; }
+.wr-loom-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; border: 1px solid rgba(255, 138, 194, 0.4); }
+.wr-loom-rackrow .wr-row-right { display: flex; gap: 6px; }

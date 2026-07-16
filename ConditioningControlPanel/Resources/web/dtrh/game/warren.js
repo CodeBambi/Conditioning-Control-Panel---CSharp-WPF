@@ -36,7 +36,10 @@ import { BOONS } from './boons.js';
 import { MATERIALS, MAT_BY_ID, RECIPES, matchGrid, gridCost, recipeCost, recipeCells,
   matArt, craftedArt } from './crafting.js';
 import * as reveals from './reveals.js';
-import { S, updateSetting, descentSetup, UNLOCK_LADDER, RANK_NAMES } from '../engine/settings.js';
+import { createLoomStudio } from './loomStudio.js';
+import { BUBBLE_SKINS, getBubbleSkin, setBubbleSkin } from './variants.js';
+import { S, updateSetting, descentSetup, UNLOCK_LADDER, RANK_NAMES,
+  WORD_PACKS, getWordPack, setWordPack } from '../engine/settings.js';
 import { getLevel } from '../engine/audioLevels.js';
 import { isMuted } from '../shared/audioMute.js';
 
@@ -423,7 +426,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     let n = 0;
     for (const r of RECIPES) {
       if (!v.discoveredRecipes.has(r.id)) continue;
-      if (r.resultKind === 'permanent' && v.craftedCount(r.id) >= 1) continue;
+      if (r.resultKind === 'permanent' && v.craftedCount(r.id) >= (r.repeatable ? 10 : 1)) continue;
       const cost = recipeCost(r);
       if (Object.keys(cost).every((id) => v.materialCount(id) >= cost[id])) n++;
     }
@@ -607,10 +610,20 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     ],
     boudoir: [
       { id: 'haul', side: 'left',  title: 'THE HAUL', sub: 'what the tube let you keep', render: renderHaulWin },
-      { id: 'kept', side: 'left',  title: 'KEPT THINGS', sub: 'made, not yet woken',
+      { id: 'kept', side: 'left',  title: 'KEPT THINGS', sub: 'what you made, and what it does',
         gate: (v) => RECIPES.some((r) => v.craftedCount(r.id) > 0), render: renderKeptWin },
+      { id: 'headphones', side: 'left', title: 'HEADPHONES', sub: 'what the descent whispers',
+        gate: (v) => v.craftedCount('headphones') >= 1, render: renderHeadphonesWin },
+      { id: 'skins', side: 'left', title: 'LIPSTICK', sub: 'a shade for the tube’s treats',
+        gate: (v) => v.craftedCount('lipstick') >= 1, render: renderSkinsWin },
       { id: 'table', side: 'right', title: 'THE WORKTABLE', sub: 'draw the picture. it becomes the thing.',
         render: renderWorktableWin },
+      { id: 'padlock', side: 'right', title: 'THE PADLOCK', sub: 'commitment, in hardware form',
+        gate: (v) => v.craftedCount('the_padlock') >= 1, render: renderPadlockWin },
+      { id: 'denial', side: 'right', title: 'DENIAL', sub: 'the cage’s bargain',
+        gate: (v) => v.craftedCount('the_cage') >= 1, render: renderDenialWin },
+      { id: 'loom', side: 'right', title: 'THE LOOM', sub: 'spin a spiral of your own',
+        gate: (v) => v.craftedCount('the_loom') >= 1, render: renderLoomWin },
     ],
   };
 
@@ -635,6 +648,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     expandedRows.clear();
     boudoirGrid.fill(null);   // a walked-away worktable spends nothing
     boudoirTray = null;
+    loom.stop();              // THE LOOM: park the preview rAF + cancel a mid-weave job
     if (openId && stations) stations.blur();
     openId = null;
   }
@@ -1058,10 +1072,16 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     }
   }
 
-  /** KEPT THINGS pane: crafted items, all dormant until Part 2 wakes them. */
+  /** What a crafted item's row/card says it DOES (Part 2: effects are live). */
+  function craftedEffectLine(r) {
+    if (r.id === 'the_pink_heart') return 'it isn’t asleep. it’s waiting. it knows what it costs.';
+    return r.effect || 'dormant — it hasn’t learned its purpose yet.';
+  }
+
+  /** KEPT THINGS pane: crafted items + what each one does (consumables show ×N). */
   function renderKeptWin(body, v) {
     const card = el('wr-card', body);
-    el('wr-card-sub', card, 'they’re yours. they’re asleep. she says they wake when they’re needed.');
+    el('wr-card-sub', card, 'they’re yours. they come down with you.');
     for (const r of RECIPES) {
       const owned = v.craftedCount(r.id);
       if (owned <= 0) continue;
@@ -1069,8 +1089,8 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       row.style.setProperty('--acc', '255,138,194');
       row.appendChild(artIcon(craftedArt(r.id), r.glyph, '255,138,194', 44));
       const mid = el('wr-row-mid', row);
-      el('wr-row-name', mid, r.name);
-      el('wr-row-flavor', mid, 'dormant — it hasn’t learned its purpose yet.');
+      el('wr-row-name', mid, r.name + (r.repeatable && owned > 1 ? ` ×${owned}` : ''));
+      el('wr-row-flavor', mid, craftedEffectLine(r));
       const right = el('wr-row-right', row);
       el('wr-row-state', right, r.resultKind === 'consumable' ? `×${owned}` : 'KEPT ✓');
       tip(row, r.desc);
@@ -1080,7 +1100,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   const cardForCrafted = (r, again) => ({
     ribbon: again ? 'CRAFTED AGAIN' : 'CRAFTED', accent: '255,138,194',
     title: r.name, desc: r.desc, flavor: r.flavor,
-    context: 'dormant — for now.', glyph: r.glyph,
+    context: craftedEffectLine(r), glyph: r.glyph,
     art: `${ART}crafted/${r.id}.png`, cue: 'unlock_card',
   });
 
@@ -1147,13 +1167,20 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
         el('wr-craft-status', actions, 'place what you carry.');
       } else if (!match) {
         el('wr-craft-status', actions, 'the picture means nothing. yet.');
-      } else if (match.resultKind === 'permanent' && v.craftedCount(match.id) >= 1) {
+      } else if (match.resultKind === 'permanent' && !match.repeatable && v.craftedCount(match.id) >= 1) {
         // page-side dupe guard: the bridge would happily craft a second one
         el('wr-craft-status wr-craft-status--dup', actions, `${match.glyph} ${match.name.toLowerCase()} — you already keep one.`);
+      } else if (match.repeatable && v.craftedCount(match.id) >= 10) {
+        // THE SHOT saturates at 10 (mirrors ShotSparkMult's cap C#-side)
+        el('wr-craft-status wr-craft-status--dup', actions, `${match.glyph} your system is saturated.`);
       } else {
         grid.classList.add('is-match');
         const again = v.discoveredRecipes.has(match.id);
-        const b = btn('wr-buy wr-craft-go', `craft · ${match.name.toLowerCase()}`, () => {
+        const owned = v.craftedCount(match.id);
+        const label = match.repeatable && owned >= 1
+          ? `take another shot · ×${owned + 1}`
+          : `craft · ${match.name.toLowerCase()}`;
+        const b = btn('wr-buy wr-craft-go', label, () => {
           cmd('craft', { id: match.id, cost: gridCost(boudoirGrid) });
           boudoirGrid.fill(null);   // optimistic clear; the snapshot round-trip re-renders everything
           boudoirTray = null;
@@ -1171,14 +1198,16 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       for (const r of found) {
         const cost = recipeCost(r);
         const afford = Object.keys(cost).every((id) => v.materialCount(id) >= cost[id]);
-        const dup = r.resultKind === 'permanent' && v.craftedCount(r.id) >= 1;
+        const dup = r.resultKind === 'permanent'
+          && v.craftedCount(r.id) >= (r.repeatable ? 10 : 1);   // the_shot stacks to 10
         const c = btn('wr-craft-chip' + (afford && !dup ? '' : ' is-off'), `${r.glyph} ${r.name.toLowerCase()}`, () => {
           if (dup || !afford) { sfx('ui_denied', 0.35); return; }
           boudoirGrid.splice(0, 9, ...recipeCells(r));
           boudoirTray = null;
           syncCraft();
         }, chips);
-        tip(c, dup ? 'you already keep one.' : afford ? 'lay its picture on the table' : 'the haul doesn’t cover it yet');
+        tip(c, dup ? (r.repeatable ? 'your system is saturated.' : 'you already keep one.')
+          : afford ? 'lay its picture on the table' : 'the haul doesn’t cover it yet');
       }
     }
     const unmade = RECIPES.length - found.length;
@@ -1188,6 +1217,115 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     }
 
     syncCraft();
+  }
+
+  // ---- Part 2 crafted-unlock panes (all craftedCount-gated in STATION_WINDOWS) ----
+
+  // THE LOOM: the pane module owns the preview loop, the encoder worker and the
+  // saved-rack state; module-level so refreshWins wipes don't lose a half-woven
+  // spiral. boot.js routes loom-list/loom-result here via chaosRun.
+  const loom = createLoomStudio({ bridge, sfx });
+
+  /** THE LOOM pane: delegate to the studio module. */
+  function renderLoomWin(body, v) {
+    loom.render(body, v);
+  }
+
+  /** THE PADLOCK pane: pin one discovered mantra - every descent's first draft offers it. */
+  function renderPadlockWin(body, v) {
+    const card = el('wr-card', body);
+    el('wr-card-sub', card, 'one mantra, pinned. the first draft of every descent offers it.');
+    let anyRow = false;
+    for (const b of BOONS) {
+      if (b.curse) continue;
+      if (!v.isDiscovered('boon:' + b.id)) continue;
+      anyRow = true;
+      const pinned = v.pinnedBoon === b.id;
+      const row = el('wr-row is-click' + (pinned ? ' is-owned' : ''), card);
+      row.style.setProperty('--acc', pinned ? '255,138,194' : '150,162,196');
+      el('wr-verb-glyph', row, pinned ? '★' : '◈');
+      const mid = el('wr-row-mid', row);
+      el('wr-row-name', mid, b.name);
+      el('wr-row-desc', mid, b.desc);
+      const right = el('wr-row-right', row);
+      el('wr-row-state', right, pinned ? 'PINNED ★' : 'pin');
+      row.addEventListener('click', () => {
+        sfx('ui_click', 0.3);
+        cmd('pin-boon', { id: pinned ? null : b.id });
+      });
+      tip(row, pinned ? 'unpin it' : 'pin it — the first draft of every descent will offer it');
+    }
+    if (!anyRow) {
+      card.appendChild(hazyRow('nothing to pin yet',
+        'mantras you have met at the draft table can be pinned. go meet some.'));
+    }
+  }
+
+  /** DENIAL pane: THE CAGE's run modifier, armed here, worn every descent. */
+  function renderDenialWin(body, v) {
+    const card = el('wr-card', body);
+    el('wr-card-sub', card, 'the cage’s bargain: no hearts fall, everything pays +50%.');
+    const on = v.denialArmed;
+    const row = el('wr-row is-click' + (on ? ' is-owned' : ''), card);
+    row.style.setProperty('--acc', on ? '255,110,110' : '150,162,196');
+    el('wr-verb-glyph', row, '🔒');
+    const mid = el('wr-row-mid', row);
+    el('wr-row-name', mid, 'DENIAL');
+    el('wr-row-desc', mid, on
+      ? 'armed. nothing soft falls — tonight, or any night, until you say otherwise.'
+      : 'open. hearts fall as usual.');
+    const right = el('wr-row-right', row);
+    el('wr-row-state', right, on ? 'ARMED 🔒' : 'arm it');
+    row.addEventListener('click', () => { sfx('ui_click', 0.3); cmd('set-denial', { on: !on }); });
+    tip(row, on ? 'disarm it — hearts return next descent' : 'arm it — it holds until you disarm it');
+  }
+
+  /** HEADPHONES pane: alternate word packs (local setting - re-renders itself). */
+  function renderHeadphonesWin(body, v) {
+    body.innerHTML = '';
+    const card = el('wr-card', body);
+    el('wr-card-sub', card, 'what the descent whispers over you. pick tonight’s pack.');
+    const cur = getWordPack();
+    for (const p of WORD_PACKS) {
+      const onRow = cur === p.id;
+      const row = el('wr-row is-click' + (onRow ? ' is-owned' : ''), card);
+      row.style.setProperty('--acc', onRow ? '255,138,194' : '150,162,196');
+      el('wr-verb-glyph', row, '🎧');
+      const mid = el('wr-row-mid', row);
+      el('wr-row-name', mid, p.name);
+      el('wr-row-desc', mid, p.desc);
+      const right = el('wr-row-right', row);
+      el('wr-row-state', right, onRow ? 'WORN ✓' : 'wear');
+      row.addEventListener('click', () => {
+        sfx('ui_click', 0.3);
+        setWordPack(p.id);
+        renderHeadphonesWin(body, v);
+      });
+    }
+  }
+
+  /** LIPSTICK pane: bubble-skin swatches for the tube's treats (local setting). */
+  function renderSkinsWin(body, v) {
+    body.innerHTML = '';
+    const card = el('wr-card', body);
+    el('wr-card-sub', card, 'a tint for the soft ones. threats keep their warning colors.');
+    const cur = getBubbleSkin();
+    for (const s of BUBBLE_SKINS) {
+      const onRow = cur === s.id;
+      const row = el('wr-row is-click' + (onRow ? ' is-owned' : ''), card);
+      row.style.setProperty('--acc', s.acc || '255,138,194');
+      el('wr-verb-glyph', row, '💋');
+      const mid = el('wr-row-mid', row);
+      el('wr-row-name', mid, s.name);
+      el('wr-row-desc', mid, s.desc);
+      const right = el('wr-row-right', row);
+      el('wr-row-state', right, onRow ? 'WORN ✓' : 'wear');
+      row.addEventListener('click', () => {
+        sfx('ui_click', 0.3);
+        setBubbleSkin(s.id);
+        renderSkinsWin(body, v);
+      });
+    }
   }
 
   // ============================ 📔 VANITY (the mirror) ============================
@@ -1407,6 +1545,9 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     },
     isVisible: () => visible,
     currentSetup: () => buildSetup(),
+    /** THE LOOM: host library / save verdicts, routed into the pane module. */
+    onLoomList(list) { loom.onList(list); },
+    onLoomResult(res) { loom.onResult(res); },
     /** Esc: guide beats -> modal -> the open panes -> swallow (hold-to-exit works). */
     handleEsc() {
       if (!visible) return false;

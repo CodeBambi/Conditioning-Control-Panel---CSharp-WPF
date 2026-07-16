@@ -76,6 +76,11 @@ internal static class DtrhHostService
             _testMode = testMode;
             _meta = new DtrhMetaBridge(testMode, msg => _host?.Post(msg));
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
+            // THE LOOM (crafting Part 2): saved spirals live in the CCP Spirals library
+            // folder, exposed to the page as ccp.spirals. A missing folder would make
+            // WebView2 SKIP the mapping entirely, so create it BEFORE Launch.
+            try { Directory.CreateDirectory(DtrhLoomStore.SpiralsFolder); }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost: spirals dir create failed: {E}", ex.Message); }
             _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
             {
                 StartUrl = "https://ccp.game/dtrh/index.html",
@@ -91,6 +96,8 @@ internal static class DtrhHostService
                     // (engine/boonPick.js) uploads the boon icons to WebGL, which needs
                     // CORS-clean responses; plain <img> consumers are unaffected.
                     ("ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"), CoreWebView2HostResourceAccessKind.Allow),
+                    // THE LOOM: the saved-spiral GIFs (thumbnails + in-run overlay pool).
+                    ("ccp.spirals", DtrhLoomStore.SpiralsFolder, CoreWebView2HostResourceAccessKind.Allow),
                 },
                 UserDataFolderName = "browser_data_dtrh",
                 InputEnabled = true,
@@ -185,6 +192,7 @@ internal static class DtrhHostService
                 skipped = m.Skipped,
                 truncated = m.Truncated,
             });
+            PostLoomList();   // THE LOOM: seed the page's saved-spiral pool
             // THE BIOMES (S3 read-back): the cumulative engagement ranking, so the
             // page can bias toward the media the user actually likes (the exact
             // future feature DtrhAssetStatsStore was built to serve).
@@ -260,6 +268,24 @@ internal static class DtrhHostService
                 // summed into dtrh_asset_stats.json for future media-selection features
                 try { DtrhAssetStatsStore.Merge(o); } catch { }
                 break;
+            case "loom-save":
+            {
+                // THE LOOM (crafting Part 2): the pane wove a GIF; store validates + writes
+                // into the CCP Spirals library, then the page gets the verdict + fresh list.
+                var (ok, slug, error) = DtrhLoomStore.Save(
+                    (string?)o["name"], (string?)o["gifBase64"], o["params"], (bool?)o["overwrite"] ?? false);
+                _host?.Post(new { type = "loom-result", op = "save", ok, slug, error });
+                if (ok) PostLoomList();
+                break;
+            }
+            case "loom-delete":
+            {
+                var slug = (string?)o["slug"];
+                var (ok, error) = DtrhLoomStore.Delete(slug);
+                _host?.Post(new { type = "loom-result", op = "delete", ok, slug, error });
+                if (ok) PostLoomList();
+                break;
+            }
             case "boot-error":
                 OnBootError((string?)o["msg"]);
                 break;
@@ -280,6 +306,32 @@ internal static class DtrhHostService
                 _lastHeartbeatUtc = DateTime.UtcNow;
                 break;
         }
+    }
+
+    /// <summary>THE LOOM: post the saved-spiral library (page-ready + after save/delete).
+    /// Params sidecars ride along so the pane can re-edit a kept spiral.</summary>
+    private static void PostLoomList()
+    {
+        try
+        {
+            _host?.Post(new
+            {
+                type = "loom-list",
+                spirals = DtrhLoomStore.List().Select(s => new
+                {
+                    slug = s.Slug,
+                    url = $"https://ccp.spirals/loom_{s.Slug}.gif",
+                    @params = TryParseJson(s.ParamsJson),
+                }),
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("DtrhHost.PostLoomList: {E}", ex.Message); }
+    }
+
+    private static JObject? TryParseJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JObject.Parse(json); } catch { return null; }
     }
 
     /// <summary>Page-driven fullscreen: the game asks C# to borderless-toggle its own
@@ -929,6 +981,12 @@ internal static class DtrhHostService
                 // Seeds the in-run first-discovery ledger so lesson cards fire once EVER,
                 // not once per app-session (the JS `discovered` set is otherwise empty on boot).
                 discoveredCodexIds = (meta.DiscoveredCodexIds ?? new HashSet<string>()).ToList(),
+
+                // ---- crafting Part 2: the run reads its crafted kit from cfg, not live
+                // meta, so a mid-run craft never retro-applies to the fall in progress ----
+                craftedItems = meta.CraftedItems ?? new Dictionary<string, int>(),
+                pinnedBoonId = meta.PinnedBoon,
+                denialArmed = meta.DenialArmed,
 
                 // ---- M4: seen-once flags (debuts + teaches), mirrored back one-way via set-flag ----
                 flags = new

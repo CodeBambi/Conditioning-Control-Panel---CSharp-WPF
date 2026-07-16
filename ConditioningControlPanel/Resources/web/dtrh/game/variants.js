@@ -142,6 +142,33 @@ export function popWordFor(id) {
 
 export const NAME_OF = Object.fromEntries(VARIANTS.map((v) => [v.id, v.name]));
 
+// ---- LIPSTICK (crafted, Part 2): bubble skins ---------------------------------
+// Tint-only reskins for the SOFT bubbles (plain soap + benign treats). Threats
+// keep their canonical warning colors - the skin never touches kind 'live', the
+// giants, or any special constructor. Persisted in settings S.bubbleSkin; read
+// live per build so a shade change applies to the next spawn.
+import { S as _S, updateSetting as _updateSetting } from '../engine/settings.js';
+
+export const BUBBLE_SKINS = [
+  { id: 'default', name: 'bare', desc: 'the tube’s own colors.', acc: '184,222,255' },
+  { id: 'gloss', name: 'gloss', desc: 'wet-look pink. everything soft shines.',
+    acc: '255,150,205', treat: 'rgb(255,150,205)', plain: 'rgb(255,190,225)' },
+  { id: 'noir', name: 'noir', desc: 'smoke and silver. the soft ones dress dark.',
+    acc: '186,186,204', treat: 'rgb(186,186,204)', plain: 'rgb(146,146,166)' },
+  { id: 'candy', name: 'candy', desc: 'sugar-bright. almost edible.',
+    acc: '255,205,97', treat: 'rgb(255,205,97)', plain: 'rgb(151,255,187)' },
+];
+const skinById = (id) => BUBBLE_SKINS.find((s) => s.id === id) || BUBBLE_SKINS[0];
+export function getBubbleSkin() { return skinById(_S.bubbleSkin).id; }
+export function setBubbleSkin(id) { _updateSetting('bubbleSkin', skinById(id).id); }
+/** The skinned tint for a benign spec, or the canonical tint untouched. */
+function skinnedTint(kind, baseTint, plain = false) {
+  const s = skinById(_S.bubbleSkin);
+  if (s.id === 'default') return baseTint;
+  if (plain) return s.plain || baseTint;
+  return kind === 'treat' ? (s.treat || baseTint) : baseTint;
+}
+
 /**
  * Build one concrete bubble spec from a variant row - the exact C# Build():
  * size random across the band nudged up by intensity, Strength keyed to the
@@ -178,7 +205,7 @@ export function build(variant, intensity, {
     payload: variant.payload,
     strength,
     sizePx: size * visual,
-    tint: variant.tint,
+    tint: skinnedTint(variant.kind, variant.tint),   // LIPSTICK: benign treats only
     label: variant.label,
     sprite: variant.sprite,
     motion,
@@ -243,7 +270,7 @@ export function buildPlain(intensity, { sizeScale = 1.0, sideDriftChance = 0.0 }
     payload: null,            // firePayload() early-returns on null -> no effect fires
     strength: strengthOf(size, 1.0),
     sizePx: size * visual,
-    tint: 'rgb(184,222,255)',
+    tint: skinnedTint('treat', 'rgb(184,222,255)', true),   // LIPSTICK: the soap bubble reskins too
     label: '',
     sprite: PLAIN_SPRITE,
     motion,

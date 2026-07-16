@@ -30,6 +30,7 @@ public partial class ChaosSlotPickerWindow : Window
 
     private int _selected;
     private readonly Dictionary<int, Border> _cards = new();
+    private readonly HashSet<int> _locked = new();
 
     /// <summary>The slot the player committed to (only meaningful when the dialog returned true).</summary>
     public int ChosenSlot { get; private set; }
@@ -56,13 +57,83 @@ public partial class ChaosSlotPickerWindow : Window
     {
         SlotsPanel.Children.Clear();
         _cards.Clear();
-        foreach (var s in ChaosMeta.AllSlotSummaries())
+        _locked.Clear();
+
+        // Crafting Part 2: slots 2/3 are stitched shut until the Ragdoll / Porcelain
+        // dolls are crafted in THE BOUDOIR. Any save's craft unlocks globally, and a
+        // pre-existing save keeps its slot open (back-compat with pre-craft slots).
+        var summaries = ChaosMeta.AllSlotSummaries();
+        bool anyRagdoll = false, anyPorcelain = false;
+        foreach (var s in summaries)
         {
-            var card = BuildCard(s);
+            anyRagdoll |= s.HasRagdoll;
+            anyPorcelain |= s.HasPorcelain;
+        }
+        foreach (var s in summaries)
+        {
+            bool locked = (s.Slot == 2 && !anyRagdoll && !s.Exists)
+                       || (s.Slot == 3 && !anyPorcelain && !s.Exists);
+            if (locked) _locked.Add(s.Slot);
+            var card = locked ? BuildLockedCard(s) : BuildCard(s);
             _cards[s.Slot] = card;
             SlotsPanel.Children.Add(card);
         }
+        if (_locked.Contains(_selected)) _selected = 1;
         UpdateSelectionVisuals();
+    }
+
+    /// <summary>A stitched-shut slot: dimmed, no click, no delete — crafting the doll opens it.</summary>
+    private Border BuildLockedCard(SlotSummary s)
+    {
+        var body = new StackPanel { Margin = new Thickness(16, 14, 16, 16) };
+        body.Children.Add(new TextBlock
+        {
+            Text = $"SAVE {s.Slot}",
+            FontSize = 12,
+            FontWeight = FontWeights.Bold,
+            Foreground = TextMut,
+        });
+        body.Children.Add(new TextBlock
+        {
+            Text = "🔒",
+            FontSize = 34,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 34, 0, 8),
+        });
+        body.Children.Add(new TextBlock
+        {
+            Text = "Stitched Shut",
+            FontSize = 18,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = White,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        });
+        body.Children.Add(new TextBlock
+        {
+            Text = s.Slot == 2
+                ? "craft the Ragdoll in THE BOUDOIR to open a second life"
+                : "craft the Porcelain doll in THE BOUDOIR to open a third life",
+            FontSize = 11.5,
+            Foreground = TextMut,
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 3, 0, 0),
+        });
+
+        return new Border
+        {
+            Width = 196,
+            Height = 268,
+            CornerRadius = new CornerRadius(13),
+            Background = CardBg,
+            BorderBrush = CardBorder,
+            BorderThickness = new Thickness(1.5),
+            Margin = new Thickness(9, 0, 9, 0),
+            Opacity = 0.45,
+            Child = body,
+            Tag = s.Slot,
+        };
     }
 
     private Border BuildCard(SlotSummary s)

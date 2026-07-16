@@ -275,11 +275,50 @@ export function createOverlays(hud) {
     line('cf-recap-score', `${Math.floor(stats.score).toLocaleString()} pts`);
     line('', `${DIFF_NAMES[stats.difficulty] || stats.difficulty} · ${stats.waveCount} loops · you sank ${Math.round(stats.depth).toLocaleString()} m`);
     line('', `best streak ×${Math.max(1, stats.bestCombo)} · ${stats.defused} snapped · ${stats.detonated} triggered`);
-    // THE BIOMES: the route this fall took (one rolled place per room)
-    if (stats.biomes && stats.biomes.length) {
+    // THE BIOMES: the route this fall took (one rolled place per room). When THE
+    // COMPACT is owned the route moves into the mirror section below instead.
+    if (!stats.compact && stats.biomes && stats.biomes.length) {
       line('', `the fall took you through ${stats.biomes.map((b) => `${b.glyph} ${b.name}`).join(' → ')}`);
     }
     if (stats.trickleDrops > 0) line('', `💧 drip feed gathered ${Math.floor(stats.trickleDrops)} ✦`);
+
+    // THE COMPACT (crafted, Part 2): flip it open - picks, haul, route. Owners
+    // only; without it the recap above is byte-identical to the shipped one.
+    if (stats.compact) {
+      const mirror = document.createElement('div');
+      mirror.className = 'cf-recap-mirror';
+      const mh = document.createElement('p');
+      mh.className = 'cf-recap-mirror-h';
+      mh.textContent = '— the mirror —';
+      mirror.appendChild(mh);
+      if (stats.picks && stats.picks.length) {
+        const chips = document.createElement('div');
+        chips.className = 'cf-recap-mirror-picks';
+        for (const p of stats.picks) {
+          const c = document.createElement('span');
+          c.className = 'cf-recap-mirror-chip'
+            + (p.curse ? ' is-curse' : '') + (p.toy ? ' is-toy' : '');
+          c.textContent = `${p.glyph} ${p.name}`;
+          chips.appendChild(c);
+        }
+        mirror.appendChild(chips);
+      } else {
+        const none = document.createElement('p');
+        none.textContent = 'you took nothing. the mirror remembers that too.';
+        mirror.appendChild(none);
+      }
+      if (stats.materials && stats.materials.length) {
+        const haul = document.createElement('p');
+        haul.textContent = 'the haul: ' + stats.materials.map((m) => `${m.glyph} ×${m.count}`).join(' · ');
+        mirror.appendChild(haul);
+      }
+      if (stats.biomes && stats.biomes.length) {
+        const route = document.createElement('p');
+        route.textContent = `the route: ${stats.biomes.map((b) => `${b.glyph} ${b.name}`).join(' → ')}`;
+        mirror.appendChild(route);
+      }
+      card.appendChild(mirror);
+    }
     payoutSlot = document.createElement('div');
     payoutSlot.className = 'cf-recap-payout';
     payoutSlot.textContent = 'tallying…';

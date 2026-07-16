@@ -39,7 +39,8 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boons.js';
-import { MAT_BY_ID, rollMaterialId } from './crafting.js';
+import { MAT_BY_ID, rollMaterialId, CONSUMABLE_IDS } from './crafting.js';
+import { CRAFTED_PERMANENT_APPLY, CRAFTED_TOY_DEFS } from './craftedEffects.js';
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
 import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL } from './regions.js';
@@ -174,6 +175,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // The always-on habits (Warren upgrades) trained this run - surfaced in the
       // HUD's dim left rail. They never change mid-run, so the HUD reads this once.
       ownedHabitIds: rc.ownedHabitIds || [],
+      // Crafting Part 2: the run's crafted kit, frozen at request-run time (a
+      // mid-run craft never retro-applies). id -> count from ChaosMetaState.
+      craftedItems: rc.craftedItems || {},
+      pinnedBoonId: rc.pinnedBoonId || null,     // THE PADLOCK's pinned boon
+      denialArmed: !!rc.denialArmed,             // THE CAGE's modifier toggle
     };
     // Per-item dollhouse levels: id -> level (>=1 discovered). A grab reads this to know
     // the strength to apply; absent/0 means "never discovered" (first grab unlocks at L1).
@@ -337,8 +343,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       surrenderShieldUsed: false,
       takenBoonIds: new Set(),
       runPicks: [],            // ribbon tiles: { id, name, curse }
+
+      // ---- crafted kit (Part 2; applyCraftedKit writes these at GO) ----
+      slipperySec: 0,          // Slippery Slope window: fall x1.5 + heat x2 while > 0
+      denialActive: false,     // DENIAL modifier live this run (no hearts, +50% pay)
+      padlockPending: null,    // THE PADLOCK: boon id owed to the first draft
     };
   }
+  /** How many of a crafted item this run came down with (0 = not owned). */
+  const craftedCount = (id) => (cfg && cfg.craftedItems && cfg.craftedItems[id]) | 0;
   const comboMult = () => Math.min(1.0 + st.combo * 0.08, 6.0);
   const heatMult = () => 1.0 + st.heat;
   const totalMult = () => st.baseMult * comboMult() * cfg.difficultyMult * heatMult() * st.boonMult * st.urgeMult * wxPay();
@@ -384,9 +397,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
    * Overstim weather and the Freefall sin both live here - and the Surfacing's
    * drag folds in too, so time thickens as the hole closes. */
   const baseTime = () => wxSpeed() * (st && st.freefallActive ? 2 : 1)
+    * (st && st.slipperySec > 0 ? 1.5 : 1)   // Slippery Slope (crafted): 10s greased incline
     * (1 - 0.1 * surfPull - 0.35 * surfMelt);
   /** All LUST gains flow through here so Her Perfume can sweeten them. */
-  const addHeat = (x) => { st.heat = Math.min(1.0, st.heat + x * wxHeatGain()); };
+  const addHeat = (x) => {
+    st.heat = Math.min(1.0, st.heat + x * wxHeatGain() * (st.slipperySec > 0 ? 2 : 1));
+  };
   const basePoints = (strength) => 40 + strength * 1.6;
   // Emote rain: one falling feeling-glyph per ✦ emote the pop actually banks -
   // i.e. exactly the "+N" the HUD ✦ counter ticks up by. Callers snapshot
@@ -439,6 +455,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let dvdWasActive = false;
   const discovered = new Set();
   let toys = [];
+  // Crafted consumables ride the dock without eating pockets: slot math counts
+  // only GRABBED toys, so a full crafted kit never suppresses tube offers.
+  const dockUsed = () => toys.filter((t) => !t.crafted).length;
 
   // ---- Wave 2: tunnel reactivity state ----
   let tiltSins = 0;          // The Tilt: unshielded sins accepted this run (max 3)
@@ -827,12 +846,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     }
     if (spec.kind === 'material') {
       // Crafting (THE BOUDOIR): granted LIVE like gold (bankGold) - an abandoned
-      // run keeps its haul. No markDiscovered here: the codex teach is Part 2.
+      // run keeps its haul. First-ever grab of each material teaches its codex card.
       lessons.onSpecialPopped();
       st.focus = clamp(st.focus + FOCUS_PER_DROPLET, 0, FOCUS_MAX);
       const mat = MAT_BY_ID[spec.matId];
       st.runMaterials[spec.matId] = (st.runMaterials[spec.matId] | 0) + 1;
       bridge.send({ type: 'meta-command', op: 'material-add', id: spec.matId, amount: 1 });
+      markDiscovered('material:' + spec.matId);
       hudUi.flyMaterialToBag(mat, { x, y }, 1, st.runMaterials[spec.matId]);
       sfx('golden_pop', 0.3);
       pulse('255,150,205', 0.12);
@@ -1391,6 +1411,25 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         t.cooldownLeft = t.cooldownSec;
         hudUi.toast('🫧 the pump draws them in');
         break;
+
+      // ---- crafted consumables (THE BOUDOIR, Part 2): one charge each ----
+      case 'slippery_slope':
+        st.slipperySec = 10;
+        ctx.director.setTimeFactor(baseTime());
+        sfx('vibe_buzz', 0.5);
+        hudUi.toast('💨 greased — the fall runs away with you');
+        break;
+      case 'rubber_up':
+        st.invulnUntil = performance.now() + 8000;   // onDetonated checks invuln FIRST
+        sfx('toy_ready', 0.5);
+        pulse('255,214,222', 0.3);
+        hudUi.toast('🛡 rubbered up — nothing can touch you');
+        break;
+      case 'sugar_cube':
+        spawnWhiteRabbit();
+        sfx('toy_ready', 0.5);
+        hudUi.toast('🍬 he smelled it — here he comes');
+        break;
     }
     lessons.onToyFired();   // first_play
     // Grab-in-the-tube: a grabbed toy carries 3 uses. Spend one (freeze/wand already
@@ -1398,6 +1437,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // dock and renumber so the remaining consumables keep contiguous 1..N slot keys.
     if (t.consumable) {
       if (t.id !== 'freeze_trigger' && t.id !== 'the_wand') t.chargesLeft--;
+      // A crafted charge spends the banked holding (optimistic; C# authoritative).
+      if (t.crafted) {
+        try { bridge.send({ type: 'meta-command', op: 'consume-crafted', id: t.id }); } catch (e) { /* ignore */ }
+      }
       if (t.chargesLeft <= 0) {
         const i = toys.indexOf(t);
         if (i >= 0) toys.splice(i, 1);
@@ -1443,6 +1486,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   function tickToys(dt) {
+    // Slippery Slope (crafted): the 10s greased window winds down.
+    if (st && st.slipperySec > 0) {
+      st.slipperySec -= dt;
+      if (st.slipperySec <= 0) {
+        st.slipperySec = 0;
+        if (state === 'running') ctx.director.setTimeFactor(baseTime());
+        hudUi.toast('💨 the grease dries — the fall steadies');
+      }
+    }
     if (vibeRemainingSec > 0) {
       vibeRemainingSec -= dt;
       if (vibeRemainingSec <= 0) {
@@ -1734,8 +1786,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         }, i * 200);
       }
     } else if (id === 'perfume') {
-      for (let i = 0; i < 2; i++) { markDiscovered('bubble:heart'); field.spawn(buildHeart()); }
-      field.playChime(0.25);
+      // DENIAL (crafted modifier): nothing soft falls tonight - the perfume's hearts stay away.
+      if (!st.denialActive) {
+        for (let i = 0; i < 2; i++) { markDiscovered('bubble:heart'); field.spawn(buildHeart()); }
+        field.playChime(0.25);
+      }
       pulse('255,160,215', 0.35);
     } else if (id === 'foolsgold') {
       for (let i = 0; i < 2; i++) { markDiscovered('bubble:golden'); field.spawn(buildGolden()); }
@@ -2112,8 +2167,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // speed-line heat: Heat Warp's streak burn, outranked by Freefall's howl
     const heatRush = comboWarp >= 0.6 ? ((comboWarp - 0.6) / 0.4) * 0.8 : 0;
     ctx.fx.setRushOverride(st.freefallActive ? Math.max(0.95, heatRush) : heatRush);
-    // W5 sins that ride the camera: Freefall raises the speed ceiling, Spun rolls
-    ctx.nav.setSpeedCapMult(st.freefallActive ? 2 : 1);
+    // W5 sins that ride the camera: Freefall raises the speed ceiling, Spun rolls.
+    // Slippery Slope (crafted) greases to 1.5 - max() so it never FIGHTS Freefall's 2.
+    ctx.nav.setSpeedCapMult(Math.max(st.freefallActive ? 2 : 1, st.slipperySec > 0 ? 1.5 : 1));
     ctx.nav.setRollRate(st.spunRollRate || 0);
     // Four Chambers escalation: where intensity() sits inside this chamber's
     // band drives the pattern knobs' enter->peak lerp (fx eases it further).
@@ -2342,9 +2398,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     }
     if (heartArmed && waveProgress >= heartFireAt) {
       heartArmed = false;
-      markDiscovered('bubble:heart');
-      field.spawn(buildHeart());
-      field.playChime(0.22);
+      // DENIAL (crafted modifier): the pop-up heart never arrives.
+      if (!st.denialActive) {
+        markDiscovered('bubble:heart');
+        field.spawn(buildHeart());
+        field.playChime(0.22);
+      }
     }
 
     tickToys(dt);
@@ -2566,6 +2625,16 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       hasVideo: !!(hostState && hostState.mediaStats && hostState.mediaStats.videos > 0),
     });
     happy.rigDraft(options, hpIo);   // run 4's defanged first sin / the duo demo
+    // THE PADLOCK (crafted): the pinned mantra is owed to the first draft - swap it
+    // over the last card unless the deal already offers/took it. Rerolls re-run
+    // dealOptions, so the pin survives a reroll; resolveDraft settles the debt.
+    if (st.padlockPending) {
+      const pin = boonById(st.padlockPending);
+      if (pin && !pin.curse && !st.takenBoonIds.has(pin.id)
+          && !options.some((o) => o.id === pin.id) && options.length) {
+        options[options.length - 1] = pin;
+      }
+    }
     for (const o of options) markDiscovered('boon:' + o.id);
     return options;
   }
@@ -2620,7 +2689,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       hudUi.updateToys(toys, toyStatus());
       return true;   // signals a recharge (vs a fresh dock) to the grab toast
     }
-    if (toys.length >= st.consumableSlots) return;   // dock full (canOfferPowerup should have vetoed)
+    if (dockUsed() >= st.consumableSlots) return;   // dock full (canOfferPowerup should have vetoed; crafted toys don't count)
     const lvl = Math.max(1, level | 0);
     const power = def.levelValues[Math.min(lvl, def.levelValues.length) - 1];
     // Consumables dock with 3 uses (charge-based toys keep their levelled charge
@@ -2698,6 +2767,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   function resolveDraft(boon, auto) {
+    // THE PADLOCK: the first draft settled the debt - picked, passed over, or
+    // skipped, the pin is spent for this descent (the next descent re-arms it).
+    st.padlockPending = null;
     // session telemetry: what the draft yielded + whether the timer had to decide
     if (auto) metrics.noteAutopick();
     if (boon) { if (boon.curse) metrics.noteCurse(); else metrics.noteBoon(); }
@@ -3184,6 +3256,55 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   // ============================ lifecycle ============================
 
+  /** THE BOUDOIR's kit (Part 2): apply crafted permanents, arm DENIAL, queue the
+   *  padlock's pinned boon, and dock one single-charge toy per owned consumable
+   *  type. Called from beginCountdown after freshState + buildToys (never on the
+   *  scripted classroom run). Reads cfg.craftedItems - frozen at request-run. */
+  function applyCraftedKit() {
+    let any = false;
+
+    // permanents: skeleton_key / locked_collar / the_corset / the_timepiece
+    for (const id of Object.keys(CRAFTED_PERMANENT_APPLY)) {
+      if (craftedCount(id) >= 1) { CRAFTED_PERMANENT_APPLY[id](st, cfg); any = true; }
+    }
+
+    // THE CAGE: the DENIAL modifier - no hearts fall, everything pays +50%.
+    if (cfg.denialArmed && craftedCount('the_cage') >= 1) {
+      st.denialActive = true;
+      st.boonMult += 0.5;
+      st.runPicks.push({
+        id: 'denial_modifier', name: 'DENIAL', curse: true, spent: false, glyph: '🔒',
+        desc: 'no hearts fall this descent. everything pays +50%.',
+      });
+      hudUi.announce('🔒 DENIAL — nothing soft falls tonight', 'bad', 2600);
+      any = true;
+    }
+
+    // THE PADLOCK: the pinned boon is owed to the first draft (dealOptions collects).
+    if (cfg.pinnedBoonId && craftedCount('the_padlock') >= 1) {
+      st.padlockPending = cfg.pinnedBoonId;
+    }
+
+    // crafted consumables dock as single-charge toys OUTSIDE the pocket count
+    // (crafted: true - dockUsed() skips them; no ribbon tile, no runEquipment).
+    for (const id of CONSUMABLE_IDS) {
+      if (craftedCount(id) < 1) continue;
+      const def = CRAFTED_TOY_DEFS[id];
+      if (!def) continue;
+      toys.push({
+        id, name: def.name, glyph: def.glyph, desc: def.desc,
+        key: String(toys.length + 1),
+        cooldownSec: 0, power: 0, level: 1, maxed: false,
+        chargesLeft: 1, chargesMax: 1,
+        cooldownLeft: 0, effectActive: false,
+        consumable: true, crafted: true, pickRef: null,
+      });
+      any = true;
+    }
+
+    if (any) hudUi.toast('🛏 what you crafted comes down with you');
+  }
+
   function beginCountdown(short) {
     state = 'countdown';
     st = freshState();
@@ -3224,6 +3345,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     happy.onRunStarted(cfg.runsCompleted, cfg.scriptedFirstRun);
     lastNarrationAt = -Infinity;   // fresh descent: never pre-suppressed by a hub-scene line
     if (guide) guide.onRunStarted(cfg);   // deal this descent's Cheshire schedule (or none)
+
+    // THE BOUDOIR's crafted kit comes down with you (permanents + docked
+    // consumables + modifiers) - it stands down on the scripted classroom run.
+    if (!cfg.scriptedFirstRun) applyCraftedKit();
 
     // A pre-equipped start boon enters the run already active (before wave 1) -
     // except on the scripted first descent, where it stands down (the classroom).
@@ -3333,6 +3458,16 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // THE BIOMES: the route this fall took, for the recap's summary line
       biomes: (st.biomes || []).map((id) => biomeById(id)).filter(Boolean)
         .map((b) => ({ glyph: b.glyph, name: b.name })),
+      // THE COMPACT (crafted): the mirror section - picks, haul, route. Non-owners
+      // get compact:false and a byte-identical recap.
+      compact: craftedCount('the_compact') >= 1,
+      picks: (st.runPicks || []).map((p) => ({
+        glyph: p.glyph || '◈', name: p.name, curse: !!p.curse, toy: !!p.toy,
+      })),
+      materials: Object.entries(st.runMaterials || {}).map(([id, n]) => {
+        const m = MAT_BY_ID[id];
+        return m ? { glyph: m.glyph, name: m.name, count: n } : null;
+      }).filter(Boolean),
     }, {
       onAgain: () => {
         // Re-request a fresh config (the loadout/settings may have moved, and
@@ -3622,6 +3757,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       beginCountdown(short);
     },
 
+    /** THE LOOM (crafting Part 2): host library + save/delete verdicts, routed
+     *  to the Boudoir pane (mirror of onMeta's warren routing). */
+    onLoomList(list) { if (warren && warren.onLoomList) warren.onLoomList(list); },
+    onLoomResult(res) { if (warren && warren.onLoomResult) warren.onLoomResult(res); },
+
     /** A fresh meta snapshot landed - the Warren re-renders its shelves, and the
      *  options panel reveals any newly-purchased dials. */
     onMeta() {
@@ -3727,6 +3867,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     moodIntensity() { return state === 'running' ? intensity() : 0; },
 
     setPaused(v) { paused = !!v; syncHeld(); },
+    /** THE HOURGLASS (crafted): may Esc truly FREEZE the fall right now? Outside
+     *  a live descent there's nothing to hold, so the pause always freezes. */
+    canHoldPause() { return state !== 'running' || craftedCount('the_hourglass') >= 1; },
+    /** Hub-time crafted ownership from the LIVE meta snapshot (cfg is per-run).
+     *  Gates hub-side features: the ring box's kept looks, the ballerina toggle. */
+    craftedOwned(id) {
+      const m = hostState && hostState.meta;
+      return !!(m && m.craftedItems && (m.craftedItems[id] | 0) > 0);
+    },
     setHidden(v) { hidden = !!v; syncHeld(); },
     /** A native payload window (mandatory video) fully covers the page. A cover
      * that LIFTS while the run lives = a video endured to its end (porn_dvd). */
@@ -3754,8 +3903,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (state !== 'running' || !st) return false;
       const held = st.runEquipment.has(id);
       if (kind === 'consumable') {
-        if (!held) return toys.length < st.consumableSlots;   // fresh toy needs an open pocket
-        if (toys.length < st.consumableSlots) return false;   // room to spare: prefer new toys, not a refill
+        if (!held) return dockUsed() < st.consumableSlots;   // fresh toy needs an open pocket (crafted toys don't count)
+        if (dockUsed() < st.consumableSlots) return false;   // room to spare: prefer new toys, not a refill
         const t = toys.find((x) => x.id === id);              // pockets full: offer a recharge...
         return !!t && t.chargesLeft < t.chargesMax;           // ...only if this one has a spent charge
       }

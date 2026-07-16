@@ -76,8 +76,23 @@ export async function run(bridge, hostState) {
     { op: 'equip-boon', id: 'm2test_boon' },                          // always
     { op: 'spend-gold', amount: 99999999 },                           // must be REJECTED (insufficient)
     { op: 'definitely-not-an-op' },                                   // must be ignored
+    // ---- crafting Part 2 ops: earn the prerequisites first (Part 1 ops), then
+    // exercise the new vocabulary. All deltas deterministic off the clone. ----
+    { op: 'material-add', id: 'chrome', amount: 30 },                 // always
+    { op: 'material-add', id: 'silicone', amount: 5 },                // always
+    { op: 'material-add', id: 'pills', amount: 10 },                  // always
+    { op: 'craft', id: 'the_padlock', cost: { chrome: 8 } },          // always (holdings just granted)
+    { op: 'craft', id: 'the_cage', cost: { chrome: 8, silicone: 1 } }, // always
+    { op: 'craft', id: 'sugar_cube', cost: { pills: 4 } },            // always
+    { op: 'pin-boon', id: 'm2test_pin' },                             // applies (padlock owned above)
+    { op: 'set-denial', on: true },                                   // applies iff it was off
+    { op: 'set-denial', on: true },                                   // must be REJECTED (no change)
+    { op: 'consume-crafted', id: 'sugar_cube' },                      // applies (>=1 after the craft)
+    { op: 'consume-crafted', id: 'the_padlock' },                     // must be REJECTED (not a consumable)
   ];
-  const expectApplied = 5 + (dialBuyValid ? 1 : 0) + (flagValid ? 1 : 0) + (rankValid ? 1 : 0);
+  const denialValid = m0.denialArmed !== true;
+  const expectApplied = 5 + (dialBuyValid ? 1 : 0) + (flagValid ? 1 : 0) + (rankValid ? 1 : 0)
+    + 8 + (denialValid ? 1 : 0);
   for (const c of cmds) {
     bridge.send({ type: 'meta-command', ...c });
     await wait(120);
@@ -98,6 +113,15 @@ export async function run(bridge, hostState) {
     && !(s.benchPurchases || []).includes('toy_pocket_1')
     && (s.discoveredCodexIds || []).includes('bubble:m2test') && s.equippedStartBoon === 'm2test_boon',
     s ? `gold=${s.gold}/${expectGold} dial=${(s.purchasedDials || []).includes('bubbleSize')} flag=${s.seenDefuseTutorial} boon=${s.equippedStartBoon}` : 'no snapshot');
+  // crafting Part 2 state: the crafts landed, the padlock pinned, denial armed,
+  // and the consumed sugar cube dropped exactly one from its holding.
+  const cubes0 = (m0.craftedItems && m0.craftedItems.sugar_cube) | 0;
+  const cubesNow = (s && s.craftedItems && s.craftedItems.sugar_cube) | 0;
+  check('crafting-p2-state', !!s
+    && !!(s.craftedItems && s.craftedItems.the_padlock && s.craftedItems.the_cage)
+    && s.pinnedBoon === 'm2test_pin' && s.denialArmed === true
+    && cubesNow === cubes0,   // +1 crafted, -1 consumed
+    s ? `pin=${s.pinnedBoon} denial=${s.denialArmed} cubes=${cubesNow}/${cubes0}` : 'no snapshot');
 
   // ---- 3. run lifecycle + payout round-trip ----
   bridge.send({ type: 'run-started', difficulty: 'Gentle', mode: 'm2test' });

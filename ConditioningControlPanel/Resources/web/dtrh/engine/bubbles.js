@@ -14,7 +14,8 @@
  * ==========================================================================*/
 
 import { FLASH_VOICES, SUB_VOICES, SUBLIMINAL_DROPS } from '/dtrh/assets/bubbles/manifest.js';
-import { S, activeWords, getCustomSpiral } from './settings.js';
+import { S, activeWords, getCustomSpiral, getVeilWords } from './settings.js';
+import { getLoomSpirals } from './loomSpirals.js';
 import { getLevel } from './audioLevels.js';
 import { makeSfxPlayer } from './audioBus.js';
 
@@ -382,9 +383,15 @@ export function createBubbles({ hud, canvas, media, onPop, onMiss, onEffect, onC
         const custom = getCustomSpiral();
         if (custom && custom.isVideo) overlayVideo(custom.url, 'rh-fx-spiralvid', FLASH_MAX_MS, true, S.spiralOpacity);
         else if (custom) overlayImage(custom.url, 'rh-fx-spiralvid', FLASH_MAX_MS, S.spiralOpacity);
-        // no custom spiral: pull one animated spiral at random from the pool
-        // (gif/webp animate natively in an <img> - no pop-frame decoder stall)
-        else overlayImage(pick(SPIRAL_POOL), 'rh-fx-spiralvid', FLASH_MAX_MS, S.spiralOpacity);
+        else {
+          // no custom spiral: THE LOOM's saved spirals join the bundled pool
+          // ~50/50 (gif/webp animate natively in an <img> - no decoder stall)
+          const loom = getLoomSpirals();
+          const url = (loom.length && Math.random() < 0.5)
+            ? loom[Math.floor(Math.random() * loom.length)].url
+            : pick(SPIRAL_POOL);
+          overlayImage(url, 'rh-fx-spiralvid', FLASH_MAX_MS, S.spiralOpacity);
+        }
         playVoice(FLASH_VOICES);
         break;
       }
@@ -424,11 +431,13 @@ export function createBubbles({ hud, canvas, media, onPop, onMiss, onEffect, onC
   // popped bubble of that kind makes, PLUS a synced trigger drop: the whispered
   // snap + its flashed word, so punching through the veil reads as one hit that
   // lands with the ongoing drift voice. scene.js calls this from onVeilPass.
-  const VEIL_WORDS = { spiral: 'Sink', pinkfilter: 'Drop', glitch: 'Blank', flash: 'Empty' };
+  // HEADPHONES (crafted, Part 2): the veil words come from the active word pack
+  // (the classic pack keeps the shipped Sink/Drop/Blank/Empty set). Read live so
+  // a pack change in THE BOUDOIR applies to the next crossing.
   // Veil drops fire on tube position, not a click - decode them up front so
   // the FIRST crossing is already buffer-backed (the player skips a sound
   // whose buffer is still decoding rather than play it at the wrong volume).
-  audio.preload(Object.values(VEIL_WORDS)
+  audio.preload(Object.values(getVeilWords())
     .map((w) => SUBLIMINAL_DROPS[dropSlug(w)])
     .filter(Boolean)
     .map((d) => DROP_BASE + d));
@@ -449,7 +458,7 @@ export function createBubbles({ hud, canvas, media, onPop, onMiss, onEffect, onC
   function triggerVeil(kind, force = false) {
     if ((paused && !force) || frozen) return;
     fireEffect(kind);            // the wash/overlay (+ director boost via onEffect)
-    const word = VEIL_WORDS[kind];
+    const word = getVeilWords()[kind];
     if (word) flashDrop(word);   // the snap: whispered drop + flashed word, in sync
   }
 

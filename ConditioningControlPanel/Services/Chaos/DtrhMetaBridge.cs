@@ -226,6 +226,40 @@ internal sealed class DtrhMetaBridge
                     applied = true;
                     break;
                 }
+                case "consume-crafted":
+                {
+                    // Part 2: a crafted consumable's charge was spent in-run (useToy). Only
+                    // the three CONSUMABLE_IDS decrement; permanents are never spendable.
+                    var id = RequireId(o);
+                    if (id == null || !ChaosCraftingIds.Consumables.Contains(id)) break;
+                    if (!S.CraftedItems.TryGetValue(id, out var held) || held <= 0) break;
+                    if (held == 1) S.CraftedItems.Remove(id);
+                    else S.CraftedItems[id] = held - 1;
+                    applied = true;
+                    break;
+                }
+                case "pin-boon":
+                {
+                    // THE PADLOCK: pin one boon into the first draft of every descent.
+                    // Mirrors equip-boon, but gated on owning the padlock; null/empty unpins.
+                    if (!S.CraftedItems.ContainsKey("the_padlock")) break;
+                    var id = (string?)o["id"];
+                    if (id != null && id.Length > 64) break;
+                    S.PinnedBoon = string.IsNullOrEmpty(id) ? null : id;
+                    applied = true;
+                    break;
+                }
+                case "set-denial":
+                {
+                    // THE CAGE's DENIAL modifier: two-way toggle (set-flag is one-way,
+                    // hence its own op). Arming requires owning the cage; disarming is free.
+                    bool on = (bool?)o["on"] ?? false;
+                    if (on && !S.CraftedItems.ContainsKey("the_cage")) break;
+                    if (S.DenialArmed == on) break;
+                    S.DenialArmed = on;
+                    applied = true;
+                    break;
+                }
                 case "buy-consumable-slot":
                 {
                     // Grab-in-the-tube rework: sew another consumable HUD slot with Sparks (the
@@ -417,6 +451,7 @@ internal sealed class DtrhMetaBridge
         int sparks = (int)Math.Round((scorePart + completionBonus) * run.SparkGainMult);
         sparks += (int)Math.Max(0, run.TrickleDrops);
         if (run.DripFeedMaxed) sparks = (int)Math.Round(sparks * 1.10);
+        sparks = (int)Math.Round(sparks * ChaosMeta.ShotSparkMult(S));   // THE SHOT mirror
         return Math.Max(0, sparks);
     }
 
@@ -442,6 +477,8 @@ internal sealed class DtrhMetaBridge
         "SeenEcho", "SeenChaperone", "SeenTease", "SeenBound", "SeenBrittle", "SeenBraindrain",
         // happy-path one-shots (defanged sin demo, duo gold card, skip debut)
         "SeenFirstSin", "SeenDuoDemo", "SeenSkipDebut",
+        // Cheshire's Boudoir tour (crafting Part 2)
+        "SeenBoudoirIntro",
     };
 
     private static PropertyInfo? FlagProp(string? camelKey)

@@ -16,6 +16,7 @@ import * as bridge from './bridge.js';
 import { createHostMediaSource } from './hostMedia.js';
 import { detectMode } from './shared/capability.js';
 import { createChaosGame } from './game/chaosRun.js';
+import { setLoomSpirals } from './engine/loomSpirals.js';
 
 const dom = {
   canvas: document.getElementById('sf-canvas'),
@@ -163,6 +164,14 @@ bridge.on('payload-state', (m) => {
     if (game) game.setCovered(!!m.on);
   }
 });
+// THE LOOM (crafting Part 2): the saved-spiral library + save/delete verdicts.
+// ONE handler per type (bridge handlers are a Map) - fan out from here.
+bridge.on('loom-list', (m) => {
+  const list = m.spirals || [];
+  setLoomSpirals(list);                                    // the in-run overlay pool
+  if (game && game.onLoomList) game.onLoomList(list);      // the Boudoir pane's rack
+});
+bridge.on('loom-result', (m) => { if (game && game.onLoomResult) game.onLoomResult(m); });
 bridge.on('end-run', () => shutdown());
 bridge.on('ping', (m) => bridge.send({ type: 'pong', t: m.t }));
 

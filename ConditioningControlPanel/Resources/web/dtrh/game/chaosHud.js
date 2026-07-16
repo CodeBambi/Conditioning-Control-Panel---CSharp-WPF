@@ -455,7 +455,7 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
             ? (cur.chargesLeft === 0 ? 'spent' : `${cur.chargesLeft} use${cur.chargesLeft > 1 ? 's' : ''} left`)
             : (cur.cooldownLeft > 0 ? `${Math.ceil(cur.cooldownLeft)}s cooldown` : 'ready');
           return {
-            glyph: cur.glyph, kicker: 'toy', name: cur.name,
+            glyph: cur.glyph, kicker: cur.crafted ? 'crafted · one use' : 'toy', name: cur.name,
             desc: cur.desc || '',
             extra: (cur.key ? `press ${cur.key} or click · ` : '') + state,
           };
@@ -471,6 +471,7 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
         : (t.cooldownLeft > 0 ? `${Math.ceil(t.cooldownLeft)}s` : 'ready');
       el.classList.toggle('is-ready', ready);
       el.classList.toggle('is-active', !!t.effectActive);
+      el.classList.toggle('is-crafted', !!t.crafted);   // boudoir-pink accent
     }
   }
 

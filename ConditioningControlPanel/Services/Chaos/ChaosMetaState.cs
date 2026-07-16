@@ -139,8 +139,16 @@ public sealed class ChaosMetaState
     /// strip and, in Part 3, which paperwall hints stop being hints).</summary>
     public HashSet<string> DiscoveredRecipes { get; set; } = new();
     /// <summary>Crafted item holdings: recipe id -> count (consumables stack; permanents
-    /// stay at 1 — the dupe guard is page-side).</summary>
+    /// stay at 1 — the dupe guard is page-side; the_shot is the repeatable exception, cap 10).</summary>
     public Dictionary<string, int> CraftedItems { get; set; } = new();
+    /// <summary>THE PADLOCK: boon id pinned into the first draft of every descent. Null = none.
+    /// Requires owning the_padlock (enforced by the pin-boon op).</summary>
+    public string? PinnedBoon { get; set; } = null;
+    /// <summary>THE CAGE's DENIAL modifier toggle (no hearts fall, everything pays +50%).
+    /// Arming requires owning the_cage (enforced by the set-denial op).</summary>
+    public bool DenialArmed { get; set; } = false;
+    /// <summary>Cheshire's once-ever Boudoir tour (boudoir_intro VN scene).</summary>
+    public bool SeenBoudoirIntro { get; set; } = false;
 
     // lifetime stats (consumed by the Stats tab in a later session)
     public int RunsCompleted { get; set; } = 0;

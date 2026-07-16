@@ -28,4 +28,11 @@ public static class ChaosCraftingIds
         "the_corset", "sugar_cube", "the_shot", "headphones", "the_padlock",
         "the_pink_heart",
     };
+
+    /// <summary>Crafted consumables the run may spend (crafting.js CONSUMABLE_IDS).
+    /// The consume-crafted op only decrements ids in this set.</summary>
+    public static readonly HashSet<string> Consumables = new()
+    {
+        "slippery_slope", "rubber_up", "sugar_cube",
+    };
 }
