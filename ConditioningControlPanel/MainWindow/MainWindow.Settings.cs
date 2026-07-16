@@ -635,11 +635,14 @@ namespace ConditioningControlPanel
 
         private void BtnExit_Click(object sender, RoutedEventArgs e)
         {
+            // Dark Patterns: a confirmshaming guilt-trip instead of a hard block. Exit still works
+            // (you found the tiny fleeing button, after all) — you just have to insist past the nag.
             if (App.Lockdown?.IsActive == true)
             {
-                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"), Loc.Get("title_lockdown"),
-                    MessageBoxButton.OK, MessageBoxImage.Stop);
-                return;
+                var leave = MessageBox.Show(
+                    "Leaving so soon? The session isn't finished with you. Do you really want to walk away from all this progress?",
+                    "Dark Patterns", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+                if (leave != MessageBoxResult.Yes) return;
             }
 
             if (_isRunning)

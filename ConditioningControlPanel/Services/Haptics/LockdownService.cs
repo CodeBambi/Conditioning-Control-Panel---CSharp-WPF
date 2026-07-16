@@ -6,13 +6,16 @@ using Newtonsoft.Json;
 namespace ConditioningControlPanel.Services;
 
 /// <summary>
-/// Manages lockdown mode — a timed state that forces strict lock ON, panic key OFF,
-/// and blocks all escape mechanisms. State is ephemeral (not persisted to settings.json),
-/// but the pre-lockdown values are written to a tiny recovery file. If anything calls
-/// settings.Save() while lockdown is active (which is common — many code paths do), the
-/// false PanicKeyEnabled would otherwise stick on disk and survive the lockdown window
-/// and a reboot, leaving the panic key permanently broken (#162). On next start, the
-/// recovery file lets us restore the user's real values.
+/// Manages "Dark Patterns" mode — a timed state that ratchets in-app escape friction to an
+/// absurd, satirical degree instead of actually locking the user in. Nothing about the OS is
+/// blocked: Alt+F4, the Windows key and Task Manager all still work, the panic key still fires
+/// (through a deliberately obnoxious confirm chain), the "let me out" phrase still exits, and the
+/// real countdown always expires on schedule. Every friction effect it drives (inverted window
+/// chrome, tiny/fleeing buttons, tiny-X flashes, the anti-panic chain) is applied in-memory, so a
+/// crash or force-kill naturally resets everything on relaunch — there is nothing dangerous to
+/// persist. (Historically this was a hard lockout that forced StrictLock on / PanicKey off and
+/// suppressed system keys; that behaviour and its settings-recovery machinery were removed when
+/// the concept pivoted from lockout to friction.)
 /// </summary>
 public class LockdownService : IDisposable
 {
@@ -20,8 +23,6 @@ public class LockdownService : IDisposable
     private DateTime _activatedAt;
     private TimeSpan _duration;
     private DispatcherTimer? _countdownTimer;
-    private bool _preStrictLock;
-    private bool _prePanicKeyEnabled;
     private bool _isDisposed;
 
     private static string RecoveryFilePath =>
@@ -62,21 +63,10 @@ public class LockdownService : IDisposable
     {
         if (_isActive) return;
 
-        var settings = App.Settings?.Current;
-        if (settings == null) return;
-
-        // Save current settings (so we can restore on deactivate)
-        _preStrictLock = settings.StrictLockEnabled;
-        _prePanicKeyEnabled = settings.PanicKeyEnabled;
-
-        // Persist pre-lockdown values to a recovery file BEFORE overriding. If the app
-        // crashes / is killed mid-lockdown, App.OnStartup -> RecoverIfNeeded() restores
-        // these so the panic key isn't stuck off forever.
-        WriteRecoveryFile(_preStrictLock, _prePanicKeyEnabled);
-
-        // Force lockdown settings — do NOT call Save() so these are never persisted
-        settings.StrictLockEnabled = true;
-        settings.PanicKeyEnabled = false;
+        // Dark Patterns is pure in-app friction: it does NOT force StrictLock / disable the panic
+        // key / suppress system keys the way the old hard-lockout did. So there are no dangerous
+        // settings to snapshot or recover — activation just starts the timer and lets the UI layer
+        // (MainWindow.Lab / FlashService / the anti-panic chain) apply its friction effects.
 
         _duration = duration;
         _activatedAt = DateTime.Now;
@@ -87,7 +77,7 @@ public class LockdownService : IDisposable
         _countdownTimer.Tick += OnCountdownTick;
         _countdownTimer.Start();
 
-        App.Logger?.Information("Lockdown activated for {Duration} minutes", duration.TotalMinutes);
+        App.Logger?.Information("Dark Patterns activated for {Duration} minutes", duration.TotalMinutes);
         LockdownActivated?.Invoke();
     }
 
@@ -103,18 +93,7 @@ public class LockdownService : IDisposable
             _countdownTimer = null;
         }
 
-        // Restore saved settings. Some other code path may have already called
-        // settings.Save() while lockdown was active (persisting the false PanicKeyEnabled),
-        // so we explicitly Save here to overwrite that on disk with the real values.
-        var settings = App.Settings?.Current;
-        if (settings != null)
-        {
-            settings.StrictLockEnabled = _preStrictLock;
-            settings.PanicKeyEnabled = _prePanicKeyEnabled;
-            try { App.Settings?.SaveImmediate(); } catch { /* best-effort */ }
-        }
-
-        DeleteRecoveryFile();
+        // Nothing to restore on disk — Dark Patterns never mutated any persisted setting.
 
         // Capture how long this lockdown ran BEFORE clearing _isActive, so gamification
         // (throw_away_the_key, "60+ minute lockdown") reads an authoritative duration
@@ -122,14 +101,16 @@ public class LockdownService : IDisposable
         LastActiveDuration = DateTime.Now - _activatedAt;
         _isActive = false;
 
-        App.Logger?.Information("Lockdown deactivated after {Minutes:F1} minutes", LastActiveDuration.TotalMinutes);
+        App.Logger?.Information("Dark Patterns deactivated after {Minutes:F1} minutes", LastActiveDuration.TotalMinutes);
         LockdownDeactivated?.Invoke();
     }
 
     /// <summary>
-    /// Called once at app startup. If the recovery file exists, the previous run was
-    /// killed/crashed mid-lockdown — restore the user's real PanicKeyEnabled / StrictLock
-    /// values so the panic key isn't permanently stuck off.
+    /// Called once at app startup. Legacy safety net: older builds of this mode were a hard lockout
+    /// that force-disabled the panic key and wrote a recovery file so a mid-lockdown crash couldn't
+    /// leave the panic key stuck off (#162). Dark Patterns no longer writes that file, but we still
+    /// honour any stale one left by an upgrade-in-place so an interrupted old lockdown can't strand a
+    /// disabled panic key. Then it self-deletes.
     /// </summary>
     public static void RecoverIfNeeded()
     {
@@ -156,24 +137,6 @@ public class LockdownService : IDisposable
         finally
         {
             DeleteRecoveryFile();
-        }
-    }
-
-    private static void WriteRecoveryFile(bool strictLock, bool panicKey)
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(RecoveryFilePath)!);
-            var json = JsonConvert.SerializeObject(new RecoveryState
-            {
-                StrictLockEnabled = strictLock,
-                PanicKeyEnabled = panicKey
-            });
-            File.WriteAllText(RecoveryFilePath, json);
-        }
-        catch (Exception ex)
-        {
-            App.Logger?.Warning("Lockdown: failed to write recovery file: {Error}", ex.Message);
         }
     }
 

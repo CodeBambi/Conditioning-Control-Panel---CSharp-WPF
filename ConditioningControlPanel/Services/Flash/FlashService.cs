@@ -1030,9 +1030,16 @@ namespace ConditioningControlPanel.Services
                 if (_activeWindows.Count >= MAX_CONCURRENT_FLASH) return;
             }
 
+            // Dark Patterns: per-window (non-solid) flashes stop auto-dismissing and can ONLY be
+            // closed by hunting down a tiny ✕ dropped in a random corner. We extend the lifetime way
+            // out (a CTS still fires after ~30 min as a safety auto-expire so a forgotten flash can't
+            // pin the screen forever) and, below, add the corner ✕ + suppress the whole-surface dismiss.
+            bool darkPatterns = App.Lockdown?.IsActive == true && !settings.FlashSolidMode;
+            int effLifetimeMs = darkPatterns ? Math.Max(lifetimeMs, 30 * 60 * 1000) : lifetimeMs;
+
             // Create per-window CTS with automatic cancellation after the lifetime expires~ ✨
             var windowCts = new CancellationTokenSource();
-            windowCts.CancelAfter(lifetimeMs);
+            windowCts.CancelAfter(effLifetimeMs);
 
             FlashWindow? window = null;
             int xpAmount = 0;
@@ -1089,7 +1096,7 @@ namespace ConditioningControlPanel.Services
                 window.Background = System.Windows.Media.Brushes.Black;
                 window.IsFadingOut = false;
                 window.LifetimeCts = windowCts;
-                window.ExpiresAt = DateTime.Now.AddMilliseconds(lifetimeMs);
+                window.ExpiresAt = DateTime.Now.AddMilliseconds(effLifetimeMs);
                 window.OriginalLifetimeMs = lifetimeMs;
                 window.HydraGeneration = hydraGeneration;
                 // Capture the monitor on the window so hydra children can inherit
@@ -1302,6 +1309,28 @@ namespace ConditioningControlPanel.Services
                         window.Left = finalX - (shellW - trueW) / 2.0;
                         window.Top = finalY - (shellH - trueH) / 2.0;
                     }
+                    // Dark Patterns: overlay a tiny ✕ in a random corner. It is the ONLY way to close
+                    // this flash — the whole-surface dismiss is suppressed (IsClickable = false), while
+                    // the window is still made OS-hit-testable below so the ✕ itself receives clicks.
+                    if (darkPatterns)
+                    {
+                        window.IsClickable = false;
+                        var closeX = BuildFlashCornerCloseX();
+                        var capturedWindow = window;
+                        closeX.MouseLeftButtonUp += (s, e) =>
+                        {
+                            e.Handled = true;
+                            CloseFlashFromCornerX(capturedWindow);
+                        };
+                        content = new Grid
+                        {
+                            Width = shellW,
+                            Height = shellH,
+                            Background = System.Windows.Media.Brushes.Transparent,
+                            Children = { content, closeX },
+                        };
+                    }
+
                     // Shell padding is invisible: the window itself must not paint an opaque background.
                     window.Background = System.Windows.Media.Brushes.Transparent;
                     window.Content = content;
@@ -1309,12 +1338,16 @@ namespace ConditioningControlPanel.Services
 
                     // Click handler + Alt+Tab hiding are wired ONCE in AcquireFlashWindow (the
                     // handler reads IsClickable per spawn) so recycled windows never stack handlers.
-                    window.Cursor = settings.FlashClickable
-                        ? System.Windows.Input.Cursors.Hand
-                        : System.Windows.Input.Cursors.No;
+                    window.Cursor = darkPatterns
+                        ? System.Windows.Input.Cursors.Arrow
+                        : settings.FlashClickable
+                            ? System.Windows.Input.Cursors.Hand
+                            : System.Windows.Input.Cursors.No;
 
                     window.Show();
-                    ApplyClickability(window, settings.FlashClickable);
+                    // Dark Patterns flashes must be OS-clickable so the corner ✕ works, even when the
+                    // normal click-to-dismiss (FlashClickable) is off.
+                    ApplyClickability(window, settings.FlashClickable || darkPatterns);
                     if (!suppressHaptic)
                         _ = App.Haptics?.FlashDecayVibeAsync();
 
@@ -1391,6 +1424,63 @@ namespace ConditioningControlPanel.Services
                     TriggerMultiplication(maxHydra, currentCount, window.OriginalLifetimeMs, remainingMs, window.HydraGeneration, window.Monitor);
                 }
             }
+        }
+
+        /// <summary>
+        /// Dark Patterns close path for the tiny corner ✕. Same teardown as a normal dismiss but it
+        /// deliberately does NOT trigger hydra multiplication — hunting the ✕ should end the flash,
+        /// not breed more of them.
+        /// </summary>
+        private void CloseFlashFromCornerX(FlashWindow window)
+        {
+            try { window.LifetimeCts?.Cancel(); } catch { }
+
+            lock (_lockObj)
+            {
+                _activeWindows.Remove(window);
+            }
+
+            SafeCloseFlashWindow(window);
+            FlashClicked?.Invoke(this, EventArgs.Empty);
+            _ = App.Haptics?.FlashClickVibeAsync();
+        }
+
+        /// <summary>
+        /// Builds the tiny ✕ close affordance for a Dark Patterns flash, dropped into a random corner
+        /// of the shell so the user has to find it. ~14px, semi-opaque so it never fully hides on the
+        /// image. Returns a Border (its MouseLeftButtonUp is wired by the caller).
+        /// </summary>
+        private System.Windows.Controls.Border BuildFlashCornerCloseX()
+        {
+            var horiz = _random.Next(2) == 0
+                ? System.Windows.HorizontalAlignment.Left
+                : System.Windows.HorizontalAlignment.Right;
+            var vert = _random.Next(2) == 0
+                ? System.Windows.VerticalAlignment.Top
+                : System.Windows.VerticalAlignment.Bottom;
+
+            return new System.Windows.Controls.Border
+            {
+                Width = 14,
+                Height = 14,
+                CornerRadius = new System.Windows.CornerRadius(3),
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0x10, 0x10, 0x10)),
+                BorderBrush = System.Windows.Media.Brushes.White,
+                BorderThickness = new System.Windows.Thickness(1),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                HorizontalAlignment = horiz,
+                VerticalAlignment = vert,
+                Margin = new System.Windows.Thickness(3),
+                Child = new System.Windows.Controls.TextBlock
+                {
+                    Text = "×", // ×
+                    Foreground = System.Windows.Media.Brushes.White,
+                    FontSize = 11,
+                    FontWeight = System.Windows.FontWeights.Bold,
+                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                    VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                },
+            };
         }
 
         /// <summary>

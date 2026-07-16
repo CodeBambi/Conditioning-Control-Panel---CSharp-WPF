@@ -37,11 +37,14 @@ namespace ConditioningControlPanel
             // Don't allow manual start/stop while remote controller is connected
             if (App.RemoteControl?.ControllerConnected == true) return;
 
+            // Dark Patterns: stopping the engine gets a confirmshaming nag rather than a hard block.
+            // Insisting (Yes) still stops — this is friction, not a cage.
             if (_isRunning && App.Lockdown?.IsActive == true)
             {
-                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"), Loc.Get("title_lockdown"),
-                    MessageBoxButton.OK, MessageBoxImage.Stop);
-                return;
+                var stop = MessageBox.Show(
+                    "Stopping already? You were doing so well. Are you sure you want to give up now?",
+                    "Dark Patterns", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+                if (stop != MessageBoxResult.Yes) return;
             }
 
             if (_isRunning)

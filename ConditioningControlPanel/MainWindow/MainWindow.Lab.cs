@@ -52,15 +52,17 @@ namespace ConditioningControlPanel
 
             var duration = TimeSpan.FromMinutes(minutes);
 
-            // Show double warning with clear consequences
-            var confirmed = WarningDialog.ShowDoubleWarning(this, "Lockdown Mode",
-                "- You will be LOCKED IN for " + minutes + " minutes\n" +
-                "- Strict Lock will be FORCED ON\n" +
-                "- Panic Key will be DISABLED\n" +
-                "- Alt+F4, Alt+Tab, Windows key, and Escape will be BLOCKED\n" +
-                "- You CANNOT close or minimize the application\n" +
-                "- The only escape is waiting for the timer to expire\n" +
-                "  (or Ctrl+Alt+Del → Task Manager as a safety valve)");
+            // Show double warning describing the friction (NOT a lockout — every escape still works).
+            var confirmed = WarningDialog.ShowDoubleWarning(this, "Dark Patterns",
+                "For the next " + minutes + " minutes, the app fights dirty to keep you here:\n" +
+                "- The close ✕ jumps to the far left and swaps with maximize, so you misclick\n" +
+                "- The Exit button shrinks to a tiny target that runs from your cursor\n" +
+                "- Flashes stop closing themselves; only a tiny ✕ hidden in a random corner dismisses one\n" +
+                "- The panic key makes you claw through a manipulative confirm chain first\n" +
+                "- The countdown may lie to you\n" +
+                "\n" +
+                "It is all friction, never a real cage: Alt+F4, Task Manager, the panic chain and\n" +
+                "typing \"let me out\" on the timer all still get you out whenever you truly mean it.");
 
             if (!confirmed) return;
 
@@ -336,23 +338,15 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Enable system key suppression on the keyboard hook
-                    if (_keyboardHook != null)
-                        _keyboardHook.SuppressSystemKeys = true;
+                    // NOTE (Dark Patterns): unlike the old hard lockout, we deliberately do NOT enable
+                    // GlobalKeyboardHook.SuppressSystemKeys and do NOT gray out the Strict Lock / No
+                    // Panic toggles. Alt+F4, the Windows key and Task Manager all stay live, and the
+                    // panic key still works (through the anti-panic confirm chain). All the friction is
+                    // the in-app chrome trickery below — never an OS-level lockout.
 
-                    // Gray out strict lock and panic key toggles
-                    if (SettingsTab.ChkStrictLock != null)
-                    {
-                        SettingsTab.ChkStrictLock.IsEnabled = false;
-                        SettingsTab.ChkStrictLock.Opacity = 0.4;
-                        SettingsTab.ChkStrictLock.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
-                    }
-                    if (SettingsTab.ChkNoPanic != null)
-                    {
-                        SettingsTab.ChkNoPanic.IsEnabled = false;
-                        SettingsTab.ChkNoPanic.Opacity = 0.4;
-                        SettingsTab.ChkNoPanic.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
-                    }
+                    // Apply the window-chrome dark patterns (X to the left, close/maximize swapped,
+                    // ludicrously tiny + fleeing Exit, Save/Exit positions swapped).
+                    ApplyDarkPatternChrome();
 
                     // Swap UI panels
                     if (LockdownTab.LockdownSetupPanel != null) LockdownTab.LockdownSetupPanel.Visibility = Visibility.Collapsed;
@@ -387,23 +381,8 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Disable system key suppression
-                    if (_keyboardHook != null)
-                        _keyboardHook.SuppressSystemKeys = false;
-
-                    // Restore strict lock and panic key toggles
-                    if (SettingsTab.ChkStrictLock != null)
-                    {
-                        SettingsTab.ChkStrictLock.IsEnabled = true;
-                        SettingsTab.ChkStrictLock.Opacity = 1.0;
-                        SettingsTab.ChkStrictLock.ToolTip = null;
-                    }
-                    if (SettingsTab.ChkNoPanic != null)
-                    {
-                        SettingsTab.ChkNoPanic.IsEnabled = true;
-                        SettingsTab.ChkNoPanic.Opacity = 1.0;
-                        SettingsTab.ChkNoPanic.ToolTip = null;
-                    }
+                    // Undo the chrome trickery — put the caption buttons, Exit and Save back exactly.
+                    RestoreDarkPatternChrome();
 
                     // Swap UI panels back
                     if (LockdownTab.LockdownSetupPanel != null) LockdownTab.LockdownSetupPanel.Visibility = Visibility.Visible;
@@ -429,14 +408,155 @@ namespace ConditioningControlPanel
         {
             Dispatcher.BeginInvoke(() =>
             {
-                if (LockdownTab.TxtLockdownTimer != null)
-                {
-                    if (remaining.TotalHours >= 1)
-                        LockdownTab.TxtLockdownTimer.Text = remaining.ToString(@"h\:mm\:ss");
-                    else
-                        LockdownTab.TxtLockdownTimer.Text = remaining.ToString(@"mm\:ss");
-                }
+                if (LockdownTab.TxtLockdownTimer == null) return;
+
+                // Dark pattern: the DISPLAYED countdown occasionally lies — it stalls on the last
+                // value or even ticks a second or two upward, so watching the clock feels futile. The
+                // REAL LockdownService timer is untouched, so the mode still ends exactly on schedule
+                // and every genuine escape ("let me out", Alt+F4, the anti-panic chain) still works.
+                var shown = remaining;
+                int roll = _darkPatternRng.Next(4);
+                if (roll == 0)
+                    shown = _lastShownRemaining; // stall on the previous value
+                else if (roll == 1)
+                    shown = remaining + TimeSpan.FromSeconds(_darkPatternRng.Next(1, 4)); // creep upward
+                _lastShownRemaining = shown;
+
+                if (shown.TotalHours >= 1)
+                    LockdownTab.TxtLockdownTimer.Text = shown.ToString(@"h\:mm\:ss");
+                else
+                    LockdownTab.TxtLockdownTimer.Text = shown.ToString(@"mm\:ss");
             });
+        }
+
+        // ---- Dark Patterns chrome trickery ----
+
+        private static readonly Random _darkPatternRng = new Random();
+        private TimeSpan _lastShownRemaining = TimeSpan.Zero;
+
+        // Saved original chrome state, restored verbatim on deactivate.
+        private double _preExitWidth, _preExitHeight, _preExitFontSize;
+        private Thickness _preExitMargin;
+        private int _preExitColumn, _preSaveColumn;
+        private MouseEventHandler? _fleeingExitHandler;
+        private TranslateTransform? _exitFleeTransform;
+        private Transform? _preExitTransform;
+        private int _exitFleeRemaining;
+
+        /// <summary>
+        /// Applies the window-chrome dark patterns while the mode is active: moves the ✕ close button
+        /// to the far left of the title bar (which, as a bonus, drops Maximize into the habitual
+        /// close position so the muscle-memory click maximizes instead), shrinks the bottom Exit
+        /// button to an absurdly tiny target that flees the cursor, and swaps the Save / Exit
+        /// positions. All reversible via <see cref="RestoreDarkPatternChrome"/>. Purely cosmetic —
+        /// every button still works; it's just obnoxious to hit.
+        /// </summary>
+        private void ApplyDarkPatternChrome()
+        {
+            try
+            {
+                // 1) Move ✕ to the far left. Reparent BtnClose out of the right caption panel into the
+                //    left title panel at index 0. The rightmost caption button is now Maximize, sitting
+                //    exactly where the eye/muscle-memory expects Close — instant misclick bait.
+                if (BtnClose != null && CaptionButtonsPanel != null && TitleLeftPanel != null
+                    && CaptionButtonsPanel.Children.Contains(BtnClose))
+                {
+                    CaptionButtonsPanel.Children.Remove(BtnClose);
+                    TitleLeftPanel.Children.Insert(0, BtnClose);
+                }
+
+                // 2) Nerf the Exit button — smaller than normal, but still a real, clickable target
+                //    (it dodges rather than shrinking into oblivion).
+                if (BtnExitBottom != null)
+                {
+                    _preExitWidth = BtnExitBottom.Width;
+                    _preExitHeight = BtnExitBottom.Height;
+                    _preExitFontSize = BtnExitBottom.FontSize;
+                    _preExitMargin = BtnExitBottom.Margin;
+                    _preExitTransform = BtnExitBottom.RenderTransform;
+
+                    BtnExitBottom.Height = 30;
+                    BtnExitBottom.FontSize = 11;
+                    BtnExitBottom.Margin = new Thickness(0);
+                    BtnExitBottom.VerticalAlignment = VerticalAlignment.Center;
+
+                    // 3) Make it flee a FINITE number of times (2-5), then give up and settle back home
+                    //    so it's actually clickable. Each time the cursor catches it, it jumps once and
+                    //    decrements; when the budget hits zero it snaps to its layout spot and stays.
+                    _exitFleeRemaining = _darkPatternRng.Next(2, 6); // 2..5 inclusive
+                    _exitFleeTransform = new TranslateTransform(0, 0);
+                    BtnExitBottom.RenderTransform = _exitFleeTransform;
+                    _fleeingExitHandler = (_, _) =>
+                    {
+                        if (_exitFleeTransform == null) return;
+                        if (_exitFleeRemaining <= 0)
+                        {
+                            // Given up — settle back to its real position so the click can land.
+                            _exitFleeTransform.X = 0;
+                            _exitFleeTransform.Y = 0;
+                            return;
+                        }
+                        _exitFleeRemaining--;
+                        _exitFleeTransform.X = _darkPatternRng.Next(-120, 121);
+                        _exitFleeTransform.Y = _darkPatternRng.Next(-24, 25);
+                    };
+                    BtnExitBottom.MouseEnter += _fleeingExitHandler;
+                }
+
+                // 4) Swap Save <-> Exit positions.
+                if (BtnSaveBottom != null && BtnExitBottom != null)
+                {
+                    _preSaveColumn = Grid.GetColumn(BtnSaveBottom);
+                    _preExitColumn = Grid.GetColumn(BtnExitBottom);
+                    Grid.SetColumn(BtnSaveBottom, _preExitColumn);
+                    Grid.SetColumn(BtnExitBottom, _preSaveColumn);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to apply Dark Patterns chrome");
+            }
+        }
+
+        private void RestoreDarkPatternChrome()
+        {
+            try
+            {
+                // 1) Put ✕ back on the right caption panel (restore original order: last child).
+                if (BtnClose != null && CaptionButtonsPanel != null && TitleLeftPanel != null
+                    && TitleLeftPanel.Children.Contains(BtnClose))
+                {
+                    TitleLeftPanel.Children.Remove(BtnClose);
+                    CaptionButtonsPanel.Children.Add(BtnClose);
+                }
+
+                // 2/3) Restore the Exit button size + stop it fleeing.
+                if (BtnExitBottom != null)
+                {
+                    if (_fleeingExitHandler != null)
+                    {
+                        BtnExitBottom.MouseEnter -= _fleeingExitHandler;
+                        _fleeingExitHandler = null;
+                    }
+                    _exitFleeTransform = null;
+                    BtnExitBottom.RenderTransform = _preExitTransform ?? Transform.Identity;
+                    BtnExitBottom.Width = _preExitWidth;
+                    BtnExitBottom.Height = _preExitHeight;
+                    BtnExitBottom.FontSize = _preExitFontSize;
+                    BtnExitBottom.Margin = _preExitMargin;
+                }
+
+                // 4) Swap Save <-> Exit columns back.
+                if (BtnSaveBottom != null && BtnExitBottom != null)
+                {
+                    Grid.SetColumn(BtnSaveBottom, _preSaveColumn);
+                    Grid.SetColumn(BtnExitBottom, _preExitColumn);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to restore Dark Patterns chrome");
+            }
         }
 
         internal void TxtLockdownTimer_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)

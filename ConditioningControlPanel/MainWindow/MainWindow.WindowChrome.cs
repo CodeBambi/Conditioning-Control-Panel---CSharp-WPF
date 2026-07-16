@@ -122,12 +122,9 @@ namespace ConditioningControlPanel
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
-            // Lockdown mode: block all close attempts
-            if (App.Lockdown?.IsActive == true)
-            {
-                e.Cancel = true;
-                return;
-            }
+            // Dark Patterns intentionally does NOT block close here (the old hard lockout did). The
+            // friction lives in the tiny/fleeing Exit button and the anti-panic confirm chain; the X
+            // still just minimizes-to-tray as always, and Alt+F4 remains a real, always-working exit.
 
             // Closing (real exit OR minimize-to-tray) always ends a Chaos run so it
             // can't keep spawning bubbles / pinning the app alive behind the scenes.

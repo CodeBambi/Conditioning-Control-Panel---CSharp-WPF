@@ -714,9 +714,9 @@ namespace ConditioningControlPanel
 
         private void OnGlobalKeyPressed(Key key)
         {
-            // Lockdown mode: block all key handling (panic key, etc.)
-            if (App.Lockdown?.IsActive == true)
-                return;
+            // NOTE (Dark Patterns): we intentionally do NOT swallow the panic key here (the old hard
+            // lockout did). The key must reach HandlePanicKeyPress so the anti-panic confirm chain can
+            // run — that chain IS the friction, and it always exposes a real escape.
 
             // Track Alt+Tab for achievement (Player 2 Disconnected)
             if (key == Key.Tab && (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt)))
@@ -770,6 +770,16 @@ namespace ConditioningControlPanel
             // Stop standalone Lab minigames first — they run independently of
             // the main engine, so the rest of the panic flow won't touch them.
             App.BlinkTrainer?.Stop();
+
+            // Dark Patterns: the panic key becomes an "anti-panic" — the user must claw through a
+            // deliberately manipulative confirmshaming chain before the real stop fires. Every step
+            // exposes a working (if tiny/greyed) escape, so this is friction, not a lockout. If the
+            // user bails out of the chain, we do nothing (no stop) and let them try again. Only a
+            // completed chain falls through to the genuine panic logic below.
+            if (App.Lockdown?.IsActive == true)
+            {
+                if (!RunAntiPanicChain()) return;
+            }
 
             var now = DateTime.Now;
             var timeSinceLastPress = (now - _lastPanicTime).TotalMilliseconds;
@@ -876,6 +886,48 @@ namespace ConditioningControlPanel
                 _browser?.Dispose();
                 Application.Current.Shutdown();
             }
+        }
+
+        private static readonly Random _antiPanicRng = new Random();
+
+        /// <summary>
+        /// Runs the Dark Patterns "anti-panic" confirm chain. Shows a sequence of manipulative
+        /// confirmshaming dialogs; the user must pick the genuine (tiny, greyed) escape link a fixed
+        /// number of times to get through. Picking the big decoy button never advances but never
+        /// resets either — so a careful reader always escapes in exactly <c>required</c> clicks.
+        /// Returns true if the chain completed (caller should proceed with the real panic), or false
+        /// if the user abandoned it (caller should do nothing). Bailing out never quits or traps —
+        /// Alt+F4, the tiny Exit button and the "let me out" phrase all remain independent escapes.
+        /// </summary>
+        private bool RunAntiPanicChain()
+        {
+            const int required = 4;
+            int progress = 0;
+            int guard = 0; // hard cap so a stuck loop can never hang the UI thread forever
+
+            while (progress < required && guard++ < 40)
+            {
+                var dlg = new DarkPatternPanicDialog(this, progress + 1, required, _antiPanicRng);
+                bool? ok;
+                try
+                {
+                    ok = dlg.ShowDialog();
+                }
+                catch (Exception ex)
+                {
+                    // If the dialog somehow fails, fail OPEN (let the panic through) — a broken
+                    // friction dialog must never stand between the user and stopping.
+                    App.Logger?.Warning(ex, "Anti-panic dialog failed; allowing panic through");
+                    return true;
+                }
+
+                if (ok != true) return false; // dialog closed (X / Alt+F4 / Esc) → abandon, no stop
+
+                if (dlg.Choice == PanicChoice.RealStop) progress++;
+                // Trap: intentionally no change to progress — try again on the next (nastier) dialog.
+            }
+
+            return true;
         }
 
         /// <summary>

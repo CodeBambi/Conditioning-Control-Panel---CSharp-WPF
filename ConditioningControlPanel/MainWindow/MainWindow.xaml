@@ -131,7 +131,7 @@
                 </Grid.ColumnDefinitions>
                 
                 <!-- Icon and Title -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                <StackPanel x:Name="TitleLeftPanel" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
                     <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
                            Source="{Binding Source='💗', Converter={StaticResource EmojiToImageSource}}"/>
                     <TextBlock x:Name="TxtTitleBarVersion" Text="{loc:Str app_title}" Foreground="White" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
@@ -220,7 +220,7 @@
                 </StackPanel>
 
                 <!-- Window Control Buttons -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <StackPanel x:Name="CaptionButtonsPanel" Grid.Column="2" Orientation="Horizontal">
                     <Button x:Name="BtnTitleBarBugReport" Content="🐛" Width="46" Height="36"
                             Click="BtnReportBug_Click" Style="{StaticResource WindowControlButton}"
                             ToolTip="{loc:Str btn_report_bug}" FontSize="14"/>
@@ -1191,10 +1191,10 @@
                 </Button>
 
                 <!-- Save (col 5) / Exit (col 6); col 4 is the gap -->
-                <Button Grid.Column="5" Content="{loc:Str btn_save_2}" Style="{StaticResource PinkButton}"
+                <Button x:Name="BtnSaveBottom" Grid.Column="5" Content="{loc:Str btn_save_2}" Style="{StaticResource PinkButton}"
                         Height="50" FontSize="16" Margin="0,0,10,0" Click="BtnSave_Click"
                         ToolTip="{loc:Str tooltip_save_all_settings_to_disk}"/>
-                <Button Grid.Column="6" Content="{loc:Str btn_exit}" Height="50" FontSize="16" Click="BtnExit_Click"
+                <Button x:Name="BtnExitBottom" Grid.Column="6" Content="{loc:Str btn_exit}" Height="50" FontSize="16" Click="BtnExit_Click"
                         ToolTip="{loc:Str tooltip_exit_the_application_completely}">
                     <Button.Style>
                         <Style TargetType="Button">

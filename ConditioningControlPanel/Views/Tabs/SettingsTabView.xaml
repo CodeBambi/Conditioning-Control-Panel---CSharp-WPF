@@ -144,7 +144,7 @@
                          full-size 24px image on top, then the timer +/- and Lock-in button below. -->
                     <Border Margin="0,0,0,5" Background="{DynamicResource AccentTintedBgBrush}"
                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9" Padding="2,5"
-                            ToolTip="Lockdown — locks you in for the set time (panic key disabled)">
+                            ToolTip="Dark Patterns - the app fights dirty to keep you here for the set time (every exit still works)">
                         <StackPanel>
                             <Grid Width="24" Height="24" HorizontalAlignment="Center">
                                 <Border CornerRadius="6" ClipToBounds="True">
@@ -152,7 +152,7 @@
                                            Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                 </Border>
                             </Grid>
-                            <TextBlock Text="Lockdown" FontSize="9" Foreground="White" TextAlignment="Center" Margin="0,2,0,0"/>
+                            <TextBlock Text="Dark Patterns" FontSize="9" Foreground="White" TextAlignment="Center" Margin="0,2,0,0"/>
                             <Grid x:Name="LockdownSetRow" x:FieldModifier="internal" Margin="0,3,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -167,7 +167,7 @@
                                         Content="＋" FontSize="11" Width="18" Height="18" Click="BtnLockdownPlus_Click"/>
                             </Grid>
                             <Button x:Name="BtnLockdownGo" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
-                                    Content="Lock in" FontSize="9" Height="16" Margin="0,3,0,0" Click="BtnLockdownGo_Click"/>
+                                    Content="Engage" FontSize="9" Height="16" Margin="0,3,0,0" Click="BtnLockdownGo_Click"/>
                             <TextBlock x:Name="TxtLockdownCountdown" x:FieldModifier="internal" Visibility="Collapsed"
                                        FontSize="12" FontWeight="Bold" Foreground="#FF6B6B" TextAlignment="Center" Margin="0,2,0,0"/>
                         </StackPanel>

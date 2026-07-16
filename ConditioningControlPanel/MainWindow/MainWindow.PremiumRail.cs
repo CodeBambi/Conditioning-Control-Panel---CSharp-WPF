@@ -201,14 +201,16 @@ namespace ConditioningControlPanel
         {
             if (App.Lockdown == null || App.Lockdown.IsActive) return;
             var minutes = _railLockdownMinutes;
-            var confirmed = WarningDialog.ShowDoubleWarning(this, "Lockdown Mode",
-                "- You will be LOCKED IN for " + minutes + " minutes\n" +
-                "- Strict Lock will be FORCED ON\n" +
-                "- Panic Key will be DISABLED\n" +
-                "- Alt+F4, Alt+Tab, Windows key, and Escape will be BLOCKED\n" +
-                "- You CANNOT close or minimize the application\n" +
-                "- The only escape is waiting for the timer to expire\n" +
-                "  (or Ctrl+Alt+Del → Task Manager as a safety valve)");
+            var confirmed = WarningDialog.ShowDoubleWarning(this, "Dark Patterns",
+                "For the next " + minutes + " minutes, the app fights dirty to keep you here:\n" +
+                "- The close ✕ jumps to the far left and swaps with maximize, so you misclick\n" +
+                "- The Exit button shrinks to a tiny target that runs from your cursor\n" +
+                "- Flashes stop closing themselves; only a tiny ✕ hidden in a random corner dismisses one\n" +
+                "- The panic key makes you claw through a manipulative confirm chain first\n" +
+                "- The countdown may lie to you\n" +
+                "\n" +
+                "It is all friction, never a real cage: Alt+F4, Task Manager, the panic chain and\n" +
+                "typing \"let me out\" on the timer all still get you out whenever you truly mean it.");
             if (!confirmed) return;
             App.Lockdown.Activate(TimeSpan.FromMinutes(minutes));
         }
