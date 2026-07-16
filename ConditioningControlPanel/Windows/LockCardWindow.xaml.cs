@@ -62,9 +62,14 @@ namespace ConditioningControlPanel
 
         // Win32 focus-stealing support
         private static readonly IntPtr HWND_TOPMOST = new(-1);
+        private static readonly IntPtr HWND_NOTOPMOST = new(-2);
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_SHOWWINDOW = 0x0040;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_HIDEWINDOW = 0x0080;
+        private const uint SWP_ASYNCWINDOWPOS = 0x4000;
+        private const uint LWA_ALPHA = 0x0002;
 
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
@@ -72,7 +77,27 @@ namespace ConditioningControlPanel
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+        [DllImport("user32.dll")]
+        private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
+
         private IntPtr _hwnd;
+
+        // ── Dead-man's switch ───────────────────────────────────────────────────
+        // Every escape hatch this card has (Esc, panic/ForceCloseAll, the completion close timer) runs
+        // on the UI dispatcher. If the UI thread wedges while a card is up, the card stays behind as a
+        // frozen fullscreen HWND_TOPMOST window that even Task Manager opens BEHIND, and the user's only
+        // visible way out is a reboot. A background thread heartbeats the dispatcher while any card is
+        // visible; on a sustained wedge it force-drops the cover at the Win32 level (which needs nothing
+        // from the hung thread), and if the app still hasn't recovered long after that it terminates the
+        // process - a dead app frees the screen, a wedged one holds it hostage.
+        private const int WATCHDOG_WEDGE_MS = 10_000;     // unanswered ping ⇒ UI thread considered wedged
+        private const int WATCHDOG_FAILFAST_MS = 40_000;  // unanswered ping ⇒ kill the process
+        private static readonly object _watchdogLock = new();
+        private static System.Threading.Thread? _watchdogThread;
+        private static IntPtr[] _watchdogHwnds = Array.Empty<IntPtr>();
+        private static volatile int _watchdogOpenCount;
+        private static volatile bool _watchdogPongPending;
+        private static volatile bool _watchdogDropped;
 
 
 
@@ -824,6 +849,8 @@ namespace ConditioningControlPanel
                 try { window.DismissToPool(); } catch { }
             }
 
+            UpdateWatchdogSnapshot();   // visible set is now empty - stand the dead-man's switch down
+
             // Notify InteractionQueue that lock card is complete (triggers queued items).
             // Guarded on the slot actually being ours: engine stop calls this as blanket
             // cleanup, and an unconditional Complete(LockCard) here cleared whatever WAS
@@ -864,6 +891,154 @@ namespace ConditioningControlPanel
                 // deadlock-prone hot path.
                 try { _isCompleted = true; Close(); } catch { }
             }
+        }
+
+        // ── Dead-man's switch implementation ───────────────────────────────────
+
+        // Refresh the watchdog's thread-safe view of the visible set. UI thread only (it reads
+        // _allWindows); call whenever the visible set changes.
+        private static void UpdateWatchdogSnapshot()
+        {
+            lock (_watchdogLock)
+            {
+                var hwnds = new List<IntPtr>(_allWindows.Count);
+                foreach (var w in _allWindows)
+                    if (w._hwnd != IntPtr.Zero) hwnds.Add(w._hwnd);
+                _watchdogHwnds = hwnds.ToArray();
+                _watchdogOpenCount = hwnds.Count;
+                if (_watchdogOpenCount > 0 && (_watchdogThread == null || !_watchdogThread.IsAlive))
+                {
+                    _watchdogThread = new System.Threading.Thread(WatchdogLoop)
+                    {
+                        IsBackground = true,
+                        Name = "LockCardDeadManSwitch"
+                    };
+                    _watchdogThread.Start();
+                }
+            }
+        }
+
+        private static void WatchdogLoop()
+        {
+            long pingSentAt = 0;
+            while (true)
+            {
+                System.Threading.Thread.Sleep(1000);
+
+                if (_watchdogOpenCount == 0)
+                {
+                    // No card up: idle. Reset so a stale ping from a previous card can't count as a wedge.
+                    _watchdogPongPending = false;
+                    _watchdogDropped = false;
+                    continue;
+                }
+
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+                if (!_watchdogPongPending)
+                {
+                    // Previous ping was answered ⇒ the UI thread is (or is back) alive.
+                    _watchdogDropped = false;
+                    _watchdogPongPending = true;
+                    pingSentAt = Environment.TickCount64;
+                    try
+                    {
+                        dispatcher.BeginInvoke(new Action(() => _watchdogPongPending = false),
+                            DispatcherPriority.Input);
+                    }
+                    catch { _watchdogPongPending = false; }
+                    continue;
+                }
+
+                var stalled = Environment.TickCount64 - pingSentAt;
+                if (stalled < WATCHDOG_WEDGE_MS) continue;
+
+                if (!_watchdogDropped)
+                {
+                    _watchdogDropped = true;
+                    IntPtr[] hwnds;
+                    lock (_watchdogLock) hwnds = _watchdogHwnds;
+                    App.Logger?.Warning(
+                        "LockCardWindow: UI thread unresponsive for {Ms}ms with {N} lock card(s) covering the screen - force-dropping the topmost cover",
+                        stalled, hwnds.Length);
+                    // Sacrificial thread: if any user32 call unexpectedly blocks on the hung owner
+                    // thread, the watchdog itself must stay alive to reach the fail-fast rung.
+                    new System.Threading.Thread(() => EmergencyDrop(hwnds)) { IsBackground = true }.Start();
+                    // Queued at Send so it runs the moment the dispatcher recovers, before the pong:
+                    // the dropped windows are unusable (see EmergencyDrop) and must be torn down.
+                    try { dispatcher.BeginInvoke(new Action(EmergencyRecoveryCleanup), DispatcherPriority.Send); }
+                    catch { }
+                }
+                else if (stalled >= WATCHDOG_FAILFAST_MS && _watchdogOpenCount > 0)
+                {
+                    App.Logger?.Fatal(
+                        "LockCardWindow: UI thread still wedged {Ms}ms after the emergency drop - terminating so the screen is freed",
+                        stalled);
+                    System.Threading.Thread.Sleep(500);   // let the file sink write the line above
+                    Environment.FailFast(
+                        "LockCardWindow dead-man's switch: UI thread wedged with a fullscreen topmost lock card up");
+                }
+            }
+        }
+
+        // Off-UI-thread removal of the fullscreen cover. Two rungs, neither needs the hung thread to run:
+        // the SWP_ASYNCWINDOWPOS de-topmost+hide is POSTED to the owner thread (applies the instant it
+        // recovers), while SetLayeredWindowAttributes takes effect immediately at the compositor level -
+        // alpha 0 makes the frozen cover invisible AND click-through (layered windows don't hit-test
+        // transparent pixels), so Task Manager is visible and usable again. Side effect: SLWA switches
+        // the window out of UpdateLayeredWindow mode, so WPF can never render it again - recovery must
+        // Close() these windows, never pool them.
+        private static void EmergencyDrop(IntPtr[] hwnds)
+        {
+            foreach (var h in hwnds)
+            {
+                try
+                {
+                    SetWindowPos(h, HWND_NOTOPMOST, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_HIDEWINDOW | SWP_ASYNCWINDOWPOS);
+                    SetLayeredWindowAttributes(h, 0, 0, LWA_ALPHA);
+                }
+                catch { }
+            }
+            App.Logger?.Information("LockCardWindow: emergency drop applied to {N} window(s)", hwnds.Length);
+        }
+
+        // Runs on the dispatcher once it recovers from a wedge that triggered an emergency drop.
+        private static void EmergencyRecoveryCleanup()
+        {
+            try
+            {
+                _deferTimer?.Stop();
+                _deferTimer = null;
+                _deferAttempts = 0;
+
+                var windows = new List<LockCardWindow>(_allWindows);
+                _allWindows.Clear();
+                App.Logger?.Warning(
+                    "LockCardWindow: UI thread recovered after emergency drop - closing {N} dropped card(s) (not poolable: SLWA broke their layered rendering)",
+                    windows.Count);
+                foreach (var w in windows)
+                {
+                    try
+                    {
+                        w._isCompleted = true;   // let OnClosing through even in strict mode
+                        w._voiceMode = false;
+                        w.StopVoiceSolve();
+                        w._closeTimer?.Stop();
+                        w._closeTimer = null;
+                        w.Close();
+                    }
+                    catch { }
+                }
+
+                if (windows.Count > 0 &&
+                    App.InteractionQueue?.CurrentInteraction == Services.InteractionQueueService.InteractionType.LockCard)
+                {
+                    App.InteractionQueue.Complete(Services.InteractionQueueService.InteractionType.LockCard);
+                }
+            }
+            finally { UpdateWatchdogSnapshot(); }
         }
 
         // Take a window from the keep-alive pool, or realize a new one on a pool miss (the first card of a
@@ -910,6 +1085,7 @@ namespace ConditioningControlPanel
             _voiceMode = false;
             StopVoiceSolve();
             _allWindows.Remove(this);
+            UpdateWatchdogSnapshot();
             // If this window is being genuinely closed (app shutdown, Alt+F4), make sure it can't be
             // handed back out of the keep-alive pool as a dead shell.
             RemoveFromPool(this);
@@ -1025,6 +1201,10 @@ namespace ConditioningControlPanel
             // Focus primary window
             primaryWindow?.Activate();
             primaryWindow?.TxtInput.Focus();
+
+            // Arm the dead-man's switch for this visible set (hwnds are valid: OnSourceInitialized
+            // runs synchronously inside the first Show()).
+            UpdateWatchdogSnapshot();
         }
     }
 }
