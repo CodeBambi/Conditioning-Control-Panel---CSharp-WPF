@@ -62,6 +62,17 @@ public class OverlayService : IDisposable
     private double? _rampSpiralOpacity;
     private double? _rampBrainDrainOpacity;
 
+    // #573: a timed overlay fired while the overlay is ALREADY showing (pink/spiral bubble pop
+    // during a base overlay or Deeper band) used to be swallowed whole by the ad-hoc shows'
+    // early-return. Instead we park a temporary intensity bump in _rampXOpacity (so the 500ms
+    // settings-sync can't stomp it) and restore the previous owner when the last timed hold
+    // releases. _bumpPrevRampX remembers what was parked before the first bump (a band's hold,
+    // or null = settings-sync owns it).
+    private bool _bumpPinkActive;
+    private double? _bumpPrevRampPink;
+    private bool _bumpSpiralActive;
+    private double? _bumpPrevRampSpiral;
+
     // Unified overlay host (Settings.UnifiedOverlayHost, experimental): pink/spiral render as
     // compositor layers on the shared per-monitor Skia host instead of per-effect layered
     // windows. This service keeps ALL the opacity math (ramps, pulses, holds, settings sync)
@@ -70,8 +81,7 @@ public class OverlayService : IDisposable
     // rather than the flag so a mid-run flag flip can't strand a visible layer.
     private Compositor.PinkTintLayer? _pinkLayer;
     private Compositor.SpiralLayer? _spiralLayer;
-    private static bool UseCompositor =>
-        (App.CompositorForced || App.Settings?.Current?.UnifiedOverlayHost == true) && App.Compositor != null;
+    private static bool UseCompositor => App.CompositorEnabled;
     private Compositor.PinkTintLayer GetPinkLayer()
     {
         if (_pinkLayer == null)
@@ -590,9 +600,37 @@ public class OverlayService : IDisposable
             try
             {
                 // Mark the timed overlay in-flight so the reconcile loops leave it alone.
-                if (kind == "pink_filter") _timedPinkHolds++;
-                else if (kind == "spiral") _timedSpiralHolds++;
-                show();
+                if (kind == "pink_filter")
+                {
+                    _timedPinkHolds++;
+                    if (PinkShowing)
+                    {
+                        // #573: show() would early-return on an already-showing overlay, silently
+                        // swallowing the boost. Bump the live opacity instead (never downward) and
+                        // park it in the ramp hold so the settings-sync can't stomp it; the hide
+                        // timer restores the previous owner.
+                        if (!_bumpPinkActive) { _bumpPinkActive = true; _bumpPrevRampPink = _rampPinkOpacity; }
+                        double current = _rampPinkOpacity ?? (App.Settings?.Current?.PinkFilterOpacity ?? 0) / 100.0;
+                        double target = Math.Max(current, opacityPercent / 100.0);
+                        _rampPinkOpacity = target;
+                        ApplyPinkOpacityDirect(target);
+                    }
+                    else show();
+                }
+                else if (kind == "spiral")
+                {
+                    _timedSpiralHolds++;
+                    if (SpiralShowing)
+                    {
+                        if (!_bumpSpiralActive) { _bumpSpiralActive = true; _bumpPrevRampSpiral = _rampSpiralOpacity; }
+                        double current = _rampSpiralOpacity ?? (App.Settings?.Current?.SpiralOpacity ?? 0) / 100.0;
+                        double target = Math.Max(current, opacityPercent / 100.0);
+                        _rampSpiralOpacity = target;
+                        ApplySpiralOpacityDirect(target);
+                    }
+                    else show();
+                }
+                else show();
             }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlayTimed show: {E}", ex.Message); }
         };
@@ -614,12 +652,44 @@ public class OverlayService : IDisposable
                 if (kind == "pink_filter")
                 {
                     if (_timedPinkHolds > 0) _timedPinkHolds--;
-                    if (_timedPinkHolds == 0 && !settings.PinkFilterEnabled) hide();
+                    if (_timedPinkHolds == 0)
+                    {
+                        // Undo any #573 intensity bump: hand opacity back to the previous owner (a
+                        // band's parked hold, or the settings-sync). Only touch the ramp hold while
+                        // the overlay is still up — a Stop/panic in between already cleared the
+                        // holds, and re-parking a stale value would freeze a future overlay (#563).
+                        if (_bumpPinkActive)
+                        {
+                            _bumpPinkActive = false;
+                            if (PinkShowing)
+                            {
+                                _rampPinkOpacity = _bumpPrevRampPink;
+                                if (_rampPinkOpacity is double prevPink) ApplyPinkOpacityDirect(prevPink);
+                                else _lastAppliedPinkOpacity = -1; // settings-sync re-applies next tick
+                            }
+                            _bumpPrevRampPink = null;
+                        }
+                        if (!settings.PinkFilterEnabled) hide();
+                    }
                 }
                 else if (kind == "spiral")
                 {
                     if (_timedSpiralHolds > 0) _timedSpiralHolds--;
-                    if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) hide();
+                    if (_timedSpiralHolds == 0)
+                    {
+                        if (_bumpSpiralActive)
+                        {
+                            _bumpSpiralActive = false;
+                            if (SpiralShowing)
+                            {
+                                _rampSpiralOpacity = _bumpPrevRampSpiral;
+                                if (_rampSpiralOpacity is double prevSpiral) ApplySpiralOpacityDirect(prevSpiral);
+                                else _lastAppliedSpiralOpacity = -1; // settings-sync re-applies next tick
+                            }
+                            _bumpPrevRampSpiral = null;
+                        }
+                        if (!settings.SpiralEnabled) hide();
+                    }
                 }
                 else // braindrain: don't tear down the user's base Brain Drain when a timed effect ends
                 {
@@ -1287,15 +1357,35 @@ public class OverlayService : IDisposable
 
                 delay = TimeSpan.FromMilliseconds(frameDelayMs);
 
-                var maxFrames = Math.Min(frameCount, 120);
+                // Downscale + budget the frame cache (#572 "3.5 GB / laggy" report): frames were
+                // decoded at the GIF's native size with no cap — a fullscreen-sized custom spiral
+                // (SpiralPath) at 120 Bgra32 frames retains ~1 GB. The spiral is stretched over
+                // the whole screen at low opacity, so capping the long side loses nothing
+                // visually, and the byte budget bounds the worst case regardless of dimensions.
+                const int maxDimension = 1280;
+                const long maxCacheBytes = 300L * 1024 * 1024;
+
+                double frameScale = Math.Min(1.0, (double)maxDimension / Math.Max(gif.Width, gif.Height));
+                int frameW = Math.Max(1, (int)Math.Round(gif.Width * frameScale));
+                int frameH = Math.Max(1, (int)Math.Round(gif.Height * frameScale));
+                long bytesPerFrame = (long)frameW * frameH * 4;
+
+                var maxFrames = (int)Math.Min(Math.Min(frameCount, 120),
+                    Math.Max(8, maxCacheBytes / Math.Max(1, bytesPerFrame)));
                 var step = frameCount > maxFrames ? frameCount / maxFrames : 1;
+                if (maxFrames < Math.Min(frameCount, 120))
+                    App.Logger?.Warning("Spiral: frame cache capped at {Frames} frames ({W}x{H}) to stay under {MB} MB — a smaller spiral GIF will loop smoother",
+                        maxFrames, frameW, frameH, maxCacheBytes / (1024 * 1024));
 
                 for (int i = 0; i < frameCount && frames.Count < maxFrames; i += step)
                 {
                     gif.SelectActiveFrame(dimension, i);
-                    using var frameBitmap = new System.Drawing.Bitmap(gif.Width, gif.Height);
+                    using var frameBitmap = new System.Drawing.Bitmap(frameW, frameH);
                     using (var g = System.Drawing.Graphics.FromImage(frameBitmap))
-                        g.DrawImage(gif, 0, 0, gif.Width, gif.Height);
+                    {
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+                        g.DrawImage(gif, 0, 0, frameW, frameH);
+                    }
 
                     var bitmapSource = ConvertToBitmapSource(frameBitmap);
                     bitmapSource.Freeze();
@@ -2144,27 +2234,48 @@ public class OverlayService : IDisposable
             {
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
                 if (hwnd == IntPtr.Zero) continue;
-
-                int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
-
-                if (videoHwnd != IntPtr.Zero && hwnd != videoHwnd)
-                {
-                    // Insert directly below the active video window: stays topmost (above the
-                    // desktop and other apps) but under the video the user is meant to watch.
-                    SetWindowPos(hwnd, videoHwnd, 0, 0, 0, 0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    if (needsPin) anyRecovered = true;
-                }
-                else if (needsPin || force)
-                {
-                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    if (needsPin) anyRecovered = true;
-                }
+                ReassertOne(hwnd, videoHwnd, force, ref anyRecovered);
             }
         }
+
+        // Compositor hosts carry the SAME fullscreen effects when the unified renderer is on,
+        // but only assert HWND_TOPMOST on their show/topology edges — reconcile them exactly
+        // like the legacy windows or a later topmost raise (chaos chrome ~1/s, a mandatory
+        // video) buries every layer; worse, a host re-shown mid-video pins itself above the
+        // deliberately non-re-raising video window (#497's shape all over again).
+        try
+        {
+            if (App.Compositor is { } engine)
+                foreach (var hostHwnd in engine.GetVisibleHostHandles())
+                    ReassertOne(hostHwnd, videoHwnd, force, ref anyRecovered);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ReassertZOrder (compositor hosts) failed: {Error}", ex.Message);
+        }
         return anyRecovered;
+    }
+
+    /// <summary>One window's worth of ReassertZOrder: below the active video, else topmost.</summary>
+    private static void ReassertOne(IntPtr hwnd, IntPtr videoHwnd, bool force, ref bool anyRecovered)
+    {
+        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
+
+        if (videoHwnd != IntPtr.Zero && hwnd != videoHwnd)
+        {
+            // Insert directly below the active video window: stays topmost (above the
+            // desktop and other apps) but under the video the user is meant to watch.
+            SetWindowPos(hwnd, videoHwnd, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            if (needsPin) anyRecovered = true;
+        }
+        else if (needsPin || force)
+        {
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            if (needsPin) anyRecovered = true;
+        }
     }
 
     /// <summary>

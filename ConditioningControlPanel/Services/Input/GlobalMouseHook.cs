@@ -22,15 +22,27 @@ public sealed class GlobalMouseHook : IDisposable
 
     private IntPtr _hookId = IntPtr.Zero;
     private readonly LowLevelMouseProc _proc;
+    private readonly object _sync = new();
     private bool _isDisposed;
     // When a DOWN is swallowed, its matching UP must be swallowed too. An orphaned UP still
     // reaches the window under the cursor, and WPF surfaces wired to bare MouseLeftButtonUp
     // (the dashboard FeatureCards, preset/skill cards) treat it as a click - so popping a
     // hosted bubble over the dashboard also "clicked" the card beneath it. Right-clicks have
-    // the same shape via context menus, which open on right-UP. Hook-thread only: every
-    // low-level mouse message is delivered sequentially on this hook's message loop.
-    private bool _swallowNextLeftUp;
-    private bool _swallowNextRightUp;
+    // the same shape via context menus, which open on right-UP. Written on the hook's message
+    // loop; volatile because Dispose reads them to decide whether to defer the unhook.
+    private volatile bool _swallowNextLeftUp;
+    private volatile bool _swallowNextRightUp;
+
+    // Deferred dispose: Dispose() was called while a swallowed DOWN's matching UP was still in
+    // flight (a real click's UP trails its DOWN by 60-100ms, and owners release the hook the
+    // same instant the last swallowed pop lands). Unhooking immediately would discard the
+    // pending swallow and the orphaned UP would ghost-click whatever sits under the cursor -
+    // the exact bug the swallow flags above exist to prevent. So the hook stays installed just
+    // long enough to swallow that UP, with a failsafe in case it never arrives (button released
+    // outside the desktop, session teardown mid-press).
+    private volatile bool _unhookPending;
+    private System.Threading.Timer? _unhookFailsafe;
+    private const int UnhookFailsafeMs = 750;   // comfortably > any real click's DOWN->UP gap
 
     /// <summary>Right button pressed at this PHYSICAL-px screen point. Return true to swallow.</summary>
     public Func<Point, bool>? RightDown;
@@ -48,18 +60,26 @@ public sealed class GlobalMouseHook : IDisposable
 
     public void Start()
     {
-        if (_hookId != IntPtr.Zero) return;
-        using var curProcess = Process.GetCurrentProcess();
-        using var curModule = curProcess.MainModule!;
-        _hookId = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+        lock (_sync)
+        {
+            if (_isDisposed || _unhookPending || _hookId != IntPtr.Zero) return;
+            using var curProcess = Process.GetCurrentProcess();
+            using var curModule = curProcess.MainModule!;
+            _hookId = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+        }
         App.Logger?.Debug("Global mouse hook started");
     }
 
     public void Stop()
     {
-        if (_hookId == IntPtr.Zero) return;
-        UnhookWindowsHookEx(_hookId);
-        _hookId = IntPtr.Zero;
+        IntPtr hook;
+        lock (_sync)
+        {
+            hook = _hookId;
+            _hookId = IntPtr.Zero;
+        }
+        if (hook == IntPtr.Zero) return;
+        UnhookWindowsHookEx(hook);
         App.Logger?.Debug("Global mouse hook stopped");
     }
 
@@ -90,11 +110,13 @@ public sealed class GlobalMouseHook : IDisposable
             else if (wParam == (IntPtr)WM_LBUTTONUP && _swallowNextLeftUp)
             {
                 _swallowNextLeftUp = false;
+                CompleteDeferredDisposeIfDrained();
                 return (IntPtr)1;
             }
             else if (wParam == (IntPtr)WM_RBUTTONUP && _swallowNextRightUp)
             {
                 _swallowNextRightUp = false;
+                CompleteDeferredDisposeIfDrained();
                 return (IntPtr)1;
             }
         }
@@ -103,8 +125,60 @@ public sealed class GlobalMouseHook : IDisposable
 
     public void Dispose()
     {
-        if (_isDisposed) return;
-        _isDisposed = true;
+        lock (_sync)
+        {
+            if (_isDisposed || _unhookPending) return;
+
+            // A swallowed DOWN's matching UP may still be in flight - keep the hook installed
+            // just long enough to swallow it (see the deferred-dispose field comment above).
+            // No NEW swallows can start meanwhile: the decision callbacks are cleared here.
+            if (_hookId != IntPtr.Zero && (_swallowNextLeftUp || _swallowNextRightUp))
+            {
+                _unhookPending = true;
+                RightDown = null;
+                LeftDown = null;
+                _unhookFailsafe = new System.Threading.Timer(
+                    static s => ((GlobalMouseHook)s!).CompleteDeferredDispose(),
+                    this, UnhookFailsafeMs, System.Threading.Timeout.Infinite);
+                return;
+            }
+
+            _isDisposed = true;
+        }
+        Stop();
+    }
+
+    /// <summary>Hook message loop: finish a deferred dispose once no swallow remains pending.</summary>
+    private void CompleteDeferredDisposeIfDrained()
+    {
+        if (_unhookPending && !_swallowNextLeftUp && !_swallowNextRightUp)
+            CompleteDeferredDispose();
+    }
+
+    /// <summary>
+    /// Second half of a deferred <see cref="Dispose"/>: mark disposed, kill the failsafe and
+    /// unhook. Reached from the hook callback (UP swallowed) or the failsafe timer (threadpool,
+    /// UP never arrived) - whichever fires first wins; <see cref="Stop"/>'s exchange guarantees
+    /// a single unhook either way. The unhook itself is posted to the dispatcher that installed
+    /// the hook, which also keeps it out of the hook procedure's own stack frame.
+    /// </summary>
+    private void CompleteDeferredDispose()
+    {
+        lock (_sync)
+        {
+            if (_isDisposed) return;
+            _isDisposed = true;
+            _unhookPending = false;
+            _unhookFailsafe?.Dispose();
+            _unhookFailsafe = null;
+        }
+
+        var disp = Application.Current?.Dispatcher;
+        if (disp != null && !disp.HasShutdownStarted)
+        {
+            try { disp.BeginInvoke((Action)Stop); return; }
+            catch { /* dispatcher torn down between checks - fall through */ }
+        }
         Stop();
     }
 

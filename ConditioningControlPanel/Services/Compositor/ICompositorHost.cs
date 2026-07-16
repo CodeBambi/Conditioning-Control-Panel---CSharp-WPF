@@ -26,6 +26,11 @@ internal interface ICompositorHost
     /// <summary>True while the host window is shown.</summary>
     bool IsVisible { get; }
 
+    /// <summary>Native handle of the host window (IntPtr.Zero before the hwnd exists). Lets the
+    /// z-order reconciler (OverlayService.ReassertZOrder) pin hosts below a playing mandatory
+    /// video / re-pin them topmost exactly like the legacy per-effect windows.</summary>
+    nint WindowHandle { get; }
+
     /// <summary>Show the (empty, click-through) host window. UI thread.</summary>
     void Show();
 

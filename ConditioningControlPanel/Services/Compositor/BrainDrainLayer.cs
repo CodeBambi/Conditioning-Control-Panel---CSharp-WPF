@@ -37,6 +37,11 @@ public sealed class BrainDrainLayer : BaseLayer
     private TimeSpan _captureInterval = TimeSpan.FromMilliseconds(33);
     private TimeSpan _sinceCapture;
 
+    // Topology drift is rare; checking (and allocating target rects) every capture tick at
+    // 30-60Hz is pure waste. ~1s detection latency on a monitor change is imperceptible.
+    private static readonly TimeSpan DriftCheckInterval = TimeSpan.FromSeconds(1);
+    private TimeSpan _sinceDriftCheck;
+
     public BrainDrainLayer(CompositorEngine engine) : base(engine) { }
 
     public override int ZIndex => CompositorLayers.BrainDrain;
@@ -55,6 +60,7 @@ public sealed class BrainDrainLayer : BaseLayer
         SetIntensity(intensity);
         RebuildCaptures(GetTargetScreens());
         _sinceCapture = _captureInterval; // capture on the very first tick
+        _sinceDriftCheck = TimeSpan.Zero; // captures just rebuilt - no immediate drift check
         SetActive(true);
     }
 
@@ -77,12 +83,17 @@ public sealed class BrainDrainLayer : BaseLayer
     public override void Update(TimeSpan delta)
     {
         _sinceCapture += delta;
+        _sinceDriftCheck += delta;
         if (_sinceCapture < _captureInterval) return;
         _sinceCapture = TimeSpan.Zero;
 
         try
         {
-            EnsureCapturesMatchScreens();
+            if (_sinceDriftCheck >= DriftCheckInterval)
+            {
+                _sinceDriftCheck = TimeSpan.Zero;
+                EnsureCapturesMatchScreens();
+            }
             CapturePass();
         }
         catch (Exception ex)
@@ -108,15 +119,17 @@ public sealed class BrainDrainLayer : BaseLayer
     {
         try
         {
+            var screens = App.GetAllScreensCached(); // Screen.PrimaryScreen re-enumerates per call
             if (App.Settings?.Current?.DualMonitorEnabled == true)
-                return App.GetAllScreensCached().Select(s => s.Bounds).ToArray();
-            var primary = System.Windows.Forms.Screen.PrimaryScreen;
-            return primary != null ? new[] { primary.Bounds } : Array.Empty<System.Drawing.Rectangle>();
+                return screens.Select(s => s.Bounds).ToArray();
+            foreach (var s in screens)
+                if (s.Primary) return new[] { s.Bounds };
+            return Array.Empty<System.Drawing.Rectangle>();
         }
         catch { return Array.Empty<System.Drawing.Rectangle>(); }
     }
 
-    /// <summary>Cheap per-capture-tick drift check so display topology / dual-monitor changes
+    /// <summary>Throttled (~1s) drift check so display topology / dual-monitor changes
     /// mid-run re-target the captures without a restart.</summary>
     private void EnsureCapturesMatchScreens()
     {

@@ -88,8 +88,7 @@ namespace ConditioningControlPanel.Services
         // keeps driving fade/frames/dwell through the FlashWindow state bag (same split as solid
         // mode), so lifetime/hydra/gaze behavior is identical in all three modes.
         private Compositor.FlashLayer? _flashLayer;
-        private static bool UseCompositor =>
-            (App.CompositorForced || App.Settings?.Current?.UnifiedOverlayHost == true) && App.Compositor != null;
+        private static bool UseCompositor => App.CompositorEnabled;
 
         // Clickable layer flashes: the compositor host is click-through, so clicks arrive via a
         // global mouse hook hit-testing an immutable snapshot (same pattern as shared-host
@@ -102,6 +101,12 @@ namespace ConditioningControlPanel.Services
             public float X, Y, W, H;   // world px
         }
         private volatile LayerHit[] _layerHits = Array.Empty<LayerHit>();
+        // While a mandatory video is playing, the compositor host is pinned BELOW the video
+        // (#497 reconciler), so a layer flash under the video rect is invisible — swallowing
+        // clicks there would eat the user's attention-check clicks on a flash they can't see.
+        // Published as an immutable [x,y,w,h] physical-px array (atomic reference swap; the
+        // hook thread only ever reads the captured reference). Null = no exclusion.
+        private volatile float[]? _layerVideoExcludePx;
         
         // Audio - only ONE sound per flash event
         private WaveOutEvent? _currentSound;
@@ -170,17 +175,34 @@ namespace ConditioningControlPanel.Services
         {
             DispatcherHelper.RunOnUI(() =>
             {
-                bool anyHosted = false;
+                bool anyHosted = false, anyLayer = false;
                 lock (_lockObj)
                 {
                     foreach (var w in _activeWindows)
                     {
                         if (w.IsFadingOut) continue;
                         if (w.UsesHost) anyHosted = true;   // no hwnd of its own — raise the shared host instead
-                        else if (!w.UsesLayer) ForceTopmost(w);   // layer: the compositor host re-pins itself
+                        else if (w.UsesLayer) anyLayer = true;   // ditto — raise the compositor host
+                        else ForceTopmost(w);
                     }
                 }
                 if (anyHosted) ChaosBubbleHostOverlay.RaiseActive();
+
+                // Layer flashes live on the compositor host, which only asserts topmost on its
+                // show edge — kick it back above the chaos layer's ~1/s bubble re-raise the same
+                // way legacy flash windows are force-topmosted. Skip while a mandatory video is
+                // playing: OverlayService.ReassertZOrder deliberately pins the host BELOW the
+                // video (#497), and raising it here would just fight that reconciler.
+                if (anyLayer && App.Video?.IsPlaying != true && App.Compositor is { } engine)
+                {
+                    try
+                    {
+                        foreach (var hostHwnd in engine.GetVisibleHostHandles())
+                            NativeMethods.SetWindowPos(hostHwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+                                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+                    }
+                    catch { }
+                }
             });
         }
 
@@ -1416,7 +1438,10 @@ namespace ConditioningControlPanel.Services
                             window.HostedRoot = null;
                         }
                         window.LifetimeCts = null;
-                        if (!window.UsesHost && !window.UsesLayer) window.Close();
+                        // Layer state bags still registered in Application.Windows — Close them
+                        // too (never shown, so Close is safe) or the failed spawn leaks a Window.
+                        if (window.UsesLayer) CloseStateBagWindow(window);
+                        else if (!window.UsesHost) window.Close();
                     }
                     catch { }
                 }
@@ -1436,6 +1461,11 @@ namespace ConditioningControlPanel.Services
         /// COMPOSITOR: convert the decoded frames and spawn this flash's layer item. The
         /// bookkeeping rect on <paramref name="window"/> (DIPs, already glow-expanded) converts
         /// to world px with the spawn monitor's own scale — the same math as host mode's Place.
+        /// The per-frame pixel copies (up to 60 frames × multi-MB images × concurrent spawns)
+        /// used to run synchronously on the dispatcher and hitched the UI at spawn — they now
+        /// run in Task.Run (SpiralLayer.ShowFrames pattern) and the layer item spawns on the
+        /// dispatcher when the conversion lands. window.LayerSpawnPending keeps the heartbeat
+        /// from sweeping the still-itemless window during the conversion window.
         /// </summary>
         private void SpawnLayerVisual(FlashWindow window, LoadedImageData imageData, MonitorInfo monitor,
             System.Windows.Media.Color glowColor, double glowRadius, double glowOpacity, bool luckyPulse)
@@ -1445,26 +1475,95 @@ namespace ConditioningControlPanel.Services
                 _flashLayer = new Compositor.FlashLayer(App.Compositor!);
                 App.Compositor!.RegisterLayer(_flashLayer);
             }
+            var layer = _flashLayer;
 
-            // Straight pixel copies of the already-decoded (display-sized, cached) frames — no
-            // SKCodec decode here, so the global decode gate doesn't apply.
-            var frames = new SkiaSharp.SKImage[imageData.Frames.Count];
-            for (int i = 0; i < frames.Length; i++)
-                frames[i] = Compositor.SkiaWpfInterop.ToSKImage(imageData.Frames[i]);
-
+            // Snapshot everything the worker/continuation reads. The frames are frozen
+            // BitmapSources (LoadImageAsync and AnimatedWebp freeze every frame), so reading
+            // them from a worker thread is safe.
+            var sourceFrames = imageData.Frames.ToArray();
             var dpi = monitor.DpiScale > 0 ? monitor.DpiScale : 1.0;
             var hasGlow = glowRadius > 0;
-            window.LayerItem = _flashLayer.Spawn(frames,
-                (float)(window.Left * dpi), (float)(window.Top * dpi),
-                (float)(window.Width * dpi), (float)(window.Height * dpi),
-                paddingPx: (float)(hasGlow ? glowRadius / 2 * dpi : 0),
-                cornerRadiusPx: hasGlow ? (float)(12 * dpi) : 0f,
-                new SkiaSharp.SKColor(glowColor.R, glowColor.G, glowColor.B),
-                glowSigmaPx: (float)(glowRadius * dpi / 3.0),   // WPF blur radius -> sigma (R/3)
-                glowOpacity, luckyPulse);
+            var x = (float)(window.Left * dpi);
+            var y = (float)(window.Top * dpi);
+            var w = (float)(window.Width * dpi);
+            var h = (float)(window.Height * dpi);
+            var paddingPx = (float)(hasGlow ? glowRadius / 2 * dpi : 0);
+            var cornerRadiusPx = hasGlow ? (float)(12 * dpi) : 0f;
+            var skGlowColor = new SkiaSharp.SKColor(glowColor.R, glowColor.G, glowColor.B);
+            var glowSigmaPx = (float)(glowRadius * dpi / 3.0);   // WPF blur radius -> sigma (R/3)
 
-            if (window.IsClickable)
-                EnsureLayerHook();
+            window.LayerSpawnPending = true;
+
+            _ = Task.Run(() =>
+            {
+                // Straight pixel copies of the already-decoded (display-sized, cached) frames — no
+                // SKCodec decode here, so the global decode gate doesn't apply.
+                SkiaSharp.SKImage[]? frames = null;
+                try
+                {
+                    frames = new SkiaSharp.SKImage[sourceFrames.Length];
+                    for (int i = 0; i < frames.Length; i++)
+                        frames[i] = Compositor.SkiaWpfInterop.ToSKImage(sourceFrames[i]);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("SpawnLayerVisual: frame conversion failed: {E}", ex.Message);
+                    DisposeLayerFrames(frames);
+                    frames = null;
+                }
+
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted)
+                {
+                    DisposeLayerFrames(frames);
+                    window.LayerSpawnPending = false;   // plain CLR property — safe off-thread
+                    return;
+                }
+
+                dispatcher.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        window.LayerSpawnPending = false;
+                        if (frames == null)
+                            return;   // conversion failed — the heartbeat sweeps the itemless window
+
+                        // The flash may have been clicked away, expired or torn down (Stop /
+                        // CloseAllWindows) while converting — dispose instead of spawning.
+                        bool tracked;
+                        lock (_lockObj) { tracked = _activeWindows.Contains(window); }
+                        if (!tracked || window.IsFadingOut || (!_isRunning && !_oneShotActive)
+                            || window.LifetimeCts == null || window.LifetimeCts.IsCancellationRequested)
+                        {
+                            DisposeLayerFrames(frames);
+                            return;
+                        }
+
+                        window.LayerItem = layer.Spawn(frames, x, y, w, h,
+                            paddingPx, cornerRadiusPx, skGlowColor, glowSigmaPx,
+                            glowOpacity, luckyPulse);
+                        frames = null;   // ownership transferred — FlashLayer.Remove disposes them
+
+                        if (window.IsClickable)
+                            EnsureLayerHook();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("SpawnLayerVisual: layer spawn failed: {E}", ex.Message);
+                        DisposeLayerFrames(frames);
+                    }
+                });
+            });
+        }
+
+        /// <summary>Dispose a (possibly partially filled) converted-frame array.</summary>
+        private static void DisposeLayerFrames(SkiaSharp.SKImage[]? frames)
+        {
+            if (frames == null) return;
+            foreach (var f in frames)
+            {
+                try { f?.Dispose(); } catch { }
+            }
         }
 
         /// <summary>Install the click hook for layer flashes (UI thread — the hook needs this
@@ -1491,6 +1590,14 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private bool OnLayerFlashLeftDown(System.Windows.Point px)
         {
+            // Clicks inside a playing mandatory video's rect belong to the video (attention
+            // checks) — the flash there is pinned below it and invisible, so never swallow.
+            var exclude = _layerVideoExcludePx;
+            if (exclude != null
+                && px.X >= exclude[0] && px.X <= exclude[0] + exclude[2]
+                && px.Y >= exclude[1] && px.Y <= exclude[1] + exclude[3])
+                return false;
+
             var hits = _layerHits;
             for (int i = hits.Length - 1; i >= 0; i--)
             {
@@ -1541,6 +1648,22 @@ namespace ConditioningControlPanel.Services
                 }
             }
             _layerHits = hits?.ToArray() ?? Array.Empty<LayerHit>();
+
+            // Publish the playing video's physical rect so the hook thread won't swallow
+            // clicks on a flash the video is covering (the host sits pinned below the video).
+            float[]? exclude = null;
+            try
+            {
+                if (App.Video?.IsPlaying == true && App.Video.PrimaryVideoWindow is Window vw)
+                {
+                    var vh = new System.Windows.Interop.WindowInteropHelper(vw).Handle;
+                    if (vh != IntPtr.Zero && NativeMethods.GetWindowRect(vh, out var r))
+                        exclude = new float[] { r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top };
+                }
+            }
+            catch { }
+            _layerVideoExcludePx = exclude;
+
             if (!anyLayer) ReleaseLayerHook();
         }
 
@@ -1726,9 +1849,11 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     // Host-mode flashes have no hwnd — alive means their visual is still on the
-                    // shared canvas (layer mode: still on the compositor). Per-window flashes
-                    // keep the loaded/visible liveness check.
-                    if (window.UsesLayer ? window.LayerItem == null
+                    // shared canvas (layer mode: still on the compositor, OR its off-thread
+                    // frame conversion is still pending — don't sweep a flash that hasn't had
+                    // the chance to spawn its layer item yet). Per-window flashes keep the
+                    // loaded/visible liveness check.
+                    if (window.UsesLayer ? (window.LayerItem == null && !window.LayerSpawnPending)
                         : window.UsesHost ? window.HostedRoot == null
                         : (!window.IsLoaded || !window.IsVisible))
                     {
@@ -2580,6 +2705,12 @@ namespace ConditioningControlPanel.Services
                         _flashLayer?.Remove(item);
                     }
                     window.IsFadingOut = false;
+                    // The state bag is still a real Window: constructing it registered it in
+                    // Application.Windows, and only Close() removes it — returning without a
+                    // Close leaked one Window per layer flash for the app lifetime. Close on a
+                    // never-shown Window is legal (no hwnd, so no layered-window deadlock),
+                    // and returning here keeps it out of the recycle pool below.
+                    CloseStateBagWindow(window);
                     return;
                 }
 
@@ -2593,6 +2724,9 @@ namespace ConditioningControlPanel.Services
                         window.HostedRoot = null;
                     }
                     window.IsFadingOut = false;
+                    // Same state-bag leak as the layer branch above: the never-shown Window
+                    // stays registered in Application.Windows until Close().
+                    CloseStateBagWindow(window);
                     return;
                 }
 
@@ -2618,6 +2752,30 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("Failed to close flash window: {Error}", ex.Message);
                 try { window.Close(); } catch { }
             }
+        }
+
+        /// <summary>
+        /// Close a never-shown state-bag Window (layer mode) on its dispatcher so it leaves
+        /// Application.Windows. Safe to call from any thread; Close is idempotent-ish and any
+        /// failure is swallowed (the window has no hwnd, handlers or content by this point).
+        /// </summary>
+        private static void CloseStateBagWindow(FlashWindow window)
+        {
+            try
+            {
+                if (window.Dispatcher.CheckAccess())
+                {
+                    window.Close();
+                }
+                else
+                {
+                    window.Dispatcher.BeginInvoke(() =>
+                    {
+                        try { window.Close(); } catch { }
+                    });
+                }
+            }
+            catch { }
         }
 
         // WndProc hook for flash windows: drop WM_DPICHANGED so WPF never runs its auto DPI-rescale
@@ -2770,6 +2928,13 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>Compositor mode only: this flash's layer item (null once torn down).</summary>
         public Services.Compositor.FlashLayer.FlashItem? LayerItem { get; set; }
+
+        /// <summary>
+        /// Compositor mode only: true while the off-thread frame conversion for this spawn is
+        /// still running — LayerItem is null but the flash is NOT dead, so the heartbeat must
+        /// not sweep it. Cleared by the spawn continuation whether it spawns or bails.
+        /// </summary>
+        public bool LayerSpawnPending { get; set; }
 
         /// <summary>
         /// The fade alpha the heartbeat animates: window Opacity in per-window mode, the hosted
@@ -2985,6 +3150,12 @@ namespace ConditioningControlPanel.Services
 
         [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
         public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        public struct RECT { public int Left, Top, Right, Bottom; }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
     }
 
     #endregion

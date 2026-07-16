@@ -34,6 +34,9 @@ public class CompositorHostWindow : Window, ICompositorHost
     /// relative to it — see IWpfLayer.WorldSpacePx).</summary>
     public System.Drawing.Rectangle ScreenBoundsPx => _screenBoundsPx;
 
+    /// <summary>Native handle (Zero until SourceInitialized).</summary>
+    public nint WindowHandle => _hwnd;
+
     /// <summary>Raised by the SKElement when the surface repaints; the engine draws the layers.</summary>
     public event Action<CompositorHostWindow, SKPaintSurfaceEventArgs>? PaintSurface;
 
@@ -124,9 +127,17 @@ public class CompositorHostWindow : Window, ICompositorHost
             var ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
             SetWindowLong(_hwnd, GWL_EXSTYLE,
                 ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
+            // Only natively SHOW when the window is meant to be shown, else a topology-change
+            // UpdateScreenBounds re-shows a host the engine hid (past WindowHideGrace) while WPF
+            // IsVisible stays false - the hide timer's IsVisible check then never hides it again.
+            // Keyed off Visibility, not IsVisible: Show() sets Visibility=Visible BEFORE the hwnd
+            // is created (SourceInitialized fires mid-Show, when IsVisible is still false), so the
+            // first Show still presents; Hide() sets it to Hidden.
+            uint flags = SWP_NOACTIVATE | SWP_FRAMECHANGED;
+            if (Visibility == Visibility.Visible) flags |= SWP_SHOWWINDOW;
             SetWindowPos(_hwnd, HWND_TOPMOST,
                 _screenBoundsPx.X, _screenBoundsPx.Y, _screenBoundsPx.Width, _screenBoundsPx.Height,
-                SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                flags);
         }
         catch (Exception ex2)
         {

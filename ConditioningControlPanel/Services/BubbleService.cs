@@ -2054,8 +2054,7 @@ internal class Bubble
     // compositor's BubbleLayer instead: same hook-pop input contract (UsesHost stays true, hit
     // discs are renderer-agnostic), just Skia draw calls in place of a WPF _grid on a Canvas.
     private static Compositor.BubbleLayer? s_layer;
-    internal static bool UseCompositor =>
-        (App.CompositorForced || App.Settings?.Current?.UnifiedOverlayHost == true) && App.Compositor != null;
+    internal static bool UseCompositor => App.CompositorEnabled;
     /// <summary>Lazily create + register the shared BubbleLayer. Null if the compositor is off.</summary>
     private static Compositor.BubbleLayer? EnsureLayer()
     {

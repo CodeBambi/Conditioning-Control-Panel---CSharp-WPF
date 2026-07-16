@@ -66,6 +66,36 @@ public sealed class BubbleLayer : BaseLayer
     private static readonly SKTypeface _bold = SKTypeface.FromFamilyName("Segoe UI", SKFontStyle.Bold)
         ?? SKTypeface.FromFamilyName(null, SKFontStyle.Bold);
 
+    // Shield dash effect cache, keyed on quantized DPI scale (the only input) - a handful of
+    // entries max (one per monitor scale). Disposed on Clear; rebuilt lazily.
+    private readonly Dictionary<float, SKPathEffect> _dashCache = new();
+
+    private SKPathEffect GetDash(float scale)
+    {
+        float q = MathF.Round(scale * 4f) / 4f;
+        if (!_dashCache.TryGetValue(q, out var fx))
+        {
+            fx = SKPathEffect.CreateDash(new[] { 3f * q, 2f * q }, 0);
+            _dashCache[q] = fx;
+        }
+        return fx;
+    }
+
+    /// <summary>Rebuild a cached blur mask filter only when the quantized sigma moves - the
+    /// FlashLayer.BlurCache pattern; churning native blur filters per bubble per frame is the
+    /// expensive part, and every sigma here derives from spawn constants + DPI.</summary>
+    private static SKMaskFilter GetCachedBlur(ref SKMaskFilter? cache, ref float cachedSigma, float sigma)
+    {
+        float q = MathF.Round(sigma * 2f) / 2f;
+        if (cache == null || Math.Abs(q - cachedSigma) > 0.01f)
+        {
+            cache?.Dispose();
+            cache = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, Math.Max(0.5f, q));
+            cachedSigma = q;
+        }
+        return cache;
+    }
+
     public BubbleItem Add(BubbleItem item)
     {
         _items.Add(item);
@@ -76,14 +106,21 @@ public sealed class BubbleLayer : BaseLayer
     public void Remove(BubbleItem item)
     {
         item.ReleaseTeaseFrames();
+        item.ReleaseEffectCaches();
         _items.Remove(item);
         if (_items.Count == 0) SetActive(false);
     }
 
     public void Clear()
     {
-        foreach (var it in _items) it.ReleaseTeaseFrames();
+        foreach (var it in _items)
+        {
+            it.ReleaseTeaseFrames();
+            it.ReleaseEffectCaches();
+        }
         _items.Clear();
+        foreach (var fx in _dashCache.Values) { try { fx.Dispose(); } catch { } }
+        _dashCache.Clear();
         SetActive(false);
     }
 
@@ -123,10 +160,9 @@ public sealed class BubbleLayer : BaseLayer
             if (item.HasGlow)
             {
                 float sigma = Math.Max(0.5f, item.GlowBlurDip * s / 3f);   // WPF blurRadius/3 convention
-                _glow.MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, sigma);
+                _glow.MaskFilter = GetCachedBlur(ref item.GlowBlurCache, ref item.GlowBlurCacheSigma, sigma);
                 _glow.Color = item.GlowColor.WithAlpha((byte)(item.GlowOpacity * item.Opacity * 255f));
                 canvas.DrawCircle(cx, cy, half, _glow);
-                _glow.MaskFilter?.Dispose();
                 _glow.MaskFilter = null;
             }
 
@@ -233,10 +269,9 @@ public sealed class BubbleLayer : BaseLayer
                 _text.TextSize = item.LabelFontDip * s;
                 // Soft shadow (BlurRadius 6 -> sigma 2) then the white glyph.
                 _text.Color = SKColors.Black.WithAlpha((byte)(0.8f * item.Opacity * 255f));
-                _text.MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 2f * s);
+                _text.MaskFilter = GetCachedBlur(ref item.LabelBlurCache, ref item.LabelBlurCacheSigma, 2f * s);
                 float baseline = cy + _text.TextSize * 0.35f;
                 canvas.DrawText(item.Label, cx, baseline, _text);
-                _text.MaskFilter?.Dispose();
                 _text.MaskFilter = null;
                 _text.Color = SKColors.White.WithAlpha(ga);
                 canvas.DrawText(item.Label, cx, baseline, _text);
@@ -264,9 +299,8 @@ public sealed class BubbleLayer : BaseLayer
                 float shr = (item.SizeDip + 12f) * 0.5f * s;
                 _stroke.Color = new SKColor(0x9C, 0xE8, 0xFF, (byte)(item.ShieldOpacity * item.Opacity * 255f));
                 _stroke.StrokeWidth = 3.5f * s;
-                _stroke.PathEffect = SKPathEffect.CreateDash(new[] { 3f * s, 2f * s }, 0);
+                _stroke.PathEffect = GetDash(s);
                 canvas.DrawCircle(cx, cy, shr, _stroke);
-                _stroke.PathEffect?.Dispose();
                 _stroke.PathEffect = null;
             }
 
@@ -312,10 +346,9 @@ public sealed class BubbleLayer : BaseLayer
         _fill.Color = new SKColor(0x12, 0x0A, 0x18, (byte)(0xA0 / 255f * alpha * 255f));
         canvas.DrawRoundRect(new SKRoundRect(pill, 9f * s, 9f * s), _fill);
         _text.Color = SKColors.Black.WithAlpha((byte)(0.9f * alpha * 255f));
-        _text.MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 1.7f * s);
+        _text.MaskFilter = GetCachedBlur(ref item.HintBlurCache, ref item.HintBlurCacheSigma, 1.7f * s);
         float baseline = py + th * 0.35f;
         canvas.DrawText(item.HintText, cx, baseline, _text);
-        _text.MaskFilter?.Dispose();
         _text.MaskFilter = null;
         _text.Color = new SKColor(0xFF, 0xE2, 0xF2, (byte)(alpha * 255f));
         canvas.DrawText(item.HintText, cx, baseline, _text);
@@ -384,6 +417,24 @@ public sealed class BubbleLayer : BaseLayer
         public float ShieldOpacity;
         public float PrismOpacity;
         public float HintOpacity;
+
+        // Cached blur mask filters (FlashLayer.BlurCache pattern): each sigma derives from
+        // spawn constants + DPI, so these build once per item instead of per frame. Owned by
+        // the item; disposed via ReleaseEffectCaches on Remove/Clear (safe even in off-thread
+        // mode - an in-flight SKPicture holds its own native ref on anything drawn into it).
+        internal SKMaskFilter? GlowBlurCache;
+        internal float GlowBlurCacheSigma = -1f;
+        internal SKMaskFilter? LabelBlurCache;
+        internal float LabelBlurCacheSigma = -1f;
+        internal SKMaskFilter? HintBlurCache;
+        internal float HintBlurCacheSigma = -1f;
+
+        internal void ReleaseEffectCaches()
+        {
+            GlowBlurCache?.Dispose(); GlowBlurCache = null; GlowBlurCacheSigma = -1f;
+            LabelBlurCache?.Dispose(); LabelBlurCache = null; LabelBlurCacheSigma = -1f;
+            HintBlurCache?.Dispose(); HintBlurCache = null; HintBlurCacheSigma = -1f;
+        }
 
         // Tease frame: the WPF face Image's current Source (animated webp/gif frame or a still),
         // converted to an owned SKImage lazily and cached per source so repeated frames reuse.

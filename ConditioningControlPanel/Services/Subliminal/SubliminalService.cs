@@ -50,8 +50,7 @@ namespace ConditioningControlPanel.Services
         // the shared per-monitor Skia host - no per-screen window OR host canvas churn at all.
         // Focus-steal still falls back to the classic windows (the host is NOACTIVATE).
         private Compositor.SubliminalLayer? _layer;
-        private static bool UseCompositor =>
-            (App.CompositorForced || App.Settings?.Current?.UnifiedOverlayHost == true) && App.Compositor != null;
+        private static bool UseCompositor => App.CompositorEnabled;
         // One ref-counted hold on the shared host while any card could be up — NOT per show
         // (host churn is exactly what solid mode exists to remove). Released on Stop/Dispose,
         // or when a one-shot's card fades out with the service not running.

@@ -32,8 +32,22 @@ internal sealed class LayeredCompositorHost : ICompositorHost
     public string ScreenDeviceName { get; }
     public bool IsExcludedSurface { get; }
     public double DpiScale { get; }
-    public System.Drawing.Rectangle ScreenBoundsPx { get; private set; }
+
+    // Written by the UI thread (topology changes), read by the present thread (PresentOne).
+    // Rectangle is a 4-int struct, so an unsynchronized handoff can tear mid-update and hand
+    // the present thread a mismatched DIB/UpdateLayeredWindow frame. Dedicated lock: never
+    // held across SetWindowPos/UpdateLayeredWindow, and independent of _slotLock ordering.
+    private readonly object _boundsLock = new();
+    private System.Drawing.Rectangle _screenBoundsPx;
+    public System.Drawing.Rectangle ScreenBoundsPx
+    {
+        get { lock (_boundsLock) return _screenBoundsPx; }
+        private set { lock (_boundsLock) _screenBoundsPx = value; }
+    }
+
     public bool IsVisible { get; private set; }
+
+    public nint WindowHandle => _hwnd;
 
     private readonly IntPtr _hwnd;
     private readonly Thread _presentThread;
@@ -87,8 +101,8 @@ internal sealed class LayeredCompositorHost : ICompositorHost
     public void Show()
     {
         if (_hwnd == IntPtr.Zero) return;
-        SetWindowPos(_hwnd, HWND_TOPMOST, ScreenBoundsPx.X, ScreenBoundsPx.Y,
-            ScreenBoundsPx.Width, ScreenBoundsPx.Height, SWP_NOACTIVATE);
+        var b = ScreenBoundsPx;
+        SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
         ShowWindow(_hwnd, SW_SHOWNA);
         IsVisible = true;
     }
@@ -102,10 +116,10 @@ internal sealed class LayeredCompositorHost : ICompositorHost
 
     public void UpdateScreenBounds(System.Windows.Forms.Screen screen)
     {
-        ScreenBoundsPx = screen.Bounds;
+        var b = screen.Bounds;
+        ScreenBoundsPx = b;
         if (_hwnd != IntPtr.Zero && IsVisible)
-            SetWindowPos(_hwnd, HWND_TOPMOST, ScreenBoundsPx.X, ScreenBoundsPx.Y,
-                ScreenBoundsPx.Width, ScreenBoundsPx.Height, SWP_NOACTIVATE);
+            SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
         // The present thread re-sizes its DIB to the new bounds on the next present.
     }
 

@@ -35,10 +35,14 @@ public abstract class BaseLayer : IWpfLayer
         try
         {
             if (App.Settings?.Current?.DualMonitorEnabled == true) return true;
-            var primary = System.Windows.Forms.Screen.PrimaryScreen;
-            return primary != null
-                && screenBoundsPx.X == primary.Bounds.X
-                && screenBoundsPx.Y == primary.Bounds.Y;
+            // Cached lookup: Screen.PrimaryScreen re-enumerates all monitors per call on .NET
+            // Core, and this runs per fill layer per monitor per presented frame.
+            foreach (var s in App.GetAllScreensCached())
+            {
+                if (s.Primary)
+                    return screenBoundsPx.X == s.Bounds.X && screenBoundsPx.Y == s.Bounds.Y;
+            }
+            return true; // empty cache (display transition): err toward showing
         }
         catch { return true; }
     }

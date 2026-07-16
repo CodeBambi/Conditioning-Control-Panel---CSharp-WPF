@@ -48,8 +48,7 @@ public sealed class ChaosSkiaFxOverlay : Window
     // overlays are stacked"). The layer is created + registered lazily on first use and lives
     // for the app's lifetime; this window is then never created at all.
     private static Services.Compositor.ChaosFxLayer? _layer;
-    private static bool UseCompositor =>
-        (App.CompositorForced || App.Settings?.Current?.UnifiedOverlayHost == true) && App.Compositor != null;
+    private static bool UseCompositor => App.CompositorEnabled;
 
     // ---- public keep-alive / draw API (all thread-safe; marshalled to the UI thread) ----
 

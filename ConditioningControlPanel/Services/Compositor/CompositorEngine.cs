@@ -35,7 +35,16 @@ public class CompositorEngine : IDisposable
 
     private readonly object _layerLock = new();
     private readonly List<IWpfLayer> _layers = new();
+    // Copy-on-write snapshot: rebuilt in RegisterLayer under _layerLock, read lock-free on the
+    // hot paths (tick + paint). Layers are app-lifetime (no unregister), so the array is stable.
+    private volatile IWpfLayer[] _layerSnapshot = Array.Empty<IWpfLayer>();
     private readonly Dictionary<IWpfLayer, bool> _lastActiveState = new();
+
+    // One-shot present force per surface, consumed by this tick's present gate. Set when a layer
+    // deactivates (its last sprites must be erased even if the surviving layers are non-dirty)
+    // and when EnsureWindows creates a host mid-run (a layered window shows NOTHING until its
+    // first present, so static non-dirty layers would leave a new monitor blank).
+    private bool _forcePresentMain, _forcePresentExcluded;
 
     private readonly Dictionary<string, ICompositorHost> _windows = new();
     private readonly Dictionary<string, ICompositorHost> _excludedWindows = new();
@@ -75,6 +84,7 @@ public class CompositorEngine : IDisposable
             if (_layers.Contains(layer)) return;
             _layers.Add(layer);
             _layers.Sort((a, b) => a.ZIndex.CompareTo(b.ZIndex));
+            _layerSnapshot = _layers.ToArray();
             _lastActiveState[layer] = false;
         }
         Wake();
@@ -107,6 +117,23 @@ public class CompositorEngine : IDisposable
 
     /// <summary>True when this engine presents off the UI thread (the #550 fix path is active).</summary>
     public bool OffThreadActive => _offThreadMode;
+
+    /// <summary>
+    /// Native handles of every currently VISIBLE host window, for the z-order reconciler
+    /// (OverlayService.ReassertZOrder): hosts assert HWND_TOPMOST only on show/topology edges,
+    /// so without reconciliation a later topmost raise (mandatory video, chaos chrome) either
+    /// buries every compositor layer or — worse — a re-shown host buries the video (#497).
+    /// UI thread only (same thread that mutates the host dictionaries).
+    /// </summary>
+    public List<nint> GetVisibleHostHandles()
+    {
+        var handles = new List<nint>(_windows.Count + _excludedWindows.Count);
+        foreach (var dict in new[] { _windows, _excludedWindows })
+            foreach (var host in dict.Values)
+                if (host.IsVisible && host.WindowHandle != 0)
+                    handles.Add(host.WindowHandle);
+        return handles;
+    }
 
     /// <summary>
     /// Pay the one-time host costs (window creation, hwnd + ex-styles, Skia surface alloc, paint
@@ -158,8 +185,7 @@ public class CompositorEngine : IDisposable
         // animating ones (bubbles/chaos FX/flash/subliminal) keep repainting every frame.
         bool anyMainDirty = false, anyExcludedDirty = false;
 
-        IWpfLayer[] layers;
-        lock (_layerLock) layers = _layers.ToArray();
+        IWpfLayer[] layers = _layerSnapshot;
 
         foreach (var layer in layers)
         {
@@ -167,6 +193,15 @@ public class CompositorEngine : IDisposable
             if (_lastActiveState.TryGetValue(layer, out var was) && was != active)
             {
                 _lastActiveState[layer] = active;
+                // Per-layer active->inactive edge: force one re-present of its surface so the
+                // layer's last-drawn output is erased even when every surviving layer on that
+                // surface is active-but-non-dirty (static pink tint). The aggregate edge below
+                // only covers the "whole surface went inactive" case.
+                if (!active)
+                {
+                    if (layer.ExcludeFromCapture) _forcePresentExcluded = true;
+                    else _forcePresentMain = true;
+                }
                 try
                 {
                     if (active) layer.OnActivated();
@@ -200,8 +235,8 @@ public class CompositorEngine : IDisposable
         ShowSurfaceIfActive(_windows, anyMainActive, excluded: false);
         ShowSurfaceIfActive(_excludedWindows, anyExcludedActive, excluded: true);
 
-        if (anyMainActive && anyMainDirty) PresentSurface(_windows, excluded: false);
-        if (anyExcludedActive && anyExcludedDirty) PresentSurface(_excludedWindows, excluded: true);
+        if (anyMainActive && (anyMainDirty || _forcePresentMain)) PresentSurface(_windows, excluded: false);
+        if (anyExcludedActive && (anyExcludedDirty || _forcePresentExcluded)) PresentSurface(_excludedWindows, excluded: true);
 
         // Reset dirty flags now this frame's invalidations are queued. Only active layers matter;
         // an inactive layer re-marks itself dirty when it next activates.
@@ -218,6 +253,7 @@ public class CompositorEngine : IDisposable
         if (_wasExcludedActive && !anyExcludedActive) PresentSurface(_excludedWindows, excluded: true);
         _wasMainActive = anyMainActive;
         _wasExcludedActive = anyExcludedActive;
+        _forcePresentMain = _forcePresentExcluded = false; // one-shot: consumed (or moot) this tick
 
         // Fully park when everything has been idle past the grace window: unhook the tick so
         // an idle compositor costs literally zero per frame. The (visible, empty) hosts are
@@ -276,9 +312,7 @@ public class CompositorEngine : IDisposable
 
     private void EnsureWindows(Dictionary<string, ICompositorHost> surface, bool excluded)
     {
-        System.Windows.Forms.Screen[] screens;
-        try { screens = System.Windows.Forms.Screen.AllScreens; }
-        catch { return; }
+        var screens = App.GetAllScreensCached(); // called every active tick - never raw-enumerate here
         if (screens.Length == 0) return; // can be empty during display transitions
 
         if (!_modeLatched)
@@ -302,6 +336,10 @@ public class CompositorEngine : IDisposable
                 window.PaintSurface += OnPaintSurface;
                 surface[screen.DeviceName] = window;
             }
+            // A fresh host has never presented - a layered window renders nothing until its
+            // first UpdateLayeredWindow/raster, so force one even if no layer is dirty.
+            if (excluded) _forcePresentExcluded = true;
+            else _forcePresentMain = true;
         }
     }
 
@@ -326,10 +364,7 @@ public class CompositorEngine : IDisposable
         }
     }
 
-    private IWpfLayer[] SnapshotLayers()
-    {
-        lock (_layerLock) return _layers.ToArray();
-    }
+    private IWpfLayer[] SnapshotLayers() => _layerSnapshot;
 
     /// <summary>Record a monitor's active layers into an immutable picture, in device px, monitor-
     /// local. Cheap (draw-command capture only); runs on the UI thread where layer state is safe to
@@ -419,9 +454,9 @@ public class CompositorEngine : IDisposable
 
     private static void RebuildSurface(Dictionary<string, ICompositorHost> surface)
     {
-        System.Windows.Forms.Screen[] screens;
-        try { screens = System.Windows.Forms.Screen.AllScreens; }
-        catch { return; }
+        // App invalidates this cache on DisplaySettingsChanged (and this runs deferred at
+        // Background priority), so it re-enumerates fresh topology here, not a stale snapshot.
+        var screens = App.GetAllScreensCached();
         if (screens.Length == 0) return;
 
         var byName = screens.ToDictionary(s => s.DeviceName);

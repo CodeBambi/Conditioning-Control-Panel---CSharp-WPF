@@ -299,6 +299,13 @@ namespace ConditioningControlPanel
         /// <summary>Effective off-thread-present decision: the persisted setting OR the launch flag.</summary>
         public static bool CompositorOffThreadPresent =>
             CompositorOffThreadForced || Settings?.Current?.CompositorOffThreadPresent == true;
+        /// <summary>THE compositor routing gate — the single source of truth every render-path
+        /// fork must use ("do effects go to the unified overlay host or the legacy per-effect
+        /// windows?"). Effective decision: the persisted toggle OR the launch flag, AND the
+        /// engine actually exists. Never inline this predicate at a call site: a per-service
+        /// copy that drifts leaves that feature split-brained on the wrong render path.</summary>
+        public static bool CompositorEnabled =>
+            (CompositorForced || Settings?.Current?.UnifiedOverlayHost == true) && Compositor != null;
         public static OverlayService Overlay { get; private set; } = null!;
         public static ScreenShakeService ScreenShake { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
@@ -1376,7 +1383,7 @@ namespace ConditioningControlPanel
             Personality.MigrateFromLegacy(Settings.Current);
 
             Subliminal = new SubliminalService();
-            // Unified overlay host (experimental, Settings.UnifiedOverlayHost): shared per-monitor
+            // Unified overlay host (default ON, Settings.UnifiedOverlayHost): shared per-monitor
             // Skia surface the effect services route to instead of per-effect windows. Inert (no
             // windows, no render tick) until a layer activates, so constructing it always is free.
             Compositor = new Services.Compositor.CompositorEngine();
@@ -1698,7 +1705,7 @@ namespace ConditioningControlPanel
             // Pay the compositor's one-time host costs (window + hwnd + Skia surface + paint JIT)
             // after startup settles instead of on the first effect trigger ("first load" hitch).
             // Deferred to Background priority so launch isn't slowed.
-            if (CompositorForced || Settings?.Current?.UnifiedOverlayHost == true)
+            if (CompositorEnabled)
             {
                 Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
                     () => Compositor?.Prewarm());
