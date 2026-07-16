@@ -3022,3 +3022,50 @@ img.rh-fx-spiralspin {
 .wr-loom-progress, .wr-loom-status { font-size: 0.78rem; color: #ffd7ec; font-style: italic; margin-top: 4px; text-align: center; }
 .wr-loom-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; border: 1px solid rgba(255, 138, 194, 0.4); }
 .wr-loom-rackrow .wr-row-right { display: flex; gap: 6px; }
+
+/* ============================ crafting Part 3 ============================ */
+
+/* the recap line: a Lookbook page tore loose */
+.cf-recap-page { color: #ffd7ec !important; font-style: italic; }
+
+/* THE PAPERWALL: torn Lookbook sketches pinned up in THE BOUDOIR */
+.wr-paper-wall { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; padding: 4px 0 6px; }
+.wr-paper-page {
+  position: relative; padding: 10px 10px 6px; border-radius: 3px;
+  background: linear-gradient(165deg, #efe6d4 0%, #e2d5bd 100%);
+  border: 1px solid rgba(120, 100, 70, 0.55);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+  transform: rotate(-1.6deg);
+}
+.wr-paper-page:nth-child(2n) { transform: rotate(1.4deg); }
+.wr-paper-page:nth-child(3n) { transform: rotate(-0.5deg); }
+/* the pin */
+.wr-paper-page::before {
+  content: ''; position: absolute; top: -5px; left: 50%; margin-left: -5px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffb7dc, #c2447e 70%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5);
+}
+.wr-paper-grid {
+  display: grid; grid-template-columns: repeat(3, 30px); grid-template-rows: repeat(3, 30px);
+  gap: 3px;
+}
+.wr-paper-cell { border-radius: 3px; border: 1px dashed rgba(110, 92, 62, 0.35); }
+.wr-paper-cell.is-filled {
+  display: flex; align-items: center; justify-content: center; font-size: 0.95rem;
+  border: 1px solid rgba(110, 92, 62, 0.6);
+  background: color-mix(in srgb, var(--mt, #fff) 30%, transparent);
+}
+.wr-paper-cell.is-torn {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; font-weight: 800; color: #7d6b4a;
+  border: 1px dashed rgba(110, 92, 62, 0.8);
+  background:
+    repeating-linear-gradient(135deg, rgba(110, 92, 62, 0.18) 0 4px, rgba(110, 92, 62, 0.05) 4px 8px);
+}
+.wr-paper-foot {
+  margin-top: 6px; text-align: center; font-size: 0.66rem; letter-spacing: 0.06em;
+  color: #6d5c3e; font-style: italic;
+}
+.wr-paper-page.is-made { opacity: 0.62; filter: saturate(0.75); }
+.wr-paper-page.is-made .wr-paper-foot { color: #3e6d4c; font-weight: 700; font-style: normal; }

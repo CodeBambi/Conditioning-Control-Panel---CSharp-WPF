@@ -39,7 +39,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boons.js';
-import { MAT_BY_ID, rollMaterialId, CONSUMABLE_IDS } from './crafting.js';
+import { MAT_BY_ID, rollMaterialId, CONSUMABLE_IDS, pickSketchId } from './crafting.js';
 import { CRAFTED_PERMANENT_APPLY, CRAFTED_TOY_DEFS } from './craftedEffects.js';
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
@@ -3429,6 +3429,22 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (channelSec > 0.5) bridge.send({ type: 'meta-command', op: 'add-channel-seconds', seconds: channelSec });
     flushAssetStats();   // ship the last engagement delta before the recap
 
+    // THE PAPERWALL (Part 3): a page tears loose from her Lookbook on the way up —
+    // one undiscovered recipe's torn sketch pins up in THE BOUDOIR. Gated on the
+    // boudoir reveal (runs >= 5, counting this one) so the pin never precedes the
+    // room; the pick reads LIVE meta (pre-add snapshot) and add-to-set dedupes.
+    let pageTorn = false;
+    if (!cfg.scriptedFirstRun) {
+      const m = hostState && hostState.meta;
+      if (m && ((m.runsCompleted | 0) + 1) >= 5) {
+        const sketchId = pickSketchId(new Set(m.discoveredRecipes || []), new Set(m.paperwallSketches || []));
+        if (sketchId) {
+          bridge.send({ type: 'meta-command', op: 'add-to-set', set: 'paperwallSketches', id: sketchId });
+          pageTorn = true;
+        }
+      }
+    }
+
     bridge.send({
       type: 'run-ended',
       score: st.score,
@@ -3468,6 +3484,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         const m = MAT_BY_ID[id];
         return m ? { glyph: m.glyph, name: m.name, count: n } : null;
       }).filter(Boolean),
+      // THE PAPERWALL (Part 3): a torn Lookbook page pinned itself this run
+      pageTorn,
     }, {
       onAgain: () => {
         // Re-request a fresh config (the loadout/settings may have moved, and

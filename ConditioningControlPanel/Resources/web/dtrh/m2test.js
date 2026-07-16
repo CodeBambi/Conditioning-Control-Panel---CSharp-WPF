@@ -89,10 +89,11 @@ export async function run(bridge, hostState) {
     { op: 'set-denial', on: true },                                   // must be REJECTED (no change)
     { op: 'consume-crafted', id: 'sugar_cube' },                      // applies (>=1 after the craft)
     { op: 'consume-crafted', id: 'the_padlock' },                     // must be REJECTED (not a consumable)
+    { op: 'add-to-set', set: 'paperwallSketches', id: 'm2test_sketch' }, // always (Part 3: the endRun tear rides this op)
   ];
   const denialValid = m0.denialArmed !== true;
   const expectApplied = 5 + (dialBuyValid ? 1 : 0) + (flagValid ? 1 : 0) + (rankValid ? 1 : 0)
-    + 8 + (denialValid ? 1 : 0);
+    + 9 + (denialValid ? 1 : 0);
   for (const c of cmds) {
     bridge.send({ type: 'meta-command', ...c });
     await wait(120);
@@ -122,6 +123,9 @@ export async function run(bridge, hostState) {
     && s.pinnedBoon === 'm2test_pin' && s.denialArmed === true
     && cubesNow === cubes0,   // +1 crafted, -1 consumed
     s ? `pin=${s.pinnedBoon} denial=${s.denialArmed} cubes=${cubesNow}/${cubes0}` : 'no snapshot');
+  // crafting Part 3: the paperwall sketch set persists + snapshots back
+  check('paperwall-sketch', !!s && (s.paperwallSketches || []).includes('m2test_sketch'),
+    s ? `sketches=${(s.paperwallSketches || []).length}` : 'no snapshot');
 
   // ---- 3. run lifecycle + payout round-trip ----
   bridge.send({ type: 'run-started', difficulty: 'Gentle', mode: 'm2test' });

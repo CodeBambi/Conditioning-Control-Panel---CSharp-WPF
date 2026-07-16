@@ -149,6 +149,10 @@ public sealed class ChaosMetaState
     public bool DenialArmed { get; set; } = false;
     /// <summary>Cheshire's once-ever Boudoir tour (boudoir_intro VN scene).</summary>
     public bool SeenBoudoirIntro { get; set; } = false;
+    /// <summary>THE PAPERWALL (Part 3): recipe ids whose torn Lookbook sketch has pinned up.
+    /// One page tears per completed descent (page-side pick via add-to-set); pages persist
+    /// after discovery as faded "made" trophies, so this only ever grows.</summary>
+    public HashSet<string> PaperwallSketches { get; set; } = new();
 
     // lifetime stats (consumed by the Stats tab in a later session)
     public int RunsCompleted { get; set; } = 0;

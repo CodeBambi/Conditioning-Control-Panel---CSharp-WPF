@@ -270,9 +270,82 @@ export function rollMaterialId() {
 export function matArt(id) { return `${ART}materials/${id}.png`; }
 export function craftedArt(id) { return `${ART}crafted/${id}.png`; }
 
-// ============================ Part-3 seam ============================
+// ============================ THE PAPERWALL (Part 3) ============================
+// Torn Lookbook sketches: one page tears loose per completed descent and pins up
+// in THE BOUDOIR, showing an undiscovered recipe's pictogram with a corner torn
+// away. The sketch teaches the SHAPE; the torn cells keep a sliver of puzzle
+// (torn ≠ empty — something goes there, the page just doesn't say what).
 
 /** Recipes the player hasn't discovered yet (paperwall hints draw from this). */
 export function undiscoveredRecipes(v) {
   return RECIPES.filter((r) => !v.discoveredRecipes.has(r.id));
+}
+
+const occupiedCells = (r) => r.grid.split('').filter((ch) => ch !== '.' && ch !== '/').length;
+
+/**
+ * Which page tears loose tonight: a weighted pick over recipes that are neither
+ * discovered nor already sketched — simpler drawings tear first. The Pink Heart
+ * is the LAST page: it only comes loose once every other picture is known.
+ * Returns a recipe id, or null (the book has no loose pages left).
+ */
+export function pickSketchId(discovered, sketched) {
+  const open = RECIPES.filter((r) =>
+    r.id !== 'the_pink_heart' && !discovered.has(r.id) && !sketched.has(r.id));
+  if (!open.length) {
+    const othersKnown = RECIPES.every((r) => r.id === 'the_pink_heart' || discovered.has(r.id));
+    return (othersKnown && !discovered.has('the_pink_heart') && !sketched.has('the_pink_heart'))
+      ? 'the_pink_heart' : null;
+  }
+  const weights = open.map((r) => 11 - occupiedCells(r));   // 3 cells -> 8, 9 cells -> 2
+  let roll = Math.random() * weights.reduce((s, w) => s + w, 0);
+  for (let i = 0; i < open.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return open[i].id;
+  }
+  return open[open.length - 1].id;
+}
+
+// Deterministic torn cells: the same page always has the same corner missing
+// (no save state needed). Rings (7+ cells) lose 2 cells, small drawings lose 1 —
+// always OCCUPIED cells, so the drawing's outline is never ambiguous.
+function tornIndexes(recipe) {
+  let h = 2166136261;
+  for (const c of recipe.id) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  const occ = [];
+  const rows = recipe.grid.split('/');
+  for (let r = 0; r < rows.length && r < 3; r++) {
+    for (let c = 0; c < rows[r].length && c < 3; c++) {
+      if (rows[r][c] !== '.') occ.push(r * 3 + c);
+    }
+  }
+  const torn = new Set();
+  const want = Math.min(occ.length >= 7 ? 2 : 1, Math.max(0, occ.length - 1));
+  let guard = 32;
+  while (torn.size < want && guard-- > 0) {
+    torn.add(occ[h % occ.length]);
+    h = Math.imul(h ^ (h >>> 13), 16777619) >>> 0;
+  }
+  return torn;
+}
+
+/**
+ * The sketch as drawn on the page: a flat 9-array (row-major, top-left first) of
+ * null (empty cell) | { glyph, tint, name, torn } — torn cells still carry their
+ * material (hidden while unmade, revealed once the recipe is discovered).
+ */
+export function sketchView(recipe) {
+  const torn = tornIndexes(recipe);
+  const rows = recipe.grid.split('/');
+  const cells = new Array(9).fill(null);
+  for (let r = 0; r < rows.length && r < 3; r++) {
+    for (let c = 0; c < rows[r].length && c < 3; c++) {
+      const id = CH_TO_ID[rows[r][c]];
+      if (!id) continue;
+      const i = r * 3 + c;
+      const m = MAT_BY_ID[id];
+      cells[i] = { glyph: m.glyph, tint: m.tint, name: m.name, torn: torn.has(i) };
+    }
+  }
+  return cells;
 }

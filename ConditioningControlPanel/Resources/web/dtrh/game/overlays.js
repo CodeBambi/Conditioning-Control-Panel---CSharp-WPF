@@ -281,6 +281,8 @@ export function createOverlays(hud) {
       line('', `the fall took you through ${stats.biomes.map((b) => `${b.glyph} ${b.name}`).join(' → ')}`);
     }
     if (stats.trickleDrops > 0) line('', `💧 drip feed gathered ${Math.floor(stats.trickleDrops)} ✦`);
+    // THE PAPERWALL (Part 3): a torn Lookbook page pinned itself on the way up
+    if (stats.pageTorn) line('cf-recap-page', '🗞 a page tore loose from her Lookbook — it’s pinned in THE BOUDOIR.');
 
     // THE COMPACT (crafted, Part 2): flip it open - picks, haul, route. Owners
     // only; without it the recap above is byte-identical to the shipped one.

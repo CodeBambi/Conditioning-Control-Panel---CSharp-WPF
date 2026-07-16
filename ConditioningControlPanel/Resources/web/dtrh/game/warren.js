@@ -34,7 +34,7 @@ import {
 } from './catalog.js';
 import { BOONS } from './boons.js';
 import { MATERIALS, MAT_BY_ID, RECIPES, matchGrid, gridCost, recipeCost, recipeCells,
-  matArt, craftedArt } from './crafting.js';
+  matArt, craftedArt, sketchView } from './crafting.js';
 import * as reveals from './reveals.js';
 import { createLoomStudio } from './loomStudio.js';
 import { BUBBLE_SKINS, getBubbleSkin, setBubbleSkin } from './variants.js';
@@ -610,6 +610,8 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     ],
     boudoir: [
       { id: 'haul', side: 'left',  title: 'THE HAUL', sub: 'what the tube let you keep', render: renderHaulWin },
+      { id: 'paperwall', side: 'left', title: 'THE PAPERWALL', sub: 'torn pages from her Lookbook',
+        gate: (v) => v.paperwallSketches.size > 0, render: renderPaperwallWin },
       { id: 'kept', side: 'left',  title: 'KEPT THINGS', sub: 'what you made, and what it does',
         gate: (v) => RECIPES.some((r) => v.craftedCount(r.id) > 0), render: renderKeptWin },
       { id: 'headphones', side: 'left', title: 'HEADPHONES', sub: 'what the descent whispers',
@@ -1051,8 +1053,8 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   // ============================ 🛏 THE BOUDOIR (craft) ============================
   // Materials drop in the fall (chaosRun material rolls); recipes are PICTOGRAMS -
   // the 3x3 worktable arrangement literally draws the object (crafting.js owns the
-  // tables + matcher, translation/mirror tolerant). Part 1: crafted items persist
-  // "dormant" (effects are Part 2); hints on the boon-room walls are Part 3.
+  // tables + matcher, translation/mirror tolerant). Part 2 made the items real;
+  // Part 3 is THE PAPERWALL - torn Lookbook sketches that teach undiscovered shapes.
 
   /** THE HAUL pane: the six raw ingredients + banked counts. */
   function renderHaulWin(body, v) {
@@ -1069,6 +1071,45 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
         state: count > 0 ? 'owned' : 'empty', foot: `×${count}`,
         tipText: count > 0 ? `${m.name} ×${count}` : `no ${m.name.toLowerCase()} yet — the tube drops it`,
       }));
+    }
+  }
+
+  /** THE PAPERWALL pane (Part 3): torn Lookbook sketches, one pinned per completed
+   * descent (chaosRun endRun picks; add-to-set persists). Each page shows an
+   * undiscovered recipe's pictogram with its torn cells hidden - the shape is the
+   * hint, the torn corner is the puzzle. Discovered pages fade into trophies. */
+  function renderPaperwallWin(body, v) {
+    const card = el('wr-card', body);
+    el('wr-card-sub', card, 'pages tear loose on the way up. the drawing is the recipe — the torn corner isn’t telling.');
+    const wall = el('wr-paper-wall', card);
+    for (const r of RECIPES) {
+      if (!v.paperwallSketches.has(r.id)) continue;
+      const made = v.discoveredRecipes.has(r.id);
+      const page = el('wr-paper-page' + (made ? ' is-made' : ''), wall);
+      const grid = el('wr-paper-grid', page);
+      const cells = sketchView(r);
+      for (let i = 0; i < 9; i++) {
+        const c = cells[i];
+        const cell = el('wr-paper-cell', grid);
+        if (!c) continue;
+        if (c.torn && !made) {
+          cell.classList.add('is-torn');
+          cell.textContent = '?';
+        } else {
+          cell.classList.add('is-filled');
+          cell.textContent = c.glyph;
+          cell.style.setProperty('--mt', c.tint);
+        }
+      }
+      el('wr-paper-foot', page, made ? `${r.glyph} ${r.name.toLowerCase()} · made ✓` : 'unmade');
+      tip(page, made ? r.desc
+        : 'draw this at the worktable. the ? cells hold SOMETHING — the page doesn’t say what.');
+    }
+    const inBook = RECIPES.filter((r) =>
+      !v.discoveredRecipes.has(r.id) && !v.paperwallSketches.has(r.id)).length;
+    if (inBook > 0) {
+      card.appendChild(hazyRow(`the Lookbook still holds ${inBook} page${inBook === 1 ? '' : 's'}.`,
+        'they come loose one descent at a time.'));
     }
   }
 
@@ -1212,8 +1253,12 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     }
     const unmade = RECIPES.length - found.length;
     if (unmade > 0) {
+      // Part 3: once torn sketches hang next door, the nudge points at them
+      const hinted = RECIPES.some((r) =>
+        v.paperwallSketches.has(r.id) && !v.discoveredRecipes.has(r.id));
       card.appendChild(hazyRow(`${unmade} picture${unmade === 1 ? '' : 's'} still unmade.`,
-        'draw shapes with what you carry. some pictures mean something.'));
+        hinted ? 'the paperwall remembers some of them.'
+          : 'draw shapes with what you carry. some pictures mean something.'));
     }
 
     syncCraft();

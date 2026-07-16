@@ -521,6 +521,7 @@ export function metaView(meta) {
   const materials = m.materials || {};
   const discoveredRecipes = asSet(m.discoveredRecipes);
   const craftedItems = m.craftedItems || {};
+  const paperwallSketches = asSet(m.paperwallSketches);
   const runs = m.runsCompleted | 0;
   const rankIndex = RANKS.forRuns(runs);
 
@@ -625,6 +626,8 @@ export function metaView(meta) {
     pinnedBoon: m.pinnedBoon || null,
     denialArmed: !!m.denialArmed,
     seenBoudoirIntro: !!m.seenBoudoirIntro,
+    // Part 3: THE PAPERWALL's torn Lookbook sketches (recipe ids with a page pinned)
+    paperwallSketches,
 
     isDiscovered: (codexId) => discovered.has(codexId),
     /** Happy path: run 2+ shows full shelves; before that only the starter trio. */
