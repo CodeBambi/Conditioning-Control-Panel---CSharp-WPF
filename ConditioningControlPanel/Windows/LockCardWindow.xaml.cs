@@ -80,6 +80,9 @@ namespace ConditioningControlPanel
         [DllImport("user32.dll")]
         private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
 
+        [DllImport("user32.dll")]
+        private static extern void DisableProcessWindowsGhosting();
+
         private IntPtr _hwnd;
 
         // ── Dead-man's switch ───────────────────────────────────────────────────
@@ -98,6 +101,23 @@ namespace ConditioningControlPanel
         private static volatile int _watchdogOpenCount;
         private static volatile bool _watchdogPongPending;
         private static volatile bool _watchdogDropped;
+        // Hwnds hit by EmergencyDrop. SLWA permanently breaks WPF's layered rendering on them, so any
+        // window in here must be Closed and never handed back out of the keep-alive pool (a wedged
+        // dismissal can pool a dropped window before the Send-priority recovery cleanup runs).
+        private static readonly HashSet<IntPtr> _droppedHwnds = new();
+        private static bool _ghostingDisabled;
+
+        // Verified on Win11 26200: with ghosting active, one click at a hung fullscreen card makes DWM
+        // replace it on screen with a topmost "Ghost" hwnd the emergency drop can't reach - the cover
+        // then survives SLWA/SetWindowPos on the real hwnd. Per-process, irreversible, so flip it once
+        // before the first card can ever hang.
+        private static void DisableGhostingOnce()
+        {
+            if (_ghostingDisabled) return;
+            _ghostingDisabled = true;
+            try { DisableProcessWindowsGhosting(); }
+            catch (Exception ex) { App.Logger?.Debug("DisableProcessWindowsGhosting failed: {E}", ex.Message); }
+        }
 
 
 
@@ -878,8 +898,24 @@ namespace ConditioningControlPanel
             ReturnToPool();
         }
 
+        // True if this window was hit by EmergencyDrop — its layered rendering is permanently broken
+        // (see EmergencyDrop) and it must be destroyed, never pooled or rented.
+        private bool IsDroppedShell()
+        {
+            if (_hwnd == IntPtr.Zero) return false;
+            lock (_watchdogLock) return _droppedHwnds.Contains(_hwnd);
+        }
+
         private void ReturnToPool()
         {
+            if (IsDroppedShell())
+            {
+                // SLWA-poisoned by an emergency drop: WPF can never render this window again. Pooling
+                // it would hand a later card an invisible shell that still steals keyboard focus.
+                App.Logger?.Warning("LockCardWindow: refusing to pool an emergency-dropped window - closing it");
+                try { _isCompleted = true; Close(); } catch { }
+                return;
+            }
             if (_pool.Count < POOL_MAX)
             {
                 if (!_pool.Contains(this)) _pool.Push(this);
@@ -958,7 +994,14 @@ namespace ConditioningControlPanel
                 {
                     _watchdogDropped = true;
                     IntPtr[] hwnds;
-                    lock (_watchdogLock) hwnds = _watchdogHwnds;
+                    lock (_watchdogLock)
+                    {
+                        hwnds = _watchdogHwnds;
+                        // Mark them poisoned BEFORE dropping: if the wedged dispatcher item itself
+                        // pools these windows when it resumes, ReturnToPool must already know to
+                        // Close them instead (the Send-priority cleanup can't preempt that item).
+                        foreach (var h in hwnds) _droppedHwnds.Add(h);
+                    }
                     App.Logger?.Warning(
                         "LockCardWindow: UI thread unresponsive for {Ms}ms with {N} lock card(s) covering the screen - force-dropping the topmost cover",
                         stalled, hwnds.Length);
@@ -1007,6 +1050,12 @@ namespace ConditioningControlPanel
         // Runs on the dispatcher once it recovers from a wedge that triggered an emergency drop.
         private static void EmergencyRecoveryCleanup()
         {
+            // This runs ON the dispatcher, so the UI thread is provably alive again: acknowledge the
+            // outstanding ping and clear the drop flag NOW. Without this, a recovery landing near the
+            // 40s deadline (with a wedge-parked card request re-arming the count before the lower-
+            // priority pong drains) could FailFast a healthy app off the stale wedge clock.
+            _watchdogPongPending = false;
+            _watchdogDropped = false;
             try
             {
                 _deferTimer?.Stop();
@@ -1032,6 +1081,25 @@ namespace ConditioningControlPanel
                     catch { }
                 }
 
+                // A wedged dismissal may have pooled dropped windows before this cleanup could run
+                // (a dispatcher item can't be preempted): sweep the pool for poisoned shells too.
+                if (_pool.Count > 0)
+                {
+                    var kept = new List<LockCardWindow>(_pool.Count);
+                    while (_pool.Count > 0)
+                    {
+                        var w = _pool.Pop();
+                        if (w == null) continue;
+                        if (w.IsDroppedShell())
+                        {
+                            App.Logger?.Warning("LockCardWindow: closing an emergency-dropped shell found in the pool");
+                            try { w._isCompleted = true; w.Close(); } catch { }
+                        }
+                        else kept.Add(w);
+                    }
+                    for (int i = kept.Count - 1; i >= 0; i--) _pool.Push(kept[i]);
+                }
+
                 if (windows.Count > 0 &&
                     App.InteractionQueue?.CurrentInteraction == Services.InteractionQueueService.InteractionType.LockCard)
                 {
@@ -1048,7 +1116,16 @@ namespace ConditioningControlPanel
             while (_pool.Count > 0)
             {
                 var w = _pool.Pop();
-                if (w != null) return w;
+                if (w == null) continue;
+                // A dropped shell that slipped into the pool (wedged dismissal racing the recovery
+                // cleanup) is unrenderable — destroy it and keep looking.
+                if (w.IsDroppedShell())
+                {
+                    App.Logger?.Warning("LockCardWindow: rented an emergency-dropped shell - closing it and renting another");
+                    try { w._isCompleted = true; w.Close(); } catch { }
+                    continue;
+                }
+                return w;
             }
             return new LockCardWindow();
         }
@@ -1086,6 +1163,10 @@ namespace ConditioningControlPanel
             StopVoiceSolve();
             _allWindows.Remove(this);
             UpdateWatchdogSnapshot();
+            // Un-mark a dropped shell as it is destroyed: the OS may recycle this hwnd value for a
+            // future window, which must not inherit the "poisoned" verdict.
+            if (_hwnd != IntPtr.Zero)
+                lock (_watchdogLock) { _droppedHwnds.Remove(_hwnd); }
             // If this window is being genuinely closed (app shutdown, Alt+F4), make sure it can't be
             // handed back out of the keep-alive pool as a dead shell.
             RemoveFromPool(this);
@@ -1163,12 +1244,21 @@ namespace ConditioningControlPanel
             }
             _allWindows.Clear();
             _sharedInput = "";
+            // Refresh the switch NOW: the early returns below (no screens) must not leave it armed
+            // on the stale snapshot of the just-pooled (hidden) windows — a later unrelated UI stall
+            // would "drop" pooled shells and could even FailFast with nothing on screen.
+            UpdateWatchdogSnapshot();
 
             // Reset achievement tracking
             _startTime = DateTime.Now;
             _totalErrors = 0;
             _totalCharsTyped = 0;
             _isTest = isTest;
+
+            // Hung fullscreen-topmost covers must never be replaced by a DWM ghost: the ghost copies
+            // the cover's rect and topmost band but is a separate hwnd the emergency drop can't touch,
+            // so with ghosting on, one click at a frozen card keeps the screen covered until FailFast.
+            DisableGhostingOnce();
 
             var screens = App.GetAllScreensCached();
             if (screens.Length == 0)
@@ -1194,17 +1284,21 @@ namespace ConditioningControlPanel
                     primaryWindow = window;
                 }
 
+                // Arm the dead-man's switch INSIDE the loop, around each Show: the most-documented
+                // wedge site is the show sequence itself (#494's synchronous CompleteRender on a fresh
+                // realization), and by iteration N the earlier monitors' cards are already fullscreen
+                // topmost. Pre-Show covers pooled reuse (hwnd already valid); post-Show covers a fresh
+                // window whose hwnd materialized inside Show(). Windows without an hwnd yet are skipped
+                // by the snapshot, so the pre-Show call is safe on a pool miss.
+                UpdateWatchdogSnapshot();
                 window.Show();
                 window.OnShown();   // per-show foreground/focus/voice (Loaded no longer re-fires on reuse)
+                UpdateWatchdogSnapshot();
             }
 
             // Focus primary window
             primaryWindow?.Activate();
             primaryWindow?.TxtInput.Focus();
-
-            // Arm the dead-man's switch for this visible set (hwnds are valid: OnSourceInitialized
-            // runs synchronously inside the first Show()).
-            UpdateWatchdogSnapshot();
         }
     }
 }

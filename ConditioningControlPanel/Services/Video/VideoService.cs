@@ -76,6 +76,17 @@ namespace ConditioningControlPanel.Services
         private static readonly List<object> _nativeQuarantine = new();
         private static readonly object _quarantineLock = new();
         private static bool _coreLoaded;   // Core.Initialize is per-process; retire/re-init must not repeat it
+        // Circuit breaker: each retire roots a whole LibVLC instance in quarantine forever, so on a
+        // machine where every video output-fails the heal would otherwise leak two instances per
+        // scheduled video, unboundedly. After the cap the watchdog stops retiring (videos are still
+        // skipped at the grace deadline, but no more native instances are condemned).
+        private static int _libVLCRetireCount;
+        private const int MaxLibVLCRetiresPerSession = 4;
+        // Bumped by every CloseAll. Watchdog actions (vout heal, wedge rescue) snapshot it when they
+        // fire and abort if it moved by the time their dispatched continuation runs - otherwise a
+        // stale continuation can resurrect a video the user panicked away, run reentrantly inside
+        // another teardown's message pump, or kill a newer video it never belonged to.
+        private int _teardownGeneration;
 
         private System.Threading.Timer? _wedgeWatchdog;
         private DispatcherTimer? _heartbeatTimer;
@@ -143,7 +154,10 @@ namespace ConditioningControlPanel.Services
         private static readonly object _libVLCLock = new();
         private static bool _libVLCInitialized;
         private static bool _libVLCInitializing;
-        private static readonly TaskCompletionSource<bool> _libVLCReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Recreated on every retire (see RetireSharedLibVLC) so WaitForLibVLC waits for the REBUILD
+        // instead of instantly returning false off the first init's completed TCS. Reads/writes are
+        // under _libVLCLock or tolerate a stale snapshot (worst case: one early false).
+        private static TaskCompletionSource<bool> _libVLCReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly List<LibVLCSharp.Shared.MediaPlayer> _mediaPlayers = new();
         private readonly object _mediaPlayersLock = new();  // Thread-safe access to _mediaPlayers
 
@@ -553,23 +567,51 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private bool RetireSharedLibVLC(LibVLC? suspect, string reason)
         {
+            // No suspect means the caller doesn't know which instance misbehaved (e.g. it captured
+            // _libVLC after a retire already nulled it). Never condemn blind: on the vout-retry path
+            // a null capture would otherwise bypass the ReferenceEquals guard below and quarantine
+            // the FRESH instance the retry just built.
+            if (suspect == null) return false;
+
             lock (_libVLCLock)
             {
                 if (_libVLC == null) return false;
-                if (suspect != null && !ReferenceEquals(_libVLC, suspect)) return false;
+                if (!ReferenceEquals(_libVLC, suspect)) return false;
+                if (_libVLCRetireCount >= MaxLibVLCRetiresPerSession)
+                {
+                    App.Logger?.Warning(
+                        "VideoService: retire requested ({Reason}) but the per-session cap ({Cap}) is reached - keeping the current instance",
+                        reason, MaxLibVLCRetiresPerSession);
+                    return false;
+                }
+                _libVLCRetireCount++;
 
                 lock (_quarantineLock) { _nativeQuarantine.Add(_libVLC); }
                 App.Logger?.Warning(
-                    "VideoService: retiring shared LibVLC instance ({Reason}) - a fresh instance will be created for the next video",
-                    reason);
+                    "VideoService: retiring shared LibVLC instance ({Reason}, retire {N}/{Cap}) - a fresh instance will be created for the next video",
+                    reason, _libVLCRetireCount, MaxLibVLCRetiresPerSession);
                 _libVLC = null;
                 _libVLCInitialized = false;
                 _libVLCInitializing = false;
+                // The old TCS is already completed; a fresh one lets WaitForLibVLC actually WAIT for
+                // the rebuild (BubbleCount's recovery calls PreloadLibVLC + WaitForLibVLC - with the
+                // stale completed TCS it returned false in microseconds while the rebuild was mid-flight).
+                _libVLCReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             }
             // The duration cache holds Media objects created from the retired instance; drop it so
             // it lazily rebuilds against the fresh one (the retired instance stays rooted, so any
             // in-flight parse can finish harmlessly).
             _metadataCache = null;
+            // Proactively rebuild off-thread: SharedLibVLC consumers outside the mandatory-video
+            // pipeline (bubble count, mini player, help/Deeper previews) read the static directly and
+            // would otherwise be stranded on null until the next scheduled video runs EnsureLibVLC.
+            // Init is serialized under _libVLCLock, so this can't race the retry's own init - the
+            // retry either finds the fresh instance ready or briefly blocks on the lock until it is.
+            Task.Run(() =>
+            {
+                try { EnsureLibVLCInitialized(); }
+                catch (Exception ex) { App.Logger?.Debug("VideoService: background LibVLC rebuild failed: {E}", ex.Message); }
+            });
             return true;
         }
 
@@ -2702,13 +2744,40 @@ namespace ConditioningControlPanel.Services
                 // Authoritative live check — covers a vout that appeared before the event was wired.
                 try { if (player.VoutCount > 0) return; } catch { }
 
-                var retry = !_voutRetryUsed;
+                // A file with no video track legitimately never creates a vout — an audio-only .mp4 in
+                // the videos folder is not an output failure. Let it play out (black window + audio,
+                // the pre-heal behavior) instead of truncating it at the deadline every rotation and
+                // condemning a healthy instance each time.
+                try
+                {
+                    using var media = player.Media;
+                    var tracks = media?.Tracks;
+                    if (tracks != null && tracks.Length > 0 && !tracks.Any(t => t.TrackType == TrackType.Video))
+                    {
+                        App.Logger?.Information(
+                            "VideoService: no vout after {Grace}ms but {File} has no video track - letting it play out",
+                            VoutGraceMs, Path.GetFileName(path));
+                        return;
+                    }
+                }
+                catch { /* track probe is best-effort; fall through to the heal */ }
+
+                // Retire first, retry only if the retire actually happened — if the circuit breaker
+                // tripped (or another heal already swapped the instance) a replay would just fail the
+                // same way, so skip straight to the give-up path.
+                var retired = RetireSharedLibVLC(owner, "no video output within grace window");
+                var retry = retired && !_voutRetryUsed;
                 _voutRetryUsed = true;
                 App.Logger?.Error(
-                    "VideoService: no video output {Grace}ms after Play ({File}) - white-screen output failure; retiring shared LibVLC{Next}",
-                    VoutGraceMs, Path.GetFileName(path),
-                    retry ? ", retrying on a fresh instance" : "; retry already spent, skipping this video");
-                RetireSharedLibVLC(owner, "no video output within grace window");
+                    "VideoService: no video output {Grace}ms after Play ({File}) - white-screen output failure (retired={Retired}){Next}",
+                    VoutGraceMs, Path.GetFileName(path), retired,
+                    retry ? ", retrying on a fresh instance" : "; skipping this video");
+
+                // Snapshot the teardown generation: if ANY teardown (panic, natural end, wedge rescue)
+                // runs before the dispatched action does, the generation moves and the action aborts —
+                // it must never resurrect a video the user stopped, nor run reentrantly inside another
+                // teardown's message pump.
+                var gen = _teardownGeneration;
 
                 var dispatcher = Application.Current?.Dispatcher;
                 if (dispatcher == null || dispatcher.HasShutdownStarted) return;
@@ -2716,20 +2785,33 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        // A different video may have started while this was queued (e.g. the wedge
-                        // watchdog already tore down and rescheduled) — never kill the newcomer.
-                        if (_primaryMediaPlayer != null && !ReferenceEquals(player, _primaryMediaPlayer)) return;
+                        if (_isCleaningUp || _teardownGeneration != gen || !_videoPlaying) return;
+                        // A different video may have started while this was queued — never kill it.
+                        if (!ReferenceEquals(player, _primaryMediaPlayer)) return;
 
-                        ForceCleanup();
                         if (retry)
                         {
+                            // Slot-preserving teardown, mirroring the attention-fail retry: CloseAll
+                            // does NOT release the InteractionQueue Video slot, so queued lock cards /
+                            // bubble counts can't start on top of the retry video; extend the stuck
+                            // timeout so the queue doesn't auto-complete the slot during the gap.
+                            _safetyTimer?.Stop();
+                            _fallbackSafetyTimer?.Stop();
+                            _fallbackSafetyTimer = null;
+                            _videoPlaying = false;
+                            CloseAll();
+                            App.InteractionQueue?.ExtendTimeout(300, InteractionQueueService.InteractionType.Video);
                             App.Logger?.Information("VideoService: vout self-heal - replaying {File} on a fresh LibVLC instance",
                                 Path.GetFileName(path));
                             PlayVideo(path, strict, isVoutRetry: true);
                         }
-                        else if (_isRunning)
+                        else
                         {
-                            ScheduleNext();
+                            // Give up on this video via the FULL natural-end path: Cleanup raises
+                            // VideoEnded, resumes flashes/bubbles, releases the queue slot, and re-arms
+                            // the scheduler. ForceCleanup did none of that, which left ambient features
+                            // suppressed for the whole inter-video gap on chronically failing machines.
+                            Cleanup();
                         }
                     }
                     catch (Exception ex) { App.Logger?.Warning(ex, "VideoService: vout self-heal dispatch failed"); }
@@ -2808,12 +2890,16 @@ namespace ConditioningControlPanel.Services
                 // Queue a real teardown + reschedule for the instant the dispatcher drains again, so a
                 // multi-minute lockout collapses to a brief stutter instead of stranding the frozen
                 // frame until the user kills the app or the next scheduled video jolts it loose.
+                // Generation-guarded: if some other teardown already ran by then (e.g. the vout heal
+                // tore down and started its retry video), this must not kill the newcomer.
+                var gen = _teardownGeneration;
                 try
                 {
                     var dispatcher = Application.Current?.Dispatcher;
                     if (dispatcher != null && !dispatcher.HasShutdownStarted)
                         dispatcher.BeginInvoke(new Action(() =>
                         {
+                            if (_teardownGeneration != gen) return;
                             try { ForceCleanup(); }
                             catch (Exception ex) { App.Logger?.Warning(ex, "Wedge rescue: ForceCleanup threw"); }
                             if (_isRunning) ScheduleNext();
@@ -2886,6 +2972,8 @@ namespace ConditioningControlPanel.Services
                 // Closing veto (SetupStrictHandlers) can never block the window teardown
                 // below, even if a caller forgot to clear it.
                 _videoPlaying = false;
+                // Invalidate any in-flight watchdog continuation (see _teardownGeneration).
+                System.Threading.Interlocked.Increment(ref _teardownGeneration);
             }
 
             // Credit the minutes actually watched, on EVERY teardown (natural end, manual stop, panic,
