@@ -235,17 +235,33 @@ const VEIN_FRAG = `
   varying vec3 vWorld;
   varying float vFogDepth;
   uniform float uTime, uOpacity, uRings, uScroll;
-  uniform vec3 uColor, uRimColor, uFogColor;
+  uniform vec3 uColor, uRimColor, uFogColor, uAccent;
   uniform float uFogDensity;
   uniform int uClipOn;
   uniform vec3 uClipPoint, uClipAxis;
   uniform float uClipR, uClipReach;
+  // biome dressing knobs (all 0 = the classic look). The math mirrors tunnel.js'
+  // biome pattern knobs, rescaled to corridor space, so a doorway corridor wears
+  // the SAME visual language as the biome it leads into. update() eases the
+  // whole set in via J.fxLevel - in a draft room only AFTER the roulette lands,
+  // so the dress never leaks the roll early. Every term ramps continuously from
+  // zero (bounded offsets / mixed masks - never rescaled coordinates), so the
+  // ease-in can't pop or jump phase.
+  uniform float uFxBreath, uFxThrob, uFxStrobe, uFxFlicker;
+  uniform float uFxDots, uFxChecker, uFxPanel, uFxArch, uFxCaustic, uFxScan;
+  uniform float uFxGlitch, uFxStreaks, uFxChase, uFxChain, uFxBeam;
+  uniform float uFxKaleido, uFxMirrorY, uFxHelix, uFxHelix2, uFxDrift;
+  uniform float uFxDesat, uFxRingFade, uFxSurge, uFxSlip, uFxBeat;
 
   float lineMask(float coord, float w) {
     float di = 0.5 - abs(fract(coord) - 0.5);
     float aa = clamp(1.5 * fwidth(coord), w, 0.5); // screen-space AA (clamped so grazing rings don't wash out): no sub-pixel crawl when the fall hovers at a fork
     return 1.0 - smoothstep(0.0, aa, di);
   }
+  // sharp periodic pulse (mostly dark, brief bright peaks) + per-cell hash,
+  // same primitives as the main tube shader.
+  float pulse(float p, float k) { return pow(0.5 + 0.5 * sin(p), k); }
+  float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
 
   void main() {
     // flush-trim to the artery bore + rim glow on the cut
@@ -260,19 +276,193 @@ const VEIN_FRAG = `
         edge = min(edge, dr - uClipR);
       }
     }
+    float around = vUv.y;
+    float len = vUv.x * uRings;   // corridor length in ring spacings (~8u each)
     float scroll = uTime * uScroll;
-    float ring = lineMask(vUv.x * uRings - scroll, 0.06);
-    float ringGlow = 0.4 + 1.8 * pow(0.5 + 0.5 * sin((vUv.x * uRings - scroll) * 6.2831), 3.0);
+
+    // heartbeat envelope: drives the throb glow AND the chapel's beat-lurch
+    float hb = fract(uTime * 0.62);
+    float thr = uFxThrob * (exp(-18.0 * hb) + 0.55 * exp(-18.0 * fract(hb - 0.32)));
+
+    // bounded scroll offsets (never scale scroll itself - it grows unbounded):
+    // surge = the Undertow's swell-and-drag; slip = Static's vertical-hold roll;
+    // beat = the Chapel wall advancing ON the heartbeat and settling between.
+    scroll += uFxSurge * 2.0 * sin(uTime * 0.45);
+    scroll += uFxSlip * 0.8 * smoothstep(0.55, 0.95, fract(uTime * 0.53));
+    scroll += uFxBeat * 0.9 * exp(-6.0 * hb);
+
+    // row tear (Static): short bands of the corridor shear sideways in bursts
+    if (uFxGlitch > 0.001) {
+      float band = floor(len * 6.0);
+      float burst = pulse(uTime * 2.7 + hash1(band) * 6.2831, 24.0);
+      around += uFxGlitch * burst * (hash1(band + 17.0) - 0.5) * 0.12;
+    }
+
+    float ringCoord = len - scroll;
+    float brW = 1.0 + uFxBreath * 0.5 * sin(uTime * 0.75);
+    float ring = lineMask(ringCoord, 0.06 * max(brW, 0.5));
+    // chain links (Chain Court): the ring splits into two rails that alternate
+    // brightness around the bore, reading as interlocked links. Integer link
+    // count - wrap-safe; the soft square wave carries its own fwidth AA.
+    if (uFxChain > 0.001) {
+      float lc = around * 10.0;
+      float lw = clamp(1.5 * fwidth(lc), 0.05, 0.35);
+      float tri = fract(lc);
+      float sq = smoothstep(0.25 - lw, 0.25 + lw, tri) * (1.0 - smoothstep(0.75 - lw, 0.75 + lw, tri));
+      float links = max(lineMask(ringCoord - 0.14, 0.05) * mix(1.0, 0.3, sq),
+                        lineMask(ringCoord + 0.14, 0.05) * mix(0.3, 1.0, sq));
+      ring = mix(ring, links, uFxChain);
+    }
+    ring *= 1.0 - uFxRingFade;
+
+    // helix strands: the accent-colored swirl some biomes wind down the bore
+    // (Mirrors' folded chevrons, the Coronation's counter-braid, Vertigo's
+    // fighting twins, Mirror Lake's reflection). Masks are mixed, never
+    // coordinates (a coordinate lerp would break the vUv wrap mid-ease);
+    // integer arm counts are wrap-safe around the bore. Drift is BOUNDED
+    // phase wobble, same rule as the scroll offsets above.
+    float drift = uFxDrift * (6.0 * sin(uTime * 0.16) + 2.0 * sin(uTime * 0.32 + 1.7));
+    float helix = 0.0, helix2 = 0.0, waterline = 0.0;
+    if (uFxHelix > 0.001) {
+      float hCore = len * 0.8 - scroll * 0.8 + drift;
+      float h = lineMask(around * 3.0 + hCore, 0.045);
+      if (uFxKaleido > 0.001) {
+        float aFold = abs(fract(around * 3.0) - 0.5) * 2.0;
+        h = mix(h, lineMask(aFold * 3.0 + hCore, 0.045), uFxKaleido);
+      }
+      if (uFxMirrorY > 0.001) {
+        float aMir = 0.5 - abs(around - 0.5);
+        float ripple = 0.05 * uFxMirrorY * sin(len * 2.0 + uTime * 0.8);
+        h = mix(h, lineMask((aMir + ripple) * 6.0 + hCore, 0.045), uFxMirrorY);
+      }
+      helix = uFxHelix * h;
+    }
+    if (uFxHelix2 > 0.001) {
+      helix2 = uFxHelix2 * lineMask(around * 3.0 - len * 0.8 + scroll * 0.8 - drift * 0.6, 0.035);
+    }
+    // waterline fold glow (Mirror Lake): the seam the corridor reflects across
+    if (uFxMirrorY > 0.001) {
+      waterline = uFxMirrorY * lineMask(around + 0.5, 0.09) * (0.55 + 0.45 * sin(uTime * 0.9));
+    }
+
+    float ringGlow = 0.4 + 1.8 * pow(0.5 + 0.5 * sin(ringCoord * 6.2831), 3.0);
+    ringGlow *= 1.0 + uFxBreath * 0.3 * sin(uTime * 0.75 - 0.6);   // brightness trails the width swell
+    ringGlow *= 1.0 + thr * 1.6;                                    // heartbeat lub-dub
+    float strobe = uFxStrobe * pulse(uTime * 11.94, 12.0);          // ~1.9Hz signage tick (Casino)
+    ringGlow *= 1.0 + strobe * 2.2;
+    // marquee chase (Casino): two bulb-trains running around every ring
+    if (uFxChase > 0.001) {
+      float chase = pulse((around - uTime * 0.22) * 6.2831, 10.0)
+                  + 0.45 * pulse((around + 0.5 - uTime * 0.22) * 6.2831, 10.0);
+      ringGlow *= 1.0 + uFxChase * 2.6 * chase;
+    }
+    // candle-flame unsteadiness (Keyhole): the glow wavers, never metronomic
+    if (uFxFlicker > 0.001) {
+      ringGlow *= 1.0 + uFxFlicker * (0.45 * sin(uTime * 7.3) * sin(uTime * 3.1) + 0.2 * sin(uTime * 13.7));
+    }
+
     // dark wall + glowing theme-colored line work, like the main tube - NOT a
     // solid color fill (a 0.5 fill made each vein read as a giant flat ball).
-    // The branch's identity color lives in the rings and the mouth rim.
+    // The branch's identity color lives in the rings and the mouth rim; the
+    // biome dress rides on top in the biome's own accent.
     vec3 col = uColor * 0.12 + uColor * ring * ringGlow;
+    col += uAccent * (helix * 1.2 + helix2) * (0.55 + 0.45 * pulse(len * 0.5 - uTime * 1.3, 3.0));
+    col += uAccent * waterline * 0.8;
+
+    // polka dots (Toybox): brick-offset candy lattice riding the wall
+    if (uFxDots > 0.001) {
+      float dl = len * 2.0 - scroll * 0.4;
+      float rowId = floor(dl);
+      float da = around * 10.0 + 0.5 * mod(rowId, 2.0);
+      vec2 dc = vec2(fract(da) - 0.5, fract(dl) - 0.5);
+      float dotM = 1.0 - smoothstep(0.13, 0.22, length(dc));
+      float dvis = clamp(1.5 - 3.0 * fwidth(dl), 0.0, 1.0);
+      float dh = hash1(floor(da) * 11.0 + rowId * 57.0);
+      col += mix(uColor, uAccent, dh) * dotM * dvis * uFxDots * (0.4 + 0.25 * sin(uTime * 1.3 + dh * 6.2831));
+    }
+    // private browsing (Incognito): faint alpha-checker + crawling redaction bars
+    if (uFxChecker > 0.001) {
+      float ch = sin(around * 6.2831 * 6.0) * sin(len * 6.2831 * 1.5 - scroll * 0.63);
+      col *= 1.0 + uFxChecker * 0.12 * ch;
+      float bar = lineMask(len * 0.4 - uTime * 0.05, 0.30);
+      col *= 1.0 - uFxChecker * 0.45 * bar;
+    }
+    // picture frames (Gallery): gilt frames tiling the corridor wall
+    if (uFxPanel > 0.001) {
+      float pa = around * 8.0;
+      float pl = len * 1.2 - scroll * 0.27;
+      vec2 pc = vec2(abs(fract(pa) - 0.5), abs(fract(pl) - 0.5));
+      float inner = max(pc.x, pc.y);
+      float frame = smoothstep(0.34, 0.38, inner) * (1.0 - smoothstep(0.44, 0.48, inner));
+      float pvis = clamp(1.5 - 2.0 * fwidth(pl), 0.0, 1.0);
+      col += uAccent * frame * pvis * uFxPanel * (0.32 + 0.10 * sin(uTime * 0.5));
+      col *= 1.0 - uFxPanel * 0.10 * (1.0 - smoothstep(0.30, 0.36, inner));
+    }
+    // stained glass (Chapel): pane cells between dark lead lines
+    if (uFxArch > 0.001) {
+      float ca = around * 7.0;
+      float cl = len * 0.8 - scroll * 0.25;
+      float lead = max(lineMask(ca, 0.05), lineMask(cl, 0.05));
+      float ph = hash1(floor(ca) * 7.0 + floor(cl) * 113.0);
+      vec3 pane = mix(uColor, uAccent, ph);
+      col += uFxArch * (pane * (0.12 + 0.08 * sin(uTime * 0.6 + ph * 6.2831)) * (1.0 - lead) - col * 0.45 * lead);
+    }
+    // caustics (Undertow / Mirror Lake): shifting water-light webs
+    if (uFxCaustic > 0.001) {
+      float c1 = sin((around * 5.0 + len * 0.9) * 6.2831 + uTime * 0.55);
+      float c2 = sin((around * 3.0 - len * 0.75) * 6.2831 - uTime * 0.4);
+      float c3 = 0.6 + 0.4 * sin((around * 8.0 + len * 0.4) * 6.2831 + uTime * 0.85);
+      col += uAccent * uFxCaustic * pow(0.5 + 0.5 * c1 * c2, 4.0) * c3 * 0.7;
+    }
+    // CRT scan (Static): fine phosphor rows + a rolling hold-bar; row amplitude
+    // fades where the rows go sub-pixel (fwidth) instead of shimmering to moire
+    if (uFxScan > 0.001) {
+      float sc = len * 30.0;
+      float rows = 0.5 + 0.5 * sin(sc * 6.2831);
+      float rowVis = clamp(1.5 - 3.0 * fwidth(sc), 0.0, 1.0);
+      col *= 1.0 - uFxScan * 0.30 * rows * rowVis;
+      col += uAccent * uFxScan * 0.35 * pulse((len * 0.25 - uTime * 0.35) * 6.2831, 10.0);
+    }
+    // speed streaks (Terminal Velocity): the corridor is ALWAYS at speed
+    if (uFxStreaks > 0.001) {
+      float sk = lineMask(around * 24.0 + sin(len * 2.0) * 0.15, 0.03)
+               * pulse(len * 2.0 - uTime * 9.0, 2.0);
+      col += uAccent * uFxStreaks * sk * 1.3;
+    }
+    // searchlight beams (Searchlight): the wall goes near-dark and two roaming
+    // azimuth beams become what shows you the corridor
+    if (uFxBeam > 0.001) {
+      col *= 1.0 - uFxBeam * 0.5;
+      float b = pulse((around - uTime * 0.13) * 6.2831, 14.0)
+              + 0.6 * pulse((around + 0.37 + uTime * 0.11) * 6.2831, 14.0);
+      col += mix(uColor, uAccent, 0.7) * uFxBeam * b * (0.55 + ring * 1.2);
+    }
+    // the Grey Ward: drain the corridor of color with a faint paper grain
+    if (uFxDesat > 0.001) {
+      float lum = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(col, vec3(lum), uFxDesat);
+      float grain = hash1(floor(around * 160.0) + floor(len * 40.0) * 3.0 + floor(uTime * 9.0) * 7.0);
+      col += vec3((grain - 0.5) * 0.05 * uFxDesat);
+    }
+
     float rim = 1.0 - smoothstep(0.0, 0.9, edge);
     col += uRimColor * rim * (1.3 + 0.4 * sin(uTime * 2.0));
     float f = 1.0 - exp(-uFogDensity * uFogDensity * vFogDepth * vFogDepth);
     col = mix(col, uFogColor, clamp(f, 0.0, 1.0));
     gl_FragColor = vec4(col, uOpacity);
   }`;
+
+// biome dressing knob names: shared by the vein shader (as uFx<Key>) and the
+// veinFx payloads handed to schedule() (game/biomes.js authors one recipe per
+// biome). update() multiplies each weight by J.fxLevel every frame.
+const VEIN_FX_KEYS = [
+  'breath', 'throb', 'strobe', 'flicker',
+  'dots', 'checker', 'panel', 'arch', 'caustic', 'scan',
+  'glitch', 'streaks', 'chase', 'chain', 'beam',
+  'kaleido', 'mirrorY', 'helix', 'helix2', 'drift',
+  'desat', 'ringFade', 'surge', 'slip', 'beat',
+];
+const fxUniName = (k) => 'uFx' + k.charAt(0).toUpperCase() + k.slice(1);
 
 // ---- antechamber material: the spherical room's interior wall ----------------
 // BackSide + opaque (no uOpacity - the room is born 120u+ ahead, fully buried
@@ -528,22 +718,28 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
 
     const tubeGeo = new THREE.TubeGeometry(curve, 120, VEIN_RADIUS, 20, false);
+    const uniforms = {
+      uTime: { value: 0 },
+      uOpacity: { value: 0 },
+      uRings: { value: Math.round(VEIN_LEN / 8) },
+      uScroll: { value: 1.0 },
+      uColor: { value: col.clone() },
+      uRimColor: { value: col.clone().lerp(new THREE.Color(0xffffff), 0.4) },
+      uAccent: { value: col.clone().lerp(new THREE.Color(0xffffff), 0.25) },
+      uFogColor: { value: fogCol().clone() },
+      uFogDensity: { value: FOG_DENSITY },
+      uClipOn: { value: 0 },   // no trunk trim in v5: the vein meets the CHAMBER wall
+      uClipPoint: { value: new THREE.Vector3() },
+      uClipAxis: { value: new THREE.Vector3(0, 0, 1) },
+      uClipR: { value: 0 },
+      uClipReach: { value: 0 },
+    };
+    // biome dressing knobs, all parked at the classic look; update() drives
+    // them from J.veinFx * fxLevel (fork: the biome you're IN; draft room: the
+    // one you're about to enter, held back until the roulette lands)
+    for (const k of VEIN_FX_KEYS) uniforms[fxUniName(k)] = { value: 0 };
     const mat = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uOpacity: { value: 0 },
-        uRings: { value: Math.round(VEIN_LEN / 8) },
-        uScroll: { value: 1.0 },
-        uColor: { value: col.clone() },
-        uRimColor: { value: col.clone().lerp(new THREE.Color(0xffffff), 0.4) },
-        uFogColor: { value: fogCol().clone() },
-        uFogDensity: { value: FOG_DENSITY },
-        uClipOn: { value: 0 },   // no trunk trim in v5: the vein meets the CHAMBER wall
-        uClipPoint: { value: new THREE.Vector3() },
-        uClipAxis: { value: new THREE.Vector3(0, 0, 1) },
-        uClipR: { value: 0 },
-        uClipReach: { value: 0 },
-      },
+      uniforms,
       vertexShader: VEIN_VERT,
       fragmentShader: VEIN_FRAG,
       transparent: true,               // for the fog fade-in reveal (uOpacity)
@@ -1118,6 +1314,22 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       J.room.mat.uniforms.uTime.value += dt;
       J.room.mat.uniforms.uFogColor.value.copy(fc);
     }
+    // biome corridor dressing: ease the recipe's weights in over ~1.1s. On a
+    // fork you're already IN the biome, so it ramps with the approach; in a
+    // draft room it holds at zero until the roulette lands (revealDone) - the
+    // corridors dressing themselves as the destination IS the reveal's payoff.
+    if (J.veinFx) {
+      const wantFx = (J.mode === 'draft' && !J.revealDone) ? 0 : 1;
+      J.fxLevel = clamp(J.fxLevel + Math.sign(wantFx - J.fxLevel) * dt * 0.9, 0, 1);
+      if (J.fxLevel > 0.0001) {
+        for (const m of J.veins) {
+          if (m.dying) continue;
+          for (const k of VEIN_FX_KEYS) {
+            m.mat.uniforms[fxUniName(k)].value = (J.veinFx[k] || 0) * J.fxLevel;
+          }
+        }
+      }
+    }
     // the room title breathes: a slow opacity swell so the writing feels lit,
     // not painted. Its reveal tracks the phase (fog fade-up on approach).
     // With a roulette in the room the title HOLDS BACK until the settle card
@@ -1181,8 +1393,11 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
      * 3 doors); coaxIndex = the door that takes a passive faller; presealIndex =
      * a door born shut (fork mode only). mode 'draft' stages the boon draft:
      * lingerSec is the game's draft timer (timeout dives the coaxed door with
-     * skipped semantics), lead shortens the telegraph. */
-    schedule({ atDepth, branches, coaxIndex = 0, presealIndex = null, mode = 'fork', lingerSec = 0, lead = LEAD, title = null, biomeReveal = null }) {
+     * skipped semantics), lead shortens the telegraph. veinFx = a biome's
+     * corridor-dressing recipe ({accent, <knob>: weight, ...} - see
+     * VEIN_FX_KEYS / biomes.js): forks pass the biome you're in, draft rooms
+     * the one the doors lead into (applied only after the roulette lands). */
+    schedule({ atDepth, branches, coaxIndex = 0, presealIndex = null, mode = 'fork', lingerSec = 0, lead = LEAD, title = null, biomeReveal = null, veinFx = null }) {
       if (!active) return;
       if (J) teardown();
       const descs = (branches || []).slice(0, 3);
@@ -1205,7 +1420,13 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
         // the Journey Rooms: the next room's title over its doors (draft rooms)
         title: title && title.text ? buildTitle(C, veins, title, park) : null,
         revealRow: null, revealDone: true,
+        // biome corridor dressing: eased in by update() (fxLevel 0 -> 1)
+        veinFx: veinFx || null, fxLevel: 0,
       };
+      // the dress's accent color is fixed per biome; the weights ramp via fxLevel
+      if (veinFx && veinFx.accent != null) {
+        for (const v of veins) v.mat.uniforms.uAccent.value.set(veinFx.accent);
+      }
       // the biome roulette (draft rooms with a rolled biome only): while it
       // spins, revealDone=false keeps the doors dead + the draft clock at zero.
       // No payload (fork mode, scripted runs) = today's behavior untouched.

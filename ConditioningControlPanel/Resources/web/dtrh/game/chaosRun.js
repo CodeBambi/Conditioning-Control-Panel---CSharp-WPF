@@ -1784,12 +1784,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const presealChance = PRESEAL_BY_WAVE[Math.min(4, st.waveIndex)] || 0;
     let presealIndex = null;
     if (Math.random() < presealChance) presealIndex = (coaxSide === 'left') ? 1 : 0; // seal the resisting mouth
+    const forkBiome = activeBiome();   // the fork's corridors dress as the biome you're IN
     ctx.junctions.schedule({
       atDepth: ctx.nav.getDepth() + JUNCTION_LEAD,
       branches: [left, right],
       coaxIndex: coaxSide === 'left' ? 0 : 1,
       presealIndex,
       mode: 'fork',
+      veinFx: (forkBiome && forkBiome.veinFx) || null,
     });
     bark('junction-near');
   }
@@ -1993,6 +1995,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           color: (b.style && b.style.palette && b.style.palette.colLine) || 0xff69b4 })),
         targetIndex: BIOMES_ALL.findIndex((b) => b.id === targetBiome.id),
       } : null,
+      // the doorway corridors dress as the destination biome - junctions holds
+      // the dress back until the roulette lands, so it can't leak the roll
+      veinFx: (targetBiome && targetBiome.veinFx) || null,
     });
   }
 
