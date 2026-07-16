@@ -56,6 +56,27 @@ namespace ConditioningControlPanel.Services
         // its own instead of needing a hard shutdown. Armed at the very top of PlayVideo — BEFORE any
         // window is created — because the wedge frequently happens mid-creation, before the safety
         // timers are even armed.
+        // ---- Vout self-heal (white-screen storm #557/#558/#559/#560/#574) ----
+        // Software decode (#533/#537/#540) did not end the white screens: on the affected machines
+        // the failure is OUTPUT-side — the player decodes fine but never creates a video output, so
+        // the window stays white. Worse, once one teardown wedges, disposing the wedged player
+        // poisons the shared LibVLC instance and EVERY later video white-screens until app restart
+        // (#559: "it runs fine a while, and then gets bugged"). Self-heal in three parts:
+        //   1. Vout watchdog: no video output within VoutGraceMs of Play ⇒ retire the shared LibVLC
+        //      and retry the same video ONCE on a fresh instance.
+        //   2. Rooted quarantine: a player whose Stop() wedged is NEVER Dispose()d — that dispose is
+        //      the poisoning step. It is rooted in _nativeQuarantine instead (a bounded native leak
+        //      beats a poisoned pipeline) and the owning shared instance is retired.
+        //   3. Retire-on-wedge: any UI-wedge rescue during playback also retires the instance, so
+        //      the next video starts clean instead of inheriting the corrupted native state.
+        private System.Threading.Timer? _voutWatchTimer;
+        private volatile bool _voutSeen;
+        private bool _voutRetryUsed;
+        private const int VoutGraceMs = 8000;
+        private static readonly List<object> _nativeQuarantine = new();
+        private static readonly object _quarantineLock = new();
+        private static bool _coreLoaded;   // Core.Initialize is per-process; retire/re-init must not repeat it
+
         private System.Threading.Timer? _wedgeWatchdog;
         private DispatcherTimer? _heartbeatTimer;
         private long _uiHeartbeatTicks;
@@ -409,42 +430,49 @@ namespace ConditioningControlPanel.Services
 
                 try
                 {
-                    // Find the libvlc folder - check for libvlc.dll existence, not just folder
-                    var appDir = AppDomain.CurrentDomain.BaseDirectory;
-                    string? libvlcPath = null;
-
-                    // Try paths in order of preference
-                    var pathsToTry = new[]
+                    // Load the native libvlc libraries once per process. A retire/re-init cycle
+                    // (see RetireSharedLibVLC) must NOT run Core.Initialize again - only the managed
+                    // LibVLC instance is recreated.
+                    if (!_coreLoaded)
                     {
-                        Path.Combine(appDir, "libvlc", "win-x64"),  // NuGet package structure
-                        Path.Combine(appDir, "libvlc"),             // Direct folder
-                        appDir                                       // Same folder as exe
-                    };
+                        // Find the libvlc folder - check for libvlc.dll existence, not just folder
+                        var appDir = AppDomain.CurrentDomain.BaseDirectory;
+                        string? libvlcPath = null;
 
-                    foreach (var path in pathsToTry)
-                    {
-                        var dllPath = Path.Combine(path, "libvlc.dll");
-                        App.Logger?.Information("Checking for LibVLC at: {Path}", dllPath);
-                        if (File.Exists(dllPath))
+                        // Try paths in order of preference
+                        var pathsToTry = new[]
                         {
-                            libvlcPath = path;
-                            App.Logger?.Information("Found libvlc.dll at: {Path}", path);
-                            break;
-                        }
-                    }
+                            Path.Combine(appDir, "libvlc", "win-x64"),  // NuGet package structure
+                            Path.Combine(appDir, "libvlc"),             // Direct folder
+                            appDir                                       // Same folder as exe
+                        };
 
-                    if (libvlcPath != null)
-                    {
-                        // Initialize LibVLCSharp core with explicit path
-                        Core.Initialize(libvlcPath);
-                        App.Logger?.Information("LibVLC core initialized from: {Path}", libvlcPath);
-                    }
-                    else
-                    {
-                        // Try default initialization (may find system-installed VLC)
-                        App.Logger?.Information("libvlc.dll not found in expected locations, trying default initialization");
-                        Core.Initialize();
-                        App.Logger?.Information("LibVLC core initialized from default location");
+                        foreach (var path in pathsToTry)
+                        {
+                            var dllPath = Path.Combine(path, "libvlc.dll");
+                            App.Logger?.Information("Checking for LibVLC at: {Path}", dllPath);
+                            if (File.Exists(dllPath))
+                            {
+                                libvlcPath = path;
+                                App.Logger?.Information("Found libvlc.dll at: {Path}", path);
+                                break;
+                            }
+                        }
+
+                        if (libvlcPath != null)
+                        {
+                            // Initialize LibVLCSharp core with explicit path
+                            Core.Initialize(libvlcPath);
+                            App.Logger?.Information("LibVLC core initialized from: {Path}", libvlcPath);
+                        }
+                        else
+                        {
+                            // Try default initialization (may find system-installed VLC)
+                            App.Logger?.Information("libvlc.dll not found in expected locations, trying default initialization");
+                            Core.Initialize();
+                            App.Logger?.Information("LibVLC core initialized from default location");
+                        }
+                        _coreLoaded = true;
                     }
 
                     // Create LibVLC instance with audio and video options.
@@ -494,6 +522,55 @@ namespace ConditioningControlPanel.Services
                     _libVLCReady.TrySetResult(_libVLC != null);
                 }
             }
+        }
+
+        /// <summary>
+        /// Root a wedged native object forever so it is never disposed or finalized. Disposing a
+        /// wedged player is exactly what corrupts the shared LibVLC instance (the #559 "every video
+        /// after is broken" poisoning) — and its finalizer would call the same native teardown, so
+        /// the object must stay strongly reachable for the life of the process. A handful of leaked
+        /// players (~a few MB each, and wedges are rare) is a far better failure mode.
+        /// </summary>
+        private static void QuarantineNative(object nativeObj, string reason)
+        {
+            int count;
+            lock (_quarantineLock)
+            {
+                _nativeQuarantine.Add(nativeObj);
+                count = _nativeQuarantine.Count;
+            }
+            App.Logger?.Warning("VideoService: quarantined a wedged {Type} ({Reason}) - {Count} native object(s) rooted",
+                nativeObj.GetType().Name, reason, count);
+        }
+
+        /// <summary>
+        /// Retire the shared LibVLC instance: quarantine it (never dispose - players created from it
+        /// may still be wedged inside native calls) and clear the init flags so the next video's
+        /// EnsureLibVLCInitialized builds a fresh instance. <paramref name="suspect"/> guards against
+        /// retiring an instance that was already replaced (e.g. the async disposal task condemning
+        /// the old instance after a vout retry already built the new one): pass the instance that
+        /// misbehaved, and the retire is skipped if it is no longer the shared one.
+        /// </summary>
+        private bool RetireSharedLibVLC(LibVLC? suspect, string reason)
+        {
+            lock (_libVLCLock)
+            {
+                if (_libVLC == null) return false;
+                if (suspect != null && !ReferenceEquals(_libVLC, suspect)) return false;
+
+                lock (_quarantineLock) { _nativeQuarantine.Add(_libVLC); }
+                App.Logger?.Warning(
+                    "VideoService: retiring shared LibVLC instance ({Reason}) - a fresh instance will be created for the next video",
+                    reason);
+                _libVLC = null;
+                _libVLCInitialized = false;
+                _libVLCInitializing = false;
+            }
+            // The duration cache holds Media objects created from the retired instance; drop it so
+            // it lazily rebuilds against the fresh one (the retired instance stays rooted, so any
+            // in-flight parse can finish harmlessly).
+            _metadataCache = null;
+            return true;
         }
 
         /// <summary>
@@ -1289,7 +1366,7 @@ namespace ConditioningControlPanel.Services
             _scheduler.Start();
         }
 
-        private void PlayVideo(string path, bool strict)
+        private void PlayVideo(string path, bool strict, bool isVoutRetry = false)
         {
             App.Logger?.Information("VideoService: PlayVideo called for {File}", Path.GetFileName(path));
 
@@ -1300,6 +1377,11 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Warning("VideoService: PlayVideo skipped - video already playing");
                 return;
             }
+
+            // Fresh video ⇒ fresh vout-retry budget. The retry pass keeps the budget spent so a
+            // machine where even the fresh LibVLC instance can't present skips on to ScheduleNext
+            // instead of looping retire/retry forever.
+            if (!isVoutRetry) _voutRetryUsed = false;
 
             _videoPlaying = true;
             _strictActive = strict;
@@ -1769,6 +1851,11 @@ namespace ConditioningControlPanel.Services
                 };
                 App.Logger?.Information("LibVLC audio: Volume={Vol}, Mute={Mute}",
                     mediaPlayer.Volume, mediaPlayer.Mute);
+
+                // Arm the vout watchdog on the primary player: if no video output exists within the
+                // grace window the screen is white regardless of decode state (#557-#560/#574) —
+                // self-heal by retiring the shared instance and retrying once (see VoutWatchdogFire).
+                StartVoutWatchdog(mediaPlayer, path, strict);
             }
 
                 App.Logger?.Debug("LibVLC video window on: {Screen} (audio: {Audio}, vol: {Vol}, mute: {Mute})",
@@ -2573,6 +2660,84 @@ namespace ConditioningControlPanel.Services
         /// Arms the off-thread wedge watchdog for the current video. Idempotent (safe to call again on
         /// a retry/troll replay). Must be called on the UI thread, before window creation.
         /// </summary>
+        /// <summary>
+        /// Arm the vout (video output) watchdog for the primary player of the current video. Called
+        /// right after Play(). One-shot: fires once at <see cref="VoutGraceMs"/> and checks whether
+        /// LibVLC ever created a video output. Decode-side health signals (TimeChanged, EndReached)
+        /// are useless here — on the white-screen machines the clip "plays" fine, there is just
+        /// nothing on screen, which is why the software-decode default (#533/#537/#540) didn't cure it.
+        /// </summary>
+        private void StartVoutWatchdog(LibVLCSharp.Shared.MediaPlayer player, string path, bool strict)
+        {
+            // Capture the instance the player was built from NOW: by the time the timer fires,
+            // another heal path may already have retired and rebuilt the shared instance, and the
+            // fire handler must never condemn the fresh one.
+            var owner = _libVLC;
+            _voutSeen = false;
+            player.Vout += (s, e) => { if (e.Count > 0) _voutSeen = true; };
+            _voutWatchTimer?.Dispose();
+            _voutWatchTimer = new System.Threading.Timer(
+                _ => VoutWatchdogFire(player, owner, path, strict), null, VoutGraceMs, System.Threading.Timeout.Infinite);
+        }
+
+        private void StopVoutWatchdog()
+        {
+            try { _voutWatchTimer?.Dispose(); } catch { }
+            _voutWatchTimer = null;
+        }
+
+        /// <summary>
+        /// Threadpool callback at the vout deadline. If the primary player never created a video
+        /// output the user is staring at a white fullscreen: retire the (suspect) shared LibVLC
+        /// instance and replay the same video once on a fresh one; if the retry white-screens too,
+        /// give up on this video and let the scheduler move on.
+        /// </summary>
+        private void VoutWatchdogFire(LibVLCSharp.Shared.MediaPlayer player, LibVLC? owner, string path, bool strict)
+        {
+            try
+            {
+                if (!_videoPlaying || _isCleaningUp) return;
+                if (!ReferenceEquals(player, _primaryMediaPlayer)) return;   // stale timer from a previous video
+                if (_voutSeen) return;
+                // Authoritative live check — covers a vout that appeared before the event was wired.
+                try { if (player.VoutCount > 0) return; } catch { }
+
+                var retry = !_voutRetryUsed;
+                _voutRetryUsed = true;
+                App.Logger?.Error(
+                    "VideoService: no video output {Grace}ms after Play ({File}) - white-screen output failure; retiring shared LibVLC{Next}",
+                    VoutGraceMs, Path.GetFileName(path),
+                    retry ? ", retrying on a fresh instance" : "; retry already spent, skipping this video");
+                RetireSharedLibVLC(owner, "no video output within grace window");
+
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        // A different video may have started while this was queued (e.g. the wedge
+                        // watchdog already tore down and rescheduled) — never kill the newcomer.
+                        if (_primaryMediaPlayer != null && !ReferenceEquals(player, _primaryMediaPlayer)) return;
+
+                        ForceCleanup();
+                        if (retry)
+                        {
+                            App.Logger?.Information("VideoService: vout self-heal - replaying {File} on a fresh LibVLC instance",
+                                Path.GetFileName(path));
+                            PlayVideo(path, strict, isVoutRetry: true);
+                        }
+                        else if (_isRunning)
+                        {
+                            ScheduleNext();
+                        }
+                    }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "VideoService: vout self-heal dispatch failed"); }
+                }));
+            }
+            catch (Exception ex) { App.Logger?.Debug("VoutWatchdogFire error: {Error}", ex.Message); }
+        }
+
         private void StartWedgeWatchdog()
         {
             _wedgeRescueFired = false;
@@ -2634,6 +2799,11 @@ namespace ConditioningControlPanel.Services
                     try { p.Stop(); }
                     catch (Exception ex) { App.Logger?.Debug("Wedge rescue: player.Stop failed - {Error}", ex.Message); }
                 }
+
+                // A wedge mid-playback means the shared instance's native state is suspect - the #559
+                // pattern is precisely "one wedge, then every later video white-screens". Retire it so
+                // the next video starts on a clean instance (the retired one is rooted, never disposed).
+                RetireSharedLibVLC(_libVLC, "UI-thread wedge rescue during playback");
 
                 // Queue a real teardown + reschedule for the instant the dispatcher drains again, so a
                 // multi-minute lockout collapses to a brief stutter instead of stranding the frozen
@@ -2756,20 +2926,27 @@ namespace ConditioningControlPanel.Services
                 // Unbind races the teardown (panic/CloseAll doesn't raise VideoEnded). (#536)
                 _enhancementDriving = false;
 
-                // Stop all players in parallel with timeout to prevent one hanging player from blocking others
-                if (playersCopy.Count > 0)
+                // Stop all players in parallel with timeout to prevent one hanging player from blocking
+                // others. Keep the player↔task pairing: a player whose Stop() never completes is WEDGED
+                // and must be quarantined at disposal time, not disposed (see _nativeQuarantine).
+                var stopPairs = playersCopy.Select(player => (player, task: Task.Run(() =>
                 {
-                    var stopTasks = playersCopy.Select(player => Task.Run(() =>
+                    try
                     {
-                        try
-                        {
-                            player.Stop();
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Debug("CloseAll: Failed to stop LibVLC player - {Error}", ex.Message);
-                        }
-                    })).ToArray();
+                        player.Stop();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("CloseAll: Failed to stop LibVLC player - {Error}", ex.Message);
+                    }
+                }))).ToList();
+                // Snapshot the instance these players belong to, so the (possibly delayed) retire below
+                // can never condemn a FRESH instance that a vout-retry has since built.
+                var owningLibVLC = _libVLC;
+
+                if (stopPairs.Count > 0)
+                {
+                    var stopTasks = stopPairs.Select(p => p.task).ToArray();
 
                     // Wait for all players to stop with timeout (500ms should be plenty)
                     var allStopped = Task.WaitAll(stopTasks, TimeSpan.FromMilliseconds(500));
@@ -2785,7 +2962,13 @@ namespace ConditioningControlPanel.Services
                         while (sw.ElapsedMilliseconds < 4000 && stopTasks.Any(t => !t.IsCompleted))
                             WaitWithMessagePump(150);
                         if (stopTasks.Any(t => !t.IsCompleted))
+                        {
                             App.Logger?.Error("CloseAll: LibVLC player STILL stopping after extended wait — detaching anyway");
+                            // A Stop() that outlives a 4.5s wait is the poisoning signature: retire the
+                            // owning instance NOW so the very next video (which may start within seconds)
+                            // gets a clean one instead of inheriting the corrupted native state (#559).
+                            RetireSharedLibVLC(owningLibVLC, "player Stop() wedged past extended wait");
+                        }
                         else
                             App.Logger?.Information("CloseAll: stragglers stopped after extended wait ({Ms}ms)", sw.ElapsedMilliseconds);
                     }
@@ -2861,15 +3044,25 @@ namespace ConditioningControlPanel.Services
                 if (!synchronous)
                     App.Overlay?.NotifyTopWindowClosed();
 
-                // Dispose media players - synchronously during app exit, async during normal operation
-                if (playersCopy.Count > 0)
+                // Dispose media players - synchronously during app exit, async during normal operation.
+                // NEVER dispose a player whose Stop() hasn't completed: disposing a wedged player is
+                // the exact step that poisons the shared LibVLC instance and turns one bad teardown
+                // into "every video after this is a white screen" (#559). Wedged players are rooted in
+                // quarantine instead, and their owning instance is retired.
+                if (stopPairs.Count > 0)
                 {
                     if (synchronous)
                     {
                         // Synchronous disposal - used during app exit to prevent orphaned windows
-                        App.Logger?.Debug("CloseAll: Synchronous disposal of {Count} LibVLC players", playersCopy.Count);
-                        foreach (var player in playersCopy)
+                        App.Logger?.Debug("CloseAll: Synchronous disposal of {Count} LibVLC players", stopPairs.Count);
+                        foreach (var (player, task) in stopPairs)
                         {
+                            if (!task.IsCompleted)
+                            {
+                                // App is exiting anyway; a blocking Dispose here would wedge shutdown.
+                                QuarantineNative(player, "Stop() still wedged at app exit");
+                                continue;
+                            }
                             try
                             {
                                 player.Dispose();
@@ -2888,8 +3081,14 @@ namespace ConditioningControlPanel.Services
                             // Wait for any pending EndReached events to complete their Task.Run dispatch
                             await Task.Delay(1000);
 
-                            foreach (var player in playersCopy)
+                            foreach (var (player, task) in stopPairs)
                             {
+                                if (!task.IsCompleted)
+                                {
+                                    QuarantineNative(player, "Stop() never completed");
+                                    RetireSharedLibVLC(owningLibVLC, "a wedged player was quarantined");
+                                    continue;
+                                }
                                 try
                                 {
                                     player.Dispose();
@@ -2908,8 +3107,9 @@ namespace ConditioningControlPanel.Services
             }
             finally
             {
-                // Video is torn down — the wedge watchdog has nothing left to guard.
+                // Video is torn down — the wedge and vout watchdogs have nothing left to guard.
                 StopWedgeWatchdog();
+                StopVoutWatchdog();
 
                 // Release the audio-duck ref taken in PlayVideo, exactly once per teardown. Balancing
                 // it here (not only in Cleanup) covers the paths that tear down WITHOUT Cleanup — the
