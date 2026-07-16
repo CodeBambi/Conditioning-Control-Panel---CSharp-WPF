@@ -33,6 +33,8 @@ import {
   HOWTO_CARDS, metaView, MAX_CONSUMABLE_SLOTS,
 } from './catalog.js';
 import { BOONS } from './boons.js';
+import { MATERIALS, MAT_BY_ID, RECIPES, matchGrid, gridCost, recipeCost, recipeCells,
+  matArt, craftedArt } from './crafting.js';
 import * as reveals from './reveals.js';
 import { S, updateSetting, descentSetup, UNLOCK_LADDER, RANK_NAMES } from '../engine/settings.js';
 import { getLevel } from '../engine/audioLevels.js';
@@ -69,6 +71,7 @@ const STATION_META = {
   toybox: { label: 'TOYBOX', glyph: '🧸', accent: 0x66e0d0, sub: 'level up · emotes ✦' },
   dials:  { label: 'THE DIALS', glyph: '🎛', accent: 0xe84393, sub: 'unlock · gold 🪙' },
   vanity: { label: 'VANITY', glyph: '📔', accent: 0xc178ff, sub: 'the mirror' },
+  boudoir: { label: 'THE BOUDOIR', glyph: '🛏', accent: 0xff8ac2, sub: 'craft · what you carried down' },
 };
 
 export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, runSetup, onDescend, onExit, onOptions, onReportBug, fullscreen, guide }) {
@@ -147,7 +150,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   let modal = null;          // open modal element (howto / intro)
   const revealEls = new Map();       // reveal id -> DOM element to flash (rows or whole panes)
   // reveal id -> station to flash in 3D (station-level surfaces)
-  const STATION_REVEALS = { dollhouse: ['toybox', 'dials'], tab_looking_glass: ['vanity'] };
+  const STATION_REVEALS = { dollhouse: ['toybox', 'dials'], tab_looking_glass: ['vanity'], boudoir: ['boudoir'] };
 
   const view = () => metaView(getMeta());
 
@@ -413,6 +416,20 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     return n;
   }
 
+  /** Crafting badge: DISCOVERED recipes the haul covers right now (a consumable
+   * always counts; a kept permanent doesn't). Never counts undiscovered pictures -
+   * the badge must not leak that something craftable exists before it's been made. */
+  function countCraftableNow(v) {
+    let n = 0;
+    for (const r of RECIPES) {
+      if (!v.discoveredRecipes.has(r.id)) continue;
+      if (r.resultKind === 'permanent' && v.craftedCount(r.id) >= 1) continue;
+      const cost = recipeCost(r);
+      if (Object.keys(cost).every((id) => v.materialCount(id) >= cost[id])) n++;
+    }
+    return n;
+  }
+
   // ============================ the 3D stations ============================
 
   function buildStationDefs(v) {
@@ -430,6 +447,11 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
         glyph: STATION_META.vanity.glyph, accent: STATION_META.vanity.accent,
         artUrl: `${ART}hub/station_vanity.png` });
     }
+    if (reveals.isUnlocked('boudoir', v)) {
+      defs.push({ id: 'boudoir', kind: 'station', label: STATION_META.boudoir.label,
+        glyph: STATION_META.boudoir.glyph, accent: STATION_META.boudoir.accent,
+        artUrl: `${ART}hub/station_boudoir.png`, badge: countCraftableNow(v) });
+    }
     defs.push({ id: 'portal', kind: 'portal', label: 'FALL IN', glyph: '🕳', accent: 0xe84393 });
     return defs;
   }
@@ -438,6 +460,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     if (!stations) return;
     stations.setBadge('toybox', countAffordableToybox(v));
     stations.setBadge('dials', countAffordableDials(v));
+    stations.setBadge('boudoir', countCraftableNow(v));
   }
 
   // ============================ persistent chrome ============================
@@ -582,6 +605,13 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       { id: 'diary',  side: 'right', title: 'DIARY', sub: 'verbs & what you’ve met', reveal: 'diary',
         gate: (v) => reveals.isUnlocked('diary', v), render: renderDiaryWin },
     ],
+    boudoir: [
+      { id: 'haul', side: 'left',  title: 'THE HAUL', sub: 'what the tube let you keep', render: renderHaulWin },
+      { id: 'kept', side: 'left',  title: 'KEPT THINGS', sub: 'made, not yet woken',
+        gate: (v) => RECIPES.some((r) => v.craftedCount(r.id) > 0), render: renderKeptWin },
+      { id: 'table', side: 'right', title: 'THE WORKTABLE', sub: 'draw the picture. it becomes the thing.',
+        render: renderWorktableWin },
+    ],
   };
 
   let winLayer = null;          // .wr-wins root: head bar + two-column split (null = no station open)
@@ -589,6 +619,10 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   let cols = null;              // { left, right } column elements
   const openWins = new Map();   // window id -> { def, winEl, bodyEl }
   const expandedRows = new Set(); // 'boon:<id>' / 'up:<id>' rows whose detail is open
+  // THE BOUDOIR worktable: module-level so refreshWins' innerHTML wipes (every
+  // answered meta-command re-renders the pane) don't scatter a half-drawn picture.
+  const boudoirGrid = new Array(9).fill(null);  // 3x3 cells, row-major: material id | null
+  let boudoirTray = null;                        // material id "in hand" (tray selection)
 
   /** Close every open pane. Name kept from the single-sheet era: all close
    * paths (toggle / miss / Esc / dive / hide) call this. */
@@ -599,6 +633,8 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     cols = null;
     openWins.clear();
     expandedRows.clear();
+    boudoirGrid.fill(null);   // a walked-away worktable spends nothing
+    boudoirTray = null;
     if (openId && stations) stations.blur();
     openId = null;
   }
@@ -996,6 +1032,162 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       }, right);
     }
     return row;
+  }
+
+  // ============================ 🛏 THE BOUDOIR (craft) ============================
+  // Materials drop in the fall (chaosRun material rolls); recipes are PICTOGRAMS -
+  // the 3x3 worktable arrangement literally draws the object (crafting.js owns the
+  // tables + matcher, translation/mirror tolerant). Part 1: crafted items persist
+  // "dormant" (effects are Part 2); hints on the boon-room walls are Part 3.
+
+  /** THE HAUL pane: the six raw ingredients + banked counts. */
+  function renderHaulWin(body, v) {
+    const card = el('wr-card', body);
+    const total = MATERIALS.reduce((s, m) => s + v.materialCount(m.id), 0);
+    el('wr-card-sub', card, total > 0
+      ? 'raw ingredients, grabbed on the way down. spend them at the worktable.'
+      : 'nothing yet. ingredients drift in the tube — grab them as you fall.');
+    const row = el('wr-pockets', card);
+    for (const m of MATERIALS) {
+      const count = v.materialCount(m.id);
+      row.appendChild(shelfCard({
+        art: matArt(m.id), glyph: m.glyph, title: m.name.toLowerCase(), acc: '255,138,194',
+        state: count > 0 ? 'owned' : 'empty', foot: `×${count}`,
+        tipText: count > 0 ? `${m.name} ×${count}` : `no ${m.name.toLowerCase()} yet — the tube drops it`,
+      }));
+    }
+  }
+
+  /** KEPT THINGS pane: crafted items, all dormant until Part 2 wakes them. */
+  function renderKeptWin(body, v) {
+    const card = el('wr-card', body);
+    el('wr-card-sub', card, 'they’re yours. they’re asleep. she says they wake when they’re needed.');
+    for (const r of RECIPES) {
+      const owned = v.craftedCount(r.id);
+      if (owned <= 0) continue;
+      const row = el('wr-row is-owned', card);
+      row.style.setProperty('--acc', '255,138,194');
+      row.appendChild(artIcon(craftedArt(r.id), r.glyph, '255,138,194', 44));
+      const mid = el('wr-row-mid', row);
+      el('wr-row-name', mid, r.name);
+      el('wr-row-flavor', mid, 'dormant — it hasn’t learned its purpose yet.');
+      const right = el('wr-row-right', row);
+      el('wr-row-state', right, r.resultKind === 'consumable' ? `×${owned}` : 'KEPT ✓');
+      tip(row, r.desc);
+    }
+  }
+
+  const cardForCrafted = (r, again) => ({
+    ribbon: again ? 'CRAFTED AGAIN' : 'CRAFTED', accent: '255,138,194',
+    title: r.name, desc: r.desc, flavor: r.flavor,
+    context: 'dormant — for now.', glyph: r.glyph,
+    art: `${ART}crafted/${r.id}.png`, cue: 'unlock_card',
+  });
+
+  /** THE WORKTABLE pane: tray (take an ingredient in hand) + the 3x3 grid
+   * (click to place / clear) + the craft line. State lives module-level
+   * (boudoirGrid/boudoirTray) so snapshot re-renders keep the drawing. */
+  function renderWorktableWin(body, v) {
+    // sanitize: the bank may have moved under a placed grid (a craft landed,
+    // another session's spend) - drop placements the haul no longer covers
+    for (const m of MATERIALS) {
+      let excess = boudoirGrid.filter((c) => c === m.id).length - v.materialCount(m.id);
+      for (let i = 8; i >= 0 && excess > 0; i--) {
+        if (boudoirGrid[i] === m.id) { boudoirGrid[i] = null; excess--; }
+      }
+    }
+    if (boudoirTray && v.materialCount(boudoirTray) <= 0) boudoirTray = null;
+
+    const card = el('wr-card wr-craft', body);
+    el('wr-card-sub', card, 'take an ingredient in hand, lay it on the table. draw the right picture and it becomes the thing.');
+    const tray = el('wr-craft-tray', card);
+    const grid = el('wr-craft-grid', card);
+    const actions = el('wr-craft-actions', card);
+
+    const remainOf = (id) => v.materialCount(id) - boudoirGrid.filter((c) => c === id).length;
+
+    function renderTray() {
+      tray.innerHTML = '';
+      for (const m of MATERIALS) {
+        const remain = remainOf(m.id);
+        const t = btn('wr-craft-mat' + (boudoirTray === m.id ? ' is-held' : '') + (remain <= 0 ? ' is-out' : ''), '', () => {
+          boudoirTray = boudoirTray === m.id ? null : m.id;
+          renderTray();
+        }, tray);
+        el('wr-craft-mat-glyph', t, m.glyph);
+        el('wr-craft-mat-n', t, `×${remain}`);
+        tip(t, remain > 0
+          ? `${m.name} — ${boudoirTray === m.id ? 'in hand. click a cell to place it.' : 'click to take in hand'}`
+          : `no ${m.name.toLowerCase()} left to place`);
+      }
+    }
+
+    function renderGrid() {
+      grid.innerHTML = '';
+      for (let i = 0; i < 9; i++) {
+        const cur = boudoirGrid[i];
+        const cell = btn('wr-craft-cell' + (cur ? ' is-filled' : ''), '', () => {
+          if (boudoirGrid[i]) boudoirGrid[i] = null;                       // click filled = take it back
+          else if (boudoirTray && remainOf(boudoirTray) > 0) boudoirGrid[i] = boudoirTray;
+          else { sfx('ui_denied', 0.3); return; }
+          syncCraft();
+        }, grid);
+        if (cur) el('wr-craft-cell-glyph', cell, (MAT_BY_ID[cur] || {}).glyph || '❔');
+      }
+    }
+
+    function syncCraft() {
+      renderTray();
+      renderGrid();
+      actions.innerHTML = '';
+      grid.classList.remove('is-match');
+      const filled = boudoirGrid.some(Boolean);
+      const match = matchGrid(boudoirGrid);
+      if (!filled) {
+        el('wr-craft-status', actions, 'place what you carry.');
+      } else if (!match) {
+        el('wr-craft-status', actions, 'the picture means nothing. yet.');
+      } else if (match.resultKind === 'permanent' && v.craftedCount(match.id) >= 1) {
+        // page-side dupe guard: the bridge would happily craft a second one
+        el('wr-craft-status wr-craft-status--dup', actions, `${match.glyph} ${match.name.toLowerCase()} — you already keep one.`);
+      } else {
+        grid.classList.add('is-match');
+        const again = v.discoveredRecipes.has(match.id);
+        const b = btn('wr-buy wr-craft-go', `craft · ${match.name.toLowerCase()}`, () => {
+          cmd('craft', { id: match.id, cost: gridCost(boudoirGrid) });
+          boudoirGrid.fill(null);   // optimistic clear; the snapshot round-trip re-renders everything
+          boudoirTray = null;
+          showUnlockCard(cardForCrafted(match, again));
+          bark('crafted', { id: match.id });
+        }, actions);
+        tip(b, again ? match.desc : 'the picture holds together. make it real.');
+      }
+    }
+
+    // discovered pictures: one chip each - click lays its pictogram on the table
+    const found = RECIPES.filter((r) => v.discoveredRecipes.has(r.id));
+    if (found.length) {
+      const chips = el('wr-craft-chips', card);
+      for (const r of found) {
+        const cost = recipeCost(r);
+        const afford = Object.keys(cost).every((id) => v.materialCount(id) >= cost[id]);
+        const dup = r.resultKind === 'permanent' && v.craftedCount(r.id) >= 1;
+        const c = btn('wr-craft-chip' + (afford && !dup ? '' : ' is-off'), `${r.glyph} ${r.name.toLowerCase()}`, () => {
+          if (dup || !afford) { sfx('ui_denied', 0.35); return; }
+          boudoirGrid.splice(0, 9, ...recipeCells(r));
+          boudoirTray = null;
+          syncCraft();
+        }, chips);
+        tip(c, dup ? 'you already keep one.' : afford ? 'lay its picture on the table' : 'the haul doesn’t cover it yet');
+      }
+    }
+    const unmade = RECIPES.length - found.length;
+    if (unmade > 0) {
+      card.appendChild(hazyRow(`${unmade} picture${unmade === 1 ? '' : 's'} still unmade.`,
+        'draw shapes with what you carry. some pictures mean something.'));
+    }
+
+    syncCraft();
   }
 
   // ============================ 📔 VANITY (the mirror) ============================

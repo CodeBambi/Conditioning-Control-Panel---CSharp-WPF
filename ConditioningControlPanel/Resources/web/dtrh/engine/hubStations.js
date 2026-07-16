@@ -175,6 +175,7 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
     dials:   { x: 2.9,  y: 1.4 },
     vanity:  { x: 0,    y: 2.15 },   // ducks under the DOM logo marquee
     portal:  { x: 0,    y: -0.4 },
+    boudoir: { x: 2.9,  y: -1.15 },  // crafting (bottom-right; bottom-left is the wr-dock)
   };
 
   // ---- one station -----------------------------------------------------------

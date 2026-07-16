@@ -129,6 +129,19 @@ public sealed class ChaosMetaState
     /// <summary>Per-line cooldown ends for pooled lines: cue id -> Unix epoch ms when it may play again.</summary>
     public Dictionary<string, long> NarrativeCooldownEnds { get; set; } = new();
 
+    // ---- crafting (2026-07, THE BOUDOIR): materials drop in the tube, recipes are
+    // pictograms drawn on the 3x3 worktable. Id whitelists live in ChaosCraftingIds.cs;
+    // grid shapes live page-side (game/crafting.js is the single source of truth) ----
+    /// <summary>Banked crafting materials: material id -> count. Granted live per grab
+    /// (material-add), like gold, so abandoned runs keep what was picked up.</summary>
+    public Dictionary<string, int> Materials { get; set; } = new();
+    /// <summary>Recipe ids the player has crafted at least once (drives the discovered-pictures
+    /// strip and, in Part 3, which paperwall hints stop being hints).</summary>
+    public HashSet<string> DiscoveredRecipes { get; set; } = new();
+    /// <summary>Crafted item holdings: recipe id -> count (consumables stack; permanents
+    /// stay at 1 — the dupe guard is page-side).</summary>
+    public Dictionary<string, int> CraftedItems { get; set; } = new();
+
     // lifetime stats (consumed by the Stats tab in a later session)
     public int RunsCompleted { get; set; } = 0;
     public long BestScore { get; set; } = 0;

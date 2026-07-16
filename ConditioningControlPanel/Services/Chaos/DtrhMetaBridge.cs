@@ -179,6 +179,53 @@ internal sealed class DtrhMetaBridge
                     if (amount > 0 && S.Gold >= amount) { S.Gold -= amount; applied = true; }
                     break;
                 }
+                case "material-add":
+                {
+                    // Crafting (THE BOUDOIR): a material grabbed in the tube, granted LIVE per
+                    // grab like add-gold — abandoned runs keep what was picked up (accepted,
+                    // same as gold). Whitelisted id; amount clamped to a single grab burst.
+                    var id = RequireId(o);
+                    int amount = (int?)o["amount"] ?? 0;
+                    if (id == null || !ChaosCraftingIds.Materials.Contains(id)) break;
+                    if (amount <= 0 || amount > 30) break;
+                    S.Materials[id] = (S.Materials.TryGetValue(id, out var have) ? have : 0) + amount;
+                    applied = true;
+                    break;
+                }
+                case "craft":
+                {
+                    // Crafting (THE BOUDOIR): the page matched a pictogram on the worktable and
+                    // sends the recipe id + its material cost map. Grid shapes live page-side
+                    // (crafting.js is the source of truth); this validates the shape of the
+                    // SPEND — whitelisted ids, 1..9 cells, holdings cover the cost — then
+                    // decrements, records the discovery and the crafted item. Same trust model
+                    // as purchase-upgrade/bench-buy (integrity, not anti-cheat). The
+                    // permanent-dupe guard is page-side.
+                    var id = RequireId(o);
+                    if (id == null || !ChaosCraftingIds.Recipes.Contains(id)) break;
+                    if (o["cost"] is not JObject costObj) break;
+                    var cost = new Dictionary<string, int>();
+                    int cells = 0;
+                    bool shapeOk = true;
+                    foreach (var p in costObj.Properties())
+                    {
+                        int n = (int?)p.Value ?? 0;
+                        if (!ChaosCraftingIds.Materials.Contains(p.Name) || n <= 0 || n > 9)
+                        { shapeOk = false; break; }
+                        cost[p.Name] = n;
+                        cells += n;
+                    }
+                    if (!shapeOk || cells < 1 || cells > 9) break;
+                    bool affordable = cost.All(kv =>
+                        S.Materials.TryGetValue(kv.Key, out var have) && have >= kv.Value);
+                    if (!affordable) break;
+                    foreach (var kv in cost) S.Materials[kv.Key] -= kv.Value;
+                    S.DiscoveredRecipes.Add(id);
+                    S.CraftedItems[id] = (S.CraftedItems.TryGetValue(id, out var owned) ? owned : 0) + 1;
+                    App.Logger?.Information("DtrhMetaBridge: crafted {Id} (x{Count})", id, S.CraftedItems[id]);
+                    applied = true;
+                    break;
+                }
                 case "buy-consumable-slot":
                 {
                     // Grab-in-the-tube rework: sew another consumable HUD slot with Sparks (the

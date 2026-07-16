@@ -30,6 +30,7 @@
  * ==========================================================================*/
 
 import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, buildHeart, buildGoldDroplet,
+  buildMaterial,
   buildHeavy, buildPrism, buildBrittle, buildEcho, buildEchoChild, buildTease,
   buildBoundPair, buildChaperonePair, buildDarter, rollDarter,
   FREEZE_MAX_ON_SCREEN, SIDE_DRIFT_CHANCE, SIDE_DRIFT_GRACE_SPAWNS, MOTION,
@@ -38,6 +39,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boons.js';
+import { MAT_BY_ID, rollMaterialId } from './crafting.js';
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
 import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL } from './regions.js';
@@ -97,6 +99,8 @@ const COMBO_BIG_THRESHOLDS = [25, 50, 100];
 const TICK = 0.25;                  // the C# RunTick period
 const PLAIN_BUBBLE_CHANCE = 0.30;   // share of ordinary spawns that are plain, effect-free soap bubbles (deep-run baseline)
 const PLAIN_BUBBLE_CHANCE_EARLY = 0.80; // at the top of the run: mostly plain bubbles, effects rare - ramps down to PLAIN_BUBBLE_CHANCE as intensity peaks
+const MATERIAL_DROP_CAP = 8;        // crafting: max material drops per run (tube + pop combined)
+const MATERIAL_POP_CHANCE = 0.008;  // crafting: chance a popped treat sheds a raw ingredient
 const VIDEO_HEAVY_SEC = 17;         // the stuck POV video holds 15s (payloadFx VIDEO_HOLD_SEC) + slack
 const CASCADE_BASE_SEC = 6;         // GifCascadePayload.DURATION_SEC (+5 ride-out)
 const RANK = { Curious: 0, Tempted: 1, Slipping: 2, Entranced: 3, Devoted: 4, Claimed: 5 };
@@ -255,6 +259,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       goldenChance: 0.005,
       goldenChanceBase: 0.005, // weather re-derives goldenChance from this
       goldenPay: [10, 20],
+      // crafting (THE BOUDOIR): tube-drop odds per ordinary spawn; runMaterials is
+      // this run's grabs for the bag chip's ×N (the banked totals live C#-side)
+      materialChance: 0.011,
+      materialDropsThisRun: 0,
+      runMaterials: {},
       moodRingLevel: 0,        // 💍 forecast / x1.5 weather / reroll
       stickyFingersLevel: 0,   // 🍯 held-card paddle pay tier
       dropPerPop: 0,
@@ -816,6 +825,19 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       pulse('255,215,0', 0.12);
       return;
     }
+    if (spec.kind === 'material') {
+      // Crafting (THE BOUDOIR): granted LIVE like gold (bankGold) - an abandoned
+      // run keeps its haul. No markDiscovered here: the codex teach is Part 2.
+      lessons.onSpecialPopped();
+      st.focus = clamp(st.focus + FOCUS_PER_DROPLET, 0, FOCUS_MAX);
+      const mat = MAT_BY_ID[spec.matId];
+      st.runMaterials[spec.matId] = (st.runMaterials[spec.matId] | 0) + 1;
+      bridge.send({ type: 'meta-command', op: 'material-add', id: spec.matId, amount: 1 });
+      hudUi.flyMaterialToBag(mat, { x, y }, 1, st.runMaterials[spec.matId]);
+      sfx('golden_pop', 0.3);
+      pulse('255,150,205', 0.12);
+      return;
+    }
     if (spec.kind === 'golden') {
       lessons.onSpecialPopped();
       st.focus = clamp(st.focus + FOCUS_PER_GOLDEN, 0, FOCUS_MAX);
@@ -892,6 +914,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         markDiscovered('bubble:gold_droplet');
         field.spawn(buildGoldDroplet(x + randInt(-30, 30), y + randInt(-15, 15)));
       }
+    }
+    // Crafting (THE BOUDOIR): rarely a popped treat sheds a raw ingredient,
+    // spilled beside the pop like a Gold-Digger droplet. Same per-run cap as
+    // the tube drops; never on the scripted first descent.
+    if (!cfg.scriptedFirstRun && st.materialDropsThisRun < MATERIAL_DROP_CAP
+        && Math.random() < MATERIAL_POP_CHANCE) {
+      st.materialDropsThisRun++;
+      field.spawn(buildMaterial(MAT_BY_ID[rollMaterialId()], x + randInt(-40, 40), y + randInt(-20, 20)));
     }
     // Private Show (shielded half): pops pay x3 while she holds the stage
     if (showActive && st.privateShowPayMult > 1) pts *= st.privateShowPayMult;
@@ -1170,6 +1200,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   function onTreatExpired(spec) {
     if (!st || state !== 'running' || heldNow()) return;
+    // Crafting: a missed ingredient just drifts away - it's a bonus, never a
+    // streak penalty (and no "faded" toast; the tube stays quiet about it).
+    if (spec.kind === 'material') return;
     const name = spec.kind === 'golden' ? 'lucky bubble' : NAME_OF[spec.variantId] || spec.variantId;
     if (st.combo > 1) {
       st.combo = Math.floor(st.combo / 2);
@@ -2969,6 +3002,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         field.spawn(buildGolden());
         field.playChime(0.30);
       }
+      // Crafting (THE BOUDOIR): a raw ingredient rides the tube - rare, capped
+      // per run, and never on the scripted first descent.
+      if (!cfg.scriptedFirstRun && st.materialDropsThisRun < MATERIAL_DROP_CAP
+          && Math.random() < st.materialChance) {
+        st.materialDropsThisRun++;
+        field.spawn(buildMaterial(MAT_BY_ID[rollMaterialId()]));
+        field.playChime(0.22);
+      }
       // "Look at the bright colors..." sin: sometimes a mimic prism drifts in.
       if (st.prismChance > 0 && Math.random() < st.prismChance) {
         markDiscovered('bubble:prism');
@@ -3368,6 +3409,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           if (!st.biomes) st.biomes = rollBiomeIds();
           st.biomes[b.room - 1] = b.id;
           commitWave(b.room);
+          return true;
+        };
+        // diagnostics seam: drop a crafting material into the tube mid-run -
+        // __sfMaterial('chrome') (rate knobs stay untouched; cap not counted)
+        window.__sfMaterial = (id) => {
+          const mat = MAT_BY_ID[String(id || '')];
+          if (!mat || state !== 'running') return false;
+          field.spawn(buildMaterial(mat));
           return true;
         };
       } catch { /* diagnostics seam */ }

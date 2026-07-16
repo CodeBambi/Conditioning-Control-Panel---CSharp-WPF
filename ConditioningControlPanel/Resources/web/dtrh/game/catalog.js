@@ -504,6 +504,10 @@ export function metaView(meta) {
   const seenReveals = asSet(m.seenReveals);
   const firstTimes = asSet(m.firstTimesAwarded);
   const dials = asSet(m.purchasedDials);
+  // crafting (THE BOUDOIR): materials + recipe ledgers (game/crafting.js owns the tables)
+  const materials = m.materials || {};
+  const discoveredRecipes = asSet(m.discoveredRecipes);
+  const craftedItems = m.craftedItems || {};
   const runs = m.runsCompleted | 0;
   const rankIndex = RANKS.forRuns(runs);
 
@@ -597,6 +601,13 @@ export function metaView(meta) {
     // and discovered items deepen freely with Sparks. Nothing gates on a proof anymore.
     // (The LESSONS copy lives on only as an explanation-text source.)
     isLessonBlocked: () => false,
+
+    // ---- crafting (THE BOUDOIR) ----
+    materials,
+    discoveredRecipes,
+    craftedItems,
+    materialCount: (id) => materials[id] | 0,
+    craftedCount: (id) => craftedItems[id] | 0,
 
     isDiscovered: (codexId) => discovered.has(codexId),
     /** Happy path: run 2+ shows full shelves; before that only the starter trio. */

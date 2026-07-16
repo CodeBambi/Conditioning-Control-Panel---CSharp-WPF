@@ -91,6 +91,23 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
   goldDelta.className = 'cf-gold-delta';
   goldRow.append(goldIcon, goldTotal, goldDelta);
 
+  // ---- the material bag (crafting / THE BOUDOIR): a grabbed ingredient flies
+  // here, the chip pops "+1 ×N" for that material, holds, then fades - the gold
+  // ticker's little sibling. ×N is the RUN total for that material (the banked
+  // total lives in the dollhouse), so the number always matches what you felt. ----
+  const bagRow = mk('cf-hud-bag');
+  bagRow.style.display = 'none';
+  const bagIcon = document.createElement('span');
+  bagIcon.className = 'cf-bag-icon';
+  bagIcon.textContent = '👜';
+  const bagMat = document.createElement('span');
+  bagMat.className = 'cf-bag-mat';
+  const bagCount = document.createElement('span');
+  bagCount.className = 'cf-bag-count';
+  const bagDelta = document.createElement('span');
+  bagDelta.className = 'cf-bag-delta';
+  bagRow.append(bagIcon, bagMat, bagCount, bagDelta);
+
   // ---- rising-number tickers: emotes ease up to the live target; gold counts up
   // on a bump then auto-hides. Driven by a self-terminating rAF loop that only
   // spins while there's a delta to close (idle cost = zero). ----
@@ -139,14 +156,35 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
       goldHideT2 = window.setTimeout(() => { goldRow.style.display = 'none'; goldRow.classList.remove('is-fading'); }, 480);
     }, 2400);
   }
+  // the bag chip: show for the grabbed material, pop "+N ×runTotal", fade like gold
+  let bagHideT1 = 0, bagHideT2 = 0;
+  function bumpBag(mat, delta, runTotal) {
+    clearTimeout(bagHideT1); clearTimeout(bagHideT2);
+    bagMat.textContent = (mat && mat.glyph) || '❔';
+    bagCount.textContent = `×${Math.max(0, runTotal | 0)}`;
+    bagRow.style.display = '';
+    bagRow.classList.remove('is-fading');
+    if (delta > 0) {
+      bagDelta.textContent = `+${delta | 0}`;
+      bagDelta.classList.remove('is-pop'); void bagDelta.offsetWidth; bagDelta.classList.add('is-pop');
+    }
+    bagRow.classList.remove('is-bump'); void bagRow.offsetWidth; bagRow.classList.add('is-bump');
+    bagHideT1 = window.setTimeout(() => {
+      bagRow.classList.add('is-fading');
+      bagHideT2 = window.setTimeout(() => { bagRow.style.display = 'none'; bagRow.classList.remove('is-fading'); }, 480);
+    }, 2400);
+  }
   function resetTickers() {
     clearTimeout(goldHideT1); clearTimeout(goldHideT2);
+    clearTimeout(bagHideT1); clearTimeout(bagHideT2);
     cancelAnimationFrame(tickerRaf); tickerRaf = 0;
     emoteTarget = emoteShown = 0; goldTarget = goldShown = 0;
     emoteNum.textContent = '0'; emoteVal.classList.remove('is-gain');
     goldTotal.textContent = '0';
     goldRow.style.display = 'none';
     goldRow.classList.remove('is-fading', 'is-bump');
+    bagRow.style.display = 'none';
+    bagRow.classList.remove('is-fading', 'is-bump');
   }
 
   // ---- the biome banner: current place name + its live effect, up top so the
@@ -677,6 +715,48 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
         requestAnimationFrame(step);
       } catch (e) { /* ignore */ }
     },
+    // Crafting (THE BOUDOIR): a grabbed material's glyph flies from the tube grab
+    // point into the bag chip, which bumps "+1 ×N" on arrival. A glyph DIV, not an
+    // img (no material PNGs ship in Part 1 - flyArtToSlot's error handler would
+    // remove it mid-flight). The bag chip is shown up front so the dest rect exists.
+    flyMaterialToBag(mat, fromPos, delta, runTotal) {
+      try {
+        bagMat.textContent = (mat && mat.glyph) || '❔';
+        bagCount.textContent = `×${Math.max(0, (runTotal | 0) - (delta | 0))}`;   // pre-arrival count
+        bagRow.style.display = '';
+        bagRow.classList.remove('is-fading');
+        const el = document.createElement('div');
+        el.className = 'cf-mat-fly is-pop';
+        el.textContent = (mat && mat.glyph) || '❔';
+        el.style.transform = 'translate(-50%,-50%)';
+        document.body.appendChild(el);
+        const sx = (fromPos && fromPos.x) || window.innerWidth / 2;
+        const sy = (fromPos && fromPos.y) || window.innerHeight / 2;
+        el.style.left = sx + 'px'; el.style.top = sy + 'px';
+        const POP = 260, FLY = 620;
+        const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+        let t0 = null;
+        const step = (ts) => {
+          if (t0 == null) t0 = ts;
+          const e = ts - t0;
+          if (e < POP) { requestAnimationFrame(step); return; }
+          el.classList.remove('is-pop');
+          const k = Math.min(1, (e - POP) / FLY);
+          const r = bagRow.getBoundingClientRect();
+          const tx = (r.left || 24) + Math.max(8, r.width / 2);
+          const ty = (r.top || 24) + r.height / 2;
+          const kk = ease(k);
+          el.style.left = (sx + (tx - sx) * kk) + 'px';
+          el.style.top = (sy + (ty - sy) * kk) + 'px';
+          el.style.transform = `translate(-50%,-50%) scale(${1 - 0.55 * kk})`;
+          el.style.opacity = String(1 - 0.25 * kk);
+          if (k < 1) { requestAnimationFrame(step); return; }
+          el.remove();
+          bumpBag(mat, delta, runTotal);
+        };
+        requestAnimationFrame(step);
+      } catch (e) { /* ignore */ }
+    },
     resetCombo() { prevCombo = null; },   // fresh run without a hide (recap "Again"): no phantom break
     setVisible(v) {
       root.style.display = v ? '' : 'none';
@@ -695,6 +775,7 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
     dispose() {
       clearTimeout(pulseTimer);
       clearTimeout(goldHideT1); clearTimeout(goldHideT2);
+      clearTimeout(bagHideT1); clearTimeout(bagHideT2);
       cancelAnimationFrame(tickerRaf);
       clearInterval(emberTimer);
       tips.dispose();

@@ -1377,6 +1377,31 @@ img.rh-fx-spiralspin {
   100% { opacity: 0; transform: translateY(-8px) scale(1); }
 }
 
+/* ---- the material bag (crafting): "+1 ×N" per grabbed ingredient, then fades ---- */
+.cf-hud-bag {
+  display: flex; align-items: baseline; gap: 7px;
+  font-weight: 800; color: #ffb3dd;
+  text-shadow: 0 0 12px rgba(255, 140, 200, 0.7), 0 1px 2px rgba(0, 0, 0, 0.8);
+  transition: opacity 0.45s ease;
+}
+.cf-hud-bag.is-fading { opacity: 0; }
+.cf-hud-bag.is-bump { animation: cfGoldBump 0.4s ease-out; }
+.cf-bag-icon { font-size: 1.1rem; }
+.cf-bag-mat { font-size: 1.15rem; }
+.cf-bag-count { font-size: 1.1rem; letter-spacing: 0.02em; }
+.cf-bag-delta {
+  font-size: 0.95rem; font-weight: 900; color: #ffd7ec;
+  text-shadow: 0 0 10px rgba(255, 170, 215, 0.95);
+}
+.cf-bag-delta.is-pop { animation: cfGoldDelta 1.1s ease-out; }
+/* the material glyph that flies from the grab point into the bag chip */
+.cf-mat-fly {
+  position: fixed; z-index: 60; pointer-events: none;
+  font-size: 2.2rem; line-height: 1; will-change: left, top, transform, opacity;
+  filter: drop-shadow(0 0 10px rgba(255, 150, 205, 0.85)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+.cf-mat-fly.is-pop { animation: cfShieldPop 0.42s ease-out; }
+
 /* ---- the multiplier badge (Balatro-style chip; fire tiers ride the streak) ---- */
 .cf-mult-badge {
   position: relative;
@@ -2535,6 +2560,51 @@ img.rh-fx-spiralspin {
 .wr-pocket-col { display: flex; flex-direction: column; gap: 6px; }
 .wr-pocket-label { font-family: Consolas, monospace; font-weight: 700; font-size: 0.7rem; color: #8a86b8; }
 .wr-pocket-row { display: flex; gap: 20px; }
+
+/* ---- 🛏 THE BOUDOIR: the worktable (crafting) ---- */
+.wr-craft-tray { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 10px; }
+.wr-craft-mat {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  width: 56px; padding: 7px 0 6px; border-radius: 12px; cursor: pointer;
+  background: rgba(255,138,194,0.10); border: 2px solid rgba(255,138,194,0.35); color: #fff;
+  transition: transform 0.12s, border-color 0.15s, background 0.15s;
+}
+.wr-craft-mat:hover { border-color: rgba(255,138,194,0.85); transform: translateY(-2px); }
+.wr-craft-mat.is-held { border-color: #ff8ac2; background: rgba(255,138,194,0.28); box-shadow: 0 0 14px rgba(255,138,194,0.5); }
+.wr-craft-mat.is-out { opacity: 0.4; }
+.wr-craft-mat-glyph { font-size: 1.35rem; line-height: 1; }
+.wr-craft-mat-n { font-family: Consolas, monospace; font-size: 0.68rem; font-weight: 700; color: #d8cdee; }
+.wr-craft-grid {
+  display: grid; grid-template-columns: repeat(3, 64px); gap: 7px;
+  justify-content: center; margin: 6px auto 10px; width: max-content;
+  padding: 10px; border-radius: 14px; background: rgba(12,9,22,0.6);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+.wr-craft-grid.is-match { border-color: rgba(255,138,194,0.8); animation: wrCraftMatch 1.4s ease-in-out infinite; }
+@keyframes wrCraftMatch {
+  0%, 100% { box-shadow: 0 0 8px rgba(255,138,194,0.25); }
+  50% { box-shadow: 0 0 22px rgba(255,138,194,0.6); }
+}
+.wr-craft-cell {
+  width: 64px; height: 64px; border-radius: 10px; cursor: pointer; padding: 0;
+  background: rgba(255,255,255,0.05); border: 2px dashed rgba(255,255,255,0.18);
+  display: flex; align-items: center; justify-content: center;
+}
+.wr-craft-cell:hover { border-color: rgba(255,138,194,0.7); background: rgba(255,138,194,0.10); }
+.wr-craft-cell.is-filled { border-style: solid; border-color: rgba(255,138,194,0.55); background: rgba(255,138,194,0.14); }
+.wr-craft-cell-glyph { font-size: 1.7rem; line-height: 1; }
+.wr-craft-actions { display: flex; align-items: center; justify-content: center; min-height: 40px; margin-bottom: 8px; }
+.wr-craft-status { font-size: 0.82rem; color: #8a86b8; font-style: italic; text-align: center; }
+.wr-craft-status--dup { color: #d8c9a0; }
+.wr-craft-go { background: #ff8ac2; color: #1a1120; }
+.wr-craft-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.wr-craft-chip {
+  padding: 5px 11px; border-radius: 999px; cursor: pointer; font-size: 0.74rem; font-weight: 700;
+  background: rgba(255,138,194,0.14); border: 1px solid rgba(255,138,194,0.45); color: #ffd7ec;
+}
+.wr-craft-chip:hover { background: rgba(255,138,194,0.28); }
+.wr-craft-chip.is-off { opacity: 0.45; cursor: default; }
+.wr-craft-chip.is-off:hover { background: rgba(255,138,194,0.14); }
 .wr-tiles { display: flex; flex-wrap: wrap; gap: 18px; }
 .wr-tile-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 108px; }
 .wr-tile-cell.is-click { cursor: pointer; }

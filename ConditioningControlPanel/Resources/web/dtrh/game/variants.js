@@ -275,6 +275,24 @@ export function buildGoldDroplet(atX, atY) {
   };
 }
 
+/** Crafting material (THE BOUDOIR): a grabbable ingredient in the tube. The material
+ * row (id/glyph/tint from crafting.js MATERIALS) is passed in so this file stays free
+ * of a crafting.js import. sprite stays null in Part 1 - chaosField renders the tint
+ * radial gradient + glyph label (the placeholder); the real art will be
+ * matArt(mat.id) -> https://ccp.art/materials/{id}.png once the PNGs land.
+ * Pass atX/atY for the rare pop-drop (Gold-Digger droplet shape); omit for tube rises. */
+export function buildMaterial(mat, atX, atY) {
+  const spec = {
+    variantId: 'material_' + mat.id, kind: 'material', matId: mat.id, payload: null, strength: 0,
+    sizePx: rand(84, 104), tint: mat.tint, label: mat.glyph,
+    sprite: null,
+    motion: atX != null ? MOTION.RainDown : MOTION.FloatUp,
+    fuseMs: 0, speedMult: atX != null ? 1.8 : 1.0, payMult: 1.0, treatLifeMs: 5000,
+  };
+  if (atX != null) spec.spawnAt = { x: atX, y: atY };
+  return spec;
+}
+
 /** Heavy Drop: every Nth bubble goes giant - x1.55 size, half speed, pays x3. */
 export function buildHeavy(intensity, effectIntensity = 1.0, sizeScale = 1.0) {
   const variant = VARIANTS[Math.random() < 0.5 ? 0 : 1];   // the flash + subliminal treats
