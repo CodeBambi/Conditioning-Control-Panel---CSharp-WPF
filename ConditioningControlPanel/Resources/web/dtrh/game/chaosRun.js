@@ -346,6 +346,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
       // ---- crafted kit (Part 2; applyCraftedKit writes these at GO) ----
       slipperySec: 0,          // Slippery Slope window: fall x1.5 + heat x2 while > 0
+      rubberSec: 0,            // Rubber Up window: detonations can't touch you while > 0
       denialActive: false,     // DENIAL modifier live this run (no hearts, +50% pay)
       padlockPending: null,    // THE PADLOCK: boon id owed to the first draft
     };
@@ -762,8 +763,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const diff = cfg.difficulty;
 
     // Snap Chain: inside the post-snap window a trigger can't take anything.
-    if (performance.now() < st.invulnUntil) {
-      hudUi.toast(`⛓ snap chain holds (${NAME_OF[spec.variantId] || spec.variantId})`);
+    // Rubber Up (crafted) rides the same gate on its own dt-based window.
+    if (st.rubberSec > 0 || performance.now() < st.invulnUntil) {
+      hudUi.toast(st.rubberSec > 0
+        ? `🛡 the rubber holds (${NAME_OF[spec.variantId] || spec.variantId})`
+        : `⛓ snap chain holds (${NAME_OF[spec.variantId] || spec.variantId})`);
       pulse('122,224,255', 0.22);
       bark('detonated-absorbed', { variant: spec.variantId, strength: spec.strength, runDetonations: st.runDetonations, combo: st.combo, difficulty: diff, shields: st.shields });
       return;
@@ -1415,12 +1419,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // ---- crafted consumables (THE BOUDOIR, Part 2): one charge each ----
       case 'slippery_slope':
         st.slipperySec = 10;
-        ctx.director.setTimeFactor(baseTime());
+        // freeze / slow-mo / a live fork keep their own factors; they restore
+        // through baseTime() (which carries the x1.5) when they let go.
+        if (st.freezeRemainingSec <= 0 && st.slowMoRemainingSec <= 0 && state === 'running'
+            && !(ctx.junctions && ctx.junctions.isBusy())) {
+          ctx.director.setTimeFactor(baseTime());
+        }
         sfx('vibe_buzz', 0.5);
         hudUi.toast('💨 greased — the fall runs away with you');
         break;
       case 'rubber_up':
-        st.invulnUntil = performance.now() + 8000;   // onDetonated checks invuln FIRST
+        st.rubberSec = 8;   // onDetonated checks invuln FIRST; ticks down in tickToys so holds don't eat it
         sfx('toy_ready', 0.5);
         pulse('255,214,222', 0.3);
         hudUi.toast('🛡 rubbered up — nothing can touch you');
@@ -1491,8 +1500,19 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       st.slipperySec -= dt;
       if (st.slipperySec <= 0) {
         st.slipperySec = 0;
-        if (state === 'running') ctx.director.setTimeFactor(baseTime());
+        if (st.freezeRemainingSec <= 0 && st.slowMoRemainingSec <= 0 && state === 'running'
+            && !(ctx.junctions && ctx.junctions.isBusy())) {
+          ctx.director.setTimeFactor(baseTime());
+        }
         hudUi.toast('💨 the grease dries — the fall steadies');
+      }
+    }
+    // Rubber Up (crafted): the 8s shielded window winds down.
+    if (st && st.rubberSec > 0) {
+      st.rubberSec -= dt;
+      if (st.rubberSec <= 0) {
+        st.rubberSec = 0;
+        hudUi.toast('🛡 the rubber wears off — it can touch you again');
       }
     }
     if (vibeRemainingSec > 0) {
@@ -2624,15 +2644,20 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       equipment: [...st.runEquipment],
       hasVideo: !!(hostState && hostState.mediaStats && hostState.mediaStats.videos > 0),
     });
+    const dealt = options.slice();   // pre-rig refs: the pin must not stomp a rigged card
     happy.rigDraft(options, hpIo);   // run 4's defanged first sin / the duo demo
     // THE PADLOCK (crafted): the pinned mantra is owed to the first draft - swap it
-    // over the last card unless the deal already offers/took it. Rerolls re-run
-    // dealOptions, so the pin survives a reroll; resolveDraft settles the debt.
+    // over the last card the happy path didn't rig, unless the deal already
+    // offers/took it (or the rig claimed every slot - then this deal keeps its
+    // cards). Rerolls re-run dealOptions, so the pin survives a reroll;
+    // resolveDraft settles the debt.
     if (st.padlockPending) {
       const pin = boonById(st.padlockPending);
       if (pin && !pin.curse && !st.takenBoonIds.has(pin.id)
-          && !options.some((o) => o.id === pin.id) && options.length) {
-        options[options.length - 1] = pin;
+          && !options.some((o) => o.id === pin.id)) {
+        for (let i = options.length - 1; i >= 0; i--) {
+          if (options[i] === dealt[i]) { options[i] = pin; break; }
+        }
       }
     }
     for (const o of options) markDiscovered('boon:' + o.id);
@@ -3759,6 +3784,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // Seed the options panel from whatever snapshot already landed pre-attach.
       try { ctx.syncOptionUnlocks && ctx.syncOptionUnlocks((hostState && hostState.meta && hostState.meta.purchasedDials) || []); } catch (e) { /* ignore */ }
       try { ctx.setOptionProgress && ctx.setOptionProgress({ rankIndex: RANKS.forRuns((hostState && hostState.meta && hostState.meta.runsCompleted) | 0) }); } catch (e) { /* ignore */ }
+      try { if (hostState && hostState.loomList && warren.onLoomList) warren.onLoomList(hostState.loomList); } catch (e) { /* ignore */ }
     },
 
     /** The host answered request-run: deal the fresh config and drop in. */

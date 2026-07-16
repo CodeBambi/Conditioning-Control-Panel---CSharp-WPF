@@ -1222,6 +1222,9 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
           ? `take another shot · ×${owned + 1}`
           : `craft · ${match.name.toLowerCase()}`;
         const b = btn('wr-buy wr-craft-go', label, () => {
+          if (b.disabled) return;
+          b.disabled = true;        // one craft per click; the snapshot round-trip rebuilds the pane
+          b.classList.add('is-off');
           cmd('craft', { id: match.id, cost: gridCost(boudoirGrid) });
           boudoirGrid.fill(null);   // optimistic clear; the snapshot round-trip re-renders everything
           boudoirTray = null;

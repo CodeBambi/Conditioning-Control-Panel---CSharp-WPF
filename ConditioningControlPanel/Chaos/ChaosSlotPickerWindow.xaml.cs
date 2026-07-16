@@ -286,8 +286,26 @@ public partial class ChaosSlotPickerWindow : Window
         e.Handled = true;   // don't let the click also select the card
         if (sender is not Button btn || btn.Tag is not int slot) return;
 
+        var msg = $"Erase Save {slot}?\n\nThis permanently deletes this local save. It can't be undone.";
+
+        // Crafting Part 2: if no surviving save holds the doll that stitches this slot
+        // open, erasing it locks the slot shut again — say so before the player commits.
+        if (slot == 2 || slot == 3)
+        {
+            bool dollElsewhere = false;
+            foreach (var s in ChaosMeta.AllSlotSummaries())
+            {
+                if (s.Slot == slot) continue;
+                dollElsewhere |= slot == 2 ? s.HasRagdoll : s.HasPorcelain;
+            }
+            if (!dollElsewhere)
+                msg += slot == 2
+                    ? "\n\nWithout this save, Save 2 is Stitched Shut again until the Ragdoll is crafted in THE BOUDOIR."
+                    : "\n\nWithout this save, Save 3 is Stitched Shut again until the Porcelain doll is crafted in THE BOUDOIR.";
+        }
+
         var r = MessageBox.Show(
-            $"Erase Save {slot}?\n\nThis permanently deletes this local save. It can't be undone.",
+            msg,
             "Erase save", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
         if (r != MessageBoxResult.OK) return;
 

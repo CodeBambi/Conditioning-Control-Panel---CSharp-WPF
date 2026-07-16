@@ -266,6 +266,20 @@ export function setWordPack(id) {
 /** The veil punch-through words of the active pack (bubbles.js triggerVeil). */
 export function getVeilWords() { return packById(S.wordPack).veil; }
 
+// ---- crafted-gate enforcement (slot load) ------------------------------------
+// The crafted picks (word pack / bubble skin / music box) persist in the shared
+// sf-settings row, but OWNERSHIP is per save slot - a slot that never crafted
+// the gate item must not inherit another slot's pick (its revert controls are
+// hidden there). Snaps each un-owned pick back to its shipped default, persisting
+// the reset. Call it only once ownership is reliably KNOWN (the meta snapshot is
+// in) - an ownedFn that answers false because the meta simply hasn't landed yet
+// would wipe a legitimate owner's choices.
+export function enforceCraftedDefaults(ownedFn) {
+  if (S.wordPack !== DEFAULTS.wordPack && !ownedFn('headphones')) setWordPack(DEFAULTS.wordPack);
+  if (S.bubbleSkin !== DEFAULTS.bubbleSkin && !ownedFn('lipstick')) updateSetting('bubbleSkin', DEFAULTS.bubbleSkin);
+  if (S.musicBox !== DEFAULTS.musicBox && !ownedFn('the_ballerina')) updateSetting('musicBox', DEFAULTS.musicBox);
+}
+
 // ---- subliminal word list -------------------------------------------------
 export function allWords() {
   return [...packById(S.wordPack).words, ...S.customWords];

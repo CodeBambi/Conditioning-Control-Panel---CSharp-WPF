@@ -30,7 +30,7 @@ import { createDriftChain } from './driftChain.js';
 import { getLevel, setLevel, audioGroups, getVoice, setVoice, voiceSets, onVoice } from './audioLevels.js';
 import { getAudioCtx, getMasterOut, closeAudioBus } from './audioBus.js';
 import { S, updateSetting, onSettings, THEME_COLORS, THEME_PRESETS, applyThemePreset, intToHex, hexToInt,
-  getLooks, saveLook, clearLook, applyLook } from './settings.js';
+  getLooks, saveLook, clearLook, applyLook, enforceCraftedDefaults } from './settings.js';
 import * as bridge from '../bridge.js';
 
 const DRONE_URL = '/dtrh/assets/audio/drone1.mp3'; // Explore uses drift-under-glass; the fall gets its own bed
@@ -703,6 +703,12 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
 
   function setRunActive(on) {
     runActive = !!on;
+    // A soft (un-held) pause can't outlive the descent it opened over: without
+    // the hourglass the run keeps falling behind the card, and if it ends there
+    // (clock out / relapse) the card would bury the recap and pre-arm the Esc
+    // ladder past its pause rung. Drop the card the moment the run stands down.
+    // A HELD pause froze the run clock, so it can never be live on this edge.
+    if (!runActive && gamePaused && !pauseHeld) setGamePaused(false);
     // The options panel is session-lived and shared hub<->descent: force it shut
     // on a run transition so opening it in the Warren (or leaving it open) never
     // strands it over the descent/hub.
@@ -727,6 +733,16 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     // still targets COUNT_MIN, so pause it (clears + stops spawning). Veil
     // punch-through washes skip while paused; M4 routes veils into the game.
     bubbles.setPaused(true);
+    // Crafted-gated settings live in the shared sf-settings row, but ownership
+    // is per save slot: once THIS slot's meta snapshot is in, snap any un-owned
+    // pick back to its default. syncOptionUnlocks rides every meta snapshot
+    // (chaosRun.onMeta), so this fires as soon as ownership is actually KNOWN -
+    // a missing meta (getMeta() null) never resets anything.
+    const enforceCrafted = () => {
+      if (!game.getMeta || !game.getMeta()) return;
+      enforceCraftedDefaults((id) => { try { return !!game.craftedOwned(id); } catch (e) { return true; } });
+      syncMusicBox();   // an inherited music-box bed stops mid-note
+    };
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
     game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, drift, junctions, boonPick, powerupDrops, hubStations, flashBurst: (n) => bubbles.flashBurst(n),
@@ -740,7 +756,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       toggleFullscreen: () => toggleFullscreen(),
       onFullscreenChange: (cb) => FS.subscribe(cb),
       // Reveal earned option-panel dials from the meta snapshot (purchased "Dials").
-      syncOptionUnlocks: (ids) => panel.setUnlocks(ids),
+      syncOptionUnlocks: (ids) => { panel.setUnlocks(ids); enforceCrafted(); },
       // Live meta-rank for the panel's DESCENT section (deep pool variants).
       setOptionProgress: (p) => panel.setProgress(p),
       silenceVoice: (on) => { voiceSilenced = !!on; },

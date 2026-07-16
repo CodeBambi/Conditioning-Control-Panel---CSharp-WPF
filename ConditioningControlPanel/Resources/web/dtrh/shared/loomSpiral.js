@@ -12,9 +12,10 @@
  *     bg: '#rrggbb' }
  *
  * Seamless looping: a spiral with N identical arms repeats every 2π/N of
- * rotation. With 2 alternating colors the pattern only repeats over the color
- * cycle too - when N is odd the true period is (2π/N)·colors.length. loopMs
- * folds that into wall-clock so preview phase and GIF frame phase agree.
+ * rotation. With 2 alternating colors, rotating one arm span swaps the colors,
+ * so the true period is colors.length arm spans when N divides evenly - and a
+ * full 2π (N arm spans) when it doesn't (odd arms + 2 colors). loopMs folds
+ * that into wall-clock so preview phase and GIF frame phase agree.
  * ==========================================================================*/
 
 export const LOOM_SCHEMA = 1;
@@ -52,12 +53,13 @@ export function loopMs(p, frames = 36) {
   return frames * delayCsFor(p) * 10;
 }
 
-/** The symmetry span this loop animates across, in radians: 2π/arms, times the
- *  color-cycle length when the arm count doesn't divide it (odd arms + 2 colors). */
+/** The symmetry span this loop animates across, in radians: colors.length arm
+ *  spans when the color cycle divides the arm count evenly (one arm span just
+ *  swaps the colors), else a full turn (odd arms + 2 colors have no sub-2π symmetry). */
 export function loopSpanRad(p) {
   const q = normalizeParams(p);
   const n = q.colors.length;
-  return (Math.PI * 2 / q.arms) * (q.arms % n === 0 ? 1 : n);
+  return (Math.PI * 2 / q.arms) * (q.arms % n === 0 ? n : q.arms);
 }
 
 /** Radius easing per style: t in 0..1 (center -> rim) -> radius fraction 0..1. */

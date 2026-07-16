@@ -115,6 +115,10 @@ internal static class DtrhLoomStore
                 return (false, "bad-name");
             if (!File.Exists(gifPath)) return (false, "io-failed");
 
+            File.Delete(gifPath);
+
+            // only after the gif is truly gone: if the overlay pointed at it, fall
+            // back to the built-in (a failed delete must not reset the setting)
             try
             {
                 var s = App.Settings?.Current;
@@ -126,7 +130,6 @@ internal static class DtrhLoomStore
             }
             catch { }
 
-            File.Delete(gifPath);
             var sidecar = Path.Combine(SpiralsFolder, Prefix + slug + ".json");
             try { if (File.Exists(sidecar)) File.Delete(sidecar); } catch { }
             App.Logger?.Information("DtrhLoomStore: deleted spiral {Slug}", slug);

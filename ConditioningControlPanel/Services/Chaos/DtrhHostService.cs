@@ -646,6 +646,8 @@ internal static class DtrhHostService
                 case "duo-demo": bark.NotifyChaosDuoDemo(); break;
                 // ---- Wave 2: tunnel pickups (reuse the rabbit-catch voice) ----
                 case "rabbit-caught": bark.NotifyChaosDarterCaught(I("gold"), 0, true); break;
+                // ---- Crafting: THE BOUDOIR (reuse the first-time voice) ----
+                case "crafted": bark.NotifyChaosFirstTime(S("id")); break;
                 default: App.Logger?.Debug("DtrhHost: unrouted bark event '{E}'", (string?)o["event"]); break;
             }
         }

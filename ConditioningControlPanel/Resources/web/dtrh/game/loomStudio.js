@@ -37,6 +37,7 @@ export function createLoomStudio({ bridge, sfx }) {
   let saved = [];             // host truth: [{ slug, url, params }]
   let worker = null;
   let jobId = 0;
+  let pendingJob = null;      // { id, name, params, overwrite } captured when SAVE was clicked
   let encoding = false;       // a save job is in flight (worker + host round-trip)
   let progress = 0;
   let status = null;          // transient line under the SAVE button
@@ -66,19 +67,25 @@ export function createLoomStudio({ bridge, sfx }) {
       return;
     }
     if (msg.error) {
+      pendingJob = null;
       encoding = false;
       status = 'the thread snapped: ' + msg.error;
       redraw();
       return;
     }
     if (msg.gif) {
-      // hand the finished file to the host; loom-result closes the loop
+      // hand the finished file to the host; loom-result closes the loop.
+      // Send what was true when SAVE was clicked - the pane stays live during
+      // the encode, so module state may have drifted since.
+      const job = pendingJob;
+      if (!job || job.id !== msg.id) return;
+      pendingJob = null;
       try {
         bridge.send({
           type: 'loom-save',
-          name,
-          overwrite: overwriteArmed,
-          params,
+          name: job.name,
+          overwrite: job.overwrite,
+          params: job.params,
           gifBase64: b64FromBuffer(msg.gif),
         });
       } catch (e) {
@@ -133,7 +140,9 @@ export function createLoomStudio({ bridge, sfx }) {
     progress = 0;
     status = null;
     jobId++;
-    w.postMessage({ id: jobId, params });
+    const jobParams = normalizeParams(params);
+    pendingJob = { id: jobId, name, params: jobParams, overwrite: overwriteArmed };
+    w.postMessage({ id: jobId, params: jobParams });
     redraw();
   }
 
@@ -157,6 +166,7 @@ export function createLoomStudio({ bridge, sfx }) {
     previewCanvas = null;
     lastBody = null;
     if (encoding && worker) { try { worker.postMessage({ cancel: jobId }); } catch (e) { /* ignore */ } }
+    pendingJob = null;
     encoding = false;
   }
 
