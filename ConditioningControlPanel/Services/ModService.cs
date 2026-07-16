@@ -253,6 +253,35 @@ namespace ConditioningControlPanel.Services
         #region Install / Uninstall / Activate
 
         /// <summary>
+        /// Read just the mod.json out of a .ccpmod without extracting the package.
+        /// Used to show name/author in the install confirmation. Null on any
+        /// failure (not a zip, no manifest, unparseable) — full validation still
+        /// happens in InstallModAsync.
+        /// </summary>
+        public static async Task<ModManifest?> PeekManifestAsync(string ccpmodPath)
+        {
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var zip = ZipFile.OpenRead(ccpmodPath);
+                    var entry = zip.GetEntry("mod.json");
+                    if (entry == null) return null;
+                    using var reader = new StreamReader(entry.Open());
+                    var manifest = JsonConvert.DeserializeObject<ModManifest>(reader.ReadToEnd());
+                    if (manifest == null
+                        || string.IsNullOrWhiteSpace(manifest.Name)
+                        || string.IsNullOrWhiteSpace(manifest.Author)) return null;
+                    return manifest;
+                });
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Install a .ccpmod file. Extracts, validates manifest, registers.
         /// </summary>
         public async Task<ModInstallResult> InstallModAsync(string ccpmodPath)

@@ -18,12 +18,11 @@ namespace ConditioningControlPanel
         // Route segments / dict selectors.
         public const string CatalogueKindPresets = "presets";
         public const string CatalogueKindSessions = "sessions";
+        public const string CatalogueKindMods = "mods";
 
         private static readonly TimeSpan CatalogueCheckThrottle = TimeSpan.FromSeconds(90);
-        private DateTime _lastCataloguePresetCheckUtc = DateTime.MinValue;
-        private DateTime _lastCatalogueSessionCheckUtc = DateTime.MinValue;
-        private bool _cataloguePresetCheckInFlight;
-        private bool _catalogueSessionCheckInFlight;
+        private readonly Dictionary<string, DateTime> _lastCatalogueCheckUtc = new();
+        private readonly HashSet<string> _catalogueChecksInFlight = new();
 
         private static bool IsCatalogueAcceptedStatus(string? status) =>
             string.Equals(status, "approved", StringComparison.OrdinalIgnoreCase) ||
@@ -43,13 +42,15 @@ namespace ConditioningControlPanel
             {
                 CatalogueKindPresets => s.CataloguePresetSubmissions,
                 CatalogueKindSessions => s.CatalogueSessionSubmissions,
+                CatalogueKindMods => s.CatalogueModSubmissions,
                 _ => null,
             };
         }
 
         // Look up the current moderation status for a given key, or null if not yet
-        // submitted. Used by card builders to render the status badge.
-        private DeeperSubmissionRecord? GetCatalogueRecord(string kind, string key)
+        // submitted. Used by card builders to render the status badge. Static so
+        // dialogs (ModManagerDialog) can render badges without a MainWindow ref.
+        internal static DeeperSubmissionRecord? GetCatalogueRecord(string kind, string key)
         {
             var dict = GetCatalogueDict(kind);
             if (dict == null || string.IsNullOrEmpty(key)) return null;
@@ -117,18 +118,16 @@ namespace ConditioningControlPanel
                 var dict = GetCatalogueDict(kind);
                 if (dict == null || dict.Count == 0) return;
 
-                bool inFlight = kind == CatalogueKindPresets ? _cataloguePresetCheckInFlight : _catalogueSessionCheckInFlight;
-                if (inFlight) return;
+                if (_catalogueChecksInFlight.Contains(kind)) return;
 
                 bool anyOpen = dict.Values.Any(r => !IsCatalogueAcceptedStatus(r.Status) || !r.AcceptedNotified);
                 if (!anyOpen) return;
 
-                bool isPresets = kind == CatalogueKindPresets;
-                var lastCheck = isPresets ? _lastCataloguePresetCheckUtc : _lastCatalogueSessionCheckUtc;
-                if (!force && DateTime.UtcNow - lastCheck < CatalogueCheckThrottle) return;
+                if (!force && _lastCatalogueCheckUtc.TryGetValue(kind, out var lastCheck)
+                    && DateTime.UtcNow - lastCheck < CatalogueCheckThrottle) return;
 
-                if (isPresets) { _cataloguePresetCheckInFlight = true; _lastCataloguePresetCheckUtc = DateTime.UtcNow; }
-                else { _catalogueSessionCheckInFlight = true; _lastCatalogueSessionCheckUtc = DateTime.UtcNow; }
+                _catalogueChecksInFlight.Add(kind);
+                _lastCatalogueCheckUtc[kind] = DateTime.UtcNow;
 
                 var statuses = await App.Catalogue.FetchMyCatalogueAssetsAsync(kind, default).ConfigureAwait(true);
                 if (statuses == null) return;
@@ -169,7 +168,7 @@ namespace ConditioningControlPanel
             }
             finally
             {
-                if (kind == CatalogueKindPresets) _cataloguePresetCheckInFlight = false; else _catalogueSessionCheckInFlight = false;
+                _catalogueChecksInFlight.Remove(kind);
             }
         }
 
@@ -209,6 +208,11 @@ namespace ConditioningControlPanel
                 {
                     var preset = App.Settings?.Current?.UserPresets?.FirstOrDefault(p => p.Id == key);
                     if (preset != null && !string.IsNullOrEmpty(preset.Name)) return preset.Name;
+                }
+                if (kind == CatalogueKindMods)
+                {
+                    if (App.Mods?.InstalledMods.TryGetValue(key, out var mod) == true
+                        && !string.IsNullOrEmpty(mod.Name)) return mod.Name;
                 }
             }
             catch { }

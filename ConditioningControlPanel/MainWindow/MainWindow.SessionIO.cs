@@ -680,6 +680,10 @@ namespace ConditioningControlPanel
                     ImportEnhancementFiles(files);
                     break;
 
+                case DropType.Mod:
+                    await HandleModDropAsync(files[0]);
+                    break;
+
                 case DropType.Assets:
                 case DropType.Zip:
                 case DropType.Folder:
@@ -688,7 +692,7 @@ namespace ConditioningControlPanel
             }
         }
 
-        private enum DropType { None, Session, Preset, Assets, Zip, Folder, Enhancement }
+        private enum DropType { None, Session, Preset, Assets, Zip, Folder, Enhancement, Mod }
 
         private static readonly HashSet<string> AssetVideoExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -733,6 +737,11 @@ namespace ConditioningControlPanel
             // Single preset file
             if (files.Length == 1 && files[0].EndsWith(".preset.json", StringComparison.OrdinalIgnoreCase))
                 return DropType.Preset;
+
+            // Single mod package. Must be detected before the generic zip/asset
+            // branches — a .ccpmod IS a zip, but it installs, not extracts.
+            if (files.Length == 1 && files[0].EndsWith(".ccpmod", StringComparison.OrdinalIgnoreCase))
+                return DropType.Mod;
 
             // Deeper enhancement project file(s). Accept the canonical *.ccpenh.json
             // double-suffix or a plain *.json (the serializer rejects non-enhancement
@@ -794,6 +803,12 @@ namespace ConditioningControlPanel
                     DropOverlaySubtitle.Text = files.Length == 1
                         ? Path.GetFileName(files[0])
                         : $"{files.Length} enhancements";
+                    break;
+
+                case DropType.Mod:
+                    DropOverlayIcon.Text = "🧩";
+                    DropOverlayTitle.Text = Loc.Get("label_drop_to_install_mod");
+                    DropOverlaySubtitle.Text = Path.GetFileName(files[0]);
                     break;
 
                 case DropType.Zip:
