@@ -725,8 +725,9 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-    
+
                             <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
                                         ToolTip="{loc:Str tooltip_show_content_on_all_connected_monitors_2_3_or}">
                                 <CheckBox x:Name="ChkDualMon" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
@@ -785,6 +786,13 @@
                                 <CheckBox x:Name="ChkVideoHwDecode" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
                                           Checked="ChkVideoHwDecode_Changed" Unchecked="ChkVideoHwDecode_Changed"/>
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="Force video GPU decode" Margin="6,0,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="5" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
+                                        ToolTip="Render fullscreen effects (spiral, pink filter, flashes, bubbles...) in one shared overlay window per monitor. Smoother with many effects on screen. Turn off to fall back to the classic one-window-per-effect renderer if overlays misbehave.">
+                                <CheckBox x:Name="ChkUnifiedOverlay" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
+                                          Checked="ChkUnifiedOverlay_Changed" Unchecked="ChkUnifiedOverlay_Changed"/>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Unified overlay renderer" Margin="6,0,0,0"/>
                             </StackPanel>
                         </Grid>
     

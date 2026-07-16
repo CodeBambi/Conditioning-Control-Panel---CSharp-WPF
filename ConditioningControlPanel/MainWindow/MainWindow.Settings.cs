@@ -89,6 +89,7 @@ namespace ConditioningControlPanel
             if (SettingsTab.ChkPerformanceMode != null) SettingsTab.ChkPerformanceMode.IsChecked = s.PerformanceMode;
             if (SettingsTab.ChkAutoPerformance != null) SettingsTab.ChkAutoPerformance.IsChecked = s.AutoPerformanceMode;
             if (SettingsTab.ChkVideoHwDecode != null) SettingsTab.ChkVideoHwDecode.IsChecked = s.VideoForceHardwareDecoding;
+            if (SettingsTab.ChkUnifiedOverlay != null) SettingsTab.ChkUnifiedOverlay.IsChecked = s.UnifiedOverlayHost;
             RemoteControlTab.ChkStopEffectsOnRemoteDisconnect.IsChecked = s.StopEffectsOnRemoteDisconnect;
             if (RemoteControlTab.ChkRemoteShareAvatar != null) RemoteControlTab.ChkRemoteShareAvatar.IsChecked = s.RemoteShareAvatar;
 
@@ -500,6 +501,7 @@ namespace ConditioningControlPanel
             if (SettingsTab.ChkPerformanceMode != null) s.PerformanceMode = SettingsTab.ChkPerformanceMode.IsChecked ?? false;
             if (SettingsTab.ChkAutoPerformance != null) s.AutoPerformanceMode = SettingsTab.ChkAutoPerformance.IsChecked ?? true;
             if (SettingsTab.ChkVideoHwDecode != null) s.VideoForceHardwareDecoding = SettingsTab.ChkVideoHwDecode.IsChecked ?? false;
+            if (SettingsTab.ChkUnifiedOverlay != null) s.UnifiedOverlayHost = SettingsTab.ChkUnifiedOverlay.IsChecked ?? true;
 
             // Deeper
             if (SettingsTab.ChkEnableDeeper != null) s.EnableDeeper = SettingsTab.ChkEnableDeeper.IsChecked ?? true;

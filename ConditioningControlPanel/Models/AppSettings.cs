@@ -2294,18 +2294,17 @@ namespace ConditioningControlPanel.Models
             get => _chaosBubbleSharedHost;
             set { _chaosBubbleSharedHost = value; OnPropertyChanged(); }
         }
-        private bool _unifiedOverlayHost = false;
-        /// <summary>Default OFF (reverted 2026-07-13, bug #550): render the fullscreen
+        private bool _unifiedOverlayHost = true;
+        /// <summary>Default ON (re-enabled for the 6.4 merge): render the fullscreen
         /// effects (pink filter, spiral, brain drain, subliminals, flash, bubbles, chaos FX) as
         /// z-ordered Skia layers inside ONE shared click-through compositor window per monitor
         /// (Services/Compositor/CompositorEngine) instead of one layered Window per effect.
         /// Concurrent fullscreen layered windows were the root cause of the session-lag /
         /// mouse-stutter cluster; this is the WPF twin of the Avalonia port's compositor and the
-        /// end-state renderer. Was briefly default ON (72456c1e) but the host renders through a
-        /// software SKElement on the UI thread, so a continuously-active fullscreen spiral
-        /// saturates the dispatcher on some machines (~1s input latency, #550). Kept OFF until the
-        /// host moves to GPU raster (SKGLElement) / throttled invalidation. Falls back to the
-        /// legacy per-effect windows when off.</summary>
+        /// end-state renderer. Was reverted to OFF once (2026-07-13, #550: unthrottled software
+        /// SKElement raster saturated the UI thread) — since fixed by dirty-gated invalidation,
+        /// so the compositor is the blessed path going forward. A Settings-tab toggle
+        /// ("Unified overlay renderer") lets users fall back to the legacy per-effect windows.</summary>
         public bool UnifiedOverlayHost
         {
             get => _unifiedOverlayHost;
@@ -3754,30 +3753,31 @@ namespace ConditioningControlPanel.Models
             _loudnessThresholdRelaxed = true;
         }
 
-        private bool _migratedUnifiedOverlayHostOff;
-        /// <summary>One-shot guard for <see cref="MigrateDisableUnifiedOverlayHost"/> so a user who
-        /// later re-enables the experimental compositor toggle isn't clobbered on the next launch.</summary>
+        private bool _migratedUnifiedOverlayHostOn;
+        /// <summary>One-shot guard for <see cref="MigrateEnableUnifiedOverlayHost"/> so a user who
+        /// turns the compositor toggle off afterwards isn't clobbered back on at the next launch.</summary>
         [JsonProperty]
-        public bool MigratedUnifiedOverlayHostOff
+        public bool MigratedUnifiedOverlayHostOn
         {
-            get => _migratedUnifiedOverlayHostOff;
-            set { _migratedUnifiedOverlayHostOff = value; OnPropertyChanged(); }
+            get => _migratedUnifiedOverlayHostOn;
+            set { _migratedUnifiedOverlayHostOn = value; OnPropertyChanged(); }
         }
 
         /// <summary>
-        /// Force the unified overlay host OFF once for users upgrading from 6.3.3, where it was
-        /// briefly default ON (72456c1e). The host renders through a software SKElement on the UI
-        /// thread, so a continuously-active fullscreen spiral saturated the dispatcher on some
-        /// machines (~1s input latency, bug #550). Because the property has no
-        /// DefaultValueHandling.Ignore, every 6.3.3 user has "true" written to settings.json, so a
-        /// default flip alone wouldn't reach them. Nobody enabled it deliberately in the &lt;1 day it
-        /// was default ON, and the in-app toggle can turn it back on — so a one-shot force-off is safe.
+        /// Force the unified overlay host ON once for users upgrading from 6.3.3/6.3.4. The
+        /// 6.3.4 hotfix force-migrated everyone OFF (bug #550: the host's unthrottled software
+        /// raster saturated the UI thread) and persisted "false" to settings.json, so the
+        /// default flip back to ON wouldn't reach them. #550 is fixed (dirty-gated invalidation)
+        /// and the compositor is now the blessed render path, so re-enable once; the
+        /// Settings-tab toggle ("Unified overlay renderer") lets anyone opt back out and their
+        /// choice sticks. Supersedes the retired MigrateDisableUnifiedOverlayHost — its
+        /// MigratedUnifiedOverlayHostOff sentinel key is simply ignored in old settings files.
         /// </summary>
-        internal void MigrateDisableUnifiedOverlayHost()
+        internal void MigrateEnableUnifiedOverlayHost()
         {
-            if (_migratedUnifiedOverlayHostOff) return;
-            _unifiedOverlayHost = false;
-            _migratedUnifiedOverlayHostOff = true;
+            if (_migratedUnifiedOverlayHostOn) return;
+            _unifiedOverlayHost = true;
+            _migratedUnifiedOverlayHostOn = true;
         }
 
         private double _speechWakeThreshold = 0.15;

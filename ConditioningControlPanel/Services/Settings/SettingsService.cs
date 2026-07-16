@@ -174,10 +174,10 @@ namespace ConditioningControlPanel.Services
                         // existing users to the gentler default. One-shot.
                         settings.MigrateLoudnessThreshold();
 
-                        // #550: pull the compositor back off for 6.3.3 upgraders (it was briefly
-                        // default ON and persisted true; software SKElement on the UI thread stalled
-                        // some machines). One-shot — re-enabling the toggle later sticks.
-                        settings.MigrateDisableUnifiedOverlayHost();
+                        // Compositor is the blessed render path now that #550 is fixed: re-enable
+                        // it once for users the 6.3.4 hotfix force-migrated off (persisted false).
+                        // One-shot — turning the toggle off later sticks.
+                        settings.MigrateEnableUnifiedOverlayHost();
 
                         return settings;
                     }
@@ -248,7 +248,7 @@ namespace ConditioningControlPanel.Services
                     MergeBuiltInAwarenessPresets(settings);
                     settings.MigrateFromContentModeToMod();
                     settings.MigrateLoudnessThreshold();
-                    settings.MigrateDisableUnifiedOverlayHost();
+                    settings.MigrateEnableUnifiedOverlayHost();
 
                     App.Logger?.Warning("Settings RESTORED from daily backup {Backup} (main file was unparseable)", bakPath);
                     return settings;
