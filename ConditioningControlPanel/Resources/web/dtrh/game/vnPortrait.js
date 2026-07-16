@@ -17,6 +17,8 @@
  *       vn.hide();  vn.dispose();
  * ==========================================================================*/
 
+import { modTint, modCompanion, modPortrait } from '../modContent.js';
+
 const TINT = {
   'builtin-bambisleep': { a: '255,105,180', b: '255,60,120' },
   'builtin-sissyhypno': { a: '255,64,180',  b: '180,60,255' },
@@ -297,12 +299,19 @@ export function createVnPortrait(hud, opts = {}) {
     const modId = getModId() || 'builtin-sissyhypno';
     const o = (typeof arg === 'string') ? resolveBeat(arg, modId) : (arg || {});
     const token = ++beatToken;
-    const tint = TINT[modId] || DEFAULT_TINT; tintA = tint.a;
+    // Creator mods: their declared tint / portrait stills win over the baked
+    // per-builtin sets; everything falls back per-piece when the mod ships none.
+    const tint = modTint() || TINT[modId] || DEFAULT_TINT; tintA = tint.a;
     root.style.setProperty('--vnA', tint.a); root.style.setProperty('--vnB', tint.b);
 
     const { key, def } = setFor(modId);
     const seg = def && def[o.emote];
-    const frames = seg && seg.frames;
+    const mp = modPortrait();
+    // A mod portrait is a still: a one-frame "segment" that lands straight on
+    // its freeze frame (per-emote png when shipped, else the default still).
+    const frames = mp
+      ? [(mp.emotes && mp.emotes[o.emote]) || mp.defaultUrl]
+      : (seg && seg.frames);
 
     skipping = false; skipWaiters = [];
     root.hidden = false; requestAnimationFrame(() => root.classList.add('vn-on'));
@@ -311,14 +320,14 @@ export function createVnPortrait(hud, opts = {}) {
 
     // her first frame + the bubble arrive together
     if (frames && frames.length) showFrame(frames[0]);
-    nameEl.textContent = NAME[modId] || '';
+    nameEl.textContent = modCompanion() || NAME[modId] || '';
     bubble.classList.add('vn-on');
     if (o.voUrl) startVoice(o.voUrl); else stopVoice();
     const typing = typewrite(o.line || '', token);
 
     // perform the emote segment -> freeze on the last frame
     if (frames && frames.length) {
-      const delays = seg.delays || frames.map(() => 40);
+      const delays = (seg && seg.delays) || frames.map(() => 40);
       for (let i = 0; i < frames.length; i++) {
         if (token !== beatToken) return false;
         if (skipping) break;

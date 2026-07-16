@@ -13,6 +13,7 @@
  * ==========================================================================*/
 
 import * as bridge from './bridge.js';
+import { setModContent } from './modContent.js';
 import { createHostMediaSource } from './hostMedia.js';
 import { detectMode } from './shared/capability.js';
 import { createChaosGame } from './game/chaosRun.js';
@@ -122,6 +123,7 @@ function shutdown() {
 
 bridge.on('init', (m) => {
   initMsg = m;
+  setModContent(m.modContent);   // creator mods: the mod's own DTRH content (or null)
   armBootDeadline(); // progress milestone - reset the boot deadline
   if (m.m2Test) {
     try { window.__dtrhVnTest = true; } catch (e) { /* lets the VN welcome fire on any descent for play-testing */ }

@@ -725,6 +725,13 @@ namespace ConditioningControlPanel.Services
             var oldModId = _activeMod.Id;
             if (oldModId == modId) return;
 
+            // DTRH snapshots the active mod's dtrh content (virtual-host mapping +
+            // init payload) at launch - a mid-session mod switch would leave it
+            // serving the OLD mod's descent. Close it; the next launch picks up
+            // the new mod cleanly.
+            try { if (Chaos.DtrhHostService.IsActive) Chaos.DtrhHostService.CloseActive(); }
+            catch (Exception ex) { _log?.Debug("ActivateMod: DTRH close failed: {E}", ex.Message); }
+
             // Save current pool customizations before switching
             SaveCurrentPoolsToSettings(oldModId);
 
