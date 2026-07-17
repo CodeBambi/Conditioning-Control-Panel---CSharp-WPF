@@ -1871,7 +1871,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const intoRegion = st.elapsedSec - (st.waveIndex - 1) * waveLen;
     if (intoRegion < 12 || waveLen - intoRegion < 24) { st.nextJunctionSec = st.elapsedSec + 6; return; }
     st.nextJunctionSec = st.elapsedSec + JUNCTION_EVERY + Math.random() * 16;
-    fireJunction();
+    // every BONUS_ROOM_EVERY-th room the fork slot is upgraded to the Grand
+    // Draft (4-5 boon doors); the counter ticks on every antechamber armed
+    if ((roomsVisited + 1) % BONUS_ROOM_EVERY === 0) fireBonusRoom();
+    else fireJunction();
   }
 
   /** Blend a doorway's brand color 35% toward the current chamber's line hue so
@@ -1886,6 +1889,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   function fireJunction() {
+    roomsVisited++;
     const pair = JUNCTION_PAIRS[Math.floor(Math.random() * JUNCTION_PAIRS.length)];
     const coaxSide = Math.random() < 0.5 ? 'left' : 'right';
     // clone the branded descs - rewards are per-fork and must never stick to the
@@ -1920,14 +1924,53 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const presealChance = PRESEAL_BY_WAVE[Math.min(4, st.waveIndex)] || 0;
     let presealIndex = null;
     if (Math.random() < presealChance) presealIndex = (coaxSide === 'left') ? 1 : 0; // seal the resisting mouth
+    const forkBiome = activeBiome();   // the fork's corridors dress as the biome you're IN
     ctx.junctions.schedule({
       atDepth: ctx.nav.getDepth() + JUNCTION_LEAD,
       branches: [left, right],
       coaxIndex: coaxSide === 'left' ? 0 : 1,
       presealIndex,
       mode: 'fork',
+      veinFx: (forkBiome && forkBiome.veinFx) || null,
     });
     bark('junction-near');
+  }
+
+  /** The Grand Draft: every BONUS_ROOM_EVERY-th room the descent passes through
+   * (forks + boon rooms both count), the fork slot is upgraded - a wider
+   * antechamber with 4-5 doors and EVERY one a dealt boon (junctions v7 grows
+   * the sphere so the extra doorways never clip). It rides mid-region like a
+   * fork: the clock keeps running, no wave advances - the pick just applies
+   * (resolveBonusRoom). Reuses the whole draft-room kit: chrome, resist,
+   * reroll, the coaxed-door timeout. */
+  function fireBonusRoom() {
+    const doors = Math.random() < 0.5 ? 4 : 5;
+    const options = dealOptions(doors);
+    if (!options || options.length < 2) { fireJunction(); return; }   // starved pool: a plain fork
+    bonusRoomActive = true;
+    draftRoomActive = true;     // reuse ALL the draft-room machinery (chrome, resist, reroll)
+    draftRoomSkip = false;
+    draftRoomDoors = options.length;
+    draftRevealBiome = null;    // no roulette: the doors stay in this room's biome
+    const bio = activeBiome();
+    ctx.junctions.schedule({
+      atDepth: ctx.nav.getDepth() + JUNCTION_LEAD,
+      branches: options.map(boonBranch),
+      coaxIndex: Math.floor(Math.random() * options.length),
+      mode: 'draft',
+      lingerSec: cfg.draftAutoResumeSec,
+      lead: JUNCTION_LEAD,
+      title: { numeral: '✦', text: 'TEMPTATION', color: 0xffd76a },
+      veinFx: (bio && bio.veinFx) || null,
+    });
+    if (!ctx.junctions.isBusy()) {   // engine refused (inactive/torn down): no room, no wedge
+      bonusRoomActive = false;
+      draftRoomActive = false;
+      return;
+    }
+    roomsVisited++;
+    bark('junction-near');
+    hudUi.toast('✦ the walls open wide — every door holds a gift');
   }
 
   /** The fork committed (engine reports the winning branch). Tally the brand,
@@ -1998,10 +2041,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // tube (the next chamber rebases at the vein exit, so the door you take IS
   // the chamber you land in). The resist button / timeout dives the coaxed door
   // with no boon (+1 resistance, same as the old table). Reroll re-deals the
-  // door cards in place. The old in-tube card row (engine/boonPick.js) stays
-  // for 4-choice drafts (three doors is the room's geometric max), the run-1
-  // scripted draft (fires at an arbitrary mid-loop beat) and the Court's
-  // terminal Landing (no next chamber to dive into).
+  // door cards in place. The room takes 2-5 doors (junctions v7 widens the
+  // antechamber for 4-5); the old in-tube card row (engine/boonPick.js) stays
+  // only for the run-1 scripted draft (fires at an arbitrary mid-loop beat)
+  // and the Court's terminal Landing (no next chamber to dive into).
   const DRAFT_ROOM_LEAD = 70;   // shorter telegraph than a fork: the field is already held+cleared
   // door tint per boon theme (mirrors boonPick's THEMES palette)
   const DRAFT_DOOR_COLORS = {
@@ -2009,8 +2052,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     rare: '#c178ff', uncommon: '#66e0d0', common: '#ccd6e6',
   };
   let draftRoomActive = false;   // a draft room is scheduled/lingering (drafting stays true throughout)
+  let bonusRoomActive = false;   // the live draft room is a grand room (mid-region, no wave advance)
   let draftRoomSkip = false;     // the resist button fired; the commit resolves boonless
-  let draftRoomDoors = 3;        // dealt door count (draftChoices can be 2)
+  let draftRoomDoors = 3;        // dealt door count (2-5: wave drafts deal draftChoices, grand rooms 4-5)
+  let roomsVisited = 0;          // every antechamber counts: forks + boon rooms (paces the grand room)
+  const BONUS_ROOM_EVERY = 10;   // every 10th room is the Grand Draft (fireBonusRoom)
   let draftDom = null;           // lazy DOM chrome: caption + reroll/resist (reuses boonPick's CSS)
   let draftCapTimer = null;      // 250ms caption countdown while the room lingers
   let draftRevealBiome = null;   // the roulette's pre-rolled target, for the settle card
@@ -2061,7 +2107,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function draftRoomCaption() {
     const left = ctx && ctx.junctions && ctx.junctions.getDraftSecondsLeft
       ? ctx.junctions.getDraftSecondsLeft() : null;
-    const words = draftRoomDoors === 2 ? 'two doors' : 'three doors';
+    const words = ({ 2: 'two doors', 3: 'three doors', 4: 'four doors', 5: 'five doors' })[draftRoomDoors]
+      || `${draftRoomDoors} doors`;
     return `${words}, one keeps you — click a card to take it${left != null ? ` · ${left}s` : ''}`;
   }
 
@@ -2092,7 +2139,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (!draftRoomActive || st.rerollsLeft <= 0 || !ctx || !ctx.junctions) return;
     st.rerollsLeft--;
     hudUi.toast('🎲 tempted fate again');
-    ctx.junctions.setDraftCards(dealOptions().map(boonBranch));
+    ctx.junctions.setDraftCards(dealOptions(draftRoomDoors).map(boonBranch));
     syncDraftButtons();
   }
 
@@ -2129,7 +2176,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           color: (b.style && b.style.palette && b.style.palette.colLine) || 0xff69b4 })),
         targetIndex: BIOMES_ALL.findIndex((b) => b.id === targetBiome.id),
       } : null,
+      // the doorway corridors dress as the destination biome - junctions holds
+      // the dress back until the roulette lands, so it can't leak the roll
+      veinFx: (targetBiome && targetBiome.veinFx) || null,
     });
+    if (ctx.junctions.isBusy()) roomsVisited++;   // armed: this room paces the Grand Draft too
   }
 
   /** A draft-room door committed: the dive is already running engine-side;
@@ -2138,12 +2189,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hideDraftRoomChrome();
     if (!draftRoomActive) return;   // aborted (run ended): teardown fired without us
     draftRoomActive = false;
+    // a Grand Draft resolves mid-region (resolveBonusRoom) - no wave machinery
+    const bonus = bonusRoomActive;
+    bonusRoomActive = false;
     const b = (choice && choice.branch) || {};
     if (b.color) st.branchTint = { color: b.color, strength: 0.6 };   // the tube blushes in the boon's color
     ctx.fx.pulseFlash(0.5);
     const skipped = draftRoomSkip || (choice && choice.skipped);
     draftRoomSkip = false;
-    if (skipped) { resolveDraft(null, false); return; }
+    if (skipped) { if (bonus) resolveBonusRoom(null, false); else resolveDraft(null, false); return; }
     // A timeout dives the coaxed door (junctions.commit -> tubesPick), so its
     // winner.desc carries a real boon - award it ("she chose for you") instead of
     // leaving you empty-handed. Falls through to the gold-pouch fallback below when
@@ -2158,7 +2212,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       hudUi.announce(`🪙 +${gold} gold`, 'powerup', 1600);
       sfx('golden_pop', 0.55);
     }
-    resolveDraft(b.boon || null, timedOut);
+    if (bonus) resolveBonusRoom(b.boon || null, timedOut);
+    else resolveDraft(b.boon || null, timedOut);
   }
 
   /** Per-RunTick: Lust Bleed (the tube blushes with the LUST bar; a held full
@@ -2570,10 +2625,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     pendingWave = newWave;
 
     const options = dealOptions();
-    // Four Chambers: the draft is a ROOM with one tube per boon (2-3 doors).
-    // The clock is frozen while drafting, so the approach + linger cost no run
-    // time. 4-choice drafts keep the in-tube card row (three doors max).
-    if (cfg.regionMode && ctx && ctx.junctions && options.length >= 2 && options.length <= 3) {
+    // Four Chambers: the draft is a ROOM with one tube per boon (2-5 doors -
+    // junctions v7 widens the antechamber past 3). The clock is frozen while
+    // drafting, so the approach + linger cost no run time. The in-tube card
+    // row survives only as the engine-refused fallback below (plus the run-1
+    // scripted draft and the Court's terminal Landing).
+    if (cfg.regionMode && ctx && ctx.junctions && options.length >= 2 && options.length <= 5) {
       openDraftRoom(options);
       if (ctx.junctions.isBusy()) return;   // room armed: onCommit resolves the draft
       draftRoomActive = false;              // engine refused (inactive/torn down): card row, not a wedge
@@ -2632,10 +2689,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     });
   }
 
-  function dealOptions() {
+  function dealOptions(choicesOverride) {
     const options = dealDraft({
       allowCurses: cfg.allowCurses,
-      choices: cfg.draftChoices,
+      choices: choicesOverride || cfg.draftChoices,
       guaranteeCurse: st.maxedBoons.has('surrender'),
       takenIds: st.takenBoonIds,
       sinChance: cfg.sinChance,
@@ -2867,6 +2924,56 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (!scripted && st.welcomeShower) spawnWelcomeShower();
       if (!scripted) announceFinalLoopIfEntering();
     }, { onTick: (b) => sfx(b === 'GO!' ? 'sink' : 'countdown_tick', 0.45) });
+  }
+
+  /** A Grand Draft door committed mid-region: apply the boon exactly like a
+   * wave draft would (same shield / tilt / announce semantics), but the run
+   * never parked - no drafting state, no wave advances, no Ready/GO. */
+  function resolveBonusRoom(boon, auto) {
+    if (auto) metrics.noteAutopick();
+    if (boon) {
+      if (boon.curse) metrics.noteCurse(); else metrics.noteBoon();
+      lessons.onDraftCardTaken(!!boon.curse);   // draft4 / surrender / first-times
+      const rigShield = boon.curse && happy.shouldShieldSin(boon.id);
+      const surrShield = boon.curse && !rigShield && st.maxedBoons.has('surrender') && !st.surrenderShieldUsed;
+      if (surrShield) st.surrenderShieldUsed = true;
+      const sinShielded = rigShield || surrShield;
+      applyBoon(boon, sinShielded);
+      if (boon.curse) {
+        // The Tilt: the world tips a little every time you say yes (a shielded
+        // sin keeps the horizon - the candle takes the tilt too)
+        if (!sinShielded && tiltSins < 3) {
+          tiltSins++;
+          ctx.nav.setRollOffset(tiltSins * 2.5);
+        }
+        if (st.sinExtraMult > 0) {
+          st.boonMult += st.sinExtraMult;
+          hudUi.toast(`🕯 sin embraced (+${st.sinExtraMult.toFixed(2)}x)`);
+        }
+        if (rigShield) hudUi.toast('☠ the first taste is free — no sting, this once');
+        else if (sinShielded) hudUi.toast('🕯 the candle took the sting (no drawback)');
+        if (st.maxedBoons.has('surrender')) {
+          st.shields += 1;
+          hudUi.toast('🕯 you said yes. it gave back (+1 resistance)');
+        }
+        sfx('sin_accept', 0.6);
+        hudUi.announce(`☠ ${boon.name}`, 'bad', 2200, { artKey: boon.id });
+        bark('curse-picked', { name: boon.name, rarity: boon.rarity, mult: boon.mult });
+      } else {
+        sfx('boon_pick', 0.55);
+        hudUi.announce(`◈ ${boon.name}`, 'powerup', 2200, { artKey: boon.id });
+        bark('boon-picked', { name: boon.name });
+      }
+    } else {
+      metrics.noteSkip();
+      st.shields += 1;
+      pulse('120,220,160', 0.22);
+      hudUi.announce('+1 RESISTANCE', 'freeze', 2000, { artKey: 'resistance' });
+      // fly a shield from screen-centre into the HUD shields slot so the bank reads
+      try { hudUi.flyShieldToSlot && hudUi.flyShieldToSlot(); } catch (e) { /* ignore */ }
+      bark('boon-skipped', { shields: st.shields });
+    }
+    happy.onDraftResolved(hpIo);   // the run-4 first-sin beat is spent either way
   }
 
   function commitWave(newWave) {
@@ -3548,6 +3655,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // an aborted draft room never commits: drop its state + chrome so the next
     // run's first draft doesn't inherit a stale skip flag
     draftRoomActive = false;
+    bonusRoomActive = false;
     draftRoomSkip = false;
     hideDraftRoomChrome();
     syncHeld();
@@ -3998,7 +4106,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       window.removeEventListener('keydown', onToyKey);
       hideDraftRoomChrome();
       if (draftDom && draftDom.root.parentNode) draftDom.root.parentNode.removeChild(draftDom.root);
-      draftDom = null; draftRoomActive = false;
+      draftDom = null; draftRoomActive = false; bonusRoomActive = false;
       if (offVoice) { offVoice(); offVoice = null; }
       warren?.dispose();
       lessons?.dispose();

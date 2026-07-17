@@ -25,6 +25,15 @@
  *   mechHint  - one plain-language line on how the mechanic plays; the quiet
  *               grey note under the flavour line (roulette settle card,
  *               arrival card, HUD biome chip).
+ *   veinFx    - the junction/draft-room corridor dress ({accent, <knob>:
+ *               weight}): the doorway tubes wear the biome's signature
+ *               pattern in its accent color, on top of each door's identity
+ *               color. Knob names = junctions.js VEIN_FX_KEYS (dots, scan,
+ *               chase, chain, caustic, arch, mirrorY, streaks, beam, helix/
+ *               helix2, kaleido, drift, desat, ringFade, breath/throb/strobe/
+ *               flicker, surge/slip/beat). Forks dress as the biome you're
+ *               IN; a draft room dresses as the one its doors lead into,
+ *               only after the roulette lands (no early hint).
  *
  * All FOUR slots per room are live (wave 1: Toybox/Keyhole/Mirrors/Grey Ward/
  * Gallery/Casino/Velocity/Coronation; wave 2: Static/Incognito/Vertigo/
@@ -76,6 +85,8 @@ export const BIOMES_BY_ROOM = {
       wx: { fuseMult: 1.15 },   // kind fuses - nothing here means anything, right?
       mech: 'mimics',
       mechHint: 'about 1 in 7 toys flips when popped: a flash slips out and that pop pays ×3',
+      // wrapping-paper corridor: candy polka dots + a crib-mobile breath
+      veinFx: { accent: 0x9be8ff, dots: 1.0, breath: 0.7 },
     },
     {
       id: 'keyhole', name: 'The Keyhole', glyph: '🗝',
@@ -97,6 +108,8 @@ export const BIOMES_BY_ROOM = {
       wx: {},
       mech: 'keyhole',
       mechHint: 'two candle beams roam the dark: pop inside the light for ×1.6 pay, outside it only ×0.8',
+      // candlelit throat: the linework sinks toward dark and what's left wavers
+      veinFx: { accent: 0xffdca0, flicker: 1.0, ringFade: 0.5 },
     },
     {
       id: 'static', name: 'Late Night Static', glyph: '📺',
@@ -122,6 +135,8 @@ export const BIOMES_BY_ROOM = {
       wx: {},
       mech: 'flicker',
       mechHint: 'the signal rolls in and out (screen tints teal when it is IN): on-signal pops pay ×2, snow pops ×0.5',
+      // a dying broadcast: phosphor rows, row-tear bursts, vertical-hold slip
+      veinFx: { accent: 0x5ee8d0, scan: 0.9, glitch: 0.5, slip: 0.6 },
     },
     {
       id: 'incognito', name: 'Incognito', glyph: '🕶',
@@ -146,6 +161,8 @@ export const BIOMES_BY_ROOM = {
       wx: {},
       mech: 'incognito',
       mechHint: 'HISTORY CLEARED wipes hit every ~40s (5s warning): everything still on screen melts for +2 🪙 each',
+      // an empty page at 1am: alpha-checker wall, redaction bars crawling past
+      veinFx: { accent: 0x8fa0c0, checker: 0.85, ringFade: 0.25 },
     },
   ],
 
@@ -173,6 +190,8 @@ export const BIOMES_BY_ROOM = {
       wx: {},
       mech: 'mirrors',
       mechHint: 'every ~40s a 9-second mirror moment turns everything into your favorite: those pops pay ×1.5',
+      // silvered corridor: a helix folded kaleidoscopic into mirror chevrons
+      veinFx: { accent: 0x9fb8ff, helix: 0.9, kaleido: 1.0 },
     },
     {
       id: 'greyward', name: 'The Grey Ward', glyph: '🌫',
@@ -196,6 +215,8 @@ export const BIOMES_BY_ROOM = {
       wx: { heatGain: 0.5 },   // lust only warms where the color is (mech re-adds it on media touch)
       mech: 'greyward',
       mechHint: 'only the media holds color: go 7s without popping or grabbing any and your streak greys away fast',
+      // the drain starts at the door: the corridor greys out, grain like ash
+      veinFx: { accent: 0x9aa0a8, desat: 0.8, breath: 0.35 },
     },
     {
       id: 'vertigo', name: 'Vertigo', glyph: '🙃',
@@ -219,6 +240,8 @@ export const BIOMES_BY_ROOM = {
       wx: {},
       mech: 'vertigo',
       mechHint: 'a 3·2·1 count flips gravity for 7s: fuses burn ×1.4 hotter and snaps finished mid-flip pay ×2',
+      // two helixes fighting each other + a stalling drift: up stops meaning anything
+      veinFx: { accent: 0x7bffb8, helix: 0.7, helix2: 0.85, drift: 1.0 },
     },
     {
       id: 'searchlight', name: 'The Searchlight', glyph: '🔦',
@@ -241,6 +264,8 @@ export const BIOMES_BY_ROOM = {
       wx: {},
       mech: 'searchlight',
       mechHint: 'pops in the dark pay ×1.35, inside a beam only ×0.6 — linger in the light and you are SPOTTED: nearby fuses enrage',
+      // near-black steel throat: sweeping beams are what shows you the walls
+      veinFx: { accent: 0xcfe0ff, beam: 1.0, ringFade: 0.6, throb: 0.45 },
     },
   ],
 
@@ -268,6 +293,8 @@ export const BIOMES_BY_ROOM = {
       wx: {},
       mech: 'gallery',
       mechHint: 'grabs melt in your hands (−3 streak): keeping hands off builds pay up to ×2, and 10s TOUCH PERMITTED windows let you binge',
+      // museum corridor: gilt picture frames tiling the marble, dust-still
+      veinFx: { accent: 0xd4af6a, panel: 0.9, breath: 0.2 },
     },
     {
       id: 'casino', name: 'Fool’s Casino', glyph: '🎰',
@@ -292,6 +319,8 @@ export const BIOMES_BY_ROOM = {
       wx: { goldenBonus: 0.02 },   // stacked deck: goldens land noticeably more often
       mech: 'casino',
       mechHint: 'a golden pop puts its gold in a pot: golden again doubles it (up to 3 times), a detonation burns it, 20s quiet cashes out',
+      // the house's hallway: gold bulb-trains chasing every ring, a slot tick
+      veinFx: { accent: 0xffd700, chase: 1.0, strobe: 0.5 },
     },
     {
       id: 'chaincourt', name: 'The Chain Court', glyph: '⛓',
@@ -315,6 +344,8 @@ export const BIOMES_BY_ROOM = {
       wx: {},
       mech: 'contracts',
       mechHint: 'every clean snap banks +2 🪙; signing a drifting contract pays 20 🪙 now — the balance comes due 45s later',
+      // old iron gullet: the rings interlock into chain links on a slow pulse
+      veinFx: { accent: 0xe65a6e, chain: 0.95, throb: 0.5 },
     },
     {
       id: 'undertow', name: 'The Undertow', glyph: '🌊',
@@ -339,6 +370,8 @@ export const BIOMES_BY_ROOM = {
       wx: {},
       mech: 'undertow',
       mechHint: 'currents drag everything to their eye and slow your snaps: win one inside for ×3 pay and 12s of still water',
+      // a flooded pipe: caustic light webs, the flow surging forward and dragging back
+      veinFx: { accent: 0x9fc8ff, caustic: 0.9, surge: 0.85 },
     },
   ],
 
@@ -366,6 +399,8 @@ export const BIOMES_BY_ROOM = {
       wx: { fuseMult: 2.6 },   // fuses so long the field never threatens - the combo clock is the game
       mech: 'velocity',
       mechHint: 'full speed and fuses barely burn: but 4s without a pop and your streak starts bleeding away',
+      // already at terminal velocity: white-hot streaks, the rings receding
+      veinFx: { accent: 0xffffff, streaks: 1.0, ringFade: 0.45 },
     },
     {
       id: 'coronation', name: 'The Coronation', glyph: '👑',
@@ -389,6 +424,8 @@ export const BIOMES_BY_ROOM = {
       wx: {},
       mech: 'coronation',
       mechHint: 'gold verdicts drift down reading your run back: click to accept one for +0.12 multiplier, kept all run',
+      // the processional: a gold filigree braid wound against the fall, regal pulse
+      veinFx: { accent: 0xffd700, helix2: 0.95, throb: 0.5, breath: 0.2 },
     },
     {
       id: 'chapel', name: 'The Pink Chapel', glyph: '🕊',
@@ -412,6 +449,8 @@ export const BIOMES_BY_ROOM = {
       wx: {},
       mech: 'communion',
       mechHint: 'a soft bell rings every ~2s: pop ON it to chain up to ×2.2 (every 4th gilds nearby) — off-beat pays ×0.8',
+      // the nave: stained-glass panes between lead lines, the wall keeping time
+      veinFx: { accent: 0xffe6b0, arch: 0.9, beat: 0.55 },
     },
     {
       id: 'mirrorlake', name: 'Mirror Lake', glyph: '🪷',
@@ -435,6 +474,8 @@ export const BIOMES_BY_ROOM = {
       wx: { payMult: 1.1 },   // acceptance pays - gently, on everything
       mech: 'acceptance',
       mechHint: 'your shields melt into +0.15 multiplier each on entry; pops while the water shows a reflection pay ×1.5',
+      // the still shore: the corridor folds across a glowing waterline, calm caustics
+      veinFx: { accent: 0xc0d8e8, helix: 0.6, mirrorY: 0.95, caustic: 0.35, surge: 0.2 },
     },
   ],
 };

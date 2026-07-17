@@ -253,6 +253,35 @@ namespace ConditioningControlPanel.Services
         #region Install / Uninstall / Activate
 
         /// <summary>
+        /// Read just the mod.json out of a .ccpmod without extracting the package.
+        /// Used to show name/author in the install confirmation. Null on any
+        /// failure (not a zip, no manifest, unparseable) — full validation still
+        /// happens in InstallModAsync.
+        /// </summary>
+        public static async Task<ModManifest?> PeekManifestAsync(string ccpmodPath)
+        {
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    using var zip = ZipFile.OpenRead(ccpmodPath);
+                    var entry = zip.GetEntry("mod.json");
+                    if (entry == null) return null;
+                    using var reader = new StreamReader(entry.Open());
+                    var manifest = JsonConvert.DeserializeObject<ModManifest>(reader.ReadToEnd());
+                    if (manifest == null
+                        || string.IsNullOrWhiteSpace(manifest.Name)
+                        || string.IsNullOrWhiteSpace(manifest.Author)) return null;
+                    return manifest;
+                });
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Install a .ccpmod file. Extracts, validates manifest, registers.
         /// </summary>
         public async Task<ModInstallResult> InstallModAsync(string ccpmodPath)
@@ -316,6 +345,11 @@ namespace ConditioningControlPanel.Services
                     if (sanitizeResult != null)
                         return new ModInstallResult { ErrorMessage = sanitizeResult };
 
+                    // Lint (never reject) any shipped emote sets so a bad package is
+                    // diagnosable from the log — the runtime already degrades to the
+                    // static avatar when an emotes.json is missing or malformed.
+                    LintEmoteFolders(tempDir, manifest.Id);
+
                     // Move to permanent location (overwrite existing if same ID)
                     var installDir = Path.Combine(_modsFolder, manifest.Id);
                     if (Directory.Exists(installDir))
@@ -344,6 +378,54 @@ namespace ConditioningControlPanel.Services
             {
                 _log?.Error(ex, "Failed to install mod from {Path}", ccpmodPath);
                 return new ModInstallResult { ErrorMessage = $"Installation failed: {ex.Message}" };
+            }
+        }
+
+        /// <summary>
+        /// Best-effort validation of resources/emotes/set*/ in an extracted mod:
+        /// logs warnings for missing/unparseable emotes.json and dangling set dirs.
+        /// Never rejects the install.
+        /// </summary>
+        private void LintEmoteFolders(string modDir, string modId)
+        {
+            try
+            {
+                var emotesRoot = Path.Combine(modDir, "resources", "emotes");
+                if (!Directory.Exists(emotesRoot)) return;
+
+                foreach (var dir in Directory.EnumerateDirectories(emotesRoot))
+                {
+                    var name = Path.GetFileName(dir);
+                    if (!name.StartsWith("set", StringComparison.OrdinalIgnoreCase)
+                        || !int.TryParse(name.AsSpan(3), out var setNum) || setNum <= 0)
+                    {
+                        _log?.Warning("Mod {ModId}: emote folder '{Name}' ignored (expected set1, set2, ...)", modId, name);
+                        continue;
+                    }
+
+                    var mapPath = Path.Combine(dir, "emotes.json");
+                    if (!File.Exists(mapPath))
+                    {
+                        _log?.Warning("Mod {ModId}: emotes/{Name} has no emotes.json — set will not load", modId, name);
+                        continue;
+                    }
+                    try { Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(mapPath)); }
+                    catch (Exception ex)
+                    {
+                        _log?.Warning("Mod {ModId}: emotes/{Name}/emotes.json is not valid JSON ({Error}) — set will not load", modId, name, ex.Message);
+                        continue;
+                    }
+
+                    var gifs = Directory.EnumerateFiles(dir, "*.gif").Count();
+                    if (gifs == 0)
+                        _log?.Warning("Mod {ModId}: emotes/{Name} ships no GIF clips", modId, name);
+                    else
+                        _log?.Information("Mod {ModId}: emote set {Set} ok ({Gifs} clips)", modId, setNum, gifs);
+                }
+            }
+            catch (Exception ex)
+            {
+                _log?.Debug("Emote lint failed: {Error}", ex.Message);
             }
         }
 
@@ -642,6 +724,13 @@ namespace ConditioningControlPanel.Services
 
             var oldModId = _activeMod.Id;
             if (oldModId == modId) return;
+
+            // DTRH snapshots the active mod's dtrh content (virtual-host mapping +
+            // init payload) at launch - a mid-session mod switch would leave it
+            // serving the OLD mod's descent. Close it; the next launch picks up
+            // the new mod cleanly.
+            try { if (Chaos.DtrhHostService.IsActive) Chaos.DtrhHostService.CloseActive(); }
+            catch (Exception ex) { _log?.Debug("ActivateMod: DTRH close failed: {E}", ex.Message); }
 
             // Save current pool customizations before switching
             SaveCurrentPoolsToSettings(oldModId);

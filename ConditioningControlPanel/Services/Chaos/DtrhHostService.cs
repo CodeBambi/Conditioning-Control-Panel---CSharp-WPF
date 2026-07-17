@@ -81,24 +81,32 @@ internal static class DtrhHostService
             // WebView2 SKIP the mapping entirely, so create it BEFORE Launch.
             try { Directory.CreateDirectory(DtrhLoomStore.SpiralsFolder); }
             catch (Exception ex) { App.Logger?.Debug("DtrhHost: spirals dir create failed: {E}", ex.Message); }
+            var mappings = new List<(string, string, CoreWebView2HostResourceAccessKind)>
+            {
+                ("ccp.game", webRoot, CoreWebView2HostResourceAccessKind.Deny),
+                // Allow (not DenyCors): the engine uploads this media to WebGL, which
+                // needs CORS-clean responses (verified in the M0 spike).
+                ("ccp.assets", App.EffectiveAssetsPath, CoreWebView2HostResourceAccessKind.Allow),
+                // M4: the bundled Chaos art (bubble sprites, boon icons, announcer
+                // banners). Allow (not DenyCors): the in-tube boon draft
+                // (engine/boonPick.js) uploads the boon icons to WebGL, which needs
+                // CORS-clean responses; plain <img> consumers are unaffected.
+                ("ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"), CoreWebView2HostResourceAccessKind.Allow),
+                // THE LOOM: the saved-spiral GIFs (thumbnails + in-run overlay pool).
+                ("ccp.spirals", DtrhLoomStore.SpiralsFolder, CoreWebView2HostResourceAccessKind.Allow),
+            };
+            // Creator mods: an installed mod's resources/dtrh folder (voice clips,
+            // descent media, portrait, drone). Mapping ONLY the dtrh subfolder keeps
+            // the rest of the mod's resources off the page. Launch-time snapshot:
+            // switching the active mod requires a DTRH restart (ActivateMod closes us).
+            var modDtrh = DtrhModContent.ModDtrhRoot();
+            if (modDtrh != null)
+                mappings.Add(("ccp.mod", modDtrh, CoreWebView2HostResourceAccessKind.Allow));
             _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
             {
                 StartUrl = "https://ccp.game/dtrh/index.html",
                 PrimaryHost = "ccp.game",
-                Mappings = new List<(string, string, CoreWebView2HostResourceAccessKind)>
-                {
-                    ("ccp.game", webRoot, CoreWebView2HostResourceAccessKind.Deny),
-                    // Allow (not DenyCors): the engine uploads this media to WebGL, which
-                    // needs CORS-clean responses (verified in the M0 spike).
-                    ("ccp.assets", App.EffectiveAssetsPath, CoreWebView2HostResourceAccessKind.Allow),
-                    // M4: the bundled Chaos art (bubble sprites, boon icons, announcer
-                    // banners). Allow (not DenyCors): the in-tube boon draft
-                    // (engine/boonPick.js) uploads the boon icons to WebGL, which needs
-                    // CORS-clean responses; plain <img> consumers are unaffected.
-                    ("ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"), CoreWebView2HostResourceAccessKind.Allow),
-                    // THE LOOM: the saved-spiral GIFs (thumbnails + in-run overlay pool).
-                    ("ccp.spirals", DtrhLoomStore.SpiralsFolder, CoreWebView2HostResourceAccessKind.Allow),
-                },
+                Mappings = mappings,
                 UserDataFolderName = "browser_data_dtrh",
                 InputEnabled = true,
                 // Launch in a normal titled window (Alt-Tab / minimize / move); the dock's [ ]
@@ -176,6 +184,10 @@ internal static class DtrhHostService
                 // Active persona (builtin-bambisleep / builtin-sissyhypno / builtin-locked):
                 // the page's VN portrait picks the matching portrait set + tint.
                 modId = SafeActiveModId(),
+                // Creator mods: the mod's own DTRH content (drift pools, portrait,
+                // tint, drone) as ccp.mod URLs; null = no mod content, page runs
+                // on its shipped assets exactly as before.
+                modContent = DtrhModContent.BuildInitPayload(),
                 // M5: the page boots into the Warren hub; a run's config is dealt
                 // per-descent by request-run. init carries the SAVED run setup so
                 // the hub's Descent tab opens on the user's own choices.
@@ -184,6 +196,7 @@ internal static class DtrhHostService
             });
             if (_meta != null) _host?.Post(_meta.SnapshotMessage());
             var m = DtrhAssetManifest.Build();
+            DtrhModContent.MergeMedia(m);   // creator mods: mix/replace descent media
             _host?.Post(new
             {
                 type = "manifest",

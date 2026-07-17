@@ -1708,6 +1708,17 @@ namespace ConditioningControlPanel.Models
             set { _cataloguePresetSubmissions = value ?? new Dictionary<string, DeeperSubmissionRecord>(); OnPropertyChanged(); }
         }
 
+        // Mod catalogue submissions, keyed by the mod id (installed mods live in
+        // %UserData%/mods/{id}). The catalogue stores metadata + an external
+        // download link only — the .ccpmod binary is hosted by the creator (MEGA).
+        private Dictionary<string, DeeperSubmissionRecord> _catalogueModSubmissions = new();
+        [JsonProperty]
+        public Dictionary<string, DeeperSubmissionRecord> CatalogueModSubmissions
+        {
+            get => _catalogueModSubmissions;
+            set { _catalogueModSubmissions = value ?? new Dictionary<string, DeeperSubmissionRecord>(); OnPropertyChanged(); }
+        }
+
         private bool _runOnStartup = false;
         public bool RunOnStartup
         {

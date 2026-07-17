@@ -27,6 +27,7 @@ import { createDirector } from './director.js';
 import { createFx } from './fx.js';
 import { createPanel } from './panel.js';
 import { createDriftChain } from './driftChain.js';
+import { modDroneUrl } from '../modContent.js';
 import { getLevel, setLevel, audioGroups, getVoice, setVoice, voiceSets, onVoice } from './audioLevels.js';
 import { getAudioCtx, getMasterOut, closeAudioBus } from './audioBus.js';
 import { S, updateSetting, onSettings, THEME_COLORS, THEME_PRESETS, applyThemePreset, intToHex, hexToInt,
@@ -172,7 +173,14 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   let droneKickTries = 0, droneKickRest = 0, droneDuck = 1, voiceDuck = 1;
   let voiceSilenced = false;   // VN tutorial: hard-mute the drift voice while the persona speaks
   let runActive = false;       // game mode: the drift whisper + special tube moods live ONLY inside a descent (the Warren hub idles calm + quiet)
-  try { drone = new Audio(DRONE_URL); drone.loop = true; drone.preload = 'auto'; drone.volume = DRONE_FLOOR; } catch (e) { drone = null; }
+  // Creator mods may override the drone bed (ccp.mod is cross-origin, so set
+  // crossOrigin BEFORE src or the WebAudio route would mute it).
+  try {
+    drone = new Audio();
+    drone.crossOrigin = 'anonymous';
+    drone.src = modDroneUrl() || DRONE_URL;
+    drone.loop = true; drone.preload = 'auto'; drone.volume = DRONE_FLOOR;
+  } catch (e) { drone = null; }
   function setDroneVolume(v) {
     if (droneGain) droneGain.gain.value = v;
     else if (drone) drone.volume = v;

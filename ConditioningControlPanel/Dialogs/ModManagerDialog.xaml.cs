@@ -48,9 +48,20 @@ namespace ConditioningControlPanel
             foreach (var mod in App.Mods.InstalledMods.Values.OrderBy(m => !m.IsBuiltIn).ThenBy(m => m.Name))
             {
                 var prefix = mod.Id == App.Mods.ActiveModId ? "\u2605 " : "  "; // star for active
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                row.Children.Add(new TextBlock
+                {
+                    Text = prefix + mod.Name,
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+                // Catalogue share status pill (user mods the owner has shared).
+                var badge = MainWindow.CreateCatalogueStatusBadge(
+                    MainWindow.GetCatalogueRecord(MainWindow.CatalogueKindMods, mod.Id));
+                if (badge != null) row.Children.Add(badge);
+
                 var item = new ListBoxItem
                 {
-                    Content = prefix + mod.Name,
+                    Content = row,
                     Tag = mod.Id,
                     Foreground = new SolidColorBrush(Colors.White)
                 };
@@ -107,6 +118,26 @@ namespace ConditioningControlPanel
 
             // Can't uninstall built-in mods or active mod
             BtnUninstall.Visibility = (!mod.IsBuiltIn && !isActive) ? Visibility.Visible : Visibility.Collapsed;
+
+            // Only user-installed mods can be shared to the catalogue.
+            BtnShare.Visibility = (!mod.IsBuiltIn && !string.IsNullOrEmpty(mod.InstalledPath))
+                ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private async void BtnShare_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedMod == null || Owner is not MainWindow mw) return;
+
+            BtnShare.IsEnabled = false;
+            try
+            {
+                await mw.ShareModToCatalogueAsync(_selectedMod, this);
+                RefreshModList(); // pick up the new status badge
+            }
+            finally
+            {
+                BtnShare.IsEnabled = true;
+            }
         }
 
         private void BtnActivate_Click(object sender, RoutedEventArgs e)
