@@ -346,6 +346,24 @@ namespace ConditioningControlPanel.Features
             }
         }
 
+        /// <summary>Open the standalone corner-GIF overlay config window (two pinnable corners,
+        /// independent of any running session — driven by App.CornerGif).</summary>
+        private void BtnCornerGifs_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new CornerGifWindow
+                {
+                    Owner = Window.GetWindow(this),
+                };
+                win.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Spiral card: Corner GIF window launch failed");
+            }
+        }
+
         private void OnLoomStoreChanged()
         {
             // Raised on the loom window's bridge thread contractually near the UI

@@ -2129,6 +2129,16 @@ namespace ConditioningControlPanel.Models
             set { _spiralLinkRamp = value; OnPropertyChanged(); }
         }
 
+        // Standalone corner-GIF overlays (Spiral card -> "Corner GIFs" window). Independent of
+        // sessions; driven app-wide by CornerGifService. Up to two slots (two screen corners).
+        private List<CornerGifOverlaySetting> _cornerGifOverlays = new();
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<CornerGifOverlaySetting> CornerGifOverlays
+        {
+            get => _cornerGifOverlays;
+            set { _cornerGifOverlays = value ?? new(); OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Bubbles (Unlocks Lv.20)

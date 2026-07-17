@@ -137,6 +137,14 @@
                     Margin="0,0,0,10"
                     Click="BtnOpenLoom_Click"/>
 
+            <!-- Standalone corner-GIF overlays (independent of sessions) -->
+            <Button x:Name="BtnCornerGifs"
+                    Content="🖼 CORNER GIFs — pin a GIF to a screen corner"
+                    Style="{DynamicResource OutlineButton}"
+                    Padding="12,10"
+                    Margin="0,0,0,10"
+                    Click="BtnCornerGifs_Click"/>
+
             <!-- Select GIF (browse anywhere) -->
             <Button x:Name="BtnSelectGif"
                     Content="{loc:Str btn_select_gif}"
