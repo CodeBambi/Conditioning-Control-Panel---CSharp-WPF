@@ -1,0 +1,77 @@
+{
+  "enabled": true,
+  "defaultMode": "council",
+  "modes": {
+    "solo": {
+      "model": "anthropic/claude-fable-5",
+      "thinkingLevel": "high",
+      "feedbackMode": "steer"
+    },
+    "gutCheck": {
+      "model": "zai/glm-5.2",
+      "thinkingLevel": "low",
+      "terse": true,
+      "feedbackMode": "steer"
+    },
+    "council": {
+      "members": [
+        "architect",
+        "critic",
+        "simplifier",
+        "tester",
+        "security",
+        "performance"
+      ],
+      "synthesizer": {
+        "model": "kimi-coding/k3",
+        "thinkingLevel": "high"
+      },
+      "parallel": true,
+      "timeoutMs": 120000,
+      "feedbackMode": "steer"
+    },
+    "debate": {
+      "advocate": "architect",
+      "critic": "critic",
+      "rounds": 2,
+      "timeoutMs": 180000,
+      "feedbackMode": "steer"
+    }
+  },
+  "personas": {
+    "architect": {
+      "defaultModel": "uva/gpt-5.6-sol",
+      "thinkingLevel": "high"
+    },
+    "critic": {
+      "defaultModel": "anthropic/claude-fable-5",
+      "thinkingLevel": "high"
+    },
+    "simplifier": {
+      "defaultModel": "kimi-coding/k3",
+      "thinkingLevel": "medium"
+    },
+    "tester": {
+      "defaultModel": "uva/gpt-5.6-luna",
+      "thinkingLevel": "high"
+    },
+    "security": {
+      "defaultModel": "kimi-coding/k3",
+      "thinkingLevel": "high"
+    },
+    "performance": {
+      "defaultModel": "anthropic/claude-fable-5",
+      "thinkingLevel": "medium"
+    }
+  },
+  "triggers": {
+    "onDone": false,
+    "whenStuck": 3
+  },
+  "feedbackMode": "steer",
+  "maxConsultsPerTurn": 3,
+  "disabledForModels": [],
+  "contextBudget": {
+    "responseReserveTokens": 4096
+  }
+}

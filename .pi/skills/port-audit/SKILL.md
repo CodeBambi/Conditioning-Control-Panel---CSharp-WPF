@@ -1,94 +1,94 @@
 ---
 name: port-audit
-description: "Health and drift audit for the Avalonia port. Use this skill when asked to audit, review, or check the state/health/status of the port; after merging main into feat/crossplatform; after a batch of feature work or a UCE milestone; before a release or publish; or when something 'feels off' (perf regressions, features silently broken, docs not matching code). Produces a structured report and fresh task-board rows, not ad-hoc observations."
+description: "Audit the health, drift, safety, and verified capability of the greenfield Windows/Linux client under client/. Use after milestones, batches, merges, before release, when docs and code may disagree, or when behavior feels broken. Checks the sole client task board, contracts, architecture, Windows/Linux evidence, first-attempt contamination, privacy, performance, and files new rows instead of trusting old port claims."
 ---
 
 # port-audit
 
-An audit answers four questions: does it build and pass, does it still behave like WPF, has anything drifted (code vs docs, perf vs baseline, security posture), and what new work fell out. Run the ladder top to bottom; each rung is cheap until the manual ones.
+An audit asks: what exists, what is proven, what drifted, what is unsafe, and what work follows.
 
-## 1. Tree and build gate
+## Scope and authority
 
-```bash
-git -C E:/Code/Conditioning-Control-Panel status --short   # parallel WIP awareness FIRST
-git -C E:/Code/Conditioning-Control-Panel log --oneline -15
-dotnet build ConditioningControlPanel/CCP.Desktop.slnf -clp:ErrorsOnly   # must be 0 errors
-dotnet test ConditioningControlPanel/tests/CCP.Core.Tests/CCP.Core.Tests.csproj   # all green; count must not decrease
+Audit `client/` and `client/docs/`. WPF is behavior evidence; `ConditioningControlPanel/CCP.*` is historical lessons only. Do not import old parity percentages, checkboxes, test floors, benchmark numbers, packages, or completion claims.
+
+Read `architecture.md`, `capability-inventory.md`, `first-attempt-lessons.md`, `task-board.md`, and `port-workflow.md`. `client/docs/task-board.md` is the only live queue.
+
+## Audit ladder
+
+### 1. Tree and reproducibility
+
+- Inspect `git status`, recent relevant history, project files, package locks, and generated/untracked state.
+- Do not modify or revert unrelated work.
+- Verify pinned development extensions and ignored generated state when orchestration is in scope.
+
+### 2. Build and automated tests
+
+Discover current client commands from its project files/docs. Start with builds, tests, analyzers, and cheap headless checks. Do not run a legacy-style whole-app smoke/layer/screenshot crawl by default: it is slow and historically missed visible bugs. Run broader app traversal only for a named milestone/release audit with an approved matrix. Report actual outputs; never embed permanent counts.
+
+### 3. Queue integrity
+
+For every task-board claim:
+
+- compare status with code, tests, headed evidence, and blockers;
+- reject `DONE` without the row's Windows/Linux acceptance;
+- detect implementation rows that lack contracts, stable scope, dependencies, or verification;
+- reconcile `.pi-tasks` recovery state only as local evidence, never authority.
+
+### 4. Contract and architecture conformance
+
+Map implemented features to capability/contract sections. Check owner decisions, explicit exclusions, failure behavior, persistence, input/focus/window semantics, multi-monitor behavior, theme behavior, audio, rendered animation, and teardown. Flag copied WPF mechanics or first-attempt topology that was not approved.
+
+### 5. First-attempt contamination
+
+Search for inherited `CCP.Avalonia` classes/interfaces, old plans/trackers, fixed layer values, stale version pins, copied completion comments, old test floors, and Windows-only fallbacks. A useful first-attempt idea must be traceable to an `ACCEPT` or `ADAPT` lesson.
+
+### 6. Windows evidence
+
+Exercise affected capabilities end to end. For UI, verify real pointer/keyboard interaction, focus, ownership, taskbar/Alt-Tab, resize, scrolling, right-click, animation frames, audio, overlays, capture, monitor layouts, failure injection, and cleanup as required. Compare against WPF behavior where the contract preserves it.
+
+Use `app-visual-verification` for targeted screenshots of recent/high-risk/suspicious surfaces reviewed by `kimi-coding/k3`. Run the broader theme/language/scaling/window matrix only at a named milestone or release gate. Do not infer interaction from still images.
+
+### 7. Linux evidence
+
+Run on supported distributions/backends and name them. Distinguish X11 and Wayland/window manager/compositor when relevant. Compilation, an external-browser fallback, disabled feature, or no-op does not count as support. File exact capability gaps as product decisions.
+
+### 8. Security and privacy
+
+Check camera data remains memory-only, secrets use approved storage, sensitive URLs/headers/content are not logged, paths are validated, capture policy matches contracts, consent is not broadened, local HTTP servers bind/protect correctly, and advisor/task transcripts contain no sensitive data.
+
+### 9. Rendering, media, and performance
+
+Check deterministic ordering, tint below full opacity, one-decoder video contract, actual displayed-frame progress, no orphan windows/audio, and abnormal teardown. Compare fresh measurements only against an approved client baseline read dynamically. If no baseline exists, establish evidence without inventing one.
+
+### 10. Documentation drift
+
+Fix factual documentation drift. Every new defect, missing proof, or capability gap becomes a prioritized row in `client/docs/task-board.md` with acceptance and blocker. Do not hide findings in the audit report.
+
+## Consultation gate
+
+Use council review for release verdicts and findings involving architecture, security/privacy, packages, browser/media, shared composition, input/windowing, or cross-platform degradation. Supply primary evidence and inspect the fit ledger. Consensus is advisory; empirical evidence and owner decisions win.
+
+## Report
+
+```text
+# Greenfield client audit
+## Verdict: green / yellow / red and why
+## Scope and environment
+## Build and automated tests
+## Windows headed evidence
+## Linux headed evidence
+## Contract and architecture drift
+## First-attempt contamination
+## Security and privacy
+## Rendering/media/performance
+## Documentation fixed
+## Task-board rows added or changed
+## Council verdict, dissent, and evidence reconciliation
+## Release blockers
 ```
 
-A red build is not necessarily yours: check whether untracked/modified files from a parallel session explain it before touching anything (it has happened; for example an in-progress webcam service broke the slnf mid-audit). Never revert someone's WIP.
-
-## 2. Smoke sweep (Windows head, Debug only)
-
-```bash
-dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -- --smoke-test
-```
-
-Catches crashes, raw `{loc:...}` strings, placeholder tabs, dead dialogs across ~44 tabs / ~34 dialogs / 12 feature popups / 5-theme reskin. The harness is `Compile Include`d only in Debug config (`tests/CCP.Avalonia.Desktop.Windows.Smoke/`, no csproj; the flag is inert in Release). Remember its limit: it does NOT prove behavior, only that surfaces open without exceptions.
-
-## 3. Stub and gap hunt
-
-```bash
-grep -rinE "TODO|stub|not ported|not wired|placeholder|NotImplemented|No-?op" ConditioningControlPanel/CCP.Avalonia --include=*.cs
-```
-
-Floor, not ceiling. Add spot-checks: pick 2-3 features and exercise them side by side with the WPF head (`wpf-parity` has the method). Prioritize recently merged or recently ported areas.
-
-## 4. Doc drift check
-
-Compare the trackers against reality; the docs are updated in batches and DO drift (both directions):
-
-- `crossplatform-rebuild-plan.md` section 1A vs actual code/git log.
-- `unified-compositor-engine-plan.md` current-state table vs the compositor code (a known instance: the doc claimed `WS_EX_LAYERED` was removed while `CompositorWindow` deliberately keeps it; code wins).
-- `skia-rebuild-goal.md` "Current state" is the active driver's status block and DOES drift as work lands (its 2026-07-04 snapshot lagged the video Phase E / chaos S5–S9 landings until refreshed 2026-07-05); trust its commit-hash evidence over prose. (The former `EXECUTION_GOAL.md`, long superseded and materially stale, was deleted in the 2026-07-05 docs cleanup.)
-- `avalonia-ui-parity-matrix.md`: OWNER RULING 2026-07-02: pre-existing `[x]` marks are void (hand-made port, no trusted baseline); rows are re-earned with evidence under `skia-rebuild-goal.md` WS0. During audits, only trust rows carrying WS0-era evidence; flip anything else back to `[ ]`.
-
-Fix the docs as part of the audit; stale trackers poison every future session.
-
-## 5. Perf gate
-
-```bash
-dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -- --benchmark
-# heavy stress (3 min): -- --max-benchmark
-```
-
-Compare against `ConditioningControlPanel/docs/benchmark-optimized.json` (startup ~1977ms, working set ~561MB at 10s, idle ~124 FPS, active ~185 FPS, max-intensity avg ~178 FPS) and the targets in `benchmark-baseline.json` (effect FPS floor 30, aim 60). Also sanity-check vs WPF: Avalonia currently beats WPF on startup (~2.5s vs ~4.2s) and memory (~422MB vs ~1218MB); a port that got heavier than WPF is a defect. `perf-baseline.ps1` automates the A/B. Update the benchmark JSON if you establish a new legitimate baseline.
-
-## 6. Security and privacy posture (must never regress silently)
-
-- Webcam/gaze frames are never written to disk or sent over the network; processing stays in-memory.
-- Deeper-enhancement input validation intact (NaN, Infinity, UNC paths, control characters, bounds).
-- No UNC or extended-length paths accepted for `--play`/`--edit` CLI arguments.
-- Screen-capture exclusion (`WDA_EXCLUDEFROMCAPTURE`) still applied on keyword-highlight overlays in both heads (`KeywordHighlightService` / `AvaloniaKeywordHighlightService`) and on WPF brain-drain windows (self-capture avoidance). Subliminal cards are DELIBERATELY left in capture (`WDA_NONE`, see the comment in WPF `SubliminalService`) so they appear in the user's recordings; their absence from exclusion is not a regression, do not "fix" it.
-- Secrets: tokens still go through the secret-store seam (DPAPI on Windows), never plaintext files.
-
-If a diff touched any of these areas, read it, do not assume.
-
-## 7. Cross-head and packaging spot checks
-
-- CI: `ConditioningControlPanel/.github/workflows/build.yml` documents the intended matrix but is NOT active (it sits below repo root, so GitHub never triggers it). Do not claim "CI is green" from it. If off-Windows verification matters for this audit, use the Linux VM flow: `ConditioningControlPanel/docs/linux-vm-testing.md` + `build-linux.sh` (VM GL workarounds: `AVALONIA_D3D11_DISABLED=1`, `LIBGL_ALWAYS_SOFTWARE=1`).
-- Version constants live in multiple places and are known to diverge (as of 2026-07: WPF head 6.2.5 in `ConditioningControlPanel.csproj` + `UpdateService.cs` `AppVersion` vs 6.2.2 across the CCP.Core/CCP.Avalonia/CCP.WindowsOnly csprojs). Grep `<Version>` and `AppVersion` fresh each audit and flag mismatches; do not trust these example numbers.
-- `Microsoft.WindowsAppSDK` pins still present (`ExcludeAssets="all"`) in CCP.Avalonia + Linux/macOS heads; LibVLC package versions unchanged unless intentional.
-
-## Report format
-
-```
-# Port audit YYYY-MM-DD
-## Verdict: green / yellow / red (one line why)
-## Build & tests: ...
-## Smoke: ...
-## Behavior spot-checks: <feature>: pass/fail vs WPF
-## Doc drift found & fixed: ...
-## Perf: numbers vs baseline
-## Security posture: intact / findings
-## New task-board rows filed: ...
-```
-
-Every finding becomes a task-board row (`avalonia-migration-task-board.md`) with priority; the audit is not done until the rows exist. Update tracker checkboxes you invalidated or satisfied.
+The audit is incomplete until findings are represented in the client task board.
 
 ## Related skills
 
-- `wpf-parity` - side-by-side behavior verification method
-- `port-plan` - turning findings into claimed, sequenced work
-- `unified-compositor-engine` - compositor-specific validation and FPS expectations
-- `avalonia-research` - if an audit finding needs a v12 explanation
+- `wpf-parity`, `avalonia-research`, `port-plan`, `dashboard-design`, `app-visual-verification`, `overlay-clickthrough`, `unified-compositor-engine`.

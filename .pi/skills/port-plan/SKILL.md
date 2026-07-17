@@ -1,70 +1,76 @@
 ---
 name: port-plan
-description: "Plan, sequence, and coordinate Avalonia port work before writing code. Use this skill at the START of any non-trivial CCP port task: choosing what to work on next, slicing work into committable steps, designing a Core/Avalonia seam, coordinating parallel agents or worktrees, claiming work items, or deciding where new code should live (CCP.Core vs CCP.Avalonia vs a platform head). Also use it when the user says 'plan', 'what next', 'continue the port', or starts a multi-file task."
+description: "Plan and sequence non-trivial work for the greenfield Windows/Linux Avalonia client under client/. Use when the user says plan, what next, continue the port, task-auto, milestone, slice, seam, parallelize, or asks where code should live. Reads the client docs first, treats WPF as behavioral evidence and the first Avalonia attempt as lessons only, and produces bounded task-board work with consultation and verification gates."
 ---
 
 # port-plan
 
-## Step 1: Read the trackers before deciding anything
+Plan the greenfield client. Do not continue the old `CCP.Avalonia` migration by inertia.
 
-Ground truth lives in `ConditioningControlPanel/docs/`, in this order:
+## Authority order
 
-1. `avalonia-migration-task-board.md` - open rows, Known Functional Gaps, Current Sprint Focus. (Very long single-line ledger rows: Read in <=45-line slices.)
-2. `unified-compositor-engine-plan.md` - the UCE effort's ONLY status tracker (the master plan does not track it). If the task is compositor/video related, this is the queue.
-3. `crossplatform-rebuild-plan.md` section 1A - phase-level status snapshot.
-4. `avalonia-ui-parity-matrix.md` - what is verified vs not.
+1. `client/docs/architecture.md` for owner-approved decisions.
+2. `client/docs/capability-inventory.md` for observable behavior and acceptance.
+3. `client/docs/task-board.md`, the only live greenfield queue.
+4. `client/docs/first-attempt-lessons.md` for `ACCEPT`/`ADAPT`/`REJECT` lessons only.
+5. `client/docs/port-workflow.md` for `/task`, `/task-auto`, model routing, consult gates, commits, and stop conditions.
+6. `client/docs/port-session-prompt.md` for fresh-session and crash-recovery reconciliation protocol, never live status.
 
-Two cautions:
-- **Docs lag code.** Check `git log --oneline -15` for work that postdates the trackers before trusting a checkbox. Trust code over docs, then fix the doc.
-- **Check `git status` first.** Parallel sessions/agents leave WIP in the tree; a red build may not be yours.
+Repository instructions remain mandatory. Generated specs and council verdicts are lower authority.
 
-## Step 2: Pick the work
+## Scope boundary
 
-Priority order as of the docs: P0 task-board gaps (currently none open), then UCE phases A-E (video parity is the blocker), then sync-from-main deferrals, then mobile/packaging (Android AAB, signing/notarization, touch UX), then P2+ improvements (for example gap M, effect FPS tooling). Cross-platform click-through (Linux/macOS) is explicitly out of scope until Windows parity holds.
+- Product code belongs under `client/`; targets are Windows and Linux only.
+- WPF under `ConditioningControlPanel/` is read-only behavioral evidence unless explicitly in scope.
+- `ConditioningControlPanel/CCP.*` is the first Avalonia attempt: inspect only for a documented lesson or narrow experiment. Never inherit its topology, packages, services, interfaces, timers, fixed layer values, or completion claims by default.
+- Do not approve topology, package, platform seam, baseline, or build command before evidence supports it.
 
-## Step 3: Slice into sessions and commits
+## Planning sequence
 
-- One work item = one claim = one conventional commit (`feat(av): ...`, `fix(av): ...`, one task per commit). Every commit leaves the slnf building with 0 errors.
-- Slice so each step is independently verifiable in the running app. "Wire the layer" and "make it render" are separate commits if each can be proven.
-- Trackers are external memory: write progress into the docs as you go, not just the transcript. Compact context after every finished item, green build, or large file read, and unconditionally at ~50-60% of the window; before compacting, write the in-flight state (task, next step, files touched, re-verify commands) into the task-board row. Full rules: "Context discipline" in `docs/skia-rebuild-goal.md`.
+1. Check `git status --short`, recent relevant commits, current worktree, `.pi-tasks/`, active workflows/processes, and recovery loops; never absorb unrelated work or assume a new chat means a new run.
+2. Reconcile execution journals with git and `client/docs/task-board.md`. Resume a valid `/task-auto` or `/task` before creating replacement work; classify orphaned WIP explicitly.
+3. Select one approved unblocked row from `client/docs/task-board.md`, or propose one only when no valid work is resumable.
+4. Link the relevant capability and owner decisions.
+5. Use `wpf-parity` for observable behavior with narrow citations and focused git-history archaeology for non-trivial affected paths.
+6. Use `avalonia-research` for every Avalonia v12 API, package, rendering, input, windowing, or platform question.
+7. Audit dependencies and platform-specific code before implementation, following the official porting methodology: WPF-only packages/controls, `[DllImport]`, browser/media/camera/audio dependencies, and Windows assumptions become explicit spikes or seams.
+8. Define Windows and Linux acceptance separately; distinguish X11/Wayland when relevant. A no-op is not support.
+9. List dependencies, blockers, product decisions, security/privacy constraints, and exclusions.
+10. Choose a small vertical slice that reaches the screen/behavior early and is independently verifiable: one reviewable diff and one commit.
+11. Define automated and headed evidence before implementation.
+12. Run the consultation checkpoint in `port-workflow.md`: council for architecture/dependency/platform/security/rendering/input; debate when two concrete approaches remain.
 
-## Step 4: Design the seam before the code
+Use the 2026 official migration guide/cheat sheet as the technical starting point. Use the 2024 expert-guide methodology selectively: preparation, dependency audit, incremental slices, frequent small commits, and target-platform testing are accepted; its literal code-commenting migration recipe and "keep existing structure" rule do not override the greenfield architecture.
 
-Where code lives:
+Never encode live task state, current package versions, active agent names, branch names, or "next work" into a durable starting prompt. Starting prompts define reconciliation protocol; current state is discovered from disk and live registries. Start a new run with `/task-auto @client/docs/port-session-prompt.md`. After interruption, use `/task-auto-resume`; invoking `/task-auto` again creates a competing journal rather than resuming.
 
-- **`CCP.Core`**: portable logic, models, service interfaces (`CCP.Core/Platform/` has ~35 seam interfaces). No Avalonia UI types (no controls, windows, views); Core DOES reference the base Avalonia package and uses `Avalonia.Threading` (`Dispatcher.UIThread`, `DispatcherTimer`) directly - a deliberate ponytail-audit outcome. Do not re-wrap dispatching.
-- **`CCP.Avalonia`**: shared UI + Avalonia implementations + DI defaults.
-- **`CCP.Avalonia.Desktop` / per-OS heads**: platform overrides only.
+If the Pi Avalonia MCP is available, plan a bounded advisory use only where it adds evidence: small AXAML validation, accessibility/layout questions, or heuristic performance review. Never make it a required blocker, generator, or primary source; its upstream content targets Avalonia 11.3.1 and requires the telemetry/version safeguards in `avalonia-research`.
 
-The DI pattern (registration file: `CCP.Avalonia/ServiceCollectionExtensions.cs`, `ConfigureCoreServices()`):
-every seam gets a safe fallback registration in shared DI, specialized per head via
-`App.ConfigurePlatformServices` (Windows head: `CCP.Avalonia.Desktop.Windows/Program.cs`) or
-`DesktopServiceCollectionExtensions`. **Last registration wins; order matters.** Mobile branches on
-`OperatingSystem.IsAndroid()`.
+## Code placement
 
-Known intentional exceptions (do not "fix"):
-- `IVideoSurface` is NOT DI-registered (needs a VideoView at construction; consumers construct directly).
-- `IOverlaySurface` is registered `AddTransient` (one window per consumer).
+Until topology is approved, state responsibilities rather than inventing projects: portable rules/persistence, shared Avalonia UI/rendering, Windows implementation, Linux implementation, and tests/harnesses. A new abstraction needs a real platform boundary or multiple real implementations. Prefer framework/standard-library features over wrappers and dependencies.
 
-**The ponytail bar (YAGNI):** a prior audit deleted needless wrappers; do not recreate these phantom seams: `IUiDispatcher`, `IScheduler`, `IAppLogger`, `LibVLCNativeDiscovery` wrapper, `ICaptureService` (folded into `IFrameSource`), `IImageDecoder`/`IImageSourceFactory` (folded into `IAssetLoader`), `IUiTimer` (replaced by framework APIs). `IThumbnailProvider` is different: it was deferred, never created; treat it as a possible future seam and create it only if it clears the bar below. A new abstraction must earn its existence: two real implementations or a real platform boundary. New NuGet deps must earn their weight, be pinned, and be recorded with reasons in the task board. Web-research faster/lighter alternatives before adding anything (see `avalonia-research`).
+## Task orchestration
 
-## Step 5: Multi-agent coordination (when parallelizing)
+- `/task`: one bounded row or spike.
+- `/task-auto`: use the restart-safe program in `port-session-prompt.md` or an owner-reviewed milestone naming exact rows, order, blockers, exclusions, consultation, and verification. Never use an unconstrained “implement the port” prompt.
+- `/task-auto-resume`: first choice when a valid AUTO journal exists after restart; do not launch a competing AUTO run.
+- `/task-resume <id>`: resume a valid unfinished child task when no AUTO run owns it.
+- `.pi-tasks/` is local recovery state; durable status belongs in `client/docs/task-board.md`.
+- Follow workflow model tiers and fallback procedure in `client/docs/port-workflow.md`.
 
-The swarm protocol from `crossplatform-rebuild-plan.md` section 20, condensed:
+## Parallel work
 
-- **Lanes** (safe to parallelize): one tab view + VM, one dialog cluster, one feature-control cluster, one Core service area, a Chaos sub-split, AvatarTube, one platform head. One git worktree per porter, wave size 3-6.
-- **Chokepoints** (orchestrator-only; porters NEVER edit): `CCP.Avalonia/ServiceCollectionExtensions.cs`, `CCP.Core/Models/AppSettings.cs` and other 4000-line shared files, `App.axaml(.cs)`, all `*.csproj`/`.slnx`/`.slnf`, the MainWindow shell, `Localization/Languages/*.json`, main-branch syncs.
-- **Claims**: append-only ledger rows in `avalonia-migration-task-board.md`, committed BEFORE work starts (claim commit). Markers: todo / wip @agentN / review / done / blocked.
-- **Hand-off Queue**: porters put needed chokepoint changes (DI lines, csproj assets, loc keys) in the task board's Hand-off Queue for the orchestrator; they do not apply them.
-- **Localization**: new keys go in `ConditioningControlPanel/tools/new-localization-keys.json`, merged via `python ConditioningControlPanel/tools/merge-localization-keys.py` (paths from repo root). Never hand-edit the language JSON files in parallel sessions.
+Parallelize only disjoint files and independently verifiable slices. Use separate worktrees. Assign shared project files, registration, schemas, localization, shell, and tracker rows to one orchestrator.
 
-## Step 6: Define done before starting
+## Required plan output
 
-Write down, per item: the WPF behavior contract it must match (get it via `wpf-parity`), the verification you will run (build, Core tests, smoke test, side-by-side exercise, theme sweep, multi-monitor), and which tracker rows/checkboxes you will update. If you cannot state how you will prove it works while running, the slice is wrong.
+For each slice: outcome; linked decision/contract; WPF evidence; focused history findings; relevant feature/systemic first-attempt lesson; allowed/forbidden areas; Windows acceptance; Linux acceptance/blocker; security/privacy/performance constraints; v12 research; optional bounded Avalonia MCP review and redaction; consultation question; automated VERIFY; end-to-end wiring proof; headed gates; tracker update; dependencies; stop conditions.
+
+## Stop instead of guessing
+
+Stop when sources conflict, behavior is ambiguous, a package/endpoint is needed, Linux equivalence is unknown, privacy/safety broadens, parallel work touches a chokepoint, or verification cannot prove the promise.
 
 ## Related skills
 
-- `wpf-parity` - extract the behavior contract and keep trackers honest
-- `port-feature` - the implementation workflow for each planned slice
-- `avalonia-research` - research mandate for any v12 API or new dependency
-- `unified-compositor-engine` - if the slice touches the compositor
+- `wpf-parity`, `avalonia-research`, `port-feature`, `mechanical-port-work`, `port-audit`.

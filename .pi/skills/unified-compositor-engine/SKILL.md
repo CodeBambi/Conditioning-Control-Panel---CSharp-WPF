@@ -1,108 +1,104 @@
 ---
 name: unified-compositor-engine
-description: "Work on the Unified Compositor Engine (UCE): CCP's single Skia render surface that draws video, flash images, subliminals, bouncing text, spiral, brain drain, pink tint, and bubbles as z-ordered layers inside one topmost window per monitor with PER-REGION click-through (team review 2026-07-09: only theme-color-filter/spiral regions pass input, every other active layer captures over its painted region; see overlay-clickthrough). The engine ALREADY EXISTS and is adopted; UCE scope = ambient/session conditioning ONLY — DTRH/Chaos game mode went web-only in a dedicated WebView window (owner ruling 2026-07-10, board row #6; run-only chaos layers are decommission candidates with ambient carve-outs). Use this skill whenever you touch anything under CCP.Avalonia/Compositor/, any *Layer class, video rendering, overlay z-order, or overlay flicker/lag. Also use it when someone asks why an overlay effect renders wrong, out of order, or not at all in the Avalonia head."
+description: "Plan, research, implement, or verify shared real-time visual composition in the greenfield client under client/: video frame fan-out, deterministic ordering, tint/spiral layering, overlays, capture boundaries, performance, and multi-monitor geometry. Preserves the successful shared-composition idea and safety contracts without copying the first attempt's UCE classes, interfaces, timers, Skia lease, fixed z-values, windows, or status claims."
 ---
 
 # unified-compositor-engine
 
-## Current reality (read this first; older docs describe a world that no longer exists)
+This skill retains the product principle, not the old engine implementation.
 
-The compositor is **built and wired in**. Do not scaffold it again.
+## Approved direction
 
-What already renders through it: flash, subliminal, bouncing text, pink tint, spiral, brain drain, bubbles, and mandatory video (layer exists). The effect services register layers instead of creating windows:
+Read architecture A-001 and A-003 plus `capability-inventory.md#video-presentation`.
 
-- `AvaloniaFlashService` registers `FlashLayer`
-- `AvaloniaSubliminalService` registers `SubliminalLayer`
-- `AvaloniaBouncingTextService` registers `BouncingTextLayer`
-- `AvaloniaOverlayService` registers `PinkTintLayer`, `SpiralLayer`, `BrainDrainLayer` (it owns no windows anymore)
-- `AvaloniaBubbleService` and `AvaloniaVideoService` also take the engine
+- Overlapping real-time visuals share a composition domain by default.
+- Ordering is explicit and deterministic, never accidental native-window activation order.
+- Separate windows are allowed when observable focus, accessibility, native control, capture, security, or isolation behavior requires them.
+- Shared composition does not imply shared state ownership, input policy, or capture policy.
 
-What still uses separate windows: ~23 Chaos overlay/window classes, AvatarTube, secondary-monitor video (`VideoOverlayWindow` nested in `AvaloniaVideoService.cs` around line 1156), dialogs, and secondary windows (~101 `Window` subclasses in `CCP.Avalonia` total). That is intentional for now.
+The following are not approved merely because the first attempt used them: compositor classes, layer interfaces, DI lifetime, Skia lease API, timer cadence, fixed numeric z-values, window count, frame buffers, hooks, capture-affinity split, or package versions.
 
-**Status tracker:** `ConditioningControlPanel/docs/unified-compositor-engine-plan.md` is the ONLY UCE doc — it holds both the status tracker and the loop driver (one unchecked task per iteration, in phase order); the former `unified-compositor-engine-goal.md` was folded into it on 2026-07-10. Read it before doing UCE work, and check the git log since its last update; the doc can lag the code.
+## Current ordering contract
 
-## Architecture map (verified paths)
+Verified client decisions currently establish:
 
-| Piece | Path | Notes |
-|---|---|---|
-| Engine | `ConditioningControlPanel/CCP.Avalonia/Compositor/CompositorEngine.cs` | DI singleton (registered in `ServiceCollectionExtensions.cs`). One topmost transparent `CompositorWindow` per monitor, ~60Hz `DispatcherTimer` (16ms), renders `IAvaloniaLayer`s sorted by `ZIndex`. Window creation is deliberately STAGGERED (~250ms apart) |
-| Window | `Compositor/CompositorWindow.axaml(.cs)` | Per-monitor, stays `WS_EX_TRANSPARENT\|LAYERED` (re-applied on Opened/Activated/WindowState change). Input is PER-REGION (team review 2026-07-09): the mouse hook swallows clicks inside the compositor's capture mask (union of non-ambient layer regions), passes ambient-only (color-filter/spiral) regions. See `overlay-clickthrough` skill |
-| Draw op | `Compositor/CompositorControl.cs` | `CompositorDrawOp` custom draw operation (Skia lease) |
-| Core seam | `ConditioningControlPanel/CCP.Core/Services/Compositor/ILayer.cs` | Portable: `ZIndex`, `IsActive`, `OnActivated()`, `OnDeactivated()` |
-| Avalonia seam | `Compositor/IAvaloniaLayer.cs` | Adds `Update(TimeSpan)` and `Render(SKCanvas, PixelRect, TimeSpan)` |
-| Z constants | `Compositor/CompositorLayers.cs` | Authoritative, overrides any legacy z-ordering |
-| Layers | `Compositor/Layers/` | `BaseLayer`, `VideoLayer`, `MandatoryVideoLayer`, `FlashLayer`, `SubliminalLayer`, `BubbleLayer`, `BouncingTextLayer`, `BrainDrainLayer`, `SpiralLayer`, `PinkTintLayer`, `PlaceholderLayer` |
+1. video frame and opaque aspect-fit bars at the bottom;
+2. spiral above video and bars;
+3. bounded color overlay above spiral;
+4. other effects require explicit relative-order contracts before implementation.
 
-### Z-layer constants (from `CompositorLayers.cs`, verified)
+Do not invent or import remaining z-order. Record product decisions in client docs.
 
-```
-Video=10  MandatoryVideo=15  LockCard=20  Flash=30  Subliminal=40
-Bubbles=45  BouncingText=50  BrainDrain=55  Spiral=60  PinkTint=70
-```
+## Tint safety
 
-Lower renders first (behind). Note: `LockCard=20` is defined but no `LockCardLayer` exists yet; the lock card is still a window.
+- Actual rendered tint never reaches 100% opacity.
+- Persistent user state and temporary requests have separate ownership.
+- Video, browser, mandatory playback, ramps, pulses, failures, panic, display changes, and teardown never overwrite persistent tint state.
+- Overlapping temporary requests remain below the ceiling and restore the latest valid underlying value deterministically.
+- Acceptance observes rendered pixels/state, not only settings.
 
-## Capture affinity (dual-surface split)
+## Unified video presentation
 
-The engine maintains TWO surfaces per monitor, split by `IAvaloniaLayer.ExcludeFromCapture`:
+For mandatory, local, direct URL, and supported online sources:
 
-- **Main surface** (`_windows`): all normal layers. It must NEVER get a `SetWindowDisplayAffinity` call — subliminals (and flash/spiral/pink tint) are visible in screenshots/streams BY DESIGN (WPF `SubliminalService` deliberately sets `WDA_NONE`). This is a never-regress guardrail.
-- **Excluded surface** (`_excludedWindows`): layers with `ExcludeFromCapture => true` (today only `BrainDrainLayer`). Its `CompositorWindow` is constructed with `excludeFromCapture: true` and applies `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE /*0x11*/)` inside `ApplyNativeTransparency`, after the `SWP_FRAMECHANGED` flush, re-asserted on Opened/Activated/WindowState like the ex-styles. WPF parity: brain-drain windows are excluded "so we don't capture ourselves" — the exclusion is what breaks the blur's self-capture feedback loop and keeps the effect out of streams and the app's own OCR captures.
+- one native decoder;
+- one playback clock/source/network lifecycle;
+- one audible stream and output-device state;
+- the same presented frame fanned out to every monitor;
+- independent aspect-fit and centering per monitor;
+- opaque black letterbox/pillarbox bars beneath spiral/tint;
+- no browser-fullscreen or browser-screen-capture mirror fallback;
+- clean end/error/panic/hot-plug/shutdown teardown.
 
-Lifecycle: the excluded surface is created lazily on the first tick an excluded layer is active (staggered, same v12 native-race rule), and torn down after ~500ms of excluded-idle. Inter-surface z caveat: two sibling topmost windows cannot interleave layers, so the excluded surface is shown LAST and sits above every main-surface layer (brain drain z55 renders above spiral z60/pink z70); WPF's inter-window z was show-order based too, so this is accepted and documented in `CompositorEngine`.
+Handle negative coordinates, monitors above/below, gaps, mixed scaling/resolution, portrait/flipped orientation, rearrangement, and hot-plug. Prove whether the OS already applies orientation before adding transforms.
 
-Adding a new must-not-capture layer = override `ExcludeFromCapture => true`, nothing else. Never move `SubliminalLayer` (or any capture-visible layer) to the excluded surface, and never "fix" a capture bug by excluding the main surface.
+## Layer contract
 
-## Remaining work (the actual job)
+Every visual effect must define:
 
-Per `unified-compositor-engine-plan.md`, phases A-E: prove video renders, reach behavior parity, verify every layer, performance, then flip the default and delete legacy. The headline blockers:
+- state owner and lifecycle;
+- active/dirty condition;
+- monitor scope and geometry space;
+- relative order;
+- blend/opacity and safety bounds;
+- input policy through `overlay-clickthrough`;
+- capture inclusion/exclusion;
+- update cadence and invalidation ownership;
+- background-thread handoff and disposal;
+- failure and teardown behavior;
+- Windows/Linux acceptance.
 
-1. **Video does not render through the UCE yet.** `VideoLayer`/`MandatoryVideoLayer` exist but the frame path is broken or unproven. The legacy `AvaloniaMultiMonitorVideoService` is the only working video path. See `references/video-pipeline.md` in this skill for the frame-delivery patterns and known allocation traps.
-2. Audio volume/device/mute are missing on the UCE video path.
-3. Attention checks are tied to the legacy `VideoOverlayWindow` and bypass the UCE.
-4. Chaos overlays are not migrated to layers.
+Services/product logic own state; render code presents immutable/synchronized snapshots. Never draw from decoder/background threads directly into the render target.
 
-## Critical rules (each one is a scar; violating it reintroduces a fixed bug)
+## Research and implementation selection
 
-1. **Never delete or break `AvaloniaMultiMonitorVideoService` or the legacy `*Window` video path until Phase E**, and only after UCE video is proven by actually running the app. There are ~9 `IMultiMonitorVideoService` references to rehome first.
-2. **Never modify the WPF head** for UCE work. It stays runnable as the behavior reference.
-3. **Never call `SetWindowSubclass` on an Avalonia v12 HWND.** It races Avalonia's window-proc management and intermittently crashes with native `0xC0000005` (comment in `CompositorWindow.axaml.cs`). `WS_EX_TRANSPARENT` + `WS_EX_NOACTIVATE` already cover what the subclass did.
-4. **Keep the staggered per-monitor window creation** in `CompositorEngine`. Creating several transparent topmost windows in one frame races the v12 Win32 backend (same `0xC0000005`). Do not "simplify" it into a plain loop.
-5. **Draw persistent `SKImage`s, not `SKBitmap`s.** `SKCanvas.DrawBitmap(SKBitmap, ...)` recreates an `SKImage` every call (~480 MB/s of allocations measured in `VideoLayer`). Convert once, cache, draw the `SKImage`. `VideoLayer` was fixed in plan Phase D.1/D.2 (2026-07-04): triple-buffered pinned decoder buffers + long-lived zero-copy `SKImage.FromPixels` wrappers, presentation folded into the engine `Update` tick — see the protocol comment block in `VideoLayer.cs` before touching it.
-6. **One invalidation per frame, owned by the engine.** `ICustomDrawOperation.Render` is not re-invoked without an explicit `InvalidateVisual` (Avalonia issue #12247); the engine's tick is the only invalidator. Layers never invalidate themselves. If moving to a render-thread model, the idiomatic v12 primitive is `CompositionCustomVisualHandler` (self-drives via `RequestNextFrameRendering`).
-7. **Services own state; layers only render it.** A service tells its layer what to show; the layer holds no business logic. Note the engine is a nullable ctor dependency in effect services: without DI the layer is never created (or, in `AvaloniaOverlayService`'s case, created but never registered) and the effect silently renders nothing.
-8. **Thread safety:** decoded frames arrive on background threads. Hand them over under a lock or queue; never touch `SKCanvas` off the render path.
-9. **Z-order comes from `CompositorLayers` only.** No `Topmost` toggling, no `SetWindowPos` for layer ordering.
-10. **Click-through is the `overlay-clickthrough` skill's domain.** The compositor window stays always-`WS_EX_TRANSPARENT|LAYERED`, but input is PER-REGION (team review 2026-07-09, polarity flipped from opt-in-capture to opt-out-ambient): the engine unions every non-ambient active layer's painted region into a per-frame **capture mask** (immutable snapshot), and the global mouse hook swallows clicks inside the mask and passes clicks over ambient-only (color-filter/spiral) or bare-desktop regions. Interactive layers (`FlashLayer.HitTest`, `BubbleLayer.HitTest`) still hit-test their geometry for on-click behavior.
+Use `avalonia-research` before choosing custom drawing, render-thread scheduling, direct Skia integration, surfaces, native windows, invalidation, decoder packages, or Linux graphics paths. Prefer stable current APIs. Unstable APIs need an approved spike and fallback strategy.
+
+The official migration cheat sheet maps WPF `CompositionTarget.Rendering` to `TopLevel.RequestAnimationFrame` for UI-thread frames and points to composition custom visuals for render-thread callbacks. Treat this as a research starting point, not approval of either primitive; measure the greenfield workload before selecting it.
+
+Treat first-attempt allocation measurements and buffer designs as experiment evidence only. Profile the greenfield implementation before optimizing. Avoid per-frame allocations/copies when measured, but do not pre-copy old complexity.
 
 ## Verification
 
-```bash
-# from repo root
-dotnet build ConditioningControlPanel/CCP.Desktop.slnf -c Debug     # 0 errors (check git status first; parallel WIP can break the tree)
-dotnet test ConditioningControlPanel/tests/CCP.Core.Tests/CCP.Core.Tests.csproj
-dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj
-```
+- Simultaneously render video, bars, spiral, tint, and representative higher effects; prove order.
+- Observe tint through overlap, error, cancellation, and teardown.
+- Use frame-numbered media and instrumentation to prove one decoder and identical presented frame across all screens.
+- Verify one audio/source lifecycle regardless of monitor count.
+- Test display topology/orientation/hot-plug.
+- Verify input and capture policies independently.
+- Measure startup, frame cadence, allocations, CPU/GPU, memory, and stalls against an approved client baseline when one exists.
+- Run headed Windows and Linux X11/Wayland acceptance for every claimed backend.
 
-- Watch `ccp-run.log` for `VideoLayer:` / `CompositorEngine` lines when diagnosing the video path.
-- `--verify-spiral` (Debug builds only) validates spiral rendering; `--smoke-test` sweeps the whole UI; `--benchmark` / `--max-benchmark` measure startup, memory, and FPS.
-- Perf reference points (from `docs/benchmark-optimized.json`): idle ~124 FPS, active session ~185 FPS, 3-minute max-intensity average ~178 FPS, startup ~2.0s, working set ~561MB at 10s. A UCE change that regresses these is a defect. Targets from `benchmark-baseline.json`: effect FPS floor 30, aim 60.
-- Behavior parity means side-by-side with the WPF head, per feature. "Builds and looks right" is not done.
+Compilation or a registered layer is not proof that pixels render.
 
-## Report template
+## Consultation and stop conditions
 
-After each work session report: phase/task from the plan doc, files created/modified/deleted, validation results (build/test/smoke/log evidence), behavioral differences vs WPF (should be none), and what remains. Then update the checkboxes and current-state table in `unified-compositor-engine-plan.md`. Commit as `feat(av): ...` (one task per commit).
+Council is required for render architecture, package/decoder admission, native surfaces, input/capture split, layer-order decisions, or cross-platform degradation. Debate materially different viable designs. Stop if Linux behavior, tint safety, frame ownership, or headed proof is unresolved.
 
-## Constraints
+## Historical references
 
-- Do not broaden the webcam privacy contract: camera frames are never written to disk or sent over the network.
-- Do not weaken deeper-enhancement validation (NaN, Infinity, UNC paths, control characters, bounds).
-- Do not accept UNC or extended-length paths for `--play`/`--edit` CLI arguments.
-- Keep `LibVLCSharp` packages until the plan says otherwise; `Microsoft.WindowsAppSDK` stays pinned with `ExcludeAssets="all"` (WebView2 NU1605 downgrade guard), never removed.
+`ConditioningControlPanel/CCP.Avalonia/Compositor/` and this skill's `references/video-pipeline.md` are first-attempt evidence only. They may reveal pitfalls but never establish greenfield completion or mandatory internals.
 
 ## Related skills
 
-- `overlay-clickthrough` - ex-styles, hooks, hit-testing, topmost rules for the compositor window
-- `avalonia-research` - verify any v12 rendering API online before using it
-- `wpf-parity` - extracting the WPF behavior a layer must reproduce
-- `port-audit` - the wider health sweep after UCE milestones
+- `avalonia-research`, `overlay-clickthrough`, `wpf-parity`, `port-plan`, `port-feature`.

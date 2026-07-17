@@ -1,0 +1,6 @@
+{
+  "packages": [
+    "npm:@mjasnikovs/pi-task@0.18.24",
+    "npm:@booplex/bpx-consult@0.10.1"
+  ]
+}

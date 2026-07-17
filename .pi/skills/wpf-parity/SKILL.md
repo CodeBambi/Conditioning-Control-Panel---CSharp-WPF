@@ -1,81 +1,104 @@
 ---
 name: wpf-parity
-description: "Feature archaeology and parity discipline for the WPF-to-Avalonia port. Use this skill whenever you need to know what a feature does in the original WPF head, when porting or changing ANY ported behavior, when merging main into feat/crossplatform, when updating the parity matrix or task board, or when the two heads behave differently. Also use it when the user asks 'does X work like WPF', 'what is missing', or 'keep track of what exists in WPF'."
+description: "Extract user-observable behavior from the legacy WPF product for the greenfield Windows/Linux client. Use whenever asking what a feature does, defining a contract, investigating a parity gap, reviewing WPF changes, or comparing behavior. Ports the idea and outcome rather than WPF classes or internals, records narrow evidence in client docs, and treats Linux as a first-class separately verified target."
 ---
 
 # wpf-parity
 
+## Purpose
+
+WPF is the primary evidence for existing Windows product behavior. Extract capability and observable intent, not implementation. Owner-approved greenfield decisions may intentionally supersede WPF; record those differences explicitly.
+
 ## The bar
 
-- **1:1 behavioral parity with WPF on Windows is the floor, not the ceiling.** Every ported feature must do what the WPF head does, and must be at least as fast and smooth. A port that is heavier or laggier is a defect even if it works.
-- **UX may look different; behavior may not.** Visual improvements are welcome (see `dashboard-design`), but timings, triggers, settings semantics, focus behavior, multi-monitor behavior, and event ordering must match.
-- Degradation is allowed ONLY on Linux/macOS/Android for inherently platform-limited features (hooks, wallpaper, WebView2, WASAPI), and must degrade gracefully, never trap input or crash.
-- No permanent stubs. "Builds and looks right" is not done: the first port shipped inert UI (dead START button, dead overlays). A feature is ported when it is exercised end-to-end in the running app.
+- Windows must satisfy the approved behavior contract.
+- Linux is first-class and needs independent evidence. Never claim support from compilation or a no-op.
+- Preserve timings/order only when user-observable or safety-relevant.
+- Presence of code, XAML, handlers, tests, or assets is not completion evidence.
+- First-attempt Avalonia code cannot establish WPF behavior and is never an implementation template.
 
-## Map of the WPF head (where behavior lives)
+## Archaeology workflow
 
-The WPF head is code-behind-heavy, no MVVM (ViewModels/ has one file). Knowing the layout saves hours:
+1. Define the user capability or exact unresolved question.
+2. Search settings declarations and all relevant consumers; do not assume an old shared-model path is architectural.
+3. Inspect UI entry points, gestures, commands, help, locks, and accessibility paths.
+4. Follow the narrow execution path needed to establish triggers and outcomes.
+5. Record visible/audible behavior, timing/order, state transitions, persistence, live-service effects, failures, retries, cancellation, and teardown.
+6. For windows/overlays record owner, modality, activation, focus restoration, taskbar/Alt-Tab, topmost, move/resize, click-through/interactivity, capture policy, and monitor scope.
+7. Inspect validation, consent, privacy, secret/path handling, and logging.
+8. Search all call sites for event ordering and edge cases.
+9. Cite focused `file:line-range` evidence. For files over 100KB, grep first and read only meaningful ranges.
+10. Separate requirements from mechanics:
+   - **Behavior:** what the user observes or relies on.
+   - **Mechanic:** WPF window, timer, static service, library, event chain, or rendering API. Mechanics are not port requirements unless independently approved.
+11. Label findings `VERIFIED`, `INFERRED`, `UNVERIFIED`, or `PRODUCT DECISION REQUIRED`.
+12. Check `client/docs/architecture.md` for decisions that replace old behavior or mechanism.
 
-| Area | Location |
-|---|---|
-| Main window | `ConditioningControlPanel/MainWindow/` - one giant partial class across ~45 files (`MainWindow.Presets.cs`, `.Browser.cs`, `.Assets.cs`, `.StartStop.cs`, `.UiUpdates.cs`, `.TabNavigation.cs`, ...). `MainWindow.xaml` itself is 127KB |
-| Dashboard | `Views/Tabs/SettingsTabView.xaml` (the "settings" tab IS the home dashboard): `VelvetFeatureGrid`, 12 `FeatureCard`s + center logo. Cards: Flash, Visuals, Video, Subliminal, Spiral, LockCard, PinkFilter, MindWipe, BubblePop, BouncingText, System, BubbleCount |
-| Feature cards | `Features/FeatureCard.xaml(.cs)` (IsActive ring), `Features/*FeatureControl.xaml` (per-feature settings UIs hosted in `FeaturePopupWindow`) |
-| Services | `Services/` - flash `Flash/FlashService.cs`; video `Video/VideoService.cs` (+Dual/Mirror/Wallpaper); subliminal+bouncing text `Subliminal/`; spiral/pink/brain-drain overlays `Notifications/OverlayService.cs`; lock card+mind wipe+brain drain services `LockCard/`; bubbles `BubbleService.cs` (230KB); chaos `Chaos/ChaosModeService.cs` + `Chaos/` UI dir; audio ducking `AudioService.cs`; webcam `Webcam/`; gaze `Tracking/`; haptics `Haptics/`; progression/quests/achievements `Progression/`; companion `../AvatarTube/` + `Companion/`; browser `../MainWindow/MainWindow.Browser.cs` + `Browser/`; Deeper `Deeper/`; sessions `Session/SessionEngine.cs`; keyword triggers `KeywordTriggerService.cs` + `ScreenOcrService`; tutorial `TutorialService.cs` |
-| Service access | ~90 static properties on `App` (`App.Flash`, `App.Video`, ...) in `App.xaml.cs` (152KB) |
-| Settings | `CCP.Core/Models/AppSettings.cs` (shared with the port since the section-19.4 collapse) |
-| Themes/mods | `CCP.Core/Models/BuiltInMods.cs`, `Services/ModService.cs`, `MainWindow.xaml.cs` `RefreshThemeAwareElements()` |
+## Translate only after the contract exists
 
-Folder names lie sometimes: `OverlayService` is under `Notifications/`, `MindWipeService`/`BrainDrainService` under `LockCard/`.
+Once observable behavior is recorded, use the current official [WPF migration guide](https://docs.avaloniaui.net/docs/migration/wpf/) and [cheat sheet](https://docs.avaloniaui.net/docs/migration/wpf/cheat-sheet) to identify Avalonia concepts. Do not translate while still discovering behavior; otherwise WPF mechanics silently become requirements.
 
-**Sliced reads are mandatory** for the big files. Non-exhaustive list of 100KB+ offenders: AppSettings.cs 192KB (yes, the file step 1 sends you to), BubbleService 230KB, WebcamTrackingService 186KB, ChaosModeService 172KB, VideoService 155KB, App.xaml.cs 152KB, ChaosHubWindow.xaml.cs 144KB, ProfileSyncService 144KB, BuiltInMods.cs 134KB, AvatarTubeWindow.Speech.cs 133KB, MainWindow.xaml 127KB, FlashService 116KB, TutorialService 116KB, MainWindow.Browser.cs 114KB, MainWindow.xaml.cs 110KB, MainWindow.UiUpdates.cs 106KB. Grep for the member you need, then Read the enclosing range. Task-board ledger lines are also extremely long; Read that file in <=45-line slices.
+Common current mappings to verify in the deeper docs before implementation:
 
-## Feature archaeology workflow (extracting the behavioral contract)
+- `DependencyProperty` -> `StyledProperty` when styling/animation/inheritance is required; `DirectProperty` only for appropriate non-styled/performance-sensitive state.
+- WPF triggers/VisualStateManager -> selectors, classes, pseudo-classes, bindings, or converters; Avalonia does not use WPF style triggers.
+- `ElementName` -> `#name`; ancestor binding -> `$parent[Type]`; templated parent -> `TemplateBinding` where suitable.
+- `Preview*` events -> tunnel routing; mouse-specific events -> pointer events with explicit button checks.
+- `RoutedCommand`/`CommandBinding` -> direct `ICommand` bindings.
+- `HierarchicalDataTemplate` -> `TreeDataTemplate`; templates belong in `DataTemplates` where appropriate.
+- `Dispatcher.Invoke/BeginInvoke` -> `Dispatcher.UIThread.InvokeAsync/Post` with asynchronous semantics.
+- Storyboards/`CompositionTarget.Rendering` -> Avalonia animations/transitions or `TopLevel.RequestAnimationFrame`; render-thread work requires separate current research.
+- WPF transparent windows do not imply click-through in Avalonia.
+- `WindowStyle`/`ResizeMode` -> current Avalonia decorations and resize properties, while preserving the window behavior contract.
+- `DropShadowEffect` -> often `BoxShadow`; `LayoutTransform` -> `LayoutTransformControl`; `pack://` -> `avares://`.
+- screen APIs -> `TopLevel.Screens`, with physical bounds/scaling semantics verified for each use.
 
-When you need "what does WPF do for X":
+These are candidate translations, not permission to copy entire XAML files.
 
-1. **Settings first**: find the feature's flags/values in `CCP.Core/Models/AppSettings.cs`. They name the semantics (enabled flags such as `FlashEnabled`, `SpiralEnabled`; timings; probabilities).
-2. **Service**: locate the service (table above), Grep for the settings it reads, its public methods, its events, and its timers. Note event names and ordering.
-3. **UI**: find the `Features/*FeatureControl` and dashboard card wiring (`MainWindow.Presets.cs`: `RefreshFeatureCardActiveStates`, `ShowFeaturePopup`, `OnFeatureCardToggleRequested`).
-4. **Windows/overlays**: if the feature draws on screen, find its window classes and their input model (see `overlay-clickthrough`).
-5. Write the contract down as: inputs (settings), triggers (timers/events), visible behavior (what/where/how long), input behavior (click-through? clickable? focus?), multi-monitor behavior, and edge cases. That contract is what the Avalonia side must reproduce, and what belongs in a task-board row or parity-matrix item.
+## Contract shape
 
-## The living trackers (external memory - keep them true)
+Capture:
 
-| Doc (all under `ConditioningControlPanel/docs/`) | Role | Update rule |
-|---|---|---|
-| `avalonia-ui-parity-matrix.md` | Per-screen verification checklist | Flip `[ ]` to `[x]` ONLY after exercising the item end-to-end in the running app, side by side with WPF, matching function, look, and speed, and record the evidence in the row. "Renders" is not verified. OWNER RULING 2026-07-02: all pre-existing `[x]` marks are VOID (the port was hand-made; the 2026-06-23 sweep is not trusted); the matrix is being re-earned from a full reset under `skia-rebuild-goal.md` WS0 |
-| `avalonia-migration-task-board.md` | Live work queue | New gaps become rows; claims are append-only ledger rows (see `port-plan`) |
-| `crossplatform-rebuild-plan.md` section 1A | Phase-level status snapshot | Update when a phase materially changes |
-| `crossplatform-rebuild-plan.md` section 19 | Sync-from-main workflow + backlog | Record deferred UI work per merge |
+- purpose and entry points;
+- settings/inputs and valid ranges;
+- triggers and preconditions;
+- visible/audible outcome;
+- interaction, focus, ownership, and window behavior;
+- timing and event ordering;
+- multi-monitor/orientation/scaling behavior;
+- persistence and migration;
+- success, failure, cancellation, and teardown;
+- privacy/security/capture constraints;
+- Windows acceptance;
+- Linux acceptance or exact capability gap;
+- narrow evidence and unresolved product decisions.
 
-Docs lag code (they are updated in batches). When a doc contradicts the code, trust the code, then fix the doc.
+## Where to record
 
-## Sync-from-main workflow (WPF keeps shipping; the port must keep up)
+- `client/docs/capability-inventory.md`: capability summary and evidence.
+- `client/docs/architecture.md`: approved intentional differences/mechanisms.
+- `client/docs/first-attempt-lessons.md`: first-attempt lesson only.
+- `client/docs/task-board.md`: sole live queue, blockers, and verification.
+- future `client/docs/contracts/<feature>.md`: detailed contract when created.
 
-When `main` merges into `feat/crossplatform`:
+Docs never outrank code evidence or owner decisions. Fix drift rather than carrying contradictions forward.
 
-1. `git diff --stat <prev>..<new> -- ConditioningControlPanel/` to list what changed.
-2. Bucket each file:
-   - **Localization JSON**: auto-syncs (CCP.Core Content-links `Localization/Languages/*.json`). No action.
-   - **Models**: since the section-19.4 collapse, `CCP.Core/Models` is the single source referenced by BOTH heads; model drift is dead. If a merge tries to resurrect a WPF-side `Models/` file, that is a conflict artifact, not a real change.
-   - **Portable service logic**: port into the Core service.
-   - **UI changes**: port if that screen is already ported; otherwise add a task-board backlog row.
-   - **WPF-only infra** (installer, Velopack remnants, win-only glue): no action.
-3. Build the slnf + run Core tests.
-4. Record deferrals in the task board section 19.3-style backlog.
+## WPF changes during the port
 
-**Merge trap:** modify/delete conflict resolutions can silently drop main's deltas (it happened to `Quest.cs` and `AppSettings.cs`; both had to be re-applied by hand). After any merge with modify/delete conflicts, diff the affected files against main's version explicitly.
+Treat a WPF diff as new behavioral evidence. Determine whether it changes user-visible behavior, persistence, safety, privacy, or acceptance. Update the relevant client contract/task. Do not merge WPF or first-attempt source into `client/` by default.
 
-## Gap hunting
+## Use focused git history for non-trivial archaeology
 
-- Stub floor: `grep -rinE "TODO|stub|not ported|not wired|placeholder|NotImplemented|No-?op" ConditioningControlPanel/CCP.Avalonia --include=*.cs` - treat as a floor, not a ceiling.
-- The ceiling is a full click-through of every feature in the running app; unnamed gaps only show up when exercised.
-- Behavioral diffs found while doing anything else get logged as task-board rows immediately (external memory beats transcript memory).
+For a substantial feature, inspect history for the narrow WPF and first-attempt paths after reading current code. Search later commits for fixes, reverts, re-openings, races, leaks, crashes, stubs, unwired work, and deletions. History often reveals hidden edge behavior and invalidated completion claims. A commit subject is a lead, not proof: inspect the relevant diff/final code and record only behavior or lessons that survive verification. Cite decisive commit IDs in task research; never copy historical architecture merely because it once shipped.
+
+## Consultation
+
+Use council after focused archaeology for disputed parity, platform degradation, privacy/security, overlay/input/window behavior, or high-impact contract decisions. Include client decision links, narrow WPF citations, alternatives, and Windows/Linux consequences. Advisor consensus cannot establish behavior; source and headed observation do.
+
+## Verification
+
+Run WPF and the client side by side when possible. Exercise the complete user path, not just rendering. Compare state, timing, interaction, focus, audio, windows, monitors, persistence, failure, and teardown. Record exact evidence in the matching client task row.
 
 ## Related skills
 
-- `port-feature` - the implementation workflow that consumes the contract you extract here
-- `port-plan` - claims, lanes, and sequencing before you start
-- `port-audit` - periodic whole-port health sweep
-- `dashboard-design` - what may legitimately differ (visual language) vs what may not (behavior)
+- `port-plan`, `port-feature`, `avalonia-research`, `dashboard-design`, `overlay-clickthrough`.

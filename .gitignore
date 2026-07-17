@@ -43,6 +43,13 @@ settings.json
 logs/
 **/.claude/settings.local.json
 
+# Pi port orchestration
+# Share the exact project package declaration, but not installed npm contents or
+# crash-safe task run state. Pi restores the pinned package after project trust.
+!.pi/settings.json
+.pi/npm/
+.pi-tasks/
+
 # Asset folders (users add their own content)
 assets/images/*
 assets/sounds/*

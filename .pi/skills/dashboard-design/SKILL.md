@@ -1,60 +1,102 @@
 ---
 name: dashboard-design
-description: "CCP's visual design language: themed neon dashboard, feature cards with lit/unlit borders, per-mod reskinning. Use this skill when building or modifying ANY user-facing CCP surface (dashboard, cards, tabs, dialogs, panels), when choosing colors or brushes, when working with themes/mods, or when the user references the 'img state' screenshots or asks for the UI to look right/better. The core grammar: a colored glowing card border means the feature is ON, a dark unlit border means OFF, and every surface must re-skin across all five themes."
+description: "Design and verify any user-facing greenfield client surface under client/: dashboard, cards, feature popups, tabs, dialogs, panels, themes, and AvatarTube-adjacent layout. Preserves CCP's five-theme dark-neon grammar, lit/unlit/locked card meaning, stable quick-toggle behavior, responsive layout, and accessible scrollable popups without inheriting WPF or first-attempt resource topology."
 ---
 
 # dashboard-design
 
-## Canonical visual reference
+## Evidence
 
-`img state/` at the repo root (filenames contain spaces) holds the approved dashboard look, one per theme:
-`good view.png` (Sissy Hypno, purple), `default good view.jpg` (CCP Default, pink), `bambi sleep good view.jpg` (Bambi Sleep, pink/magenta), `drone good view.jpg` (Dronification, matrix green), `circe lock good view.jpg` (Circe's Lock). Look at them before designing anything; they are the acceptance target.
+Use `img state/` and WPF as visual/product evidence. Read `client/docs/capability-inventory.md#dashboard-and-feature-popups`, architecture A-004/A-005, and the task row. Do not copy WPF dimensions/resource names or first-attempt theme services/brush algorithms by default.
 
-The port's license to differ: **UX may look somewhat different from WPF as long as behavior is identical and this design language is kept.** Improvements are welcome; drift from the grammar below is not.
+## Visual grammar
 
-## The card grammar (the load-bearing convention)
+Support the five built-in identities:
 
-A dashboard feature card = themed neon artwork + label + optional help "?" button.
+- CCP Default;
+- Bambi Sleep;
+- Sissy Hypno;
+- Dronification;
+- Circe's Lock.
 
-- **ON**: border ring in the theme accent color + outer glow. WPF implementation: `Features/FeatureCard.xaml` `ActiveBorder` (BorderBrush `{DynamicResource PinkBrush}`, thickness 3.5) + `ActiveGlow` DropShadow (opacity 0.55), driven by the `IsActive` property.
-- **OFF**: border dark/unlit; artwork stays visible but the card reads as dormant.
-- **Locked**: the active ring is SUPPRESSED even if the underlying setting is true, and right-click toggle is ignored (`FeatureCard.xaml.cs` `ApplyActiveState`). A `LockedOverlay` communicates the lock.
-- **Neutral cards**: Visuals and System have no single enabled flag; they stay unlit by design. Do not invent an on-state for them.
-- Interactions: left-click opens the feature's settings popup (non-modal); right-click quick-toggles the feature AND starts/stops the running service.
+The dashboard is dark with theme-specific neon accents, readable themed artwork, restrained glow, and clear hierarchy. Theme switching updates visible colors, artwork, contrast, and state without restart.
 
-State is driven from `AppSettings` flags (`FlashEnabled`, `SpiralEnabled`, `PinkFilterEnabled`, ...) via `MainWindow.Presets.cs` `RefreshFeatureCardActiveStates()` + a settings `PropertyChanged` listener in WPF. Any Avalonia card surface must keep this live: toggling a setting anywhere updates the border immediately, no restart, no tab switch.
+### Feature cards
 
-## Layout regions (from the screenshots)
+- **Enabled:** theme accent border and glow.
+- **Disabled:** dark/unlit border; artwork remains readable.
+- **Locked:** visible lock treatment, active ring suppressed, quick-toggle rejected.
+- **Neutral:** `Visuals` and `System` have no invented aggregate on-state.
 
-Top: title bar; nav chips (Dashboard, Presets, Quests, Enhancements, Deeper, Subjects, Assets, language); second row (Achievements, Leaderboard, Companion, Profile, Lab, Premium); level/XP progress bar.
-Left/main: 4x4 feature-card grid (`VelvetFeatureGrid` in WPF's `Views/Tabs/SettingsTabView.xaml`; the settings tab IS the home dashboard) around a 2x2 center emblem that carries the active theme's branding.
-Right column: Browser panel (HypnoTube/BambiCloud connect, webcam tracking, pop out), Audio panel (Master/Video/Duck sliders, output device, duck toggle, test), Quick Links.
-Bottom: Webcam / App Info / Scheduler+Intensity Ramp / Catalogue buttons; marquee news ticker; START (accent) / Save / Exit (red) action bar.
-Left edge: companion character in a tube with speech bubble.
+State reflects the live feature, not stale markup. Changes from cards, popups, automation, settings, or sessions update immediately.
 
-## The theme system (themes ARE mods)
+### Interaction
 
-- Schema: `CCP.Core/Models/ModManifest.cs` `ModTheme` - `AccentColor`, `BackgroundColor`, `PanelColor`, `SurfaceColor`, `FilterColor` (hex strings). Secondary accent (WPF `ModService.GetSecondaryColorHex`): four built-ins hardcode it (CCP Default, Bambi Sleep, Sissy Hypno, Dronification); Circe's Lock and custom mods derive it via HSL hue shift (`ComputeSecondaryFromAccent`). The Avalonia head currently returns `Theme.AccentDarkColor` instead (`AvaloniaModService`) - a known divergence to be aware of when colors differ between heads.
-- Five built-ins in `CCP.Core/Models/BuiltInMods.cs`: CCP Default (`builtin-ccp-default`), Bambi Sleep (`builtin-bambisleep`), Sissy Hypno (`builtin-sissyhypno`), Dronification (`drone-mode` - deliberately a community-style id), Circe's Lock (`builtin-locked`). Mods are `.ccpmod` ZIP packages; Drone and Circe's Lock ship large artwork packs.
-- Switching: `ModService.ActivateMod()` fires `ModChanged`; WPF rewrites `Application.Current.Resources` color+brush keys in `RefreshThemeAwareElements()`; the Avalonia equivalent is `CCP.Avalonia/Services/Theme/AvaloniaThemeService.cs` (DI singleton). Re-skin is live, no restart.
-- Card artwork is theme-resolved: `ModResourceResolver.ResolveImage("features/*.png")` prefers the active mod's extracted resources over built-in assets. Artwork path strings are case-inconsistent (`features/flash.png` vs `features/Pink_filter.png`); match exact strings when porting.
-- Known per-theme quirk: CCP Default uses a 4-anchor `AccentGradientBrush`; all other mods get a solid accent gradient. Preserve it.
+- Left-click opens a modeless feature settings popup.
+- Plain right-click on every unlocked toggleable card immediately invokes the stable feature command, persists, and live-starts/stops during a session.
+- Localized title, artwork, capitalization, and visual-tree position are never command identity.
+- Help and test actions remain separate and cannot steal plain right-click.
 
-## Rules
+## Feature popups
 
-1. **Never hardcode a hex color for anything theme-related.** Bind `DynamicResource` theme keys (`PinkBrush`, `PinkColor`, `DarkerBg`, `PanelBg`, `SurfaceBg`, `SecondaryBrush`, `AccentGradientBrush`, ...). A hardcoded accent passes on one theme and fails the other four.
-2. **Every new surface must pass the 5-theme sweep**: switch all five mods live and confirm colors, artwork, and readability follow. This is part of the port's definition of done.
-3. **On/off affordance is mandatory** for anything representing a toggleable feature: lit accent border + glow when on, unlit when off, suppressed when locked. Do not substitute checkmarks or toggle switches on dashboard cards.
-4. Dark base, neon accent: backgrounds come from theme Background/Panel/Surface keys; accent is used for borders, glows, highlights, and primary actions, not for large fills (exception: START button and the pink filter itself).
-5. Remember `DynamicResource` cannot feed converter properties in Avalonia; restructure (bind the brush directly or use StaticResource for converter inputs).
-6. Respect localization: no baked-in English strings in artwork or XAML; keys via the loc merge workflow (`port-feature`).
+- Owned, modeless, centered on the owner, and within the owner's monitor working area.
+- Compact for short content; finite viewport for tall content.
+- Vertical wheel, trackpad, touch, keyboard bring-into-view, scrollbar controls, and thumb dragging work.
+- Horizontal scrolling disabled unless a feature contract explicitly requires it.
+- Nested scrolling chains predictably.
+- Mixed scaling and secondary monitors do not hide controls.
+- Close/Escape/focus restoration follows the per-window contract.
 
-## Verifying a design change
+## Window behavior
 
-Run the Windows head, open the dashboard, and check: card borders reflect actual settings state live (toggle via right-click and via the feature popup); the 5-theme sweep; window resize behavior; then compare the overall composition against the matching `img state/` screenshot. For behavior questions (what a card click must do), defer to `wpf-parity`.
+Shared chrome may share theme resources but must not flatten semantic differences. Read the window manifest/task: ownership, modality, activation/focus, taskbar/Alt-Tab, topmost, resize, placement, decorations, close/hide/reuse, and shutdown are per-window behavior.
+
+## Implementation rules
+
+- Use theme tokens/resources instead of hardcoded theme colors.
+- Follow Avalonia's selector/class/pseudo-class styling model; do not port WPF `Style.Triggers`, `DataTrigger`, `VisualStateManager`, `BasedOn`, or keyed-style assignment literally. Use bindings/converters when state is data-driven.
+- Put templates in the appropriate `DataTemplates` collection and use Avalonia template/type matching rather than assuming WPF resource lookup.
+- Keep text localizable and artwork free of baked-in UI strings unless approved.
+- Verify current Avalonia v12 styling, resource, popup, scrolling, and animation APIs through `avalonia-research`.
+- Prefer responsive layout and minimum readable sizes over literal WPF pixels.
+- Do not use transforms that make hit-testing, scrolling, or native controls unreliable.
+- Ensure keyboard navigation, focus visibility, contrast, and scaling.
+
+Current source: [official WPF migration guide](https://docs.avaloniaui.net/docs/migration/wpf/) and [cheat sheet](https://docs.avaloniaui.net/docs/migration/wpf/cheat-sheet). Verify deeper styling/binding pages for the selected pattern.
+
+## Avalonia MCP for dashboard and UX work
+
+When admitted and available in Pi, use `decriptor/AvaloniaUI.MCP` as a bounded design-review assistant, not a dashboard generator.
+
+Good uses:
+
+- validate a small AXAML fragment for basic XML/namespace and common-pattern mistakes;
+- ask for candidate selector, pseudo-class, responsive-layout, keyboard/focus, contrast, and accessibility concerns;
+- run its heuristic performance pass on one complex card, popup, or template;
+- use its control reference to discover candidate primitives, then verify them in current v12 docs.
+
+Do not use its generated themes, palettes, controls, animations, visual states, architecture, or WPF conversion as production output. Those generators are generic, do not know CCP's five themes or lit/unlit/locked semantics, and upstream source pins Avalonia 11.3.1 while emitting stale WPF patterns. The MCP cannot judge CCP visual hierarchy or rendered fidelity.
+
+For a user-facing slice, the recommended chain is: contract and screenshots -> current official v12 docs -> hand-authored smallest AXAML -> advisory MCP review -> real build/headed interaction -> K3 screenshot review. Record accepted and rejected MCP findings rather than copying its response.
+
+## Acceptance
+
+On Windows and Linux:
+
+1. sweep all five themes live;
+2. sweep supported languages;
+3. exercise every card stopped and during a session;
+4. verify immediate state rings and locked/neutral/help exceptions;
+5. open every popup on primary/secondary mixed-scale monitors and reach the final control through every required scrolling path;
+6. resize/move/minimize/restore owner and verify focus/window behavior;
+7. compare composition to the appropriate `img state/` reference without requiring identical implementation.
+
+Screenshots prove appearance; headed interaction proves behavior.
+
+## Consultation
+
+Use council for new theme architecture, major responsive layout, window-shell changes, accessibility tradeoffs, or divergence from the approved screenshots/behavior. Supply screenshots, contracts, and platform evidence.
 
 ## Related skills
 
-- `wpf-parity` - behavior must match WPF even when looks improve
-- `port-feature` - implementation workflow + AXAML conversion cheatsheet
-- `avalonia-research` - before using any new Avalonia styling/animation API
+- `wpf-parity`, `avalonia-research`, `port-feature`, `port-plan`.
