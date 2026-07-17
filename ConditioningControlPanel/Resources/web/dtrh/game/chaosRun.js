@@ -372,9 +372,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (!p) return null;
     return { bg1: p.colBg, bg2: p.colFog, line: p.colLine };
   };
-  /** The dome's wall image: the biome's own art, faded over the retinted wall on
-   * the same gate (so a draft room still leaks nothing before the roulette lands). */
-  const biomeWallFor = (bio) => (bio && bio.id ? { mode: 'biome', url: `https://ccp.art/biomes/${bio.id}.png`, repeat: 1 } : null);
+  /** The dome's wall art: the biome's own image, plastered polka-dot style - the
+   * shader (uWallDot) punches each repeat tile into a soft disc, so the biome reads
+   * as a field of stamps with the retinted wall showing between, not one full-bleed
+   * stretch. Faded over the retint on the same gate (a draft room leaks nothing
+   * before the roulette lands). */
+  const biomeWallFor = (bio) => (bio && bio.id ? { mode: 'biome', url: `https://ccp.art/biomes/${bio.id}.png`, repeat: 3, dot: true } : null);
   /** The chamber's effective style/profile/weather: biome override or classic. */
   const styleForWaveNow = (waveIndex) => {
     const b = biomeAt(waveIndex);
@@ -1965,62 +1968,104 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (!rec || !rec.grid) return null;
     st.recipeRevealedThisRun = true;
     pendingRecipeReveal = id;
-    const canvas = makeRecipePageCanvas(rec);
-    // stash the page + its words for the reveal notice (fired by junctions
-    // onWallReveal the instant the plaster lands - see wireRecipeNotice)
-    pendingRecipeNotice = { name: rec.name, glyph: rec.glyph, dataUrl: canvas.toDataURL('image/png') };
-    return { mode: 'recipe', canvas, repeat: 3 };
+    // dome walls: MANY crisp copies of the page scattered like a Boudoir pin-wall
+    // (small + plentiful, drawn full-res so each still reads as a recipe - never a
+    // downscaled-to-mush single image). notice card: one clean page.
+    const wallCanvas = makeRecipeWallCanvas(rec);
+    pendingRecipeNotice = { name: rec.name, glyph: rec.glyph, dataUrl: makeRecipePageCanvas(rec).toDataURL('image/png') };
+    return { mode: 'recipe', canvas: wallCanvas, repeat: 2 };
   }
 
-  /** Draw the recipe's torn Lookbook page onto a tile - the EXACT page she'd see
-   * on the Paperwall (parchment, the 3x3 pictogram with torn cells hidden as '?',
-   * the recipe's name along the foot). junctions tiles it across the dome, so the
-   * walls read as that one page pinned up over and over. A small transparent
-   * margin lets slivers of the biome show between the pinned pages. */
-  function makeRecipePageCanvas(rec) {
-    const S = 384;
-    const c = document.createElement('canvas');
-    c.width = c.height = S;
-    const g = c.getContext('2d');
-    g.clearRect(0, 0, S, S);
-    const m = S * 0.07;
-    const w = S - m * 2, h = S - m * 2;
-    const rr = (x, y, ww, hh, r) => {
-      g.beginPath();
-      if (g.roundRect) g.roundRect(x, y, ww, hh, r);
-      else { g.moveTo(x + r, y); g.arcTo(x + ww, y, x + ww, y + hh, r); g.arcTo(x + ww, y + hh, x, y + hh, r); g.arcTo(x, y + hh, x, y, r); g.arcTo(x, y, x + ww, y, r); }
-    };
+  /** roundRect path with a fallback for engines without ctx.roundRect. */
+  function rrectPath(g, x, y, w, h, r) {
+    g.beginPath();
+    if (g.roundRect) { g.roundRect(x, y, w, h, r); return; }
+    g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r);
+  }
+
+  /** Draw ONE torn Lookbook page CENTERED on the current canvas origin, filling a
+   * `size`x`size` box - the EXACT page she'd see on the Paperwall (parchment, the
+   * 3x3 pictogram with torn cells hidden as '?', the recipe's name along the foot).
+   * Centered so callers can translate + rotate it into a scattered plaster. */
+  function drawRecipePage(g, size, rec, cells) {
+    const inset = size * 0.06;                       // torn-edge margin inside the box
+    const w = size - inset * 2, h = size - inset * 2;
+    const x0 = -w / 2, y0 = -h / 2;                  // page top-left, relative to centre
+    const rad = size * 0.03;
+    // the page: aged parchment, faint torn edge, soft drop shadow (pinned layers)
     g.save();
-    g.translate(m, m);
-    // the page: aged parchment, faint torn edge
-    const grd = g.createLinearGradient(0, 0, 0, h);
-    grd.addColorStop(0, '#f7eed7');
-    grd.addColorStop(1, '#e6d4ab');
-    g.fillStyle = grd; rr(0, 0, w, h, 12); g.fill();
-    g.strokeStyle = 'rgba(120,90,50,0.4)'; g.lineWidth = 2; rr(1, 1, w - 2, h - 2, 12); g.stroke();
+    g.shadowColor = 'rgba(0,0,0,0.32)'; g.shadowBlur = size * 0.045; g.shadowOffsetY = size * 0.02;
+    const grd = g.createLinearGradient(0, y0, 0, y0 + h);
+    grd.addColorStop(0, '#f7eed7'); grd.addColorStop(1, '#e6d4ab');
+    g.fillStyle = grd; rrectPath(g, x0, y0, w, h, rad); g.fill();
+    g.restore();
+    g.strokeStyle = 'rgba(120,90,50,0.4)'; g.lineWidth = 2; rrectPath(g, x0 + 1, y0 + 1, w - 2, h - 2, rad); g.stroke();
     // the pictogram: 3x3, filled cells wear the material tint + glyph, torn = '?'
-    const cells = sketchView(rec);
-    const gw = w * 0.7, gx = (w - gw) / 2, gy = h * 0.12, cell = gw / 3;
+    const gw = w * 0.7, gx = x0 + (w - gw) / 2, gy = y0 + h * 0.12, cell = gw / 3;
     g.textAlign = 'center'; g.textBaseline = 'middle';
     for (let i = 0; i < 9; i++) {
       const cx = gx + (i % 3) * cell + cell / 2;
       const cy = gy + Math.floor(i / 3) * cell + cell / 2;
-      const s = cell * 0.82;
-      const cc = cells[i];
-      if (!cc) { g.fillStyle = 'rgba(90,70,40,0.06)'; rr(cx - s / 2, cy - s / 2, s, s, 7); g.fill(); continue; }
+      const s = cell * 0.82, cc = cells[i];
+      if (!cc) { g.fillStyle = 'rgba(90,70,40,0.06)'; rrectPath(g, cx - s / 2, cy - s / 2, s, s, cell * 0.14); g.fill(); continue; }
       if (cc.torn) {
-        g.fillStyle = 'rgba(90,70,40,0.1)'; rr(cx - s / 2, cy - s / 2, s, s, 7); g.fill();
+        g.fillStyle = 'rgba(90,70,40,0.1)'; rrectPath(g, cx - s / 2, cy - s / 2, s, s, cell * 0.14); g.fill();
         g.fillStyle = 'rgba(80,60,35,0.55)'; g.font = `${Math.round(cell * 0.5)}px serif`; g.fillText('?', cx, cy);
       } else {
-        g.fillStyle = cc.tint; rr(cx - s / 2, cy - s / 2, s, s, 7); g.fill();
+        g.fillStyle = cc.tint; rrectPath(g, cx - s / 2, cy - s / 2, s, s, cell * 0.14); g.fill();
         g.font = `${Math.round(cell * 0.5)}px serif`; g.fillText(cc.glyph, cx, cy);
       }
     }
     // the foot: the recipe's own glyph + name
     g.fillStyle = 'rgba(70,50,28,0.92)';
     g.font = `600 ${Math.round(h * 0.068)}px system-ui, sans-serif`;
-    g.fillText(`${rec.glyph} ${rec.name.toLowerCase()}`, w / 2, h * 0.9);
+    g.fillText(`${rec.glyph} ${rec.name.toLowerCase()}`, 0, y0 + h * 0.9);
+  }
+
+  /** One clean page on a transparent tile - the reveal notice's art. */
+  function makeRecipePageCanvas(rec) {
+    const S = 384;
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, S, S);
+    g.save(); g.translate(S / 2, S / 2);
+    drawRecipePage(g, S * 0.92, rec, sketchView(rec));
     g.restore();
+    return c;
+  }
+
+  /** The dome wall: a pin-wall of the SAME page stamped many times, each tilted a
+   * little and drawn at full page resolution so it stays readable (smaller + more,
+   * never one image scaled down to mush). junctions tiles this across the dome, so
+   * each page is drawn at its 8 wrap-offsets too - the tile seams seamlessly. */
+  function makeRecipeWallCanvas(rec) {
+    const cells = sketchView(rec);
+    const TILE = 1024, PAGE = 300;
+    const c = document.createElement('canvas');
+    c.width = c.height = TILE;
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, TILE, TILE);
+    // staggered pin spots (fractions of the tile) + a fixed tilt each - deterministic
+    // so the plaster looks the same every frame and wraps cleanly.
+    const spots = [
+      [0.18, 0.20, -6], [0.58, 0.13, 5], [0.87, 0.30, -3],
+      [0.35, 0.50, 7], [0.72, 0.55, -5], [0.11, 0.73, 4],
+      [0.50, 0.83, -7], [0.86, 0.82, 6],
+    ];
+    for (const [fx, fy, deg] of spots) {
+      const cx = fx * TILE, cy = fy * TILE, rot = deg * Math.PI / 180;
+      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
+        g.save();
+        g.translate(cx + ox * TILE, cy + oy * TILE);
+        g.rotate(rot);
+        drawRecipePage(g, PAGE, rec, cells);
+        g.fillStyle = 'rgba(60,40,20,0.5)';               // a little pin tack at the top
+        g.beginPath(); g.arc(0, -PAGE * 0.4, PAGE * 0.03, 0, Math.PI * 2); g.fill();
+        g.restore();
+      }
+    }
     return c;
   }
 

@@ -561,6 +561,7 @@ const ROOM_FRAG = `
   varying float vFogDepth;
   uniform float uTime, uFogDensity, uThemeFlash;
   uniform float uWallMix, uWallRepeat;   // wall dressing: a texture plastered over the dome interior
+  uniform float uWallDot;                // >0.5 = punch each tile into a soft disc (biome polka-dot plaster)
   uniform sampler2D uWallTex;            // always bound (1x1 transparent placeholder when idle)
   uniform vec3 uBg1, uBg2, uLineColor, uFogColor;
   uniform vec3 uHoleDir[ROOM_HOLES];
@@ -590,10 +591,16 @@ const ROOM_FRAG = `
     float lon = lineMask(vUv.x * 22.0 - uTime * 0.25, 0.05) * sin(vUv.y * 3.14159);
     vec3 col = base + uLineColor * (lat * 0.30 + lon * 0.22);
     col += rim;
-    // wall dressing: a tiled glyph wallpaper or a biome image faded over the wall.
-    // transparent gaps (wall.a==0) keep the base, so the biome colors show through
-    // the polka-dot spacing; an opaque biome image fully replaces at uWallMix==1.
-    vec4 wall = texture2D(uWallTex, fract(vUv * uWallRepeat));
+    // wall dressing: a plaster of recipe pages or a biome image faded over the wall.
+    // transparent gaps (wall.a==0) keep the base, so the retinted wall shows between
+    // the pinned pages / dots. uWallDot punches each repeat tile into a soft disc so
+    // an otherwise full-bleed biome image reads as polka-dot stamps of the biome.
+    vec2 wuv = fract(vUv * uWallRepeat);
+    vec4 wall = texture2D(uWallTex, wuv);
+    if (uWallDot > 0.5) {
+      float d = distance(wuv, vec2(0.5));
+      wall.a *= 1.0 - smoothstep(0.34, 0.46, d);   // soft-edged dot, biome colour between
+    }
     col = mix(col, mix(col, wall.rgb, wall.a), uWallMix);
     col *= 1.0 + uThemeFlash;   // biome-reveal flicker: the dome pulses bright as it becomes the drawn biome
     float f = 1.0 - exp(-uFogDensity * uFogDensity * vFogDepth * vFogDepth);
@@ -952,7 +959,8 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
         uTime: { value: 0 },
         uThemeFlash: { value: 0 },                    // biome-reveal flicker (update() drives it)
         uWallMix: { value: 0 },                       // wall-dressing opacity (update() eases it)
-        uWallRepeat: { value: 1 },                    // 1 = one image; >1 tiles a glyph wallpaper
+        uWallRepeat: { value: 1 },                    // 1 = one image; >1 tiles the plaster / dots
+        uWallDot: { value: 0 },                       // 1 = punch tiles into biome polka-dots (see frag)
         uWallTex: { value: PLACEHOLDER_TEX },         // dressing texture (placeholder until one loads)
         uBg1: { value: new THREE.Color(ROOM_BG1) },   // tube palette: the room IS more tube
         uBg2: { value: new THREE.Color(ROOM_BG2) },
@@ -1592,6 +1600,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       if (J.wallDress) {
         const u = J.room.mat.uniforms;
         u.uWallRepeat.value = wallDress.repeat != null ? wallDress.repeat : 1;
+        u.uWallDot.value = wallDress.dot ? 1 : 0;   // biome art dots; recipe pages stay rectangular
         if (wallDress.canvas) {
           J.wallDress.tex = texFromCanvas(wallDress.canvas);
           J.wallDress.owned = true;
