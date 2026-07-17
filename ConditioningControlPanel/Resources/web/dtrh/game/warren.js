@@ -1164,106 +1164,161 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     if (boudoirTray && v.materialCount(boudoirTray) <= 0) boudoirTray = null;
 
     const card = el('wr-card wr-craft', body);
-    el('wr-card-sub', card, 'take an ingredient in hand, lay it on the table. draw the right picture and it becomes the thing.');
+    el('wr-card-sub', card, 'take an ingredient, then press-and-drag to lay a whole shape. right-click sweeps a cell off. draw the right picture and it becomes the thing.');
     const tray = el('wr-craft-tray', card);
     const grid = el('wr-craft-grid', card);
     const actions = el('wr-craft-actions', card);
 
     const remainOf = (id) => v.materialCount(id) - boudoirGrid.filter((c) => c === id).length;
 
-    // Drag state for the worktable. `from` is 'tray' (a fresh material from the
-    // rack) or a grid index (moving/swapping an already-placed cell). Lives in
-    // this closure so it survives syncCraft's per-drop re-renders. Click-to-hold
-    // (boudoirTray) still works unchanged — drag is purely additive.
-    let drag = null;
+    // ---- Minecraft-grade worktable input (Part 4 QoL) ----------------------
+    // ONE cursor model, one material per cell (the pictogram matcher demands it):
+    //   • boudoirTray = what you carry "in hand" (persists across placements).
+    //   • left-click a cell holding a material  -> place it (hand keeps it, so you
+    //     can lay a whole shape); a DIFFERENT material already there swaps out to
+    //     the haul; the SAME material is a no-op.
+    //   • left-click a filled cell empty-handed -> pick it back UP into your hand
+    //     (that's the "remove, then click again to add" flow).
+    //   • PRESS-AND-DRAG across cells                    -> paint the held material
+    //     into every cell you cross (MC drag-distribute), stopping when the haul
+    //     runs dry. Drag straight off a tray slot to start painting from the rack.
+    //   • RIGHT-click / right-drag                       -> erase cells back to the
+    //     haul. "sweep the table" clears the whole grid at once.
+    // Elements are built ONCE (persistent) so mid-drag re-syncs update in place and
+    // never yank the cell out from under the pointer.
+    let paint = null;                    // { mode:'place'|'erase', mat } while a drag is live
+    const trayEls = new Map();           // material id -> { root, n }
+    const cellEls = new Array(9).fill(null);
 
-    // Drop a grid material back onto the tray to return it to the bank.
-    tray.addEventListener('dragover', (e) => { if (drag && typeof drag.from === 'number') e.preventDefault(); });
-    tray.addEventListener('drop', (e) => {
-      if (drag && typeof drag.from === 'number') {
-        e.preventDefault(); boudoirGrid[drag.from] = null; drag = null; syncCraft();
-      }
-    });
+    /** Lay `mat` at cell i (swapping any different occupant back to the haul).
+     *  Returns true if the grid changed. */
+    function placeAt(i, mat) {
+      if (!mat) return false;
+      if (boudoirGrid[i] === mat) return false;      // already this one
+      if (remainOf(mat) <= 0) return false;          // haul has no spare
+      boudoirGrid[i] = mat;                          // any prior occupant frees up automatically
+      return true;
+    }
+    function eraseAt(i) {
+      if (boudoirGrid[i] == null) return false;
+      boudoirGrid[i] = null;
+      return true;
+    }
+    /** Pick a placed material off the table and INTO the hand. */
+    function pickAt(i) {
+      const cur = boudoirGrid[i];
+      if (cur == null) return false;
+      boudoirGrid[i] = null;
+      boudoirTray = cur;
+      return true;
+    }
 
-    function renderTray() {
+    function beginPaint(mode, mat) {
+      paint = { mode, mat };
+      // end the stroke wherever the button comes up — even off the grid
+      window.addEventListener('pointerup', endPaint, { once: true });
+      window.addEventListener('pointercancel', endPaint, { once: true });
+    }
+    function endPaint() { paint = null; }
+
+    function buildTray() {
       tray.innerHTML = '';
+      trayEls.clear();
       for (const m of MATERIALS) {
-        const remain = remainOf(m.id);
-        const t = btn('wr-craft-mat' + (boudoirTray === m.id ? ' is-held' : '') + (remain <= 0 ? ' is-out' : ''), '', () => {
-          boudoirTray = boudoirTray === m.id ? null : m.id;
-          renderTray();
-        }, tray);
+        const t = document.createElement('button');
+        t.type = 'button';
+        t.className = 'wr-craft-mat';
         t.appendChild(artIcon(matArt(m.id), m.glyph, '255,138,194', 34));
-        el('wr-craft-mat-n', t, `×${remain}`);
-        if (remain > 0) {
-          t.draggable = true;
-          t.addEventListener('dragstart', (e) => {
-            drag = { from: 'tray', id: m.id };
-            try { e.dataTransfer.setData('text/plain', m.id); e.dataTransfer.effectAllowed = 'copy'; } catch (_) { /* ignore */ }
-          });
-          t.addEventListener('dragend', () => { drag = null; });
-        }
-        tip(t, remain > 0
-          ? `${m.name} — ${boudoirTray === m.id ? 'in hand. click a cell to place it.' : 'click to take, or drag onto the table'}`
+        const n = el('wr-craft-mat-n', t, '×0');
+        tray.appendChild(t);
+        trayEls.set(m.id, { root: t, n });
+        t.addEventListener('pointerdown', (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          if (boudoirTray === m.id) { boudoirTray = null; sfx('ui_click', 0.25); syncCraft(); return; } // toggle out of hand
+          if (remainOf(m.id) <= 0) { sfx('ui_denied', 0.3); return; }
+          boudoirTray = m.id;
+          beginPaint('place', m.id);     // drag straight onto the table to fill
+          sfx('ui_click', 0.25);
+          syncCraft();
+        });
+      }
+    }
+
+    function buildGrid() {
+      grid.innerHTML = '';
+      grid.addEventListener('contextmenu', (e) => e.preventDefault());   // right-drag must not pop a menu
+      for (let i = 0; i < 9; i++) {
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'wr-craft-cell';
+        grid.appendChild(cell);
+        cellEls[i] = cell;
+        cell.addEventListener('pointerdown', (e) => {
+          if (e.button === 2) {                              // right = erase + begin erase-stroke
+            e.preventDefault();
+            beginPaint('erase', null);
+            if (eraseAt(i)) { sfx('ui_click', 0.22); syncCraft(); }
+            return;
+          }
+          if (e.button !== 0) return;
+          e.preventDefault();
+          if (boudoirTray) {                                 // holding -> place / swap, keep painting
+            const changed = placeAt(i, boudoirTray);
+            beginPaint('place', boudoirTray);
+            if (changed) { sfx('ui_click', 0.22); syncCraft(); }
+            else if (boudoirGrid[i] !== boudoirTray) sfx('ui_denied', 0.3);
+            return;
+          }
+          if (boudoirGrid[i] != null) {                      // empty-handed -> pick it up, keep painting
+            pickAt(i);
+            beginPaint('place', boudoirTray);
+            sfx('ui_click', 0.22);
+            syncCraft();
+          }
+        });
+        cell.addEventListener('pointerenter', () => {
+          if (!paint) return;
+          const changed = paint.mode === 'erase' ? eraseAt(i) : placeAt(i, paint.mat);
+          if (changed) { sfx('ui_click', 0.14); syncCraft(); }
+        });
+      }
+    }
+
+    function updateTray() {
+      for (const m of MATERIALS) {
+        const ref = trayEls.get(m.id);
+        if (!ref) continue;
+        const remain = remainOf(m.id);
+        ref.root.classList.toggle('is-held', boudoirTray === m.id);
+        ref.root.classList.toggle('is-out', remain <= 0);
+        ref.n.textContent = `×${remain}`;
+        tip(ref.root, remain > 0 || boudoirTray === m.id
+          ? `${m.name} — ${boudoirTray === m.id ? 'in hand. click or drag across the table.' : 'take it, then press-and-drag to lay a whole shape'}`
           : `no ${m.name.toLowerCase()} left to place`);
       }
     }
 
-    function renderGrid() {
-      grid.innerHTML = '';
-      for (let i = 0; i < 9; i++) {
-        const cur = boudoirGrid[i];
-        const cell = btn('wr-craft-cell' + (cur ? ' is-filled' : ''), '', () => {
-          if (boudoirGrid[i]) boudoirGrid[i] = null;                       // click filled = take it back
-          else if (boudoirTray && remainOf(boudoirTray) > 0) boudoirGrid[i] = boudoirTray;
-          else { sfx('ui_denied', 0.3); return; }
-          syncCraft();
-        }, grid);
-        if (cur) cell.appendChild(artIcon(matArt(cur), (MAT_BY_ID[cur] || {}).glyph || '❔', '255,138,194', 48));
-
-        // a filled cell can be dragged: onto another cell to move/swap it, or
-        // onto the tray to return it to the bank
-        if (cur) {
-          cell.draggable = true;
-          cell.addEventListener('dragstart', (e) => {
-            drag = { from: i, id: cur };
-            try { e.dataTransfer.setData('text/plain', cur); e.dataTransfer.effectAllowed = 'move'; } catch (_) { /* ignore */ }
-          });
-          cell.addEventListener('dragend', () => { drag = null; cell.classList.remove('is-dragover'); });
-        }
-        // every cell is a drop target (place from tray / land a moved cell)
-        cell.addEventListener('dragover', (e) => {
-          if (!drag) return;
-          const ok = drag.from === 'tray' ? remainOf(drag.id) > 0 : drag.from !== i;
-          if (ok) { e.preventDefault(); cell.classList.add('is-dragover'); }
-        });
-        cell.addEventListener('dragleave', () => cell.classList.remove('is-dragover'));
-        cell.addEventListener('drop', (e) => {
-          e.preventDefault();
-          cell.classList.remove('is-dragover');
-          if (!drag) return;
-          if (drag.from === 'tray') {
-            if (remainOf(drag.id) > 0) boudoirGrid[i] = drag.id;
-            else sfx('ui_denied', 0.3);
-          } else if (typeof drag.from === 'number' && drag.from !== i) {
-            const src = drag.from;                                   // move, swapping if the target is filled
-            const tmp = boudoirGrid[i]; boudoirGrid[i] = boudoirGrid[src]; boudoirGrid[src] = tmp;
-          }
-          drag = null;
-          syncCraft();
-        });
-      }
+    function updateCell(i) {
+      const cell = cellEls[i];
+      const cur = boudoirGrid[i];
+      cell.classList.toggle('is-filled', !!cur);
+      cell.innerHTML = '';
+      if (cur) cell.appendChild(artIcon(matArt(cur), (MAT_BY_ID[cur] || {}).glyph || '❔', '255,138,194', 48));
+      tip(cell, cur ? 'left-click to lift it · right-click to sweep it off'
+        : (boudoirTray ? 'left-click (or drag) to lay it here' : ''));
     }
 
+    /** In-place refresh of the whole table — safe to call mid-drag. */
     function syncCraft() {
-      renderTray();
-      renderGrid();
+      updateTray();
+      for (let i = 0; i < 9; i++) updateCell(i);
       actions.innerHTML = '';
       grid.classList.remove('is-match');
       const filled = boudoirGrid.some(Boolean);
       const match = matchGrid(boudoirGrid);
       if (!filled) {
-        el('wr-craft-status', actions, 'place what you carry.');
+        el('wr-craft-status', actions, boudoirTray ? 'lay it on the table — press and drag to fill.' : 'take an ingredient, then draw.');
       } else if (!match) {
         el('wr-craft-status', actions, 'the picture means nothing. yet.');
       } else if (match.resultKind === 'permanent' && !match.repeatable && v.craftedCount(match.id) >= 1) {
@@ -1291,7 +1346,19 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
         }, actions);
         tip(b, again ? match.desc : 'the picture holds together. make it real.');
       }
+      // "sweep the table": return every placed ingredient to the haul at once
+      if (filled) {
+        const clr = btn('wr-craft-clear', 'sweep the table', () => {
+          boudoirGrid.fill(null);
+          sfx('ui_click', 0.3);
+          syncCraft();
+        }, actions);
+        tip(clr, 'return every placed ingredient to the haul');
+      }
     }
+
+    buildTray();
+    buildGrid();
 
     // discovered pictures: one chip each - click lays its pictogram on the table
     const found = RECIPES.filter((r) => v.discoveredRecipes.has(r.id));

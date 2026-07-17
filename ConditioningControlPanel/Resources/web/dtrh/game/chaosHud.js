@@ -108,6 +108,14 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
   bagDelta.className = 'cf-bag-delta';
   bagRow.append(bagIcon, bagMat, bagCount, bagDelta);
 
+  // ---- the crafted loadout rail: the passive modifiers you carry INTO the fall
+  // (skeleton key, corset, DENIAL, a padlock pin...). Sits right under the score so
+  // a glance tells you what rules you brought, packed 2-up and near-transparent
+  // until hovered. The docked consumables live in the toy dock; this is only the
+  // always-on kit. Nested in .cf-hud, so the Eye folds it away with everything
+  // else. Populated once at run start via setLoadout(). ----
+  const loadoutRow = mk('cf-hud-loadout');
+
   // ---- rising-number tickers: emotes ease up to the live target; gold counts up
   // on a bump then auto-hides. Driven by a self-terminating rAF loop that only
   // spins while there's a delta to close (idle cost = zero). ----
@@ -286,7 +294,17 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
   heatBar.appendChild(heatFill);
   heatRow.append(heatLabel, heatBar);
 
+  // ---- the run clock. The elapsed/duration readout is the POCKET WATCH's job:
+  // it stays hidden until the_timepiece is crafted (setClock(true)), so the fall
+  // feels timeless without it. The LOOP counter is always shown (it's position,
+  // not time). Once the watch is owned the whole row grows + brightens. ----
   const clockRow = mk('cf-hud-clock');
+  const clockTime = document.createElement('span');
+  clockTime.className = 'cf-hud-clock-time';
+  clockTime.style.display = 'none';   // no watch = no time
+  const clockLoop = document.createElement('span');
+  clockLoop.className = 'cf-hud-clock-loop';
+  clockRow.append(clockTime, clockLoop);
 
   // ---- the weather chip (Wave 2): named sky + Mood Ring forecast/reroll ----
   const weatherRow = mk('cf-hud-weather');
@@ -396,6 +414,39 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
       n.textContent = u.name;
       tile.append(g, n);
       habitsRow.appendChild(tile);
+    }
+  }
+
+  // ---- the crafted loadout: the always-on modifiers brought down from THE
+  // BOUDOIR. items = [{ id, glyph, name, effect, art, count?, curse? }]. Each tile
+  // shows the crafted PNG (glyph fallback) + short name; hover for the full effect.
+  // Pink accent (boudoir), red for a curse-flavoured modifier (DENIAL). ----
+  function setLoadout(items) {
+    loadoutRow.innerHTML = '';
+    const list = Array.isArray(items) ? items : [];
+    for (const it of list) {
+      const accent = it.curse ? '255,138,138' : '255,138,194';
+      const tile = document.createElement('div');
+      tile.className = 'cf-hud-loadout-item' + (it.curse ? ' is-curse' : '');
+      tile.style.setProperty('--acc', accent);
+      tips.attach(tile, () => ({
+        glyph: it.glyph || '◈', kicker: it.curse ? 'modifier' : 'crafted',
+        name: it.name + (it.count > 1 ? ` ×${it.count}` : ''),
+        desc: it.effect || '', accent,
+      }));
+      const ic = document.createElement('span');
+      ic.className = 'cf-hud-loadout-ic';
+      if (it.art) {
+        const img = document.createElement('img');
+        img.src = it.art; img.alt = '';
+        img.addEventListener('error', () => { img.remove(); ic.textContent = it.glyph || '◈'; });
+        ic.appendChild(img);
+      } else ic.textContent = it.glyph || '◈';
+      const n = document.createElement('span');
+      n.className = 'cf-hud-loadout-name';
+      n.textContent = it.name + (it.count > 1 ? ` ×${it.count}` : '');
+      tile.append(ic, n);
+      loadoutRow.appendChild(tile);
     }
   }
 
@@ -561,6 +612,13 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
     pulse,
     setPicks,
     setHabits,
+    setLoadout,
+    /** THE POCKET WATCH: reveal (and enlarge) the elapsed/duration readout only
+     * when the_timepiece is in the loadout. Off = the fall feels timeless. */
+    setClock(has) {
+      clockTime.style.display = has ? '' : 'none';
+      clockRow.classList.toggle('has-watch', !!has);
+    },
     updateToys,
     bumpGold,
     update(st) {
@@ -585,7 +643,8 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
       focusRow.classList.toggle('is-low', st.focus < DEFUSE_COST);
       heatFill.style.width = `${Math.round(st.heat * 100)}%`;
       heatTint.style.opacity = st.heat > 0.3 ? String(((st.heat - 0.3) / 0.7) * 0.30) : '0';
-      clockRow.textContent = `${fmtClock(st.elapsedSec)} / ${fmtClock(st.runDurationSec)} · LOOP ${st.waveIndex}/${st.waveCount}`;
+      clockTime.textContent = `${fmtClock(st.elapsedSec)} / ${fmtClock(st.runDurationSec)} · `;
+      clockLoop.textContent = `LOOP ${st.waveIndex}/${st.waveCount}`;
       const rippleCost = st.rippleCost || RIPPLE_COST;
       const rippleReady = st.focus >= rippleCost;
       rippleRow.textContent = rippleReady ? '🌊 ripple READY · right-click' : `🌊 ${rippleCost} focus`;
