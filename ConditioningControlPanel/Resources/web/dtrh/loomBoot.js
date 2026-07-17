@@ -10,7 +10,9 @@ import { createLoomStudio } from './game/loomStudio.js';
 
 const sfx = (name, scale = 0.45) => bridge.send({ type: 'sfx', name, scale });
 
-const studio = createLoomStudio({ bridge, sfx });
+// The window gets the crisp 768px preview backing and the hotkeys
+// (F / R / ctrl+S / 1-6) - the game pane keeps the lean defaults.
+const studio = createLoomStudio({ bridge, sfx, previewSize: 768, hotkeys: true });
 
 bridge.on('loom-list', (m) => studio.onList(m.spirals || []));
 bridge.on('loom-result', (m) => studio.onResult(m));

@@ -2,24 +2,35 @@
 <!-- THE LOOM, outside the rabbit hole: the main app's spiral creator window
      (LoomHostService). Same studio module, same worker, same C# file store
      as the Warren's Boudoir pane - this page is just a lighter home for it.
-     No three.js importmap needed: the loom is 2D canvas + one WebGL quad. -->
+     No three.js importmap needed: the loom is 2D canvas + one WebGL quad.
+
+     Layout: the studio-split. Left = the stage (big always-visible preview,
+     name/save, patterns), right = the grouped dial cards (scrolls on its
+     own), bottom = the rack strip. The studio module emits the same DOM in
+     the game pane, where it simply stacks - all grid styling lives HERE. -->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>The Loom</title>
   <link rel="stylesheet" href="./styles.css" />
   <style>
-    /* page-local layout only - all component chrome comes from styles.css */
+    /* page-local layout only - all component chrome comes from styles.css
+       plus the studio CSS loomStudio.js injects (shared with the game pane) */
     html, body { height: 100%; }
-    body { overflow-y: auto; }
+    body { overflow: hidden; }
     .loom-page {
-      max-width: 620px;
+      height: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      max-width: 1760px;
       margin: 0 auto;
-      padding: 22px 18px 48px;
+      padding: 14px 22px 16px;
     }
     .loom-page-head {
+      flex: none;
       text-align: center;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
     }
     .loom-page-head h1 {
       margin: 0;
@@ -34,7 +45,100 @@
       color: #b9b3d8;
       letter-spacing: 0.06em;
     }
-    .loom-page .wr-loom-preview { display: block; margin: 0 auto 10px; }
+
+    #loom { flex: 1; min-height: 0; display: flex; }
+
+    /* the studio-split grid: stage | dials, rack across the bottom */
+    .loom-page .wr-loom-studio {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(430px, 1.2fr) minmax(390px, 1fr);
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: 12px;
+    }
+
+    /* left: the stage card - preview grows to fill, save/patterns pinned under */
+    .loom-page .wr-loom-studio > .wr-card.wr-loom {
+      grid-column: 1;
+      grid-row: 1;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow-y: auto;   /* only if the window gets squeezed very short */
+    }
+    .loom-page .loom-stage { flex: 1; min-height: 220px; }
+    .loom-page .loom-stage-inner {
+      height: 100%;
+      max-width: 100%;
+      aspect-ratio: 1 / 1;
+    }
+    .loom-page .wr-loom-preview {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+    }
+
+    /* right: the dial cards scroll as their own column */
+    .loom-page .loom-controls {
+      grid-column: 2;
+      grid-row: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .loom-page .loom-controls > .wr-card { margin: 0 0 10px; }
+    .loom-page .loom-controls > .wr-card:last-child { margin-bottom: 0; }
+
+    /* bottom: the rack as a filmstrip of tiles */
+    .loom-page .wr-loom-rack {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      margin: 0;
+      padding: 12px 16px;
+    }
+    .loom-page .loom-rack-strip {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .loom-page .wr-loom-rackrow {
+      flex: 0 0 auto;
+      width: 118px;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      padding: 10px;
+      margin: 0;
+      text-align: center;
+    }
+    .loom-page .wr-loom-thumb { width: 82px; height: 82px; }
+    .loom-page .wr-loom-rackrow .wr-row-mid { width: 100%; min-width: 0; flex: none; }
+    .loom-page .wr-loom-rackrow .wr-row-name {
+      font-size: 0.8rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .loom-page .wr-loom-rackrow .wr-row-right {
+      width: auto;
+      flex-direction: row;
+      align-items: center;
+    }
+
+    /* narrow window: fall back to the stacked column */
+    @media (max-width: 980px) {
+      body { overflow-y: auto; }
+      .loom-page { height: auto; display: block; max-width: 640px; }
+      #loom { display: block; }
+      .loom-page .wr-loom-studio { display: block; }
+      .loom-page .loom-stage-inner { height: auto; aspect-ratio: auto !important; }
+      .loom-page .wr-loom-preview { width: min(288px, 100%); height: auto; margin: 4px auto 10px; }
+      .loom-page .loom-rack-strip { flex-wrap: wrap; }
+    }
   </style>
 </head>
 <body>

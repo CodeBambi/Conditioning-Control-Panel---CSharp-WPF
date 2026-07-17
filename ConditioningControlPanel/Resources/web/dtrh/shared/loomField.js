@@ -17,7 +17,8 @@
  * editor can never produce a non-looping GIF.
  *
  * Schema v2 (persisted verbatim in the loom_<slug>.json sidecar):
- *   { schema: 2, speed: 1-5, bg: {kind:'solid'|'radial', color, outer},
+ *   { schema: 2, format: 'square'|'wide'|'tall', speed: 1-5,
+ *     bg: {kind:'solid'|'radial', color, outer},
  *     layer:  {arms:1-12, turns:0.5-6, duty:0.2-0.8,
  *              style:'log'|'arch'|'ribbon'|'golden'|'tunnel'|'petal',
  *              direction:1|-1, colors:['#rrggbb' x1-6],
@@ -29,8 +30,11 @@
  *                   text:<=12ch, flashCycles:0-4} }
  * ==========================================================================*/
 
+import { drawSpiral } from './loomSpiral.js';
+
 export const LOOM_SCHEMA_V2 = 2;
 export const LOOM_STYLES = ['log', 'arch', 'ribbon', 'golden', 'tunnel', 'petal'];
+export const LOOM_FORMATS = ['square', 'wide', 'tall'];   // 1:1 · 16:9 · 9:16 (tiktok)
 export const LOOM_SWATCHES = ['#ff69b4', '#e56cc0', '#8a5cff', '#00e5ff', '#39ff9d', '#ffd94d', '#ff6a2f', '#ffffff'];
 
 /** speed 1-5 -> GIF frame delay in centiseconds (desktop v1 table, verbatim). */
@@ -72,6 +76,7 @@ function normalizeLayer(raw, fallbackColors) {
 export function defaultParams2() {
   return {
     schema: LOOM_SCHEMA_V2,
+    format: 'square',
     layer: { arms: 4, turns: 2, duty: 0.5, style: 'log', direction: 1, colors: ['#ff69b4'], bandMode: 'hard', speedMul: 1 },
     layer2: { enabled: false, arms: 4, turns: 2, duty: 0.35, style: 'log', direction: -1, colors: ['#8a5cff'], bandMode: 'hard', speedMul: 1 },
     speed: 3,
@@ -110,6 +115,7 @@ export function normalizeParams2(p) {
 
   return {
     schema: LOOM_SCHEMA_V2,
+    format: LOOM_FORMATS.includes(q.format) ? q.format : 'square',
     layer: normalizeLayer(q.layer, d.layer.colors),
     layer2: Object.assign(normalizeLayer(l2, d.layer2.colors), { enabled: l2.enabled === true }),
     speed: clamp(Math.round(num(q.speed, 3)), 1, 5),
@@ -137,6 +143,14 @@ export function normalizeParams2(p) {
 }
 
 export function delayCsFor2(p) { return DELAY_CS[normalizeParams2(p).speed] || 5; }
+
+/** Pixel dims for a format at a given long side: 1:1, 16:9, or 9:16. */
+export function formatDims2(format, longSide) {
+  const short = Math.round((longSide * 9) / 16);
+  if (format === 'wide') return { w: longSide, h: short };
+  if (format === 'tall') return { w: short, h: longSide };
+  return { w: longSide, h: longSide };
+}
 
 /** One seamless loop in ms (preview phase = (elapsed % loopMs2) / loopMs2). */
 export function loopMs2(p, frames = 36) { return frames * delayCsFor2(p) * 10; }
@@ -292,8 +306,12 @@ void main() {
   // top-left origin like the 2D canvas the frame is composited onto
   vec2 xy = vec2(gl_FragCoord.x, u_res.y - gl_FragCoord.y);
   vec2 c = 0.5 * u_res;
-  // overdraw the corners like v1 drawSpiral (maxR = c*1.45): no dead edges
-  float scale = min(c.x, c.y) * 1.45;
+  // overdraw the corners like v1 drawSpiral: scale from the HALF-DIAGONAL so
+  // any aspect (square / 16:9 / 9:16) keeps its corner inside r<=0.975 - the
+  // shader's field is only defined to r=1. For a square this is EXACTLY the
+  // old min(c)*1.45 (1.0253048 = 1.45/sqrt(2)), so existing spirals re-render
+  // identically.
+  float scale = length(c) * 1.0253048;
   vec2 p = (xy - c) / scale;
   float zoom = 1.0 + u_pulseAmp * sin(6.2831853 * u_phase * u_pulseCycles);
   float r = length(p) / zoom;
@@ -411,12 +429,13 @@ export function createFieldRenderer(canvas) {
  *  (No webfont in the bundle - Segoe UI is guaranteed on this Windows-only app.) */
 const CP_FONT = (px) => `600 ${px}px "Segoe UI", sans-serif`;
 
-/** Draw the dot/eye/mantra centerpiece over a composited frame (2D context). */
-export function drawCenterpiece(ctx, q, phase, size) {
+/** Draw the dot/eye/mantra centerpiece over a composited frame (2D context).
+ *  `height` defaults to `size` (square); non-square frames pass both. */
+export function drawCenterpiece(ctx, q, phase, size, height = size) {
   const cp = q.centerpiece;
   if (cp.kind === 'none') return;
-  const cx = size / 2, cy = size / 2;
-  const r = (cp.sizeFrac * size) / 2;
+  const cx = size / 2, cy = height / 2;
+  const r = (cp.sizeFrac * Math.min(size, height)) / 2;
   const hueRad = q.hueCycles > 0 ? TWO_PI * q.hueCycles * phase : 0;
   const color = rgb01ToCss(rotateHue(hexToRgb01(cp.color), hueRad));
 
@@ -446,13 +465,40 @@ export function drawCenterpiece(ctx, q, phase, size) {
 
 /**
  * One complete frame: WebGL field -> 2D composite -> centerpiece. `field` is a
- * createFieldRenderer() whose canvas is already sized to `size`. q MUST be
- * normalized (normalizeParams2).
+ * createFieldRenderer() whose canvas already matches the target aspect (the
+ * shader renders any aspect natively). q MUST be normalized (normalizeParams2).
+ * `height` defaults to `size` so square callers stay unchanged.
  */
-export function composeFrame(ctx, field, q, phase, size) {
+export function composeFrame(ctx, field, q, phase, size, height = size) {
   field.render(q, phase);
-  ctx.drawImage(field.canvas, 0, 0, size, size);
-  drawCenterpiece(ctx, q, phase, size);
+  ctx.drawImage(field.canvas, 0, 0, size, height);
+  drawCenterpiece(ctx, q, phase, size, height);
+}
+
+/**
+ * No-WebGL fallback frame at any aspect. drawSpiral only knows squares, so
+ * non-square frames render a max(w,h) square offscreen and crop its center
+ * band. Preview and worker BOTH use this, so even the fallback stays
+ * preview == file.
+ */
+let _fbSquare = null;
+export function drawFallbackFrame(ctx, q, phase, w, h = w) {
+  const v1 = projectToV1(q);
+  if (w === h) {
+    drawSpiral(ctx, w, v1, phase);
+  } else {
+    const side = Math.max(w, h);
+    if (!_fbSquare || _fbSquare.width !== side) {
+      _fbSquare = typeof OffscreenCanvas !== 'undefined'
+        ? new OffscreenCanvas(side, side)
+        : document.createElement('canvas');
+      _fbSquare.width = side; _fbSquare.height = side;
+    }
+    const sctx = _fbSquare.getContext('2d');
+    drawSpiral(sctx, side, v1, phase);
+    ctx.drawImage(_fbSquare, (side - w) / 2, (side - h) / 2, w, h, 0, 0, w, h);
+  }
+  drawCenterpiece(ctx, q, phase, w, h);
 }
 
 /**

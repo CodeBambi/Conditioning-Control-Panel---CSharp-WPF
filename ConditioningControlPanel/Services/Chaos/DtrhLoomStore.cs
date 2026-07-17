@@ -109,6 +109,19 @@ internal static class DtrhLoomStore
         }
     }
 
+    /// <summary>Full path of a saved spiral's gif, or null when the slug is invalid
+    /// or the file is gone. Same whitelist as Save/Delete - traversal impossible.</summary>
+    public static string? GifPathFor(string? slug)
+    {
+        if (slug == null || !SlugRe.IsMatch(slug)) return null;
+        try
+        {
+            var p = Path.Combine(SpiralsFolder, Prefix + slug + ".gif");
+            return File.Exists(p) ? p : null;
+        }
+        catch { return null; }
+    }
+
     /// <summary>Delete a spiral (+ sidecar). Clears Settings.SpiralPath if it pointed at it,
     /// so the overlay falls back to the built-in instead of a dead file.</summary>
     public static (bool Ok, string? Error) Delete(string? slug)

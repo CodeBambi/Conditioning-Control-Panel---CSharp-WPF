@@ -303,6 +303,18 @@ internal static class DtrhHostService
                 if (ok) PostLoomList();
                 break;
             }
+            case "loom-reveal":
+            {
+                // 📂 on a rack tile: show the saved gif in Explorer (the game runs
+                // fullscreen, so Explorer opens behind it - still there on alt-tab).
+                var path = DtrhLoomStore.GifPathFor((string?)o["slug"]);
+                if (path != null)
+                {
+                    try { System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\""); }
+                    catch (Exception ex) { App.Logger?.Debug("DtrhHost: reveal failed: {E}", ex.Message); }
+                }
+                break;
+            }
             case "boot-error":
                 OnBootError((string?)o["msg"]);
                 break;

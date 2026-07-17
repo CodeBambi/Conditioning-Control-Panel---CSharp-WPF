@@ -123,6 +123,7 @@ namespace ConditioningControlPanel
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_FRAMECHANGED = 0x0020;
         private const uint GW_HWNDPREV = 3;
+        private const uint GW_OWNER = 4;
         private const int GWL_EXSTYLE = -20;
         private const int GWL_STYLE = -16;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -408,18 +409,23 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// True when the foreground window belongs to our process. Used to gate z-order
-        /// raises so we lift the tube only when our app is actually in front — never
-        /// stealing z-order from other apps (e.g. a fullscreen video player).
+        /// True when the MAIN window (or the tube, or a dialog owned by main) is the
+        /// foreground window. Used to gate z-order raises so we lift the pair only when
+        /// the user is actually IN the main app — never stealing z-order from other
+        /// apps (e.g. a fullscreen video player), and never from our own secondary
+        /// windows either: a plain same-process check used to count the Loom window
+        /// and the DtRH game as "us", so every speech bubble shoved the main window
+        /// forward over them (the bubbles are topmost and never needed the raise).
         /// </summary>
         private bool IsOurAppForeground()
         {
             var foreground = GetForegroundWindow();
             if (foreground == IntPtr.Zero) return false;
             if (foreground == _parentHandle || foreground == _tubeHandle) return true;
-            GetWindowThreadProcessId(foreground, out uint foregroundPid);
-            uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
-            return foregroundPid == ourPid;
+            // A dialog owned by main (settings popups etc.) counts as main being in
+            // front - raising main keeps the owned dialog above it anyway.
+            var owner = GetWindow(foreground, GW_OWNER);
+            return owner != IntPtr.Zero && owner == _parentHandle;
         }
 
         private void CalculateScaleFactor()
@@ -1045,20 +1051,13 @@ namespace ConditioningControlPanel
             // so the next call has it.
             if (_parentHandle == IntPtr.Zero) { CaptureParentGeom(); return; }
 
-            // Only bring to front when our process owns the foreground window —
-            // otherwise we'd steal z-order from other apps (e.g. fullscreen video players).
-            // Skipped when force=true (caller is intentionally foregrounding our app).
-            if (!force)
-            {
-                var foreground = GetForegroundWindow();
-                if (foreground != IntPtr.Zero && foreground != _parentHandle && foreground != _tubeHandle)
-                {
-                    GetWindowThreadProcessId(foreground, out uint foregroundPid);
-                    uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
-                    if (foregroundPid != ourPid)
-                        return;
-                }
-            }
+            // Only bring to front when the main window itself (or the tube / a dialog
+            // it owns) is foreground — otherwise we'd steal z-order from other apps
+            // (fullscreen video players) or from our OWN secondary windows (the Loom,
+            // the DtRH game). Skipped when force=true (caller is intentionally
+            // foregrounding our app).
+            if (!force && !IsOurAppForeground())
+                return;
 
             // Parent to top first, then tube above it — keeps them as a pair
             SetWindowPos(_parentHandle, HWND_TOP, 0, 0, 0, 0,
@@ -1083,16 +1082,11 @@ namespace ConditioningControlPanel
 
             try
             {
-                // Only redirect activation to parent if our process already owns the foreground —
-                // otherwise we'd steal focus from other apps (e.g. fullscreen video players)
-                var foreground = GetForegroundWindow();
-                if (foreground != IntPtr.Zero)
-                {
-                    GetWindowThreadProcessId(foreground, out uint foregroundPid);
-                    uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
-                    if (foregroundPid != ourPid)
-                        return; // Another app is in front, don't steal focus
-                }
+                // Only redirect activation to parent if main/tube already own the
+                // foreground — otherwise we'd steal focus from other apps (fullscreen
+                // video players) or from our own secondary windows (Loom, DtRH).
+                if (!IsOurAppForeground())
+                    return;
 
                 // Don't redirect activation when speech bubble is showing —
                 // redirecting brings parent to front, hiding the bubble behind it
