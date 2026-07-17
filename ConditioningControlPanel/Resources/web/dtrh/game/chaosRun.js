@@ -38,13 +38,13 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   BOUND_SPAWN_CHANCE, BRITTLE_SPAWN_CHANCE,
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
-import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boons.js';
+import { draft as dealDraft, boonById, boonTheme, duoPartnerScore, endlessFiller } from './boons.js';
 import { MAT_BY_ID, MATERIALS, matArt, rollMaterialId, CONSUMABLE_IDS, pickSketchId, RECIPE_BY_ID, sketchView, craftedArt } from './crafting.js';
 import { CRAFTED_PERMANENT_APPLY, CRAFTED_TOY_DEFS } from './craftedEffects.js';
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
-import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL } from './regions.js';
-import { rollBiomeIds, biomeForWave, biomeById, BIOMES_ALL } from './biomes.js';
+import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL, setRegionCycle } from './regions.js';
+import { rollBiomeIds, biomeForWave, biomeById, BIOMES_ALL, setBiomeCycle } from './biomes.js';
 import { createBiomeMech } from './biomeMech.js';
 import { setAudioColor } from '../engine/audioBus.js';
 import { getVoice, setVoiceDefault, onVoice, getLevel } from '../engine/audioLevels.js';
@@ -141,8 +141,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       difficulty: rc.difficulty || 'Easy',
       difficultyMult: rc.difficultyMult ?? 1.0,   // payout scalar ONLY - pace comes from DIFF_PACE
       pace: DIFF_PACE[rc.difficulty] || DIFF_PACE.Easy,
-      durationSec: clamp(rc.durationSec ?? 960, 60, 1200),
+      durationSec: clamp(rc.durationSec ?? 960, 60, 7200),   // The Hourglass: up to 2h
       waveCount: clamp(rc.waveCount ?? REGION_COUNT, 1, 12),
+      // The Bottomless Fall: no clock — regions loop + deepen, ends only on wake (hold ESC).
+      endless: !!rc.endless,
       // The Four Chambers: a fixed I->IV descent, each ending in a boon Landing.
       // On by default; a legacy non-4-loop run (or an explicit opt-out) falls
       // back to the old random-weather / monotonic-intensity path.
@@ -224,7 +226,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       score: 0, combo: 0, bestCombo: 0, heat: 0, focus: FOCUS_START,
       gold: 0,   // run-gold running total (banked to meta Gold; drives the HUD gold ticker)
       defused: 0, detonated: 0, effectsFired: 0, spawned: 0,
-      elapsedSec: 0, runDurationSec: cfg.durationSec,
+      // Endless ignores the length dial and starts on a well-paced base (~3 min/region) that
+      // then self-extends; a normal run uses the picked duration (The Hourglass or a preset).
+      elapsedSec: 0, runDurationSec: cfg.endless ? ENDLESS_BASE_SEC : cfg.durationSec,
       waveIndex: 1, waveCount: cfg.waveCount, actIndex: 1,
       rippleCooldown: 0,
       freezeRemainingSec: 0, slowMoRemainingSec: 0,
@@ -341,6 +345,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       privateShowPending: false, privateShowAt: 0, privateShowPayMult: 1.0,
       activesDisabled: false,
       relapseArmed: false, relapseActive: false,
+      // The Bottomless Fall: a permanent, self-extending descent. endlessLap counts full
+      // I->IV cycles completed (== "how deep you went", the recap score); endlessLift shifts
+      // the intensity band up a touch each lap so deeper loops run hotter.
+      endless: !!cfg.endless, endlessLap: 0, endlessLift: 0,
       surrenderShieldUsed: false,
       takenBoonIds: new Set(),
       runPicks: [],            // ribbon tiles: { id, name, curse }
@@ -439,7 +447,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const regionLen = st.runDurationSec / st.waveCount;
     const region = regionForWave(st.waveIndex);
     const local = smoothstep((st.elapsedSec - (st.waveIndex - 1) * regionLen) / regionLen);
-    return clamp(region.band.start + (region.band.peak - region.band.start) * local, 0, 1);
+    // The Bottomless Fall: each lap lifts the whole band a touch, so deeper loops run hotter.
+    const lift = st.endlessLift || 0;
+    return clamp(region.band.start + lift + (region.band.peak - region.band.start) * local, 0, 1);
   };
   const chanceFlip = () => {
     if (st.chanceDoubleOdds <= 0) return 1.0;
@@ -2498,11 +2508,38 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   const SURF_MELT_LEAD = 18;   // remaining sec: the melt shows its hand
   const SURF_WASH_MS = 3400;   // white-out ramp; endRun fires at its peak
 
+  // ---- The Bottomless Fall (endless) ----
+  const ENDLESS_BASE_SEC = 720;     // ~3 min per region to start (4 * 180); ignores the length dial
+  // Keep the clock's floor this far ahead of the play-head. Deliberately ABOVE FINAL_LANDING_LEAD
+  // (60): every "final stretch" guard (terminal Landing, fork suppression, draft-skip on wave
+  // transition, video-slice gate) keys off remaining <= 60, so holding remaining > 75 means an
+  // endless descent keeps dealing boons/forks/videos normally and never enters a closing state.
+  const ENDLESS_EXTEND_LEAD = 75;
+
+  // Endless keeps the descent from ever ending: it holds the clock ahead of the play-head
+  // (so the Surfacing/finish never trigger) and deepens once per full I->IV lap crossed.
+  // relapse/finalLanding/finish are all separately gated on !st.endless.
+  function tickEndless() {
+    if (!st.endless) return;
+    if (st.runDurationSec - st.elapsedSec < ENDLESS_EXTEND_LEAD) {
+      const waveLen = st.runDurationSec / Math.max(1, st.waveCount);
+      st.waveCount += 1;
+      st.runDurationSec += waveLen;
+    }
+    const lap = Math.floor((st.waveIndex - 1) / REGION_COUNT);
+    if (lap > st.endlessLap) {
+      st.endlessLap = lap;
+      st.endlessLift = Math.min(0.42, st.endlessLift + 0.06);   // deeper laps ride the band hotter
+      hudUi.announce(`∞ DEPTH ${lap + 1}`, 'good', 2400, { subText: 'deeper still' });
+      sfx('sin_accept', 0.5);
+    }
+  }
+
   function tickSurfacing(dt) {
     const remain = st.runDurationSec - st.elapsedSec;
     // held back while a relapse is armed (the end isn't real yet) and while a
     // draft owns the field (the Court's Landing at T-60 must not melt its table)
-    const arm = state === 'running' && !st.relapseArmed && !drafting;
+    const arm = state === 'running' && !st.relapseArmed && !st.endless && !drafting;
     const pullT = st.finishing ? 1
       : (arm ? clamp((SURF_PULL_LEAD - remain) / (SURF_PULL_LEAD - SURF_MELT_LEAD), 0, 1) : 0);
     const meltT = st.finishing ? 1
@@ -2715,12 +2752,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // The Surfacing replaces the old "the hole is closing… ten seconds" banner:
     // the world itself closes over the last ~40s (see tickSurfacing above).
     tickSurfacing(dt);
+    tickEndless();   // The Bottomless Fall: hold the clock ahead + deepen per lap (no-op otherwise)
 
     // The Court's Landing (region IV's boon) is offered ~60s before the close, so
     // a descent NEVER ends on a boon pick: gameplay + the finish countdown carry
     // it out afterward. Held until any live fork tears down; skipped while a
     // relapse is still armed (it then fires ~60s before the EXTENDED end).
-    if (cfg.regionMode && cfg.boonDraftEnabled && !st.finalLandingDone && !st.relapseArmed
+    // Endless has no close, so no terminal Landing — its boons ride the loop drafts.
+    if (cfg.regionMode && cfg.boonDraftEnabled && !st.finalLandingDone && !st.relapseArmed && !st.endless
         && state === 'running' && !drafting
         && st.runDurationSec - st.elapsedSec <= FINAL_LANDING_LEAD
         && !(ctx && ctx.junctions && ctx.junctions.isBusy())) {
@@ -2732,7 +2771,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // A live fork OR an in-tube boon draft owns the tube: the recap must not fire
     // mid-antechamber / mid-dive / mid-pick. The clock runs on a few extra seconds
     // until it tears down (boonPick auto-resumes, so this can't hang the finish).
-    if (st.elapsedSec >= st.runDurationSec
+    if (!st.endless
+        && st.elapsedSec >= st.runDurationSec
         && !(ctx && ctx.junctions && ctx.junctions.isBusy())
         && !(ctx && ctx.boonPick && ctx.boonPick.isBusy())) {
       // Relapse: the hole isn't done with you - one more loop, everything drips double.
@@ -2943,6 +2983,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       }
     }
     for (const o of options) markDiscovered('boon:' + o.id);
+    // The Bottomless Fall: once the real pool thins (uniques deplete), top the draft up with
+    // Deepening cards so an endless descent never degrades to a 1-card fork. Added AFTER the
+    // discovery loop so synthetic ids never write a codex entry. They stack across drafts.
+    if (st.endless) {
+      const want = choicesOverride || cfg.draftChoices;
+      if (options.length < want) {
+        options.push(...endlessFiller(want - options.length, new Set(options.map((o) => o.id))));
+      }
+    }
     return options;
   }
 
@@ -3703,6 +3752,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function beginCountdown(short) {
     state = 'countdown';
     st = freshState();
+    setRegionCycle(!!st.endless);   // The Bottomless Fall: bonus loops wrap I->IV instead of clamping to Court
+    setBiomeCycle(!!st.endless);    // ...and the biome art wraps in lockstep
     tickAcc = 0;
     spawnWait = 0.8;
     lastNoFocusAnnounce = -10;
@@ -3762,7 +3813,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.setPicks(st.runPicks);
     hudUi.setHabits(st.ownedHabitIds);   // the always-on habits rail (left, dim until hover)
     hudUi.setLoadout(cfg.scriptedFirstRun ? [] : buildLoadout());   // the crafted modifiers brought down
-    hudUi.setClock(!cfg.scriptedFirstRun && craftedCount('the_timepiece') >= 1);   // the timer is the pocket watch's gift
+    // The pocket watch's gift — but an endless fall has no countdown to show (the clock
+    // self-extends forever), so it stays hidden there; the ∞ DEPTH banners mark progress.
+    hudUi.setClock(!cfg.scriptedFirstRun && !st.endless && craftedCount('the_timepiece') >= 1);
     hudUi.setVisible(true);
     if (!short) sfx('fall_in', 0.28);
     overlays.showCountdown({
@@ -3801,6 +3854,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function endRun(ranFullCourse) {
     if (state !== 'running') return;
     state = 'recap';
+    setRegionCycle(false); setBiomeCycle(false);   // The Bottomless Fall: disarm cycling so the next (normal) run clamps to Court
     // Surfaced: hush the drift whisper + calm the tube for the recap/hub idle.
     try { ctx.setRunActive && ctx.setRunActive(false); } catch (e) { /* ignore */ }
     if (ctx && ctx.wall) ctx.wall.setRegion(0); // bare the wall for the recap/warren
@@ -3869,6 +3923,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       difficulty: cfg.difficulty,
       waveCount: st.waveCount,
       depth: ctx.nav.getDepth(),
+      // The Bottomless Fall: how many full I->IV laps the endless descent sank through
+      endless: !!st.endless,
+      endlessDepth: st.endlessLap,
       bestCombo: st.bestCombo,
       defused: st.defused,
       detonated: st.detonated,

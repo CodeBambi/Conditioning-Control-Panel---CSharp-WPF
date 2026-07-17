@@ -269,6 +269,43 @@ const DUO_FAVOR = 0.75;
  * (sinChance roll, or guaranteed by the Surrender capstone). Duo/trio cards
  * need their partner equipped; unique cards already taken sit the run out.
  */
+// ---- The Bottomless Fall: Deepening filler ----
+// Once an endless descent has taken most of the real pool (unique cards deplete against
+// takenBoonIds), a draft can come up short. These synthetic cards top it back up so the
+// player is never handed fewer than `choices`. They are NOT unique and repeat across drafts
+// on purpose: each pick STACKS its multiplier again, so a deep endless run keeps paying off.
+export const DEEPEN_CARDS = [
+  { id: 'deepen_mult', name: 'Deeper Still', rarity: 'Common', curse: false, mult: 0.15, synthetic: true,
+    desc: '+0.15x run multiplier. the hole has nothing left to teach — only more of you to take.',
+    flavor: 'there is always further down.',
+    apply: () => {} },
+  { id: 'deepen_shield', name: 'Second Wind', rarity: 'Common', curse: false, mult: 0.05, synthetic: true,
+    desc: '+2 resistance right now, and a little deeper still (+0.05x run multiplier).',
+    flavor: 'catch your breath. she\'ll wait — she has forever.',
+    apply: (s) => { s.shields += 2; } },
+  { id: 'deepen_sink', name: 'Sinking Feeling', rarity: 'Uncommon', curse: false, mult: 0.25, synthetic: true,
+    desc: '+0.25x run multiplier. every loop you stay under is worth more than the last.',
+    flavor: 'you stopped counting the floors a while ago.',
+    apply: () => {} },
+  { id: 'deepen_focus', name: 'Clear Water', rarity: 'Common', curse: false, mult: 0.10, synthetic: true,
+    desc: '+0.10x run multiplier and everything quiets — nothing left to chase but the next one down.',
+    flavor: 'the deeper you go, the stiller it gets.',
+    apply: () => {} },
+];
+
+/** Fill a thin endless draft up to `n` Deepening cards. `avoid` (a Set of ids already in the
+ * draft) keeps a single draft from showing the same filler twice; if `n` exceeds the distinct
+ * kinds the pool cycles (a same-card repeat is harmless — it just stacks). */
+export function endlessFiller(n, avoid = null) {
+  if (n <= 0) return [];
+  const pool = DEEPEN_CARDS.filter((c) => !(avoid && avoid.has(c.id)));
+  const shuffled = pool.map((v) => [Math.random(), v]).sort((a, z) => a[0] - z[0]).map((p) => p[1]);
+  const src = shuffled.length ? shuffled : DEEPEN_CARDS;
+  const out = [];
+  for (let i = 0; out.length < n; i++) out.push(src[i % src.length]);
+  return out.slice(0, n);
+}
+
 export function draft({ allowCurses = true, choices = 3, guaranteeCurse = false,
   takenIds = null, sinChance = 0.5, equipment = [], hasVideo = false } = {}) {
   choices = Math.min(5, Math.max(2, choices));

@@ -130,6 +130,9 @@ public sealed class ChaosRunConfig
     public ChaosDifficulty Difficulty { get; set; } = ChaosDifficulty.Easy;
     public int DurationSec { get; set; } = 180;
     public int WaveCount { get; set; } = 5;
+    /// <summary>The Bottomless Fall unlock: this descent ignores the clock — regions loop and
+    /// deepen, and it ends only when the player wakes (hold ESC). Gated on owning endless_mode.</summary>
+    public bool Endless { get; set; } = false;
 
     /// <summary>Story (immersive, default) vs Free Desktop (free-play over the real desktop). Drives the
     /// backdrop, narrative, avatar visibility and z-order at run start. See <see cref="ChaosPlayMode"/>.</summary>
@@ -195,8 +198,12 @@ public sealed class ChaosRunConfig
         if (s == null) { ChaosMeta.ApplyTo(cfg); return cfg; }
         var saved = Enum.TryParse<ChaosDifficulty>(s.ChaosDifficulty, out var d) ? d : ChaosDifficulty.Easy;
         cfg.Difficulty = ClampDifficulty(saved);
-        cfg.DurationSec = Math.Clamp(s.ChaosRunDurationSec, 60, 1200);
+        // The Hourglass unlock widens the ceiling from 20 min to 2 hours; without it the old
+        // preset ceiling still holds (a stale page can never write itself a longer fall).
+        int durMax = ChaosMeta.IsOwned("custom_duration") ? 7200 : 1200;
+        cfg.DurationSec = Math.Clamp(s.ChaosRunDurationSec, 60, durMax);
         cfg.WaveCount = Math.Clamp(s.ChaosWaveCount, 1, 12);
+        cfg.Endless = s.ChaosEndless && ChaosMeta.IsOwned("endless_mode");
         cfg.MotionOverride = Enum.TryParse<ChaosMotion>(s.ChaosMotionMode, out var m) ? m : (ChaosMotion?)null;
         cfg.EnabledVariants = ClampVariants(s.ChaosEnabledVariants);   // null = all
         cfg.ScreenShakeEnabled = s.ChaosScreenShakeEnabled;

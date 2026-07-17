@@ -438,8 +438,16 @@ internal static class DtrhHostService
         var s = App.Settings?.Current;
         if (s == null) return;
         if (setup["difficulty"] != null) s.ChaosDifficulty = (string?)setup["difficulty"] ?? s.ChaosDifficulty;
-        if (setup["durationSec"] != null) s.ChaosRunDurationSec = Math.Clamp((int?)setup["durationSec"] ?? 960, 60, 1200);
+        if (setup["durationSec"] != null)
+        {
+            // The Hourglass unlock lifts the ceiling to 2h; without it the preset ceiling holds.
+            int durMax = ChaosMeta.IsOwned("custom_duration") ? 7200 : 1200;
+            s.ChaosRunDurationSec = Math.Clamp((int?)setup["durationSec"] ?? 960, 60, durMax);
+        }
         if (setup["waveCount"] != null) s.ChaosWaveCount = Math.Clamp((int?)setup["waveCount"] ?? 5, 1, 12);
+        // The Bottomless Fall: the endless toggle only sticks for owners (a stale page can't
+        // arm it without the unlock); FromSettings re-checks ownership at deal time too.
+        if (setup["endless"] != null) s.ChaosEndless = ((bool?)setup["endless"] ?? false) && ChaosMeta.IsOwned("endless_mode");
         if (setup["motion"] != null) s.ChaosMotionMode = (string?)setup["motion"] ?? s.ChaosMotionMode;
         if (setup["enabledVariants"] != null)
         {
@@ -468,6 +476,7 @@ internal static class DtrhHostService
             {
                 difficulty = s?.ChaosDifficulty ?? "Easy",
                 durationSec = s?.ChaosRunDurationSec ?? 180,
+                endless = s?.ChaosEndless ?? false,
                 waveCount = s?.ChaosWaveCount ?? 5,
                 motion = s?.ChaosMotionMode ?? "Mixed",
                 enabledVariants = s?.ChaosEnabledVariants,
@@ -989,6 +998,7 @@ internal static class DtrhHostService
                 difficultyMult = cfg.DifficultyMult,
                 durationSec = cfg.DurationSec,
                 waveCount = cfg.WaveCount,
+                endless = cfg.Endless,   // The Bottomless Fall: no clock; regions loop + deepen until wake
                 effectIntensity = cfg.EffectIntensity,
                 enabledVariants = cfg.EnabledVariants,
                 motionOverride = cfg.MotionOverride?.ToString(),
@@ -1018,6 +1028,8 @@ internal static class DtrhHostService
                 ownedHabitIds = meta.PurchasedUpgrades
                     .Where(id => ChaosMeta.IsUpgradeActive(id)
                                  && id != "extreme_tier"
+                                 && id != "custom_duration"   // setup-shape unlocks, no in-run
+                                 && id != "endless_mode"      // effect -> keep them off the HUD rail
                                  && ChaosUpgrades.ById(id) != null)
                     .ToList(),
                 rankIndex = (int)ChaosMeta.RankIndex,

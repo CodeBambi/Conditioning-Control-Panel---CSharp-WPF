@@ -309,6 +309,7 @@ namespace ConditioningControlPanel
         public static OverlayService Overlay { get; private set; } = null!;
         public static ScreenShakeService ScreenShake { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
+        public static CornerGifService CornerGif { get; private set; } = null!;
         public static Services.Chaos.ChaosModeService Chaos { get; private set; } = null!;
         public static LockCardService LockCard { get; private set; } = null!;
         public static PopQuizService PopQuiz { get; private set; } = null!;
@@ -1390,6 +1391,10 @@ namespace ConditioningControlPanel
             Overlay = new OverlayService();
             ScreenShake = new ScreenShakeService();
             Bubbles = new BubbleService();
+            // Standalone corner-GIF overlays (Spiral card): restore any persisted overlays.
+            // RefreshOverlays marshals onto the dispatcher, so this queues until startup settles.
+            CornerGif = new CornerGifService();
+            CornerGif.RefreshOverlays();
             Services.Chaos.ChaosMeta.Init();   // load persistent Chaos meta-progression before the run service
             Chaos = new Services.Chaos.ChaosModeService();
             InteractionQueue = new InteractionQueueService();

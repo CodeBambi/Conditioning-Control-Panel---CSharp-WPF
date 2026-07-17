@@ -43,6 +43,8 @@ public static class ChaosUpgrades
     public const int COST_PENDULUM        = 220;
     public const int COST_DRAFT4          = 200;
     public const int COST_EXTREME_TIER    = 350;
+    public const int COST_CUSTOM_DURATION = 300;
+    public const int COST_ENDLESS         = 600;
 
     public static readonly IReadOnlyList<ChaosUpgrade> All = new List<ChaosUpgrade>
     {
@@ -88,6 +90,17 @@ public static class ChaosUpgrades
                 Desc = "opens the inescapable difficulty in the descent setup.",
                 Flavor = "the last door was never locked.",
                 Apply = _ => { } },                                       // flag stored at purchase time
+        // The Hourglass + The Bottomless Fall (2026-07-17): descent-shape unlocks, not in-run
+        // effects — like extreme_tier they only open a control in the setup, so Apply is a no-op
+        // and they're filtered out of the HUD habit rail (DtrhHost.BuildRunConfig).
+        new() { Id = "custom_duration", Branch = ChaosBranch.Depth,   Name = "The Hourglass",       Cost = COST_CUSTOM_DURATION, Glyph = "⌛",
+                Desc = "unlocks a free length dial in the descent setup — set any fall from 2 minutes to 2 hours.",
+                Flavor = "you decide how long you stay under. she likes that you keep deciding to stay longer.",
+                Apply = _ => { } },                                       // duration clamp + slider read ownership; no in-run effect
+        new() { Id = "endless_mode",    Branch = ChaosBranch.Depth,   Name = "The Bottomless Fall", Cost = COST_ENDLESS, Glyph = "∞",
+                Desc = "unlocks the ∞ endless toggle in setup: descend with no clock. the regions loop and deepen, the boons keep coming, and you rise only when you choose to wake.",
+                Flavor = "there was never a bottom. you only assumed there was.",
+                Apply = _ => { } },                                       // per-run toggle (setup.endless); no always-on effect
     };
 
     public static ChaosUpgrade? ById(string id) => All.FirstOrDefault(u => u.Id == id);

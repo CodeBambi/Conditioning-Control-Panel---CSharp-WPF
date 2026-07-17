@@ -79,6 +79,9 @@ namespace ConditioningControlPanel.Features
             else if (e.PropertyName == nameof(Models.AppSettings.SpiralPath))
             {
                 Dispatcher.BeginInvoke(new Action(UpdateSelectionHighlight));
+                // Corner-GIF slots left on "built-in" follow the pool selection, so a spiral
+                // change must re-render them too (RefreshOverlays no-ops if none are enabled).
+                try { App.CornerGif?.RefreshOverlays(); } catch { /* overlay refresh best-effort */ }
             }
         }
 
@@ -343,6 +346,24 @@ namespace ConditioningControlPanel.Features
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Spiral card: Loom launch failed");
+            }
+        }
+
+        /// <summary>Open the standalone corner-GIF overlay config window (two pinnable corners,
+        /// independent of any running session — driven by App.CornerGif).</summary>
+        private void BtnCornerGifs_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new CornerGifWindow
+                {
+                    Owner = Window.GetWindow(this),
+                };
+                win.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Spiral card: Corner GIF window launch failed");
             }
         }
 
