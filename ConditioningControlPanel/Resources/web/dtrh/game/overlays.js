@@ -274,6 +274,8 @@ export function createOverlays(hud) {
     card.appendChild(h);
     line('cf-recap-score', `${Math.floor(stats.score).toLocaleString()} pts`);
     line('', `${DIFF_NAMES[stats.difficulty] || stats.difficulty} · ${stats.waveCount} loops · you sank ${Math.round(stats.depth).toLocaleString()} m`);
+    // The Bottomless Fall: the run's headline is how many full I->IV laps you sank through.
+    if (stats.endless) line('cf-recap-score', `∞ the bottomless fall — you reached depth ${(stats.endlessDepth || 0) + 1}`);
     line('', `best streak ×${Math.max(1, stats.bestCombo)} · ${stats.defused} snapped · ${stats.detonated} triggered`);
     // THE BIOMES: the route this fall took (one rolled place per room). When THE
     // COMPACT is owned the route moves into the mirror section below instead.

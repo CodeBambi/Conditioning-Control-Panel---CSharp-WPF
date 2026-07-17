@@ -508,10 +508,18 @@ export function rollBiomeIds() {
   return out;
 }
 
+// The Bottomless Fall: endless loops wrap the rolled biomes I->IV->I like regionForWave,
+// instead of a relapse's clamp-to-Court reuse. Set alongside setRegionCycle at run start.
+let BIOME_CYCLE = false;
+export function setBiomeCycle(on) { BIOME_CYCLE = !!on; }
+
 /** Resolve the rolled biome for a 1-based waveIndex (relapse loops past the
- * last region reuse its roll, mirroring regionForWave). rolled = st.biomes. */
+ * last region reuse its roll, mirroring regionForWave; endless cycling wraps). rolled = st.biomes. */
 export function biomeForWave(waveIndex, rolled) {
-  if (!rolled) return null;
-  const i = Math.min(Math.max(1, waveIndex | 0), REGION_COUNT) - 1;
+  if (!rolled || !rolled.length) return null;
+  const raw = Math.max(1, waveIndex | 0);
+  const i = BIOME_CYCLE
+    ? ((raw - 1) % rolled.length + rolled.length) % rolled.length
+    : Math.min(raw, REGION_COUNT) - 1;
   return rolled[i] ? biomeById(rolled[i]) : null;
 }

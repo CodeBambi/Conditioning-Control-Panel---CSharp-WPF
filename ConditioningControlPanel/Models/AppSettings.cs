@@ -2242,7 +2242,18 @@ namespace ConditioningControlPanel.Models
         public int ChaosRunDurationSec
         {
             get => _chaosRunDurationSec;
-            set { _chaosRunDurationSec = Math.Clamp(value, 60, 900); OnPropertyChanged(); }
+            // Ceiling raised 60..900 -> 60..7200 (2026-07-17): the old 900 cap silently clamped
+            // the 16/20-min portal chips down to 15 min, and The Hourglass unlock needs up to 2h.
+            // Ownership gating for >20 min lives at the use sites (FromSettings / PersistRunSetup).
+            set { _chaosRunDurationSec = Math.Clamp(value, 60, 7200); OnPropertyChanged(); }
+        }
+        // The Bottomless Fall unlock: last-chosen endless toggle (per-run, gated on owning
+        // endless_mode at read time). Persisted so the portal remembers the choice.
+        private bool _chaosEndless = false;
+        public bool ChaosEndless
+        {
+            get => _chaosEndless;
+            set { _chaosEndless = value; OnPropertyChanged(); }
         }
         // (ChaosLiveBubbleShare removed — the knob was inert; live/benign split is set by variant weights.)
         // Motion: "Mixed" (per-variant defaults), "FloatUp", "RainDown", "RoamBounce".

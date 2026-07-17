@@ -102,13 +102,28 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   // just ~60s each, so the ACT I-IV identity + region VO all survive. 12/16/20 are
   // the standard descents.
   const CHAMBER_TOTALS = [240, 720, 960, 1200];   // 4 / 12 / 16 / 20 min (60 / 180 / 240 / 300s per chamber)
+  // The Hourglass (2min..2h) + The Bottomless Fall (∞ endless) are Depth unlocks; owning
+  // them opens the free length dial / the endless toggle in this portal.
+  const DUR_MIN = 120, DUR_MAX = 7200;
+  const ownsCustomDur = () => { try { return metaView(getMeta()).isOwned('custom_duration'); } catch (e) { return false; } };
+  const ownsEndless = () => { try { return metaView(getMeta()).isOwned('endless_mode'); } catch (e) { return false; } };
+  const fmtDur = (s) => {
+    s = Math.round(s || 0);
+    const m = Math.floor(s / 60), sec = s % 60;
+    if (m >= 60) { const h = Math.floor(m / 60), mm = m % 60; return mm ? `${h}h ${mm}m` : `${h}h`; }
+    return sec ? `${m}m ${sec}s` : `${m} min`;
+  };
   const setup = {
     difficulty: (runSetup && runSetup.difficulty) || 'Easy',
     durationSec: (runSetup && runSetup.durationSec) || 960,
+    endless: !!(runSetup && runSetup.endless) && ownsEndless(),
     key1: (runSetup && runSetup.key1) || 'Q',
     key2: (runSetup && runSetup.key2) || 'E',
   };
-  if (!CHAMBER_TOTALS.includes(setup.durationSec)) setup.durationSec = 960;
+  // A custom-length owner keeps any saved free value (clamped); everyone else snaps back to
+  // a preset so a stale/un-owned page can't ride a non-preset length.
+  if (ownsCustomDur()) setup.durationSec = Math.max(DUR_MIN, Math.min(DUR_MAX, setup.durationSec | 0));
+  else if (!CHAMBER_TOTALS.includes(setup.durationSec)) setup.durationSec = 960;
   // FTUE pacing: until the player has two descents behind them (and hasn't touched
   // the chip), the portal preselects the 12-min fall so run 2 fits the guided hour.
   let lengthTouched = false;
@@ -138,6 +153,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     const enabled = POOL_VARIANTS.filter((v) => !off.has(v.id)).map((v) => v.id);
     return {
       difficulty: setup.difficulty, durationSec: setup.durationSec, waveCount: 4,
+      endless: !!setup.endless && ownsEndless(),
       key1: setup.key1, key2: setup.key2,
       motion: d.motion, effectIntensity: d.effectIntensity, colorFlashes: d.colorFlashes,
       boonDraftEnabled: d.boonDraftEnabled, allowCurses: d.allowCurses, dartersEnabled: d.dartersEnabled,
@@ -559,14 +575,50 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
         if (d.extremeGate) revealEls.set('pill_inescapable', p);
       }
       const lenRow = el('wr-pills wr-pills--center', chrome.fall);
+      const endlessOn = ownsEndless() && setup.endless;
       for (const secs of CHAMBER_TOTALS) {
-        btn('wr-seg wr-seg--small' + (setup.durationSec === secs ? ' is-on' : ''), `${secs / 60} min`, () => {
+        const chip = btn('wr-seg wr-seg--small' + (!endlessOn && setup.durationSec === secs ? ' is-on' : ''), `${secs / 60} min`, () => {
+          if (endlessOn) return;   // the clock is off; presets don't apply
           setup.durationSec = secs;
           lengthTouched = true;
           refreshChrome(view());
         }, lenRow);
+        if (endlessOn) chip.classList.add('is-locked');
       }
-      tip(lenRow, 'four chambers, always in order. each runs about a quarter of the descent and ends in a boon.');
+      // The Bottomless Fall: an ∞ toggle rides beside the presets once unlocked.
+      if (ownsEndless()) {
+        const eChip = btn('wr-seg wr-seg--small' + (endlessOn ? ' is-on' : ''), '∞ endless', () => {
+          setup.endless = !setup.endless;
+          lengthTouched = true;
+          refreshChrome(view());
+        }, lenRow);
+        tip(eChip, 'no clock. the regions loop and deepen and the boons keep coming — you rise only when you hold ESC to wake.');
+      }
+      // The Hourglass: a free 2min..2h dial under the presets (hidden while endless owns the fall).
+      if (ownsCustomDur() && !endlessOn) {
+        const dialRow = el('wr-dial wr-pills--center', chrome.fall);
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.className = 'wr-dial-range';
+        slider.min = String(DUR_MIN); slider.max = String(DUR_MAX); slider.step = '30';
+        slider.value = String(Math.max(DUR_MIN, Math.min(DUR_MAX, setup.durationSec | 0)));
+        dialRow.appendChild(slider);
+        const lbl = el('wr-dial-val', dialRow, fmtDur(setup.durationSec));
+        slider.addEventListener('input', () => {
+          const val = Math.max(DUR_MIN, Math.min(DUR_MAX, parseInt(slider.value, 10) || DUR_MIN));
+          setup.durationSec = val;
+          lengthTouched = true;
+          lbl.textContent = fmtDur(val);
+          // live-sync the preset chips' highlight without a full rebuild (keeps the drag smooth)
+          lenRow.querySelectorAll('.wr-seg--small').forEach((c) => {
+            c.classList.toggle('is-on', c.textContent === `${val / 60} min`);
+          });
+        });
+        tip(dialRow, 'the hourglass: set any fall from 2 minutes to 2 hours. the four chambers just stretch to fit.');
+      }
+      tip(lenRow, endlessOn
+        ? 'endless: no clock, no bottom. hold ESC to wake when you\'ve had enough.'
+        : 'four chambers, always in order. each runs about a quarter of the descent and ends in a boon.');
     }
 
     // hint

@@ -2753,6 +2753,10 @@ img.rh-fx-spiralspin {
 .wr-check { padding: 7px 4px; cursor: pointer; font-size: 0.85rem; opacity: 0.75; user-select: none; }
 .wr-check.is-on { opacity: 1; color: #ffd6ea; }
 .wr-slider { width: 220px; accent-color: #e84393; }
+/* The Hourglass: the free 2min..2h length dial under the preset chips */
+.wr-dial { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 6px; }
+.wr-dial-range { width: 240px; accent-color: #e84393; cursor: pointer; pointer-events: auto; }
+.wr-dial-val { min-width: 64px; text-align: left; font-weight: 800; font-size: 0.9rem; color: #ffd6ea; text-shadow: 0 1px 4px rgba(0,0,0,0.7); }
 .wr-select {
   background: #221f40; color: #fff; border: 1px solid rgba(232,67,147,0.5);
   border-radius: 8px; padding: 5px 10px; font-size: 0.85rem;
