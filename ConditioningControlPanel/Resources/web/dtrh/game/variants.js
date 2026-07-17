@@ -304,15 +304,16 @@ export function buildGoldDroplet(atX, atY) {
 
 /** Crafting material (THE BOUDOIR): a grabbable ingredient in the tube. The material
  * row (id/glyph/tint from crafting.js MATERIALS) is passed in so this file stays free
- * of a crafting.js import. sprite stays null in Part 1 - chaosField renders the tint
- * radial gradient + glyph label (the placeholder); the real art will be
- * matArt(mat.id) -> https://ccp.art/materials/{id}.png once the PNGs land.
+ * of a crafting.js import. The sprite is the painted material art (ccp.art/materials/
+ * {id}.png, mirrors crafting.js matArt); chaosField clips it into the bubble orb. The
+ * glyph is kept only as the load-failure fallback (label is dropped when a sprite draws,
+ * so the emoji doesn't sit on top of the art).
  * Pass atX/atY for the rare pop-drop (Gold-Digger droplet shape); omit for tube rises. */
 export function buildMaterial(mat, atX, atY) {
   const spec = {
     variantId: 'material_' + mat.id, kind: 'material', matId: mat.id, payload: null, strength: 0,
-    sizePx: rand(84, 104), tint: mat.tint, label: mat.glyph,
-    sprite: null,
+    sizePx: rand(84, 104), tint: mat.tint, label: null,
+    sprite: 'https://ccp.art/materials/' + mat.id + '.png',
     motion: atX != null ? MOTION.RainDown : MOTION.FloatUp,
     fuseMs: 0, speedMult: atX != null ? 1.8 : 1.0, payMult: 1.0, treatLifeMs: 5000,
   };

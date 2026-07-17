@@ -175,7 +175,10 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
     dials:   { x: 2.9,  y: 1.4 },
     vanity:  { x: 0,    y: 2.15 },   // ducks under the DOM logo marquee
     portal:  { x: 0,    y: -0.4 },
-    boudoir: { x: 2.9,  y: -1.15 },  // crafting (bottom-right; bottom-left is the wr-dock)
+    // crafting (bottom-right). Cards are CARD_H (3.1) tall, so at y=-1.15 its top
+    // edge (0.40) overlapped THE DIALS' bottom edge (dials y=1.4 -> -0.15). Dropped
+    // to -1.95 so the two right-column cards clear each other (~0.25 gap).
+    boudoir: { x: 2.9,  y: -1.95 },
   };
 
   // ---- one station -----------------------------------------------------------

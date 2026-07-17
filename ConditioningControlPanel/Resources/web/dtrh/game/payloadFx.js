@@ -23,6 +23,7 @@
 
 import { S } from '../engine/settings.js';
 import { isMuted, onMuteChange } from '../shared/audioMute.js';
+import { pickSpiralUrl } from '../engine/loomSpirals.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const clamp01 = (v) => clamp(v, 0, 1);
@@ -98,7 +99,11 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
   }
 
   function showSpiral(strength, durMult) {
-    holdOn('spiral', 'sf-pfx-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
+    const h = holdOn('spiral', 'sf-pfx-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
+    // Draw from the shared pool (bundled sp1..8 + the player's Loom spirals)
+    // instead of the single hardcoded spiral.png in .sf-pfx-spiral - the CSS
+    // still owns cover/blend/spin, we only swap the image so in-run spirals vary.
+    h.el.style.backgroundImage = `url('${pickSpiralUrl()}')`;
   }
   function showPink(strength, durMult) {
     holdOn('pink', 'sf-pfx-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
