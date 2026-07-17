@@ -70,6 +70,31 @@
                 </StackPanel>
             </Border>
 
+            <!-- Actions (kept above the library so they're reachable without scrolling) -->
+            <!-- THE LOOM: weave your own spiral (also craftable inside DtRH) -->
+            <Button x:Name="BtnOpenLoom"
+                    Content="🌀 THE LOOM — weave your own spiral"
+                    Style="{DynamicResource OutlineButton}"
+                    Padding="12,10"
+                    Margin="0,0,0,10"
+                    Click="BtnOpenLoom_Click"/>
+
+            <!-- Standalone corner-GIF overlays (independent of sessions) -->
+            <Button x:Name="BtnCornerGifs"
+                    Content="🖼 CORNER GIFs — pin a GIF to a screen corner"
+                    Style="{DynamicResource OutlineButton}"
+                    Padding="12,10"
+                    Margin="0,0,0,10"
+                    Click="BtnCornerGifs_Click"/>
+
+            <!-- Select GIF (browse anywhere) -->
+            <Button x:Name="BtnSelectGif"
+                    Content="{loc:Str btn_select_gif}"
+                    Style="{DynamicResource OutlineButton}"
+                    Padding="12,10"
+                    Margin="0,0,0,10"
+                    Click="BtnSelectGif_Click"/>
+
             <!-- Spiral library -->
             <Border Background="{DynamicResource SurfaceBgBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}"
@@ -128,29 +153,6 @@
                                Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
-
-            <!-- THE LOOM: weave your own spiral (also craftable inside DtRH) -->
-            <Button x:Name="BtnOpenLoom"
-                    Content="🌀 THE LOOM — weave your own spiral"
-                    Style="{DynamicResource OutlineButton}"
-                    Padding="12,10"
-                    Margin="0,0,0,10"
-                    Click="BtnOpenLoom_Click"/>
-
-            <!-- Standalone corner-GIF overlays (independent of sessions) -->
-            <Button x:Name="BtnCornerGifs"
-                    Content="🖼 CORNER GIFs — pin a GIF to a screen corner"
-                    Style="{DynamicResource OutlineButton}"
-                    Padding="12,10"
-                    Margin="0,0,0,10"
-                    Click="BtnCornerGifs_Click"/>
-
-            <!-- Select GIF (browse anywhere) -->
-            <Button x:Name="BtnSelectGif"
-                    Content="{loc:Str btn_select_gif}"
-                    Style="{DynamicResource OutlineButton}"
-                    Padding="12,10"
-                    Click="BtnSelectGif_Click"/>
 
             <TextBlock Text="{loc:Str label_if_you_have_display_problems_try_setting_your}"
                        Foreground="#FFA500"

@@ -79,6 +79,9 @@ namespace ConditioningControlPanel.Features
             else if (e.PropertyName == nameof(Models.AppSettings.SpiralPath))
             {
                 Dispatcher.BeginInvoke(new Action(UpdateSelectionHighlight));
+                // Corner-GIF slots left on "built-in" follow the pool selection, so a spiral
+                // change must re-render them too (RefreshOverlays no-ops if none are enabled).
+                try { App.CornerGif?.RefreshOverlays(); } catch { /* overlay refresh best-effort */ }
             }
         }
 

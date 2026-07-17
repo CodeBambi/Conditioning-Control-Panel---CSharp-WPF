@@ -70,34 +70,57 @@ namespace ConditioningControlPanel.Services
             Uri? gifUri = null;
             System.Drawing.Image? img = null;
 
-            var gifPath = setting.GifPath;
-            if (!string.IsNullOrEmpty(gifPath) && System.IO.File.Exists(gifPath))
+            // Resolution order: this slot's explicit pick -> the Spiral Library's active
+            // selection (App.Settings.SpiralPath, the "pool") -> built-in spiral resource.
+            // So an enabled-but-unpicked slot draws whatever spiral the app is already using,
+            // matching OverlayService.GetSpiralPath (the pool) rather than a separate file.
+            string filePath = "";
+            if (!string.IsNullOrEmpty(setting.GifPath) && System.IO.File.Exists(setting.GifPath))
+            {
+                filePath = setting.GifPath;
+            }
+            else
+            {
+                var poolPath = App.Settings?.Current?.SpiralPath;
+                if (!string.IsNullOrEmpty(poolPath) && System.IO.File.Exists(poolPath))
+                    filePath = poolPath;
+            }
+
+            if (!string.IsNullOrEmpty(filePath))
             {
                 try
                 {
-                    gifUri = new Uri(gifPath);
-                    img = System.Drawing.Image.FromFile(gifPath);
+                    gifUri = new Uri(filePath);
+                    img = System.Drawing.Image.FromFile(filePath);
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning("CornerGifService: failed to load GIF from file: {Error}", ex.Message);
+                    App.Logger?.Warning("CornerGifService: failed to load GIF from file {Path}: {Error}", filePath, ex.Message);
                     gifUri = null;
                     img = null;
                 }
             }
 
-            // Fallback to the built-in spiral so an enabled-but-unpicked slot still shows something.
+            // Built-in spiral resource fallback (same resource the pool's "Default" card uses).
+            // Handles both pack:// (embedded) and file:// (active-mod override) URIs.
             if (img == null)
             {
                 try
                 {
-                    gifUri = new Uri(ModResourceResolver.ResolveUri("spirals/spiral.gif"), UriKind.Absolute);
-                    var resourceInfo = Application.GetResourceStream(gifUri);
-                    if (resourceInfo?.Stream != null)
+                    gifUri = new Uri(ModResourceResolver.ResolveUri("spiral.gif"), UriKind.Absolute);
+                    if (gifUri.IsFile)
                     {
-                        using (resourceInfo.Stream)
+                        img = System.Drawing.Image.FromFile(gifUri.LocalPath);
+                    }
+                    else
+                    {
+                        var resourceInfo = Application.GetResourceStream(gifUri);
+                        if (resourceInfo?.Stream != null)
                         {
-                            img = System.Drawing.Image.FromStream(resourceInfo.Stream);
+                            using (resourceInfo.Stream)
+                            {
+                                img = System.Drawing.Image.FromStream(resourceInfo.Stream);
+                            }
                         }
                     }
                 }

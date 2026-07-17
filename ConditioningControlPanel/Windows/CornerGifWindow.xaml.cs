@@ -138,9 +138,10 @@ namespace ConditioningControlPanel
             body.Children.Add(pickBtn);
             body.Children.Add(new TextBlock
             {
-                Text = "Leave unset to use the built-in spiral.",
+                Text = "Leave unset to use your selected spiral (from the Spiral Library).",
                 Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x90)),
                 FontSize = 10,
+                TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 12),
             });
 
@@ -269,7 +270,7 @@ namespace ConditioningControlPanel
 
         private static string PickerLabel(string path) =>
             string.IsNullOrEmpty(path) || !File.Exists(path)
-                ? "📁 Choose GIF…  (built-in spiral)"
+                ? "📁 Choose GIF…  (uses selected spiral)"
                 : $"📁 {Path.GetFileName(path)}";
 
         private void ApplyLiveDebounced()
