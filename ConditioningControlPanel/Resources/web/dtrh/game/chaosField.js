@@ -344,6 +344,10 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       if (b.telegraphLeft > 0) return;                // not active yet
       // The Spanker keeps working after the first hit: a mowing sweeper can be
       // re-smacked (fresh fling, fresh bounces) as many times as you land it.
+      // NOTE: the boon REPLACES the catch by design ("rabbits can't be caught
+      // anymore... you give up the free slow-mo" - catalog.js). Don't add a catch
+      // path here for spanker runs: the whole rabbit tree (electrified_rabbits,
+      // hopscotch, tail_plug, riptide) is built on smacked rabbits mowing.
       if (phys.spanker) { smack(b, x, y); return; }
       if (b.sweeper) return;                          // sweepers can't be CAUGHT bare-handed
       const quick = (performance.now() - b.activeAt) <= (b.spec.quickWindowMs || 500);

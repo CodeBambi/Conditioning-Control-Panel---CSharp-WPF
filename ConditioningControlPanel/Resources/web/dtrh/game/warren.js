@@ -1171,6 +1171,20 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
 
     const remainOf = (id) => v.materialCount(id) - boudoirGrid.filter((c) => c === id).length;
 
+    // Drag state for the worktable. `from` is 'tray' (a fresh material from the
+    // rack) or a grid index (moving/swapping an already-placed cell). Lives in
+    // this closure so it survives syncCraft's per-drop re-renders. Click-to-hold
+    // (boudoirTray) still works unchanged — drag is purely additive.
+    let drag = null;
+
+    // Drop a grid material back onto the tray to return it to the bank.
+    tray.addEventListener('dragover', (e) => { if (drag && typeof drag.from === 'number') e.preventDefault(); });
+    tray.addEventListener('drop', (e) => {
+      if (drag && typeof drag.from === 'number') {
+        e.preventDefault(); boudoirGrid[drag.from] = null; drag = null; syncCraft();
+      }
+    });
+
     function renderTray() {
       tray.innerHTML = '';
       for (const m of MATERIALS) {
@@ -1179,10 +1193,18 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
           boudoirTray = boudoirTray === m.id ? null : m.id;
           renderTray();
         }, tray);
-        el('wr-craft-mat-glyph', t, m.glyph);
+        t.appendChild(artIcon(matArt(m.id), m.glyph, '255,138,194', 34));
         el('wr-craft-mat-n', t, `×${remain}`);
+        if (remain > 0) {
+          t.draggable = true;
+          t.addEventListener('dragstart', (e) => {
+            drag = { from: 'tray', id: m.id };
+            try { e.dataTransfer.setData('text/plain', m.id); e.dataTransfer.effectAllowed = 'copy'; } catch (_) { /* ignore */ }
+          });
+          t.addEventListener('dragend', () => { drag = null; });
+        }
         tip(t, remain > 0
-          ? `${m.name} — ${boudoirTray === m.id ? 'in hand. click a cell to place it.' : 'click to take in hand'}`
+          ? `${m.name} — ${boudoirTray === m.id ? 'in hand. click a cell to place it.' : 'click to take, or drag onto the table'}`
           : `no ${m.name.toLowerCase()} left to place`);
       }
     }
@@ -1197,7 +1219,39 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
           else { sfx('ui_denied', 0.3); return; }
           syncCraft();
         }, grid);
-        if (cur) el('wr-craft-cell-glyph', cell, (MAT_BY_ID[cur] || {}).glyph || '❔');
+        if (cur) cell.appendChild(artIcon(matArt(cur), (MAT_BY_ID[cur] || {}).glyph || '❔', '255,138,194', 48));
+
+        // a filled cell can be dragged: onto another cell to move/swap it, or
+        // onto the tray to return it to the bank
+        if (cur) {
+          cell.draggable = true;
+          cell.addEventListener('dragstart', (e) => {
+            drag = { from: i, id: cur };
+            try { e.dataTransfer.setData('text/plain', cur); e.dataTransfer.effectAllowed = 'move'; } catch (_) { /* ignore */ }
+          });
+          cell.addEventListener('dragend', () => { drag = null; cell.classList.remove('is-dragover'); });
+        }
+        // every cell is a drop target (place from tray / land a moved cell)
+        cell.addEventListener('dragover', (e) => {
+          if (!drag) return;
+          const ok = drag.from === 'tray' ? remainOf(drag.id) > 0 : drag.from !== i;
+          if (ok) { e.preventDefault(); cell.classList.add('is-dragover'); }
+        });
+        cell.addEventListener('dragleave', () => cell.classList.remove('is-dragover'));
+        cell.addEventListener('drop', (e) => {
+          e.preventDefault();
+          cell.classList.remove('is-dragover');
+          if (!drag) return;
+          if (drag.from === 'tray') {
+            if (remainOf(drag.id) > 0) boudoirGrid[i] = drag.id;
+            else sfx('ui_denied', 0.3);
+          } else if (typeof drag.from === 'number' && drag.from !== i) {
+            const src = drag.from;                                   // move, swapping if the target is filled
+            const tmp = boudoirGrid[i]; boudoirGrid[i] = boudoirGrid[src]; boudoirGrid[src] = tmp;
+          }
+          drag = null;
+          syncCraft();
+        });
       }
     }
 

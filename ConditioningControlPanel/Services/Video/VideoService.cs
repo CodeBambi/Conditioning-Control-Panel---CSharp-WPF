@@ -1360,8 +1360,10 @@ namespace ConditioningControlPanel.Services
             // Create media from URL — disposed after Play() (LibVLC ref-counts internally)
             using var media = new Media(_libVLC!, url, FromType.FromLocation);
             // Secondaries skip audio decoding entirely — prevents a parallel WASAPI session
-            // from opening on the same MMDevice and racing the primary's mixer state.
-            if (!withAudio) media.AddOption(":no-audio");
+            // from opening on the same MMDevice and racing the primary's mixer state. Also
+            // skip it when audio is deactivated (effective volume 0), else the async Play()
+            // lets the video blip at 100% before the volume set below lands (see file path).
+            if (!withAudio || GetEffectiveVolume() <= 0) media.AddOption(":no-audio");
             mediaPlayer.Play(media);
 
             if (withAudio)
@@ -1877,7 +1879,11 @@ namespace ConditioningControlPanel.Services
             // Secondaries skip audio decoding entirely. Setting Mute=true after Play() opened
             // a second WASAPI session on the same MMDevice; Windows collapsed both into one
             // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
-            if (!withAudio)
+            // Also skip it when audio is deactivated (effective volume 0): Play() is async, so
+            // the Volume=0 set below no-ops until the aout exists and the video would start at
+            // 100% for a beat before the Playing handler cuts it — the audible blip a
+            // "deactivated audio" user hears. :no-audio never decodes audio, so nothing blips.
+            if (!withAudio || GetEffectiveVolume() <= 0)
             {
                 media.AddOption(":no-audio");
             }
