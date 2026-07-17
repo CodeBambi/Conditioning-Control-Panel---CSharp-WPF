@@ -1,0 +1,20 @@
+{
+  "nextId": 25,
+  "loops": [
+    {
+      "id": "12",
+      "prompt": "CCP port stall check. If any workflow run is active or a monitor is running: reply 'in flight' and do nothing else. If a task is in_progress but no run/monitor is active: re-read its board WIP entry and resume. If zero in_progress and zero pending non-BLOCKED tasks: run CLOSE-OUT, then LoopDelete this loop.",
+      "trigger": {
+        "type": "cron",
+        "schedule": "*/30 * * * *"
+      },
+      "status": "active",
+      "recurring": true,
+      "createdAt": 1783858190519,
+      "updatedAt": 1783886546085,
+      "expiresAt": 1784462990519,
+      "maxFires": 20,
+      "fireCount": 16
+    }
+  ]
+}

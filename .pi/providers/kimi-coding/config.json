@@ -1,0 +1,61 @@
+{
+  "model": {
+    "contextWindow": 262144,
+    "maxTokens": 32000,
+    "input": [
+      "text",
+      "image"
+    ],
+    "reasoning": true,
+    "reasoningMap": {
+      "none": {
+        "effort": null,
+        "enabled": false
+      },
+      "off": {
+        "effort": null,
+        "enabled": false
+      },
+      "minimal": {
+        "effort": "low",
+        "enabled": true
+      },
+      "low": {
+        "effort": "low",
+        "enabled": true
+      },
+      "medium": {
+        "effort": "medium",
+        "enabled": true
+      },
+      "high": {
+        "effort": "high",
+        "enabled": true
+      },
+      "xhigh": {
+        "effort": "high",
+        "enabled": true
+      }
+    },
+    "thinkingKeep": "all",
+    "generation": {}
+  },
+  "tools": {
+    "moonshot_search": {
+      "enabled": true,
+      "default_collapsed": true
+    },
+    "moonshot_fetch": {
+      "enabled": true,
+      "default_collapsed": true
+    },
+    "kimi_datasource": {
+      "enabled": true,
+      "default_collapsed": true
+    }
+  },
+  "uploads": {
+    "thresholdBytes": 115343360
+  },
+  "protocol": "openai"
+}
