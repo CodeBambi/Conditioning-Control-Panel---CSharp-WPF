@@ -86,7 +86,7 @@ const AMBIENT_KINDS = {
   specks:   { count: 20, size: [1, 2.2], life: [0.05, 0.30], shape: 'blink', alpha: 0.55 },
   ash:      { count: 20, size: [1.5, 3], vy: [12, 26], vx: [-9, 3], sway: 11, shape: 'fleck', alpha: 0.30 },
   glints:   { count: 7, size: [4, 9], life: [0.35, 0.80], shape: 'star', alpha: 0.80 },
-  bubbles:  { count: 14, size: [2, 5], vy: [-14, -34], vx: [-4, 4], sway: 9, shape: 'ring', alpha: 0.40 },
+  bubbles:  { count: 48, size: [1, 5], vy: [-10, -40], vx: [-4, 4], sway: 11, shape: 'ring', alpha: 0.34 },
   coins:    { count: 8, size: [3, 6], life: [0.25, 0.60], shape: 'star', alpha: 0.90 },
   embers:   { count: 16, size: [1.5, 3], vy: [-70, -150], vx: [-8, 8], shape: 'streak', alpha: 0.50 },
   goldleaf: { count: 12, size: [2, 4], vy: [-7, -18], vx: [-6, 6], sway: 13, shape: 'fleck', alpha: 0.45 },

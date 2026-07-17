@@ -1443,6 +1443,8 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       // dome (linger) and then flickers up as its own moment.
       if (J.wallDress && J.room) {
         const d = J.wallDress;
+        // a late-decoded ingredient photo redrew the plaster canvas: re-upload it.
+        if (d.tex && d.canvas && d.canvas.__recipeDirty) { d.tex.needsUpdate = true; d.canvas.__recipeDirty = false; }
         if (d.mode === 'recipe') {
           // settled AND the roulette (if any) resolved: the plaster is its own
           // beat, never a second thing happening over the biome reveal. When a
@@ -1603,6 +1605,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
         u.uWallDot.value = wallDress.dot ? 1 : 0;   // biome art dots; recipe pages stay rectangular
         if (wallDress.canvas) {
           J.wallDress.tex = texFromCanvas(wallDress.canvas);
+          J.wallDress.canvas = wallDress.canvas;   // kept so a late ingredient-photo redraw can re-upload
           J.wallDress.owned = true;
           u.uWallTex.value = J.wallDress.tex;
         } else if (wallDress.url) {

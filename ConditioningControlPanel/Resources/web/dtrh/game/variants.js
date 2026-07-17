@@ -25,6 +25,7 @@ export const MOTION = { FloatUp: 'FloatUp', RainDown: 'RainDown', RoamBounce: 'R
 
 const SPRITE_BASE = '/dtrh/assets/bubbles/effects/';
 const ART_BASE = 'https://ccp.art/bubbles/';   // bundled assets/Chaos/bubbles/{id}.png
+const MAT_ART_BASE = 'https://ccp.art/materials/'; // bundled assets/Chaos/materials/{id}.png (crafting ingredient cutouts)
 const PLAIN_SPRITE = '/dtrh/assets/bubbles/bubble.png'; // the classic dashboard Bubble-Pop soap bubble
 
 // One row per variant: visual band + behaviour + native payload binding.
@@ -304,15 +305,15 @@ export function buildGoldDroplet(atX, atY) {
 
 /** Crafting material (THE BOUDOIR): a grabbable ingredient in the tube. The material
  * row (id/glyph/tint from crafting.js MATERIALS) is passed in so this file stays free
- * of a crafting.js import. sprite stays null in Part 1 - chaosField renders the tint
- * radial gradient + glyph label (the placeholder); the real art will be
- * matArt(mat.id) -> https://ccp.art/materials/{id}.png once the PNGs land.
- * Pass atX/atY for the rare pop-drop (Gold-Digger droplet shape); omit for tube rises. */
+ * of a crafting.js import. The ingredient cutout PNG (assets/Chaos/materials/{id}.png,
+ * served off ccp.art) is the bubble face; the glyph rides along as label:null so no
+ * emoji overlays the art (chaosField falls back to the tint gradient if the PNG is
+ * missing). Pass atX/atY for the rare pop-drop (Gold-Digger droplet shape); omit for tube rises. */
 export function buildMaterial(mat, atX, atY) {
   const spec = {
     variantId: 'material_' + mat.id, kind: 'material', matId: mat.id, payload: null, strength: 0,
-    sizePx: rand(84, 104), tint: mat.tint, label: mat.glyph,
-    sprite: null,
+    sizePx: rand(84, 104), tint: mat.tint, label: null,
+    sprite: MAT_ART_BASE + mat.id + '.png',
     motion: atX != null ? MOTION.RainDown : MOTION.FloatUp,
     fuseMs: 0, speedMult: atX != null ? 1.8 : 1.0, payMult: 1.0, treatLifeMs: 5000,
   };

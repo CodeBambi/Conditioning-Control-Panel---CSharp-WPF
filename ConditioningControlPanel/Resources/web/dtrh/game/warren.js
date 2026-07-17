@@ -1097,8 +1097,12 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
           cell.textContent = '?';
         } else {
           cell.classList.add('is-filled');
-          cell.textContent = c.glyph;
           cell.style.setProperty('--mt', c.tint);
+          // the real ingredient photo, glyph as fallback until/if it fails to load
+          const mi = document.createElement('img');
+          mi.className = 'wr-paper-cell-img'; mi.src = matArt(c.id); mi.alt = '';
+          mi.addEventListener('error', () => { mi.remove(); cell.textContent = c.glyph; });
+          cell.appendChild(mi);
         }
       }
       el('wr-paper-foot', page, made ? `${r.glyph} ${r.name.toLowerCase()} · made ✓` : 'unmade');

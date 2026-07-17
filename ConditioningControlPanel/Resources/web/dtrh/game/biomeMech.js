@@ -419,7 +419,10 @@ export function createBiomeMech(g) {
   const incognito = () => {
     let gap = 44, wipeIn = rand(34, 44), warned = false;
     return {
-      enter() { g.toast('🕶 incognito — nothing here is saved'); },
+      enter() {
+        g.field.phys.incognito = true;   // every bubble spawns anonymous - you can't read the field
+        g.toast('🕶 incognito — nothing here is saved');
+      },
       tick(dt) {
         wipeIn -= dt;
         if (wipeIn <= 5 && !warned) {
@@ -444,7 +447,7 @@ export function createBiomeMech(g) {
           g.toast('🕶 nothing to clear. this time.');
         }
       },
-      exit() { },
+      exit() { g.field.phys.incognito = false; },   // identities return once you leave the room
     };
   };
 

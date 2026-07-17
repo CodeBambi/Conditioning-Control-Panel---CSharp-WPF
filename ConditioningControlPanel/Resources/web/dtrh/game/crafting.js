@@ -344,7 +344,7 @@ export function sketchView(recipe) {
       if (!id) continue;
       const i = r * 3 + c;
       const m = MAT_BY_ID[id];
-      cells[i] = { glyph: m.glyph, tint: m.tint, name: m.name, torn: torn.has(i) };
+      cells[i] = { id, glyph: m.glyph, tint: m.tint, name: m.name, torn: torn.has(i) };
     }
   }
   return cells;

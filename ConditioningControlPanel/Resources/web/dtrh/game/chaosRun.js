@@ -39,7 +39,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boons.js';
-import { MAT_BY_ID, rollMaterialId, CONSUMABLE_IDS, pickSketchId, RECIPE_BY_ID, sketchView } from './crafting.js';
+import { MAT_BY_ID, MATERIALS, matArt, rollMaterialId, CONSUMABLE_IDS, pickSketchId, RECIPE_BY_ID, sketchView } from './crafting.js';
 import { CRAFTED_PERMANENT_APPLY, CRAFTED_TOY_DEFS } from './craftedEffects.js';
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
@@ -1959,6 +1959,21 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
    * paperwall's picker off LIVE meta, so it never re-teases a recipe she already
    * knows or already has a page for. Arms pendingRecipeReveal; the sketch is
    * banked when she actually settles into the dome (onDraftRoomLinger). */
+  // Recipe-card art: the material PNGs drawn into each sketch cell (matArt). Loaded
+  // once and cached so the plaster + the notice draw the real ingredient photos, not
+  // emoji glyphs. Preloaded at attach so they're ready by the deep-run reveal; a late
+  // load redraws the wall canvas + flags it dirty (junctions re-uploads the texture).
+  const _matImgs = new Map();   // id -> HTMLImageElement
+  function matImg(id) {
+    let im = _matImgs.get(id);
+    if (im) return im;
+    im = new Image(); im.decoding = 'async'; im.src = matArt(id);
+    _matImgs.set(id, im);
+    return im;
+  }
+  function preloadRecipeArt() { try { for (const m of MATERIALS) matImg(m.id); } catch (e) { /* best effort */ } }
+  const imgReady = (im) => !!(im && im.complete && im.naturalWidth > 0);
+
   function pickRecipeDress() {
     if (!st || st.recipeRevealedThisRun || cfg.scriptedFirstRun) return null;
     const m = hostState && hostState.meta;
@@ -2013,8 +2028,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         g.fillStyle = 'rgba(90,70,40,0.1)'; rrectPath(g, cx - s / 2, cy - s / 2, s, s, cell * 0.14); g.fill();
         g.fillStyle = 'rgba(80,60,35,0.55)'; g.font = `${Math.round(cell * 0.5)}px serif`; g.fillText('?', cx, cy);
       } else {
-        g.fillStyle = cc.tint; rrectPath(g, cx - s / 2, cy - s / 2, s, s, cell * 0.14); g.fill();
-        g.font = `${Math.round(cell * 0.5)}px serif`; g.fillText(cc.glyph, cx, cy);
+        const im = cc.id ? matImg(cc.id) : null;
+        if (imgReady(im)) {
+          // the real ingredient photo, clipped into the cell's rounded square
+          g.save();
+          rrectPath(g, cx - s / 2, cy - s / 2, s, s, cell * 0.14); g.clip();
+          g.drawImage(im, cx - s / 2, cy - s / 2, s, s);
+          g.restore();
+        } else {
+          g.fillStyle = cc.tint; rrectPath(g, cx - s / 2, cy - s / 2, s, s, cell * 0.14); g.fill();
+          g.font = `${Math.round(cell * 0.5)}px serif`; g.fillText(cc.glyph, cx, cy);
+        }
       }
     }
     // the foot: the recipe's own glyph + name
@@ -2042,29 +2066,41 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
    * each page is drawn at its 8 wrap-offsets too - the tile seams seamlessly. */
   function makeRecipeWallCanvas(rec) {
     const cells = sketchView(rec);
-    const TILE = 1024, PAGE = 300;
+    const TILE = 1024, GRID = 6, PAGE = 150;   // 6x6 lattice = 36 small pages per tile (was 8 big ones)
     const c = document.createElement('canvas');
     c.width = c.height = TILE;
     const g = c.getContext('2d');
-    g.clearRect(0, 0, TILE, TILE);
-    // staggered pin spots (fractions of the tile) + a fixed tilt each - deterministic
-    // so the plaster looks the same every frame and wraps cleanly.
-    const spots = [
-      [0.18, 0.20, -6], [0.58, 0.13, 5], [0.87, 0.30, -3],
-      [0.35, 0.50, 7], [0.72, 0.55, -5], [0.11, 0.73, 4],
-      [0.50, 0.83, -7], [0.86, 0.82, 6],
-    ];
-    for (const [fx, fy, deg] of spots) {
-      const cx = fx * TILE, cy = fy * TILE, rot = deg * Math.PI / 180;
-      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
-        g.save();
-        g.translate(cx + ox * TILE, cy + oy * TILE);
-        g.rotate(rot);
-        drawRecipePage(g, PAGE, rec, cells);
-        g.fillStyle = 'rgba(60,40,20,0.5)';               // a little pin tack at the top
-        g.beginPath(); g.arc(0, -PAGE * 0.4, PAGE * 0.03, 0, Math.PI * 2); g.fill();
-        g.restore();
+    // A dense pin-wall lattice: one page per lattice cell, deterministically jittered
+    // + tilted so it reads as scattered pages (never a rigid grid), and wraps cleanly.
+    const tilts = [-7, 5, -3, 7, -5, 4, -6, 6, 3, -4, 8, -8];
+    const spots = [];
+    for (let r = 0; r < GRID; r++) for (let cN = 0; cN < GRID; cN++) {
+      const jx = (((r * 7 + cN * 3) % 5) - 2) * 0.018;   // deterministic jitter, +/- ~0.036 tile
+      const jy = (((r * 3 + cN * 5) % 5) - 2) * 0.018;
+      spots.push([(cN + 0.5) / GRID + jx, (r + 0.5) / GRID + jy, tilts[(r * GRID + cN) % tilts.length]]);
+    }
+    const paint = () => {
+      g.clearRect(0, 0, TILE, TILE);
+      for (const [fx, fy, deg] of spots) {
+        const cx = fx * TILE, cy = fy * TILE, rot = deg * Math.PI / 180;
+        for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
+          g.save();
+          g.translate(cx + ox * TILE, cy + oy * TILE);
+          g.rotate(rot);
+          drawRecipePage(g, PAGE, rec, cells);
+          g.fillStyle = 'rgba(60,40,20,0.5)';               // a little pin tack at the top
+          g.beginPath(); g.arc(0, -PAGE * 0.4, PAGE * 0.03, 0, Math.PI * 2); g.fill();
+          g.restore();
+        }
       }
+    };
+    paint();
+    // Any ingredient photo not decoded yet? Redraw when it lands and flag the canvas
+    // so junctions re-uploads the texture (imgReady falls back to glyphs until then).
+    for (const cc of cells) {
+      if (!cc || cc.torn || !cc.id) continue;
+      const im = matImg(cc.id);
+      if (!imgReady(im)) im.addEventListener('load', () => { paint(); c.__recipeDirty = true; }, { once: true });
     }
     return c;
   }
@@ -2693,9 +2729,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       return;
     }
 
-    // A live fork owns the tube: the recap must not fire mid-antechamber /
-    // mid-dive. The clock runs on a few extra seconds until the fork tears down.
-    if (st.elapsedSec >= st.runDurationSec && !(ctx && ctx.junctions && ctx.junctions.isBusy())) {
+    // A live fork OR an in-tube boon draft owns the tube: the recap must not fire
+    // mid-antechamber / mid-dive / mid-pick. The clock runs on a few extra seconds
+    // until it tears down (boonPick auto-resumes, so this can't hang the finish).
+    if (st.elapsedSec >= st.runDurationSec
+        && !(ctx && ctx.junctions && ctx.junctions.isBusy())
+        && !(ctx && ctx.boonPick && ctx.boonPick.isBusy())) {
       // Relapse: the hole isn't done with you - one more loop, everything drips double.
       if (st.relapseArmed && !st.relapseActive) {
         st.relapseArmed = false;
@@ -3737,6 +3776,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // A mandatory-video card is an in-world DOM node (payloadFx front layer); the
     // field teardown doesn't touch it, so stop it here or it overlays the recap + hub.
     try { payloadFx?.cancelHeavy(); } catch (e) { /* ignore */ }
+    // A run ending WHILE an in-tube boon draft is open would leave its card row in
+    // the shared scene (junctions are torn down by setRunActive(false), but boonPick
+    // is not) - force it closed so no phantom draft rides the idle crawl into the
+    // recap + hub. No-op when idle.
+    try { ctx.boonPick && ctx.boonPick.reset && ctx.boonPick.reset(); } catch (e) { /* ignore */ }
     field.clearAll();
     clearAmbient();
     if (ctx.spawner) ctx.spawner.setAutoSpotlight(true); // the idling tunnel may feature again
@@ -3830,6 +3874,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.setPicks([]);
     hudUi.setHabits([]);
     try { payloadFx?.cancelHeavy(); } catch (e) { /* ignore */ }   // kill any lingering video card before the hub
+    try { ctx.boonPick && ctx.boonPick.reset && ctx.boonPick.reset(); } catch (e) { /* ignore */ }   // a draft aborted mid-pick must not strand its card row in the hub
     field.clearAll();
     clearAmbient();
     if (bMech) bMech.reset();   // a run aborted mid-chamber must not leak its biome mechanic into the hub
@@ -3860,6 +3905,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
      * the idling tunnel; a descent starts when the host answers request-run. */
     attach(sceneCtx) {
       ctx = sceneCtx;
+      preloadRecipeArt();   // warm the ingredient photos so a deep-run recipe plaster draws them, not glyphs
       ffx = createFieldFx(ctx.hud);
       payloadFx = createPayloadFx({ hud: ctx.hud, fx: ctx.fx, media: ctx.media, flashBurst: ctx.flashBurst });
       try { window.__sfPayloadFx = payloadFx; } catch { /* diagnostics seam (m2test) */ }
