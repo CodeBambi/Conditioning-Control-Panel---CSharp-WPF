@@ -34,7 +34,7 @@ const DROP_BASE = BASE + 'drops/';
 // picked at random each time a spiral bubble fires (a user-set custom spiral,
 // if any, still wins). All animate natively in an <img>, so no webm decoder
 // cold-start on the pop frame. Files live in assets/bubbles/effects/spirals/.
-const SPIRAL_POOL = ['sp1.gif', 'sp2.webp', 'sp3.gif', 'sp4.webp', 'sp5.gif', 'sp6.gif', 'sp7.gif', 'sp8.gif']
+const SPIRAL_POOL = ['sp1.gif', 'sp2.webp', 'sp3.gif', 'sp4.webp', 'sp5.gif', 'sp6.gif', 'sp7.gif']
   .map((f) => BASE + 'effects/spirals/' + f);
 // slug a subliminal word to its drop key (matches gen_sub_drops.py: lowercase,
 // runs of non-alphanumerics -> '_', trimmed).

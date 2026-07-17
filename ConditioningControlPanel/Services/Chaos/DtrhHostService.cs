@@ -40,6 +40,7 @@ internal static class DtrhHostService
     private static bool _videoHooked;
     private static bool _vnSpeaking;   // a VN tutorial beat owns the mix: skip native stingers/barks
     private static bool _worldFrozen;  // an in-world Freeze bubble is holding native video + voice
+    private static bool _diveMuted;    // the dive's in-page master mute is holding native video silent
 
     // ---- per-run native engagement metrics (local-only session telemetry) ----
     // Durations only the host can measure (video watch / voiceover / native audio
@@ -244,6 +245,9 @@ internal static class DtrhHostService
                 break;
             case "freeze-state":
                 ApplyWorldFreeze((bool?)o["on"] ?? false);
+                break;
+            case "mute-state":
+                ApplyDiveMute((bool?)o["on"] ?? false);
                 break;
             case "meta-command":
                 _meta?.Handle(o);
@@ -673,6 +677,24 @@ internal static class DtrhHostService
     /// REAL world with it: pause any covering video and the currently-playing spoken voiceline
     /// for the freeze window, resuming both when it lifts. Idempotent (dedup on _worldFrozen);
     /// also force-resumed on run end / teardown so a clip can never wedge paused.</summary>
+    /// <summary>mute-state {on} - the dive's in-page master mute is a WEB switch that can
+    /// only silence page media; a mandatory native video that covers the page never heard it
+    /// and faded its audio in anyway. Mirror the mute onto the native VideoService so one
+    /// control silences everything. Idempotent; force-released on run end / teardown so a
+    /// muted descent can never leave every video silent afterward.</summary>
+    private static void ApplyDiveMute(bool on)
+    {
+        if (on == _diveMuted) return;
+        _diveMuted = on;
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null) return;
+        disp.BeginInvoke(() =>
+        {
+            try { App.Video?.SetExternalMute(on); }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost.ApplyDiveMute: {E}", ex.Message); }
+        });
+    }
+
     private static void ApplyWorldFreeze(bool on)
     {
         if (on == _worldFrozen) return;
@@ -894,6 +916,8 @@ internal static class DtrhHostService
         HookVideoEvents(false);
         // Never leave a video or voiceline wedged paused if the window dies mid-freeze.
         if (_worldFrozen) { _worldFrozen = false; try { App.Video?.PlayPrimary(); } catch { } try { App.AvatarWindow?.ResumeSpokenAudio(); } catch { } }
+        // ...and never leave every video silent because the dive ended while muted.
+        if (_diveMuted) { _diveMuted = false; try { App.Video?.SetExternalMute(false); } catch { } }
         try { _meta?.FlushSave(); } catch { }
         if (_runActive && !_testMode)
         {

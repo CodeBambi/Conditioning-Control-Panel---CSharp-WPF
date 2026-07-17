@@ -13,6 +13,7 @@
  * ==========================================================================*/
 
 import * as bridge from './bridge.js';
+import { isMuted, onMuteChange } from './shared/audioMute.js';
 import { setModContent } from './modContent.js';
 import { createHostMediaSource } from './hostMedia.js';
 import { detectMode } from './shared/capability.js';
@@ -178,6 +179,13 @@ bridge.on('loom-list', (m) => {
 bridge.on('loom-result', (m) => { if (game && game.onLoomResult) game.onLoomResult(m); });
 bridge.on('end-run', () => shutdown());
 bridge.on('ping', (m) => bridge.send({ type: 'pong', t: m.t }));
+
+// The dive's master mute is a WEB switch - it silences page media but never the
+// native mandatory video the host lays over us. Mirror it to the host so one
+// button silences everything; the host force-releases on run end / teardown.
+const pushMute = (m) => { try { bridge.send({ type: 'mute-state', on: !!m }); } catch (e) { /* ignore */ } };
+onMuteChange(pushMute);
+pushMute(isMuted());   // ship the persisted state at boot (a muted user stays muted)
 
 // Liveness for the host's wedge watchdog: a beating rAF posts every ~2s. If the page's
 // main thread locks up, the silence (not this code) is the signal.

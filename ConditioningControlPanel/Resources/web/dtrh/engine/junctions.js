@@ -114,6 +114,11 @@ const ROOM_FLICKER_DUR = 0.6; // seconds of the settle flicker as the dome snaps
 const RECIPE_WALL_MIX = 1.0;
 const BIOME_WALL_MIX = 0.55;
 const WALL_FADE_RATE = 1.6;   // recipe wallpaper fade-in speed (mix units/sec)
+// A recipe plaster in a room with a biome roulette waits out the settle card
+// (~5.2s big center reveal) so the pages + their notice land as their OWN beat -
+// one thing, then the next - never stacked on the roulette payoff. Measured from
+// the moment the wheel lands (revealDone in linger). No roulette = shows at once.
+const RECIPE_CARD_HOLD = 5.4;
 
 // a 1x1 transparent texture so the dome's uWallTex sampler is ALWAYS bound (an
 // unbound sampler2D samples black / warns under WebView2/ANGLE). uWallMix holds
@@ -121,30 +126,12 @@ const WALL_FADE_RATE = 1.6;   // recipe wallpaper fade-in speed (mix units/sec)
 const PLACEHOLDER_TEX = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1, THREE.RGBAFormat);
 PLACEHOLDER_TEX.needsUpdate = true;
 
-// rasterize a glyph into a transparent tile laid out polka-dot style (two
-// staggered rows). Tiled across the dome via RepeatWrapping + uWallRepeat, it
-// reads as a glyph "wallpaper" with the biome colors showing through the gaps.
-// The 3x3 offset copies make the lattice wrap seamlessly across the tile seam.
-// Owned by the room that builds it -> disposed in teardown.
-function makeGlyphWallpaper(glyph) {
-  const S = 256;
-  const c = document.createElement('canvas');
-  c.width = c.height = S;
-  const g = c.getContext('2d');
-  g.clearRect(0, 0, S, S);
-  g.font = `${Math.round(S * 0.28)}px serif`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.globalAlpha = 0.85;
-  const dots = [[0.25, 0.25], [0.75, 0.25], [0.0, 0.75], [0.5, 0.75]];
-  for (const [dx, dy] of dots) {
-    for (let ox = -1; ox <= 1; ox++) {
-      for (let oy = -1; oy <= 1; oy++) {
-        g.fillText(glyph, (dx + ox) * S, (dy + oy) * S);
-      }
-    }
-  }
-  const tex = new THREE.CanvasTexture(c);
+// The recipe wall dressing is a canvas built by the GAME layer (chaosRun draws
+// the torn Lookbook page from the recipe's sketch - engine code can't reach the
+// crafting tables) and handed to schedule() as wallDress.canvas. Here it's just
+// wrapped into a tiling CanvasTexture, OWNED by the room (disposed in teardown).
+function texFromCanvas(canvas) {
+  const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -617,7 +604,7 @@ const ROOM_FRAG = `
 export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
   let J = null;           // the live fork, or null when idle
   let active = false;     // only telegraph forks during a real descent
-  const api = { onCommit: null, onLinger: null, onVeinEnd: null, onRevealFx: null };
+  const api = { onCommit: null, onLinger: null, onVeinEnd: null, onRevealFx: null, onWallReveal: null };
   const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _m = new THREE.Matrix4();
   const shatters = [];    // live shard bursts (ticked in update)
 
@@ -1450,9 +1437,17 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
         const d = J.wallDress;
         if (d.mode === 'recipe') {
           // settled AND the roulette (if any) resolved: the plaster is its own
-          // beat, never a second thing happening over the biome reveal.
-          const want = J.phase === 'linger' && J.revealDone ? 1 : 0;
-          if (want && !d.shown) { d.shown = true; J.roomFlickerT = ROOM_FLICKER_DUR; }
+          // beat, never a second thing happening over the biome reveal. When a
+          // roulette ran, wait out its big settle card (RECIPE_CARD_HOLD) so the
+          // pages + their notice follow it - one thing, then the next.
+          if (J.phase === 'linger' && J.revealDone) J.wallHold += dt;
+          const cardClear = !J.revealRow || J.wallHold >= RECIPE_CARD_HOLD;
+          const want = J.phase === 'linger' && J.revealDone && cardClear ? 1 : 0;
+          if (want && !d.shown) {
+            d.shown = true;
+            J.roomFlickerT = ROOM_FLICKER_DUR;
+            if (api.onWallReveal) { try { api.onWallReveal(); } catch (e) { /* ignore */ } }
+          }
           J.wallMix = clamp(J.wallMix + Math.sign(want - J.wallMix) * dt * WALL_FADE_RATE, 0, 1);
         } else {
           J.wallMix = J.fxLevel;
@@ -1584,6 +1579,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
         // interior. update() eases wallMix toward the mode's target.
         wallDress: wallDress ? { mode: wallDress.mode || 'biome', tex: null, owned: false, shown: false } : null,
         wallMix: 0,
+        wallHold: 0,   // seconds the recipe plaster has waited since the roulette settled
       };
       // the dress's accent color is fixed per biome; the weights ramp via fxLevel
       if (veinFx && veinFx.accent != null) {
@@ -1596,8 +1592,8 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       if (J.wallDress) {
         const u = J.room.mat.uniforms;
         u.uWallRepeat.value = wallDress.repeat != null ? wallDress.repeat : 1;
-        if (wallDress.glyph) {
-          J.wallDress.tex = makeGlyphWallpaper(wallDress.glyph);
+        if (wallDress.canvas) {
+          J.wallDress.tex = texFromCanvas(wallDress.canvas);
           J.wallDress.owned = true;
           u.uWallTex.value = J.wallDress.tex;
         } else if (wallDress.url) {
@@ -1722,6 +1718,11 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
      * owns the sfx bridge; the engine just narrates the hops). */
     get onRevealFx() { return api.onRevealFx; },
     set onRevealFx(fn) { api.onRevealFx = fn; },
+    /** onWallReveal() - fires ONCE the instant a recipe wall plaster reveals
+     * (after the settle card, if any). The game shows the "a page tears loose"
+     * notice here so the text lands exactly when the walls change. */
+    get onWallReveal() { return api.onWallReveal; },
+    set onWallReveal(fn) { api.onWallReveal = fn; },
     /** onVeinEnd(exitFrame) - the scene rebases the loop onto {pos,tangent,up}. */
     get onVeinEnd() { return api.onVeinEnd; },
     set onVeinEnd(fn) { api.onVeinEnd = fn; },

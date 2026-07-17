@@ -660,10 +660,31 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// An external owner (the DtRH dive) is holding every video silent. Its in-page
+        /// mute is a WEB switch and can never reach LibVLC, so a mandatory video that
+        /// covered the page kept fading its audio in over a muted descent. Volume-based
+        /// rather than LibVLC's Mute: Mute reads unreliably before an audio output exists
+        /// and the play path force-unmutes, so folding this into GetEffectiveVolume is the
+        /// one place that covers every site at once - play-time AND live slider drags.
+        /// </summary>
+        private static volatile bool _externalMute;
+
+        /// <summary>Silence (or release) every video for an external owner. Applies live.
+        /// MUST be released on teardown - see DtrhHostService.DisposeAll.</summary>
+        public void SetExternalMute(bool on)
+        {
+            if (_externalMute == on) return;
+            _externalMute = on;
+            App.Logger?.Information("VideoService external mute: {On}", on);
+            UpdatePlayingVideosVolume();
+        }
+
+        /// <summary>
         /// Calculate effective volume combining master and video volume.
         /// </summary>
         private int GetEffectiveVolume()
         {
+            if (_externalMute) return 0;
             var master = App.Settings.Current.MasterVolume;
             var video = App.Settings.Current.VideoVolume;
             return (int)((master / 100.0) * (video / 100.0) * 100);
@@ -1857,6 +1878,17 @@ namespace ConditioningControlPanel.Services
             // a second WASAPI session on the same MMDevice; Windows collapsed both into one
             // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
             if (!withAudio)
+            {
+                media.AddOption(":no-audio");
+            }
+            // Muted (dive master-mute or a zeroed slider) must start SILENT. Setting
+            // Volume=0 after Play() can't win the race: LibVLC creates the aout a beat
+            // later and the first frames play at full volume, so the video's audio
+            // "fades in for a sec" even while muted (the Playing handler below only lands
+            // afterward). Kill the audio output at the media level so it never starts.
+            // Trade-off: un-muting mid-video won't restore sound - fine for the mandatory
+            // dive video, and any later playback opens a fresh Media that re-evaluates this.
+            else if (GetEffectiveVolume() == 0)
             {
                 media.AddOption(":no-audio");
             }

@@ -39,7 +39,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boons.js';
-import { MAT_BY_ID, rollMaterialId, CONSUMABLE_IDS, pickSketchId, RECIPE_BY_ID } from './crafting.js';
+import { MAT_BY_ID, rollMaterialId, CONSUMABLE_IDS, pickSketchId, RECIPE_BY_ID, sketchView } from './crafting.js';
 import { CRAFTED_PERMANENT_APPLY, CRAFTED_TOY_DEFS } from './craftedEffects.js';
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
@@ -1901,7 +1901,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   function fireJunction() {
     roomsVisited++;
-    pendingRecipeReveal = null;   // a fresh room supersedes any unclaimed plaster
+    pendingRecipeReveal = null; pendingRecipeNotice = null;   // a fresh room supersedes any unclaimed plaster
     const pair = JUNCTION_PAIRS[Math.floor(Math.random() * JUNCTION_PAIRS.length)];
     const coaxSide = Math.random() < 0.5 ? 'left' : 'right';
     // clone the branded descs - rewards are per-fork and must never stick to the
@@ -1962,10 +1962,66 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (!m || ((m.runsCompleted | 0) + 1) < 5) return null;
     const id = pickSketchId(new Set(m.discoveredRecipes || []), new Set(m.paperwallSketches || []));
     const rec = id && RECIPE_BY_ID[id];
-    if (!rec || !rec.glyph) return null;
+    if (!rec || !rec.grid) return null;
     st.recipeRevealedThisRun = true;
     pendingRecipeReveal = id;
-    return { mode: 'recipe', glyph: rec.glyph, repeat: 4 };
+    const canvas = makeRecipePageCanvas(rec);
+    // stash the page + its words for the reveal notice (fired by junctions
+    // onWallReveal the instant the plaster lands - see wireRecipeNotice)
+    pendingRecipeNotice = { name: rec.name, glyph: rec.glyph, dataUrl: canvas.toDataURL('image/png') };
+    return { mode: 'recipe', canvas, repeat: 3 };
+  }
+
+  /** Draw the recipe's torn Lookbook page onto a tile - the EXACT page she'd see
+   * on the Paperwall (parchment, the 3x3 pictogram with torn cells hidden as '?',
+   * the recipe's name along the foot). junctions tiles it across the dome, so the
+   * walls read as that one page pinned up over and over. A small transparent
+   * margin lets slivers of the biome show between the pinned pages. */
+  function makeRecipePageCanvas(rec) {
+    const S = 384;
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, S, S);
+    const m = S * 0.07;
+    const w = S - m * 2, h = S - m * 2;
+    const rr = (x, y, ww, hh, r) => {
+      g.beginPath();
+      if (g.roundRect) g.roundRect(x, y, ww, hh, r);
+      else { g.moveTo(x + r, y); g.arcTo(x + ww, y, x + ww, y + hh, r); g.arcTo(x + ww, y + hh, x, y + hh, r); g.arcTo(x, y + hh, x, y, r); g.arcTo(x, y, x + ww, y, r); }
+    };
+    g.save();
+    g.translate(m, m);
+    // the page: aged parchment, faint torn edge
+    const grd = g.createLinearGradient(0, 0, 0, h);
+    grd.addColorStop(0, '#f7eed7');
+    grd.addColorStop(1, '#e6d4ab');
+    g.fillStyle = grd; rr(0, 0, w, h, 12); g.fill();
+    g.strokeStyle = 'rgba(120,90,50,0.4)'; g.lineWidth = 2; rr(1, 1, w - 2, h - 2, 12); g.stroke();
+    // the pictogram: 3x3, filled cells wear the material tint + glyph, torn = '?'
+    const cells = sketchView(rec);
+    const gw = w * 0.7, gx = (w - gw) / 2, gy = h * 0.12, cell = gw / 3;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let i = 0; i < 9; i++) {
+      const cx = gx + (i % 3) * cell + cell / 2;
+      const cy = gy + Math.floor(i / 3) * cell + cell / 2;
+      const s = cell * 0.82;
+      const cc = cells[i];
+      if (!cc) { g.fillStyle = 'rgba(90,70,40,0.06)'; rr(cx - s / 2, cy - s / 2, s, s, 7); g.fill(); continue; }
+      if (cc.torn) {
+        g.fillStyle = 'rgba(90,70,40,0.1)'; rr(cx - s / 2, cy - s / 2, s, s, 7); g.fill();
+        g.fillStyle = 'rgba(80,60,35,0.55)'; g.font = `${Math.round(cell * 0.5)}px serif`; g.fillText('?', cx, cy);
+      } else {
+        g.fillStyle = cc.tint; rr(cx - s / 2, cy - s / 2, s, s, 7); g.fill();
+        g.font = `${Math.round(cell * 0.5)}px serif`; g.fillText(cc.glyph, cx, cy);
+      }
+    }
+    // the foot: the recipe's own glyph + name
+    g.fillStyle = 'rgba(70,50,28,0.92)';
+    g.font = `600 ${Math.round(h * 0.068)}px system-ui, sans-serif`;
+    g.fillText(`${rec.glyph} ${rec.name.toLowerCase()}`, w / 2, h * 0.9);
+    g.restore();
+    return c;
   }
 
   /** The plaster lands: pin the torn sketch in THE BOUDOIR. A TEASE, not a
@@ -1975,10 +2031,27 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const id = pendingRecipeReveal;
     pendingRecipeReveal = null;
     if (!id) return;
-    const rec = RECIPE_BY_ID[id];
     bridge.send({ type: 'meta-command', op: 'add-to-set', set: 'paperwallSketches', id });
     markDiscovered('recipe:' + id);
-    hudUi.toast(`${rec && rec.glyph ? rec.glyph + ' ' : ''}the walls know something you can’t make yet`);
+    // The VISIBLE notice is fired by junctions onWallReveal -> showRecipeNotice,
+    // synced to the plaster actually landing. Banking runs at linger (a beat
+    // earlier, while a roulette card may still be up), so a toast here would
+    // flash and fade before the walls ever change - which is the bug we hit.
+  }
+
+  /** The plaster lands on the dome: announce it big - the torn page itself plus
+   * its name. Fired by junctions the INSTANT the wall dressing reveals (after the
+   * biome settle card, if any), so the words and the walls change together. */
+  function showRecipeNotice() {
+    const n = pendingRecipeNotice;
+    pendingRecipeNotice = null;
+    if (!n) return;
+    hudUi.announce('A PAGE TEARS LOOSE', 'depth', 4600, {
+      artUrl: n.dataUrl, artBig: true,
+      subText: `${n.glyph} ${n.name.toLowerCase()}`,
+      hint: 'pinned to your Paperwall — draw it at the Loom',
+    });
+    try { sfx('boon_pick', 0.6); } catch (e) { /* ignore */ }
   }
 
   /** The Grand Draft: every BONUS_ROOM_EVERY-th room the descent passes through
@@ -2016,7 +2089,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (!ctx.junctions.isBusy()) {   // engine refused (inactive/torn down): no room, no wedge
       bonusRoomActive = false;
       draftRoomActive = false;
-      if (recipeDress) { st.recipeRevealedThisRun = false; pendingRecipeReveal = null; }  // no room = no reveal spent
+      if (recipeDress) { st.recipeRevealedThisRun = false; pendingRecipeReveal = null; pendingRecipeNotice = null; }  // no room = no reveal spent
       return;
     }
     roomsVisited++;
@@ -2109,6 +2182,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let roomsVisited = 0;          // every antechamber counts: forks + boon rooms (paces the grand room)
   const BONUS_ROOM_EVERY = 10;   // every 10th room is the Grand Draft (fireBonusRoom)
   let pendingRecipeReveal = null; // recipe id plastered on the live room, banked when she settles in
+  let pendingRecipeNotice = null; // {name,glyph,dataUrl} for the reveal announce, fired when the plaster lands
   let draftDom = null;           // lazy DOM chrome: caption + reroll/resist (reuses boonPick's CSS)
   let draftCapTimer = null;      // 250ms caption countdown while the room lingers
   let draftRevealBiome = null;   // the roulette's pre-rolled target, for the settle card
@@ -2207,7 +2281,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     draftRoomActive = true;
     draftRoomSkip = false;
     draftRoomDoors = options.length;
-    pendingRecipeReveal = null;   // a fresh room supersedes any unclaimed plaster
+    pendingRecipeReveal = null; pendingRecipeNotice = null;   // a fresh room supersedes any unclaimed plaster
     // The Journey Rooms: the doors lead INTO the next room, so its title hangs
     // over them - big writing above the doorway mouths (junctions buildTitle).
     // The room dresses in its classic palette (never the biome's), but the
@@ -2217,6 +2291,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const nextStyle = next.style;   // classic room palette - never the biome's (no early hint)
     const targetBiome = biomeForWave(pendingWave, st.biomes);   // null on scripted runs
     draftRevealBiome = targetBiome;   // the settle card reads it when the wheel lands
+    // the recipe plaster rides the FIRST boon dome of the descent - whichever
+    // comes first, a boundary draft room or a Grand Draft (pickRecipeDress is
+    // once-per-run, so the other one just wears its biome art as usual)
+    const recipeDress = pickRecipeDress();
     ctx.junctions.schedule({
       atDepth: ctx.nav.getDepth() + DRAFT_ROOM_LEAD,
       branches: options.map(boonBranch),
@@ -2237,9 +2315,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // ...and so does the DOME: its walls retint + take the biome's own art on
       // the same gate, so the room BECOMES the place the doors lead into.
       roomTheme: roomThemeFor(targetBiome),
-      wallDress: biomeWallFor(targetBiome),
+      // ...unless this is the descent's recipe room: the plaster wins the walls
+      // (the retint still lands, so the biome reads in the colour under it), and
+      // junctions holds it until AFTER the roulette settles - one beat, then the next.
+      wallDress: recipeDress || biomeWallFor(targetBiome),
     });
     if (ctx.junctions.isBusy()) roomsVisited++;   // armed: this room paces the Grand Draft too
+    else if (recipeDress) { st.recipeRevealedThisRun = false; pendingRecipeReveal = null; pendingRecipeNotice = null; }  // no room = no reveal spent
   }
 
   /** A draft-room door committed: the dive is already running engine-side;
@@ -3827,6 +3909,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (ctx.junctions) {
         ctx.junctions.onCommit = (choice) => (choice && choice.mode === 'draft' ? onDraftDoorChosen(choice) : onJunctionChosen(choice));
         ctx.junctions.onLinger = (on, mode) => (mode === 'draft' ? onDraftRoomLinger(on) : onJunctionLinger(on));
+        // the recipe plaster's own beat: junctions fires this the instant the pages
+        // reveal (after the biome settle card), so the notice lands with the walls
+        ctx.junctions.onWallReveal = () => showRecipeNotice();
         // the biome roulette's casino noises: a tick per hop, a payoff on the
         // landing - and only THEN the draft chrome (resist/reroll/countdown),
         // which onDraftRoomLinger held back while the wheel spun
