@@ -25,6 +25,12 @@ internal static class DtrhLoomStore
 
     private static readonly Regex SlugRe = new("^[a-z0-9_-]{1,24}$", RegexOptions.Compiled);
 
+    /// <summary>Raised after a successful Save or Delete, so open UI (the
+    /// SpiralFeatureControl library) can refresh without polling the folder.
+    /// Raised on the caller's thread - WebView2 bridge messages arrive on the
+    /// UI thread, but subscribers should still marshal defensively.</summary>
+    public static event Action? Changed;
+
     public static string SpiralsFolder => Path.Combine(App.UserDataPath, "Spirals");
 
     /// <summary>Sanitize a display name into the slug the files use. Null when nothing survives.</summary>
@@ -93,6 +99,7 @@ internal static class DtrhLoomStore
             }
             catch { /* sidecar is a convenience (re-edit); the gif is the artifact */ }
             App.Logger?.Information("DtrhLoomStore: saved spiral {Slug} ({Bytes} bytes)", slug, bytes.Length);
+            try { Changed?.Invoke(); } catch { /* a broken subscriber must not fail the save */ }
             return (true, slug, null);
         }
         catch (Exception ex)
@@ -133,6 +140,7 @@ internal static class DtrhLoomStore
             var sidecar = Path.Combine(SpiralsFolder, Prefix + slug + ".json");
             try { if (File.Exists(sidecar)) File.Delete(sidecar); } catch { }
             App.Logger?.Information("DtrhLoomStore: deleted spiral {Slug}", slug);
+            try { Changed?.Invoke(); } catch { /* a broken subscriber must not fail the delete */ }
             return (true, null);
         }
         catch (Exception ex)

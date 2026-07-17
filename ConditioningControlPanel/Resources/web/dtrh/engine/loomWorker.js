@@ -1,26 +1,34 @@
 /* ============================================================================
- * loomWorker.js - THE LOOM's GIF encoder, OFF the main thread (Part 2).
+ * loomWorker.js - THE LOOM's GIF encoder, OFF the main thread. Schema v2.
  *
- * Renders the spiral frames with the SAME drawSpiral the preview uses
- * (shared/loomSpiral.js), quantizes each frame against a small global palette
- * built from the params' own colors (bg -> color ramps, so banding is
- * invisible on this kind of art), and streams them into omggif's GifWriter.
+ * Renders each frame with the SAME field pipeline the preview uses
+ * (shared/loomField.js: WebGL field -> 2D composite -> centerpiece), so the
+ * file always matches the pane. Encoding is gifenc (vendored): a proper
+ * quantizer, because v2 frames - glow halos, gradient bands, radial
+ * backgrounds, dual layers - hold thousands of colors the old bg->color
+ * ramp palette could never cover.
  *
- * Protocol (main -> worker):
- *   { id, params }        encode this spiral
- *   { cancel: id }        pane closed / re-tweaked mid-encode: stop early
- * (worker -> main), per job:
- *   { id, progress }                                    0..1, every 4 frames
- *   { id, gif: ArrayBuffer, bytes, w, h, frames, delayCs }  done (buffer transferred)
- *   { id, error }
+ * Palette policy: one global palette pooled from 6 evenly spaced frames when
+ * the hue stands still; per-frame local palettes when hueCycles > 0 (a global
+ * table can't chase a moving hue).
  *
- * Budget: 640px / 36 frames lands ~1.5-3.5MB for typical params. A pathological
- * palette that still overshoots 6MB re-encodes once at 512/30; >8MB errors out
- * (the C# store enforces the same ceiling).
+ * Protocol (unchanged from v1):
+ *   main -> worker: { id, params }  |  { cancel: id }
+ *   worker -> main: { id, progress } (0..1, every 4 frames)
+ *                   { id, gif: ArrayBuffer, bytes, w, h, frames, delayCs }
+ *                   { id, error }
+ *
+ * Budget (unchanged): >6MB re-encodes once at 512/30; >8MB errors out (the
+ * C# store enforces the same ceiling). No WebGL in the worker? Frames fall
+ * back to the v1 drawSpiral projection - same look the preview falls back to.
  * ==========================================================================*/
 
-import { GifWriter } from '/dtrh/vendor/omggif/omggif.module.js';
-import { drawSpiral, normalizeParams, delayCsFor } from '/dtrh/shared/loomSpiral.js';
+import { GIFEncoder, quantize, applyPalette } from '/dtrh/vendor/gifenc/gifenc.esm.js';
+import { drawSpiral } from '/dtrh/shared/loomSpiral.js';
+import {
+  normalizeParams2, delayCsFor2, createFieldRenderer, composeFrame,
+  drawCenterpiece, projectToV1,
+} from '/dtrh/shared/loomField.js';
 
 const SIZE = 640, FRAMES = 36;
 const RETRY_SIZE = 512, RETRY_FRAMES = 30;
@@ -36,56 +44,8 @@ self.onmessage = (e) => {
     .finally(() => cancelled.delete(msg.id));
 };
 
-const hexToRgbInt = (h) => parseInt(h.slice(1), 16) & 0xffffff;
-
-/** Global palette: for each params color, a 24-step bg->color ramp + the pure
- *  color; plus bg itself. Deduped, padded to the next power of two (omggif
- *  requires 2..256 pow2). Small on purpose - this art IS flat ramps. */
-function buildPalette(q) {
-  const bg = hexToRgbInt(q.bg);
-  const set = new Set([bg]);
-  for (const c of q.colors) {
-    const rgb = hexToRgbInt(c);
-    const r0 = (bg >> 16) & 255, g0 = (bg >> 8) & 255, b0 = bg & 255;
-    const r1 = (rgb >> 16) & 255, g1 = (rgb >> 8) & 255, b1 = rgb & 255;
-    for (let i = 1; i <= 24; i++) {
-      const t = i / 24;
-      set.add(((Math.round(r0 + (r1 - r0) * t) << 16)
-        | (Math.round(g0 + (g1 - g0) * t) << 8)
-        | Math.round(b0 + (b1 - b0) * t)) & 0xffffff);
-    }
-  }
-  let palette = [...set];
-  if (palette.length > 256) palette = palette.slice(0, 256);
-  let pow = 2;
-  while (pow < palette.length) pow <<= 1;
-  while (palette.length < pow) palette.push(palette[0]);
-  return palette;
-}
-
-/** 15-bit RGB -> palette index LUT: one Uint8Array(32768) filled by nearest
- *  match, then O(1) per pixel. Plenty for ramp art (5 bits/channel). */
-function buildLut(palette) {
-  const lut = new Uint8Array(32768);
-  const pr = new Uint8Array(palette.length), pg = new Uint8Array(palette.length), pb = new Uint8Array(palette.length);
-  for (let i = 0; i < palette.length; i++) {
-    pr[i] = (palette[i] >> 16) & 255; pg[i] = (palette[i] >> 8) & 255; pb[i] = palette[i] & 255;
-  }
-  for (let key = 0; key < 32768; key++) {
-    const r = ((key >> 10) & 31) << 3, g = ((key >> 5) & 31) << 3, b = (key & 31) << 3;
-    let best = 0, bestD = Infinity;
-    for (let i = 0; i < palette.length; i++) {
-      const dr = r - pr[i], dg = g - pg[i], db = b - pb[i];
-      const d = dr * dr + dg * dg + db * db;
-      if (d < bestD) { bestD = d; best = i; }
-    }
-    lut[key] = best;
-  }
-  return lut;
-}
-
 async function encodeJob({ id, params }) {
-  const q = normalizeParams(params);
+  const q = normalizeParams2(params);
   let out = await encode(id, q, SIZE, FRAMES);
   if (out == null) return;   // cancelled
   if (out.bytes > SOFT_CAP) {
@@ -98,31 +58,77 @@ async function encodeJob({ id, params }) {
     [out.buf]);
 }
 
+/** Every 4th pixel (RGBA quads, alpha forced opaque) - quantizer diet. */
+function subsample(rgba, factor) {
+  const pixels = Math.floor(rgba.length / 4 / factor);
+  const out = new Uint8Array(pixels * 4);
+  for (let i = 0; i < pixels; i++) {
+    const s = i * factor * 4, d = i * 4;
+    out[d] = rgba[s]; out[d + 1] = rgba[s + 1]; out[d + 2] = rgba[s + 2]; out[d + 3] = 255;
+  }
+  return out;
+}
+
 async function encode(id, q, size, frames) {
-  const canvas = new OffscreenCanvas(size, size);
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const composite = new OffscreenCanvas(size, size);
+  const ctx = composite.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('no 2d context in worker');
 
-  const palette = buildPalette(q);
-  const lut = buildLut(palette);
-  const delayCs = delayCsFor(q);
-  const indexed = new Uint8Array(size * size);
-  // worst case ~= raw indexed data + headers; LZW only shrinks it
-  const buf = new Uint8Array(size * size * frames + 4096);
-  const writer = new GifWriter(buf, size, size, { loop: 0, palette });
+  // WebGL field; falls back to the v1 wedge renderer if the worker has no GL.
+  let field = null;
+  try { field = createFieldRenderer(new OffscreenCanvas(size, size)); } catch (e) { field = null; }
+  const v1 = field ? null : projectToV1(q);
 
+  const drawFrame = (phase) => {
+    if (field) {
+      composeFrame(ctx, field, q, phase, size);
+    } else {
+      drawSpiral(ctx, size, v1, phase);
+      drawCenterpiece(ctx, q, phase, size);
+    }
+  };
+  const readFrame = (phase) => {
+    drawFrame(phase);
+    return ctx.getImageData(0, 0, size, size).data;
+  };
+
+  const delayCs = delayCsFor2(q);
+  const perFramePalette = q.hueCycles > 0;
+
+  // Global palette: pool 6 evenly spaced frames, subsampled 4x.
+  let globalPalette = null;
+  if (!perFramePalette) {
+    const SAMPLES = 6;
+    const parts = [];
+    for (let i = 0; i < SAMPLES; i++) {
+      if (cancelled.has(id)) return null;
+      parts.push(subsample(readFrame(i / SAMPLES), 4));
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    let len = 0;
+    for (const p of parts) len += p.length;
+    const pool = new Uint8Array(len);
+    let off = 0;
+    for (const p of parts) { pool.set(p, off); off += p.length; }
+    globalPalette = quantize(pool, 256, { format: 'rgb565' });
+  }
+
+  const gif = GIFEncoder();
   for (let f = 0; f < frames; f++) {
     if (cancelled.has(id)) return null;
-    drawSpiral(ctx, size, q, f / frames);
-    const px = ctx.getImageData(0, 0, size, size).data;
-    for (let i = 0, j = 0; j < indexed.length; i += 4, j++) {
-      indexed[j] = lut[((px[i] & 0xf8) << 7) | ((px[i + 1] & 0xf8) << 2) | (px[i + 2] >> 3)];
-    }
-    writer.addFrame(0, 0, size, size, indexed, { delay: delayCs });
+    const rgba = readFrame(f / frames);
+    const palette = perFramePalette ? quantize(subsample(rgba, 4), 256, { format: 'rgb565' }) : globalPalette;
+    const indexed = applyPalette(rgba, palette, 'rgb565');
+    // First frame carries the global table + loop flag; later frames only
+    // declare a local table when palettes vary per frame.
+    const opts = { delay: delayCs * 10, repeat: 0 };
+    if (f === 0 || perFramePalette) opts.palette = palette;
+    gif.writeFrame(indexed, size, size, opts);
     if (f % 4 === 3) self.postMessage({ id, progress: (f + 1) / frames });
     // yield so a cancel message can land between frames
     await new Promise((r) => setTimeout(r, 0));
   }
-  const bytes = writer.end();
-  return { buf: buf.buffer.slice(0, bytes), bytes, size, frames, delayCs };
+  gif.finish();
+  const bytes = gif.bytes();
+  return { buf: bytes.buffer, bytes: bytes.length, size, frames, delayCs };
 }

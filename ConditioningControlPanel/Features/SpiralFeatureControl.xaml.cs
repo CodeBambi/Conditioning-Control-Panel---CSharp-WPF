@@ -37,6 +37,8 @@ namespace ConditioningControlPanel.Features
             {
                 inpc.PropertyChanged += OnSettingsPropertyChanged;
             }
+            // Loom saves/deletes (game pane or the main-app Loom window) show up live.
+            Services.Chaos.DtrhLoomStore.Changed += OnLoomStoreChanged;
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -45,6 +47,7 @@ namespace ConditioningControlPanel.Features
             {
                 inpc.PropertyChanged -= OnSettingsPropertyChanged;
             }
+            Services.Chaos.DtrhLoomStore.Changed -= OnLoomStoreChanged;
         }
 
         private void LoadFromSettings()
@@ -328,6 +331,27 @@ namespace ConditioningControlPanel.Features
         }
 
         private void BtnRefreshSpirals_Click(object sender, RoutedEventArgs e) => RefreshLibrary();
+
+        /// <summary>Open THE LOOM editor window (the enhanced spiral creator).
+        /// Saves land in the Spirals folder; DtrhLoomStore.Changed refreshes us live.</summary>
+        private void BtnOpenLoom_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Services.Chaos.LoomHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Spiral card: Loom launch failed");
+            }
+        }
+
+        private void OnLoomStoreChanged()
+        {
+            // Raised on the loom window's bridge thread contractually near the UI
+            // thread, but marshal defensively - and the control may be unloading.
+            Dispatcher.BeginInvoke(new Action(RefreshLibrary));
+        }
 
         private void BtnSelectGif_Click(object sender, RoutedEventArgs e)
         {

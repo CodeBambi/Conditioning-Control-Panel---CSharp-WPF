@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<!-- THE LOOM, outside the rabbit hole: the main app's spiral creator window
+     (LoomHostService). Same studio module, same worker, same C# file store
+     as the Warren's Boudoir pane - this page is just a lighter home for it.
+     No three.js importmap needed: the loom is 2D canvas + one WebGL quad. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>The Loom</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    /* page-local layout only - all component chrome comes from styles.css */
+    html, body { height: 100%; }
+    body { overflow-y: auto; }
+    .loom-page {
+      max-width: 620px;
+      margin: 0 auto;
+      padding: 22px 18px 48px;
+    }
+    .loom-page-head {
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .loom-page-head h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 0.18em;
+      color: var(--pink, #ff69b4);
+      text-shadow: 0 0 18px rgba(255, 105, 180, 0.45);
+    }
+    .loom-page-head p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: #b9b3d8;
+      letter-spacing: 0.06em;
+    }
+    .loom-page .wr-loom-preview { display: block; margin: 0 auto 10px; }
+  </style>
+</head>
+<body>
+  <div class="loom-page">
+    <div class="loom-page-head">
+      <h1>THE LOOM</h1>
+      <p>spin a spiral of your own</p>
+    </div>
+    <div id="loom"></div>
+  </div>
+  <script type="module" src="./loomBoot.js"></script>
+</body>
+</html>

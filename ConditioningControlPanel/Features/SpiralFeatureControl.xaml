@@ -129,6 +129,14 @@
                 </StackPanel>
             </Border>
 
+            <!-- THE LOOM: weave your own spiral (also craftable inside DtRH) -->
+            <Button x:Name="BtnOpenLoom"
+                    Content="🌀 THE LOOM — weave your own spiral"
+                    Style="{DynamicResource OutlineButton}"
+                    Padding="12,10"
+                    Margin="0,0,0,10"
+                    Click="BtnOpenLoom_Click"/>
+
             <!-- Select GIF (browse anywhere) -->
             <Button x:Name="BtnSelectGif"
                     Content="{loc:Str btn_select_gif}"
