@@ -16,7 +16,7 @@ let spirals = [];   // [{ slug, url, params }]
 // saved spirals join this pool at runtime via pickSpiralUrl(). All animate
 // natively in an <img>/background (gif/webp), so no webm decoder cold-start.
 const BUNDLED_BASE = '/dtrh/assets/bubbles/effects/spirals/';
-export const BUNDLED_SPIRALS = ['sp1.gif', 'sp2.webp', 'sp3.gif', 'sp4.webp', 'sp5.gif', 'sp6.gif', 'sp7.gif', 'sp8.gif']
+export const BUNDLED_SPIRALS = ['sp1.gif', 'sp2.webp', 'sp3.gif', 'sp4.webp', 'sp5.gif', 'sp6.gif', 'sp7.gif']
   .map((f) => BUNDLED_BASE + f);
 
 export function setLoomSpirals(list) {

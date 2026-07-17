@@ -30,7 +30,7 @@ const LUCKY_XP = 100;
 const POP_SFX = ['Pop.mp3', 'Pop2.mp3', 'Pop3.mp3'];
 const CHIME_SFX = ['chime1.mp3', 'chime2.mp3', 'chime3.mp3'];
 const DROP_BASE = BASE + 'drops/';
-// The default spiral overlay is a POOL (bundled sp1..8 + the player's Loom
+// The default spiral overlay is a POOL (bundled sp1..7 + the player's Loom
 // spirals, ~50/50): pickSpiralUrl() from loomSpirals.js owns that choice so the
 // in-run payload fx shares the exact same source. A user-set custom spiral, if
 // any, still wins (checked in fireEffect before the pool).
