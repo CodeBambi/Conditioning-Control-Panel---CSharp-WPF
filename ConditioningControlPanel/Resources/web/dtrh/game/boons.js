@@ -271,7 +271,7 @@ const DUO_FAVOR = 0.75;
  */
 export function draft({ allowCurses = true, choices = 3, guaranteeCurse = false,
   takenIds = null, sinChance = 0.5, equipment = [], hasVideo = false } = {}) {
-  choices = Math.min(4, Math.max(2, choices));
+  choices = Math.min(5, Math.max(2, choices));
   const has = (id) => equipment.includes(id);
   const draftable = (b) =>
     (!b.requiresAny || b.requiresAny.some(has))
