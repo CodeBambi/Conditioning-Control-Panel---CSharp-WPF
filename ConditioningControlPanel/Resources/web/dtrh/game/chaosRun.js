@@ -39,7 +39,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boons.js';
-import { MAT_BY_ID, rollMaterialId, CONSUMABLE_IDS, pickSketchId } from './crafting.js';
+import { MAT_BY_ID, rollMaterialId, CONSUMABLE_IDS, pickSketchId, RECIPE_BY_ID } from './crafting.js';
 import { CRAFTED_PERMANENT_APPLY, CRAFTED_TOY_DEFS } from './craftedEffects.js';
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
@@ -270,6 +270,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       materialChance: 0.011,
       materialDropsThisRun: 0,
       runMaterials: {},
+      recipeRevealedThisRun: false,  // the dome plasters ONE recipe's glyph per descent
       moodRingLevel: 0,        // 💍 forecast / x1.5 weather / reroll
       stickyFingersLevel: 0,   // 🍯 held-card paddle pay tier
       dropPerPop: 0,
@@ -364,6 +365,16 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // roll no biomes (st.biomes null) and everything resolves to the classics.
   const activeBiome = () => (st && cfg && cfg.regionMode ? biomeForWave(st.waveIndex, st.biomes) : null);
   const biomeAt = (waveIndex) => (st && cfg && cfg.regionMode ? biomeForWave(waveIndex, st.biomes) : null);
+  /** The dome's biome palette: the antechamber retints from its classic pink
+   * toward these (junctions eases it on the reveal gate). Null = stay classic. */
+  const roomThemeFor = (bio) => {
+    const p = bio && bio.style && bio.style.palette;
+    if (!p) return null;
+    return { bg1: p.colBg, bg2: p.colFog, line: p.colLine };
+  };
+  /** The dome's wall image: the biome's own art, faded over the retinted wall on
+   * the same gate (so a draft room still leaks nothing before the roulette lands). */
+  const biomeWallFor = (bio) => (bio && bio.id ? { mode: 'biome', url: `https://ccp.art/biomes/${bio.id}.png`, repeat: 1 } : null);
   /** The chamber's effective style/profile/weather: biome override or classic. */
   const styleForWaveNow = (waveIndex) => {
     const b = biomeAt(waveIndex);
@@ -1890,6 +1901,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   function fireJunction() {
     roomsVisited++;
+    pendingRecipeReveal = null;   // a fresh room supersedes any unclaimed plaster
     const pair = JUNCTION_PAIRS[Math.floor(Math.random() * JUNCTION_PAIRS.length)];
     const coaxSide = Math.random() < 0.5 ? 'left' : 'right';
     // clone the branded descs - rewards are per-fork and must never stick to the
@@ -1932,8 +1944,41 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       presealIndex,
       mode: 'fork',
       veinFx: (forkBiome && forkBiome.veinFx) || null,
+      roomTheme: roomThemeFor(forkBiome),
+      wallDress: biomeWallFor(forkBiome),
     });
     bark('junction-near');
+  }
+
+  /** THE BOUDOIR: pick this descent's recipe plaster - ONE per run, and only
+   * once the boudoir itself is due (runs >= 5, same gate the torn page uses, so
+   * the walls never show her a room she hasn't been given yet). Shares the
+   * paperwall's picker off LIVE meta, so it never re-teases a recipe she already
+   * knows or already has a page for. Arms pendingRecipeReveal; the sketch is
+   * banked when she actually settles into the dome (onDraftRoomLinger). */
+  function pickRecipeDress() {
+    if (!st || st.recipeRevealedThisRun || cfg.scriptedFirstRun) return null;
+    const m = hostState && hostState.meta;
+    if (!m || ((m.runsCompleted | 0) + 1) < 5) return null;
+    const id = pickSketchId(new Set(m.discoveredRecipes || []), new Set(m.paperwallSketches || []));
+    const rec = id && RECIPE_BY_ID[id];
+    if (!rec || !rec.glyph) return null;
+    st.recipeRevealedThisRun = true;
+    pendingRecipeReveal = id;
+    return { mode: 'recipe', glyph: rec.glyph, repeat: 4 };
+  }
+
+  /** The plaster lands: pin the torn sketch in THE BOUDOIR. A TEASE, not a
+   * discovery - the shape is hers now, but she still has to make it at the
+   * worktable. add-to-set dedupes, so a re-fire is harmless. */
+  function bankRecipeReveal() {
+    const id = pendingRecipeReveal;
+    pendingRecipeReveal = null;
+    if (!id) return;
+    const rec = RECIPE_BY_ID[id];
+    bridge.send({ type: 'meta-command', op: 'add-to-set', set: 'paperwallSketches', id });
+    markDiscovered('recipe:' + id);
+    hudUi.toast(`${rec && rec.glyph ? rec.glyph + ' ' : ''}the walls know something you can’t make yet`);
   }
 
   /** The Grand Draft: every BONUS_ROOM_EVERY-th room the descent passes through
@@ -1953,6 +1998,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     draftRoomDoors = options.length;
     draftRevealBiome = null;    // no roulette: the doors stay in this room's biome
     const bio = activeBiome();
+    // the Grand Draft's walls are free (no roulette to leak), so they take the
+    // recipe plaster when one is due; otherwise they wear the biome's own art.
+    const recipeDress = pickRecipeDress();
     ctx.junctions.schedule({
       atDepth: ctx.nav.getDepth() + JUNCTION_LEAD,
       branches: options.map(boonBranch),
@@ -1962,10 +2010,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       lead: JUNCTION_LEAD,
       title: { numeral: '✦', text: 'TEMPTATION', color: 0xffd76a },
       veinFx: (bio && bio.veinFx) || null,
+      roomTheme: roomThemeFor(bio),
+      wallDress: recipeDress || biomeWallFor(bio),
     });
     if (!ctx.junctions.isBusy()) {   // engine refused (inactive/torn down): no room, no wedge
       bonusRoomActive = false;
       draftRoomActive = false;
+      if (recipeDress) { st.recipeRevealedThisRun = false; pendingRecipeReveal = null; }  // no room = no reveal spent
       return;
     }
     roomsVisited++;
@@ -2057,6 +2108,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let draftRoomDoors = 3;        // dealt door count (2-5: wave drafts deal draftChoices, grand rooms 4-5)
   let roomsVisited = 0;          // every antechamber counts: forks + boon rooms (paces the grand room)
   const BONUS_ROOM_EVERY = 10;   // every 10th room is the Grand Draft (fireBonusRoom)
+  let pendingRecipeReveal = null; // recipe id plastered on the live room, banked when she settles in
   let draftDom = null;           // lazy DOM chrome: caption + reroll/resist (reuses boonPick's CSS)
   let draftCapTimer = null;      // 250ms caption countdown while the room lingers
   let draftRevealBiome = null;   // the roulette's pre-rolled target, for the settle card
@@ -2128,6 +2180,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   function onDraftRoomLinger(on) {
     onJunctionLinger(on);   // the same near-hover crawl while the doors are read
+    // she's inside and the walls have finished becoming: pin the torn sketch
+    if (on && pendingRecipeReveal) bankRecipeReveal();
     // while the biome roulette spins the chrome stays hidden (resist/reroll
     // would be dead buttons anyway - the engine gates every pick path until
     // the wheel lands); the onRevealFx 'settle' handler shows it instead
@@ -2153,6 +2207,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     draftRoomActive = true;
     draftRoomSkip = false;
     draftRoomDoors = options.length;
+    pendingRecipeReveal = null;   // a fresh room supersedes any unclaimed plaster
     // The Journey Rooms: the doors lead INTO the next room, so its title hangs
     // over them - big writing above the doorway mouths (junctions buildTitle).
     // The room dresses in its classic palette (never the biome's), but the
@@ -2179,6 +2234,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // the doorway corridors dress as the destination biome - junctions holds
       // the dress back until the roulette lands, so it can't leak the roll
       veinFx: (targetBiome && targetBiome.veinFx) || null,
+      // ...and so does the DOME: its walls retint + take the biome's own art on
+      // the same gate, so the room BECOMES the place the doors lead into.
+      roomTheme: roomThemeFor(targetBiome),
+      wallDress: biomeWallFor(targetBiome),
     });
     if (ctx.junctions.isBusy()) roomsVisited++;   // armed: this room paces the Grand Draft too
   }
@@ -3703,6 +3762,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           const mat = MAT_BY_ID[String(id || '')];
           if (!mat || state !== 'running') return false;
           field.spawn(buildMaterial(mat));
+          return true;
+        };
+        // diagnostics seam: force the Grand Draft NOW - __sfBonusRoom() - so the
+        // recipe plaster + wall dressing can be seen without grinding 10 rooms
+        // (re-arms the once-per-run reveal so it can be fired repeatedly)
+        window.__sfBonusRoom = () => {
+          if (state !== 'running' || !ctx || !ctx.junctions || ctx.junctions.isBusy()) return false;
+          if (st) st.recipeRevealedThisRun = false;
+          fireBonusRoom();
           return true;
         };
       } catch { /* diagnostics seam */ }
