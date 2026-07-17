@@ -21,6 +21,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Title -->
@@ -65,8 +66,21 @@
                            Foreground="#808090" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
             </StackPanel>
 
+            <!-- Download URL (mods only: creator-hosted binary, catalogue keeps the link).
+                 Collapsed unless the ctor asks for it. -->
+            <StackPanel Grid.Row="5" x:Name="PnlDownloadUrl" Margin="0,12,0,0" Visibility="Collapsed">
+                <TextBlock Text="{loc:Str dialog_catalogue_submit_mega_label}"
+                           Foreground="#B0B0C0" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBox x:Name="TxtDownloadUrl" MaxLength="500"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="#E0E0E0"
+                         BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                         Padding="8,6" FontSize="14" CaretBrush="{DynamicResource PinkBrush}"/>
+                <TextBlock Text="{loc:Str dialog_catalogue_submit_mega_hint}"
+                           Foreground="#808090" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+
             <!-- Guidelines hyperlink + affirmation checkbox -->
-            <StackPanel Grid.Row="5" Margin="0,14,0,0">
+            <StackPanel Grid.Row="6" Margin="0,14,0,0">
                 <TextBlock FontSize="13">
                     <Hyperlink x:Name="LinkGuidelines"
                                NavigateUri="https://app.cclabs.app/catalogue/guidelines"
@@ -109,13 +123,13 @@
             </StackPanel>
 
             <!-- Spinner -->
-            <StackPanel Grid.Row="6" x:Name="PnlSpinner" Orientation="Horizontal" Margin="0,16,0,12" Visibility="Collapsed">
+            <StackPanel Grid.Row="7" x:Name="PnlSpinner" Orientation="Horizontal" Margin="0,16,0,12" Visibility="Collapsed">
                 <TextBlock Text="⌛" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
                 <TextBlock Text="{loc:Str dialog_catalogue_submit_spinner}" Foreground="#B0B0C0" FontSize="13" VerticalAlignment="Center"/>
             </StackPanel>
 
             <!-- Buttons -->
-            <Grid Grid.Row="7" Margin="0,20,0,0">
+            <Grid Grid.Row="8" Margin="0,20,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>

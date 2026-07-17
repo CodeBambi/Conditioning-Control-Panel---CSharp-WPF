@@ -30,6 +30,7 @@
  * ==========================================================================*/
 
 import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, buildHeart, buildGoldDroplet,
+  buildMaterial,
   buildHeavy, buildPrism, buildBrittle, buildEcho, buildEchoChild, buildTease,
   buildBoundPair, buildChaperonePair, buildDarter, rollDarter,
   FREEZE_MAX_ON_SCREEN, SIDE_DRIFT_CHANCE, SIDE_DRIFT_GRACE_SPAWNS, MOTION,
@@ -38,6 +39,8 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boons.js';
+import { MAT_BY_ID, rollMaterialId, CONSUMABLE_IDS, pickSketchId } from './crafting.js';
+import { CRAFTED_PERMANENT_APPLY, CRAFTED_TOY_DEFS } from './craftedEffects.js';
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
 import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL } from './regions.js';
@@ -97,6 +100,8 @@ const COMBO_BIG_THRESHOLDS = [25, 50, 100];
 const TICK = 0.25;                  // the C# RunTick period
 const PLAIN_BUBBLE_CHANCE = 0.30;   // share of ordinary spawns that are plain, effect-free soap bubbles (deep-run baseline)
 const PLAIN_BUBBLE_CHANCE_EARLY = 0.80; // at the top of the run: mostly plain bubbles, effects rare - ramps down to PLAIN_BUBBLE_CHANCE as intensity peaks
+const MATERIAL_DROP_CAP = 8;        // crafting: max material drops per run (tube + pop combined)
+const MATERIAL_POP_CHANCE = 0.008;  // crafting: chance a popped treat sheds a raw ingredient
 const VIDEO_HEAVY_SEC = 17;         // the stuck POV video holds 15s (payloadFx VIDEO_HOLD_SEC) + slack
 const CASCADE_BASE_SEC = 6;         // GifCascadePayload.DURATION_SEC (+5 ride-out)
 const RANK = { Curious: 0, Tempted: 1, Slipping: 2, Entranced: 3, Devoted: 4, Claimed: 5 };
@@ -170,6 +175,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // The always-on habits (Warren upgrades) trained this run - surfaced in the
       // HUD's dim left rail. They never change mid-run, so the HUD reads this once.
       ownedHabitIds: rc.ownedHabitIds || [],
+      // Crafting Part 2: the run's crafted kit, frozen at request-run time (a
+      // mid-run craft never retro-applies). id -> count from ChaosMetaState.
+      craftedItems: rc.craftedItems || {},
+      pinnedBoonId: rc.pinnedBoonId || null,     // THE PADLOCK's pinned boon
+      denialArmed: !!rc.denialArmed,             // THE CAGE's modifier toggle
     };
     // Per-item dollhouse levels: id -> level (>=1 discovered). A grab reads this to know
     // the strength to apply; absent/0 means "never discovered" (first grab unlocks at L1).
@@ -219,7 +229,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       rippleCooldown: 0,
       freezeRemainingSec: 0, slowMoRemainingSec: 0,
       ordinarySpawns: 0, spawnSerial: 0, waveDetonations: 0, runDetonations: 0,
-      endingSoonFired: false, finalLoopAnnounced: false, finalLandingDone: false, finishing: false,
+      finalLoopAnnounced: false, finalLandingDone: false, finishing: false,
       lastComboBig: 0, lastActFired: 1,
 
       // ---- THE BIOMES: one rolled id per room (null on legacy/scripted runs) ----
@@ -255,6 +265,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       goldenChance: 0.005,
       goldenChanceBase: 0.005, // weather re-derives goldenChance from this
       goldenPay: [10, 20],
+      // crafting (THE BOUDOIR): tube-drop odds per ordinary spawn; runMaterials is
+      // this run's grabs for the bag chip's ×N (the banked totals live C#-side)
+      materialChance: 0.011,
+      materialDropsThisRun: 0,
+      runMaterials: {},
       moodRingLevel: 0,        // 💍 forecast / x1.5 weather / reroll
       stickyFingersLevel: 0,   // 🍯 held-card paddle pay tier
       dropPerPop: 0,
@@ -328,8 +343,16 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       surrenderShieldUsed: false,
       takenBoonIds: new Set(),
       runPicks: [],            // ribbon tiles: { id, name, curse }
+
+      // ---- crafted kit (Part 2; applyCraftedKit writes these at GO) ----
+      slipperySec: 0,          // Slippery Slope window: fall x1.5 + heat x2 while > 0
+      rubberSec: 0,            // Rubber Up window: detonations can't touch you while > 0
+      denialActive: false,     // DENIAL modifier live this run (no hearts, +50% pay)
+      padlockPending: null,    // THE PADLOCK: boon id owed to the first draft
     };
   }
+  /** How many of a crafted item this run came down with (0 = not owned). */
+  const craftedCount = (id) => (cfg && cfg.craftedItems && cfg.craftedItems[id]) | 0;
   const comboMult = () => Math.min(1.0 + st.combo * 0.08, 6.0);
   const heatMult = () => 1.0 + st.heat;
   const totalMult = () => st.baseMult * comboMult() * cfg.difficultyMult * heatMult() * st.boonMult * st.urgeMult * wxPay();
@@ -367,11 +390,20 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   const wxSpeed = () => wxMult(weatherNow && weatherNow.speedMult);
   const wxSpawnRate = () => wxMult(weatherNow && weatherNow.spawnRate);
   const wxGolden = () => (weatherNow && weatherNow.goldenBonus ? weatherNow.goldenBonus * wxAmp() : 0) + (bx('goldenBonus') || 0);
+  // ---- The Surfacing (the run's diegetic ending; see tickSurfacing) ----
+  let surfPull = 0, surfMelt = 0, surfDrain = 0, surfTimeF = 0, surfHeartIn = 0;
+  let surfBarkDone = false, surfDomOn = false, regionBloomNow = 1;
+
   /** The run's resting time factor (freeze/slow-mo restore to THIS, not 1).
-   * Overstim weather and the Freefall sin both live here. */
-  const baseTime = () => wxSpeed() * (st && st.freefallActive ? 2 : 1);
+   * Overstim weather and the Freefall sin both live here - and the Surfacing's
+   * drag folds in too, so time thickens as the hole closes. */
+  const baseTime = () => wxSpeed() * (st && st.freefallActive ? 2 : 1)
+    * (st && st.slipperySec > 0 ? 1.5 : 1)   // Slippery Slope (crafted): 10s greased incline
+    * (1 - 0.1 * surfPull - 0.35 * surfMelt);
   /** All LUST gains flow through here so Her Perfume can sweeten them. */
-  const addHeat = (x) => { st.heat = Math.min(1.0, st.heat + x * wxHeatGain()); };
+  const addHeat = (x) => {
+    st.heat = Math.min(1.0, st.heat + x * wxHeatGain() * (st.slipperySec > 0 ? 2 : 1));
+  };
   const basePoints = (strength) => 40 + strength * 1.6;
   // Emote rain: one falling feeling-glyph per ✦ emote the pop actually banks -
   // i.e. exactly the "+N" the HUD ✦ counter ticks up by. Callers snapshot
@@ -424,6 +456,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let dvdWasActive = false;
   const discovered = new Set();
   let toys = [];
+  // Crafted consumables ride the dock without eating pockets: slot math counts
+  // only GRABBED toys, so a full crafted kit never suppresses tube offers.
+  const dockUsed = () => toys.filter((t) => !t.crafted).length;
 
   // ---- Wave 2: tunnel reactivity state ----
   let tiltSins = 0;          // The Tilt: unshielded sins accepted this run (max 3)
@@ -728,8 +763,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const diff = cfg.difficulty;
 
     // Snap Chain: inside the post-snap window a trigger can't take anything.
-    if (performance.now() < st.invulnUntil) {
-      hudUi.toast(`⛓ snap chain holds (${NAME_OF[spec.variantId] || spec.variantId})`);
+    // Rubber Up (crafted) rides the same gate on its own dt-based window.
+    if (st.rubberSec > 0 || performance.now() < st.invulnUntil) {
+      hudUi.toast(st.rubberSec > 0
+        ? `🛡 the rubber holds (${NAME_OF[spec.variantId] || spec.variantId})`
+        : `⛓ snap chain holds (${NAME_OF[spec.variantId] || spec.variantId})`);
       pulse('122,224,255', 0.22);
       bark('detonated-absorbed', { variant: spec.variantId, strength: spec.strength, runDetonations: st.runDetonations, combo: st.combo, difficulty: diff, shields: st.shields });
       return;
@@ -810,6 +848,20 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       pulse('255,215,0', 0.12);
       return;
     }
+    if (spec.kind === 'material') {
+      // Crafting (THE BOUDOIR): granted LIVE like gold (bankGold) - an abandoned
+      // run keeps its haul. First-ever grab of each material teaches its codex card.
+      lessons.onSpecialPopped();
+      st.focus = clamp(st.focus + FOCUS_PER_DROPLET, 0, FOCUS_MAX);
+      const mat = MAT_BY_ID[spec.matId];
+      st.runMaterials[spec.matId] = (st.runMaterials[spec.matId] | 0) + 1;
+      bridge.send({ type: 'meta-command', op: 'material-add', id: spec.matId, amount: 1 });
+      markDiscovered('material:' + spec.matId);
+      hudUi.flyMaterialToBag(mat, { x, y }, 1, st.runMaterials[spec.matId]);
+      sfx('golden_pop', 0.3);
+      pulse('255,150,205', 0.12);
+      return;
+    }
     if (spec.kind === 'golden') {
       lessons.onSpecialPopped();
       st.focus = clamp(st.focus + FOCUS_PER_GOLDEN, 0, FOCUS_MAX);
@@ -886,6 +938,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         markDiscovered('bubble:gold_droplet');
         field.spawn(buildGoldDroplet(x + randInt(-30, 30), y + randInt(-15, 15)));
       }
+    }
+    // Crafting (THE BOUDOIR): rarely a popped treat sheds a raw ingredient,
+    // spilled beside the pop like a Gold-Digger droplet. Same per-run cap as
+    // the tube drops; never on the scripted first descent.
+    if (!cfg.scriptedFirstRun && st.materialDropsThisRun < MATERIAL_DROP_CAP
+        && Math.random() < MATERIAL_POP_CHANCE) {
+      st.materialDropsThisRun++;
+      field.spawn(buildMaterial(MAT_BY_ID[rollMaterialId()], x + randInt(-40, 40), y + randInt(-20, 20)));
     }
     // Private Show (shielded half): pops pay x3 while she holds the stage
     if (showActive && st.privateShowPayMult > 1) pts *= st.privateShowPayMult;
@@ -1164,6 +1224,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   function onTreatExpired(spec) {
     if (!st || state !== 'running' || heldNow()) return;
+    // Crafting: a missed ingredient just drifts away - it's a bonus, never a
+    // streak penalty (and no "faded" toast; the tube stays quiet about it).
+    if (spec.kind === 'material') return;
     const name = spec.kind === 'golden' ? 'lucky bubble' : NAME_OF[spec.variantId] || spec.variantId;
     if (st.combo > 1) {
       st.combo = Math.floor(st.combo / 2);
@@ -1352,6 +1415,30 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         t.cooldownLeft = t.cooldownSec;
         hudUi.toast('🫧 the pump draws them in');
         break;
+
+      // ---- crafted consumables (THE BOUDOIR, Part 2): one charge each ----
+      case 'slippery_slope':
+        st.slipperySec = 10;
+        // freeze / slow-mo / a live fork keep their own factors; they restore
+        // through baseTime() (which carries the x1.5) when they let go.
+        if (st.freezeRemainingSec <= 0 && st.slowMoRemainingSec <= 0 && state === 'running'
+            && !(ctx.junctions && ctx.junctions.isBusy())) {
+          ctx.director.setTimeFactor(baseTime());
+        }
+        sfx('vibe_buzz', 0.5);
+        hudUi.toast('💨 greased — the fall runs away with you');
+        break;
+      case 'rubber_up':
+        st.rubberSec = 8;   // onDetonated checks invuln FIRST; ticks down in tickToys so holds don't eat it
+        sfx('toy_ready', 0.5);
+        pulse('255,214,222', 0.3);
+        hudUi.toast('🛡 rubbered up — nothing can touch you');
+        break;
+      case 'sugar_cube':
+        spawnWhiteRabbit();
+        sfx('toy_ready', 0.5);
+        hudUi.toast('🍬 he smelled it — here he comes');
+        break;
     }
     lessons.onToyFired();   // first_play
     // Grab-in-the-tube: a grabbed toy carries 3 uses. Spend one (freeze/wand already
@@ -1359,6 +1446,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // dock and renumber so the remaining consumables keep contiguous 1..N slot keys.
     if (t.consumable) {
       if (t.id !== 'freeze_trigger' && t.id !== 'the_wand') t.chargesLeft--;
+      // A crafted charge spends the banked holding (optimistic; C# authoritative).
+      if (t.crafted) {
+        try { bridge.send({ type: 'meta-command', op: 'consume-crafted', id: t.id }); } catch (e) { /* ignore */ }
+      }
       if (t.chargesLeft <= 0) {
         const i = toys.indexOf(t);
         if (i >= 0) toys.splice(i, 1);
@@ -1404,6 +1495,26 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   function tickToys(dt) {
+    // Slippery Slope (crafted): the 10s greased window winds down.
+    if (st && st.slipperySec > 0) {
+      st.slipperySec -= dt;
+      if (st.slipperySec <= 0) {
+        st.slipperySec = 0;
+        if (st.freezeRemainingSec <= 0 && st.slowMoRemainingSec <= 0 && state === 'running'
+            && !(ctx.junctions && ctx.junctions.isBusy())) {
+          ctx.director.setTimeFactor(baseTime());
+        }
+        hudUi.toast('💨 the grease dries — the fall steadies');
+      }
+    }
+    // Rubber Up (crafted): the 8s shielded window winds down.
+    if (st && st.rubberSec > 0) {
+      st.rubberSec -= dt;
+      if (st.rubberSec <= 0) {
+        st.rubberSec = 0;
+        hudUi.toast('🛡 the rubber wears off — it can touch you again');
+      }
+    }
     if (vibeRemainingSec > 0) {
       vibeRemainingSec -= dt;
       if (vibeRemainingSec <= 0) {
@@ -1464,8 +1575,27 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     ctx.fx.forceZone(lustFullSeen ? 'pinkfog' : weatherZone);
   }
 
+  /** The Surfacing: drop the ending sequence's ramps + DOM dress (run end /
+   * fresh run / a relapse that walked the whole thing back). The wash overlay
+   * is NOT cancelled here - endRun fires at its peak and it must keep fading
+   * out over the recap; only returnToWarren aborts it. */
+  function clearSurfacing() {
+    surfPull = 0; surfMelt = 0; surfDrain = 0; surfTimeF = 0; surfHeartIn = 0;
+    surfBarkDone = false;
+    if (!ctx) return;
+    if (ctx.fx.setSurfacing) ctx.fx.setSurfacing(0, 0);
+    if (ctx.spawner && ctx.spawner.setSurfacing) ctx.spawner.setSurfacing(0);
+    if (surfDomOn) {
+      surfDomOn = false;
+      ctx.hud.classList.remove('cf-surfacing');
+      ctx.hud.style.removeProperty('--surf-melt');
+      ctx.hud.style.removeProperty('--surf-drain');
+    }
+  }
+
   /** Reset every tunnel-reactivity verb (run end / fresh run / back to hub). */
   function clearAmbient() {
+    clearSurfacing();
     tiltSins = 0; lustFullSeen = false; weatherZone = null; comboWarp = 0;
     weatherNow = null; weatherNext = null; weatherRerollUsed = false; staticBoltIn = 0;
     weatherSeen.clear();
@@ -1599,7 +1729,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (ffx && ffx.setRegionPalette) ffx.setRegionPalette(style ? style.field : null);
     // THE BIOMES: the place's ambient weather (confetti / ash / bubbles / ...)
     if (ffx && ffx.setAmbient) ffx.setAmbient(style ? style.ambient : null);
-    if (ctx.setBloomStrength) ctx.setBloomStrength(style && style.bloom ? style.bloom : 1);
+    // remembered so the Surfacing can swell bloom OVER the chamber's weight
+    // (and hand it back if a relapse cancels the ending mid-ramp)
+    regionBloomNow = style && style.bloom ? style.bloom : 1;
+    if (ctx.setBloomStrength) ctx.setBloomStrength(regionBloomNow);
     // THE BIOMES: swap the chamber's mechanic in (exits the old one cleanly).
     if (bMech) bMech.setBiome(regionIndex, biome);
     // ...and show the place's name + effect on the HUD so the player always
@@ -1673,8 +1806,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         }, i * 200);
       }
     } else if (id === 'perfume') {
-      for (let i = 0; i < 2; i++) { markDiscovered('bubble:heart'); field.spawn(buildHeart()); }
-      field.playChime(0.25);
+      // DENIAL (crafted modifier): nothing soft falls tonight - the perfume's hearts stay away.
+      if (!st.denialActive) {
+        for (let i = 0; i < 2; i++) { markDiscovered('bubble:heart'); field.spawn(buildHeart()); }
+        field.playChime(0.25);
+      }
       pulse('255,160,215', 0.35);
     } else if (id === 'foolsgold') {
       for (let i = 0; i < 2; i++) { markDiscovered('bubble:golden'); field.spawn(buildGolden()); }
@@ -1735,7 +1871,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const intoRegion = st.elapsedSec - (st.waveIndex - 1) * waveLen;
     if (intoRegion < 12 || waveLen - intoRegion < 24) { st.nextJunctionSec = st.elapsedSec + 6; return; }
     st.nextJunctionSec = st.elapsedSec + JUNCTION_EVERY + Math.random() * 16;
-    fireJunction();
+    // every BONUS_ROOM_EVERY-th room the fork slot is upgraded to the Grand
+    // Draft (4-5 boon doors); the counter ticks on every antechamber armed
+    if ((roomsVisited + 1) % BONUS_ROOM_EVERY === 0) fireBonusRoom();
+    else fireJunction();
   }
 
   /** Blend a doorway's brand color 35% toward the current chamber's line hue so
@@ -1750,6 +1889,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   function fireJunction() {
+    roomsVisited++;
     const pair = JUNCTION_PAIRS[Math.floor(Math.random() * JUNCTION_PAIRS.length)];
     const coaxSide = Math.random() < 0.5 ? 'left' : 'right';
     // clone the branded descs - rewards are per-fork and must never stick to the
@@ -1784,14 +1924,53 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const presealChance = PRESEAL_BY_WAVE[Math.min(4, st.waveIndex)] || 0;
     let presealIndex = null;
     if (Math.random() < presealChance) presealIndex = (coaxSide === 'left') ? 1 : 0; // seal the resisting mouth
+    const forkBiome = activeBiome();   // the fork's corridors dress as the biome you're IN
     ctx.junctions.schedule({
       atDepth: ctx.nav.getDepth() + JUNCTION_LEAD,
       branches: [left, right],
       coaxIndex: coaxSide === 'left' ? 0 : 1,
       presealIndex,
       mode: 'fork',
+      veinFx: (forkBiome && forkBiome.veinFx) || null,
     });
     bark('junction-near');
+  }
+
+  /** The Grand Draft: every BONUS_ROOM_EVERY-th room the descent passes through
+   * (forks + boon rooms both count), the fork slot is upgraded - a wider
+   * antechamber with 4-5 doors and EVERY one a dealt boon (junctions v7 grows
+   * the sphere so the extra doorways never clip). It rides mid-region like a
+   * fork: the clock keeps running, no wave advances - the pick just applies
+   * (resolveBonusRoom). Reuses the whole draft-room kit: chrome, resist,
+   * reroll, the coaxed-door timeout. */
+  function fireBonusRoom() {
+    const doors = Math.random() < 0.5 ? 4 : 5;
+    const options = dealOptions(doors);
+    if (!options || options.length < 2) { fireJunction(); return; }   // starved pool: a plain fork
+    bonusRoomActive = true;
+    draftRoomActive = true;     // reuse ALL the draft-room machinery (chrome, resist, reroll)
+    draftRoomSkip = false;
+    draftRoomDoors = options.length;
+    draftRevealBiome = null;    // no roulette: the doors stay in this room's biome
+    const bio = activeBiome();
+    ctx.junctions.schedule({
+      atDepth: ctx.nav.getDepth() + JUNCTION_LEAD,
+      branches: options.map(boonBranch),
+      coaxIndex: Math.floor(Math.random() * options.length),
+      mode: 'draft',
+      lingerSec: cfg.draftAutoResumeSec,
+      lead: JUNCTION_LEAD,
+      title: { numeral: '✦', text: 'TEMPTATION', color: 0xffd76a },
+      veinFx: (bio && bio.veinFx) || null,
+    });
+    if (!ctx.junctions.isBusy()) {   // engine refused (inactive/torn down): no room, no wedge
+      bonusRoomActive = false;
+      draftRoomActive = false;
+      return;
+    }
+    roomsVisited++;
+    bark('junction-near');
+    hudUi.toast('✦ the walls open wide — every door holds a gift');
   }
 
   /** The fork committed (engine reports the winning branch). Tally the brand,
@@ -1862,10 +2041,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // tube (the next chamber rebases at the vein exit, so the door you take IS
   // the chamber you land in). The resist button / timeout dives the coaxed door
   // with no boon (+1 resistance, same as the old table). Reroll re-deals the
-  // door cards in place. The old in-tube card row (engine/boonPick.js) stays
-  // for 4-choice drafts (three doors is the room's geometric max), the run-1
-  // scripted draft (fires at an arbitrary mid-loop beat) and the Court's
-  // terminal Landing (no next chamber to dive into).
+  // door cards in place. The room takes 2-5 doors (junctions v7 widens the
+  // antechamber for 4-5); the old in-tube card row (engine/boonPick.js) stays
+  // only for the run-1 scripted draft (fires at an arbitrary mid-loop beat)
+  // and the Court's terminal Landing (no next chamber to dive into).
   const DRAFT_ROOM_LEAD = 70;   // shorter telegraph than a fork: the field is already held+cleared
   // door tint per boon theme (mirrors boonPick's THEMES palette)
   const DRAFT_DOOR_COLORS = {
@@ -1873,8 +2052,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     rare: '#c178ff', uncommon: '#66e0d0', common: '#ccd6e6',
   };
   let draftRoomActive = false;   // a draft room is scheduled/lingering (drafting stays true throughout)
+  let bonusRoomActive = false;   // the live draft room is a grand room (mid-region, no wave advance)
   let draftRoomSkip = false;     // the resist button fired; the commit resolves boonless
-  let draftRoomDoors = 3;        // dealt door count (draftChoices can be 2)
+  let draftRoomDoors = 3;        // dealt door count (2-5: wave drafts deal draftChoices, grand rooms 4-5)
+  let roomsVisited = 0;          // every antechamber counts: forks + boon rooms (paces the grand room)
+  const BONUS_ROOM_EVERY = 10;   // every 10th room is the Grand Draft (fireBonusRoom)
   let draftDom = null;           // lazy DOM chrome: caption + reroll/resist (reuses boonPick's CSS)
   let draftCapTimer = null;      // 250ms caption countdown while the room lingers
   let draftRevealBiome = null;   // the roulette's pre-rolled target, for the settle card
@@ -1925,7 +2107,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function draftRoomCaption() {
     const left = ctx && ctx.junctions && ctx.junctions.getDraftSecondsLeft
       ? ctx.junctions.getDraftSecondsLeft() : null;
-    const words = draftRoomDoors === 2 ? 'two doors' : 'three doors';
+    const words = ({ 2: 'two doors', 3: 'three doors', 4: 'four doors', 5: 'five doors' })[draftRoomDoors]
+      || `${draftRoomDoors} doors`;
     return `${words}, one keeps you — click a card to take it${left != null ? ` · ${left}s` : ''}`;
   }
 
@@ -1956,7 +2139,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (!draftRoomActive || st.rerollsLeft <= 0 || !ctx || !ctx.junctions) return;
     st.rerollsLeft--;
     hudUi.toast('🎲 tempted fate again');
-    ctx.junctions.setDraftCards(dealOptions().map(boonBranch));
+    ctx.junctions.setDraftCards(dealOptions(draftRoomDoors).map(boonBranch));
     syncDraftButtons();
   }
 
@@ -1993,7 +2176,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           color: (b.style && b.style.palette && b.style.palette.colLine) || 0xff69b4 })),
         targetIndex: BIOMES_ALL.findIndex((b) => b.id === targetBiome.id),
       } : null,
+      // the doorway corridors dress as the destination biome - junctions holds
+      // the dress back until the roulette lands, so it can't leak the roll
+      veinFx: (targetBiome && targetBiome.veinFx) || null,
     });
+    if (ctx.junctions.isBusy()) roomsVisited++;   // armed: this room paces the Grand Draft too
   }
 
   /** A draft-room door committed: the dive is already running engine-side;
@@ -2002,12 +2189,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hideDraftRoomChrome();
     if (!draftRoomActive) return;   // aborted (run ended): teardown fired without us
     draftRoomActive = false;
+    // a Grand Draft resolves mid-region (resolveBonusRoom) - no wave machinery
+    const bonus = bonusRoomActive;
+    bonusRoomActive = false;
     const b = (choice && choice.branch) || {};
     if (b.color) st.branchTint = { color: b.color, strength: 0.6 };   // the tube blushes in the boon's color
     ctx.fx.pulseFlash(0.5);
     const skipped = draftRoomSkip || (choice && choice.skipped);
     draftRoomSkip = false;
-    if (skipped) { resolveDraft(null, false); return; }
+    if (skipped) { if (bonus) resolveBonusRoom(null, false); else resolveDraft(null, false); return; }
     // A timeout dives the coaxed door (junctions.commit -> tubesPick), so its
     // winner.desc carries a real boon - award it ("she chose for you") instead of
     // leaving you empty-handed. Falls through to the gold-pouch fallback below when
@@ -2022,7 +2212,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       hudUi.announce(`🪙 +${gold} gold`, 'powerup', 1600);
       sfx('golden_pop', 0.55);
     }
-    resolveDraft(b.boon || null, timedOut);
+    if (bonus) resolveBonusRoom(b.boon || null, timedOut);
+    else resolveDraft(b.boon || null, timedOut);
   }
 
   /** Per-RunTick: Lust Bleed (the tube blushes with the LUST bar; a held full
@@ -2051,8 +2242,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // speed-line heat: Heat Warp's streak burn, outranked by Freefall's howl
     const heatRush = comboWarp >= 0.6 ? ((comboWarp - 0.6) / 0.4) * 0.8 : 0;
     ctx.fx.setRushOverride(st.freefallActive ? Math.max(0.95, heatRush) : heatRush);
-    // W5 sins that ride the camera: Freefall raises the speed ceiling, Spun rolls
-    ctx.nav.setSpeedCapMult(st.freefallActive ? 2 : 1);
+    // W5 sins that ride the camera: Freefall raises the speed ceiling, Spun rolls.
+    // Slippery Slope (crafted) greases to 1.5 - max() so it never FIGHTS Freefall's 2.
+    ctx.nav.setSpeedCapMult(Math.max(st.freefallActive ? 2 : 1, st.slipperySec > 0 ? 1.5 : 1));
     ctx.nav.setRollRate(st.spunRollRate || 0);
     // Four Chambers escalation: where intensity() sits inside this chamber's
     // band drives the pattern knobs' enter->peak lerp (fx eases it further).
@@ -2068,6 +2260,83 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   // ============================ RunTick (0.25s) ============================
+
+  // ============================ The Surfacing ============================
+  // The run's diegetic close: no "ten seconds" banner, no 3·2·1 - the world
+  // itself tells you the hole is closing. Three overlapping ramps keyed to
+  // time-remaining:
+  //   the PULL  (T-40..T-18): time thickens a touch, the wall starts to breathe
+  //   the MELT  (T-18..T-2):  the tube throbs to a heartbeat, bloom swells, the
+  //                           2D field over-saturates + smears, wall cards slump
+  //   the DRAIN (expiry):     color drains (uDesat) under a white wash; endRun
+  //                           fires at full white and the recap surfaces as it lifts
+  // Every target is recomputed from remaining time each tick and everything
+  // eases, so a RELAPSE (the clock extends at expiry) simply walks it all back.
+  const SURF_PULL_LEAD = 40;   // remaining sec: the pull starts (subliminal)
+  const SURF_MELT_LEAD = 18;   // remaining sec: the melt shows its hand
+  const SURF_WASH_MS = 3400;   // white-out ramp; endRun fires at its peak
+
+  function tickSurfacing(dt) {
+    const remain = st.runDurationSec - st.elapsedSec;
+    // held back while a relapse is armed (the end isn't real yet) and while a
+    // draft owns the field (the Court's Landing at T-60 must not melt its table)
+    const arm = state === 'running' && !st.relapseArmed && !drafting;
+    const pullT = st.finishing ? 1
+      : (arm ? clamp((SURF_PULL_LEAD - remain) / (SURF_PULL_LEAD - SURF_MELT_LEAD), 0, 1) : 0);
+    const meltT = st.finishing ? 1
+      : (arm ? clamp((SURF_MELT_LEAD - remain) / (SURF_MELT_LEAD - 2), 0, 1) : 0);
+    const drainT = st.finishing ? 1 : 0;
+    const k = Math.min(1, dt * 1.6);
+    surfPull += (pullT - surfPull) * k;
+    surfMelt += (meltT - surfMelt) * k;
+    surfDrain += (drainT - surfDrain) * Math.min(1, dt * 2.2);
+
+    if (surfPull < 0.004 && surfDrain < 0.004) {
+      if (surfDomOn) {
+        // a relapse walked it all the way back: hand the tube to the chamber
+        clearSurfacing();
+        if (ctx.setBloomStrength) ctx.setBloomStrength(regionBloomNow);
+        if (st.freezeRemainingSec <= 0 && st.slowMoRemainingSec <= 0 && state === 'running'
+            && !(ctx.junctions && ctx.junctions.isBusy())) {
+          ctx.director.setTimeFactor(baseTime());
+        }
+      }
+      return;
+    }
+
+    // tube: knob floors + bloom swell over the chamber's own weight
+    if (ctx.fx.setSurfacing) ctx.fx.setSurfacing(surfMelt, surfDrain);
+    if (ctx.spawner && ctx.spawner.setSurfacing) ctx.spawner.setSurfacing(surfMelt);
+    if (ctx.setBloomStrength) ctx.setBloomStrength(regionBloomNow * (1 + 0.75 * surfMelt));
+
+    // DOM: one class + two eased vars (styles.css does the rest)
+    if (!surfDomOn) { surfDomOn = true; ctx.hud.classList.add('cf-surfacing'); }
+    ctx.hud.style.setProperty('--surf-melt', surfMelt.toFixed(3));
+    ctx.hud.style.setProperty('--surf-drain', surfDrain.toFixed(3));
+
+    // time: the pull/melt drag rides in baseTime; the wash owns the final slide
+    // to a 0.06 near-stop (the drone follows the fall speed down on its own).
+    // Freeze / slow-mo keep their own factors and restore through baseTime; a
+    // live fork's 0.16 read-hover (onJunctionLinger) must not be stomped either.
+    if (st.finishing) {
+      surfTimeF += (0.06 - surfTimeF) * Math.min(1, dt * 2);
+      ctx.director.setTimeFactor(surfTimeF);
+    } else if (st.freezeRemainingSec <= 0 && st.slowMoRemainingSec <= 0 && state === 'running'
+        && !(ctx.junctions && ctx.junctions.isBusy())) {
+      ctx.director.setTimeFactor(baseTime());
+    }
+
+    // the ending's only voice: one bark as the melt shows its hand, then a
+    // heartbeat that quickens with the wall's throb
+    if (!surfBarkDone && meltT > 0) { surfBarkDone = true; bark('ending-soon'); }
+    if (surfMelt > 0.25) {
+      surfHeartIn -= dt;
+      if (surfHeartIn <= 0) {
+        surfHeartIn = 1.35 - 0.55 * surfMelt;
+        sfx('heartbeat', 0.2 + 0.3 * surfMelt);
+      }
+    }
+  }
 
   function tick(dt) {
     st.elapsedSec += dt;
@@ -2204,9 +2473,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     }
     if (heartArmed && waveProgress >= heartFireAt) {
       heartArmed = false;
-      markDiscovered('bubble:heart');
-      field.spawn(buildHeart());
-      field.playChime(0.22);
+      // DENIAL (crafted modifier): the pop-up heart never arrives.
+      if (!st.denialActive) {
+        markDiscovered('bubble:heart');
+        field.spawn(buildHeart());
+        field.playChime(0.22);
+      }
     }
 
     tickToys(dt);
@@ -2218,11 +2490,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // elapsed/duration, not the sawtooth intensity - triggers must always land)
     if (guide) guide.tick({ frac: st.elapsedSec / Math.max(1, st.runDurationSec), wave: st.waveIndex });
 
-    if (!st.endingSoonFired && st.runDurationSec - st.elapsedSec <= 10) {
-      st.endingSoonFired = true;
-      hudUi.announce('the hole is closing…', 'depth', 2400, { artKey: 'ending_soon', subText: 'ten seconds' });
-      bark('ending-soon');
-    }
+    // The Surfacing replaces the old "the hole is closing… ten seconds" banner:
+    // the world itself closes over the last ~40s (see tickSurfacing above).
+    tickSurfacing(dt);
 
     // The Court's Landing (region IV's boon) is offered ~60s before the close, so
     // a descent NEVER ends on a boon pick: gameplay + the finish countdown carry
@@ -2249,16 +2519,22 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         st.runDurationSec += waveLen;
         hudUi.announce('☠ RELAPSE — one more loop', 'bad', 2600, { artKey: 'relapse', subText: 'one more loop' });
         sfx('sin_accept', 0.6);
+        ctx.fx.pulseFlash(0.8);   // the slam that yanks you back down: the melt walks itself back
         bark('wave-escalated', { wave: st.waveIndex + 1 });
       } else if (!st.finishing) {
-        // The closing beat: a 3·2·1 finish countdown, then the recap - a descent
-        // ends on a counted-down moment, not an abrupt cut. The Court's boon was
-        // already granted ~60s ago, so the run never ends on a pick.
+        // The closing beat: no 3·2·1 - the Surfacing has been building for ~40s
+        // and the clock expiring tips it into the white wash. endRun fires at
+        // full white and the recap surfaces as the white lifts ('sink' answers
+        // the melt going under; endRun's own 'surface' stinger answers it back).
+        // The Court's boon was already granted ~60s ago, so the run never ends
+        // on a pick.
         st.finishing = true;
-        overlays.showFinishCountdown(() => endRun(true), { onTick: (b) => sfx(b === '1' ? 'sink' : 'countdown_tick', 0.5) });
+        surfTimeF = Math.max(0.06, baseTime());
+        sfx('sink', 0.5);
+        overlays.showSurfaceWash(() => endRun(true), { inMs: SURF_WASH_MS });
         return;
       } else {
-        return;   // finish countdown running: endRun fires from its onDone
+        return;   // the wash is rising: endRun fires at its peak
       }
     }
 
@@ -2349,10 +2625,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     pendingWave = newWave;
 
     const options = dealOptions();
-    // Four Chambers: the draft is a ROOM with one tube per boon (2-3 doors).
-    // The clock is frozen while drafting, so the approach + linger cost no run
-    // time. 4-choice drafts keep the in-tube card row (three doors max).
-    if (cfg.regionMode && ctx && ctx.junctions && options.length >= 2 && options.length <= 3) {
+    // Four Chambers: the draft is a ROOM with one tube per boon (2-5 doors -
+    // junctions v7 widens the antechamber past 3). The clock is frozen while
+    // drafting, so the approach + linger cost no run time. The in-tube card
+    // row survives only as the engine-refused fallback below (plus the run-1
+    // scripted draft and the Court's terminal Landing).
+    if (cfg.regionMode && ctx && ctx.junctions && options.length >= 2 && options.length <= 5) {
       openDraftRoom(options);
       if (ctx.junctions.isBusy()) return;   // room armed: onCommit resolves the draft
       draftRoomActive = false;              // engine refused (inactive/torn down): card row, not a wedge
@@ -2411,10 +2689,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     });
   }
 
-  function dealOptions() {
+  function dealOptions(choicesOverride) {
     const options = dealDraft({
       allowCurses: cfg.allowCurses,
-      choices: cfg.draftChoices,
+      choices: choicesOverride || cfg.draftChoices,
       guaranteeCurse: st.maxedBoons.has('surrender'),
       takenIds: st.takenBoonIds,
       sinChance: cfg.sinChance,
@@ -2423,7 +2701,22 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       equipment: [...st.runEquipment],
       hasVideo: !!(hostState && hostState.mediaStats && hostState.mediaStats.videos > 0),
     });
+    const dealt = options.slice();   // pre-rig refs: the pin must not stomp a rigged card
     happy.rigDraft(options, hpIo);   // run 4's defanged first sin / the duo demo
+    // THE PADLOCK (crafted): the pinned mantra is owed to the first draft - swap it
+    // over the last card the happy path didn't rig, unless the deal already
+    // offers/took it (or the rig claimed every slot - then this deal keeps its
+    // cards). Rerolls re-run dealOptions, so the pin survives a reroll;
+    // resolveDraft settles the debt.
+    if (st.padlockPending) {
+      const pin = boonById(st.padlockPending);
+      if (pin && !pin.curse && !st.takenBoonIds.has(pin.id)
+          && !options.some((o) => o.id === pin.id)) {
+        for (let i = options.length - 1; i >= 0; i--) {
+          if (options[i] === dealt[i]) { options[i] = pin; break; }
+        }
+      }
+    }
     for (const o of options) markDiscovered('boon:' + o.id);
     return options;
   }
@@ -2478,7 +2771,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       hudUi.updateToys(toys, toyStatus());
       return true;   // signals a recharge (vs a fresh dock) to the grab toast
     }
-    if (toys.length >= st.consumableSlots) return;   // dock full (canOfferPowerup should have vetoed)
+    if (dockUsed() >= st.consumableSlots) return;   // dock full (canOfferPowerup should have vetoed; crafted toys don't count)
     const lvl = Math.max(1, level | 0);
     const power = def.levelValues[Math.min(lvl, def.levelValues.length) - 1];
     // Consumables dock with 3 uses (charge-based toys keep their levelled charge
@@ -2556,6 +2849,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   function resolveDraft(boon, auto) {
+    // THE PADLOCK: the first draft settled the debt - picked, passed over, or
+    // skipped, the pin is spent for this descent (the next descent re-arms it).
+    st.padlockPending = null;
     // session telemetry: what the draft yielded + whether the timer had to decide
     if (auto) metrics.noteAutopick();
     if (boon) { if (boon.curse) metrics.noteCurse(); else metrics.noteBoon(); }
@@ -2628,6 +2924,56 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (!scripted && st.welcomeShower) spawnWelcomeShower();
       if (!scripted) announceFinalLoopIfEntering();
     }, { onTick: (b) => sfx(b === 'GO!' ? 'sink' : 'countdown_tick', 0.45) });
+  }
+
+  /** A Grand Draft door committed mid-region: apply the boon exactly like a
+   * wave draft would (same shield / tilt / announce semantics), but the run
+   * never parked - no drafting state, no wave advances, no Ready/GO. */
+  function resolveBonusRoom(boon, auto) {
+    if (auto) metrics.noteAutopick();
+    if (boon) {
+      if (boon.curse) metrics.noteCurse(); else metrics.noteBoon();
+      lessons.onDraftCardTaken(!!boon.curse);   // draft4 / surrender / first-times
+      const rigShield = boon.curse && happy.shouldShieldSin(boon.id);
+      const surrShield = boon.curse && !rigShield && st.maxedBoons.has('surrender') && !st.surrenderShieldUsed;
+      if (surrShield) st.surrenderShieldUsed = true;
+      const sinShielded = rigShield || surrShield;
+      applyBoon(boon, sinShielded);
+      if (boon.curse) {
+        // The Tilt: the world tips a little every time you say yes (a shielded
+        // sin keeps the horizon - the candle takes the tilt too)
+        if (!sinShielded && tiltSins < 3) {
+          tiltSins++;
+          ctx.nav.setRollOffset(tiltSins * 2.5);
+        }
+        if (st.sinExtraMult > 0) {
+          st.boonMult += st.sinExtraMult;
+          hudUi.toast(`🕯 sin embraced (+${st.sinExtraMult.toFixed(2)}x)`);
+        }
+        if (rigShield) hudUi.toast('☠ the first taste is free — no sting, this once');
+        else if (sinShielded) hudUi.toast('🕯 the candle took the sting (no drawback)');
+        if (st.maxedBoons.has('surrender')) {
+          st.shields += 1;
+          hudUi.toast('🕯 you said yes. it gave back (+1 resistance)');
+        }
+        sfx('sin_accept', 0.6);
+        hudUi.announce(`☠ ${boon.name}`, 'bad', 2200, { artKey: boon.id });
+        bark('curse-picked', { name: boon.name, rarity: boon.rarity, mult: boon.mult });
+      } else {
+        sfx('boon_pick', 0.55);
+        hudUi.announce(`◈ ${boon.name}`, 'powerup', 2200, { artKey: boon.id });
+        bark('boon-picked', { name: boon.name });
+      }
+    } else {
+      metrics.noteSkip();
+      st.shields += 1;
+      pulse('120,220,160', 0.22);
+      hudUi.announce('+1 RESISTANCE', 'freeze', 2000, { artKey: 'resistance' });
+      // fly a shield from screen-centre into the HUD shields slot so the bank reads
+      try { hudUi.flyShieldToSlot && hudUi.flyShieldToSlot(); } catch (e) { /* ignore */ }
+      bark('boon-skipped', { shields: st.shields });
+    }
+    happy.onDraftResolved(hpIo);   // the run-4 first-sin beat is spent either way
   }
 
   function commitWave(newWave) {
@@ -2860,6 +3206,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         field.spawn(buildGolden());
         field.playChime(0.30);
       }
+      // Crafting (THE BOUDOIR): a raw ingredient rides the tube - rare, capped
+      // per run, and never on the scripted first descent.
+      if (!cfg.scriptedFirstRun && st.materialDropsThisRun < MATERIAL_DROP_CAP
+          && Math.random() < st.materialChance) {
+        st.materialDropsThisRun++;
+        field.spawn(buildMaterial(MAT_BY_ID[rollMaterialId()]));
+        field.playChime(0.22);
+      }
       // "Look at the bright colors..." sin: sometimes a mimic prism drifts in.
       if (st.prismChance > 0 && Math.random() < st.prismChance) {
         markDiscovered('bubble:prism');
@@ -3034,6 +3388,55 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   // ============================ lifecycle ============================
 
+  /** THE BOUDOIR's kit (Part 2): apply crafted permanents, arm DENIAL, queue the
+   *  padlock's pinned boon, and dock one single-charge toy per owned consumable
+   *  type. Called from beginCountdown after freshState + buildToys (never on the
+   *  scripted classroom run). Reads cfg.craftedItems - frozen at request-run. */
+  function applyCraftedKit() {
+    let any = false;
+
+    // permanents: skeleton_key / locked_collar / the_corset / the_timepiece
+    for (const id of Object.keys(CRAFTED_PERMANENT_APPLY)) {
+      if (craftedCount(id) >= 1) { CRAFTED_PERMANENT_APPLY[id](st, cfg); any = true; }
+    }
+
+    // THE CAGE: the DENIAL modifier - no hearts fall, everything pays +50%.
+    if (cfg.denialArmed && craftedCount('the_cage') >= 1) {
+      st.denialActive = true;
+      st.boonMult += 0.5;
+      st.runPicks.push({
+        id: 'denial_modifier', name: 'DENIAL', curse: true, spent: false, glyph: '🔒',
+        desc: 'no hearts fall this descent. everything pays +50%.',
+      });
+      hudUi.announce('🔒 DENIAL — nothing soft falls tonight', 'bad', 2600);
+      any = true;
+    }
+
+    // THE PADLOCK: the pinned boon is owed to the first draft (dealOptions collects).
+    if (cfg.pinnedBoonId && craftedCount('the_padlock') >= 1) {
+      st.padlockPending = cfg.pinnedBoonId;
+    }
+
+    // crafted consumables dock as single-charge toys OUTSIDE the pocket count
+    // (crafted: true - dockUsed() skips them; no ribbon tile, no runEquipment).
+    for (const id of CONSUMABLE_IDS) {
+      if (craftedCount(id) < 1) continue;
+      const def = CRAFTED_TOY_DEFS[id];
+      if (!def) continue;
+      toys.push({
+        id, name: def.name, glyph: def.glyph, desc: def.desc,
+        key: String(toys.length + 1),
+        cooldownSec: 0, power: 0, level: 1, maxed: false,
+        chargesLeft: 1, chargesMax: 1,
+        cooldownLeft: 0, effectActive: false,
+        consumable: true, crafted: true, pickRef: null,
+      });
+      any = true;
+    }
+
+    if (any) hudUi.toast('🛏 what you crafted comes down with you');
+  }
+
   function beginCountdown(short) {
     state = 'countdown';
     st = freshState();
@@ -3074,6 +3477,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     happy.onRunStarted(cfg.runsCompleted, cfg.scriptedFirstRun);
     lastNarrationAt = -Infinity;   // fresh descent: never pre-suppressed by a hub-scene line
     if (guide) guide.onRunStarted(cfg);   // deal this descent's Cheshire schedule (or none)
+
+    // THE BOUDOIR's crafted kit comes down with you (permanents + docked
+    // consumables + modifiers) - it stands down on the scripted classroom run.
+    if (!cfg.scriptedFirstRun) applyCraftedKit();
 
     // A pre-equipped start boon enters the run already active (before wave 1) -
     // except on the scripted first descent, where it stands down (the classroom).
@@ -3154,6 +3561,22 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (channelSec > 0.5) bridge.send({ type: 'meta-command', op: 'add-channel-seconds', seconds: channelSec });
     flushAssetStats();   // ship the last engagement delta before the recap
 
+    // THE PAPERWALL (Part 3): a page tears loose from her Lookbook on the way up —
+    // one undiscovered recipe's torn sketch pins up in THE BOUDOIR. Gated on the
+    // boudoir reveal (runs >= 5, counting this one) so the pin never precedes the
+    // room; the pick reads LIVE meta (pre-add snapshot) and add-to-set dedupes.
+    let pageTorn = false;
+    if (!cfg.scriptedFirstRun) {
+      const m = hostState && hostState.meta;
+      if (m && ((m.runsCompleted | 0) + 1) >= 5) {
+        const sketchId = pickSketchId(new Set(m.discoveredRecipes || []), new Set(m.paperwallSketches || []));
+        if (sketchId) {
+          bridge.send({ type: 'meta-command', op: 'add-to-set', set: 'paperwallSketches', id: sketchId });
+          pageTorn = true;
+        }
+      }
+    }
+
     bridge.send({
       type: 'run-ended',
       score: st.score,
@@ -3183,6 +3606,18 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // THE BIOMES: the route this fall took, for the recap's summary line
       biomes: (st.biomes || []).map((id) => biomeById(id)).filter(Boolean)
         .map((b) => ({ glyph: b.glyph, name: b.name })),
+      // THE COMPACT (crafted): the mirror section - picks, haul, route. Non-owners
+      // get compact:false and a byte-identical recap.
+      compact: craftedCount('the_compact') >= 1,
+      picks: (st.runPicks || []).map((p) => ({
+        glyph: p.glyph || '◈', name: p.name, curse: !!p.curse, toy: !!p.toy,
+      })),
+      materials: Object.entries(st.runMaterials || {}).map(([id, n]) => {
+        const m = MAT_BY_ID[id];
+        return m ? { glyph: m.glyph, name: m.name, count: n } : null;
+      }).filter(Boolean),
+      // THE PAPERWALL (Part 3): a torn Lookbook page pinned itself this run
+      pageTorn,
     }, {
       onAgain: () => {
         // Re-request a fresh config (the loadout/settings may have moved, and
@@ -3202,6 +3637,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function returnToWarren() {
     overlays.hideRecap();
     overlays.hideCountdown();
+    // a run torn down while the wash was rising must not strand a white screen
+    // (or fire the peak's stale endRun); the post-recap path is a cheap no-op
+    if (overlays.cancelSurfaceWash) overlays.cancelSurfaceWash();
     hudUi.setVisible(false);
     hudUi.setPicks([]);
     hudUi.setHabits([]);
@@ -3217,6 +3655,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // an aborted draft room never commits: drop its state + chrome so the next
     // run's first draft doesn't inherit a stale skip flag
     draftRoomActive = false;
+    bonusRoomActive = false;
     draftRoomSkip = false;
     hideDraftRoomChrome();
     syncHeld();
@@ -3256,6 +3695,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           if (!st.biomes) st.biomes = rollBiomeIds();
           st.biomes[b.room - 1] = b.id;
           commitWave(b.room);
+          return true;
+        };
+        // diagnostics seam: drop a crafting material into the tube mid-run -
+        // __sfMaterial('chrome') (rate knobs stay untouched; cap not counted)
+        window.__sfMaterial = (id) => {
+          const mat = MAT_BY_ID[String(id || '')];
+          if (!mat || state !== 'running') return false;
+          field.spawn(buildMaterial(mat));
           return true;
         };
       } catch { /* diagnostics seam */ }
@@ -3445,6 +3892,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // Seed the options panel from whatever snapshot already landed pre-attach.
       try { ctx.syncOptionUnlocks && ctx.syncOptionUnlocks((hostState && hostState.meta && hostState.meta.purchasedDials) || []); } catch (e) { /* ignore */ }
       try { ctx.setOptionProgress && ctx.setOptionProgress({ rankIndex: RANKS.forRuns((hostState && hostState.meta && hostState.meta.runsCompleted) | 0) }); } catch (e) { /* ignore */ }
+      try { if (hostState && hostState.loomList && warren.onLoomList) warren.onLoomList(hostState.loomList); } catch (e) { /* ignore */ }
     },
 
     /** The host answered request-run: deal the fresh config and drop in. */
@@ -3460,6 +3908,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       shortNextCountdown = false;
       beginCountdown(short);
     },
+
+    /** THE LOOM (crafting Part 2): host library + save/delete verdicts, routed
+     *  to the Boudoir pane (mirror of onMeta's warren routing). */
+    onLoomList(list) { if (warren && warren.onLoomList) warren.onLoomList(list); },
+    onLoomResult(res) { if (warren && warren.onLoomResult) warren.onLoomResult(res); },
 
     /** A fresh meta snapshot landed - the Warren re-renders its shelves, and the
      *  options panel reveals any newly-purchased dials. */
@@ -3566,6 +4019,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     moodIntensity() { return state === 'running' ? intensity() : 0; },
 
     setPaused(v) { paused = !!v; syncHeld(); },
+    /** THE HOURGLASS (crafted): may Esc truly FREEZE the fall right now? Outside
+     *  a live descent there's nothing to hold, so the pause always freezes. */
+    canHoldPause() { return state !== 'running' || craftedCount('the_hourglass') >= 1; },
+    /** Hub-time crafted ownership from the LIVE meta snapshot (cfg is per-run).
+     *  Gates hub-side features: the ring box's kept looks, the ballerina toggle. */
+    craftedOwned(id) {
+      const m = hostState && hostState.meta;
+      return !!(m && m.craftedItems && (m.craftedItems[id] | 0) > 0);
+    },
     setHidden(v) { hidden = !!v; syncHeld(); },
     /** A native payload window (mandatory video) fully covers the page. A cover
      * that LIFTS while the run lives = a video endured to its end (porn_dvd). */
@@ -3593,8 +4055,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (state !== 'running' || !st) return false;
       const held = st.runEquipment.has(id);
       if (kind === 'consumable') {
-        if (!held) return toys.length < st.consumableSlots;   // fresh toy needs an open pocket
-        if (toys.length < st.consumableSlots) return false;   // room to spare: prefer new toys, not a refill
+        if (!held) return dockUsed() < st.consumableSlots;   // fresh toy needs an open pocket (crafted toys don't count)
+        if (dockUsed() < st.consumableSlots) return false;   // room to spare: prefer new toys, not a refill
         const t = toys.find((x) => x.id === id);              // pockets full: offer a recharge...
         return !!t && t.chargesLeft < t.chargesMax;           // ...only if this one has a spent charge
       }
@@ -3644,7 +4106,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       window.removeEventListener('keydown', onToyKey);
       hideDraftRoomChrome();
       if (draftDom && draftDom.root.parentNode) draftDom.root.parentNode.removeChild(draftDom.root);
-      draftDom = null; draftRoomActive = false;
+      draftDom = null; draftRoomActive = false; bonusRoomActive = false;
       if (offVoice) { offVoice(); offVoice = null; }
       warren?.dispose();
       lessons?.dispose();

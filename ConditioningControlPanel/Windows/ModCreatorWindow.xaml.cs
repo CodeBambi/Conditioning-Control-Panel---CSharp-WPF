@@ -31,6 +31,8 @@ namespace ConditioningControlPanel
 
         // Section text field controls
         private TextBox? _txtModName, _txtAuthor, _txtVersion, _txtDescription;
+        private TextBox? _txtTags, _txtMinAppVersion;
+        private TextBox? _txtAffirmation, _txtRankSubject;
         private TextBox? _txtAccentHex, _txtLightHex, _txtDarkHex, _txtFilterHex;
         private TextBox? _txtBgHex, _txtPanelHex, _txtSurfaceHex;
         private Border? _swatchAccent, _swatchLight, _swatchDark, _swatchFilter;
@@ -196,6 +198,14 @@ namespace ConditioningControlPanel
             ("messages", "Messages"),
             ("phrases", "Phrases"),
             ("replacements", "Text Replacements"),
+            ("pools", "Pools & Triggers"),
+            ("personalities", "Personalities"),
+            ("advanced", "Advanced"),
+            ("barks", "Barks"),
+            ("mantras", "Mantras"),
+            ("eventaudio", "Event Audio"),
+            ("portraits", "Portraits"),
+            ("emotes", "Animated Emotes"),
         };
 
         // ─── Constructor ─────────────────────────────────────────
@@ -348,6 +358,48 @@ namespace ConditioningControlPanel
             BuildMessagesSection();
             BuildPhrasesSection();
             BuildReplacementsSection();
+            // Newer content types, one partial-class file per panel
+            // (ModCreatorWindow.Pools.cs, .Personalities.cs, .Advanced.cs,
+            // .Barks.cs, .Mantras.cs, .EventAudio.cs, .Portraits.cs, .Emotes.cs).
+            BuildPoolsSection();
+            BuildPersonalitiesSection();
+            BuildAdvancedSection();
+            BuildBarksSection();
+            BuildMantrasSection();
+            BuildEventAudioSection();
+            BuildPortraitsSection();
+            BuildEmotesSection();
+        }
+
+        // ─── Side-file seams ─────────────────────────────────────
+        // Aggregate hooks the per-panel partials plug into: export writes each
+        // panel's side files into the .ccpmod resources tree; load repopulates
+        // panels from an extracted resources tree; clear resets panel state.
+        private void WriteSideFilesTo(string resourcesDir)
+        {
+            WriteBarksTo(resourcesDir);
+            WriteMantrasTo(resourcesDir);
+            WriteEventAudioTo(resourcesDir);
+            WritePortraitsTo(resourcesDir);
+            WriteEmotesTo(resourcesDir);
+        }
+
+        private void LoadSideFilesFrom(string resourcesDir)
+        {
+            LoadBarksFrom(resourcesDir);
+            LoadMantrasFrom(resourcesDir);
+            LoadEventAudioFrom(resourcesDir);
+            LoadPortraitsFrom(resourcesDir);
+            LoadEmotesFrom(resourcesDir);
+        }
+
+        private void ClearSideFileState()
+        {
+            ClearBarksSection();
+            ClearMantrasSection();
+            ClearEventAudioSection();
+            ClearPortraitsSection();
+            ClearEmotesSection();
         }
 
         private Border CreateSectionPanel(string key)
@@ -519,6 +571,16 @@ namespace ConditioningControlPanel
             _txtDescription.Width = 500;
             stack.Children.Add(_txtDescription);
 
+            stack.Children.Add(CreateFieldLabel("Tags (comma-separated)"));
+            _txtTags = CreateDarkTextBox("e.g. feminization, soft, voice");
+            _txtTags.Width = 350;
+            stack.Children.Add(_txtTags);
+
+            stack.Children.Add(CreateFieldLabel("Minimum App Version"));
+            _txtMinAppVersion = CreateDarkTextBox("e.g. 6.3.4 (optional)");
+            _txtMinAppVersion.Width = 160;
+            stack.Children.Add(_txtMinAppVersion);
+
             stack.Children.Add(CreateFieldLabel("Preview Image"));
             var previewSlot = CreateImageSlot("preview", "Preview Image", 160, 120);
             stack.Children.Add(previewSlot);
@@ -666,6 +728,16 @@ namespace ConditioningControlPanel
             _txtTakeoverLabel = CreateDarkTextBox("");
             _txtTakeoverLabel.Width = 250;
             stack.Children.Add(_txtTakeoverLabel);
+
+            stack.Children.Add(CreateFieldLabel("Affirmation"));
+            _txtAffirmation = CreateDarkTextBox("Shown on the level-up card, e.g. \"Good girl.\"");
+            _txtAffirmation.Width = 350;
+            stack.Children.Add(_txtAffirmation);
+
+            stack.Children.Add(CreateFieldLabel("Rank Subject"));
+            _txtRankSubject = CreateDarkTextBox("What ranks measure, e.g. \"obedience\"");
+            _txtRankSubject.Width = 250;
+            stack.Children.Add(_txtRankSubject);
         }
 
         // ─── Image Slots Sections ────────────────────────────────
@@ -1919,6 +1991,7 @@ namespace ConditioningControlPanel
                             SetImageSlot(key, imgPath);
                     }
                     LoadAudioFromResources(resourcesDir);
+                    LoadSideFilesFrom(resourcesDir);
                 }
 
                 TxtStatus.Text = Loc.GetF("mod_loaded_active", manifest.Name);
@@ -1937,6 +2010,8 @@ namespace ConditioningControlPanel
             SetTextBoxValue(_txtAuthor, manifest.Author);
             SetTextBoxValue(_txtVersion, manifest.Version);
             SetTextBoxValue(_txtDescription, manifest.Description);
+            SetTextBoxValue(_txtTags, manifest.Tags != null ? string.Join(", ", manifest.Tags) : "");
+            SetTextBoxValue(_txtMinAppVersion, manifest.MinAppVersion);
 
             // Theme
             if (manifest.Theme != null)
@@ -1958,6 +2033,8 @@ namespace ConditioningControlPanel
                 SetTextBoxValue(_txtModeDisplayName, manifest.Identity.ModeDisplayName);
                 SetTextBoxValue(_txtTalkToLabel, manifest.Identity.TalkToLabel);
                 SetTextBoxValue(_txtTakeoverLabel, manifest.Identity.TakeoverLabel);
+                SetTextBoxValue(_txtAffirmation, manifest.Identity.Affirmation);
+                SetTextBoxValue(_txtRankSubject, manifest.Identity.RankSubject);
             }
 
             // Triggers
@@ -2037,6 +2114,11 @@ namespace ConditioningControlPanel
                     AddCustomAvatarSet(cs.SetNumber, cs.Label, cs.UnlockLevel);
             }
 
+            // Manifest sections owned by the panel partials.
+            PopulatePoolsFromManifest(manifest);
+            PopulatePersonalitiesFromManifest(manifest);
+            PopulateAdvancedFromManifest(manifest);
+
             UpdateStatusBar();
         }
 
@@ -2052,6 +2134,18 @@ namespace ConditioningControlPanel
                 Author = GetTextBoxValue(_txtAuthor),
                 Description = string.IsNullOrWhiteSpace(GetTextBoxValue(_txtDescription)) ? null : GetTextBoxValue(_txtDescription),
             };
+
+            // Tags + minimum app version
+            var tags = GetTextBoxValue(_txtTags)
+                .Split(new[] { ',', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(t => t.Trim())
+                .Where(t => t.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(12)
+                .ToList();
+            if (tags.Count > 0) manifest.Tags = tags;
+            var minVer = GetTextBoxValue(_txtMinAppVersion).Trim();
+            if (Version.TryParse(minVer, out _)) manifest.MinAppVersion = minVer;
 
             // Preview image
             if (_imageSlots.TryGetValue("preview", out var previewPath) && previewPath != null)
@@ -2087,8 +2181,11 @@ namespace ConditioningControlPanel
             var mdn = GetTextBoxValue(_txtModeDisplayName);
             var ttl = GetTextBoxValue(_txtTalkToLabel);
             var tol = GetTextBoxValue(_txtTakeoverLabel);
+            var aff = GetTextBoxValue(_txtAffirmation);
+            var rank = GetTextBoxValue(_txtRankSubject);
             if (!string.IsNullOrEmpty(cn) || !string.IsNullOrEmpty(ut) || !string.IsNullOrEmpty(mdn)
-                || !string.IsNullOrEmpty(ttl) || !string.IsNullOrEmpty(tol))
+                || !string.IsNullOrEmpty(ttl) || !string.IsNullOrEmpty(tol)
+                || !string.IsNullOrEmpty(aff) || !string.IsNullOrEmpty(rank))
             {
                 manifest.Identity = new ModIdentity
                 {
@@ -2097,6 +2194,8 @@ namespace ConditioningControlPanel
                     ModeDisplayName = string.IsNullOrEmpty(mdn) ? null : mdn,
                     TalkToLabel = string.IsNullOrEmpty(ttl) ? null : ttl,
                     TakeoverLabel = string.IsNullOrEmpty(tol) ? null : tol,
+                    Affirmation = string.IsNullOrEmpty(aff) ? null : aff,
+                    RankSubject = string.IsNullOrEmpty(rank) ? null : rank,
                 };
             }
 
@@ -2201,6 +2300,11 @@ namespace ConditioningControlPanel
                 }).ToList();
             }
 
+            // Manifest sections owned by the panel partials.
+            ApplyPoolsToManifest(manifest);
+            ApplyPersonalitiesToManifest(manifest);
+            ApplyAdvancedToManifest(manifest);
+
             return manifest;
         }
 
@@ -2283,6 +2387,9 @@ namespace ConditioningControlPanel
                     }
                 }
 
+                // Barks / mantras / event audio / portraits / emotes.
+                WriteSideFilesTo(resourcesDir);
+
                 // Create ZIP
                 if (File.Exists(sfd.FileName))
                     File.Delete(sfd.FileName);
@@ -2341,6 +2448,7 @@ namespace ConditioningControlPanel
                 // Clear all image slots first
                 foreach (var key in _imageSlots.Keys.ToList())
                     ClearImageSlot(key);
+                ClearSideFileState();
 
                 PopulateFromManifest(manifest);
 
@@ -2355,6 +2463,7 @@ namespace ConditioningControlPanel
                             SetImageSlot(key, imgPath);
                     }
                     LoadAudioFromResources(resourcesDir);
+                    LoadSideFilesFrom(resourcesDir);
                 }
 
                 NavigateToSection("info");
@@ -2425,6 +2534,16 @@ namespace ConditioningControlPanel
                 ClearAudioSlot(key);
             _voiceLines.Clear();
             _voiceLinesPanel?.Children.Clear();
+
+            // New metadata fields + panel partials
+            SetTextBoxValue(_txtTags, "");
+            SetTextBoxValue(_txtMinAppVersion, "");
+            SetTextBoxValue(_txtAffirmation, "");
+            SetTextBoxValue(_txtRankSubject, "");
+            ClearPoolsSection();
+            ClearPersonalitiesSection();
+            ClearAdvancedSection();
+            ClearSideFileState();
 
             NavigateToSection("info");
             UpdateStatusBar();

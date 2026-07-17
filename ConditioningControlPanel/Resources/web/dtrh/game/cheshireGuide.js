@@ -368,6 +368,15 @@ export function createCheshireGuide(opts) {
           playHubScene('graduation', ARC_DONE, null);
           return false;
         }
+        // THE BOUDOIR tour (crafting Part 2): once-ever, after the arc, the
+        // moment the station exists (runs >= 5). Flag first (openIntro's
+        // pattern) so a mid-scene snapshot can't re-enter.
+        if (stage >= ARC_DONE && v.runs >= 5 && !v.seenBoudoirIntro
+            && warrenTut && warrenTut.canOpen('boudoir')) {
+          try { bridge.send({ type: 'meta-command', op: 'set-flag', key: 'seenBoudoirIntro' }); } catch (e) { /* ignore */ }
+          playHubScene('boudoir_intro', stage, flashPass);
+          return true;   // the boudoir reveal flash runs AFTER her tour
+        }
         maybeAmbient(v);
         return false;
       } catch (e) { log('cheshire: maybeStart: ' + (e && e.message)); return false; }

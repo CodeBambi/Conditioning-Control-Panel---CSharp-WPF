@@ -1730,6 +1730,17 @@ namespace ConditioningControlPanel.Models
             set { _cataloguePresetSubmissions = value ?? new Dictionary<string, DeeperSubmissionRecord>(); OnPropertyChanged(); }
         }
 
+        // Mod catalogue submissions, keyed by the mod id (installed mods live in
+        // %UserData%/mods/{id}). The catalogue stores metadata + an external
+        // download link only — the .ccpmod binary is hosted by the creator (MEGA).
+        private Dictionary<string, DeeperSubmissionRecord> _catalogueModSubmissions = new();
+        [JsonProperty]
+        public Dictionary<string, DeeperSubmissionRecord> CatalogueModSubmissions
+        {
+            get => _catalogueModSubmissions;
+            set { _catalogueModSubmissions = value ?? new Dictionary<string, DeeperSubmissionRecord>(); OnPropertyChanged(); }
+        }
+
         private bool _runOnStartup = false;
         public bool RunOnStartup
         {
@@ -2314,6 +2325,39 @@ namespace ConditioningControlPanel.Models
             get => _chaosBubbleSharedHost;
             set { _chaosBubbleSharedHost = value; OnPropertyChanged(); }
         }
+        private bool _unifiedOverlayHost = true;
+        /// <summary>Default ON (re-enabled for the 6.4 merge): render the fullscreen
+        /// effects (pink filter, spiral, brain drain, subliminals, flash, bubbles, chaos FX) as
+        /// z-ordered Skia layers inside ONE shared click-through compositor window per monitor
+        /// (Services/Compositor/CompositorEngine) instead of one layered Window per effect.
+        /// Concurrent fullscreen layered windows were the root cause of the session-lag /
+        /// mouse-stutter cluster; this is the WPF twin of the Avalonia port's compositor and the
+        /// end-state renderer. Was reverted to OFF once (2026-07-13, #550: unthrottled software
+        /// SKElement raster saturated the UI thread) — since fixed by dirty-gated invalidation,
+        /// so the compositor is the blessed path going forward. A Settings-tab toggle
+        /// ("Unified overlay renderer") lets users fall back to the legacy per-effect windows.</summary>
+        public bool UnifiedOverlayHost
+        {
+            get => _unifiedOverlayHost;
+            set { _unifiedOverlayHost = value; OnPropertyChanged(); }
+        }
+        private bool _compositorOffThreadPresent;
+        /// <summary>Default OFF (experimental, #550 proper fix): when the unified overlay host is on,
+        /// render each monitor's layers OFF the UI thread. The UI-thread tick still runs Update() and
+        /// records the active layers into a cheap immutable SKPicture (draw-command capture, no raster);
+        /// a dedicated per-monitor present thread then rasterizes that picture into a DIB-backed surface
+        /// and pushes it with UpdateLayeredWindow(ULW_ALPHA). This removes the fullscreen software raster
+        /// + layered composite from the UI thread (the dispatcher-starvation that made the spiral lag the
+        /// whole app on some machines) while keeping per-pixel alpha, click-through and the layers'
+        /// UI-thread contract intact (SKImage frees route through the engine's deferred-disposal so an
+        /// image referenced by an in-flight picture is never freed under the present thread). No-op when
+        /// the unified host is off. Needs play-test on a high-res / multi-monitor machine before shipping
+        /// on - the win only shows where the UI-thread raster actually saturated.</summary>
+        public bool CompositorOffThreadPresent
+        {
+            get => _compositorOffThreadPresent;
+            set { _compositorOffThreadPresent = value; OnPropertyChanged(); }
+        }
         private bool _chaosDvdSharedHost = true;
         /// <summary>Default ON (proven win): render the DVD bouncing-text logos (Porn DVD /
         /// Intrusive Thoughts / Casting Couch) as cheap Canvas children of ONE shared click-through host
@@ -2856,16 +2900,20 @@ namespace ConditioningControlPanel.Models
             set { _autoPerformanceMode = value; OnPropertyChanged(); }
         }
 
-        private bool _videoHardwareDecoding = true;
+        private bool _videoForceHardwareDecoding = false;
         /// <summary>
-        /// Use GPU (DXVA) hardware decoding for mandatory videos. Default on; LibVLC falls back
-        /// to software automatically if a GPU's hardware decode path is unavailable. Provided as
-        /// an escape hatch for the rare systems with flaky hardware decoders.
+        /// Force GPU (DXVA) hardware decoding for mandatory videos. Default OFF — mandatory videos
+        /// software-decode, because the LibVLC hardware path intermittently renders a white screen
+        /// and wedges cleanup on Windows 11 (build 26200) and some Win10 machines (#533/#537/#540).
+        /// These are short attention-check clips, so software decode costs little. This is an opt-in
+        /// escape hatch for users on good hardware who want GPU decode back.
+        /// NOTE: property was renamed from the old default-ON "VideoHardwareDecoding" precisely so
+        /// existing users' persisted true value stops binding and everyone lands on software decode.
         /// </summary>
-        public bool VideoHardwareDecoding
+        public bool VideoForceHardwareDecoding
         {
-            get => _videoHardwareDecoding;
-            set { _videoHardwareDecoding = value; OnPropertyChanged(); }
+            get => _videoForceHardwareDecoding;
+            set { _videoForceHardwareDecoding = value; OnPropertyChanged(); }
         }
 
         #endregion
@@ -3734,6 +3782,33 @@ namespace ConditioningControlPanel.Models
             if (_speechLoudnessThreshold >= 0.035 && _speechLoudnessThreshold <= 0.045)
                 _speechLoudnessThreshold = 0.015;
             _loudnessThresholdRelaxed = true;
+        }
+
+        private bool _migratedUnifiedOverlayHostOn;
+        /// <summary>One-shot guard for <see cref="MigrateEnableUnifiedOverlayHost"/> so a user who
+        /// turns the compositor toggle off afterwards isn't clobbered back on at the next launch.</summary>
+        [JsonProperty]
+        public bool MigratedUnifiedOverlayHostOn
+        {
+            get => _migratedUnifiedOverlayHostOn;
+            set { _migratedUnifiedOverlayHostOn = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Force the unified overlay host ON once for users upgrading from 6.3.3/6.3.4. The
+        /// 6.3.4 hotfix force-migrated everyone OFF (bug #550: the host's unthrottled software
+        /// raster saturated the UI thread) and persisted "false" to settings.json, so the
+        /// default flip back to ON wouldn't reach them. #550 is fixed (dirty-gated invalidation)
+        /// and the compositor is now the blessed render path, so re-enable once; the
+        /// Settings-tab toggle ("Unified overlay renderer") lets anyone opt back out and their
+        /// choice sticks. Supersedes the retired MigrateDisableUnifiedOverlayHost — its
+        /// MigratedUnifiedOverlayHostOff sentinel key is simply ignored in old settings files.
+        /// </summary>
+        internal void MigrateEnableUnifiedOverlayHost()
+        {
+            if (_migratedUnifiedOverlayHostOn) return;
+            _unifiedOverlayHost = true;
+            _migratedUnifiedOverlayHostOn = true;
         }
 
         private double _speechWakeThreshold = 0.15;

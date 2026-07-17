@@ -167,6 +167,21 @@ export const CHESHIRE = {
       { id: 'gr09', pose: 'couch_invite', mood: 'lowest-warmest close of the arc',
         text: '[low] ...go show the hole what I made. I’ll be watching. I’m always watching. [giggles]' },
     ],
+
+    // ---- THE BOUDOIR tour (crafting Part 2): once, when the station appears
+    // (runs >= 5, arc done). Two card-tour beats walk the real panes. ----
+    boudoir_intro: [
+      { id: 'bd01', pose: 'couch_invite', mood: 'mock surprise, delighted',
+        text: 'Oh, THAT room. [chuckles] I wondered when the Warren would show you. It only opens for girls whose pockets keep filling up.' },
+      { id: 'bd02', pose: 'lean_fwd', mood: 'shop talk, fond', demo: { card: 'boudoir', pane: 'haul' },
+        text: 'Everything the tube let you keep lands in THE HAUL. Silicone, lace, chrome... raw pieces of the hole itself. You’ve been hoarding, kitten.' },
+      { id: 'bd03', pose: 'table_lean', mood: 'the trick, savored slowly', demo: { card: 'boudoir', pane: 'table' },
+        text: 'And the WORKTABLE is where the trick happens. Draw a picture with what you carry. Draw the RIGHT picture... [low] and it becomes the thing.' },
+      { id: 'bd04', pose: 'seated', mood: 'coy, withholding',
+        text: 'No, I won’t tell you the pictures. Where’s the fun in that? Sketches turn up. Shapes rhyme. Girls figure it out. [giggles]' },
+      { id: 'bd05', pose: 'curled', mood: 'quiet, the blade under the purr',
+        text: '[whispers] One more thing. Some pictures open doors. Some pictures lock them. She stitched both kinds into the walls. Sleep well, sweet thing.' },
+    ],
   },
 
   /* ======================================================================

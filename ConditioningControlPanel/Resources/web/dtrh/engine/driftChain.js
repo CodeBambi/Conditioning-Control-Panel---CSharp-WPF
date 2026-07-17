@@ -15,6 +15,7 @@
  * ==========================================================================*/
 
 import { FALL_DRIFT } from '/dtrh/assets/barks/manifest.js';
+import { modDrift } from '../modContent.js';
 import { isMuted, onMuteChange } from '../shared/audioMute.js';
 import { getLevel, onLevels } from './audioLevels.js';
 import { getAudioCtx, getMasterOut, makeSfxPlayer } from './audioBus.js';
@@ -42,9 +43,32 @@ const RATE_MAX_SPEED = 30;      // tube speed at which the voice hits its ceilin
 const RATE_MAX = 1.43;          // +43% tempo flat out (pitch preserved by default)
 
 export function createDriftChain({ getDepth }) {
-  // One shared element: the chain speaks one line at a time.
+  // One shared element: the chain speaks one line at a time. crossOrigin so a
+  // creator mod's ccp.mod clips survive the WebAudio route below (a routed
+  // cross-origin element without CORS goes silent); harmless for same-origin.
   const el = new Audio();
   el.preload = 'auto';
+  el.crossOrigin = 'anonymous';
+
+  // Creator mods: the mod's own drift pools (init modContent, set before the
+  // engine starts). Built ONCE - per-pool: 'replace' swaps the shipped corpus
+  // for the mod's clips, 'mix' appends; a pool the mod didn't ship keeps the
+  // shipped corpus, so a partial package never starves the chain into silence.
+  // Mod entries carry no region/biome tags, so the gates treat them as the
+  // universal backbone.
+  const modPools = (() => {
+    const md = modDrift();
+    if (!md || !md.pools) return null;
+    const out = {};
+    for (const id of ['drift', 'sensory', 'descent', 'babble', 'resolve']) {
+      const mp = md.pools[id] || [];
+      if (!mp.length) { out[id] = FALL_DRIFT[id] || []; continue; }
+      const entries = mp.map((e) => ({ mod: 'ccpmod', file: e.file, url: e.url }));
+      out[id] = md.mode === 'mix' ? (FALL_DRIFT[id] || []).concat(entries) : entries;
+    }
+    return out;
+  })();
+  const poolSrc = (id) => (modPools ? modPools[id] : FALL_DRIFT[id]);
 
   // Loudness lives in a gain node on the shared context, NOT el.volume - iOS
   // ignores volume on media elements outright, so the voice slider did nothing
@@ -165,7 +189,7 @@ export function createDriftChain({ getDepth }) {
   }
 
   function pick(poolId) {
-    const pool = FALL_DRIFT[poolId];
+    const pool = poolSrc(poolId);
     if (!pool || !pool.length) return null;
     let eligible = pool.map((_, i) => i).filter((i) => inRegion(pool[i]) && keyOf(pool[i]) !== lastKey);
     // Circe's VO ships ONLY as biome lines. When any are eligible, foreground
@@ -262,7 +286,7 @@ export function createDriftChain({ getDepth }) {
       el.pause();
       el.currentTime = 0;
       el.onended = null;
-      el.src = BASE + bark.mod + '/' + bark.file;
+      el.src = bark.url || (BASE + bark.mod + '/' + bark.file);
       ensureVoiceRoute();
       keepCtxAwake();          // don't start a clip into a suspended (silent) context
       stallPos = 0; stallTicks = 0; // fresh clip: reset the freeze detector

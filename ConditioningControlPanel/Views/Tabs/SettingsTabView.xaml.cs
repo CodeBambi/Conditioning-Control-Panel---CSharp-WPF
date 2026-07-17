@@ -367,6 +367,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkVideoHwDecode_Changed(sender, e);
         }
+        private void ChkUnifiedOverlay_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkUnifiedOverlay_Changed(sender, e);
+        }
         private void ChkWinStart_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

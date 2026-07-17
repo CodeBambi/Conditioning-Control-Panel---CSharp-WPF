@@ -291,8 +291,8 @@ namespace ConditioningControlPanel
 
         // Builds a small colored status pill for a catalogue submission, or null
         // when the asset hasn't been shared. Same palette/glyphs as the Deeper
-        // library badge.
-        private Border? CreateCatalogueStatusBadge(DeeperSubmissionRecord? rec)
+        // library badge. Static so dialogs (ModManagerDialog) can render it too.
+        internal static Border? CreateCatalogueStatusBadge(DeeperSubmissionRecord? rec)
         {
             if (rec == null || string.IsNullOrEmpty(rec.CatalogueId)) return null;
 
@@ -354,6 +354,8 @@ namespace ConditioningControlPanel
                 {
                     RefreshCustomSessionCards();
                 }
+                // CatalogueKindMods: ModManagerDialog rebuilds its badges from
+                // settings every time its list refreshes; nothing to update here.
             }
             catch (Exception ex)
             {

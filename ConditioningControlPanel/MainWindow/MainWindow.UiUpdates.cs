@@ -2034,8 +2034,15 @@ namespace ConditioningControlPanel
         internal void ChkVideoHwDecode_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            App.Settings.Current.VideoHardwareDecoding = SettingsTab.ChkVideoHwDecode.IsChecked ?? true;
-            App.Logger?.Information("Video hardware decoding set to {Enabled}", App.Settings.Current.VideoHardwareDecoding);
+            App.Settings.Current.VideoForceHardwareDecoding = SettingsTab.ChkVideoHwDecode.IsChecked ?? false;
+            App.Logger?.Information("Force video hardware decoding set to {Enabled}", App.Settings.Current.VideoForceHardwareDecoding);
+        }
+
+        internal void ChkUnifiedOverlay_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.UnifiedOverlayHost = SettingsTab.ChkUnifiedOverlay.IsChecked ?? true;
+            App.Logger?.Information("Unified overlay renderer set to {Enabled}", App.Settings.Current.UnifiedOverlayHost);
         }
 
         internal void ChkOfflineMode_Changed(object sender, RoutedEventArgs e)

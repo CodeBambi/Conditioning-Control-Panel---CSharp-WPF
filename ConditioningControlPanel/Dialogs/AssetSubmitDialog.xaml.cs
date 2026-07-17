@@ -26,10 +26,15 @@ namespace ConditioningControlPanel
         public bool Confirmed { get; private set; }
         public string Creator { get; private set; } = "";
         public IReadOnlyList<string> Tags { get; private set; } = Array.Empty<string>();
+        public string DownloadUrl { get; private set; } = "";
 
-        public AssetSubmitDialog(string assetName, string? defaultCreator = null)
+        private readonly bool _requireDownloadUrl;
+
+        public AssetSubmitDialog(string assetName, string? defaultCreator = null,
+            bool requireDownloadUrl = false, string? defaultTags = null)
         {
             InitializeComponent();
+            _requireDownloadUrl = requireDownloadUrl;
 
             TxtSubtitle.Text = string.IsNullOrWhiteSpace(assetName)
                 ? string.Empty
@@ -37,6 +42,14 @@ namespace ConditioningControlPanel
 
             if (!string.IsNullOrWhiteSpace(defaultCreator))
                 TxtCreator.Text = defaultCreator.Trim();
+            if (!string.IsNullOrWhiteSpace(defaultTags))
+                TxtTags.Text = defaultTags.Trim();
+
+            if (requireDownloadUrl)
+            {
+                PnlDownloadUrl.Visibility = Visibility.Visible;
+                TxtDownloadUrl.TextChanged += (_, _) => UpdateSubmitEnabled();
+            }
 
             ChkAffirm.Checked += (_, _) => UpdateSubmitEnabled();
             ChkAffirm.Unchecked += (_, _) => UpdateSubmitEnabled();
@@ -47,7 +60,22 @@ namespace ConditioningControlPanel
         private void UpdateSubmitEnabled()
         {
             BtnSubmit.IsEnabled = ChkAffirm.IsChecked == true
-                && !string.IsNullOrWhiteSpace(TxtCreator.Text);
+                && !string.IsNullOrWhiteSpace(TxtCreator.Text)
+                && (!_requireDownloadUrl || IsValidMegaUrl(TxtDownloadUrl.Text));
+        }
+
+        // The catalogue only stores a link to the creator-hosted binary; v1
+        // restricts hosting to MEGA so the server-side allowlist stays simple.
+        internal static bool IsValidMegaUrl(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return false;
+            if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)) return false;
+            if (uri.Scheme != Uri.UriSchemeHttps) return false;
+            var host = uri.Host;
+            return host.Equals("mega.nz", StringComparison.OrdinalIgnoreCase)
+                || host.Equals("www.mega.nz", StringComparison.OrdinalIgnoreCase)
+                || host.Equals("mega.co.nz", StringComparison.OrdinalIgnoreCase)
+                || host.Equals("www.mega.co.nz", StringComparison.OrdinalIgnoreCase);
         }
 
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
@@ -60,8 +88,10 @@ namespace ConditioningControlPanel
         private void BtnSubmit_Click(object sender, RoutedEventArgs e)
         {
             if (ChkAffirm.IsChecked != true || string.IsNullOrWhiteSpace(TxtCreator.Text)) return;
+            if (_requireDownloadUrl && !IsValidMegaUrl(TxtDownloadUrl.Text)) return;
 
             Creator = TxtCreator.Text.Trim();
+            DownloadUrl = _requireDownloadUrl ? TxtDownloadUrl.Text.Trim() : "";
             // Accept comma- or whitespace-separated tags; dedup, lowercase-trim, cap length.
             Tags = (TxtTags.Text ?? string.Empty)
                 .Split(new[] { ',', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries)

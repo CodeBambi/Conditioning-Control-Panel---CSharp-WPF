@@ -416,6 +416,19 @@ export const DIARY_CODEX = [
     desc: 'Golden droplets bead on the tunnel wall and streak past. Click one before it\'s gone for a few emotes, banked when you surface. The walls sweat when you\'re close.' },
   { codex: 'pickup:whiterabbit', name: 'The White Rabbit (in the walls)', glyph: '🐇', tint: '255,255,255',
     desc: 'Once in a while he dashes down the tube, faster than you fall. Catch him with a click before he outruns you — he tips 10-20 gold for the trouble. He\'s late. You\'re not.' },
+  // ---- crafting materials (THE BOUDOIR): taught on the first-ever grab ----
+  { codex: 'material:silicone', name: 'Silicone', glyph: '🍮', tint: '255,214,222',
+    desc: 'A material. Soft, patient, endlessly forgiving — it takes whatever shape you press it into. Grabs bank straight to your bag; THE BOUDOIR turns pictures of it into things.' },
+  { codex: 'material:makeup', name: 'Makeup', glyph: '💄', tint: '255,96,160',
+    desc: 'A material. Everything creative starts here — paint enough of it in the right shape and the picture becomes the thing. She calls that the whole trick.' },
+  { codex: 'material:pills', name: 'Pink Pills', glyph: '💊', tint: '255,148,196',
+    desc: 'A material. Small, sweet, permanent. What they change stays changed — the recipes that use them don\'t come undone.' },
+  { codex: 'material:lace', name: 'Lace', glyph: '🎀', tint: '244,226,255',
+    desc: 'A material. It binds, it adorns, it holds you together — stockings, bows, collars, dolls. Delicate is not the same as weak.' },
+  { codex: 'material:lube', name: 'Lube', glyph: '🧴', tint: '168,230,255',
+    desc: 'A material. Everything goes easier with it — slopes, keys, second thoughts. The rarest kind of kindness down here.' },
+  { codex: 'material:chrome', name: 'Chrome', glyph: '⛓', tint: '206,214,228',
+    desc: 'A material. The hard one — locks, keys, cages, mirrors. Chrome keeps what silicone promises. Drawn in a closed ring, it means forever.' },
   // ---- the weather (Wave 2): one sky per loop, worn by the tunnel itself ----
   { codex: 'weather:stillness', name: 'Stillness', glyph: '🕯', tint: '255,214,236',
     desc: 'Weather. The deep holds its breath — trances burn 10% slower under it.' },
@@ -504,6 +517,11 @@ export function metaView(meta) {
   const seenReveals = asSet(m.seenReveals);
   const firstTimes = asSet(m.firstTimesAwarded);
   const dials = asSet(m.purchasedDials);
+  // crafting (THE BOUDOIR): materials + recipe ledgers (game/crafting.js owns the tables)
+  const materials = m.materials || {};
+  const discoveredRecipes = asSet(m.discoveredRecipes);
+  const craftedItems = m.craftedItems || {};
+  const paperwallSketches = asSet(m.paperwallSketches);
   const runs = m.runsCompleted | 0;
   const rankIndex = RANKS.forRuns(runs);
 
@@ -597,6 +615,19 @@ export function metaView(meta) {
     // and discovered items deepen freely with Sparks. Nothing gates on a proof anymore.
     // (The LESSONS copy lives on only as an explanation-text source.)
     isLessonBlocked: () => false,
+
+    // ---- crafting (THE BOUDOIR) ----
+    materials,
+    discoveredRecipes,
+    craftedItems,
+    materialCount: (id) => materials[id] | 0,
+    craftedCount: (id) => craftedItems[id] | 0,
+    // Part 2: THE PADLOCK's pin, THE CAGE's toggle, Cheshire's Boudoir tour
+    pinnedBoon: m.pinnedBoon || null,
+    denialArmed: !!m.denialArmed,
+    seenBoudoirIntro: !!m.seenBoudoirIntro,
+    // Part 3: THE PAPERWALL's torn Lookbook sketches (recipe ids with a page pinned)
+    paperwallSketches,
 
     isDiscovered: (codexId) => discovered.has(codexId),
     /** Happy path: run 2+ shows full shelves; before that only the starter trio. */

@@ -560,6 +560,14 @@ public static class ChaosMeta
             ElapsedSec: run.ElapsedSec));
     }
 
+    /// <summary>THE SHOT (crafted, repeatable): +4% drops payout per shot in the system,
+    /// stacking to +40% at the 10-shot saturation cap. 1.0 with none crafted.</summary>
+    public static double ShotSparkMult(ChaosMetaState state)
+    {
+        int shots = state.CraftedItems.TryGetValue("the_shot", out var n) ? n : 0;
+        return 1.0 + 0.04 * Math.Min(10, shots);
+    }
+
     /// <summary>Plain-value award input so run brains that are NOT a ChaosRunState (the DtRH
     /// browser game reports its runs over the bridge) share the exact same formula/banking.</summary>
     public readonly record struct ChaosRunRewardInput(
@@ -583,6 +591,9 @@ public static class ChaosMeta
         // capstone tips 10% extra on the whole haul.
         sparks += (int)Math.Max(0, run.TrickleDrops);
         if (run.DripFeedMaxed) sparks = (int)Math.Round(sparks * 1.10);
+
+        // THE SHOT (crafted, repeatable): a standing drip on the whole haul.
+        sparks = (int)Math.Round(sparks * ShotSparkMult(State));
 
         // One-time cold-start kindness ("first fall"): +25 the first time RunsCompleted
         // goes 0→1 (guarded so it only ever applies once). Displayed on the recap card.

@@ -88,8 +88,22 @@ public static class ChaosSfx
         catch { return scale; }
     }
 
+    // Voice cap: each cue burns a Task.Run thread + its own WaveOutEvent for the clip's
+    // duration. "Fire rarely" stopped holding once chaos pops/subliminal payloads routed
+    // through here — WER dumps 27800 (0xc0000005) and 24012 (0xc0000409) both died with
+    // 6-15 threads inside this method mid audio storm. Excess cues are dropped, not
+    // queued: a one-shot SFX played late is worse than silence.
+    private const int MAX_VOICES = 6;
+    private static int _activeVoices;
+
     private static void PlayAsync(string path, float volume)
     {
+        if (Interlocked.Increment(ref _activeVoices) > MAX_VOICES)
+        {
+            Interlocked.Decrement(ref _activeVoices);
+            App.Logger?.Debug("ChaosSfx: voice cap ({Max}) reached, dropping {Path}", MAX_VOICES, path);
+            return;
+        }
         Task.Run(() =>
         {
             WaveOutEvent? outputDevice = null;
@@ -109,6 +123,7 @@ public static class ChaosSfx
             {
                 try { outputDevice?.Dispose(); } catch { }
                 try { audioFile?.Dispose(); } catch { }
+                Interlocked.Decrement(ref _activeVoices);
             }
         });
     }

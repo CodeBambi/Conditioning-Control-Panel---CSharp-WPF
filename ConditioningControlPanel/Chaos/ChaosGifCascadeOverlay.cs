@@ -129,6 +129,7 @@ public sealed class ChaosGifCascadeOverlay : Window
     private readonly List<Faller> _fallers = new();
     private readonly DispatcherTimer _spawn;
     private readonly DispatcherTimer _life;
+    private readonly DispatcherTimer _hideGrace;
     private bool _spawning;
     // Motion runs off the composition clock (vsync-aligned) instead of a 16ms
     // DispatcherTimer, whose OS-quantized cadence beat against the refresh and made
@@ -178,6 +179,16 @@ public sealed class ChaosGifCascadeOverlay : Window
 
         _life = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
         _life.Tick += (_, _) => { _life.Stop(); _spawning = false; _spawn.Stop(); };  // stop spawning; let in-flight fall out
+
+        // Hiding right when the last clip landed meant the NEXT cascade re-Show()ed a
+        // full-virtual-screen layered window (DWM re-composition hitch at trigger time). The
+        // window idles visible-but-empty (no redraws) through this grace before hiding.
+        _hideGrace = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+        _hideGrace.Tick += (_, _) =>
+        {
+            _hideGrace.Stop();
+            if (!_spawning && _fallers.Count == 0) { try { Hide(); } catch { } }
+        };
     }
 
     /// <summary>Set the window-local X band clips spawn/fall in. Full = the whole virtual screen (all
@@ -194,6 +205,7 @@ public sealed class ChaosGifCascadeOverlay : Window
     private void Restart(List<string> files, double spawnRatePerSec, double durationSec,
                          double gifSize, double fallSpeed, double opacity, double startScale)
     {
+        _hideGrace.Stop();
         StopAndClear();
         _files = files;
         _gifSize = Math.Clamp(gifSize, 40, 600);
@@ -335,9 +347,10 @@ public sealed class ChaosGifCascadeOverlay : Window
             if (!_spawning && _fallers.Count == 0)
             {
                 GoIdle();
-                // Cascade over: hide the window (kept alive for the next payload) — an idle
-                // visible full-virtual-screen layered surface taxes DWM composition every frame.
-                try { Hide(); } catch { }
+                // Cascade over: keep the (now empty, non-redrawing) window up for the grace so a
+                // follow-up cascade doesn't pay a full-virtual-screen Show(); hide after that.
+                _hideGrace.Stop();
+                _hideGrace.Start();
             }
         }
         catch (Exception ex) { App.Logger?.Debug("GifCascade step: {E}", ex.Message); }
@@ -373,6 +386,7 @@ public sealed class ChaosGifCascadeOverlay : Window
 
     private void CloseNow()
     {
+        try { _hideGrace.Stop(); } catch { }
         StopAndClear();
         if (ReferenceEquals(_active, this)) _active = null;
         try { Close(); } catch { }

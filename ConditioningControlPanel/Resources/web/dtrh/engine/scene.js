@@ -27,12 +27,15 @@ import { createDirector } from './director.js';
 import { createFx } from './fx.js';
 import { createPanel } from './panel.js';
 import { createDriftChain } from './driftChain.js';
+import { modDroneUrl } from '../modContent.js';
 import { getLevel, setLevel, audioGroups, getVoice, setVoice, voiceSets, onVoice } from './audioLevels.js';
 import { getAudioCtx, getMasterOut, closeAudioBus } from './audioBus.js';
-import { S, updateSetting, onSettings, THEME_COLORS, THEME_PRESETS, applyThemePreset, intToHex, hexToInt } from './settings.js';
+import { S, updateSetting, onSettings, THEME_COLORS, THEME_PRESETS, applyThemePreset, intToHex, hexToInt,
+  getLooks, saveLook, clearLook, applyLook, enforceCraftedDefaults } from './settings.js';
 import * as bridge from '../bridge.js';
 
 const DRONE_URL = '/dtrh/assets/audio/drone1.mp3'; // Explore uses drift-under-glass; the fall gets its own bed
+const MUSICBOX_URL = '/dtrh/assets/audio/musicbox1.mp3'; // THE BALLERINA's bed (crafted; graceful if absent)
 const DRONE_FLOOR = 0.16;      // ambient music bed; the speed curve lifts it toward DRONE_MAX
 const DRONE_MAX = 0.5;         // full-speed ceiling (the 'music' slider can push past this up to 2x)
 // Mix hierarchy (sidechain ducks): spotlight video > drift voice > drone bed.
@@ -170,7 +173,14 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   let droneKickTries = 0, droneKickRest = 0, droneDuck = 1, voiceDuck = 1;
   let voiceSilenced = false;   // VN tutorial: hard-mute the drift voice while the persona speaks
   let runActive = false;       // game mode: the drift whisper + special tube moods live ONLY inside a descent (the Warren hub idles calm + quiet)
-  try { drone = new Audio(DRONE_URL); drone.loop = true; drone.preload = 'auto'; drone.volume = DRONE_FLOOR; } catch (e) { drone = null; }
+  // Creator mods may override the drone bed (ccp.mod is cross-origin, so set
+  // crossOrigin BEFORE src or the WebAudio route would mute it).
+  try {
+    drone = new Audio();
+    drone.crossOrigin = 'anonymous';
+    drone.src = modDroneUrl() || DRONE_URL;
+    drone.loop = true; drone.preload = 'auto'; drone.volume = DRONE_FLOOR;
+  } catch (e) { drone = null; }
   function setDroneVolume(v) {
     if (droneGain) droneGain.gain.value = v;
     else if (drone) drone.volume = v;
@@ -194,6 +204,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     if (isMuted()) return;
     if (droneCtx && droneCtx.state === 'suspended') { const r = droneCtx.resume(); if (r && r.catch) r.catch(() => {}); }
     const p = drone.play(); if (p && p.catch) p.catch(() => {});
+    syncMusicBox();   // THE BALLERINA rides the same first-interact gate
   }
   const offDroneMute = onMuteChange((m) => {
     if (!drone) return;
@@ -202,7 +213,36 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       if (droneCtx && droneCtx.state === 'suspended') { const r = droneCtx.resume(); if (r && r.catch) r.catch(() => {}); }
       const p = drone.play(); if (p && p.catch) p.catch(() => {});
     }
+    syncMusicBox();
   });
+
+  // ---- THE BALLERINA (crafted, Part 2): a music-box bed under the drone ------
+  // Lazy element (built on first want), rides the same mute/hidden/pause paths
+  // and the 'music' slider at ~0.35x the bed's live level. A missing asset flips
+  // mboxFailed and the toggle reads "(asset missing)" - no layer, no errors.
+  let mbox = null, mboxFailed = false;
+  function musicBoxBroken() { return mboxFailed; }
+  function syncMusicBox() {
+    const want = !!S.musicBox && droneStarted && !mboxFailed
+      && !isMuted() && !document.hidden && !(gamePaused && pauseHeld);
+    if (want && !mbox) {
+      try {
+        mbox = new Audio(MUSICBOX_URL);
+        mbox.loop = true;
+        mbox.preload = 'auto';
+        mbox.volume = 0;
+        mbox.addEventListener('error', () => {
+          mboxFailed = true;
+          try { if (mbox) mbox.pause(); } catch (e) { /* ignore */ }
+          mbox = null;
+        }, { once: true });
+      } catch (e) { mboxFailed = true; mbox = null; }
+    }
+    if (!mbox) return;
+    if (want) { const p = mbox.play(); if (p && p.catch) p.catch(() => {}); }
+    else { try { mbox.pause(); } catch (e) { /* ignore */ } }
+  }
+  const offMusicBox = onSettings((key) => { if (key === 'musicBox') syncMusicBox(); });
 
   // ---- navigation + cards ----------------------------------------------------
   const nav = createFallNav({
@@ -336,6 +376,10 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     // Game mode: the pause card gains a "surface" exit - the run ends early
     // but still pays out its recap (the WPF RequestStop contract).
     onSurface: game ? () => { setGamePaused(false); game.surface(); } : null,
+    // Crafted unlocks (Part 2): hub-time ownership, read LAZILY at panel-open
+    // (the meta snapshot lands after buildHud runs).
+    craftedOwned: game ? (id) => { try { return !!game.craftedOwned(id); } catch (e) { return false; } } : () => false,
+    musicBoxBroken: () => musicBoxBroken(),
   });
   const offHudMute = onMuteChange(hudBits.syncMute);
   hudBits.syncMute(isMuted());
@@ -363,26 +407,40 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   });
 
   // ---- ESC pause -----------------------------------------------------------------
+  // THE HOURGLASS (crafted, Part 2): the pause card always opens (Esc ladder +
+  // surface keep working, the pointer guard keeps pops from firing through the
+  // dim), but the FREEZE is gated. Without the hourglass mid-descent the fall
+  // keeps moving behind the card - "no pause down here". Hidden/covered holds
+  // are OS-level and stay unconditional (they never route through here).
   let gamePaused = false;
-  function setGamePaused(v) {
+  let pauseHeld = true;   // did the current pause actually freeze the world?
+  function setGamePaused(v, forceHold = false) {
     v = !!v;
     if (v === gamePaused) return;
     if (v && director.isOver()) return; // results screen owns the end state
+    const held = v
+      ? (forceHold || !game || !game.canHoldPause || !!game.canHoldPause())
+      : pauseHeld;   // unpause undoes exactly what the pause did
     gamePaused = v;
-    nav.setPaused(v);
-    bubbles.setFrozen(v);
-    syncSpawner();
-    wall.setPaused(v);
-    if (game) game.setPaused(v);
-    hudBits.showPause(v);
-    if (v) drift.stop(); else if (!game || runActive) drift.start();
-    if (drone && droneStarted) {
-      if (v) { try { drone.pause(); } catch (e) { /* ignore */ } }
-      else if (!isMuted() && !document.hidden) {
-        if (droneCtx && droneCtx.state === 'suspended') { const r = droneCtx.resume(); if (r && r.catch) r.catch(() => {}); }
-        const p = drone.play(); if (p && p.catch) p.catch(() => {});
+    pauseHeld = held;
+    if (held) {
+      nav.setPaused(v);
+      bubbles.setFrozen(v);
+      wall.setPaused(v);
+      if (game) game.setPaused(v);
+      if (v) drift.stop(); else if (!game || runActive) drift.start();
+      if (drone && droneStarted) {
+        if (v) { try { drone.pause(); } catch (e) { /* ignore */ } }
+        else if (!isMuted() && !document.hidden) {
+          if (droneCtx && droneCtx.state === 'suspended') { const r = droneCtx.resume(); if (r && r.catch) r.catch(() => {}); }
+          const p = drone.play(); if (p && p.catch) p.catch(() => {});
+        }
       }
     }
+    syncSpawner();
+    syncMusicBox();
+    hudBits.showPause(v, { held });
+    if (!v) pauseHeld = true;
   }
   // ---- fullscreen <-> pause reconciliation -------------------------------------
   // In element-fullscreen, Chromium/WebView2 eats the FIRST Esc to EXIT fullscreen
@@ -403,7 +461,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     if (suppressExitPause) { suppressExitPause = false; return; } // we left on purpose
     // Standalone browser only: the browser ate the first Esc to exit fullscreen,
     // so turn that exit into the pause. Hosted owns Esc directly (onKeyDown ladder).
-    if (!FS.hosted && game && runActive && !gamePaused && !director.isOver()) setGamePaused(true);
+    if (!FS.hosted && game && runActive && !gamePaused && !director.isOver()) setGamePaused(true, true);   // browser-eaten Esc: always a real hold
   });
 
   function onKeyDown(e) {
@@ -647,11 +705,18 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   // ONLY inside a descent in game mode, plus the usual ESC-pause / hidden-tab
   // parks. One source of truth so the Warren hub never plays video behind it.
   function syncSpawner() {
-    spawner.setPaused(gamePaused || document.hidden || (game && !runActive));
+    // a soft (un-held) pause leaves the conveyor running - the fall doesn't wait
+    spawner.setPaused((gamePaused && pauseHeld) || document.hidden || (game && !runActive));
   }
 
   function setRunActive(on) {
     runActive = !!on;
+    // A soft (un-held) pause can't outlive the descent it opened over: without
+    // the hourglass the run keeps falling behind the card, and if it ends there
+    // (clock out / relapse) the card would bury the recap and pre-arm the Esc
+    // ladder past its pause rung. Drop the card the moment the run stands down.
+    // A HELD pause froze the run clock, so it can never be live on this edge.
+    if (!runActive && gamePaused && !pauseHeld) setGamePaused(false);
     // The options panel is session-lived and shared hub<->descent: force it shut
     // on a run transition so opening it in the Warren (or leaving it open) never
     // strands it over the descent/hub.
@@ -676,6 +741,16 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     // still targets COUNT_MIN, so pause it (clears + stops spawning). Veil
     // punch-through washes skip while paused; M4 routes veils into the game.
     bubbles.setPaused(true);
+    // Crafted-gated settings live in the shared sf-settings row, but ownership
+    // is per save slot: once THIS slot's meta snapshot is in, snap any un-owned
+    // pick back to its default. syncOptionUnlocks rides every meta snapshot
+    // (chaosRun.onMeta), so this fires as soon as ownership is actually KNOWN -
+    // a missing meta (getMeta() null) never resets anything.
+    const enforceCrafted = () => {
+      if (!game.getMeta || !game.getMeta()) return;
+      enforceCraftedDefaults((id) => { try { return !!game.craftedOwned(id); } catch (e) { return true; } });
+      syncMusicBox();   // an inherited music-box bed stops mid-note
+    };
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
     game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, drift, junctions, boonPick, powerupDrops, hubStations, flashBurst: (n) => bubbles.flashBurst(n),
@@ -689,7 +764,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       toggleFullscreen: () => toggleFullscreen(),
       onFullscreenChange: (cb) => FS.subscribe(cb),
       // Reveal earned option-panel dials from the meta snapshot (purchased "Dials").
-      syncOptionUnlocks: (ids) => panel.setUnlocks(ids),
+      syncOptionUnlocks: (ids) => { panel.setUnlocks(ids); enforceCrafted(); },
       // Live meta-rank for the panel's DESCENT section (deep pool variants).
       setOptionProgress: (p) => panel.setProgress(p),
       silenceVoice: (on) => { voiceSilenced = !!on; },
@@ -725,7 +800,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     const rawDt = clock.getDelta();    // real frame period - drives the perf governor
     const dt = Math.min(rawDt, 0.05);  // clamped for a stable simulation step
 
-    if (gamePaused) { // frozen frame under the pause overlay; ESC resumes
+    if (gamePaused && pauseHeld) { // frozen frame under the pause overlay; ESC resumes
       if (composer) composer.render(); else renderer.render(scene, camera);
       return;
     }
@@ -793,9 +868,13 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       droneDuck += (duckTarget - droneDuck) * Math.min(1, dt * 2.5);
       // the 'music' slider is a 0..1 multiplier over the speed-following bed
       setDroneVolume(isMuted() ? 0 : Math.max(0, Math.min(1, droneVol)) * getLevel('music') * droneDuck);
+      // THE BALLERINA: the music box rides the same envelope at ~0.35x
+      if (mbox) mbox.volume = isMuted() ? 0
+        : Math.max(0, Math.min(1, droneVol * getLevel('music') * droneDuck * 0.35));
       droneWatch += dt;
       if (droneWatch >= 1) {
         droneWatch = 0;
+        syncMusicBox();   // 1Hz self-heal, same cadence as the drone watchdog
         if (droneStarted && !isMuted() && !document.hidden) {
           if (!drone.paused) { droneKickTries = 0; }
           else if (clock.elapsedTime >= droneKickRest) {
@@ -850,14 +929,16 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       bubbles.setPaused(true);
       syncSpawner(); // parks card + spotlight videos (no hidden-tab audio)
       if (drone) { try { drone.pause(); } catch (e) { /* ignore */ } }
+      syncMusicBox();
     } else if (!running) {
       running = true;
       if (!director.isOver() && !game) bubbles.setPaused(false);   // game mode: field stays down
       syncSpawner();
-      if (drone && droneStarted && !isMuted() && !gamePaused) {
+      if (drone && droneStarted && !isMuted() && !(gamePaused && pauseHeld)) {
         if (droneCtx && droneCtx.state === 'suspended') { const r = droneCtx.resume(); if (r && r.catch) r.catch(() => {}); }
         const p = drone.play(); if (p && p.catch) p.catch(() => {});
       }
+      syncMusicBox();
       clock.getDelta(); frame();
     }
   }
@@ -891,6 +972,8 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     offDroneMute();
     offHudMute();
     offCssTheme();
+    offMusicBox();
+    if (mbox) { try { mbox.pause(); mbox.src = ''; } catch (e) { /* ignore */ } mbox = null; }
     if (drone) { try { drone.pause(); drone.src = ''; } catch (e) { /* ignore */ } drone = null; }
     droneCtx = null; droneGain = null;
     closeAudioBus(); // the one shared AudioContext (drone + video gains + SFX)
@@ -928,7 +1011,8 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
 }
 
 // ---- HUD chrome (score / meters / hearts / dock / hint / results / pause) ----
-function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRestart, onOptions, onResume, onSkip, onSurface = null }) {
+function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRestart, onOptions, onResume, onSkip, onSurface = null,
+  craftedOwned = () => false, musicBoxBroken = () => false }) {
   const bits = [];
   const el = (cls, parent) => {
     const d = document.createElement('div');
@@ -1041,10 +1125,43 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
     offVoiceSync = onVoice(syncVoice);   // persona default can land after build
     syncVoice();
   }
+  // THE BALLERINA (crafted, Part 2): the music-box toggle. Built always,
+  // gated LAZILY at caret-open (ownership arrives after buildHud runs).
+  const mbRow = document.createElement('div');
+  mbRow.className = 'sf-voice-row sf-musicbox-row';
+  mbRow.hidden = true;
+  const mbHead = document.createElement('span');
+  mbHead.className = 'sf-voice-head';
+  mbHead.textContent = 'music box';
+  const mbBtns = document.createElement('div');
+  mbBtns.className = 'sf-voice-btns';
+  const mbBtn = document.createElement('button');
+  mbBtn.type = 'button';
+  mbBtn.className = 'sf-voice-btn';
+  const syncMbBtn = () => {
+    if (musicBoxBroken()) {
+      mbBtn.textContent = '🩰 (asset missing)';
+      mbBtn.classList.remove('is-on');
+      return;
+    }
+    mbBtn.textContent = S.musicBox ? '🩰 spinning' : '🩰 wound down';
+    mbBtn.classList.toggle('is-on', !!S.musicBox);
+  };
+  mbBtn.addEventListener('click', () => {
+    if (musicBoxBroken()) { syncMbBtn(); return; }
+    updateSetting('musicBox', !S.musicBox);
+    syncMbBtn();
+  });
+  syncMbBtn();
+  mbBtns.appendChild(mbBtn);
+  mbRow.append(mbHead, mbBtns);
+  audioPanel.appendChild(mbRow);
+
   caretBtn.addEventListener('click', () => {
     const open = audioPanel.hidden;
     audioPanel.hidden = !open;
     caretBtn.classList.toggle('is-open', open);
+    if (open) { mbRow.hidden = !craftedOwned('the_ballerina'); syncMbBtn(); }
   });
   audioWrap.append(muteBtn, caretBtn, audioPanel);
   dock.appendChild(audioWrap);
@@ -1092,10 +1209,64 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
     row.append(nm, inp);
     themePanel.appendChild(row);
   }
+  // THE RING BOX (crafted, Part 2): up to 3 kept Looks. Empty slot click keeps
+  // the current colors; a kept slot click wears it; its little × is a two-step
+  // forget. Gated LAZILY at paint-open (ownership arrives after buildHud runs).
+  const looksRow = document.createElement('div');
+  looksRow.className = 'sf-looks-row';
+  looksRow.hidden = true;
+  themePanel.appendChild(looksRow);
+  const rebuildLooks = () => {
+    looksRow.innerHTML = '';
+    const head = document.createElement('span');
+    head.className = 'sf-looks-head';
+    head.textContent = '💍 kept looks';
+    looksRow.appendChild(head);
+    const looks = getLooks();
+    for (let i = 0; i < 3; i++) {
+      const slot = document.createElement('span');
+      slot.className = 'sf-look-slot';
+      const look = looks[i];
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sf-swatch sf-look' + (look ? '' : ' is-empty');
+      if (look) {
+        b.style.background = `linear-gradient(135deg, ${intToHex(look.colLine)}, ${intToHex(look.colSpiral)})`;
+        b.title = 'wear this look';
+        b.addEventListener('click', () => { applyLook(i); refreshInputs(); });
+      } else {
+        b.textContent = '+';
+        b.title = 'keep the current look';
+        b.addEventListener('click', () => { saveLook(i); rebuildLooks(); });
+      }
+      slot.appendChild(b);
+      if (look) {
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.className = 'sf-look-x';
+        x.textContent = '×';
+        x.title = 'forget this look';
+        let armed = false;
+        x.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!armed) { armed = true; x.classList.add('is-armed'); x.title = 'click again to forget'; return; }
+          clearLook(i);
+          rebuildLooks();
+        });
+        slot.appendChild(x);
+      }
+      looksRow.appendChild(slot);
+    }
+  };
   paintBtn.addEventListener('click', () => {
     const open = themePanel.hidden;
     themePanel.hidden = !open;
     paintBtn.classList.toggle('is-open', open);
+    if (open) {
+      const owned = craftedOwned('the_ring_box');
+      looksRow.hidden = !owned;
+      if (owned) rebuildLooks();
+    }
   });
   themeWrap.append(paintBtn, themePanel);
   dock.appendChild(themeWrap);
@@ -1279,8 +1450,13 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
       results.hidden = false;
     },
     hideResults() { results.hidden = true; },
-    showPause(v) {
+    showPause(v, { held = true } = {}) {
       pause.hidden = !v;
+      // THE HOURGLASS: a soft (un-held) pause names the missing craft.
+      pauseH.textContent = held ? 'paused' : 'no pause down here';
+      pauseP.textContent = held ? 'the fall waits for you'
+        : 'the hole doesn\'t wait. craft the hourglass and it will.';
+      pauseCard.classList.toggle('sf-pause-soft', v && !held);
       if (v) refreshPauseHint();
       // Keep the controls (⚙ options / audio / theme) reachable while paused:
       // reveal the chrome and (via .sf-paused CSS) lift it above the pause dim.

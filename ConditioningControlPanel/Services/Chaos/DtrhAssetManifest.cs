@@ -40,8 +40,17 @@ internal static class DtrhAssetManifest
         try
         {
             var root = App.EffectiveAssetsPath;
-            Collect(Path.Combine(root, "images"), root, isImage: true, m);
-            Collect(Path.Combine(root, "videos"), root, isImage: false, m);
+            // Honor the user's asset selection: items unchecked in the Assets tree land in
+            // DisabledAssetPaths (relative to EffectiveAssetsPath, forward-slashed). The DtRH
+            // game consumed the raw folder before this, so deselected images/videos still fell
+            // through the tube. Match FlashService.GetMediaFiles' normalization exactly
+            // (case-insensitive, separator-agnostic) so the same unchecks that hide a flash
+            // hide it here too.
+            var disabled = new HashSet<string>(
+                (App.Settings?.Current?.DisabledAssetPaths ?? new()).Select(p => p.Replace('\\', '/')),
+                StringComparer.OrdinalIgnoreCase);
+            Collect(Path.Combine(root, "images"), root, isImage: true, m, disabled);
+            Collect(Path.Combine(root, "videos"), root, isImage: false, m, disabled);
 
             int total = m.Images.Count + m.Videos.Count;
             if (total > MaxEntries)
@@ -64,7 +73,7 @@ internal static class DtrhAssetManifest
         return m;
     }
 
-    private static void Collect(string dir, string root, bool isImage, Manifest m)
+    private static void Collect(string dir, string root, bool isImage, Manifest m, HashSet<string> disabled)
     {
         if (!Directory.Exists(dir)) return;
         var exts = isImage ? ImageExts : VideoExts;
@@ -80,6 +89,13 @@ internal static class DtrhAssetManifest
                 // random other junk (txt/db) is silently ignored.
                 if (!otherExts.Contains(ext) && IsMediaLike(ext)) m.Skipped++;
                 continue;
+            }
+            // Deselected in the Assets tree -> not disabled=skip (silently, not "skipped"):
+            // it's user intent, not an unsupported file.
+            if (disabled.Count > 0)
+            {
+                var rel = Path.GetRelativePath(root, f).Replace('\\', '/');
+                if (disabled.Contains(rel)) continue;
             }
             long len;
             try { len = new FileInfo(f).Length; } catch { continue; }

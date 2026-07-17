@@ -60,6 +60,7 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
   let liveFlash = 0, liveCascade = 0;
   let videoCardEl = null;    // the single live video card (one at a time)
   let videoCardCancel = null; // early-out for the live card (room arrival)
+  let heavyGen = 0;          // bumped by cancelHeavy; a card acquired across a bump is stale
   let disposed = false;
 
   /** Draw a URL from the user's image pool (null when the pool is empty). */
@@ -260,8 +261,13 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     if (!media || !media.drawKind) return;
     const pickV = media.drawKind('video');
     if (!pickV) return;   // no user videos in the pool - silently skip
+    // Snapshot the heavy generation: cancelHeavy() (room arrival / endRun) can fire while
+    // we're awaiting the decrypt below, and videoCardCancel isn't wired up yet, so the card
+    // would append AFTER the run ended and sit over the recap/hub for its full 15s hold.
+    const gen = heavyGen;
     const got = await pickV.acquire();
     if (disposed || videoCardEl || !got || !got.url) return;
+    if (gen !== heavyGen) return;   // a cancelHeavy landed during acquire: this card is stale
 
     const card = document.createElement('div');
     card.className = 'sf-pfx-videocard';
@@ -309,6 +315,7 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
    * true if anything live was actually cut. */
   function cancelHeavy() {
     let cut = false;
+    heavyGen++;   // invalidate any video card still mid-acquire (see videoCard's gen check)
     if (videoCardCancel) { try { videoCardCancel(); } catch { /* ignore */ } cut = true; }
     for (const c of cascades) { try { c.cancel(); } catch { /* ignore */ } cut = true; }
     cascades.clear();

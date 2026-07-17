@@ -244,6 +244,10 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
   let arms0 = null;        // engine-default spiral arm count, captured on first override
   let rushOverride = 0, rushOverrideEased = 0;
   let flashHold = 0;
+  // The Surfacing (the run's diegetic ending): melt floors the throb/breath/
+  // beat-scroll knobs so the wall heaves no matter what the chamber wants;
+  // drain floors uDesat (the color leaves the tube under the white wash).
+  let surfMelt = 0, surfDrain = 0, surfMeltE = 0, surfDrainE = 0;
 
   // ---- Four Chambers region grade ---------------------------------------------
   // Each chamber OWNS the tube's palette during a region-mode run: a region
@@ -376,6 +380,18 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
         if (key === 'strobe' || key === 'glitch') target *= strobeScale;
       }
       ku.value += (target - ku.value) * Math.min(1, dt * 0.8);
+    }
+    // The Surfacing floors ride AFTER the knob ease so the ending always wins:
+    // the ease may pull a knob toward the chamber's (usually zero) target each
+    // frame, and the floor lifts it right back - net effect, value == floor.
+    surfMeltE += (surfMelt - surfMeltE) * Math.min(1, dt * 3);
+    surfDrainE += (surfDrain - surfDrainE) * Math.min(1, dt * 3);
+    if (surfMeltE > 0.003 || surfDrainE > 0.003) {
+      const floorU = (name, v) => { const u = uni[name]; if (u && u.value < v) u.value = v; };
+      floorU('uThrob', surfMeltE);
+      floorU('uBreath', 0.85 * surfMeltE);
+      floorU('uBeatScroll', 0.5 * surfMeltE);
+      floorU('uDesat', surfDrainE);
     }
 
     // ribbons + sparkles: zone blend, plus a slow breath, the intensity ramp,
@@ -583,6 +599,9 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
   function holdFlash(on, amount = 0.55) { flashHold = on ? amount : 0; }
   // setRushOverride: force the speed-line heat regardless of actual fall speed.
   function setRushOverride(f) { rushOverride = clamp01(f || 0); }
+  // setSurfacing: the ending sequence's wall override (see the state above).
+  // Both 0 releases it; the internal ease walks the knobs back down.
+  function setSurfacing(melt = 0, drain = 0) { surfMelt = clamp01(melt); surfDrain = clamp01(drain); }
 
   function dispose() {
     offSettings();
@@ -627,7 +646,7 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     update, dispose, flashRandomTheme, pulseFlash, seedZoneAhead,
     getZone: () => currentZone,
     // Wave 2 game verbs
-    strikeNow, forceZone, setTint, setDensity, holdFlash, setRushOverride,
+    strikeNow, forceZone, setTint, setDensity, holdFlash, setRushOverride, setSurfacing,
     // Four Chambers region grade
     applyRegionGrade, setRegionProgress,
     rebase,

@@ -79,6 +79,10 @@ public sealed class ChaosFlashOverlay : Window
 
     private readonly Image _img;
     private readonly DispatcherTimer _life;
+    // Hiding right when a wash faded out meant the NEXT wash re-Show()ed a full-stage layered
+    // window (DWM re-composition hitch at trigger time). The window now idles visible (Opacity 0,
+    // image cleared, click-through) through this grace, hiding only after a truly quiet spell.
+    private readonly DispatcherTimer _hideGrace;
     private (string path, int durationMs, double opacity)? _pending;   // first Display can land before Loaded
     private int _displayGen;   // guards the async still-decode against a newer wash / a clear
 
@@ -114,11 +118,19 @@ public sealed class ChaosFlashOverlay : Window
         {
             _life.Stop();
             var fade = new DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(700));
-            // Window stays alive but HIDES between washes. Mid-run Close() of a layered
-            // window is the render-thread deadlock trigger; an idle-but-visible full-screen
-            // layered surface costs DWM composition every frame and stutters the GIF flashes.
-            fade.Completed += (_, _) => { ClearImage(); try { Hide(); } catch { } };
+            // Window stays alive between washes. Mid-run Close() of a layered window is the
+            // render-thread deadlock trigger; it hides only after _hideGrace of quiet (an
+            // Opacity-0 cleared surface doesn't redraw, so idling visible is ~free — while
+            // hiding immediately made every wash pay a full-stage Show() hitch).
+            fade.Completed += (_, _) => { ClearImage(); _hideGrace.Stop(); _hideGrace.Start(); };
             BeginAnimation(OpacityProperty, fade);
+        };
+
+        _hideGrace = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+        _hideGrace.Tick += (_, _) =>
+        {
+            _hideGrace.Stop();
+            if (!_life.IsEnabled) { try { Hide(); } catch { } }
         };
     }
 
@@ -130,6 +142,7 @@ public sealed class ChaosFlashOverlay : Window
 
     private void DisplayCore(string path, int durationMs, double opacity)
     {
+        _hideGrace.Stop();
         _life.Stop();
         ClearImage();
         int gen = ++_displayGen;
@@ -198,6 +211,7 @@ public sealed class ChaosFlashOverlay : Window
 
     private void CloseNow()
     {
+        try { _hideGrace.Stop(); } catch { }
         try { _life.Stop(); } catch { }
         ClearImage();
         if (ReferenceEquals(_active, this)) _active = null;

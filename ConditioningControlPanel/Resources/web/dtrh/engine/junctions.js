@@ -46,6 +46,12 @@
  *     shatter (no boon granted - the game banks +1 resistance instead).
  * The surrender fork is now an easter egg: ~1 fork in 100, and when it hits
  * the tube picks the path even OVER a click (commit overrides pickIndex).
+ *
+ * v7 widens the chamber for 4-5 doorways (the game's grand boon rooms):
+ * DOOR_LAYOUT sizes the antechamber per door count - a bigger sphere shrinks
+ * each hole's angular radius, so five rims still sit on solid wall without
+ * touching. All the sphere-derived numbers (X_RING, hole cosines, the trunk
+ * cut, the camera park) moved into roomGeom()/J.geom.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -65,28 +71,51 @@ const VEIN_RADIUS = RADIUS * 0.88; // narrower than the bore: two bore-width vei
 const DIVERGE_DEG = 45;      // peel angle off the spine tangent - ~90 deg between the two arms.
                              //   60 put the mouths nearly side-on: big wall gaps between them and a
                              //   harsh dive turn. 45 seats them forward-facing with a tight join.
-// doorway azimuths per door count. Hole angular radius is ~18.5 deg at ROOM_R,
-// so adjacent doors need >37 deg of separation: 3 doors at -50/0/+50 leaves
-// ~13 deg of solid wall between rims. The CENTER door (az 0) runs straight down
-// the old spine, so it takes a steeper plunge (see buildVein's tilt) to duck
-// under the trunk instead of letting the anti-clip pass shove it around.
-const DOOR_AZIMUTHS = { 2: [-DIVERGE_DEG, DIVERGE_DEG], 3: [-50, 0, 50] };
+// doorway azimuths + room size (in bores) per door count. A hole's angular
+// radius is asin(0.97 * VEIN_RADIUS / roomR), so adjacent doors need better
+// than TWICE that in separation or their rims merge: ~18.5 deg at 2.7 bores
+// (3 doors at -50/0/+50 leaves ~13 deg of solid wall), and 4-5 doors can NOT
+// fit on that wall - the room itself grows. 3.4 bores shrinks the hole to
+// ~14.5 deg (4 doors, 38 deg apart, ~9 deg of wall) and 3.9 bores to ~12.6 deg
+// (5 doors, 32 deg apart, ~6 deg of wall). Mouth-to-mouth the corridors clear
+// each other too: the closest pair sits 2*roomR*sin(sep/2) apart, always > 2
+// vein diameters here. The CENTER door (az 0) runs straight down the old
+// spine, so it takes a steeper plunge (see buildVein's tilt) to duck under
+// the trunk instead of letting the anti-clip pass shove it around.
+const DOOR_LAYOUT = {
+  2: { az: [-DIVERGE_DEG, DIVERGE_DEG], roomR: 2.7 },
+  3: { az: [-50, 0, 50], roomR: 2.7 },
+  4: { az: [-57, -19, 19, 57], roomR: 3.4 },
+  5: { az: [-64, -32, 0, 32, 64], roomR: 3.9 },
+};
+const MAX_DOORS = 5;
 
 // ---- the antechamber: a spherical room the bifurcation nests in -------------
-const ROOM_R = RADIUS * 2.7; // chamber radius (~14.9): both doorways fit on the far wall with ~50 deg
-                             //   of solid wall between their rims - nothing clips anything.
-const X_RING = Math.sqrt(ROOM_R * ROOM_R - RADIUS * RADIUS);
-                             // the room center sits this far past the fork, so the trunk pierces the
-                             //   near wall EXACTLY at the fork depth (entry ring radius == bore radius)
+// Sized per door count (DOOR_LAYOUT.roomR): every doorway must fit on the far
+// wall with solid wall between the rims - nothing clips anything. All the
+// sphere-derived numbers are per-fork now (J.geom), computed here.
 const MOUTH_IN = 2.0;        // vein collar reach into the chamber (pipe-into-tank lip)
 const ROOM_CUT_IN = 4;       // trunk wall survives this far past the entry ring (a short throat collar
                              //   inside the room, so the wall-to-wall seam is overlapped, never a gap)
-const CUT_END = X_RING + ROOM_R + 8; // trunk hidden from ROOM_CUT_IN until fully outside the far wall
-// hole apertures (cos of the angular radius, measured from the room center).
-// Each hole is a hair NARROWER than the pipe that feeds it, so the hole rim is
-// always backed by pipe wall behind it - no page-background leak on the seam.
-const ENTRY_HOLE_COS = Math.sqrt(1 - Math.pow((RADIUS * 0.96) / ROOM_R, 2));
-const VEIN_HOLE_COS = Math.sqrt(1 - Math.pow((VEIN_RADIUS * 0.97) / ROOM_R, 2));
+function roomGeom(nDoors) {
+  const roomR = RADIUS * ((DOOR_LAYOUT[nDoors] || DOOR_LAYOUT[2]).roomR);
+  // the room center sits xRing past the fork, so the trunk pierces the near
+  // wall EXACTLY at the fork depth (entry ring radius == bore radius)
+  const xRing = Math.sqrt(roomR * roomR - RADIUS * RADIUS);
+  return {
+    roomR, xRing,
+    // trunk hidden from ROOM_CUT_IN until fully outside the far wall
+    cutEnd: xRing + roomR + 8,
+    // hole apertures (cos of the angular radius, measured from the room center).
+    // Each hole is a hair NARROWER than the pipe that feeds it, so the hole rim
+    // is always backed by pipe wall behind it - no page-background leak on the seam.
+    entryHoleCos: Math.sqrt(1 - Math.pow((RADIUS * 0.96) / roomR, 2)),
+    veinHoleCos: Math.sqrt(1 - Math.pow((VEIN_RADIUS * 0.97) / roomR, 2)),
+    // big rooms park the camera deeper: from the classic threshold the far
+    // wall of a 3.9-bore room pushes the door cards too small to read
+    stopIn: STOP_IN + Math.max(0, roomR - RADIUS * 2.7) * 0.55,
+  };
+}
 
 const STOP_BACK = 24;        // the glide-in engages this far short of the fork...
 const STOP_IN = 2;           // ...and eases to a stop just INSIDE the entry ring - a step back
@@ -235,17 +264,33 @@ const VEIN_FRAG = `
   varying vec3 vWorld;
   varying float vFogDepth;
   uniform float uTime, uOpacity, uRings, uScroll;
-  uniform vec3 uColor, uRimColor, uFogColor;
+  uniform vec3 uColor, uRimColor, uFogColor, uAccent;
   uniform float uFogDensity;
   uniform int uClipOn;
   uniform vec3 uClipPoint, uClipAxis;
   uniform float uClipR, uClipReach;
+  // biome dressing knobs (all 0 = the classic look). The math mirrors tunnel.js'
+  // biome pattern knobs, rescaled to corridor space, so a doorway corridor wears
+  // the SAME visual language as the biome it leads into. update() eases the
+  // whole set in via J.fxLevel - in a draft room only AFTER the roulette lands,
+  // so the dress never leaks the roll early. Every term ramps continuously from
+  // zero (bounded offsets / mixed masks - never rescaled coordinates), so the
+  // ease-in can't pop or jump phase.
+  uniform float uFxBreath, uFxThrob, uFxStrobe, uFxFlicker;
+  uniform float uFxDots, uFxChecker, uFxPanel, uFxArch, uFxCaustic, uFxScan;
+  uniform float uFxGlitch, uFxStreaks, uFxChase, uFxChain, uFxBeam;
+  uniform float uFxKaleido, uFxMirrorY, uFxHelix, uFxHelix2, uFxDrift;
+  uniform float uFxDesat, uFxRingFade, uFxSurge, uFxSlip, uFxBeat;
 
   float lineMask(float coord, float w) {
     float di = 0.5 - abs(fract(coord) - 0.5);
     float aa = clamp(1.5 * fwidth(coord), w, 0.5); // screen-space AA (clamped so grazing rings don't wash out): no sub-pixel crawl when the fall hovers at a fork
     return 1.0 - smoothstep(0.0, aa, di);
   }
+  // sharp periodic pulse (mostly dark, brief bright peaks) + per-cell hash,
+  // same primitives as the main tube shader.
+  float pulse(float p, float k) { return pow(0.5 + 0.5 * sin(p), k); }
+  float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
 
   void main() {
     // flush-trim to the artery bore + rim glow on the cut
@@ -260,19 +305,193 @@ const VEIN_FRAG = `
         edge = min(edge, dr - uClipR);
       }
     }
+    float around = vUv.y;
+    float len = vUv.x * uRings;   // corridor length in ring spacings (~8u each)
     float scroll = uTime * uScroll;
-    float ring = lineMask(vUv.x * uRings - scroll, 0.06);
-    float ringGlow = 0.4 + 1.8 * pow(0.5 + 0.5 * sin((vUv.x * uRings - scroll) * 6.2831), 3.0);
+
+    // heartbeat envelope: drives the throb glow AND the chapel's beat-lurch
+    float hb = fract(uTime * 0.62);
+    float thr = uFxThrob * (exp(-18.0 * hb) + 0.55 * exp(-18.0 * fract(hb - 0.32)));
+
+    // bounded scroll offsets (never scale scroll itself - it grows unbounded):
+    // surge = the Undertow's swell-and-drag; slip = Static's vertical-hold roll;
+    // beat = the Chapel wall advancing ON the heartbeat and settling between.
+    scroll += uFxSurge * 2.0 * sin(uTime * 0.45);
+    scroll += uFxSlip * 0.8 * smoothstep(0.55, 0.95, fract(uTime * 0.53));
+    scroll += uFxBeat * 0.9 * exp(-6.0 * hb);
+
+    // row tear (Static): short bands of the corridor shear sideways in bursts
+    if (uFxGlitch > 0.001) {
+      float band = floor(len * 6.0);
+      float burst = pulse(uTime * 2.7 + hash1(band) * 6.2831, 24.0);
+      around += uFxGlitch * burst * (hash1(band + 17.0) - 0.5) * 0.12;
+    }
+
+    float ringCoord = len - scroll;
+    float brW = 1.0 + uFxBreath * 0.5 * sin(uTime * 0.75);
+    float ring = lineMask(ringCoord, 0.06 * max(brW, 0.5));
+    // chain links (Chain Court): the ring splits into two rails that alternate
+    // brightness around the bore, reading as interlocked links. Integer link
+    // count - wrap-safe; the soft square wave carries its own fwidth AA.
+    if (uFxChain > 0.001) {
+      float lc = around * 10.0;
+      float lw = clamp(1.5 * fwidth(lc), 0.05, 0.35);
+      float tri = fract(lc);
+      float sq = smoothstep(0.25 - lw, 0.25 + lw, tri) * (1.0 - smoothstep(0.75 - lw, 0.75 + lw, tri));
+      float links = max(lineMask(ringCoord - 0.14, 0.05) * mix(1.0, 0.3, sq),
+                        lineMask(ringCoord + 0.14, 0.05) * mix(0.3, 1.0, sq));
+      ring = mix(ring, links, uFxChain);
+    }
+    ring *= 1.0 - uFxRingFade;
+
+    // helix strands: the accent-colored swirl some biomes wind down the bore
+    // (Mirrors' folded chevrons, the Coronation's counter-braid, Vertigo's
+    // fighting twins, Mirror Lake's reflection). Masks are mixed, never
+    // coordinates (a coordinate lerp would break the vUv wrap mid-ease);
+    // integer arm counts are wrap-safe around the bore. Drift is BOUNDED
+    // phase wobble, same rule as the scroll offsets above.
+    float drift = uFxDrift * (6.0 * sin(uTime * 0.16) + 2.0 * sin(uTime * 0.32 + 1.7));
+    float helix = 0.0, helix2 = 0.0, waterline = 0.0;
+    if (uFxHelix > 0.001) {
+      float hCore = len * 0.8 - scroll * 0.8 + drift;
+      float h = lineMask(around * 3.0 + hCore, 0.045);
+      if (uFxKaleido > 0.001) {
+        float aFold = abs(fract(around * 3.0) - 0.5) * 2.0;
+        h = mix(h, lineMask(aFold * 3.0 + hCore, 0.045), uFxKaleido);
+      }
+      if (uFxMirrorY > 0.001) {
+        float aMir = 0.5 - abs(around - 0.5);
+        float ripple = 0.05 * uFxMirrorY * sin(len * 2.0 + uTime * 0.8);
+        h = mix(h, lineMask((aMir + ripple) * 6.0 + hCore, 0.045), uFxMirrorY);
+      }
+      helix = uFxHelix * h;
+    }
+    if (uFxHelix2 > 0.001) {
+      helix2 = uFxHelix2 * lineMask(around * 3.0 - len * 0.8 + scroll * 0.8 - drift * 0.6, 0.035);
+    }
+    // waterline fold glow (Mirror Lake): the seam the corridor reflects across
+    if (uFxMirrorY > 0.001) {
+      waterline = uFxMirrorY * lineMask(around + 0.5, 0.09) * (0.55 + 0.45 * sin(uTime * 0.9));
+    }
+
+    float ringGlow = 0.4 + 1.8 * pow(0.5 + 0.5 * sin(ringCoord * 6.2831), 3.0);
+    ringGlow *= 1.0 + uFxBreath * 0.3 * sin(uTime * 0.75 - 0.6);   // brightness trails the width swell
+    ringGlow *= 1.0 + thr * 1.6;                                    // heartbeat lub-dub
+    float strobe = uFxStrobe * pulse(uTime * 11.94, 12.0);          // ~1.9Hz signage tick (Casino)
+    ringGlow *= 1.0 + strobe * 2.2;
+    // marquee chase (Casino): two bulb-trains running around every ring
+    if (uFxChase > 0.001) {
+      float chase = pulse((around - uTime * 0.22) * 6.2831, 10.0)
+                  + 0.45 * pulse((around + 0.5 - uTime * 0.22) * 6.2831, 10.0);
+      ringGlow *= 1.0 + uFxChase * 2.6 * chase;
+    }
+    // candle-flame unsteadiness (Keyhole): the glow wavers, never metronomic
+    if (uFxFlicker > 0.001) {
+      ringGlow *= 1.0 + uFxFlicker * (0.45 * sin(uTime * 7.3) * sin(uTime * 3.1) + 0.2 * sin(uTime * 13.7));
+    }
+
     // dark wall + glowing theme-colored line work, like the main tube - NOT a
     // solid color fill (a 0.5 fill made each vein read as a giant flat ball).
-    // The branch's identity color lives in the rings and the mouth rim.
+    // The branch's identity color lives in the rings and the mouth rim; the
+    // biome dress rides on top in the biome's own accent.
     vec3 col = uColor * 0.12 + uColor * ring * ringGlow;
+    col += uAccent * (helix * 1.2 + helix2) * (0.55 + 0.45 * pulse(len * 0.5 - uTime * 1.3, 3.0));
+    col += uAccent * waterline * 0.8;
+
+    // polka dots (Toybox): brick-offset candy lattice riding the wall
+    if (uFxDots > 0.001) {
+      float dl = len * 2.0 - scroll * 0.4;
+      float rowId = floor(dl);
+      float da = around * 10.0 + 0.5 * mod(rowId, 2.0);
+      vec2 dc = vec2(fract(da) - 0.5, fract(dl) - 0.5);
+      float dotM = 1.0 - smoothstep(0.13, 0.22, length(dc));
+      float dvis = clamp(1.5 - 3.0 * fwidth(dl), 0.0, 1.0);
+      float dh = hash1(floor(da) * 11.0 + rowId * 57.0);
+      col += mix(uColor, uAccent, dh) * dotM * dvis * uFxDots * (0.4 + 0.25 * sin(uTime * 1.3 + dh * 6.2831));
+    }
+    // private browsing (Incognito): faint alpha-checker + crawling redaction bars
+    if (uFxChecker > 0.001) {
+      float ch = sin(around * 6.2831 * 6.0) * sin(len * 6.2831 * 1.5 - scroll * 0.63);
+      col *= 1.0 + uFxChecker * 0.12 * ch;
+      float bar = lineMask(len * 0.4 - uTime * 0.05, 0.30);
+      col *= 1.0 - uFxChecker * 0.45 * bar;
+    }
+    // picture frames (Gallery): gilt frames tiling the corridor wall
+    if (uFxPanel > 0.001) {
+      float pa = around * 8.0;
+      float pl = len * 1.2 - scroll * 0.27;
+      vec2 pc = vec2(abs(fract(pa) - 0.5), abs(fract(pl) - 0.5));
+      float inner = max(pc.x, pc.y);
+      float frame = smoothstep(0.34, 0.38, inner) * (1.0 - smoothstep(0.44, 0.48, inner));
+      float pvis = clamp(1.5 - 2.0 * fwidth(pl), 0.0, 1.0);
+      col += uAccent * frame * pvis * uFxPanel * (0.32 + 0.10 * sin(uTime * 0.5));
+      col *= 1.0 - uFxPanel * 0.10 * (1.0 - smoothstep(0.30, 0.36, inner));
+    }
+    // stained glass (Chapel): pane cells between dark lead lines
+    if (uFxArch > 0.001) {
+      float ca = around * 7.0;
+      float cl = len * 0.8 - scroll * 0.25;
+      float lead = max(lineMask(ca, 0.05), lineMask(cl, 0.05));
+      float ph = hash1(floor(ca) * 7.0 + floor(cl) * 113.0);
+      vec3 pane = mix(uColor, uAccent, ph);
+      col += uFxArch * (pane * (0.12 + 0.08 * sin(uTime * 0.6 + ph * 6.2831)) * (1.0 - lead) - col * 0.45 * lead);
+    }
+    // caustics (Undertow / Mirror Lake): shifting water-light webs
+    if (uFxCaustic > 0.001) {
+      float c1 = sin((around * 5.0 + len * 0.9) * 6.2831 + uTime * 0.55);
+      float c2 = sin((around * 3.0 - len * 0.75) * 6.2831 - uTime * 0.4);
+      float c3 = 0.6 + 0.4 * sin((around * 8.0 + len * 0.4) * 6.2831 + uTime * 0.85);
+      col += uAccent * uFxCaustic * pow(0.5 + 0.5 * c1 * c2, 4.0) * c3 * 0.7;
+    }
+    // CRT scan (Static): fine phosphor rows + a rolling hold-bar; row amplitude
+    // fades where the rows go sub-pixel (fwidth) instead of shimmering to moire
+    if (uFxScan > 0.001) {
+      float sc = len * 30.0;
+      float rows = 0.5 + 0.5 * sin(sc * 6.2831);
+      float rowVis = clamp(1.5 - 3.0 * fwidth(sc), 0.0, 1.0);
+      col *= 1.0 - uFxScan * 0.30 * rows * rowVis;
+      col += uAccent * uFxScan * 0.35 * pulse((len * 0.25 - uTime * 0.35) * 6.2831, 10.0);
+    }
+    // speed streaks (Terminal Velocity): the corridor is ALWAYS at speed
+    if (uFxStreaks > 0.001) {
+      float sk = lineMask(around * 24.0 + sin(len * 2.0) * 0.15, 0.03)
+               * pulse(len * 2.0 - uTime * 9.0, 2.0);
+      col += uAccent * uFxStreaks * sk * 1.3;
+    }
+    // searchlight beams (Searchlight): the wall goes near-dark and two roaming
+    // azimuth beams become what shows you the corridor
+    if (uFxBeam > 0.001) {
+      col *= 1.0 - uFxBeam * 0.5;
+      float b = pulse((around - uTime * 0.13) * 6.2831, 14.0)
+              + 0.6 * pulse((around + 0.37 + uTime * 0.11) * 6.2831, 14.0);
+      col += mix(uColor, uAccent, 0.7) * uFxBeam * b * (0.55 + ring * 1.2);
+    }
+    // the Grey Ward: drain the corridor of color with a faint paper grain
+    if (uFxDesat > 0.001) {
+      float lum = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(col, vec3(lum), uFxDesat);
+      float grain = hash1(floor(around * 160.0) + floor(len * 40.0) * 3.0 + floor(uTime * 9.0) * 7.0);
+      col += vec3((grain - 0.5) * 0.05 * uFxDesat);
+    }
+
     float rim = 1.0 - smoothstep(0.0, 0.9, edge);
     col += uRimColor * rim * (1.3 + 0.4 * sin(uTime * 2.0));
     float f = 1.0 - exp(-uFogDensity * uFogDensity * vFogDepth * vFogDepth);
     col = mix(col, uFogColor, clamp(f, 0.0, 1.0));
     gl_FragColor = vec4(col, uOpacity);
   }`;
+
+// biome dressing knob names: shared by the vein shader (as uFx<Key>) and the
+// veinFx payloads handed to schedule() (game/biomes.js authors one recipe per
+// biome). update() multiplies each weight by J.fxLevel every frame.
+const VEIN_FX_KEYS = [
+  'breath', 'throb', 'strobe', 'flicker',
+  'dots', 'checker', 'panel', 'arch', 'caustic', 'scan',
+  'glitch', 'streaks', 'chase', 'chain', 'beam',
+  'kaleido', 'mirrorY', 'helix', 'helix2', 'drift',
+  'desat', 'ringFade', 'surge', 'slip', 'beat',
+];
+const fxUniName = (k) => 'uFx' + k.charAt(0).toUpperCase() + k.slice(1);
 
 // ---- antechamber material: the spherical room's interior wall ----------------
 // BackSide + opaque (no uOpacity - the room is born 120u+ ahead, fully buried
@@ -296,7 +515,7 @@ const ROOM_VERT = `
 
 const ROOM_FRAG = `
   precision highp float;
-  #define ROOM_HOLES 4
+  #define ROOM_HOLES 6
   varying vec2 vUv;
   varying vec3 vObjDir;
   varying float vFogDepth;
@@ -372,10 +591,10 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
   // ridden vein) each sightline through the missing wall terminates on the
   // chamber's opaque far interior wall or a vein interior - never the page
   // background.
-  function applyCut(atDepth) {
+  function applyCut(atDepth, G) {
     if (!tunnel || !tunnel.setCut) return;
     const lo = arcFrac((atDepth + ROOM_CUT_IN) / layout.loopDepth);
-    const hi = arcFrac((atDepth + CUT_END) / layout.loopDepth);
+    const hi = arcFrac((atDepth + G.cutEnd) / layout.loopDepth);
     tunnel.setCut(lo, hi, true);
   }
 
@@ -454,7 +673,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
   }
 
   // ---- one vein: a diverging corridor attached to the chamber's far wall ------
-  function buildVein(index, azDeg, desc, fr, C) {
+  function buildVein(index, azDeg, desc, fr, C, G) {
     const col = new THREE.Color(desc.color);
 
     // peel direction: off the tangent by the door's azimuth, tilted down
@@ -468,7 +687,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     // the corridor starts a hair INSIDE the chamber (a short collar poking
     // through the wall hole - pipe-into-tank), then runs outward through the
     // sphere's doorway, which is cut a touch narrower than this bore.
-    const mouth = C.clone().addScaledVector(dir, ROOM_R - MOUTH_IN);
+    const mouth = C.clone().addScaledVector(dir, G.roomR - MOUTH_IN);
 
     // the corridor curve: walk a heading that peels off, keeps sinking, and adds
     // a gentle S-wobble so it reads as a real path that CONTINUES (never re-merges).
@@ -528,22 +747,28 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
 
     const tubeGeo = new THREE.TubeGeometry(curve, 120, VEIN_RADIUS, 20, false);
+    const uniforms = {
+      uTime: { value: 0 },
+      uOpacity: { value: 0 },
+      uRings: { value: Math.round(VEIN_LEN / 8) },
+      uScroll: { value: 1.0 },
+      uColor: { value: col.clone() },
+      uRimColor: { value: col.clone().lerp(new THREE.Color(0xffffff), 0.4) },
+      uAccent: { value: col.clone().lerp(new THREE.Color(0xffffff), 0.25) },
+      uFogColor: { value: fogCol().clone() },
+      uFogDensity: { value: FOG_DENSITY },
+      uClipOn: { value: 0 },   // no trunk trim in v5: the vein meets the CHAMBER wall
+      uClipPoint: { value: new THREE.Vector3() },
+      uClipAxis: { value: new THREE.Vector3(0, 0, 1) },
+      uClipR: { value: 0 },
+      uClipReach: { value: 0 },
+    };
+    // biome dressing knobs, all parked at the classic look; update() drives
+    // them from J.veinFx * fxLevel (fork: the biome you're IN; draft room: the
+    // one you're about to enter, held back until the roulette lands)
+    for (const k of VEIN_FX_KEYS) uniforms[fxUniName(k)] = { value: 0 };
     const mat = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uOpacity: { value: 0 },
-        uRings: { value: Math.round(VEIN_LEN / 8) },
-        uScroll: { value: 1.0 },
-        uColor: { value: col.clone() },
-        uRimColor: { value: col.clone().lerp(new THREE.Color(0xffffff), 0.4) },
-        uFogColor: { value: fogCol().clone() },
-        uFogDensity: { value: FOG_DENSITY },
-        uClipOn: { value: 0 },   // no trunk trim in v5: the vein meets the CHAMBER wall
-        uClipPoint: { value: new THREE.Vector3() },
-        uClipAxis: { value: new THREE.Vector3(0, 0, 1) },
-        uClipR: { value: 0 },
-        uClipReach: { value: 0 },
-      },
+      uniforms,
       vertexShader: VEIN_VERT,
       fragmentShader: VEIN_FRAG,
       transparent: true,               // for the fog fade-in reveal (uOpacity)
@@ -661,19 +886,19 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
   }
 
   // ---- the antechamber sphere: built once per fork, holes aligned to the pipes
-  function buildRoom(C, entryDir, veins) {
-    const geo = new THREE.SphereGeometry(ROOM_R, 48, 32);
-    // hole order: [entry, doorway 0, doorway 1, (doorway 2)] - commit() bricks
-    // up losers by index, so keep this order in sync with closeDoor below.
-    // The shader loops a fixed ROOM_HOLES(4); unused slots get cos 2.0 (never
+  function buildRoom(C, entryDir, veins, G) {
+    const geo = new THREE.SphereGeometry(G.roomR, 48, 32);
+    // hole order: [entry, doorway 0 .. doorway 4] - commit() bricks up losers
+    // by index, so keep this order in sync with closeDoor below.
+    // The shader loops a fixed ROOM_HOLES(6); unused slots get cos 2.0 (never
     // discards, rim term evaluates to zero) so a 2-door fork wastes nothing.
-    const dirs = [entryDir.clone()], coss = [ENTRY_HOLE_COS], rims = [new THREE.Color(0xff8fd8)];
+    const dirs = [entryDir.clone()], coss = [G.entryHoleCos], rims = [new THREE.Color(0xff8fd8)];
     for (const v of veins) {
       dirs.push(v.dir.clone());
-      coss.push(VEIN_HOLE_COS);
+      coss.push(G.veinHoleCos);
       rims.push(v.mat.uniforms.uRimColor.value.clone());
     }
-    while (dirs.length < 4) { dirs.push(new THREE.Vector3(0, 1, 0)); coss.push(2.0); rims.push(new THREE.Color(0x000000)); }
+    while (dirs.length < 6) { dirs.push(new THREE.Vector3(0, 1, 0)); coss.push(2.0); rims.push(new THREE.Color(0x000000)); }
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
@@ -706,7 +931,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
   // settle card) yet still under the biome roulette row (buildBiomeRow, lift
   // 0.80) - any higher and the engraving's top line kisses the tiles. The
   // title also DELAYS its fade-in until the settle card is done (see update).
-  function buildTitle(C, veins, title, park) {
+  function buildTitle(C, veins, title, park, G) {
     const mean = new THREE.Vector3();
     for (const v of veins) mean.add(v.dir);
     if (mean.lengthSq() < 1e-6) return null;
@@ -714,7 +939,10 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     const dir = mean.clone().add(new THREE.Vector3(0, 0.42, 0)).normalize();
     const tex = makeRoomTitleTex(title);
     tex.colorSpace = THREE.SRGBColorSpace;
-    const W = 15.5, H = W * (340 / 1024);
+    // scale with the room: a big-room title at the same world size would read
+    // tiny from the (also further) camera park
+    const k = G.roomR / (RADIUS * 2.7);
+    const W = 15.5 * k, H = W * (340 / 1024);
     const geo = new THREE.PlaneGeometry(W, H);
     const mat = new THREE.MeshBasicMaterial({
       map: tex, transparent: true, opacity: 0,
@@ -726,7 +954,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.renderOrder = 900;
-    mesh.position.copy(C).addScaledVector(dir, ROOM_R * 0.72);
+    mesh.position.copy(C).addScaledVector(dir, G.roomR * 0.72);
     mesh.lookAt(park);   // face the camera's park just inside the entry
     scene.add(mesh);
     return {
@@ -742,7 +970,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
   // start; the game passes its index). The doors stay DEAD until it lands:
   // pickIndex / getPickables / skipDraft / the draft clock all key off
   // J.revealDone (see update's linger branch).
-  function buildBiomeRow(C, veins, spec, park) {
+  function buildBiomeRow(C, veins, spec, park, G) {
     const mean = new THREE.Vector3();
     for (const v of veins) mean.add(v.dir);
     if (mean.lengthSq() < 1e-6) return null;
@@ -750,10 +978,12 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     // above the title (0.42 at 0.72R): the row crowns the room like a marquee
     const dir = mean.clone().add(new THREE.Vector3(0, 0.80, 0)).normalize();
     const group = new THREE.Group();
-    group.position.copy(C).addScaledVector(dir, ROOM_R * 0.72);
+    group.position.copy(C).addScaledVector(dir, G.roomR * 0.72);
     group.lookAt(park);   // children (plane +Z) face the camera's park
     scene.add(group);
-    const SIZE = 1.05, PITCH = 1.18;
+    // same room-proportional scale as the title (see buildTitle's k)
+    const k = G.roomR / (RADIUS * 2.7);
+    const SIZE = 1.05 * k, PITCH = 1.18 * k;
     const squares = spec.items.map((item, i) => {
       const tex = makeBiomeSquareTex(item);
       tex.colorSpace = THREE.SRGBColorSpace;
@@ -1041,7 +1271,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     // glide through the entry and ease to a stop mid-chamber: the hold's eased
     // approach carries the camera in through the entry hole, and the doorways
     // (with their cards) sit ~40-50 deg off-axis in comfortable head-on view.
-    try { nav.setForwardHold(true, J.atDepth + STOP_IN); } catch (e) { /* ignore */ }
+    try { nav.setForwardHold(true, J.atDepth + J.geom.stopIn); } catch (e) { /* ignore */ }
     if (api.onLinger) { try { api.onLinger(true, J.mode); } catch (e) { /* ignore */ } }
   }
 
@@ -1118,6 +1348,22 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       J.room.mat.uniforms.uTime.value += dt;
       J.room.mat.uniforms.uFogColor.value.copy(fc);
     }
+    // biome corridor dressing: ease the recipe's weights in over ~1.1s. On a
+    // fork you're already IN the biome, so it ramps with the approach; in a
+    // draft room it holds at zero until the roulette lands (revealDone) - the
+    // corridors dressing themselves as the destination IS the reveal's payoff.
+    if (J.veinFx) {
+      const wantFx = (J.mode === 'draft' && !J.revealDone) ? 0 : 1;
+      J.fxLevel = clamp(J.fxLevel + Math.sign(wantFx - J.fxLevel) * dt * 0.9, 0, 1);
+      if (J.fxLevel > 0.0001) {
+        for (const m of J.veins) {
+          if (m.dying) continue;
+          for (const k of VEIN_FX_KEYS) {
+            m.mat.uniforms[fxUniName(k)].value = (J.veinFx[k] || 0) * J.fxLevel;
+          }
+        }
+      }
+    }
     // the room title breathes: a slow opacity swell so the writing feels lit,
     // not painted. Its reveal tracks the phase (fog fade-up on approach).
     // With a roulette in the room the title HOLDS BACK until the settle card
@@ -1177,44 +1423,55 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
   }
 
   return {
-    /** Arm a chamber ahead. branches = [{word, color, brand, reward, ...}] (2 or
-     * 3 doors); coaxIndex = the door that takes a passive faller; presealIndex =
+    /** Arm a chamber ahead. branches = [{word, color, brand, reward, ...}]
+     * (2-5 doors; 4-5 doors get a proportionally wider chamber);
+     * coaxIndex = the door that takes a passive faller; presealIndex =
      * a door born shut (fork mode only). mode 'draft' stages the boon draft:
      * lingerSec is the game's draft timer (timeout dives the coaxed door with
-     * skipped semantics), lead shortens the telegraph. */
-    schedule({ atDepth, branches, coaxIndex = 0, presealIndex = null, mode = 'fork', lingerSec = 0, lead = LEAD, title = null, biomeReveal = null }) {
+     * skipped semantics), lead shortens the telegraph. veinFx = a biome's
+     * corridor-dressing recipe ({accent, <knob>: weight, ...} - see
+     * VEIN_FX_KEYS / biomes.js): forks pass the biome you're in, draft rooms
+     * the one the doors lead into (applied only after the roulette lands). */
+    schedule({ atDepth, branches, coaxIndex = 0, presealIndex = null, mode = 'fork', lingerSec = 0, lead = LEAD, title = null, biomeReveal = null, veinFx = null }) {
       if (!active) return;
       if (J) teardown();
-      const descs = (branches || []).slice(0, 3);
+      const descs = (branches || []).slice(0, MAX_DOORS);
       if (descs.length < 2) return;
       const fr = layout.frameAtDepth(atDepth);
-      // chamber center: X_RING past the fork, so the trunk pierces the near wall
-      // exactly at the fork depth (see the constants block)
-      const C = fr.pos.clone().addScaledVector(fr.tangent, X_RING);
-      const az = DOOR_AZIMUTHS[descs.length] || DOOR_AZIMUTHS[2];
-      const veins = descs.map((d, i) => buildVein(i, az[i], d, fr, C));
+      const G = roomGeom(descs.length);
+      // chamber center: xRing past the fork, so the trunk pierces the near wall
+      // exactly at the fork depth (see roomGeom)
+      const C = fr.pos.clone().addScaledVector(fr.tangent, G.xRing);
+      const az = (DOOR_LAYOUT[descs.length] || DOOR_LAYOUT[2]).az;
+      const veins = descs.map((d, i) => buildVein(i, az[i], d, fr, C, G));
       // the camera's eventual mid-chamber park: what the title plane faces
-      const park = fr.pos.clone().addScaledVector(fr.tangent, STOP_IN);
+      const park = fr.pos.clone().addScaledVector(fr.tangent, G.stopIn);
       J = {
         phase: 'approach', atDepth, coaxIndex, presealIndex, mode, lingerSec, lead,
-        winner: null, lingerT: 0,
+        winner: null, lingerT: 0, geom: G,
         // the rare surrender fork (5s and the tube chooses - even over a click)
         autoPick: mode === 'fork' && Math.random() < AUTO_PICK_CHANCE,
         veins,
-        room: buildRoom(C, fr.tangent.clone().negate(), veins),
+        room: buildRoom(C, fr.tangent.clone().negate(), veins, G),
         // the Journey Rooms: the next room's title over its doors (draft rooms)
-        title: title && title.text ? buildTitle(C, veins, title, park) : null,
+        title: title && title.text ? buildTitle(C, veins, title, park, G) : null,
         revealRow: null, revealDone: true,
+        // biome corridor dressing: eased in by update() (fxLevel 0 -> 1)
+        veinFx: veinFx || null, fxLevel: 0,
       };
+      // the dress's accent color is fixed per biome; the weights ramp via fxLevel
+      if (veinFx && veinFx.accent != null) {
+        for (const v of veins) v.mat.uniforms.uAccent.value.set(veinFx.accent);
+      }
       // the biome roulette (draft rooms with a rolled biome only): while it
       // spins, revealDone=false keeps the doors dead + the draft clock at zero.
       // No payload (fork mode, scripted runs) = today's behavior untouched.
       if (mode === 'draft' && biomeReveal && biomeReveal.items && biomeReveal.items.length
           && biomeReveal.targetIndex >= 0 && biomeReveal.targetIndex < biomeReveal.items.length) {
-        J.revealRow = buildBiomeRow(C, veins, biomeReveal, park);
+        J.revealRow = buildBiomeRow(C, veins, biomeReveal, park, G);
         J.revealDone = !J.revealRow;
       }
-      applyCut(atDepth);   // hide the trunk through the chamber's span
+      applyCut(atDepth, G);   // hide the trunk through the chamber's span
       if (presealIndex != null && veins[presealIndex]) {
         // A door born shut gets the full wall-off (brick + gif drape): the old
         // bare seal read as an "empty" doorway - an open glowing hole with a
@@ -1305,7 +1562,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
      * all spawn AHEAD of the camera, straight into this span). The spawners
      * clamp their throws short of it / skip it. */
     getBlockedSpan() {
-      return J ? { lo: J.atDepth - 4, hi: J.atDepth + CUT_END } : null;
+      return J ? { lo: J.atDepth - 4, hi: J.atDepth + J.geom.cutEnd } : null;
     },
     setActive(on) {
       active = !!on;

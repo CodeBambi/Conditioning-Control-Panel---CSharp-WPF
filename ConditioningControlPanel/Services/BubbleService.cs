@@ -25,10 +25,10 @@ public class BubbleService : IDisposable
 {
     private const int MAX_BUBBLES = 3;          // per-window fallback cap (SetWindowPos-bound — keep small)
     private const int MAX_BUBBLES_HOST = 40;    // shared-host cap: a dense ambient field is cheap on the Canvas
-    // Trigger/effect bubbles ALWAYS render per-window (forceWindowMode) even with the shared host on,
-    // and each is a WS_EX_LAYERED window repositioned via SetWindowPos every frame. So they must be
-    // capped independently of the (Canvas-cheap) host field cap — otherwise a high trigger chance puts
-    // dozens of layered windows on screen and starves desktop-heap/GPU surfaces (freeze cluster #448/#431).
+    // Trigger/effect bubbles are capped independently of the (Canvas-cheap) host field cap: in the
+    // per-window fallback each is a WS_EX_LAYERED window repositioned via SetWindowPos every frame
+    // (dozens on screen starve desktop-heap/GPU surfaces — freeze cluster #448/#431), and even when
+    // hosted, every pop fires a payload — an uncapped field spams full-screen effects.
     private const int MAX_TRIGGER_WINDOWS = 4;
     /// <summary>Concurrent ambient cap. The per-window path stays at 3 (each move is a SetWindowPos);
     /// the shared-host path repositions via batched Canvas.SetLeft/Top, so it carries a dense field.</summary>
@@ -42,7 +42,17 @@ public class BubbleService : IDisposable
     private readonly List<Bubble> _bubbles = new();
     private readonly Random _random = new();
     private DispatcherTimer? _spawnTimer;
-    private DispatcherTimer? _animationTimer; // Single shared animation timer for all bubbles
+    // Single shared animation driver for all bubbles. Driven off CompositionTarget.Rendering (the
+    // composition clock) rather than a DispatcherTimer: a DispatcherTimer at Render priority gets
+    // STARVED under UI-thread load (a mandatory video decoding + chaos FX overlays), then fires its
+    // backlog of Ticks back-to-back once the thread frees — which reads as the field lurching/jumping
+    // exactly when it's busiest. Rendering coalesces to one callback per rendered frame and simply
+    // DROPS frames under load instead of bunching, so motion stays smooth-then-degrades-gracefully.
+    // We gate the logical step to ~STEP_MS so the existing 30fps-tuned motion math is untouched.
+    private bool _animDriverHooked;                 // true while OnAnimationRenderTick is subscribed
+    private long _lastStepMs;                        // _stepClock timestamp of the last logical step
+    private const double STEP_MS = 30.0;             // logical-step gate (~30fps; was a 32ms timer)
+    private static readonly System.Diagnostics.Stopwatch _stepClock = System.Diagnostics.Stopwatch.StartNew();
     private bool _isRunning;
     private BitmapImage? _bubbleImage;
     private string _assetsPath = "";
@@ -184,13 +194,8 @@ public class BubbleService : IDisposable
         _spawnTimer.Tick += (s, e) => SpawnBubble();
         _spawnTimer.Start();
 
-        // Single shared animation timer for all bubbles (32ms = ~30 FPS, sufficient for floating bubbles)
-        _animationTimer = new DispatcherTimer(DispatcherPriority.Render)
-        {
-            Interval = TimeSpan.FromMilliseconds(32)
-        };
-        _animationTimer.Tick += AnimateAllBubbles;
-        _animationTimer.Start();
+        // Single shared animation driver for all bubbles (~30 FPS logical step, composition-clock driven)
+        StartAnimationDriver();
 
         // Spawn first bubble immediately
         SpawnBubble();
@@ -640,6 +645,13 @@ public class BubbleService : IDisposable
 
             // 3) the companion pops it — 50% louder, and the benign callback fires the effect payload
             bubble.PopByAvatar(1.5f);
+
+            // 3b) Let the payload's presentation surge settle before going home: the pop fires
+            // burst sparkles + an overlay/flash show, all damaging layered surfaces at once, and
+            // the re-attach then resizes/re-styles the avatar's OWN layered window. That exact
+            // collision produced a captured render-thread deadlock (hang_20260713_110759: render
+            // thread wedged in CWGXBitmapLockState::LockRead) — give the surge a beat to pass.
+            await Task.Delay(2500, ct);
         }
         catch (OperationCanceledException) { /* run ended / shutdown mid-egg */ }
         catch (Exception ex) { App.Logger?.Debug("Avatar bubble egg failed: {E}", ex.Message); }
@@ -709,11 +721,10 @@ public class BubbleService : IDisposable
         _spawnTimer?.Stop();
         _spawnTimer = null;
 
-        _animationTimer?.Stop();
-        _animationTimer = null;
+        StopAnimationDriver();
 
-        // DispatcherTimer ticks are synchronous on the UI thread and won't
-        // fire after Stop(), so no delay is needed here.
+        // The Rendering handler is detached synchronously above and won't fire
+        // after this point, so no delay is needed here.
 
         // Pop all remaining bubbles
         PopAllBubbles();
@@ -733,7 +744,9 @@ public class BubbleService : IDisposable
     private void BeginAmbientHostIfEnabled()
     {
         if (_ambientHost) return;
-        if (App.Settings?.Current?.BubbleSharedHost != true) return;
+        // Stand up when the ambient Canvas host is opted in, OR whenever the compositor is on (the
+        // BubbleLayer needs the same _ambientHost gate + hook that feed the renderer-agnostic pop path).
+        if (App.Settings?.Current?.BubbleSharedHost != true && !Bubble.UseCompositor) return;
         _ambientHost = true;
         Bubble.AmbientHostActive = true;
         ChaosBubbleHostOverlay.EnsureCreated();
@@ -895,16 +908,8 @@ public class BubbleService : IDisposable
                 if (_bubbleImage == null)
                     LoadBubbleImage();
 
-                // Ensure animation timer is running to animate the spawned bubble
-                if (_animationTimer == null || !_animationTimer.IsEnabled)
-                {
-                    _animationTimer = new DispatcherTimer(DispatcherPriority.Render)
-                    {
-                        Interval = TimeSpan.FromMilliseconds(32)
-                    };
-                    _animationTimer.Tick += AnimateAllBubbles;
-                    _animationTimer.Start();
-                }
+                // Ensure the animation driver is running to animate the spawned bubble
+                StartAnimationDriver();
 
                 var settings = App.Settings.Current;
                 // Baseline spawn: keyword-triggered bubbles follow the same
@@ -1024,17 +1029,35 @@ public class BubbleService : IDisposable
     private Bubble CreateAmbientBubble(System.Windows.Forms.Screen screen, bool isClickable)
     {
         var spec = RollTriggerSpec();
-        // Trigger bubbles are per-window layered windows; keep their concurrent count low regardless of
-        // the overall (host-rendered) field cap. Past the ceiling, fall back to a plain bubble so the
-        // dashboard stays lively without a layered-window pileup.
+        // Cap concurrent trigger bubbles regardless of render mode: in per-window fallback each is a
+        // layered window (pileup starves desktop heap — #448/#431), and even hosted, each pop fires a
+        // payload, so an uncapped field spams effects. Past the ceiling, fall back to a plain bubble.
         if (spec != null && _bubbles.Count(b => b.IsAmbientEffectBubble) >= MAX_TRIGGER_WINDOWS)
             spec = null;
         if (spec == null)
             return new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable);
+        // Trigger bubbles ride the shared ambient host like plain bubbles (hook-based pops via the
+        // UsesHost/HostHitClickable snapshots). forceWindowMode was a relic of the host being
+        // chaos-run-only: the per-pop layered-window Show/Close it forced was the residual "small
+        // frame skip on every effect-bubble click", and those topmost windows are exactly the
+        // population the layered-window render deadlock (hang_20260713_110759) lives in. Per-window
+        // is now only the fallback when the host is down or doesn't cover the target screen.
+        bool hostUp = _ambientHost && ChaosBubbleHostOverlay.IsReady
+            && ChaosBubbleHostOverlay.CoversPoint(screen.Bounds.X + screen.Bounds.Width / 2.0,
+                                                  screen.Bounds.Y + screen.Bounds.Height / 2.0);
         return new Bubble(screen, _bubbleImage, _random, onPop: null, onMiss: OnMiss, onDestroy: OnDestroy,
                           isClickable: isClickable, spec: spec,
-                          onBenignPop: b => { AwardAmbientPop(b); try { b.Spec?.Payload?.Fire(); } catch { } },
-                          forceWindowMode: true);
+                          onBenignPop: b =>
+                          {
+                              AwardAmbientPop(b);
+                              var sw = System.Diagnostics.Stopwatch.StartNew();
+                              try { b.Spec?.Payload?.Fire(); } catch { }
+                              sw.Stop();
+                              if (sw.ElapsedMilliseconds >= 20)
+                                  App.Logger?.Information("[POPLAG] payload {Kind} Fire() took {Ms}ms",
+                                      b.Spec?.Payload?.DisplayName ?? "?", sw.ElapsedMilliseconds);
+                          },
+                          forceWindowMode: !hostUp, ambientTrigger: true);
     }
 
     private void OnMiss(Bubble bubble)
@@ -1058,10 +1081,9 @@ public class BubbleService : IDisposable
     /// </summary>
     private void StopAnimationTimerIfIdle()
     {
-        if (!_isRunning && !_chaosActive && _bubbles.Count == 0 && _animationTimer != null)
+        if (!_isRunning && !_chaosActive && _bubbles.Count == 0 && _animDriverHooked)
         {
-            _animationTimer.Stop();
-            _animationTimer = null;
+            StopAnimationDriver();
         }
     }
 
@@ -1779,18 +1801,40 @@ public class BubbleService : IDisposable
     private const int VK_LBUTTON = 0x01;
     private const int VK_RBUTTON = 0x02;   // right button is the comfy sweep choice (no stray desktop clicks)
 
-    /// <summary>Ensure the shared 30fps animation timer is running (used by chaos + SpawnOnce).</summary>
-    private void EnsureAnimationTimer()
+    /// <summary>Ensure the shared 30fps animation driver is running (used by chaos + SpawnOnce).</summary>
+    private void EnsureAnimationTimer() => StartAnimationDriver();
+
+    /// <summary>Subscribe the animation step to the composition clock. Idempotent — the
+    /// <see cref="_animDriverHooked"/> guard makes a double-subscribe impossible across the several
+    /// start paths (Start / SpawnOnce / chaos), so the field can never step twice per frame.</summary>
+    private void StartAnimationDriver()
     {
-        if (_animationTimer == null || !_animationTimer.IsEnabled)
-        {
-            _animationTimer = new DispatcherTimer(DispatcherPriority.Render)
-            {
-                Interval = TimeSpan.FromMilliseconds(32)
-            };
-            _animationTimer.Tick += AnimateAllBubbles;
-            _animationTimer.Start();
-        }
+        if (_animDriverHooked) return;
+        _animDriverHooked = true;
+        _lastStepMs = _stepClock.ElapsedMilliseconds;
+        System.Windows.Media.CompositionTarget.Rendering += OnAnimationRenderTick;
+    }
+
+    /// <summary>Detach the animation step from the composition clock. MUST run on teardown/idle —
+    /// a Rendering handler keeps the render loop pumping at refresh rate for as long as it's attached,
+    /// so a stranded subscription is both a leak and wasted per-frame work.</summary>
+    private void StopAnimationDriver()
+    {
+        if (!_animDriverHooked) return;
+        _animDriverHooked = false;
+        System.Windows.Media.CompositionTarget.Rendering -= OnAnimationRenderTick;
+    }
+
+    /// <summary>Composition-clock tick. Fires once per rendered frame (60/120/144Hz), so we gate the
+    /// actual logical step to ~<see cref="STEP_MS"/>. Re-base <see cref="_lastStepMs"/> to the real
+    /// frame time (not += STEP_MS): a late frame must NOT trigger a burst of catch-up steps — dropping
+    /// is exactly the graceful-under-load behaviour a DispatcherTimer failed to give.</summary>
+    private void OnAnimationRenderTick(object? sender, EventArgs e)
+    {
+        long now = _stepClock.ElapsedMilliseconds;
+        if (now - _lastStepMs < STEP_MS) return;
+        _lastStepMs = now;
+        AnimateAllBubbles(sender, e);
     }
 
     private void PlayPopSound(bool isLucky = false, float volumeMult = 1f)
@@ -2023,6 +2067,22 @@ internal class Bubble
     /// does, but driven by the AppSettings.BubbleSharedHost flag instead of the chaos one.</summary>
     internal static bool AmbientHostActive;
 
+    // ---- Compositor BubbleLayer (unified overlay host) ----
+    // When the flag is on, a bubble that WOULD ride the shared Canvas host renders on the
+    // compositor's BubbleLayer instead: same hook-pop input contract (UsesHost stays true, hit
+    // discs are renderer-agnostic), just Skia draw calls in place of a WPF _grid on a Canvas.
+    private static Compositor.BubbleLayer? s_layer;
+    internal static bool UseCompositor => App.CompositorEnabled;
+    /// <summary>Lazily create + register the shared BubbleLayer. Null if the compositor is off.</summary>
+    private static Compositor.BubbleLayer? EnsureLayer()
+    {
+        if (s_layer != null) return s_layer;
+        if (App.Compositor == null) return null;
+        try { s_layer = new Compositor.BubbleLayer(App.Compositor); App.Compositor.RegisterLayer(s_layer); }
+        catch { s_layer = null; }
+        return s_layer;
+    }
+
     /// <summary>A hidden, reset transparent window shell of exactly <paramref name="bucket"/> px square —
     /// recycled from that bucket or freshly built at that size. Never resized after creation. UI thread only.</summary>
     private static Window RentWindow(int bucket)
@@ -2092,6 +2152,10 @@ internal class Bubble
 
     private readonly Window? _window;   // null in shared-host mode (the grid lives on ChaosBubbleHostOverlay)
     private readonly bool _useHost;     // AppSettings.ChaosBubbleSharedHost && chaos bubble — see the spawn block
+    private readonly bool _useLayer;    // UnifiedOverlayHost: render on the compositor BubbleLayer (also window-less)
+    private Compositor.BubbleLayer.BubbleItem? _layerItem;   // this bubble's draw-state on the layer (null off-layer)
+    private Image? _teaseFaceImg;       // the tease face's frame Image (read per-frame for the layer's current frame)
+    private SkiaSharp.SKPoint[][]? _crackPts;   // brittle crack polylines in DIP (0.._size box) for the layer
     private readonly FrameworkElement _fxTarget;   // where glow/opacity apply: _window (per-window) or _grid (host)
     private double _winDim;   // the (quantized) square window side this bubble uses; held so AnimateFrame can re-centre without resizing the window (see spawn — resizing churns the layered DIB)
     private System.Windows.Input.MouseButtonEventHandler? _winClickHandler;   // removed on death so the pooled window never roots a dead bubble
@@ -2438,10 +2502,11 @@ internal class Bubble
 
     // ---- Shared-host pop hit-testing (mouse-hook path; see BubbleService.OnSharedHostLeftDown) ----
 
-    /// <summary>True when this bubble renders on the shared Canvas host (vs. its own pooled layered
-    /// window). The hook-pop path targets ONLY host bubbles; per-window bubbles keep their WPF handler,
-    /// so this is the guard that prevents a double-pop across the two render paths.</summary>
-    internal bool UsesHost => _useHost;
+    /// <summary>True when this bubble renders window-less on a SHARED surface (the Canvas host OR the
+    /// compositor BubbleLayer) rather than its own pooled layered window. Both share the hook-pop input
+    /// contract (renderer-agnostic hit discs); per-window bubbles keep their WPF handler, so this is the
+    /// guard that prevents a double-pop across the render paths.</summary>
+    internal bool UsesHost => _useHost || _useLayer;
 
     /// <summary>This bubble is currently a valid left-click pop target.</summary>
     internal bool HostHitClickable => _isClickable && _isAlive && !_isDestroyed && !_isPopping && !_claimedByAvatar;
@@ -2463,6 +2528,105 @@ internal class Bubble
     /// <summary>Pop this bubble from a shared-host hook click (UI thread) — routes exactly like a
     /// real press (tease/brittle/channel/benign all handled by OnPlayerPress).</summary>
     internal void HostHookPop() => OnPlayerPress();
+
+    // ---- Compositor BubbleLayer bridge (see Services/Compositor/BubbleLayer.cs) ----
+
+    /// <summary>Build this bubble's compositor draw item from its (static) spawn state. Called once
+    /// from the ctor when _useLayer; the per-frame values are filled by <see cref="SyncLayerItem"/>.
+    /// Mirrors the WPF visual tree built above (base sprite + BuildChaosLayers), resolved from the
+    /// same flags so the two render paths match.</summary>
+    private Compositor.BubbleLayer.BubbleItem BuildLayerItem()
+    {
+        bool hasTint = _spec != null && !_hasVariantSprite;
+        var tint = _spec != null
+            ? new SkiaSharp.SKColor(_spec.Tint.R, _spec.Tint.G, _spec.Tint.B)
+            : new SkiaSharp.SKColor(0xE8, 0xE8, 0xF0);
+
+        // Glow: the DropShadow that wins on the sprite (or the spotlight halo), resolved from flags.
+        bool hasGlow = false; var glowColor = default(SkiaSharp.SKColor); float glowBlur = 0, glowOp = 0;
+        if (_spec != null)
+        {
+            if (_spec.IsSweeper) { glowColor = new SkiaSharp.SKColor(0xFF, 0x8A, 0x14); glowBlur = 36; glowOp = 1.0f; hasGlow = true; }
+            else if (_isDarter) { glowColor = tint; glowBlur = 26; glowOp = 0.9f; hasGlow = true; }
+            else if (_spec.IsGolden) { glowColor = new SkiaSharp.SKColor(0xFF, 0xD7, 0x00); glowBlur = 20; glowOp = 0.55f; hasGlow = true; }
+            else if (_spec.IsBrittle) { glowColor = new SkiaSharp.SKColor(0xBF, 0xE6, 0xFF); glowBlur = 22; glowOp = 0.6f; hasGlow = true; }
+            else if (_spec.Spotlight)
+            {
+                var tier = PerformanceProfile.CurrentTier;
+                if (PerformanceProfile.AllowGlow(tier))
+                {
+                    glowColor = new SkiaSharp.SKColor(0xFF, 0xD7, 0x00);
+                    glowBlur = (float)Math.Min(40, PerformanceProfile.MaxGlowBlurRadius(tier));
+                    glowOp = 0.85f; hasGlow = true;
+                }
+            }
+        }
+
+        var item = new Compositor.BubbleLayer.BubbleItem
+        {
+            DpiScale = (float)_dpiScale,
+            SizeDip = _size,
+            HitSizeDip = _hitSize,
+            // Seed the spawn position (BubbleItem.Opacity defaults to 1): SyncLayerItem only runs on
+            // the next animate tick, so a compositor frame between Add() and that first sync would
+            // otherwise draw the bubble at (0,0) - a one-frame flash in the top-left corner (#553).
+            CenterXPx = (_posX + _size / 2.0) * _dpiScale,
+            CenterYPx = (_posY + _size / 2.0) * _dpiScale,
+            Sprite = Compositor.BubbleLayer.ResolveSprite(_bubbleImage.Source as System.Windows.Media.Imaging.BitmapSource),
+            HasTint = hasTint,
+            Tint = tint,
+            Label = (_spec != null && !_hasVariantSprite && !string.IsNullOrEmpty(_spec.Label)) ? _spec.Label : null,
+            LabelFontDip = (float)Math.Max(14, _size * 0.30),
+            HasShine = ChaosSkiaFxOverlay.Enabled && !_hasVariantSprite && _spec != null,
+            IsEcho = _spec?.IsEcho == true,
+            EchoColor = _spec != null ? new SkiaSharp.SKColor(_spec.Tint.R, _spec.Tint.G, _spec.Tint.B, 110) : default,
+            IsTease = _isTease,
+            TeaseInnerDip = (float)(_size * 0.86),
+            HasGlow = hasGlow,
+            GlowColor = glowColor,
+            GlowBlurDip = glowBlur,
+            GlowOpacity = glowOp,
+            PrismGhost = Compositor.BubbleLayer.ResolveSprite(_prismGhost?.Source as System.Windows.Media.Imaging.BitmapSource),
+            Cracks = _crackPts,
+            HintText = (_hintEl?.Child as TextBlock)?.Text,
+            HintYOffDip = (float)(_size / 2.0 + Math.Clamp(_winPad - 24.0, 2.0, 14.0)),
+        };
+        return item;
+    }
+
+    /// <summary>Copy the frame's just-computed visual state onto the draw item. Reads the values the
+    /// (unshown) WPF animation wrote this tick — position, the composed sprite scale/opacity, and each
+    /// variant element's animated scale/colour/opacity — so the layer never re-derives animation.</summary>
+    private void SyncLayerItem(double currentScale, double opacity, double jx, double jy)
+    {
+        var it = _layerItem;
+        if (it == null) return;
+        it.CenterXPx = (_posX + _size / 2.0 + jx) * _dpiScale;
+        it.CenterYPx = (_posY + _size / 2.0 + jy) * _dpiScale;
+        it.Scale = (float)currentScale;
+        it.Angle = (float)_angle;
+        it.Opacity = (float)opacity;
+
+        if (_fuseRing != null)
+        {
+            it.FuseScale = (float)((_fuseRing.RenderTransform as ScaleTransform)?.ScaleX ?? 1.0);
+            it.FuseOpacity = (float)_fuseRing.Opacity;
+            if (_fuseStrokeBrush != null)
+            { var c = _fuseStrokeBrush.Color; it.FuseColor = new SkiaSharp.SKColor(c.R, c.G, c.B); }
+        }
+        if (_telegraphRing != null)
+        {
+            it.TelegraphScale = (float)((_telegraphRing.RenderTransform as ScaleTransform)?.ScaleX ?? 1.0);
+            it.TelegraphOpacity = _telegraphRing.Visibility == Visibility.Visible ? (float)_telegraphRing.Opacity : 0f;
+        }
+        if (_freezeAura != null) it.FreezeAuraOpacity = (float)_freezeAura.Opacity;
+        if (_brittleCracks != null) it.BrittleOpacity = (float)_brittleCracks.Opacity;
+        if (_teaseShine != null) it.TeaseShineOpacity = (float)_teaseShine.Opacity;
+        if (_teaseFaceImg != null) it.TeaseSource = _teaseFaceImg.Source as System.Windows.Media.Imaging.BitmapSource;
+        if (_shieldRing != null) it.ShieldOpacity = (float)_shieldRing.Opacity;
+        if (_prismGhost != null) it.PrismOpacity = (float)_prismGhost.Opacity;
+        if (_hintEl != null) it.HintOpacity = _hintEl.Visibility == Visibility.Visible ? (float)_hintEl.Opacity : 0f;
+    }
 
     /// <summary>The box grown by <paramref name="expand"/> about its centre — the reach of its pop burst.</summary>
     public Rect ChainReach(double expand)
@@ -2515,7 +2679,8 @@ internal class Bubble
                   Action<Bubble>? onTreatExpired = null, Action<Bubble>? onClickPop = null,
                   Func<Bubble, bool>? canChannelDefuse = null, Action<Bubble, string>? onChannelBroken = null,
                   Action<Bubble>? onTeaseTouched = null, Action<Bubble>? onTeaseDenied = null,
-                  Action<Bubble>? onBrittleShattered = null, bool forceWindowMode = false)
+                  Action<Bubble>? onBrittleShattered = null, bool forceWindowMode = false,
+                  bool ambientTrigger = false)
     {
         _random = random;
         _onPop = onPop;
@@ -2594,9 +2759,9 @@ internal class Bubble
         if (spec != null) _speed *= Math.Max(0.1, spec.SpeedMult);   // golden bubbles fly
         if (spec != null) _speed *= ChaosTuning.CHAOS_SPEED_MULT;    // chaos pace bump: travel farther before rotting
         // Dashboard speed slider: up to +500% travel (6x) for the ambient game — BOTH plain and
-        // trigger bubbles — leaving chaos pacing alone (chaos bubbles carry a spec but not
-        // forceWindowMode).
-        if (spec == null || forceWindowMode)
+        // trigger bubbles — leaving chaos pacing alone (chaos bubbles carry a spec but are
+        // never ambientTrigger).
+        if (spec == null || ambientTrigger)
         {
             int speedBoost = App.Settings?.Current?.BubbleSpeedBoost ?? 0;
             if (speedBoost > 0) _speed *= 1.0 + Math.Clamp(speedBoost, 0, 500) / 100.0;
@@ -2794,21 +2959,42 @@ internal class Bubble
         // (recycled hidden shell) rather than newly created — see RentWindow / the pool above.
         // Every per-bubble property below is (re)set on each reuse so a recycled shell carries
         // no state from its previous bubble.
-        // Shared-host A/B (chaos bubbles only): one Canvas host instead of a Window per bubble.
-        // forceWindowMode pins per-window rendering for dashboard trigger bubbles — the shared
-        // ChaosBubbleHostOverlay only exists during a real chaos run.
-        // Chaos effect bubbles ride the host under ChaosBubbleSharedHost; ambient dashboard bubbles
-        // (spec == null) ride it under BubbleSharedHost while the ambient host is standing. Either way
-        // forceWindowMode (dashboard trigger bubbles) pins per-window rendering.
-        bool chaosHost = spec != null && (App.Settings?.Current?.ChaosBubbleSharedHost ?? false);
-        bool ambientHost = spec == null && AmbientHostActive && (App.Settings?.Current?.BubbleSharedHost ?? false);
-        _useHost = !forceWindowMode && (chaosHost || ambientHost);
+        // Shared-host A/B: one Canvas host instead of a Window per bubble.
+        // Chaos effect bubbles ride the host under ChaosBubbleSharedHost; ambient bubbles — plain
+        // (spec == null) AND dashboard trigger bubbles (ambientTrigger) — ride it under
+        // BubbleSharedHost while the ambient host is standing. forceWindowMode pins per-window
+        // rendering: CreateAmbientBubble sets it for a trigger bubble whose target screen the
+        // host can't cover (host down, or spawn on a screen outside its stage bounds).
+        // Under the unified overlay host the compositor IS the shared host, so a would-be host
+        // bubble rides the BubbleLayer even when the experimental Canvas-host flags are off (the
+        // chaos run's _rippleHook / the ambient _ambientHook already give the hook-pop path).
+        bool chaosHost = spec != null && !ambientTrigger && ((App.Settings?.Current?.ChaosBubbleSharedHost ?? false) || UseCompositor);
+        bool ambientHost = (spec == null || ambientTrigger) && AmbientHostActive && ((App.Settings?.Current?.BubbleSharedHost ?? false) || UseCompositor);
+        bool wantsHost = !forceWindowMode && (chaosHost || ambientHost);
+        // Under the unified overlay host, a would-be host bubble renders on the compositor
+        // BubbleLayer instead of the Canvas host (same window-less, hook-pop contract).
+        _useLayer = wantsHost && UseCompositor && EnsureLayer() != null;
+        _useHost = wantsHost && !_useLayer;
 
         // Quantized window side (per-window mode); also a harmless notional size in host mode.
         double winNeed = Math.Max(_size, _hitSize) + _winPad * 2;
         _winDim = Math.Ceiling(winNeed / 128.0) * 128.0;
 
-        if (_useHost)
+        if (_useLayer)
+        {
+            // COMPOSITOR-LAYER MODE: no per-bubble Window and no Canvas host child. The WPF _grid
+            // tree still exists and is animated by AnimateFrame (unshown), but its computed visual
+            // state is copied into a BubbleLayer.BubbleItem each frame (SyncLayerItem) and drawn in
+            // Skia on the shared overlay host. Pops come from the global mouse hook exactly like the
+            // Canvas host (UsesHost stays true → the disc snapshot includes this bubble).
+            _window = null;
+            _fxTarget = _grid;
+            _grid.Opacity = _baseOpacity;
+            _grid.Effect = null;
+            _layerItem = BuildLayerItem();
+            s_layer?.Add(_layerItem);
+        }
+        else if (_useHost)
         {
             // SHARED-HOST MODE: no per-bubble Window. The grid is a child of the one
             // ChaosBubbleHostOverlay Canvas, repositioned each frame via Canvas.SetLeft/Top — no
@@ -2891,10 +3077,10 @@ internal class Bubble
             try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x8A, 0x14), BlurRadius = 36, ShadowDepth = 0, Opacity = 1.0 }; } catch { }
         }
 
-        // Show + alt-tab hide (per-window mode only — the host is already shown). A recycled shell can be
-        // parked on its previous monitor; reveal chaos bubbles at zero opacity, pin to the target screen
-        // in physical px, then restore opacity, so the first visible frame is on the right monitor.
-        if (!_useHost)
+        // Show + alt-tab hide (per-window mode only — the host/layer is already shown). A recycled shell
+        // can be parked on its previous monitor; reveal chaos bubbles at zero opacity, pin to the target
+        // screen in physical px, then restore opacity, so the first visible frame is on the right monitor.
+        if (!_useHost && !_useLayer)
         {
             if (_spec != null)
             {
@@ -3482,7 +3668,14 @@ internal class Bubble
                 }
             }
             _fxTarget.Opacity = opacity;
-            if (_useHost)
+            if (_useLayer)
+            {
+                // Copy the just-computed visual state onto the compositor draw item (no window, no
+                // Canvas). currentScale/opacity are already applied to the WPF tree above; the rest
+                // (fuse/telegraph/aura/tease/etc.) is read off the elements the animation just wrote.
+                SyncLayerItem(currentScale, opacity, jx, jy);
+            }
+            else if (_useHost)
             {
                 // Cheap Canvas reposition — no SetWindowPos. Grid (_hitSize) centred on the bubble.
                 // PHYSICAL px: the host converts by its own origin/scale (mixed-DPI safe).
@@ -4125,6 +4318,7 @@ internal class Bubble
             var crackBrush = new SolidColorBrush(Color.FromArgb(0xD8, 0xEC, 0xF7, 0xFF));
             crackBrush.Freeze();
             double c = _size / 2.0;
+            var crackPts = new SkiaSharp.SKPoint[3][];   // shared with the compositor layer
             for (int i = 0; i < 3; i++)
             {
                 // Each crack: a jagged 3-segment polyline from near the centre out to the rim.
@@ -4132,19 +4326,24 @@ internal class Bubble
                 double r1 = _size * 0.12, r2 = _size * 0.27, r3 = _size * 0.44;
                 double kink1 = a + (_random.NextDouble() - 0.5) * 0.7;
                 double kink2 = kink1 + (_random.NextDouble() - 0.5) * 0.7;
+                var p0 = new Point(c + Math.Cos(a) * r1, c + Math.Sin(a) * r1);
+                var p1 = new Point(c + Math.Cos(kink1) * r2, c + Math.Sin(kink1) * r2);
+                var p2 = new Point(c + Math.Cos(kink2) * r3, c + Math.Sin(kink2) * r3);
+                crackPts[i] = new[]
+                {
+                    new SkiaSharp.SKPoint((float)p0.X, (float)p0.Y),
+                    new SkiaSharp.SKPoint((float)p1.X, (float)p1.Y),
+                    new SkiaSharp.SKPoint((float)p2.X, (float)p2.Y),
+                };
                 _brittleCracks.Children.Add(new System.Windows.Shapes.Polyline
                 {
-                    Points = new PointCollection
-                    {
-                        new Point(c + Math.Cos(a) * r1,     c + Math.Sin(a) * r1),
-                        new Point(c + Math.Cos(kink1) * r2, c + Math.Sin(kink1) * r2),
-                        new Point(c + Math.Cos(kink2) * r3, c + Math.Sin(kink2) * r3),
-                    },
+                    Points = new PointCollection { p0, p1, p2 },
                     Stroke = crackBrush,
                     StrokeThickness = 1.6,
                     IsHitTestVisible = false,
                 });
             }
+            _crackPts = crackPts;
             _grid.Children.Add(_brittleCracks);
         }
 
@@ -4352,6 +4551,7 @@ internal class Bubble
                     });
                 }
             }
+            _teaseFaceImg = img;   // layer mode reads its current Source each frame for the Skia frame
             face.Children.Add(img);
         }
 
@@ -4479,7 +4679,13 @@ internal class Bubble
         }
         catch { }
 
-        if (_useHost)
+        if (_useLayer)
+        {
+            // Layer mode: drop the draw item (disposes its owned tease frames) — no window, no Canvas child.
+            try { if (_layerItem != null) s_layer?.Remove(_layerItem); } catch { }
+            _layerItem = null;
+        }
+        else if (_useHost)
         {
             // Host mode: pull the grid off the shared Canvas — there's no per-bubble window to recycle.
             try { ChaosBubbleHostOverlay.Remove(_grid); } catch { }
