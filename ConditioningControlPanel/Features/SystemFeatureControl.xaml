@@ -46,6 +46,21 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="Force video GPU decode" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="Play mandatory videos on the GPU. Off by default (software decode) to dodge a white-screen bug on some PCs. Turn ON if a video only plays on one of your screens, keeps swapping screens, or freezes when it starts."
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkVideoGpuDecode"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkVideoGpuDecode_Changed" Unchecked="ChkVideoGpuDecode_Changed"/>
+                </Grid>
+                <Grid Margin="0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <TextBlock Text="{loc:Str setting_win_start}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
                         <TextBlock Text="{loc:Str tooltip_launch_automatically_when_windows_starts}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
