@@ -39,7 +39,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boons.js';
-import { MAT_BY_ID, MATERIALS, matArt, rollMaterialId, CONSUMABLE_IDS, pickSketchId, RECIPE_BY_ID, sketchView } from './crafting.js';
+import { MAT_BY_ID, MATERIALS, matArt, rollMaterialId, CONSUMABLE_IDS, pickSketchId, RECIPE_BY_ID, sketchView, craftedArt } from './crafting.js';
 import { CRAFTED_PERMANENT_APPLY, CRAFTED_TOY_DEFS } from './craftedEffects.js';
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
@@ -3662,6 +3662,44 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (any) hudUi.toast('🛏 what you crafted comes down with you');
   }
 
+  // THE BOUDOIR loadout rail: the always-on modifiers the crafted kit brings into
+  // the fall (the docked consumables show in the toy dock, so they're left out).
+  // Short lines are hand-authored (the recipe `effect` strings are too long for a
+  // 2-up chip); glyph/name come from the recipe table. Mirrors applyCraftedKit's
+  // ownership reads exactly, so the rail can never claim a modifier the run didn't get.
+  const LOADOUT_MODS = {
+    skeleton_key:  '+1 draft reroll',
+    locked_collar: '+1 collar save',
+    the_corset:    '+1 starting resistance',
+    the_timepiece: 'descent lasts +10% longer',
+    the_hourglass: 'Esc holds the fall — pause',
+    the_shot:      (n) => `+${Math.min(40, 4 * n)}% drops payout`,
+  };
+  function buildLoadout() {
+    const out = [];
+    for (const id of Object.keys(LOADOUT_MODS)) {
+      const n = craftedCount(id);
+      if (n < 1) continue;
+      const rec = RECIPE_BY_ID[id] || {};
+      const line = LOADOUT_MODS[id];
+      out.push({
+        id, glyph: rec.glyph || '◈', name: rec.name || id, art: craftedArt(id),
+        effect: typeof line === 'function' ? line(n) : line,
+        count: id === 'the_shot' ? n : 0,
+      });
+    }
+    if (cfg.denialArmed && craftedCount('the_cage') >= 1) {
+      out.push({ id: 'the_cage', glyph: '🔒', name: 'DENIAL', art: craftedArt('the_cage'),
+        effect: 'no hearts fall · everything pays +50%', curse: true });
+    }
+    if (cfg.pinnedBoonId && craftedCount('the_padlock') >= 1) {
+      const b = boonById(cfg.pinnedBoonId);
+      out.push({ id: 'the_padlock', glyph: '🔐', name: 'Padlock', art: craftedArt('the_padlock'),
+        effect: b ? `pins ${b.name} to the first draft` : 'pins a mantra to the first draft' });
+    }
+    return out;
+  }
+
   function beginCountdown(short) {
     state = 'countdown';
     st = freshState();
@@ -3723,6 +3761,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.updateToys(toys, toyStatus());
     hudUi.setPicks(st.runPicks);
     hudUi.setHabits(st.ownedHabitIds);   // the always-on habits rail (left, dim until hover)
+    hudUi.setLoadout(cfg.scriptedFirstRun ? [] : buildLoadout());   // the crafted modifiers brought down
+    hudUi.setClock(!cfg.scriptedFirstRun && craftedCount('the_timepiece') >= 1);   // the timer is the pocket watch's gift
     hudUi.setVisible(true);
     if (!short) sfx('fall_in', 0.28);
     overlays.showCountdown({
@@ -3873,6 +3913,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.setVisible(false);
     hudUi.setPicks([]);
     hudUi.setHabits([]);
+    hudUi.setLoadout([]);
+    hudUi.setClock(false);
     try { payloadFx?.cancelHeavy(); } catch (e) { /* ignore */ }   // kill any lingering video card before the hub
     try { ctx.boonPick && ctx.boonPick.reset && ctx.boonPick.reset(); } catch (e) { /* ignore */ }   // a draft aborted mid-pick must not strand its card row in the hub
     field.clearAll();

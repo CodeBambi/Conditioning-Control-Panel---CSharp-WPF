@@ -1540,7 +1540,11 @@ img.rh-fx-spiralspin {
 @keyframes cfLowPulse { 50% { opacity: 0.45; } }
 .cf-focus-bar.cf-focus-flash { animation: cfFocusFlash 0.5s ease-out; }
 @keyframes cfFocusFlash { 0%, 60% { box-shadow: 0 0 0 2px #ff5468, 0 0 14px #ff5468; } }
-.cf-hud-clock { font-size: 0.85rem; opacity: 0.9; }
+.cf-hud-clock { font-size: 0.85rem; opacity: 0.9; transition: font-size 0.25s ease, opacity 0.25s ease; }
+/* THE POCKET WATCH unlocked: the timer earns its place - bigger, brighter, and
+   the elapsed/duration glows pink-warm so you actually watch the clock. */
+.cf-hud-clock.has-watch { font-size: 1.02rem; opacity: 1; font-weight: 600; }
+.cf-hud-clock.has-watch .cf-hud-clock-time { color: #ffd9ec; text-shadow: 0 0 8px rgba(255, 138, 194, 0.5); }
 /* THE BIOMES: the active place's name + effect, top-left, so the rules are always visible */
 .cf-hud-biome {
   align-self: flex-start;
@@ -1919,6 +1923,43 @@ img.rh-fx-spiralspin {
 .cf-hud-active-item:hover { opacity: 1; }
 .cf-hud-active-glyph { font-size: 0.95rem; flex: none; }
 .cf-hud-active-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- the crafted loadout rail (THE BOUDOIR modifiers carried into the fall).
+   Packed 2-up right under the score, half-transparent until hovered, pink accent
+   (boudoir). Nested in .cf-hud, so the Eye folds it away for free. ---- */
+.cf-hud-loadout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 6px;
+  margin: 2px 0 1px;
+  max-width: 16rem;
+}
+.cf-hud-loadout:empty { display: none; }
+.cf-hud-loadout-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px 2px 3px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--acc, 255,138,194), 0.4);
+  background: rgba(38, 20, 30, 0.42);
+  color: #ffdcee;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  opacity: 0.5;   /* half transparent until looked at */
+  pointer-events: auto;   /* re-enable hover inside the pointer-events:none .cf-hud */
+  transition: opacity 0.15s ease;
+  animation: cfToastIn 0.25s ease-out;
+}
+.cf-hud-loadout-item:hover { opacity: 1; }
+.cf-hud-loadout-item.is-curse { background: rgba(40, 18, 18, 0.46); color: #ffd9d9; }
+.cf-hud-loadout-ic {
+  flex: none; width: 18px; height: 18px; border-radius: 5px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; font-size: 0.95rem;
+  background: rgba(var(--acc, 255,138,194), 0.14);
+}
+.cf-hud-loadout-ic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cf-hud-loadout-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- the Eye: hide/show the run HUD (bottom-right) ---- */
 .cf-eye-btn {
@@ -2589,6 +2630,8 @@ img.rh-fx-spiralspin {
   width: 64px; height: 64px; border-radius: 10px; cursor: pointer; padding: 0;
   background: rgba(255,255,255,0.05); border: 2px dashed rgba(255,255,255,0.18);
   display: flex; align-items: center; justify-content: center;
+  touch-action: none;   /* let press-and-drag paint rather than scroll/select */
+  user-select: none;
 }
 .wr-craft-cell:hover { border-color: rgba(255,138,194,0.7); background: rgba(255,138,194,0.10); }
 .wr-craft-cell.is-filled { border-style: solid; border-color: rgba(255,138,194,0.55); background: rgba(255,138,194,0.14); }
@@ -2597,6 +2640,15 @@ img.rh-fx-spiralspin {
 .wr-craft-status { font-size: 0.82rem; color: #8a86b8; font-style: italic; text-align: center; }
 .wr-craft-status--dup { color: #d8c9a0; }
 .wr-craft-go { background: #ff8ac2; color: #1a1120; }
+.wr-craft-clear {
+  margin-left: 10px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); color: #b8b2d4;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.wr-craft-clear:hover { background: rgba(255,110,110,0.16); border-color: rgba(255,110,110,0.5); color: #ffd9d9; }
+.wr-craft-tray { touch-action: none; }
+.wr-craft-mat { user-select: none; }
 .wr-craft-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
 .wr-craft-chip {
   padding: 5px 11px; border-radius: 999px; cursor: pointer; font-size: 0.74rem; font-weight: 700;
