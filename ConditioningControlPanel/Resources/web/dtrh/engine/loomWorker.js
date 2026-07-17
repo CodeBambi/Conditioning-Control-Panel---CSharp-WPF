@@ -24,12 +24,12 @@
  * ==========================================================================*/
 
 import { GIFEncoder, quantize, applyPalette } from '/dtrh/vendor/gifenc/gifenc.esm.js';
-import { drawSpiral } from '/dtrh/shared/loomSpiral.js';
 import {
   normalizeParams2, delayCsFor2, createFieldRenderer, composeFrame,
-  drawCenterpiece, projectToV1,
+  drawFallbackFrame, formatDims2,
 } from '/dtrh/shared/loomField.js';
 
+// SIZE is the LONG side; q.format decides the frame shape (1:1, 16:9, 9:16).
 const SIZE = 640, FRAMES = 36;
 const RETRY_SIZE = 512, RETRY_FRAMES = 30;
 const SOFT_CAP = 6 * 1024 * 1024, HARD_CAP = 8 * 1024 * 1024;
@@ -54,7 +54,7 @@ async function encodeJob({ id, params }) {
   }
   if (out.bytes > HARD_CAP) { self.postMessage({ id, error: 'gif too large' }); return; }
   self.postMessage(
-    { id, gif: out.buf, bytes: out.bytes, w: out.size, h: out.size, frames: out.frames, delayCs: out.delayCs },
+    { id, gif: out.buf, bytes: out.bytes, w: out.w, h: out.h, frames: out.frames, delayCs: out.delayCs },
     [out.buf]);
 }
 
@@ -70,26 +70,22 @@ function subsample(rgba, factor) {
 }
 
 async function encode(id, q, size, frames) {
-  const composite = new OffscreenCanvas(size, size);
+  const { w, h } = formatDims2(q.format, size);
+  const composite = new OffscreenCanvas(w, h);
   const ctx = composite.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('no 2d context in worker');
 
   // WebGL field; falls back to the v1 wedge renderer if the worker has no GL.
   let field = null;
-  try { field = createFieldRenderer(new OffscreenCanvas(size, size)); } catch (e) { field = null; }
-  const v1 = field ? null : projectToV1(q);
+  try { field = createFieldRenderer(new OffscreenCanvas(w, h)); } catch (e) { field = null; }
 
   const drawFrame = (phase) => {
-    if (field) {
-      composeFrame(ctx, field, q, phase, size);
-    } else {
-      drawSpiral(ctx, size, v1, phase);
-      drawCenterpiece(ctx, q, phase, size);
-    }
+    if (field) composeFrame(ctx, field, q, phase, w, h);
+    else drawFallbackFrame(ctx, q, phase, w, h);
   };
   const readFrame = (phase) => {
     drawFrame(phase);
-    return ctx.getImageData(0, 0, size, size).data;
+    return ctx.getImageData(0, 0, w, h).data;
   };
 
   const delayCs = delayCsFor2(q);
@@ -123,12 +119,12 @@ async function encode(id, q, size, frames) {
     // declare a local table when palettes vary per frame.
     const opts = { delay: delayCs * 10, repeat: 0 };
     if (f === 0 || perFramePalette) opts.palette = palette;
-    gif.writeFrame(indexed, size, size, opts);
+    gif.writeFrame(indexed, w, h, opts);
     if (f % 4 === 3) self.postMessage({ id, progress: (f + 1) / frames });
     // yield so a cancel message can land between frames
     await new Promise((r) => setTimeout(r, 0));
   }
   gif.finish();
   const bytes = gif.bytes();
-  return { buf: bytes.buffer, bytes: bytes.length, size, frames, delayCs };
+  return { buf: bytes.buffer, bytes: bytes.length, w, h, frames, delayCs };
 }

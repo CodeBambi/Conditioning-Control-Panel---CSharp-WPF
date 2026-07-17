@@ -184,6 +184,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     const img = document.createElement('img');
     img.src = url;
     img.alt = '';
+    img.draggable = false;   // else a native image-drag hijacks the worktable's press-and-drag paint gesture
     img.addEventListener('error', () => {
       img.remove();
       el('wr-icon-glyph', box, glyph || '◈');

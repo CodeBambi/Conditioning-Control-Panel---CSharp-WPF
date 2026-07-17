@@ -13,7 +13,8 @@ namespace ConditioningControlPanel.Services.Chaos;
 /// the in-game way in). A stripped-down sibling of <see cref="DtrhHostService"/>:
 /// one windowed <see cref="ChaosWebViewHost"/> pointed at
 /// <c>Resources/web/dtrh/loom.html</c>, speaking only the loom bridge subset
-/// (loom-save / loom-delete / sfx out of the page, loom-result / loom-list in).
+/// (loom-save / loom-delete / loom-reveal / sfx out of the page,
+/// loom-result / loom-list in).
 /// File authority stays in <see cref="DtrhLoomStore"/> - saves land in the CCP
 /// Spirals library, so the overlay and the SpiralFeatureControl pick them up
 /// exactly like spirals woven inside the game.
@@ -99,6 +100,18 @@ internal static class LoomHostService
                 var (ok, error) = DtrhLoomStore.Delete(slug);
                 _host?.Post(new { type = "loom-result", op = "delete", ok, slug, error });
                 if (ok) PostLoomList();
+                break;
+            }
+            case "loom-reveal":
+            {
+                // 📂 on a rack tile: show the saved gif in Explorer. Path comes from
+                // the slug-whitelisted store, never from the page.
+                var path = DtrhLoomStore.GifPathFor((string?)o["slug"]);
+                if (path != null)
+                {
+                    try { System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\""); }
+                    catch (Exception ex) { App.Logger?.Debug("LoomHost: reveal failed: {E}", ex.Message); }
+                }
                 break;
             }
             case "sfx":
