@@ -93,7 +93,8 @@
   ],
   "referenceDocs": [
     "docs/constitution.md",
-    "client/docs/task-board.md"
+    "client/docs/task-board.md",
+    "client/docs/port-lessons.md"
   ],
   "standards": [],
   "neverLoad": []

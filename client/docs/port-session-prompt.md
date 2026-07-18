@@ -71,8 +71,12 @@ While a batch is active, maintain exactly ONE pi-loop (hybrid: `monitor:done` ev
 1. Run `spine status --diagnose` and read new `.spine/runtime/` evidence and journal entries.
 2. If stalled/failed: follow the diagnosis table in `spine-orchestrate-waves` (`retry`, `resume --force`, packet fix) — never start a second engine, never hand-edit `.spine/batch-state.json`.
 3. If work drifts from the packet, board, or constitution: cancel/retry with a corrected packet rather than steering by hope.
-4. **Process improvement:** when evidence shows a concrete missing capability, stale instruction, unsafe behavior, or repeated failure — file a bounded tooling task (new/adjusted skill, agent, workflow, or packet template). The loop proposes and drafts; a new skill/agent is adopted only after the orchestrator (or owner, for policy-touching changes) reviews it and validation proves it. Do not spend the port continually rewriting its own orchestration.
-5. Record durable findings with `mem_save` (engram) so crashes and restarts do not lose steering context.
+4. **Learning harvest (every loop fire and every land):** collect lessons from live evidence — worker retries and their causes, review REVISE/REPLAN reasons, contract failures, stall diagnoses, v12/API surprises, environment quirks, packet-authoring mistakes — and route each to its sink:
+   - **`client/docs/port-lessons.md`** (append a one-to-three-line dated entry; prune superseded entries) — this file is in spine `referenceDocs`, so every future worker reads it automatically;
+   - **`mem_save` (engram)** for cross-session steering context that outlives crashes;
+   - **packet templates** — fix the authoring pattern immediately when the next packet is written.
+5. **Process improvement (recurrence-triggered):** when the SAME lesson appears twice, stop absorbing it manually — file a bounded tooling task to encode it durably: a new or adjusted skill, agent, workflow, worker standing order (`docs/constitution.md`), or spine config change. The loop proposes and drafts; adoption requires orchestrator review + validation (owner review for policy-touching changes). One-off lessons stay in port-lessons.md; do not spend the port continually rewriting its own orchestration.
+6. **Retrospective (at each land):** briefly ask whether already-landed slices could be materially improved by what was just learned. If yes, file an evidence-citing improvement row on the board — never immediate rework; the board decides when it is worth a slice.
 
 ### Delegation
 
