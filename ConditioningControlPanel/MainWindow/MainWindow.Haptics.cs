@@ -376,7 +376,16 @@ namespace ConditioningControlPanel
                 case "BouncingText":
                     haptics.BouncingTextEnabled = isEnabled;
                     break;
+                case "Dtrh":
+                    haptics.DtrhEnabled = isEnabled;
+                    break;
             }
+        }
+
+        internal void CmbHapticDtrhDensity_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading || HapticsTab.CmbHapticDtrhDensity == null) return;
+            App.Settings.Current.Haptics.DtrhDensity = HapticsTab.CmbHapticDtrhDensity.SelectedIndex;
         }
 
         private System.Windows.Threading.DispatcherTimer? _hapticFeatureDebounce;
@@ -429,6 +438,14 @@ namespace ConditioningControlPanel
                 case "BouncingText":
                     haptics.BouncingTextIntensity = value;
                     if (HapticsTab.TxtHapticBouncingText != null) HapticsTab.TxtHapticBouncingText.Text = $"{(int)slider.Value}%";
+                    break;
+                case "Dtrh":
+                    haptics.DtrhIntensity = value;
+                    if (HapticsTab.TxtHapticDtrh != null) HapticsTab.TxtHapticDtrh.Text = $"{(int)slider.Value}%";
+                    break;
+                case "DtrhAmbient":
+                    haptics.DtrhAmbientIntensity = value;
+                    if (HapticsTab.TxtHapticDtrhAmbient != null) HapticsTab.TxtHapticDtrhAmbient.Text = $"{(int)slider.Value}%";
                     break;
             }
 

@@ -290,6 +290,43 @@ namespace ConditioningControlPanel.Models
             set { _buttplugUrl = value; OnPropertyChanged(); }
         }
 
+        // ---- Down the Rabbit Hole (browser game) director ----
+        private bool _dtrhEnabled = true;
+        private double _dtrhIntensity = 0.6;
+        private double _dtrhAmbientIntensity = 0.12;
+        private int _dtrhDensity = 1;
+
+        /// <summary>Event-driven haptics during a DtRH descent (DtrhHapticDirector).</summary>
+        public bool DtrhEnabled
+        {
+            get => _dtrhEnabled;
+            set { _dtrhEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>Accent ceiling: device power at the run's biggest moments; every
+        /// event in the director's table plays at a fraction of this.</summary>
+        public double DtrhIntensity
+        {
+            get => _dtrhIntensity;
+            set { _dtrhIntensity = Math.Clamp(value, 0, 1); OnPropertyChanged(); }
+        }
+
+        /// <summary>Ambient "depth gauge" floor at full depth (0 = accents only).
+        /// The director scales this with the game's own 0..1 depth signal.</summary>
+        public double DtrhAmbientIntensity
+        {
+            get => _dtrhAmbientIntensity;
+            set { _dtrhAmbientIntensity = Math.Clamp(value, 0, 1); OnPropertyChanged(); }
+        }
+
+        /// <summary>How often accents may fire: 0=Sparse (big moments only),
+        /// 1=Balanced, 2=Rich (micro-events too).</summary>
+        public int DtrhDensity
+        {
+            get => _dtrhDensity;
+            set { _dtrhDensity = Math.Clamp(value, 0, 2); OnPropertyChanged(); }
+        }
+
         // Audio Sync settings
         private AudioSyncSettings _audioSync = new();
 

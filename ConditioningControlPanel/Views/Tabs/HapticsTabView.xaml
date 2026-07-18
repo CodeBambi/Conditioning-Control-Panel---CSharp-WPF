@@ -507,6 +507,94 @@
                                 </StackPanel>
                             </Grid>
     
+                    <!-- Down the Rabbit Hole - event-driven descent haptics (DtrhHapticDirector) -->
+                    <Border x:Name="DtrhHapticCard" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1,2,1,1"
+                            CornerRadius="8" Margin="0,12,0,0" Background="{DynamicResource SurfaceBgBrush}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Header: title + enable toggle -->
+                            <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="8,8,0,0" Padding="12,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,6,0"
+                                                   Source="{Binding Source='🐇', Converter={StaticResource EmojiToImageSource}}"/>
+                                            <TextBlock Text="{loc:Str label_dtrh_haptics}" Foreground="{DynamicResource SecondaryBrush}"
+                                                       FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{loc:Str label_dtrh_haptics_sub}"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <TextBlock Text="{loc:Str btn_enable}" Foreground="#AAAAAA" FontSize="10"
+                                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <CheckBox x:Name="ChkHapticDtrh" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
+                                                  IsChecked="True" Tag="Dtrh"
+                                                  Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <!-- Accents + Ambient sliders, Density picker -->
+                            <Grid Grid.Row="1" Margin="12,10,12,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+                                    <Grid>
+                                        <TextBlock Text="{loc:Str label_dtrh_accents}" Foreground="#AAAAAA" FontSize="10"/>
+                                        <TextBlock x:Name="TxtHapticDtrh" x:FieldModifier="internal" Text="60%"
+                                                   Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                   HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderHapticDtrh" x:FieldModifier="internal" Style="{StaticResource PinkSlider}"
+                                            Minimum="0" Maximum="100" Value="60" Margin="0,4,0,0" Tag="Dtrh"
+                                            ValueChanged="SliderHapticFeature_Changed"
+                                            ToolTip="{loc:Str tooltip_dtrh_accents}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+                                    <Grid>
+                                        <TextBlock Text="{loc:Str label_dtrh_ambient}" Foreground="#AAAAAA" FontSize="10"/>
+                                        <TextBlock x:Name="TxtHapticDtrhAmbient" x:FieldModifier="internal" Text="12%"
+                                                   Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                   HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderHapticDtrhAmbient" x:FieldModifier="internal" Style="{StaticResource PinkSlider}"
+                                            Minimum="0" Maximum="60" Value="12" Margin="0,4,0,0" Tag="DtrhAmbient"
+                                            ValueChanged="SliderHapticFeature_Changed"
+                                            ToolTip="{loc:Str tooltip_dtrh_ambient}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="4" VerticalAlignment="Bottom">
+                                    <TextBlock Text="{loc:Str label_dtrh_density}" Foreground="#AAAAAA" FontSize="10" Margin="0,0,0,2"/>
+                                    <ComboBox x:Name="CmbHapticDtrhDensity" x:FieldModifier="internal" Width="100" FontSize="11"
+                                              SelectedIndex="1" VerticalAlignment="Center"
+                                              Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}"
+                                              BorderBrush="{DynamicResource SecondaryBrush}"
+                                              SelectionChanged="CmbHapticDtrhDensity_SelectionChanged">
+                                        <ComboBoxItem Content="{loc:Str btn_density_sparse}" Foreground="{DynamicResource PinkBrush}"/>
+                                        <ComboBoxItem Content="{loc:Str btn_density_balanced}" Foreground="{DynamicResource PinkBrush}"/>
+                                        <ComboBoxItem Content="{loc:Str btn_density_rich}" Foreground="{DynamicResource PinkBrush}"/>
+                                    </ComboBox>
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </Border>
+
                     <!-- Video Haptic Sync - Enhanced Featured Card -->
                     <Border x:Name="VideoHapticSyncCard" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1,2,1,1"
                             CornerRadius="8" Margin="0,12,0,0" Background="{DynamicResource SurfaceBgBrush}">

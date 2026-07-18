@@ -1,5 +1,16 @@
 {
   "app_title": "컨디셔닝 컨트롤 패널",
+
+  "label_dtrh_haptics": "Down the Rabbit Hole",
+  "label_dtrh_haptics_sub": "하강 중 햅틱 신호 - 큰 순간에는 악센트, 그 아래에는 깊이에 따른 진동",
+  "label_dtrh_accents": "악센트",
+  "label_dtrh_ambient": "앰비언트",
+  "label_dtrh_density": "밀도",
+  "btn_density_sparse": "드묾",
+  "btn_density_balanced": "균형",
+  "btn_density_rich": "풍부",
+  "tooltip_dtrh_accents": "이벤트 악센트의 최대 출력 - 모든 순간은 이 값의 일부로 재생됩니다",
+  "tooltip_dtrh_ambient": "깊이 떨어질수록 강해지는 배경 진동 - 0이면 꺼짐",
   "tab_settings": "설정",
   "tab_presets": "프리셋",
   "tab_progression": "성장",

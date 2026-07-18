@@ -1,5 +1,16 @@
 {
   "app_title": "Painel de Controle de Condicionamento",
+
+  "label_dtrh_haptics": "Down the Rabbit Hole",
+  "label_dtrh_haptics_sub": "Sinais hápticos durante uma descida - acentos nos grandes momentos e um zumbido de profundidade ao fundo",
+  "label_dtrh_accents": "Acentos",
+  "label_dtrh_ambient": "Ambiente",
+  "label_dtrh_density": "Densidade",
+  "btn_density_sparse": "Esparsa",
+  "btn_density_balanced": "Equilibrada",
+  "btn_density_rich": "Rica",
+  "tooltip_dtrh_accents": "Potência máxima do dispositivo para os acentos - cada momento da corrida usa uma fração deste valor",
+  "tooltip_dtrh_ambient": "Zumbido de fundo que se intensifica conforme você afunda - 0 desativa",
   "tab_settings": "Configurações",
   "tab_presets": "Predefinições",
   "tab_progression": "Progressão",

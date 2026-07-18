@@ -57,6 +57,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkHapticsEnabled_Changed(sender, e);
         }
+        private void CmbHapticDtrhDensity_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.CmbHapticDtrhDensity_SelectionChanged(sender, e);
+        }
         private void CmbHapticMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

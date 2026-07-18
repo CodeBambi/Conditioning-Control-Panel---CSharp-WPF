@@ -529,6 +529,19 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     try { if (guide && guide.onEvent(event, data)) return; } catch (e) { /* the tee must never eat a bark */ }
     bridge.send({ type: 'bark', event, ...(data || {}) });
   };
+  // Haptics: a low-rate depth/state feed for the host's DtrhHapticDirector — the
+  // toy's ambient layer is a literal depth gauge, so it rides the game's own
+  // intensity() signal (region bands + endless lift) plus the Surfacing melt.
+  // ~2s cadence like the liveness heartbeat; all pattern/cooldown thinking is C#-side.
+  setInterval(() => {
+    const running = state === 'running' && !heldNow();
+    bridge.send({
+      type: 'haptic-state',
+      running,
+      depth: running ? +intensity().toFixed(3) : 0,
+      melt: running ? +surfMelt.toFixed(3) : 0,
+    });
+  }, 2000);
   // The boon draft plays IN the tube (engine/boonPick.js): the fall parks, themed
   // cards hang ahead, click one to shatter-and-drop-through. Same callback
   // contract as the old DOM overlay (overlays.showDraft), which stays as a
