@@ -8,6 +8,10 @@
     <LangVersion>12.0</LangVersion>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- AVLN3001: App/MainWindow have no parameterless ctor by design — they are constructed
+         through the composition root with injected dependencies (startup-shutdown-contract §7),
+         never via the runtime XAML loader. -->
+    <NoWarn>$(NoWarn);AVLN3001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

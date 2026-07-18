@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In Progress
 
-**Current Step:** Step 2
+**Current Step:** Step 4
 
 ## Steps
 
@@ -22,12 +22,12 @@
 - [x] Unit tests: phase order, inter-phase cancellation, typed phase failure, missing-registration validation
 
 ### Step 3: Teardown and integration proof
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Teardown on window-close, startup-failure, and panic paths (idempotent)
-- [ ] Demonstrator background participant with exactly one owner, stopped on every path
-- [ ] Integration proof: user path reaches registered code via real composition root (test + visible trace)
-- [ ] Unit tests: teardown exactly-once per path, repeated shutdown no-op, panic path logs + tears down
+- [x] Teardown on window-close, startup-failure, and panic paths (idempotent)
+- [x] Demonstrator background participant with exactly one owner, stopped on every path
+- [x] Integration proof: user path reaches registered code via real composition root (test + visible trace)
+- [x] Unit tests: teardown exactly-once per path, repeated shutdown no-op, panic path logs + tears down
 
 ### Step 4: Evidence, board reconciliation, pre-completion consult
 **Status:** ⬜ Not Started

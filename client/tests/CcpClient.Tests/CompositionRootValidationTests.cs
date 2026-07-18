@@ -49,7 +49,7 @@ public class CompositionRootValidationTests
         var root = new CompositionRoot();
         Assert.True(root.Validate(out _));
 
-        var host = root.Build();
+        var host = root.Build(new StartupTrace());
 
         Assert.Single(host.Participants);
         Assert.IsType<HeartbeatParticipant>(host.Participants[0]);
@@ -60,7 +60,7 @@ public class CompositionRootValidationTests
     {
         // Contract §4.4: constructors are cheap; construction (phase 2) and start (phase 3)
         // are separate steps. Building the root must leave every participant un-started.
-        var host = new CompositionRoot().Build();
+        var host = new CompositionRoot().Build(new StartupTrace());
 
         var heartbeat = Assert.IsType<HeartbeatParticipant>(host.Participants[0]);
         Assert.False(heartbeat.Running);
@@ -73,7 +73,7 @@ public class CompositionRootValidationTests
         var order = new List<string>();
         var first = new RecordingParticipant("First", order);
         var second = new RecordingParticipant("Second", order);
-        var host = new ApplicationHost(new ListLogSink(), [first, second]);
+        var host = new ApplicationHost(new ListLogSink(), [first, second], new StartupTrace());
 
         var outcome = await host.StartParticipantsAsync(CancellationToken.None);
 
@@ -87,7 +87,7 @@ public class CompositionRootValidationTests
     public async Task StartParticipants_StartFailure_YieldsTypedFatal_NotException()
     {
         var boom = new InvalidOperationException("start boom");
-        var host = new ApplicationHost(new ListLogSink(), [new ThrowingParticipant("Bad", boom)]);
+        var host = new ApplicationHost(new ListLogSink(), [new ThrowingParticipant("Bad", boom)], new StartupTrace());
 
         var outcome = await host.StartParticipantsAsync(CancellationToken.None);
 

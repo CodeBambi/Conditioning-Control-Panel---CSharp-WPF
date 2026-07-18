@@ -3,7 +3,8 @@
         x:Class="CcpClient.Desktop.Views.MainWindow"
         Width="480" Height="320"
         Title="CCP Client">
-  <TextBlock Text="CCP greenfield client scaffold"
-             HorizontalAlignment="Center"
-             VerticalAlignment="Center" />
+  <StackPanel Margin="16">
+    <TextBlock Text="CCP greenfield client — startup trace" FontWeight="Bold" />
+    <TextBlock x:Name="TraceText" TextWrapping="Wrap" Margin="0,8,0,0" />
+  </StackPanel>
 </Window>

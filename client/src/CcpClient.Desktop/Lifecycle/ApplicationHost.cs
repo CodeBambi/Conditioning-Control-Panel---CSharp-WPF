@@ -11,16 +11,17 @@ public sealed class ApplicationHost
     private readonly IReadOnlyList<IBackgroundParticipant> _participants;
     private int _shutdownStarted;
 
-    public ApplicationHost(ILogSink log, IReadOnlyList<IBackgroundParticipant> participants)
+    public ApplicationHost(ILogSink log, IReadOnlyList<IBackgroundParticipant> participants, StartupTrace trace)
     {
         _log = log;
         _participants = participants;
+        Trace = trace;
     }
 
     public IReadOnlyList<IBackgroundParticipant> Participants => _participants;
 
     /// <summary>Phase-outcome trace displayed by the placeholder window (contract §10.1).</summary>
-    public StartupTrace Trace { get; } = new();
+    public StartupTrace Trace { get; }
 
     public bool IsShutdown => Volatile.Read(ref _shutdownStarted) != 0;
 

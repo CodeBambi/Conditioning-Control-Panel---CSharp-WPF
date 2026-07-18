@@ -55,10 +55,10 @@ public sealed class CompositionRoot
     }
 
     /// <summary>Manual construction only. Precondition: <see cref="Validate"/> passed.</summary>
-    public ApplicationHost Build()
+    public ApplicationHost Build(StartupTrace trace)
     {
         var log = LogSinkFactory() ?? throw new InvalidOperationException("Validate must run before Build.");
         var participants = ParticipantsFactory() ?? throw new InvalidOperationException("Validate must run before Build.");
-        return new ApplicationHost(log, participants);
+        return new ApplicationHost(log, participants, trace);
     }
 }
