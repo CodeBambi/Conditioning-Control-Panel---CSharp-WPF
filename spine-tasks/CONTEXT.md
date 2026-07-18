@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-18
 **Status:** Active
-**Next Task ID:** SP-003
+**Next Task ID:** SP-004
 
 ---
 
@@ -26,7 +26,8 @@ Nine `client/docs/task-board.md` rows, serial (each depends on the prior; `lanes
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
-| SP-002-bootstrap-architecture | Row 1: architecture proposal instantiating A-001…A-014 + minimal `client/` scaffolding + WSL2 build attempt | Authored 2026-07-18 (pre-approach Fable consult applied: no `.spine/` worker edits, WSL2 step explicit, stub skipped) | None |
+| SP-002-bootstrap-architecture | Row 1: architecture proposal instantiating A-001…A-014 + minimal `client/` scaffolding + WSL2 build attempt | **Done 2026-07-18** (landed `5fd1d540`; batch `20260718T120441` recovered from external SIGINT via retry→resume; row 1 stays WIP pending owner ratification) | None |
+| SP-003-startup-shutdown-contract | Row 2: startup/shutdown/integration contract — ordered cancellable phases, typed failures, ownership, teardown, integration proof; container admission decision; single-instance CARVED OUT (owner question §5.3) | Authored 2026-07-18 (proposal-review Fable consult applied: single-instance carve-out; engine-review watch item — zero reviews in both prior batches) | SP-002 |
 
 Rows 2–9 (packets not yet authored — gated on solo Fable 5 review of SP-002's proposal + owner async veto):
 
