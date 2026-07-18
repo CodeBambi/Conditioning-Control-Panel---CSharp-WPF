@@ -1,0 +1,9 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpClient.Desktop.Views.MainWindow"
+        Width="480" Height="320"
+        Title="CCP Client">
+  <TextBlock Text="CCP greenfield client scaffold"
+             HorizontalAlignment="Center"
+             VerticalAlignment="Center" />
+</Window>
