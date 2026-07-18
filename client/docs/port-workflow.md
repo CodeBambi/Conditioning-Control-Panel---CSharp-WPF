@@ -68,7 +68,7 @@ Verify the spine setup from the workspace rather than trusting this file:
 The project consult profile uses:
 
 - **default mode: council** so an unspecified consult gathers independent persona reviews and synthesizes them;
-- **solo ladder (owner-ranked capability/cost):** default `uva/gpt-5.6-sol` at high thinking (~95% of Fable 5's capability, cheaper); escalate to `anthropic/claude-fable-5` via `persona: "critic"` for the highest-stakes single reviews; use `kimi-coding/k3` (~93%, cheaper) via `persona: "simplifier"` or `"security"` for cheap bounded reads. Fable 5 remains the council critic — smartest, most expensive seat;
+- **solo model:** `anthropic/claude-fable-5` at high thinking (subscription-funded and the only solo route proven to engage in non-interactive/child contexts — a `uva/gpt-5.6-sol` solo default hard-failed with `No API provider registered: openai-responses-uva` on 2026-07-18, even with a persona override, because bpx-consult initializes the solo default route unconditionally). `uva` routes remain council seats for interactive sessions; `kimi-coding/k3` via `persona: "simplifier"`/`"security"` for cheap bounded reads where the kimi route engages;
 - **gut-check model:** `zai/glm-5.2` at low thinking for quick bounded reviews;
 - **council roster:** architect = `uva/gpt-5.6-sol` high, critic = `anthropic/claude-fable-5` high, simplifier = `kimi-coding/k3` medium, tester = `uva/gpt-5.6-luna` high, security = `kimi-coding/k3` high, performance = `anthropic/claude-fable-5` high;
 - **council synthesizer:** `kimi-coding/k3` at high thinking;

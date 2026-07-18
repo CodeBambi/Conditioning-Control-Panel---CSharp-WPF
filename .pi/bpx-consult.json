@@ -3,7 +3,7 @@
   "defaultMode": "council",
   "modes": {
     "solo": {
-      "model": "uva/gpt-5.6-sol",
+      "model": "anthropic/claude-fable-5",
       "thinkingLevel": "high",
       "feedbackMode": "steer"
     },
