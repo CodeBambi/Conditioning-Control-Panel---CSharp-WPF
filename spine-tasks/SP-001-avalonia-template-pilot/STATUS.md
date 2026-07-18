@@ -1,35 +1,35 @@
 # Status: SP-001 — avalonia template pilot
 
-**Overall:** ⬜ Not Started
+**Overall:** ✅ Done (integrated `9a24a78a`, 2026-07-18; reconciled retroactively by orchestrator — worker skipped STATUS.md updates, gap recorded in `client/docs/port-lessons.md`)
 
 ## Steps
 
 ### Step 1: Resolve current Avalonia 12 facts
-**Status:** ⬜ Not Started
+**Status:** ✅ Done
 
-- [ ] Pre-approach solo consult run
-- [ ] .NET SDK version resolved
-- [ ] Avalonia.Templates version resolved from real feed
-- [ ] Template-pinned Avalonia package version reconciled
+- [x] Pre-approach solo consult run — NOT done in worker session (deferred to engine-owned review; recorded as gap in record.md)
+- [x] .NET SDK version resolved — 10.0.302 (record.md)
+- [x] Avalonia.Templates version resolved from real feed — 12.1.0 (record.md)
+- [x] Template-pinned Avalonia package version reconciled — Avalonia 12.1.0 on net10.0 (record.md)
 
 ### Step 2: Create and build the throwaway template project
-**Status:** ⬜ Not Started
+**Status:** ✅ Done
 
-- [ ] Templates installed (version recorded)
-- [ ] Project generated at `.spine-scratch/CcpPilotApp` (untracked confirmed)
-- [ ] Restore succeeded
-- [ ] Debug build succeeded
+- [x] Templates installed (Avalonia.Templates 12.1.0, recorded)
+- [x] Project generated at `.spine-scratch/CcpPilotApp` (untracked confirmed)
+- [x] Restore succeeded
+- [x] Debug build succeeded — 0 warnings, 0 errors (record.md)
 
 ### Step 3: Record evidence and reconcile the board
-**Status:** ⬜ Not Started
+**Status:** ✅ Done
 
-- [ ] record.md written (versions, output, consult verdicts)
-- [ ] Board pilot row → `WIP` with evidence (not DONE)
-- [ ] Pre-completion solo consult run and recorded
+- [x] record.md written (versions, output, consult verdicts, surprises)
+- [x] Board pilot row → `WIP` with evidence (later flipped to `DONE` by owner ratification 2026-07-18)
+- [x] Pre-completion solo consult — NOT done in worker session (deferred to engine-owned review; recorded as gap in record.md)
 
 ### Step 4: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Done
 
-- [ ] Contract testCommand passes
-- [ ] `git diff --check` clean
-- [ ] Only File Scope paths changed
+- [x] Contract testCommand passes (`dotnet build .spine-scratch/CcpPilotApp/CcpPilotApp.csproj -c Debug --nologo`)
+- [x] `git diff --check` clean
+- [x] Only File Scope paths changed (integrated as one-slice merge `9a24a78a`)

@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-18
 **Status:** Active
-**Next Task ID:** SP-002
+**Next Task ID:** SP-003
 
 ---
 
@@ -20,11 +20,17 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **Pause protocol:** if the Fable 5 consult route errors or times out, assume the 5-hour subscription window is exhausted — safely park in-flight work (spine state is durable), write `.spine/handoff.md`, delete/pause loops and monitors, and STOP until the owner resumes with the session prompt. Same response to unresolvable ambiguity, safety/privacy questions, or repeated failure: pause, never improvise past a gate.
 
-### Phase 1 — Milestone 1: foundation contracts and first visible slice (packets not yet authored)
+### Phase 1 — Milestone 1: foundation contracts and first visible slice
 
 Nine `client/docs/task-board.md` rows, serial (each depends on the prior; `lanes.maxParallel` stays 1). Row 1 runs alone first — the owner reviews its architecture proposal before rows 2–9 are authored:
 
-1. Bootstrap discovery and architecture proposal *(consult checkpoint after: solo Fable 5 reviews the architecture proposal before rows 2–9 are authored; owner reviews asynchronously and may veto — produces `client/` scaffolding + updates `.spine/spine-config.json` testing commands to the real client solution)*
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-002-bootstrap-architecture | Row 1: architecture proposal instantiating A-001…A-014 + minimal `client/` scaffolding + WSL2 build attempt | Authored 2026-07-18 (pre-approach Fable consult applied: no `.spine/` worker edits, WSL2 step explicit, stub skipped) | None |
+
+Rows 2–9 (packets not yet authored — gated on solo Fable 5 review of SP-002's proposal + owner async veto):
+
+1. ~~Bootstrap discovery and architecture proposal~~ → SP-002 *(consult checkpoint after: solo Fable 5 reviews the architecture proposal before rows 2–9 are authored; owner reviews asynchronously and may veto — produces `client/` scaffolding + updates `.spine/spine-config.json` testing commands to the real client solution)*
 2. Define startup, shutdown, and integration contract
 3. Establish async lifecycle and fault policy
 4. Define persistence and migration contract
