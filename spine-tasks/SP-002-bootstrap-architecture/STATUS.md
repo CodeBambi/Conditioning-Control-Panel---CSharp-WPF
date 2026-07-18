@@ -21,13 +21,13 @@
 - [x] Composition-root shape instantiated minimally (no features)
 
 ### Step 3: WSL2 Ubuntu 26.04 build attempt
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] WSL2 dotnet SDK verified/installed; scaffold build attempted from WSL
-- [ ] Outcome or named manual gate recorded in record.md
+- [x] WSL2 dotnet SDK verified/installed; scaffold build attempted from WSL (distro `Ubuntu` = 26.04 LTS; SDK 10.0.110 via apt; build+test green from `~/ccp-sp002/client`)
+- [x] Outcome or named manual gate recorded in record.md
 
 ### Step 4: Evidence, board reconciliation, pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] record.md written (proposal summary, consult verdicts, build outputs, surprises)
 - [ ] Pre-completion solo consult (Fable 5) run and recorded
