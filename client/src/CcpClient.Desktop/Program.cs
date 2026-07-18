@@ -1,18 +1,98 @@
 using Avalonia;
+using CcpClient.Desktop.Lifecycle;
 
 namespace CcpClient.Desktop;
 
 /// <summary>
-/// Entry point and composition root. Explicit manual construction only —
-/// no DI container, no static service locator (container admission is a
-/// row-2 decision per client/docs/architecture-proposal.md §3).
+/// Entry point. Runs startup phases 1–3 as plain C# before the Avalonia lifetime
+/// (phase 4) starts, per client/docs/startup-shutdown-contract.md §1. Explicit manual
+/// construction only — no DI container, no static service locator (contract §7).
 /// </summary>
 public static class Program
 {
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static int Main(string[] args)
+    {
+        // Phase 1 (Bootstrap) actions must exist before anything can fail: panic hooks
+        // and the minimal logger seam (contract §1, §9).
+        ILogSink log = new DebugLogSink();
+        InstallPanicHooks(log);
 
-    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>()
+        var trace = new StartupTrace();
+        var root = new CompositionRoot { LogSinkFactory = () => log };
+        ApplicationHost? host = null;
+        using var cts = new CancellationTokenSource();
+
+        var outcome = StartupPhaseRunner
+            .RunAsync(CreateStartupPhases(root, trace, h => host = h), trace, cts.Token)
+            .GetAwaiter().GetResult();
+
+        switch (outcome)
+        {
+            // Startup-failure path (contract §6): teardown of completed phases only;
+            // the window never exists; StartWithClassicDesktopLifetime is never called.
+            case StartupOutcome.Failed failed:
+                log.Log($"startup failed ({failed.Failure.Kind}) in phase {failed.Failure.Phase}: {failed.Failure.Reason}");
+                host?.ShutdownAsync().GetAwaiter().GetResult();
+                return 1;
+            case StartupOutcome.Cancelled:
+                host?.ShutdownAsync().GetAwaiter().GetResult();
+                return 0;
+        }
+
+        try
+        {
+            // Phase 4 (UserInterface): the Avalonia lifetime itself.
+            return BuildAvaloniaApp(host!).StartWithClassicDesktopLifetime(args);
+        }
+        catch (Exception ex)
+        {
+            // Panic path (contract §6): the lifetime Exit event does NOT fire here.
+            // Log, best-effort guarded teardown, non-zero exit. No dialog, no swallow.
+            log.Log($"panic: unhandled exception escaped the UI lifetime: {ex}");
+            host!.ShutdownAsync().GetAwaiter().GetResult();
+            return 2;
+        }
+    }
+
+    /// <summary>
+    /// Phases 1–3 (contract §1). Extracted from <see cref="Main"/> so tests can walk the
+    /// real composition root through the real phase runner (contract §10.2).
+    /// </summary>
+    public static StartupPhase[] CreateStartupPhases(
+        CompositionRoot root, StartupTrace trace, Action<ApplicationHost> onHostBuilt)
+    {
+        ApplicationHost? host = null;
+        return
+        [
+            StartupPhase.FromSync("Bootstrap", _ => StartupOutcome.Success.Instance),
+            StartupPhase.FromSync("CompositionRoot", _ =>
+            {
+                if (!root.Validate(out var failure))
+                {
+                    return new StartupOutcome.Failed(failure!);
+                }
+
+                host = root.Build(trace);
+                onHostBuilt(host);
+                return StartupOutcome.Success.Instance;
+            }),
+            new StartupPhase("CoreServices", ct => host!.StartParticipantsAsync(ct)),
+        ];
+    }
+
+    private static void InstallPanicHooks(ILogSink log)
+    {
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            log.Log($"panic: unhandled exception: {e.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            log.Log($"panic: unobserved task exception: {e.Exception}");
+            e.SetObserved();
+        };
+    }
+
+    public static AppBuilder BuildAvaloniaApp(ApplicationHost host) => AppBuilder
+        .Configure<App>(() => new App(host))
         .UsePlatformDetect();
 }
