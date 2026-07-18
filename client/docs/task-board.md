@@ -4,6 +4,8 @@ This is the only live queue for the greenfield Windows/Linux client.
 
 Do not import completion claims, test floors, parity percentages, or row states from the first Avalonia attempt.
 
+Active `/task-auto` milestone input: [`milestone-1.md`](milestone-1.md) — pending owner sign-off; its "Cannot start until" gates apply before any run.
+
 ## Status values
 
 - `OPEN`
