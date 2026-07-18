@@ -38,6 +38,12 @@ Verdict text (persisted before checkbox, per packet write-then-check rule):
 
 ---
 
+## Contract summary
+
+Deliverable: `client/docs/startup-shutdown-contract.md`. Four named phases (Bootstrap → CompositionRoot → CoreServices → UserInterface) run in order with a host-owned `CancellationToken`; cancellation or failure after phase N tears down N..1 in reverse (numbered rule). Typed failure taxonomy: Recoverable/Degraded (reserved — first consumers rows 3/5) and Fatal. Composition root is manual construction over a named-registration checklist, validated fail-fast before the window appears. Every background participant has exactly one owner — the runner's registry — and constructors never start work (tested rule). One guarded idempotent teardown entry point serves window-close, startup-failure, and panic. Single-instance: seam point reserved, no mechanism (owner question §5.3). `TerminateProcess` analogue: rejected — standard `Main` return with exit code; revisit at first native-dependency admission. `ShutdownMode = OnMainWindowClose`.
+
+---
+
 ## WPF startup/shutdown evidence digest (outcomes only, no mechanics transplant)
 
 Source: `ConditioningControlPanel/App.xaml.cs` via `client/docs/row-1-research-inputs.md` §3.1 (archaeology performed 2026-07-18, line citations therein). Read-only behavioral evidence per `wpf-parity`.
@@ -63,18 +69,22 @@ Source: `ConditioningControlPanel/App.xaml.cs` via `client/docs/row-1-research-i
 
 ## Engine-review presence/absence note
 
-*(pending — recorded at Step 4; packet requires noting whether `spine_review_step` returned skipped, since the review pipeline is empirically unproven: zero review events in SP-001/SP-002 batches.)*
+`spine_review_step` was called after each step (1, 2, 3) and returned **skipped=true, reviewLevel=0, spawnFailed=false** every time — the batch engine ran no reviewer for this batch either. That makes three consecutive batches (SP-001, SP-002, SP-003) with zero engine review events; the review pipeline remains empirically unproven. Worker-side quality gates substituted: two mandatory solo Fable consults (pre-approach, pre-completion) with verdict text persisted in this record, plus the contract testCommand. Orchestrator verifies the journal at land.
 
 ---
 
 ## Container decision + reasons
 
-*(summary pending — full text in `client/docs/startup-shutdown-contract.md` §7)*
+**Manual construction, no DI container** (full text: `client/docs/startup-shutdown-contract.md` §7). Two registrations have no consumer for container lifetime management (A-014); the first attempt's container produced hidden-globals-as-architecture and runtime-null wiring bugs; an explicit named-registration checklist is ordinary unit-testable code. Revisit trigger: recurring manual-wiring errors or a row requiring scoped/transient lifetimes. No package beyond the SP-002 baseline was admitted; the panic path uses a minimal `ILogSink` seam with a stderr default — Serilog/framework admission explicitly deferred per the packet Do-NOT list.
 
 ## Test output
 
-*(pending — Step 5)*
+`dotnet build client/CcpClient.sln -c Debug --nologo` — succeeded, **0 warnings, 0 errors**.
+`dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo` — **Passed: 23, Failed: 0, Skipped: 0** (Windows, .NET 10).
+
+Coverage of the contract's tested rules: phase-order enforcement; inter-phase cancellation stops later phases; typed failure (no unhandled exception) from a failing phase; missing-registration validation fail-fast; reverse-order exactly-once teardown; repeated/concurrent shutdown no-op; startup-failure path stops only started participants; panic path logs and tears down without hanging; participant stop-throw is logged and teardown continues; stop-of-never-started is a no-op; real composition root resolves every MainWindow dependency through the real phase runner.
 
 ## Surprises
 
-*(pending — Step 4)*
+- The runner must own **start** as well as stop: letting `Program.cs` start a participant directly broke the startup-failure teardown guarantee (started but not yet handed to the runner = orphan). The runner's registry is the single owner set; contract §5 states this explicitly.
+- Panic path confirmed per the pre-approach consult: Avalonia's `Exit` event does not fire for an unhandled UI-thread exception, so one guarded idempotent teardown entry point is invoked from three call sites (lifetime `Exit`, phase-runner failure branch, `Main` catch + unhandled-exception hooks). The exactly-once tests depend on that single entry point.
