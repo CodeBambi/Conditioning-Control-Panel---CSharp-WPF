@@ -68,7 +68,7 @@ Verify the spine setup from the workspace rather than trusting this file:
 The project consult profile uses:
 
 - **default mode: council** so an unspecified consult gathers independent persona reviews and synthesizes them;
-- **solo model:** `anthropic/claude-fable-5` at high thinking when a focused single-advisor review is explicitly requested;
+- **solo ladder (owner-ranked capability/cost):** default `uva/gpt-5.6-sol` at high thinking (~95% of Fable 5's capability, cheaper); escalate to `anthropic/claude-fable-5` via `persona: "critic"` for the highest-stakes single reviews; use `kimi-coding/k3` (~93%, cheaper) via `persona: "simplifier"` or `"security"` for cheap bounded reads. Fable 5 remains the council critic — smartest, most expensive seat;
 - **gut-check model:** `zai/glm-5.2` at low thinking for quick bounded reviews;
 - **council roster:** architect = `uva/gpt-5.6-sol` high, critic = `anthropic/claude-fable-5` high, simplifier = `kimi-coding/k3` medium, tester = `uva/gpt-5.6-luna` high, security = `kimi-coding/k3` high, performance = `anthropic/claude-fable-5` high;
 - **council synthesizer:** `kimi-coding/k3` at high thinking;
