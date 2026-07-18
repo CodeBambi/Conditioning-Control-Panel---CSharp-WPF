@@ -1,6 +1,6 @@
 # Status: SP-002 — bootstrap discovery and architecture proposal
 
-**Overall:** 🔄 In Progress — Step 3
+**Overall:** ✅ Complete — all steps done; contract green; .DONE created
 
 ## Steps
 
@@ -27,16 +27,16 @@
 - [x] Outcome or named manual gate recorded in record.md
 
 ### Step 4: Evidence, board reconciliation, pre-completion consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
 - [x] record.md written (proposal summary, consult verdicts, build outputs, surprises)
 - [x] Pre-completion solo consult (Fable 5) run and recorded (verdict: no blocker; correction applied)
-- [ ] Board row 1 → `WIP` with evidence (not `DONE`)
-- [ ] STATUS.md accurate
+- [x] Board row 1 → `WIP` with evidence (not `DONE`)
+- [x] STATUS.md accurate
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand passes
-- [ ] `git diff --check` clean
-- [ ] Only File Scope paths changed
+- [x] Contract testCommand passes (build 0 warnings/0 errors; 1/1 test passed)
+- [x] `git diff --check` clean
+- [x] Only File Scope paths changed (client/**, task-board.md, port-lessons.md, task folder)
