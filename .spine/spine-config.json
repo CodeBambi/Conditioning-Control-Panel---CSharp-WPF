@@ -22,7 +22,7 @@
       "model": "anthropic/claude-fable-5",
       "thinking": "medium",
       "plan": {
-        "model": "uva/gpt-5.6-sol",
+        "model": "anthropic/claude-fable-5",
         "thinking": "low"
       }
     },
