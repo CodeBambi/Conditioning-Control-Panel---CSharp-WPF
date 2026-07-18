@@ -168,3 +168,11 @@ tools/
 
 # Redistributables (re-downloadable from Microsoft; do not bloat the repo)
 redist/
+
+# pi-spine runtime (NOTE: .pi/ is intentionally NOT ignored - this repo tracks .pi skills/agents/settings)
+.spine-scratch/
+.spine/runtime/
+.spine/batch-state.json
+.spine/batch-history.json
+.spine/run-metrics.jsonl
+.worktrees/

@@ -1,0 +1,27 @@
+{
+  "profileVersion": 1,
+  "worker": {
+    "alwaysInclude": ["taskplane-worker-cursor.mdc"],
+    "neverInclude": [],
+    "globMatch": true
+  },
+  "reviewer": {
+    "enabled": true,
+    "alwaysInclude": [],
+    "neverInclude": [
+      "taskplane-worker-cursor.mdc",
+      "taskplane-task-authoring.mdc"
+    ],
+    "globMatch": true,
+    "maxRules": 32
+  },
+  "discovery": {
+    "excludePatterns": ["*-brutal-audit"],
+    "excludeRelPaths": [
+      "audit-workflow.mdc",
+      "cursor-integration.mdc",
+      "taskplane/prompt-template.md",
+      "taskplane/status-template.md"
+    ]
+  }
+}

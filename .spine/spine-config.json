@@ -1,0 +1,100 @@
+{
+  "configVersion": 1,
+  "project": {
+    "name": "Conditioning-Control-Panel",
+    "description": ""
+  },
+  "paths": {
+    "tasksRoot": "spine-tasks"
+  },
+  "baseBranch": "feat/crossplatform",
+  "testing": {
+    "build": "git diff --check",
+    "test": "git diff --check",
+    "testWithCoverage": "git diff --check"
+  },
+  "agents": {
+    "worker": {
+      "model": "kimi-coding/k3",
+      "thinking": "high"
+    },
+    "reviewer": {
+      "model": "anthropic/claude-fable-5",
+      "thinking": "medium",
+      "plan": {
+        "model": "uva/gpt-5.6-sol",
+        "thinking": "low"
+      }
+    },
+    "supervisor": {
+      "enabled": false,
+      "model": "inherit",
+      "pollIntervalMs": 30000,
+      "autoNudge": false,
+      "thinking": "off"
+    }
+  },
+  "lanes": {
+    "maxParallel": 3,
+    "queueExcess": true,
+    "workerBackend": "subprocess",
+    "workerOutputMaxBytes": 262144,
+    "workerOutputTailLines": 200,
+    "retainWorkerOutputOnSuccess": false,
+    "streamWorkerOutputLive": false,
+    "workerLiveLogMaxBytes": 262144,
+    "stallTimeoutMinutes": 120,
+    "stallGraceAfterProgressMinutes": 30,
+    "heartbeatIntervalMinutes": 10,
+    "progressSnapshotIntervalMinutes": 2,
+    "checkpointWarningMinutes": 10,
+    "extendGraceOnFileScope": false,
+    "autoCommitOnStall": false,
+    "cleanupWorktreesOnComplete": true
+  },
+  "dashboard": {
+    "port": 8109
+  },
+  "orchestrator": {
+    "attachedMilestonePollMs": 2000,
+    "sequencePollMs": 5000,
+    "dashboardPollMs": 2000
+  },
+  "gates": {
+    "requireBeforeIntegrate": true,
+    "collectBuildEvidence": true,
+    "collectTestEvidence": true
+  },
+  "integrate": {
+    "isolatedWorktree": true,
+    "allowHumanOnBaseBranch": "warn"
+  },
+  "review": {
+    "requireFinalVerdict": true,
+    "maxFinalAttempts": 3
+  },
+  "handoff": {
+    "path": ".spine/handoff.md",
+    "autoWriteOn": []
+  },
+  "metrics": {
+    "enabled": true,
+    "path": ".spine/run-metrics.jsonl"
+  },
+  "contract": {
+    "mode": "required",
+    "legacyTaskIdPrefixes": [
+      "TP-"
+    ]
+  },
+  "worktreeSetupHook": "",
+  "worktreeSetupIgnorePaths": [
+    ".venv"
+  ],
+  "referenceDocs": [
+    "docs/constitution.md",
+    "client/docs/task-board.md"
+  ],
+  "standards": [],
+  "neverLoad": []
+}
