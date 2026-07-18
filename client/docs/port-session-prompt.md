@@ -79,7 +79,7 @@ While a batch is active, maintain exactly ONE pi-loop (hybrid: `monitor:done` ev
 - **Workers** implement packets; the orchestrator never hand-edits product code.
 - **Read-only subagents/workflows** handle WPF archaeology, current-state audits, and fan-out research or multi-perspective review at gates — use the `pi-dynamic-workflows` tier map (`small`/`medium`/`big`; `big-fallback` = `uva/gpt-5.6-sol:high` when the big route fails). Record fallback use.
 - **consult** at the gates in `client/docs/port-workflow.md` §Consultation gates. Until the board's consult-probe row proves the council seats, use **solo** mode and record the caveat; a missing advisor is a failed gate, not silent consensus.
-- **MCPs:** engram is memory. The Avalonia MCP is optional advisory review only (A-013), owner-gated, never v12 authority; if unavailable or unadmitted, skip it — that never blocks a task.
+- **MCPs:** engram is memory — use `mem_save`/`mem_search` for durable steering context. The Avalonia MCP is **owner-admitted (2026-07-18) advisory review** for AXAML/UX/dashboard/effects work: verify its connection at reconciliation, and packets for UI surfaces MUST include the A-013 advisory step — send small redacted AXAML snippets after official v12 research, record accepted/rejected findings concisely. It is never v12 authority (its validator is pinned to Avalonia 11.3.x heuristics; project baseline is 12.x), never generates production code, and its unavailability never blocks a task.
 - Skills load per packet, not wholesale. Current Avalonia v12 facts come only through `avalonia-research`.
 
 ### Recovery
