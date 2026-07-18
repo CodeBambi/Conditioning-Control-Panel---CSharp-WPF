@@ -14,19 +14,17 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
-| SP-001-avalonia-template-pilot | Throwaway Avalonia 12 template spike proving the spine pipeline end-to-end (real dotnet contract, review, gate, integrate) | Pending | None |
+| SP-001-avalonia-template-pilot | Throwaway Avalonia 12 template spike proving the spine pipeline end-to-end (real dotnet contract, review, gate, integrate) | Done (integrated `9a24a78a`) | None |
 
-**Gates before Phase 1 (owner-held, not packets):**
+**Continuous-run authorization (owner decision 2026-07-18, chat):** the port runs autonomously until no claimable board work remains. SP-001 ratified; Phase 1 decomposition approved. Per-task owner checkpoints are replaced by mandatory **solo consults on `anthropic/claude-fable-5`**: pre-decomposition per phase, pre-approach and pre-completion per packet, pre-land for P0/high-risk work. Council stays off until the probe row passes; never substitute a weaker model for a failed Fable gate.
 
-1. SP-001 landed and owner judges the pilot against `client/docs/port-workflow.md` §Pilot — this flips the board row "Pilot pinned spine batch workflow".
-2. Board row "Probe bpx-consult council and task integration" resolved — council seats are unproven (kimi routes not engaging, recorded 2026-07-18); until then packets use **solo** consult gates.
-3. Owner approves the Phase 1 decomposition below (which board rows, order, exclusions).
+**Pause protocol:** if the Fable 5 consult route errors or times out, assume the 5-hour subscription window is exhausted — safely park in-flight work (spine state is durable), write `.spine/handoff.md`, delete/pause loops and monitors, and STOP until the owner resumes with the session prompt. Same response to unresolvable ambiguity, safety/privacy questions, or repeated failure: pause, never improvise past a gate.
 
 ### Phase 1 — Milestone 1: foundation contracts and first visible slice (packets not yet authored)
 
 Nine `client/docs/task-board.md` rows, serial (each depends on the prior; `lanes.maxParallel` stays 1). Row 1 runs alone first — the owner reviews its architecture proposal before rows 2–9 are authored:
 
-1. Bootstrap discovery and architecture proposal *(owner checkpoint after — produces `client/` scaffolding + updates `.spine/spine-config.json` testing commands to the real client solution)*
+1. Bootstrap discovery and architecture proposal *(consult checkpoint after: solo Fable 5 reviews the architecture proposal before rows 2–9 are authored; owner reviews asynchronously and may veto — produces `client/` scaffolding + updates `.spine/spine-config.json` testing commands to the real client solution)*
 2. Define startup, shutdown, and integration contract
 3. Establish async lifecycle and fault policy
 4. Define persistence and migration contract
