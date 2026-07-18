@@ -1,16 +1,18 @@
 # Status: SP-003 — startup, shutdown, and integration contract
 
-**Overall:** ⬜ Not Started
+**Overall:** 🔄 In Progress
+
+**Current Step:** Step 1
 
 ## Steps
 
 ### Step 1: Pre-approach consult and contract draft
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
-- [ ] STATUS.md updated before starting work
-- [ ] WPF startup/shutdown outcomes digest in record.md (outcomes only)
-- [ ] `client/docs/startup-shutdown-contract.md` written (phases, failure taxonomy, ownership rule, teardown matrix, container decision, single-instance carve-out)
+- [x] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
+- [x] STATUS.md updated before starting work
+- [x] WPF startup/shutdown outcomes digest in record.md (outcomes only)
+- [x] `client/docs/startup-shutdown-contract.md` written (phases, failure taxonomy, ownership rule, teardown matrix, container decision, single-instance carve-out)
 
 ### Step 2: Startup phases and composition root
 **Status:** ⬜ Not Started
