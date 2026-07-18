@@ -94,6 +94,7 @@ After a crash, restart, provider outage, or owner pause: run reconciliation agai
 - Windows and Linux only; distinguish X11 and Wayland where behavior differs.
 - Do not claim support from compilation, a no-op, a stub, a Windows-only test, markup presence, handler invocation, timer ticks, or a single screenshot.
 - Never broaden webcam, biometric, secret, path, logging, capture, moderation, consent, or network boundaries without owner approval.
+- New board rows may be filed only for discovered parity gaps, blockers, or bounded tooling needs — each citing WPF/capability-inventory evidence. Net-new product features beyond WPF parity require an explicit owner decision; the run never invents scope.
 
 ### Verification and completion
 
