@@ -1,8 +1,8 @@
 # Status: SP-003 — startup, shutdown, and integration contract
 
-**Overall:** 🔄 In Progress
+**Overall:** ✅ Complete
 
-**Current Step:** Step 5
+**Current Step:** done
 
 ## Steps
 
@@ -38,8 +38,8 @@
 - [x] STATUS.md accurate
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand passes
-- [ ] `git diff --check` clean
-- [ ] Only File Scope paths changed
+- [x] Contract testCommand passes (build 0 warnings/0 errors; 23/23 tests)
+- [x] `git diff --check` clean
+- [x] Only File Scope paths changed
