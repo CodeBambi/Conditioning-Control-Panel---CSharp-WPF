@@ -8,7 +8,7 @@ This is the owner-reviewed milestone-scope authority for milestone 1 of the gree
 
 The session prompt's reconciliation task discovers this document as the active milestone scope via the task-board pointer, and the decomposer MUST derive titles only from the rows in scope below — never from the full doc set (the 2026-07-18 run that received the whole documentation produced zero titles).
 
-**Two-stage execution:** row 1 (bootstrap) runs first as a **standalone `/task`** — the owner reviews its architecture proposal before anything else proceeds, and the run gives a second pipeline data point beyond the pilot. Only rows 2–9 form the `/task-auto` run. (No verified pi-task mechanism exists for "pause the AUTO run after task N"; the documented pauses are the verify-FAIL picker and manual cancel, so the pause is structural: two runs.)
+**Two-stage execution:** row 1 (bootstrap) runs first as a **standalone `/task`** — the owner reviews its architecture proposal before anything else proceeds, and the run gives the pipeline's first data point. Only rows 2–9 form the `/task-auto` run. (No verified pi-task mechanism exists for "pause the AUTO run after task N"; the documented pauses are the verify-FAIL picker and manual cancel, so the pause is structural: two runs.)
 
 Authority order is unchanged (`port-workflow.md` §Sources of authority). `client/docs/task-board.md` remains the only live queue; this document carries **no live status** — reconcile board state at run start per `port-session-prompt.md`. If the board and this document disagree, the board wins and this document must be corrected before the run continues.
 
@@ -115,9 +115,11 @@ All `port-workflow.md` §Stop conditions apply. In particular for this milestone
 
 ## Owner sign-off
 
-- [x] Owner has reviewed scope, order, exclusions, and gates above. **Approved 2026-07-18** (chat sign-off).
+All prior sign-offs were rescinded 2026-07-18 per owner reset (see task-board gate history) — every item below is unchecked; dated notes are unratified proposals retained for re-review, not decisions.
+
+- [ ] Owner has reviewed scope, order, exclusions, and gates above.
 - [ ] "Pilot pinned pi-task workflow" row `DONE` on the board.
 - [ ] "Probe bpx-consult council and task integration" row `DONE` on the board. (Partial probe evidence 2026-07-18 in Review record above: council route hard-fails, kimi seats not engaging.)
-- [x] Sentry mitigation decided **or** MCP declared out of scope for this run. **Decided 2026-07-18 via delegated consult (solo): MCP declared OUT OF SCOPE for milestone 1** — every task treats the MCP as unavailable and skips it (failure policy); no per-task MCP deliberation. The "Audit and admit bounded Avalonia MCP use" row stays `WIP` — admission is deferred, not decided; revisitable at milestone 2 if a real need appears. Rationale: redaction-only is a policy not a control; fork-patching invalidates the audit's hash verification; firewall rules are fragile ops cost to admit a toolset with zero semantic validation; compilation + K3 + headed gates already cover the only defect class ValidateXaml detects.
-- [x] Row-6 surface approved 2026-07-18: **main dashboard window with one real toggleable feature card** — exercising selectors/pseudo-classes, compiled bindings including a named/ancestor case, one direct `ICommand`, `IsVisible` layout intent, an `avares://` asset, keyboard/pointer input, scaling, and teardown (the board row's own acceptance list).
-- [x] Linux execution environment identified 2026-07-18: **WSL2 Ubuntu 26.04 LTS** present on the workstation (no dotnet SDK installed yet; WSLg Wayland/X11 headed validation pending — setup is part of row 1's scaffolding slice).
+- [ ] Sentry mitigation decided **or** MCP declared out of scope for this run. *2026-07-18 proposal (delegated solo consult, not owner-ratified): declare MCP OUT OF SCOPE for milestone 1 — every task treats the MCP as unavailable and skips it (failure policy); no per-task MCP deliberation; admission deferred, revisitable at milestone 2.* Rationale: redaction-only is a policy not a control; fork-patching invalidates the audit's hash verification; firewall rules are fragile ops cost to admit a toolset with zero semantic validation; compilation + K3 + headed gates already cover the only defect class ValidateXaml detects.
+- [ ] Row-6 surface approved. *2026-07-18 candidate (not owner-ratified): **main dashboard window with one real toggleable feature card*** — exercising selectors/pseudo-classes, compiled bindings including a named/ancestor case, one direct `ICommand`, `IsVisible` layout intent, an `avares://` asset, keyboard/pointer input, scaling, and teardown (the board row's own acceptance list).
+- [ ] Linux execution environment identified. *2026-07-18 candidate (not owner-ratified): **WSL2 Ubuntu 26.04 LTS** present on the workstation (no dotnet SDK installed yet; WSLg Wayland/X11 headed validation pending — setup is part of row 1's scaffolding slice).*
