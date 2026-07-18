@@ -9,9 +9,9 @@
   },
   "baseBranch": "feat/crossplatform",
   "testing": {
-    "build": "git diff --check",
-    "test": "git diff --check",
-    "testWithCoverage": "git diff --check"
+    "build": "dotnet build client/CcpClient.sln -c Debug --nologo",
+    "test": "dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo",
+    "testWithCoverage": "dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo"
   },
   "agents": {
     "worker": {

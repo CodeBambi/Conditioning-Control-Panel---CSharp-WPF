@@ -53,5 +53,5 @@ Excluded from milestone 1: all BLOCKED rows, all spikes (WebView/DTRH, video han
 3. **Never** hand-edit `.spine/batch-state.json`.
 4. **Windows PATH:** `spine` is not on bash PATH by default — `export PATH="$PATH:/c/Users/Micha/.pi/agent/npm/node_modules/.bin"` first, or invoke the `.cmd` shim.
 5. **Stub first:** run `SPINE_WORKER_STUB=1 spine batch start <id>` once per new packet shape before real workers.
-6. **Testing commands:** `.spine/spine-config.json` `testing.*` are `git diff --check` placeholders until row 1 creates the client solution; each packet's `## Contract` `testCommand` carries the real scoped dotnet command.
+6. **Testing commands:** `.spine/spine-config.json` `testing.*` carry the real client commands since SP-002 land (2026-07-18): `dotnet build client/CcpClient.sln -c Debug --nologo` / `dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo`. Each packet's `## Contract` `testCommand` may still narrow scope. NOTE: the spine gate-evidence executable allowlist (`evidence-command.mjs`) is node-only upstream; `dotnet` was added via local node_modules patch (does NOT survive pi-spine reinstall — re-apply with the fsync patch; see port-lessons).
 7. **Board reconciliation:** every task updates its `client/docs/task-board.md` row before `.DONE`; the board wins over spine state on conflict.
