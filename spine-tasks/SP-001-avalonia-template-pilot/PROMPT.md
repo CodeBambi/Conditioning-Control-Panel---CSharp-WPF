@@ -25,7 +25,7 @@ Prove the pi-spine pipeline end-to-end on this repository with a bounded throwaw
 | Field | Value |
 |-------|-------|
 | testCommand | `dotnet build .spine-scratch/CcpPilotApp/CcpPilotApp.csproj -c Debug --nologo` |
-| fileScopeMustChange | `spine-tasks/SP-001-avalonia-template-pilot/record.md`, `client/docs/task-board.md` |
+| fileScopeMustChange | `spine-tasks/SP-001-avalonia-template-pilot/record.md` |
 | fileScopeMustNotChange | `ConditioningControlPanel/**` |
 | artifactsMustExist | `spine-tasks/SP-001-avalonia-template-pilot/record.md` |
 
@@ -87,4 +87,4 @@ Run a **pre-approach solo consult** (`consult` tool, mode solo) with the planned
 
 ## Amendments
 
-- None yet.
+- 2026-07-18 (authoring): `client/docs/task-board.md` removed from `fileScopeMustChange` — it pre-landed on the base branch during the engine switch and would false-satisfy contract verify. The board update remains required via Step 3 and Documentation Requirements; the contract deliverable is `record.md`.
