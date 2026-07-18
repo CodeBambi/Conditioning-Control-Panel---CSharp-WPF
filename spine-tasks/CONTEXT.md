@@ -27,12 +27,12 @@ Nine `client/docs/task-board.md` rows, serial (each depends on the prior; `lanes
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
 | SP-002-bootstrap-architecture | Row 1: architecture proposal instantiating A-001…A-014 + minimal `client/` scaffolding + WSL2 build attempt | **Done 2026-07-18** (landed `5fd1d540`; batch `20260718T120441` recovered from external SIGINT via retry→resume; row 1 stays WIP pending owner ratification) | None |
-| SP-003-startup-shutdown-contract | Row 2: startup/shutdown/integration contract — ordered cancellable phases, typed failures, ownership, teardown, integration proof; container admission decision; single-instance CARVED OUT (owner question §5.3) | Authored 2026-07-18 (proposal-review Fable consult applied: single-instance carve-out; engine-review watch item — zero reviews in both prior batches) | SP-002 |
+| SP-003-startup-shutdown-contract | Row 2: startup/shutdown/integration contract — ordered cancellable phases, typed failures, ownership, teardown, integration proof; container admission decision; single-instance CARVED OUT (owner question §5.3) | Authored 2026-07-18 (proposal-review Fable consult applied: single-instance carve-out; engine-review watch item — zero reviews in both prior batches) — **Done 2026-07-18** (landed `eb801810`; batch `20260718T212127` recovered from `worker_orphaned` ×2 via retry; 23/23 tests, headed Windows smoke observed; gate evidence stale post-retry → orchestrator re-run; rows T-2/T-3 filed; row 2 stays WIP pending owner ratification + WSL2 Linux gate) | SP-002 |
 
 Rows 2–9 (packets not yet authored — gated on solo Fable 5 review of SP-002's proposal + owner async veto):
 
 1. ~~Bootstrap discovery and architecture proposal~~ → SP-002 *(consult checkpoint after: solo Fable 5 reviews the architecture proposal before rows 2–9 are authored; owner reviews asynchronously and may veto — produces `client/` scaffolding + updates `.spine/spine-config.json` testing commands to the real client solution)*
-2. Define startup, shutdown, and integration contract
+2. ~~Define startup, shutdown, and integration contract~~ → SP-003 *(landed `eb801810`; row stays WIP pending owner ratification + WSL2 Linux re-run)*
 3. Establish async lifecycle and fault policy
 4. Define persistence and migration contract
 5. Define truthful runtime capability contract
