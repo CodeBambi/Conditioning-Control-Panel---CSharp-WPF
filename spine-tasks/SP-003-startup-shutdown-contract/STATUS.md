@@ -2,12 +2,12 @@
 
 **Overall:** 🔄 In Progress
 
-**Current Step:** Step 1
+**Current Step:** Step 2
 
 ## Steps
 
 ### Step 1: Pre-approach consult and contract draft
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
 - [x] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
 - [x] STATUS.md updated before starting work
@@ -15,11 +15,11 @@
 - [x] `client/docs/startup-shutdown-contract.md` written (phases, failure taxonomy, ownership rule, teardown matrix, container decision, single-instance carve-out)
 
 ### Step 2: Startup phases and composition root
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Phase runner implemented (ordered phases, CancellationToken, typed failures, composition-root validation)
-- [ ] Manual construction only; no static locator; no constructor-started background work
-- [ ] Unit tests: phase order, inter-phase cancellation, typed phase failure, missing-registration validation
+- [x] Phase runner implemented (ordered phases, CancellationToken, typed failures, composition-root validation)
+- [x] Manual construction only; no static locator; no constructor-started background work
+- [x] Unit tests: phase order, inter-phase cancellation, typed phase failure, missing-registration validation
 
 ### Step 3: Teardown and integration proof
 **Status:** ⬜ Not Started
