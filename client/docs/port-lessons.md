@@ -10,3 +10,4 @@ Append-only, dated, one-to-three lines per entry. Harvested by the steering loop
 - 2026-07-18 — bpx-consult solo routes: only `anthropic/claude-fable-5` engages outside interactive windows; `uva/*` providers are not registered in child contexts. Keep solo default on Fable.
 - 2026-07-18 — Project Avalonia baseline is empirically 12.1.0 on net10.0 (SP-001); Avalonia MCP validation is 11.3.x-pinned — treat its version-specific hints skeptically.
 - 2026-07-18 — SP-001 worker skipped STATUS.md updates and in-worker consults during manual-assisted execution; packets must state these as explicit checkboxes, and reviews should check them.
+- 2026-07-18 — WSL2 Linux env (SP-002): the 26.04 distro registers as plain `Ubuntu` (check `/etc/os-release`, not distro name); `dotnet-sdk-10.0` (10.0.110) is in the native Ubuntu apt feed; no passwordless sudo — install packages via `wsl -u root` from the host.

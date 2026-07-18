@@ -15,7 +15,7 @@
 
 ## Consult verdicts
 
-- **Pre-approach (solo Fable 5):** ran during the Step 1 session; its output shaped the packet amendment (worker does not edit `.spine/`; WSL2 attempt added as Step 3) and the proposal outline. **Gap (honest record):** the verbatim verdict was not persisted to record.md before that session ended — the STATUS.md checkbox claimed record.md persistence prematurely. Recurrence of the SP-001 recorded gap (state claimed before durable write); already covered by the 2026-07-18 port-lessons entry on explicit STATUS/checkbox discipline.
+- **Pre-approach (solo Fable 5):** ran during the Step 1 session (the `ae3c7dd8` STATUS.md checkbox attests it). **Gap (honest record):** no verdict content survives — the verbatim verdict was not persisted to record.md before that session ended, and the STATUS checkbox claimed record.md persistence prematurely. Recurrence of the SP-001 recorded gap (state claimed before durable write); already covered by the 2026-07-18 port-lessons entry on explicit STATUS/checkbox discipline. Note: the packet amendment in PROMPT.md (worker does not edit `.spine/`; WSL2 attempt as Step 3) came from the **packet-authoring** consult recorded in PROMPT.md's own Amendments section (committed at `e235fa7e`, before Step 1) — a separate event from the Step 1 worker consult.
 - **Pre-completion (solo Fable 5):** see §Pre-completion consult below (run on the committed diff + proposal before .DONE).
 
 ## Build outputs
@@ -71,4 +71,9 @@ Passed! - Failed: 0, Passed: 1, Skipped: 0, Total: 1
 
 ## Pre-completion consult
 
-(Filled in below after the solo Fable 5 call on the final diff.)
+**Solo Fable 5, 2026-07-18, on the committed diff + proposal. Verdict: NO BLOCKER** — the package is fit to close SP-002 and to author Phase 1 rows 2–9 against the proposal.
+
+- **Correction applied (caught a false causal claim in this record):** the first draft attributed the PROMPT.md amendment to the Step 1 worker consult; commit order (`e235fa7e` packet authoring precedes `ae3c7dd8` Step 1) proves it was the packet-authoring consult. Fixed above; the advisor noted the conflation would read as fabricated verdict reconstruction — worse than the honest gap.
+- Both named gaps confirmed non-blocking: lost verbatim pre-approach verdict (honest record is the correct disposition; no post-hoc re-run) and no headed WSLg launch (Step 3 requires a build attempt only; headed evidence belongs to the first-visible-slice row).
+- Proposal judged sound for rows 2–9: every contested decision deferred to a named row, nothing admitted beyond Avalonia 12.1.0 + xunit, the three owner questions are genuine A-001…A-014 gaps.
+- Advisor's close-out checklist (applied): record.md correction; STATUS.md Step 1 checkbox reconciliation; board row 1 → `WIP` citing this record; one-line port-lessons entry on the WSL environment facts (distro name, native apt SDK, `wsl -u root`); then Step 5 verification.

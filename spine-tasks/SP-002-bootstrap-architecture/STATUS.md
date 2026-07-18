@@ -7,11 +7,11 @@
 ### Step 1: Pre-approach consult and architecture proposal
 **Status:** ✅ Complete
 
-- [x] Pre-approach solo consult (Fable 5) run and verdict recorded in record.md
+- [x] Pre-approach solo consult (Fable 5) run (verdict content lost before record.md existed; gap recorded honestly in record.md)
 - [x] STATUS.md updated before starting work
 - [x] `client/docs/architecture-proposal.md` written (topology, package baseline, composition root, A-### citations, lesson dispositions)
 - [x] Flagged owner questions section complete
-- [ ] Proposed spine testing commands recorded in record.md
+- [x] Proposed spine testing commands recorded in record.md (and proposal §7)
 
 ### Step 2: Minimal client scaffolding
 **Status:** ✅ Complete
@@ -29,8 +29,8 @@
 ### Step 4: Evidence, board reconciliation, pre-completion consult
 **Status:** 🔄 In Progress
 
-- [ ] record.md written (proposal summary, consult verdicts, build outputs, surprises)
-- [ ] Pre-completion solo consult (Fable 5) run and recorded
+- [x] record.md written (proposal summary, consult verdicts, build outputs, surprises)
+- [x] Pre-completion solo consult (Fable 5) run and recorded (verdict: no blocker; correction applied)
 - [ ] Board row 1 → `WIP` with evidence (not `DONE`)
 - [ ] STATUS.md accurate
 
