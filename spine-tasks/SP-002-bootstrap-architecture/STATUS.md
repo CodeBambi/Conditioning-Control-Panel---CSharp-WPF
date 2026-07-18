@@ -1,16 +1,16 @@
 # Status: SP-002 — bootstrap discovery and architecture proposal
 
-**Overall:** ⬜ Not Started
+**Overall:** 🔄 In Progress — Step 1
 
 ## Steps
 
 ### Step 1: Pre-approach consult and architecture proposal
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] Pre-approach solo consult (Fable 5) run and verdict recorded in record.md
-- [ ] STATUS.md updated before starting work
-- [ ] `client/docs/architecture-proposal.md` written (topology, package baseline, composition root, A-### citations, lesson dispositions)
-- [ ] Flagged owner questions section complete
+- [x] Pre-approach solo consult (Fable 5) run and verdict recorded in record.md
+- [x] STATUS.md updated before starting work
+- [x] `client/docs/architecture-proposal.md` written (topology, package baseline, composition root, A-### citations, lesson dispositions)
+- [x] Flagged owner questions section complete
 - [ ] Proposed spine testing commands recorded in record.md
 
 ### Step 2: Minimal client scaffolding
