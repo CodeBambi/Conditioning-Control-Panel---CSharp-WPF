@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In Progress
 
-**Current Step:** Step 4
+**Current Step:** Step 5
 
 ## Steps
 
@@ -30,12 +30,12 @@
 - [x] Unit tests: teardown exactly-once per path, repeated shutdown no-op, panic path logs + tears down
 
 ### Step 4: Evidence, board reconciliation, pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] record.md written (incl. engine-review presence/absence note)
-- [ ] Pre-completion solo consult (Fable 5) run; verdict text persisted
-- [ ] Board row 2 → `WIP` with evidence (not `DONE`)
-- [ ] STATUS.md accurate
+- [x] record.md written (incl. engine-review presence/absence note: spine_review_step skipped all three calls)
+- [x] Pre-completion solo consult (Fable 5) run; verdict text persisted before checkbox (write-then-check)
+- [x] Board row 2 → `WIP` with evidence (not `DONE`)
+- [x] STATUS.md accurate
 
 ### Step 5: Testing & Verification
 **Status:** ⬜ Not Started

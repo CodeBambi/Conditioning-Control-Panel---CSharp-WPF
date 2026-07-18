@@ -32,9 +32,25 @@ Verdict text (persisted before checkbox, per packet write-then-check rule):
 
 **Disposition:** all four adjustments accepted and folded into the contract (§teardown matrix single guarded entry point; phases 1–3 run pre-Avalonia in `Main`; `TerminateProcess`-analogue disposition recorded; numbered cancellation rule + reserved-taxonomy wording + minimal logger seam).
 
-### Pre-completion solo consult (Fable 5)
+### Pre-completion solo consult (Fable 5) — 2026-07-18
 
-*(pending — Step 4)*
+Verdict text (persisted before checkbox, per write-then-check):
+
+> **PLAN — the work is sound as far as I can verify it, but note the limits of that verification and the remaining close-out steps before `.DONE`.**
+>
+> **Verification caveat first:** the transcript shows test names, a green build (0 warnings), 23/23 passing, and record.md/contract excerpts — but the actual implementation diffs (Program.cs, ApplicationHost.cs, App.axaml.cs, MainWindow) were never printed in this conversation. My verdict on claims (1)–(4) rests on the test inventory and your own record, not direct code inspection. Three cheap self-checks close that gap:
+>
+> 1. **Locator/constructor-work ban:** `grep -rn "public static" client/src/CcpClient.Desktop/` — anything resembling `App.Services` or a static registry is a blocker. Should return only `Main`/`BuildAvaloniaApp`.
+> 2. **Panic hooks actually wired:** `grep -n "UnhandledException\|UnobservedTaskException\|catch" client/src/CcpClient.Desktop/Program.cs` — the three-call-site design is load-bearing; confirm `Main` really has the try/catch + both hooks, not just the tests simulating them.
+> 3. **No package creep:** `git diff bd10ae88 HEAD -- client/src/CcpClient.Desktop/CcpClient.Desktop.csproj` — must show no `PackageReference` beyond the SP-002 baseline.
+>
+> **One evidence gap worth naming, not fixing with code:** the integration proof has two halves — the composition-root test (done) and the *user-visible* phase trace in the window. No test can assert the latter without headless Avalonia (correctly not admitted). A 30-second headed smoke — launch the exe, confirm the trace renders, close, confirm clean exit code — turns that claim from "believed" to "observed." If you skip it, record.md must name it as the unproven manual gate per the constitution's honesty rule. Prefer running it.
+>
+> **Then the mechanical close-out, in order:** persist this verdict before checking the consult checkbox (write-then-check); board row 2 → `WIP` citing record.md; STATUS.md Steps 4/5 to reality; re-run full contract testCommand + `git diff --check` + `git status --short` (File Scope only, no stray bin/obj); commit Step 4/5; create `.DONE`.
+>
+> Nothing visible contradicts the packet's completion criteria. The container decision (§7) is well-reasoned and tied to A-014; the single-instance carve-out and `TerminateProcess` disposition match the amendments. Only a failed grep (static locator, missing panic hooks, or a new package) blocks `.DONE`.
+
+**Disposition:** all three self-checks run (results in Test output section below); headed smoke run on Windows (trace observed, clean exit 0); close-out steps executed in the stated order.
 
 ---
 
@@ -83,6 +99,12 @@ Source: `ConditioningControlPanel/App.xaml.cs` via `client/docs/row-1-research-i
 `dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo` — **Passed: 23, Failed: 0, Skipped: 0** (Windows, .NET 10).
 
 Coverage of the contract's tested rules: phase-order enforcement; inter-phase cancellation stops later phases; typed failure (no unhandled exception) from a failing phase; missing-registration validation fail-fast; reverse-order exactly-once teardown; repeated/concurrent shutdown no-op; startup-failure path stops only started participants; panic path logs and tears down without hanging; participant stop-throw is logged and teardown continues; stop-of-never-started is a no-op; real composition root resolves every MainWindow dependency through the real phase runner.
+
+## Headed smoke (Windows, 2026-07-18)
+
+Ran `CcpClient.Desktop.exe` (Debug build) headed. Window "CCP Client" rendered the user-visible phase trace (observed via UIA accessibility tree, not just believed): `Bootstrap: ok / CompositionRoot: ok / CoreServices: ok / Heartbeat: running`. Graceful window close (`CloseMainWindow`) → process exited within 10s with **exit code 0**. Both halves of the integration proof are therefore observed: real-composition-root resolution (test) and user-visible trace (headed smoke). stderr was empty on the happy path, as designed — `ILogSink` fires on failures/panic only.
+
+Pre-completion consult self-checks (Fable-requested): (1) `public static` scan — only stateless factories, singleton result instances, `Program.Main`/`BuildAvaloniaApp`/`CreateStartupPhases`; no `App.Services`-style mutable registry. (2) `Program.cs` has the `try/catch` around the lifetime call plus both `AppDomain.UnhandledException` and `TaskScheduler.UnobservedTaskException` hooks. (3) csproj diff vs SP-002 baseline adds only a `NoWarn` for AVLN3001 (documented: composition-root construction, never runtime XAML loader) — zero new `PackageReference`s.
 
 ## Surprises
 
