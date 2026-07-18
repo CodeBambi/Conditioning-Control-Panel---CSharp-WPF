@@ -4,7 +4,7 @@
  *
  * v2 ("the most advanced spiral editor available"): six weave styles, up to
  * six threads with hard/gradient blending, a counter-rotating second weave,
- * glow, pulse, wobble, hue drift, a centerpiece (dot / eye / mantra word),
+ * glow, pulse, wobble, hue drift, a centerpiece (dot / star / cross / x / mantra word),
  * presets, and a 🎲. The preview and the encoder share ONE field pipeline
  * (shared/loomField.js - WebGL field + 2D centerpiece composite), so the file
  * always matches the pane; machines without WebGL fall back to the v1 wedge
@@ -37,7 +37,7 @@ const MAX_SPIRALS = 12;
 const PRESETS = [
   ['classic ccp', { layer: { arms: 4, turns: 2, colors: ['#e84393', '#8b5cf6'] }, bg: { color: '#121220' }, glow: 0.25 }],
   ['bambi haze', { layer: { arms: 6, style: 'ribbon', bandMode: 'gradient', colors: ['#ff69b4', '#ffb6c1', '#ff1493'] }, bg: { kind: 'radial', color: '#2a1030', outer: '#12081a' }, pulse: { amp: 0.08, cycles: 1 }, glow: 0.4 }],
-  ['sissy swirl', { layer: { arms: 5, turns: 2.5, style: 'golden', colors: ['#9b59b6', '#bb8fce'] }, centerpiece: { kind: 'eye', color: '#bb8fce', sizeFrac: 0.14 } }],
+  ['sissy swirl', { layer: { arms: 5, turns: 2.5, style: 'golden', colors: ['#9b59b6', '#bb8fce'] }, centerpiece: { kind: 'star', color: '#bb8fce', sizeFrac: 0.16 } }],
   ['drone protocol', { layer: { arms: 10, turns: 3.5, duty: 0.3, colors: ['#00ff41'] }, bg: { color: '#050805' }, wobble: { amp: 0.1, freq: 4, cycles: 1 } }],
   ['locked in', { layer: { arms: 3, turns: 4, colors: ['#e81ca8', '#ff6ec7'] }, layer2: { enabled: true, arms: 3, turns: 1.5, colors: ['#8a0f5e'], direction: -1 }, glow: 0.5 }],
   ['hypno teal', { layer: { arms: 2, turns: 5, colors: ['#40d0c0', '#ffffff'] }, bg: { color: '#0d0d18' } }],
@@ -487,7 +487,13 @@ export function createLoomStudio({ bridge, sfx, previewSize = 288, hotkeys = fal
     inp.type = 'color';
     inp.value = value;
     inp.className = 'wr-loom-color';
+    // 'input' streams live as you drag - apply straight to params so the running
+    // preview follows the drag (no redraw: rebuilding the DOM mid-drag would tear
+    // down the open OS dialog). 'change' fires once the dialog CLOSES, so it's
+    // safe to commit with a full redraw - the same path presets/random take, and
+    // the only one that reliably repaints the centerpiece across browsers.
     inp.addEventListener('input', () => onPick(inp.value));
+    inp.addEventListener('change', () => { onPick(inp.value); redraw(); });
     parent.appendChild(inp);
     return inp;
   }
@@ -737,14 +743,14 @@ export function createLoomStudio({ bridge, sfx, previewSize = 288, hotkeys = fal
     const center = sec('the centerpiece');
     const cpRow = el('wr-loom-row wr-loom-styles', center);
     el('wr-loom-lbl', cpRow, 'kind');
-    for (const k of ['none', 'dot', 'eye', 'mantra']) {
+    for (const k of ['none', 'dot', 'star', 'cross', 'x', 'mantra']) {
       chip(cpRow, k === 'mantra' ? 'word' : k, params.centerpiece.kind === k,
         () => patch((p) => { p.centerpiece.kind = k; }));
     }
     if (params.centerpiece.kind !== 'none') {
       const cpOpts = el('wr-loom-row wr-loom-colors', center);
       el('wr-loom-lbl', cpOpts, 'its color');
-      colorInput(cpOpts, params.centerpiece.color, (v) => { params.centerpiece.color = v; });
+      colorInput(cpOpts, params.centerpiece.color, (v) => { params.centerpiece.color = v; params = normalizeParams2(params); });
       slider(center, 'its size', 8, 40, 1, () => Math.round(params.centerpiece.sizeFrac * 100),
         (v) => { params.centerpiece.sizeFrac = v / 100; }, (v) => v + '%', Math.round(DEF.centerpiece.sizeFrac * 100));
       if (params.centerpiece.kind === 'mantra') {

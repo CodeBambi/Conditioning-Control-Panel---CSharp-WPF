@@ -1,6 +1,17 @@
 {
   "app_title": "Conditioning Control Panel",
 
+  "label_dtrh_haptics": "Down the Rabbit Hole",
+  "label_dtrh_haptics_sub": "Haptic cues during a descent - accents on big moments, a depth-gauge hum underneath",
+  "label_dtrh_accents": "Accents",
+  "label_dtrh_ambient": "Ambient",
+  "label_dtrh_density": "Density",
+  "btn_density_sparse": "Sparse",
+  "btn_density_balanced": "Balanced",
+  "btn_density_rich": "Rich",
+  "tooltip_dtrh_accents": "Peak device power for event accents - every moment in the run plays at a fraction of this",
+  "tooltip_dtrh_ambient": "Background hum that deepens as you fall - 0 turns it off",
+
   "recap_header_season": "SEASON",
   "recap_status_complete": "Complete",
   "recap_default_handle": "you",

@@ -125,6 +125,7 @@ internal static class DtrhHostService
             _host.Show();
             HookVideoEvents(true);
             StartHeartbeatWatch();
+            Haptics.DtrhHapticDirector.OnLaunch(testMode);
             // Tuck the main CCP window into the tray while the descent owns the screen;
             // DisposeAll restores it on exit. The game window keeps focus.
             try
@@ -267,6 +268,7 @@ internal static class DtrhHostService
                     try { ChaosCrashSentinel.Mark($"mode=dtrh-web diff={diff}"); } catch { }
                     try { App.Bark?.NotifyChaosRunStarted(diff); } catch { }
                 }
+                try { Haptics.DtrhHapticDirector.OnRunStarted(); } catch { }
                 App.Logger?.Information("DtrhHost: run started (diff={D}, mode={M})", diff, (string?)o["mode"]);
                 break;
             }
@@ -274,8 +276,15 @@ internal static class DtrhHostService
                 OnRunEnded(o);
                 break;
             case "bark":
+                // Haptics tap FIRST: the moment happened whether or not a voice line plays
+                // over it (the vn-speaking gate below only guards the audio mix).
+                try { Haptics.DtrhHapticDirector.OnGameEvent(o); } catch { }
                 if (_vnSpeaking) break;   // don't let a bark talk over her VN line
                 RouteBark(o);
+                break;
+            case "haptic-state":
+                // page's ~2s depth/melt feed for the haptic director's ambient floor
+                try { Haptics.DtrhHapticDirector.OnHapticState(o); } catch { }
                 break;
             case "heartbeat":
                 _lastHeartbeatUtc = DateTime.UtcNow;
@@ -534,6 +543,7 @@ internal static class DtrhHostService
     private static void OnRunEnded(JObject o)
     {
         _runActive = false;
+        try { Haptics.DtrhHapticDirector.OnRunEnded(); } catch { }
         ApplyWorldFreeze(false);   // a run ending mid-freeze must resume native video + voice, not wedge them through the hub
         try
         {
@@ -720,6 +730,7 @@ internal static class DtrhHostService
     {
         if (on == _worldFrozen) return;
         _worldFrozen = on;
+        try { Haptics.DtrhHapticDirector.OnWorldFreeze(on); } catch { }
         var disp = Application.Current?.Dispatcher;
         if (disp == null) return;
         disp.BeginInvoke(() =>
@@ -771,6 +782,7 @@ internal static class DtrhHostService
     private static void OnVideoStarted(object? sender, EventArgs e)
     {
         if (_runActive) _runVideosShown++;   // session telemetry: a video was shown this run
+        try { Haptics.DtrhHapticDirector.OnVideoCovering(true); } catch { }
         var disp = Application.Current?.Dispatcher;
         if (disp == null || _host == null) return;
         disp.BeginInvoke(() => _host?.Post(new { type = "payload-state", kind = "video", on = true }));
@@ -809,6 +821,7 @@ internal static class DtrhHostService
 
     private static void OnVideoEnded(object? sender, EventArgs e)
     {
+        try { Haptics.DtrhHapticDirector.OnVideoCovering(false); } catch { }
         var disp = Application.Current?.Dispatcher;
         if (disp == null || _host == null) return;
         disp.BeginInvoke(() =>
@@ -935,6 +948,8 @@ internal static class DtrhHostService
         CancelExitWatchdog();
         StopHeartbeatWatch();
         HookVideoEvents(false);
+        // Never leave the toy running after the window dies (crash, watchdog, clean exit alike).
+        try { Haptics.DtrhHapticDirector.OnClosed(); } catch { }
         // Never leave a video or voiceline wedged paused if the window dies mid-freeze.
         if (_worldFrozen) { _worldFrozen = false; try { App.Video?.PlayPrimary(); } catch { } try { App.AvatarWindow?.ResumeSpokenAudio(); } catch { } }
         // ...and never leave every video silent because the dive ended while muted.

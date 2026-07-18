@@ -1,5 +1,16 @@
 {
   "app_title": "Panel de Control de Condicionamiento",
+
+  "label_dtrh_haptics": "Down the Rabbit Hole",
+  "label_dtrh_haptics_sub": "Señales hápticas durante un descenso - acentos en los grandes momentos y un zumbido de profundidad de fondo",
+  "label_dtrh_accents": "Acentos",
+  "label_dtrh_ambient": "Ambiente",
+  "label_dtrh_density": "Densidad",
+  "btn_density_sparse": "Escasa",
+  "btn_density_balanced": "Equilibrada",
+  "btn_density_rich": "Rica",
+  "tooltip_dtrh_accents": "Potencia máxima del dispositivo para los acentos - cada momento de la partida usa una fracción de este valor",
+  "tooltip_dtrh_ambient": "Zumbido de fondo que se intensifica al profundizar - 0 lo desactiva",
   "tab_settings": "Ajustes",
   "tab_presets": "Presets",
   "tab_progression": "Progresión",

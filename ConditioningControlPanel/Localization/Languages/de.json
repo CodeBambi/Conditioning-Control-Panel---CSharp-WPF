@@ -1,5 +1,16 @@
 {
   "app_title": "Conditioning Control Panel",
+
+  "label_dtrh_haptics": "Down the Rabbit Hole",
+  "label_dtrh_haptics_sub": "Haptik-Impulse während eines Abstiegs - Akzente bei großen Momenten, darunter ein Tiefen-Summen",
+  "label_dtrh_accents": "Akzente",
+  "label_dtrh_ambient": "Grundton",
+  "label_dtrh_density": "Dichte",
+  "btn_density_sparse": "Sparsam",
+  "btn_density_balanced": "Ausgewogen",
+  "btn_density_rich": "Intensiv",
+  "tooltip_dtrh_accents": "Maximale Geräteleistung für Ereignis-Akzente - jeder Moment im Lauf spielt mit einem Anteil davon",
+  "tooltip_dtrh_ambient": "Hintergrund-Summen, das mit der Tiefe zunimmt - 0 schaltet es aus",
   "tab_settings": "Einstellungen",
   "tab_presets": "Vorlagen",
   "tab_progression": "Fortschritt",

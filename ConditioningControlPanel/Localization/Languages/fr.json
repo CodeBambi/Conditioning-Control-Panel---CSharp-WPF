@@ -1,5 +1,16 @@
 {
   "app_title": "Panneau de Contrôle de Conditionnement",
+
+  "label_dtrh_haptics": "Down the Rabbit Hole",
+  "label_dtrh_haptics_sub": "Signaux haptiques pendant une descente - des accents sur les grands moments, un bourdonnement de profondeur en fond",
+  "label_dtrh_accents": "Accents",
+  "label_dtrh_ambient": "Ambiance",
+  "label_dtrh_density": "Densité",
+  "btn_density_sparse": "Discret",
+  "btn_density_balanced": "Équilibré",
+  "btn_density_rich": "Riche",
+  "tooltip_dtrh_accents": "Puissance maximale de l'appareil pour les accents - chaque moment de la descente en joue une fraction",
+  "tooltip_dtrh_ambient": "Bourdonnement de fond qui s'intensifie avec la profondeur - 0 pour désactiver",
   "tab_settings": "Paramètres",
   "tab_presets": "Préréglages",
   "tab_progression": "Progression",

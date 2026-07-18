@@ -1,5 +1,16 @@
 {
   "app_title": "コンディショニングコントロールパネル",
+
+  "label_dtrh_haptics": "Down the Rabbit Hole",
+  "label_dtrh_haptics_sub": "降下中のハプティクス - 大きな瞬間にアクセント、その下に深度に応じた振動",
+  "label_dtrh_accents": "アクセント",
+  "label_dtrh_ambient": "アンビエント",
+  "label_dtrh_density": "密度",
+  "btn_density_sparse": "控えめ",
+  "btn_density_balanced": "バランス",
+  "btn_density_rich": "リッチ",
+  "tooltip_dtrh_accents": "イベントアクセントの最大出力 - すべての瞬間はこの値の一部で再生されます",
+  "tooltip_dtrh_ambient": "深く落ちるほど強まる背景の振動 - 0でオフ",
   "tab_settings": "設定",
   "tab_presets": "プリセット",
   "tab_progression": "進行",

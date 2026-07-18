@@ -1,5 +1,16 @@
 {
   "app_title": "调教控制面板",
+
+  "label_dtrh_haptics": "Down the Rabbit Hole",
+  "label_dtrh_haptics_sub": "坠落过程中的触觉反馈 - 大事件时的重音，以及随深度变化的背景震动",
+  "label_dtrh_accents": "重音",
+  "label_dtrh_ambient": "环境",
+  "label_dtrh_density": "密度",
+  "btn_density_sparse": "稀疏",
+  "btn_density_balanced": "均衡",
+  "btn_density_rich": "丰富",
+  "tooltip_dtrh_accents": "事件重音的最大设备功率 - 每个时刻都按此值的一定比例播放",
+  "tooltip_dtrh_ambient": "随着坠落加深而增强的背景震动 - 0 为关闭",
   "dlg_media_drop_title": "你想对此文件做什么？",
   "dlg_media_drop_play": "在 Deeper 播放器中播放",
   "dlg_media_drop_edit": "在 Deeper 编辑器中打开",

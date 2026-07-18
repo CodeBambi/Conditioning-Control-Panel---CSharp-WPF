@@ -307,6 +307,10 @@ namespace ConditioningControlPanel
             HapticsTab.SliderHapticAchievement.Value = s.Haptics.AchievementIntensity * 100;
             HapticsTab.ChkHapticBouncingText.IsChecked = s.Haptics.BouncingTextEnabled;
             HapticsTab.SliderHapticBouncingText.Value = s.Haptics.BouncingTextIntensity * 100;
+            HapticsTab.ChkHapticDtrh.IsChecked = s.Haptics.DtrhEnabled;
+            HapticsTab.SliderHapticDtrh.Value = s.Haptics.DtrhIntensity * 100;
+            HapticsTab.SliderHapticDtrhAmbient.Value = s.Haptics.DtrhAmbientIntensity * 100;
+            HapticsTab.CmbHapticDtrhDensity.SelectedIndex = Math.Clamp(s.Haptics.DtrhDensity, 0, 2);
 
             // Per-feature haptic mode dropdowns
             HapticsTab.CmbHapticBubbleMode.SelectedIndex = (int)s.Haptics.BubblePopMode;
@@ -440,6 +444,8 @@ namespace ConditioningControlPanel
             if (HapticsTab.TxtHapticSubliminal != null) HapticsTab.TxtHapticSubliminal.Text = $"{(int)HapticsTab.SliderHapticSubliminal.Value}%";
             if (HapticsTab.TxtHapticLevelUp != null) HapticsTab.TxtHapticLevelUp.Text = $"{(int)HapticsTab.SliderHapticLevelUp.Value}%";
             if (HapticsTab.TxtHapticAchievement != null) HapticsTab.TxtHapticAchievement.Text = $"{(int)HapticsTab.SliderHapticAchievement.Value}%";
+            if (HapticsTab.TxtHapticDtrh != null) HapticsTab.TxtHapticDtrh.Text = $"{(int)HapticsTab.SliderHapticDtrh.Value}%";
+            if (HapticsTab.TxtHapticDtrhAmbient != null) HapticsTab.TxtHapticDtrhAmbient.Text = $"{(int)HapticsTab.SliderHapticDtrhAmbient.Value}%";
         }
 
         private void SaveSettings()

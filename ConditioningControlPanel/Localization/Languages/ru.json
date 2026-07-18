@@ -1,5 +1,16 @@
 {
   "app_title": "Панель управления кондиционированием",
+
+  "label_dtrh_haptics": "Down the Rabbit Hole",
+  "label_dtrh_haptics_sub": "Тактильные сигналы во время спуска - акценты на ярких моментах и фоновая вибрация глубины",
+  "label_dtrh_accents": "Акценты",
+  "label_dtrh_ambient": "Фон",
+  "label_dtrh_density": "Плотность",
+  "btn_density_sparse": "Редко",
+  "btn_density_balanced": "Сбалансировано",
+  "btn_density_rich": "Насыщенно",
+  "tooltip_dtrh_accents": "Максимальная мощность устройства для акцентов - каждый момент забега играет с долей этого значения",
+  "tooltip_dtrh_ambient": "Фоновая вибрация, усиливающаяся с глубиной - 0 отключает",
   "tab_settings": "Настройки",
   "tab_presets": "Пресеты",
   "tab_progression": "Прогрессия",

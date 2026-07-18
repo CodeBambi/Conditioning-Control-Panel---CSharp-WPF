@@ -26,7 +26,7 @@
  *     layer2: layer + {enabled:bool},
  *     glow: 0-1, pulse: {amp:0-0.25, cycles:1-4},
  *     wobble: {amp:0-0.35, freq:1-6, cycles:1-3}, hueCycles: 0-2,
- *     centerpiece: {kind:'none'|'dot'|'eye'|'mantra', color, sizeFrac:0.08-0.4,
+ *     centerpiece: {kind:'none'|'dot'|'star'|'cross'|'x'|'mantra', color, sizeFrac:0.08-0.4,
  *                   text:<=12ch, flashCycles:0-4} }
  * ==========================================================================*/
 
@@ -37,8 +37,16 @@ export const LOOM_STYLES = ['log', 'arch', 'ribbon', 'golden', 'tunnel', 'petal'
 export const LOOM_FORMATS = ['square', 'wide', 'tall'];   // 1:1 · 16:9 · 9:16 (tiktok)
 export const LOOM_SWATCHES = ['#ff69b4', '#e56cc0', '#8a5cff', '#00e5ff', '#39ff9d', '#ffd94d', '#ff6a2f', '#ffffff'];
 
-/** speed 1-5 -> GIF frame delay in centiseconds (desktop v1 table, verbatim). */
-const DELAY_CS = { 1: 10, 2: 7, 3: 5, 4: 3, 5: 2 };
+/** speed 1-5 -> GIF frame delay in centiseconds, paired with FRAME_TABLE below.
+ * Delays are finer than the old {10,7,5,3,2} desktop table so we can weave more
+ * frames per loop (smoother motion) WITHOUT changing spin speed: for every speed
+ * FRAME_TABLE[s] * DELAY_CS[s] equals the old 36 * oldDelay, so each loop lasts
+ * exactly as long as before - just with ~2x the frames. Preview and encoder both
+ * read these (loopMs2 + the worker), so the pane always matches the file. */
+const DELAY_CS = { 1: 5, 2: 4, 3: 3, 4: 2, 5: 2 };
+/** speed 1-5 -> frames per loop. speed 5 stays 36 (already at the 2cs floor, so
+ * it can't gain frames without slowing down). */
+const FRAME_TABLE = { 1: 72, 2: 63, 3: 60, 4: 54, 5: 36 };
 const TWO_PI = Math.PI * 2;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -133,7 +141,7 @@ export function normalizeParams2(p) {
     },
     hueCycles: clamp(Math.round(num(q.hueCycles, 0)), 0, 2),
     centerpiece: {
-      kind: cp.kind === 'dot' || cp.kind === 'eye' || cp.kind === 'mantra' ? cp.kind : 'none',
+      kind: ['dot', 'star', 'cross', 'x', 'mantra'].includes(cp.kind) ? cp.kind : 'none',
       color: hex(cp.color, '#ffffff'),
       sizeFrac: clamp(num(cp.sizeFrac, 0.16), 0.08, 0.4),
       text: typeof cp.text === 'string' ? cp.text.slice(0, 12) : '',
@@ -142,7 +150,10 @@ export function normalizeParams2(p) {
   };
 }
 
-export function delayCsFor2(p) { return DELAY_CS[normalizeParams2(p).speed] || 5; }
+export function delayCsFor2(p) { return DELAY_CS[normalizeParams2(p).speed] || 3; }
+
+/** Frames per loop for these params (shared by the preview timing and the encoder). */
+export function framesFor2(p) { return FRAME_TABLE[normalizeParams2(p).speed] || 60; }
 
 /** Pixel dims for a format at a given long side: 1:1, 16:9, or 9:16. */
 export function formatDims2(format, longSide) {
@@ -152,8 +163,9 @@ export function formatDims2(format, longSide) {
   return { w: longSide, h: longSide };
 }
 
-/** One seamless loop in ms (preview phase = (elapsed % loopMs2) / loopMs2). */
-export function loopMs2(p, frames = 36) { return frames * delayCsFor2(p) * 10; }
+/** One seamless loop in ms (preview phase = (elapsed % loopMs2) / loopMs2).
+ * frames * delay must match the worker's exactly, so both derive from the tables. */
+export function loopMs2(p) { return framesFor2(p) * delayCsFor2(p) * 10; }
 
 /** Smallest rotation that maps a layer onto itself (v1 loopSpanRad, 1-6 colors). */
 function symmetrySpanRad(layer) {
@@ -429,8 +441,35 @@ export function createFieldRenderer(canvas) {
  *  (No webfont in the bundle - Segoe UI is guaranteed on this Windows-only app.) */
 const CP_FONT = (px) => `600 ${px}px "Segoe UI", sans-serif`;
 
-/** Draw the dot/eye/mantra centerpiece over a composited frame (2D context).
- *  `height` defaults to `size` (square); non-square frames pass both. */
+/** Five-pointed star, outer radius r, point-up, filled solid in `color`. */
+function drawStar(ctx, cx, cy, r, color) {
+  const inner = r * 0.42;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : inner;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const x = cx + rad * Math.cos(a), y = cy + rad * Math.sin(a);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** Two crossed bars: angle 0 draws a '+' cross, angle PI/4 draws an 'X'. */
+function drawBars(ctx, cx, cy, r, color, angle) {
+  const half = r, t = r * 0.32;   // arm reach / half-thickness
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+  ctx.fillStyle = color;
+  ctx.fillRect(-half, -t, half * 2, t * 2);
+  ctx.fillRect(-t, -half, t * 2, half * 2);
+  ctx.restore();
+}
+
+/** Draw the dot/star/cross/x/mantra centerpiece over a composited frame (2D
+ *  context). `height` defaults to `size` (square); non-square frames pass both. */
 export function drawCenterpiece(ctx, q, phase, size, height = size) {
   const cp = q.centerpiece;
   if (cp.kind === 'none') return;
@@ -442,13 +481,12 @@ export function drawCenterpiece(ctx, q, phase, size, height = size) {
   if (cp.kind === 'dot') {
     ctx.fillStyle = color;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, TWO_PI); ctx.fill();
-  } else if (cp.kind === 'eye') {
-    ctx.fillStyle = color;
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TWO_PI); ctx.fill();
-    ctx.fillStyle = q.bg.color;
-    ctx.beginPath(); ctx.arc(cx, cy, r * 0.45, 0, TWO_PI); ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.arc(cx + r * 0.18, cy - r * 0.2, r * 0.12, 0, TWO_PI); ctx.fill();
+  } else if (cp.kind === 'star') {
+    drawStar(ctx, cx, cy, r, color);
+  } else if (cp.kind === 'cross') {
+    drawBars(ctx, cx, cy, r, color, 0);
+  } else if (cp.kind === 'x') {
+    drawBars(ctx, cx, cy, r, color, Math.PI / 4);
   } else if (cp.kind === 'mantra' && cp.text) {
     const flash = cp.flashCycles > 0 ? 0.5 * (1 + Math.cos(TWO_PI * phase * cp.flashCycles)) : 1;
     if (flash <= 0.01) return;
@@ -551,7 +589,7 @@ export function randomParams2(palette = LOOM_SWATCHES) {
   if (Math.random() < 0.3) d.wobble = { amp: 0.08 + Math.random() * 0.15, freq: 2 + Math.floor(Math.random() * 3), cycles: 1 };
   if (Math.random() < 0.2) d.hueCycles = 1;
   if (Math.random() < 0.25) {
-    d.centerpiece.kind = pickFrom(['dot', 'eye']);
+    d.centerpiece.kind = pickFrom(['dot', 'star', 'cross', 'x']);
     d.centerpiece.color = pickFrom(palette);
   }
   return normalizeParams2(d);
