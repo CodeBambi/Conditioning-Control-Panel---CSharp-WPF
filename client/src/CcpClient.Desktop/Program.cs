@@ -23,6 +23,13 @@ public static class Program
             return AssetSelfCheck.Run(typeof(Program).Assembly, Console.Out);
         }
 
+        // Version surface (release-publish-gates.md §2): same bounded self-check shape —
+        // reads the InformationalVersion ATTRIBUTE, never a path (single-file safe).
+        if (args.Contains(VersionSelfCheck.Flag, StringComparer.Ordinal))
+        {
+            return VersionSelfCheck.Run(typeof(Program).Assembly, Console.Out);
+        }
+
         // Phase 1 (Bootstrap) actions must exist before anything can fail: panic hooks
         // and the minimal logger seam (contract §1, §9).
         ILogSink log = new DebugLogSink();
