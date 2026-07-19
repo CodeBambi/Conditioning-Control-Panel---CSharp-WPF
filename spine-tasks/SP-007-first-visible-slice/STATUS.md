@@ -1,8 +1,8 @@
 # Status: SP-007 — validate official migration checklist in first visible slice
 
-**Overall:** 🔄 In progress
+**Overall:** ✅ Complete
 
-**Current Step:** Step 6
+**Current Step:** all steps complete
 
 ## Steps
 
@@ -49,8 +49,8 @@
 - [x] STATUS.md accurate
 
 ### Step 6: Testing & Verification
-**Status:** 🔄 In progress
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand passes
-- [ ] `git diff --check` clean
-- [ ] Only File Scope paths changed
+- [x] Contract testCommand passes
+- [x] `git diff --check` clean
+- [x] Only File Scope paths changed
