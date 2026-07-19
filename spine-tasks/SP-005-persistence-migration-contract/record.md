@@ -102,5 +102,7 @@ Full as-built summary submitted (store shape, chaining, flush wiring, test inven
 **Truncated-tail reconstruction (labeled):** the reply cut off inside the lock-ordering analysis (`FlushAsync` holds `_writeGate` then reads `IsDirty` under `_mutationGate`). Reconstruction: no code path acquires `_mutationGate` and then `_writeGate` (`Mutate`/`Replace` release `_mutationGate` before `Save` takes `_writeGate`; `WriteOnce` takes `_mutationGate` only), so the acquisition order is consistently `_writeGate` → `_mutationGate` and no inversion exists. No code change from this item.
 
 ### Test output — final (post-consult, both platforms)
-Windows: build **0W/0E**; tests **51/51 passed** (34 SP-003/SP-004 intact + 13 persistence + 4 teardown-flush).
+Windows: build **0W/0E** (`--no-incremental` verified); tests **51/51 passed** (34 SP-003/SP-004 intact + 13 persistence + 4 teardown-flush). `git diff --check` clean; `git status --short` shows only File Scope paths.
 WSL2 Ubuntu (SDK 10.0.110, native `~/ccp-sp005` copy): build **0W/0E**; tests **51/51 passed** — the three consult-driven additions included.
+
+4. **xUnit1051 analyzer warning** surfaced only under `--no-incremental` (the two `ManualResetEventSlim.Wait(timeout)` calls in the wedged-writer test wanted the test cancellation token) — fixed with `TestContext.Current.CancellationToken`; final gate confirmed 0 warnings on a forced full rebuild on both platforms.

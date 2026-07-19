@@ -99,7 +99,7 @@ public class TeardownFlushTests
             WriteTempFile = (p, json) =>
             {
                 writeStarted.Set();
-                releaseWrite.Wait(TimeSpan.FromSeconds(30));
+                releaseWrite.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
                 new AtomicWriteHooks().WriteTempFile(p, json);
             },
         };
@@ -110,7 +110,7 @@ public class TeardownFlushTests
         store.Mutate(m => m.Greeting = "wedged");
 
         var flush = store.FlushAsync(TimeSpan.FromMilliseconds(100));
-        Assert.True(writeStarted.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(writeStarted.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
         await flush; // returns after the bounded wait while the write is still blocked
 
         Assert.Contains(log.Messages, m => m.Contains("exceeded its bounded wait"));
