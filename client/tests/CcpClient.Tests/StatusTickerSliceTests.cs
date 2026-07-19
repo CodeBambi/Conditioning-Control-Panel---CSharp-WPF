@@ -55,7 +55,7 @@ public class StatusTickerSliceTests
         Assert.False(completion!.IsCompleted); // a real long-running operation
 
         var ticksBefore = ticker.TickCount;
-        await Task.Delay(1200); // 500ms interval: several ticks
+        await Task.Delay(1200, TestContext.Current.CancellationToken); // 500ms interval: several ticks
         Assert.True(ticker.TickCount > ticksBefore); // the tick ADVANCES — the operation is real
 
         vm.ToggleCommand.Execute(null);
@@ -114,12 +114,12 @@ public class StatusTickerSliceTests
         Assert.IsType<OperationOutcome.Completed>(outcome);
 
         // FILE content, not view-model state (persistence proof).
-        var json = await File.ReadAllTextAsync(settingsPath);
+        var json = await File.ReadAllTextAsync(settingsPath, TestContext.Current.CancellationToken);
         Assert.Contains("\"statusTickerEnabled\": true", json);
 
         await host.ShutdownAsync();
 
-        var jsonAfterTeardown = await File.ReadAllTextAsync(settingsPath);
+        var jsonAfterTeardown = await File.ReadAllTextAsync(settingsPath, TestContext.Current.CancellationToken);
         Assert.Contains("\"statusTickerEnabled\": true", jsonAfterTeardown);
     }
 
@@ -146,7 +146,7 @@ public class StatusTickerSliceTests
         Assert.True(vm2.TickerLit); // the ring is lit from the operation, phase 4, no toggle needed
 
         var ticks = ticker2.TickCount;
-        await Task.Delay(1200);
+        await Task.Delay(1200, TestContext.Current.CancellationToken);
         Assert.True(ticker2.TickCount > ticks);
 
         // Teardown mid-operation: the owned completion terminates typed Cancelled.

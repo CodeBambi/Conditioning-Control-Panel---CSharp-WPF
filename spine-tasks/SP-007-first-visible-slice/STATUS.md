@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In progress
 
-**Current Step:** Step 3
+**Current Step:** Step 4
 
 ## Steps
 
@@ -25,14 +25,14 @@
 - [x] Checklist mechanics: pseudo-class selectors, compiled bindings (x:DataType + named/ancestor), one direct ICommand, load-bearing IsVisible, avares:// asset; no WPF transplants
 
 ### Step 3: Tests, wiring, WSL2 gate
-**Status:** 🔄 In progress
+**Status:** ✅ Complete
 
 - [x] Unit tests: operation outcomes, ring-from-operation, file-content persistence, restart-restore via composition root, prior integration proofs intact
 - [x] Composition-root construction in named phase; restore-then-start ordered; no constructor-started work
-- [ ] WSL2 native-dir run: testCommand green + session-probe facts recorded (X11 facts, no Wayland claim)
+- [x] WSL2 native-dir run: testCommand green + session-probe facts recorded (X11 facts, no Wayland claim)
 
 ### Step 4: Headed evidence, MCP advisory, visual verification
-**Status:** ⬜ Pending
+**Status:** 🔄 In progress
 
 - [ ] Headed Windows UIA smoke: asset rendered, quick-toggle tick advance, ring flip, :pointerover delta, IsVisible bounds delta, keyboard path, restart-restore, scaling bounds 100%/150%, mid-operation teardown exit 0
 - [ ] Headed WSLg observation recorded with session-probe facts; unobservable items named
