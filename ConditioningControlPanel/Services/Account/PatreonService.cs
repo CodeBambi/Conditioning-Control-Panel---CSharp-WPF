@@ -442,14 +442,20 @@ namespace ConditioningControlPanel.Services
                     var refreshed = await RefreshTokensAsync(tokens.RefreshToken);
                     if (!refreshed)
                     {
-                        UpdateTier(PatreonTier.None, false);
-                        return PatreonTier.None;
+                        // A refresh failure here is usually transient (proxy/network hiccup, not a
+                        // revoked grant), so DON'T hard-drop a paying subscriber to None (#585 - lost
+                        // premium while still subscribed). Fall back to the cached tier exactly like
+                        // the HTTP-failure path below; the 24h cache + 2-week premium grace still
+                        // time-box this, and a genuinely dead grant lapses once the grace expires.
+                        // Note the 401 path further down DOES clear tokens on a hard-invalid token.
+                        App.Logger?.Warning("Patreon token refresh failed (expired access token) - keeping cached tier {Tier}", CurrentTier);
+                        return CurrentTier;
                     }
                     tokens = _tokenStorage.RetrieveTokens();
                     if (tokens == null)
                     {
-                        UpdateTier(PatreonTier.None, false);
-                        return PatreonTier.None;
+                        App.Logger?.Warning("Patreon tokens missing after successful refresh - keeping cached tier {Tier}", CurrentTier);
+                        return CurrentTier;
                     }
                 }
 

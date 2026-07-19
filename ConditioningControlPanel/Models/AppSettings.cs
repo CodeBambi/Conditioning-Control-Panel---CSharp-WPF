@@ -2342,18 +2342,21 @@ namespace ConditioningControlPanel.Models
             get => _unifiedOverlayHost;
             set { _unifiedOverlayHost = value; OnPropertyChanged(); }
         }
-        private bool _compositorOffThreadPresent;
-        /// <summary>Default OFF (experimental, #550 proper fix): when the unified overlay host is on,
-        /// render each monitor's layers OFF the UI thread. The UI-thread tick still runs Update() and
-        /// records the active layers into a cheap immutable SKPicture (draw-command capture, no raster);
-        /// a dedicated per-monitor present thread then rasterizes that picture into a DIB-backed surface
-        /// and pushes it with UpdateLayeredWindow(ULW_ALPHA). This removes the fullscreen software raster
-        /// + layered composite from the UI thread (the dispatcher-starvation that made the spiral lag the
-        /// whole app on some machines) while keeping per-pixel alpha, click-through and the layers'
-        /// UI-thread contract intact (SKImage frees route through the engine's deferred-disposal so an
-        /// image referenced by an in-flight picture is never freed under the present thread). No-op when
-        /// the unified host is off. Needs play-test on a high-res / multi-monitor machine before shipping
-        /// on - the win only shows where the UI-thread raster actually saturated.</summary>
+        private bool _compositorOffThreadPresent = true;
+        /// <summary>Default ON (#550 proper fix, promoted 6.4.1 after 6.4.0 shipped the compositor ON
+        /// but this OFF — bugs #588/#586/#587: fullscreen spiral rastered on the UI thread and starved
+        /// the dispatcher on high-res / multi-monitor machines, exactly the repro the flag was built for).
+        /// When the unified overlay host is on, render each monitor's layers OFF the UI thread. The
+        /// UI-thread tick still runs Update() and records the active layers into a cheap immutable
+        /// SKPicture (draw-command capture, no raster); a dedicated per-monitor present thread then
+        /// rasterizes that picture into a DIB-backed surface and pushes it with UpdateLayeredWindow(ULW_ALPHA).
+        /// This removes the fullscreen software raster + layered composite from the UI thread while keeping
+        /// per-pixel alpha, click-through and the layers' UI-thread contract intact (SKImage frees route
+        /// through the engine's deferred-disposal so an image referenced by an in-flight picture is never
+        /// freed under the present thread). No-op when the unified host is off. Falls back to the UI-thread
+        /// SKElement host when off; there is no dedicated UI toggle — the user-facing escape hatch is the
+        /// Settings > System "Unified overlay renderer" switch, which drops to the legacy per-effect windows
+        /// entirely (that path never had the UI-thread spiral raster either).</summary>
         public bool CompositorOffThreadPresent
         {
             get => _compositorOffThreadPresent;
@@ -3810,6 +3813,31 @@ namespace ConditioningControlPanel.Models
             if (_migratedUnifiedOverlayHostOn) return;
             _unifiedOverlayHost = true;
             _migratedUnifiedOverlayHostOn = true;
+        }
+
+        private bool _migratedCompositorOffThreadOn;
+        /// <summary>One-shot guard for <see cref="MigrateEnableCompositorOffThreadPresent"/> so a user who
+        /// turns the off-thread present toggle off afterwards isn't clobbered back on at the next launch.</summary>
+        [JsonProperty]
+        public bool MigratedCompositorOffThreadOn
+        {
+            get => _migratedCompositorOffThreadOn;
+            set { _migratedCompositorOffThreadOn = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Force the off-thread compositor present path ON once for users upgrading from 6.4.0 and
+        /// earlier, which persisted "false" (the flag defaulted OFF while the compositor itself
+        /// defaulted ON). That combo rastered the fullscreen spiral on the UI thread and starved the
+        /// dispatcher on high-res / multi-monitor machines (bugs #588/#586/#587), so the field-default
+        /// flip to ON wouldn't reach them without this. One-shot — turning the toggle off later sticks.
+        /// No-op when the unified host is off (the present path only runs under the compositor).
+        /// </summary>
+        internal void MigrateEnableCompositorOffThreadPresent()
+        {
+            if (_migratedCompositorOffThreadOn) return;
+            _compositorOffThreadPresent = true;
+            _migratedCompositorOffThreadOn = true;
         }
 
         private double _speechWakeThreshold = 0.15;
