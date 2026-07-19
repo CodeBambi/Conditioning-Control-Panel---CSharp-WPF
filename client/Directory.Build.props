@@ -1,0 +1,16 @@
+<Project>
+
+  <!--
+    ONE VERSION AUTHORITY (client/docs/release-publish-gates.md §2).
+    Every version surface (AssemblyVersion, FileVersion, InformationalVersion, publish
+    artifact naming, future update metadata) DERIVES from this single <Version>.
+    No other file under client/ declares a version. This file also stops the MSBuild
+    upward Directory.Build.props walk, insulating the client from any repo-root props.
+    0.1.0 = honest greenfield pre-Milestone-1 number — deliberately NOT the WPF
+    product's version; the greenfield client must not impersonate it.
+  -->
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+</Project>

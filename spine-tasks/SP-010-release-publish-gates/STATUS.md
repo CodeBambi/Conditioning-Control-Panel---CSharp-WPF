@@ -1,12 +1,12 @@
 # STATUS: SP-010 — establish Release and publish gates
 
-**Current Step:** 1
-**Last Updated:** 2026-07-19 (Step 1 started)
+**Current Step:** 2
+**Last Updated:** 2026-07-19 (Step 1 complete — engine review skipped, T-2)
 
 ## Steps
 
 ### Step 1: Pre-approach consult, current-docs research, contract draft
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
 - [x] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
 - [x] STATUS.md updated before starting work
@@ -14,12 +14,12 @@
 - [x] `client/docs/release-publish-gates.md` written (strategy + revisit trigger, version rule, matrix, metadata shape, honest absences)
 
 ### Step 2: Version authority + derivation tests
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] `client/Directory.Build.props` single `<Version>`; SDK flow confirmed
-- [ ] Runtime version surface reads InformationalVersion ATTRIBUTE (no path/Location reads)
-- [ ] Publish script derives naming via `dotnet msbuild -getProperty:Version`
-- [ ] Derivation tests green (attributes + artifact name; no blind equality)
+- [x] `client/Directory.Build.props` single `<Version>`; SDK flow confirmed
+- [x] Runtime version surface reads InformationalVersion ATTRIBUTE (no path/Location reads)
+- [x] Publish script derives naming via `dotnet msbuild -getProperty:Version`
+- [x] Derivation tests green (attributes + artifact name; no blind equality)
 
 ### Step 3: Windows artifact evidence matrix
 **Status:** ⬜ Not Started
