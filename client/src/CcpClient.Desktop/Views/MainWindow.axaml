@@ -65,6 +65,12 @@
     <TextBlock Text="{Binding #TickText.Text, StringFormat='ElementName mirror: {0}'}"
                FontSize="10" Opacity="0.5" Foreground="#FFE8E0EE" Margin="0,4,0,0" />
 
+    <!-- SP-007 layout probe: the card's measured DIP bounds and the window's RenderScaling,
+         rendered in the window (UIA-readable on Windows) and logged once on first layout
+         (stderr-readable on Linux). Demonstrator-slice diagnostic; content-free. -->
+    <TextBlock x:Name="LayoutProbeText" FontSize="10" Opacity="0.5" Foreground="#FFE8E0EE"
+               Text="layout-probe: pending" />
+
     <!-- SP-003/SP-004/SP-006 integration proofs retained (may shrink, never deleted). -->
     <TextBlock Text="Startup trace + capability states (SP-003/SP-006 proofs)"
                FontWeight="SemiBold" FontSize="11" Foreground="#FFE8E0EE" Margin="0,14,0,4" />

@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In progress
 
-**Current Step:** Step 4
+**Current Step:** Step 5
 
 ## Steps
 
@@ -32,16 +32,16 @@
 - [x] WSL2 native-dir run: testCommand green + session-probe facts recorded (X11 facts, no Wayland claim)
 
 ### Step 4: Headed evidence, MCP advisory, visual verification
-**Status:** 🔄 In progress
+**Status:** ✅ Complete
 
-- [ ] Headed Windows UIA smoke: asset rendered, quick-toggle tick advance, ring flip, :pointerover delta, IsVisible bounds delta, keyboard path, restart-restore, scaling bounds 100%/150%, mid-operation teardown exit 0
-- [ ] Headed WSLg observation recorded with session-probe facts; unobservable items named
-- [ ] A-013 MCP advisory: redacted AXAML review done (or unavailability recorded); findings accepted/rejected
-- [ ] K3 visual verification: lit + unlit screenshots reviewed; bounded defects fixed
-- [ ] Validation doc: every row filled with ACTUAL named observation (no markup-presence claims)
+- [x] Headed Windows UIA smoke: asset rendered, quick-toggle tick advance, ring flip, :pointerover delta, IsVisible bounds delta, keyboard path, restart-restore, scaling bounds 100%/150%, mid-operation teardown exit 0
+- [x] Headed WSLg observation recorded with session-probe facts; unobservable items named
+- [x] A-013 MCP advisory: redacted AXAML review done (or unavailability recorded); findings accepted/rejected
+- [x] K3 visual verification: lit + unlit screenshots reviewed; bounded defects fixed
+- [x] Validation doc: every row filled with ACTUAL named observation (no markup-presence claims)
 
 ### Step 5: Evidence, board reconciliation, pre-completion consult
-**Status:** ⬜ Pending
+**Status:** 🔄 In progress
 
 - [ ] record.md written (incl. engine-review presence/absence note)
 - [ ] Pre-completion solo consult (Fable 5) run; verdict text persisted

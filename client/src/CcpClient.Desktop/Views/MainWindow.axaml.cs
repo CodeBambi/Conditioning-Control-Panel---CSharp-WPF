@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using CcpClient.Desktop.Capabilities;
@@ -50,7 +51,25 @@ public partial class MainWindow : Window
         };
         // Left-click settings popup: CARVED OUT (A-005 per-window contract, dashboard/feature
         // rows own it). No left-click handler is wired — a no-op would be a claim.
+
+        // SP-007 layout probe (demonstrator-slice diagnostic): measured card bounds + actual
+        // RenderScaling, visible in the window and logged once for the headed harness.
+        TickerCard.LayoutUpdated += (_, _) =>
+        {
+            var bounds = TickerCard.Bounds;
+            var topLeft = TickerCard.PointToScreen(new Point(0, 0));
+            LayoutProbeText.Text = string.Create(
+                System.Globalization.CultureInfo.InvariantCulture,
+                $"layout-probe: card {bounds.Width:F1}x{bounds.Height:F1} DIP @ scale {RenderScaling:0.##} @ screen {topLeft.X},{topLeft.Y}");
+            if (!_layoutProbeLogged)
+            {
+                _layoutProbeLogged = true;
+                host.LogDiagnostic(LayoutProbeText.Text);
+            }
+        };
     }
+
+    private bool _layoutProbeLogged;
 
     private static string Describe(CapabilityState state) => state switch
     {

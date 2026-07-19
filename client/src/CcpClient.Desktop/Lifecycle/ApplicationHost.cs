@@ -72,6 +72,12 @@ public sealed class ApplicationHost
     public bool IsShutdown => Volatile.Read(ref _shutdownStarted) != 0;
 
     /// <summary>
+    /// Content-free diagnostic surface for headed verification harnesses (SP-007 layout
+    /// probe). Never carries user content or secrets.
+    /// </summary>
+    public void LogDiagnostic(string message) => _log.Log(message);
+
+    /// <summary>
     /// Phase 3 body: explicitly start each registered participant in registration order.
     /// A start failure is a typed Fatal outcome, not an escaped exception.
     /// </summary>
