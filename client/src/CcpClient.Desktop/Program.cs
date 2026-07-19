@@ -78,6 +78,21 @@ public static class Program
                 return StartupOutcome.Success.Instance;
             }),
             new StartupPhase("CoreServices", ct => host!.StartParticipantsAsync(ct)),
+            // Capability contract §3 rule 2: probes run as owned operations in this named
+            // phase, after CoreServices (store load cannot race probe files) and before the
+            // window exists. Capability states never fail startup — a Faulted/Degraded state
+            // is truthful information, so the phase returns Success once probes complete.
+            new StartupPhase("CapabilityProbes", async ct =>
+            {
+                if (host!.ProbeRunner is not null)
+                {
+                    await host.ProbeRunner.RunAllAsync(ct).ConfigureAwait(false);
+                }
+
+                return ct.IsCancellationRequested
+                    ? StartupOutcome.Cancelled.Instance
+                    : StartupOutcome.Success.Instance;
+            }),
         ];
     }
 

@@ -1,5 +1,6 @@
 namespace CcpClient.Desktop.Lifecycle;
 
+using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Persistence;
 
 /// <summary>The minimal logger seam the panic path needs (contract §9). No levels, no framework.</summary>
@@ -116,8 +117,21 @@ public sealed class CompositionRoot
         // Persistence contract §11: the store's flush is wired into the host's reserved
         // pre-drain slot. A custom participants factory without a store gets no flush.
         var store = participants.OfType<PersistenceStore<DemoSettings>>().FirstOrDefault();
+
+        // Capability contract §3: the demonstrator probes are registered at composition
+        // (never run here) and execute as owned operations in the CapabilityProbes phase.
+        // The fs probe targets the SAME data directory the store persists into.
+        var capabilities = new CapabilityRegistry();
+        var dataDirectory = Path.GetDirectoryName(SettingsPathFactory())!;
+        capabilities.Register("display-session", _ =>
+            Task.FromResult(SessionProbe.Probe(new RuntimeSessionEnvironment())));
+        capabilities.Register("atomic-filesystem", token =>
+            Task.Run(() => AtomicFileSystemProbe.Probe(dataDirectory, new ProcMountsTable()), token));
+        var probeRunner = new CapabilityProbeRunner(infra.Registry.OwnerFor("CapabilityProbes"), capabilities);
+
         return new ApplicationHost(
             log, participants, trace, infra.Registry, infra.UiDispatch,
-            preDrainFlush: store is null ? null : () => store.FlushAsync(DefaultFlushTimeout));
+            preDrainFlush: store is null ? null : () => store.FlushAsync(DefaultFlushTimeout),
+            capabilities: capabilities, probeRunner: probeRunner);
     }
 }

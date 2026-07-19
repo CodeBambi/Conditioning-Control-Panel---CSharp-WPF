@@ -1,5 +1,7 @@
 namespace CcpClient.Desktop.Lifecycle;
 
+using CcpClient.Desktop.Capabilities;
+
 /// <summary>
 /// The single owner of every background participant (contract §5.2): the only caller of
 /// <see cref="IBackgroundParticipant.StartAsync"/> (phase 3) and
@@ -32,7 +34,9 @@ public sealed class ApplicationHost
         OperationRegistry registry,
         UiDispatchBoundary uiDispatch,
         TimeSpan? drainTimeout = null,
-        Func<Task>? preDrainFlush = null)
+        Func<Task>? preDrainFlush = null,
+        CapabilityRegistry? capabilities = null,
+        CapabilityProbeRunner? probeRunner = null)
     {
         _log = log;
         _participants = participants;
@@ -41,7 +45,15 @@ public sealed class ApplicationHost
         UiDispatch = uiDispatch;
         _drainTimeout = drainTimeout ?? DefaultDrainTimeout;
         _preDrainFlush = preDrainFlush;
+        Capabilities = capabilities;
+        ProbeRunner = probeRunner;
     }
+
+    /// <summary>Capability states for the window's user-visible surface (capability contract §9). Null only in owner-less test hosts.</summary>
+    public CapabilityRegistry? Capabilities { get; }
+
+    /// <summary>Runs the CapabilityProbes phase body (capability contract §3 rule 2). Null only in owner-less test hosts.</summary>
+    public CapabilityProbeRunner? ProbeRunner { get; }
 
     public IReadOnlyList<IBackgroundParticipant> Participants => _participants;
 

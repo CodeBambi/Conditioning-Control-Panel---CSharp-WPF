@@ -41,8 +41,9 @@ public class IntegrationProofTests
         Assert.Equal(1, heartbeat.StartCount);
         Assert.IsType<LoadOutcome.Missing>(store.LastLoadOutcome); // loaded in phase 3, fresh install
 
-        // The trace the window displays records every phase outcome.
-        Assert.Equal(3, host.Trace.Entries.Count);
+        // The trace the window displays records every phase outcome (incl. SP-006's
+        // CapabilityProbes phase).
+        Assert.Equal(4, host.Trace.Entries.Count);
         Assert.All(host.Trace.Entries, entry => Assert.EndsWith(": ok", entry));
 
         await host.ShutdownAsync();
