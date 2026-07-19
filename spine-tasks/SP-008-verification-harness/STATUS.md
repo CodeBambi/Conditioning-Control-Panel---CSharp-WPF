@@ -2,12 +2,12 @@
 
 **Overall:** 🔄 In progress
 
-**Current Step:** Step 1
+**Current Step:** Step 3
 
 ## Steps
 
 ### Step 1: Pre-approach consult, admission spike design, harness doc skeleton
-**Status:** 🔄 In progress
+**Status:** ✅ Complete
 
 - [x] Pre-approach solo consult (Fable 5) run; verdict text persisted BEFORE checkbox
 - [x] STATUS.md updated before starting work
@@ -15,11 +15,11 @@
 - [x] `client/docs/verification-harness.md` skeleton (tiers, evidence-class rule, affected=csproj-path, budget table, manifest schema, self-test usage)
 
 ### Step 2: Headless admission spike (evidence-gated)
-**Status:** ⬜ Pending
+**Status:** ✅ Complete
 
-- [ ] `Avalonia.Headless.XUnit@12.1.0` in NEW CcpClient.HeadlessTests project (NOT in CcpClient.Tests)
-- [ ] Real [AvaloniaTest] interaction test green on Windows AND WSL2 (recorded); draw-level assertions only
-- [ ] Contract testCommand builds solution + runs BOTH test projects; 85 landed tests untouched/green
+- [x] `Avalonia.Headless.XUnit@12.1.0` in NEW CcpClient.HeadlessTests project (NOT in CcpClient.Tests)
+- [x] Real [AvaloniaFact] interaction tests (3) green on Windows AND WSL2 (recorded); draw-level assertions only
+- [x] Contract testCommand builds solution + runs BOTH test projects; 85 landed tests untouched/green
 
 ### Step 3: Harness implementation (tiers 2–3)
 **Status:** ⬜ Pending

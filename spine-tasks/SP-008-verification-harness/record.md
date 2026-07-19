@@ -38,6 +38,21 @@ All pages fetched 2026-07-19 from official sources (freshness: v12 docs, current
 
 (to be filled as steps land)
 
+## Step 2 — headless admission evidence
+
+**ADMITTED: `Avalonia.Headless.XUnit@12.1.0`** (restore/build/real-test green on Windows AND WSL2 — the packet's admission bar).
+
+- Project: `client/tests/CcpClient.HeadlessTests/` (xunit.v3 3.2.2 same as CcpClient.Tests; project reference to CcpClient.Desktop; added to `CcpClient.sln` under `tests/`). Minimal `TestApp` (FluentTheme in code, no AXAML) per consult point 4 — the real `App` is composition-root-constructed by design.
+- `[AvaloniaFact]` used (official v12 XUnit attribute; the packet's `[AvaloniaTest]` wording is the NUnit one — deviation recorded in research section).
+- Three REAL interaction tests against the dashboard card through the REAL composition root (`CompositionRoot` + `StartupPhaseRunner`, temp settings dir, same boot pattern as the 85 landed tests):
+  1. `Card_Toggle_AppliesLitClass_AndStyleResolvesBorderBrush` — compiled `Classes.lit` binding resolves; toggle via the ONE command path applies/removes the `lit` class; the `.lit` selector's BorderBrush (#FFE066FF) wins over the base (#FF3A2F3E) and reverts on toggle-off. Draw-level: tree classes + style resolution.
+  2. `Card_ArrangedBounds_GrowWithLoadBearinIsVisible` — arranged DIP card height grows when the tick row enters layout on toggle-on. Draw-level: in-memory layout bounds.
+  3. `ElementNameMirror_FollowsLiveTickText` — phase-4 bind through the REAL `AvaloniaUiDispatch` (headless UI thread is a real Dispatcher); the `#TickText.Text` mirror follows an ADVANCING tick. Draw-level: compiled-binding resolution against a changing source.
+- Draw-level assertions ONLY — no `CaptureRenderedFrame`, no pixel claims, default fake drawing backend (no pixels exist). Evidence-class rule honored.
+- **Windows:** build 0W/0E; 3/3 headless passed; 85/85 landed CcpClient.Tests passed untouched (SDK 10.0.302).
+- **WSL2 (Ubuntu, SDK 10.0.110, native `~/ccp-sp008` copy, never /mnt/e):** solution build 0W/0E; 3/3 headless passed; 85/85 landed passed. Session facts: `WAYLAND_DISPLAY=wayland-0`, `DISPLAY=:0` (WSLg; headless needs no display at all — in-memory backends — recorded as environment fact only).
+
 ## Engine reviews
 
-(to be filled — `spine_review_step` results per step; T-2 tracking)
+- Step 1 plan review: `spine_review_step` → **skipped=true, reviewLevel=0, spawnFailed=false** (eighth consecutive batch with zero engine reviews; T-2 remains open). Fable solo consults are the active quality gate per the packet.
+- (further steps appended as they land)
