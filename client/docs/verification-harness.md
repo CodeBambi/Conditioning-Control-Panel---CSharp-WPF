@@ -25,7 +25,7 @@ pwsh client/tools/verify/capture.ps1 -Surface dashboard-card -State unlit
 pwsh client/tools/verify/capture.ps1 -Surface dashboard -State unlit
 ```
 
-Surfaces are NAMED capture scopes, not app screens: `dashboard-card` = the card rect from the app's layout probe (Avalonia exposes no UIA peers for Border/Grid/StackPanel — SP-007 surprise #1); `dashboard` = the whole window. States are driven through REAL input (state `lit` right-click quick-toggles the card before capture — the same user path a regression would break).
+Surfaces are NAMED capture scopes, not app screens: `dashboard-card` = the card rect from the app's layout probe (Avalonia exposes no UIA peers for Border/Grid/StackPanel — SP-007 surprise #1); `dashboard` = the whole window. State drives differ per platform, honestly: **Windows** drives `lit` through REAL input (right-click quick-toggle, tick-advance verified by UIA before capture — the same user path a regression would break); **WSLg** drives `lit` through the restart-restore path (pre-seeded `{"statusTickerEnabled": true}` — a real user path, but NOT an input path: WSLg has no input automation, SP-007 named gate). Interaction evidence stays Windows-headed; WSLg captures are render/scale/session-facts only.
 
 - Windows: real window + `CopyFromScreen` crop to the layout-probe rect → PNG. (System.Drawing appears here ONLY as capture transport; scripts never read a pixel — SP-008 consult.)
 - WSLg (Linux/X11): `XGetImage` via python3 ctypes against the app's X window (`capture-wslg.sh` + `xgetimage.py`) → BMP. WSLg RAIL windows are invisible to Windows-side GDI capture (SP-007 surprise #3).
@@ -36,7 +36,7 @@ Surfaces are NAMED capture scopes, not app screens: `dashboard-card` = the card 
 
 Deterministic named checks BEFORE/DESIDE model review: one cross-platform .NET console tool (`client/tools/verify/CcpVerify`) reads the manifest (`client/tools/verify/checks.json`), decodes a capture via `Avalonia.Media.Imaging.Bitmap` (no System.Drawing, zero new packages), evaluates each named check for the captured surface+state, and exits non-zero naming the FIRST failed check. K3 (`app-visual-verification` skill) then reviews the same capture against the same manifest — the manifest row is the shared contract between deterministic assertion and model review.
 
-- Checks are scoped to REAL current consumers only: the SP-007 dashboard card lit/unlit states and the capability surface. No speculative checks for surfaces that do not exist (A-014). Each new surface adds its checks with its own task.
+- Checks are scoped to REAL current consumers only: the SP-007 dashboard card lit/unlit border bands and the dashboard background. The capability surface is verified by TIER-2 UIA TEXT NEEDLES inside `capture.ps1` (`capability display-session: Available` etc.) — pixel checks cannot read text, so no manifest check claims it. No speculative checks for surfaces that do not exist (A-014). Each new surface adds its checks with its own task.
 
 ### Tier 4 — theme/language/platform matrices (named milestones/releases ONLY)
 

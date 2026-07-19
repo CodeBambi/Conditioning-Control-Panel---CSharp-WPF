@@ -64,7 +64,7 @@ public class DashboardCardHeadlessTests
     }
 
     [AvaloniaFact]
-    public async Task Card_ArrangedBounds_GrowWithLoadBearinIsVisible()
+    public async Task Card_ArrangedBounds_GrowWithLoadBearingIsVisible()
     {
         var host = await BootAsync();
         var window = new MainWindow(host);

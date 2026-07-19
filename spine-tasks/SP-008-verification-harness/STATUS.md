@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In progress
 
-**Current Step:** Step 5
+**Current Step:** Step 6
 
 ## Steps
 
@@ -38,12 +38,12 @@
 - [x] WSL2 gate: full testCommand green native-dir + tier-2 WSLg capture exercised (X11 facts, no Wayland claim)
 
 ### Step 5: Evidence, board reconciliation, pre-completion consult
-**Status:** ⬜ Pending
+**Status:** ✅ Complete
 
-- [ ] record.md written (incl. engine-review presence/absence)
-- [ ] Pre-completion solo consult (Fable 5) run; verdict text persisted
-- [ ] Board row 7 → `WIP` with evidence (not `DONE`)
-- [ ] STATUS.md accurate
+- [x] record.md written (incl. engine-review presence/absence)
+- [x] Pre-completion solo consult (Fable 5) run; verdict text persisted
+- [x] Board row 7 → `WIP` with evidence (not `DONE`)
+- [x] STATUS.md accurate
 
 ### Step 6: Testing & Verification
 **Status:** ⬜ Pending
