@@ -1,21 +1,21 @@
 # Status: SP-009 — define asset and packaged-output manifest
 
-**Overall:** 🔄 Pending
+**Overall:** 🔄 In Progress
 
-**Current Step:** not started
+**Current Step:** Step 2
 
 ## Steps
 
 ### Step 1: Pre-approach consult, v12 research, contract draft
-**Status:** ⬜ Pending
+**Status:** ✅ Complete
 
-- [ ] Pre-approach solo consult (Fable 5) run; verdict text persisted BEFORE checkbox
-- [ ] STATUS.md updated before starting work
-- [ ] v12 AssetLoader research (platform-init requirement, embedding mechanics, publish-resolution changes — research only)
-- [ ] `client/docs/asset-manifest.md` written (schema, override/trust policy, two-direction rule, self-check contract, row-9 hook, evidence classes)
+- [x] Pre-approach solo consult (Fable 5) run; verdict text persisted BEFORE checkbox
+- [x] STATUS.md updated before starting work
+- [x] v12 AssetLoader research (platform-init requirement, embedding mechanics, publish-resolution changes — research only)
+- [x] `client/docs/asset-manifest.md` written (schema, override/trust policy, two-direction rule, self-check contract, row-9 hook, evidence classes)
 
 ### Step 2: Catalogue and validation tests
-**Status:** ⬜ Pending
+**Status:** 🔄 In Progress
 
 - [ ] assets.manifest.json with one real entry, embedded as avares resource
 - [ ] Two-direction tests: manifest opens via AssetLoader + completeness sweep fails on unmanifested assets
