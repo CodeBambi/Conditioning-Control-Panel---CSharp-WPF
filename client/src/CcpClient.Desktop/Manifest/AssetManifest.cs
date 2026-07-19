@@ -293,3 +293,66 @@ public static class AssetVerifier
     public static bool IsCompilerOwnedBundleEntry(string path) =>
         path.Split('/').Last().StartsWith('!');
 }
+
+/// <summary>
+/// The <c>--verify-assets</c> diagnostic self-check (asset-manifest.md §--verify-assets
+/// self-check contract): a bounded path that runs BEFORE the startup phases — no window,
+/// no lifetime, no participants (SP-003 phase discipline: nothing starts that asset
+/// opening does not need). Opens the embedded manifest and every required embedded asset
+/// through the same avares:// mechanism the app uses, prints one diagnostic line per
+/// failure, exit 0 on full pass, non-zero otherwise.
+/// </summary>
+public static class AssetSelfCheck
+{
+    public const string Flag = "--verify-assets";
+
+    public static int Run(Assembly assembly, TextWriter output)
+    {
+        AssetEntry[] entries;
+        try
+        {
+            var loader = new StandardAssetLoader(assembly);
+            using var manifestStream = loader.Open(
+                new Uri(AssetManifest.AssemblyAssetUriPrefix + AssetManifest.ManifestAssetPath));
+            if (!AssetManifest.TryParse(manifestStream, out entries, out var errors))
+            {
+                foreach (var error in errors)
+                {
+                    output.WriteLine(
+                        $"asset FAIL asset.manifest {AssetManifest.ManifestAssetPath}: manifest-invalid: {error}");
+                }
+
+                output.WriteLine("verify-assets: FAIL (manifest invalid)");
+                return 1;
+            }
+        }
+        catch (Exception ex)
+        {
+            output.WriteLine(
+                $"asset FAIL asset.manifest {AssetManifest.ManifestAssetPath}: open-failed: {ex.Message}");
+            output.WriteLine("verify-assets: FAIL (manifest unreadable)");
+            return 1;
+        }
+
+        var failures = AssetVerifier.Verify(entries, assembly);
+        foreach (var entry in entries.Where(e => e is { Source: AssetSource.Embedded, Required: true }))
+        {
+            if (failures.Any(f => f.Id == entry.Id && f.Path == entry.Path))
+            {
+                continue;
+            }
+
+            output.WriteLine($"asset OK {entry.Id} {entry.Path}");
+        }
+
+        foreach (var failure in failures)
+        {
+            output.WriteLine($"asset FAIL {failure.Id} {failure.Path}: {failure.Reason}");
+        }
+
+        output.WriteLine(failures.Count == 0
+            ? $"verify-assets: PASS ({entries.Length} manifest entries, all required embedded assets open)"
+            : $"verify-assets: FAIL ({failures.Count} failure(s))");
+        return failures.Count == 0 ? 0 : 1;
+    }
+}

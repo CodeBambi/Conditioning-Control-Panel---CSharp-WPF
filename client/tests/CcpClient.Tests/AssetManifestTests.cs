@@ -131,6 +131,21 @@ public class AssetManifestTests
     }
 
     [Fact]
+    public void SelfCheck_RealAssembly_ExitZero_WithPerAssetLines()
+    {
+        // The --verify-assets path exercised from unit tests (SP-009 Step 3): same code
+        // the real binary runs, same assembly, captured output.
+        var output = new StringWriter();
+        var exit = AssetSelfCheck.Run(DesktopAssembly, output);
+        Assert.Equal(0, exit);
+        var text = output.ToString();
+        Assert.Contains("asset OK demo.status-ticker.icon Assets/demo-status-ticker.png", text, StringComparison.Ordinal);
+        Assert.Contains($"asset OK asset.manifest {AssetManifest.ManifestAssetPath}", text, StringComparison.Ordinal);
+        Assert.Contains("verify-assets: PASS", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("asset FAIL", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Schema_ValidUserModCopiedEntries_Parse()
     {
         // Schema covers policy-shaped entries; loading is unimplemented and recorded.
