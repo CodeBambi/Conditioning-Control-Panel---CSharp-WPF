@@ -115,4 +115,5 @@ Full as-built summary submitted (all eight delivered items above). Verdict recei
 - Step 2 plan review: **skipped=true** (same as Step 1; T-2).
 - Step 3 plan review: **skipped=true** (T-2).
 - Step 4 plan review: **skipped=true** (T-2).
+- Step 5 plan review: **skipped=true** (T-2).
 - (further steps appended as they land)
