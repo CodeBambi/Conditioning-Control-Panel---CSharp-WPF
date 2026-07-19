@@ -54,3 +54,28 @@ All fetched **2026-07-19**. Baselines: Avalonia 12.1.0, .NET SDK 10.0.302 (Windo
 - **Publish strategy:** self-contained single-file per RID (`win-x64`, `linux-x64`), `IncludeNativeLibrariesForSelfExtract` NOT set (natives beside the exe; artifact = publish directory as a unit). Revisit trigger: first real distribution consumer. Consult Q1's "document the natives decision" applied.
 - **Version number: `0.1.0`** — honest greenfield pre-Milestone-1 number; deliberately NOT the WPF product's 6.2.7 (the greenfield client must not impersonate it). Recorded per the packet's "record the choice" requirement.
 - **Matrix:** graceful-close-only exit-0 (no kill on the success path); corrupt-settings asserts the quarantine FILE with original bytes; fresh-profile asserts NO settings.json created (persistence §5 rule 2); data-path identity proven by moving the publish dir + identical quarantine landing path across modes; native-deps floor via per-.so ldd + runtime maps.
+
+## Step 2 evidence
+
+- `client/Directory.Build.props` created with single `<Version>0.1.0</Version>`; `dotnet msbuild -getProperty:Version` against the app csproj returns `0.1.0` (authority flows through the SDK).
+- `VersionSelfCheck` reads `AssemblyInformationalVersionAttribute` via reflection; `--version` flag wired next to `--verify-assets` at the top of `Main`. Real binary: `version: 0.1.0+304f8e66ff21995be4e295d76efe8c50da607fb6` — the `+<SourceRevisionId>` suffix is LIVE, confirming derivation-not-equality was the correct test design.
+- Publish scripts (`client/tools/publish/publish.ps1|.sh`) derive the artifact name from the authority; empty Version = hard failure.
+- `VersionDerivationTests` (3 tests): informational-exists+prefix-derives, AssemblyVersion==FileVersion numerically, self-check exit 0 + exact line. Full suite **118/118** (115 landed + 3 new), 0W/0E.
+- `git check-ignore` audit: `client/tools/publish/` ignored by root `.gitignore` line 167 `tools/` (SP-008 trap) — force-added the two scripts, staged list audited (no bin/obj swept). `client/artifacts/publish/` ignored by line 94 `publish/` — correct (outputs, not source).
+- Engine review Step 2: `spine_review_step` → **skipped=true** (T-2).
+
+## Step 3 evidence — Windows artifact matrix
+
+**Publish (win-x64):** `pwsh client/tools/publish/publish.ps1` → `CcpClient.Desktop-0.1.0-win-x64/` — apphost 82.8 MB + native sidecars `av_libglesv2.dll` 5.4 MB / `libHarfBuzzSharp.dll` 1.8 MB / `libSkiaSharp.dll` 11.6 MB (+PDBs). Matches the researched SDK-default layout (natives beside the exe, managed bundled in-memory).
+
+**Matrix (`pwsh client/tools/publish/matrix.ps1`), 2026-07-19 — MATRIX PASS (windows):**
+
+- Gate 2 `--verify-assets`: PASS exit 0 on **debug, release, published** — **row-8 publish third DISCHARGED (Windows)**.
+- Gate 3 `--version` prefix == authority 0.1.0: PASS all three (debug `+304f8e66…`, release/published `+95b9257c…` — suffix differs by build commit as designed).
+- Gate 4 fresh-profile headed: PASS all three — graceful exit 0 via `CloseMainWindow`, layout-probe observed (`card 488.0x77.0 DIP @ scale 1`), **no settings.json created**.
+- Gate 5 corrupt-settings: PASS all three — graceful exit 0, `settings.corrupt-*.json` preserved the exact seeded garbage bytes (`07B 07B 00 FF 41`); the typed-Degraded stderr seam line observed (`persistence: settings file unreadable; preserved at … before falling back to flagged defaults`) — quarantine is observable, never silent.
+- Gate 6 data-path identity: PASS — identical `C:\Users\Micha\AppData\Roaming\CcpClient` across all three modes; the published mode ran from a MOVED copy at `%TEMP%\ccp-sp010-portable` (location independence proven).
+- Gate 7 logs-absence: PASS all three — no `*.log` beside artifact or in config dir.
+- Gate 8 native-deps floor (published): PASS — sidecars recorded above; research expectation vs observed reality match exactly.
+- First matrix run caught two SCRIPT bugs (not product): Release binary not pre-built (publish uses the RID-scoped intermediate dir — script now fails with the exact build command) and gate 6 compared timestamped quarantine filenames instead of the directory (fixed to compare `DirectoryName`). Re-run: full PASS.
+- Engine review Step 3: `spine_review_step` → skipped=true (T-2).

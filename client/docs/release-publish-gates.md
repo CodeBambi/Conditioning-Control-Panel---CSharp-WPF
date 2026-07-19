@@ -19,6 +19,8 @@ dotnet publish client/src/CcpClient.Desktop/CcpClient.Desktop.csproj -c Release 
 
 **Revisit trigger:** the first real distribution consumer (an installer/archive row, or a distribution channel requiring a literal single file). That row re-evaluates `IncludeNativeLibrariesForSelfExtract` (with the extraction-dir failure modes above as its test matrix) and records the decision here.
 
+**Measured publish facts (2026-07-19, SDK 10.0.302):** command = the §1 invocation per RID via `client/tools/publish/publish.ps1|.sh` (artifact name derives from `dotnet msbuild -getProperty:Version`). win-x64 artifact = `CcpClient.Desktop-0.1.0-win-x64/`: apphost `CcpClient.Desktop.exe` **82.8 MB** (all managed assemblies bundled) + native sidecars `av_libglesv2.dll` 5.4 MB, `libHarfBuzzSharp.dll` 1.8 MB, `libSkiaSharp.dll` 11.6 MB (+PDB symbol files, not product payload) — observed layout matches the researched SDK-default expectation exactly. linux-x64 facts land with the Step-4 WSL2 gate.
+
 ## 2. One version authority
 
 **Rule: one `<Version>` in `client/Directory.Build.props`. Every version surface DERIVES from it. Nothing else anywhere declares a version.**

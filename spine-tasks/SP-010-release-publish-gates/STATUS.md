@@ -1,7 +1,7 @@
 # STATUS: SP-010 — establish Release and publish gates
 
-**Current Step:** 2
-**Last Updated:** 2026-07-19 (Step 1 complete — engine review skipped, T-2)
+**Current Step:** 4
+**Last Updated:** 2026-07-19 (Step 3 complete — Windows matrix PASS; engine review skipped, T-2)
 
 ## Steps
 
@@ -14,7 +14,7 @@
 - [x] `client/docs/release-publish-gates.md` written (strategy + revisit trigger, version rule, matrix, metadata shape, honest absences)
 
 ### Step 2: Version authority + derivation tests
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
 - [x] `client/Directory.Build.props` single `<Version>`; SDK flow confirmed
 - [x] Runtime version surface reads InformationalVersion ATTRIBUTE (no path/Location reads)
@@ -22,14 +22,14 @@
 - [x] Derivation tests green (attributes + artifact name; no blind equality)
 
 ### Step 3: Windows artifact evidence matrix
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] win-x64 self-contained single-file published; size + command recorded
-- [ ] Matrix green on Debug/Release/published: startup+shutdown exit 0, --verify-assets (published = row-8 discharge), fresh-profile, corrupt-settings quarantine, data-path identity, logs-absence
-- [ ] Windows native-deps expectation vs observed recorded
+- [x] win-x64 self-contained single-file published; size + command recorded
+- [x] Matrix green on Debug/Release/published: startup+shutdown exit 0, --verify-assets (published = row-8 discharge), fresh-profile, corrupt-settings quarantine, data-path identity, logs-absence
+- [x] Windows native-deps expectation vs observed recorded
 
 ### Step 4: WSL2 gate — Linux matrix + WSLg headed smoke
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] Native-dir copy (~/ccp-sp010), full contract testCommand green on WSL2
 - [ ] linux-x64 published; same matrix green incl. --verify-assets on all three modes
