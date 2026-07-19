@@ -1,5 +1,6 @@
 using Avalonia;
 using CcpClient.Desktop.Lifecycle;
+using CcpClient.Desktop.Manifest;
 
 namespace CcpClient.Desktop;
 
@@ -13,6 +14,15 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // Diagnostic self-check (asset-manifest.md §--verify-assets self-check contract):
+        // a bounded path BEFORE any phase — no window, no lifetime, no participants, no
+        // startup side effects (SP-003 phase discipline). The normal path below is
+        // byte-identical to before this flag existed.
+        if (args.Contains(AssetSelfCheck.Flag, StringComparer.Ordinal))
+        {
+            return AssetSelfCheck.Run(typeof(Program).Assembly, Console.Out);
+        }
+
         // Phase 1 (Bootstrap) actions must exist before anything can fail: panic hooks
         // and the minimal logger seam (contract §1, §9).
         ILogSink log = new DebugLogSink();
