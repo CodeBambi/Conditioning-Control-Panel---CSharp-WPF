@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- SP-011 granular matrix (tracked OVERLAY file — not part of the payload).
+     Covers the acceptance items the payload's own spike.js does NOT: module workers
+     (the payload's real /dtrh/engine/gifWorker.js), WebAudio decode + autoplay policy,
+     unmuted media autoplay. Results in DOM (transport-independent) and over the bridge. -->
+<meta charset="utf-8">
+<title>MATRIX</title>
+<pre id="out">RUNNING</pre>
+<script type="module">
+const out = document.getElementById('out');
+const lines = [];
+const rec = (n, ok, d) => {
+  lines.push(`${ok ? 'PASS' : 'FAIL'}  ${n}  ${d}`);
+  out.textContent = lines.join('\n');
+  try { window.chrome?.webview?.postMessage({ type: 'matrix-result', name: n, ok, detail: String(d) }); } catch (e) { /* transport optional */ }
+};
+const mediaBase = new URLSearchParams(location.search).get('media') || '';
+
+// 1. module worker from the payload tree (root-relative, as the engine spawns it)
+try {
+  const w = new Worker('/dtrh/engine/gifWorker.js', { type: 'module' });
+  let failed = false;
+  w.addEventListener('error', (e) => { failed = true; rec('worker-module', false, `error event: ${e.message || e.type}`); });
+  setTimeout(() => { if (!failed) { rec('worker-module', true, 'constructed, no error event in 2s'); w.terminate(); } }, 2000);
+} catch (e) {
+  rec('worker-module', false, `ctor threw: ${e.message}`);
+}
+
+// 2. WebAudio: context state + CORS decode of a payload bark over the media origin
+(async () => {
+  try {
+    const ctx = new AudioContext();
+    rec('webaudio-context', true, `state=${ctx.state} sampleRate=${ctx.sampleRate}`);
+    if (mediaBase) {
+      const r = await fetch(`${mediaBase}/media/barks/circe/fall_b_casino_001.mp3`);
+      const buf = await r.arrayBuffer();
+      const decoded = await ctx.decodeAudioData(buf);
+      rec('webaudio-decode-cors', true, `decoded ${decoded.duration.toFixed(2)}s ${decoded.numberOfChannels}ch via fetch status ${r.status}`);
+    } else {
+      rec('webaudio-decode-cors', false, 'no ?media= origin passed');
+    }
+  } catch (e) {
+    rec('webaudio-decode-cors', false, `threw: ${e.message}`);
+  }
+})();
+
+// 3. autoplay policy: muted video (usually allowed) vs UNMUTED audio (the DTRH bark path)
+(async () => {
+  if (!mediaBase) { rec('autoplay-unmuted', false, 'no ?media= origin passed'); return; }
+  try {
+    const a = new Audio(`${mediaBase}/media/barks/circe/fall_b_casino_001.mp3`);
+    a.crossOrigin = 'anonymous';
+    await a.play();
+    rec('autoplay-unmuted', true, 'play() resolved WITHOUT any user gesture');
+    a.pause();
+  } catch (e) {
+    rec('autoplay-unmuted', false, `${e.name}: ${e.message}`);
+  }
+})();
+
+setTimeout(() => { document.title = 'MATRIX-DONE'; }, 6000);
+</script>

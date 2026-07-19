@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SP-011 quarantined spike host. NOT referenced by client/CcpClient.sln.
+    Inherits client/Directory.Build.props (single <Version> authority) — nothing else.
+    Build-only: acceptance is headed evidence, not a test project.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <RootNamespace>CcpSpike.WebView</RootNamespace>
+    <!-- NativeControlHost (WebView) needs supportedOS in the Win32 manifest. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Baseline pinned to the product's 12.1.0 (src/CcpClient.Desktop/CcpClient.Desktop.csproj). -->
+    <PackageReference Include="Avalonia" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
+    <!-- Spike subject: the claim under test (board row: "Avalonia.Controls.WebView 12.0.1"). -->
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
+  </ItemGroup>
+
+</Project>
