@@ -7,18 +7,49 @@ namespace CcpClient.Desktop.Lifecycle;
 /// </summary>
 public sealed class ApplicationHost
 {
+    private static readonly TimeSpan DefaultDrainTimeout = TimeSpan.FromSeconds(5);
+
     private readonly ILogSink _log;
     private readonly IReadOnlyList<IBackgroundParticipant> _participants;
+    private readonly TimeSpan _drainTimeout;
     private int _shutdownStarted;
 
+    /// <summary>
+    /// Convenience for owner-less test participants; any participant that registers
+    /// operations must share the host's registry (use <see cref="CompositionRoot.Build"/>
+    /// or the full constructor).
+    /// </summary>
     public ApplicationHost(ILogSink log, IReadOnlyList<IBackgroundParticipant> participants, StartupTrace trace)
+        : this(log, participants, trace, new OperationRegistry(), new UiDispatchBoundary(), DefaultDrainTimeout)
+    {
+    }
+
+    public ApplicationHost(
+        ILogSink log,
+        IReadOnlyList<IBackgroundParticipant> participants,
+        StartupTrace trace,
+        OperationRegistry registry,
+        UiDispatchBoundary uiDispatch,
+        TimeSpan? drainTimeout = null)
     {
         _log = log;
         _participants = participants;
         Trace = trace;
+        Registry = registry;
+        UiDispatch = uiDispatch;
+        _drainTimeout = drainTimeout ?? DefaultDrainTimeout;
     }
 
     public IReadOnlyList<IBackgroundParticipant> Participants => _participants;
+
+    /// <summary>The registry owning every participant's async operations (async contract §1).</summary>
+    public OperationRegistry Registry { get; }
+
+    /// <summary>The late-bound UI dispatch boundary (async contract §5).</summary>
+    public UiDispatchBoundary UiDispatch { get; }
+
+    /// <summary>Phase 4 binding of the real dispatch boundary (async contract §5.2). Never SynchronizationContext capture.</summary>
+    public void BindUiDispatch(IUiDispatch dispatch) => UiDispatch.Bind(dispatch);
 
     /// <summary>Phase-outcome trace displayed by the placeholder window (contract §10.1).</summary>
     public StartupTrace Trace { get; }
@@ -57,11 +88,14 @@ public sealed class ApplicationHost
     }
 
     /// <summary>
-    /// The single idempotent teardown entry point (contract §6). Runs exactly once per
-    /// process; every later invocation from any path is a no-op. Stops participants in
-    /// reverse start order and never throws: one participant's stop failure is logged and
-    /// teardown continues to the rest. The settings-flush ordering slot is reserved at the
-    /// head of this sequence for row 4.
+    /// The single idempotent teardown entry point (SP-003 contract §6; async contract §6).
+    /// Runs exactly once per process; every later invocation from any path is a no-op.
+    /// Order: cancel every generation and drain every owned completion (bounded wait is a
+    /// backstop only; cancellation terminates well-behaved operations), then stop
+    /// participants in reverse start order. Never throws: unobserved operations are
+    /// recorded in registry state, and one participant's stop failure is logged while
+    /// teardown continues to the rest. The settings-flush ordering slot is reserved at
+    /// the head of this sequence for row 4. There is no second teardown path for async work.
     /// </summary>
     public async Task ShutdownAsync()
     {
@@ -71,6 +105,10 @@ public sealed class ApplicationHost
         }
 
         // ponytail: settings flush slot goes here when row 4 lands (contract §6 rule 5).
+
+        // Async contract §6 steps 1-3: cancel generations, await owned completions,
+        // record unobserved (never throw).
+        await Registry.CancelAndDrainAsync(_log, _drainTimeout).ConfigureAwait(false);
 
         for (var i = _participants.Count - 1; i >= 0; i--)
         {
