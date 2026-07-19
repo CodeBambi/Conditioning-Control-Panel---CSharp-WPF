@@ -12,6 +12,7 @@ public sealed class ApplicationHost
     private readonly ILogSink _log;
     private readonly IReadOnlyList<IBackgroundParticipant> _participants;
     private readonly TimeSpan _drainTimeout;
+    private readonly Func<Task>? _preDrainFlush;
     private int _shutdownStarted;
 
     /// <summary>
@@ -30,7 +31,8 @@ public sealed class ApplicationHost
         StartupTrace trace,
         OperationRegistry registry,
         UiDispatchBoundary uiDispatch,
-        TimeSpan? drainTimeout = null)
+        TimeSpan? drainTimeout = null,
+        Func<Task>? preDrainFlush = null)
     {
         _log = log;
         _participants = participants;
@@ -38,6 +40,7 @@ public sealed class ApplicationHost
         Registry = registry;
         UiDispatch = uiDispatch;
         _drainTimeout = drainTimeout ?? DefaultDrainTimeout;
+        _preDrainFlush = preDrainFlush;
     }
 
     public IReadOnlyList<IBackgroundParticipant> Participants => _participants;
@@ -94,8 +97,8 @@ public sealed class ApplicationHost
     /// backstop only; cancellation terminates well-behaved operations), then stop
     /// participants in reverse start order. Never throws: unobserved operations are
     /// recorded in registry state, and one participant's stop failure is logged while
-    /// teardown continues to the rest. The settings-flush ordering slot is reserved at
-    /// the head of this sequence for row 4. There is no second teardown path for async work.
+    /// teardown continues to the rest. The settings flush occupies the head slot SP-003
+    /// reserved (activated by SP-005, persistence contract §11). There is no second teardown path for async work.
     /// </summary>
     public async Task ShutdownAsync()
     {
@@ -104,7 +107,21 @@ public sealed class ApplicationHost
             return;
         }
 
-        // ponytail: settings flush slot goes here when row 4 lands (contract §6 rule 5).
+        // Persistence contract §11 (SP-005): the settings flush occupies the reserved head
+        // slot — it completes BEFORE generations are cancelled/drained and before reverse-order
+        // participant stop. Attempted on every path including panic (contract §11 rule 4);
+        // bounded internally; guarded here too so teardown never throws (SP-003 invariant).
+        if (_preDrainFlush is not null)
+        {
+            try
+            {
+                await _preDrainFlush().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _log.Log($"teardown: settings flush failed: {ex.Message}");
+            }
+        }
 
         // Async contract §6 steps 1-3: cancel generations, await owned completions,
         // record unobserved (never throw).

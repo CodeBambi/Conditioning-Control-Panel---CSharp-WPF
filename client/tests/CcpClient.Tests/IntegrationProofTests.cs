@@ -1,5 +1,6 @@
 using CcpClient.Desktop;
 using CcpClient.Desktop.Lifecycle;
+using CcpClient.Desktop.Persistence;
 using Xunit;
 
 namespace CcpClient.Tests;
@@ -16,7 +17,13 @@ public class IntegrationProofTests
     public async Task RealCompositionRoot_ThroughRealPhaseRunner_ResolvesEveryWindowDependency()
     {
         var trace = new StartupTrace();
-        var root = new CompositionRoot(); // the real root, exactly as Program.Main builds it
+        var settingsDir = Path.Combine(Path.GetTempPath(), "ccp-integration-" + Guid.NewGuid().ToString("N"));
+        var root = new CompositionRoot
+        {
+            // The real root, exactly as Program.Main builds it — with the settings path
+            // redirected so the test never touches the real per-user file.
+            SettingsPathFactory = () => Path.Combine(settingsDir, "settings.json"),
+        };
         ApplicationHost? host = null;
 
         var outcome = await StartupPhaseRunner.RunAsync(
@@ -27,9 +34,12 @@ public class IntegrationProofTests
 
         // MainWindow's dependencies are (host, host.Trace) — both resolve from the root's product.
         Assert.Same(trace, host!.Trace);
-        var heartbeat = Assert.IsType<HeartbeatParticipant>(Assert.Single(host.Participants));
+        Assert.Equal(2, host.Participants.Count);
+        var store = Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
+        var heartbeat = Assert.IsType<HeartbeatParticipant>(host.Participants[1]);
         Assert.True(heartbeat.Running); // phase 3 demonstrably started it
         Assert.Equal(1, heartbeat.StartCount);
+        Assert.IsType<LoadOutcome.Missing>(store.LastLoadOutcome); // loaded in phase 3, fresh install
 
         // The trace the window displays records every phase outcome.
         Assert.Equal(3, host.Trace.Entries.Count);

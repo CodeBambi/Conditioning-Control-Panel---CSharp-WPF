@@ -1,4 +1,5 @@
 using CcpClient.Desktop.Lifecycle;
+using CcpClient.Desktop.Persistence;
 using Xunit;
 
 namespace CcpClient.Tests;
@@ -51,8 +52,11 @@ public class CompositionRootValidationTests
 
         var host = root.Build(new StartupTrace());
 
-        Assert.Single(host.Participants);
-        Assert.IsType<HeartbeatParticipant>(host.Participants[0]);
+        Assert.Equal(2, host.Participants.Count);
+        // Persistence contract §4 rule 1: the store registers first, so its phase-3 load
+        // completes before any consumer participant starts.
+        Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
+        Assert.IsType<HeartbeatParticipant>(host.Participants[1]);
     }
 
     [Fact]
@@ -62,9 +66,10 @@ public class CompositionRootValidationTests
         // are separate steps. Building the root must leave every participant un-started.
         var host = new CompositionRoot().Build(new StartupTrace());
 
-        var heartbeat = Assert.IsType<HeartbeatParticipant>(host.Participants[0]);
+        var heartbeat = Assert.IsType<HeartbeatParticipant>(host.Participants[1]);
         Assert.False(heartbeat.Running);
         Assert.Equal(0, heartbeat.StartCount);
+        Assert.False(host.Participants[0].Running);
     }
 
     [Fact]

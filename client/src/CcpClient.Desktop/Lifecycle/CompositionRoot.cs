@@ -1,5 +1,7 @@
 namespace CcpClient.Desktop.Lifecycle;
 
+using CcpClient.Desktop.Persistence;
+
 /// <summary>The minimal logger seam the panic path needs (contract §9). No levels, no framework.</summary>
 public interface ILogSink
 {
@@ -28,7 +30,7 @@ public sealed class DebugLogSink : ILogSink
 /// the composition root in <see cref="CompositionRoot.Build"/>; participants receive their
 /// single owner and the boundary here, never by locating them later.
 /// </summary>
-public sealed record ParticipantInfrastructure(OperationRegistry Registry, UiDispatchBoundary UiDispatch)
+public sealed record ParticipantInfrastructure(OperationRegistry Registry, UiDispatchBoundary UiDispatch, ILogSink Log)
 {
     /// <summary>The single async-operation owner for one participant (async contract §1.1).</summary>
     public AsyncOperationOwner OwnerFor(string participantName) => Registry.OwnerFor(participantName);
@@ -36,28 +38,66 @@ public sealed record ParticipantInfrastructure(OperationRegistry Registry, UiDis
 
 public sealed class CompositionRoot
 {
+    /// <summary>Flush bounded wait for teardown (persistence contract §11 rule 2): backstop only — the chained writer is the mechanism.</summary>
+    public static readonly TimeSpan DefaultFlushTimeout = TimeSpan.FromSeconds(5);
+
     /// <summary>Factory seam so tests can deliberately blank a registration (contract §4 test).</summary>
     public Func<ILogSink?> LogSinkFactory { get; init; } = () => new DebugLogSink();
 
-    /// <summary>Each required participant is named here; deleting one is a compile error or a validation failure.</summary>
-    public Func<ParticipantInfrastructure, IReadOnlyList<IBackgroundParticipant>?> ParticipantsFactory { get; init; } = DefaultParticipants;
+    /// <summary>
+    /// Settings file location seam (persistence contract §4 rule 1). Production default is
+    /// the per-user data path; tests substitute a temp path. The data-path authority itself
+    /// is row 8/9's scope — this is the demonstrator's landing spot, not a product decision.
+    /// </summary>
+    public Func<string> SettingsPathFactory { get; init; } = DefaultSettingsPath;
 
-    private static IReadOnlyList<IBackgroundParticipant> DefaultParticipants(ParticipantInfrastructure infra) =>
-        [new HeartbeatParticipant(infra.OwnerFor("Heartbeat"), infra.UiDispatch)];
+    /// <summary>Each required participant is named here; deleting one is a compile error or a validation failure.</summary>
+    public Func<ParticipantInfrastructure, IReadOnlyList<IBackgroundParticipant>?> ParticipantsFactory { get; init; }
+
+    public CompositionRoot()
+    {
+        // Instance default (needs SettingsPathFactory); init-only so tests can override.
+        ParticipantsFactory = DefaultParticipants;
+    }
+
+    /// <summary>
+    /// Per-user settings path: %APPDATA%\\CcpClient on Windows, ~/.config/CcpClient on Linux.
+    /// </summary>
+    public static string DefaultSettingsPath()
+    {
+        var root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        if (string.IsNullOrEmpty(root))
+        {
+            root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+        }
+
+        return Path.Combine(root, "CcpClient", "settings.json");
+    }
+
+    private IReadOnlyList<IBackgroundParticipant> DefaultParticipants(ParticipantInfrastructure infra) =>
+        [
+            // Persistence contract §4 rule 1: the store starts first, so its phase-3 load
+            // completes before any consumer participant starts.
+            new PersistenceStore<DemoSettings>(
+                infra.OwnerFor("Persistence"), infra.Log, SettingsPathFactory(),
+                DemoSettings.CurrentSchemaVersion, [new DemoMigrationV0ToV1()]),
+            new HeartbeatParticipant(infra.OwnerFor("Heartbeat"), infra.UiDispatch),
+        ];
 
     /// <summary>
     /// Phase 2 body: fail fast with a typed error naming what is missing.
     /// </summary>
     public bool Validate(out InitFailure? failure)
     {
-        if (LogSinkFactory() is null)
+        var log = LogSinkFactory();
+        if (log is null)
         {
             failure = new InitFailure("CompositionRoot", InitFailureKind.Fatal, "Missing registration: LogSink");
             return false;
         }
 
         // Probe with a scratch infrastructure (participant constructors are cheap, contract §4.4).
-        if (ParticipantsFactory(new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary())) is null)
+        if (ParticipantsFactory(new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), log)) is null)
         {
             failure = new InitFailure("CompositionRoot", InitFailureKind.Fatal, "Missing registration: BackgroundParticipants");
             return false;
@@ -71,8 +111,13 @@ public sealed class CompositionRoot
     public ApplicationHost Build(StartupTrace trace)
     {
         var log = LogSinkFactory() ?? throw new InvalidOperationException("Validate must run before Build.");
-        var infra = new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary());
+        var infra = new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), log);
         var participants = ParticipantsFactory(infra) ?? throw new InvalidOperationException("Validate must run before Build.");
-        return new ApplicationHost(log, participants, trace, infra.Registry, infra.UiDispatch);
+        // Persistence contract §11: the store's flush is wired into the host's reserved
+        // pre-drain slot. A custom participants factory without a store gets no flush.
+        var store = participants.OfType<PersistenceStore<DemoSettings>>().FirstOrDefault();
+        return new ApplicationHost(
+            log, participants, trace, infra.Registry, infra.UiDispatch,
+            preDrainFlush: store is null ? null : () => store.FlushAsync(DefaultFlushTimeout));
     }
 }

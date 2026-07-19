@@ -71,7 +71,7 @@ Rules:
 2. Participants stop in **reverse start order**.
 3. Teardown never throws: an individual participant's stop failure is logged and teardown continues to the remaining participants.
 4. The startup-failure path and the panic path both leave **no orphaned background participant**: anything phase 3 started is provably stopped.
-5. Graceful-shutdown flush of persisted state (settings) is **reserved as an ordering slot** at the head of the teardown sequence, before participant stop; the flush itself is row 4's deliverable.
+5. Graceful-shutdown flush of persisted state (settings) is **ACTIVATED** (SP-005, 2026-07-19): the persistence store's bounded flush occupies this reserved slot at the head of the teardown sequence, before participant stop — semantics, panic-path policy, and the dirty-at-shutdown test are defined in [`persistence-migration-contract.md`](persistence-migration-contract.md) §11; evidence in `spine-tasks/SP-005-persistence-migration-contract/record.md`.
 
 ## 7. Container-admission decision: manual construction, no DI container
 
