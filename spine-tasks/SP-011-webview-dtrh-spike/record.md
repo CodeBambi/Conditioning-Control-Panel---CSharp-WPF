@@ -8,7 +8,8 @@ Packet emits structured `## Review Level: 2` heading (T-2 root-cause fix). Per-c
 
 | Step | spine_review_step call | Result | Engine review fired? |
 |------|------------------------|--------|----------------------|
-| 1 | type=plan after step-1 commit | (recorded at call time) | (recorded at call time) |
+| 1 | type=plan after step-1 commit | `skipped: true`, `spawnFailed: false` — "Nested reviewer spawn blocked inside pi worker session (SP-195); batch engine runs reviews after worker success" | NO in-worker (by design); post-.DONE engine review = the actual T-2 check, observable only at land time |
+| 2 | type=plan after step-2 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
 
 ## Step 1 — package verification, payload archaeology, pre-approach consult
 
@@ -64,3 +65,34 @@ Design presented: two HttpListener loopback origins (page + media, cross-origin 
 > Q2 — Synthetic MessageEvent: honest, but it has a hard precondition you haven't verified, and you need a declared plan B. Dispatching `new MessageEvent('message', {data: …})` on `window.chrome.webview` works *only if that object exists* under the Avalonia WebView2 adapter (i.e., the adapter left `IsWebMessageEnabled` on). If the adapter disables it, `window.chrome.webview` is `undefined`, bridge.js's `isHosted` is false, `announceReady()` silently no-ops, and your synthetic dispatch has no target. So the Windows transport observation is really three ordered empirical checks — record each as its own named observation: 1. Does `window.chrome.webview` exist in the page [TRUNCATED at this point in transit]
 
 **Worker completion of the truncated direction (declared, faithful to the verdict's shape):** the three ordered transport checks are (1) does `window.chrome.webview` exist in the page; (2) if yes, does native `window.chrome.webview.postMessage` raise Avalonia `WebMessageReceived` (page→host); (3) does synthetic `MessageEvent` dispatch deliver host→page into unchanged bridge.js handlers. **Plan B (declared pre-build):** if `window.chrome.webview` is absent, a NEW tracked overlay file (never shadowing bridge.js) provides a minimal `window.chrome.webview`-compatible EventTarget over `invokeCSharpAction` — served overlay-first, labeled in evidence as spike demonstration material for the admit row's "minimal transport-only edit" question, NOT a payload edit. Consult response truncation itself recorded for provenance.
+
+## Step 2 — quarantined spike host + loopback + Windows boot
+
+### Host shape (per consult verdict)
+
+- `client/spikes/CcpSpike.WebView/` — minimal Avalonia 12.1.0/net10.0 app, NOT in `client/CcpClient.sln` (verified: never added), build-only, inherits `client/Directory.Build.props` (single Version authority — stated here per packet).
+- Two-origin loopback (`LoopbackServer.cs`): page origin serves `GET /dtrh/*` overlay-first (tracked `overlay/` over the READ-ONLY payload tree) + `GET /health`; media origin serves `GET /media/*` from the payload's `assets/` (READ-ONLY) with `Access-Control-Allow-Origin: <page-origin>`, `Access-Control-Expose-Headers: Content-Range`, and OPTIONS preflight (`Allow-Headers: range` — consult correction: Range is NOT a CORS-safelisted request header). Non-GET → 405; unknown route → 404; traversal (`..`, `\`, `:`, leading `/`, escape-under-root) → 403; Range → 206/`Content-Range`, invalid → 416.
+- Ports: HttpListener cannot bind port 0 (consult) → retry loop, random in 49152–65535. Origin shape per run recorded in the spike log (e.g. page `http://127.0.0.1:59401`, media `http://127.0.0.1:51545`). 127.0.0.1 prefixes needed no URL ACL on this Windows box (consult assertion confirmed empirically).
+- Scratch: `client/spikes/CcpSpike.WebView/scratch/` (gitignored via spike-local `.gitignore`) holds the WebView2 UserDataFolder, WPE dirs, spike logs, captures. Payload writes: none observed/attempted; any would land under scratch.
+- Windows app.manifest with supportedOS REQUIRED — first run crashed `InvalidOperationException: Unable to create child window for native control host` (NativeControlHost). Fixed by tracked `app.manifest`. **Integration consequence for the admit row: the product head will need the same manifest.** (Surprise, durable.)
+- WebView2 runtime: user-level install at `%LOCALAPPDATA%\Microsoft\EdgeWebView\Application\150.0.4078.83` (registry `pv` absent; loader found it).
+
+### Transport checks (probe.html — tracked overlay file importing the payload's UNCHANGED bridge.js)
+
+Adapter: `DetailedWebViewAdapterInfo { Type = WebView2, Engine = Blink, Version = 150.0.4078.83, IsSupported = True, IsInstalled = True, SupportedScenarios = NativeControlHost }`.
+
+- **check1:** `window.chrome.webview` PRESENT; `invokeCSharpAction` = function. (`transport check1: window.chrome.webview=present invokeCSharpAction=function`)
+- **check2 (page→host):** BOTH `window.chrome.webview.postMessage` AND `invokeCSharpAction(...)` raised Avalonia `WebMessageReceived`. → Unchanged `bridge.js` page→host transport WORKS on Windows under the Avalonia WebView2 adapter.
+- **check3 (host→page):** synthetic `MessageEvent` dispatch on `window.chrome.webview` DELIVERED into the unchanged `bridge.on('probe-h2p')` handler. → Host→page works byte-unchanged via this spike transport (admit row picks the real one; native `CoreWebView2` handle is also reachable via `TryGetPlatformHandle` per docs — not needed for the spike).
+- Captures: `scratch/probe-boot.png` (probe transcript visible in the rendered page; text dim — cosmetic only).
+
+### Windows boot of the exact payload (index.html)
+
+- `ready` (protocol 1) arrived at t=750ms — **BEFORE NavigationCompleted** (WebView2 pumps messages during load; worker race fixed — detect transport on demand in SendBootMessages). Recorded under bridge-ordering evidence.
+- init+manifest sent ready-triggered (WPF-shaped init: settings.masterVolume, modId, modContent:null, runSetup full shape, m2Test:false; manifest empty on this run).
+- **ENGINE LIVE (game mode) at t=1502ms cold** (page log `engine live (game mode)`; loader hid; Warren hub rendered).
+- Full module graph loaded over loopback from the READ-ONLY tree: boot.js, bridge.js, hostMedia.js, modContent.js, shared/, game/ (chaosRun 210KB, warren 76KB, spawner 103KB…), engine/ (scene.js 72KB…), `vendor/three/three.module.min.js` 687KB via the importmap's root-relative `/dtrh/...` specifier — the importmap works unchanged on the loopback origin.
+- Frame behavior: steady-state rAF average **360.4 fps** over 90 frames at t=2268ms (WebGL-accelerated; no blanks observed at boot/engine-live captures).
+- Heartbeats ~2s cadence (29 over 60s run). Clean auto-quit teardown, exit code 0. Benign stderr on exit: WebView2 `Failed to unregister class Chrome_WidgetWin_0` (shutdown noise, no functional impact).
+- Captures: `scratch/index-boot-early.png` (loader "Opening the hole…"), `scratch/index-engine2.png` (Warren hub rendered: tunnel WebGL, FALL IN, difficulty/duration pills, HUD).
+- Surprises: (a) app.manifest requirement (above); (b) `ready` precedes NavigationCompleted — hosts must not gate message handling on nav-complete.

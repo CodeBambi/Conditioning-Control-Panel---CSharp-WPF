@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- SP-011 transport probe (tracked OVERLAY file — not part of the payload).
+     Imports the payload's UNCHANGED bridge.js and records, in DOM (host-readable
+     without any working transport): check1 which JS host objects exist; check2
+     which page->host paths raise the host's WebMessageReceived; check3 readiness
+     for host->page synthetic dispatch (host completes this check). -->
+<meta charset="utf-8">
+<title>PROBING</title>
+<pre id="out">PROBING</pre>
+<script type="module">
+const out = document.getElementById('out');
+const lines = [];
+const rec = (s) => { lines.push(s); out.textContent = lines.join('\n'); };
+
+rec('check1 window.chrome.webview: ' + ((window.chrome && window.chrome.webview) ? 'PRESENT' : 'ABSENT'));
+rec('check1b invokeCSharpAction: ' + (typeof window.invokeCSharpAction));
+
+let bridge = null;
+try {
+  bridge = await import('./bridge.js');
+  rec('bridge.js imported (payload blob 13af3f4d, byte-unchanged); isHosted=' + bridge.isHosted);
+} catch (e) {
+  rec('bridge.js import FAILED: ' + (e && e.message));
+}
+
+if (window.chrome && window.chrome.webview) {
+  window.chrome.webview.postMessage({ type: 'probe-p2h-native', note: 'native window.chrome.webview.postMessage' });
+  rec('sent probe-p2h-native');
+}
+if (typeof window.invokeCSharpAction === 'function') {
+  window.invokeCSharpAction(JSON.stringify({ type: 'probe-p2h-ica', note: 'invokeCSharpAction path' }));
+  rec('sent probe-p2h-ica');
+}
+
+if (bridge) {
+  bridge.on('probe-h2p', (m) => {
+    rec('check3 host->page DELIVERED via unchanged bridge.on: ' + JSON.stringify(m));
+    document.title = 'PROBE-DONE';
+  });
+  rec('bridge.on(probe-h2p) registered; awaiting host dispatch');
+}
+rec('probe module complete');
+</script>

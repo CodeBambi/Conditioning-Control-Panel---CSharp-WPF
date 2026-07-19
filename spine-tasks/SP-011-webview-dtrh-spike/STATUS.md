@@ -1,12 +1,12 @@
 # STATUS: SP-011 — spike official WebView with the copied DTRH payload
 
-**Current Step:** Step 1 — Package verification, payload archaeology, pre-approach consult
+**Current Step:** Step 3 — Windows evidence matrix
 **Last Updated:** 2026-07-19 (worker session 1)
 
 ## Steps
 
 ### Step 1: Package verification, payload archaeology, pre-approach consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete (plan review: engine-skipped in worker per SP-195, recorded)
 
 - [x] FIRST: verify `Avalonia.Controls.WebView` ID/version/license/native deps on the live feed (wrong ID/conflict = finding, not failure)
 - [x] STATUS.md updated before starting work
@@ -15,14 +15,14 @@
 - [x] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
 
 ### Step 2: Quarantined spike host + loopback
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete (plan review: engine-skipped in worker per SP-195, recorded)
 
-- [ ] client/spikes/CcpSpike.WebView/ minimal host (NOT in CcpClient.sln, build-only)
-- [ ] Loopback: GET-only into read-only tree, overlay-first, scratch-dir writes, HTTP Range, origin/port recorded
-- [ ] Windows boot of index.html with capture evidence
+- [x] client/spikes/CcpSpike.WebView/ minimal host (NOT in CcpClient.sln, build-only)
+- [x] Loopback: GET-only into read-only tree, overlay-first, scratch-dir writes, HTTP Range, origin/port recorded
+- [x] Windows boot of index.html with capture evidence
 
 ### Step 3: Windows evidence matrix (named observation per item)
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] spike.html granular items (if archaeology supports): WebGL, workers, WebAudio/autoplay, video seek, CORS-clean upload, fullscreen, focus
 - [ ] Bridge ordering observation (unchanged bridge.js)

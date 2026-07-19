@@ -14,6 +14,8 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <RootNamespace>CcpSpike.WebView</RootNamespace>
+    <!-- NativeControlHost (WebView) needs supportedOS in the Win32 manifest. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
