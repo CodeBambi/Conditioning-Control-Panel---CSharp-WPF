@@ -75,8 +75,9 @@ public sealed class LoopbackServer : IDisposable
         _mediaLoop = Task.Run(() => AcceptLoop(_media, HandleMedia));
     }
 
-    private static int BindWithRetry(HttpListener l)
+    private int BindWithRetry(HttpListener l)
     {
+        Exception? last = null;
         for (var i = 0; i < 60; i++)
         {
             var port = Random.Shared.Next(49152, 65536);
@@ -86,13 +87,16 @@ public sealed class LoopbackServer : IDisposable
                 l.Start();
                 return port;
             }
-            catch (HttpListenerException)
+            catch (Exception ex) // HttpListenerException (in use) or anything transient
             {
-                l.Prefixes.Clear();
+                last = ex;
+                _log.Log($"loopback: bind 127.0.0.1:{port} failed ({ex.GetType().Name}: {ex.Message}) — retrying");
+                try { l.Prefixes.Clear(); } catch { /* best effort */ }
+                try { if (l.IsListening) l.Stop(); } catch { /* best effort */ }
             }
         }
 
-        throw new InvalidOperationException("no free ephemeral port in 60 tries");
+        throw new InvalidOperationException($"no free ephemeral port in 60 tries (last: {last?.Message})");
     }
 
     private async Task AcceptLoop(HttpListener l, Func<HttpListenerContext, Task> handler)
@@ -175,32 +179,35 @@ public sealed class LoopbackServer : IDisposable
 
         if (req.HttpMethod != "GET")
         {
-            await Refuse(ctx, 405, "refused: GET-only origin", path);
+            await Refuse(ctx, 405, "refused: GET-only origin", path, cors: true);
             return;
         }
 
         if (MediaBlocked)
         {
-            await Refuse(ctx, 403, "refused: route blocked (fault injection)", path);
+            // CORS on refusals too — a CORS-less 403 surfaces to fetch() as an opaque
+            // TypeError, not a status (run G: spike.js run() aborted silently). Error
+            // diagnosability is part of the loopback contract.
+            await Refuse(ctx, 403, "refused: route blocked (fault injection)", path, cors: true);
             return;
         }
 
         if (!path.StartsWith("/media/", StringComparison.Ordinal))
         {
-            await Refuse(ctx, 404, "refused: no such route (only /media/* is exposed)", path);
+            await Refuse(ctx, 404, "refused: no such route (only /media/* is exposed)", path, cors: true);
             return;
         }
 
         var rel = path["/media/".Length..];
         if (!TryResolve(_mediaRoot, rel, out var file))
         {
-            await Refuse(ctx, 403, "refused: path traversal", path);
+            await Refuse(ctx, 403, "refused: path traversal", path, cors: true);
             return;
         }
 
         if (!File.Exists(file))
         {
-            await Refuse(ctx, 404, "not found", path);
+            await Refuse(ctx, 404, "not found", path, cors: true);
             return;
         }
 
@@ -309,9 +316,10 @@ public sealed class LoopbackServer : IDisposable
         return start >= 0 && start <= end && start < len;
     }
 
-    private async Task Refuse(HttpListenerContext ctx, int code, string msg, string path)
+    private async Task Refuse(HttpListenerContext ctx, int code, string msg, string path, bool cors = false)
     {
         _log.Log($"loopback: {ctx.Request.HttpMethod} {path} -> {code} {msg}");
+        if (cors) AddCors(ctx.Response);
         await WriteText(ctx, code, msg, "text/plain");
     }
 

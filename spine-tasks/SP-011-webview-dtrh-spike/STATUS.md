@@ -1,6 +1,6 @@
 # STATUS: SP-011 — spike official WebView with the copied DTRH payload
 
-**Current Step:** Step 3 — Windows evidence matrix
+**Current Step:** Step 4 — WSL2 gate (Linux build + WSLg/X11 evidence)
 **Last Updated:** 2026-07-19 (worker session 1)
 
 ## Steps
@@ -22,17 +22,17 @@
 - [x] Windows boot of index.html with capture evidence
 
 ### Step 3: Windows evidence matrix (named observation per item)
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete (plan review: engine-skipped in worker per SP-195, recorded)
 
-- [ ] spike.html granular items (if archaeology supports): WebGL, workers, WebAudio/autoplay, video seek, CORS-clean upload, fullscreen, focus
-- [ ] Bridge ordering observation (unchanged bridge.js)
-- [ ] Loopback routes enumerated + path-traversal refusal
-- [ ] Exit/teardown observation
-- [ ] Failure injection ×3 (kill process, blocked route, missing media)
-- [ ] Startup time + frame behavior measured
+- [x] spike.html granular items (if archaeology supports): WebGL, workers, WebAudio/autoplay, video seek, CORS-clean upload, fullscreen, focus
+- [x] Bridge ordering observation (unchanged bridge.js)
+- [x] Loopback routes enumerated + path-traversal refusal
+- [x] Exit/teardown observation
+- [x] Failure injection ×3 (kill process, blocked route, missing media)
+- [x] Startup time + frame behavior measured
 
 ### Step 4: WSL2 gate — Linux build + WSLg/X11 evidence
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] Native-dir copy (~/ccp-sp011); WebKitGTK/WPE via wsl -u root (packages + versions recorded)
 - [ ] Linux restore/build + full contract testCommand green on WSL2

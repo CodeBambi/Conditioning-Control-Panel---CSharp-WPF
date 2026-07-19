@@ -38,6 +38,14 @@ if (bridge) {
     document.title = 'PROBE-DONE';
   });
   rec('bridge.on(probe-h2p) registered; awaiting host dispatch');
+  // preBuffer check: the host sends probe-buffered BEFORE this delayed registration;
+  // bridge.js must buffer it and replay on on() (ordering contract, bridge.js:18-40).
+  setTimeout(() => {
+    bridge.on('probe-buffered', (m) => {
+      rec('preBuffer REPLAY delivered on late registration: ' + JSON.stringify(m));
+    });
+    rec('late handler registered for probe-buffered (after host send)');
+  }, 4000);
 }
 rec('probe module complete');
 </script>

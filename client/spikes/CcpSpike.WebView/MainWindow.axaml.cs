@@ -59,7 +59,11 @@ public partial class MainWindow : Window
         if (args is WindowsWebView2EnvironmentRequestedEventArgs wv2)
         {
             wv2.UserDataFolder = Path.Combine(_config.ScratchDir, "wv2-profile");
-            _log.Log($"webview: WebView2 UserDataFolder = {wv2.UserDataFolder}");
+            // WPF parity (DtrhHostService.cs:120): programmatic audio (barks) needs the
+            // autoplay policy relaxed. Empirical: without this, unmuted play() rejects
+            // with NotAllowedError and AudioContext stays suspended (matrix run B).
+            wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
+            _log.Log($"webview: WebView2 UserDataFolder = {wv2.UserDataFolder}, AdditionalBrowserArguments = {wv2.AdditionalBrowserArguments}");
         }
         else if (args is LinuxWpeWebViewEnvironmentRequestedEventArgs wpe)
         {
@@ -75,9 +79,16 @@ public partial class MainWindow : Window
         {
             "spike" => $"{_server.PageOrigin}/dtrh/spike.html",
             "probe" => $"{_server.PageOrigin}/dtrh/probe.html",
+            "matrix" => $"{_server.PageOrigin}/dtrh/matrix.html?media={Uri.EscapeDataString(_server.MediaOrigin)}",
             _ => $"{_server.PageOrigin}/dtrh/index.html",
         };
         _log.Log($"spike: navigating {url} t={ElapsedMs()}ms (cold start)");
+        if (_config.BlockMediaAfterArm)
+        {
+            _server.MediaBlocked = true;
+            _log.Log("fault-injection: media origin BLOCKED (case 2 armed)");
+        }
+
         SetStatus($"navigating {url}");
         Web.Source = new Uri(url);
 
@@ -100,6 +111,7 @@ public partial class MainWindow : Window
             switch (_config.Page)
             {
                 case "probe": await RunProbeSequence(); break;
+                case "matrix": SetStatus("matrix: running (see log)"); break;
                 case "spike": await RunSpikePage(); break;
                 default: await RunIndexPage(); break;
             }
@@ -149,6 +161,13 @@ public partial class MainWindow : Window
             var final = await EvalString("document.getElementById('out').textContent");
             _log.Log("probe #out final:\n" + final);
             _log.Log($"probe check3: synthetic host->page dispatch {(await EvalString("document.title") == "PROBE-DONE" ? "DELIVERED" : "NOT delivered")}");
+
+            // preBuffer check: send a type with NO registered handler yet; probe.html
+            // registers the handler at +4s — bridge.js must replay it then.
+            await SendToPage(new { type = "probe-buffered", via = "pre-handler-send" });
+            _log.Log("probe preBuffer: probe-buffered sent before handler registration");
+            await Task.Delay(5200);
+            _log.Log("probe #out post-preBuffer:\n" + await EvalString("document.getElementById('out').textContent"));
         }
         else
         {
@@ -175,11 +194,10 @@ public partial class MainWindow : Window
         await SendToPage(new
         {
             type = "spike-run",
-            assets = new
-            {
-                video = $"{_server.MediaOrigin}/media/bubbles/spiral.webm",
-                image = $"{_server.MediaOrigin}/media/bubbles/bubble.png",
-            },
+            // spike.js reads video/image at TOP level of the message (run(m) takes the
+            // whole message as `assets`) — WPF DtrhSpike's shape, not nested.
+            video = $"{_server.MediaOrigin}/media/{_config.SpikeVideoPath ?? "bubbles/spiral.webm"}",
+            image = $"{_server.MediaOrigin}/media/{_config.SpikeImagePath ?? "bubbles/bubble.png"}",
         });
         SetStatus("spike.html: spike-run sent; results stream to log");
     }
@@ -303,6 +321,16 @@ public partial class MainWindow : Window
             case "exit":
                 _log.Log($"page->host: exit t={ElapsedMs()}ms — closing window");
                 Close();
+                return;
+            case "fullscreen-set":
+                // The host, not the HTML Fullscreen API, owns this transition (capability-inventory).
+                var fsOn = JsonDocument.Parse(body).RootElement.TryGetProperty("on", out var f) && f.GetBoolean();
+                WindowState = fsOn ? WindowState.FullScreen : WindowState.Normal;
+                _log.Log($"page->host: fullscreen-set on={fsOn} -> WindowState={WindowState} t={ElapsedMs()}ms");
+                SetStatus($"fullscreen: {WindowState}");
+                return;
+            case "matrix-result":
+                _log.Log($"matrix: {body[..Math.Min(body.Length, 300)]}");
                 return;
             default:
                 _log.Log($"page->host: {body[..Math.Min(body.Length, 300)]}");

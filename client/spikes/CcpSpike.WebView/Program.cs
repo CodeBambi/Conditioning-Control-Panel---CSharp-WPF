@@ -12,6 +12,8 @@ public sealed record SpikeConfig
     public int AutoQuitSeconds { get; init; }           // 0 = stay open
     public bool PopulateManifest { get; init; }         // --manifest: payload media in manifest
     public bool BlockMediaAfterArm { get; init; }       // --block-media: fault-injection case 2
+    public string? SpikeVideoPath { get; init; }        // --spike-video: media-root-relative override
+    public string? SpikeImagePath { get; init; }        // --spike-image: media-root-relative override
     public long StartedTicks { get; init; }             // Stopwatch.GetTimestamp() at Main entry
 }
 
@@ -60,6 +62,14 @@ public static class Program
 
         bool Flag(string name) => args.Any(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
 
+        string? Opt(string name)
+        {
+            for (var i = 0; i < args.Length - 1; i++)
+                if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+                    return args[i + 1];
+            return null;
+        }
+
         var payload = Get("--payload");
         var spikeDir = FindUp("CcpSpike.WebView.csproj", AppContext.BaseDirectory)
             ?? throw new InvalidOperationException("spike project dir not found above " + AppContext.BaseDirectory);
@@ -76,6 +86,8 @@ public static class Program
             AutoQuitSeconds = int.Parse(Get("--auto-quit", "0")),
             PopulateManifest = Flag("--manifest"),
             BlockMediaAfterArm = Flag("--block-media"),
+            SpikeVideoPath = Opt("--spike-video"),
+            SpikeImagePath = Opt("--spike-image"),
         };
     }
 
