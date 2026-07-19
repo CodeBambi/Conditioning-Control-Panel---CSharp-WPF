@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "checks": [
+    {
+      "name": "dashboard-card-unlit-border",
+      "surface": "dashboard-card",
+      "state": "unlit",
+      "evidenceClass": "presentation-verified",
+      "kind": "border-color-band",
+      "region": { "band": "top", "thicknessPx": 3 },
+      "expectedColor": "#3A2F3E",
+      "tolerance": 24,
+      "minPixelFraction": 0.5
+    },
+    {
+      "name": "dashboard-card-lit-border",
+      "surface": "dashboard-card",
+      "state": "lit",
+      "evidenceClass": "presentation-verified",
+      "kind": "border-color-band",
+      "region": { "band": "top", "thicknessPx": 3 },
+      "expectedColor": "#E066FF",
+      "tolerance": 32,
+      "minPixelFraction": 0.5
+    },
+    {
+      "name": "dashboard-background",
+      "surface": "dashboard",
+      "state": "unlit",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.0, "y": 0.0, "w": 1.0, "h": 0.06 } },
+      "expectedColor": "#141018",
+      "tolerance": 8,
+      "minPixelFraction": 0.8
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <!-- Assembly name stays CcpVerify; the assertion logic (CheckManifest/CheckEvaluator/
+         DecodedImage) is pure C# and is unit-tested from CcpClient.Tests via project
+         reference. Avalonia is used ONLY to decode captures (Bitmap) — never System.Drawing. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Baseline package (admitted SP-001/SP-002) + packages already present transitively in
+         the admitted dependency graph (Avalonia.Headless via the admitted
+         Avalonia.Headless.XUnit 12.1.0; Avalonia.Skia via baseline Avalonia.Desktop).
+         Pinned explicit references add NO new third-party code — recorded in SP-008 record.md. -->
+    <PackageReference Include="Avalonia" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.0" />
+  </ItemGroup>
+
+</Project>

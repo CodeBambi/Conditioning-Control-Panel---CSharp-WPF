@@ -10,6 +10,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- SP-008 admission spike: pinned to the exact 12.1.0 baseline (packet decision; this
+         row owns the admission). Separate project because [assembly: AvaloniaTestApplication]
+         is assembly-wide — the 85 landed CcpClient.Tests stay unpolluted. -->
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
@@ -20,9 +25,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CcpClient.Desktop\CcpClient.Desktop.csproj" />
-    <!-- SP-008: assertion-logic unit tests run against the CcpVerify evaluator directly
-         (pure logic, no Avalonia runtime) — synthetic pixel buffers only. -->
-    <ProjectReference Include="..\..\tools\verify\CcpVerify\CcpVerify.csproj" />
   </ItemGroup>
 
 </Project>
