@@ -2,12 +2,12 @@
 
 **Overall:** ◐ In Progress
 
-**Current Step:** 1
+**Current Step:** 4
 
 ## Steps
 
 ### Step 1: Pre-approach consult and contract draft
-**Status:** ◐ In Progress
+**Status:** ✅ Complete
 
 - [x] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
 - [x] STATUS.md updated before starting work
@@ -15,23 +15,23 @@
 - [x] `client/docs/runtime-capability-contract.md` written (state model, probe rule, honesty rule, degradation semantics, row-3/row-5 boundary, fallback policy, session-type reporting)
 
 ### Step 2: Capability registry and demonstrator probes
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Registry + probe execution via OperationRegistry; typed states with reasons; exceptions → Faulted
-- [ ] Demonstrator 1: session-type probe (Windows/X11/Wayland; XWayland distinction recorded)
-- [ ] Demonstrator 2: atomic filesystem probe (real I/O; degrades truthfully on DrvFs)
-- [ ] Unit tests: all states reachable; probe-throw → Faulted; unregistered → Unavailable; registration alone never Available
+- [x] Registry + probe execution via OperationRegistry; typed states with reasons; exceptions → Faulted
+- [x] Demonstrator 1: session-type probe (Windows/X11/Wayland; XWayland distinction recorded)
+- [x] Demonstrator 2: atomic filesystem probe (real I/O; degrades truthfully on DrvFs)
+- [x] Unit tests: all states reachable; probe-throw → Faulted; unregistered → Unavailable; registration alone never Available
 
 ### Step 3: Wiring, WSL2 honesty run, integration proof
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Probes run in named startup phase as owned operations; window surfaces states (integration proof)
-- [ ] WSL2 run: testCommand + ACTUAL observed demonstrator states recorded (degraded = honesty proof)
-- [ ] Headed Windows smoke: UIA-observed truthful states; exit 0; recorded
-- [ ] Composition-root path populates states via real probes (no doubles on that path)
+- [x] Probes run in named startup phase as owned operations; window surfaces states (integration proof) — wired in Step 2 commit (CapabilityProbes phase + MainWindow surface)
+- [x] WSL2 run: testCommand + ACTUAL observed demonstrator states recorded (degraded = honesty proof)
+- [x] Headed Windows smoke: UIA-observed truthful states; exit 0; recorded
+- [x] Composition-root path populates states via real probes (no doubles on that path)
 
 ### Step 4: Evidence, board reconciliation, pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** ◐ In Progress
 
 - [ ] record.md written (incl. engine-review presence/absence note)
 - [ ] Pre-completion solo consult (Fable 5) run; verdict text persisted
