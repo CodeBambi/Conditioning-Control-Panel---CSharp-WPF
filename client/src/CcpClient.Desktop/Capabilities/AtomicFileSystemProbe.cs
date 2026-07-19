@@ -19,18 +19,23 @@ public interface IMountTable
 /// </summary>
 public sealed class ProcMountsTable : IMountTable
 {
-    private const string MountsPath = "/proc/self/mounts";
+    private const string DefaultMountsPath = "/proc/self/mounts";
+
+    private readonly string _mountsPath;
+
+    /// <param name="mountsPath">Mount-table source; tests inject a fixture file, production uses /proc/self/mounts.</param>
+    public ProcMountsTable(string? mountsPath = null) => _mountsPath = mountsPath ?? DefaultMountsPath;
 
     public string? FilesystemTypeOf(string path)
     {
-        if (!File.Exists(MountsPath))
+        if (!File.Exists(_mountsPath))
         {
             return null;
         }
 
         string? bestType = null;
         var bestLength = -1;
-        foreach (var line in File.ReadLines(MountsPath))
+        foreach (var line in File.ReadLines(_mountsPath))
         {
             // Format: device mountpoint fstype options dump pass (mountpoint octal-escaped).
             var fields = line.Split(' ');
@@ -79,6 +84,10 @@ public static class AtomicFileSystemProbe
     private const string Surviving = "temp write, rename-over-existing, and quarantine move verified by real I/O";
 
     /// <summary>Passthrough/network filesystems whose fsync honoring cannot be verified in-process (contract §8.2).</summary>
+    // ponytail: Linux-only list. A Windows SMB data directory is the same epistemic case
+    // (DriveInfo.DriveType.Network is the BCL check) but is out of the packet's
+    // demonstrator scope; add the DriveInfo downgrade with the first consumer that can
+    // land its data directory on a Windows network drive.
     private static readonly HashSet<string> PassthroughFilesystems = new(StringComparer.Ordinal)
     {
         "9p", "drvfs", "cifs", "smbfs", "nfs", "nfs4",

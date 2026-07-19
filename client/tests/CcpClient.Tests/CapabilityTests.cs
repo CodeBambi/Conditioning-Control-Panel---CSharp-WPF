@@ -107,6 +107,30 @@ public class CapabilityTests
         }
     }
 
+    [Fact]
+    public async Task ProbeCancelledMidFlight_StaysNotProbed_NeverAvailable()
+    {
+        var registry = new CapabilityRegistry();
+        var started = new TaskCompletionSource();
+        registry.Register("cap", async token =>
+        {
+            started.SetResult();
+            await Task.Delay(Timeout.Infinite, token); // observes cancellation
+            return new CapabilityState.Available("unreachable");
+        });
+        var operations = new OperationRegistry();
+        var owner = operations.OwnerFor("test-probes");
+        var runner = new CapabilityProbeRunner(owner, registry);
+
+        var run = runner.RunAllAsync(CancellationToken.None);
+        await started.Task;
+        owner.Cancel(); // teardown-shape cancellation while the probe is in flight
+        await run;
+
+        var unavailable = Assert.IsType<CapabilityState.Unavailable>(registry.GetState("cap"));
+        Assert.Equal(CapabilityReasonCodes.NotProbed, unavailable.Reason.Code);
+    }
+
     // --- Demonstrator 1: session probe (contract §8.1) ---
 
     private sealed class FakeSessionEnvironment(bool windows, bool linux, string? wayland, string? x11)
@@ -239,6 +263,24 @@ public class CapabilityTests
     }
 
     [Fact]
+    public void FileSystemProbe_CleansPriorLeftovers_ThenAvailable()
+    {
+        var dir = NewTempDir();
+        File.WriteAllText(Path.Combine(dir, "ccp-capability-probe-stale"), "stale from an interrupted earlier run");
+        try
+        {
+            var state = AtomicFileSystemProbe.Probe(dir, new FakeMountTable(null));
+
+            Assert.IsType<CapabilityState.Available>(state);
+            Assert.Empty(Directory.EnumerateFiles(dir, "ccp-capability-probe-*")); // stale leftover gone too
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void FileSystemProbe_IoFailure_UnavailableWithFsReason()
     {
         // A path whose parent is a FILE: CreateDirectory fails with IOException on every OS.
@@ -254,6 +296,34 @@ public class CapabilityTests
         {
             Directory.Delete(Path.GetDirectoryName(fileParent)!, recursive: true);
         }
+    }
+
+    // --- Mount-table evidence (contract §2 rule 4) ---
+
+    [Fact]
+    public void ProcMountsTable_MissingFile_NoDowngrade()
+    {
+        var mounts = new ProcMountsTable(Path.Combine(NewTempDir(), "no-such-mounts"));
+        Assert.Null(mounts.FilesystemTypeOf("/anything"));
+    }
+
+    [Fact]
+    public void ProcMountsTable_LongestPrefixWins_AndUnescapes()
+    {
+        var dir = NewTempDir();
+        var mountsFile = Path.Combine(dir, "mounts");
+        File.WriteAllLines(mountsFile,
+        [
+            "rootfs / rootfs rw 0 0",
+            "C:\\ /mnt/e 9p rw,aname=drvfs 0 0",
+            "/dev/sdd /mnt/e/case\\040dir ext4 rw 0 0",
+        ]);
+        var mounts = new ProcMountsTable(mountsFile);
+
+        Assert.Equal("9p", mounts.FilesystemTypeOf("/mnt/e/some/dir"));
+        Assert.Equal("ext4", mounts.FilesystemTypeOf("/mnt/e/case dir/deeper")); // unescaped + longer prefix
+        Assert.Equal("rootfs", mounts.FilesystemTypeOf("/elsewhere"));
+        Directory.Delete(dir, recursive: true);
     }
 
     // --- Composition-root path: real probes, no doubles (contract §9.2) ---

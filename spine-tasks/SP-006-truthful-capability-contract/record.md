@@ -44,11 +44,11 @@ No rejection of the overall outline. Skipped: staleness machinery (no consumer),
 
 ### Test output — Windows (contract testCommand)
 `dotnet build client/CcpClient.sln -c Debug --nologo` → **0 Warning(s), 0 Error(s)** (.NET SDK 10, net10.0).
-`dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo` → **Passed: 74, Failed: 0** (51 SP-003/004/005 intact + 23 capability: registry honesty, all-states reachability, throw→Faulted, null→Faulted, cancel→not-probed, session matrix incl. WSLg/headless/unsupported, fs real-IO/9p-degrade/ext4-no-downgrade/io-failure, real-composition-root walk).
+`dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo` → **Passed: 78, Failed: 0** (51 SP-003/004/005 intact + 27 capability: registry honesty, all-states reachability, throw→Faulted, null→Faulted, pre-cancel + mid-flight cancel→not-probed, session matrix incl. WSLg/headless/unsupported, fs real-IO/9p-degrade/ext4-no-downgrade/io-failure/leftover-cleanup, mounts longest-prefix/unescape/missing-file, real-composition-root walk).
 
 ### Test output — WSL2 Linux (in-packet gate)
 Environment: WSL2 Ubuntu, dotnet SDK 10.0.110; `client/` copied to native `~/ccp-sp006` (SP-002/SP-005 pattern — /mnt/e build avoided).
-Build: **0 Warning(s), 0 Error(s)**. Tests: **Passed: 74, Failed: 0** — identical suite green on Linux.
+Build: **0 Warning(s), 0 Error(s)**. Tests: **Passed: 78, Failed: 0** — identical suite green on Linux.
 
 ### ACTUAL observed demonstrator states under WSL2/WSLg (honesty proof)
 Observed by running the real probes in the WSL2 copy (temporary observation test, WSL copy only — not committed; raw output below):
@@ -74,4 +74,22 @@ Ran `spine-tasks/SP-006-truthful-capability-contract/headed-smoke.ps1` against t
 
 ## Pre-completion consult (solo Fable 5, 2026-07-19)
 
-(verdict to be appended)
+Full as-built summary submitted (contract, mapping, demonstrators, evidence, known gaps). Verdict received complete (no truncation):
+
+**(1) Residual lie-by-construction: none found in the mapping.** Memory visibility of the probe→apply handoff is sound; `Cancelled → not-probed` is the honest state. One epistemic note: `Available` on Windows/ext4 claims "verified by real I/O" where fsync honoring is equally unverifiable in-process — defensible because the contract draws the line at kernel evidence of non-forwarding (passthrough filesystems), and only downgrades there. **Related ceiling flagged (not required for this packet): a Windows SMB data directory is the same epistemic case** (`DriveInfo.DriveType.Network` is the BCL check) — out of demonstrator scope; recorded as a `ponytail:` ceiling comment in `AtomicFileSystemProbe` with the upgrade path (add the DriveInfo downgrade with the first consumer that can land its data directory on a Windows network drive).
+
+**(2) Always-Success phase shape: sound**, with one precision — the contract's "capability states never fail startup" is about the PROBE phase, not a ban on future gating: a consuming feature row may read a capability state in its own phase and fail THAT phase. The advisor judged the current contract wording acceptable as-is (a consuming row amends when needed); no edit made.
+
+**(3) Claimed-but-untested audit — three gaps found and closed:**
+1. **Mid-flight cancellation → stays not-probed** (the pre-cancelled-token test only covered the runner's pre-probe check, not the Cancelled outcome branch) → **test added** (`ProbeCancelledMidFlight_StaysNotProbed_NeverAvailable`: probe blocks on its generation token, owner cancelled concurrently, outcome Cancelled, state stays not-probed).
+2. **"Cleanup incl. prior leftovers" claimed but untested** → **test added** (`FileSystemProbe_CleansPriorLeftovers_ThenAvailable`: stale probe-prefixed file seeded, probe run, leftover gone, Available).
+3. **`ProcMountsTable` parsing (longest-prefix, octal unescape, missing-file) not deterministically testable** (hardcoded /proc path; the WSL run parsed the real table but the prefix logic had no fixture) → **source seam added** (`ProcMountsTable(string? mountsPath)`) + **two tests added** (missing file → null/no downgrade; longest-prefix wins + `\040` unescape + root fallback).
+Optional and declined with reasons: a phase-level cancel-during-CapabilityProbes test (no probe-injection seam on the composition-root path; the ternary is trivial), a probe-file/store-temp coexistence test (prefix disjointness is structural), implementing the Windows-SMB downgrade now (no consumer — ceiling documented instead).
+
+**(4) Evidence set for board WIP: complete** — contract doc, test floor, WSL2 observed states, headed smoke, both consults, engine-review absence note. Row goes WIP with evidence citing this record, never DONE.
+
+### Test output — final (post-consult, both platforms)
+Windows: build **0W/0E**; tests **78/78 passed** (the three consult-driven additions + mounts-fixture seam included). WSL2 Ubuntu (SDK 10.0.110, native `~/ccp-sp006` copy): build **0W/0E**; tests **78/78 passed**.
+
+## Board reconciliation
+`client/docs/task-board.md` row "Define truthful runtime capability contract" → **WIP** with evidence citing this record (owner ratification remains the DONE gate). No other docs needed edits: the row-3/row-5 boundary sentence in `async-lifecycle-fault-contract.md` §2 already names this row's contract as the owner of capability states — activation is recorded here and in `runtime-capability-contract.md` §6; no cross-reference edit required. No durable surprise for `port-lessons.md` beyond the ps1-encoding trivia (recorded above).
