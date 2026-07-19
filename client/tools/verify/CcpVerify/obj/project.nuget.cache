@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "dgSpecHash": "gl8HuQp2vcg=",
+  "success": true,
+  "projectFilePath": "E:\\Code\\Conditioning-Control-Panel\\.worktrees\\spine-20260719T114609\\lane-1\\client\\tools\\verify\\CcpVerify\\CcpVerify.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Micha\\.nuget\\packages\\avalonia\\12.1.0\\avalonia.12.1.0.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\avalonia.buildservices\\11.3.2\\avalonia.buildservices.11.3.2.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\avalonia.fonts.inter\\12.1.0\\avalonia.fonts.inter.12.1.0.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\avalonia.harfbuzz\\12.1.0\\avalonia.harfbuzz.12.1.0.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\avalonia.headless\\12.1.0\\avalonia.headless.12.1.0.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\avalonia.remote.protocol\\12.1.0\\avalonia.remote.protocol.12.1.0.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\avalonia.skia\\12.1.0\\avalonia.skia.12.1.0.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\harfbuzzsharp\\8.3.1.3\\harfbuzzsharp.8.3.1.3.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\harfbuzzsharp.nativeassets.linux\\8.3.1.3\\harfbuzzsharp.nativeassets.linux.8.3.1.3.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\harfbuzzsharp.nativeassets.macos\\8.3.1.3\\harfbuzzsharp.nativeassets.macos.8.3.1.3.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\harfbuzzsharp.nativeassets.webassembly\\8.3.1.3\\harfbuzzsharp.nativeassets.webassembly.8.3.1.3.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\harfbuzzsharp.nativeassets.win32\\8.3.1.3\\harfbuzzsharp.nativeassets.win32.8.3.1.3.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\microcom.runtime\\0.11.6\\microcom.runtime.0.11.6.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\skiasharp\\3.119.4\\skiasharp.3.119.4.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\skiasharp.nativeassets.linux\\3.119.4\\skiasharp.nativeassets.linux.3.119.4.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\skiasharp.nativeassets.macos\\3.119.4\\skiasharp.nativeassets.macos.3.119.4.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\skiasharp.nativeassets.webassembly\\3.119.4\\skiasharp.nativeassets.webassembly.3.119.4.nupkg.sha512",
+    "C:\\Users\\Micha\\.nuget\\packages\\skiasharp.nativeassets.win32\\3.119.4\\skiasharp.nativeassets.win32.3.119.4.nupkg.sha512"
+  ],
+  "logs": []
+}
