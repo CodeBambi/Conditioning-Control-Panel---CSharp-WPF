@@ -1,7 +1,7 @@
 # STATUS: SP-011 — spike official WebView with the copied DTRH payload
 
-**Current Step:** Step 6 — Testing & Verification
-**Last Updated:** 2026-07-19 (worker session 1)
+**Current Step:** Complete — all 6 steps done
+**Last Updated:** 2026-07-19 (worker session 1, task complete)
 
 ## Steps
 
@@ -49,8 +49,8 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 6: Testing & Verification
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green (product suite + spike build)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` = File Scope only (no payload/scratch content)
+- [x] Contract testCommand green (product suite + spike build) — Windows: sln 0W/0E, 118/118, 3/3 headless, spike 0W/0E; WSL2: same (Step 4)
+- [x] `git diff --check` clean
+- [x] `git status --short` = File Scope only (no payload/scratch content; forbidden paths verified clean vs batch base 1d50384a)

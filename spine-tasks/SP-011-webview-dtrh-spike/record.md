@@ -10,6 +10,11 @@ Packet emits structured `## Review Level: 2` heading (T-2 root-cause fix). Per-c
 |------|------------------------|--------|----------------------|
 | 1 | type=plan after step-1 commit | `skipped: true`, `spawnFailed: false` — "Nested reviewer spawn blocked inside pi worker session (SP-195); batch engine runs reviews after worker success" | NO in-worker (by design); post-.DONE engine review = the actual T-2 check, observable only at land time |
 | 2 | type=plan after step-2 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
+| 3 | type=plan after step-3 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
+| 4 | type=plan after step-4 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
+| 5 | type=plan after step-5 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
+
+**T-2 closure evidence:** the structured `## Review Level: 2` heading IS present in this packet (parsed — reviewLevel echoed as 2 in every response), so the T-2 root cause (unparsed bold-prose level) is fixed. Every in-worker call still skipped with "Nested reviewer spawn blocked inside pi worker session (SP-195)" — that is the documented worker-side behavior, NOT a spawn failure (`spawnFailed: false` each time). Whether the ENGINE runs code+final review after `.DONE` with the heading present is observable only at land time by the orchestrator; the second suspect (windowsHide spawn mass-patch) applies only if engine reviews skip there too.
 
 ## Step 1 — package verification, payload archaeology, pre-approach consult
 
@@ -132,3 +137,10 @@ Highlights (each a named observation in the deliverable):
 - **Worker-child council probe (packet probe-row clause):** ONE bounded council-mode consult attempted ("does council respond from a worker-child context at all?"). Outcome: **"Council synthesizer returned no usable text."** — the expected T-7 failure; the attempt + outcome IS the evidence. Non-blocking; all gates stayed solo Fable 5.
 - **Pre-completion solo consult (Fable 5):** verdict — "CORRECTION on one claim, then proceed — everything else is sound and well-evidenced." Correction: W17's "heartbeats CONTINUED uninterrupted" was disproved by my own beat counts (20 beats at t=60.5s teardown ⇒ silence from t≈40.7s; kill at t≈12–13s ⇒ beats continued ~28s then stopped). Corrected in webview-dtrh-spike.md (W17 row + §6 question), this record (Step-3 section), and the board row. (Verdict text again truncated in transit after the correction — the verdict's opening line and full correction content were received; no further corrections followed per the "proceed" instruction.)
 - STATUS accurate; Step 6 verification next.
+
+## Step 6 — verification
+
+- Contract testCommand green on Windows: `dotnet build client/CcpClient.sln` 0W/0E; `CcpClient.Tests` 118/118; `CcpClient.HeadlessTests` 3/3; `dotnet build spikes/CcpSpike.WebView` 0W/0E. (WSL2 green recorded in Step 4.)
+- `git diff --check` clean. `git status --short` clean after committing; one stray pi-loop runtime file from this session's monitors (untracked, outside File Scope) deleted — the three older `.pi/loops/*.json` are tracked worktree state predating this task.
+- File-scope audit vs batch base 1d50384a: changed paths = client/spikes/CcpSpike.WebView/**, client/docs/webview-dtrh-spike.md, client/docs/task-board.md, spine-tasks/SP-011-webview-dtrh-spike/** only. Forbidden paths (ConditioningControlPanel/**, client/src/**, client/tests/**, client/CcpClient.sln, .spine/**) verified CLEAN. Both fileScopeMustChange files present. artifactsMustExist: webview-dtrh-spike.md ✓, record.md ✓.
+- Completion criteria: all met (package verified; Windows boot evidence; WSLg/X11 diagnosed evidence never faked, Wayland never claimed; named observation per acceptance item; payload read-only with bridge.js byte-unchanged + tree identity recorded; evidence doc sufficient for the admit-row review; board WIP not DONE; both solo consults persisted; council probe attempt + engine-review presence recorded).
