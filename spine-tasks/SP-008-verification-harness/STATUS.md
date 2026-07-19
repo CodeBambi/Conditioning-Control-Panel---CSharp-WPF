@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In progress
 
-**Current Step:** Step 4
+**Current Step:** Step 5
 
 ## Steps
 
@@ -30,12 +30,12 @@
 - [x] Assertion-logic unit tests in CcpClient.Tests (synthetic bitmaps: pass/fail/tolerance)
 
 ### Step 4: Seeded-regression self-test, budgets, K3 integration
-**Status:** ⬜ Pending
+**Status:** ✅ Complete
 
-- [ ] Re-runnable self-test mode: throwaway-edit real AXAML → specific NAMED check fails → restore → green (run recorded; no injection flags)
-- [ ] Measured budgets: each tier Windows + WSL2, cold + incremental separate, recorded with headroom
-- [ ] Manifest-driven K3 review of card lit+unlit (verdict recorded); tier-4 milestone hook documented (not run)
-- [ ] WSL2 gate: full testCommand green native-dir + tier-2 WSLg capture exercised (X11 facts, no Wayland claim)
+- [x] Re-runnable self-test mode: throwaway-edit real AXAML → specific NAMED check fails → restore → green (run recorded; no injection flags)
+- [x] Measured budgets: each tier Windows + WSL2, cold + incremental separate, recorded with headroom
+- [x] Manifest-driven K3 review of card lit+unlit (verdict recorded); tier-4 milestone hook documented (not run)
+- [x] WSL2 gate: full testCommand green native-dir + tier-2 WSLg capture exercised (X11 facts, no Wayland claim)
 
 ### Step 5: Evidence, board reconciliation, pre-completion consult
 **Status:** ⬜ Pending

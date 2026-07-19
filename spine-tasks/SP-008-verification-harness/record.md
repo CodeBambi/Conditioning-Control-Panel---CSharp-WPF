@@ -65,8 +65,29 @@ All pages fetched 2026-07-19 from official sources (freshness: v12 docs, current
 - **Windows:** build 0W/0E; 3/3 headless passed; 85/85 landed CcpClient.Tests passed untouched (SDK 10.0.302).
 - **WSL2 (Ubuntu, SDK 10.0.110, native `~/ccp-sp008` copy, never /mnt/e):** solution build 0W/0E; 3/3 headless passed; 85/85 landed passed. Session facts: `WAYLAND_DISPLAY=wayland-0`, `DISPLAY=:0` (WSLg; headless needs no display at all — in-memory backends — recorded as environment fact only).
 
+## Step 4 — self-test, budgets, K3, WSL2 gate
+
+### Seeded-regression self-test (re-runnable: `pwsh client/tools/verify/self-test.ps1`)
+Full run 2026-07-19 (Windows), transcript summary:
+1. Seeded `MainWindow.axaml` lit brush `#FFE066FF` → `#FF336633` (throwaway-edit, no product flags), solution rebuild OK.
+2. `capture.ps1 -Surface dashboard-card -State lit` (real right-click state drive) → CcpVerify: `FAIL dashboard-card-lit-border — 0/1464 (fraction 0.000)`, `FIRST FAILED CHECK: dashboard-card-lit-border`, exit 2. The SPECIFIC named check tripped.
+3. `git checkout` restore → rebuild → re-capture → `PASS dashboard-card-lit-border — 958/1464 (fraction 0.654)`, `ALL CHECKS PASSED`, exit 0.
+4. `SELF-TEST PASS`. `git status` after: no product-source mutation left behind. One fix during development: PS 5.1 BOM-less UTF-8 mangling (SP-006 lesson) — em-dashes inside string literals broke parsing; harness scripts are ASCII-only now.
+
+### Measured budgets (2026-07-19)
+- Windows (SDK 10.0.302): tier-1 cold 12.9 s (build 2.3 + tests 6.1 + 4.4), incremental 8.3 s; tier-2 capture 5.5 s; tier-3 assert 0.4 s; self-test 23 s.
+- WSL2 (Ubuntu 26.04, SDK 10.0.110, native `~/ccp-sp008` copy): tier-1 cold 14.6 s (build 7.5 + tests 4.6 + 2.5), incremental 9.0 s; tier-2 WSLg capture 6.0 s; tier-3 assert 0.3 s.
+- Budgets with stated headroom recorded in verification-harness.md (tier-1 60 s, tier-2 30 s, tier-3 5 s, self-test 120 s).
+
+### K3 manifest-driven review (app-visual-verification, exact model kimi-coding/k3)
+`invoke-k3-visual-review.ps1` with card unlit + lit captures + the manifest checks in the prompt. **VERDICT: PASS.** Definite defects: none. Matches: correct state pairing (tick row only in lit, green mono text), neon border restrained per grammar, no clipping/truncation. Possible issues recorded: unlit description text low contrast (consistent with subdued grammar — intentional); unlit icon ring hollow-looking (asset design, not a rendering defect; no action). Interaction gates K3 flagged (toggle behavior, tick advance) are already covered by the tier-2 state drive (real right-click + UIA tick-advance verification inside `capture.ps1`) — never by stills.
+
+### WSL2 gate (in-packet)
+Full contract testCommand green on the native-dir copy: build 0W/0E; CcpClient.Tests **94/94**; CcpClient.HeadlessTests **3/3**. Tier-2 WSLg capture path exercised against the real surface: `capture-wslg.sh dashboard-card unlit|lit` → XGetImage BMPs → CcpVerify on Linux PASS (966/1464 unlit, 955/1464 lit). Session facts: `WAYLAND_DISPLAY=wayland-0`, `DISPLAY=:0`, `XDG_SESSION_TYPE` empty — WSLg Wayland session with X11 via XWayland; **X11 facts recorded, no Wayland claim** (§5.1 owner question unchanged).
+
 ## Engine reviews
 
 - Step 1 plan review: `spine_review_step` → **skipped=true, reviewLevel=0, spawnFailed=false** (eighth consecutive batch with zero engine reviews; T-2 remains open). Fable solo consults are the active quality gate per the packet.
 - Step 2 plan review: **skipped=true** (same as Step 1; T-2).
+- Step 3 plan review: **skipped=true** (T-2).
 - (further steps appended as they land)

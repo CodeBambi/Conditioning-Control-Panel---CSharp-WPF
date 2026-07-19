@@ -95,13 +95,21 @@ Sequence: (1) edit the REAL `MainWindow.axaml` — break the lit border brush (`
 
 ## Runtime budgets (measured, never invented)
 
-Measured 2026-07-19 (Step 4); budget = observed + headroom. Cold = clean `bin/obj` + first run; incremental = no source change since last build.
+Measured 2026-07-19 (SP-008 Step 4); budget = observed + stated headroom. Cold = clean `bin/obj` + first run; incremental = no source change since last build. Machines: Windows .NET SDK 10.0.302; WSL2 Ubuntu 26.04 SDK 10.0.110 (native-dir copy, never /mnt/e).
 
 | Tier | Windows cold | Windows incremental | WSL2 cold | WSL2 incremental | Budget |
 |---|---|---|---|---|---|
-| Tier 1 (build + both test projects) | — | — | — | — | — |
-| Tier 2 (launch + capture one state) | — | — | — | — | — |
-| Tier 3 (console assert one capture) | — | — | — | — | — |
-| Self-test (full cycle) | — | — | — | — | — |
+| Tier 1 (build + both test projects) | 12.9 s (2.3 build + 6.1 + 4.4 tests) | 8.3 s | 14.6 s (7.5 build + 4.6 + 2.5 tests) | 9.0 s | **60 s** |
+| Tier 2 (launch + capture one state) | 5.5 s | same (always a fresh launch) | 6.0 s (WSLg XGetImage) | same | **30 s** |
+| Tier 3 (console assert one capture) | 0.4 s | — | 0.3 s | — | **5 s** |
+| Self-test (full cycle: seed/build/capture/fail/restore/green) | 23 s | — | not applicable (Windows PS path) | — | **120 s** |
 
-(to be measured in Step 4 — cells are honest blanks until then)
+Headroom rationale: ~4x on tier 1 (dominated by NuGet/SDK variance on cold CI-like machines), ~5x on tiers 2–3, ~5x on the self-test (two builds + two captures + two assertions). Re-measure when a tier adds a project or a surface.
+
+## K3 integration
+
+The manifest is the shared contract between deterministic assertion and model review (`app-visual-verification` skill, exact model `kimi-coding/k3`): the review prompt names the manifest checks (name, region, property, tolerance) and asks K3 only for what pixels-with-tolerance cannot see (clipping, truncation, state pairing, glow bleed, contrast). First run recorded in `spine-tasks/SP-008-verification-harness/record.md`: card lit+unlit captures, VERDICT PASS. Interaction gates K3 cannot discharge (toggle behavior, tick advance) are covered by the tier-2 state drive (real right-click + tick-advance verification in `capture.ps1`), never by stills.
+
+## Tier-4 milestone hook
+
+Matrices (five themes, languages, scaling levels, platform pairs) run ONLY when a task-board row names a milestone/release. The hook: `capture.ps1`/`capture-wslg.sh` take `-Surface`/`-State`; a milestone row adds its matrix as a list of surface/state invocations plus matching manifest entries. No matrix automation exists beyond this hook (A-014); do not run matrices outside a named milestone.
