@@ -34,6 +34,8 @@ Nine `client/docs/task-board.md` rows, serial (each depends on the prior; `lanes
 
 | SP-007-first-visible-slice | Row 6: validate official migration checklist in first visible slice — dashboard window + `demo.status-ticker` demonstrator card, named-observation-per-checklist-item validation doc, Wayland named gate | **Done 2026-07-19** (landed `2d6d846d`; batch `20260719T100547` — relaunched after T-6 false-completion abort of `20260719T093943`; 85/85 Windows + WSL2, headed smoke PASS, WSLg honestly scoped; row 6 stays WIP pending owner ratification + Linux-Wayland gate §5.1 + named manual gates) | SP-006 |
 
+| SP-008-verification-harness | Row 7: tiered targeted verification harness — 4 tiers, draw/presentation evidence-class rule, headless admission (evidence-gated), CcpVerify named-check console tool + manifest, seeded-regression self-test, measured budgets | **Done 2026-07-19** (landed `88192528`; batch `20260719T114609` — clean run; 94/94 + 3/3 headless Windows, WSL2 gate in-packet; orchestrator land consult SKIPPED — per-turn consult cap (route healthy, SP-006 precedent); `.gitignore tools/` trap caught pre-land; row 7 stays WIP pending owner ratification; named limits: WSLg lit = settings-restore-driven, self-test Windows-only, tier-4 hook only) | SP-007 |
+
 Rows 2–9 (packets not yet authored — gated on solo Fable 5 review of SP-002's proposal + owner async veto):
 
 1. ~~Bootstrap discovery and architecture proposal~~ → SP-002 *(consult checkpoint after: solo Fable 5 reviews the architecture proposal before rows 2–9 are authored; owner reviews asynchronously and may veto — produces `client/` scaffolding + updates `.spine/spine-config.json` testing commands to the real client solution)*
@@ -42,6 +44,7 @@ Rows 2–9 (packets not yet authored — gated on solo Fable 5 review of SP-002'
 4. ~~Define persistence and migration contract~~ → SP-005 *(landed `0c2c849f`; WSL2 gate delivered in-packet; row stays WIP pending owner ratification)*
 5. ~~Define truthful runtime capability contract~~ → SP-006 *(landed `66457c87`; WSLg honesty proof delivered; row stays WIP pending owner ratification)*
 6. ~~Validate official migration checklist in first visible slice~~ → SP-007 *(landed `2d6d846d`; row stays WIP pending owner ratification + Linux-Wayland gate §5.1 + named manual gates)*
+7. ~~Build tiered targeted verification harness~~ → SP-008 *(landed `88192528`; row stays WIP pending owner ratification; `.spine` testing.* now includes the headless project)*
 7. Build tiered targeted verification harness
 8. Define asset and packaged-output manifest
 9. Establish Release and publish gates
