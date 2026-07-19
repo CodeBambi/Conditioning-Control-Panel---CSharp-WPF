@@ -116,3 +116,23 @@ Reviewed `windows-uia-scale1-card-unlit.png` and `windows-uia-scale1-card-lit.pn
 
 ## Engine reviews
 `spine_review_step` called after Steps 1, 2, 3 (plan): all **skipped=true, reviewLevel=0, spawnFailed=false** — seventh consecutive batch (SP-001…SP-007) with zero engine reviews; T-2 remains open. Fable solo consults are the active quality gate per the packet.
+
+## Pre-completion consult (solo Fable 5, 2026-07-19)
+
+Full as-built summary submitted (implementation, evidence set, named gates, surprises, board plan). Verdict received complete (no truncation): **"the slice is sound and the evidence set is honest — proceed to land, with two small annotations and one board correction check. No rework required."**
+
+(a) **Residual capability-lie audit: none found.** Scaling split legitimate (real measured bounds at both factors; Windows-150% a named gate, not a claim). WSLg observation correctly scoped to render/scale/session-facts. Two annotations, BOTH APPLIED:
+1. **Keyboard path was click-focused, not Tab-focused** — the toggle keystroke is real, but focus arrived via pointer. Tab-reachability untested; keyboard toggle itself observed. Focus traversal design belongs to the dashboard rows.
+2. **The stderr probe line says `scale 1` on the 1.5 run** — the one-shot first-layout log races the scaling override; the LIVE window text (read from the XGetImage capture: `@ scale 1.5`) is the observation. Recorded here explicitly so the log line is not misread later.
+
+(b) **Layout probe: KEEP** — it exists because Avalonia exposes no UIA peers for Border/Grid/StackPanel (observed platform fact); it is the only reproducible card locator and the scaling observations depend on it. Slice tooling, not scope creep. **Supersedure note (applied):** the real dashboard row replaces it with a proper automation-peer strategy (a custom control with real peers) and the probe line leaves the window then. `ApplicationHost.LogDiagnostic` stays (one method, stated privacy constraint).
+
+(c) **Board plan satisfies reconciliation** — with one correction the advisor verified: the §5.1 Wayland opt-in question is NOT in Decisions-needed (the display-backends entry is adjacent but different), so it must be ADDED, not just checked. Row → `WIP`, evidence cites this record, names the Linux-Wayland gate in the row text itself, never narrows the original acceptance wording, never `DONE`.
+
+### Annotations applied (per consult)
+- Tab-reachability untested (pointer-acquired focus; keystroke itself real) — (a)1.
+- stderr `scale 1` vs live `scale 1.5` first-layout race — (a)2.
+- Layout-probe supersedure to the dashboard rows — (b).
+
+## Board reconciliation
+`client/docs/task-board.md` row "Validate official migration checklist in first visible slice" → **WIP** with evidence citing this record and naming the Linux-Wayland gate (never `DONE`; owner ratification + Wayland gate remain). "Decisions needed" gained the §5.1 Wayland opt-in question (was absent — pre-completion consult verified). No other docs needed edits; no durable surprise beyond those already recorded above (port-lessons candidates: no-UIA-peers + occluded-window capture pattern — left in this record for the port-lessons owner row, not appended here).

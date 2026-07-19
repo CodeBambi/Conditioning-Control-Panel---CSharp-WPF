@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In progress
 
-**Current Step:** Step 5
+**Current Step:** Step 6
 
 ## Steps
 
@@ -41,15 +41,15 @@
 - [x] Validation doc: every row filled with ACTUAL named observation (no markup-presence claims)
 
 ### Step 5: Evidence, board reconciliation, pre-completion consult
-**Status:** 🔄 In progress
+**Status:** ✅ Complete
 
-- [ ] record.md written (incl. engine-review presence/absence note)
-- [ ] Pre-completion solo consult (Fable 5) run; verdict text persisted
-- [ ] Board row 6 → `WIP` with evidence naming the Linux-Wayland gate (not `DONE`); Decisions-needed §5.1 entry present
-- [ ] STATUS.md accurate
+- [x] record.md written (incl. engine-review presence/absence note)
+- [x] Pre-completion solo consult (Fable 5) run; verdict text persisted
+- [x] Board row 6 → `WIP` with evidence naming the Linux-Wayland gate (not `DONE`); Decisions-needed §5.1 entry present
+- [x] STATUS.md accurate
 
 ### Step 6: Testing & Verification
-**Status:** ⬜ Pending
+**Status:** 🔄 In progress
 
 - [ ] Contract testCommand passes
 - [ ] `git diff --check` clean
