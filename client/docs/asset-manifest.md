@@ -69,7 +69,15 @@ Publish strategy is task-board row 9's open decision; this row runs NO publish (
 
 ## Measured budgets
 
-(filled by SP-009 Step 4 — cold/incremental, Windows + WSL2; cold precondition verified by actually deleting `bin/obj`, SP-008 surprise #5)
+Measured 2026-07-19 (SP-009 Step 4); cold precondition VERIFIED by deleting all `bin/obj` and confirming zero remained before the cold run (SP-008 surprise #5 discipline). Machines: Windows .NET SDK 10.0.302; WSL2 Ubuntu 26.04 SDK 10.0.110 (native-dir copy, never /mnt/e). "Validation tests" = `dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj --filter FullyQualifiedName~AssetManifestTests` (21 tests).
+
+| Check | Windows cold | Windows incremental | WSL2 cold | WSL2 incremental | Budget |
+|---|---|---|---|---|---|
+| Solution build (context) | 2.4 s | — | 9.5 s | — | — |
+| Validation tests (filtered, 21) | 4.0 s | 2.3 s | 4.9 s | 3.6 s | **30 s** |
+| `--verify-assets` self-check run | 0.24 s first run / 0.09 s warm | — | 0.10 s first run / 0.14 s warm | — | **10 s** |
+
+The self-check is sub-second on both platforms — it opens two embedded streams and enumerates the bundle index. The 10 s budget is ~40x headroom for catalogue growth; re-measure when the catalogue adds real assets or a copied-asset direction exists.
 
 ## Research citations
 

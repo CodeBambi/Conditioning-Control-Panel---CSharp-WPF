@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In Progress
 
-**Current Step:** Step 3
+**Current Step:** Step 5
 
 ## Steps
 
@@ -23,22 +23,22 @@
 - [x] Schema-validation tests (user/mod/copied entries validate; loading unimplemented, recorded)
 
 ### Step 3: `--verify-assets` self-check mode
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] Diagnostic flag on real binary (bounded path; per-failure diagnostic line; exit 0/non-zero; no window/side effects)
-- [ ] Unit tests for manifest parse + outcome mapping
-- [ ] SP-003 startup invariants intact
+- [x] Diagnostic flag on real binary (bounded path; per-failure diagnostic line; exit 0/non-zero; no window/side effects)
+- [x] Unit tests for manifest parse + outcome mapping
+- [x] SP-003 startup invariants intact
 
 ### Step 4: Debug+Release output runs, WSL2 gate, budgets
-**Status:** ⬜ Pending
+**Status:** ✅ Complete
 
-- [ ] `--verify-assets` exit 0 on Debug + Release Windows binaries (recorded)
-- [ ] WSL2 gate: full testCommand green + Debug/Release Linux self-check exit 0 (case-exactness meaningful; session facts recorded)
-- [ ] Measured budgets (cold precondition verified; both platforms)
-- [ ] Harness integration decision recorded (verification-harness.md line or not — justified)
+- [x] `--verify-assets` exit 0 on Debug + Release Windows binaries (recorded)
+- [x] WSL2 gate: full testCommand green + Debug/Release Linux self-check exit 0 (case-exactness meaningful; session facts recorded)
+- [x] Measured budgets (cold precondition verified; both platforms)
+- [x] Harness integration decision recorded (verification-harness.md line or not — justified)
 
 ### Step 5: Evidence, board reconciliation, pre-completion consult
-**Status:** ⬜ Pending
+**Status:** 🔄 In Progress
 
 - [ ] record.md written (incl. engine-review presence/absence)
 - [ ] Pre-completion solo consult (Fable 5) run; verdict text persisted

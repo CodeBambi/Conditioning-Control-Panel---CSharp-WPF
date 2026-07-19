@@ -43,6 +43,51 @@ All sources fetched 2026-07-19. Baseline: Avalonia **12.1.0** (project-pinned). 
 - https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview (fetched 2026-07-19) — VERIFIED (row-9 hook research, NOT implementation): single-file bundles managed DLLs loaded **in memory** (no extraction by default) — embedded resources incl. the `!AvaloniaResources` bundle keep working through `GetManifestResourceStream`. `Assembly.Location` returns **empty**, `Assembly.GetFile(s)` throw; `AppContext.BaseDirectory` reaches files next to the exe. Consequence (consult pin 3): the verifier is stream-only — no `Assembly.Location`, no output-dir-relative resolution for embedded assets — so the row-9 invocation is literally the same command against the published artifact.
 - Open question from consult Q2 answered by source: `.axaml` files are compiled to IL by Avalonia.Build.Tasks, not packed into `!AvaloniaResources` — the sweep's expected content is exactly the `Assets/**` glob; verified empirically in Step 2 (rule written from observation).
 
+## Design decisions
+
+- **JSON catalogue over typed registry** (packet pin): readable by pack/verify tooling, SP-008 checks.json pattern. The catalogue is embedded via the same `Assets\**` glob it catalogues and **self-lists** (consult Q3) — the sweep covers it, so it must be declared.
+- **Sweep roots at the assembly root** `avares://CcpClient.Desktop/` (consult Q2 option (a), verified viable): `GetAssets` with path `/` matches every bundle entry (keys are rooted). Any future `<AvaloniaResource>` glob outside `Assets/` fails the sweep.
+- **Compiler-owned `!`-prefix exclusion, rule from observation (consult Q2):** the first root sweep FAILED on `!AvaloniaResourceXamlInfo` — Avalonia.Build.Tasks packs compiled-XAML metadata (`ClassToResourcePathIndex`, confirmed in `src/Markup/Avalonia.Markup.Xaml/PortableXaml/AvaloniaResourceXamlInfo.cs` @ 12.1.0) into the bundle. The `.axaml`-not-in-bundle prediction was half-wrong: per-axaml resources do NOT appear, but one compiler-owned metadata entry DOES. The rule: final path segment starting with `!` = compiler-owned (same marker as `!AvaloniaResources` itself), excluded; every non-`!` asset must be manifest-listed. Stated in asset-manifest.md §Two-direction validation rule.
+- **Open is already case-sensitive on every platform** (research): the bundle index dictionary uses the default ordinal comparer, so `Open` fails on case drift even on Windows. The named ordinal check (manifest path vs `GetAssets`-enumerated case) remains the explicit assertion and is the check that will matter for future COPIED assets, where the filesystem (NTFS vs ext4) decides case behavior.
+- **Verifier is stream-only** (consult pin 3): no `Assembly.Location`, no `AppContext.BaseDirectory`, no output-relative paths — the row-9 hook stays "one invocation, zero new test logic" under single-file publish.
+- **No JSON Schema library** (consult pin 2): `AssetManifest.TryParse` IS the schema; schema-validation tests drive synthetic user/mod/copied/invalid documents through it.
+- **Copied direction assert-empty** (consult pin 4): `CopiedDirection_ManifestDeclaresNoCopiedEntries` — no output-directory convention without a consumer (A-014).
+- **`StandardAssetLoader` despite `[Unstable]`** (consult Q1): the static `AssetLoader` needs `AvaloniaLocator` (app init), unavailable pre-lifetime; `StandardAssetLoader(assembly)` is confirmed by the 12.1.0 source to need no locator state; SP-007 landed the same pattern; 0 warnings. Recorded in asset-manifest.md.
+- **Self-check output channel:** `Console.Out`. WinExe has no attached console, but shell redirection delivers stdout on Windows (verified: `CcpClient.Desktop.exe --verify-assets > file` captures all lines); Linux apphost stdout works normally. Exit code is the primary contract; diagnostic lines are for humans/CI logs.
+
+## Step 2/3 evidence summary
+
+- Solution build 0W/0E; CcpClient.Tests **115/115** (94 landed + 21 new) on Windows; same 115/115 + HeadlessTests 3/3 on WSL2 (below).
+- Negative tests prove both sweep directions and the named case check: synthetic unmanifested asset → `unmanifested-embedded-asset` naming the path; synthetic case drift → `case-mismatch: manifest 'Assets/DEMO-status-ticker.png' vs embedded 'Assets/demo-status-ticker.png'`; synthetic missing path → `open-failed:`.
+- Real-binary sanity (Windows Debug): exit 0, per-asset OK lines + PASS summary (full transcripts below).
+
+## Step 4 — Debug+Release output runs, WSL2 gate, budgets
+
+### Windows (SDK 10.0.302)
+- Debug build 0W/0E; `bin/Debug/net10.0/CcpClient.Desktop.exe --verify-assets` → **exit 0**:
+  `asset OK demo.status-ticker.icon Assets/demo-status-ticker.png` / `asset OK asset.manifest Assets/assets.manifest.json` / `verify-assets: PASS (2 manifest entries, all required embedded assets open)`
+- Release build 0W/0E; same invocation against `bin/Release/net10.0/` → **exit 0**, identical output.
+
+### WSL2 gate (Ubuntu 26.04, SDK 10.0.110, native `~/ccp-sp009` copy, never /mnt/e)
+- Full contract testCommand green: solution build 0W/0E; CcpClient.Tests **115/115**; CcpClient.HeadlessTests **3/3**.
+- `bin/Debug/net10.0/CcpClient.Desktop --verify-assets` → **exit 0** (identical 3-line output); `bin/Release/net10.0/CcpClient.Desktop --verify-assets` → **exit 0** (identical).
+- Case-exactness on ext4: the ordinal sweep + case-mismatch negative tests run in the 115 on ext4 (embedded case is filesystem-independent by bundle design — recorded in the contract; the ext4-meaningful case is the future copied direction, stated).
+- Session facts: `WAYLAND_DISPLAY=wayland-0`, `DISPLAY=:0`, `XDG_SESSION_TYPE` empty (WSLg Wayland session with X11 via XWayland — X11 facts only, no Wayland claim, §5.1 owner question unchanged); kernel 6.6.114.1-microsoft-standard-WSL2 x86_64.
+
+### Measured budgets (cold precondition verified: all bin/obj deleted, zero remaining confirmed)
+Recorded in asset-manifest.md §Measured budgets. Windows: cold build 2.4 s; validation tests cold 4.0 s / incremental 2.3 s; self-check 0.24 s first-run / 0.09 s warm (Release 0.31 s after rebuild). WSL2: cold build 9.5 s; validation tests cold 4.9 s / incremental 3.6 s; self-check Debug 0.10 s / warm 0.14 s / Release 0.086 s.
+
+### Harness integration decision
+**The self-check invocation is NOT added to `verification-harness.md`; it stays in `asset-manifest.md`.** Justification: the harness's tier 1 is explicitly "never launches the app" and tiers 2–3 are headed capture/pixel-assertion machinery; the `--verify-assets` mode launches the binary (though never the lifetime), so it fits no tier. Its natural gate is row 9's release/publish lane (same invocation against the published artifact), which the harness doc does not own. Adding it to tier 1 would silently redefine the tier's scope.
+
+## Surprises
+
+1. **`!AvaloniaResourceXamlInfo` IS in the bundle** (see design decisions) — the consult's ".axaml exclusion is probably moot" was right about per-axaml resources but the compiler still adds one metadata entry; the first sweep run caught it immediately, which is the sweep working as designed.
+2. **WinExe stdout redirection works** — a GUI-subsystem exe has no console, but `> file` redirection delivers `Console.Out` anyway; the self-check's diagnostic lines are capturable on Windows without native interop (AttachConsole was the alternative and is forbidden).
+3. **A deleted-for-cold-measurement Release binary bit once** — after the bin/obj clean, a Release run returned 127 (file gone). Rebuild-then-run is the order; recorded so future budget passes don't misread 127 as a product failure.
+
 ## Engine reviews
 
 - Step 1 plan review: `spine_review_step` → **skipped=true, reviewLevel=0, spawnFailed=false** (ninth consecutive batch with zero engine reviews; T-2 remains open). Fable solo consults are the active quality gate per the packet.
+- Step 2 plan review: **skipped=true** (T-2).
+- Step 3 plan review: **skipped=true** (T-2).
