@@ -1,8 +1,8 @@
 # Status: SP-006 — truthful runtime capability contract
 
-**Overall:** ◐ In Progress
+**Overall:** ✅ Complete
 
-**Current Step:** 5
+**Current Step:** done
 
 ## Steps
 
@@ -39,8 +39,8 @@
 - [x] STATUS.md accurate
 
 ### Step 5: Testing & Verification
-**Status:** ◐ In Progress
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand passes
-- [ ] `git diff --check` clean
-- [ ] Only File Scope paths changed
+- [x] Contract testCommand passes
+- [x] `git diff --check` clean
+- [x] Only File Scope paths changed
