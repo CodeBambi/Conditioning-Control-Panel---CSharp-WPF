@@ -98,6 +98,7 @@ Full contract testCommand green on the native-dir copy: build 0W/0E; CcpClient.T
 3. **Inline `pkill -f 'CcpClient[.]Desktop'` inside a `bash -lc` whose command line also contains the DLL path self-kills the shell** (SP-007 lesson 4 re-confirmed) — kill patterns live inside script files only.
 4. **Evaluator cross-validation for free:** CcpVerify's pixel counts on the same captures are IDENTICAL to SP-007's PowerShell `GetPixel` counts (966 unlit, 958 lit) — independent implementations agree.
 5. Cold-build definition matters: a first `find -prune -exec rm` silently failed and produced a fake 2 s "cold" build; the honest cold number (12.9 s) came only after verifying `bin/obj` were actually gone. Budget measurements must verify the precondition, not assume it.
+6. **Repo-root `.gitignore` line 167 (`tools/`) silently excluded ALL of `client/tools/verify/` from every commit** — caught only by inspecting the task's changed-file list before `.DONE` (the solution would have been broken at land: the sln references `tools\verify\CcpVerify\CcpVerify.csproj`). The root `.gitignore` is out of File Scope, so the files were force-added (`git add -f`; tracked files stay tracked). A second trap inside the first: `-f` also swept in `bin/` build outputs and the ephemeral captures — both removed from the index before commit; `artifacts/` keeps only its in-scope `.gitignore`. Lesson for later rows adding tooling under any `tools/` path: check `git check-ignore` on new paths and audit the task's changed-file list before finishing.
 
 ## Pre-completion consult (solo Fable 5, 2026-07-19)
 
@@ -116,4 +117,5 @@ Full as-built summary submitted (all eight delivered items above). Verdict recei
 - Step 3 plan review: **skipped=true** (T-2).
 - Step 4 plan review: **skipped=true** (T-2).
 - Step 5 plan review: **skipped=true** (T-2).
+- Step 6: no review checkpoint (verification step); engine-review absence total for this batch: 5/5 calls skipped (T-2).
 - (further steps appended as they land)
