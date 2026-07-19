@@ -16,6 +16,10 @@ VERSION="$(dotnet msbuild "$CSPROJ" -nologo -getProperty:Version | tr -d '[:spac
 
 NAME="CcpClient.Desktop-$VERSION-$RID"
 OUT="$ROOT/artifacts/publish/$NAME"
+# Always publish to a CLEAN output dir: an incremental `dotnet publish` into an existing
+# single-file output dir silently DROPS the native sidecars (libSkiaSharp/libHarfBuzzSharp)
+# and the app then dies with a native-load failure at startup (SP-010).
+rm -rf "$OUT"
 dotnet publish "$CSPROJ" -c Release -r "$RID" --self-contained true -p:PublishSingleFile=true -o "$OUT" --nologo
 
 echo "PUBLISHED $NAME"

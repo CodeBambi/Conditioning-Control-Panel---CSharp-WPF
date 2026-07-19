@@ -62,7 +62,9 @@ public sealed class CompositionRoot
     }
 
     /// <summary>
-    /// Per-user settings path: %APPDATA%\\CcpClient on Windows, ~/.config/CcpClient on Linux.
+    /// Per-user settings path: %APPDATA%\\CcpClient on Windows; $XDG_CONFIG_HOME/CcpClient when
+    /// set, else ~/.config/CcpClient on Linux (.NET's Unix ApplicationData mapping — verified
+    /// SP-010: the quarantine lands under XDG_CONFIG_HOME when it is set).
     /// </summary>
     public static string DefaultSettingsPath()
     {

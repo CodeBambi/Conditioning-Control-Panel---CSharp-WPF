@@ -79,3 +79,44 @@ All fetched **2026-07-19**. Baselines: Avalonia 12.1.0, .NET SDK 10.0.302 (Windo
 - Gate 8 native-deps floor (published): PASS — sidecars recorded above; research expectation vs observed reality match exactly.
 - First matrix run caught two SCRIPT bugs (not product): Release binary not pre-built (publish uses the RID-scoped intermediate dir — script now fails with the exact build command) and gate 6 compared timestamped quarantine filenames instead of the directory (fixed to compare `DirectoryName`). Re-run: full PASS.
 - Engine review Step 3: `spine_review_step` → skipped=true (T-2).
+
+## Step 4 evidence — WSL2 gate: Linux matrix + WSLg headed smoke
+
+**Environment:** WSL2 Ubuntu 26.04, SDK 10.0.110, kernel 6.6.114.1-microsoft-standard-WSL2 x86_64; native ext4 copy `~/ccp-sp010` (rsync from /mnt/e, bin/obj/artifacts excluded — never built on /mnt/e). Session facts: `WAYLAND_DISPLAY=wayland-0`, `DISPLAY=:0` (WSLg; X11 via XWayland — X11 facts only, no Wayland claim, §5.1 owner question unchanged).
+
+**Contract testCommand on WSL2:** solution build 0W/0E; **CcpClient.Tests 118/118; CcpClient.HeadlessTests 3/3.**
+
+**Publish (linux-x64):** `./client/tools/publish/publish.sh` → `CcpClient.Desktop-0.1.0-linux-x64/` (93 MB): apphost + `libHarfBuzzSharp.so` 2.8 MB + `libSkiaSharp.so` 11.2 MB (no av_libglesv2 — Windows ANGLE only).
+
+**Matrix (`./client/tools/publish/matrix.sh`), 2026-07-19 — MATRIX PASS (wsl2):**
+
+- Gate 2 `--verify-assets`: PASS exit 0 on **debug, release, published** — **row-8 publish third DISCHARGED (Linux; both platforms now done).**
+- Gate 3 `--version` prefix == authority: PASS all three. WSL copies have NO `.git` → SourceRevisionId absent → prints plain `0.1.0` (derivation test tolerates; recorded as a fact about SourceLink requiring git presence).
+- Gate 4 fresh-profile: PASS all three — graceful exit 0, no settings.json created.
+- Gate 5 corrupt-settings: PASS all three — `settings.corrupt-*.json` preserved the exact seeded bytes (`7B 7B 00 FF 41`); typed-Degraded stderr seam line observed.
+- Gate 6 data-path identity: PASS — `/home/mich/.config/CcpClient` identical across modes; published ran from MOVED `/tmp/ccp-sp010-portable`.
+- Gate 7 logs-absence: PASS all three.
+- Gate 8 native-deps floor (published): recorded in release-publish-gates.md §1 — ldd-per-.so ∪ `/proc/<pid>/maps`: system fontconfig/freetype/expat/z/bz2/png16/brotli + libX11 family + libGL/Mesa (WSLg) + libdbus + ICU 78. `ldd` on the apphost alone shows none of this (consult Q1 confirmed empirically).
+- Gate 1 graceful close on every headed run: **WM_DELETE_WINDOW ClientMessage → exit 0** (negative control first: malformed message ignored, process alive at 2 s; protocol advertisement asserted via `XGetWMProtocols` before every send; XGetImage BMP capture per run under `client/tools/verify/artifacts/wslg-matrix-*.bmp`). **Rows 2/3 headed-Linux (WSLg) smoke debt DISCHARGED; SP-007's WSLg graceful-close gap DISCHARGED** (the libX11 WM_DELETE_WINDOW path works — no rename needed).
+
+**XDG correction (empirical):** with `XDG_CONFIG_HOME=/tmp/xdg-sp010` the quarantine landed under it — the store honors `XDG_CONFIG_HOME` via .NET's Unix `ApplicationData` mapping. The pre-approach consult's framing ("~/.config literal, not XDG") was wrong; release-publish-gates.md gate 6 + the `CompositionRoot.DefaultSettingsPath` doc comment corrected to the observed truth (advisor advisory < empirical evidence, per authority order).
+
+**Measured budgets (cold precondition VERIFIED: all bin/obj deleted, zero remaining confirmed):**
+
+| Measurement | Windows | WSL2 |
+|---|---|---|
+| publish cold | 3.05 s | 6.67 s (true zero-bin/obj re-measure) |
+| publish incremental | 1.73 s | 1.38 s |
+| matrix run 1 | 9.06 s | 27.4 s |
+| matrix run 2 | 6.96 s | 27.3 s |
+
+(WSL2 matrix is dominated by six headed runs × (launch + window-wait + negative-control 2 s + close-wait); Windows headed close is near-instant. Publish cold on Windows is 3 s because the solution is small and NuGet is cache-warm; SP-008/009 measured the same machine class.)
+
+**Surprises (Step 3/4):**
+
+1. **Incremental `dotnet publish` into an existing single-file output dir silently DROPS native sidecars** — reproduced deterministically (cold: libSkiaSharp/libHarfBuzzSharp/av_libglesv2 present; second run: gone; app dies with `BadImageFormatException 0x8007000B`). Fixed in both publish scripts: always publish to a CLEAN output dir. The matrix caught this within minutes of first failure — the gates working as designed. **port-lessons candidate.**
+2. **Bash ERE has no `\S`** — the GATE3 version regex silently never-matched on WSL (PCRE-ism); fixed to `[[:space:]]`/`[^[:space:]]` classes. Windows PS regex unaffected.
+3. **Transient `Internal CLR error (0x80131506)`** on the first WSL Debug build; clean retry succeeded. Recorded, no recurrence.
+4. **WSL `--version` prints unsuffixed `0.1.0`** — no `.git` in the native copy → no SourceLink → no SourceRevisionId. Confirms the suffix is git-presence-dependent; derivation-not-equality testing was the correct call.
+5. **XDG_CONFIG_HOME is honored** (see above) — doc-level correction, not a behavior change.
+- Engine review Step 4: `spine_review_step` → skipped=true (T-2).

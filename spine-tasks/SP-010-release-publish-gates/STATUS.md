@@ -1,7 +1,7 @@
 # STATUS: SP-010 — establish Release and publish gates
 
-**Current Step:** 4
-**Last Updated:** 2026-07-19 (Step 3 complete — Windows matrix PASS; engine review skipped, T-2)
+**Current Step:** 5
+**Last Updated:** 2026-07-19 (Step 4 complete — WSL2 matrix PASS, WSLg gaps discharged; engine review skipped, T-2)
 
 ## Steps
 
@@ -29,17 +29,17 @@
 - [x] Windows native-deps expectation vs observed recorded
 
 ### Step 4: WSL2 gate — Linux matrix + WSLg headed smoke
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] Native-dir copy (~/ccp-sp010), full contract testCommand green on WSL2
-- [ ] linux-x64 published; same matrix green incl. --verify-assets on all three modes
-- [ ] ldd residual-deps floor recorded
-- [ ] WSLg headed smoke: rendered window (XGetImage) + clean exit (rows 2/3 debt)
-- [ ] Graceful close via WM_DELETE_WINDOW attempted (discharged or honestly renamed)
-- [ ] Budgets measured both platforms (cold precondition verified)
+- [x] Native-dir copy (~/ccp-sp010), full contract testCommand green on WSL2
+- [x] linux-x64 published; same matrix green incl. --verify-assets on all three modes
+- [x] ldd residual-deps floor recorded
+- [x] WSLg headed smoke: rendered window (XGetImage) + clean exit (rows 2/3 debt)
+- [x] Graceful close via WM_DELETE_WINDOW attempted (discharged or honestly renamed)
+- [x] Budgets measured both platforms (cold precondition verified)
 
 ### Step 5: Evidence, board reconciliation, pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] record.md complete (incl. engine-review presence/absence — T-2)
 - [ ] Pre-completion solo Fable 5 consult (verdict in record.md)

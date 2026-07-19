@@ -14,6 +14,10 @@ if ([string]::IsNullOrWhiteSpace($Version)) { throw "FAIL: Version property empt
 
 $Name = "CcpClient.Desktop-$Version-$Rid"
 $Out = Join-Path $Root "artifacts/publish/$Name"
+# Always publish to a CLEAN output dir: an incremental `dotnet publish` into an existing
+# single-file output dir silently DROPS the native sidecars (libSkiaSharp/libHarfBuzzSharp/
+# av_libglesv2) and the app then dies with BadImageFormatException 0x8007000B (SP-010).
+if (Test-Path $Out) { Remove-Item $Out -Recurse -Force }
 dotnet publish $Csproj -c Release -r $Rid --self-contained true -p:PublishSingleFile=true -o $Out --nologo
 if ($LASTEXITCODE -ne 0) { throw "FAIL: dotnet publish exit $LASTEXITCODE" }
 
