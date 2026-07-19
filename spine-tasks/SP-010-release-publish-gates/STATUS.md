@@ -1,7 +1,7 @@
 # STATUS: SP-010 — establish Release and publish gates
 
-**Current Step:** 6
-**Last Updated:** 2026-07-19 (Step 5 complete — record.md + board reconciled + pre-completion consult applied; engine review skipped, T-2)
+**Current Step:** 6 (complete)
+**Last Updated:** 2026-07-19 (all steps complete — .DONE)
 
 ## Steps
 
@@ -47,8 +47,8 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 6: Testing & Verification
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green (solution + both test projects)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` = File Scope only (client/tools check-ignore audit done)
+- [x] Contract testCommand green (solution + both test projects)
+- [x] `git diff --check` clean
+- [x] `git status --short` = File Scope only (client/tools check-ignore audit done)
