@@ -1,16 +1,18 @@
 # Status: SP-005 — persistence and migration contract
 
-**Overall:** ⬜ Not Started
+**Overall:** 🔄 In Progress
+
+**Current Step:** 1
 
 ## Steps
 
 ### Step 1: Pre-approach consult and contract draft
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
-- [ ] STATUS.md updated before starting work
-- [ ] WPF persistence outcomes digest in record.md (outcomes only)
-- [ ] `client/docs/persistence-migration-contract.md` written (schema authority, atomic write, quarantine, unknown-member policy, migration journal, replacement notification + delivery context, secret seam, import/backup boundary, STJ decision, teardown flush + panic policy, debounce policy-only, Core deferral)
+- [x] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
+- [x] STATUS.md updated before starting work
+- [x] WPF persistence outcomes digest in record.md (outcomes only)
+- [x] `client/docs/persistence-migration-contract.md` written (schema authority, atomic write, quarantine, unknown-member policy, migration journal, replacement notification + delivery context, secret seam, import/backup boundary, STJ decision, teardown flush + panic policy, debounce policy-only, Core deferral)
 
 ### Step 2: Persistence store implementation
 **Status:** ⬜ Not Started
