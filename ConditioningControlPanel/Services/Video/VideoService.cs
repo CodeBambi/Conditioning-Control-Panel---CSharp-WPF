@@ -44,6 +44,11 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _attentionTimer;
         private DispatcherTimer? _safetyTimer;
         private DispatcherTimer? _fallbackSafetyTimer;
+        // Hard wall-clock cap that force-ends a video once it has played for VideoMaxDurationSeconds.
+        // The selection-time duration filter (RefillQueues) is best-effort — it lets a video with no
+        // cached duration through and warms the cache in the background — so a long clip can slip past
+        // the user's max on a cold cache (#584). This cap guarantees the max is never exceeded on screen.
+        private DispatcherTimer? _maxLenCapTimer;
 
         // ---- UI-thread wedge watchdog (freeze/lockout rescue, #529/#532 storm) ----
         // The _safetyTimer/_fallbackSafetyTimer above are DispatcherTimers: dead weight the moment
@@ -1151,6 +1156,8 @@ namespace ConditioningControlPanel.Services
             _safetyTimer?.Stop();
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
+            _maxLenCapTimer?.Stop();
+            _maxLenCapTimer = null;
             _videoPlaying = false;
             _triggerInProgress = false;
             _strictActive = false;
@@ -1506,6 +1513,13 @@ namespace ConditioningControlPanel.Services
                 // even if LibVLC's LengthChanged never fires. Will be replaced by accurate timer
                 // once video duration is known.
                 StartFallbackSafetyTimer();
+
+                // Enforce the user's max video-length cap (#584). This is independent of the safety
+                // timers (which key off the file's own duration, not the user's cap) and of the
+                // selection filter (best-effort, cold-cache bypass), so it holds even for a long clip
+                // that slipped past selection. Wall-clock from playback start; a few seconds of LibVLC
+                // startup latency before frames roll is negligible against a minutes-long cap.
+                StartMaxLengthCapTimer();
 
                 // Ensure LibVLC is initialized (deferred from startup for faster launch)
                 EnsureLibVLCInitialized();
@@ -2737,6 +2751,37 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Arms the user's max video-length cap (#584). When VideoMaxDurationSeconds &gt; 0, force-ends the
+        /// current video once it has played that many wall-clock seconds, regardless of the file's real
+        /// duration — the selection-time filter only best-effort excludes long files (cold-cache bypass),
+        /// so this is what actually guarantees the on-screen video never runs past the user's limit.
+        /// One-shot; disarmed on Cleanup. No-op when no cap is set.
+        /// </summary>
+        private void StartMaxLengthCapTimer()
+        {
+            _maxLenCapTimer?.Stop();
+            _maxLenCapTimer = null;
+
+            var maxSec = App.Settings?.Current?.VideoMaxDurationSeconds ?? 0;
+            if (maxSec <= 0) return;
+
+            _maxLenCapTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(maxSec) };
+            _maxLenCapTimer.Tick += (s, e) =>
+            {
+                _maxLenCapTimer?.Stop();
+                _maxLenCapTimer = null;
+                if (_videoPlaying)
+                {
+                    App.Logger?.Information("VideoService: Max video-length cap ({Max}s) reached - ending video early.", maxSec);
+                    Cleanup();
+                }
+            };
+            _maxLenCapTimer.Start();
+
+            App.Logger?.Debug("VideoService: Max video-length cap timer started for {Max}s", maxSec);
+        }
+
+        /// <summary>
         /// Arms the off-thread wedge watchdog for the current video. Idempotent (safe to call again on
         /// a retry/troll replay). Must be called on the UI thread, before window creation.
         /// </summary>
@@ -3290,6 +3335,8 @@ namespace ConditioningControlPanel.Services
             _safetyTimer?.Stop();
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
+            _maxLenCapTimer?.Stop();
+            _maxLenCapTimer = null;
             _videoPlaying = false;
             _triggerInProgress = false;
             CloseAll();

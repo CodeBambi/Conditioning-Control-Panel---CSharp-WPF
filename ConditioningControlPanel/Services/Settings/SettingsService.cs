@@ -179,6 +179,11 @@ namespace ConditioningControlPanel.Services
                         // One-shot — turning the toggle off later sticks.
                         settings.MigrateEnableUnifiedOverlayHost();
 
+                        // Off-thread present is the #550 proper fix; 6.4.0 shipped the compositor on
+                        // but this off, so the spiral rastered on the UI thread (#588/#586/#587).
+                        // Re-enable once; the Settings > System toggle lets it be turned back off.
+                        settings.MigrateEnableCompositorOffThreadPresent();
+
                         return settings;
                     }
                 }
@@ -249,6 +254,7 @@ namespace ConditioningControlPanel.Services
                     settings.MigrateFromContentModeToMod();
                     settings.MigrateLoudnessThreshold();
                     settings.MigrateEnableUnifiedOverlayHost();
+                    settings.MigrateEnableCompositorOffThreadPresent();
 
                     App.Logger?.Warning("Settings RESTORED from daily backup {Backup} (main file was unparseable)", bakPath);
                     return settings;
