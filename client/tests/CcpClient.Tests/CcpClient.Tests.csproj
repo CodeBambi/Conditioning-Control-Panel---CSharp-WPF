@@ -20,6 +20,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CcpClient.Desktop\CcpClient.Desktop.csproj" />
+    <!-- SP-008: assertion-logic unit tests run against the CcpVerify evaluator directly
+         (pure logic, no Avalonia runtime) — synthetic pixel buffers only. -->
+    <ProjectReference Include="..\..\tools\verify\CcpVerify\CcpVerify.csproj" />
   </ItemGroup>
 
 </Project>

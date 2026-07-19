@@ -36,7 +36,20 @@ All pages fetched 2026-07-19 from official sources (freshness: v12 docs, current
 
 ## Design decisions
 
-(to be filled as steps land)
+- **CcpVerify package references (recorded deviation from a strict "zero new packages" reading):** the console tool references `Avalonia` 12.1.0 (baseline, admitted SP-001/002), plus `Avalonia.Headless` and `Avalonia.Skia` 12.1.0 as EXPLICIT references. Both are already in the admitted dependency graph transitively (`Avalonia.Headless` is a dependency of the admitted `Avalonia.Headless.XUnit@12.1.0`; `Avalonia.Skia` ships with baseline `Avalonia.Desktop`) — the explicit pins add NO new third-party code, same versions. Decode path: `UseSkia().UseHeadless(UseHeadlessDrawing=false).SetupWithoutStarting()` (official v12 pattern), then `Bitmap` decodes PNG and BMP on both platforms. No System.Drawing anywhere in the tool.
+- **Assertion logic is pure C#** (`DecodedImage` BGRA buffer + `CheckEvaluator` + `CheckManifest`): unit tests synthesize buffers directly — no Avalonia runtime, no captures, keeping the 85 landed tests unpolluted (9 additive tests in CcpClient.Tests).
+- **Pass criterion is `minPixelFraction`, not absolute counts** (consult): one manifest valid at Windows scale 1.0 AND WSLg scale 1.5.
+- **Surfaces are named capture scopes:** `dashboard-card` = card rect from the layout probe; `dashboard` = full window. State `lit` is driven through REAL input on Windows (right-click quick-toggle, tick-advance verified before capture) and through the restart-restore path on WSLg (pre-seeded `{"statusTickerEnabled": true}` — a real user path; WSLg has no input automation, SP-007 named gate, recorded in the script header).
+- **WSLg crop is window-relative** (surprise, recorded below): the probe's `PointToScreen` output equals the card's offset within the X window (window opens at Avalonia monitor origin; X window = client area). X root coordinates are a different space under WSLg (monitors tiled under one root) — verified empirically (966/1464 border pixels = SP-007's exact count).
+- **Artifacts gitignored in-scope:** `client/tools/verify/artifacts/` (repo-root .gitignore is out of File Scope).
+
+### Step 3 evidence summary
+
+- Windows: `capture.ps1` unlit/lit/dashboard full — CAPTURE PASS each (lit state driven by real right-click, tick 2→6 observed). CcpVerify: 3/3 checks PASS against the fresh captures (966/1464 unlit, 958/1464 lit, dashboard background 19195/21320) — pixel counts match SP-007's PS-computed values exactly (cross-validation of the evaluator against the original implementation).
+- Fail path: lit check against the unlit capture → `FAIL dashboard-card-lit-border … FIRST FAILED CHECK: dashboard-card-lit-border`, exit 2.
+- WSLg: `capture-wslg.sh` dashboard-card unlit + lit CAPTURE PASS (XGetImage; lit via settings restore — probe showed the tick row in layout, card 488x96). CcpVerify ON LINUX against the BMPs: unlit 966/1464 PASS, lit 955/1464 PASS.
+- Cross-check vs SP-007 artifacts: unlit PNG 966/1464, lit PNG 958/1464, WSLg full-window BMP dashboard-background 18649/21320 PASS.
+- Solution build 0W/0E; CcpClient.Tests 94/94 (85 landed + 9 new).
 
 ## Step 2 — headless admission evidence
 
@@ -55,4 +68,5 @@ All pages fetched 2026-07-19 from official sources (freshness: v12 docs, current
 ## Engine reviews
 
 - Step 1 plan review: `spine_review_step` → **skipped=true, reviewLevel=0, spawnFailed=false** (eighth consecutive batch with zero engine reviews; T-2 remains open). Fable solo consults are the active quality gate per the packet.
+- Step 2 plan review: **skipped=true** (same as Step 1; T-2).
 - (further steps appended as they land)

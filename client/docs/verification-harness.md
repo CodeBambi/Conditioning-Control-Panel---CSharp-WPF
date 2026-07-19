@@ -20,14 +20,17 @@ Build + unit tests + headless tests. Runs on every iteration; the only tier that
 Thin scripts under `client/tools/verify/` formalizing the SP-007 headed-smoke patterns. Launch the real app, raise it (`SetWindowPos(HWND_TOPMOST)` on Windows — the app opens unactivated behind existing windows and pixel captures read the occluder, SP-007 surprise #2), read UIA/layout-probe facts, drive real input, capture ONE surface+state by name:
 
 ```
-pwsh client/tools/verify/capture.ps1 -Surface dashboard -State lit
+pwsh client/tools/verify/capture.ps1 -Surface dashboard-card -State lit
+pwsh client/tools/verify/capture.ps1 -Surface dashboard-card -State unlit
 pwsh client/tools/verify/capture.ps1 -Surface dashboard -State unlit
 ```
 
+Surfaces are NAMED capture scopes, not app screens: `dashboard-card` = the card rect from the app's layout probe (Avalonia exposes no UIA peers for Border/Grid/StackPanel — SP-007 surprise #1); `dashboard` = the whole window. States are driven through REAL input (state `lit` right-click quick-toggles the card before capture — the same user path a regression would break).
+
 - Windows: real window + `CopyFromScreen` crop to the layout-probe rect → PNG. (System.Drawing appears here ONLY as capture transport; scripts never read a pixel — SP-008 consult.)
-- WSLg (Linux/X11): `XGetImage` via python3 ctypes against the app's X window → BMP/PNG. WSLg RAIL windows are invisible to Windows-side GDI capture (SP-007 surprise #3).
-- Headed ACTIONS (right-click quick-toggle, keyboard, teardown) remain task-specific scripts building on the same helpers; the harness owns launch/raise/read/capture, the task owns its action sequence.
-- Output: `client/artifacts/verify/<platform>-<surface>-<state>.png` (gitignored).
+- WSLg (Linux/X11): `XGetImage` via python3 ctypes against the app's X window (`capture-wslg.sh` + `xgetimage.py`) → BMP. WSLg RAIL windows are invisible to Windows-side GDI capture (SP-007 surprise #3).
+- Headed ACTIONS (right-click quick-toggle, keyboard, teardown) beyond what a state needs remain task-specific scripts building on the same helpers; the harness owns launch/raise/read/capture, the task owns its action sequence.
+- Output: `client/tools/verify/artifacts/<platform>-<surface>-<state>.png|bmp` (gitignored, in-scope .gitignore).
 
 ### Tier 3 — K3 image inspection driven by the named-check manifest
 
@@ -58,14 +61,14 @@ Every check in the manifest declares an evidence class:
   "checks": [
     {
       "name": "dashboard-card-lit-border",
-      "surface": "dashboard",
+      "surface": "dashboard-card",
       "state": "lit",
       "evidenceClass": "presentation-verified",
       "kind": "border-color-band",
       "region": { "band": "top", "thicknessPx": 3 },
       "expectedColor": "#E066FF",
       "tolerance": 32,
-      "minPixelCount": 50
+      "minPixelFraction": 0.5
     }
   ]
 }
@@ -76,9 +79,9 @@ Fields:
 - `name` — stable check identity; the console tool exits non-zero naming the first failed `name`. K3's review prompt cites the same names.
 - `surface` / `state` — match `capture.ps1 -Surface/-State`. A check is evaluated only against captures of its own surface+state.
 - `evidenceClass` — `draw-verified` | `presentation-verified` (rule above).
-- `kind` — evaluation semantics: `border-color-band` (count pixels within `tolerance` of `expectedColor` inside an edge band of the capture) | `region-color` (same count inside a fractional rect of the capture).
+- `kind` — evaluation semantics: `border-color-band` (sample an edge band of the capture) | `region-color` (sample a fractional rect of the capture).
 - `region` — **capture-relative, never absolute pixels** (captures differ across platforms: Windows scale 1.0, WSLg scale 1.5, card 77 vs 71 DIP — SP-007 measured font-metric delta). Either `{ "band": "top|bottom|left|right", "thicknessPx": N }` (first N pixel rows/columns of the capture) or `{ "rect": { "x": 0.0, "y": 0.0, "w": 1.0, "h": 0.05 } }` (fractions of capture width/height).
-- `expectedColor` — `#RRGGBB`; `tolerance` — per-channel absolute delta; `minPixelCount` — pass criterion: matching pixels >= this.
+- `expectedColor` — `#RRGGBB`; `tolerance` — per-channel absolute delta; `minPixelFraction` — pass criterion: fraction (0..1) of sampled region pixels within tolerance. Fraction-based, not absolute counts, so one manifest is valid at Windows scale 1.0 AND WSLg scale 1.5 (SP-008 consult).
 
 ## Seeded-regression self-test
 
