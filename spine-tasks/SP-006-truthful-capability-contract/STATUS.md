@@ -1,16 +1,18 @@
 # Status: SP-006 — truthful runtime capability contract
 
-**Overall:** ⬜ Not Started
+**Overall:** ◐ In Progress
+
+**Current Step:** 1
 
 ## Steps
 
 ### Step 1: Pre-approach consult and contract draft
-**Status:** ⬜ Not Started
+**Status:** ◐ In Progress
 
-- [ ] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
-- [ ] STATUS.md updated before starting work
-- [ ] First-attempt capability evidence digest in record.md (three lying patterns, outcomes only)
-- [ ] `client/docs/runtime-capability-contract.md` written (state model, probe rule, honesty rule, degradation semantics, row-3/row-5 boundary, fallback policy, session-type reporting)
+- [x] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
+- [x] STATUS.md updated before starting work
+- [x] First-attempt capability evidence digest in record.md (three lying patterns, outcomes only)
+- [x] `client/docs/runtime-capability-contract.md` written (state model, probe rule, honesty rule, degradation semantics, row-3/row-5 boundary, fallback policy, session-type reporting)
 
 ### Step 2: Capability registry and demonstrator probes
 **Status:** ⬜ Not Started
