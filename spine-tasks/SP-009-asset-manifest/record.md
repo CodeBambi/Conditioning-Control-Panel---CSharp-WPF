@@ -86,6 +86,11 @@ Recorded in asset-manifest.md §Measured budgets. Windows: cold build 2.4 s; val
 2. **WinExe stdout redirection works** — a GUI-subsystem exe has no console, but `> file` redirection delivers `Console.Out` anyway; the self-check's diagnostic lines are capturable on Windows without native interop (AttachConsole was the alternative and is forbidden).
 3. **A deleted-for-cold-measurement Release binary bit once** — after the bin/obj clean, a Release run returned 127 (file gone). Rebuild-then-run is the order; recorded so future budget passes don't misread 127 as a product failure.
 
+## Follow-ups for the orchestrator
+
+- port-lessons candidates (durable surprises; SP-007/SP-008 precedent — left here for the port-lessons owner row, not appended): (1) `!AvaloniaResourceXamlInfo` compiler metadata rides in the `!AvaloniaResources` bundle — any root-level bundle sweep must expect `!`-prefixed root entries; (2) WinExe stdout redirection works without a console (`> file` captures `Console.Out`) — diagnostic flags on the real binary need no AttachConsole interop; (3) budget passes must rebuild before running a configuration whose bin/obj was cleaned (127 = file gone, not a product failure).
+- Row 9 (Release/publish gates) owns the publish-mode invocation of `--verify-assets` against the published artifact — the hook is ready, zero new test logic needed.
+
 ## Pre-completion consult (solo Fable 5, 2026-07-19)
 
 Full as-built summary + diff submitted. Verdict received complete: **proceed to land after ONE small tightening (the `!` rule — a real but tiny drift hole). No rework of evidence, schema, or tests otherwise. Deviations (a) double-open and (b) ordinal-bundle-index finding accepted as recorded.**

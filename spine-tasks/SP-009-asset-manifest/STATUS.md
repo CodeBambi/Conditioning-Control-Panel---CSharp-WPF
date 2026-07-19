@@ -1,8 +1,8 @@
 # Status: SP-009 — define asset and packaged-output manifest
 
-**Overall:** 🔄 In Progress
+**Overall:** ✅ Complete
 
-**Current Step:** Step 6
+**Current Step:** done
 
 ## Steps
 
@@ -46,8 +46,8 @@
 - [x] STATUS.md accurate
 
 ### Step 6: Testing & Verification
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand passes (solution + BOTH test projects)
-- [ ] `git diff --check` clean
-- [ ] Only File Scope paths changed
+- [x] Contract testCommand passes (solution + BOTH test projects)
+- [x] `git diff --check` clean
+- [x] Only File Scope paths changed
