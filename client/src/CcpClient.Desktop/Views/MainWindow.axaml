@@ -1,11 +1,75 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:CcpClient.Desktop.Views"
         x:Class="CcpClient.Desktop.Views.MainWindow"
-        Width="480" Height="320"
-        Title="CCP Client">
+        x:DataType="vm:MainWindowViewModel"
+        Width="520" Height="680"
+        Title="CCP Client"
+        Background="#FF141018">
+  <Window.Styles>
+    <!-- A-012/cheat sheet §Styling: selectors + pseudo-classes, never WPF triggers. -->
+    <Style Selector="Border.feature-card">
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Background" Value="#FF1E1822" />
+    </Style>
+    <Style Selector="Border.feature-card:pointerover">
+      <Setter Property="BorderBrush" Value="#FF6B5B73" />
+    </Style>
+    <!-- The lit ring: driven by the conditional class bound to the OPERATION state. -->
+    <Style Selector="Border.feature-card.lit">
+      <Setter Property="BorderBrush" Value="#FFE066FF" />
+      <Setter Property="BoxShadow" Value="0 0 12 0 #80E066FF" />
+    </Style>
+    <Style Selector="Border.feature-card.lit:pointerover">
+      <Setter Property="BorderBrush" Value="#FFF0A0FF" />
+    </Style>
+  </Window.Styles>
+
   <StackPanel Margin="16">
-    <TextBlock Text="CCP greenfield client — startup trace" FontWeight="Bold" />
-    <TextBlock x:Name="TraceText" TextWrapping="Wrap" Margin="0,8,0,0" />
-    <TextBlock x:Name="HeartbeatText" Margin="0,8,0,0" Text="Heartbeat: waiting" />
+    <TextBlock Text="CCP greenfield client — dashboard (first visible slice)"
+               FontWeight="Bold" Foreground="#FFE8E0EE" />
+
+    <!-- demo.status-ticker demonstrator card: right-click quick-toggles, Enter (focused) toggles,
+         left-click settings popup CARVED OUT (A-005; no handler wired — a no-op would be a claim). -->
+    <Border x:Name="TickerCard"
+            Classes="feature-card"
+            Classes.lit="{Binding TickerLit}"
+            AutomationProperties.Name="demo.status-ticker card"
+            Focusable="True"
+            Padding="12" Margin="0,12,0,0">
+      <Border.KeyBindings>
+        <KeyBinding Gesture="Enter" Command="{Binding ToggleCommand}" />
+      </Border.KeyBindings>
+      <StackPanel>
+        <Grid ColumnDefinitions="Auto,*">
+          <Image Source="avares://CcpClient.Desktop/Assets/demo-status-ticker.png"
+                 Width="32" Height="32" VerticalAlignment="Top" />
+          <StackPanel Grid.Column="1" Margin="10,0,0,0">
+            <TextBlock Text="Demo: Status Ticker" FontWeight="SemiBold" Foreground="#FFE8E0EE" />
+            <TextBlock Text="Demonstrator feature (demo.status-ticker) — not a product feature; the first real feature card supersedes it. Right-click or Enter toggles."
+                       Opacity="0.6" FontSize="11" TextWrapping="Wrap" Foreground="#FFE8E0EE" />
+          </StackPanel>
+        </Grid>
+        <!-- Load-bearing IsVisible: this row leaves layout when the operation is off. -->
+        <TextBlock x:Name="TickText"
+                   IsVisible="{Binding TickerVisible}"
+                   Text="{Binding TickText}"
+                   Margin="0,8,0,0" Foreground="#FFB8F0B8" FontFamily="Consolas" />
+      </StackPanel>
+    </Border>
+
+    <!-- Compiled-binding named-element case: this text FOLLOWS the live tick text — a delta
+         proves #TickText resolves (a constant could be a hardcoded literal). -->
+    <TextBlock Text="{Binding #TickText.Text, StringFormat='ElementName mirror: {0}'}"
+               FontSize="10" Opacity="0.5" Foreground="#FFE8E0EE" Margin="0,4,0,0" />
+
+    <!-- SP-003/SP-004/SP-006 integration proofs retained (may shrink, never deleted). -->
+    <TextBlock Text="Startup trace + capability states (SP-003/SP-006 proofs)"
+               FontWeight="SemiBold" FontSize="11" Foreground="#FFE8E0EE" Margin="0,14,0,4" />
+    <TextBlock x:Name="TraceText" TextWrapping="Wrap" FontSize="10" Opacity="0.75" Foreground="#FFE8E0EE" />
+    <TextBlock x:Name="HeartbeatText" FontSize="10" Opacity="0.75" Margin="0,6,0,0"
+               Text="Heartbeat: waiting" Foreground="#FFE8E0EE" />
   </StackPanel>
 </Window>

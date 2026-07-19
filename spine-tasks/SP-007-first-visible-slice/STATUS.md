@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In progress
 
-**Current Step:** Step 2
+**Current Step:** Step 3
 
 ## Steps
 
@@ -16,19 +16,19 @@
 - [x] `client/docs/migration-checklist-validation.md` skeleton written (item → where exercised → named observation → citation → status)
 
 ### Step 2: Dashboard window and demonstrator card
-**Status:** 🔄 In progress
+**Status:** ✅ Complete
 
-- [ ] MainWindow evolved to dashboard: one card + retained SP-006 capability surface
-- [ ] `demo.status-ticker`: toggle = real SP-004 owned operation; ring reflects operation state
-- [ ] Flag persists via SP-005 (file-content assert; restart restores)
-- [ ] Right-click quick-toggle + keyboard path; left-click popup carved out (recorded)
-- [ ] Checklist mechanics: pseudo-class selectors, compiled bindings (x:DataType + named/ancestor), one direct ICommand, load-bearing IsVisible, avares:// asset; no WPF transplants
+- [x] MainWindow evolved to dashboard: one card + retained SP-006 capability surface
+- [x] `demo.status-ticker`: toggle = real SP-004 owned operation; ring reflects operation state
+- [x] Flag persists via SP-005 (file-content assert; restart restores)
+- [x] Right-click quick-toggle + keyboard path; left-click popup carved out (recorded)
+- [x] Checklist mechanics: pseudo-class selectors, compiled bindings (x:DataType + named/ancestor), one direct ICommand, load-bearing IsVisible, avares:// asset; no WPF transplants
 
 ### Step 3: Tests, wiring, WSL2 gate
-**Status:** ⬜ Pending
+**Status:** 🔄 In progress
 
-- [ ] Unit tests: operation outcomes, ring-from-operation, file-content persistence, restart-restore via composition root, prior integration proofs intact
-- [ ] Composition-root construction in named phase; restore-then-start ordered; no constructor-started work
+- [x] Unit tests: operation outcomes, ring-from-operation, file-content persistence, restart-restore via composition root, prior integration proofs intact
+- [x] Composition-root construction in named phase; restore-then-start ordered; no constructor-started work
 - [ ] WSL2 native-dir run: testCommand green + session-probe facts recorded (X11 facts, no Wayland claim)
 
 ### Step 4: Headed evidence, MCP advisory, visual verification
