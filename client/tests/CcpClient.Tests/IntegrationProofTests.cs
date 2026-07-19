@@ -34,11 +34,14 @@ public class IntegrationProofTests
 
         // MainWindow's dependencies are (host, host.Trace) — both resolve from the root's product.
         Assert.Same(trace, host!.Trace);
-        Assert.Equal(2, host.Participants.Count);
+        Assert.Equal(3, host.Participants.Count);
         var store = Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
         var heartbeat = Assert.IsType<HeartbeatParticipant>(host.Participants[1]);
+        var ticker = Assert.IsType<CcpClient.Desktop.Features.StatusTickerParticipant>(host.Participants[2]);
         Assert.True(heartbeat.Running); // phase 3 demonstrably started it
         Assert.Equal(1, heartbeat.StartCount);
+        Assert.True(ticker.Running); // phase 3 started the participant...
+        Assert.False(ticker.IsOperationLive); // ...but the restored flag (fresh install) keeps the operation OFF
         Assert.IsType<LoadOutcome.Missing>(store.LastLoadOutcome); // loaded in phase 3, fresh install
 
         // The trace the window displays records every phase outcome (incl. SP-006's

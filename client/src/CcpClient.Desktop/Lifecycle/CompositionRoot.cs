@@ -75,15 +75,22 @@ public sealed class CompositionRoot
         return Path.Combine(root, "CcpClient", "settings.json");
     }
 
-    private IReadOnlyList<IBackgroundParticipant> DefaultParticipants(ParticipantInfrastructure infra) =>
+    private IReadOnlyList<IBackgroundParticipant> DefaultParticipants(ParticipantInfrastructure infra)
+    {
+        // Persistence contract §4 rule 1: the store starts first, so its phase-3 load
+        // completes before any consumer participant starts.
+        var store = new PersistenceStore<DemoSettings>(
+            infra.OwnerFor("Persistence"), infra.Log, SettingsPathFactory(),
+            DemoSettings.CurrentSchemaVersion, [new DemoMigrationV0ToV1()]);
+        return
         [
-            // Persistence contract §4 rule 1: the store starts first, so its phase-3 load
-            // completes before any consumer participant starts.
-            new PersistenceStore<DemoSettings>(
-                infra.OwnerFor("Persistence"), infra.Log, SettingsPathFactory(),
-                DemoSettings.CurrentSchemaVersion, [new DemoMigrationV0ToV1()]),
+            store,
             new HeartbeatParticipant(infra.OwnerFor("Heartbeat"), infra.UiDispatch),
+            // demo.status-ticker (SP-007): registered AFTER the store — phase-3 start order
+            // IS the restore-then-start ordering (its start reads the restored flag).
+            new Features.StatusTickerParticipant(infra.OwnerFor("StatusTicker"), infra.UiDispatch, store),
         ];
+    }
 
     /// <summary>
     /// Phase 2 body: fail fast with a typed error naming what is missing.
