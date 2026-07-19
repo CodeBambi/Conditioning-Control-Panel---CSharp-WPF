@@ -1,22 +1,22 @@
 # Status: SP-007 — validate official migration checklist in first visible slice
 
-**Overall:** 🔄 Pending
+**Overall:** 🔄 In progress
 
-**Current Step:** not started
+**Current Step:** Step 2
 
 ## Steps
 
 ### Step 1: Pre-approach consult, v12 research, validation skeleton
-**Status:** ⬜ Pending
+**Status:** ✅ Complete
 
-- [ ] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
-- [ ] STATUS.md updated before starting work
-- [ ] v12 research per checklist item (migration index + cheat sheet + deeper pages; URL + freshness recorded)
-- [ ] WPF quick-toggle parity digest in record.md (outcomes only)
-- [ ] `client/docs/migration-checklist-validation.md` skeleton written (item → where exercised → named observation → citation → status)
+- [x] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
+- [x] STATUS.md updated before starting work
+- [x] v12 research per checklist item (migration index + cheat sheet + deeper pages; URL + freshness recorded)
+- [x] WPF quick-toggle parity digest in record.md (outcomes only)
+- [x] `client/docs/migration-checklist-validation.md` skeleton written (item → where exercised → named observation → citation → status)
 
 ### Step 2: Dashboard window and demonstrator card
-**Status:** ⬜ Pending
+**Status:** 🔄 In progress
 
 - [ ] MainWindow evolved to dashboard: one card + retained SP-006 capability surface
 - [ ] `demo.status-ticker`: toggle = real SP-004 owned operation; ring reflects operation state
