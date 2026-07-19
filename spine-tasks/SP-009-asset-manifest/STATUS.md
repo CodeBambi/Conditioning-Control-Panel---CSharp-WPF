@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In Progress
 
-**Current Step:** Step 5
+**Current Step:** Step 6
 
 ## Steps
 
@@ -38,15 +38,15 @@
 - [x] Harness integration decision recorded (verification-harness.md line or not — justified)
 
 ### Step 5: Evidence, board reconciliation, pre-completion consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] record.md written (incl. engine-review presence/absence)
-- [ ] Pre-completion solo consult (Fable 5) run; verdict text persisted
-- [ ] Board row 8 → `WIP` with evidence naming the publish-mode gate (not `DONE`)
-- [ ] STATUS.md accurate
+- [x] record.md written (incl. engine-review presence/absence)
+- [x] Pre-completion solo consult (Fable 5) run; verdict text persisted
+- [x] Board row 8 → `WIP` with evidence naming the publish-mode gate (not `DONE`)
+- [x] STATUS.md accurate
 
 ### Step 6: Testing & Verification
-**Status:** ⬜ Pending
+**Status:** 🔄 In Progress
 
 - [ ] Contract testCommand passes (solution + BOTH test projects)
 - [ ] `git diff --check` clean

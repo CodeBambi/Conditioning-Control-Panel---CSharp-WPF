@@ -86,8 +86,19 @@ Recorded in asset-manifest.md §Measured budgets. Windows: cold build 2.4 s; val
 2. **WinExe stdout redirection works** — a GUI-subsystem exe has no console, but `> file` redirection delivers `Console.Out` anyway; the self-check's diagnostic lines are capturable on Windows without native interop (AttachConsole was the alternative and is forbidden).
 3. **A deleted-for-cold-measurement Release binary bit once** — after the bin/obj clean, a Release run returned 127 (file gone). Rebuild-then-run is the order; recorded so future budget passes don't misread 127 as a product failure.
 
+## Pre-completion consult (solo Fable 5, 2026-07-19)
+
+Full as-built summary + diff submitted. Verdict received complete: **proceed to land after ONE small tightening (the `!` rule — a real but tiny drift hole). No rework of evidence, schema, or tests otherwise. Deviations (a) double-open and (b) ordinal-bundle-index finding accepted as recorded.**
+
+1. **`!`-prefix rule tightened (APPLIED pre-land):** the first implementation excluded a `!`-prefixed FINAL SEGMENT anywhere (`path.Split('/').Last().StartsWith('!')`), but the observed evidence covers only bundle-ROOT entries — a future `Assets/!notes.png` would have been silently filtered (exactly the unmanifested-asset hole the sweep exists to close). Fixed to root-level only (`path.StartsWith('!') && !path.Contains('/')`) in code + contract doc; full contract testCommand re-run green after the fix (115/115 + 3/3, 0W/0E). A hypothetical compiler entry under a subdirectory now fails loudly — the correct failure mode.
+2. **Board-row evidence (APPLIED):** row → WIP citing record.md, publish-mode named as row 9's deferred gate (annotate, never rewrite — the acceptance's "publish tests" third stands). The two required additions are in the row text: (1) "Schema covers user/mod/copied/override/trust; instances do NOT — no mod loader, no override resolution, no localization entries (no consumer, A-014)" (schema fields must not read as implemented capability — the assets-present-means-supported failure class); (2) named numbers (Debug+Release × Windows+WSL2 exit 0, 115/115 + 3/3 both platforms, two-direction + ordinal case-exact tests with negative proofs).
+3. **Q2 — no over-build, no under-proof:** TryParse-as-schema kept the validator boundary tight; copied assert-empty resisted the invented-convention trap; the stream-only constraint is the entire row-9 surface; embedded-policy consistency checks (embedded ⇒ full/none/Assets-rooted) are cheap and load-bearing; all three failure vocabularies demonstrated by negative tests — drift protection demonstrated, not asserted.
+4. **Deviation (b) endorsed:** the source-verified ordinal bundle index (case drift fails on EVERY platform for embedded assets) STRENGTHENS the row over the pre-approach framing; the contract correctly relocates the ext4 hazard to the future copied direction.
+
 ## Engine reviews
 
 - Step 1 plan review: `spine_review_step` → **skipped=true, reviewLevel=0, spawnFailed=false** (ninth consecutive batch with zero engine reviews; T-2 remains open). Fable solo consults are the active quality gate per the packet.
 - Step 2 plan review: **skipped=true** (T-2).
 - Step 3 plan review: **skipped=true** (T-2).
+- Step 4 plan review: **skipped=true** (T-2).
+- Step 5: plan review **skipped=true** (T-2) — 5/5 calls skipped this batch.

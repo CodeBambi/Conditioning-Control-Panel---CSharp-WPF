@@ -284,14 +284,16 @@ public static class AssetVerifier
     }
 
     /// <summary>
-    /// Bundle entries whose final segment starts with '!' are Avalonia compiler-owned
-    /// metadata (observed 2026-07-19 on 12.1.0: <c>!AvaloniaResourceXamlInfo</c>, the
-    /// compiled-XAML ClassToResourcePathIndex; the bundle itself is <c>!AvaloniaResources</c>).
-    /// They are build machinery, never product assets, and are excluded from the sweep by
-    /// this NAMED rule (asset-manifest.md §Two-direction validation rule).
+    /// Bundle-ROOT entries starting with '!' are Avalonia compiler-owned metadata (observed
+    /// 2026-07-19 on 12.1.0: <c>!AvaloniaResourceXamlInfo</c>, the compiled-XAML
+    /// ClassToResourcePathIndex; the bundle itself is <c>!AvaloniaResources</c>). The rule is
+    /// deliberately root-level ONLY: a '!'-prefixed name inside a real directory (e.g. a
+    /// future <c>Assets/!notes.png</c>) is a product asset and must fail the sweep when
+    /// unmanifested — the observed evidence covers root entries only (asset-manifest.md
+    /// §Two-direction validation rule).
     /// </summary>
     public static bool IsCompilerOwnedBundleEntry(string path) =>
-        path.Split('/').Last().StartsWith('!');
+        path.StartsWith('!') && !path.Contains('/');
 }
 
 /// <summary>
