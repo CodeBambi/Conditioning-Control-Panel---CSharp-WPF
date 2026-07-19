@@ -27,6 +27,9 @@ public interface IDocumentMigration
 /// </summary>
 public sealed class DemoSettings
 {
+    /// <summary>The schema version this build writes (persistence contract §1): the store is the single authority that reads and advances it.</summary>
+    public const int CurrentSchemaVersion = 1;
+
     public string Greeting { get; set; } = "hello";
 
     public int Volume { get; set; } = 50;

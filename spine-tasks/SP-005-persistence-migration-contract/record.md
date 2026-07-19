@@ -45,9 +45,43 @@ Sources: `ConditioningControlPanel/CCP.Core/Services/Settings/SettingsService.cs
 
 ## Engine-review presence/absence
 
-Review Level 2. Engine reviews are empirically dead (board row T-2: zero reviews in SP-001…SP-004; `spine_review_step` returns skipped). To be recorded per step as called.
+Review Level 2. Engine reviews are empirically dead (board row T-2: zero reviews in SP-001…SP-004; `spine_review_step` returns skipped). Per-step calls:
+
+- Step 1 plan review: **skipped** (`skipped=true, reviewLevel=0`) — 5th consecutive batch with no engine review. Mandatory Fable consults carry the quality gate.
+- Step 2 plan review: **skipped** (`skipped=true, reviewLevel=0`) — same T-2 disposition.
+- Step 3 plan review: **skipped** (`skipped=true, reviewLevel=0`) — same T-2 disposition.
 
 <!-- filled in during Steps 2-5 -->
 ## Implementation notes, test output, surprises
 
-(pending)
+### Serializer decision
+System.Text.Json (in-box) with the explicit tolerance stack (JsonNode DOM-level version/migrations → typed bind with `[JsonExtensionData]` round-trip → bind failure quarantine + Degraded). Newtonsoft rejected as a new package admission; its per-member salvage compensated for schema churn the DOM-level migration journal + extension-data round-trip replace. Revisit trigger recorded in contract §2.
+
+### Core-deferral decision
+Store landed in `client/src/CcpClient.Desktop/Persistence/`; no `CcpClient.Core` created (proposal §1 pre-decision; A-014 YAGNI). Revisit trigger: first second-assembly consumer (contract §13).
+
+### Panic-path flush policy
+ATTEMPT on every teardown path including panic (contract §11 rule 4): the single guarded entry point is the only teardown; flush is bounded (5 s backstop) and never throws; serialization failure becomes a typed failure that skips the write; atomic replacement prevents partial corruption. Deliberate no-flush rejected on user-data-preservation grounds (WPF flushed on all paths; first attempt lost exit flush once, `e9501ce8`).
+
+### Implementation shape (as built)
+- `PersistenceStore<TModel>` — SP-003 participant, registered first; load in `StartAsync` (phase 3). Typed `LoadOutcome` (Loaded/Missing/Quarantined/NewerSchema); `IsDegraded` surface.
+- Writes: chained serialization — each `Save` chains onto the previous write's completion under a lock (per pre-approach consult; no channel/queue-consumer loop). Write body serializes the LATEST `Current` at execution time; generation token observed before I/O, never passed into it. `SaveImmediate` = enqueue + await quiescence. `FlushAsync(boundedWait)` = no-op unless Running+dirty+writes-enabled; awaits quiescence with bounded wait, logs outcomes, never throws.
+- Dirty discipline: only `Mutate`/`Replace` (and migration write-through) set dirty; loading defaults never does — `Defaults_NeverAutoSaved_LoadingDefaultsLeavesNoFile` and `Shutdown_CleanStore_WritesNothing` prove it.
+- Teardown wiring: `ApplicationHost` gained an optional `preDrainFlush` delegate invoked at SP-003's reserved head slot (guarded, logged, never throws); `CompositionRoot.Build` wires `store.FlushAsync(DefaultFlushTimeout=5s)` when the participants list contains the store. `ParticipantInfrastructure` gained `ILogSink` so the default store registration logs.
+- Activation edit to `startup-shutdown-contract.md` §6 rule 5: RESERVED → ACTIVATED (single-line edit citing this task), plus the matching doc-comment update in `ApplicationHost.ShutdownAsync`.
+
+### Surprises
+1. **`StreamWriter` dispose closed the `FileStream` before `Flush(flushToDisk: true)`** — every real write failed with `ObjectDisposedException` while the injected-hook tests passed, masking it until the scratch repro. Fixed by flushing to disk inside the writer scope. Lesson: the failure-injection hooks proved the typed-outcome path but not the real I/O path; the real path is only covered by tests that write actual files (all present).
+2. **C# field initializers cannot reference instance members** — the `ParticipantsFactory` default moved into a constructor body. Cosmetic.
+3. Nested `TempDir.Path(string)` helper shadows `System.IO.Path` inside the nested class — qualified names needed there.
+
+### Test output — Windows (contract testCommand)
+`dotnet build client/CcpClient.sln -c Debug --nologo` → **0 Warning(s), 0 Error(s)** (.NET SDK 10, net10.0).
+`dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo` → **Passed: 48, Failed: 0** (34 SP-003/SP-004 intact + 11 persistence + 3 teardown-flush).
+
+### Test output — WSL2 Linux (in-packet gate)
+Environment: WSL2 Ubuntu (distro `Ubuntu`), dotnet SDK **10.0.110**; `client/` copied to native dir `~/ccp-sp005` (SP-002 pattern — /mnt/e build avoided).
+Build: **0 Warning(s), 0 Error(s)**. Tests: **Passed: 48, Failed: 0** — identical suite, so rename/flush/quarantine semantics are exercised on Linux file I/O, including atomic `File.Move(overwrite: true)`, `Flush(flushToDisk: true)`, temp adoption, and quarantine moves.
+
+### Engine reviews
+Steps 1–3 plan reviews: all `skipped` (see list above; Step 3 recorded below at commit time). Fable solo consults are the active quality gate per the packet.

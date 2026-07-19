@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In Progress
 
-**Current Step:** 2
+**Current Step:** 4
 
 ## Steps
 
@@ -15,7 +15,7 @@
 - [x] `client/docs/persistence-migration-contract.md` written (schema authority, atomic write, quarantine, unknown-member policy, migration journal, replacement notification + delivery context, secret seam, import/backup boundary, STJ decision, teardown flush + panic policy, debounce policy-only, Core deferral)
 
 ### Step 2: Persistence store implementation
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
 - [x] Store implemented in `Persistence/` (JsonNode DOM version read, atomic temp+rename+flush writer with injection points, single serialized writer via OperationRegistry, quarantine path)
 - [x] One demonstrator settings model + one v0→v1 migration with journal (no framework)
@@ -23,15 +23,15 @@
 - [x] Unit tests: corrupt→quarantine+Degraded+flagged defaults; mid-rename crash recovery; unknown-member round-trip; migration idempotence; serialized concurrent writes; replacement notification
 
 ### Step 3: Teardown flush wiring and activation note
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Flush wired at SP-003's reserved teardown position (before participant stop; single guarded entry point)
-- [ ] Dirty-at-shutdown flush test; SP-003/SP-004 tests intact
-- [ ] Minimal activation edit to `startup-shutdown-contract.md`, recorded in record.md
-- [ ] WSL2 Linux contract testCommand run recorded in record.md (or exact blocker named)
+- [x] Flush wired at SP-003's reserved teardown position (before participant stop; single guarded entry point)
+- [x] Dirty-at-shutdown flush test; SP-003/SP-004 tests intact
+- [x] Minimal activation edit to `startup-shutdown-contract.md`, recorded in record.md
+- [x] WSL2 Linux contract testCommand run recorded in record.md (or exact blocker named)
 
 ### Step 4: Evidence, board reconciliation, pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] record.md written (incl. engine-review presence/absence note)
 - [ ] Pre-completion solo consult (Fable 5) run; verdict text persisted
