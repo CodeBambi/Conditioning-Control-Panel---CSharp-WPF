@@ -32,6 +32,8 @@ Nine `client/docs/task-board.md` rows, serial (each depends on the prior; `lanes
 | SP-005-persistence-migration-contract | Row 4: persistence + migration contract — schema authority, atomic temp+rename write, serialized writer via OperationRegistry, quarantine/Degraded, unknown-member preserve, migration journal, replacement notification, secret seam, STJ decision, teardown-flush activation, WSL2 gate in-packet | **Done 2026-07-19** (landed `0c2c849f`; batch `20260719T010403` — clean run, one GitignoredDirtyWorktree on worker bin/obj → T-5; 51/51 Windows + WSL2 in-packet gate; rows 2/3 WSL2 unit debt closed; row 4 stays WIP pending owner ratification) | SP-004 |
 | SP-006-truthful-capability-contract | Row 5: truthful runtime capability contract — typed states + runtime probes, honesty rule (degraded-truthful > fake-available), session-type + atomic-fs demonstrators, WSL2 observed-states gate | **Done 2026-07-19** (landed `66457c87`; batch `20260719T021531` — T-5 recovery ×1; 78/78 Windows + WSL2 with real WSLg honesty proof; orchestrator land consult skipped — session-wide consult cap, see .spine/handoff.md; row 5 stays WIP pending owner ratification; CYCLE PARKED after this land) | SP-005 |
 
+| SP-007-first-visible-slice | Row 6: validate official migration checklist in first visible slice — dashboard window + `demo.status-ticker` demonstrator card, named-observation-per-checklist-item validation doc, Wayland named gate | **Done 2026-07-19** (landed `2d6d846d`; batch `20260719T100547` — relaunched after T-6 false-completion abort of `20260719T093943`; 85/85 Windows + WSL2, headed smoke PASS, WSLg honestly scoped; row 6 stays WIP pending owner ratification + Linux-Wayland gate §5.1 + named manual gates) | SP-006 |
+
 Rows 2–9 (packets not yet authored — gated on solo Fable 5 review of SP-002's proposal + owner async veto):
 
 1. ~~Bootstrap discovery and architecture proposal~~ → SP-002 *(consult checkpoint after: solo Fable 5 reviews the architecture proposal before rows 2–9 are authored; owner reviews asynchronously and may veto — produces `client/` scaffolding + updates `.spine/spine-config.json` testing commands to the real client solution)*
@@ -39,7 +41,7 @@ Rows 2–9 (packets not yet authored — gated on solo Fable 5 review of SP-002'
 3. ~~Establish async lifecycle and fault policy~~ → SP-004 *(landed `33d5a19a`; row stays WIP pending owner ratification + WSL2 Linux re-run)*
 4. ~~Define persistence and migration contract~~ → SP-005 *(landed `0c2c849f`; WSL2 gate delivered in-packet; row stays WIP pending owner ratification)*
 5. ~~Define truthful runtime capability contract~~ → SP-006 *(landed `66457c87`; WSLg honesty proof delivered; row stays WIP pending owner ratification)*
-6. Validate official migration checklist in first visible slice
+6. ~~Validate official migration checklist in first visible slice~~ → SP-007 *(landed `2d6d846d`; row stays WIP pending owner ratification + Linux-Wayland gate §5.1 + named manual gates)*
 7. Build tiered targeted verification harness
 8. Define asset and packaged-output manifest
 9. Establish Release and publish gates
