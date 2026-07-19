@@ -1,18 +1,18 @@
 # Status: SP-008 — build tiered targeted verification harness
 
-**Overall:** 🔄 Pending
+**Overall:** 🔄 In progress
 
-**Current Step:** not started
+**Current Step:** Step 1
 
 ## Steps
 
 ### Step 1: Pre-approach consult, admission spike design, harness doc skeleton
-**Status:** ⬜ Pending
+**Status:** 🔄 In progress
 
-- [ ] Pre-approach solo consult (Fable 5) run; verdict text persisted BEFORE checkbox
-- [ ] STATUS.md updated before starting work
-- [ ] v12 headless research (official sources; URL + freshness recorded)
-- [ ] `client/docs/verification-harness.md` skeleton (tiers, evidence-class rule, affected=csproj-path, budget table, manifest schema, self-test usage)
+- [x] Pre-approach solo consult (Fable 5) run; verdict text persisted BEFORE checkbox
+- [x] STATUS.md updated before starting work
+- [x] v12 headless research (official sources; URL + freshness recorded)
+- [x] `client/docs/verification-harness.md` skeleton (tiers, evidence-class rule, affected=csproj-path, budget table, manifest schema, self-test usage)
 
 ### Step 2: Headless admission spike (evidence-gated)
 **Status:** ⬜ Pending
