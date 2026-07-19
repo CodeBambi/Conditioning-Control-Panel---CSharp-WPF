@@ -266,7 +266,13 @@ vec4 layer${S}(float r, float th, float wob) {
   } else if (style < 4.5) {
     // Tunnel: bands ride the radius; turns above the minimum shear them into a helix.
     float shift = u_rot${S} * arms / 6.2831853;
-    float twist = (u_turns${S} - 0.5) * th / 6.2831853;
+    // The helix shear is linear in th, and atan()'s branch cut (the -x axis)
+    // makes th jump by 2*PI there - so pos jumps by the twist-per-revolution.
+    // Snap that to a whole number of COLOUR CYCLES (mirrors symmetrySpanRad) or
+    // fract()/the colour index don't line up and the cut shows a hard seam.
+    // count == 1 (single thread) allows any integer twist.
+    float helix = floor((u_turns${S} - 0.5) / count + 0.5) * count;
+    float twist = helix * th / 6.2831853;
     float pos = t * arms - shift + twist + wob * 0.5;
     float s = fract(pos);
     float aaS = min(u_px * arms * 1.5, 0.45);
