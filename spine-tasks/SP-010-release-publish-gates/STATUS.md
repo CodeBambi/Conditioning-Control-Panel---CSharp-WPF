@@ -1,17 +1,17 @@
 # STATUS: SP-010 — establish Release and publish gates
 
-**Current Step:** Not started
-**Last Updated:** 2026-07-19 (authored)
+**Current Step:** 1
+**Last Updated:** 2026-07-19 (Step 1 started)
 
 ## Steps
 
 ### Step 1: Pre-approach consult, current-docs research, contract draft
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
-- [ ] STATUS.md updated before starting work
-- [ ] Current-docs research: .NET 10 single-file native extraction semantics; AppContext.BaseDirectory/Assembly.Location under single-file; residual Linux deps (ldd method); Avalonia 12.1 publish guidance (URLs + freshness recorded)
-- [ ] `client/docs/release-publish-gates.md` written (strategy + revisit trigger, version rule, matrix, metadata shape, honest absences)
+- [x] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
+- [x] STATUS.md updated before starting work
+- [x] Current-docs research: .NET 10 single-file native extraction semantics; AppContext.BaseDirectory/Assembly.Location under single-file; residual Linux deps (ldd method); Avalonia 12.1 publish guidance (URLs + freshness recorded)
+- [x] `client/docs/release-publish-gates.md` written (strategy + revisit trigger, version rule, matrix, metadata shape, honest absences)
 
 ### Step 2: Version authority + derivation tests
 **Status:** ⬜ Not Started
