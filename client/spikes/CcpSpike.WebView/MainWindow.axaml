@@ -1,0 +1,8 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpSpike.WebView.MainWindow"
+        Title="SP-011 WebView spike"
+        Width="1280" Height="800">
+  <!-- Skeleton: content lands with the Step-2 host. -->
+  <TextBlock Text="skeleton" />
+</Window>

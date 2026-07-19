@@ -1,18 +1,18 @@
 # STATUS: SP-011 — spike official WebView with the copied DTRH payload
 
-**Current Step:** Not started
-**Last Updated:** 2026-07-19 (authored)
+**Current Step:** Step 1 — Package verification, payload archaeology, pre-approach consult
+**Last Updated:** 2026-07-19 (worker session 1)
 
 ## Steps
 
 ### Step 1: Package verification, payload archaeology, pre-approach consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] FIRST: verify `Avalonia.Controls.WebView` ID/version/license/native deps on the live feed (wrong ID/conflict = finding, not failure)
-- [ ] STATUS.md updated before starting work
-- [ ] Payload archaeology: git log spike.html/spike.js/m2test.js; source path + file count/hash recorded
-- [ ] Restore/build spike skeleton vs Avalonia 12.1.0 baseline (dependency-range outcome recorded)
-- [ ] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
+- [x] FIRST: verify `Avalonia.Controls.WebView` ID/version/license/native deps on the live feed (wrong ID/conflict = finding, not failure)
+- [x] STATUS.md updated before starting work
+- [x] Payload archaeology: git log spike.html/spike.js/m2test.js; source path + file count/hash recorded
+- [x] Restore/build spike skeleton vs Avalonia 12.1.0 baseline (dependency-range outcome recorded)
+- [x] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
 
 ### Step 2: Quarantined spike host + loopback
 **Status:** ⬜ Not Started
