@@ -1,6 +1,6 @@
 # Status: SP-004 — async lifecycle and fault policy
 
-**Overall:** 🔄 In Progress — Current Step: 3
+**Overall:** 🔄 In Progress — Current Step: 4
 
 ## Steps
 
@@ -20,12 +20,12 @@
 - [x] Unit tests: stale-generation completion discarded; mid-flight cancellation → typed Cancelled; deterministic fault routing (NOT via UnobservedTaskException); zero unobserved operations at teardown
 
 ### Step 3: UI dispatch boundary and demonstrator integration
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] `IUiDispatch`-style boundary late-bound in phase 4 (no SynchronizationContext capture); tested pre-binding rule
-- [ ] Heartbeat wired through the primitive; user-visible update flows through the real boundary
-- [ ] Simulated resource failure → typed Recoverable/Degraded routed to owner
-- [ ] Headed Windows smoke: UIA-observed background callback reaching window; clean exit 0; recorded in record.md
+- [x] `IUiDispatch`-style boundary late-bound in phase 4 (no SynchronizationContext capture); tested pre-binding rule
+- [x] Heartbeat wired through the primitive; user-visible update flows through the real boundary
+- [x] Simulated resource failure → typed Recoverable/Degraded routed to owner
+- [x] Headed Windows smoke: UIA-observed background callback reaching window; clean exit 0; recorded in record.md
 
 ### Step 4: Evidence, board reconciliation, pre-completion consult
 **Status:** ⬜ Not Started

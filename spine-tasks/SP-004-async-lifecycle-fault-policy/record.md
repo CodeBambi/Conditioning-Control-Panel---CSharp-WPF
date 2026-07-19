@@ -71,9 +71,18 @@ Late-bound in phase 4 via `ApplicationHost.BindUiDispatch(IUiDispatch)`, never `
 
 (Filled in Step 5.)
 
-## Headed smoke
+## Headed smoke (Windows, 2026-07-18)
 
-(Filled in Step 3.)
+Ran `spine-tasks/SP-004-async-lifecycle-fault-policy/headed-smoke.ps1` against the Debug build (`CcpClient.Desktop.exe`, net10.0). Observed via UIA accessibility tree (not believed): window "CCP Client" rendered the SP-003 phase trace (`Bootstrap: ok / CompositionRoot: ok / CoreServices: ok / Heartbeat: running`) **and** the heartbeat tick text advancing across two samples (`Heartbeat: tick 16` → `Heartbeat: tick 24`) — a background callback demonstrably reached the window through the real dispatch boundary (`Dispatcher.UIThread.Post` via the late-bound `UiDispatchBoundary`). Graceful close (`CloseMainWindow`) → process exited within 10s with **exit code 0** — in-flight cancellation flowed through SP-003's single guarded teardown entry point. stderr carried no panic/unobserved logs.
+
+---
+
+## Step 3 notes
+
+- `IUiDispatch` is Post-only per the pre-approach consult (e): `AvaloniaUiDispatch` wraps `Dispatcher.UIThread.Post`; `UiDispatchBoundary` holds the binding, throws `InvalidOperationException` on pre-binding `Post` and on double-bind, exposes `IsBound` for the skip-until-bound rule.
+- Pre-binding rule tests: `Post_BeforeBinding_ThrowsInvalidOperation`, `Bind_ThenPost_Dispatches_DoubleBind_Throws`.
+- Demonstrator skip-until-bound test: `Heartbeat_SkipsProjectionUntilBound_ThenFlowsThroughBoundary` — ticks accumulate pre-binding with zero posts attempted and no fault; after a fake boundary binds, the reporter receives tick text.
+- Simulated native/resource failure tests: `ResourceFailure_ClassifiedByOwner_RoutedAsTypedOutcome_NotSwallowed` (Recoverable), `DegradedOutcome_ClassifiedByOwner_RoutedAsTypedOutcome` (Degraded), `FaultingOperation_DefaultClassifier_MapsToFatal` — the SP-003 reserved taxonomy members are activated as operation-outcome classifications.
 
 ## Surprises
 
