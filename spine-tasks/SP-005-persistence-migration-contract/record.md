@@ -85,3 +85,22 @@ Build: **0 Warning(s), 0 Error(s)**. Tests: **Passed: 48, Failed: 0** — identi
 
 ### Engine reviews
 Steps 1–3 plan reviews: all `skipped` (see list above; Step 3 recorded below at commit time). Fable solo consults are the active quality gate per the packet.
+
+## Pre-completion consult (solo Fable 5, 2026-07-19)
+
+Full as-built summary submitted (store shape, chaining, flush wiring, test inventory, known accepted gaps). Verdict received (reply truncated during the lock-ordering analysis — received portion applied; the truncated thread is reconstructed below and labeled):
+
+**(a) Chaining/flush interleavings — no failing interleaving found.** Verified: previous tails never fault so `await previous` is safe; post-teardown `Save` registers on the cancelled generation and terminates typed `Cancelled` (contract-allowed loss, §11 rule 5); the dirty-flag race is closed by the mutation-version capture (a mutation landing mid-write keeps dirty set); `FlushAsync` under `ShutdownAsync`'s `GetResult()` cannot deadlock (thread-pool write, `ConfigureAwait(false)` throughout, no UI dependency); `tail.Result` after `WhenAny` is safe. **But three claimed behaviors had no test coverage:**
+1. **Post-teardown `Save` → typed `Cancelled`** (contract §11 rule 5) — claimed, untested → **test added** (`Save_AfterTeardown_CompletesTypedCancelled_NeverFaults`).
+2. **Bounded-wait-exceeded flush path** (the pre-approach consult's own correction — logged-and-continue) — claimed, untested → **test added** (`Flush_ExceedsBoundedWait_LogsAndShutdownContinues`, wedged-writer injection, drain-after-release).
+3. **Adopted-temp-that-is-partial → quarantine** (the disposition recorded from the truncated pre-approach consult) — claimed, untested → **test added** (`CrashMidWrite_PartialTemp_AdoptedThenQuarantined_BytesPreserved`).
+
+**(b) Migration write-through on fresh installs:** confirmed safe — a `Missing` load runs no migrations, dirty stays false, nothing is written (already covered by `Defaults_NeverAutoSaved`). Hand-written v1-without-journal re-runs the idempotent migration harmlessly; the shipped v0 fixtures confirm the version-gate half of the rule.
+
+**(c) Claimed-but-not-tested audit:** the three items above were the material gaps; panic-path flush is the same code path as the tested `ShutdownAsync` flush by the single-entry-point design (defensible per SP-003's panic-shape tests); nested-type extension-data preservation is a feature-model rule for later rows (DemoSettings is flat by design).
+
+**Truncated-tail reconstruction (labeled):** the reply cut off inside the lock-ordering analysis (`FlushAsync` holds `_writeGate` then reads `IsDirty` under `_mutationGate`). Reconstruction: no code path acquires `_mutationGate` and then `_writeGate` (`Mutate`/`Replace` release `_mutationGate` before `Save` takes `_writeGate`; `WriteOnce` takes `_mutationGate` only), so the acquisition order is consistently `_writeGate` → `_mutationGate` and no inversion exists. No code change from this item.
+
+### Test output — final (post-consult, both platforms)
+Windows: build **0W/0E**; tests **51/51 passed** (34 SP-003/SP-004 intact + 13 persistence + 4 teardown-flush).
+WSL2 Ubuntu (SDK 10.0.110, native `~/ccp-sp005` copy): build **0W/0E**; tests **51/51 passed** — the three consult-driven additions included.

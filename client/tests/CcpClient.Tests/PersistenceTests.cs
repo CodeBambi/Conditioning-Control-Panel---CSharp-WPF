@@ -260,6 +260,43 @@ public class PersistenceTests
         Assert.False(File.Exists(path));
     }
 
+    [Fact]
+    public async Task CrashMidWrite_PartialTemp_AdoptedThenQuarantined_BytesPreserved()
+    {
+        using var dir = new TempDir();
+        var path = dir.Path("settings.json");
+        // Simulated crash mid-WRITE (before rename): the orphaned temp is partial. Adoption
+        // must surface it through the quarantine path, never silently default over it.
+        const string partial = "{ \"schemaVersion\": 1, \"greeting\": \"cut-off";
+        File.WriteAllText(path + ".tmp", partial);
+
+        var store = NewStore(path);
+        await store.StartAsync(CancellationToken.None);
+
+        var quarantined = Assert.IsType<LoadOutcome.Quarantined>(store.LastLoadOutcome);
+        Assert.True(File.Exists(quarantined.BackupPath));
+        Assert.Equal(partial, File.ReadAllText(quarantined.BackupPath));
+        Assert.Equal("hello", store.Current.Greeting); // flagged defaults
+    }
+
+    [Fact]
+    public async Task Save_AfterTeardown_CompletesTypedCancelled_NeverFaults()
+    {
+        using var dir = new TempDir();
+        var path = dir.Path("settings.json");
+        var store = NewStore(path);
+        await store.StartAsync(CancellationToken.None);
+        store.Mutate(m => m.Greeting = "before-stop");
+        await store.SaveImmediate();
+
+        await store.StopAsync(); // generation cancelled — the teardown shape
+
+        // Contract §11 rule 5: a post-teardown save terminates typed Cancelled — it does
+        // not fault and does not silently succeed.
+        var outcome = await store.Save();
+        Assert.IsType<OperationOutcome.Cancelled>(outcome);
+    }
+
     private static PersistenceStore<DemoSettings> NewStore(
         string path, ListLogSink? log = null, AtomicWriteHooks? hooks = null) =>
         new(new OperationRegistry().OwnerFor("Persistence"),

@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In Progress
 
-**Current Step:** 4
+**Current Step:** 5
 
 ## Steps
 
@@ -31,15 +31,15 @@
 - [x] WSL2 Linux contract testCommand run recorded in record.md (or exact blocker named)
 
 ### Step 4: Evidence, board reconciliation, pre-completion consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] record.md written (incl. engine-review presence/absence note)
-- [ ] Pre-completion solo consult (Fable 5) run; verdict text persisted
-- [ ] Board row 4 → `WIP` with evidence (not `DONE`)
-- [ ] STATUS.md accurate
+- [x] record.md written (incl. engine-review presence/absence note)
+- [x] Pre-completion solo consult (Fable 5) run; verdict text persisted
+- [x] Board row 4 → `WIP` with evidence (not `DONE`)
+- [x] STATUS.md accurate
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] Contract testCommand passes
 - [ ] `git diff --check` clean

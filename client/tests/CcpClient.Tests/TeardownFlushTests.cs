@@ -84,6 +84,44 @@ public class TeardownFlushTests
         Assert.Equal(77, document["volume"]!.GetValue<int>());
     }
 
+    [Fact]
+    public async Task Flush_ExceedsBoundedWait_LogsAndShutdownContinues()
+    {
+        using var dir = new TempDir();
+        var path = dir.Path("settings.json");
+        var log = new ListLogSink();
+        var writeStarted = new ManualResetEventSlim();
+        var releaseWrite = new ManualResetEventSlim();
+        var hooks = new AtomicWriteHooks
+        {
+            // A wedged writer: starts, then blocks until released (panic-path hazard the
+            // bounded wait exists for — the pre-approach consult's correction).
+            WriteTempFile = (p, json) =>
+            {
+                writeStarted.Set();
+                releaseWrite.Wait(TimeSpan.FromSeconds(30));
+                new AtomicWriteHooks().WriteTempFile(p, json);
+            },
+        };
+        var store = new PersistenceStore<DemoSettings>(
+            new OperationRegistry().OwnerFor("Persistence"), log, path,
+            DemoSettings.CurrentSchemaVersion, [new DemoMigrationV0ToV1()], hooks);
+        await store.StartAsync(CancellationToken.None);
+        store.Mutate(m => m.Greeting = "wedged");
+
+        var flush = store.FlushAsync(TimeSpan.FromMilliseconds(100));
+        Assert.True(writeStarted.Wait(TimeSpan.FromSeconds(5)));
+        await flush; // returns after the bounded wait while the write is still blocked
+
+        Assert.Contains(log.Messages, m => m.Contains("exceeded its bounded wait"));
+
+        // Unblock and drain: the wedged write completes, shutdown was never hung.
+        releaseWrite.Set();
+        var drained = await store.SaveImmediate();
+        Assert.IsType<OperationOutcome.Completed>(drained);
+        Assert.True(File.Exists(path));
+    }
+
     private sealed class ListLogSink : ILogSink
     {
         public List<string> Messages { get; } = [];
