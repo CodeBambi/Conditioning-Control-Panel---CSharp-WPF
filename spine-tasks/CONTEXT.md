@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-19
 **Status:** Active
-**Next Task ID:** SP-011
+**Next Task ID:** SP-012
 
 ---
 
@@ -20,7 +20,23 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **Pause protocol:** if the Fable 5 consult route errors or times out, assume the 5-hour subscription window is exhausted — safely park in-flight work (spine state is durable), write `.spine/handoff.md`, delete/pause loops and monitors, and STOP until the owner resumes with the session prompt. Same response to unresolvable ambiguity, safety/privacy questions, or repeated failure: pause, never improvise past a gate.
 
-### Phase 1 — Milestone 1: foundation contracts and first visible slice
+### Phase 2 — governance repairs, WebView/DTRH spike, dashboard-successor UI rows
+
+Phase 1 COMPLETE 2026-07-19 (all nine rows landed, all WIP pending owner ratification). Phase 2 decomposition approved by solo Fable consult 2026-07-19 (council unavailable — probe FAILED, seats unproven, T-7 3rd recurrence).
+
+**Orchestrator-side items (no packets):** (a) council probe — EXECUTED 2026-07-19, FAILED (empty synthesizer + silent wrong-model substitution; board probe row WIP with evidence); (b) T-2 — ROOT-CAUSED 2026-07-19: packets wrote Review Level as bold prose, engine regex requires `## Review Level: N` heading; template fixed from SP-011 on; closes on empirical review presence.
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-011-webview-dtrh-spike | Row: spike official WebView with the copied DTRH payload — package admission consult (solo Fable, council unavailable), `Avalonia.Controls.WebView 12.0.1` restore/build/boot evidence on Windows + WSLg/X11 (Wayland = named owner question §5.1, never faked); includes the probe row's worker-child council-attempt checkbox (non-blocking) + engine-review presence check (T-2 closure evidence) | Authored 2026-07-19 (pre-authoring Fable consult applied: package-claim-first, read-only payload serving + overlay, must-EVIDENCE Linux; T-2 heading fix emitted) | SP-010 |
+| SP-012-window-behavior-manifest | Row: per-window behavior manifest (read-only WPF archaeology, zero deps) | Not authored | SP-011 |
+| SP-013-popup-scrolling | Row: prove feature-popup scrolling (builds the popup SP-007 carved out) | Not authored | SP-012 |
+| SP-014-quick-toggle-dispatch | Row: replace card-title quick-toggle dispatch — SCOPE to the demonstrator card with named limits (one card, one theme exist; full multi-card/multi-theme acceptance awaits real cards) | Not authored | SP-013 |
+| SP-015-avatartube-animation | Row: prove AvatarTube rendered animation (needs asset pipeline thinking) | Not authored | SP-014 |
+
+**Excluded from Phase 2 (exclusion with rationale — rows stay OPEN, not BLOCKED):** camera provenance/acquisition/ONNX spikes + multi-monitor video-geometry spike + audio-backend spike (WSL2 evidence would be fake-by-construction for camera and unrepresentative for geometry; capability-honesty contract bans faked availability — audio noted as PARTIALLY viable later via WSLg PulseAudio: enumerate/select/fallback is real evidence, latency numbers are not); online-video handoff spike (after DTRH); AI provider spikes (after UI rows; the AI CONTRACT row is a Phase 2 optional tail — define-only, environment-free, unblocks nothing urgent).
+
+### Phase 1 — Milestone 1: foundation contracts and first visible slice (COMPLETE 2026-07-19)
 
 Nine `client/docs/task-board.md` rows, serial (each depends on the prior; `lanes.maxParallel` stays 1). Row 1 runs alone first — the owner reviews its architecture proposal before rows 2–9 are authored:
 
