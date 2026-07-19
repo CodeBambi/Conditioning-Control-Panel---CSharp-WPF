@@ -1,6 +1,6 @@
 # Status: SP-004 — async lifecycle and fault policy
 
-**Overall:** 🔄 In Progress — Current Step: 5
+**Overall:** ✅ Complete — all steps done, .DONE created
 
 ## Steps
 
@@ -36,8 +36,8 @@
 - [x] STATUS.md accurate
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand passes
-- [ ] `git diff --check` clean
-- [ ] Only File Scope paths changed
+- [x] Contract testCommand passes (34/34, 0 warnings, 0 errors)
+- [x] `git diff --check` clean
+- [x] Only File Scope paths changed (17 files, all in scope)
