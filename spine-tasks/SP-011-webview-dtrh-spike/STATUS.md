@@ -1,6 +1,6 @@
 # STATUS: SP-011 — spike official WebView with the copied DTRH payload
 
-**Current Step:** Step 4 — WSL2 gate (Linux build + WSLg/X11 evidence)
+**Current Step:** Step 5 — Evidence, board reconciliation, pre-completion consult
 **Last Updated:** 2026-07-19 (worker session 1)
 
 ## Steps
@@ -32,15 +32,15 @@
 - [x] Startup time + frame behavior measured
 
 ### Step 4: WSL2 gate — Linux build + WSLg/X11 evidence
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete (plan review: engine-skipped in worker per SP-195, recorded)
 
-- [ ] Native-dir copy (~/ccp-sp011); WebKitGTK/WPE via wsl -u root (packages + versions recorded)
-- [ ] Linux restore/build + full contract testCommand green on WSL2
-- [ ] WSLg/X11 boot attempt with XGetImage evidence (diagnosed non-boot acceptable, never faked)
-- [ ] Budgets both platforms (cold precondition verified)
+- [x] Native-dir copy (~/ccp-sp011); WebKitGTK/WPE via wsl -u root (packages + versions recorded)
+- [x] Linux restore/build + full contract testCommand green on WSL2
+- [x] WSLg/X11 boot attempt with XGetImage evidence (diagnosed non-boot acceptable, never faked)
+- [x] Budgets both platforms (cold precondition verified)
 
 ### Step 5: Evidence, board reconciliation, pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] client/docs/webview-dtrh-spike.md — named observation per acceptance item
 - [ ] record.md complete (consult verdicts; engine-review presence/absence — T-2; worker-child council attempt outcome)

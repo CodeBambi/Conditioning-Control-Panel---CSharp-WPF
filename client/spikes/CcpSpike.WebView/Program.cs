@@ -14,6 +14,8 @@ public sealed record SpikeConfig
     public bool BlockMediaAfterArm { get; init; }       // --block-media: fault-injection case 2
     public string? SpikeVideoPath { get; init; }        // --spike-video: media-root-relative override
     public string? SpikeImagePath { get; init; }        // --spike-image: media-root-relative override
+    public bool PreferGtk { get; init; }                // --prefer-gtk: Linux WebKitGTK adapter fallback
+    public bool DialogMode { get; init; }               // --dialog: NativeWebDialog instead of embedded
     public long StartedTicks { get; init; }             // Stopwatch.GetTimestamp() at Main entry
 }
 
@@ -88,6 +90,8 @@ public static class Program
             BlockMediaAfterArm = Flag("--block-media"),
             SpikeVideoPath = Opt("--spike-video"),
             SpikeImagePath = Opt("--spike-image"),
+            PreferGtk = Flag("--prefer-gtk"),
+            DialogMode = Flag("--dialog"),
         };
     }
 

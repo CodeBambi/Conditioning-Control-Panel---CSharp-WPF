@@ -69,7 +69,16 @@ public partial class MainWindow : Window
         {
             wpe.DataDirectory = Path.Combine(_config.ScratchDir, "wpe-data");
             wpe.CacheDirectory = Path.Combine(_config.ScratchDir, "wpe-cache");
-            _log.Log("webview: WPE data/cache dirs set under scratch");
+            // Ubuntu 26.04 ships no WPE package (apt-cache search wpewebkit: empty) —
+            // docs' documented fallback where WPE is unpackaged.
+            wpe.PreferWebKitGtkInstead = _config.PreferGtk;
+            _log.Log($"webview: WPE data/cache dirs set under scratch; PreferWebKitGtkInstead={wpe.PreferWebKitGtkInstead}");
+        }
+        else if (args is GtkWebViewEnvironmentRequestedEventArgs gtk)
+        {
+            gtk.BaseDataDirectory = Path.Combine(_config.ScratchDir, "gtk-data");
+            gtk.BaseCacheDirectory = Path.Combine(_config.ScratchDir, "gtk-cache");
+            _log.Log("webview: GTK WebKit base dirs set under scratch");
         }
     }
 
@@ -89,8 +98,29 @@ public partial class MainWindow : Window
             _log.Log("fault-injection: media origin BLOCKED (case 2 armed)");
         }
 
-        SetStatus($"navigating {url}");
-        Web.Source = new Uri(url);
+        if (_config.DialogMode)
+        {
+            // NativeWebDialog (the GTK adapter's declared SupportedScenarios): separate
+            // window; has WebMessageReceived but NO InvokeScript (host->page unavailable).
+            Web.IsVisible = false;
+            var dlg = new NativeWebDialog { Title = "SP-011 dialog" };
+            dlg.EnvironmentRequested += OnEnvironmentRequested;
+            dlg.AdapterCreated += (_, _) => _log.Log($"webview(dialog): AdapterCreated");
+            dlg.AdapterDestroyed += (_, _) => _log.Log("webview(dialog): AdapterDestroyed");
+            dlg.NavigationStarted += (_, _) => _log.Log($"webview(dialog): NavigationStarted t={ElapsedMs()}ms");
+            dlg.NavigationCompleted += (_, e) => _log.Log($"webview(dialog): NavigationCompleted t={ElapsedMs()}ms success={e.IsSuccess}");
+            dlg.WebMessageReceived += OnWebMessage;
+            dlg.Closing += (_, _) => _log.Log("webview(dialog): Closing");
+            dlg.Source = new Uri(url);
+            dlg.Show();
+            SetStatus($"dialog mode: {url}");
+            _log.Log("webview(dialog): Show() called; render evidence via XGetImage capture");
+        }
+        else
+        {
+            SetStatus($"navigating {url}");
+            Web.Source = new Uri(url);
+        }
 
         if (_config.AutoQuitSeconds > 0)
         {
