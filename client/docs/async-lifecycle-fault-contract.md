@@ -36,7 +36,7 @@ The classification vocabulary is shared with `InitFailureKind`; the outcome type
 
 1. Each owner carries a monotonic **generation**: an integer that starts at 0 and increments every time the owner is (re)started after a stop. Starting an owner creates a fresh `CancellationTokenSource` linked to the host token; stopping or tearing down an owner cancels the current generation's source.
 2. Every operation the owner starts captures the generation current at its start. A completion (or any state mutation, including a UI projection) arriving for generation *N* when the owner's current generation is *M > N* is **stale and discarded** — it cannot overwrite newer-generation state.
-3. Out-of-order completion is therefore a non-event: a late result from a previous generation is checked against the current generation at the point of application and dropped. Tests inject out-of-order completion, cancellation, and background-thread callbacks (first-attempt lesson: tests inject, not assume).
+3. Out-of-order completion is therefore a non-event: a late result from a previous generation is checked against the current generation at the point of application and dropped. The owned completion task always reports the operation's honest terminal outcome; staleness gates **application**, not **observation** — a stale op is still observed, just not applied. Tests inject out-of-order completion, cancellation, and background-thread callbacks (first-attempt lesson: tests inject, not assume).
 4. In-flight operations observe the generation token and terminate with the typed `Cancelled` outcome. Cancellation — never the UI thread — is what unblocks in-flight work (§6 rule 3).
 
 ## 4. Fault policy

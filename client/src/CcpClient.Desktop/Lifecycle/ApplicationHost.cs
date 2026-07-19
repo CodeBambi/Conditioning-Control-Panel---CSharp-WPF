@@ -14,6 +14,11 @@ public sealed class ApplicationHost
     private readonly TimeSpan _drainTimeout;
     private int _shutdownStarted;
 
+    /// <summary>
+    /// Convenience for owner-less test participants; any participant that registers
+    /// operations must share the host's registry (use <see cref="CompositionRoot.Build"/>
+    /// or the full constructor).
+    /// </summary>
     public ApplicationHost(ILogSink log, IReadOnlyList<IBackgroundParticipant> participants, StartupTrace trace)
         : this(log, participants, trace, new OperationRegistry(), new UiDispatchBoundary(), DefaultDrainTimeout)
     {

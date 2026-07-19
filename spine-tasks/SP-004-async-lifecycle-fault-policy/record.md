@@ -26,6 +26,22 @@ First call truncated after answering (a)/(b) (same truncation failure mode as th
 
 **Disposition:** all points accepted: per-owner generation; Post-only `IUiDispatch` (no `InvokeAsync`); unbound `Post` throws `InvalidOperationException` while the demonstrator skips-until-bound via `IsBound` (both tested); new `OperationOutcome` type reusing the SP-003 failure-kind vocabulary without extending `InitFailureKind`; teardown violation is logged/recorded, asserted by tests via registry state; posted delegates do their generation check on the UI thread; shutdown ordering = cancel generation → await owned completions → record unobserved → stop participants (bounded await as backstop only).
 
+### Pre-completion solo consult (Fable 5) — 2026-07-18
+
+Verdict text (persisted before checkbox, per write-then-check; truncated only inside the mechanical close-out list):
+
+> **PLAN — the work meets the completion criteria as far as this transcript shows.**
+>
+> **(a) Yes — honest terminal outcome on the completion task is the right semantic. Keep it.** The completion task is the ownership/observation channel; the generation check governs *state application*, not *observation*. Reporting `Cancelled` for a stale op that actually ran to completion would fabricate an outcome that didn't happen. Two truths stay separate: "what did this operation do" (completion task, always honest) and "may this result touch current state" (generation check at the point of application, contract §3.3). That separation is also what makes zero-unobserved accounting work: a stale op is still *observed*, just not *applied*. The one hazard — a caller awaiting a stale task and acting on `Completed` without a generation check — is the rule the contract already states, and the only current consumer (heartbeat) checks inside the posted delegate. [Sentence added to contract §3.3.]
+>
+> **(b) Acceptable — not a second ownership path.** The 3-arg ctor's throwaway registry is still *the* registry for that host: drain runs against it, and owner-less participants register nothing. A second ownership path would mean a second way to start/cancel/observe operations — that doesn't exist. The latent hazard is constructing a participant with an owner from registry A and a host holding registry B (hit and fixed in `IntegrationProofTests`). [Doc-comment added to the 3-arg ctor per the consult's hardening suggestion.]
+>
+> **(c) No blockers.** Trivia: redundant `.OfType<Task>().Cast<Task>()` in `CancelAndDrainAsync` [fixed]; the Track-before-Completion-assignment window is documented and unreachable in practice. Criteria audit: contract doc with all required sections incl. row-5 boundary sentence ✓; generation invalidation / mid-flight cancel / deterministic fault routing (not `UnobservedTaskException`) / zero-unobserved all tested ✓; pre-binding rule tested both ways ✓; headed smoke *observed* the background callback (tick 16→24 via UIA) with exit 0 ✓; SP-003's 23 tests intact, no second teardown path ✓; no new packages, no DI, no Headless admission ✓; consult truncation handled per packet precedent ✓. The no-amendment disposition on SP-003's "reserved" note is correct — the reservation covers *phase* failure kinds, which remain unexercised.
+>
+> **Close-out:** persist verdict before checkbox; board row → `WIP` citing record.md; STATUS to reality; re-run full testCommand + `git diff --check` + `git status --short` (File Scope only); commit; `.DONE`. [truncated tail]
+
+**Disposition:** no blockers; both hardening suggestions applied (3-arg-ctor doc-comment, `OfType`/`Cast` dedup) plus the §3.3 clarifying sentence; close-out executed in the stated order.
+
 ---
 
 ## WPF async/dispatcher evidence digest (outcomes only, no mechanics transplant)
@@ -51,7 +67,9 @@ Source: `ConditioningControlPanel/App.xaml.cs` (3345 lines — grep + focused re
 
 ## Contract summary
 
-`client/docs/async-lifecycle-fault-contract.md` — see doc. (Step 1 deliverable; summary finalized in Step 4.)
+Deliverable: `client/docs/async-lifecycle-fault-contract.md`. Every long-running operation is registered in the runner's registry with exactly one owner (per-participant `AsyncOperationOwner`), a monotonic per-owner cancellation generation (incremented on each (re)start), an owned completion task, and a typed terminal outcome (`OperationOutcome`: Completed / Cancelled / Failed — failure kinds reuse the SP-003 `InitFailureKind` vocabulary directly, activating the reserved Recoverable/Degraded as per-operation owner-supplied classifications; capability probes are row 5). Stale completions (generation older than current) are discarded at the point of application — tested by injecting a late result. One deliberate UI dispatch boundary: Post-only `IUiDispatch`, late-bound in phase 4 via `ApplicationHost.BindUiDispatch` (SynchronizationContext capture banned); pre-binding `Post` throws `InvalidOperationException` (wiring bug, not a runtime fault) while long-running owners skip UI projection until bound; posted delegates re-check liveness on the UI thread. Teardown remains SP-003's single guarded entry point, extended: cancel generations → await owned completions (bounded wait as backstop only) → record unobserved in registry state (never throws) → reverse-order participant stop. Tested bans: no async void except genuine event handlers, no unobserved required work (zero-unobserved asserted at teardown), no blanket catch-as-success (deterministic registry routing, not `UnobservedTaskException`).
+
+**SP-003 contract amendment check (Documentation Requirements):** evaluated — no amendment needed. SP-003's "reserved" note covers Recoverable/Degraded as *startup-phase* failure kinds, which remain unexercised and accurately reserved; this task activates the same vocabulary as *operation* outcome classifications in the new contract's separate `OperationOutcome` type. Amending SP-003's note would misstate its scope.
 
 ---
 
@@ -63,13 +81,16 @@ Late-bound in phase 4 via `ApplicationHost.BindUiDispatch(IUiDispatch)`, never `
 
 ## Engine-review presence/absence note
 
-(Filled in Step 4 — `spine_review_step` results recorded here as called.)
+`spine_review_step` was called after each step (1, 2, 3) and returned **skipped=true, reviewLevel=0, spawnFailed=false** every time — fourth consecutive batch (SP-001…SP-004) with zero engine reviews; the review pipeline remains empirically dead (tooling row T-2). Worker-side quality gates substituted per the packet: two mandatory solo Fable consults (pre-approach, pre-completion) with verdict text persisted here, plus the contract testCommand and headed smoke. Orchestrator verifies the journal at land.
 
 ---
 
 ## Test output
 
-(Filled in Step 5.)
+`dotnet build client/CcpClient.sln -c Debug --nologo` — succeeded, **0 warnings, 0 errors**.
+`dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo` — **Passed: 34, Failed: 0, Skipped: 0** (Windows, .NET 10; 23 SP-003 + 11 new).
+
+New-test coverage of the contract's tested rules: `RunAsync_WithoutBegin_ThrowsSequencingError` (no op outside a live generation); `StaleGenerationCompletion_IsDiscarded_CannotOverwriteNewerState` (out-of-order completion injected; `DiscardedStaleCompletions` = 1; newer state untouched); `CancellationMidFlight_YieldsTypedCancelled_NoUnhandledException`; `ResourceFailure_ClassifiedByOwner_RoutedAsTypedOutcome_NotSwallowed` (Recoverable), `DegradedOutcome_ClassifiedByOwner_RoutedAsTypedOutcome` (Degraded), `FaultingOperation_DefaultClassifier_MapsToFatal` (deterministic registry routing — no `UnobservedTaskException`); `Teardown_CancelsInFlightThroughSingleEntryPoint_AndReportsZeroUnobserved` (in-flight tick op completes typed `Cancelled` through `ShutdownAsync`; zero unobserved; SP-003 stop invariants intact); `Teardown_OrphanedOperation_IsRecordedInRegistryState_NeverThrows` (bounded wait expires; violation logged + counted, teardown never throws); `Post_BeforeBinding_ThrowsInvalidOperation` / `Bind_ThenPost_Dispatches_DoubleBind_Throws` (pre-binding rule); `Heartbeat_SkipsProjectionUntilBound_ThenFlowsThroughBoundary` (skip-until-bound, then real flow). All 23 SP-003 tests still pass — the single guarded teardown entry point is undisturbed.
 
 ## Headed smoke (Windows, 2026-07-18)
 
@@ -86,4 +107,8 @@ Ran `spine-tasks/SP-004-async-lifecycle-fault-policy/headed-smoke.ps1` against t
 
 ## Surprises
 
-(Filled in Step 4.)
+- **Consult truncation recurred.** The first pre-approach call truncated mid-reply after (a)/(b) — the same failure mode as this packet's pre-authoring consult. A narrowed follow-up recovered (c)–(e) in full. The (e) answer changed the design: `IUiDispatch` is Post-only (no `InvokeAsync`), eliminating the shutdown-deadlock class by construction rather than by rule.
+- **Deadlock hazard was real, not theoretical:** SP-003 invokes `ShutdownAsync` synchronously from the UI thread (lifetime `Exit` handler); any awaitable UI dispatch would have made teardown capable of deadlocking. The Post-only interface plus cancel-before-drain ordering removes it.
+- **xUnit2014 is build-breaking:** `Assert.Throws` over a lambda returning `Task` is an analyzer *error*, even when the throw is synchronous; a void local function is the workaround.
+- **`ParticipantInfrastructure` evolution:** handing participants their owner + boundary at composition (via the factory parameter) kept the no-locator rule while leaving SP-003's 3-arg `ApplicationHost` ctor intact for existing tests — registry/boundary are optional infrastructure there, unused by owner-less recording participants.
+- **PowerShell UIA smoke:** method-call argument lists cannot span lines in PowerShell; script otherwise worked first try (tick 16 → tick 24 observed).
