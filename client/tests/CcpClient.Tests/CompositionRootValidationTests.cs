@@ -33,7 +33,7 @@ public class CompositionRootValidationTests
     [Fact]
     public void Validate_MissingParticipants_FailsFastWithTypedFatalNamingTheRegistration()
     {
-        var root = new CompositionRoot { ParticipantsFactory = () => null };
+        var root = new CompositionRoot { ParticipantsFactory = _ => null };
 
         var valid = root.Validate(out var failure);
 

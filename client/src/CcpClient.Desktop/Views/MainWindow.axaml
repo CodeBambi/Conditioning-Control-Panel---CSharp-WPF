@@ -6,5 +6,6 @@
   <StackPanel Margin="16">
     <TextBlock Text="CCP greenfield client — startup trace" FontWeight="Bold" />
     <TextBlock x:Name="TraceText" TextWrapping="Wrap" Margin="0,8,0,0" />
+    <TextBlock x:Name="HeartbeatText" Margin="0,8,0,0" Text="Heartbeat: waiting" />
   </StackPanel>
 </Window>

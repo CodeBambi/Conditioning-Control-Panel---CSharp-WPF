@@ -1,6 +1,6 @@
 # Status: SP-004 — async lifecycle and fault policy
 
-**Overall:** 🔄 In Progress — Current Step: 2
+**Overall:** 🔄 In Progress — Current Step: 3
 
 ## Steps
 
@@ -13,11 +13,11 @@
 - [x] `client/docs/async-lifecycle-fault-contract.md` written (ownership rule, generation scheme, dispatch boundary, fault classifications, row-5 boundary sentence, tested bans)
 
 ### Step 2: Async operation primitive and generation scheme
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] Async-operation primitive implemented (registry-owned, generation, owned completion task, typed outcomes reusing SP-003 taxonomy)
-- [ ] Cancellation flows through SP-003's single guarded teardown entry point (no second path)
-- [ ] Unit tests: stale-generation completion discarded; mid-flight cancellation → typed Cancelled; deterministic fault routing (NOT via UnobservedTaskException); zero unobserved operations at teardown
+- [x] Async-operation primitive implemented (registry-owned, generation, owned completion task, typed outcomes reusing SP-003 taxonomy)
+- [x] Cancellation flows through SP-003's single guarded teardown entry point (no second path)
+- [x] Unit tests: stale-generation completion discarded; mid-flight cancellation → typed Cancelled; deterministic fault routing (NOT via UnobservedTaskException); zero unobserved operations at teardown
 
 ### Step 3: UI dispatch boundary and demonstrator integration
 **Status:** ⬜ Not Started

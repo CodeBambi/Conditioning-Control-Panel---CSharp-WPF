@@ -44,10 +44,14 @@ public class IntegrationProofTests
     {
         // Real runner, real root shape, one participant deliberately failing to start.
         var trace = new StartupTrace();
-        var started = new HeartbeatParticipant();
+        HeartbeatParticipant? started = null;
         var root = new CompositionRoot
         {
-            ParticipantsFactory = () => [started, new FailingParticipant()],
+            ParticipantsFactory = infra =>
+            {
+                started = new HeartbeatParticipant(infra.OwnerFor("Heartbeat"), infra.UiDispatch);
+                return [started, new FailingParticipant()];
+            },
         };
         ApplicationHost? host = null;
 
@@ -61,7 +65,7 @@ public class IntegrationProofTests
         // Main's startup-failure branch: guarded teardown of completed phases only.
         Assert.NotNull(host);
         await host!.ShutdownAsync();
-        Assert.Equal(1, started.StopCount);
+        Assert.Equal(1, started!.StopCount);
     }
 
     private sealed class FailingParticipant : IBackgroundParticipant

@@ -22,16 +22,28 @@ public sealed class DebugLogSink : ILogSink
 /// checklist over named registrations — a missing registration is a typed Fatal failure
 /// before the window exists, never a null at first use.
 /// </summary>
+/// <summary>
+/// The infrastructure participants are constructed against: the operation registry (async
+/// contract §1) and the late-bound UI dispatch boundary (async contract §5). Created by
+/// the composition root in <see cref="CompositionRoot.Build"/>; participants receive their
+/// single owner and the boundary here, never by locating them later.
+/// </summary>
+public sealed record ParticipantInfrastructure(OperationRegistry Registry, UiDispatchBoundary UiDispatch)
+{
+    /// <summary>The single async-operation owner for one participant (async contract §1.1).</summary>
+    public AsyncOperationOwner OwnerFor(string participantName) => Registry.OwnerFor(participantName);
+}
+
 public sealed class CompositionRoot
 {
     /// <summary>Factory seam so tests can deliberately blank a registration (contract §4 test).</summary>
     public Func<ILogSink?> LogSinkFactory { get; init; } = () => new DebugLogSink();
 
     /// <summary>Each required participant is named here; deleting one is a compile error or a validation failure.</summary>
-    public Func<IReadOnlyList<IBackgroundParticipant>?> ParticipantsFactory { get; init; } = DefaultParticipants;
+    public Func<ParticipantInfrastructure, IReadOnlyList<IBackgroundParticipant>?> ParticipantsFactory { get; init; } = DefaultParticipants;
 
-    private static IReadOnlyList<IBackgroundParticipant> DefaultParticipants() =>
-        [new HeartbeatParticipant()];
+    private static IReadOnlyList<IBackgroundParticipant> DefaultParticipants(ParticipantInfrastructure infra) =>
+        [new HeartbeatParticipant(infra.OwnerFor("Heartbeat"), infra.UiDispatch)];
 
     /// <summary>
     /// Phase 2 body: fail fast with a typed error naming what is missing.
@@ -44,7 +56,8 @@ public sealed class CompositionRoot
             return false;
         }
 
-        if (ParticipantsFactory() is null)
+        // Probe with a scratch infrastructure (participant constructors are cheap, contract §4.4).
+        if (ParticipantsFactory(new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary())) is null)
         {
             failure = new InitFailure("CompositionRoot", InitFailureKind.Fatal, "Missing registration: BackgroundParticipants");
             return false;
@@ -58,7 +71,8 @@ public sealed class CompositionRoot
     public ApplicationHost Build(StartupTrace trace)
     {
         var log = LogSinkFactory() ?? throw new InvalidOperationException("Validate must run before Build.");
-        var participants = ParticipantsFactory() ?? throw new InvalidOperationException("Validate must run before Build.");
-        return new ApplicationHost(log, participants, trace);
+        var infra = new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary());
+        var participants = ParticipantsFactory(infra) ?? throw new InvalidOperationException("Validate must run before Build.");
+        return new ApplicationHost(log, participants, trace, infra.Registry, infra.UiDispatch);
     }
 }

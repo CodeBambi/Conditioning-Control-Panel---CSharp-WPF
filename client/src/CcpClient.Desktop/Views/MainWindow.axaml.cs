@@ -17,5 +17,12 @@ public partial class MainWindow : Window
         var lines = host.Trace.Entries.Concat(
             host.Participants.Select(p => $"{p.Name}: {(p.Running ? "running" : "stopped")}"));
         TraceText.Text = string.Join(Environment.NewLine, lines);
+
+        // Async contract §5.4: the demonstrator's tick text reaches the window through
+        // the real dispatch boundary; the reporter is invoked only inside a boundary post.
+        foreach (var heartbeat in host.Participants.OfType<HeartbeatParticipant>())
+        {
+            heartbeat.TickReporter = text => HeartbeatText.Text = text;
+        }
     }
 }
