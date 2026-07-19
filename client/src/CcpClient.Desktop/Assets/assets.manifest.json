@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "demo.status-ticker.icon",
+      "source": "embedded",
+      "path": "Assets/demo-status-ticker.png",
+      "required": true,
+      "provenance": {
+        "origin": "Generated in-repo for SP-007 (64x64 neon-ring demonstrator card glyph, one-time PowerShell System.Drawing)",
+        "license": "project-internal"
+      },
+      "heads": [ "desktop" ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "asset.manifest",
+      "source": "embedded",
+      "path": "Assets/assets.manifest.json",
+      "required": true,
+      "provenance": {
+        "origin": "Authored in-repo for SP-009 (this catalogue; self-listed because the completeness sweep covers every embedded asset)",
+        "license": "project-internal"
+      },
+      "heads": [ "desktop" ],
+      "overridePolicy": "none",
+      "trust": "full"
+    }
+  ]
+}

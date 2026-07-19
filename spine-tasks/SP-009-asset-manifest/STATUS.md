@@ -2,7 +2,7 @@
 
 **Overall:** 🔄 In Progress
 
-**Current Step:** Step 2
+**Current Step:** Step 3
 
 ## Steps
 
@@ -15,15 +15,15 @@
 - [x] `client/docs/asset-manifest.md` written (schema, override/trust policy, two-direction rule, self-check contract, row-9 hook, evidence classes)
 
 ### Step 2: Catalogue and validation tests
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] assets.manifest.json with one real entry, embedded as avares resource
-- [ ] Two-direction tests: manifest opens via AssetLoader + completeness sweep fails on unmanifested assets
-- [ ] Case-exactness named check (ordinal, meaningful on ext4)
-- [ ] Schema-validation tests (user/mod/copied entries validate; loading unimplemented, recorded)
+- [x] assets.manifest.json with one real entry, embedded as avares resource
+- [x] Two-direction tests: manifest opens via AssetLoader + completeness sweep fails on unmanifested assets
+- [x] Case-exactness named check (ordinal, meaningful on ext4)
+- [x] Schema-validation tests (user/mod/copied entries validate; loading unimplemented, recorded)
 
 ### Step 3: `--verify-assets` self-check mode
-**Status:** ⬜ Pending
+**Status:** 🔄 In Progress
 
 - [ ] Diagnostic flag on real binary (bounded path; per-failure diagnostic line; exit 0/non-zero; no window/side effects)
 - [ ] Unit tests for manifest parse + outcome mapping

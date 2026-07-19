@@ -42,3 +42,7 @@ All sources fetched 2026-07-19. Baseline: Avalonia **12.1.0** (project-pinned). 
 - https://docs.avaloniaui.net/docs/basics/user-interface/assets (official v12 doc set, fetched 2026-07-19) — VERIFIED: assets are included via `<AvaloniaResource Include="Assets\**" />` in the csproj (the greenfield csproj already does exactly this).
 - https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview (fetched 2026-07-19) — VERIFIED (row-9 hook research, NOT implementation): single-file bundles managed DLLs loaded **in memory** (no extraction by default) — embedded resources incl. the `!AvaloniaResources` bundle keep working through `GetManifestResourceStream`. `Assembly.Location` returns **empty**, `Assembly.GetFile(s)` throw; `AppContext.BaseDirectory` reaches files next to the exe. Consequence (consult pin 3): the verifier is stream-only — no `Assembly.Location`, no output-dir-relative resolution for embedded assets — so the row-9 invocation is literally the same command against the published artifact.
 - Open question from consult Q2 answered by source: `.axaml` files are compiled to IL by Avalonia.Build.Tasks, not packed into `!AvaloniaResources` — the sweep's expected content is exactly the `Assets/**` glob; verified empirically in Step 2 (rule written from observation).
+
+## Engine reviews
+
+- Step 1 plan review: `spine_review_step` → **skipped=true, reviewLevel=0, spawnFailed=false** (ninth consecutive batch with zero engine reviews; T-2 remains open). Fable solo consults are the active quality gate per the packet.
