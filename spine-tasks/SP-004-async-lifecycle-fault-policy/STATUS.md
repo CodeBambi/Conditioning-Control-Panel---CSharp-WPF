@@ -1,19 +1,19 @@
 # Status: SP-004 — async lifecycle and fault policy
 
-**Overall:** ⬜ Not Started
+**Overall:** 🔄 In Progress — Current Step: 2
 
 ## Steps
 
 ### Step 1: Pre-approach consult and contract draft
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
-- [ ] STATUS.md updated before starting work
-- [ ] WPF async/dispatcher outcomes digest in record.md (outcomes only)
-- [ ] `client/docs/async-lifecycle-fault-contract.md` written (ownership rule, generation scheme, dispatch boundary, fault classifications, row-5 boundary sentence, tested bans)
+- [x] Pre-approach solo consult (Fable 5) run; verdict text persisted in record.md BEFORE checkbox
+- [x] STATUS.md updated before starting work
+- [x] WPF async/dispatcher outcomes digest in record.md (outcomes only)
+- [x] `client/docs/async-lifecycle-fault-contract.md` written (ownership rule, generation scheme, dispatch boundary, fault classifications, row-5 boundary sentence, tested bans)
 
 ### Step 2: Async operation primitive and generation scheme
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] Async-operation primitive implemented (registry-owned, generation, owned completion task, typed outcomes reusing SP-003 taxonomy)
 - [ ] Cancellation flows through SP-003's single guarded teardown entry point (no second path)
