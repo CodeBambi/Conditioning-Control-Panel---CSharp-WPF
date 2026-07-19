@@ -1,6 +1,6 @@
 # STATUS: SP-011 — spike official WebView with the copied DTRH payload
 
-**Current Step:** Step 5 — Evidence, board reconciliation, pre-completion consult
+**Current Step:** Step 6 — Testing & Verification
 **Last Updated:** 2026-07-19 (worker session 1)
 
 ## Steps
@@ -40,16 +40,16 @@
 - [x] Budgets both platforms (cold precondition verified)
 
 ### Step 5: Evidence, board reconciliation, pre-completion consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete (plan review: engine-skipped in worker per SP-195, recorded)
 
-- [ ] client/docs/webview-dtrh-spike.md — named observation per acceptance item
-- [ ] record.md complete (consult verdicts; engine-review presence/absence — T-2; worker-child council attempt outcome)
-- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
-- [ ] task-board.md spike row → WIP with evidence (admit row stays BLOCKED)
-- [ ] STATUS.md accurate before .DONE
+- [x] client/docs/webview-dtrh-spike.md — named observation per acceptance item
+- [x] record.md complete (consult verdicts; engine-review presence/absence — T-2; worker-child council attempt outcome)
+- [x] Pre-completion solo Fable 5 consult (verdict in record.md)
+- [x] task-board.md spike row → WIP with evidence (admit row stays BLOCKED)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 6: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] Contract testCommand green (product suite + spike build)
 - [ ] `git diff --check` clean
