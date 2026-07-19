@@ -1,7 +1,7 @@
 # STATUS: SP-010 — establish Release and publish gates
 
-**Current Step:** 5
-**Last Updated:** 2026-07-19 (Step 4 complete — WSL2 matrix PASS, WSLg gaps discharged; engine review skipped, T-2)
+**Current Step:** 6
+**Last Updated:** 2026-07-19 (Step 5 complete — record.md + board reconciled + pre-completion consult applied; engine review skipped, T-2)
 
 ## Steps
 
@@ -39,15 +39,15 @@
 - [x] Budgets measured both platforms (cold precondition verified)
 
 ### Step 5: Evidence, board reconciliation, pre-completion consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] record.md complete (incl. engine-review presence/absence — T-2)
-- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
-- [ ] task-board.md: row 9 → WIP with evidence; rows 2/3/8 discharge annotations
-- [ ] STATUS.md accurate before .DONE
+- [x] record.md complete (incl. engine-review presence/absence — T-2)
+- [x] Pre-completion solo Fable 5 consult (verdict in record.md)
+- [x] task-board.md: row 9 → WIP with evidence; rows 2/3/8 discharge annotations
+- [x] STATUS.md accurate before .DONE
 
 ### Step 6: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] Contract testCommand green (solution + both test projects)
 - [ ] `git diff --check` clean

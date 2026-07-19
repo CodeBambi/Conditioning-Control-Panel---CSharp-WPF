@@ -120,3 +120,37 @@ All fetched **2026-07-19**. Baselines: Avalonia 12.1.0, .NET SDK 10.0.302 (Windo
 4. **WSL `--version` prints unsuffixed `0.1.0`** — no `.git` in the native copy → no SourceLink → no SourceRevisionId. Confirms the suffix is git-presence-dependent; derivation-not-equality testing was the correct call.
 5. **XDG_CONFIG_HOME is honored** (see above) — doc-level correction, not a behavior change.
 - Engine review Step 4: `spine_review_step` → skipped=true (T-2).
+
+## Pre-completion consult (solo Fable 5, 2026-07-19)
+
+Full as-built summary + deviations submitted. Verdict received complete: **proceed to .DONE after one cheap strengthening (applied below) and normal Step 5/6 mechanics. No rework.**
+
+**Q1 — adversarial read of acceptance words:** everything discharged except two nuances to NAME rather than leave implicit:
+1. "Run the first vertical slice" — the matrix exercises launch/render/persistence/graceful-close in every mode but NOT the slice's toggle interaction in Release/published. Acceptable (packet's matrix definition is the controlling scope) — **named non-claim:** published-mode evidence = launch/render/persistence/graceful-close; toggle interaction remains Windows-Debug-headed evidence (SP-007/SP-008). Recorded here and on the board row.
+2. "Renders its window for real" — matrix.sh asserted the XGetImage capture SUCCEEDED, not that the pixels show anything (an all-black BMP would pass). **Cheap strengthening APPLIED:** ran CcpVerify's existing manifest named check against the published-mode WSLg capture:
+   `CcpVerify --capture client/tools/verify/artifacts/wslg-matrix-published-fresh.bmp --surface dashboard --state unlit` → **PASS `dashboard-background` — 18649/21320 pixels matched (fraction 0.875), ALL CHECKS PASSED, exit 0** (520x680 BMP, WSL2). The rows-2/3 discharge claim is now pixels-verified, not file-exists-verified. Recorded one-off; not wired into matrix.sh (per consult: enough for this gate).
+
+**Q2 — graceful-close discharge is honest, scoped:** claim it discharged **as "WSLg/X11 (XWayland)"** — never generalized to Linux-Wayland (§5.1 owner question unchanged) or non-WSLg X11. The evidence shape is the strong form (protocol advertisement asserted, malformed-message negative control, wait-based exit 0, no pkill on the success path). Windows CloseMainWindow is a different mechanism and was never part of the gap.
+
+**Q3 — no blockers in the diff shape.** client/Directory.Build.props walk-stop is a feature; CompositionRoot.cs doc-comment edit is in file scope and behavior-free; force-adds require the Step-6 `git ls-files client/tools/` audit (packet-named).
+
+The consult also acknowledged the XDG empirical correction (advisor framing overruled by evidence — the intended resolution order).
+
+## Engine reviews (T-2)
+
+- Step 1 plan review: `spine_review_step` → **skipped=true, reviewLevel=0, spawnFailed=false**.
+- Step 2 plan review: **skipped=true**. Step 3: **skipped=true**. Step 4: **skipped=true**. Step 5: recorded below at close.
+- **5/5 calls skipped this batch — TENTH consecutive batch with zero engine reviews (T-2 remains open).** Fable solo consults carried all quality gates per the packet.
+
+## Follow-ups for the orchestrator
+
+- port-lessons candidates (durable surprises; left for the port-lessons owner row per SP-007/008/009 precedent): (1) **incremental `dotnet publish` into an existing single-file output dir silently drops native sidecars** (app dies with BadImageFormatException 0x8007000B) — always publish to a clean output dir; (2) bash ERE has no `\S`/`\d` PCRE classes — use POSIX `[[:space:]]` classes in cross-platform scripts; (3) `--version`/InformationalVersion carries `+<SourceRevisionId>` only when `.git` is present at build time (native WSL copies print the bare version); (4) `Environment.SpecialFolder.ApplicationData` honors `XDG_CONFIG_HOME` on Linux — do not document "~/.config literal" without verifying.
+- Row 8 (asset manifest): the publish third is now discharged on BOTH platforms — the row's remaining gate is owner ratification only.
+- Rows 2/3: the headed-Linux (WSLg) smoke debt is discharged (rendered window, pixels named-check-verified, graceful exit 0) — remaining gates are owner ratification (and row 6's Linux-Wayland §5.1 question is NOT touched by this).
+
+## Board reconciliation (Step 5)
+
+- Row 9 → **WIP** with the full evidence block (never DONE — owner ratification).
+- Row 8 annotated: publish third **DISCHARGED** (both platforms) — the asset-manifest.md hook text itself was NOT edited: that file is outside this packet's File Scope; the discharge annotation lives on the board row (in scope) — recorded here as the packet's Documentation-Requirements justification.
+- Rows 2/3 annotated: headed-Linux (WSLg) smoke **CLOSED**, scoped to WSLg/X11 (XWayland); Linux-Wayland explicitly untouched (§5.1).
+- `client/docs/port-lessons.md` not edited (outside File Scope); durable surprises left above as candidates per SP-007/008/009 precedent.
