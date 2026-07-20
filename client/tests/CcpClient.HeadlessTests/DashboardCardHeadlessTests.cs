@@ -50,12 +50,12 @@ public class DashboardCardHeadlessTests
         Assert.Equal(Color.Parse("#FF3A2F3E"), ((ISolidColorBrush)card.BorderBrush!).Color);
 
         // The ONE command path (A-004) — ring derives from the operation, not the flag.
-        vm.ToggleCommand.Execute(null);
+        vm.ToggleCommand.Execute(StatusTickerParticipant.FeatureId);
 
         Assert.Contains("lit", card.Classes); // conditional class applied from operation state
         Assert.Equal(Color.Parse("#FFE066FF"), ((ISolidColorBrush)card.BorderBrush!).Color); // .lit selector won
 
-        vm.ToggleCommand.Execute(null);
+        vm.ToggleCommand.Execute(StatusTickerParticipant.FeatureId);
 
         Assert.DoesNotContain("lit", card.Classes);
         Assert.Equal(Color.Parse("#FF3A2F3E"), ((ISolidColorBrush)card.BorderBrush!).Color);
@@ -78,7 +78,7 @@ public class DashboardCardHeadlessTests
         Assert.True(offHeight > 0); // arranged for real (in-memory layout)
         Assert.False(tick.IsVisible); // binding resolved: row collapsed while off
 
-        vm.ToggleCommand.Execute(null);
+        vm.ToggleCommand.Execute(StatusTickerParticipant.FeatureId);
 
         Assert.True(tick.IsVisible);
         window.UpdateLayout(); // re-arrange with the tick row in layout
@@ -100,7 +100,7 @@ public class DashboardCardHeadlessTests
         host.BindUiDispatch(new AvaloniaUiDispatch());
         var vm = (MainWindowViewModel)window.DataContext!;
         var ticker = host.Participants.OfType<StatusTickerParticipant>().Single();
-        vm.ToggleCommand.Execute(null);
+        vm.ToggleCommand.Execute(StatusTickerParticipant.FeatureId);
 
         // The #TickText.Text ElementName compiled binding resolves against a CHANGING
         // source (SP-007 consult: a constant could be a hardcoded literal).

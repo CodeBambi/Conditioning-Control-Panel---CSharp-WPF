@@ -17,12 +17,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly StatusTickerParticipant _ticker;
     private readonly PersistenceStore<DemoSettings> _store;
+    private readonly QuickToggleDispatch _quickToggle;
     private string _tickText = "ticker off";
+    private string _cardTitle = "Demo: Status Ticker";
 
     public MainWindowViewModel(ApplicationHost host)
     {
         _ticker = host.Participants.OfType<StatusTickerParticipant>().First();
         _store = host.Participants.OfType<PersistenceStore<DemoSettings>>().First();
+        // A-004/SP-014: the ONE dispatch entry — stable card ID → the toggle operation.
+        // Neutral cards (Visuals/System parity) would simply have no entry (no fake cards).
+        _quickToggle = new QuickToggleDispatch(
+            new Dictionary<string, Action> { [CardId] = Toggle });
         ToggleCommand = new ToggleFeatureCommand(this);
         // SP-004 pattern: the reporter is invoked only on the UI thread, inside a boundary post.
         _ticker.TickReporter = text => TickText = text;
@@ -32,6 +38,35 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     /// <summary>The single direct <see cref="ICommand"/> (cheat sheet §Commands — no RoutedCommand).</summary>
     public ICommand ToggleCommand { get; }
+
+    /// <summary>
+    /// The demonstrator card's STABLE dispatch identity — the only key quick-toggle resolves
+    /// on. Never localized, never a display string: <see cref="CardTitle"/> is display text.
+    /// </summary>
+    public string CardId => StatusTickerParticipant.FeatureId;
+
+    /// <summary>
+    /// Display title bound by the card's title TextBlock. Mutable display text (rewording /
+    /// future localization territory): mutating it must never affect dispatch — the
+    /// title-mutation negative test proves it.
+    /// </summary>
+    public string CardTitle
+    {
+        get => _cardTitle;
+        set
+        {
+            if (_cardTitle == value)
+            {
+                return;
+            }
+
+            _cardTitle = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CardTitle)));
+        }
+    }
+
+    /// <summary>The dispatch the ONE command path resolves through (public so tests assert resolution outcomes).</summary>
+    public QuickToggleDispatch QuickToggle => _quickToggle;
 
     /// <summary>The card's lit ring: derives from the operation authority (<see cref="StatusTickerParticipant.IsOperationLive"/>).</summary>
     public bool TickerLit => _ticker.IsOperationLive;
@@ -69,7 +104,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TickerVisible)));
     }
 
-    /// <summary>The demonstrator is always executable; <see cref="CanExecuteChanged"/> is inert by contract.</summary>
+    /// <summary>
+    /// The dispatch key comes from the command parameter (the card's stable ID); null or
+    /// unknown IDs no-op silently — WPF <c>else return</c> parity (Presets.cs:818).
+    /// <see cref="CanExecuteChanged"/> is inert by contract.
+    /// </summary>
     private sealed class ToggleFeatureCommand(MainWindowViewModel vm) : ICommand
     {
         public event EventHandler? CanExecuteChanged
@@ -80,6 +119,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         public bool CanExecute(object? parameter) => true;
 
-        public void Execute(object? parameter) => vm.Toggle();
+        public void Execute(object? parameter) => vm._quickToggle.TryToggle(parameter as string);
     }
 }

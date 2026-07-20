@@ -41,13 +41,15 @@ public partial class MainWindow : Window
         // WPF parity outcome (capability-inventory §Feature-card interaction): plain
         // right-click anywhere on the card body quick-toggles — no popup, no context menu.
         // Pointer events with an explicit button check (cheat sheet §Events), e.Handled = true.
-        // The same ONE command path as the keyboard KeyBinding (A-004).
+        // SP-014/A-004: the gesture dispatches through the ONE command path keyed on the card's
+        // STABLE ID (vm.CardId) — never on title/display text.
         TickerCard.PointerPressed += (_, e) =>
         {
             if (e.GetCurrentPoint(TickerCard).Properties.PointerUpdateKind == PointerUpdateKind.RightButtonPressed)
             {
                 e.Handled = true;
-                ((MainWindowViewModel)DataContext!).ToggleCommand.Execute(null);
+                var vm = (MainWindowViewModel)DataContext!;
+                vm.ToggleCommand.Execute(vm.CardId);
             }
         };
         // Left-click opens the demonstrator's settings popup (SP-013; W-04 contract):
