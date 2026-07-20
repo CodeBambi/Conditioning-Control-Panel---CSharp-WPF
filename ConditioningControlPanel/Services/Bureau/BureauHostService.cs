@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -36,6 +37,9 @@ namespace ConditioningControlPanel.Services.Bureau
         private const int ServerFetchCount = 24;   // over-fetch: not every target resolves locally
         private const int BatchDecodeCap = 6;      // frames per bridge message (keeps postMessage light)
 
+        /// <summary>Discord channel with the pack catalogue — the "requisition office".</summary>
+        private const string DiscordCatalogueUrl = "https://discord.com/channels/1456573221489999934/1511409848699584653";
+
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(25) };
 
         private static ChaosWebViewHost? _host;
@@ -45,6 +49,8 @@ namespace ConditioningControlPanel.Services.Bureau
         private static bool _exiting;
         private static bool _relaunchedOnce;
         private static bool _disposing;
+        private static bool _rawHooked;        // pack-drop AdditionalObjects listener attached
+        private static bool _installBusy;      // one drag-drop install at a time
 
         public static bool IsActive => _host != null;
 
@@ -110,6 +116,16 @@ namespace ConditioningControlPanel.Services.Bureau
             {
                 _lastHeartbeatUtc = DateTime.UtcNow;
                 _host?.FocusWeb();
+
+                // Pack drag-and-drop: file paths only travel via AdditionalObjects, which
+                // ChaosWebViewHost's JSON-only pipe drops — so listen on the raw event too.
+                var core = _host?.WebView?.CoreWebView2;
+                if (core != null && !_rawHooked)
+                {
+                    core.WebMessageReceived += OnRawWebMessage;
+                    _rawHooked = true;
+                }
+
                 Post(new
                 {
                     type = "init",
@@ -148,8 +164,17 @@ namespace ConditioningControlPanel.Services.Bureau
                     _lastHeartbeatUtc = DateTime.UtcNow;
                     break;
                 case "next":
-                    _ = Task.Run(() => HandleNextAsync());
+                    var packFilter = (string?)o["pack"];
+                    _ = Task.Run(() => HandleNextAsync(packFilter));
                     break;
+                case "packs":
+                    _ = Task.Run(() => HandlePacksAsync());
+                    break;
+                case "open-catalogue":
+                    OpenCatalogue();
+                    break;
+                case "pack-drop":
+                    break;   // handled by OnRawWebMessage (needs AdditionalObjects for the file path)
                 case "submit":
                     _ = Task.Run(() => HandleSubmitAsync(o));
                     break;
@@ -174,7 +199,7 @@ namespace ConditioningControlPanel.Services.Bureau
 
         // ============================ handlers ============================
 
-        private static async Task HandleNextAsync()
+        private static async Task HandleNextAsync(string? packFilter = null)
         {
             try
             {
@@ -206,6 +231,13 @@ namespace ConditioningControlPanel.Services.Bureau
                     var sep = target.IndexOf(':');
                     if (sep != 64) continue;
                     if (!int.TryParse(target[(sep + 1)..], out var frame)) continue;
+
+                    // Locker scoping: only serve cases whose evidence lives in the loaded pack.
+                    if (!string.IsNullOrEmpty(packFilter))
+                    {
+                        if (!BureauIndexService.TryResolve(target[..sep], out var owner, out _)) continue;
+                        if (!string.Equals(owner, packFilter, StringComparison.Ordinal)) continue;
+                    }
 
                     var decoded = BureauIndexService.DecodeFrame(target[..sep], frame);
                     if (decoded == null) continue;   // not in this user's packs / decoder divergence — skip
@@ -323,6 +355,142 @@ namespace ConditioningControlPanel.Services.Bureau
             }
         }
 
+        /// <summary>The evidence-lockers list: every image-bearing pack from the catalogue
+        /// manifest, marked installed/not, with the locally indexed image count when installed.</summary>
+        private static async Task HandlePacksAsync()
+        {
+            try
+            {
+                await BureauIndexService.EnsureBuiltAsync().ConfigureAwait(false);
+                var packs = App.ContentPacks;
+                var available = packs != null
+                    ? await packs.GetAvailablePacksAsync().ConfigureAwait(false)
+                    : new List<Models.ContentPack>();
+
+                var lockers = new List<object>();
+                foreach (var p in available)
+                {
+                    var installed = packs?.IsPackInstalled(p.Id) == true;
+                    var indexed = BureauIndexService.PackCounts.TryGetValue(p.Id, out var n) ? n : 0;
+                    if (!installed && p.ImageCount <= 0) continue;   // video-only packs have no casework
+                    if (installed && indexed == 0) continue;
+                    lockers.Add(new { id = p.Id, name = p.Name, installed, images = installed ? indexed : p.ImageCount });
+                }
+                Post(new { type = "packs", lockers, catalogueUrl = DiscordCatalogueUrl });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BureauHostService.HandlePacksAsync failed");
+                Post(new { type = "packs", lockers = Array.Empty<object>(), catalogueUrl = DiscordCatalogueUrl });
+            }
+        }
+
+        /// <summary>Open the Discord pack-catalogue channel in the user's default browser
+        /// (the game window's own navigation is locked to the site host).</summary>
+        private static void OpenCatalogue()
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(DiscordCatalogueUrl)
+                {
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex) { App.Logger?.Warning("BureauHostService.OpenCatalogue: {E}", ex.Message); }
+        }
+
+        /// <summary>Raw WebMessageReceived listener: only consumes 'pack-drop', whose dropped-file
+        /// paths ride the AdditionalObjects channel (CoreWebView2File) that the JSON pipe can't carry.</summary>
+        private static void OnRawWebMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            try
+            {
+                JObject o;
+                try { o = JObject.Parse(e.WebMessageAsJson); } catch { return; }
+                if ((string?)o["type"] != "pack-drop") return;
+
+                string? zipPath = null;
+                foreach (var obj in e.AdditionalObjects ?? Enumerable.Empty<object>())
+                {
+                    if (obj is CoreWebView2File file &&
+                        file.Path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        zipPath = file.Path;
+                        break;
+                    }
+                }
+                if (zipPath == null)
+                {
+                    Post(new { type = "pack-install-failed", error = "That wasn't a pack zip. Drop the pack's .zip file." });
+                    return;
+                }
+                _ = Task.Run(() => HandlePackDropAsync(zipPath));
+            }
+            catch (Exception ex) { App.Logger?.Warning("BureauHostService.OnRawWebMessage: {E}", ex.Message); }
+        }
+
+        /// <summary>Install a dropped pack zip: match it to a known catalogue pack by filename,
+        /// run the local-zip install pipeline, then re-index and refresh the lockers.</summary>
+        private static async Task HandlePackDropAsync(string zipPath)
+        {
+            if (_installBusy)
+            {
+                Post(new { type = "pack-install-failed", error = "An intake is already in progress." });
+                return;
+            }
+            _installBusy = true;
+            try
+            {
+                var packs = App.ContentPacks;
+                if (packs == null)
+                {
+                    Post(new { type = "pack-install-failed", error = "Pack service unavailable." });
+                    return;
+                }
+
+                // Match the zip to a known pack by normalized filename vs pack Name/Id
+                // (distribution zips are named after the pack, e.g. "Bambi Core Collection.zip").
+                static string Norm(string s) => new string(s.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+                var stem = Norm(System.IO.Path.GetFileNameWithoutExtension(zipPath));
+                var available = await packs.GetAvailablePacksAsync().ConfigureAwait(false);
+                var pack = available.FirstOrDefault(p => Norm(p.Name) == stem || Norm(p.Id) == stem);
+                if (pack == null)
+                {
+                    Post(new { type = "pack-install-failed", error = "Unrecognized pack zip. Get official packs from the requisition catalogue." });
+                    return;
+                }
+                if (packs.IsPackInstalled(pack.Id))
+                {
+                    Post(new { type = "pack-install-failed", error = $"'{pack.Name}' is already in custody." });
+                    return;
+                }
+
+                Post(new { type = "pack-install-progress", msg = $"Taking custody of '{pack.Name}'..." });
+                await packs.InstallPackFromLocalZipAsync(pack, zipPath,
+                    status => Post(new { type = "pack-install-progress", msg = status })).ConfigureAwait(false);
+
+                Post(new { type = "pack-install-progress", msg = "Cataloguing the new evidence..." });
+                await BureauIndexService.RebuildAsync((done, total) =>
+                    Post(new { type = "index-progress", done, total, ready = false })).ConfigureAwait(false);
+                Post(new
+                {
+                    type = "index-progress",
+                    done = BureauIndexService.Done,
+                    total = BureauIndexService.Total,
+                    ready = true,
+                });
+
+                Post(new { type = "pack-installed", id = pack.Id, name = pack.Name });
+                await HandlePacksAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BureauHostService.HandlePackDropAsync failed");
+                Post(new { type = "pack-install-failed", error = ex.Message });
+            }
+            finally { _installBusy = false; }
+        }
+
         // ============================ plumbing ============================
 
         private static async Task<(int Status, JObject? Body)> ServerAsync(HttpMethod method, string path, JObject? body, bool admin = false)
@@ -421,6 +589,7 @@ namespace ConditioningControlPanel.Services.Bureau
                 try { _host?.Dispose(); } catch { }
                 _host = null;
                 _exiting = false;
+                _rawHooked = false;   // the CoreWebView2 died with the host; a relaunch re-hooks
                 App.Logger?.Information("BureauHostService: closed");
             }
             finally { _disposing = false; }

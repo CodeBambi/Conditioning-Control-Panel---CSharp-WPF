@@ -31,10 +31,21 @@ namespace ConditioningControlPanel.Services.Bureau
         private static readonly object Gate = new();
         private static Task? _buildTask;
         private static Dictionary<string, (string PackId, PackFileEntry Entry)> _byHash = new();
+        private static Dictionary<string, int> _packCounts = new();
 
         public static bool IsReady { get; private set; }
         public static int Done { get; private set; }
         public static int Total { get; private set; }
+
+        /// <summary>Indexed (hashable) image count per installed packId — the lockers UI's numbers.</summary>
+        public static IReadOnlyDictionary<string, int> PackCounts => _packCounts;
+
+        /// <summary>Re-run the build (after a pack install). Cached hashes make old packs instant.</summary>
+        public static Task RebuildAsync(Action<int, int>? progress = null)
+        {
+            lock (Gate) { _buildTask = null; }
+            return EnsureBuiltAsync(progress);
+        }
 
         private static string CachePath => Path.Combine(App.UserDataPath, "bureau_hash_index.json");
 
@@ -83,6 +94,7 @@ namespace ConditioningControlPanel.Services.Bureau
                 Done = 0;
                 var cache = LoadCache();
                 var map = new Dictionary<string, (string, PackFileEntry)>(work.Count, StringComparer.Ordinal);
+                var counts = new Dictionary<string, int>(StringComparer.Ordinal);
                 var dirty = 0;
 
                 foreach (var (packId, entry) in work)
@@ -93,7 +105,11 @@ namespace ConditioningControlPanel.Services.Bureau
                         hash = HashEntry(packId, entry);
                         if (hash != null) { cache[key] = hash; dirty++; }
                     }
-                    if (hash != null) map[hash] = (packId, entry);
+                    if (hash != null)
+                    {
+                        map[hash] = (packId, entry);
+                        counts[packId] = counts.TryGetValue(packId, out var c) ? c + 1 : 1;
+                    }
 
                     Done++;
                     if ((Done % 25) == 0 || Done == Total)
@@ -105,6 +121,7 @@ namespace ConditioningControlPanel.Services.Bureau
 
                 if (dirty > 0) SaveCache(cache);
                 _byHash = map;
+                _packCounts = counts;
                 App.Logger?.Information("BureauIndex: {Mapped} images indexed across {Packs} packs ({Total} entries scanned)",
                     map.Count, packs.InstalledPacks.Count, Total);
             }
