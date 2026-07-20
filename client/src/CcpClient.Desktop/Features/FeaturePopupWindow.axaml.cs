@@ -89,6 +89,17 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
             _ => SyntheticPopupContent.BuildTall(),
         };
         PopupScroller.Offset = new Vector(0, 0);
+        // Nested variant: refresh the probe when the INNER list scrolls too (its
+        // ScrollChanged does not bubble to the outer scroller's handler).
+        var inner = ContentHost.Content as Control;
+        if (inner is not null)
+        {
+            foreach (var innerScroller in inner.GetVisualDescendants().OfType<ScrollViewer>())
+            {
+                innerScroller.ScrollChanged += (_, _) => UpdateScrollProbe();
+            }
+        }
+
         if (_owner is not null)
         {
             ApplyFitAndCap();
@@ -226,9 +237,17 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
     /// </summary>
     private void UpdateScrollProbe()
     {
+        // Nested variant: report the inner list's extent/offset too — chaining evidence is
+        // "inner scrolls itself while it can (outer stays 0), then remaining movement
+        // chains to the popup (outer rises)"; outer-only metrics can't show the first half.
+        var inner = PopupScroller.GetVisualDescendants().OfType<ListBox>().FirstOrDefault()?
+            .GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+        var innerText = inner is null
+            ? string.Empty
+            : string.Create(CultureInfo.InvariantCulture, $" inner-extent {inner.Extent.Height:F1} inner-offset {inner.Offset.Y:F1}");
         ScrollProbeText.Text = string.Create(
             CultureInfo.InvariantCulture,
-            $"scroll-probe: extent {PopupScroller.Extent.Height:F1} viewport {PopupScroller.Viewport.Height:F1} offset {PopupScroller.Offset.Y:F1} final-in-viewport {(IsFinalControlInViewport() ? "true" : "false")}");
+            $"scroll-probe: extent {PopupScroller.Extent.Height:F1} viewport {PopupScroller.Viewport.Height:F1} offset {PopupScroller.Offset.Y:F1}{innerText} final-in-viewport {(IsFinalControlInViewport() ? "true" : "false")}");
     }
 
     private bool IsFinalControlInViewport()
@@ -254,8 +273,14 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
     private void UpdatePopupProbe()
     {
         var size = PixelSize.FromSize(ClientSize, RenderScaling);
-        var scrollbar = PopupScroller.GetVisualDescendants().OfType<ScrollBar>().FirstOrDefault();
-        var thumb = PopupScroller.GetVisualDescendants().OfType<Thumb>().FirstOrDefault();
+        // The Fluent template hosts horizontal AND vertical ScrollBars; the disabled
+        // horizontal one stays collapsed at 0x0. Evidence is about the VERTICAL bar.
+        var scrollbar = PopupScroller.GetVisualDescendants().OfType<ScrollBar>()
+            .FirstOrDefault(s => s.Orientation == Avalonia.Layout.Orientation.Vertical);
+        var thumb = scrollbar?.GetVisualDescendants().OfType<Thumb>().FirstOrDefault();
+        // Nested variant: the inner list's geometry lets the headed harness wheel over the
+        // LIST (chaining evidence), not just the popup body.
+        var list = PopupScroller.GetVisualDescendants().OfType<ListBox>().FirstOrDefault();
 
         string Geometry(Control? control)
         {
@@ -271,7 +296,7 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
 
         var text = string.Create(
             CultureInfo.InvariantCulture,
-            $"popup-probe: pos {Position.X},{Position.Y} size {size.Width}x{size.Height} scale {RenderScaling:0.##} scroller {Geometry(PopupScroller)} scrollbar {Geometry(scrollbar)} thumb {Geometry(thumb)}");
+            $"popup-probe: pos {Position.X},{Position.Y} size {size.Width}x{size.Height} scale {RenderScaling:0.##} scroller {Geometry(PopupScroller)} scrollbar {Geometry(scrollbar)} thumb {Geometry(thumb)} list {Geometry(list)}");
         if (text != _lastProbe)
         {
             _lastProbe = text;

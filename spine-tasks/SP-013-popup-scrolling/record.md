@@ -86,6 +86,7 @@ Full verdict text received; key rulings applied to the design:
 ## Engine-review presence (T-2)
 
 - Step 1 plan review: **ABSENT** — `spine_review_step` returned `skipped=true` (`nested_spawn_blocked`, by design SP-195; `spawnFailed=false`). Engine runs code+final reviews post-.DONE.
+- Step 2 plan review: **ABSENT** — same (`skipped=true`, `spawnFailed=false`).
 
 ## Step 2 implementation notes (2026-07-20)
 
@@ -98,6 +99,39 @@ Full verdict text received; key rulings applied to the design:
 1. **Avalonia 12.1.0 `ScrollViewer.Padding` clips the content tail.** With `Padding="16"` on the ScrollViewer, the presenter arranged the content 32 DIP shorter than its desired size (stack desired 1225, bounds 1193) — the final control was UNREACHABLE at max offset (extent 1193 < content bottom 1225). Measured in a throwaway headless debug test, fixed by moving the padding onto the inner `ContentControl` (extent then = 1225+32 = 1257, correct). Durable port lesson candidate — orchestrator's harvest call (port-lessons.md is outside this packet's File Scope).
 2. **`KeyBinding` in `Window.KeyBindings` does not inherit DataContext** — a compiled `{Binding CloseCommand}` on it never resolved (silent no-op), found by the headless Escape test. Replaced with a tunnel `OnKeyDown` override, which is ALSO the WPF shape (`PreviewKeyDown`, xaml.cs:45). The card's `Border.KeyBindings` (SP-007) works because the binding targets the Border's own DataContext inheritance.
 3. **ScrollViewer without `Background` does not hit-test its empty regions** — wheel events over content gaps never reached the presenter (hit falls to the window Border, outside the scroller's bubble path). `Background="Transparent"` on the scroller is required for wheel-anywhere scrolling (headless test caught it: wheel worked over ListBox items, not over the tall StackPanel).
+
+## Step 3 — Windows-headed evidence matrix (2026-07-20, `popup-evidence.ps1`, log + PNGs in `evidence/`)
+
+Headed run on this workstation (3 monitors, all scale 1.0 per SP-007 record). Real input via mouse_event/SendKeys/UIA Invoke; observable scrolling via the app's UIA scroll-probe (changing Extent/Viewport/Offset, never screenshots alone). Full log: `evidence/windows-headed-evidence.log`. **EVIDENCE PASS** — 25 PASS gates, 1 named GATE, graceful close exit 0.
+
+| Gate | Result |
+|---|---|
+| TALL geometry | scrollbar present (w=16); popup {182,202 520x640} inside owner WA {0,0,1920,1032}; extent 948 > viewport 504; final starts below fold |
+| A. mouse wheel | offsets 100→200→300→400→444 (monotonic, stable at bottom); final-in-viewport true; offset+viewport = extent |
+| B. keyboard focus (Tab) | focus trail close-button → variants → toggle rows 5…30 → **popup final control**; bring-into-view moved offset to 428; final-in-viewport true |
+| C. scrollbar track | 1 page-down click → offset 444 (page = viewport); final reached |
+| D. thumb drag | real drag on the thumb → offset 0 → 444; final reached |
+| E. trackpad/touch | **NAMED MANUAL GATE** — see below |
+| Close paths | Escape closed (keyboard side); title-bar button closed via real click at the button's UIA rect (button side) — ONE operation |
+| Focus restoration | after Escape close, GetForegroundWindow = dashboard hwnd (W-04) |
+| SHORT | extent 224 ≤ viewport 224, popup height 360 DIP (compact, WPF min — not the 640 fixed) |
+| NESTED | inner list scrolled itself (inner-offset → 1400 while outer 0), then chained (outer → 100 → 122); final reached |
+| Secondary monitor (Windows-headed only) | dashboard moved to DISPLAY1 WA {-1440,-1469,1440x2512}; popup opened at {-1380,-1389} INSIDE that working area on DISPLAY1 — owner-monitor, never primary-by-default; negative-origin monitor handled |
+
+**Trackpad/touch:** digitizer PROBED — this box HAS a 2-point integrated touch digitizer (SM_DIGITIZER=0xCD), so the path was attempted for real with OS-level `InjectTouchInput`: **err=87 (ERROR_INVALID_PARAMETER) across parameter variations in 4 of 5 attempts; the one accepted batch (156 injections, 12 pans) produced NO app-visible scrolling (offset 0 → 0)** — automation cannot produce this evidence on this workstation. NAMED MANUAL GATE: physical touch-pan on the touch monitor. No touchpad device present (0 found) — trackpad specifically also gates.
+
+**Mixed scaling:** `AVALONIA_GLOBAL_SCALE_FACTOR` is honored on X11 ONLY (SP-007 record :53 — Win32 scaling comes from GetDpiForMonitor); all monitors here are scale 1.0. Mixed-scale geometry/capping evidence therefore lands in the Step-4 WSLg run (1.5× session facts); Windows-150% inherits SP-007's named manual gate.
+
+**K3 visual review (4 PNGs):** popup-tall-top / popup-tall-scrolled-bottom / popup-short-compact / popup-nested-scrolled — dark grammar, pink chrome, title bar + close button, variant switcher, correct thumb positions (top/bottom), inner-list own scrollbar, compact short state without scrollbar, probe texts readable. **K3 PASS** on all four states.
+
+**A-013 MCP advisory (redacted AXAML):** `ValidateXaml` strict → PASS (first run caught MY redaction dropping `xmlns:x` — a fair catch; resent, passed). `AnalyzePerformance` → **REJECTED**: emitted "❌ Invalid XAML syntax - cannot analyze performance" AND "Score: 90/100 🏆 Excellent" in ONE response — SP-007's exact self-contradictory failure mode, second occurrence; the 12.1.0 compiler + headless suite remain the authority.
+
+## Surprises (headed phase)
+
+4. **The popup opens UNACTIVATED in the normal z-band** (Windows foreground-lock; the script process has no foreground rights) — the foreground terminal sat ABOVE the popup and silently ate every click/wheel aimed at it (clicks "worked", foreground changed, but to the terminal's hwnd). SP-007's SetWindowPos(HWND_TOPMOST) raise had to be applied to the POPUP after every open, not just the dashboard. Also: owned windows NEST under the owner in the UIA tree, so a naive `RootElement.Children` popup search either misses the popup or (descendants search) returns the DASHBOARD element (its subtree contains the popup's probe text) — `Get-Popup` must exclude the window carrying `layout-probe`.
+5. **PowerShell `$Matches` entries are strings** — `$Matches[4] + [double]$Matches[1]*...` string-CONCATENATED ("76"+244 → 76244) and sent clicks off-screen. Cast the coordinate groups to `[int]` BEFORE arithmetic (capture.ps1's Get-CardRect already did this; I deviated and paid for it).
+6. **Fluent ScrollViewer template hosts horizontal AND vertical ScrollBars** — `OfType<ScrollBar>().FirstOrDefault()` can return the disabled HORIZONTAL one (collapsed, 0x0 at the scroller origin). Filter by `Orientation == Vertical`.
+7. **InjectTouchInput on this workstation:** init succeeds, then err=87 on most attempts; one run accepted 156 injections with zero app-visible effect. Unreliable-for-automation; named manual gate.
 
 ## Evidence matrix + budgets
 

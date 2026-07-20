@@ -1,7 +1,7 @@
 # STATUS: SP-013 — prove feature-popup scrolling
 
-**Current Step:** Step 3 — synthetic content + Windows-headed evidence matrix
-**Last Updated:** 2026-07-20 (Step 2 complete: 139 unit + 11 headless green)
+**Current Step:** Step 4 — WSLg/X11 gate + board reconciliation + pre-completion consult
+**Last Updated:** 2026-07-20 (Step 3 complete: EVIDENCE PASS, 25 gates + 1 named touch gate)
 
 ### Step 1: WPF evidence + current v12 research + pre-approach consult
 **Status:** ✅ Complete
@@ -19,12 +19,12 @@
 - [x] Unit tests: capping math, one-at-a-time transitions, command-path close (headless — real routing), focus restoration
 
 ### Step 3: Synthetic content + Windows-headed evidence matrix
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] TALL / SHORT / NESTED-list content variants
-- [ ] Five input paths to final control, each with changing Extent/Viewport/Offset recorded + captures; touch probed first (absent = named manual gate)
-- [ ] Mixed-scaling run (AVALONIA_GLOBAL_SCALE_FACTOR); K3 visual review
-- [ ] A-013 MCP advisory on redacted AXAML snippets (accepted/rejected recorded)
+- [x] TALL / SHORT / NESTED-list content variants
+- [x] Five input paths to final control, each with changing Extent/Viewport/Offset recorded + captures; touch probed first (digitizer present but injection unreliable → NAMED MANUAL GATE, not faked)
+- [x] Mixed-scaling run (AVALONIA_GLOBAL_SCALE_FACTOR is X11-only → Step 4 WSLg run); K3 visual review PASS (4 states)
+- [x] A-013 MCP advisory on redacted AXAML snippets (ValidateXaml PASS; AnalyzePerformance REJECTED self-contradictory)
 
 ### Step 4: WSLg/X11 gate + board reconciliation + pre-completion consult
 **Status:** ⬜ Not Started
