@@ -128,6 +128,26 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Lab → "Beta Inspection Bureau" labeling game. The page is served live from
+        /// cclabs.app/bureau and hosted in WebView2 via <see cref="Services.Bureau.BureauHostService"/>;
+        /// the host supplies auth, server proxying and local frame decoding. Requires a logged-in
+        /// account (UnifiedId + auth token) — the page itself shows the clearance gate if missing.
+        /// </summary>
+        internal void BtnStartBureau_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Services.Bureau.BureauHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartBureau_Click failed");
+                MessageBox.Show("Couldn't open the Inspection Bureau:\n\n" + ex.Message,
+                    Services.Bureau.BureauHostService.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
         /// Lab → Chaos Mode hero card. Opens the setup/lobby window where the user
         /// configures the run; BEGIN CHAOS there persists settings and launches via
         /// <see cref="App.Chaos"/> (which owns the countdown, HUD and loop).
