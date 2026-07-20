@@ -1,6 +1,6 @@
 # STATUS: SP-012 — build per-window behavior manifest
 
-**Current Step:** Step 3 — Dashboard observability demonstrator
+**Current Step:** Step 4 — Board reconciliation + pre-completion consult
 **Last Updated:** 2026-07-20 (worker session start)
 
 ### Step 1: Retained-window inventory (completeness-checkable) + pre-approach consult
@@ -20,15 +20,15 @@
 - [x] Shared-chrome constraints section (constraints only, no design)
 
 ### Step 3: Dashboard observability demonstrator (observation-only)
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Procedures executed against dashboard on Windows (headed, zero product-code change)
-- [ ] Same on WSLg/X11 (session facts, never backend claims)
-- [ ] Unobservable fields recorded "procedure defined, not demonstrable on this window"
-- [ ] Per-field demonstrator outcome in manifest; evidence pointers in record.md
+- [x] Procedures executed against dashboard on Windows (headed, zero product-code change)
+- [x] Same on WSLg/X11 (session facts, never backend claims)
+- [x] Unobservable fields recorded "procedure defined, not demonstrable on this window"
+- [x] Per-field demonstrator outcome in manifest; evidence pointers in record.md
 
 ### Step 4: Board reconciliation + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] record.md complete (enumeration, classification, consult verdicts w/ actual answering model, engine-review presence, demonstrator evidence)
 - [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
