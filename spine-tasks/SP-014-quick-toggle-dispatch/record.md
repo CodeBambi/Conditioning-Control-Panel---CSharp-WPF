@@ -85,7 +85,13 @@ no speculative framework) and capability-inventory §Feature-card interaction.
   ID the explicit dispatch key end-to-end (falsifiably: title strings must NOT resolve).
 - `StatusTickerParticipant.FeatureId = "demo.status-ticker"` already exists as the stable ID.
 
-### Pre-approach consult (solo; requested Fable 5 — ACTUAL answering model recorded per T-7 rule)
+### Pre-approach consult (solo; provenance per T-7)
+
+**Provenance:** requested Fable 5, solo mode. The consult tool's response carried no
+answering-model identity; per the T-7 probe record the solo default route is Fable-family
+as configured, but the ACTUAL answering model is not verifiable per-call — recorded
+honestly as "solo default route (Fable-family per T-7 session verification); tool did not
+disclose the answering model."
 
 **Verdict: design approved — proceed; the Execute(parameter)→TryToggle shape is the honest
 minimal form.** Guards applied:
@@ -171,3 +177,38 @@ minimal form.** Guards applied:
   (`artifacts/wslg-dashboard-card-lit.bmp`, 488x96 DIP @ scale 1, 2449 lit-pink pixels;
   restore-driven lit state — a real user path, no input automation exists on WSLg per
   SP-008). Gesture evidence remains Windows-headed + headless draw-level (named limit).
+
+### Engine-review presence (T-2, per call)
+
+Review Level 2 (`## Review Level: 2` structured heading present). `spine_review_step`
+called after each step (type=plan):
+- Step 1 (de12d1e1): skipped=true, spawnFailed=false, reviewLevel=2 echoed —
+  `nested_spawn_blocked` in-worker BY DESIGN (SP-195/SP-278); engine runs reviews post-.DONE.
+- Step 2 (65a7002b): skipped=true, spawnFailed=false, reviewLevel=2 echoed — same by-design skip.
+- Step 3 (b3b921b6): skipped=true, spawnFailed=false, reviewLevel=2 echoed — same by-design skip.
+- Step 4: (recorded after the Step-4 commit below — same expected shape.)
+No REVISE, no spawn failure (fail-closed rule never triggered). Engine-side code+final
+reviews are expected AFTER .DONE per SP-195; their presence is the engine's to record.
+
+### Pre-completion consult (solo; provenance per T-7)
+
+**Provenance:** requested Fable 5, solo mode; tool did not disclose the answering model —
+same record as the pre-approach consult ("solo default route, Fable-family per T-7;
+unverifiable per-call").
+
+**Verdict: APPROVED with three small fixes before .DONE (no code changes).**
+(a) Honesty: no material gap — record.md keeps the distinction crisp that the greenfield
+pre-state was KEYLESS hard-wiring (the title-keyed mechanism lived only in the first
+attempt); "replaced" = first-attempt mechanism rejected + replacement contract implemented
+and falsifiably proven on one card. The one-entry dictionary is non-vacuous BECAUSE the
+negative tests bite. (b) No-context-menu negative: sufficient as a composite — the UIA
+Menu scan covers the overlay-popup configuration (Win32 OverlayPopups renders menus inside
+the owner hwnd, no new window), the window-count gate covers native popups, the structural
+headless check proves no menu exists to open, and immediate-toggle-on-press is the
+strongest behavioral proof. Advisor suggestion adopted: one clarifying sentence added to
+the contract doc. (c) Fixes applied before .DONE: (1) consult provenance completed (this
+note + the pre-approach note); (2) stray-process hygiene — the MSB3021 lock came from a
+leftover instance spawned by an UNCOMMITTED /tmp debug script (not the smoke, whose exit-0
+gate passed); final verification re-checks for CcpClient processes first; (3) final scope
+sweep — git status File-Scope-only, `git diff --check` clean, no client/tools/verify
+residue (verified clean).

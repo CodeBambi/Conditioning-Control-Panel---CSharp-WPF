@@ -82,7 +82,11 @@ identity) is what this contract ports.
   `ContextFlyout` exists or opens.
 - Windows-headed smoke (`spine-tasks/SP-014-quick-toggle-dispatch/`): real SendInput
   right-click toggles, ring pixel flip, persistence file proof, **toggle while the SP-013
-  modeless popup is open**, no-context-menu negative, title-region click parity.
+  modeless popup is open**, no-context-menu negative, title-region click parity. The
+  no-context-menu negative is a composite that covers BOTH menu configurations: the
+  process-window count catches a native popup menu, the UIA Menu/MenuItem scan inside the
+  dashboard subtree catches an overlay-rendered (in-window) menu, the headless structural
+  check proves no menu exists to open, and immediate toggle on press is the behavioral proof.
 
 ## Named limits (row stays WIP)
 

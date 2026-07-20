@@ -29,10 +29,10 @@
 ### Step 4: WSL2 gate + board reconciliation + pre-completion consult
 **Status:** 🔄 In Progress
 
-- [ ] WSL2 in-packet gate: contract green incl. title-mutation test; X11 session facts honest
-- [ ] record.md complete (archaeology, dispositions, consult provenance, engine-review presence, evidence)
-- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
-- [ ] task-board.md row → WIP with named limits (never DONE)
+- [x] WSL2 in-packet gate: contract green incl. title-mutation test; X11 session facts honest
+- [x] record.md complete (archaeology, dispositions, consult provenance, engine-review presence, evidence)
+- [x] Pre-completion solo Fable 5 consult (verdict in record.md)
+- [x] task-board.md row → WIP with named limits (never DONE)
 - [ ] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
