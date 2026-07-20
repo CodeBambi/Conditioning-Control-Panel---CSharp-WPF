@@ -1,16 +1,16 @@
 # STATUS: SP-015 — prove AvatarTube rendered animation
 
-**Current Step:** Not started
-**Last Updated:** 2026-07-20 (authored)
+**Current Step:** Step 1 — decoder claim verification + archaeology + pre-approach consult
+**Last Updated:** 2026-07-20 (Step 1 started)
 
 ### Step 1: Decoder claim verification + AvatarTube archaeology + pre-approach consult
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
-- [ ] STATUS.md updated before starting work
-- [ ] FIRST checkbox: pinned 12.1.0 decode/animate surface verified (never docs site); finding recorded
-- [ ] WPF + first-attempt archaeology with File.cs:line; leak REJECT lessons cited
-- [ ] Owner-transition demonstrable-vs-contract split decided from archaeology
-- [ ] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
+- [x] STATUS.md updated before starting work
+- [x] FIRST checkbox: pinned 12.1.0 decode/animate surface verified (never docs site); finding recorded
+- [x] WPF + first-attempt archaeology with File.cs:line; leak REJECT lessons cited
+- [x] Owner-transition demonstrable-vs-contract split decided from archaeology
+- [x] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
 
 ### Step 2: Synthetic asset pipeline + animation engine
 **Status:** ⬜ Not Started
