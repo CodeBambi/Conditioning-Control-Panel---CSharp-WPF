@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Graded Intake</title>
+    <!-- The in-app "Graded Intake" page. Served by the WebView2 IntakeWindow host
+         (Agent I) from https://ccp.game/intake/. Self-contained effect layer
+         (DOM/canvas/WebAudio) — NO coupling to WPF App.Flash/App.Bubbles. Media +
+         config + AI auth arrive over web-shim.js. No age gate / consent screen:
+         the host app owns consent. No remote fonts — offline. Portable to a gated
+         phone/web app later (web-shim's standalone path). -->
+    <link rel="stylesheet" href="./styles.css">
+
+    <!-- three.js resolved from DtRH's vendored ESM (Agent F reuses it, phone-safe).
+         Path is relative to this page's origin; under the host that is
+         https://ccp.game/intake/ so ../dtrh/vendor/... resolves to the shared vendor. -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "../dtrh/vendor/three/three.module.min.js",
+        "three/addons/": "../dtrh/vendor/three/addons/"
+      }
+    }
+    </script>
+</head>
+<body>
+    <!-- three.js tube background (Agent F); sits behind everything. -->
+    <canvas id="intake-bg" aria-hidden="true"></canvas>
+
+    <!-- The beat stage: prompts, options, in-page effects (Agents C/D/E draw here). -->
+    <main id="intake-stage" class="intake-stage" role="main"></main>
+
+    <!-- Minimal HUD (band · depth). Real render may replace/augment. -->
+    <div id="intake-hud" class="intake-hud" aria-hidden="true"></div>
+
+    <!-- Loader (covers the page until the first beat renders). -->
+    <div id="intake-loader" class="intake-loader">
+        <div class="intake-loader-ring" aria-hidden="true"></div>
+        <p>Opening <span id="intake-title">Graded Intake</span>&#8230;</p>
+    </div>
+
+    <script type="module" src="./boot.js"></script>
+</body>
+</html>

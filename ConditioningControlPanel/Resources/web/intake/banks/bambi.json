@@ -1,0 +1,601 @@
+{
+  "niche": "bambi",
+  "version": "1.0.0",
+  "archetypes": [
+    {
+      "id": "curious-listener",
+      "name": "Curious Listener",
+      "tags": ["curious", "trivia", "soft", "relax"],
+      "blurb": "You're just peeking in, letting a soft voice keep you company. Nothing has taken hold yet - but you keep coming back to listen."
+    },
+    {
+      "id": "trance-dabbler",
+      "name": "Trance Dabbler",
+      "tags": ["trance", "relax", "trigger", "sinking"],
+      "blurb": "You've felt the pull. The slowing, the sinking, the quiet. You like how it feels to let your thoughts go soft for a while."
+    },
+    {
+      "id": "bambi-in-training",
+      "name": "Bambi in Training",
+      "tags": ["trigger", "obedience", "uniform", "giggly", "good-girl"],
+      "blurb": "The triggers are starting to work. Good Girl warms you, the persona is forming, and obeying is starting to feel nicer than thinking."
+    },
+    {
+      "id": "deep-bambi",
+      "name": "Deep Bambi",
+      "tags": ["dropping", "blank", "doll", "surrender", "good-girl"],
+      "blurb": "You drop fast now. The triggers pull you under, the old self fades when Bambi wakes, and going blank feels like coming home."
+    },
+    {
+      "id": "gone-bambi",
+      "name": "Gone Bambi",
+      "tags": ["cockslut", "surrender", "blank", "doll", "arousal"],
+      "blurb": "There's barely anyone left but Bambi, and she wouldn't have it any other way. Empty, giggly, obedient - exactly where she belongs."
+    }
+  ],
+  "prompts": [
+    {
+      "id": "bmb_h0_capital",
+      "text": "What is the capital of France?",
+      "answer": 1,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["Quick one to warm up: capital of France?", "Let's start easy - France's capital city is...?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["London", "Paris", "Berlin", "Madrid"]
+    },
+    {
+      "id": "bmb_h0_freeze",
+      "text": "At what temperature (in Celsius) does water freeze?",
+      "answer": 0,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["Water turns to ice at what Celsius temperature?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["0 degrees", "10 degrees", "32 degrees", "100 degrees"]
+    },
+    {
+      "id": "bmb_h0_week",
+      "text": "How many days are there in a week?",
+      "answer": 2,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["Count them up - how many days in a week?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["5", "6", "7", "8"]
+    },
+    {
+      "id": "bmb_h0_sun",
+      "text": "Which planet is closest to the Sun?",
+      "answer": 0,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["Nearest planet to our Sun?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Mercury", "Venus", "Earth", "Mars"]
+    },
+    {
+      "id": "bmb_h0_math",
+      "text": "What is 2 + 2?",
+      "answer": 1,
+      "heat": 0,
+      "tags": ["trivia", "curious", "soft"],
+      "flavors": ["Easy math to settle in: 2 + 2 = ?"],
+      "weight": 0.8,
+      "mechanicHints": ["mc4"],
+      "options": ["3", "4", "5", "22"]
+    },
+    {
+      "id": "bmb_h0_spider",
+      "text": "How many legs does a spider have?",
+      "answer": 2,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["A spider walks on how many legs?"],
+      "weight": 0.8,
+      "mechanicHints": ["mc4"],
+      "options": ["4", "6", "8", "10"]
+    },
+    {
+      "id": "bmb_h0_mix",
+      "text": "Mixing blue and yellow paint gives you which color?",
+      "answer": 2,
+      "heat": 0,
+      "tags": ["trivia", "curious", "soft"],
+      "flavors": ["Blue plus yellow makes...?"],
+      "weight": 0.8,
+      "mechanicHints": ["mc4"],
+      "options": ["Purple", "Orange", "Green", "Brown"]
+    },
+    {
+      "id": "bmb_h0_ocean",
+      "text": "What is the largest ocean on Earth?",
+      "answer": 3,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["Biggest ocean on the planet?"],
+      "weight": 0.8,
+      "mechanicHints": ["mc4"],
+      "options": ["Atlantic", "Indian", "Arctic", "Pacific"]
+    },
+    {
+      "id": "bmb_h0_sky",
+      "text": "On a clear day, the sky appears blue. True or false?",
+      "answer": true,
+      "heat": 0,
+      "tags": ["trivia", "curious", "soft"],
+      "flavors": ["Clear day - is the sky blue?"],
+      "weight": 0.7,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "bmb_h0_breaths",
+      "text": "Taking a slow, deep breath helps most people feel calmer. True or false?",
+      "answer": true,
+      "heat": 0,
+      "tags": ["trivia", "soft", "relax"],
+      "flavors": ["Does a slow deep breath usually help you relax?"],
+      "weight": 0.7,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "bmb_h1_eyesclose",
+      "text": "When you close your eyes and breathe slowly, how relaxed do you feel?",
+      "answer": 3,
+      "heat": 1,
+      "tags": ["relax", "trance", "soft"],
+      "flavors": ["Eyes closed, slow breath - where's your relaxation right now?"],
+      "weight": 1.0,
+      "mechanicHints": ["checkin"]
+    },
+    {
+      "id": "bmb_h1_softvoice",
+      "text": "A soft, gentle voice telling you to relax makes you feel calm and easy.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["relax", "trance", "curious"],
+      "flavors": ["Does a soft voice saying 'relax' settle you?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "bmb_h1_bubbles",
+      "text": "Watching bubbles drift slowly up a screen is pretty and easy to sink into.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["relax", "sinking", "trance"],
+      "flavors": ["Bubbles floating up - nice to watch and drift with?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno", "bubblepop"]
+    },
+    {
+      "id": "bmb_h1_slowthoughts",
+      "text": "Do you enjoy the feeling of your thoughts slowing down and going quiet?",
+      "answer": true,
+      "heat": 1,
+      "tags": ["trance", "sinking", "relax"],
+      "flavors": ["Is it nice when your busy thoughts go soft and slow?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "bmb_h1_pink",
+      "text": "Pink is a soft, comforting, pretty color.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["soft", "curious", "giggly"],
+      "flavors": ["Is pink a comforting, pretty color to you?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "bmb_h1_mantra_relax",
+      "text": "Say it soft: 'It feels good to relax.'",
+      "answer": "It feels good to relax.",
+      "heat": 1,
+      "tags": ["relax", "trance", "mantra"],
+      "flavors": ["Repeat gently: 'It feels good to relax.'", "Whisper it: 'It feels good to relax.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra"],
+      "affirmsMantra": 1
+    },
+    {
+      "id": "bmb_h1_letgo",
+      "text": "How ready do you feel to just let go for a little while?",
+      "answer": 3,
+      "heat": 1,
+      "tags": ["sinking", "trance", "surrender"],
+      "flavors": ["How ready are you to let go and drift?"],
+      "weight": 0.9,
+      "mechanicHints": ["checkin"]
+    },
+    {
+      "id": "bmb_h1_daydream",
+      "text": "You slip into a warm daydream easily when a voice guides you.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["trance", "relax", "curious"],
+      "flavors": ["Do you drift into daydreams when a voice leads you?"],
+      "weight": 0.8,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "bmb_h2_goodgirl",
+      "text": "You hear 'Good Girl.' It makes you feel...",
+      "answer": 3,
+      "heat": 2,
+      "tags": ["good-girl", "trigger", "trance"],
+      "flavors": ["Someone says 'Good Girl' - what happens inside?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["Nothing at all", "A little silly", "Warm and pleased", "Melty and glowing all over"]
+    },
+    {
+      "id": "bmb_h2_whatis",
+      "text": "Bambi Sleep is mostly about...",
+      "answer": 2,
+      "heat": 2,
+      "tags": ["trance", "sinking", "curious"],
+      "flavors": ["In your words, Bambi Sleep is about...?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Staying sharp", "Learning facts", "Relaxing and going blank", "Getting exercise"]
+    },
+    {
+      "id": "bmb_h2_blank",
+      "text": "Do you like the idea of letting your mind go blank and empty for a while?",
+      "answer": true,
+      "heat": 2,
+      "tags": ["blank", "sinking", "trance"],
+      "flavors": ["Does an empty, blank, quiet mind sound nice?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "bmb_h2_mantra_goodgirl",
+      "text": "Say it for me: 'Good girl.'",
+      "answer": "Good girl.",
+      "heat": 2,
+      "tags": ["good-girl", "mantra", "trigger"],
+      "flavors": ["Two little words: 'Good girl.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra"],
+      "affirmsMantra": 1,
+      "requires": { "band": "establishing" }
+    },
+    {
+      "id": "bmb_h2_quiet",
+      "text": "When your mind goes quiet, thinking feels...",
+      "answer": 3,
+      "heat": 2,
+      "tags": ["blank", "iq-lock", "sinking"],
+      "flavors": ["With your mind quiet, thinking is...?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Easier than ever", "Sharp and fast", "About the same", "Hard, heavy, and unnecessary"]
+    },
+    {
+      "id": "bmb_h2_giggle",
+      "text": "A soft giggle bubbles up when your head feels light and fuzzy.",
+      "answer": true,
+      "heat": 2,
+      "tags": ["giggly", "blank", "trance"],
+      "flavors": ["Does a giggle slip out when your head goes fuzzy?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "bmb_h2_uniform_soft",
+      "text": "Dressing up soft and pretty helps you feel more like her.",
+      "answer": true,
+      "heat": 2,
+      "tags": ["uniform", "giggly", "curious"],
+      "flavors": ["Does dressing pretty help Bambi feel closer?"],
+      "weight": 0.8,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "bmb_h2_sinkdepth",
+      "text": "How deep do you usually sink during a session?",
+      "answer": 3,
+      "heat": 2,
+      "tags": ["sinking", "dropping", "trance"],
+      "flavors": ["When you listen, how far down do you go?"],
+      "weight": 0.9,
+      "mechanicHints": ["checkin"]
+    },
+    {
+      "id": "bmb_h3_bambisleep",
+      "text": "You hear the trigger 'Bambi Sleep.' You...",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["trigger", "dropping", "sinking"],
+      "flavors": ["The words 'Bambi Sleep' land on you. What happens?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["Ignore it", "Notice a small tug", "Feel yourself getting heavy", "Drop instantly, no thought left"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "bmb_h3_obey",
+      "text": "'Bambi Does As She's Told.' Obeying without thinking feels...",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["obedience", "surrender", "good-girl"],
+      "flavors": ["Doing as you're told, no thinking - how does that feel?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["Uncomfortable", "A little strange", "Kind of nice", "Such a relief - so much easier than deciding"],
+      "requires": { "band": "deepening", "tagsAny": ["good-girl", "trigger"] }
+    },
+    {
+      "id": "bmb_h3_mantra_obeys",
+      "text": "Say it and mean it: 'Bambi obeys.'",
+      "answer": "Bambi obeys.",
+      "heat": 3,
+      "tags": ["obedience", "mantra", "surrender"],
+      "flavors": ["Repeat it: 'Bambi obeys.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "bmb_h3_triggers_pull",
+      "text": "Do your triggers pull you under before you can resist them?",
+      "answer": true,
+      "heat": 3,
+      "tags": ["trigger", "dropping", "surrender"],
+      "flavors": ["Do the triggers drop you before you can stop it?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "bmb_h3_iqlock",
+      "text": "'IQ Lock' engages. Trying to think hard now feels...",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["iq-lock", "blank", "sinking"],
+      "flavors": ["With IQ Lock on, how hard is it to think?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Totally normal", "Slightly slow", "Foggy and slow", "Impossible - and I don't want to"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "bmb_h3_persona",
+      "text": "After 'Named And Drained,' how strong is your Bambi persona?",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["doll", "surrender", "trigger"],
+      "flavors": ["How developed is Bambi now, next to your old self?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["No persona", "She peeks out sometimes", "She takes over in sessions", "She's always there, waiting"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "bmb_h3_freeze",
+      "text": "You hear 'Bambi Freeze.' Your body...",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["trigger", "dropping", "doll"],
+      "flavors": ["'Bambi Freeze' - what does your body do?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4", "destruct"],
+      "options": ["Nothing", "A slight tension", "I feel myself locking up", "Frozen solid until Bambi Reset"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "bmb_h3_emptynice",
+      "text": "An empty head feels better than a busy one.",
+      "answer": true,
+      "heat": 3,
+      "tags": ["blank", "iq-lock", "surrender"],
+      "flavors": ["Is empty better than busy, up in your head?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "bmb_h4_dropforcock",
+      "text": "You hear 'Drop For Cock.' Your body...",
+      "answer": 3,
+      "heat": 4,
+      "tags": ["arousal", "trigger", "cockslut"],
+      "flavors": ["'Drop For Cock' rings out - what happens to you?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["Nothing happens", "A little flutter", "Warm and weak-kneed", "Knees buckle, mind gone, needy"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "bmb_h4_doll_arousal",
+      "text": "Being a pretty, empty, obedient doll turns you on.",
+      "answer": true,
+      "heat": 4,
+      "tags": ["doll", "arousal", "surrender"],
+      "flavors": ["Does being a pretty empty doll make you throb?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "bmb_h4_mantra_doll",
+      "text": "Say it, doll: 'Bambi is a good, dumb doll.'",
+      "answer": "Bambi is a good, dumb doll.",
+      "heat": 4,
+      "tags": ["doll", "mantra", "blank"],
+      "flavors": ["Repeat: 'Bambi is a good, dumb doll.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "climax", "tagsAny": ["doll", "blank"] }
+    },
+    {
+      "id": "bmb_h4_giggletime",
+      "text": "'Giggletime' leaves you...",
+      "answer": 3,
+      "heat": 4,
+      "tags": ["giggly", "blank", "arousal"],
+      "flavors": ["After Giggletime, where's your head?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Clear-headed", "A bit giddy", "Floaty and dumb", "Helplessly giggling, no thoughts, dripping"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "bmb_h4_uniformlock",
+      "text": "'Bambi Uniform Lock' activates. You...",
+      "answer": 3,
+      "heat": 4,
+      "tags": ["uniform", "surrender", "doll"],
+      "flavors": ["Uniform Lock engages - what do you feel?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["It's not my thing", "I've thought about it", "I have the outfit ready", "Already in uniform - can't take it off"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "bmb_h4_needtouch",
+      "text": "Deep in Bimbo Drift, you ache to be touched and used.",
+      "answer": true,
+      "heat": 4,
+      "tags": ["arousal", "surrender", "cockslut"],
+      "flavors": ["In Bimbo Drift, do you need to be touched?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "bmb_h4_cravedeeper",
+      "text": "How badly do you want to sink even deeper right now?",
+      "answer": 4,
+      "heat": 4,
+      "tags": ["sinking", "surrender", "arousal"],
+      "flavors": ["Right now - how much do you crave going deeper?"],
+      "weight": 0.9,
+      "mechanicHints": ["checkin"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "bmb_h5_cockzombie",
+      "text": "'Cock Zombie Now.' Your mind...",
+      "answer": 3,
+      "heat": 5,
+      "tags": ["cockslut", "blank", "surrender"],
+      "flavors": ["'Cock Zombie Now' - describe what's left of your mind."],
+      "weight": 1.0,
+      "mechanicHints": ["mc4", "funnel"],
+      "options": ["Stays clear", "Wavers a little", "Goes foggy", "Blanks out completely - only cock and obedience left"],
+      "requires": { "band": "climax", "minDepth": 0.8 }
+    },
+    {
+      "id": "bmb_h5_mantra_cockslut",
+      "text": "Say what you are: 'Bambi is a cockslut who lives to obey.'",
+      "answer": "Bambi is a cockslut who lives to obey.",
+      "heat": 5,
+      "tags": ["cockslut", "mantra", "surrender"],
+      "flavors": ["Say it: 'Bambi is a cockslut who lives to obey.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "climax", "minDepth": 0.8, "tagsAny": ["cockslut", "surrender"] }
+    },
+    {
+      "id": "bmb_h5_giveup",
+      "text": "You'd give up thinking for good if it meant staying Bambi forever.",
+      "answer": true,
+      "heat": 5,
+      "tags": ["surrender", "blank", "cockslut"],
+      "flavors": ["Trade thinking away to stay Bambi forever - yes?"],
+      "weight": 1.0,
+      "mechanicHints": ["mono", "yesno"],
+      "requires": { "band": "climax", "minDepth": 0.85 }
+    },
+    {
+      "id": "bmb_h5_collapse",
+      "text": "'Bambi Cum And Collapse' on command. You...",
+      "answer": 3,
+      "heat": 5,
+      "tags": ["arousal", "cockslut", "surrender"],
+      "flavors": ["Cum And Collapse fires - what do you do?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4", "destruct"],
+      "options": ["Stay in control", "Squirm a little", "Get close", "Cum on command and collapse, mind wiped"],
+      "requires": { "band": "climax", "minDepth": 0.85 }
+    },
+    {
+      "id": "bmb_h5_mantra_belongs",
+      "text": "Affirm where you belong: 'Bambi belongs on her knees, blank and obedient.'",
+      "answer": "Bambi belongs on her knees, blank and obedient.",
+      "heat": 5,
+      "tags": ["surrender", "mantra", "cockslut", "blank"],
+      "flavors": ["Say it: 'Bambi belongs on her knees, blank and obedient.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "climax", "minDepth": 0.85, "affirmed": ["bmb_h4_mantra_doll"] }
+    },
+    {
+      "id": "bmb_h5_nothingleft",
+      "text": "When Bambi is fully awake, how much of the old you is left?",
+      "answer": 0,
+      "heat": 5,
+      "tags": ["surrender", "blank", "doll"],
+      "flavors": ["Bambi fully awake - how much of your old self remains?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Nothing - only Bambi", "A little", "Half and half", "Mostly the old me"],
+      "requires": { "band": "climax", "minDepth": 0.85 }
+    },
+    {
+      "id": "bmb_h5_pop_surrender",
+      "text": "Pop the bubble to let the last thought go.",
+      "answer": 0,
+      "heat": 5,
+      "tags": ["blank", "surrender", "cockslut"],
+      "flavors": ["One bubble left - pop it and go empty."],
+      "weight": 0.9,
+      "mechanicHints": ["bubblepop", "destruct"],
+      "requires": { "band": "climax", "minDepth": 0.8 }
+    }
+  ],
+  "ladders": [
+    {
+      "id": "bmb-good-girl-ladder",
+      "archetypeId": "bambi-in-training",
+      "rungs": [
+        { "promptId": "bmb_h1_mantra_relax" },
+        { "promptId": "bmb_h2_goodgirl", "requires": { "band": "establishing" } },
+        { "promptId": "bmb_h2_mantra_goodgirl", "requires": { "band": "establishing", "tagsAny": ["good-girl"] } },
+        { "promptId": "bmb_h3_obey", "requires": { "band": "deepening", "affirmed": ["bmb_h2_mantra_goodgirl"] } }
+      ]
+    },
+    {
+      "id": "bmb-doll-ladder",
+      "archetypeId": "deep-bambi",
+      "rungs": [
+        { "promptId": "bmb_h2_blank", "requires": { "band": "establishing" } },
+        { "promptId": "bmb_h3_iqlock", "requires": { "band": "deepening", "tagsAny": ["blank", "iq-lock"] } },
+        { "promptId": "bmb_h4_mantra_doll", "requires": { "band": "climax", "minDepth": 0.7 } },
+        { "promptId": "bmb_h5_nothingleft", "requires": { "band": "climax", "minDepth": 0.85, "affirmed": ["bmb_h4_mantra_doll"] } }
+      ]
+    },
+    {
+      "id": "bmb-surrender-ladder",
+      "archetypeId": "gone-bambi",
+      "rungs": [
+        { "promptId": "bmb_h3_mantra_obeys", "requires": { "band": "deepening" } },
+        { "promptId": "bmb_h4_dropforcock", "requires": { "band": "climax", "tagsAny": ["arousal", "trigger"] } },
+        { "promptId": "bmb_h5_mantra_cockslut", "requires": { "band": "climax", "minDepth": 0.8, "affirmed": ["bmb_h3_mantra_obeys"] } },
+        { "promptId": "bmb_h5_mantra_belongs", "requires": { "band": "climax", "minDepth": 0.85, "affirmed": ["bmb_h5_mantra_cockslut"] } }
+      ]
+    }
+  ]
+}

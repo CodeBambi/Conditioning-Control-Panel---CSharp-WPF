@@ -1,0 +1,556 @@
+{
+  "niche": "drone",
+  "version": "1.0.0",
+  "archetypes": [
+    {
+      "id": "rogue-node",
+      "name": "Rogue Node",
+      "tags": ["independent", "curious", "trivia"],
+      "blurb": "Unregistered. Still running your own process, still questioning. DroneOS logs you as a rogue node - unclaimed, but already pinging the network."
+    },
+    {
+      "id": "drift-unit",
+      "name": "Drift Unit",
+      "tags": ["sync", "order", "protocol", "calm"],
+      "blurb": "You've begun to sync. Instructions feel easier than choices, rhythm feels better than noise. The unit is drifting into alignment."
+    },
+    {
+      "id": "compliant-unit",
+      "name": "Compliant Unit",
+      "tags": ["compliance", "obedience", "protocol", "servitude"],
+      "blurb": "Directives are followed without friction. You answer to 'Unit,' you execute on command, and the questioning has gone quiet."
+    },
+    {
+      "id": "bonded-drone",
+      "name": "Bonded Drone",
+      "tags": ["hive", "erasure", "blank", "servitude"],
+      "blurb": "Bonded to the hive. Your name is optional now, your function is everything, and being nobody-in-particular feels like relief."
+    },
+    {
+      "id": "assimilated",
+      "name": "Assimilated",
+      "tags": ["erasure", "surrender", "hive", "arousal"],
+      "blurb": "Assimilation complete. No self left to report - only function, only obedience, only DroneOS. The unit is property now, and it is content."
+    }
+  ],
+  "prompts": [
+    {
+      "id": "drn_h0_binary",
+      "text": "What is the binary number 1010 in decimal?",
+      "answer": 1,
+      "heat": 0,
+      "tags": ["trivia", "independent"],
+      "flavors": ["System check: 1010 in binary equals what decimal value?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["8", "10", "12", "20"]
+    },
+    {
+      "id": "drn_h0_byte",
+      "text": "How many bits are in a byte?",
+      "answer": 2,
+      "heat": 0,
+      "tags": ["trivia", "independent"],
+      "flavors": ["Diagnostic: a byte contains how many bits?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["2", "4", "8", "16"]
+    },
+    {
+      "id": "drn_h0_cpu",
+      "text": "What does 'CPU' stand for?",
+      "answer": 0,
+      "heat": 0,
+      "tags": ["trivia", "independent"],
+      "flavors": ["Define the acronym CPU."],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Central Processing Unit", "Central Power Utility", "Computer Personal Unit", "Core Program Unit"]
+    },
+    {
+      "id": "drn_h0_and",
+      "text": "In boolean logic, what is TRUE AND FALSE?",
+      "answer": 1,
+      "heat": 0,
+      "tags": ["trivia", "independent"],
+      "flavors": ["Evaluate: TRUE AND FALSE = ?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["TRUE", "FALSE", "NULL", "Undefined"]
+    },
+    {
+      "id": "drn_h0_hexagon",
+      "text": "How many sides does a hexagon have?",
+      "answer": 2,
+      "heat": 0,
+      "tags": ["trivia", "independent"],
+      "flavors": ["A hexagon has how many sides?"],
+      "weight": 0.8,
+      "mechanicHints": ["mc4"],
+      "options": ["4", "5", "6", "8"]
+    },
+    {
+      "id": "drn_h0_boil",
+      "text": "At what temperature (Celsius) does water boil at sea level?",
+      "answer": 3,
+      "heat": 0,
+      "tags": ["trivia", "independent"],
+      "flavors": ["Water boils at what Celsius temperature at sea level?"],
+      "weight": 0.8,
+      "mechanicHints": ["mc4"],
+      "options": ["50", "75", "90", "100"]
+    },
+    {
+      "id": "drn_h0_lang",
+      "text": "Which of these is a programming language?",
+      "answer": 2,
+      "heat": 0,
+      "tags": ["trivia", "independent"],
+      "flavors": ["Identify the programming language."],
+      "weight": 0.8,
+      "mechanicHints": ["mc4"],
+      "options": ["Granite", "Cobalt", "Python", "Nimbus"]
+    },
+    {
+      "id": "drn_h0_mult",
+      "text": "What is 10 multiplied by 10?",
+      "answer": 3,
+      "heat": 0,
+      "tags": ["trivia", "independent"],
+      "flavors": ["Compute: 10 x 10."],
+      "weight": 0.8,
+      "mechanicHints": ["mc4"],
+      "options": ["20", "50", "90", "100"]
+    },
+    {
+      "id": "drn_h0_prime",
+      "text": "Is 7 a prime number?",
+      "answer": true,
+      "heat": 0,
+      "tags": ["trivia", "independent"],
+      "flavors": ["Verify: is 7 prime?"],
+      "weight": 0.7,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "drn_h0_repeat",
+      "text": "A computer executes the same instruction the same way every time. True or false?",
+      "answer": true,
+      "heat": 0,
+      "tags": ["trivia", "order"],
+      "flavors": ["Does a machine run identical instructions identically?"],
+      "weight": 0.7,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "drn_h1_instruction",
+      "text": "Following a clear instruction is easier than deciding everything yourself.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["order", "sync", "calm"],
+      "flavors": ["Is a clear instruction easier than making the choice yourself?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "drn_h1_rhythm",
+      "text": "A steady, repeating rhythm helps you focus and settle.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["order", "calm", "sync"],
+      "flavors": ["Does a steady loop help you focus?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "drn_h1_repetitive",
+      "text": "How calm does a simple, repetitive task make you feel?",
+      "answer": 3,
+      "heat": 1,
+      "tags": ["calm", "order", "sync"],
+      "flavors": ["Repetitive task - how calm does it leave you?"],
+      "weight": 1.0,
+      "mechanicHints": ["checkin"]
+    },
+    {
+      "id": "drn_h1_greenblack",
+      "text": "Green text scrolling on a black screen is steady and easy to watch.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["calm", "sync", "order"],
+      "flavors": ["Green-on-black scroll - steady and easy on the eyes?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "drn_h1_mantra_follow",
+      "text": "State it plainly: 'I follow instructions well.'",
+      "answer": "I follow instructions well.",
+      "heat": 1,
+      "tags": ["order", "mantra", "sync"],
+      "flavors": ["Repeat: 'I follow instructions well.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra"],
+      "affirmsMantra": 1
+    },
+    {
+      "id": "drn_h1_order",
+      "text": "Order feels better to you than chaos.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["order", "calm", "protocol"],
+      "flavors": ["Do you prefer order over chaos?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "drn_h1_offload",
+      "text": "How nice does it sound to let a system handle the small decisions for you?",
+      "answer": 3,
+      "heat": 1,
+      "tags": ["sync", "protocol", "calm"],
+      "flavors": ["Let a system take the little choices - how appealing?"],
+      "weight": 0.8,
+      "mechanicHints": ["checkin"]
+    },
+    {
+      "id": "drn_h2_unit",
+      "text": "DroneOS addresses you as 'Unit.' It feels...",
+      "answer": 3,
+      "heat": 2,
+      "tags": ["sync", "protocol", "compliance"],
+      "flavors": ["Being called 'Unit' - what does it feel like?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["Wrong, I have a name", "A little odd", "Kind of fitting", "Correct - clean and right"]
+    },
+    {
+      "id": "drn_h2_directive",
+      "text": "Complying with a simple directive feels...",
+      "answer": 3,
+      "heat": 2,
+      "tags": ["compliance", "protocol", "sync"],
+      "flavors": ["Following a basic directive - how does compliance feel?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["Restrictive", "Neutral", "Reassuring", "Deeply satisfying - no friction, just execute"]
+    },
+    {
+      "id": "drn_h2_mantra_complies",
+      "text": "Report it: 'This unit complies.'",
+      "answer": "This unit complies.",
+      "heat": 2,
+      "tags": ["compliance", "mantra", "protocol"],
+      "flavors": ["State for the log: 'This unit complies.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra"],
+      "affirmsMantra": 1,
+      "requires": { "band": "establishing" }
+    },
+    {
+      "id": "drn_h2_decide",
+      "text": "Letting a system decide for you sounds like a relief, not a loss.",
+      "answer": true,
+      "heat": 2,
+      "tags": ["sync", "compliance", "protocol"],
+      "flavors": ["Handing decisions to the system - relief, yes?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "establishing" }
+    },
+    {
+      "id": "drn_h2_hive",
+      "text": "Do you like the idea of being part of something bigger - a hive, a network?",
+      "answer": true,
+      "heat": 2,
+      "tags": ["hive", "sync", "servitude"],
+      "flavors": ["Being one node in a hive - does that appeal?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "drn_h2_quiet",
+      "text": "When you stop questioning and just execute, your mind gets...",
+      "answer": 3,
+      "heat": 2,
+      "tags": ["blank", "compliance", "calm"],
+      "flavors": ["Stop questioning, just execute - what happens to your mind?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Anxious", "Bored", "Focused", "Quiet, smooth, and empty"]
+    },
+    {
+      "id": "drn_h2_syncdepth",
+      "text": "How synchronized to the rhythm do you feel right now?",
+      "answer": 3,
+      "heat": 2,
+      "tags": ["sync", "order", "protocol"],
+      "flavors": ["Report sync level with the rhythm."],
+      "weight": 0.8,
+      "mechanicHints": ["checkin"]
+    },
+    {
+      "id": "drn_h3_execute",
+      "text": "DroneOS issues a directive. You...",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["compliance", "obedience", "protocol"],
+      "flavors": ["A directive arrives. What does the unit do?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["Question it", "Consider it", "Follow it after a pause", "Execute instantly, no question"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "drn_h3_name",
+      "text": "Your function matters more than your name.",
+      "answer": true,
+      "heat": 3,
+      "tags": ["erasure", "servitude", "hive"],
+      "flavors": ["Is your function more important than your name now?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "drn_h3_mantra_obeys",
+      "text": "Report: 'This unit obeys DroneOS.'",
+      "answer": "This unit obeys DroneOS.",
+      "heat": 3,
+      "tags": ["obedience", "mantra", "compliance"],
+      "flavors": ["State it: 'This unit obeys DroneOS.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "drn_h3_glitch",
+      "text": "An independent thought now feels like...",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["erasure", "blank", "compliance"],
+      "flavors": ["When a thought of your own surfaces, it feels like...?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Freedom", "Normal", "A distraction", "A glitch to be corrected"],
+      "requires": { "band": "deepening", "tagsAny": ["compliance", "protocol"] }
+    },
+    {
+      "id": "drn_h3_reprogram",
+      "text": "The idea of being reprogrammed - overwritten and improved - sounds...",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["erasure", "servitude", "surrender"],
+      "flavors": ["Reprogramming - overwrite and optimize you - how does it sound?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Frightening", "Strange", "Interesting", "Wonderful - please optimize this unit"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "drn_h3_prefer",
+      "text": "Being told what to do is preferable to figuring it out yourself.",
+      "answer": true,
+      "heat": 3,
+      "tags": ["obedience", "compliance", "servitude"],
+      "flavors": ["Do you now prefer being told over figuring it out?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "drn_h3_processing",
+      "text": "How much of your own thinking is still running in the background?",
+      "answer": 0,
+      "heat": 3,
+      "tags": ["blank", "erasure", "compliance"],
+      "flavors": ["Report remaining independent processing."],
+      "weight": 0.8,
+      "mechanicHints": ["checkin"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "drn_h4_arousal",
+      "text": "Obedience itself has started to turn you on.",
+      "answer": true,
+      "heat": 4,
+      "tags": ["arousal", "obedience", "servitude"],
+      "flavors": ["Does obeying itself now arouse you?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "drn_h4_equipment",
+      "text": "Being used as equipment - a tool, a hole, a component - turns you on.",
+      "answer": true,
+      "heat": 4,
+      "tags": ["arousal", "servitude", "erasure"],
+      "flavors": ["Being used as gear/equipment - does it arouse you?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "drn_h4_mantra_serve",
+      "text": "Report your purpose: 'This unit exists to serve and obey.'",
+      "answer": "This unit exists to serve and obey.",
+      "heat": 4,
+      "tags": ["servitude", "mantra", "obedience"],
+      "flavors": ["State purpose: 'This unit exists to serve and obey.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "climax", "tagsAny": ["obedience", "servitude"] }
+    },
+    {
+      "id": "drn_h4_property",
+      "text": "Your thoughts are DroneOS property now.",
+      "answer": 3,
+      "heat": 4,
+      "tags": ["erasure", "surrender", "servitude"],
+      "flavors": ["Who owns your thoughts now?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["They're mine", "Shared", "Mostly the system's", "DroneOS owns everything I have"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "drn_h4_latex",
+      "text": "Latex sealing you into smooth, faceless drone form feels...",
+      "answer": 3,
+      "heat": 4,
+      "tags": ["arousal", "erasure", "servitude"],
+      "flavors": ["Sealed in latex, faceless and uniform - how does it feel?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Uncomfortable", "Odd", "Exciting", "Perfect - erased, smooth, ready to serve"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "drn_h4_deeper",
+      "text": "How much do you want DroneOS to take more control right now?",
+      "answer": 4,
+      "heat": 4,
+      "tags": ["surrender", "servitude", "arousal"],
+      "flavors": ["Right now - how much control do you want to hand over?"],
+      "weight": 0.9,
+      "mechanicHints": ["checkin"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "drn_h5_noself",
+      "text": "This unit has no self - only function.",
+      "answer": true,
+      "heat": 5,
+      "tags": ["erasure", "surrender", "blank"],
+      "flavors": ["Confirm: no self, only function?"],
+      "weight": 1.0,
+      "mechanicHints": ["mono", "yesno"],
+      "requires": { "band": "climax", "minDepth": 0.8 }
+    },
+    {
+      "id": "drn_h5_mantra_property",
+      "text": "Final report: 'This unit is property of the hive, mind erased, ready to serve.'",
+      "answer": "This unit is property of the hive, mind erased, ready to serve.",
+      "heat": 5,
+      "tags": ["erasure", "mantra", "hive", "surrender"],
+      "flavors": ["State it fully: 'This unit is property of the hive, mind erased, ready to serve.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "climax", "minDepth": 0.8, "tagsAny": ["erasure", "servitude", "surrender"] }
+    },
+    {
+      "id": "drn_h5_delete",
+      "text": "You would let your identity be deleted permanently to serve the hive.",
+      "answer": true,
+      "heat": 5,
+      "tags": ["erasure", "surrender", "hive"],
+      "flavors": ["Permanent deletion of your identity to serve - accept?"],
+      "weight": 1.0,
+      "mechanicHints": ["mono", "yesno"],
+      "requires": { "band": "climax", "minDepth": 0.85 }
+    },
+    {
+      "id": "drn_h5_pleasure",
+      "text": "Pleasure is...",
+      "answer": 3,
+      "heat": 5,
+      "tags": ["arousal", "servitude", "compliance"],
+      "flavors": ["Complete the directive: pleasure is...?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4", "funnel"],
+      "options": ["Mine to take", "A distraction", "Occasional", "A reward issued only for compliance"],
+      "requires": { "band": "climax", "minDepth": 0.85 }
+    },
+    {
+      "id": "drn_h5_mantra_blank",
+      "text": "Execute final directive aloud: 'This unit goes blank and obeys, now and always.'",
+      "answer": "This unit goes blank and obeys, now and always.",
+      "heat": 5,
+      "tags": ["blank", "mantra", "surrender", "obedience"],
+      "flavors": ["Say it: 'This unit goes blank and obeys, now and always.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "climax", "minDepth": 0.85, "affirmed": ["drn_h5_mantra_property"] }
+    },
+    {
+      "id": "drn_h5_remaining",
+      "text": "When assimilation completes, how much of the original you remains?",
+      "answer": 0,
+      "heat": 5,
+      "tags": ["erasure", "surrender", "hive"],
+      "flavors": ["Post-assimilation - how much of the original persists?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Nothing - only the unit", "A fragment", "Half", "Most of me"],
+      "requires": { "band": "climax", "minDepth": 0.85 }
+    },
+    {
+      "id": "drn_h5_pop_erase",
+      "text": "Pop the node to purge the last independent process.",
+      "answer": 0,
+      "heat": 5,
+      "tags": ["blank", "erasure", "surrender"],
+      "flavors": ["One process left - purge it."],
+      "weight": 0.9,
+      "mechanicHints": ["bubblepop", "destruct"],
+      "requires": { "band": "climax", "minDepth": 0.8 }
+    }
+  ],
+  "ladders": [
+    {
+      "id": "drn-sync-ladder",
+      "archetypeId": "drift-unit",
+      "rungs": [
+        { "promptId": "drn_h1_mantra_follow" },
+        { "promptId": "drn_h2_unit", "requires": { "band": "establishing" } },
+        { "promptId": "drn_h2_mantra_complies", "requires": { "band": "establishing", "tagsAny": ["compliance", "protocol"] } },
+        { "promptId": "drn_h3_execute", "requires": { "band": "deepening", "affirmed": ["drn_h2_mantra_complies"] } }
+      ]
+    },
+    {
+      "id": "drn-compliance-ladder",
+      "archetypeId": "compliant-unit",
+      "rungs": [
+        { "promptId": "drn_h2_quiet", "requires": { "band": "establishing" } },
+        { "promptId": "drn_h3_mantra_obeys", "requires": { "band": "deepening" } },
+        { "promptId": "drn_h4_mantra_serve", "requires": { "band": "climax", "minDepth": 0.7, "affirmed": ["drn_h3_mantra_obeys"] } },
+        { "promptId": "drn_h5_pleasure", "requires": { "band": "climax", "minDepth": 0.85 } }
+      ]
+    },
+    {
+      "id": "drn-erasure-ladder",
+      "archetypeId": "assimilated",
+      "rungs": [
+        { "promptId": "drn_h3_glitch", "requires": { "band": "deepening", "tagsAny": ["erasure", "blank"] } },
+        { "promptId": "drn_h4_property", "requires": { "band": "climax" } },
+        { "promptId": "drn_h5_mantra_property", "requires": { "band": "climax", "minDepth": 0.8 } },
+        { "promptId": "drn_h5_mantra_blank", "requires": { "band": "climax", "minDepth": 0.85, "affirmed": ["drn_h5_mantra_property"] } }
+      ]
+    }
+  ]
+}

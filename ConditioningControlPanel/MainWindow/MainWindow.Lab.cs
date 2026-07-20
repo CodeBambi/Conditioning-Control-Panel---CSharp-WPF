@@ -93,6 +93,41 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Lab → "Graded Intake" web-core rework. Hosts the decoupled intake page
+        /// (Resources/web/intake) in a WebView2 window via <see cref="Services.Quiz.IntakeHostService"/>,
+        /// which drafts a themed CCP session from the run's QuizRunResult. Gated the same way as the
+        /// classic AI quiz above (App.Ai.IsAvailable = cloud identity or Patreon AI access), since the
+        /// intake's server AI accent uses the same Patreon-bearer gate.
+        /// </summary>
+        internal void BtnStartIntake_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Already open? Just focus it — never re-launch a live run.
+                if (Services.Quiz.IntakeHostService.IsActive)
+                {
+                    Services.Quiz.IntakeHostService.Launch();
+                    return;
+                }
+
+                if (App.Ai == null || !App.Ai.IsAvailable)
+                {
+                    MessageBox.Show(Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"), "Login Required",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                Services.Quiz.IntakeHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartIntake_Click failed");
+                MessageBox.Show("Couldn't start Graded Intake:\n\n" + ex.Message, "Graded Intake",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
         /// Lab → Chaos Mode hero card. Opens the setup/lobby window where the user
         /// configures the run; BEGIN CHAOS there persists settings and launches via
         /// <see cref="App.Chaos"/> (which owns the countdown, HUD and loop).

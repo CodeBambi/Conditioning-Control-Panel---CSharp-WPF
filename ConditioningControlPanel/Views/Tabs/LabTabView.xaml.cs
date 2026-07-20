@@ -77,6 +77,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnStartQuiz_Click(sender, e);
         }
+        private void BtnStartIntake_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnStartIntake_Click(sender, e);
+        }
         private void BtnTestPopQuiz_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

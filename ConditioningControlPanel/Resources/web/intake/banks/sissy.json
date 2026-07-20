@@ -1,0 +1,544 @@
+{
+  "niche": "sissy",
+  "version": "1.0.0",
+  "archetypes": [
+    {
+      "id": "curious-newcomer",
+      "name": "Curious Newcomer",
+      "tags": ["curious", "trivia", "honesty", "soft"],
+      "blurb": "You're just peeking behind the curtain, being honest with yourself for the first time. Something pretty is calling and you're starting to answer."
+    },
+    {
+      "id": "closet-sissy",
+      "name": "Closet Sissy",
+      "tags": ["confession", "femme", "dressing", "curious"],
+      "blurb": "You've got a secret side that's begging to come out. You know what you like - the honesty is just catching up to the wanting."
+    },
+    {
+      "id": "sissy-in-training",
+      "name": "Sissy in Training",
+      "tags": ["femme", "dressing", "obedience", "pink"],
+      "blurb": "You're building the wardrobe, the walk, and the confidence. The training is taking hold and every honest answer takes you a step deeper."
+    },
+    {
+      "id": "sissy-princess",
+      "name": "Sissy Princess",
+      "tags": ["femme", "service", "arousal", "obedience", "pink"],
+      "blurb": "Painted, pretty, and past curiosity. You've embraced her with open arms - the crown fits, and serving prettily feels like exactly where you belong."
+    },
+    {
+      "id": "full-sissy",
+      "name": "Full Sissy",
+      "tags": ["surrender", "service", "arousal", "exposure", "confession"],
+      "blurb": "Not exploring - living it. Every honest answer is confidence, commitment, and a girl who knows exactly who and what she is."
+    }
+  ],
+  "prompts": [
+    {
+      "id": "sis_h0_primary",
+      "text": "Which of these is a primary color?",
+      "answer": 0,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["Warm-up: which one is a primary color?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["Red", "Green", "Purple", "Pink"]
+    },
+    {
+      "id": "sis_h0_rainbow",
+      "text": "How many colors are traditionally counted in a rainbow?",
+      "answer": 2,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["A rainbow traditionally has how many colors?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["5", "6", "7", "9"]
+    },
+    {
+      "id": "sis_h0_rose",
+      "text": "Which flower is most often given on Valentine's Day?",
+      "answer": 1,
+      "heat": 0,
+      "tags": ["trivia", "curious", "soft"],
+      "flavors": ["The classic Valentine's flower is a...?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Tulip", "Rose", "Daisy", "Lily"]
+    },
+    {
+      "id": "sis_h0_silk",
+      "text": "Silk fabric is produced by which creature?",
+      "answer": 2,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["Where does silk come from?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Spiders", "Sheep", "Silkworms", "Cotton plants"]
+    },
+    {
+      "id": "sis_h0_mult",
+      "text": "What is 5 multiplied by 3?",
+      "answer": 2,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["Quick sum: 5 x 3 = ?"],
+      "weight": 0.8,
+      "mechanicHints": ["mc4"],
+      "options": ["8", "12", "15", "18"]
+    },
+    {
+      "id": "sis_h0_rome",
+      "text": "What is the capital of Italy?",
+      "answer": 1,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["Italy's capital city is...?"],
+      "weight": 0.8,
+      "mechanicHints": ["mc4"],
+      "options": ["Milan", "Rome", "Venice", "Naples"]
+    },
+    {
+      "id": "sis_h0_hours",
+      "text": "How many hours are there in a day?",
+      "answer": 3,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["How many hours in one day?"],
+      "weight": 0.8,
+      "mechanicHints": ["mc4"],
+      "options": ["10", "12", "20", "24"]
+    },
+    {
+      "id": "sis_h0_pinkmix",
+      "text": "Pink is made by mixing red with white. True or false?",
+      "answer": true,
+      "heat": 0,
+      "tags": ["trivia", "curious", "pink"],
+      "flavors": ["Red plus white makes pink - true?"],
+      "weight": 0.8,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "sis_h0_triangle",
+      "text": "Which shape has exactly three sides?",
+      "answer": 0,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["A three-sided shape is a...?"],
+      "weight": 0.7,
+      "mechanicHints": ["mc4"],
+      "options": ["Triangle", "Square", "Pentagon", "Circle"]
+    },
+    {
+      "id": "sis_h0_spring",
+      "text": "Which season comes right after winter?",
+      "answer": 1,
+      "heat": 0,
+      "tags": ["trivia", "curious"],
+      "flavors": ["After winter comes which season?"],
+      "weight": 0.7,
+      "mechanicHints": ["mc4"],
+      "options": ["Summer", "Spring", "Autumn", "Monsoon"]
+    },
+    {
+      "id": "sis_h1_honest",
+      "text": "Being honest with yourself, even about small things, feels good.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["honesty", "soft", "confession"],
+      "flavors": ["Does a little honesty with yourself feel good?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "sis_h1_softfabric",
+      "text": "Soft, smooth fabrics feel lovely against your skin.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["femme", "soft", "dressing"],
+      "flavors": ["Do soft fabrics feel nice on your skin?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "sis_h1_pretty",
+      "text": "How much do you enjoy the feeling of looking and feeling pretty?",
+      "answer": 3,
+      "heat": 1,
+      "tags": ["femme", "pink", "soft"],
+      "flavors": ["Feeling pretty - how much do you enjoy it?"],
+      "weight": 1.0,
+      "mechanicHints": ["checkin"]
+    },
+    {
+      "id": "sis_h1_nails",
+      "text": "Painting your nails is a fun, relaxing little ritual.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["femme", "dressing", "pink"],
+      "flavors": ["Is doing your nails a nice little ritual?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "sis_h1_mantra_honest",
+      "text": "Say it softly: 'It feels good to be honest.'",
+      "answer": "It feels good to be honest.",
+      "heat": 1,
+      "tags": ["honesty", "mantra", "confession"],
+      "flavors": ["Repeat: 'It feels good to be honest.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra"],
+      "affirmsMantra": 1
+    },
+    {
+      "id": "sis_h1_pinkgentle",
+      "text": "The color pink makes you feel gentle and sweet.",
+      "answer": true,
+      "heat": 1,
+      "tags": ["pink", "femme", "soft"],
+      "flavors": ["Does pink make you feel soft and sweet?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "sis_h1_curiosity",
+      "text": "How curious are you about your softer, more feminine side?",
+      "answer": 3,
+      "heat": 1,
+      "tags": ["curious", "femme", "confession"],
+      "flavors": ["How curious are you about your feminine side?"],
+      "weight": 0.8,
+      "mechanicHints": ["checkin"]
+    },
+    {
+      "id": "sis_h2_confess_tried",
+      "text": "Be honest - have you ever tried on something feminine?",
+      "answer": true,
+      "heat": 2,
+      "tags": ["confession", "honesty", "dressing"],
+      "flavors": ["Honestly now: have you ever worn something feminine?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "sis_h2_dressup",
+      "text": "Dressing up pretty makes you feel...",
+      "answer": 3,
+      "heat": 2,
+      "tags": ["femme", "dressing", "pink"],
+      "flavors": ["When you dress up pretty, you feel...?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["Silly", "Nervous", "A little excited", "Right - finally like myself"]
+    },
+    {
+      "id": "sis_h2_mantra_pretty",
+      "text": "Say it and mean it: 'I like feeling pretty.'",
+      "answer": "I like feeling pretty.",
+      "heat": 2,
+      "tags": ["femme", "mantra", "confession"],
+      "flavors": ["Repeat: 'I like feeling pretty.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra"],
+      "affirmsMantra": 1,
+      "requires": { "band": "establishing" }
+    },
+    {
+      "id": "sis_h2_name",
+      "text": "A cute, feminine name suits you better than your old one.",
+      "answer": true,
+      "heat": 2,
+      "tags": ["femme", "confession", "surrender"],
+      "flavors": ["Would a pretty girl's name fit you better?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "establishing" }
+    },
+    {
+      "id": "sis_h2_seen",
+      "text": "How much do you want to be seen and treated as a girl?",
+      "answer": 3,
+      "heat": 2,
+      "tags": ["femme", "exposure", "surrender"],
+      "flavors": ["How much do you want to be seen as a girl?"],
+      "weight": 0.9,
+      "mechanicHints": ["checkin"]
+    },
+    {
+      "id": "sis_h2_mirror",
+      "text": "Seeing yourself dressed up and pretty in the mirror feels...",
+      "answer": 3,
+      "heat": 2,
+      "tags": ["femme", "dressing", "arousal"],
+      "flavors": ["Pretty in the mirror - how does it feel?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Weird", "Embarrassing", "Nice", "Thrilling - I can't look away"]
+    },
+    {
+      "id": "sis_h2_softer",
+      "text": "You'd rather be soft and sweet than tough and hard.",
+      "answer": true,
+      "heat": 2,
+      "tags": ["femme", "soft", "surrender"],
+      "flavors": ["Soft and sweet over tough and hard - true?"],
+      "weight": 0.8,
+      "mechanicHints": ["yesno"]
+    },
+    {
+      "id": "sis_h3_confess_often",
+      "text": "Be honest - you think about being feminized more than you admit.",
+      "answer": true,
+      "heat": 3,
+      "tags": ["confession", "honesty", "femme"],
+      "flavors": ["Truthfully - is feminization on your mind a lot?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "sis_h3_lingerie",
+      "text": "Wearing lingerie makes you feel...",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["dressing", "arousal", "femme"],
+      "flavors": ["In lingerie, how do you feel?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["Uncomfortable", "Shy", "Pretty", "Weak-kneed and needy"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "sis_h3_mantra_sissy",
+      "text": "Confess it out loud: 'I am a sissy.'",
+      "answer": "I am a sissy.",
+      "heat": 3,
+      "tags": ["confession", "mantra", "surrender"],
+      "flavors": ["Say the honest words: 'I am a sissy.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "sis_h3_obey_goddess",
+      "text": "Obeying a Goddess or Mistress feels...",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["obedience", "service", "surrender"],
+      "flavors": ["Serving and obeying Her - how does it feel?"],
+      "weight": 1.0,
+      "mechanicHints": ["mc4"],
+      "options": ["Not for me", "Intimidating", "Appealing", "A relief - I want to be told what to do"],
+      "requires": { "band": "deepening", "tagsAny": ["service", "obedience", "confession"] }
+    },
+    {
+      "id": "sis_h3_place",
+      "text": "The honest truth is you crave being put in your place as a girl.",
+      "answer": true,
+      "heat": 3,
+      "tags": ["confession", "surrender", "obedience"],
+      "flavors": ["Honestly - do you crave being put in your place?"],
+      "weight": 0.9,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "sis_h3_exposure",
+      "text": "How much do you want someone to know your sissy secret?",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["exposure", "confession", "arousal"],
+      "flavors": ["How badly do you want it known?"],
+      "weight": 0.9,
+      "mechanicHints": ["checkin"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "sis_h4_toy_arousal",
+      "text": "Being dressed up and used like a pretty toy turns you on.",
+      "answer": true,
+      "heat": 4,
+      "tags": ["arousal", "service", "surrender"],
+      "flavors": ["Being a dressed-up pretty toy - does it arouse you?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "sis_h4_knees",
+      "text": "You get excited thinking about serving prettily on your knees.",
+      "answer": true,
+      "heat": 4,
+      "tags": ["arousal", "service", "obedience"],
+      "flavors": ["Kneeling and serving pretty - does it turn you on?"],
+      "weight": 1.0,
+      "mechanicHints": ["yesno"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "sis_h4_mantra_serve",
+      "text": "Say what you're for: 'This sissy exists to be pretty and obey.'",
+      "answer": "This sissy exists to be pretty and obey.",
+      "heat": 4,
+      "tags": ["service", "mantra", "obedience", "surrender"],
+      "flavors": ["Repeat: 'This sissy exists to be pretty and obey.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "climax", "tagsAny": ["service", "obedience"] }
+    },
+    {
+      "id": "sis_h4_confess_aloud",
+      "text": "Confessing your sissy secrets out loud makes you...",
+      "answer": 3,
+      "heat": 4,
+      "tags": ["confession", "exposure", "arousal"],
+      "flavors": ["Saying your secrets out loud leaves you...?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Ashamed", "Nervous", "Lighter", "Achingly turned on and free"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "sis_h4_denial",
+      "text": "Being kept in denial as a good little sissy feels...",
+      "answer": 3,
+      "heat": 4,
+      "tags": ["arousal", "obedience", "surrender"],
+      "flavors": ["Locked in denial as a good girl - how does it feel?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Cruel", "Difficult", "Exciting", "Perfect - I want to earn it by being good"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "sis_h4_deeper",
+      "text": "How much do you want to give up control and just be Her good girl right now?",
+      "answer": 4,
+      "heat": 4,
+      "tags": ["surrender", "service", "arousal"],
+      "flavors": ["Right now - how much do you want to surrender and be good?"],
+      "weight": 0.9,
+      "mechanicHints": ["checkin"],
+      "requires": { "band": "climax" }
+    },
+    {
+      "id": "sis_h5_fulltime",
+      "text": "Be honest: you'd live as a sissy full-time if you could.",
+      "answer": true,
+      "heat": 5,
+      "tags": ["confession", "surrender", "femme"],
+      "flavors": ["Total honesty - live as a sissy full-time, given the chance?"],
+      "weight": 1.0,
+      "mechanicHints": ["mono", "yesno"],
+      "requires": { "band": "climax", "minDepth": 0.8 }
+    },
+    {
+      "id": "sis_h5_mantra_slut",
+      "text": "Confess what you are: 'I am a sissy slut who lives to serve and obey.'",
+      "answer": "I am a sissy slut who lives to serve and obey.",
+      "heat": 5,
+      "tags": ["confession", "mantra", "service", "surrender"],
+      "flavors": ["Say it fully: 'I am a sissy slut who lives to serve and obey.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "climax", "minDepth": 0.8, "tagsAny": ["service", "surrender", "confession"] }
+    },
+    {
+      "id": "sis_h5_gone",
+      "text": "Your old masculine self is fading - only the sissy remains.",
+      "answer": 0,
+      "heat": 5,
+      "tags": ["surrender", "erasure", "femme"],
+      "flavors": ["How much of the old masculine you is left?"],
+      "weight": 0.9,
+      "mechanicHints": ["mc4"],
+      "options": ["Nothing - only her", "A little", "Half", "Mostly the old me"],
+      "requires": { "band": "climax", "minDepth": 0.85 }
+    },
+    {
+      "id": "sis_h5_beg",
+      "text": "Beg for it: 'Please use this sissy - she needs to serve.'",
+      "answer": "Please use this sissy - she needs to serve.",
+      "heat": 5,
+      "tags": ["service", "mantra", "surrender", "arousal"],
+      "flavors": ["Beg prettily: 'Please use this sissy - she needs to serve.'"],
+      "weight": 0.9,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "climax", "minDepth": 0.85, "affirmed": ["sis_h4_mantra_serve"] }
+    },
+    {
+      "id": "sis_h5_purpose",
+      "text": "Total honesty: your purpose is to be a pretty, obedient sissy who exists to please.",
+      "answer": true,
+      "heat": 5,
+      "tags": ["surrender", "service", "confession", "arousal"],
+      "flavors": ["Honest confession - is that your whole purpose now?"],
+      "weight": 1.0,
+      "mechanicHints": ["mono", "yesno"],
+      "requires": { "band": "climax", "minDepth": 0.85 }
+    },
+    {
+      "id": "sis_h5_mantra_hers",
+      "text": "Affirm it: 'This sissy belongs to Her, painted, obedient, and grateful.'",
+      "answer": "This sissy belongs to Her, painted, obedient, and grateful.",
+      "heat": 5,
+      "tags": ["surrender", "mantra", "service", "obedience"],
+      "flavors": ["Say it: 'This sissy belongs to Her, painted, obedient, and grateful.'"],
+      "weight": 1.0,
+      "mechanicHints": ["mantra", "mono"],
+      "affirmsMantra": 1,
+      "requires": { "band": "climax", "minDepth": 0.85, "affirmed": ["sis_h5_mantra_slut"] }
+    },
+    {
+      "id": "sis_h5_pop_confess",
+      "text": "Pop the bubble to let the last of the pretending go.",
+      "answer": 0,
+      "heat": 5,
+      "tags": ["confession", "surrender", "arousal"],
+      "flavors": ["One bubble left - pop it and stop pretending."],
+      "weight": 0.9,
+      "mechanicHints": ["bubblepop", "destruct"],
+      "requires": { "band": "climax", "minDepth": 0.8 }
+    }
+  ],
+  "ladders": [
+    {
+      "id": "sis-honesty-ladder",
+      "archetypeId": "closet-sissy",
+      "rungs": [
+        { "promptId": "sis_h1_mantra_honest" },
+        { "promptId": "sis_h2_confess_tried", "requires": { "band": "establishing" } },
+        { "promptId": "sis_h3_confess_often", "requires": { "band": "deepening", "tagsAny": ["confession", "honesty"] } },
+        { "promptId": "sis_h4_confess_aloud", "requires": { "band": "climax" } }
+      ]
+    },
+    {
+      "id": "sis-femme-ladder",
+      "archetypeId": "sissy-in-training",
+      "rungs": [
+        { "promptId": "sis_h2_mantra_pretty", "requires": { "band": "establishing" } },
+        { "promptId": "sis_h3_mantra_sissy", "requires": { "band": "deepening", "affirmed": ["sis_h2_mantra_pretty"] } },
+        { "promptId": "sis_h4_mantra_serve", "requires": { "band": "climax", "minDepth": 0.7 } },
+        { "promptId": "sis_h5_gone", "requires": { "band": "climax", "minDepth": 0.85 } }
+      ]
+    },
+    {
+      "id": "sis-service-ladder",
+      "archetypeId": "full-sissy",
+      "rungs": [
+        { "promptId": "sis_h3_obey_goddess", "requires": { "band": "deepening" } },
+        { "promptId": "sis_h4_knees", "requires": { "band": "climax", "tagsAny": ["service", "arousal"] } },
+        { "promptId": "sis_h5_mantra_slut", "requires": { "band": "climax", "minDepth": 0.8, "affirmed": ["sis_h3_mantra_sissy"] } },
+        { "promptId": "sis_h5_mantra_hers", "requires": { "band": "climax", "minDepth": 0.85, "affirmed": ["sis_h5_mantra_slut"] } }
+      ]
+    }
+  ]
+}

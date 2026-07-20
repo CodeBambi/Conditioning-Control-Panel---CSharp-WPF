@@ -1,0 +1,87 @@
+/* ============================================================================
+ * styles.css — SHELL ONLY for "Graded Intake".
+ *
+ * This file styles the page skeleton (body, background canvas, loader, HUD) and
+ * the Phase-0 stub renderer's plain widgets. Render agents (C effects, D
+ * steering, E visuals) own their OWN component styles — add them in scoped
+ * blocks or per-module <style>, don't bloat this file. Dark theme, pink/purple
+ * accents to match the CCP app (#FF69B4 / #252542 / #1A1A2E).
+ * ==========================================================================*/
+
+:root {
+  --intake-bg0: #14101f;
+  --intake-bg1: #1a1a2e;
+  --intake-panel: #252542;
+  --intake-accent: #ff69b4;
+  --intake-accent-2: #b06cff;
+  --intake-text: #f3e9f6;
+  --intake-dim: #a99cc0;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: radial-gradient(120% 120% at 50% 0%, var(--intake-bg1), var(--intake-bg0));
+  color: var(--intake-text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-user-select: none; user-select: none;
+  touch-action: manipulation;
+}
+
+#intake-bg {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  display: block; z-index: 0; pointer-events: none;
+}
+
+.intake-stage {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100dvh; padding: 24px;
+}
+
+.intake-hud {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 3; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--intake-dim); pointer-events: none;
+}
+
+/* --- loader --------------------------------------------------------------- */
+.intake-loader {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; background: var(--intake-bg0); color: var(--intake-text);
+}
+.intake-loader[hidden] { display: none; }
+.intake-loader-ring {
+  width: 46px; height: 46px; border-radius: 50%;
+  border: 3px solid rgba(255,105,180,.25); border-top-color: var(--intake-accent);
+  animation: intake-spin .9s linear infinite;
+}
+@keyframes intake-spin { to { transform: rotate(360deg); } }
+
+/* --- Phase-0 stub renderer widgets (replaced by Agent C) ------------------ */
+.intake-beat {
+  width: min(560px, 92vw); background: var(--intake-panel);
+  border: 1px solid rgba(176,108,255,.25); border-radius: 16px;
+  padding: 28px 26px; box-shadow: 0 18px 60px rgba(0,0,0,.45);
+}
+.intake-q { font-size: 20px; line-height: 1.4; margin: 0 0 20px; }
+.intake-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.intake-opt {
+  appearance: none; cursor: pointer; font: inherit; color: var(--intake-text);
+  background: #2f2f52; border: 1px solid rgba(255,105,180,.2); border-radius: 12px;
+  padding: 14px 16px; transition: transform .12s ease, background .12s ease, opacity .12s ease;
+}
+.intake-opt:hover { background: #3a3a63; transform: translateY(-1px); }
+.intake-opt:active { transform: translateY(0); }
+.intake-beat input[type="text"] { width: 100%; margin-bottom: 14px; padding: 12px 14px;
+  border-radius: 10px; border: 1px solid rgba(176,108,255,.3); background: #1f1f39; color: var(--intake-text); font: inherit; }
+.intake-beat input[type="range"] { width: 100%; margin-bottom: 16px; accent-color: var(--intake-accent); }
+
+.intake-done, .intake-fatal {
+  width: min(560px, 92vw); text-align: center; background: var(--intake-panel);
+  border-radius: 16px; padding: 32px; box-shadow: 0 18px 60px rgba(0,0,0,.45);
+}
+.intake-done h2 { margin: 0 0 12px; color: var(--intake-accent); }
+.intake-done p { margin: 6px 0; color: var(--intake-dim); }
+.intake-fatal { color: var(--intake-accent); }

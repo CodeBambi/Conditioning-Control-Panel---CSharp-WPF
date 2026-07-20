@@ -50,6 +50,214 @@ namespace ConditioningControlPanel.Services
             return session;
         }
 
+        // ====================================================================
+        // "Graded Intake" web-core path (Agent I).
+        // The decoupled web quiz emits a QuizRunResult (Resources/web/intake) that
+        // carries far more than a raw score: a banded-descent peakDepth, a revealed
+        // archetype route, a reward-decoupling profile, per-tag tallies, and — the
+        // load-bearing bit — the VERBATIM mantras the user affirmed. This overload
+        // drafts a themed CCP session from all of that. The classic score-bucket
+        // GenerateSession above stays the fallback for the legacy AI quiz.
+        // ====================================================================
+
+        /// <summary>
+        /// Draft a session from a completed "Graded Intake" run.
+        ///   peakDepth      -&gt; base intensity / difficulty
+        ///   route          -&gt; niche + archetype content theming
+        ///   rewardProfile  -&gt; variable (intermittent/hydra) vs steady effects
+        ///   tagTallies     -&gt; subsystem emphasis (lock cards / mind wipe / subliminals ...)
+        ///   affirmedMantras-&gt; seeded VERBATIM into SubliminalPhrases + BouncingTextPhrases
+        /// The channel intensities the web core already clamped in-page are independent of
+        /// this draft; the values below stay inside the same normal ranges the classic quiz
+        /// uses, so the drafted session still respects the user's regular session caps.
+        /// </summary>
+        public static Session GenerateSession(QuizRunResult run, SessionTextContent? textContent = null)
+        {
+            if (run == null) throw new ArgumentNullException(nameof(run));
+
+            var niche = string.IsNullOrWhiteSpace(run.Niche) ? "bambi" : run.Niche.Trim().ToLowerInvariant();
+            var difficulty = DifficultyFromDepth(run.PeakDepth);
+            var scorePercent = run.MaxScore > 0
+                ? run.TotalScore / run.MaxScore * 100.0
+                : Math.Clamp(run.PeakDepth, 0, 1) * 100.0;
+
+            // Base text content: caller-supplied (AI synthesis) or deterministic per-niche.
+            var content = textContent ?? GetFallbackContent(niche, scorePercent);
+
+            // The whole point of the rework: the mantras the user affirmed become the
+            // session's own words, verbatim. Merge (mantras first) into the phrase pools.
+            SeedAffirmedMantras(content, run.AffirmedMantras);
+
+            // Route-aware naming: lead with the revealed primary archetype when present.
+            var nicheDisplay = NicheDisplay(niche);
+            var diffPrefix = scorePercent switch
+            {
+                <= 25 => "Gentle",
+                <= 50 => "Guided",
+                <= 75 => "Intense",
+                _ => "Deep"
+            };
+            var archetype = run.Route?.PrimaryArchetypeId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(content.Name))
+                content.Name = $"{diffPrefix} {nicheDisplay} Intake";
+            if (string.IsNullOrWhiteSpace(content.Description))
+                content.Description = $"A {difficulty} session drafted from your {nicheDisplay} Intake"
+                    + (string.IsNullOrWhiteSpace(archetype) ? "." : $" — {PrettyId(archetype)} route.");
+
+            var settings = BuildSettings(difficulty, content);
+            ApplyRunShaping(settings, run);
+
+            var phases = BuildPhases(difficulty);
+            var icon = GetCategoryIcon(niche);
+
+            return new Session
+            {
+                Id = Guid.NewGuid().ToString(),
+                Name = content.Name,
+                Icon = icon,
+                DurationMinutes = 60,
+                IsAvailable = true,
+                Difficulty = difficulty,
+                BonusXP = Session.GetDifficultyXP(difficulty),
+                Source = SessionSource.Custom,
+                Description = content.Description,
+                Settings = settings,
+                Phases = phases
+            };
+        }
+
+        /// <summary>peakDepth (0..1) -&gt; difficulty, aligned to the web core's band depth floors
+        /// (Establishing 0.18, Deepening 0.42, Climax 0.72).</summary>
+        private static SessionDifficulty DifficultyFromDepth(double peakDepth)
+        {
+            var d = Math.Clamp(peakDepth, 0, 1);
+            return d switch
+            {
+                <= 0.20 => SessionDifficulty.Easy,
+                <= 0.45 => SessionDifficulty.Medium,
+                <= 0.72 => SessionDifficulty.Hard,
+                _ => SessionDifficulty.Extreme
+            };
+        }
+
+        private static string NicheDisplay(string niche) => niche switch
+        {
+            "bambi" => "Bambi",
+            "drone" => "Drone",
+            "sissy" => "Sissy",
+            _ => string.IsNullOrEmpty(niche) ? "Intake" : char.ToUpperInvariant(niche[0]) + niche[1..]
+        };
+
+        private static string PrettyId(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return id;
+            var words = id.Replace('_', ' ').Replace('-', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < words.Length; i++)
+                words[i] = char.ToUpperInvariant(words[i][0]) + words[i][1..];
+            return string.Join(' ', words);
+        }
+
+        /// <summary>Merge the affirmed mantras VERBATIM into the subliminal, bouncing-text and
+        /// lock-card pools (mantras first, case-insensitive de-dupe). These are the user's own
+        /// committed words, so they are never uppercased or reworded here.</summary>
+        private static void SeedAffirmedMantras(SessionTextContent content, List<string>? mantras)
+        {
+            if (mantras == null || mantras.Count == 0) return;
+
+            var clean = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var m in mantras)
+            {
+                var t = m?.Trim();
+                if (string.IsNullOrEmpty(t) || !seen.Add(t)) continue;
+                clean.Add(t);
+            }
+            if (clean.Count == 0) return;
+
+            content.SubliminalPhrases = MergeVerbatim(clean, content.SubliminalPhrases);
+            content.BouncingTextPhrases = MergeVerbatim(clean, content.BouncingTextPhrases);
+            // Affirmations read naturally as lock-card lines too (first-person commitments).
+            content.LockCardPhrases = MergeVerbatim(clean, content.LockCardPhrases);
+        }
+
+        private static List<string> MergeVerbatim(List<string> lead, List<string> rest)
+        {
+            var outList = new List<string>(lead);
+            var seen = new HashSet<string>(lead, StringComparer.OrdinalIgnoreCase);
+            foreach (var s in rest ?? new List<string>())
+            {
+                var t = s?.Trim();
+                if (string.IsNullOrEmpty(t) || !seen.Add(t)) continue;
+                outList.Add(t);
+            }
+            return outList;
+        }
+
+        /// <summary>Shape the base difficulty settings by the run's reward profile + tag tallies.
+        /// Reward-chasing runs (the user drifted toward the decoupled reward) get more
+        /// intermittent / unpredictable effects; steady runs stay continuous. Dominant tags
+        /// nudge the matching subsystem up. All adjustments clamp inside the classic ranges so
+        /// the draft never exceeds what the score-bucket path could already produce.</summary>
+        private static void ApplyRunShaping(SessionSettings s, QuizRunResult run)
+        {
+            var chase = Math.Clamp(run.RewardProfile?.ChaseMagnitude ?? 0, 0, 1);
+            var chased = run.RewardProfile?.ChasedReward == true;
+
+            if (chased && chase > 0.15)
+            {
+                // Variable-ratio feel: bursty, unpredictable bubbles + self-multiplying flashes.
+                s.BubblesEnabled = true;
+                s.BubblesIntermittent = true;
+                s.FlashHydra = true;
+                // Lean the flash frequency up a touch with how hard they chased.
+                s.FlashPerHour = Math.Clamp((int)(s.FlashPerHour * (1.0 + 0.25 * chase)), 1, 600);
+            }
+            else
+            {
+                // Steady, predictable reinforcement.
+                s.BubblesIntermittent = false;
+            }
+
+            // Tag emphasis: keyword-match the dominant tallied tags onto subsystems. Bank tags
+            // are content-defined, so match on substrings rather than an exact vocabulary.
+            var tags = run.TagTallies;
+            if (tags != null && tags.Count > 0)
+            {
+                if (HasTag(tags, "submission", "submit", "obey", "obedience", "surrender"))
+                {
+                    s.LockCardEnabled = true;
+                    if (s.LockCardStartMinute <= 0) s.LockCardStartMinute = 10;
+                    s.LockCardFrequency = Math.Clamp((s.LockCardFrequency ?? 1) + 1, 1, 4);
+                }
+                if (HasTag(tags, "mindless", "empty", "blank", "drop", "sleep"))
+                {
+                    s.MindWipeEnabled = true;
+                    s.MindWipeBaseMultiplier = Math.Clamp(s.MindWipeBaseMultiplier + 1, 1, 4);
+                }
+                if (HasTag(tags, "bimbo", "doll", "bambi", "pretty", "feminine"))
+                {
+                    s.SubliminalEnabled = true;
+                    s.SubliminalPerMin = Math.Clamp(s.SubliminalPerMin + 1, 1, 6);
+                }
+                if (HasTag(tags, "denial", "tease", "edge", "frustration"))
+                {
+                    s.BouncingTextEnabled = true;
+                }
+            }
+        }
+
+        private static bool HasTag(Dictionary<string, int> tags, params string[] needles)
+        {
+            foreach (var kv in tags)
+            {
+                if (kv.Value <= 0 || string.IsNullOrEmpty(kv.Key)) continue;
+                var key = kv.Key.ToLowerInvariant();
+                foreach (var n in needles)
+                    if (key.Contains(n, StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
+
         private static int Randomize(int value)
         {
             var variance = value * 0.15;
