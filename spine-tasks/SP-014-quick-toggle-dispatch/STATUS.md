@@ -1,15 +1,15 @@
 # STATUS: SP-014 — replace card-title quick-toggle dispatch
 
-**Current Step:** Not started
-**Last Updated:** 2026-07-20 (authored)
+**Current Step:** Step 1 — Archaeology of the title-keyed mechanism + pre-approach consult
+**Last Updated:** 2026-07-20 (Step 1 in progress)
 
 ### Step 1: Archaeology of the title-keyed mechanism + pre-approach consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] STATUS.md updated before starting work
-- [ ] WPF title-keyed dispatch mechanism + FeatureCard.xaml.cs:248-261 + exception cards (File.cs:line)
-- [ ] First-attempt CCP.* dispatch path + lesson dispositions (ACCEPT/ADAPT/REJECT)
-- [ ] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
+- [x] STATUS.md updated before starting work
+- [x] WPF title-keyed dispatch mechanism + FeatureCard.xaml.cs:248-261 + exception cards (File.cs:line)
+- [x] First-attempt CCP.* dispatch path + lesson dispositions (ACCEPT/ADAPT/REJECT)
+- [x] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
 
 ### Step 2: Dispatch contract + stable-identity implementation
 **Status:** ⬜ Not Started
