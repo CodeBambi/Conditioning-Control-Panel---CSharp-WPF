@@ -1888,12 +1888,8 @@ namespace ConditioningControlPanel
                 window.Topmost = true;
                 window.Topmost = wasTopmost;
                 window.Focus();
-
-                // Topmost-pulse on main moves it to the top of the regular
-                // z-band, which can leave the avatar tube buried behind it
-                // (tube was Show()'n above main but the pulse rearranges).
-                // Raise the tube too so the attached pair stays paired.
-                AvatarWindow?.RaiseAttachedTubeAboveOwner();
+                // The attached avatar tube is natively OWNED by main, so the
+                // Topmost pulse carries it along — no separate raise needed.
             }
             catch (Exception ex) { Logger?.Debug("ForceWindowToFront failed: {Error}", ex.Message); }
         }

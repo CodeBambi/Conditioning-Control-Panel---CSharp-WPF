@@ -73,9 +73,6 @@ namespace ConditioningControlPanel
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
         [DllImport("user32.dll")]
-        private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
-
-        [DllImport("user32.dll")]
         private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
         [DllImport("user32.dll")]
@@ -119,42 +116,28 @@ namespace ConditioningControlPanel
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOACTIVATE = 0x0010;
-        private const uint SWP_SHOWWINDOW = 0x0040;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_FRAMECHANGED = 0x0020;
-        private const uint GW_HWNDPREV = 3;
-        private const uint GW_OWNER = 4;
         private const int GWL_EXSTYLE = -20;
         private const int GWL_STYLE = -16;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
         private const int WS_EX_TOPMOST = 0x00000008;
         private const uint WS_POPUP = 0x80000000;
         private const uint WS_CAPTION = 0x00C00000;
-        private static readonly IntPtr HWND_TOP = IntPtr.Zero;
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
 
-        // Window message hook for maintaining topmost during drag
-        private const int WM_WINDOWPOSCHANGING = 0x0046;
-        private const int WM_WINDOWPOSCHANGED = 0x0047;
         private HwndSource? _hwndSource;
-        // Hook on the PARENT window so we can lift the tube back above main the
-        // instant main changes z-order (click, flash/overlay close, subsystem
-        // re-activation) — event-driven, no polling gap.
-        private HwndSource? _parentHwndSource;
-        private bool _reassertingAboveParent;
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct WINDOWPOS
-        {
-            public IntPtr hwnd;
-            public IntPtr hwndInsertAfter;
-            public int x;
-            public int y;
-            public int cx;
-            public int cy;
-            public uint flags;
-        }
+        // Native (Win32) ownership: while attached the tube is OWNED by the main window, so the
+        // window manager itself keeps the tube directly above main and moves/raises the two as a
+        // group. This replaces the old hand-rolled z-order machinery (parent WndProc raise hook,
+        // 300ms refresh timer, forced HWND_TOP reasserts) which could race other windows and lift
+        // the tube above unrelated surfaces (e.g. the Graded Intake host) while main stayed buried.
+        private const int GWL_HWNDPARENT = -8;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
 
         /// <summary>
         /// Start monitoring for fullscreen applications
@@ -371,61 +354,23 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Hook on the PARENT (main) window. When main's z-order changes, lift the tube
-        /// back above it immediately so the avatar/speech bubble never gets buried behind
-        /// main's UI. This is the event-driven counterpart to the (Background-priority,
-        /// pollable-to-starvation) keep-on-top timer — it fires synchronously the moment
-        /// main moves up, closing the gap the timer leaves during busy AI speech.
+        /// Set or clear the tube's NATIVE (Win32) owner. When attached the tube is owned by the
+        /// main window: the window manager keeps an owned window directly above its owner and
+        /// raises/lowers the two as a group, so the pair can never separate — no polling, no
+        /// manual raises, and other windows (ours or other apps') can freely cover BOTH.
+        /// NOTE: this is raw GWL_HWNDPARENT ownership, NOT WPF's Window.Owner — the managed
+        /// property adds minimize/visibility coupling that caused black-window artifacts, and
+        /// it cannot be set across threads in AvatarOwnThread mode anyway.
         /// </summary>
-        private IntPtr ParentWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        private void ApplyNativeOwner(bool owned)
         {
-            if (msg != WM_WINDOWPOSCHANGED) return IntPtr.Zero;
-            if (!_isAttached || _tubeHandle == IntPtr.Zero) return IntPtr.Zero;
-            if (_reassertingAboveParent) return IntPtr.Zero; // guard against re-entrancy
-
-            try
-            {
-                // Only react when the z-order actually changed (ignore pure move/resize —
-                // those are already handled by LocationChanged/SizeChanged).
-                var wp = Marshal.PtrToStructure<WINDOWPOS>(lParam);
-                if ((wp.flags & SWP_NOZORDER) != 0) return IntPtr.Zero;
-
-                // Don't fight pop quiz (it owns HWND_TOPMOST), and don't pop over other
-                // apps — only lift the tube when our own app owns the foreground.
-                if (PopQuizWindow.IsOpen || QuizWindow.IsOpen) return IntPtr.Zero;
-                if (!IsOurAppForeground()) return IntPtr.Zero;
-
-                // Place the tube directly above main. Moving the tube only triggers
-                // WM_WINDOWPOSCHANGED on the TUBE (its WndProc is a no-op), not on the
-                // parent, so this can't loop — but guard anyway for safety.
-                _reassertingAboveParent = true;
-                SetWindowPos(_tubeHandle, HWND_TOP, 0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            }
-            catch { /* parent may be tearing down */ }
-            finally { _reassertingAboveParent = false; }
-
-            return IntPtr.Zero;
-        }
-
-        /// <summary>
-        /// True when the MAIN window (or the tube, or a dialog owned by main) is the
-        /// foreground window. Used to gate z-order raises so we lift the pair only when
-        /// the user is actually IN the main app — never stealing z-order from other
-        /// apps (e.g. a fullscreen video player), and never from our own secondary
-        /// windows either: a plain same-process check used to count the Loom window
-        /// and the DtRH game as "us", so every speech bubble shoved the main window
-        /// forward over them (the bubbles are topmost and never needed the raise).
-        /// </summary>
-        private bool IsOurAppForeground()
-        {
-            var foreground = GetForegroundWindow();
-            if (foreground == IntPtr.Zero) return false;
-            if (foreground == _parentHandle || foreground == _tubeHandle) return true;
-            // A dialog owned by main (settings popups etc.) counts as main being in
-            // front - raising main keeps the owned dialog above it anyway.
-            var owner = GetWindow(foreground, GW_OWNER);
-            return owner != IntPtr.Zero && owner == _parentHandle;
+            if (_tubeHandle == IntPtr.Zero) return;
+            var owner = owned ? _parentHandle : IntPtr.Zero;
+            if (owned && owner == IntPtr.Zero) { CaptureParentGeom(); return; } // parent HWND not seeded yet; next call has it
+            SetWindowLongPtr(_tubeHandle, GWL_HWNDPARENT, owner);
+            // Owner changes are cached — flush the frame so the z-order link takes effect now.
+            SetWindowPos(_tubeHandle, IntPtr.Zero, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
 
         private void CalculateScaleFactor()
@@ -636,12 +581,7 @@ namespace ConditioningControlPanel
             {
                 if (_parentWindow.WindowState == WindowState.Minimized) return;
                 CaptureParentGeom();
-                RunOnAvatar(() =>
-                {
-                    UpdatePosition();
-                    // Keep tube in front when attached, during parent move
-                    if (_isAttached) BringAttachedPairToFront();
-                });
+                RunOnAvatar(UpdatePosition);
             }
             catch { /* Window may be closing */ }
         }
@@ -677,11 +617,7 @@ namespace ConditioningControlPanel
                             if (parentVisible && App.Settings?.Current?.AvatarEnabled == true)
                             {
                                 Show();
-                                if (_isAttached)
-                                {
-                                    UpdatePosition();
-                                    BringAttachedPairToFront();
-                                }
+                                if (_isAttached) UpdatePosition();
                                 // When detached, WPF Topmost property handles it
                             }
                             break;
@@ -706,11 +642,7 @@ namespace ConditioningControlPanel
                     {
                         ResumeAvatarGif();
                         Show();
-                        if (_isAttached)
-                        {
-                            UpdatePosition();
-                            BringAttachedPairToFront();
-                        }
+                        if (_isAttached) UpdatePosition();
                         // When detached, WPF Topmost property handles it
                     }
                     else
@@ -749,42 +681,10 @@ namespace ConditioningControlPanel
                 {
                     Show();
                     UpdatePosition();
-
-                    if (_isAttached)
-                    {
-                        // Delay BringToFront to ensure it happens AFTER parent activation completes
-                        // Use Background priority so all window activation processing finishes first
-                        Dispatcher.BeginInvoke(new Action(() =>
-                        {
-                            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-                            if (_isAttached && _tubeHandle != IntPtr.Zero)
-                            {
-                                BringAttachedPairToFront();
-                            }
-                        }), System.Windows.Threading.DispatcherPriority.Background);
-                    }
+                    // Z-order: native ownership keeps the tube above main automatically.
                 });
             }
             catch { /* Window may be closing */ }
-        }
-
-        private void ParentWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
-        {
-            // Don't fight z-order when pop quiz is open
-            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-
-            // When main window is clicked (even if already active), immediately bring tube to front.
-            // This handles the case where Activated event doesn't fire (window already active). Reads
-            // avatar UI (SpeechBubble), so do the whole check on the avatar thread (Background priority
-            // so it lands after the click processing finishes).
-            RunOnAvatar(() =>
-            {
-                if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-                if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
-                {
-                    BringAttachedPairToFront();
-                }
-            }, System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void ParentWindow_Closed(object? sender, EventArgs e)
@@ -844,7 +744,6 @@ namespace ConditioningControlPanel
                 if (_parentWindow != null && ParentVisibleNotMinimized)
                 {
                     UpdatePosition();
-                    if (_isAttached && !(PopQuizWindow.IsOpen || QuizWindow.IsOpen)) BringAttachedPairToFront();
                 }
 
                 StartFloatingAnimation();
@@ -888,18 +787,9 @@ namespace ConditioningControlPanel
                 // Release GIF animation frames to prevent memory leak
                 AnimationBehavior.SetSourceUri(ImgAvatarAnimated, null);
 
-                // Remove window message hooks. The avatar's own source is fine here; the parent's source
-                // is thread-affine to the main thread, so remove its hook there (inline when shared).
+                // Remove the window message hook (DPI-transition quiesce only).
                 _hwndSource?.RemoveHook(WndProc);
                 _hwndSource = null;
-                var parentSrc = _parentHwndSource;
-                _parentHwndSource = null;
-                if (parentSrc != null)
-                {
-                    var pd = _parentWindow?.Dispatcher;
-                    if (pd == null || pd.CheckAccess()) { try { parentSrc.RemoveHook(ParentWndProc); } catch { } }
-                    else if (!pd.HasShutdownStarted) pd.BeginInvoke(new Action(() => { try { parentSrc.RemoveHook(ParentWndProc); } catch { } }));
-                }
 
                 // Unsubscribe from video service events
                 if (App.Video != null)
@@ -976,7 +866,6 @@ namespace ConditioningControlPanel
                     _parentWindow.StateChanged -= ParentWindow_StateChanged;
                     _parentWindow.IsVisibleChanged -= ParentWindow_IsVisibleChanged;
                     _parentWindow.Activated -= ParentWindow_Activated;
-                    _parentWindow.PreviewMouseDown -= ParentWindow_PreviewMouseDown;
                     _parentWindow.Closed -= ParentWindow_Closed;
                 }
             }
@@ -986,140 +875,6 @@ namespace ConditioningControlPanel
             }
 
             base.OnClosed(e);
-        }
-
-        /// <summary>
-        /// Temporarily brings the tube window to front (above main window)
-        /// Only works if attached and parent window is visible and not minimized
-        /// </summary>
-        private void BringToFrontTemporarily()
-        {
-            if (_tubeHandle == IntPtr.Zero) return;
-
-            // Don't bring to front if detached (topmost handles that)
-            if (!_isAttached) return;
-
-            // Don't bring to front if parent window is not visible or minimized (cache read — avatar thread)
-            if (_parentWindow == null || !ParentVisibleNotMinimized)
-                return;
-
-            // Bring window to top of z-order (above main window)
-            // Use only SWP_NOACTIVATE - do NOT use SWP_SHOWWINDOW as it can interfere with keyboard focus
-            SetWindowPos(_tubeHandle, IntPtr.Zero, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        }
-
-        /// <summary>
-        /// Public hook for App.ForceWindowToFront: after main pulses Topmost
-        /// to defeat ForegroundLockTimeout, the tube needs to be re-raised so
-        /// the attached pair stays paired. Wraps the existing private method.
-        /// </summary>
-        public void RaiseAttachedTubeAboveOwner()
-        {
-            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(RaiseAttachedTubeAboveOwner)); return; }
-            BringAttachedPairToFront(force: true);
-        }
-
-        /// <summary>
-        /// Bring both the parent window and the tube to the top of z-order together.
-        /// This prevents the tube from being separated from the parent (e.g. tube on top,
-        /// parent behind other apps) after video ends, fullscreen exit, or tab changes.
-        /// </summary>
-        /// <param name="force">
-        /// When true, skip the "our process owns the foreground" gate. Use this only when
-        /// the caller is DELIBERATELY foregrounding our app right now (startup show, a
-        /// Topmost true→false pulse, panic/video-end restore). In those moments Activate()
-        /// hasn't transferred foreground yet, so the gate sees the previous app and wrongly
-        /// bails — leaving the tube/bubble buried behind the main window. Passive callers
-        /// (poll timer, Activated, mouse-down, position changes) leave this false so we
-        /// never steal z-order from other apps (e.g. fullscreen video players).
-        /// </param>
-        private void BringAttachedPairToFront(bool force = false)
-        {
-            if (_tubeHandle == IntPtr.Zero) return;
-            if (!_isAttached) return;
-            if (_parentWindow == null || !ParentVisibleNotMinimized)   // cache read — avatar thread
-                return;
-
-            // Don't fight with pop quiz — it uses HWND_TOPMOST and must stay on top
-            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen))
-                return;
-
-            // _parentHandle is seeded on the parent thread by CaptureParentGeom (reading the parent's HWND
-            // off its own thread would VerifyAccess-throw here on the avatar thread). If it isn't ready yet,
-            // kick a capture (async on the parent thread) and skip this raise — the HWND is stable once made,
-            // so the next call has it.
-            if (_parentHandle == IntPtr.Zero) { CaptureParentGeom(); return; }
-
-            // Only bring to front when the main window itself (or the tube / a dialog
-            // it owns) is foreground — otherwise we'd steal z-order from other apps
-            // (fullscreen video players) or from our OWN secondary windows (the Loom,
-            // the DtRH game). Skipped when force=true (caller is intentionally
-            // foregrounding our app).
-            if (!force && !IsOurAppForeground())
-                return;
-
-            // Parent to top first, then tube above it — keeps them as a pair
-            SetWindowPos(_parentHandle, HWND_TOP, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            SetWindowPos(_tubeHandle, HWND_TOP, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        }
-
-        /// <summary>
-        /// When the tube window gets activated while attached (e.g. after a topmost video window closes),
-        /// redirect activation to the parent window so they stay paired.
-        /// </summary>
-        private void TubeWindow_Activated(object? sender, EventArgs e)
-        {
-            if (!_isAttached || _parentWindow == null) return;
-
-            // Don't redirect activation when user is typing in the chat input
-            if (_isInputVisible) return;
-
-            // Don't activate parent when pop quiz is open — it would cover the quiz
-            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-
-            try
-            {
-                // Only redirect activation to parent if main/tube already own the
-                // foreground — otherwise we'd steal focus from other apps (fullscreen
-                // video players) or from our own secondary windows (Loom, DtRH).
-                if (!IsOurAppForeground())
-                    return;
-
-                // Don't redirect activation when speech bubble is showing —
-                // redirecting brings parent to front, hiding the bubble behind it
-                if (SpeechBubble.Visibility == Visibility.Visible)
-                {
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        if (_isAttached && _tubeHandle != IntPtr.Zero)
-                            BringAttachedPairToFront();
-                    }), DispatcherPriority.Background);
-                    return;
-                }
-
-                // Defer activation to parent so Windows finishes current activation first.
-                // Include BringAttachedPairToFront in the same callback to avoid a double-deferral
-                // gap where the tube drops behind the parent between two Background dispatches.
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try
-                    {
-                        if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-                        if (_isAttached && _parentWindow != null && ParentVisibleNotMinimized)
-                        {
-                            // Activate touches the MAIN window — run it on the parent's thread.
-                            if (_parentWindow.Dispatcher.CheckAccess()) _parentWindow.Activate();
-                            else _parentWindow.Dispatcher.BeginInvoke(new Action(() => { try { _parentWindow.Activate(); } catch { } }));
-                            BringAttachedPairToFront();
-                        }
-                    }
-                    catch { /* Window may be closing */ }
-                }), DispatcherPriority.Background);
-            }
-            catch { /* Window may be closing */ }
         }
 
         /// <summary>
@@ -1304,48 +1059,6 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Start a timer that periodically brings the window to front while speech bubble is visible.
-        /// This ensures the bubble stays on top even when user interacts with main window.
-        /// </summary>
-        private void StartZOrderRefreshTimer()
-        {
-            StopZOrderRefreshTimer();
-            // Backstop to the ParentWndProc z-order hook. Runs at Render priority (NOT the
-            // DispatcherTimer default of Background, which gets starved during busy AI
-            // speech — GIF animation, text streaming, effects — and was letting the bubble
-            // sit behind main for far longer than one tick). The hook does the heavy
-            // lifting now; this just catches anything message-driven raises miss.
-            _zOrderRefreshTimer = new DispatcherTimer(DispatcherPriority.Render)
-            {
-                Interval = TimeSpan.FromMilliseconds(300)
-            };
-            _zOrderRefreshTimer.Tick += (s, e) =>
-            {
-                if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-                if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
-                {
-                    // Only refresh z-order when our app owns the foreground — don't steal
-                    // z-order from other apps. ParentWindow_Activated handles restoration
-                    // when the user returns to us.
-                    if (IsOurAppForeground())
-                    {
-                        BringAttachedPairToFront();
-                    }
-                }
-            };
-            _zOrderRefreshTimer.Start();
-        }
-
-        /// <summary>
-        /// Stop the z-order refresh timer when speech bubble is hidden
-        /// </summary>
-        private void StopZOrderRefreshTimer()
-        {
-            _zOrderRefreshTimer?.Stop();
-            _zOrderRefreshTimer = null;
-        }
-
-        /// <summary>
         /// True when the active mod overrides tube.png but not tube2.png. In that case
         /// the detached state would otherwise mix the mod's avatar with the embedded
         /// default tube2.png — leaving the avatar floating outside the mod's chamber.
@@ -1463,6 +1176,9 @@ namespace ConditioningControlPanel
             ShowInTaskbar = false;
             SetToolWindowStyle(true);
 
+            // Break the native ownership link — a detached widget floats free of main.
+            ApplyNativeOwner(false);
+
             // Set topmost - use both WPF property and Win32 for reliability
             Topmost = true;
             ReassertTopmost(); // Use Win32 to ensure topmost is applied immediately
@@ -1538,7 +1254,9 @@ namespace ConditioningControlPanel
 
             // Snap back to parent window position
             UpdatePosition();
-            BringAttachedPairToFront();
+
+            // Re-own the tube to main: the window manager keeps the pair glued in z-order.
+            ApplyNativeOwner(true);
 
             // Defer the TOOLWINDOW style to ensure it's applied after all window state changes
             Dispatcher.BeginInvoke(new Action(() =>

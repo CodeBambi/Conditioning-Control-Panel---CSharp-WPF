@@ -277,21 +277,7 @@ namespace ConditioningControlPanel
         private async void OnVideoEnded(object? sender, EventArgs e)
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => OnVideoEnded(sender, e))); return; }
-            // After video ends, restore z-order so both windows come back together
-            if (_isAttached)
-            {
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try
-                    {
-                        if (_isAttached && _tubeHandle != IntPtr.Zero)
-                        {
-                            BringAttachedPairToFront();
-                        }
-                    }
-                    catch { /* Window may be closing */ }
-                }), DispatcherPriority.Background);
-            }
+            // Z-order after video end: native ownership keeps the attached pair together.
 
             if (App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true)
             {

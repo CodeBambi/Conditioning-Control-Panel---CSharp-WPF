@@ -39,7 +39,6 @@ namespace ConditioningControlPanel
         private DispatcherTimer? _idleTimer;
         private DispatcherTimer? _triggerTimer; // Random trigger phrases
         private DispatcherTimer? _randomBubbleTimer; // Random bubble spawning
-        private DispatcherTimer? _zOrderRefreshTimer; // Keep speech bubble on top
         private DateTime _lastSpeechEndTime = DateTime.MinValue; // Track when last speech ended
         private SpeechSource _lastSpeechSource = SpeechSource.Preset; // Track last speech source for delay calc
         private int _lastSpeechLength = 0; // Track last speech length for delay calc
@@ -525,14 +524,6 @@ namespace ConditioningControlPanel
                 SpeechBubble.UpdateLayout();
                 SpeechBubble.Visibility = Visibility.Visible;
 
-                // Start z-order refresh to keep bubble on top of main window
-                // Skip all z-order work when pop quiz is open — must not cover the quiz
-                if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
-                {
-                    StartZOrderRefreshTimer();
-                    BringAttachedPairToFront();
-                }
-
                 // Display duration is user-controlled via Companion tab slider (1-10s, default 2).
                 // Long AI replies are still readable: hovering keeps the bubble open, and
                 // "Show chat history" preserves the full conversation for re-reading.
@@ -579,7 +570,6 @@ namespace ConditioningControlPanel
                     }
 
                     _speechTimer.Stop();
-                    StopZOrderRefreshTimer();
                     SpeechBubble.Visibility = Visibility.Collapsed;
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
 
@@ -751,12 +741,6 @@ namespace ConditioningControlPanel
                     SpeechBubble.UpdateLayout();
                     SpeechBubble.Visibility = Visibility.Visible;
 
-                    if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
-                    {
-                        StartZOrderRefreshTimer();
-                        BringAttachedPairToFront();
-                    }
-
                     // Animate "" → "." → ".." → "..." so it reads as actively waiting.
                     _listeningDotsTimer?.Stop();
                     int step = 0;
@@ -793,7 +777,6 @@ namespace ConditioningControlPanel
                     if (!_isListeningBubble) return; // a real bubble already took over
                     _isListeningBubble = false;
 
-                    StopZOrderRefreshTimer();
                     SpeechBubble.Visibility = Visibility.Collapsed;
                     _lastSpeechEndTime = DateTime.Now;
                     ProcessNextSpeech();
@@ -1697,13 +1680,6 @@ namespace ConditioningControlPanel
                 SpeechBubble.UpdateLayout();
                 SpeechBubble.Visibility = Visibility.Visible;
 
-                // Start z-order refresh to keep bubble on top of main window
-                // Skip all z-order work when pop quiz is open — must not cover the quiz
-                if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
-                {
-                    StartZOrderRefreshTimer();
-                    BringAttachedPairToFront();
-                }
 
                 // Play the voice line audio in sync with the bubble
                 PlayVoiceLineAudio(filePath);
@@ -1734,7 +1710,6 @@ namespace ConditioningControlPanel
                     _isGiggling = false;
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
                     SpeechBubble.Visibility = Visibility.Collapsed;
-                    StopZOrderRefreshTimer();
 
                     _lastSpeechEndTime = DateTime.Now;
                     _lastSpeechSource = SpeechSource.Preset;
@@ -1841,13 +1816,6 @@ namespace ConditioningControlPanel
                 SpeechBubble.UpdateLayout();
                 SpeechBubble.Visibility = Visibility.Visible;
 
-                // Start z-order refresh to keep bubble on top of main window
-                // Skip all z-order work when pop quiz is open — must not cover the quiz
-                if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
-                {
-                    StartZOrderRefreshTimer();
-                    BringAttachedPairToFront();
-                }
 
                 App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
 
@@ -1876,7 +1844,6 @@ namespace ConditioningControlPanel
                     }
 
                     _speechTimer.Stop();
-                    StopZOrderRefreshTimer();
                     SpeechBubble.Visibility = Visibility.Collapsed;
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
 

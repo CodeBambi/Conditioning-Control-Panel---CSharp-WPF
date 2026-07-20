@@ -425,12 +425,6 @@ namespace ConditioningControlPanel
             // Auto-scroll to most recent message.
             Dispatcher.BeginInvoke(new Action(() => ChatHistoryScroller.ScrollToBottom()),
                 System.Windows.Threading.DispatcherPriority.Background);
-
-            if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
-            {
-                StartZOrderRefreshTimer();
-                BringAttachedPairToFront();
-            }
         }
 
         private void ExitChatHistoryMode()
@@ -440,7 +434,6 @@ namespace ConditioningControlPanel
             SpeechScroller.Visibility = Visibility.Visible;
             SpeechBubble.MaxWidth = 380; // Restore default bubble width.
             SpeechBubble.Visibility = Visibility.Collapsed;
-            StopZOrderRefreshTimer();
         }
 
         private void ToggleInputPanel()

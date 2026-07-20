@@ -237,12 +237,8 @@ namespace ConditioningControlPanel
             {
                 _avatarTubeWindow.ShowTube();
                 _avatarTubeWindow.StartPoseAnimation();
-                // Force the pair above the main window. Callers reach ShowAvatarTube right
-                // after a Topmost true→false pulse (panic restore, video end, chat-from-tray),
-                // which lifts main to the top of the z-band. Activate() hasn't transferred
-                // foreground yet, so the gated raise inside ShowTube can bail and leave the
-                // tube/bubble buried behind main. A forced raise here closes that gap.
-                _avatarTubeWindow.RaiseAttachedTubeAboveOwner();
+                // Z-order: the attached tube is natively OWNED by main, so whatever raised
+                // main (panic restore, video end, chat-from-tray) carries the tube with it.
             }
         }
 
