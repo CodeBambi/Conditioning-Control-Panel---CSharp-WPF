@@ -95,6 +95,8 @@ export const NICHES = Object.freeze([Niche.Bambi, Niche.Drone, Niche.Sissy]);
  * @property {string}   name
  * @property {string[]} tags     tags that vote this archetype up when answered
  * @property {string=}  blurb    route-reveal copy shown at the end
+ * @property {number=}  hue      signature hue 0..360 — the tube adopts it as the route
+ *                                solidifies (Background.setRouteTint) and the outro card tints with it
  */
 
 /* ----------------------------------------------------------------------------
@@ -116,6 +118,8 @@ export const NICHES = Object.freeze([Niche.Bambi, Niche.Drone, Niche.Sissy]);
  * @property {number=}  affirmsMantra   TRUTHY flag (banks use 1): answering "correct" affirms this
  *                                       prompt as a mantra. The verbatim mantra text is the prompt's
  *                                       `answer` (a string) — seeded into QuizRunResult.affirmedMantras.
+ * @property {string=}  interludeKind   Mechanic.Interlude only: 'watch' (spiral stare) | 'breathe'
+ * @property {number=}  durationMs      Mechanic.Interlude only: how long the valley runs (default ~5000)
  */
 
 /**
@@ -142,8 +146,73 @@ export const NICHES = Object.freeze([Niche.Bambi, Niche.Drone, Niche.Sissy]);
  * @property {Archetype[]}  archetypes  3-5 sub-identities
  * @property {Prompt[]}     prompts      all prompts, tagged + heat-banded
  * @property {Ladder[]}     ladders      belief ladders referencing prompt ids
+ * @property {BankTheme=}   theme       per-niche presentation (merged over DEFAULT_THEME)
  * @property {string=}      version
  */
+
+/* ----------------------------------------------------------------------------
+ * THEME — per-niche presentation pack (fiction voice + palette). Banks supply a
+ * `theme` block; themeOf() merges it over DEFAULT_THEME so every consumer
+ * (boot's intro/interstitials/outro, beats' cards, effects' praise pool,
+ * background's tint) reads ONE resolved object and never hardcodes copy.
+ * The FICTION ARC is load-bearing: section titles + interviewer lines start
+ * clinical (Calibration) and melt into the niche's own voice by Climax.
+ * -------------------------------------------------------------------------- */
+/**
+ * @typedef {Object} BankTheme
+ * @property {string}  accent          primary accent color (CSS)
+ * @property {string}  accent2         secondary accent color (CSS)
+ * @property {string}  subjectNoun     what the fiction calls the user ("Subject", "Unit", ...)
+ * @property {Object<string,string>}   sectionTitles  Band.* -> interstitial section title
+ * @property {Object<string,string[]>} interviewer    Band.* -> narrator aside lines (rotated no-repeat)
+ * @property {string[]} praise         niche praise phrases (effects' Praise pool)
+ * @property {string[]} introLines     briefing-screen copy, shown in order (typewriter)
+ * @property {string[]} outroLines     results-ceremony copy fragments
+ */
+export const DEFAULT_THEME = Object.freeze({
+  accent: '#ff69b4',
+  accent2: '#b06cff',
+  subjectNoun: 'Subject',
+  sectionTitles: Object.freeze({
+    [Band.Calibration]:  'Section 1 · Baseline Response',
+    [Band.Establishing]: 'Section 2 · Associative Response',
+    [Band.Deepening]:    'Section 3 · Suggestibility Index',
+    [Band.Climax]:       'Section 4 · Deep Compliance Survey',
+    [Band.Recovery]:     'Section 5 · Discharge & Debrief',
+  }),
+  interviewer: Object.freeze({
+    [Band.Calibration]:  ['Noted.', 'Baseline recorded.', 'Good. Continue.'],
+    [Band.Establishing]: ['Interesting.', 'That tracks.', 'Just as expected.'],
+    [Band.Deepening]:    ['You answered that quickly.', 'Relax. It is only a survey.', 'Good. Don’t think.'],
+    [Band.Climax]:       ['Yes. Like that.', 'You’re doing so well.', 'Almost done. Almost gone.'],
+    [Band.Recovery]:     ['Assessment complete.', 'Well done. Come back up.'],
+  }),
+  praise: Object.freeze(['good', 'perfect', 'so good', 'yes', 'well done', 'gooood']),
+  introLines: Object.freeze([
+    'Cognitive Response Assessment.',
+    'You will be shown a series of questions. Answer honestly.',
+    'There are no wrong answers. Only revealing ones.',
+  ]),
+  outroLines: Object.freeze([
+    'Assessment complete.',
+    'Compiling classification…',
+  ]),
+});
+/** Resolve a bank's theme over DEFAULT_THEME (shallow per key; maps merged per band). */
+export function themeOf(bank) {
+  const t = (bank && bank.theme) || {};
+  const mergeMap = (base, over) => Object.assign({}, base, over || {});
+  return {
+    accent: t.accent || DEFAULT_THEME.accent,
+    accent2: t.accent2 || DEFAULT_THEME.accent2,
+    subjectNoun: t.subjectNoun || DEFAULT_THEME.subjectNoun,
+    sectionTitles: mergeMap(DEFAULT_THEME.sectionTitles, t.sectionTitles),
+    interviewer: mergeMap(DEFAULT_THEME.interviewer, t.interviewer),
+    praise: (Array.isArray(t.praise) && t.praise.length) ? t.praise.slice() : DEFAULT_THEME.praise.slice(),
+    introLines: (Array.isArray(t.introLines) && t.introLines.length) ? t.introLines.slice() : DEFAULT_THEME.introLines.slice(),
+    outroLines: (Array.isArray(t.outroLines) && t.outroLines.length) ? t.outroLines.slice() : DEFAULT_THEME.outroLines.slice(),
+  };
+}
 
 /** Validate a PromptBank shape enough to fail fast at load. Returns string[] of problems. */
 export function validateBank(bank) {
@@ -178,12 +247,13 @@ export function validateBank(bank) {
 export const Mechanic = Object.freeze({
   MC4:       'mc4',        // 4-option multiple choice
   YesNo:     'yesno',      // binary
-  BubblePop: 'bubblepop',  // CENTERPIECE: the effect bubble IS the answer/reward
+  BubblePop: 'bubblepop',  // CENTERPIECE: floating answer bubbles drift up the stage; pop to answer
   Mantra:    'mantra',     // say-it (mic; degrades to type-it)
   CheckIn:   'checkin',    // slider / scale
   Mono:      'mono',       // single-choice ("agree" only path forward)
   Funnel:    'funnel',     // wrong dissolves -> respawns as the right one
   Destruct:  'destruct',   // correct melts/shatters/falls but registers the answer
+  Interlude: 'interlude',  // non-question pacing valley: 'watch' (spiral stare) or 'breathe'
 });
 export const MECHANICS = Object.freeze(Object.values(Mechanic));
 
@@ -209,6 +279,20 @@ export const MECHANICS = Object.freeze(Object.values(Mechanic));
  * @property {SteerRoll}  steerRoll     which coercive behaviors to apply (band-weighted)
  * @property {RewardPlan} rewardPlan    how a correct/incorrect answer pays (from reward.js)
  * @property {number}     timeoutMs     0 = no timeout; else render auto-submits timedOut
+ *                                       (render shows a shrinking-ring pressure cue when > 0)
+ * @property {BeatMeta=}  meta          presentation metadata (engine fills; render/boot consume)
+ */
+
+/**
+ * @typedef {Object} BeatMeta  presentation metadata riding each BeatSpec (all additive).
+ * @property {number}   qIndex          1-based graded-question number across the run
+ * @property {number}   qTotal          current best estimate of total graded questions
+ * @property {number}   bandBeat        1-based beat number within the current band
+ * @property {number}   bandPlanned     planned beats for the current band (may stretch)
+ * @property {boolean}  bandNew         true on the FIRST beat of a band -> boot plays the
+ *                                       interstitial/section card BEFORE rendering this beat
+ * @property {string=}  interviewerLine optional narrator aside shown between beats (from theme)
+ * @property {number=}  streak          consecutive-correct streak BEFORE this beat (HUD meter)
  */
 
 /**
@@ -222,6 +306,9 @@ export const MECHANICS = Object.freeze(Object.values(Mechanic));
  * @property {number=}  pickHeat     0..1 normalized heat of the CHOSEN option — lets reward.js's
  *                                    SpicierPick pay more for the hotter pick. Optional: reward.js
  *                                    falls back to the prompt's heat (plan._heat) when absent.
+ * @property {number=}  streak       consecutive-correct streak INCLUDING this commit (render/beats.js
+ *                                    maintains it; reward.js may use it as a small magnitude multiplier,
+ *                                    effects.js shows the meter). Optional + additive.
  */
 
 /** Build a well-formed AnswerEvent (render helper). */
@@ -266,6 +353,11 @@ export const RewardKind = Object.freeze({
  * @property {number}  intensity   0..1 RAW magnitude — MUST be clamped to caps at the effect layer
  * @property {string}  kind        RewardKind.*
  * @property {boolean} decoupled   true if the reward was NOT tied to correctness (transparency for stats)
+ * @property {boolean=} jackpot    VariableRatio only: a rare top-roll hit -> effects plays the full
+ *                                  jackpot ceremony (screen-wide cascade), audio plays the sting
+ * @property {boolean=} nearMiss   VariableRatio only: the roll ALMOST fired (fire=false) -> effects
+ *                                  may show a brief near-miss shimmer (slot-machine tease)
+ * @property {number=}  streak     echo of AnswerEvent.streak so effects can drive the streak meter
  */
 
 /* ----------------------------------------------------------------------------
@@ -369,6 +461,10 @@ export const Steer = Object.freeze({
   Tunnel:      'tunnel',       // non-correct paths visually collapse to one
   DriftResolve:'drift-resolve',// options drift then settle onto the correct one
   Decay:       'decay',        // wrong option decays/erodes over time
+  MeltAway:    'melt-away',     // wrong option melts/falls on press — veto'd, no commit
+  BottomlessNo:'bottomless-no', // refusal/wrong press peels a decoy 'card' off a stack; N (6-10) fall free, then it commits
+  HoverSwap:   'hover-swap',    // hovering the WRONG option makes Yes/No trade places N (4-7) times, nudging the cursor onto correct
+  MouseHijack: 'mouse-hijack',  // after lingering (lv3+), the real cursor is hidden and a VIRTUAL cursor is dragged toward the CORRECT option with a ramping pull until it auto-commits; fightable at first, aborts on Escape / hard fight
 });
 export const STEERS = Object.freeze(Object.values(Steer));
 
@@ -516,6 +612,26 @@ export function emptyResult(niche = Niche.Bambi) {
  * @property {Object=} ai            { serverBase, authToken } for core/ai.js, or null -> stub
  * @property {boolean} hosted        true if running inside WebView2/host
  * @property {boolean=} m2Test       dev/harness flag
+ * @property {MediaManifest=} media  host-supplied reward media (C# samples the user's assets);
+ *                                    null/absent -> effects fall back to particle stand-ins
+ * @property {string=} subjectId     stable per-install fiction id ("Subject #0007"); host supplies
+ *                                    it hosted, shim persists one standalone. Used by intro/outro.
+ */
+
+/**
+ * @typedef {Object} MediaManifest  reward media the effect layer may draw from.
+ *   URLs must be resolvable from the page origin (hosted: the C# host maps the
+ *   user's assets folder into the virtual host, DTRH-style). Keep lists SMALL
+ *   (a sampled handful) — this rides the init message.
+ * @property {string[]=} images  still images (reward bursts, occluders)
+ * @property {string[]=} gifs    animated GIFs (Drop payloads, jackpot cascade, braindrain wash,
+ *                                ambient drifters)
+ * @property {string=}  bubbleSprite  the app's real bubble PNG (mod-aware: BS/sissy mod override
+ *                                wins), sent as a data: URI by the host. beats.js uses it as the
+ *                                floating answer-bubble body; absent -> the CSS bubble stand-in.
+ * @property {string[]=} subliminals  the user's ACTIVE subliminal phrases (SubliminalPool keys,
+ *                                sampled+capped host-side). effects.js flashes them as a reward
+ *                                variant; absent/empty -> fall back to theme.praise.
  */
 export function defaultBootConfig(overrides = {}) {
   return Object.assign({
@@ -527,6 +643,8 @@ export function defaultBootConfig(overrides = {}) {
     ai: null,
     hosted: false,
     m2Test: false,
+    media: null,
+    subjectId: null,
   }, overrides);
 }
 
@@ -593,11 +711,19 @@ export const AiWant = Object.freeze({
 
 /**
  * RENDER / BEATS (Agent C) — render/beats.js
- *   export function createBeats({ root, effects, audio, steering, reward, caps }) -> Beats
+ *   export function createBeats({ root, effects, audio, steering, reward, caps, background, theme, media }) -> Beats
+ *   `media` (MediaManifest|null, OPTIONAL additive dep): media.bubbleSprite is the app's real
+ *   bubble PNG for the floating answer bubbles (4th-wall break: bubbles ENTER from a random
+ *   viewport edge/corner on a fixed full-viewport layer, drift to their slot over the card,
+ *   then bob; the BubblePop "let it float away" option commits by drifting fully offscreen).
  *   Beats.render(beat: BeatSpec) -> Promise<AnswerEvent>
  *   On commit: resolve reward via reward.resolve(beat.rewardPlan, answerEvent, scoreDelta)
  *   then effects.play(rewardEvent, beat.depth) + audio.chime(rewardEvent). Constructs a
  *   SteerContext per beat and calls steering.installSteering; enforces invariant #1 backstop.
+ *   `background`/`theme` are OPTIONAL additive deps: when present, beats forwards
+ *   background.onAnswer({correct,steered}) + background.onReward(rewardEvent) at commit,
+ *   drives background.setSteerWarp(roll.intensity) while a heavy steer is live (reset on
+ *   commit), and maintains AnswerEvent.streak (consecutive-correct counter).
  */
 
 /**
@@ -609,13 +735,24 @@ export const AiWant = Object.freeze({
 
 /**
  * EFFECTS + AUDIO (Agent E) — render/effects.js, render/audio.js
- *   effects: export function createEffects({ root, caps }) -> Effects
+ *   effects: export function createEffects({ root, caps, media, theme }) -> Effects
  *     Effects.setDepth(depth)                 (reads depthToChannels -> clampToCaps)
- *     Effects.play(rewardEvent, depth)        (clampIntensity)
+ *     Effects.play(rewardEvent, depth)        (clampIntensity; picks a no-repeat VARIANT per kind;
+ *                                              honors rewardEvent.jackpot/nearMiss/streak)
  *     Effects.recover(depth)                  (invariant #3 un-ramp)
+ *     `media` (MediaManifest|null): when present, Drop/jackpot payloads use real images/GIFs;
+ *     absent -> particle stand-ins. `theme` (resolved via themeOf): praise pool + accent colors.
+ *     Ambient layer: effects may run a low-key drifting/faded GIF layer BEHIND the card
+ *     (depth-gated frequency, hard concurrency cap, caps.visual clamps opacity).
+ *     Big-reward variant pool additionally includes: pink wash / braindrain (fullscreen faded
+ *     GIF + dim, ~5s) / subliminal flashes (media.subliminals else theme.praise) / LOOM SPIRAL
+ *     (live render via ../dtrh/shared/loomField.js randomParams2+createFieldRenderer, ~4-5s
+ *     faded fullscreen; params rolled once per session). All clamped by caps + reduced-motion.
  *   audio:   export function createAudio({ caps }) -> Audio
  *     Audio.setDepth(depth)                   (binauralDepth -> beat 10->3.5Hz, carrier 174->196Hz)
- *     Audio.chime(rewardEvent)                Audio.emerge()  (Recovery reverses)
+ *     Audio.chime(rewardEvent)                distinct voice per RewardKind; streak raises pitch;
+ *                                              jackpot -> sting; nearMiss -> muted tick
+ *     Audio.emerge()  (Recovery reverses)
  */
 
 /**
@@ -623,6 +760,22 @@ export const AiWant = Object.freeze({
  *   export function createBackground({ canvas }) -> Background
  *   Background.setDepth(depth)   (bgIntensity -> tint/speed; phone-safe, graceful fallback)
  *   Background.setEnabled(bool)  Background.dispose()
+ *
+ *   REACTIVE EXTENSIONS (all OPTIONAL — every caller guards with `fn && fn()` so an
+ *   older/fallback background still works; the tube is a full participant, not wallpaper):
+ *   Background.setBand(band)                  per-band dressing (palette/geometry mood swap,
+ *                                              Calibration sterile -> Climax vein-plunge, Recovery dawn)
+ *   Background.onAnswer({correct, steered})    correct -> speed surge + glow pulse down the tube;
+ *                                              wrong/refusal -> stall, desaturate, brief counter-rotate
+ *   Background.onReward(rewardEvent)           Drop -> plunge burst; jackpot -> full-tube strobe cascade;
+ *                                              Praise -> warm bloom (intensity ALREADY cap-clamped by caller)
+ *   Background.transition(kind) -> Promise     scripted set-piece riding a band change:
+ *                                              'iris' | 'fork' (route foreshadow) | 'plunge' (Climax entry)
+ *                                              | 'surface' (Recovery). Resolves when the moment lands
+ *                                              (boot awaits it under the interstitial, ~1-2s max).
+ *   Background.setRouteTint({hue, strength})   leading archetype's signature hue bleeds in as the route
+ *                                              solidifies (strength 0..1 = route share)
+ *   Background.setSteerWarp(intensity)         0..1 heavy-steer distortion (fisheye/wobble); 0 resets
  */
 
 /**

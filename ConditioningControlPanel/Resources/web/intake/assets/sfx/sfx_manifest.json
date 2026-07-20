@@ -1,0 +1,77 @@
+{
+  "card-melt": {
+    "variants": 2,
+    "gain": 0.5,
+    "loop": false
+  },
+  "loom-spiral-up": {
+    "variants": 1,
+    "gain": 0.15,
+    "loop": false
+  },
+  "loom-spiral-down": {
+    "variants": 1,
+    "gain": 0.15,
+    "loop": false
+  },
+  "glitch-burst": {
+    "variants": 2,
+    "gain": 0.9,
+    "loop": false
+  },
+  "error-blip": {
+    "variants": 1,
+    "gain": 0.9,
+    "loop": false
+  },
+  "freeze-sting": {
+    "variants": 1,
+    "gain": 0.9,
+    "loop": false
+  },
+  "destruct-shatter": {
+    "variants": 2,
+    "gain": 0.5,
+    "loop": false
+  },
+  "pink-wash": {
+    "variants": 2,
+    "gain": 0.15,
+    "loop": false
+  },
+  "drain-wash": {
+    "variants": 1,
+    "gain": 0.4,
+    "loop": false
+  },
+  "sticker-drag": {
+    "variants": 2,
+    "gain": 0.15,
+    "loop": false
+  },
+  "surface-bloom": {
+    "variants": 1,
+    "gain": 0.45,
+    "loop": false
+  },
+  "briefing-open": {
+    "variants": 1,
+    "gain": 0.5,
+    "loop": false
+  },
+  "pressure-heartbeat": {
+    "variants": 2,
+    "gain": 0.5,
+    "loop": true
+  },
+  "incorrect-feedback": {
+    "variants": 2,
+    "gain": 0.15,
+    "loop": false
+  },
+  "giggle": {
+    "variants": 7,
+    "gain": 0.3,
+    "loop": false
+  }
+}

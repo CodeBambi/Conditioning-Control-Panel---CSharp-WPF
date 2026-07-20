@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
@@ -151,6 +152,20 @@ namespace ConditioningControlPanel.Services.Quiz
                         steerValve = 1.0,         // full steering; a "play it straight" valve can wire here later
                         priorRun = (object?)null, // the page's own stats.js owns feed-forward (IndexedDB)
                         m2Test = _testMode,
+                        // Reward media for the in-page effect layer (gif bursts / jackpot
+                        // spotlights). Served through the ccp.assets virtual host mapped above;
+                        // a small random sample per launch keeps the init message light.
+                        media = BuildMediaManifest(),
+                        // Stable per-install fiction id ("Subject #0417" page-side). Host-supplied
+                        // so it survives WebView2 user-data clears; page mints its own standalone.
+                        subjectId = GetSubjectId(),
+                        // The user's ENABLED subliminal pool, replicated in-page by render/subliminals.js
+                        // (mirrors the WPF SubliminalService flash). Each entry carries its connected
+                        // whisper clip as a data: URI when one exists on disk (the sub_audio / active-mod
+                        // flashes_audio folders sit outside both virtual-host roots, so we inline the small
+                        // clips the same way the bubble sprite rides this init message rather than add a
+                        // new host mapping). Null when the user has no enabled phrases.
+                        subliminals = BuildSubliminalPool(),
                     },
                     ai = new
                     {
@@ -188,6 +203,9 @@ namespace ConditioningControlPanel.Services.Quiz
                     _exiting = true;
                     ArmExitWatchdog();
                     break;
+                case "intake-close":   // "are you sure? -> Yes" jumpscare ABORT
+                    OnIntakeClose();
+                    break;
                 case "exit-done":
                     DisposeAll();
                     break;
@@ -213,6 +231,17 @@ namespace ConditioningControlPanel.Services.Quiz
             if (disp == null || disp.HasShutdownStarted) return;
             disp.BeginInvoke(() =>
             {
+                // Completing an intake earns XP (mirrors PopQuiz's 25-base): deeper descent and
+                // affirmed mantras pay more, capped so endless laps can't farm it.
+                try
+                {
+                    var xp = 25
+                        + (int)Math.Round(Math.Clamp(run.PeakDepth, 0, 1) * 50)
+                        + Math.Min(run.AffirmedMantras?.Count ?? 0, 5) * 5;
+                    App.Progression?.AddXP(Math.Min(xp, 100), XPSource.Other);
+                }
+                catch (Exception ex) { App.Logger?.Debug("IntakeHostService: XP grant failed: {E}", ex.Message); }
+
                 try
                 {
                     var session = QuizSessionGenerator.GenerateSession(run);
@@ -237,6 +266,20 @@ namespace ConditioningControlPanel.Services.Quiz
                 }
                 catch (Exception ex) { App.Logger?.Warning(ex, "IntakeHostService: session draft/save failed"); }
             });
+        }
+
+        /// <summary>The in-page "are you sure? -&gt; Yes" jumpscare asks the window to close as an
+        /// ABORT: unlike the natural quiz end (a <c>quiz-result</c> that drafts a session), NOTHING
+        /// is reported here — we just tear the host down on the dispatcher, reusing the same
+        /// <see cref="DisposeAll"/> path the natural close and the title-bar X use, so no
+        /// <see cref="QuizRunResult"/> is generated. <c>_exiting</c> is set first so the heartbeat
+        /// watchdog can't relaunch the window the user is being kicked out of.</summary>
+        private static void OnIntakeClose()
+        {
+            _exiting = true;
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) { DisposeAll(); return; }
+            disp.BeginInvoke(() => DisposeAll());
         }
 
         private static void OnBootError(string? msg)
@@ -293,6 +336,269 @@ namespace ConditioningControlPanel.Services.Quiz
         {
             try { return App.Patreon?.GetAccessToken() ?? string.Empty; }
             catch { return string.Empty; }
+        }
+
+        /// <summary>MediaManifest (contracts.js): a small random sample of the user's flash images,
+        /// split gifs/stills, as ccp.assets URLs. Null on any failure — the page's effect layer
+        /// falls back to its particle stand-ins.</summary>
+        private static object? BuildMediaManifest()
+        {
+            try
+            {
+                var gifs = new List<string>();
+                var stills = new List<string>();
+                var imagesRoot = Path.Combine(App.EffectiveAssetsPath, "images");
+                if (Directory.Exists(imagesRoot))
+                {
+                    foreach (var file in Directory.EnumerateFiles(imagesRoot, "*", SearchOption.AllDirectories))
+                    {
+                        var ext = Path.GetExtension(file).ToLowerInvariant();
+                        if (ext == ".gif") gifs.Add(file);
+                        else if (ext is ".png" or ".jpg" or ".jpeg" or ".webp") stills.Add(file);
+                    }
+                }
+
+                // The bubble sprite + subliminal phrases ride the manifest too, so the page can
+                // still get them when the user has no images folder at all.
+                var bubbleSprite = BuildBubbleSpriteDataUri();
+                var subliminals = SampleActiveSubliminals();
+                if (gifs.Count == 0 && stills.Count == 0 && bubbleSprite == null && subliminals == null)
+                    return null;
+
+                var rng = new Random();
+                static List<string> Sample(List<string> pool, Random r, int take)
+                {
+                    // partial Fisher-Yates: take random items without shuffling the whole list
+                    for (int i = 0; i < Math.Min(take, pool.Count); i++)
+                    {
+                        int j = r.Next(i, pool.Count);
+                        (pool[i], pool[j]) = (pool[j], pool[i]);
+                    }
+                    return pool.GetRange(0, Math.Min(take, pool.Count));
+                }
+                string ToUrl(string file)
+                {
+                    var rel = Path.GetRelativePath(App.EffectiveAssetsPath, file).Replace('\\', '/');
+                    var escaped = string.Join('/', rel.Split('/').Select(Uri.EscapeDataString));
+                    return "https://ccp.assets/" + escaped;
+                }
+
+                return new
+                {
+                    gifs = Sample(gifs, rng, 10).Select(ToUrl).ToArray(),
+                    images = Sample(stills, rng, 10).Select(ToUrl).ToArray(),
+                    bubbleSprite,
+                    subliminals,
+                };
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("IntakeHostService.BuildMediaManifest: {E}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>The app's REAL bubble sprite (mod-aware: an active BS/sissy mod's bubble.png
+        /// wins, same resolution order <see cref="BubbleService"/> uses), PNG-encoded as a data:
+        /// URI so the page needs no extra virtual host. ~50-150KB riding the init message.</summary>
+        private static string? BuildBubbleSpriteDataUri()
+        {
+            try
+            {
+                var src = ModResourceResolver.ResolveImage("bubble.png") as System.Windows.Media.Imaging.BitmapSource;
+                if (src == null)
+                {
+                    var uri = new Uri("pack://application:,,,/Resources/bubble.png", UriKind.Absolute);
+                    src = new System.Windows.Media.Imaging.BitmapImage(uri);
+                }
+                var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(src));
+                using var ms = new MemoryStream();
+                enc.Save(ms);
+                return "data:image/png;base64," + Convert.ToBase64String(ms.ToArray());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("IntakeHostService.BuildBubbleSpriteDataUri: {E}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>The user's ACTIVE subliminal phrases (SubliminalPool entries toggled on),
+        /// shuffled + capped so the init message stays small. Null when none are active.</summary>
+        private static string[]? SampleActiveSubliminals()
+        {
+            try
+            {
+                var pool = App.Settings.Current.SubliminalPool;
+                var active = pool?.Where(kvp => kvp.Value).Select(kvp => kvp.Key)
+                    .Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+                if (active == null || active.Count == 0) return null;
+                var rng = new Random();
+                for (int i = active.Count - 1; i > 0; i--)
+                {
+                    int j = rng.Next(i + 1);
+                    (active[i], active[j]) = (active[j], active[i]);
+                }
+                return active.Take(40).ToArray();
+            }
+            catch { return null; }
+        }
+
+        // Audio inlined into the init config: only enabled phrases, and only when a matching clip
+        // exists. Small per-clip + total budgets keep the message light (the whisper mp3s are
+        // ~15-55KB each); the page re-guards clip length (>8s skipped) at play time.
+        private const long SubClipMaxBytes = 512 * 1024;          // skip a single clip larger than this
+        private const long SubAudioBudgetBytes = 6 * 1024 * 1024; // total raw audio inlined per launch
+        private static readonly string[] SubAudioExtsLower = { ".mp3", ".wav", ".ogg" };
+
+        /// <summary>The user's ENABLED subliminal phrases as <c>{ text, audio? }</c> entries for the
+        /// web core's render/subliminals.js. <c>audio</c> is a base64 data: URI of the phrase's
+        /// connected whisper clip when one exists (resolved with the SAME text→file matching
+        /// <see cref="ConditioningControlPanel.Services.SubliminalService"/> uses: active-mod
+        /// <c>resources/sounds/flashes_audio</c> first, then the default <c>Resources/sub_audio</c>).
+        /// Shuffled + capped so the init message stays light; null when no phrases are enabled.</summary>
+        private static object[]? BuildSubliminalPool()
+        {
+            try
+            {
+                var pool = App.Settings?.Current?.SubliminalPool;
+                var active = pool?.Where(kvp => kvp.Value).Select(kvp => kvp.Key)
+                    .Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).ToList();
+                if (active == null || active.Count == 0) return null;
+
+                var rng = new Random();
+                for (int i = active.Count - 1; i > 0; i--)
+                {
+                    int j = rng.Next(i + 1);
+                    (active[i], active[j]) = (active[j], active[i]);
+                }
+                if (active.Count > 400) active = active.GetRange(0, 400);
+
+                // Resolve the two audio dirs once (both may sit outside the ccp.game/ccp.assets roots,
+                // which is exactly why clips are inlined below instead of served by URL).
+                var defaultAudioDir = Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio");
+                string? modAudioDir = null;
+                try
+                {
+                    var modPath = App.Mods?.ActiveMod?.InstalledPath;
+                    if (!string.IsNullOrEmpty(modPath))
+                    {
+                        var d = Path.Combine(modPath, "resources", "sounds", "flashes_audio");
+                        if (Directory.Exists(d)) modAudioDir = d;
+                    }
+                }
+                catch { /* mod audio is best-effort */ }
+
+                // Respect the WPF global subliminal-audio toggle: when it's OFF, whispers
+                // are off everywhere, so the intake ships text-only entries (no audio
+                // resolution / inlining at all). Mirrors SubliminalService, which gates
+                // every whisper playback on the same SubAudioEnabled flag.
+                bool audioEnabled = App.Settings?.Current?.SubAudioEnabled == true;
+
+                long budget = SubAudioBudgetBytes;
+                var list = new List<object>(active.Count);
+                foreach (var text in active)
+                {
+                    string? dataUri = null;
+                    if (audioEnabled)
+                    {
+                        try
+                        {
+                            var file = ResolveSubliminalAudioFile(text, modAudioDir, defaultAudioDir);
+                            if (file != null)
+                            {
+                                var len = new FileInfo(file).Length;
+                                if (len > 0 && len <= SubClipMaxBytes && len <= budget)
+                                {
+                                    var bytes = File.ReadAllBytes(file);
+                                    dataUri = "data:" + MimeForAudio(file) + ";base64," + Convert.ToBase64String(bytes);
+                                    budget -= bytes.Length;
+                                }
+                            }
+                        }
+                        catch { dataUri = null; } // any read failure = text-only for this phrase
+                    }
+
+                    list.Add(dataUri != null ? (object)new { text, audio = dataUri } : new { text });
+                }
+                return list.ToArray();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("IntakeHostService.BuildSubliminalPool: {E}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Find the whisper clip for <paramref name="text"/>, mirroring
+        /// <c>SubliminalService.FindLinkedAudio</c>: exact filename match against case/apostrophe
+        /// variants, then a case-insensitive directory scan. Mod dir wins over the default dir.</summary>
+        private static string? ResolveSubliminalAudioFile(string text, string? modDir, string defaultDir)
+        {
+            var clean = text.Trim();
+            var variants = new[]
+            {
+                clean,
+                clean.ToUpperInvariant(),
+                clean.ToLowerInvariant(),
+                clean.Replace('’', '\''),
+                clean.Replace('\'', '’'),
+                clean.ToUpperInvariant().Replace('’', '\''),
+            };
+            var exts = new[] { ".mp3", ".wav", ".ogg", ".MP3", ".WAV", ".OGG" };
+
+            foreach (var dir in new[] { modDir, defaultDir })
+            {
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) continue;
+
+                foreach (var v in variants)
+                    foreach (var ext in exts)
+                    {
+                        var p = Path.Combine(dir, v + ext);
+                        if (File.Exists(p)) return p;
+                    }
+
+                try
+                {
+                    var norm = clean.ToUpperInvariant().Replace('’', '\'');
+                    foreach (var f in Directory.GetFiles(dir))
+                    {
+                        if (Array.IndexOf(SubAudioExtsLower, Path.GetExtension(f).ToLowerInvariant()) < 0) continue;
+                        var name = Path.GetFileNameWithoutExtension(f).ToUpperInvariant().Replace('’', '\'');
+                        if (name == norm) return f;
+                    }
+                }
+                catch { /* scan is best-effort */ }
+            }
+            return null;
+        }
+
+        private static string MimeForAudio(string file) => Path.GetExtension(file).ToLowerInvariant() switch
+        {
+            ".wav" => "audio/wav",
+            ".ogg" => "audio/ogg",
+            _ => "audio/mpeg",
+        };
+
+        /// <summary>Stable per-install subject number (4 digits, e.g. "0417") persisted beside the
+        /// user data. Kept OUT of AppSettings on purpose: it is pure fiction, not a setting.</summary>
+        private static string GetSubjectId()
+        {
+            try
+            {
+                var path = Path.Combine(App.UserDataPath, "intake_subject.txt");
+                if (File.Exists(path))
+                {
+                    var existing = File.ReadAllText(path).Trim();
+                    if (existing.Length is > 0 and <= 8) return existing;
+                }
+                var id = new Random().Next(1, 10000).ToString("D4");
+                Directory.CreateDirectory(App.UserDataPath);
+                File.WriteAllText(path, id);
+                return id;
+            }
+            catch { return "0000"; }
         }
 
         // ============================ watchdogs / recovery ============================

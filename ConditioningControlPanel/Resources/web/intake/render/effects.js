@@ -7,24 +7,62 @@
  *   flashes · subliminals · ambient bubbles · reward payloads (flash/bubble/drop/praise).
  *
  * CONTRACT (contracts.js §"EFFECTS + AUDIO (Agent E)"):
- *   createEffects({ root, caps }) -> {
+ *   createEffects({ root, caps, media, theme }) -> {
  *     setDepth(depth),                 // depthToChannels -> clampToCaps -> cadence/opacity
- *     play(rewardEvent, depth),        // clampIntensity -> render by RewardKind
+ *     play(rewardEvent, depth),        // clampIntensity -> no-repeat VARIANT per RewardKind;
+ *                                      //   honors jackpot / nearMiss / streak
  *     recover(depth),                  // invariant #3: un-ramp; depth 0 = all off/removed
+ *     dispose(),                       // full teardown (recover(0) + timers) for hosts
  *   }
+ *   `media` (MediaManifest|null): when present, Drop/jackpot payloads use real
+ *   GIFs/images from the manifest; absent -> particle stand-ins (unchanged).
+ *   media.subliminals: the user's active subliminal phrases (garnish words);
+ *   absent/empty -> theme.praise.
+ *   `theme` (resolved via themeOf, optional): praise pool + accent colors.
+ *
+ * VARIETY (the "0 variety" fix): every RewardKind owns a pool of 3-5 visual
+ * variants. Each fire picks one with a NO-REPEAT-last rotation per kind, and
+ * the pick is intensity-weighted (subtle variants at low intensity, spectacular
+ * at high — see variantWeights/pickVariantIndex, exported + testable).
+ *
+ * AMBIENT + GARNISH (presentation upgrade): (1) an AMBIENT layer — occasionally
+ * a GIF/still from the manifest DRIFTS across the viewport or GHOSTS in and out,
+ * ghost-faint, BEHIND the question card (own z-1 layer; depth-gated cadence
+ * ~45s shallow -> ~18s deep; max 2 concurrent; off below depth ~0.2, under
+ * reduced motion, without media, and through Recovery). (2) fullscreen reward
+ * GARNISHES that PAIR with a firing reward — ALWAYS GARNISH, ALWAYS DIFFERENT:
+ * pink wash / braindrain (dim + blur + faint luminosity-blend image wash) /
+ * subliminal word flashes (media.subliminals else theme.praise) / a LIVE LOOM
+ * SPIRAL (lazy dynamic import of ../../dtrh/shared/loomField.js — import
+ * failure just retires the spiral garnish). Every FIRED reward above a small
+ * intensity/depth floor draws the NEXT garnish from a SHUFFLED BAG of all four
+ * (createGarnishBag, exported + testable): the bag reshuffles when empty with
+ * no immediate repeat across the boundary, so the player cycles through every
+ * look. Jackpots skip the bag and force drain-or-spiral (still consumed from
+ * the rotation). One garnish at a time (a new one fast-fades the old), all
+ * pointer-events:none, all clamped by caps, none during Recovery (recover()
+ * force-clears a live one). Spiral/subliminal garnishes ping audio.js via the
+ * 'intake-garnish' window CustomEvent (loose seam — boot wiring unchanged;
+ * audio clamps by ITS caps); loom import failure / first spiral frame emit an
+ * 'intake-log' window CustomEvent so the C# shim can surface them (no
+ * devtools in-app; harmless if nobody listens).
  *
  * INVARIANTS honored here:
  *   #2 — every level flows from depthToChannels(depth) x clampToCaps(...,caps) or
  *        clampIntensity(intensity,caps). We NEVER hardcode an absolute strength;
  *        the constants below are ONLY 0..1 -> real-unit (ms / px / alpha) glue.
- *   #3 — recover() walks the stack down; recover(<=0) tears everything out.
+ *   #3 — recover() walks the stack down; recover(<=0) tears EVERYTHING out —
+ *        spawned nodes, media (gif/image) nodes, AND the streak meter.
  *
  * IMPORTS ARE SIDE-EFFECT FREE: no document/DOM access at module load. All DOM
  * work is guarded inside the factory + its methods, so importing this never
  * throws (a throw-at-import = silent infinite loader spin — see dtrh gotchas).
+ * Media loading is lazy (src set at spawn), error-tolerant (onerror removes the
+ * node), and capped at MAX_MEDIA_NODES concurrent nodes.
  *
- * The pure mappings (channel vector -> render numbers) are exported for headless
- * tests; the live path calls them too so the tested math IS the shipped math.
+ * The pure mappings (channel vector -> render numbers, variant math, specs) are
+ * exported for headless tests; the live path calls them too so the tested math
+ * IS the shipped math.
  * ==========================================================================*/
 
 import { depthToChannels, clampToCaps, clampIntensity, RewardKind, lerp, clamp01 } from '../core/contracts.js';
@@ -94,6 +132,285 @@ export function rewardBurstSpec(intensity) {
   return { count: Math.round(4 + i * 12), spreadPx: 60 + i * 160, durMs: 620 + i * 640 };
 }
 
+/* ----------------------------------------------------------------------------
+ * PURE VARIANT MATH — intensity-weighted, no-repeat-last rotation.
+ * Variants inside each pool are ordered subtle -> spectacular; the weight window
+ * slides with intensity so low pays quiet and high pays loud. Exported + tested.
+ * -------------------------------------------------------------------------- */
+
+/** Weight vector for n variants at a given intensity (triangular window with a
+ *  floor so every variant stays reachable). Pure. */
+export function variantWeights(n, intensity) {
+  const count = Math.max(1, n | 0);
+  const c = clamp01(intensity) * (count - 1); // window center slides subtle->spectacular
+  const w = [];
+  for (let k = 0; k < count; k++) {
+    w.push(Math.max(0.12, 1 - (Math.abs(k - c) / Math.max(1, count - 1)) * 0.9));
+  }
+  return w;
+}
+
+/** Roll a variant index: intensity-weighted, never repeating lastIndex. Pure
+ *  when `rand` (0..1) is supplied. */
+export function pickVariantIndex(n, lastIndex, intensity, rand = Math.random()) {
+  const count = Math.max(1, n | 0);
+  if (count === 1) return 0;
+  const w = variantWeights(count, intensity);
+  if (lastIndex >= 0 && lastIndex < count) w[lastIndex] = 0; // NO-REPEAT-last
+  let total = 0;
+  for (let k = 0; k < count; k++) total += w[k];
+  if (total <= 0) return (lastIndex + 1) % count;
+  let roll = clamp01(rand) * total;
+  for (let k = 0; k < count; k++) { roll -= w[k]; if (roll <= 0) return k; }
+  return count - 1;
+}
+
+/** Reward intensity -> GIF-burst numbers (Drop with media). Pure. */
+export function gifBurstSpec(intensity) {
+  const i = clamp01(intensity);
+  return {
+    count:   2 + Math.round(i * 2),            // 2..4 gif nodes
+    holdMs:  600 + Math.round(i * 600),        // 600..1200 hold, per brief
+    sizePx:  Math.round(120 + i * 150),        // approximate box edge
+    enterMs: 200,
+    exitMs:  280,
+  };
+}
+
+/* ----------------------------------------------------------------------------
+ * GIFBURST — in-browser CCP-flash REWARD (owner-directed). The kind string
+ * mirrors a recommended contracts.js `RewardKind.GifBurst: 'gifburst'` (see the
+ * FINAL REPORT contract-gap note); until that enum lands the literal is
+ * duplicated here + in reward.js (same pattern as GARNISH_CUE_EVENT). Exported
+ * so reward-roll / opacity tests can reference the shipped values.
+ * -------------------------------------------------------------------------- */
+export const GIFBURST_KIND = 'gifburst';
+
+/** Run-progress -> GifBurst opacity, HARDCODED per owner (no settings). The
+ *  owner's ladder is BY BAND (Calibration .15 / Establishing .30 / Deepening
+ *  .50 / Climax .75 / Recovery 1.00). effects.js only receives a depth scalar,
+ *  so we map via the band depth-floors (mirror of contracts.js BAND_DEPTH_FLOOR:
+ *  Establishing 0.18, Deepening 0.42, Climax 0.72). Recovery's 1.00 rung is
+ *  unreachable through the reward roll — rewards never fire in Recovery
+ *  (reward.js baseChance 0) and depth alone can't distinguish it. Pure. */
+export function gifBurstOpacityForDepth(depth) {
+  const d = clamp01(depth);
+  if (d >= 0.72) return 0.75; // Climax
+  if (d >= 0.42) return 0.50; // Deepening
+  if (d >= 0.18) return 0.30; // Establishing
+  return 0.15;                // Calibration
+}
+
+/** Streak value -> meter display numbers. Hidden under 2, capped at 10. Pure. */
+export function streakMeterSpec(streak) {
+  const s = Math.max(0, streak | 0);
+  return {
+    visible: s >= 2,
+    lit:     Math.min(s, 10),
+    glow:    clamp01((s - 2) / 8), // glow intensifies toward the cap
+  };
+}
+
+/** Reward intensity -> jackpot-ceremony numbers. Pure. */
+export function jackpotSpec(intensity) {
+  const i = clamp01(intensity);
+  return {
+    dimMs:            250,                      // anticipation beat
+    shimmerMs:        2000,                     // gold/accent shimmer overlay
+    bursts:           3 + Math.round(i * 2),
+    particlesPerBurst: Math.round(10 + i * 14),
+    bubbles:          Math.round(8 + i * 10),
+    spotlightMs:      Math.round(1500 + i * 500),
+  };
+}
+
+/** Reward intensity -> near-miss tease numbers (fire=false shimmer). Pure. */
+export function nearMissSpec(intensity) {
+  const i = clamp01(intensity);
+  return {
+    alpha:     0.05 + i * 0.10, // barely-there by design
+    durMs:     400,
+    particles: 3 + Math.round(i * 2),
+  };
+}
+
+/* ----------------------------------------------------------------------------
+ * PURE AMBIENT + GARNISH MATH — cadence/opacity curves and the garnish gamble.
+ * Same rules as the variant math above: pure when `rand`/`rng` is supplied,
+ * exported for headless tests, and the live path consumes EXACTLY these.
+ * -------------------------------------------------------------------------- */
+
+/** Ambient drifters only wake once the descent is properly under way. */
+export const AMBIENT_MIN_DEPTH = 0.2;
+
+/** Depth -> ambient-layer schedule: interval shrinks ~45s -> ~18s as depth
+ *  deepens (±25% jitter via `rand`), opacity climbs 0.10 -> 0.28 (pre-cap).
+ *  Below AMBIENT_MIN_DEPTH the layer is off entirely. Pure. */
+export function ambientSpec(depth, rand = Math.random()) {
+  const d = clamp01(depth);
+  if (d <= AMBIENT_MIN_DEPTH) return { on: false, intervalMs: Infinity, opacity: 0 };
+  const t = clamp01((d - AMBIENT_MIN_DEPTH) / (1 - AMBIENT_MIN_DEPTH));
+  return {
+    on: true,
+    intervalMs: Math.round(lerp(45000, 18000, t) * (0.75 + clamp01(rand) * 0.5)),
+    opacity: 0.10 + t * 0.18, // ghost-faint by design; visual cap multiplies on top
+  };
+}
+
+/** The four fullscreen garnishes, ordered gentle -> "ulterior reward". */
+export const GARNISH_KINDS = Object.freeze(['pink', 'sublim', 'drain', 'spiral']);
+
+/** Floors for the always-garnish rotation: a fired reward below either one
+ *  draws nothing (jackpots are exempt). Deliberately tiny — the play-test
+ *  verdict on the old probability gates was "saw one pink wash all run". */
+export const GARNISH_MIN_INTENSITY = 0.2;
+export const GARNISH_MIN_DEPTH = 0.1;
+
+/**
+ * The shuffled-bag rotation (ALWAYS GARNISH, ALWAYS DIFFERENT). draw() pops
+ * the next garnish name; an empty bag reshuffles with no immediate repeat
+ * across the boundary, so 8 straight draws hit all four kinds twice. draw()
+ * takes an `avail` subset (live path drops 'spiral' when the loom import
+ * failed) — unavailable names are skipped AND stay consumed. force(names)
+ * is the jackpot path: picks among `names` (preferring one still waiting in
+ * the bag, avoiding a back-to-back repeat) and consumes it from the rotation.
+ * Pure when `rng` is supplied. Returns { draw, force, take }.
+ */
+export function createGarnishBag(rng = Math.random, kinds = GARNISH_KINDS) {
+  const all = kinds.slice();
+  let bag = [];
+  let last = null;
+  const roll = (n) => Math.min(n - 1, Math.floor(clamp01(rng()) * n)); // 0..n-1
+  function refill(avail) {
+    bag = avail.slice();
+    for (let k = bag.length - 1; k > 0; k--) { // Fisher-Yates
+      const j = roll(k + 1);
+      const t = bag[k]; bag[k] = bag[j]; bag[j] = t;
+    }
+    // draws pop from the END: never let the fresh bag open on the last draw
+    if (bag.length > 1 && bag[bag.length - 1] === last) {
+      const t = bag[bag.length - 1]; bag[bag.length - 1] = bag[0]; bag[0] = t;
+    }
+  }
+  function take(name) { // consume one occurrence from the rotation
+    const idx = bag.indexOf(name);
+    if (idx >= 0) bag.splice(idx, 1);
+    last = name;
+    return name;
+  }
+  function draw(avail = all) {
+    const ok = all.filter((n) => avail.includes(n));
+    if (!ok.length) return null;
+    for (let guard = 0; guard < 2; guard++) {
+      while (bag.length) {
+        const n = bag.pop();
+        if (ok.includes(n)) { last = n; return n; }
+      }
+      refill(ok);
+    }
+    return null; // unreachable: refill(ok) is non-empty
+  }
+  function force(names) {
+    const ok = all.filter((n) => names.includes(n));
+    if (!ok.length) return null;
+    if (!bag.length) refill(all); // an empty bag consumes from the NEXT cycle
+    const inBag = ok.filter((n) => bag.includes(n));
+    let pool = inBag.length ? inBag : ok;
+    if (pool.length > 1 && pool.includes(last)) pool = pool.filter((n) => n !== last);
+    return take(pool[roll(pool.length)]);
+  }
+  return { draw, force, take };
+}
+
+/* The three helpers below are the RETIRED probability-gate model — kept
+ * exported for test compat, but the live path now runs on createGarnishBag. */
+
+/** LEGACY. Chance (0..1) that a FIRED reward of `kind` pairs with a garnish.
+ *  Jackpots always garnish; Chime unlocks at depth 0.35 and climbs; everything
+ *  else only gets a small chance deep. Pure. */
+export function garnishChance(kind, depth, jackpot = false) {
+  if (jackpot) return 1;
+  const d = clamp01(depth);
+  if (kind === RewardKind.None) return 0;
+  if (kind === RewardKind.Chime) {
+    if (d < 0.35) return 0;
+    return 0.35 + 0.40 * ((d - 0.35) / 0.65); // 35% at 0.35 -> 75% at full depth
+  }
+  if (d < 0.5) return 0;
+  return 0.10 + 0.15 * ((d - 0.5) / 0.5);     // 10% -> 25% deep
+}
+
+/** LEGACY. Weight per garnish name at a given intensity. The spectacle pair
+ *  (drain / spiral) scales with intensity; jackpots skew toward them. Pure. */
+export function garnishWeights(intensity, jackpot = false) {
+  const i = clamp01(intensity);
+  const w = {
+    pink:   1.0,
+    sublim: 0.9,
+    drain:  0.55 + 0.45 * i,
+    spiral: 0.30 + 0.55 * i,
+  };
+  if (jackpot) { w.pink *= 0.4; w.sublim *= 0.5; w.drain *= 2.0; w.spiral *= 2.6; }
+  return w;
+}
+
+/** LEGACY. The garnish gamble: gate roll (garnishChance) then a weighted,
+ *  no-repeat-last pick among `kinds`. Consumes rng() twice. Returns a garnish
+ *  name or null. Pure when `rng` is supplied. */
+export function pickGarnish(kind, depth, intensity, { jackpot = false, last = null, rng = Math.random, kinds = GARNISH_KINDS } = {}) {
+  const avail = GARNISH_KINDS.filter((n) => kinds.includes(n));
+  if (!avail.length) return null;
+  if (rng() >= garnishChance(kind, depth, jackpot)) return null;
+  const w = garnishWeights(intensity, jackpot);
+  const pool = avail.map((n) => ({ n, w: (n === last && avail.length > 1) ? 0 : w[n] })); // NO-REPEAT-last
+  let total = 0;
+  for (const p of pool) total += p.w;
+  if (total <= 0) return avail[0];
+  let roll = clamp01(rng()) * total;
+  for (const p of pool) { roll -= p.w; if (roll <= 0) return p.n; }
+  return pool[pool.length - 1].n;
+}
+
+/** Garnish intensity -> pink-wash numbers (~2.5-4s tint pulse). Pure. */
+export function pinkWashSpec(intensity) {
+  const i = clamp01(intensity);
+  return { alpha: 0.20 + i * 0.30, durMs: Math.round(2500 + i * 1500) };
+}
+/** Garnish intensity -> braindrain numbers (~5s dim + blur + faint wash). Pure. */
+export function drainWashSpec(intensity) {
+  const i = clamp01(intensity);
+  return { alpha: 0.35 + i * 0.25, durMs: 5000 };
+}
+/** Garnish intensity -> subliminal-flash numbers: 2-4 rapid word blinks,
+ *  140-200ms on, ~350ms apart, low alpha so it reads subliminal. Pure. */
+export function sublimFlashSpec(intensity, rand = Math.random()) {
+  const i = clamp01(intensity);
+  return {
+    flashes: 2 + Math.round(clamp01(rand) * 2),  // 2..4
+    onMs:    Math.round(140 + i * 60),           // 140..200
+    gapMs:   350,
+    alpha:   0.22 + i * 0.18,                    // 0.22..0.40
+  };
+}
+/** Garnish intensity -> live loom-spiral numbers (~4-5s, faded). Pure. */
+export function spiralGarnishSpec(intensity) {
+  const i = clamp01(intensity);
+  return { alpha: 0.30 + i * 0.15, durMs: Math.round(4000 + i * 1000), fadeMs: 700 };
+}
+
+/* Cross-module spiral no-repeat guard. beats.js carries an IDENTICAL copy (no
+ * shared module — intentional duplication) and both route their spiral params
+ * through it, so window.__ixSpiralSig makes an interlude spiral and a garnish
+ * spiral never land on the same look back-to-back either. `make` MUST mint a
+ * fresh params object per call; we reroll up to 4x if it matches the last sig. */
+function freshSpiralParams(make) {   // make: () => params object
+  let p = make();
+  const sig = (o) => { try { return JSON.stringify(o); } catch { return String(Math.random()); } };
+  for (let i = 0; i < 4 && sig(p) === window.__ixSpiralSig; i++) p = make();
+  window.__ixSpiralSig = sig(p);
+  return p;
+}
+
 /* Faint, niche-agnostic subliminal pool. Niche-specific words come from prompts/
  * AI upstream (Agents A/H) — the effect layer stays persona-neutral on purpose. */
 const SUBLIMINAL_WORDS = [
@@ -102,15 +419,51 @@ const SUBLIMINAL_WORDS = [
 ];
 const PRAISE_WORDS = ['good', 'perfect', 'so good', 'yes', 'well done', 'gooood'];
 
+const DEFAULT_ACCENT  = '#ff69b4';
+const DEFAULT_ACCENT2 = '#b06cff';
+
+/** Concurrent <img> nodes (gifs + polaroids) allowed at once — leak guard. */
+const MAX_MEDIA_NODES = 6;
+/** Concurrent ambient drifters (own layer, own counter — separate leak guard). */
+const MAX_AMBIENT = 2;
+const STREAK_SEGMENTS = 10;
+/** Slow fade-in / gentle fade-out timings (ms) so NOTHING pops. Shared by the
+ *  fullscreen garnishes (pink wash / drain / loom spiral) and the reward+jackpot
+ *  gif nodes. Preemption (a new garnish replacing a live one) fast-forwards to
+ *  GARNISH_PREEMPT_MS; dispose()/recover(0) removes instantly. Fades are clamped
+ *  against each layer's own lifetime so a short garnish still gets a real fade. */
+const GARNISH_FADE_IN_MS  = 1600;
+const GARNISH_FADE_OUT_MS = 900;
+const GARNISH_PREEMPT_MS  = 250;
+const GIF_FADE_IN_MS  = 1200;
+const GIF_FADE_OUT_MS = 700;
+/** GifBurst (in-browser flash reward) timings + physics thresholds. All
+ *  hardcoded per owner directive (no settings). */
+const GIFBURST_LIFE_MS    = 6000;  // hard cap on UNPAUSED on-screen time
+const GIFBURST_POP_MS     = 250;   // pop-in overshoot
+const GIFBURST_FADE_MS    = 700;   // auto fade-out at the 6s cap
+const GIFBURST_DISMISS_MS = 200;   // click-dismiss: quick fade + shrink
+const GIFBURST_DRAG_PX    = 6;     // release under this travel = a click, not a drag
+const GIFBURST_FLING_MIN  = 0.45;  // px/ms release speed to fling (slower = drop in place)
+/** Window CustomEvent name effects fires when a spiral/sublim garnish shows —
+ *  audio.js listens for it (same literal there; contracts.js stays untouched). */
+export const GARNISH_CUE_EVENT = 'intake-garnish';
+
 /* ----------------------------------------------------------------------------
- * SCOPED STYLES — injected once, guarded. Class prefix `ixfx-`.
+ * SCOPED STYLES — injected once, guarded. Class prefix `ixfx-`. Accent colors
+ * flow through CSS vars (--ixfx-a / --ixfx-a2) set from the theme at mount.
  * -------------------------------------------------------------------------- */
 const STYLE_ID = 'ixfx-styles';
 const CSS = `
 .ixfx-root{position:fixed;inset:0;z-index:6;pointer-events:none;overflow:hidden;
-  contain:strict;}
+  contain:strict;--ixfx-a:${DEFAULT_ACCENT};--ixfx-a2:${DEFAULT_ACCENT2};}
 .ixfx-flash{position:absolute;inset:0;background:radial-gradient(120% 120% at 50% 45%,
   #fff 0%,#ffd9f2 55%,#ffb3e6 100%);opacity:0;will-change:opacity;}
+.ixfx-spiral{position:absolute;inset:-25%;opacity:0;will-change:transform,opacity;
+  background:conic-gradient(from 0deg at 50% 50%,transparent 0deg,var(--ixfx-a) 45deg,
+  transparent 90deg,var(--ixfx-a2) 200deg,transparent 250deg,#fff 320deg,transparent 360deg);}
+.ixfx-chroma{position:absolute;inset:0;opacity:0;mix-blend-mode:screen;
+  will-change:opacity,transform;}
 .ixfx-sub{position:absolute;color:#fff;font-weight:700;letter-spacing:.06em;
   text-transform:lowercase;white-space:nowrap;opacity:0;will-change:opacity,transform;
   text-shadow:0 0 12px rgba(255,105,180,.5);mix-blend-mode:screen;}
@@ -119,12 +472,65 @@ const CSS = `
   rgba(255,105,180,.35) 55%,rgba(176,108,255,.15) 100%);
   box-shadow:0 0 14px rgba(255,105,180,.35);opacity:0;will-change:transform,opacity;}
 .ixfx-particle{position:absolute;width:10px;height:10px;border-radius:50%;
-  background:radial-gradient(circle at 40% 35%,#fff,#ff69b4 60%,#b06cff 100%);
+  background:radial-gradient(circle at 40% 35%,#fff,var(--ixfx-a) 60%,var(--ixfx-a2) 100%);
   opacity:0;will-change:transform,opacity;}
+.ixfx-drip{position:absolute;width:3px;border-radius:2px;opacity:0;
+  background:linear-gradient(180deg,transparent,var(--ixfx-a) 55%,#fff 100%);
+  will-change:transform,opacity;}
+.ixfx-edge{position:absolute;inset:0;opacity:0;will-change:opacity;
+  box-shadow:inset 0 0 120px 32px var(--ixfx-a);}
+.ixfx-ring{position:absolute;border:2px solid var(--ixfx-a);border-radius:50%;
+  width:22px;height:22px;opacity:0;will-change:transform,opacity;
+  box-shadow:0 0 10px var(--ixfx-a);}
+.ixfx-glint{position:absolute;width:16px;height:16px;opacity:0;
+  background:radial-gradient(circle,#fff 0%,var(--ixfx-a) 45%,transparent 72%);
+  will-change:transform,opacity;}
 .ixfx-praise{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);
-  color:#fff;font-weight:800;font-size:clamp(28px,7vw,68px);letter-spacing:.02em;
-  text-transform:lowercase;opacity:0;will-change:opacity,transform;
+  color:#fff;font-weight:800;font-size:clamp(38px,8.5vw,88px);letter-spacing:.02em;
+  text-transform:lowercase;opacity:0;will-change:opacity,transform;text-align:center;
   text-shadow:0 0 24px rgba(255,105,180,.8),0 0 60px rgba(176,108,255,.5);}
+.ixfx-whisper{position:absolute;color:#fff;font-weight:700;letter-spacing:.05em;
+  font-size:clamp(20px,3.2vw,30px);text-transform:lowercase;opacity:0;
+  will-change:opacity,transform;text-shadow:0 0 14px rgba(255,105,180,.6);}
+.ixfx-letter{display:inline-block;opacity:0;will-change:transform,opacity;}
+.ixfx-gif{position:absolute;border-radius:12px;object-fit:cover;opacity:0;
+  box-shadow:0 6px 30px rgba(0,0,0,.5),0 0 26px rgba(255,105,180,.35);
+  will-change:transform,opacity;}
+.ixfx-polaroid{position:absolute;background:#fff;padding:6px 6px 18px;border-radius:4px;
+  box-shadow:0 8px 24px rgba(0,0,0,.45);opacity:0;will-change:transform,opacity;}
+.ixfx-polaroid img{display:block;width:100%;height:100%;object-fit:cover;}
+.ixfx-dim{position:absolute;inset:0;background:#000;opacity:0;will-change:opacity;}
+.ixfx-shimmer{position:absolute;top:-20%;bottom:-20%;left:-60%;width:220%;opacity:0;
+  background:linear-gradient(105deg,transparent 38%,rgba(255,226,160,.45) 46%,
+  var(--ixfx-a) 50%,rgba(255,226,160,.45) 54%,transparent 62%);
+  will-change:transform,opacity;}
+.ixfx-streakm{position:absolute;left:50%;bottom:3.5%;transform:translateX(-50%);
+  display:flex;gap:4px;opacity:.9;}
+.ixfx-seg{width:16px;height:5px;border-radius:3px;background:rgba(255,255,255,.12);
+  transition:background .25s,box-shadow .25s;}
+.ixfx-seg.on{background:linear-gradient(90deg,var(--ixfx-a),var(--ixfx-a2));
+  box-shadow:0 0 calc(4px + 10px * var(--ixfx-sglow,0)) var(--ixfx-a);}
+.ixfx-amb-root{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden;}
+.ixfx-amb{position:absolute;opacity:0;border-radius:12px;object-fit:cover;
+  max-width:40vw;max-height:44vh;will-change:transform,opacity;filter:saturate(.85);}
+.ixfx-gl{position:fixed;inset:0;z-index:5;pointer-events:none;overflow:hidden;
+  --ixfx-a:${DEFAULT_ACCENT};--ixfx-a2:${DEFAULT_ACCENT2};}
+.ixfx-gwash{position:absolute;inset:0;opacity:0;mix-blend-mode:screen;will-change:opacity;}
+.ixfx-gdrain{position:absolute;inset:0;opacity:0;background-color:#0a0410;
+  background-position:center;background-size:cover;background-repeat:no-repeat;
+  background-blend-mode:luminosity;backdrop-filter:blur(7px);
+  -webkit-backdrop-filter:blur(7px);will-change:opacity;}
+.ixfx-gword{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);
+  color:#fff;font-weight:800;font-size:clamp(48px,10vw,128px);letter-spacing:.18em;
+  text-transform:lowercase;white-space:nowrap;opacity:0;filter:blur(1.2px);
+  text-shadow:0 0 34px rgba(255,105,180,.5);}
+.ixfx-gspiral{position:absolute;inset:0;width:100%;height:100%;opacity:0;will-change:opacity;}
+.ixfx-burst-root{position:fixed;inset:0;z-index:7;pointer-events:none;overflow:hidden;}
+.ixfx-burst{position:absolute;border-radius:14px;object-fit:cover;opacity:0;
+  pointer-events:auto;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;
+  -webkit-user-drag:none;box-shadow:0 8px 34px rgba(0,0,0,.55),0 0 30px rgba(255,105,180,.4);
+  will-change:transform,opacity;}
+.ixfx-burst.ixfx-grabbing{cursor:grabbing;}
 @media (prefers-reduced-motion: reduce){
   .ixfx-sub,.ixfx-bubble,.ixfx-particle{transition:none;}
 }`;
@@ -141,12 +547,56 @@ function ensureStyles() {
 }
 
 /* ----------------------------------------------------------------------------
+ * BACKDROP-LIVE body-class contract (shared with beats.js — intentional
+ * duplicate, no shared module). While ANY fullscreen visual garnish is up
+ * (spiral / drain / pink wash), body carries `ix-backdrop-live` so in-run cards
+ * thin out and the show behind them is visible. Ref-counted via a body dataset
+ * counter so overlapping layers from BOTH files never stomp each other: the
+ * class is present iff at least one layer is live. This file owns the counting
+ * for ITS fullscreen garnishes AND the see-through-card CSS (styles.css); beats
+ * owns its own layers' counting. Import-side-effect-free: only touches the DOM
+ * when called at runtime, never at module load.
+ * -------------------------------------------------------------------------- */
+function backdropRef(on) {
+  if (typeof document === 'undefined' || !document.body) return;
+  const b = document.body;
+  const n = Math.max(0, (parseInt(b.dataset.ixBackdrop || '0', 10) || 0) + (on ? 1 : -1));
+  b.dataset.ixBackdrop = String(n);
+  b.classList.toggle('ix-backdrop-live', n > 0);
+}
+
+/* ----------------------------------------------------------------------------
  * FACTORY
  * -------------------------------------------------------------------------- */
-export function createEffects({ root, caps } = {}) {
+export function createEffects({ root, caps, media, theme } = {}) {
   const hasDOM = typeof document !== 'undefined' && !!root;
   const supportsAnim = hasDOM && typeof Element !== 'undefined' &&
     typeof Element.prototype.animate === 'function';
+
+  /* Theme resolution: praise pool + accent colors degrade to the built-ins. */
+  const praisePool = (theme && Array.isArray(theme.praise) && theme.praise.length)
+    ? theme.praise.slice() : PRAISE_WORDS.slice();
+  const accent  = (theme && typeof theme.accent  === 'string' && theme.accent)  || DEFAULT_ACCENT;
+  const accent2 = (theme && typeof theme.accent2 === 'string' && theme.accent2) || DEFAULT_ACCENT2;
+
+  /* Media manifest: plain URL string lists (page-origin resolvable). Null-safe. */
+  const gifs = (media && Array.isArray(media.gifs))
+    ? media.gifs.filter((u) => typeof u === 'string' && u.length > 0) : [];
+  const images = (media && Array.isArray(media.images))
+    ? media.images.filter((u) => typeof u === 'string' && u.length > 0) : [];
+  /* Ambient drifters + braindrain washes draw from the whole visual manifest. */
+  const ambientPool = gifs.concat(images);
+  /* Garnish words: the user's ACTIVE subliminal phrases, else the praise pool. */
+  const userSubliminals = (media && Array.isArray(media.subliminals))
+    ? media.subliminals.filter((s) => typeof s === 'string' && s.trim().length > 0) : [];
+  const garnishWords = userSubliminals.length ? userSubliminals : praisePool;
+
+  /* Heavy variants degrade to gentle fades when the OS asks for reduced motion. */
+  let reducedMotion = false;
+  try {
+    reducedMotion = typeof matchMedia === 'function' &&
+      matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (_e) {}
 
   let layer = null;         // .ixfx-root container
   let flashEl = null;       // the full-screen wash
@@ -163,8 +613,53 @@ export function createEffects({ root, caps } = {}) {
 
   // live spawned nodes (for teardown on recover(0))
   const live = new Set();
+  let mediaLiveCount = 0;   // concurrent <img> nodes (cap: MAX_MEDIA_NODES)
+
+  // per-kind no-repeat variant rotation
+  const lastVariant = Object.create(null);
+
+  // streak meter (persists across beats; removed by recover(0))
+  let streakEl = null;
+  let streakSegEls = [];
+  let lastStreakShown = 0;
+
+  // ambient layer (behind the card): setTimeout chain + its own node budget
+  let ambRoot = null;
+  let ambTimer = 0;
+  let ambLive = 0;
+  const ambNodes = new Set();
+
+  // garnish layer (above the stage, below the interstitial overlay)
+  let glRoot = null;
+  let garnishNow = null;    // the single live garnish handle (one at a time)
+  const garnishBag = createGarnishBag(); // the always-different rotation
+  let inRecovery = false;   // recover() arms it; setDepth() (normal drive) clears
+
+  // GifBurst layer (z7 foreground toy — clickable / flingable, single-instance).
+  // NOT a backdrop: it never ref-counts backdropRef, so cards stay solid behind it.
+  let burstRoot = null;     // .ixfx-burst-root container (own z7 layer)
+  let burstNow = null;      // the ONE live burst handle (NO-HYDRA guard)
+  let lastBurstGif = null;  // no immediate repeat of the last burst's gif
+
+  // loom spiral machinery: module + ONE reusable field, all lazy. Params are
+  // rolled FRESH per mount (freshSpiralParams) so no two spirals repeat.
+  let loomMod = null, loomDead = false;
+  let loomField = null, loomFieldFailed = false;
+  let loomLogged = false;   // first-successful-frame diagnostic fired once
 
   function capsOf() { return caps || undefined; }
+  function pickOf(arr) { return arr[(Math.random() * arr.length) | 0]; }
+  function praisePhrase() { return pickOf(praisePool); }
+
+  /** Diagnostic seam: the app has no devtools, but page logs reach C# via the
+   *  shim. boot may or may not listen for 'intake-log' — harmless if unheard. */
+  function logSeam(msg) {
+    try {
+      if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('intake-log', { detail: { msg: 'ixfx: ' + msg } }));
+      }
+    } catch (_e) {}
+  }
 
   function mount() {
     if (mounted || !hasDOM) return;
@@ -173,6 +668,10 @@ export function createEffects({ root, caps } = {}) {
       layer = document.createElement('div');
       layer.className = 'ixfx-root';
       layer.setAttribute('aria-hidden', 'true');
+      try {
+        layer.style.setProperty('--ixfx-a', accent);
+        layer.style.setProperty('--ixfx-a2', accent2);
+      } catch (_e) {}
       flashEl = document.createElement('div');
       flashEl.className = 'ixfx-flash';
       layer.appendChild(flashEl);
@@ -189,7 +688,21 @@ export function createEffects({ root, caps } = {}) {
   }
   function removeNode(el) {
     live.delete(el);
+    if (el && el._ixMedia) { el._ixMedia = false; mediaLiveCount = Math.max(0, mediaLiveCount - 1); }
+    // Backdrop bookkeeping: every removal path (garnishFade finish/cancel, spiral
+    // stop, recover()/dispose bulk-clear) funnels through here, so one guarded
+    // decrement per node keeps the shared ref-count exactly balanced. Clearing
+    // the marker makes a double-remove idempotent (can't double-decrement).
+    if (el && el._ixBackdrop) { el._ixBackdrop = false; backdropRef(false); }
     try { if (el && el.parentNode) el.parentNode.removeChild(el); } catch (_e) {}
+  }
+  /** Decrement the shared see-through-card ref-count the moment a fullscreen
+   *  garnish's life ENDS (the start of its fade-out) rather than when the node
+   *  is finally removed, so in-run cards resolidify in sync with the fade.
+   *  Idempotent via the SAME _ixBackdrop marker removeNode clears, so the later
+   *  removeNode can never double-decrement. */
+  function releaseBackdrop(el) {
+    if (el && el._ixBackdrop) { el._ixBackdrop = false; backdropRef(false); }
   }
 
   /* ----- rAF loop: ambient flashes / subliminals / bubbles by cadence ------- */
@@ -237,7 +750,7 @@ export function createEffects({ root, caps } = {}) {
       el.textContent = SUBLIMINAL_WORDS[(Math.random() * SUBLIMINAL_WORDS.length) | 0];
       el.style.left = (8 + Math.random() * 74) + '%';
       el.style.top = (12 + Math.random() * 66) + '%';
-      el.style.fontSize = (16 + Math.random() * 34) + 'px';
+      el.style.fontSize = (24 + Math.random() * 44) + 'px';
       layer.appendChild(el);
       const peak = vis.subAlpha;
       const dur = 900 + Math.random() * 900;
@@ -285,11 +798,40 @@ export function createEffects({ root, caps } = {}) {
     } catch (_e) {}
   }
 
-  function burst(spec, hue) {
+  /** One free-flying reward bubble with a custom start/end (variant helper). */
+  function flyBubble({ leftPct, startTop, dx, dyVh, durMs, alpha, sizePx, delayMs = 0 }) {
     if (!layer) return;
     try {
-      const cx = 40 + Math.random() * 20, cy = 38 + Math.random() * 24;
-      for (let i = 0; i < spec.count; i++) {
+      const el = document.createElement('div');
+      el.className = 'ixfx-bubble';
+      const size = sizePx != null ? sizePx : (12 + Math.random() * 30);
+      el.style.width = el.style.height = size + 'px';
+      el.style.left = leftPct + '%';
+      if (startTop != null) el.style.top = startTop; else el.style.bottom = '-6%';
+      layer.appendChild(el);
+      if (supportsAnim) {
+        const a = el.animate(
+          [{ opacity: 0, transform: 'translate(0,0) scale(.5)' },
+           { opacity: alpha, offset: 0.18 },
+           { opacity: alpha, offset: 0.75 },
+           { opacity: 0, transform: `translate(${dx}px,${dyVh}vh) scale(1.05)` }],
+          { duration: durMs, delay: delayMs, easing: 'ease-in', fill: 'backwards' });
+        a.onfinish = () => removeNode(el);
+        track(el, delayMs + durMs + 200);
+      } else {
+        el.style.opacity = String(alpha);
+        track(el, delayMs + durMs);
+      }
+    } catch (_e) {}
+  }
+
+  function burst(spec, hue, alpha = 1, cxPct = null, cyPct = null) {
+    if (!layer) return;
+    try {
+      const count = reducedMotion ? Math.min(spec.count, 6) : spec.count;
+      const cx = cxPct != null ? cxPct : (40 + Math.random() * 20);
+      const cy = cyPct != null ? cyPct : (38 + Math.random() * 24);
+      for (let i = 0; i < count; i++) {
         const el = document.createElement('div');
         el.className = 'ixfx-particle';
         el.style.left = cx + '%';
@@ -301,7 +843,7 @@ export function createEffects({ root, caps } = {}) {
         const dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist - dist * 0.3;
         if (supportsAnim) {
           const a = el.animate(
-            [{ opacity: 1, transform: 'translate(-50%,-50%) scale(1)' },
+            [{ opacity: alpha, transform: 'translate(-50%,-50%) scale(1)' },
              { opacity: 0, transform: `translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) scale(.3)` }],
             { duration: spec.durMs, easing: 'cubic-bezier(.2,.8,.3,1)' });
           a.onfinish = () => removeNode(el);
@@ -313,15 +855,360 @@ export function createEffects({ root, caps } = {}) {
     } catch (_e) {}
   }
 
-  function praise(intensity) {
+  /** Gold/accent gradient sweep across the stage (jackpot + near-miss tease). */
+  function shimmerSweep(alpha, durMs) {
+    if (!layer) return;
+    try {
+      const el = document.createElement('div');
+      el.className = 'ixfx-shimmer';
+      layer.appendChild(el);
+      if (supportsAnim && !reducedMotion) {
+        const a = el.animate(
+          [{ opacity: 0, transform: 'translateX(-28%)' },
+           { opacity: alpha, offset: 0.25 },
+           { opacity: alpha, offset: 0.75 },
+           { opacity: 0, transform: 'translateX(28%)' }],
+          { duration: durMs, easing: 'ease-in-out' });
+        a.onfinish = () => removeNode(el);
+        track(el, durMs + 200);
+      } else if (supportsAnim) {
+        const a = el.animate(
+          [{ opacity: 0 }, { opacity: alpha * 0.7, offset: 0.4 }, { opacity: 0 }],
+          { duration: durMs, easing: 'ease-in-out' });
+        a.onfinish = () => removeNode(el);
+        track(el, durMs + 200);
+      } else {
+        el.style.opacity = String(alpha * 0.6);
+        track(el, durMs);
+      }
+    } catch (_e) {}
+  }
+
+  /* ----- media spawns (lazy, error-tolerant, capped) ------------------------ */
+
+  /** Spawn one <img> gif node: scale-in at a random pos, hold, fade+shrink. */
+  function spawnGifNode(url, { sizePx, holdMs, enterMs, exitMs, center = false, alpha = 1 }) {
+    if (!layer || mediaLiveCount >= MAX_MEDIA_NODES) return;
+    // Slow fade-in / gentle fade-out floors so gifs ease in, never snap in.
+    enterMs = Math.max(enterMs || 0, GIF_FADE_IN_MS);
+    exitMs  = Math.max(exitMs  || 0, GIF_FADE_OUT_MS);
+    try {
+      const el = document.createElement('img');
+      el.className = 'ixfx-gif';
+      el.decoding = 'async';
+      el.setAttribute('aria-hidden', 'true');
+      el._ixMedia = true;
+      mediaLiveCount++;
+      el.onerror = () => removeNode(el); // bad URL -> silently gone
+      el.style.width = sizePx + 'px';
+      el.style.maxWidth = '46vw';
+      el.style.maxHeight = '46vh';
+      const rot = center ? 0 : (Math.random() * 28 - 14);
+      if (center) {
+        el.style.left = '50%'; el.style.top = '44%';
+      } else {
+        el.style.left = (12 + Math.random() * 62) + '%';
+        el.style.top  = (12 + Math.random() * 56) + '%';
+      }
+      el.src = url; // lazy: assigned only at spawn time
+      layer.appendChild(el);
+      const base = center ? 'translate(-50%,-50%)' : '';
+      const total = enterMs + holdMs + exitMs;
+      if (supportsAnim && !reducedMotion) {
+        const a = el.animate(
+          [{ opacity: 0, transform: `${base} rotate(${rot}deg) scale(.35)` },
+           { opacity: alpha, offset: enterMs / total, transform: `${base} rotate(${rot}deg) scale(1.06)` },
+           { opacity: alpha, offset: (enterMs + holdMs) / total, transform: `${base} rotate(${rot}deg) scale(1)` },
+           { opacity: 0, transform: `${base} rotate(${rot}deg) scale(.5)` }],
+          { duration: total, easing: 'ease-out' });
+        a.onfinish = () => removeNode(el);
+      } else if (supportsAnim) {
+        const a = el.animate(
+          [{ opacity: 0, transform: `${base} rotate(${rot}deg)` },
+           { opacity: alpha, offset: 0.3, transform: `${base} rotate(${rot}deg)` },
+           { opacity: 0, transform: `${base} rotate(${rot}deg)` }],
+          { duration: total, easing: 'ease-in-out' });
+        a.onfinish = () => removeNode(el);
+      } else {
+        el.style.opacity = String(alpha);
+        el.style.transform = `${base} rotate(${rot}deg)`;
+      }
+      track(el, total + 300);
+    } catch (_e) {}
+  }
+
+  /** Small polaroid-style still-image pop (sparingly, high-intensity variants). */
+  function spawnPolaroid(url, intensity) {
+    if (!layer || !url || mediaLiveCount >= MAX_MEDIA_NODES) return;
+    try {
+      const wrap = document.createElement('div');
+      wrap.className = 'ixfx-polaroid';
+      wrap._ixMedia = true;
+      mediaLiveCount++;
+      const w = Math.round(90 + clamp01(intensity) * 60);
+      wrap.style.width = w + 'px';
+      wrap.style.height = Math.round(w * 1.05) + 'px';
+      wrap.style.left = (15 + Math.random() * 58) + '%';
+      wrap.style.top  = (14 + Math.random() * 52) + '%';
+      const img = document.createElement('img');
+      img.decoding = 'async';
+      img.onerror = () => removeNode(wrap);
+      img.src = url;
+      wrap.appendChild(img);
+      layer.appendChild(wrap);
+      const rot = Math.random() * 24 - 12;
+      const hold = 700 + clamp01(intensity) * 500;
+      const total = 260 + hold + 380;
+      if (supportsAnim && !reducedMotion) {
+        const a = wrap.animate(
+          [{ opacity: 0, transform: `rotate(${rot}deg) scale(.5)` },
+           { opacity: 1, offset: 260 / total, transform: `rotate(${rot}deg) scale(1.04)` },
+           { opacity: 1, offset: (260 + hold) / total, transform: `rotate(${rot}deg) scale(1)` },
+           { opacity: 0, transform: `rotate(${rot}deg) scale(.7)` }],
+          { duration: total, easing: 'ease-out' });
+        a.onfinish = () => removeNode(wrap);
+      } else if (supportsAnim) {
+        const a = wrap.animate(
+          [{ opacity: 0 }, { opacity: 1, offset: 0.3 }, { opacity: 0 }],
+          { duration: total, easing: 'ease-in-out' });
+        a.onfinish = () => removeNode(wrap);
+      } else {
+        wrap.style.opacity = '1';
+      }
+      track(wrap, total + 300);
+    } catch (_e) {}
+  }
+
+  /** Sparingly: maybe pop one polaroid inside a high-intensity Bubble/Drop. */
+  function maybePolaroid(intensity) {
+    if (!images.length || reducedMotion) return;
+    if (clamp01(intensity) < 0.65) return;
+    if (Math.random() > 0.4) return;
+    spawnPolaroid(pickOf(images), intensity);
+  }
+
+  /* ==========================================================================
+   * VARIANT POOLS — 3-5 distinct looks per RewardKind, ordered subtle ->
+   * spectacular so the intensity-weighted pick (pickVariantIndex) maps low pays
+   * to quiet looks and big pays to spectacle. No-repeat-last per kind.
+   * ========================================================================*/
+
+  /* ----- Flash variants ----------------------------------------------------- */
+  function flashWash(i) { // (a) radial wash — the original
+    const s = rewardFlashSpec(i);
+    pulseFlash(s.alpha, s.durMs);
+  }
+  function flashDouble(i) { // (b) double-pulse strobe
+    const s = rewardFlashSpec(i);
+    pulseFlash(s.alpha, Math.max(120, s.durMs * 0.55));
+    setTimeout(() => { pulseFlash(s.alpha * 0.85, s.durMs * 0.7); }, 150);
+  }
+  function flashChroma(i) { // (c) chromatic split — brief RGB offset layers
+    if (!layer) return;
+    const s = rewardFlashSpec(i);
+    const dur = s.durMs + 120;
+    const off = 4 + i * 8;
+    const layers = [
+      { tint: 'rgba(255,64,64,.85)',  dx: -off, dy: 0 },
+      { tint: 'rgba(64,255,128,.7)',  dx: off,  dy: 0 },
+      { tint: 'rgba(96,128,255,.85)', dx: 0,    dy: off },
+    ];
+    try {
+      for (const spec of layers) {
+        const el = document.createElement('div');
+        el.className = 'ixfx-chroma';
+        el.style.background =
+          `radial-gradient(120% 120% at 50% 45%,${spec.tint} 0%,transparent 68%)`;
+        layer.appendChild(el);
+        if (supportsAnim) {
+          const a = el.animate(
+            [{ opacity: 0, transform: 'translate(0,0)' },
+             { opacity: s.alpha, offset: 0.3, transform: `translate(${spec.dx}px,${spec.dy}px)` },
+             { opacity: 0, transform: 'translate(0,0)' }],
+            { duration: dur, easing: 'ease-out' });
+          a.onfinish = () => removeNode(el);
+          track(el, dur + 150);
+        } else {
+          el.style.opacity = String(s.alpha * 0.7);
+          track(el, dur);
+        }
+      }
+    } catch (_e) {}
+  }
+  function flashSpiral(i) { // (d) conic-gradient sweep
+    if (!layer) return;
+    try {
+      const s = rewardFlashSpec(i);
+      const dur = 600 + i * 400;
+      const el = document.createElement('div');
+      el.className = 'ixfx-spiral';
+      layer.appendChild(el);
+      if (supportsAnim) {
+        const a = el.animate(
+          [{ opacity: 0, transform: 'rotate(0deg) scale(1)' },
+           { opacity: s.alpha * 0.8, offset: 0.3 },
+           { opacity: 0, transform: 'rotate(210deg) scale(1.18)' }],
+          { duration: dur, easing: 'ease-out' });
+        a.onfinish = () => removeNode(el);
+        track(el, dur + 150);
+      } else {
+        el.style.opacity = String(s.alpha * 0.5);
+        track(el, dur);
+      }
+    } catch (_e) {}
+  }
+
+  /* ----- Bubble variants ---------------------------------------------------- */
+  function bubbleBurst(i) { // (a) burst + one ambient — the original
+    burst(rewardBurstSpec(i));
+    spawnBubble();
+  }
+  function bubbleFountain(i) { // (b) fountain from the bottom
+    const n = reducedMotion ? 5 : Math.round(6 + i * 10);
+    const alpha = 0.30 + i * 0.45;
+    for (let k = 0; k < n; k++) {
+      flyBubble({
+        leftPct: 42 + Math.random() * 16,
+        startTop: null,
+        dx: (Math.random() - 0.5) * 380,
+        dyVh: -(55 + Math.random() * 45),
+        durMs: 1100 + Math.random() * 800,
+        alpha,
+        delayMs: k * 60,
+      });
+    }
+    maybePolaroid(i);
+  }
+  function bubbleRing(i) { // (c) ring expanding from center
+    if (!layer) return;
+    const n = reducedMotion ? 6 : Math.round(8 + i * 8);
+    const radius = 120 + i * 220;
+    const alpha = 0.35 + i * 0.45;
+    try {
+      for (let k = 0; k < n; k++) {
+        const el = document.createElement('div');
+        el.className = 'ixfx-bubble';
+        const size = 12 + Math.random() * 22;
+        el.style.width = el.style.height = size + 'px';
+        el.style.left = '50%';
+        el.style.top = '46%';
+        layer.appendChild(el);
+        const ang = (k / n) * Math.PI * 2 + Math.random() * 0.3;
+        const dx = Math.cos(ang) * radius, dy = Math.sin(ang) * radius;
+        const dur = 800 + Math.random() * 300;
+        if (supportsAnim) {
+          const a = el.animate(
+            [{ opacity: 0, transform: 'translate(-50%,-50%) scale(.4)' },
+             { opacity: alpha, offset: 0.25 },
+             { opacity: 0, transform: `translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) scale(1.1)` }],
+            { duration: dur, easing: 'ease-out' });
+          a.onfinish = () => removeNode(el);
+          track(el, dur + 150);
+        } else {
+          el.style.opacity = String(alpha);
+          track(el, dur);
+        }
+      }
+    } catch (_e) {}
+    maybePolaroid(i);
+  }
+  function bubbleRain(i) { // (d) bubble rain from the top
+    const n = reducedMotion ? 5 : Math.round(7 + i * 9);
+    const alpha = 0.28 + i * 0.42;
+    for (let k = 0; k < n; k++) {
+      flyBubble({
+        leftPct: 4 + Math.random() * 90,
+        startTop: '-6%',
+        dx: (Math.random() - 0.5) * 90,
+        dyVh: 60 + Math.random() * 55,
+        durMs: 1400 + Math.random() * 1000,
+        alpha,
+        delayMs: Math.random() * 320,
+      });
+    }
+  }
+
+  /* ----- Drop variants ------------------------------------------------------ */
+  function gifBurst(i) { // media path: 2-4 gifs scale-in / hold / fade-shrink
+    if (!gifs.length) { dropShower(i); return; }
+    const spec = gifBurstSpec(i);
+    for (let k = 0; k < spec.count; k++) {
+      spawnGifNode(pickOf(gifs), {
+        sizePx: Math.round(spec.sizePx * (0.8 + Math.random() * 0.4)),
+        holdMs: spec.holdMs + Math.round(Math.random() * 200),
+        enterMs: spec.enterMs,
+        exitMs: spec.exitMs,
+      });
+    }
+    maybePolaroid(i);
+  }
+  function dropShower(i) { // (a) particle shower — the original stand-in
+    burst(rewardBurstSpec(i), 40);
+    maybePolaroid(i);
+  }
+  function dropStreaks(i) { // (b) heavy droplet streaks falling through
+    if (!layer) return;
+    const n = reducedMotion ? 6 : Math.round(10 + i * 16);
+    const alpha = 0.35 + i * 0.45;
+    try {
+      for (let k = 0; k < n; k++) {
+        const el = document.createElement('div');
+        el.className = 'ixfx-drip';
+        el.style.height = (40 + Math.random() * 70) + 'px';
+        el.style.left = (Math.random() * 98) + '%';
+        el.style.top = '-12%';
+        layer.appendChild(el);
+        const dur = 520 + Math.random() * 420;
+        const delay = Math.random() * 260;
+        if (supportsAnim) {
+          const a = el.animate(
+            [{ opacity: 0, transform: 'translateY(0)' },
+             { opacity: alpha, offset: 0.15 },
+             { opacity: alpha, offset: 0.8 },
+             { opacity: 0, transform: 'translateY(122vh)' }],
+            { duration: dur, delay, easing: 'ease-in', fill: 'backwards' });
+          a.onfinish = () => removeNode(el);
+          track(el, delay + dur + 150);
+        } else {
+          el.style.opacity = String(alpha);
+          track(el, delay + dur);
+        }
+      }
+    } catch (_e) {}
+  }
+  function dropEdgeGlow(i) { // (c) screen-edge glow surge
+    if (!layer) return;
+    try {
+      const el = document.createElement('div');
+      el.className = 'ixfx-edge';
+      layer.appendChild(el);
+      const peak = 0.30 + i * 0.45;
+      const dur = 750 + i * 550;
+      if (supportsAnim) {
+        const a = el.animate(
+          [{ opacity: 0 }, { opacity: peak, offset: 0.25 },
+           { opacity: peak * 0.5, offset: 0.55 },
+           { opacity: peak * 0.85, offset: 0.72 }, { opacity: 0 }],
+          { duration: dur, easing: 'ease-in-out' });
+        a.onfinish = () => removeNode(el);
+        track(el, dur + 150);
+      } else {
+        el.style.opacity = String(peak * 0.6);
+        track(el, dur);
+      }
+    } catch (_e) {}
+  }
+
+  /* ----- Praise variants ---------------------------------------------------- */
+  function praiseBig(i, phrase) { // (a) big phrase — original, pool-fed
     if (!layer) return;
     try {
       const el = document.createElement('div');
       el.className = 'ixfx-praise';
-      el.textContent = PRAISE_WORDS[(Math.random() * PRAISE_WORDS.length) | 0];
+      el.textContent = phrase != null ? phrase : praisePhrase();
       layer.appendChild(el);
-      const peak = 0.35 + clamp01(intensity) * 0.6;
-      const dur = 900 + clamp01(intensity) * 700;
+      const peak = 0.35 + clamp01(i) * 0.6;
+      const dur = 900 + clamp01(i) * 700;
       if (supportsAnim) {
         const a = el.animate(
           [{ opacity: 0, transform: 'translate(-50%,-40%) scale(.8)' },
@@ -336,11 +1223,1020 @@ export function createEffects({ root, caps } = {}) {
       }
     } catch (_e) {}
   }
+  function praiseEcho(i) { // (b) stacked echo — same phrase 3x offset/faded
+    if (!layer) return;
+    const phrase = praisePhrase();
+    const peak = 0.35 + clamp01(i) * 0.6;
+    const dur = 1000 + clamp01(i) * 700;
+    const echoes = [
+      { dx: 0,   dy: 0,  scale: 1.0,  a: peak,        delay: 0 },
+      { dx: -14, dy: 12, scale: 0.96, a: peak * 0.55, delay: 90 },
+      { dx: 14,  dy: -12, scale: 0.92, a: peak * 0.35, delay: 180 },
+    ];
+    try {
+      for (const e of echoes) {
+        const el = document.createElement('div');
+        el.className = 'ixfx-praise';
+        el.textContent = phrase;
+        layer.appendChild(el);
+        if (supportsAnim) {
+          const a = el.animate(
+            [{ opacity: 0, transform: `translate(calc(-50% + ${e.dx}px),calc(-42% + ${e.dy}px)) scale(${e.scale * 0.85})` },
+             { opacity: e.a, offset: 0.35, transform: `translate(calc(-50% + ${e.dx}px),calc(-52% + ${e.dy}px)) scale(${e.scale})` },
+             { opacity: 0, transform: `translate(calc(-50% + ${e.dx}px),calc(-62% + ${e.dy}px)) scale(${e.scale * 1.1})` }],
+            { duration: dur, delay: e.delay, easing: 'ease-out', fill: 'backwards' });
+          a.onfinish = () => removeNode(el);
+          track(el, e.delay + dur + 150);
+        } else {
+          el.style.opacity = String(e.a);
+          track(el, e.delay + dur);
+        }
+      }
+    } catch (_e) {}
+  }
+  function praiseCascade(i) { // (c) letter-cascade — letters drop in
+    if (!layer) return;
+    try {
+      const phrase = praisePhrase();
+      const el = document.createElement('div');
+      el.className = 'ixfx-praise';
+      el.style.opacity = '1'; // container static; letters animate individually
+      layer.appendChild(el);
+      const peak = 0.4 + clamp01(i) * 0.55;
+      const stepMs = 45;
+      const chars = Array.from(phrase);
+      const settleMs = 380;
+      const holdMs = 550 + clamp01(i) * 450;
+      const fadeMs = 420;
+      const total = settleMs + chars.length * stepMs + holdMs + fadeMs;
+      chars.forEach((ch, idx) => {
+        const span = document.createElement('span');
+        span.className = 'ixfx-letter';
+        span.textContent = ch === ' ' ? ' ' : ch;
+        el.appendChild(span);
+        if (supportsAnim && !reducedMotion) {
+          span.animate(
+            [{ opacity: 0, transform: 'translateY(-42px)' },
+             { opacity: peak, transform: 'translateY(4px)', offset: 0.7 },
+             { opacity: peak, transform: 'translateY(0)' }],
+            { duration: settleMs, delay: idx * stepMs, easing: 'cubic-bezier(.3,1.4,.5,1)', fill: 'both' });
+        } else if (supportsAnim) {
+          span.animate(
+            [{ opacity: 0 }, { opacity: peak }],
+            { duration: settleMs, delay: idx * stepMs, easing: 'ease-out', fill: 'both' });
+        } else {
+          span.style.opacity = String(peak);
+        }
+      });
+      if (supportsAnim) {
+        const fade = el.animate(
+          [{ opacity: 1 }, { opacity: 1, offset: (total - fadeMs) / total }, { opacity: 0 }],
+          { duration: total, easing: 'ease-in' });
+        fade.onfinish = () => removeNode(el);
+      }
+      track(el, total + 200);
+    } catch (_e) {}
+  }
+  function praiseWhisper(i) { // (d) whisper-corner — small, intimate
+    if (!layer) return;
+    try {
+      const el = document.createElement('div');
+      el.className = 'ixfx-whisper';
+      el.textContent = praisePhrase();
+      const corner = (Math.random() * 4) | 0;
+      const inset = (4 + Math.random() * 5) + '%';
+      const vInset = (8 + Math.random() * 7) + '%';
+      if (corner & 1) el.style.right = inset; else el.style.left = inset;
+      if (corner & 2) el.style.bottom = vInset; else el.style.top = vInset;
+      layer.appendChild(el);
+      const peak = 0.45 + clamp01(i) * 0.35;
+      const dur = 1400 + clamp01(i) * 700;
+      if (supportsAnim) {
+        const a = el.animate(
+          [{ opacity: 0, transform: 'translateY(6px)' },
+           { opacity: peak, offset: 0.3, transform: 'translateY(0)' },
+           { opacity: peak, offset: 0.75 },
+           { opacity: 0, transform: 'translateY(-6px)' }],
+          { duration: dur, easing: 'ease-in-out' });
+        a.onfinish = () => removeNode(el);
+        track(el, dur + 150);
+      } else {
+        el.style.opacity = String(peak);
+        track(el, dur);
+      }
+    } catch (_e) {}
+  }
+
+  /* ----- Chime variants ----------------------------------------------------- */
+  function chimeSparkle(i) { // (a) small sparkle — the original
+    burst({ count: Math.round(3 + i * 5), spreadPx: 40 + i * 70, durMs: 480 });
+  }
+  function chimeRipple(i) { // (b) tiny ripple ring
+    if (!layer) return;
+    try {
+      const el = document.createElement('div');
+      el.className = 'ixfx-ring';
+      el.style.left = (38 + Math.random() * 24) + '%';
+      el.style.top = (36 + Math.random() * 24) + '%';
+      layer.appendChild(el);
+      const scale = 5 + i * 8;
+      const dur = 620;
+      if (supportsAnim) {
+        const a = el.animate(
+          [{ opacity: 0.55, transform: 'translate(-50%,-50%) scale(1)' },
+           { opacity: 0, transform: `translate(-50%,-50%) scale(${scale})` }],
+          { duration: dur, easing: 'ease-out' });
+        a.onfinish = () => removeNode(el);
+        track(el, dur + 120);
+      } else {
+        el.style.opacity = '0.4';
+        track(el, dur);
+      }
+    } catch (_e) {}
+  }
+  function chimeGlint(i) { // (c) corner glint
+    if (!layer) return;
+    try {
+      const el = document.createElement('div');
+      el.className = 'ixfx-glint';
+      const corner = (Math.random() * 4) | 0;
+      const inset = (6 + Math.random() * 8) + '%';
+      const vInset = (8 + Math.random() * 10) + '%';
+      if (corner & 1) el.style.right = inset; else el.style.left = inset;
+      if (corner & 2) el.style.bottom = vInset; else el.style.top = vInset;
+      layer.appendChild(el);
+      const peak = 0.6 + i * 0.4;
+      const dur = 520;
+      if (supportsAnim) {
+        const a = el.animate(
+          [{ opacity: 0, transform: 'scale(0) rotate(0deg)' },
+           { opacity: peak, offset: 0.4, transform: 'scale(1.4) rotate(45deg)' },
+           { opacity: 0, transform: 'scale(.2) rotate(90deg)' }],
+          { duration: dur, easing: 'ease-out' });
+        a.onfinish = () => removeNode(el);
+        track(el, dur + 120);
+      } else {
+        el.style.opacity = String(peak * 0.6);
+        track(el, dur);
+      }
+    } catch (_e) {}
+  }
+
+  /* Pools ordered subtle -> spectacular (the weight window rides intensity). */
+  const FLASH_VARIANTS  = [flashWash, flashDouble, flashChroma, flashSpiral];
+  const BUBBLE_VARIANTS = [bubbleBurst, bubbleRain, bubbleFountain, bubbleRing];
+  const DROP_VARIANTS   = [dropShower, dropEdgeGlow, dropStreaks]; // no-media path
+  const PRAISE_VARIANTS = [praiseWhisper, praiseBig, praiseEcho, praiseCascade];
+  const CHIME_VARIANTS  = [chimeSparkle, chimeRipple, chimeGlint];
+
+  function runVariant(kindKey, pool, intensity) {
+    // reduced motion: always take the gentlest look in the pool
+    const idx = reducedMotion
+      ? 0
+      : pickVariantIndex(pool.length, kindKey in lastVariant ? lastVariant[kindKey] : -1, intensity);
+    lastVariant[kindKey] = idx;
+    try { pool[idx](intensity); } catch (_e) {}
+  }
+
+  /* ==========================================================================
+   * JACKPOT CEREMONY + NEAR-MISS TEASE  (RewardEvent.jackpot / .nearMiss)
+   * ========================================================================*/
+
+  /** Full ceremony: ~250ms anticipation dim, then a screen-wide cascade —
+   *  bursts + bubbles + (media) gif spotlight + praise phrase + gold shimmer. */
+  function jackpotCeremony(i) {
+    if (!layer) return;
+    if (reducedMotion) { // gentle: soft wash + praise fade, no strobe/cascade
+      flashWash(i);
+      praiseBig(i);
+      shimmerSweep(0.15, 1200);
+      return;
+    }
+    const spec = jackpotSpec(i);
+    try { // 1) anticipation beat: brief dim
+      const dim = document.createElement('div');
+      dim.className = 'ixfx-dim';
+      layer.appendChild(dim);
+      if (supportsAnim) {
+        const a = dim.animate(
+          [{ opacity: 0 }, { opacity: 0.5, offset: 0.45 }, { opacity: 0 }],
+          { duration: spec.dimMs + 140, easing: 'ease-in-out' });
+        a.onfinish = () => removeNode(dim);
+      }
+      track(dim, spec.dimMs + 350);
+    } catch (_e) {}
+    // 2) the cascade lands right as the dim releases
+    setTimeout(() => {
+      if (!layer) return; // recover(0) may have torn us down mid-beat
+      try {
+        shimmerSweep(0.30 + i * 0.40, spec.shimmerMs);
+        pulseFlash(rewardFlashSpec(i).alpha, 480);
+        for (let b = 0; b < spec.bursts; b++) {
+          setTimeout(() => {
+            burst({
+              count: spec.particlesPerBurst,
+              spreadPx: 160 + Math.random() * 220,
+              durMs: 900 + Math.random() * 500,
+            }, null, 1, 10 + Math.random() * 80, 15 + Math.random() * 60);
+          }, b * 140);
+        }
+        for (let k = 0; k < spec.bubbles; k++) {
+          flyBubble({
+            leftPct: 4 + Math.random() * 90,
+            startTop: null,
+            dx: (Math.random() - 0.5) * 200,
+            dyVh: -(60 + Math.random() * 50),
+            durMs: 1400 + Math.random() * 1000,
+            alpha: 0.35 + i * 0.4,
+            delayMs: k * 70,
+          });
+        }
+        if (gifs.length) {
+          spawnGifNode(pickOf(gifs), {
+            sizePx: Math.round(240 + i * 160),
+            holdMs: spec.spotlightMs,
+            enterMs: 260,
+            exitMs: 340,
+            center: true,
+          });
+        }
+        // "perfect response"-style phrase comes from the theme's praise pool
+        praiseBig(Math.min(1, i * 1.1 + 0.1), praisePhrase());
+      } catch (_e) {}
+    }, spec.dimMs);
+  }
+
+  /** Near-miss (fire=false): a faint shimmer sweep + a barely-there particle sigh. */
+  function nearMissTease(i) {
+    const spec = nearMissSpec(i);
+    shimmerSweep(spec.alpha, spec.durMs);
+    burst(
+      { count: spec.particles, spreadPx: 50, durMs: spec.durMs + 220 },
+      null, 0.25, 44 + Math.random() * 12, 58 + Math.random() * 10);
+  }
+
+  /* ==========================================================================
+   * STREAK METER — persistent slim segment bar (bottom-center). Lives across
+   * beats via module state; hidden below streak 2; shatters on a reset from a
+   * streak >= 3; recover(0) removes it entirely (invariant #3).
+   * ========================================================================*/
+
+  function ensureStreakMeter() {
+    if (streakEl || !layer) return;
+    try {
+      streakEl = document.createElement('div');
+      streakEl.className = 'ixfx-streakm';
+      streakEl.setAttribute('aria-hidden', 'true');
+      streakSegEls = [];
+      for (let k = 0; k < STREAK_SEGMENTS; k++) {
+        const seg = document.createElement('div');
+        seg.className = 'ixfx-seg';
+        streakEl.appendChild(seg);
+        streakSegEls.push(seg);
+      }
+      layer.appendChild(streakEl);
+    } catch (_e) { streakEl = null; streakSegEls = []; }
+  }
+  function removeStreakMeter() {
+    const el = streakEl;
+    streakEl = null; streakSegEls = [];
+    if (!el) return;
+    try { if (el.parentNode) el.parentNode.removeChild(el); } catch (_e) {}
+  }
+  /** The break moment: lit segments fling apart + fade, then the bar goes. */
+  function shatterStreakMeter() {
+    const el = streakEl;
+    const segs = streakSegEls;
+    streakEl = null; streakSegEls = [];
+    if (!el) return;
+    if (!supportsAnim || reducedMotion) { // gentle fade instead of the fling
+      try {
+        el.style.transition = 'opacity .45s ease-out';
+        el.style.opacity = '0';
+      } catch (_e) {}
+      setTimeout(() => { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (_e) {} }, 500);
+      return;
+    }
+    try {
+      for (const seg of segs) {
+        const dx = (Math.random() - 0.5) * 150;
+        const dy = 30 + Math.random() * 90;
+        const rot = (Math.random() - 0.5) * 220;
+        seg.animate(
+          [{ opacity: 1, transform: 'translate(0,0) rotate(0deg)' },
+           { opacity: 0, transform: `translate(${dx}px,${dy}px) rotate(${rot}deg)` }],
+          { duration: 460 + Math.random() * 260, easing: 'cubic-bezier(.3,.7,.4,1)', fill: 'forwards' });
+      }
+      setTimeout(() => { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (_e) {} }, 800);
+    } catch (_e) {
+      try { if (el.parentNode) el.parentNode.removeChild(el); } catch (_e2) {}
+    }
+  }
+
+  /** Drive the meter from RewardEvent.streak. Runs even on fire=false beats. */
+  function updateStreak(streak) {
+    if (!hasDOM) return;
+    const s = Math.max(0, streak | 0);
+    // invariant #2: a zeroed master cap means NOTHING shows, HUD included.
+    if (clampIntensity(1, capsOf()) <= 0.0005) {
+      removeStreakMeter();
+      lastStreakShown = s;
+      return;
+    }
+    const spec = streakMeterSpec(s);
+    if (!spec.visible) {
+      if (s === 0 && lastStreakShown >= 3 && streakEl) shatterStreakMeter();
+      else removeStreakMeter();
+      lastStreakShown = s;
+      return;
+    }
+    mount();
+    ensureStreakMeter();
+    if (streakEl) {
+      try {
+        streakEl.style.setProperty('--ixfx-sglow', String(spec.glow));
+        for (let k = 0; k < streakSegEls.length; k++) {
+          streakSegEls[k].classList.toggle('on', k < spec.lit);
+        }
+      } catch (_e) {}
+    }
+    lastStreakShown = s;
+  }
+
+  /* ==========================================================================
+   * AMBIENT ASSET LAYER — a GIF/still occasionally DRIFTS across the viewport
+   * or GHOSTS in and out, ghost-faint, on its own z-1 layer BEHIND the question
+   * card. Depth-gated cadence (ambientSpec), max 2 concurrent, lazy <img> with
+   * onerror cleanup. Fully off: below depth ~0.2 / reduced motion / no media /
+   * Recovery. Killed by recover() and dispose().
+   * ========================================================================*/
+
+  function mountAmbient() {
+    if (ambRoot || !hasDOM) return;
+    ensureStyles();
+    try {
+      ambRoot = document.createElement('div');
+      ambRoot.className = 'ixfx-amb-root';
+      ambRoot.setAttribute('aria-hidden', 'true');
+      root.appendChild(ambRoot);
+    } catch (_e) { ambRoot = null; }
+  }
+  function removeAmbientNode(el) {
+    if (ambNodes.delete(el)) ambLive = Math.max(0, ambLive - 1);
+    try { if (el && el.parentNode) el.parentNode.removeChild(el); } catch (_e) {}
+  }
+  function killAmbient() {
+    if (ambTimer) { clearTimeout(ambTimer); ambTimer = 0; }
+    for (const el of Array.from(ambNodes)) removeAmbientNode(el);
+    ambLive = 0;
+    if (ambRoot) { try { if (ambRoot.parentNode) ambRoot.parentNode.removeChild(ambRoot); } catch (_e) {} }
+    ambRoot = null;
+  }
+
+  /** One drifter: DRIFT (edge-to-edge crossing, 14-26s, gentle rotation/scale)
+   *  or GHOST (fade in at a random spot, hold 4-8s, fade out). */
+  function spawnAmbient() {
+    if (!hasDOM || reducedMotion || !supportsAnim || !ambientPool.length) return;
+    if (ambLive >= MAX_AMBIENT || inRecovery) return;
+    const spec = ambientSpec(depthNow);
+    if (!spec.on) return;
+    const alpha = spec.opacity * clampIntensity(1, capsOf()); // visual cap on top
+    if (alpha <= 0.005) return;
+    mountAmbient();
+    if (!ambRoot) return;
+    try {
+      const el = document.createElement('img');
+      el.className = 'ixfx-amb';
+      el.decoding = 'async';
+      el.loading = 'lazy';
+      el.setAttribute('aria-hidden', 'true');
+      el.onerror = () => removeAmbientNode(el); // bad URL -> silently gone
+      el.style.width = (18 + Math.random() * 16) + 'vmin';
+      el.src = pickOf(ambientPool); // lazy: assigned only at spawn time
+      ambRoot.appendChild(el);
+      ambNodes.add(el);
+      ambLive++;
+      if (Math.random() < 0.5) { // DRIFT: enter one edge, cross, exit the other
+        const ltr = Math.random() < 0.5;
+        el.style.left = ltr ? '-32vw' : '104vw';
+        el.style.top = (8 + Math.random() * 60) + '%';
+        const dur = 14000 + Math.random() * 12000;
+        const dx = (ltr ? 1 : -1) * 150;
+        const dy = (Math.random() - 0.5) * 18;
+        const rot = (Math.random() - 0.5) * 16;
+        const a = el.animate(
+          [{ opacity: 0, transform: 'translate(0,0) rotate(0deg) scale(.92)' },
+           { opacity: alpha, offset: 0.12 },
+           { opacity: alpha, offset: 0.85 },
+           { opacity: 0, transform: `translate(${dx}vw,${dy}vh) rotate(${rot}deg) scale(1.08)` }],
+          { duration: dur, easing: 'linear' });
+        a.onfinish = () => removeAmbientNode(el);
+        setTimeout(() => removeAmbientNode(el), dur + 500); // safety net
+      } else { // GHOST: fade in, hold, fade out in place
+        el.style.left = (8 + Math.random() * 58) + '%';
+        el.style.top = (10 + Math.random() * 55) + '%';
+        const fade = 1400;
+        const hold = 4000 + Math.random() * 4000;
+        const dur = fade + hold + fade;
+        const a = el.animate(
+          [{ opacity: 0, transform: 'scale(.97)' },
+           { opacity: alpha, offset: fade / dur },
+           { opacity: alpha, offset: (fade + hold) / dur },
+           { opacity: 0, transform: 'scale(1.05)' }],
+          { duration: dur, easing: 'ease-in-out' });
+        a.onfinish = () => removeAmbientNode(el);
+        setTimeout(() => removeAmbientNode(el), dur + 500);
+      }
+    } catch (_e) {}
+  }
+
+  /** Self-rescheduling timer chain. Each fire re-checks eligibility, so the
+   *  chain dies quietly when depth sinks below the gate and setDepth restarts
+   *  it when the descent resumes. */
+  function scheduleAmbient() {
+    if (!hasDOM || reducedMotion || !ambientPool.length) return;
+    if (ambTimer || inRecovery) return;
+    const spec = ambientSpec(depthNow, Math.random());
+    if (!spec.on) return;
+    ambTimer = setTimeout(() => {
+      ambTimer = 0;
+      spawnAmbient();
+      scheduleAmbient();
+    }, spec.intervalMs);
+  }
+
+  /* ==========================================================================
+   * BIG-REWARD GARNISHES — fullscreen pairings a fired reward sometimes earns:
+   * pink wash / braindrain / subliminal word flashes / live LOOM SPIRAL. One
+   * at a time (a new one fast-fades the old), rolled by pickGarnish, all on
+   * the z-5 garnish layer (above the stage, below the interstitial overlay).
+   * ========================================================================*/
+
+  function mountGarnish() {
+    if (glRoot || !hasDOM) return;
+    ensureStyles();
+    try {
+      glRoot = document.createElement('div');
+      glRoot.className = 'ixfx-gl';
+      glRoot.setAttribute('aria-hidden', 'true');
+      try {
+        glRoot.style.setProperty('--ixfx-a', accent);
+        glRoot.style.setProperty('--ixfx-a2', accent2);
+      } catch (_e) {}
+      root.appendChild(glRoot);
+    } catch (_e) { glRoot = null; }
+  }
+  function endGarnish(handle) { if (garnishNow === handle) garnishNow = null; }
+  function preemptGarnish() {
+    const g = garnishNow;
+    garnishNow = null;
+    if (g) { try { g.cancel(); } catch (_e) {} }
+  }
+  function removeGarnishLayer() {
+    preemptGarnish();
+    if (glRoot) { try { if (glRoot.parentNode) glRoot.parentNode.removeChild(glRoot); } catch (_e) {} }
+    glRoot = null;
+  }
+
+  /** Shared wash lifecycle: SLOW fade in (~1.6s) / hold / gentle fade out
+   *  (~0.9s) over durMs — no hard pop in either direction. Fades are clamped to
+   *  the layer's own lifetime (they can't exceed 90% of durMs) so a short wash
+   *  still gets a real, proportional fade. backdropRef is released at the START
+   *  of the fade-out (via a timer + releaseBackdrop) so cards resolidify in sync
+   *  with the fade, not after the node is gone. The returned handle's cancel()
+   *  fast-fades (~250ms) and releases backdrop immediately — the preemption path. */
+  function garnishFade(el, alpha, durMs) {
+    let fin = GARNISH_FADE_IN_MS, fout = GARNISH_FADE_OUT_MS;
+    if (fin + fout > durMs * 0.9) {           // keep a sliver of hold on short washes
+      const k = (durMs * 0.9) / (fin + fout);
+      fin *= k; fout *= k;
+    }
+    const inOff  = clamp01(fin / durMs);
+    const outOff = clamp01(1 - fout / durMs);
+    let anim = null, safety = 0, backdropTimer = 0;
+    const handle = {
+      cancel: () => {
+        clearTimeout(safety); clearTimeout(backdropTimer);
+        releaseBackdrop(el);                  // life ends now -> cards resolidify
+        try { if (anim) anim.cancel(); } catch (_e) {}
+        if (supportsAnim) {
+          try {
+            const a2 = el.animate(
+              [{ opacity: alpha * 0.8 }, { opacity: 0 }],
+              { duration: GARNISH_PREEMPT_MS, easing: 'ease-out', fill: 'forwards' });
+            a2.onfinish = () => removeNode(el);
+          } catch (_e) {}
+          setTimeout(() => removeNode(el), GARNISH_PREEMPT_MS + 80);
+        } else removeNode(el);
+      },
+    };
+    const finish = () => {
+      clearTimeout(safety); clearTimeout(backdropTimer);
+      releaseBackdrop(el); removeNode(el); endGarnish(handle);
+    };
+    if (supportsAnim) {
+      anim = el.animate(
+        [{ opacity: 0 }, { opacity: alpha, offset: inOff },
+         { opacity: alpha, offset: outOff }, { opacity: 0 }],
+        { duration: durMs, easing: 'ease-in-out' });
+      anim.onfinish = finish;
+      safety = setTimeout(finish, durMs + 400);
+      // release the see-through-card ref-count at the START of the fade-out
+      backdropTimer = setTimeout(() => releaseBackdrop(el), Math.max(0, durMs - fout));
+    } else {
+      el.style.opacity = String(alpha);
+      safety = setTimeout(finish, durMs);
+    }
+    return handle;
+  }
+
+  /** PINK WASH — the sf-pfx-pink look: fullscreen accent tint pulse, screen blend. */
+  function showPinkWash(i) {
+    mountGarnish();
+    if (!glRoot) return null;
+    try {
+      const spec = pinkWashSpec(i);
+      const el = document.createElement('div');
+      el.className = 'ixfx-gwash';
+      el.style.background =
+        `radial-gradient(circle at 50% 45%,${accent} 0%,rgba(255,20,147,.85) 100%)`;
+      glRoot.appendChild(el);
+      track(el);
+      el._ixBackdrop = true; backdropRef(true); // fullscreen wash: cards go see-through
+      sfxCue('pink-wash', i); // soft rosy-bloom cue at wash mount
+      return garnishFade(el, spec.alpha * clampIntensity(1, capsOf()), spec.durMs);
+    } catch (_e) { return null; }
+  }
+
+  /** BRAINDRAIN — the sf-pfx-drain look: fullscreen dim + backdrop blur + a
+   *  faint random image wash kept subtle by the dark luminosity blend ("drained,
+   *  not slideshow"). Works imageless too (pure dim + blur). */
+  function showDrain(i) {
+    mountGarnish();
+    if (!glRoot) return null;
+    try {
+      const spec = drainWashSpec(i);
+      const el = document.createElement('div');
+      el.className = 'ixfx-gdrain';
+      if (ambientPool.length) {
+        try { el.style.backgroundImage = `url("${pickOf(ambientPool)}")`; } catch (_e) {}
+      }
+      glRoot.appendChild(el);
+      track(el);
+      el._ixBackdrop = true; backdropRef(true); // fullscreen dim+blur: cards go see-through
+      sfxCue('drain-wash', i); // hollow vacuum drone at braindrain mount
+      return garnishFade(el, spec.alpha * clampIntensity(1, capsOf()), spec.durMs);
+    } catch (_e) { return null; }
+  }
+
+  /** SUBLIMINAL FLASHES — 2-4 rapid blinks of a big centered faded word from
+   *  the user's subliminal phrases (else theme.praise). Hard on/off blinks —
+   *  a fade would read as a title card, not a subliminal. */
+  function showSublimFlashes(i) {
+    mountGarnish();
+    if (!glRoot) return null;
+    const spec = sublimFlashSpec(i, Math.random());
+    const alpha = spec.alpha * clampIntensity(1, capsOf());
+    const timers = [];
+    let cur = null;
+    const handle = {
+      cancel: () => {
+        for (const t of timers) clearTimeout(t);
+        timers.length = 0;
+        if (cur) { removeNode(cur); cur = null; }
+      },
+    };
+    for (let k = 0; k < spec.flashes; k++) {
+      timers.push(setTimeout(() => {
+        if (!glRoot || inRecovery) return;
+        try {
+          const el = document.createElement('div');
+          el.className = 'ixfx-gword';
+          el.textContent = pickOf(garnishWords);
+          el.style.opacity = String(alpha);
+          glRoot.appendChild(el);
+          track(el, spec.onMs + 250);
+          cur = el;
+          timers.push(setTimeout(() => { if (cur === el) cur = null; removeNode(el); }, spec.onMs));
+        } catch (_e) {}
+      }, k * spec.gapMs));
+    }
+    timers.push(setTimeout(() => endGarnish(handle),
+      spec.flashes * spec.gapMs + spec.onMs + 250));
+    return handle;
+  }
+
+  /** Lazy loom module (spiral params are rolled FRESH per show — see
+   *  showLoomSpiral). Dynamic import keeps this module import-side-effect-free
+   *  and survives a missing dtrh folder: failure just retires the spiral garnish
+   *  (loomDead drops it from future picks). */
+  async function ensureLoom() {
+    if (loomMod || loomDead) return loomMod;
+    try {
+      const m = await import('../../dtrh/shared/loomField.js');
+      loomMod = m;
+    } catch (e) {
+      loomDead = true; loomMod = null;
+      logSeam('loom import failed: ' + ((e && e.message) ? e.message : String(e)));
+    }
+    return loomMod;
+  }
+  /** ONE offscreen WebGL field, reused across shows (rebuilt on a size change,
+   *  loomStudio-style). null -> the pure-2D drawFallbackFrame path. */
+  function ensureLoomField(m, w, h) {
+    if (loomFieldFailed) return null;
+    if (loomField && loomField.canvas.width === w && loomField.canvas.height === h) return loomField;
+    try {
+      if (loomField) { // viewport changed: retire the old context first
+        try {
+          const lose = loomField.gl.getExtension('WEBGL_lose_context');
+          if (lose) lose.loseContext();
+        } catch (_e) {}
+        loomField = null;
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      loomField = m.createFieldRenderer(c);
+      if (!loomField) loomFieldFailed = true; // no WebGL on this machine
+    } catch (_e) { loomField = null; loomFieldFailed = true; }
+    return loomField;
+  }
+
+  /** LOOM SPIRAL — the "ulterior reward": a live-rendered spiral, fullscreen,
+   *  faded, 4-5s. rAF composites frames ONLY while the canvas is visible. */
+  function showLoomSpiral(i) {
+    const spec = spiralGarnishSpec(i);
+    const alpha = spec.alpha * clampIntensity(1, capsOf());
+    let cancelled = false, rafG = 0, el = null, anim = null, safety = 0, backdropTimer = 0;
+    const stop = (fast) => {
+      if (cancelled) return;
+      cancelled = true;
+      if (rafG) { try { cancelAnimationFrame(rafG); } catch (_e) {} rafG = 0; }
+      if (safety) { clearTimeout(safety); safety = 0; }
+      if (backdropTimer) { clearTimeout(backdropTimer); backdropTimer = 0; }
+      try { if (anim) anim.cancel(); } catch (_e) {}
+      const node = el;
+      el = null;
+      if (!node) return;
+      releaseBackdrop(node); // life ends now (fade-out start) -> cards resolidify
+      if (fast && supportsAnim) { // preempted: quick fade of the frozen frame
+        try {
+          const a2 = node.animate(
+            [{ opacity: alpha * 0.8 }, { opacity: 0 }],
+            { duration: GARNISH_PREEMPT_MS, easing: 'ease-out', fill: 'forwards' });
+          a2.onfinish = () => removeNode(node);
+        } catch (_e) {}
+        setTimeout(() => removeNode(node), GARNISH_PREEMPT_MS + 80);
+      } else removeNode(node);
+    };
+    const handle = { cancel: () => stop(true) };
+    (async () => {
+      const m = await ensureLoom();
+      if (!m || cancelled || !hasDOM || inRecovery) return;
+      mountGarnish();
+      if (!glRoot) return;
+      try {
+        const vw = Math.max(2, (typeof window !== 'undefined' && window.innerWidth) | 0 || 2);
+        const vh = Math.max(2, (typeof window !== 'undefined' && window.innerHeight) | 0 || 2);
+        const scaleF = Math.min(1, 900 / Math.max(vw, vh)); // render budget; CSS upscales
+        const w = Math.max(2, Math.round(vw * scaleF));
+        const h = Math.max(2, Math.round(vh * scaleF));
+        el = document.createElement('canvas');
+        el.className = 'ixfx-gspiral';
+        el.width = w; el.height = h;
+        const ctx = el.getContext('2d');
+        if (!ctx) { el = null; return; }
+        glRoot.appendChild(el);
+        track(el);
+        el._ixBackdrop = true; backdropRef(true); // fullscreen live spiral: cards go see-through
+        // FRESH params every mount + cross-module no-repeat: never the same spiral twice.
+        const palette = [accent, accent2, '#ffffff'];
+        const q = freshSpiralParams(() => m.randomParams2(palette));
+        const span = Math.max(200, m.loopMs2(q));
+        const field = ensureLoomField(m, w, h);
+        const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        const frame = () => {
+          if (cancelled) return;
+          const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+          const phase = ((now - t0) % span) / span;
+          try {
+            if (field) m.composeFrame(ctx, field, q, phase, w, h);
+            else m.drawFallbackFrame(ctx, q, phase, w, h);
+            if (!loomLogged) {
+              loomLogged = true;
+              logSeam('loom spiral first frame rendered (webgl=' + !!field + ')');
+            }
+          } catch (_e) {}
+          rafG = requestAnimationFrame(frame);
+        };
+        rafG = requestAnimationFrame(frame);
+        const finish = () => { stop(false); endGarnish(handle); };
+        if (supportsAnim) {
+          // slow fade-in (~1.6s) / gentle fade-out (~0.9s), clamped to the life.
+          let fin = GARNISH_FADE_IN_MS, fout = GARNISH_FADE_OUT_MS;
+          if (fin + fout > spec.durMs * 0.9) {
+            const k = (spec.durMs * 0.9) / (fin + fout);
+            fin *= k; fout *= k;
+          }
+          const inOff  = clamp01(fin / spec.durMs);
+          const outOff = clamp01(1 - fout / spec.durMs);
+          anim = el.animate(
+            [{ opacity: 0 }, { opacity: alpha, offset: inOff },
+             { opacity: alpha, offset: outOff }, { opacity: 0 }],
+            { duration: spec.durMs, easing: 'ease-in-out' });
+          anim.onfinish = finish;
+          safety = setTimeout(finish, spec.durMs + 500);
+          // release the see-through-card ref-count at the START of the fade-out
+          const node = el;
+          backdropTimer = setTimeout(() => releaseBackdrop(node), Math.max(0, spec.durMs - fout));
+        } else {
+          el.style.opacity = String(alpha);
+          safety = setTimeout(finish, spec.durMs);
+        }
+      } catch (_e) {}
+    })();
+    return handle;
+  }
+
+  /** Fire the GENERIC sfx seam (audio.js listens on 'intake-sfx' and routes to
+   *  audio.sfx). effects.js holds no audio handle, so — exactly like garnishCue
+   *  — it reaches audio through a window CustomEvent. Never throws. */
+  function sfxCue(id, rawIntensity) {
+    try {
+      if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('intake-sfx', {
+          detail: { id, intensity: (rawIntensity == null ? 1 : clamp01(rawIntensity)) },
+        }));
+      }
+    } catch (_e) {}
+  }
+
+  /** Fire the audio seam for the garnishes that have a sound (spiral/sublim). */
+  function garnishCue(name, rawIntensity) {
+    if (name !== 'spiral' && name !== 'sublim') return;
+    try {
+      if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent(GARNISH_CUE_EVENT, {
+          detail: { name, intensity: clamp01(rawIntensity) },
+        }));
+      }
+    } catch (_e) {}
+  }
+
+  /** Run a garnish for a FIRED reward (a pairing, never a replacement).
+   *  ALWAYS GARNISH, ALWAYS DIFFERENT: every fire above the tiny floors draws
+   *  the next name from the shuffled bag; jackpots force drain-or-spiral (and
+   *  consume it from the rotation). */
+  function maybeGarnish(rewardEvent, depth, intensity) {
+    if (!hasDOM || reducedMotion || inRecovery) return;
+    const jackpot = !!rewardEvent.jackpot;
+    if (!jackpot && (intensity < GARNISH_MIN_INTENSITY || depth < GARNISH_MIN_DEPTH)) return;
+    const kinds = loomDead ? GARNISH_KINDS.filter((n) => n !== 'spiral') : GARNISH_KINDS;
+    const name = jackpot
+      ? (garnishBag.force(['drain', 'spiral'].filter((n) => kinds.includes(n))) || garnishBag.draw(kinds))
+      : garnishBag.draw(kinds);
+    if (!name) return;
+    preemptGarnish(); // one at a time: fast-fade whatever is still live
+    let h = null;
+    try {
+      if (name === 'pink') h = showPinkWash(intensity);
+      else if (name === 'drain') h = showDrain(intensity);
+      else if (name === 'sublim') h = showSublimFlashes(intensity);
+      else if (name === 'spiral') h = showLoomSpiral(intensity);
+    } catch (_e) {}
+    if (h) {
+      garnishNow = h;
+      garnishCue(name, rewardEvent.intensity); // RAW: audio clamps by ITS caps
+    }
+  }
+
+  /* ==========================================================================
+   * GIFBURST — an in-browser CCP-flash REWARD (owner-directed). ONE fullscreen
+   * GIF bursts in at a random spot/size, its opacity climbing by run band
+   * (0.15 / 0.30 / 0.50 / 0.75 / 1.00 via gifBurstOpacityForDepth). CLICK to
+   * dismiss, or GRAB + FLING it away. Max 6s of UNPAUSED life then it fades.
+   * SINGLE-INSTANCE / NO HYDRA: a new roll while one is alive is SKIPPED (never
+   * queued, never replaced). It is a FOREGROUND TOY — it does NOT ref-count
+   * backdropRef, so in-run cards stay solid behind it. Layer sits at z7 (above
+   * the z6 reward washes / z5 garnishes, below the z2147483000 jumpscare). All
+   * nodes/timers funnel through track/removeNode so recover(0) tears it out.
+   * ========================================================================*/
+  function mountBurstLayer() {
+    if (burstRoot || !hasDOM) return;
+    ensureStyles();
+    try {
+      burstRoot = document.createElement('div');
+      burstRoot.className = 'ixfx-burst-root';
+      burstRoot.setAttribute('aria-hidden', 'true');
+      root.appendChild(burstRoot);
+    } catch (_e) { burstRoot = null; }
+  }
+  function removeBurstLayer() {
+    if (burstRoot) { try { if (burstRoot.parentNode) burstRoot.parentNode.removeChild(burstRoot); } catch (_e) {} }
+    burstRoot = null;
+  }
+  /** Tear down a live burst instantly (cancel timers, remove node, clear guard). */
+  function killBurst() { if (burstNow) { try { burstNow.cancel(); } catch (_e) {} } }
+
+  /** Fire ONE GifBurst at the given run depth. Bails (no queue) if one is already
+   *  alive, or without DOM / gifs. RM: no pop-in overshoot + no fling physics
+   *  (click-dismiss only), same opacity ladder + 6s cap. */
+  function showGifBurst(depth) {
+    if (!hasDOM || !gifs.length) return;
+    if (burstNow) return;                       // NO HYDRA: at most one on screen
+    if (mediaLiveCount >= MAX_MEDIA_NODES) return;
+    mountBurstLayer();
+    if (!burstRoot) return;
+
+    // pick a gif, avoiding an immediate repeat of the last burst's gif
+    let url = pickOf(gifs);
+    if (gifs.length > 1) { let g = 0; while (url === lastBurstGif && g++ < 6) url = pickOf(gifs); }
+    lastBurstGif = url;
+
+    const targetAlpha = clamp01(gifBurstOpacityForDepth(depth)) * clampIntensity(1, capsOf());
+    const rot = (Math.random() * 16 - 8);       // slight ±8deg tilt
+    const sizeVmin = 30 + Math.random() * 20;   // large-ish, 30..50vmin
+    const leftPct = 8 + Math.random() * 58;     // biased inward so the box stays on-screen
+    const topPct  = 8 + Math.random() * 52;
+
+    let el;
+    try {
+      el = document.createElement('img');
+      el.className = 'ixfx-burst';
+      el.decoding = 'async';
+      el.setAttribute('aria-hidden', 'true');
+      el._ixMedia = true; mediaLiveCount++;      // shares the media leak-guard counter
+      el.style.width = sizeVmin.toFixed(2) + 'vmin';
+      el.style.height = 'auto';
+      el.style.left = leftPct.toFixed(2) + '%';
+      el.style.top = topPct.toFixed(2) + '%';
+      el.onerror = () => cleanup();              // bad url -> vanish, free the slot
+      el.src = url;
+      burstRoot.appendChild(el);
+    } catch (_e) { mediaLiveCount = Math.max(0, mediaLiveCount - 1); return; }
+
+    track(el);                                   // recover(0) tears it out with the rest
+
+    // --- per-instance state ---------------------------------------------------
+    let curX = 0, curY = 0;                      // current translate offset (px)
+    let baseX = 0, baseY = 0;                    // offset captured at pointerdown
+    let dragging = false, dead = false, ended = false, pointerId = null;
+    let moved = 0, downX = 0, downY = 0;
+    let samples = [];                            // {x,y,t} for release velocity
+    let popAnim = null;
+    let lifeTimer = 0, lifeRemaining = GIFBURST_LIFE_MS, lifeStart = 0;
+    const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const resting = () => `translate(${curX.toFixed(1)}px,${curY.toFixed(1)}px) rotate(${rot.toFixed(2)}deg)`;
+
+    function startLife() {
+      lifeStart = nowMs();
+      lifeTimer = setTimeout(() => { lifeTimer = 0; if (!ended) autoFade(); }, Math.max(0, lifeRemaining));
+    }
+    function pauseLife() {
+      if (!lifeTimer) return;
+      clearTimeout(lifeTimer); lifeTimer = 0;
+      lifeRemaining = Math.max(0, lifeRemaining - (nowMs() - lifeStart));
+    }
+    function resumeLife() { if (!dead && !ended && !lifeTimer) startLife(); }
+
+    function cleanup() {
+      if (dead) return; dead = true; ended = true;
+      if (lifeTimer) { clearTimeout(lifeTimer); lifeTimer = 0; }
+      removeNode(el);
+      if (burstNow === handle) burstNow = null;
+    }
+    function endWith(toTransform, durMs, easing) {
+      if (ended) return; ended = true;
+      if (lifeTimer) { clearTimeout(lifeTimer); lifeTimer = 0; }
+      if (supportsAnim) {
+        try {
+          if (popAnim) { try { popAnim.cancel(); } catch (_e) {} popAnim = null; }
+          const a = el.animate(
+            [{ opacity: targetAlpha, transform: resting() },
+             { opacity: 0, transform: toTransform }],
+            { duration: durMs, easing: easing, fill: 'forwards' });
+          a.onfinish = cleanup;
+          setTimeout(cleanup, durMs + 120);       // safety
+        } catch (_e) { cleanup(); }
+      } else cleanup();
+    }
+    function autoFade() {                          // 6s cap -> gentle fade in place
+      endWith(`translate(${curX.toFixed(1)}px,${curY.toFixed(1)}px) rotate(${rot.toFixed(2)}deg) scale(.92)`,
+        GIFBURST_FADE_MS, 'ease-in');
+    }
+    function dismiss() {                           // click -> quick fade + shrink
+      endWith(`translate(${curX.toFixed(1)}px,${curY.toFixed(1)}px) rotate(${rot.toFixed(2)}deg) scale(.6)`,
+        GIFBURST_DISMISS_MS, 'ease-in');
+    }
+    function fling(vx, vy) {                       // fast release -> fly off with spin
+      const speed = Math.hypot(vx, vy) || 1;
+      // faster fling = slightly shorter flight; 350..500ms momentum ease-out.
+      const durMs = Math.round(500 - clamp01((speed - GIFBURST_FLING_MIN) / 3) * 150);
+      const travel = Math.min(4200, speed * durMs * 1.1);
+      const nx = curX + (vx / speed) * travel;
+      const ny = curY + (vy / speed) * travel;
+      const spin = rot + (vx >= 0 ? 1 : -1) * (18 + Math.random() * 24);
+      endWith(`translate(${nx.toFixed(1)}px,${ny.toFixed(1)}px) rotate(${spin.toFixed(2)}deg)`,
+        durMs, 'cubic-bezier(.22,.61,.36,1)');
+    }
+
+    // --- pointer interactions -------------------------------------------------
+    function commitPop() {                        // freeze pop-in so inline drag styles win
+      if (popAnim) { try { popAnim.cancel(); } catch (_e) {} popAnim = null; }
+      try { el.style.opacity = String(targetAlpha); el.style.transform = resting(); } catch (_e) {}
+    }
+    function onDown(e) {
+      if (dead || ended) return;
+      try { e.preventDefault(); } catch (_e) {}
+      commitPop();
+      if (reducedMotion) { dismiss(); return; }   // RM: no drag/fling, click-dismiss only
+      dragging = true; moved = 0;
+      baseX = curX; baseY = curY;
+      downX = e.clientX; downY = e.clientY;
+      samples = [{ x: e.clientX, y: e.clientY, t: nowMs() }];
+      try { el.classList.add('ixfx-grabbing'); } catch (_e) {}
+      pauseLife();                                // 6s clock pauses while dragging
+      pointerId = (e.pointerId != null) ? e.pointerId : null;
+      try { if (pointerId != null && el.setPointerCapture) el.setPointerCapture(pointerId); } catch (_e) {}
+    }
+    function onMove(e) {
+      if (!dragging || dead) return;
+      const dx = e.clientX - downX, dy = e.clientY - downY;
+      moved = Math.max(moved, Math.hypot(dx, dy));
+      curX = baseX + dx; curY = baseY + dy;
+      try { el.style.transform = resting(); } catch (_e) {}
+      const t = nowMs();
+      samples.push({ x: e.clientX, y: e.clientY, t });
+      if (samples.length > 6) samples.shift();
+    }
+    function onUp(e) {
+      if (!dragging || dead) return;
+      dragging = false;
+      try { el.classList.remove('ixfx-grabbing'); } catch (_e) {}
+      try { if (pointerId != null && el.releasePointerCapture) el.releasePointerCapture(pointerId); } catch (_e) {}
+      if (moved < GIFBURST_DRAG_PX) { dismiss(); return; } // negligible move = a click
+      const t = nowMs();
+      let a = samples[0];
+      for (const s of samples) { if (t - s.t <= 110) { a = s; break; } } // ~last 110ms window
+      const b = samples[samples.length - 1];
+      const dt = Math.max(1, b.t - a.t);
+      const vx = (b.x - a.x) / dt, vy = (b.y - a.y) / dt;
+      if (Math.hypot(vx, vy) >= GIFBURST_FLING_MIN) fling(vx, vy);
+      else resumeLife();                          // slow release: drop in place, clock resumes
+    }
+    function onCancel() {
+      if (!dragging || dead) return;
+      dragging = false;
+      try { el.classList.remove('ixfx-grabbing'); } catch (_e) {}
+      resumeLife();
+    }
+    try {
+      el.addEventListener('pointerdown', onDown);
+      el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup', onUp);
+      el.addEventListener('pointercancel', onCancel);
+      el.addEventListener('lostpointercapture', onCancel);
+      // fallback for engines without Pointer Events: plain click dismisses.
+      if (typeof window === 'undefined' || !('PointerEvent' in window)) {
+        el.addEventListener('click', () => { if (!dead && !ended) dismiss(); });
+      }
+    } catch (_e) {}
+
+    // --- entrance -------------------------------------------------------------
+    if (supportsAnim && !reducedMotion) {
+      try {
+        popAnim = el.animate(
+          [{ opacity: 0, transform: `translate(0px,0px) rotate(${rot.toFixed(2)}deg) scale(.35)` },
+           { opacity: targetAlpha, offset: 0.72, transform: `translate(0px,0px) rotate(${rot.toFixed(2)}deg) scale(1.09)` },
+           { opacity: targetAlpha, transform: `translate(0px,0px) rotate(${rot.toFixed(2)}deg) scale(1)` }],
+          { duration: GIFBURST_POP_MS, easing: 'cubic-bezier(.2,.85,.35,1.25)', fill: 'forwards' });
+        popAnim.onfinish = () => { commitPop(); };
+      } catch (_e) { try { el.style.opacity = String(targetAlpha); el.style.transform = resting(); } catch (_e2) {} }
+    } else {
+      // RM / no WAAPI: gentle fade-in, no overshoot.
+      try {
+        el.style.transform = resting();
+        el.style.transition = 'opacity 200ms ease';
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(() => { if (!dead) try { el.style.opacity = String(targetAlpha); } catch (_e) {} });
+        } else { el.style.opacity = String(targetAlpha); }
+      } catch (_e) {}
+    }
+
+    const handle = { cancel: () => cleanup() };
+    burstNow = handle;
+    startLife();
+  }
 
   /* ----- public API --------------------------------------------------------- */
 
   /** Drive the ambient stack from one depth scalar (invariant #2: via caps). */
   function setDepth(depth) {
+    inRecovery = false; // the normal drive path re-arms ambient + garnishes
+    applyDepth(depth);
+  }
+  /** Shared depth application (recover() reuses it WITHOUT clearing the flag). */
+  function applyDepth(depth) {
     depthNow = clamp01(depth);
     const ch = clampToCaps(depthToChannels(depthNow), capsOf());
     vis = channelsToVisual(ch);
@@ -352,54 +2248,83 @@ export function createEffects({ root, caps } = {}) {
     }
     mount();
     startLoop();
+    scheduleAmbient(); // depth-gated inside; no-op until depth > AMBIENT_MIN_DEPTH
   }
 
-  /** Render a resolved reward by kind, scaled by clamped intensity (invariant #2). */
+  /** Render a resolved reward: no-repeat variant per kind, scaled by clamped
+   *  intensity (invariant #2). Handles jackpot / nearMiss / streak. */
   function play(rewardEvent, depth) {
-    if (!rewardEvent || !rewardEvent.fire) return;
-    if (!hasDOM) return;
-    mount();
+    if (!rewardEvent || !hasDOM) return;
     const intensity = clampIntensity(rewardEvent.intensity, capsOf());
+    // streak meter rides EVERY event that carries a streak (including misses,
+    // which is when the reset/shatter happens).
+    if (typeof rewardEvent.streak === 'number') updateStreak(rewardEvent.streak);
+    if (!rewardEvent.fire) {
+      // fire=false is no longer an early return: a near-miss gets its tease.
+      if (rewardEvent.nearMiss && intensity > 0.0005) { mount(); nearMissTease(intensity); }
+      return;
+    }
     if (intensity <= 0.0005) return;
-    const kind = rewardEvent.kind;
-    switch (kind) {
-      case RewardKind.Flash: {
-        const s = rewardFlashSpec(intensity); pulseFlash(s.alpha, s.durMs); break;
-      }
-      case RewardKind.Bubble: {
-        // a bright reward bubble burst + one ambient bubble
-        burst(rewardBurstSpec(intensity)); spawnBubble(); break;
-      }
+    mount();
+    if (rewardEvent.jackpot) {
+      jackpotCeremony(intensity);
+    } else switch (rewardEvent.kind) {
+      case RewardKind.Flash:  runVariant(RewardKind.Flash, FLASH_VARIANTS, intensity); break;
+      case RewardKind.Bubble: runVariant(RewardKind.Bubble, BUBBLE_VARIANTS, intensity); break;
       case RewardKind.Drop: {
-        // gif-burst stand-in: a shower of particles (no asset dependency here).
-        burst(rewardBurstSpec(intensity), 40); break;
+        // media path: real GIF burst; standalone: rotate the particle variants.
+        if (gifs.length && !reducedMotion) { try { gifBurst(intensity); } catch (_e) {} }
+        else runVariant(RewardKind.Drop, DROP_VARIANTS, intensity);
+        break;
       }
-      case RewardKind.Praise: {
-        praise(intensity); break;
-      }
-      case RewardKind.Chime: {
-        // audio owns the sound; give it a small sparkle so it reads on-screen.
-        burst({ count: Math.round(3 + intensity * 5), spreadPx: 40 + intensity * 70, durMs: 480 }); break;
+      case RewardKind.Praise: runVariant(RewardKind.Praise, PRAISE_VARIANTS, intensity); break;
+      case RewardKind.Chime:  runVariant(RewardKind.Chime, CHIME_VARIANTS, intensity); break;
+      case GIFBURST_KIND: {
+        // In-browser CCP-flash reward. Needs real gifs; without them, degrade to
+        // a flash variant so the fired reward still pays SOMETHING.
+        const d = clamp01(typeof depth === 'number' ? depth : depthNow);
+        if (gifs.length) { try { showGifBurst(d); } catch (_e) {} }
+        else runVariant(RewardKind.Flash, FLASH_VARIANTS, intensity);
+        break;
       }
       case RewardKind.None:
       default: break;
     }
+    // the garnish gamble rides the same fire (jackpots always land one)
+    maybeGarnish(rewardEvent, clamp01(typeof depth === 'number' ? depth : depthNow), intensity);
   }
 
-  /** Invariant #3: un-ramp toward 0. depth<=0 tears the whole layer out. */
+  /** Invariant #3: un-ramp toward 0. Recovery stays CLEAN: any recover() call
+   *  kills the ambient layer + force-clears a live garnish and keeps both down
+   *  until the next setDepth. depth<=0 tears the whole stack out — spawned
+   *  nodes, media nodes, streak meter, ambient + garnish layers, everything. */
   function recover(depth) {
     const d = clamp01(depth);
-    if (d > 0.0005) { setDepth(d); return; }
-    // full surfacing: stop spawning, drop every live node, hide + remove layer.
+    inRecovery = true;
+    killAmbient();
+    preemptGarnish();
+    killBurst();              // foreground toy: clear it on any recover()
+    if (d > 0.0005) { applyDepth(d); return; }
+    // full surfacing: stop spawning, drop every live node, hide + remove layers.
     depthNow = 0;
     vis = channelsToVisual(clampToCaps(depthToChannels(0), capsOf()));
     stopLoop();
     if (flashEl) flashEl.style.opacity = '0';
     for (const el of Array.from(live)) removeNode(el);
     live.clear();
+    removeStreakMeter();
+    lastStreakShown = 0;
+    mediaLiveCount = 0;
+    removeGarnishLayer();
+    removeBurstLayer();
+    lastBurstGif = null;
     if (layer) { try { if (layer.parentNode) layer.parentNode.removeChild(layer); } catch (_e) {} }
     layer = null; flashEl = null; mounted = false;
   }
 
-  return { setDepth, play, recover };
+  /** Full teardown for hosts (boot doesn't call it): recover(0) already clears
+   *  every timer, node, and layer this factory owns. */
+  function dispose() { recover(0); }
+
+  return { setDepth, play, recover, dispose };
 }

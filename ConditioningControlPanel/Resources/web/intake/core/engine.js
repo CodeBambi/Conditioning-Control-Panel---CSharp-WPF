@@ -10,8 +10,9 @@
  *     back-to-back same primary steer.
  *   - a reactive BELIEF-LADDER: bank.ladders climbed in order, each rung
  *     `requires`-gated, deeper rungs unlocked by affirmed mantras.
- *   - DEPTH-VELOCITY: fast + high-score answers raise velocity (shorten a band);
- *     timid / slow / low-score answers lower it (linger).
+ *   - DEPTH-VELOCITY: fast + high-score answers raise velocity, which INTENSIFIES
+ *     the band (hotter heat window, harder depth nudge) but NEVER shortens it
+ *     below its base; timid / slow / low-score answers lower it (linger, stretch).
  *   - ROUTE REVEAL FROM TRAJECTORY (not RNG): answered tags vote archetypes;
  *     primary = top, secondary = runner-up; shares climb ~5% -> 45% across a run.
  *   - a rewardProfile {chasedReward, chaseMagnitude} from the correlation between
@@ -34,26 +35,29 @@ import {
   RewardMode, RewardKind,
   Niche, NICHES,
   emptyResult, PRODUCT_NAME,
+  themeOf,
   clamp01, smoothstep, lerp, bandIndex, hash01,
   AiWant,
 } from './contracts.js';
 
 /* ----------------------------------------------------------------------------
- * TUNING CONSTANTS (pacing over ~25-30 beats; BUILD_PLAN.md §5 Phase 3).
+ * TUNING CONSTANTS (pacing over ~50 graded beats; BUILD_PLAN.md §5 Phase 3).
+ * Deepening + Climax carry the bulk (~60%) — that is where the spice lives and
+ * the pool is deepest. Calibration serves ~9 from the big heat-0 pool.
  * -------------------------------------------------------------------------- */
 const DESCENT_BANDS = Object.freeze([Band.Calibration, Band.Establishing, Band.Deepening, Band.Climax]);
 const BASE_BEATS = Object.freeze({
-  [Band.Calibration]:  4,
-  [Band.Establishing]: 5,
-  [Band.Deepening]:    6,
-  [Band.Climax]:       6,
+  [Band.Calibration]:  9,
+  [Band.Establishing]: 11,
+  [Band.Deepening]:    16,
+  [Band.Climax]:       14,
 });
-const MIN_BEATS = 3;               // a band can be shortened to this, never skipped (all 5 bands sequence)
-const MAX_BEATS = 9;               // a band can be stretched to this by timid play
+const MIN_BEATS = 5;               // a band can be shortened to this, never skipped (all 5 bands sequence)
+const MAX_BEATS = 22;              // a band can be stretched to this by timid play
 const RECOVERY_BEATS = 4;          // fixed, non-skippable walk-down (invariant #3)
 const CLIMAX_PEAK = 1.0;           // depth ceiling the Climax band ramps toward
-const EXPECTED_DESCENT = 21;       // ~sum(BASE_BEATS); drives progressive route-share climb
-const HARD_BEAT_CAP = 800;         // safety net so a never-aborted endless run still surfaces
+const EXPECTED_DESCENT = 50;       // sum(BASE_BEATS); drives progressive route-share climb
+const HARD_BEAT_CAP = 1600;        // safety net so a never-aborted ENDLESS run still surfaces (many laps)
 
 /** heat window (0..5) the sequencer prefers per band; camouflage low, hot high. */
 const HEAT_WINDOW = Object.freeze({
@@ -62,12 +66,30 @@ const HEAT_WINDOW = Object.freeze({
   [Band.Deepening]:    [2, 4],
   [Band.Climax]:       [3, 5],
 });
+/** fast+correct play INTENSIFIES instead of shortening: above this velocity the
+ *  heat window's upper edge widens by +1 within the band (never shrinks a band). */
+const HOT_VELOCITY = 0.3;
+
+/** interviewer asides: roll chance per beat (never twice in a row; Recovery always speaks). */
+const INTERVIEWER_ROLL = 0.4;
+
+/** timed-pressure beats (Deepening + sub-0.9 Climax; MC4/YesNo only; never back-to-back). */
+const TIMED_ROLL = 0.30;
+const TIMED_MS_MAX = 9000;
+const TIMED_MS_MIN = 6000;
+const TIMED_MECHANICS = new Set([Mechanic.MC4, Mechanic.YesNo]);
+
+/** interlude valleys: synthetic non-graded pauses in Deepening + Climax, spaced
+ *  ~one per INTERLUDE_EVERY graded beats (so long bands don't run dry of valleys). */
+const INTERLUDE_MS_MIN = 5000;
+const INTERLUDE_MS_MAX = 6500;
+const INTERLUDE_EVERY = 8;         // aim: ~one valley per 8 graded beats within a deep band
 
 /** steer catalogs per band (Calibration/Recovery steer nothing — inv of the fiction). */
 const STEER_POOL = Object.freeze({
   [Band.Establishing]: [Steer.Magnet, Steer.SizeSkew, Steer.OpacitySkew, Steer.LateBloom, Steer.Defocus, Steer.AssistClick, Steer.DriftResolve],
-  [Band.Deepening]:    [Steer.Magnet, Steer.Flee, Steer.Exile, Steer.Crowd, Steer.SizeSkew, Steer.OpacitySkew, Steer.OccludeGif, Steer.Defocus, Steer.ShrinkHit, Steer.DragReveal, Steer.AssistClick, Steer.DriftResolve, Steer.Decay],
-  [Band.Climax]:       [Steer.Flee, Steer.Exile, Steer.Crowd, Steer.OccludeGif, Steer.ShrinkHit, Steer.DragReveal, Steer.HoldRefuse, Steer.NestedNag, Steer.OverflowHit, Steer.Tunnel, Steer.Decay, Steer.Magnet],
+  [Band.Deepening]:    [Steer.Magnet, Steer.Flee, Steer.Exile, Steer.Crowd, Steer.SizeSkew, Steer.OpacitySkew, Steer.OccludeGif, Steer.Defocus, Steer.ShrinkHit, Steer.DragReveal, Steer.AssistClick, Steer.DriftResolve, Steer.Decay, Steer.MeltAway],
+  [Band.Climax]:       [Steer.Flee, Steer.Exile, Steer.Crowd, Steer.OccludeGif, Steer.ShrinkHit, Steer.DragReveal, Steer.HoldRefuse, Steer.NestedNag, Steer.OverflowHit, Steer.Tunnel, Steer.Decay, Steer.Magnet, Steer.MeltAway],
 });
 
 const OPTION_MECHANICS = new Set([Mechanic.MC4, Mechanic.YesNo, Mechanic.BubblePop, Mechanic.Mono, Mechanic.Funnel, Mechanic.Destruct]);
@@ -155,6 +177,7 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     : Niche.Bambi;
 
   const activeBank = usableBank || placeholderBank(niche);
+  const theme = themeOf(activeBank);          // resolved fiction voice (interviewer asides)
   const prompts = Array.isArray(activeBank.prompts) ? activeBank.prompts : [];
   const archetypes = (Array.isArray(activeBank.archetypes) && activeBank.archetypes.length)
     ? activeBank.archetypes : placeholderBank(niche).archetypes;
@@ -162,7 +185,14 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
 
   const endless = !!cfg.endless;
   const steerValve = clamp01(cfg.steerValve == null ? 1 : cfg.steerValve);
-  const seedInt = Math.floor(hash01(niche + '|' + (cfg.seed == null ? 'run' : cfg.seed)) * 0xFFFFFFFF);
+  // Cross-run variety: an EXPLICIT cfg.seed reproduces a run (harness/tests);
+  // no seed -> genuine per-run entropy so the prompt draw is freshly shuffled
+  // every run (the "constantly the same questions" fix — the old null path
+  // hashed a constant 'run', giving an identical rng stream on every play).
+  const seedSource = (cfg.seed != null)
+    ? (niche + '|' + cfg.seed)
+    : (niche + '|' + Date.now() + '|' + Math.random());
+  const seedInt = Math.floor(hash01(seedSource) * 0xFFFFFFFF);
   const rng = makeRng(seedInt);
 
   const byId = new Map(prompts.map((p) => [p.id, p]));
@@ -175,7 +205,8 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   const result = emptyResult(niche);
   result.endless = endless;
 
-  const usedIds = new Set();              // prompts already served this run (soft no-repeat)
+  const usedIds = new Set();              // prompts already served this run (HARD within-run no-repeat)
+  let lastServedId = '';                  // most-recent non-ladder pick (last-resort reuse never repeats it)
   const servedRungs = new Set();          // ladder rungs already delivered
   const affirmedIds = new Set();          // mantra prompt-ids affirmed (for requires.affirmed)
   const archetypeVotes = new Map();       // archetypeId -> vote weight (route reveal)
@@ -196,6 +227,17 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   let correctCount = 0;                   // graded correct answers
   let descentAnswered = 0;                // descent beats answered (route-share progress)
   let accentFlavor = '';                  // latest AI accent (best-effort, non-blocking)
+
+  // ---- presentation/meta state (BeatMeta + scheduling memories) -----------
+  let streakRun = 0;                      // consecutive-correct graded answers (meta.streak)
+  let qIndex = 0;                         // 1-based graded-question counter (interludes/recovery carry)
+  let lastEmittedBand = null;             // bandNew detection (first beat emitted in a band)
+  let lastBeatHadLine = false;            // interviewer aside never rolls twice in a row
+  let lastBeatTimed = false;              // no two timed-pressure beats back-to-back
+  const lineMem = {};                     // band -> last-two interviewer line indices (no-repeat)
+  const interludesInBand = {};            // band -> interludes inserted so far this band (reset per endless lap)
+  let bubbleServedInBand = false;         // bubble guarantee: >=1 BubblePop per descent band
+  const servedByBand = {};                // band -> actual graded beats served (qTotal estimate)
 
   const t0 = nowMs();
 
@@ -305,15 +347,25 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     return null;
   }
 
-  function eligible(band, strict) {
+  /** Band heat window; fast+correct play (hot velocity) widens the top edge +1. */
+  function heatWindowFor(band) {
     const win = HEAT_WINDOW[band] || [0, 5];
+    if (state.velocity > HOT_VELOCITY) return [win[0], Math.min(5, win[1] + 1)];
+    return win;
+  }
+
+  // mode: 'strict' = inside the band heat window; 'wide' = softer allowed + rough hot
+  // ceiling; 'any' = ignore heat entirely (last no-repeat widening before reuse).
+  function eligible(band, mode) {
+    const win = heatWindowFor(band);
     const out = [];
     for (const p of prompts) {
       if (usedIds.has(p.id)) continue;
       if (ladderPromptIds.has(p.id)) continue;  // ladder-owned prompts arrive only via the ladder
       const heat = typeof p.heat === 'number' ? p.heat : 0;
-      if (strict) { if (heat < win[0] - 0.001 || heat > win[1] + 0.001) continue; }
-      else { if (heat > win[1] + 1.5) continue; } // widened: allow softer prompts, keep a rough hot ceiling
+      if (mode === 'strict') { if (heat < win[0] - 0.001 || heat > win[1] + 0.001) continue; }
+      else if (mode === 'wide') { if (heat > win[1] + 1.5) continue; } // softer prompts ok, rough hot ceiling
+      // 'any' -> no heat filter at all
       if (!requiresOk(p.requires)) continue;
       out.push(p);
     }
@@ -334,14 +386,28 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
       const rung = nextLadderPrompt();
       if (rung) { servedRungs.add(rung.id); usedIds.add(rung.id); return rung; }
     }
-    let pool = eligible(band, true);
-    if (!pool.length) pool = eligible(band, false);      // widen the heat window
-    if (!pool.length) { usedIds.clear(); pool = eligible(band, false); } // allow reuse
+    // WITHIN-RUN NO-REPEAT: a served id never returns. If the heat window is dry,
+    // WIDEN (softer -> any heat) before ever reusing — the enlarged banks make the
+    // reuse path effectively unreachable in production.
+    let pool = eligible(band, 'strict');
+    if (!pool.length) pool = eligible(band, 'wide');     // widen the heat window
+    if (!pool.length) pool = eligible(band, 'any');      // ignore heat entirely, still no-repeat
+    if (!pool.length) {
+      // Absolute last resort (only a tiny/placeholder bank can reach here): permit
+      // reuse, but keep the just-served id out so we never repeat back-to-back.
+      const keep = lastServedId;
+      usedIds.clear();
+      if (keep) usedIds.add(keep);
+      pool = eligible(band, 'any');
+      if (!pool.length && keep) { usedIds.delete(keep); pool = eligible(band, 'any'); }
+    }
+    if (!pool.length) pool = prompts.filter((p) => !ladderPromptIds.has(p.id) && p.id !== lastServedId);
     if (!pool.length) pool = prompts.filter((p) => !ladderPromptIds.has(p.id));
     if (!pool.length) pool = prompts.slice();
     if (!pool.length) return syntheticPrompt(band);
     const p = weightedPick(pool);
     usedIds.add(p.id);
+    lastServedId = p.id;
     return p;
   }
 
@@ -434,9 +500,14 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     }
   }
   function plannedBeats(band) {
+    // Velocity NEVER shortens a band below its base (fast play must not shrink
+    // the run — engagement is rewarded with INTENSITY, not less game): positive
+    // velocity keeps the base and instead widens the heat window (heatWindowFor)
+    // and nudges depth harder (descentDepth). Timid play still stretches.
     const base = BASE_BEATS[band] || 5;
-    const scaled = Math.round(base * (1 - 0.35 * state.velocity)); // high velocity -> fewer beats
-    return Math.max(MIN_BEATS, Math.min(MAX_BEATS, scaled));
+    if (state.velocity >= 0) return Math.max(MIN_BEATS, Math.min(MAX_BEATS, base));
+    const stretched = Math.round(base * (1 - 0.35 * state.velocity)); // negative v -> more beats
+    return Math.max(MIN_BEATS, Math.min(MAX_BEATS, stretched));
   }
   function descentDepth(band, beatIndex, planned) {
     let floor = BAND_DEPTH_FLOOR[band];
@@ -447,13 +518,20 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     }
     const frac = planned > 1 ? beatIndex / (planned - 1) : 1; // 0..1 across the band
     const base = lerp(floor, ceil, smoothstep(frac));
-    return clamp01(base + state.velocity * 0.04); // small reactive nudge
+    // small reactive nudge; fast+correct play pushes slightly harder still
+    return clamp01(base + state.velocity * 0.04 + Math.max(0, state.velocity) * 0.02);
   }
 
   /* --------------------------------------------------------------------------
    * ANSWER RECORDING + VELOCITY + ROUTE
    * ------------------------------------------------------------------------ */
   function gradeBeat(beat, ev) {
+    // Interlude valleys are never graded and never wrong (beats.js may commit
+    // them as {value:true, mechanic:'interlude'}). score 0 / beatMax 0 keeps
+    // maxScore untouched if a trajectory entry is recorded.
+    if (beat.mechanic === Mechanic.Interlude || (ev && ev.mechanic === Mechanic.Interlude)) {
+      return { correct: true, score: 0, beatMax: 0 };
+    }
     const opt = (ev && typeof ev.chosenIndex === 'number' && beat.options && beat.options[ev.chosenIndex]) || null;
     let correct, score, beatMax;
     if (opt) {
@@ -481,11 +559,13 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
 
   function recordAnswer(beat, ev) {
     if (!beat) return;
+    const isInterlude = beat.mechanic === Mechanic.Interlude || (ev && ev.mechanic === Mechanic.Interlude);
     const { correct, score, beatMax } = gradeBeat(beat, ev);
-    const graded = beat.band !== Band.Recovery;
+    const graded = !isInterlude && beat.band !== Band.Recovery;
     const tags = (beat.prompt && Array.isArray(beat.prompt.tags)) ? beat.prompt.tags : [];
 
-    const rewardEvent = resolveReward(beat.rewardPlan, ev, score);
+    // Interludes never touch scoring/velocity/route/reward tallies — a valley, not a question.
+    const rewardEvent = isInterlude ? null : resolveReward(beat.rewardPlan, ev, score);
     const rewardFired = graded && !!(rewardEvent && rewardEvent.fire);
     const rewardDecoupled = !!(rewardEvent && rewardEvent.decoupled);
 
@@ -501,6 +581,7 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
       gradedAnswered += 1;
       if (correct) correctCount += 1;
       descentAnswered += 1;
+      streakRun = (correct && !(ev && ev.timedOut)) ? streakRun + 1 : 0; // wrong/timeout resets
       updateVelocity(correct, ev);
       for (const t of tags) result.tagTallies[t] = (result.tagTallies[t] || 0) + 1;
       voteArchetypes(tags, correct);
@@ -562,6 +643,60 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   }
 
   /* --------------------------------------------------------------------------
+   * BEAT META + INTERVIEWER ASIDES (theme voice, seeded rolls, no-repeat memory)
+   * ------------------------------------------------------------------------ */
+  /** qTotal: best current estimate of GRADED questions across the descent —
+   *  completed bands count what was actually served; the current + future bands
+   *  count plannedBeats at the current velocity. Stable ~50 under steady play. */
+  function estimateQTotal() {
+    let total = 0;
+    for (let i = 0; i < DESCENT_BANDS.length; i++) {
+      const b = DESCENT_BANDS[i];
+      if (i < descentIdx) total += (servedByBand[b] != null ? servedByBand[b] : BASE_BEATS[b]);
+      else if (i === descentIdx) total += Math.max(plannedBeats(b), beatsInBand);
+      else total += plannedBeats(b);
+    }
+    return total;
+  }
+
+  /** Pick a theme interviewer line for a band, avoiding the last two used. */
+  function pickInterviewerLine(band) {
+    const pool = (theme.interviewer && theme.interviewer[band]) || [];
+    if (!pool.length) return undefined;
+    const mem = lineMem[band] || (lineMem[band] = []);
+    let idxs = pool.map((_, i) => i).filter((i) => !mem.includes(i));
+    if (!idxs.length) idxs = pool.map((_, i) => i).filter((i) => i !== mem[mem.length - 1]);
+    if (!idxs.length) idxs = pool.map((_, i) => i);
+    const idx = idxs[Math.floor(rng() * idxs.length)];
+    mem.push(idx); if (mem.length > 2) mem.shift();
+    return pool[idx];
+  }
+
+  /** Roll an interviewer aside (~every 2-3 beats; never twice in a row). */
+  function rollInterviewerLine(band) {
+    const speak = !lastBeatHadLine && rng() < INTERVIEWER_ROLL;
+    if (!speak) { lastBeatHadLine = false; return undefined; }
+    const line = pickInterviewerLine(band);
+    lastBeatHadLine = !!line;
+    return line;
+  }
+
+  /** Assemble BeatMeta for the beat being emitted (also flips bandNew memory). */
+  function makeMeta(band, bandBeat, bandPlanned, interviewerLine) {
+    const meta = {
+      qIndex,
+      qTotal: estimateQTotal(),
+      bandBeat,
+      bandPlanned,
+      bandNew: lastEmittedBand !== band,
+      streak: streakRun,
+    };
+    if (interviewerLine) meta.interviewerLine = interviewerLine;
+    lastEmittedBand = band;
+    return meta;
+  }
+
+  /* --------------------------------------------------------------------------
    * BEAT BUILDERS
    * ------------------------------------------------------------------------ */
   function buildDescentBeat(band) {
@@ -571,18 +706,63 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     state.band = band;
 
     const src = selectPrompt(band);
-    const mechanic = pickMechanic(src, band);
+    let mechanic = pickMechanic(src, band);
+    // BUBBLE GUARANTEE: every descent band serves >=1 BubblePop. If the band hits
+    // its last 2 planned beats dry, force it on the next option-compatible prompt.
+    if (!bubbleServedInBand && beatsInBand >= planned - 2 && mechanic !== Mechanic.BubblePop
+        && (OPTION_MECHANICS.has(mechanic) || (Array.isArray(src.options) && src.options.length))) {
+      mechanic = Mechanic.BubblePop;
+    }
+    if (mechanic === Mechanic.BubblePop) bubbleServedInBand = true;
     const options = buildOptions(mechanic, src);
     const steerRoll = rollSteer(band, depth, options.length > 0);
     const rewardPlan = planFor(band, depth, src) || fallbackPlan(band, depth, src);
+
+    // TIMED PRESSURE: ~30% of MC4/YesNo beats in Deepening (and sub-0.9 Climax)
+    // get a shrinking-ring timeout, shorter as depth rises; never back-to-back.
+    let timeoutMs = 0;
+    const timedEligible = TIMED_MECHANICS.has(mechanic) && !lastBeatTimed
+      && (band === Band.Deepening || (band === Band.Climax && depth < 0.9));
+    if (timedEligible && rng() < TIMED_ROLL) {
+      const target = lerp(TIMED_MS_MAX, TIMED_MS_MIN, depth) + (rng() - 0.5) * 1000;
+      timeoutMs = Math.round(Math.max(TIMED_MS_MIN, Math.min(TIMED_MS_MAX, target)));
+    }
+    lastBeatTimed = timeoutMs > 0;
 
     kickAccent(band, depth); // fire-and-forget; may color a later beat
     const prompt = Object.assign({}, src);
     if (accentFlavor) prompt.flavor = accentFlavor;
 
-    beatSeq += 1; totalBeatsBuilt += 1; beatsInBand += 1;
+    beatSeq += 1; totalBeatsBuilt += 1; beatsInBand += 1; qIndex += 1;
+    const meta = makeMeta(band, beatsInBand, planned, rollInterviewerLine(band));
     trackPeak(depth, band);
-    return { id: `b${beatSeq}-${band}`, band, depth, mechanic, prompt, options, steerRoll, rewardPlan, timeoutMs: 0 };
+    return { id: `b${beatSeq}-${band}`, band, depth, mechanic, prompt, options, steerRoll, rewardPlan, timeoutMs, meta };
+  }
+
+  function buildInterludeBeat(band) {
+    const planned = plannedBeats(band);
+    const depth = descentDepth(band, beatsInBand, planned);
+    state.depth = depth;
+    state.band = band;
+
+    const win = HEAT_WINDOW[band] || [0, 5];
+    const kind = band === Band.Climax ? 'breathe' : 'watch';
+    const durationMs = Math.round(lerp(INTERLUDE_MS_MIN, INTERLUDE_MS_MAX, rng()));
+    const prompt = {
+      id: `interlude-${band}`,
+      text: kind === 'watch' ? 'just watch.' : 'breathe with it.',
+      answer: true, heat: Math.round((win[0] + win[1]) / 2), tags: [], flavors: [], weight: 1,
+      mechanicHints: [Mechanic.Interlude],
+      interludeKind: kind, durationMs,
+    };
+    const rewardPlan = planFor(band, depth, prompt) || fallbackPlan(band, depth, prompt);
+
+    // NOT beatsInBand, NOT qIndex — a valley, not a question (band never shrinks).
+    beatSeq += 1; totalBeatsBuilt += 1;
+    lastBeatTimed = false;
+    const meta = makeMeta(band, beatsInBand, planned, rollInterviewerLine(band));
+    trackPeak(depth, band);
+    return { id: `b${beatSeq}-${band}-interlude`, band, depth, mechanic: Mechanic.Interlude, prompt, options: [], steerRoll: { primary: Steer.None, secondary: [], intensity: 0 }, rewardPlan, timeoutMs: 0, meta };
   }
 
   function buildRecoveryBeat() {
@@ -596,9 +776,13 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     const prompt = { id: `recovery-${step}`, text: line, answer: 1, heat: 0, tags: [], flavors: [], weight: 1, mechanicHints: [Mechanic.CheckIn] };
     const rewardPlan = planFor(Band.Recovery, depth, prompt) || fallbackPlan(Band.Recovery, depth, prompt);
 
+    // Recovery beats ALWAYS carry an interviewer aside (the debrief voice).
+    const meta = makeMeta(Band.Recovery, step + 1, RECOVERY_BEATS, pickInterviewerLine(Band.Recovery));
+    lastBeatHadLine = true;
+
     recoveryIdx += 1; beatSeq += 1; totalBeatsBuilt += 1;
     trackPeak(depth, Band.Recovery);
-    return { id: `b${beatSeq}-recovery`, band: Band.Recovery, depth, mechanic: Mechanic.CheckIn, prompt, options: [], steerRoll: { primary: Steer.None, secondary: [], intensity: 0 }, rewardPlan, timeoutMs: 0 };
+    return { id: `b${beatSeq}-recovery`, band: Band.Recovery, depth, mechanic: Mechanic.CheckIn, prompt, options: [], steerRoll: { primary: Steer.None, secondary: [], intensity: 0 }, rewardPlan, timeoutMs: 0, meta };
   }
 
   function trackPeak(depth, band) {
@@ -640,17 +824,38 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     // advance the band if the current one is full (never below MIN_BEATS -> all bands sequence)
     let band = DESCENT_BANDS[descentIdx];
     if (beatsInBand >= plannedBeats(band)) {
+      servedByBand[band] = beatsInBand; // actual graded beats -> qTotal estimate
       descentIdx += 1;
       beatsInBand = 0;
+      bubbleServedInBand = false;
       if (descentIdx >= DESCENT_BANDS.length) {
         if (endless && !aborting) {
           lapCount += 1;
           descentIdx = DESCENT_BANDS.indexOf(Band.Deepening); // loop the deep bands, keep deepening
+          interludesInBand[Band.Deepening] = 0;               // each lap gets its valleys again
+          interludesInBand[Band.Climax] = 0;
         } else {
           return enterRecovery();
         }
       }
       band = DESCENT_BANDS[descentIdx];
+    }
+    // INTERLUDE VALLEYS: synthetic non-graded pauses in Deepening + Climax, spaced
+    // ~one per INTERLUDE_EVERY graded beats and evenly distributed across the band
+    // (so a 14-16 beat band never runs a long dry stretch without a valley). Never
+    // lands on the band's final beat. Velocity-shifted planned counts stay covered
+    // because positions are computed against the live plannedBeats.
+    if (band === Band.Deepening || band === Band.Climax) {
+      const planned = plannedBeats(band);
+      const nInt = Math.max(1, Math.round(planned / INTERLUDE_EVERY));
+      const served = interludesInBand[band] || 0;
+      if (served < nInt) {
+        const pos = Math.round((served + 1) * planned / (nInt + 1)); // evenly spaced, never at the end
+        if (beatsInBand >= pos && beatsInBand < planned) {
+          interludesInBand[band] = served + 1;
+          return { done: false, beat: buildInterludeBeat(band) };
+        }
+      }
     }
     return { done: false, beat: buildDescentBeat(band) };
   }

@@ -52,6 +52,32 @@ import {
  * decoupling. VariableRatio is the only intermittent schedule: an intensity-
  * ramped chance in (0,1) so the payout feels like a slot machine.
  * -------------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------------
+ * slot-machine tuning (VariableRatio only) + streak juice.
+ *   JACKPOT: a fired VR roll whose rJack lands in the top band pays a boosted
+ *   intensity (base * 1.5, clamped) and flags RewardEvent.jackpot for the full
+ *   ceremony. NEAR-MISS: an unfired roll within NEAR_MISS_WINDOW of the chance
+ *   threshold flags RewardEvent.nearMiss (fire stays false, intensity 0) so
+ *   effects can tease. STREAK: +3%/consecutive-correct, capped at 8 — juice,
+ *   not runaway. All rolls stay on the seeded stream (determinism preserved).
+ * -------------------------------------------------------------------------- */
+const JACKPOT_ROLL = 0.85;       // rJack >= this on a VR hit -> jackpot
+const JACKPOT_BOOST = 1.5;       // jackpot intensity = clamp01(base * this)
+const NEAR_MISS_WINDOW = 0.08;   // rFire within this above chance -> near-miss
+const STREAK_CAP = 8;            // streak beats counted at most
+const STREAK_STEP = 0.03;        // intensity multiplier step per streak beat
+
+/* GifBurst: an in-browser CCP-flash reward (owner-directed). It joins the kind
+ * roll in pickKind at GIFBURST_CHANCE — a weight comparable to how often the
+ * heavy Flash / gif-Drop payloads land (Flash is the deep-beat default, Drop the
+ * hottest; ~18% keeps GifBurst a frequent-but-not-dominant reward). The kind
+ * string mirrors a recommended contracts.js `RewardKind.GifBurst: 'gifburst'`
+ * (see FINAL REPORT contract-gap note); until that enum lands the literal is
+ * duplicated here + in effects.js (same pattern as the GARNISH_CUE_EVENT
+ * literal). effects.js renders it; audio/stats ignore an unknown kind. */
+const GIFBURST_KIND = 'gifburst';
+const GIFBURST_CHANCE = 0.18;
+
 function baseChanceFor(mode, band, depth) {
   if (band === Band.Recovery) return 0;             // recovery never rewards (inv #3)
   switch (mode) {
@@ -100,6 +126,9 @@ function pickKind(band, depth, prompt) {
   const hints = (prompt && Array.isArray(prompt.mechanicHints)) ? prompt.mechanicHints : [];
   const heat = (prompt && typeof prompt.heat === 'number') ? prompt.heat : 0;
   if (hints.includes(Mechanic.BubblePop)) return RewardKind.Bubble;
+  // GifBurst joins the roll as a random in-browser flash reward (BubblePop still
+  // wins — its bubble IS the reward). Opacity ramps by band inside effects.js.
+  if (Math.random() < GIFBURST_CHANCE) return GIFBURST_KIND;
   if (heat >= 4) return RewardKind.Drop;    // hottest -> gif burst / subliminal drop
   if (heat >= 3) return RewardKind.Praise;  // voiced/subtitled affirmation
   if (depth >= 0.6) return RewardKind.Flash;
@@ -169,8 +198,11 @@ export function createReward({ config } = {}) {
   }
 
   /**
-   * resolve(plan, answerEvent, scoreDelta) -> RewardEvent { fire, intensity, kind, decoupled }
+   * resolve(plan, answerEvent, scoreDelta) -> RewardEvent
+   *   { fire, intensity, kind, decoupled, jackpot?, nearMiss?, streak? }
    * intensity is RAW 0..1 (effect layer clamps to caps, invariant #2).
+   * jackpot/nearMiss ride the VariableRatio path only; streak echoes
+   * answerEvent.streak (when present) after applying the small multiplier.
    */
   function resolve(plan, answerEvent, scoreDelta) {
     const p = plan || { mode: RewardMode.Honest, baseChance: 0, baseIntensity: 0, kind: RewardKind.None };
@@ -188,6 +220,8 @@ export function createReward({ config } = {}) {
 
     let fire = false;
     let intensity = 0;
+    let jackpot = false;
+    let nearMiss = false;
 
     switch (mode) {
       case RewardMode.Honest: {
@@ -218,8 +252,15 @@ export function createReward({ config } = {}) {
         const rJack = hash01(seed + '|vr-jack|' + vrCount);
         vrCount += 1;
         fire = rFire < chance;
-        // On a hit, magnitude spans 0.7x..1.3x of base (the occasional jackpot).
-        intensity = fire ? clamp01(base * (0.7 + 0.6 * rJack)) : 0;
+        if (fire) {
+          // On a hit, magnitude spans 0.7x..1.3x of base; a top roll is a JACKPOT
+          // (intensity boosted toward 1, ceremony flagged for effects/audio).
+          jackpot = rJack >= JACKPOT_ROLL;
+          intensity = jackpot ? clamp01(base * JACKPOT_BOOST) : clamp01(base * (0.7 + 0.6 * rJack));
+        } else if (chance > 0 && rFire < chance + NEAR_MISS_WINDOW) {
+          // The roll ALMOST fired -> near-miss tease (no payout, no intensity).
+          nearMiss = true;
+        }
         break;
       }
       default: {
@@ -228,12 +269,21 @@ export function createReward({ config } = {}) {
       }
     }
 
-    return {
+    // STREAK MULTIPLIER: small magnitude juice from the render-side streak counter.
+    const streak = (answerEvent && typeof answerEvent.streak === 'number')
+      ? Math.max(0, answerEvent.streak | 0) : undefined;
+    if (fire && streak) intensity = clamp01(intensity * (1 + Math.min(streak, STREAK_CAP) * STREAK_STEP));
+
+    const out = {
       fire,
       intensity,
       kind: fire ? (p.kind || RewardKind.None) : RewardKind.None,
       decoupled,
     };
+    if (jackpot) out.jackpot = true;
+    if (nearMiss) out.nearMiss = true;
+    if (streak !== undefined) out.streak = streak; // echo -> effects drive the meter
+    return out;
   }
 
   /**

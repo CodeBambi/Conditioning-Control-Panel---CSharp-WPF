@@ -31,10 +31,18 @@
     <!-- The beat stage: prompts, options, in-page effects (Agents C/D/E draw here). -->
     <main id="intake-stage" class="intake-stage" role="main"></main>
 
-    <!-- Minimal HUD (band · depth). Real render may replace/augment. -->
+    <!-- In-fiction HUD (question counter · calibration dial · section name).
+         boot.js builds the internals; never shows raw depth/band ids. -->
     <div id="intake-hud" class="intake-hud" aria-hidden="true"></div>
 
-    <!-- Loader (covers the page until the first beat renders). -->
+    <!-- Interviewer aside — brief narrator line that fades in/out between beats. -->
+    <div id="intake-aside" class="intake-aside" aria-hidden="true"></div>
+
+    <!-- Shell overlay: briefing intro, band interstitials, Climax glitch.
+         Owned by boot.js; sits above the stage, below the loader. -->
+    <div id="intake-overlay" class="intake-overlay" hidden></div>
+
+    <!-- Loader (covers the page until the briefing shows). -->
     <div id="intake-loader" class="intake-loader">
         <div class="intake-loader-ring" aria-hidden="true"></div>
         <p>Opening <span id="intake-title">Graded Intake</span>&#8230;</p>

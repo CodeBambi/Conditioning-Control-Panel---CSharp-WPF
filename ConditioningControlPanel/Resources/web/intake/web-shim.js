@@ -95,6 +95,13 @@ function fromHostInit(m) {
     ai: (m.ai && m.ai.serverBase) ? { serverBase: m.ai.serverBase, authToken: m.ai.authToken || '' } : null,
     hosted: true,
     m2Test: !!c.m2Test,
+    // Additive (protocol unchanged): host MAY ride reward media + a stable
+    // fiction subject id on the same `init` config it already sends.
+    media: (c.media && typeof c.media === 'object') ? c.media : null,
+    subjectId: (typeof c.subjectId === 'string' && c.subjectId) ? c.subjectId : null,
+    // Additive: the user's ENABLED subliminal pool as { text, audio? } entries, replicated
+    // in-page by render/subliminals.js (audio is a data: URI when a connected clip exists).
+    subliminals: Array.isArray(c.subliminals) ? c.subliminals : null,
   });
 }
 
@@ -113,7 +120,27 @@ function standaloneConfig() {
     ai: q.get('ai') ? { serverBase: q.get('ai'), authToken: q.get('token') || '' } : (saved.ai || null),
     hosted: false,
     m2Test: q.has('m2test'),
+    media: saved.media || null,
+    subjectId: q.get('subject') || saved.subjectId || null,
+    subliminals: Array.isArray(saved.subliminals) ? saved.subliminals : null,
   });
+}
+
+/* ----------------------------------------------------------------------------
+ * SUBJECT ID (standalone) — the fiction's stable per-install "Subject #NNNN".
+ * Hosted, the host supplies BootConfig.subjectId on `init`; standalone we mint a
+ * 4-digit id ONCE and persist it in the same prefs blob standaloneConfig reads,
+ * so every future run greets the same Subject #. Additive only.
+ * -------------------------------------------------------------------------- */
+export function ensureStandaloneSubjectId() {
+  if (isHosted) return null;
+  try {
+    const cur = readLocal('intake.bootConfig') || {};
+    if (cur.subjectId) return String(cur.subjectId);
+    const id = String(1 + Math.floor(Math.random() * 9998)).padStart(4, '0');
+    saveStandalonePrefs({ subjectId: id });
+    return id;
+  } catch (_e) { return null; }
 }
 
 /* ----------------------------------------------------------------------------
@@ -166,6 +193,23 @@ export function startHeartbeat() {
 
 /** Report a fatal boot failure (host may fall back / show a message). */
 export function bootError(msg) { send({ type: 'boot-error', msg: String(msg) }); }
+
+/* ----------------------------------------------------------------------------
+ * ABORT CLOSE — the "are you sure? -> Yes" jumpscare (beats.js) asks the window
+ * to close as an ABORT: NO QuizRunResult is emitted, so no session is drafted.
+ *   Hosted    -> `intake-close`; C# IntakeHostService disposes the window.
+ *   Standalone-> best-effort window.close() then blank the page (no C# to ask).
+ * Additive surface — callers guard `typeof shim.closeHost === 'function'`.
+ * -------------------------------------------------------------------------- */
+export function closeHost() {
+  if (isHosted) {
+    send({ type: 'intake-close' });
+    return { closed: 'host' };
+  }
+  try { if (typeof window !== 'undefined' && typeof window.close === 'function') window.close(); } catch (_e) {}
+  try { if (typeof location !== 'undefined') location.href = 'about:blank'; } catch (_e) {}
+  return { closed: 'local' };
+}
 
 /* ----------------------------------------------------------------------------
  * tiny local helpers

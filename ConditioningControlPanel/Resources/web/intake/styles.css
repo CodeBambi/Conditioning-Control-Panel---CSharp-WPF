@@ -24,6 +24,7 @@ html, body {
   background: radial-gradient(120% 120% at 50% 0%, var(--intake-bg1), var(--intake-bg0));
   color: var(--intake-text);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 18px; font-weight: 600;
   -webkit-user-select: none; user-select: none;
   touch-action: manipulation;
 }
@@ -31,6 +32,21 @@ html, body {
 #intake-bg {
   position: fixed; inset: 0; width: 100%; height: 100%;
   display: block; z-index: 0; pointer-events: none;
+}
+
+/* Readability scrim over the living tube: a soft vignette plus a light overall
+   darken, sitting between the canvas (z0) and the beat stage (z2) so the biome
+   background stays subdued and quiz text/HUD read cleanly on top of it. Purely
+   cosmetic + click-through; never intercepts pointer input bound for the stage. */
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    radial-gradient(130% 112% at 50% 40%, rgba(8,6,16,0) 34%, rgba(8,6,16,.58) 100%),
+    linear-gradient(rgba(8,6,16,.18), rgba(8,6,16,.18));
+}
+@media (prefers-reduced-motion: reduce) {
+  /* calmer, flatter wash when motion is reduced */
+  body::after { background: linear-gradient(rgba(8,6,16,.34), rgba(8,6,16,.34)); }
 }
 
 .intake-stage {
@@ -41,7 +57,7 @@ html, body {
 
 .intake-hud {
   position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
-  z-index: 3; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+  z-index: 3; font-size: 18px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
   color: var(--intake-dim); pointer-events: none;
 }
 
@@ -61,27 +77,299 @@ html, body {
 
 /* --- Phase-0 stub renderer widgets (replaced by Agent C) ------------------ */
 .intake-beat {
-  width: min(560px, 92vw); background: var(--intake-panel);
+  width: min(760px, 94vw); background: rgba(37, 37, 66, 0.5);
+  -webkit-backdrop-filter: blur(9px) brightness(.72); backdrop-filter: blur(9px) brightness(.72);
   border: 1px solid rgba(176,108,255,.25); border-radius: 16px;
-  padding: 28px 26px; box-shadow: 0 18px 60px rgba(0,0,0,.45);
+  padding: 34px 32px; box-shadow: 0 18px 60px rgba(0,0,0,.45);
 }
-.intake-q { font-size: 20px; line-height: 1.4; margin: 0 0 20px; }
+.intake-q { font-size: 38px; font-weight: 700; line-height: 1.35; margin: 0 0 26px; }
 .intake-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .intake-opt {
   appearance: none; cursor: pointer; font: inherit; color: var(--intake-text);
-  background: #2f2f52; border: 1px solid rgba(255,105,180,.2); border-radius: 12px;
-  padding: 14px 16px; transition: transform .12s ease, background .12s ease, opacity .12s ease;
+  background: rgba(47, 47, 82, 0.5); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,105,180,.2); border-radius: 12px;
+  padding: 20px 22px; font-size: 24px; font-weight: 700;
+  transition: transform .12s ease, background .12s ease, opacity .12s ease;
 }
-.intake-opt:hover { background: #3a3a63; transform: translateY(-1px); }
+.intake-opt:hover { background: rgba(58, 58, 99, 0.62); transform: translateY(-1px); }
 .intake-opt:active { transform: translateY(0); }
 .intake-beat input[type="text"] { width: 100%; margin-bottom: 14px; padding: 12px 14px;
-  border-radius: 10px; border: 1px solid rgba(176,108,255,.3); background: #1f1f39; color: var(--intake-text); font: inherit; }
+  border-radius: 10px; border: 1px solid rgba(176,108,255,.3); background: rgba(31, 31, 57, 0.5); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); color: var(--intake-text); font: inherit; }
 .intake-beat input[type="range"] { width: 100%; margin-bottom: 16px; accent-color: var(--intake-accent); }
 
 .intake-done, .intake-fatal {
-  width: min(560px, 92vw); text-align: center; background: var(--intake-panel);
+  width: min(560px, 92vw); text-align: center; background: rgba(37, 37, 66, 0.5);
+  -webkit-backdrop-filter: blur(9px) brightness(.72); backdrop-filter: blur(9px) brightness(.72);
   border-radius: 16px; padding: 32px; box-shadow: 0 18px 60px rgba(0,0,0,.45);
 }
 .intake-done h2 { margin: 0 0 12px; color: var(--intake-accent); }
 .intake-done p { margin: 6px 0; color: var(--intake-dim); }
 .intake-fatal { color: var(--intake-accent); }
+
+/* ============================================================================
+ * SHELL SCREENS (boot.js) — briefing intro, band interstitials, Climax glitch,
+ * in-fiction HUD, interviewer asides, outro ceremony + report card.
+ * Theme accents arrive as --intake-accent / --intake-accent-2 (set per niche
+ * by boot.applyTheme); archetype hue rides --outro-hue on hued outro cards.
+ * ==========================================================================*/
+
+/* --- overlay (briefing / interstitials / glitch) -------------------------- */
+.intake-overlay {
+  position: fixed; inset: 0; z-index: 6;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; background: rgba(16, 12, 26, .88);
+  backdrop-filter: blur(3px);
+}
+.intake-overlay[hidden] { display: none; }
+.intake-screen { max-width: min(760px, 94vw); text-align: center; animation: intake-fadein .35s ease both; }
+@keyframes intake-fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* --- briefing ------------------------------------------------------------- */
+.intake-briefing {
+  background: rgba(37, 37, 66, 0.5);
+  -webkit-backdrop-filter: blur(9px) brightness(.72); backdrop-filter: blur(9px) brightness(.72);
+  border: 1px solid rgba(176,108,255,.25);
+  border-radius: 16px; padding: 34px 34px 28px; box-shadow: 0 18px 60px rgba(0,0,0,.5);
+}
+.intake-brief-eyebrow {
+  font-size: 14px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--intake-dim); margin-bottom: 12px;
+}
+.intake-brief-title { margin: 0 0 10px; font-size: 42px; font-weight: 700; letter-spacing: .02em; }
+.intake-brief-subject {
+  font-size: 16px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--intake-accent); margin-bottom: 16px;
+}
+.intake-brief-prior {
+  margin: 0 0 14px; font-size: 18px; color: var(--intake-accent-2);
+  border: 1px dashed rgba(176,108,255,.4); border-radius: 10px; padding: 10px 14px;
+}
+.intake-brief-lines { min-height: 84px; text-align: left; }
+.intake-typeline { margin: 0 0 8px; font-size: 23px; font-weight: 600; line-height: 1.5; color: var(--intake-text); }
+.intake-typeline:last-child::after {
+  content: '▍'; color: var(--intake-accent); animation: intake-caret 1s steps(1) infinite;
+}
+.is-ready .intake-typeline:last-child::after { content: ''; }
+@keyframes intake-caret { 50% { opacity: 0; } }
+
+.intake-consent-card, .intake-begin { opacity: 0; pointer-events: none; transition: opacity .4s ease; }
+.intake-briefing.is-ready .intake-consent-card,
+.intake-briefing.is-ready .intake-begin { opacity: 1; pointer-events: auto; }
+.intake-consent-card {
+  margin: 18px 0 16px; padding: 12px 14px; text-align: left;
+  background: rgba(31, 31, 57, 0.5); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,105,180,.25); border-radius: 10px;
+}
+.intake-consent { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 18px; }
+.intake-consent input { accent-color: var(--intake-accent); width: 20px; height: 20px; cursor: pointer; }
+.intake-begin {
+  appearance: none; cursor: pointer; font: inherit; font-size: 22px; font-weight: 700;
+  color: #1c1128; background: var(--intake-accent); border: 0; border-radius: 12px;
+  padding: 15px 40px; letter-spacing: .04em;
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--intake-accent) 40%, transparent);
+}
+.intake-begin:disabled { opacity: .35; cursor: default; box-shadow: none; }
+.intake-begin:not(:disabled):hover { filter: brightness(1.1); }
+
+/* --- band interstitials (tone degrades with depth) ------------------------ */
+.intake-section-count {
+  font-size: 14px; font-weight: 700; letter-spacing: .24em; text-transform: uppercase;
+  color: var(--intake-dim); margin-bottom: 10px;
+}
+.intake-section-title { margin: 0 0 14px; font-size: 48px; font-weight: 700; color: var(--intake-text); }
+.intake-section-flavor { margin: 0; font-size: 26px; font-weight: 600; color: var(--intake-dim); }
+.tone-crisp .intake-section-title { letter-spacing: .02em; }
+.tone-drift .intake-section-title {
+  letter-spacing: .09em; filter: blur(.4px);
+  animation: intake-drift 3.2s ease-in-out infinite alternate;
+}
+.tone-drift .intake-section-flavor { font-style: italic; }
+@keyframes intake-drift { from { transform: translateX(-2px) skewX(-.6deg); } to { transform: translateX(2px) skewX(.6deg); } }
+.tone-melt .intake-section-title {
+  letter-spacing: .2em; text-transform: lowercase; filter: blur(.8px);
+  color: var(--intake-accent);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--intake-accent) 55%, transparent);
+  animation: intake-melt 2.4s ease-in-out infinite alternate;
+}
+.tone-melt .intake-section-flavor {
+  font-style: italic; text-transform: lowercase; letter-spacing: .08em;
+  color: var(--intake-accent-2); filter: blur(.3px);
+}
+@keyframes intake-melt {
+  from { transform: scale(.995) rotate(-.35deg); filter: blur(.6px); }
+  to   { transform: scale(1.012) rotate(.35deg); filter: blur(1.1px); }
+}
+
+/* --- Climax glitch moment ------------------------------------------------- */
+.intake-glitching { animation: intake-jitter .12s steps(2) infinite; }
+@keyframes intake-jitter {
+  0% { transform: translate(0, 0); } 25% { transform: translate(-2px, 1px); }
+  50% { transform: translate(2px, -1px); } 75% { transform: translate(-1px, -2px); }
+}
+.intake-glitch { position: relative; text-align: center; }
+.intake-glitch-title {
+  font-size: 34px; font-weight: 700; letter-spacing: .04em; color: var(--intake-text);
+  text-shadow: -2px 0 rgba(255, 60, 90, .8), 2px 0 rgba(60, 220, 255, .8);
+  animation: intake-flicker .18s steps(2) infinite;
+}
+@keyframes intake-flicker { 0% { opacity: 1; } 45% { opacity: .35; } 60% { opacity: .9; } 100% { opacity: .6; } }
+.intake-glitch-scan {
+  position: fixed; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(255,255,255,.06) 0 1px, transparent 1px 3px);
+  mix-blend-mode: overlay; animation: intake-scan .5s linear infinite;
+}
+@keyframes intake-scan { from { background-position-y: 0; } to { background-position-y: 3px; } }
+.intake-glitch-black {
+  position: fixed; inset: 0; background: #000; z-index: 7;
+  display: flex; align-items: center; justify-content: center;
+}
+.intake-glitch-voice {
+  font-size: 28px; font-weight: 600; letter-spacing: .16em; text-transform: lowercase;
+  color: var(--intake-accent); opacity: 0; filter: blur(2px);
+  transition: opacity .7s ease, filter .7s ease;
+}
+.intake-glitch-voice.is-on { opacity: 1; filter: blur(0); }
+
+/* --- in-fiction HUD (Q counter · calibration dial · section name) --------- */
+.intake-hud {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  transition: opacity .5s ease;
+}
+.intake-hud.is-gone { opacity: 0; }
+.intake-hud-q { min-width: 74px; text-align: right; }
+.intake-hud-section { min-width: 74px; text-align: left; color: var(--intake-dim); }
+.intake-hud-dial { width: 44px; height: 44px; overflow: visible; }
+.intake-dial-ring { fill: none; stroke: rgba(169,156,192,.35); stroke-width: 1; }
+.intake-dial-tick { stroke: rgba(169,156,192,.55); stroke-width: 1; }
+.intake-dial-needle { stroke: var(--intake-accent); stroke-width: 1.6; stroke-linecap: round; }
+.intake-dial-hub { fill: var(--intake-accent); }
+.intake-dial-needleg {
+  transform-origin: 20px 20px; transform-box: view-box;
+  transition: transform .8s cubic-bezier(.3, .8, .4, 1), opacity .8s ease;
+}
+.intake-dial-spiral { fill: none; stroke: var(--intake-accent-2); stroke-width: 1.1; stroke-linecap: round; }
+.intake-dial-spiralg {
+  opacity: 0; transform-origin: 20px 20px; transform-box: view-box;
+  transition: opacity .8s ease;
+  animation: intake-dial-spin var(--dial-spin, 12s) linear infinite;
+}
+@keyframes intake-dial-spin { to { transform: rotate(360deg); } }
+
+/* --- interviewer aside ---------------------------------------------------- */
+.intake-aside {
+  position: fixed; left: 50%; bottom: 16%; transform: translateX(-50%);
+  z-index: 4; pointer-events: none; max-width: min(640px, 90vw); text-align: center;
+  font-size: 23px; font-weight: 600; font-style: italic; letter-spacing: .06em; color: var(--intake-dim);
+  opacity: 0; transition: opacity .45s ease;
+}
+.intake-aside.is-on { opacity: 1; }
+
+/* --- outro ceremony ------------------------------------------------------- */
+.intake-outro { width: min(720px, 94vw); text-align: center; }
+.intake-ceremony { transition: opacity .6s ease, filter .6s ease; }
+.intake-ceremony.is-dimmed { opacity: .28; filter: blur(1px); pointer-events: none; }
+.intake-outro-lines { text-align: center; margin-bottom: 18px; }
+.intake-outro-lines .intake-typeline { font-size: 22px; }
+.intake-outro-block { animation: intake-fadein .5s ease both; margin: 0 0 18px; }
+.intake-outro-label {
+  font-size: 14px; font-weight: 700; letter-spacing: .24em; text-transform: uppercase;
+  color: var(--intake-dim); margin-bottom: 8px;
+}
+.intake-grade-letter {
+  font-size: 116px; font-weight: 800; line-height: 1; color: var(--intake-accent);
+  text-shadow: 0 0 34px color-mix(in srgb, var(--intake-accent) 60%, transparent);
+  animation: intake-grade-pop .7s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+@keyframes intake-grade-pop {
+  from { transform: scale(1.7); opacity: 0; filter: blur(6px); }
+  to   { transform: scale(1); opacity: 1; filter: blur(0); }
+}
+.intake-routeblock {
+  background: rgba(37, 37, 66, 0.5);
+  -webkit-backdrop-filter: blur(9px) brightness(.72); backdrop-filter: blur(9px) brightness(.72);
+  border: 1px solid rgba(176,108,255,.25);
+  border-radius: 14px; padding: 18px 20px;
+}
+.intake-routeblock.is-hued {
+  border-color: hsl(var(--outro-hue) 70% 60% / .55);
+  box-shadow: 0 0 34px hsl(var(--outro-hue) 70% 55% / .18);
+}
+.intake-route-name { font-size: 38px; font-weight: 700; color: var(--intake-text); }
+.intake-routeblock.is-hued .intake-route-name { color: hsl(var(--outro-hue) 80% 74%); }
+.intake-route-share { margin-top: 4px; font-size: 16px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--intake-accent); }
+.intake-route-blurb { margin: 10px 0 0; font-size: 18px; line-height: 1.5; color: var(--intake-dim); }
+.intake-route-secondary { margin-top: 10px; font-size: 16px; color: var(--intake-dim); }
+.intake-mantras { list-style: none; margin: 0; padding: 0; }
+.intake-mantra {
+  margin: 6px 0; font-size: 20px; font-weight: 600; font-style: italic; color: var(--intake-text);
+  opacity: 0; transform: translateY(6px); transition: opacity .5s ease, transform .5s ease;
+}
+.intake-mantra.is-shown { opacity: 1; transform: none; }
+.intake-statsblock { display: flex; justify-content: center; gap: 26px; flex-wrap: wrap; }
+.intake-stat-value { font-size: 28px; font-weight: 700; color: var(--intake-accent-2); }
+.intake-stat-label { font-size: 14px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--intake-dim); margin-top: 2px; }
+
+/* --- report-card artifact ------------------------------------------------- */
+.intake-cert {
+  position: relative; margin: 6px auto 0; width: min(600px, 94vw); text-align: left;
+  background: rgba(37, 37, 66, 0.5);
+  -webkit-backdrop-filter: blur(9px) brightness(.72); backdrop-filter: blur(9px) brightness(.72);
+  border: 1px solid rgba(176,108,255,.35);
+  outline: 1px solid rgba(255,105,180,.18); outline-offset: 5px;
+  border-radius: 14px; padding: 22px 26px 20px; box-shadow: 0 18px 60px rgba(0,0,0,.5);
+  opacity: 0; transform: translateY(12px) scale(.98);
+  transition: opacity .6s ease, transform .6s ease;
+}
+.intake-cert.is-shown { opacity: 1; transform: none; }
+.intake-cert.is-hued { border-color: hsl(var(--outro-hue) 70% 60% / .5); }
+.intake-cert-head { font-size: 13px; font-weight: 700; letter-spacing: .26em; text-transform: uppercase; color: var(--intake-dim); margin-bottom: 6px; }
+.intake-cert-title { margin: 0 0 14px; font-size: 24px; font-weight: 700; color: var(--intake-accent); }
+.intake-cert-row {
+  display: flex; justify-content: space-between; gap: 14px; font-size: 18px;
+  padding: 5px 0; border-bottom: 1px dashed rgba(169,156,192,.2);
+}
+.intake-cert-k { color: var(--intake-dim); letter-spacing: .08em; text-transform: uppercase; font-size: 14px; font-weight: 700; align-self: center; }
+.intake-cert-v { color: var(--intake-text); }
+.intake-cert-seal {
+  position: absolute; right: 18px; bottom: 52px; width: 74px; height: 74px;
+  border: 2px dashed var(--intake-accent); border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  transform: rotate(-12deg); color: var(--intake-accent); opacity: .85;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--intake-accent) 30%, transparent) inset;
+  pointer-events: none;
+}
+.intake-cert-seal span { font-size: 18px; font-weight: 700; letter-spacing: .12em; }
+.intake-cert-seal .intake-cert-seal-sub { font-size: 10px; letter-spacing: .3em; font-weight: 700; }
+.intake-cert-handoff { margin-top: 14px; font-size: 17px; color: var(--intake-dim); }
+.intake-cert-exit { margin-top: 12px; opacity: 1; pointer-events: auto; }
+
+/* ============================================================================
+ * SEE-THROUGH CARDS while a fullscreen visual layer is live.
+ *
+ * effects.js and beats.js ref-count `body.ix-backdrop-live` (shared body dataset
+ * counter): it's set whenever a spiral / drain / pink-wash / gif backdrop covers
+ * the screen. While it's on, in-run card SURFACES thin out so the show behind
+ * them is clearly visible — text/borders/shadows stay, only the fill drops.
+ *
+ * Cards covered: the beats-rendered question cards (.ib-card / .ib-bubble-card,
+ * whose base fill is now a permanently-translucent rgba(37,37,66,0.5) in beats'
+ * injected sheet — see IB_CSS) and the shell/stub screen (.intake-screen). While
+ * a fullscreen backdrop is live the fill THINS FURTHER to rgba(37,37,66,0.35)
+ * so the spiral/gif reads through even more, while the big/bold text stays
+ * legible (cards keep their backdrop-filter blur/darken from the base rules).
+ *
+ * The base rule below carries the .6s transition in the NON-live state too, so
+ * the fill fades smoothly BOTH ways (add-class fades in via the live rule's own
+ * transition; remove-class fades out via this base transition). beats' .ib-card
+ * rule declares no `transition`, so this per-property rule composes cleanly and
+ * the more-specific live rule (body-scoped) wins the background over it.
+ * ==========================================================================*/
+.ib-card, .ib-bubble-card, .intake-screen {
+  transition: background .6s ease;
+}
+body.ix-backdrop-live .ib-card,
+body.ix-backdrop-live .ib-bubble-card,
+body.ix-backdrop-live .intake-screen {
+  background: rgba(37, 37, 66, 0.35);
+  transition: background .6s ease;
+}
