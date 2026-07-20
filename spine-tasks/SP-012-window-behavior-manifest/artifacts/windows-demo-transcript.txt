@@ -1,0 +1,18 @@
+=== SP-012 dashboard demonstrator (Windows headed) ===
+hwnd: 2056390770
+[owner] GW_OWNER handle: 0  (0 = no owner => root/standalone)
+[modality] procedure defined, not demonstrable on this window (no owner/modal relationship exists)
+[activation] foreground window at observation: 65916  ours: 2056390770  => NOT foreground (opens unactivated - SP-007 observed pattern)
+[topmost] WS_EX_TOPMOST: absent
+[taskbar] WS_EX_APPWINDOW: PRESENT; WS_EX_TOOLWINDOW: absent
+[decorations] WS_CAPTION: PRESENT; WS_THICKFRAME: PRESENT; WS_MINIMIZEBOX: PRESENT; WS_MAXIMIZEBOX: PRESENT; WS_SYSMENU: PRESENT
+[placement] GetWindowRect: (208,208) 536x719
+[resize] WS_THICKFRAME PRESENT => resizable (style-level)
+[uia] window title: 'CCP Client'
+[focus] UIA FocusedElement: 'Recycle Bin' (ControlType.ListItem)
+[taskbar] taskbar button found: 'CcpClient.Desktop - 1 running window'
+[capture] windows-dashboard-window.png (208,208) 536x719
+[alttab] switcher captured (windows-alttab-switcher.png) — CCP Client thumbnail PRESENT in the switcher (verified by review of the capture)
+[resize] drag right edge +80: width 536 -> 616 => RESIZED (behavior-level)
+[close] CloseMainWindow: exit 0
+=== demonstrator done ===
