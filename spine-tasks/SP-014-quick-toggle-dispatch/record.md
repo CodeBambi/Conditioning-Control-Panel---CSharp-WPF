@@ -158,3 +158,16 @@ minimal form.** Guards applied:
    (a ContextMenu is a separate popup window element).
 3. UIA popup window rect disagreed with Win32 GetWindowRect by (52,52); the app-reported
    popup-probe pos/size (used by SP-013) is the reliable locator for input.
+
+## Step 4 — WSL2 gate (in-packet, native-dir copy `~/ccp-sp014`, never /mnt/e)
+
+- Environment: Ubuntu 26.04, SDK 10.0.110, kernel 6.6.114.1-microsoft-standard-WSL2.
+  Session facts: `WAYLAND_DISPLAY=wayland-0`, `DISPLAY=:0`, `XDG_SESSION_TYPE` empty
+  (WSLg = Wayland session with X11 via XWayland; session facts only — no Wayland backend
+  claim, §5.1 untouched).
+- Contract testCommand GREEN: build 0W/0E; `CcpClient.Tests` 144/144 (title-mutation
+  negative test included); `CcpClient.HeadlessTests` 15/15 — identical counts to Windows.
+- Render proof on the changed code (WSLg/X11): lit card captured via XGetImage
+  (`artifacts/wslg-dashboard-card-lit.bmp`, 488x96 DIP @ scale 1, 2449 lit-pink pixels;
+  restore-driven lit state — a real user path, no input automation exists on WSLg per
+  SP-008). Gesture evidence remains Windows-headed + headless draw-level (named limit).
