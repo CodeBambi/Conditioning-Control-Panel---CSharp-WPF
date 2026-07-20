@@ -103,3 +103,58 @@ minimal form.** Guards applied:
 4. CardTitle mutation is the fair stand-in for the language-switch failure mode because it
    is asserted at BOTH layers: the VM source of the displayed text AND (headless) the
    rendered TextBlock text.
+
+## Step 2 — Implementation (commit 65a7002b)
+
+- `client/src/CcpClient.Desktop/Features/QuickToggleDispatch.cs` (new, ~50 lines with docs):
+  one ordinal `Dictionary<string, Action>` keyed on stable card ID; `TryToggle(string?) -> bool`;
+  null/unknown = silent no-op (WPF `else return` parity, documented in the contract, not error
+  swallowing). NO registry framework — one entry, constructed by the view-model.
+- `MainWindowViewModel.cs`: `CardId` (= `StatusTickerParticipant.FeatureId`), mutable `CardTitle`
+  (INPC display text), `_quickToggle` with the single entry `[CardId] = Toggle`; command
+  `Execute(parameter)` now resolves via `_quickToggle.TryToggle(parameter as string)` — the
+  keyless `Execute(null)` path is REMOVED. `Toggle()` stays internal (no keyless bypass in tests).
+- `MainWindow.axaml`: title TextBlock now `{Binding CardTitle}` (x:Name CardTitleText);
+  KeyBinding gained `CommandParameter="{Binding CardId}"`.
+- `MainWindow.axaml.cs`: right-click handler passes `vm.CardId`.
+- 8 existing keyless call sites updated to `Execute(StatusTickerParticipant.FeatureId)`
+  (StatusTickerSliceTests x4, DashboardCardHeadlessTests x4).
+- Tests: `QuickToggleDispatchTests.cs` (5 unit: stable-ID resolution + persistence file proof,
+  TITLE-MUTATION negative, title-strings-never-resolve (incl. casing/whitespace/null),
+  unknown/neutral silent no-op, one-path convergence) + `QuickToggleDispatchHeadlessTests.cs`
+  (4 draw-level: real routed right-click press toggles; focused `KeyPressQwerty(Enter)` toggles
+  the same operation — LOAD-BEARING proof that CommandParameter resolved (pre-approach consult
+  guard 1); mutated title renders while right-click over the title text still toggles;
+  no ContextMenu/ContextFlyout exists or opens).
+- Results: build 0W/0E; unit 139->144 (+5) green; headless 11->15 (+4) green. Windows.
+
+## Step 3 — Windows-headed evidence (headed-smoke.ps1, 18 gates, SMOKE PASS x2 runs)
+
+- SP-007 claims re-verified on the changed code: unlit ring 966px, right-click live-start
+  (tick 1->5 ADVANCES), lit ring 958px, mid-run persistence file-content proof
+  (statusTickerEnabled true while running), teardown exit 0 + final flush (false).
+- CROSS-PROOF: left-click opens the SP-013 popup (popup-probe observed); popup raised topmost
+  (a topmost dashboard BURIES its owned popup — new surprise below); popup dragged aside by
+  its title bar (140,340 exact); right-click on the exposed card toggled OFF (tick 18->absent)
+  WHILE popup open, popup survived; right-click again toggled ON (tick 21->25 ADVANCING)
+  WHILE popup open; Escape closed the popup after a focusing title-bar click.
+- Negative proofs: process windows stayed 1 after all right-clicks (an Avalonia ContextMenu
+  would be a separate popup window element); 0 app Menu/MenuItem elements; title-region click
+  (over the displayed title text) toggled identically (title region == body region).
+- Exceptions (locked/help/Visuals/System): contract-only named limits — no fake cards.
+- A-013 MCP advisory: AXAML changed -> ValidateXaml (strict) PASS on a redacted fragment
+  (card + KeyBinding + CommandParameter + CardTitle binding). AnalyzePerformance REJECTED by
+  rule (self-contradictory output, 2 prior occurrences). K3 skipped: no pixel change.
+
+### Surprises (Step 3)
+1. **A topmost dashboard BURIES its owned popup.** SP-007's HWND_TOPMOST harness raise made
+   the dashboard render above the modeless popup: WindowFromPoint at the popup's title bar
+   returned the dashboard hwnd and every popup-aimed click hit the dashboard. Fix: raise the
+   POPUP hwnd topmost after opening (SP-013's pattern) — among topmost windows the latest
+   raise wins.
+2. **UIA exposes window chrome as MenuItem.** The non-client system-menu icon appears in the
+   dashboard's UIA subtree as ControlType.MenuItem name='System' once the window is activated.
+   A no-context-menu check must exclude it; the strong check is the process-window count
+   (a ContextMenu is a separate popup window element).
+3. UIA popup window rect disagreed with Win32 GetWindowRect by (52,52); the app-reported
+   popup-probe pos/size (used by SP-013) is the reliable locator for input.
