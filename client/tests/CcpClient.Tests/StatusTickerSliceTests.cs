@@ -46,7 +46,7 @@ public class StatusTickerSliceTests
 
         Assert.False(vm.TickerLit); // ring dark before any toggle
 
-        vm.ToggleCommand.Execute(null); // the ONE command path (A-004)
+        vm.ToggleCommand.Execute(StatusTickerParticipant.FeatureId); // the ONE command path (A-004)
         Assert.True(ticker.IsOperationLive);
         Assert.True(vm.TickerLit); // ring derives from the operation authority
         Assert.True(vm.TickerVisible);
@@ -58,7 +58,7 @@ public class StatusTickerSliceTests
         await Task.Delay(1200, TestContext.Current.CancellationToken); // 500ms interval: several ticks
         Assert.True(ticker.TickCount > ticksBefore); // the tick ADVANCES — the operation is real
 
-        vm.ToggleCommand.Execute(null);
+        vm.ToggleCommand.Execute(StatusTickerParticipant.FeatureId);
         Assert.False(ticker.IsOperationLive);
         Assert.False(vm.TickerLit);
         Assert.False(vm.TickerVisible);
@@ -109,7 +109,7 @@ public class StatusTickerSliceTests
         var store = host.Participants.OfType<PersistenceStore<DemoSettings>>().Single();
         var vm = new MainWindowViewModel(host);
 
-        vm.ToggleCommand.Execute(null);
+        vm.ToggleCommand.Execute(StatusTickerParticipant.FeatureId);
         var outcome = await store.SaveImmediate(); // await quiescence of the chained writer
         Assert.IsType<OperationOutcome.Completed>(outcome);
 
@@ -129,7 +129,7 @@ public class StatusTickerSliceTests
         var (root, settingsPath, _) = RealRoot();
         var first = await BootAsync(root);
         var firstStore = first.Participants.OfType<PersistenceStore<DemoSettings>>().Single();
-        new MainWindowViewModel(first).ToggleCommand.Execute(null);
+        new MainWindowViewModel(first).ToggleCommand.Execute(StatusTickerParticipant.FeatureId);
         Assert.IsType<OperationOutcome.Completed>(await firstStore.SaveImmediate());
         await first.ShutdownAsync();
         Assert.True(File.Exists(settingsPath));

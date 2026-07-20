@@ -31,8 +31,10 @@
     <TextBlock Text="CCP greenfield client — dashboard (first visible slice)"
                FontWeight="Bold" Foreground="#FFE8E0EE" />
 
-    <!-- demo.status-ticker demonstrator card: right-click quick-toggles, Enter (focused) toggles,
-         left-click settings popup CARVED OUT (A-005; no handler wired — a no-op would be a claim). -->
+    <!-- demo.status-ticker demonstrator card: right-click quick-toggles, Enter (focused) toggles.
+         SP-014: BOTH gestures dispatch through ONE command path keyed on the card's STABLE ID
+         (CardId = demo.status-ticker); the title below is display text (CardTitle binding) and
+         never participates in dispatch. -->
     <Border x:Name="TickerCard"
             Classes="feature-card"
             Classes.lit="{Binding TickerLit}"
@@ -40,14 +42,14 @@
             Focusable="True"
             Padding="12" Margin="0,12,0,0">
       <Border.KeyBindings>
-        <KeyBinding Gesture="Enter" Command="{Binding ToggleCommand}" />
+        <KeyBinding Gesture="Enter" Command="{Binding ToggleCommand}" CommandParameter="{Binding CardId}" />
       </Border.KeyBindings>
       <StackPanel>
         <Grid ColumnDefinitions="Auto,*">
           <Image Source="avares://CcpClient.Desktop/Assets/demo-status-ticker.png"
                  Width="32" Height="32" VerticalAlignment="Top" />
           <StackPanel Grid.Column="1" Margin="10,0,0,0">
-            <TextBlock Text="Demo: Status Ticker" FontWeight="SemiBold" Foreground="#FFE8E0EE" />
+            <TextBlock x:Name="CardTitleText" Text="{Binding CardTitle}" FontWeight="SemiBold" Foreground="#FFE8E0EE" />
             <TextBlock Text="Demonstrator feature (demo.status-ticker) — not a product feature; the first real feature card supersedes it. Right-click or Enter toggles."
                        Opacity="0.6" FontSize="11" TextWrapping="Wrap" Foreground="#FFE8E0EE" />
           </StackPanel>
