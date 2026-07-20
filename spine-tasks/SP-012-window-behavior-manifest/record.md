@@ -9,8 +9,9 @@ Worker session log. Enumeration method + raw inventory, classification decisions
 | 1 | type=plan after step-1 commit | `skipped: true`, `spawnFailed: false` — "Nested reviewer spawn blocked inside pi worker session (SP-195); batch engine runs reviews after worker success" | NO in-worker (by design, SP-195); post-.DONE engine review is the orchestrator-observable check |
 | 2 | type=plan after step-2 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip; reviewLevel echoed 2 — heading parsed) | NO in-worker |
 | 3 | type=plan after step-3 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
+| 4 | type=plan after step-4 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip; reviewLevel echoed 2) | NO in-worker |
 
-(Rows for steps 4–5 are appended ONLY after the actual calls happen — a presence log logs events that happened (pre-completion consult correction).)
+(Row for step 5 is appended ONLY after the actual call happens — a presence log logs events that happened (pre-completion consult correction).)
 
 **In-worker skip = documented design (SP-195), NOT the T-2 regression** (reviewLevel echoed 2 in every response → the structured heading parses). Post-.DONE engine code+final review presence is observable only at land time; SP-011 proved reviews fire with the heading. If they skip post-.DONE here, that IS the regression — say so at land.
 
@@ -84,4 +85,11 @@ Full as-built summary + diff shape submitted. Verdict received **complete** (no 
 - **Correction 2 (APPLIED):** record.md engine-review table rows 4–5 were pre-recorded before the calls happened — a presence log must log events that happened. Rows removed; steps 4–5 rows are appended only after the actual calls.
 - Q3 (blocking .DONE): nothing structural. Sequence followed: corrections → this verdict persisted before checkbox → Step 5 full contract testCommand (build + BOTH test projects — only the app project was built during the demonstrator) → `git diff --check` → scope audit (gitignored `client/tools/verify/artifacts/` stays out; `~/ccp-sp012` stays WSL-side) → STATUS accurate → .DONE → exit immediately.
 - Non-blocking note: the WSLg `_NET_CLIENT_LIST`-absent finding is genuinely durable (constrains every future Linux window-behavior gate on WSLg); port-lessons harvesting left to the orchestrator (port-lessons.md is outside this packet's File Scope).
+
+## Step 5 — verification
+
+- **Contract testCommand green on Windows:** `dotnet build client/CcpClient.sln -c Debug --nologo` → 0 Warning(s), 0 Error(s); `dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo` → **118/118 passed**; `dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo` → **3/3 passed**. (The manifest changes no product code; this proves the lane is clean.)
+- **`git diff --check` clean** (only LF/CRLF warnings).
+- **`git status --short` = File Scope only** (record.md tail edit at audit time). Per-commit scope audit: all 5 step commits touch only `client/docs/window-behavior-manifest.md`, `client/docs/task-board.md`, `spine-tasks/SP-012-window-behavior-manifest/**`. Forbidden paths (`ConditioningControlPanel/**`, `client/src/**`, `client/tests/**`, `client/CcpClient.sln`, `client/spikes/**`, `.spine/**`) verified CLEAN. Both `artifactsMustExist` files present (`client/docs/window-behavior-manifest.md`, `spine-tasks/SP-012-window-behavior-manifest/record.md`). `fileScopeMustChange` satisfied (manifest created). Demonstrator side-effects: `~/ccp-sp012` stays WSL-side; `client/tools/verify/artifacts/` untouched.
+- Completion criteria: all met (completeness-checkable inventory with re-runnable method; 79 named rows with per-field File.cs:line evidence + explicit evidence class; observation procedure per field; platform matrix pending owner question with WSLg/X11 as only observed environment; shared-chrome constraints section; dashboard demonstrator executed on Windows AND WSLg/X11 with zero product-code change and honest per-field proven/defined-only accounting; board WIP not DONE with named gates; both solo consults persisted with provenance; engine-review presence recorded per call; no tracked changes outside File Scope).
 
