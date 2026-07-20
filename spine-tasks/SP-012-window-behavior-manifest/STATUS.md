@@ -1,15 +1,15 @@
 # STATUS: SP-012 — build per-window behavior manifest
 
-**Current Step:** Not started
-**Last Updated:** 2026-07-20 (authored)
+**Current Step:** Step 1 — Retained-window inventory + pre-approach consult
+**Last Updated:** 2026-07-20 (worker session start)
 
 ### Step 1: Retained-window inventory (completeness-checkable) + pre-approach consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] STATUS.md updated before starting work
-- [ ] Mechanical enumeration of ALL WPF windows (auditable method + raw list in record.md)
-- [ ] Classification: RETAINED vs cross-referenced (overlay/AvatarTube/DTRH rows) vs excluded-with-reason
-- [ ] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
+- [x] STATUS.md updated before starting work
+- [x] Mechanical enumeration of ALL WPF windows (auditable method + raw list in record.md)
+- [x] Classification: RETAINED vs cross-referenced (overlay/AvatarTube/DTRH rows) vs excluded-with-reason
+- [x] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
 
 ### Step 2: Manifest authoring — named row per retained window
 **Status:** ⬜ Not Started
