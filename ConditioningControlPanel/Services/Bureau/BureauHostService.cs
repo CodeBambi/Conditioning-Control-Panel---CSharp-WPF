@@ -264,13 +264,15 @@ namespace ConditioningControlPanel.Services.Bureau
             var target = (string?)o["target"] ?? "";
             try
             {
-                var (status, body) = await ServerAsync(HttpMethod.Post, "/v2/bureau/submit", new JObject
+                var req = new JObject
                 {
                     ["unified_id"] = App.Settings?.Current?.UnifiedId,
                     ["target"] = target,
                     ["dims"] = o["dims"],
                     ["boxes"] = o["boxes"] ?? new JArray(),
-                }).ConfigureAwait(false);
+                };
+                if (o["amend"]?.Value<bool>() == true) req["amend"] = true;
+                var (status, body) = await ServerAsync(HttpMethod.Post, "/v2/bureau/submit", req).ConfigureAwait(false);
 
                 var reply = status == 200 && body != null ? body : new JObject();
                 reply["type"] = "submit-result";
