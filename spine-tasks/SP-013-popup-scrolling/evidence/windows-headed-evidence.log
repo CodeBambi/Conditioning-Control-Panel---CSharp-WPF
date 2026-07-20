@@ -1,0 +1,87 @@
+[06:58:58.325] touch/trackpad probe: SM_DIGITIZER=0xCD SM_MAXIMUMTOUCHES=2 integrated-touch-ready=True
+[06:58:58.529] precision-touchpad enumeration: 0 candidate device(s) ()
+[06:58:58.553] launched pid=27084
+[06:59:03.375] owner monitor working area: {X=0,Y=0,Width=1920,Height=1032} scale assumed 1.0 (all monitors 1.0 per SP-007 record)
+[06:59:04.618] popup raised: hwnd=11734092 dashboard=1586300992 foreground=11734092
+[06:59:04.785] popup opened: popup-probe: pos 104,124 size 520x640 scale 1 maxHeight 640 scroller 105,219,518,504 scrollbar 607,219,16,504 thumb 607,235,16,251 list none
+[06:59:04.792] PASS: tall-scrollbar-present — scrollbar w=16
+[06:59:04.799] PASS: tall-inside-owner-working-area — popup {X=104,Y=124,Width=520,Height=640} within WA {X=0,Y=0,Width=1920,Height=1032}
+[06:59:04.971] PASS: tall-overflows — extent 948 > viewport 504
+[06:59:04.976] PASS: tall-final-starts-below-fold — final-in-viewport false at open
+[06:59:05.002] capture: E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260720T022627\lane-1\spine-tasks\SP-013-popup-scrolling\evidence\popup-tall-top.png (520 x 640)
+[06:59:05.336] focus check: foreground=11734092 popup=11734092 dashboard=1586300992
+[06:59:05.805] after title click: foreground=11734092
+[06:59:10.609] PASS: wheel-offset-monotonic — offsets: 100, 200, 300, 400, 444, 444, 444
+[06:59:10.615] PASS: wheel-reaches-final-control — final-in-viewport true; offset=444 extent=948 viewport=504
+[06:59:10.620] PASS: wheel-bottom — offset+viewport=948 >= extent=948 (offset stable at bottom)
+[06:59:10.633] capture: E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260720T022627\lane-1\spine-tasks\SP-013-popup-scrolling\evidence\popup-tall-scrolled-bottom.png (520 x 640)
+[06:59:13.035] PASS: escape-closes-popup — Escape closed the popup (one command path, keyboard side)
+[06:59:13.455] PASS: focus-restored-to-dashboard — GetForegroundWindow=1586300992 dashboard=1586300992
+[06:59:14.643] popup raised: hwnd=11799628 dashboard=1586300992 foreground=11799628
+[06:59:19.333] PASS: keyboard-tab-reaches-final-control — final-in-viewport true; focus trail: popup close button | variant tall | variant short | variant nested | Synthetic toggle row 5 | Synthetic toggle row 10 | Synthetic toggle row 15 | Synthetic toggle row 20 | Synthetic toggle row 25 | Synthetic toggle row 30 | popup final control
+[06:59:19.340] PASS: keyboard-focus-scrolled — offset=428 (bring-into-view moved the viewport)
+[06:59:21.757] PASS: close-button-closes-popup — title-bar close button closed the popup (one command path, button side)
+[06:59:22.934] popup raised: hwnd=11865164 dashboard=1586300992 foreground=11865164
+[06:59:23.726] PASS: scrollbar-track-clicked — 1 track page-down clicks
+[06:59:23.732] PASS: scrollbar-track-reaches-final-control — final-in-viewport true after 1 clicks; offset=444
+[06:59:25.582] popup raised: hwnd=11930700 dashboard=1586300992 foreground=11930700
+[06:59:27.624] PASS: thumb-drag-scrolled — offset 0 -> 444
+[06:59:27.630] PASS: thumb-drag-reaches-final-control — final-in-viewport true; offset=444 extent=948
+[06:59:29.485] popup raised: hwnd=11996236 dashboard=1586300992 foreground=11996236
+[06:59:30.955] PASS: title-bar-drag-moves-popup — pos (104,124) -> (204,204) — delta (100,80) = drag (100,80)
+[06:59:32.795] popup raised: hwnd=12061772 dashboard=1586300992 foreground=12061772
+[06:59:33.138] touch DOWN rejected: win32=87 struct-size=144
+[06:59:33.447] touch DOWN rejected: win32=87 struct-size=144
+[06:59:33.762] touch DOWN rejected: win32=87 struct-size=144
+[06:59:34.084] touch DOWN rejected: win32=87 struct-size=144
+[06:59:34.426] touch DOWN rejected: win32=87 struct-size=144
+[06:59:34.733] touch DOWN rejected: win32=87 struct-size=144
+[06:59:35.032] GATE: injected pans accepted but no scroll — named manual gate
+[06:59:36.868] popup raised: hwnd=12127308 dashboard=1586300992 foreground=12127308
+[06:59:37.553] PASS: variant-short-invoked — UIA Invoke on variant short
+[06:59:37.683] PASS: short-compact-no-scroll — extent 224 <= viewport 224
+[06:59:37.804] PASS: short-popup-compact — popup height 360 DIP (WPF min 360, not the 640 fixed height)
+[06:59:37.815] capture: E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260720T022627\lane-1\spine-tasks\SP-013-popup-scrolling\evidence\popup-short-compact.png (520 x 360)
+[06:59:39.662] popup raised: hwnd=12192844 dashboard=1586300992 foreground=12192844
+[06:59:40.342] PASS: variant-nested-invoked — UIA Invoke on variant nested
+[06:59:40.503] PASS: nested-list-located — list rect: 121,279,470,200
+[06:59:50.628] PASS: nested-inner-scrolls-itself — inner-offset > 0 while wheeling over the list
+[06:59:50.634] PASS: nested-chains-to-popup — outer offset rose only after inner scrolled; final offset=100 inner=1400
+[06:59:51.367] PASS: nested-reaches-final-control — final-in-viewport true; offset=122 inner=1400
+[06:59:51.384] capture: E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260720T022627\lane-1\spine-tasks\SP-013-popup-scrolling\evidence\popup-nested-scrolled.png (520 x 640)
+[06:59:52.020] monitors: 3
+[06:59:52.027] moving dashboard to secondary monitor WA {X=-1440,Y=-1469,Width=1440,Height=2512}
+[06:59:54.067] popup raised: hwnd=12258380 dashboard=1586300992 foreground=12258380
+[06:59:54.077] PASS: secondary-monitor-inside-owner-working-area — popup {X=-1380,Y=-1389,Width=520,Height=640} within secondary WA {X=-1440,Y=-1469,Width=1440,Height=2512} (owner-monitor, NOT primary-by-default)
+[06:59:54.084] PASS: secondary-monitor-popup-on-owner-monitor — popup on \\.\DISPLAY1, owner moved to \\.\DISPLAY1
+[06:59:54.783] graceful close exit 0
+[06:59:54.795] 
+[06:59:54.799] ==== FINDINGS ====
+[06:59:54.804] PASS: tall-scrollbar-present — scrollbar w=16
+[06:59:54.809] PASS: tall-inside-owner-working-area — popup {X=104,Y=124,Width=520,Height=640} within WA {X=0,Y=0,Width=1920,Height=1032}
+[06:59:54.814] PASS: tall-overflows — extent 948 > viewport 504
+[06:59:54.818] PASS: tall-final-starts-below-fold — final-in-viewport false at open
+[06:59:54.823] PASS: wheel-offset-monotonic — offsets: 100, 200, 300, 400, 444, 444, 444
+[06:59:54.828] PASS: wheel-reaches-final-control — final-in-viewport true; offset=444 extent=948 viewport=504
+[06:59:54.832] PASS: wheel-bottom — offset+viewport=948 >= extent=948 (offset stable at bottom)
+[06:59:54.837] PASS: escape-closes-popup — Escape closed the popup (one command path, keyboard side)
+[06:59:54.841] PASS: focus-restored-to-dashboard — GetForegroundWindow=1586300992 dashboard=1586300992
+[06:59:54.846] PASS: keyboard-tab-reaches-final-control — final-in-viewport true; focus trail: popup close button | variant tall | variant short | variant nested | Synthetic toggle row 5 | Synthetic toggle row 10 | Synthetic toggle row 15 | Synthetic toggle row 20 | Synthetic toggle row 25 | Synthetic toggle row 30 | popup final control
+[06:59:54.850] PASS: keyboard-focus-scrolled — offset=428 (bring-into-view moved the viewport)
+[06:59:54.854] PASS: close-button-closes-popup — title-bar close button closed the popup (one command path, button side)
+[06:59:54.858] PASS: scrollbar-track-clicked — 1 track page-down clicks
+[06:59:54.862] PASS: scrollbar-track-reaches-final-control — final-in-viewport true after 1 clicks; offset=444
+[06:59:54.866] PASS: thumb-drag-scrolled — offset 0 -> 444
+[06:59:54.871] PASS: thumb-drag-reaches-final-control — final-in-viewport true; offset=444 extent=948
+[06:59:54.875] PASS: title-bar-drag-moves-popup — pos (104,124) -> (204,204) — delta (100,80) = drag (100,80)
+[06:59:54.879] GATE: trackpad/touch — 6 InjectTouchInput pan gestures ACCEPTED by the OS but produced NO scrolling (offset 0 -> 0); automation cannot produce this evidence here; NAMED MANUAL GATE: physical touch-pan on the touch monitor
+[06:59:54.883] PASS: variant-short-invoked — UIA Invoke on variant short
+[06:59:54.887] PASS: short-compact-no-scroll — extent 224 <= viewport 224
+[06:59:54.892] PASS: short-popup-compact — popup height 360 DIP (WPF min 360, not the 640 fixed height)
+[06:59:54.896] PASS: variant-nested-invoked — UIA Invoke on variant nested
+[06:59:54.900] PASS: nested-list-located — list rect: 121,279,470,200
+[06:59:54.904] PASS: nested-inner-scrolls-itself — inner-offset > 0 while wheeling over the list
+[06:59:54.915] PASS: nested-chains-to-popup — outer offset rose only after inner scrolled; final offset=100 inner=1400
+[06:59:54.919] PASS: nested-reaches-final-control — final-in-viewport true; offset=122 inner=1400
+[06:59:54.923] PASS: secondary-monitor-inside-owner-working-area — popup {X=-1380,Y=-1389,Width=520,Height=640} within secondary WA {X=-1440,Y=-1469,Width=1440,Height=2512} (owner-monitor, NOT primary-by-default)
+[06:59:54.927] PASS: secondary-monitor-popup-on-owner-monitor — popup on \\.\DISPLAY1, owner moved to \\.\DISPLAY1

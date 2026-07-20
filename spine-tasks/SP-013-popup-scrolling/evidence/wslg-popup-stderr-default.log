@@ -1,0 +1,6 @@
+layout-probe: card 488.0x71.0 DIP @ scale 1 @ screen 16,45
+popup-probe: pos 0,0 size 520x360 scale 1 maxHeight Infinity scroller 1,93,518,230 scrollbar 503,93,16,230 thumb 503,109,16,51 list none
+scroll-probe: extent 893.0 viewport 230.0 offset 0.0 final-in-viewport false
+popup-probe: pos 3066,1993 size 520x360 scale 1 maxHeight 640 scroller 3067,2086,518,510 scrollbar 3569,2086,16,510 thumb 3569,2102,16,273 list none
+scroll-probe: extent 893.0 viewport 510.0 offset 0.0 final-in-viewport false
+popup-probe: pos 3173,1787 size 520x640 scale 1 maxHeight 640 scroller 3174,1880,518,510 scrollbar 3676,1880,16,510 thumb 3676,1896,16,273 list none

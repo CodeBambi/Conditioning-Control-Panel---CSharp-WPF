@@ -57,10 +57,15 @@ public static class Program
                 return 0;
         }
 
+        // --popup-demo (SP-013 WSLg evidence): opens the demonstrator popup at startup.
+        // WSLg has no input automation (SP-008 named limit) — the popup cannot be
+        // left-clicked there, so it must open itself; probe facts go to stderr.
+        var popupDemo = args.Contains("--popup-demo", StringComparer.Ordinal);
+
         try
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
-            return BuildAvaloniaApp(host!).StartWithClassicDesktopLifetime(args);
+            return BuildAvaloniaApp(host!, popupDemo).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -124,7 +129,7 @@ public static class Program
         };
     }
 
-    public static AppBuilder BuildAvaloniaApp(ApplicationHost host) => AppBuilder
-        .Configure<App>(() => new App(host))
+    public static AppBuilder BuildAvaloniaApp(ApplicationHost host, bool popupDemo = false) => AppBuilder
+        .Configure<App>(() => new App(host, popupDemo))
         .UsePlatformDetect();
 }
