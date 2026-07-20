@@ -7,8 +7,12 @@ Worker session log. Enumeration method + raw inventory, classification decisions
 | Step | spine_review_step call | Result | Engine review fired? |
 |------|------------------------|--------|----------------------|
 | 1 | type=plan after step-1 commit | `skipped: true`, `spawnFailed: false` — "Nested reviewer spawn blocked inside pi worker session (SP-195); batch engine runs reviews after worker success" | NO in-worker (by design, SP-195); post-.DONE engine review is the orchestrator-observable check |
+| 2 | type=plan after step-2 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip; reviewLevel echoed 2 — heading parsed) | NO in-worker |
+| 3 | type=plan after step-3 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
 
-(Rows for steps 2–5 appended as the task proceeds. Post-.DONE engine code+final review presence/absence is observable only at land time; the in-worker skip is documented behavior, not a regression. If post-.DONE reviews do NOT fire, that is the regression the packet names — say so at land.)
+(Rows for steps 4–5 are appended ONLY after the actual calls happen — a presence log logs events that happened (pre-completion consult correction).)
+
+**In-worker skip = documented design (SP-195), NOT the T-2 regression** (reviewLevel echoed 2 in every response → the structured heading parses). Post-.DONE engine code+final review presence is observable only at land time; SP-011 proved reviews fire with the heading. If they skip post-.DONE here, that IS the regression — say so at land.
 
 ## Step 1 — mechanical enumeration (completeness-checkable)
 
@@ -65,4 +69,19 @@ Re-runnable dead-window check: `grep -rn --include="*.cs" --include="*.xaml" "At
 **WSLg/X11 (session facts, never backend claims):** `scratch/wslg-demo.sh` (rsync → native ~/ccp-sp012 build, never /mnt/e for build/run). Session: WAYLAND_DISPLAY=wayland-0, DISPLAY=:0, XDG_SESSION_TYPE unset, kernel 6.6.114.1-microsoft-standard-WSL2, Ubuntu 26.04, SDK 10.0.110. Window found via `xwininfo -root -tree` (0x60000f "CCP Client" 520×680+38+59) — **`_NET_CLIENT_LIST` does not exist on the WSLg XWayland root** ("no such atom on any window"); `_NET_SUPPORTED` advertises only MOVERESIZE/STATE/STATE_FULLSCREEN/MAXIMIZED_*/ACTIVE_WINDOW/FRAME_EXTENTS. Properties (xprop): `_NET_WM_WINDOW_TYPE=NORMAL`; `_NET_WM_STATE` empty (no ABOVE); `WM_TRANSIENT_FOR` not found; `WM_NORMAL_HINTS` min 1×1 increment 1; `_NET_ACTIVE_WINDOW` = our window (session activated it — honest difference vs Windows unactivated); `WM_PROTOCOLS` advertises WM_DELETE_WINDOW; `_NET_FRAME_EXTENTS` 38,38,59,38. Capture: `artifacts/wslg-dashboard-window.bmp` (XGetImage — renders for real, session-facts line visible). Graceful close: `wmclose.py` → **exit 0** (wait on the real PID, second run). Modality: "procedure defined, not demonstrable on this window" both platforms. Resize drag + taskbar `_NET_CLIENT_LIST` procedure: defined, not demonstrable on WSLg (no xdotool; atom absent) — recorded honestly.
 
 **Surprise (durable):** WSLg's XWayland root has NO `_NET_CLIENT_LIST` — the manifest §3 Linux taskbar procedure must not assume it (already written that way; the demonstrator confirms the caveat). Candidate for port-lessons if the owner row wants it.
+
+## Step 4 — board reconciliation + pre-completion consult
+
+- Board row "Build per-window behavior manifest" → **WIP** with evidence citing the manifest + record; two named remaining gates recorded (exercise-every-row before shared chrome; owner matrix question); never DONE; original acceptance text preserved verbatim (annotate-don't-rewrite).
+
+### Pre-completion consult (solo, Fable family per project route — actual answering model not echoed by the tool; recorded per T-7 practice)
+
+Full as-built summary + diff shape submitted. Verdict received **complete** (no truncation): **"the shape is sound and honestly scoped — proceed to Step 5 and .DONE after two small corrections. No rework of the manifest body."**
+
+- Q1 (d(true) taskbar reading / W-16 dual mode): **both correct** — `ShowInTaskbar` defaults true and WPF gives owned windows a taskbar button when true (exactly why the codebase sets false explicitly on FeaturePopupWindow and a handful of others); W-16's dual modality is directly evidenced (`ShowDialog` at Awareness.cs:627/937/976, `.Show()` at Settings.cs:853) and is the strongest justification for shared-chrome constraint #9.
+- Q2 (9/10 vs 7/10 accounting): **honest and conservative** — undercounting rather than overcounting (resize counted unproven on WSLg despite WM_NORMAL_HINTS; taskbar unproven despite tree enumeration).
+- **Correction 1 (APPLIED):** board wording "78 of 79 windows do not exist" implicitly claimed the dashboard IS W-01's greenfield instance — it isn't (W-01 is `WindowStyle.None` custom-chrome CanResizeWithGrip minimize-to-tray; the dashboard is a default-chrome 520×680 demonstrator surface; the §7 demonstrator proves procedures, discharges no row). Reworded in the board AND in manifest §0.1 (which had the same "the other 78" defect): none of the 79 manifest windows exists; the dashboard is a new surface used only to demonstrate procedures; no manifest row (including W-01) is discharged.
+- **Correction 2 (APPLIED):** record.md engine-review table rows 4–5 were pre-recorded before the calls happened — a presence log must log events that happened. Rows removed; steps 4–5 rows are appended only after the actual calls.
+- Q3 (blocking .DONE): nothing structural. Sequence followed: corrections → this verdict persisted before checkbox → Step 5 full contract testCommand (build + BOTH test projects — only the app project was built during the demonstrator) → `git diff --check` → scope audit (gitignored `client/tools/verify/artifacts/` stays out; `~/ccp-sp012` stays WSL-side) → STATUS accurate → .DONE → exit immediately.
+- Non-blocking note: the WSLg `_NET_CLIENT_LIST`-absent finding is genuinely durable (constrains every future Linux window-behavior gate on WSLg); port-lessons harvesting left to the orchestrator (port-lessons.md is outside this packet's File Scope).
 

@@ -1,6 +1,6 @@
 # STATUS: SP-012 — build per-window behavior manifest
 
-**Current Step:** Step 4 — Board reconciliation + pre-completion consult
+**Current Step:** Step 5 — Testing & Verification
 **Last Updated:** 2026-07-20 (worker session start)
 
 ### Step 1: Retained-window inventory (completeness-checkable) + pre-approach consult
@@ -28,15 +28,15 @@
 - [x] Per-field demonstrator outcome in manifest; evidence pointers in record.md
 
 ### Step 4: Board reconciliation + pre-completion consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] record.md complete (enumeration, classification, consult verdicts w/ actual answering model, engine-review presence, demonstrator evidence)
-- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
-- [ ] task-board.md manifest row → WIP with evidence + named remaining gates (never DONE)
+- [x] record.md complete (enumeration, classification, consult verdicts w/ actual answering model, engine-review presence, demonstrator evidence)
+- [x] Pre-completion solo Fable 5 consult (verdict in record.md)
+- [x] task-board.md manifest row → WIP with evidence + named remaining gates (never DONE)
 - [ ] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] Contract testCommand green (build + both test projects)
 - [ ] `git diff --check` clean
