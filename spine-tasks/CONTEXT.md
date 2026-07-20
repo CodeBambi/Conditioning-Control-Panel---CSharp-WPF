@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-19
 **Status:** Active
-**Next Task ID:** SP-012
+**Next Task ID:** SP-013
 
 ---
 
@@ -29,7 +29,7 @@ Phase 1 COMPLETE 2026-07-19 (all nine rows landed, all WIP pending owner ratific
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
 | SP-011-webview-dtrh-spike | Row: spike official WebView with the copied DTRH payload — package admission consult (solo Fable, council unavailable), `Avalonia.Controls.WebView 12.0.1` restore/build/boot evidence on Windows + WSLg/X11 (Wayland = named owner question §5.1, never faked); includes the probe row's worker-child council-attempt checkbox (non-blocking) + engine-review presence check (T-2 closure evidence) | **Done 2026-07-19** (landed `88c40055`; batch `20260719T210942` — one T-5 recovery; THREE Linux findings for the admit row (embedded never-presents on WSLg/X11; NativeWebDialog renders; bridge transport absent on Linux); T-2 CLOSED — engine reviews fired APPROVE+PASS; row stays WIP pending owner ratification; admit row stays BLOCKED) | SP-010 |
-| SP-012-window-behavior-manifest | Row: per-window behavior manifest (read-only WPF archaeology, zero deps) | Not authored | SP-011 |
+| SP-012-window-behavior-manifest | Row: per-window behavior manifest (read-only WPF archaeology, zero deps) | Authored 2026-07-20 (pre-authoring Fable consult applied: observation-only demonstrator, procedure-per-field auditability, docs-only contract rejected — real scoped testCommand, matrix columns pending owner question) | SP-011 |
 | SP-013-popup-scrolling | Row: prove feature-popup scrolling (builds the popup SP-007 carved out) | Not authored | SP-012 |
 | SP-014-quick-toggle-dispatch | Row: replace card-title quick-toggle dispatch — SCOPE to the demonstrator card with named limits (one card, one theme exist; full multi-card/multi-theme acceptance awaits real cards) | Not authored | SP-013 |
 | SP-015-avatartube-animation | Row: prove AvatarTube rendered animation (needs asset pipeline thinking) | Not authored | SP-014 |

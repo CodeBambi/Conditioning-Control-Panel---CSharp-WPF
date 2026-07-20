@@ -1,0 +1,43 @@
+# STATUS: SP-012 — build per-window behavior manifest
+
+**Current Step:** Not started
+**Last Updated:** 2026-07-20 (authored)
+
+### Step 1: Retained-window inventory (completeness-checkable) + pre-approach consult
+**Status:** ⬜ Not Started
+
+- [ ] STATUS.md updated before starting work
+- [ ] Mechanical enumeration of ALL WPF windows (auditable method + raw list in record.md)
+- [ ] Classification: RETAINED vs cross-referenced (overlay/AvatarTube/DTRH rows) vs excluded-with-reason
+- [ ] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
+
+### Step 2: Manifest authoring — named row per retained window
+**Status:** ⬜ Not Started
+
+- [ ] `client/docs/window-behavior-manifest.md` — named row per window, all acceptance fields with File.cs:line evidence + evidence class
+- [ ] Observation procedure per field (Windows UIA/headed; Linux wmctrl/xprop/XGetImage)
+- [ ] Platform-matrix columns "pending owner question"; WSLg/X11 only observed env; Wayland §5.1 untouched
+- [ ] Shared-chrome constraints section (constraints only, no design)
+
+### Step 3: Dashboard observability demonstrator (observation-only)
+**Status:** ⬜ Not Started
+
+- [ ] Procedures executed against dashboard on Windows (headed, zero product-code change)
+- [ ] Same on WSLg/X11 (session facts, never backend claims)
+- [ ] Unobservable fields recorded "procedure defined, not demonstrable on this window"
+- [ ] Per-field demonstrator outcome in manifest; evidence pointers in record.md
+
+### Step 4: Board reconciliation + pre-completion consult
+**Status:** ⬜ Not Started
+
+- [ ] record.md complete (enumeration, classification, consult verdicts w/ actual answering model, engine-review presence, demonstrator evidence)
+- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
+- [ ] task-board.md manifest row → WIP with evidence + named remaining gates (never DONE)
+- [ ] STATUS.md accurate before .DONE
+
+### Step 5: Testing & Verification
+**Status:** ⬜ Not Started
+
+- [ ] Contract testCommand green (build + both test projects)
+- [ ] `git diff --check` clean
+- [ ] `git status --short` = File Scope only
