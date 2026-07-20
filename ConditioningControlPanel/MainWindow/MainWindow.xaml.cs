@@ -1387,11 +1387,16 @@ namespace ConditioningControlPanel
                 _suppressModSelectorChange = false;
             }
 
-            // Hide BambiCloud option if mod doesn't want it
-            var showBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
+            // Hide BambiCloud option if mod doesn't want it — unless the user override
+            // (Settings > Show BambiCloud everywhere) forces it visible.
+            var modWantsBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
+            var showBambiCloud = modWantsBambiCloud || (App.Settings?.Current?.ForceShowBambiCloud ?? false);
             SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
 
-            if (!showBambiCloud)
+            // Keep the mod's own default site (HypnoTube) selected when the button is
+            // only visible because of the user override — the override reveals BambiCloud,
+            // it doesn't switch to it.
+            if (!modWantsBambiCloud)
                 SettingsTab.RbHypnoTube.IsChecked = true;
 
             RefreshBrowserLoadingText();
@@ -1415,8 +1420,10 @@ namespace ConditioningControlPanel
         private void RefreshBrowserLoadingText()
         {
             if (SettingsTab.BrowserLoadingText == null) return;
-            var showBambiCloud = App.Mods?.ShowBambiCloudOption() ?? false;
-            var siteName = showBambiCloud
+            // Reflect the actually-selected site radio, not just the mod's preference —
+            // the BambiCloud button can now be visible via user override without being selected.
+            var onBambiCloud = SettingsTab.RbBambiCloud?.IsChecked == true;
+            var siteName = onBambiCloud
                 ? "BambiCloud"
                 : (App.Mods?.ActiveMod.Manifest.Browser?.SiteName ?? "HypnoTube");
             SettingsTab.BrowserLoadingText.Text = $"🌐 Click to connect to {siteName}";
@@ -1568,10 +1575,13 @@ namespace ConditioningControlPanel
             PopulateAchievementGrid();
             DrawSkillTree();
 
-            var showBambiCloud = App.Mods.ShowBambiCloudOption();
+            var modWantsBambiCloud = App.Mods.ShowBambiCloudOption();
+            var showBambiCloud = modWantsBambiCloud || (App.Settings?.Current?.ForceShowBambiCloud ?? false);
             SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
-            if (!showBambiCloud)
+            if (!modWantsBambiCloud)
             {
+                // Mod doesn't want BambiCloud as its site: keep HypnoTube selected and
+                // navigate to the mod's default even if the override reveals the button.
                 SettingsTab.RbHypnoTube.IsChecked = true;
                 if (_browser != null && _browserInitialized)
                 {
@@ -2064,6 +2074,8 @@ namespace ConditioningControlPanel
             {
                 if (SettingsTab.ToggleEnhanceIfPossible != null)
                     SettingsTab.ToggleEnhanceIfPossible.IsChecked = App.Settings?.Current?.BrowserEnhanceIfPossible ?? true;
+                if (SettingsTab.ChkForceShowBambiCloud != null)
+                    SettingsTab.ChkForceShowBambiCloud.IsChecked = App.Settings?.Current?.ForceShowBambiCloud ?? false;
             }
             catch { }
 

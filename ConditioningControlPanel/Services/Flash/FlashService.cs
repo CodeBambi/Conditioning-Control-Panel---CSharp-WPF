@@ -46,6 +46,21 @@ namespace ConditioningControlPanel.Services
         // (which both starved CompleteRender into the resize deadlock and drove the native-memory
         // ramp — managed heap stayed ~82MB while private memory hit 3GB). 10 relieves both.
         private const int MAX_CONCURRENT_FLASH = 10;
+        // Compositor/solid flashes are cheap items on ONE shared Skia host — no per-flash layered
+        // window, so the native-memory/render-thread churn that forced MAX_CONCURRENT_FLASH down to
+        // 10 does not apply. Honor the user's SimultaneousImages slider (max 20) plus headroom for
+        // hydra children instead of silently capping at 10 (bug: slider set to 11-20 only showed 10).
+        private const int MAX_CONCURRENT_FLASH_HOST = 30;
+
+        /// <summary>
+        /// Mode-aware concurrent-flash cap (#601). The classic per-flash layered-window path carries
+        /// the native-memory/render-churn risk that pins it to <see cref="MAX_CONCURRENT_FLASH"/> (10);
+        /// compositor-layer and solid-host flashes are cheap shared-host items and get the higher
+        /// <see cref="MAX_CONCURRENT_FLASH_HOST"/> (30) so the SimultaneousImages slider (max 20) is honored.
+        /// Pure so it can be unit-tested without spinning up WPF.
+        /// </summary>
+        internal static int ResolveFlashCap(bool useLayer, bool useHost)
+            => (useLayer || useHost) ? MAX_CONCURRENT_FLASH_HOST : MAX_CONCURRENT_FLASH;
         // Per-window shells are sized to a coarse bucket grid so the pool recycles by size instead of
         // realizing a fresh window on nearly every (image-sized, so almost-always-unique) flash. A fresh
         // Window.Show() runs a synchronous MediaContext.CompleteRender on first realization; under a
@@ -1067,10 +1082,19 @@ namespace ConditioningControlPanel.Services
         {
             if (!_isRunning && !_oneShotActive) return;
 
-            // Prevent memory explosion / compositor backup from too many concurrent flash windows
+            // Decide the render path up front so the concurrency cap can be mode-aware. Compositor
+            // (layer item on the shared Skia host) takes precedence over solid mode (child of the
+            // shared host); both fall back to a classic per-flash layered window.
+            bool useLayer = UseCompositor;
+            bool useHost = !useLayer && settings.FlashSolidMode;
+
+            // Prevent memory explosion / compositor backup from too many concurrent flash windows.
+            // Only the classic layered-window path carries that risk; compositor/solid flashes are
+            // cheap shared-host items, so they get the higher cap (see MAX_CONCURRENT_FLASH_HOST).
+            int cap = ResolveFlashCap(useLayer, useHost);
             lock (_lockObj)
             {
-                if (_activeWindows.Count >= MAX_CONCURRENT_FLASH) return;
+                if (_activeWindows.Count >= cap) return;
             }
 
             // Create per-window CTS with automatic cancellation after the lifetime expires~ ✨
@@ -1098,17 +1122,15 @@ namespace ConditioningControlPanel.Services
                     finalY = monitor.Y + _random.Next(0, Math.Max(1, monitor.Height - geom.Height));
                 }
 
-                // SOLID MODE: no per-flash Window at all. The FlashWindow instance is created but
-                // never shown — it carries the per-flash state (lifetime CTS, gaze rect, hydra data)
-                // while the visual is a child of the ONE shared click-through host. This kills the
-                // per-flash topmost-layered-window churn that some fullscreen games react to.
-                bool useHost = settings.FlashSolidMode;
-
-                // COMPOSITOR: takes precedence over both classic and solid mode. Same state-bag
-                // trick as solid mode, but the visual is a layer item on the shared Skia host -
-                // and clickability survives (global-hook hit-test), unlike solid mode.
-                bool useLayer = UseCompositor;
-                if (useLayer) useHost = false;
+                // Render path decided at the top of this method (mode-aware cap):
+                //   useLayer — COMPOSITOR: visual is a layer item on the shared Skia host; the
+                //     per-flash state bag rides along and clickability survives (global-hook
+                //     hit-test), unlike solid mode. Takes precedence over solid + classic.
+                //   useHost — SOLID MODE: the FlashWindow is created but never shown — it carries
+                //     the per-flash state (lifetime CTS, gaze rect, hydra data) while the visual is
+                //     a child of the ONE shared click-through host, killing the per-flash
+                //     topmost-layered-window churn that some fullscreen games react to.
+                //   otherwise — classic per-flash layered window from the pool.
 
                 // Recycled from the pool when possible — all per-spawn state must be (re)set here.
                 // The window comes back already at geom's size (matched from the pool or freshly

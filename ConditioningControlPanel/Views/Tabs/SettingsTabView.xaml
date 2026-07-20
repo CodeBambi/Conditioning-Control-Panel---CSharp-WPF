@@ -1111,6 +1111,7 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <CheckBox x:Name="ToggleEnhanceIfPossible" x:FieldModifier="internal" Grid.Column="0"
                                               Content="{loc:Str browser_enhance_label}"
@@ -1124,6 +1125,15 @@
                                                Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
                                                VerticalAlignment="Center"
                                                Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                    <!-- User override: reveal the BambiCloud site toggle even on mods
+                                         whose manifest hides it (issue #596). -->
+                                    <CheckBox x:Name="ChkForceShowBambiCloud" x:FieldModifier="internal" Grid.Column="2"
+                                              Content="{loc:Str browser_show_bambicloud_label}"
+                                              Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                              VerticalAlignment="Center" Cursor="Hand" Margin="12,0,0,0"
+                                              Checked="ChkForceShowBambiCloud_Changed"
+                                              Unchecked="ChkForceShowBambiCloud_Changed"
+                                              ToolTip="{loc:Str browser_show_bambicloud_tooltip}"/>
                                 </Grid>
                             </Border>
     

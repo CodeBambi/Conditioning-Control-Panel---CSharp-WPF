@@ -77,14 +77,28 @@ public sealed class FlashPayload : EffectPayload
     public override string DisplayName => "flash";
     public override EffectBubblePayloadKind Kind => EffectBubblePayloadKind.Flash;
 
+    /// <summary>
+    /// Ambient (dashboard trigger-bubble) pop-flash duration in ms (#593): the user's global Flash
+    /// Duration (seconds, clamped 1..30) instead of the chaos Strength-scaled ~3-4s burst. Pure so it
+    /// can be unit-tested without App.Settings.
+    /// </summary>
+    internal static int AmbientFlashDurationMs(int flashDurationSeconds)
+        => Math.Clamp(flashDurationSeconds, 1, 30) * 1000;
+
     public override void Fire()
     {
         try
         {
             int amount = Scale(1, 3);
+            // Dashboard "Trigger Bubble" flashes honor the user's global Flash Duration setting so a
+            // popped flash bubble looks like a normal flash instead of a fixed ~3-4s burst (bug: the
+            // pop-flash duration ignored the slider — the Strength band × LINGER pinned it near 4s).
+            // Chaos-run flashes keep the Strength-scaled band so they stay under the brisk cadence.
             // Was 250–700ms — flashes barely registered mid-run. Long enough to actually
             // be seen (plus the fade tail), still well under the bubble cadence.
-            int duration = (int)(Scale(900, 2000) * GlobalDurationMult * DurationMult);
+            int duration = Ambient && App.Settings?.Current != null
+                ? AmbientFlashDurationMs(App.Settings.Current.FlashDuration)
+                : (int)(Scale(900, 2000) * GlobalDurationMult * DurationMult);
             // Chaos-run flashes read better big: +50% over the original 45–95 band.
             int size = Scale(68, 143);
             App.Flash?.TriggerFlashOnce(amount, duration, size, suppressHaptic: false);

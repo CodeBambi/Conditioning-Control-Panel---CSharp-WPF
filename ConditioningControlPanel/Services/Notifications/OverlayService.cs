@@ -34,6 +34,39 @@ public class OverlayService : IDisposable
     private bool _sustainedPinkHeld;
     private bool _sustainedSpiralHeld;
 
+    // Deeper enhancement overlay bands are the ONE case where an overlay must sit ABOVE a playing
+    // mandatory video: the pink/spiral tint IS the enhanced video's effect (pre-compositor it was a
+    // fresh topmost window created per band, so it naturally drew over the just-created video window).
+    // ReassertZOrder otherwise pins every overlay BELOW the video (#497). This depth counts live
+    // Deeper overlay bands (driven by the Deeper dispatcher's band Start/Stop); >0 flips the reconciler
+    // to pin the overlay hosts above the video instead. Ambient/session/voice overlays are unaffected.
+    // Reset to 0 by the enhancement engine on Stop so a leaked band can't strand overlays above future
+    // videos. Volatile: read on the UI reconciler, written from the (UI-thread) dispatcher.
+    private int _deeperOverlayBandDepth;
+    internal bool DeeperOverlayBandActive => System.Threading.Volatile.Read(ref _deeperOverlayBandDepth) > 0;
+
+    /// <summary>A Deeper enhancement overlay band opened (region entered). While any band is live the
+    /// z-order reconciler pins overlays ABOVE the enhanced video, and we kick an immediate reassert so
+    /// the tint pops over the video without waiting for the ~500ms reconcile tick.</summary>
+    internal void BeginDeeperOverlayBand()
+    {
+        System.Threading.Interlocked.Increment(ref _deeperOverlayBandDepth);
+        Application.Current?.Dispatcher?.BeginInvoke(new Action(() => { try { ReassertZOrder(force: true); } catch { } }));
+    }
+
+    /// <summary>A Deeper enhancement overlay band closed (region exited). On the last band exit the
+    /// reconciler returns to pinning overlays below the video, and a forced reassert re-seats them.</summary>
+    internal void EndDeeperOverlayBand()
+    {
+        if (System.Threading.Interlocked.Decrement(ref _deeperOverlayBandDepth) < 0)
+            System.Threading.Interlocked.Exchange(ref _deeperOverlayBandDepth, 0);
+        Application.Current?.Dispatcher?.BeginInvoke(new Action(() => { try { ReassertZOrder(force: true); } catch { } }));
+    }
+
+    /// <summary>Force-clear the Deeper band depth. Called by the enhancement engine on Stop so an
+    /// abnormally-ended band (no matching exit) can't leave overlays pinned above later videos.</summary>
+    internal void ResetDeeperOverlayBands() => System.Threading.Interlocked.Exchange(ref _deeperOverlayBandDepth, 0);
+
     public OverlayService()
     {
         // Subscribe to settings changes if App.Settings.Current is available
@@ -2228,13 +2261,18 @@ public class OverlayService : IDisposable
         }
         catch { }
 
+        // A live Deeper enhancement overlay band means the overlay IS the enhanced video's effect and
+        // must sit ABOVE it, restoring the pre-compositor behavior (the #497 below-video pin is only
+        // correct for ambient/session overlays that happen to co-exist with a mandatory video).
+        bool aboveVideo = DeeperOverlayBandActive;
+
         foreach (var list in new[] { _pinkFilterWindows, _spiralWindows, _brainDrainBlurWindows })
         {
             foreach (var window in list)
             {
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
                 if (hwnd == IntPtr.Zero) continue;
-                ReassertOne(hwnd, videoHwnd, force, ref anyRecovered);
+                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
             }
         }
 
@@ -2247,7 +2285,7 @@ public class OverlayService : IDisposable
         {
             if (App.Compositor is { } engine)
                 foreach (var hostHwnd in engine.GetVisibleHostHandles())
-                    ReassertOne(hostHwnd, videoHwnd, force, ref anyRecovered);
+                    ReassertOne(hostHwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
         }
         catch (Exception ex)
         {
@@ -2256,25 +2294,49 @@ public class OverlayService : IDisposable
         return anyRecovered;
     }
 
-    /// <summary>One window's worth of ReassertZOrder: below the active video, else topmost.</summary>
-    private static void ReassertOne(IntPtr hwnd, IntPtr videoHwnd, bool force, ref bool anyRecovered)
+    /// <summary>One window's worth of ReassertZOrder. Normally: below the active video (#497), else
+    /// topmost. When <paramref name="aboveVideo"/> (a live Deeper overlay band), the overlay is the
+    /// enhanced video's own effect, so pin it to the top of the topmost band ABOVE the video instead.</summary>
+    /// <summary>Where a single overlay window should be pinned relative to a (possibly playing) video.</summary>
+    internal enum ZOrderAction { None, PinBelowVideo, PinTopmost }
+
+    /// <summary>
+    /// Pure z-order decision for one overlay window. Extracted from <see cref="ReassertOne"/> so the
+    /// Deeper-band-above-video rule (and the #497 below-video pin it must preserve) can be unit-tested.
+    /// <paramref name="aboveVideo"/> — a live Deeper enhancement band, so the overlay IS the video's own
+    /// effect and must sit above it; otherwise a co-existing video keeps overlays pinned just below it.
+    /// </summary>
+    internal static ZOrderAction ResolveZOrderAction(bool hasVideo, bool isVideoWindow, bool aboveVideo, bool needsPin, bool force)
+    {
+        if (hasVideo && !isVideoWindow && !aboveVideo)
+            return ZOrderAction.PinBelowVideo;
+        if (needsPin || force || aboveVideo)
+            return ZOrderAction.PinTopmost;
+        return ZOrderAction.None;
+    }
+
+    private static void ReassertOne(IntPtr hwnd, IntPtr videoHwnd, bool aboveVideo, bool force, ref bool anyRecovered)
     {
         int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
         bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
 
-        if (videoHwnd != IntPtr.Zero && hwnd != videoHwnd)
+        switch (ResolveZOrderAction(videoHwnd != IntPtr.Zero, hwnd == videoHwnd, aboveVideo, needsPin, force))
         {
-            // Insert directly below the active video window: stays topmost (above the
-            // desktop and other apps) but under the video the user is meant to watch.
-            SetWindowPos(hwnd, videoHwnd, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            if (needsPin) anyRecovered = true;
-        }
-        else if (needsPin || force)
-        {
-            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            if (needsPin) anyRecovered = true;
+            case ZOrderAction.PinBelowVideo:
+                // Insert directly below the active video window: stays topmost (above the
+                // desktop and other apps) but under the video the user is meant to watch.
+                SetWindowPos(hwnd, videoHwnd, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                if (needsPin) anyRecovered = true;
+                break;
+            case ZOrderAction.PinTopmost:
+                // Top of the topmost band. Above a playing video too — the mandatory video window is
+                // deliberately non-re-raising, so a Deeper band's tint set here stays over it. Re-applied
+                // every reconcile tick while aboveVideo holds (cheap; no fight since the video won't re-raise).
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                if (needsPin) anyRecovered = true;
+                break;
         }
     }
 

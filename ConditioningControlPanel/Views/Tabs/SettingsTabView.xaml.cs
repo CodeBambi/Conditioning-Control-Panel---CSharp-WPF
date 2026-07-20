@@ -492,6 +492,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ToggleEnhanceIfPossible_Changed(sender, e);
         }
+        private void ChkForceShowBambiCloud_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkForceShowBambiCloud_Changed(sender, e);
+        }
         private void VelvetBtnAppInfo_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

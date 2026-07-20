@@ -453,6 +453,8 @@
   "deeper_player_tip_event_open": "Jump to this rule in the editor.",
   "browser_enhance_label": "Enhance if possible",
   "browser_enhance_tooltip": "When enabled, navigating to a video page that matches a saved enhancement plays its effects on top.",
+  "browser_show_bambicloud_label": "Show BambiCloud",
+  "browser_show_bambicloud_tooltip": "Reveal the BambiCloud site toggle on mods that normally hide it. The mod's default site stays selected; this just makes BambiCloud available to switch to.",
   "browser_enhance_match_none": "No saved enhancement for this page.",
   "browser_enhance_match_off": "Enhancements disabled.",
   "browser_enhance_match_fmt": "Enhancing: {0}",

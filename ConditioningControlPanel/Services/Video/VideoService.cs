@@ -74,10 +74,24 @@ namespace ConditioningControlPanel.Services
         //      beats a poisoned pipeline) and the owning shared instance is retired.
         //   3. Retire-on-wedge: any UI-wedge rescue during playback also retires the instance, so
         //      the next video starts clean instead of inheriting the corrupted native state.
+        //   4. Mid-play re-arm: the start-of-play watchdog is one-shot, so a vout that appears and
+        //      then VANISHES mid-clip (the screen goes white partway through — #600) went unhealed
+        //      until the user toggled the engine. A periodic poll watches for a vout that was present
+        //      and stays gone past VoutLostGraceMs, then runs the SAME retire+replay heal once.
         private System.Threading.Timer? _voutWatchTimer;
         private volatile bool _voutSeen;
         private bool _voutRetryUsed;
         private const int VoutGraceMs = 8000;
+        // Mid-play vout-loss detection (part 4). Separate from the one-shot start watchdog so the
+        // proven start-of-play path is untouched. Polls the primary player's live VoutCount.
+        private System.Threading.Timer? _voutMidWatchTimer;
+        private volatile bool _voutEverSeen;        // vout has been present at least once this playback
+        private long _voutLostSinceTicks;           // UtcNow ticks when vout first went absent after being seen (0 = present/never)
+        private bool _voutMidHealUsed;              // one mid-play heal per playback (own budget, independent of _voutRetryUsed)
+        private const int VoutMidPollMs = 2000;     // poll cadence
+        // Loss must persist this long before healing — generous so a brief drop during a seek/segment
+        // boundary or the tail end of a clip does not truncate a healthy video.
+        private const int VoutLostGraceMs = 5000;
         private static readonly List<object> _nativeQuarantine = new();
         private static readonly object _quarantineLock = new();
         private static bool _coreLoaded;   // Core.Initialize is per-process; retire/re-init must not repeat it
@@ -2799,16 +2813,27 @@ namespace ConditioningControlPanel.Services
             // fire handler must never condemn the fresh one.
             var owner = _libVLC;
             _voutSeen = false;
-            player.Vout += (s, e) => { if (e.Count > 0) _voutSeen = true; };
+            player.Vout += (s, e) => { if (e.Count > 0) { _voutSeen = true; _voutEverSeen = true; } };
             _voutWatchTimer?.Dispose();
             _voutWatchTimer = new System.Threading.Timer(
                 _ => VoutWatchdogFire(player, owner, path, strict), null, VoutGraceMs, System.Threading.Timeout.Infinite);
+
+            // Part 4: mid-play vout-loss poll. Reset per-playback state and start ticking after the
+            // start grace has elapsed (before that, a missing vout is the start watchdog's job).
+            _voutEverSeen = false;
+            _voutLostSinceTicks = 0;
+            _voutMidHealUsed = false;
+            _voutMidWatchTimer?.Dispose();
+            _voutMidWatchTimer = new System.Threading.Timer(
+                _ => VoutMidPlayTick(player, owner, path, strict), null, VoutGraceMs + VoutMidPollMs, VoutMidPollMs);
         }
 
         private void StopVoutWatchdog()
         {
             try { _voutWatchTimer?.Dispose(); } catch { }
             _voutWatchTimer = null;
+            try { _voutMidWatchTimer?.Dispose(); } catch { }
+            _voutMidWatchTimer = null;
         }
 
         /// <summary>
@@ -2856,51 +2881,149 @@ namespace ConditioningControlPanel.Services
                     VoutGraceMs, Path.GetFileName(path), retired,
                     retry ? ", retrying on a fresh instance" : "; skipping this video");
 
-                // Snapshot the teardown generation: if ANY teardown (panic, natural end, wedge rescue)
-                // runs before the dispatched action does, the generation moves and the action aborts —
-                // it must never resurrect a video the user stopped, nor run reentrantly inside another
-                // teardown's message pump.
-                var gen = _teardownGeneration;
-
-                var dispatcher = Application.Current?.Dispatcher;
-                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
-                dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try
-                    {
-                        if (_isCleaningUp || _teardownGeneration != gen || !_videoPlaying) return;
-                        // A different video may have started while this was queued — never kill it.
-                        if (!ReferenceEquals(player, _primaryMediaPlayer)) return;
-
-                        if (retry)
-                        {
-                            // Slot-preserving teardown, mirroring the attention-fail retry: CloseAll
-                            // does NOT release the InteractionQueue Video slot, so queued lock cards /
-                            // bubble counts can't start on top of the retry video; extend the stuck
-                            // timeout so the queue doesn't auto-complete the slot during the gap.
-                            _safetyTimer?.Stop();
-                            _fallbackSafetyTimer?.Stop();
-                            _fallbackSafetyTimer = null;
-                            _videoPlaying = false;
-                            CloseAll();
-                            App.InteractionQueue?.ExtendTimeout(300, InteractionQueueService.InteractionType.Video);
-                            App.Logger?.Information("VideoService: vout self-heal - replaying {File} on a fresh LibVLC instance",
-                                Path.GetFileName(path));
-                            PlayVideo(path, strict, isVoutRetry: true);
-                        }
-                        else
-                        {
-                            // Give up on this video via the FULL natural-end path: Cleanup raises
-                            // VideoEnded, resumes flashes/bubbles, releases the queue slot, and re-arms
-                            // the scheduler. ForceCleanup did none of that, which left ambient features
-                            // suppressed for the whole inter-video gap on chronically failing machines.
-                            Cleanup();
-                        }
-                    }
-                    catch (Exception ex) { App.Logger?.Warning(ex, "VideoService: vout self-heal dispatch failed"); }
-                }));
+                DispatchVoutHeal(player, path, strict, retry);
             }
             catch (Exception ex) { App.Logger?.Debug("VoutWatchdogFire error: {Error}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Threadpool poll (every <see cref="VoutMidPollMs"/>, starting after the start grace) for a
+        /// vout that appeared and then VANISHED mid-clip — the screen goes white partway through
+        /// (#600) but decode-side signals stay healthy, so nothing else catches it. Only acts once the
+        /// loss has persisted past <see cref="VoutLostGraceMs"/> (a brief drop at a seek/segment
+        /// boundary or the clip tail is not a failure) and heals at most once per playback.
+        /// </summary>
+        /// <summary>Outcome of a single mid-play vout poll (#600). Pure decision extracted so the
+        /// state machine can be unit-tested without LibVLC.</summary>
+        internal enum VoutMidDecision
+        {
+            Healthy,               // vout present — reset the loss clock
+            DeferToStartWatchdog,  // never seen a vout yet — the start watchdog owns this case
+            StartLossClock,        // vout just went absent — begin timing the loss
+            WithinGrace,           // absent but not long enough yet to act
+            Heal                   // absent past the grace window — retire + replay
+        }
+
+        /// <summary>
+        /// Pure state transition for the mid-play vout poll. Given the live <paramref name="voutCount"/>
+        /// and the persisted loss state, returns the action and the updated loss-clock value. Mirrors
+        /// exactly the branch logic in <see cref="VoutMidPlayTick"/> so tests exercise the real decision.
+        /// </summary>
+        internal static VoutMidDecision EvaluateVoutMidPlay(
+            uint voutCount, bool everSeen, long lostSinceTicks, long nowTicks, int graceMs, out long newLostSinceTicks)
+        {
+            if (voutCount > 0)
+            {
+                newLostSinceTicks = 0;   // healthy — reset the loss window
+                return VoutMidDecision.Healthy;
+            }
+
+            newLostSinceTicks = lostSinceTicks;
+
+            // vout absent. Before it has ever appeared, a missing vout is the start watchdog's job.
+            if (!everSeen) return VoutMidDecision.DeferToStartWatchdog;
+
+            if (lostSinceTicks == 0)
+            {
+                newLostSinceTicks = nowTicks;   // start the loss clock
+                return VoutMidDecision.StartLossClock;
+            }
+
+            var lostMs = (nowTicks - lostSinceTicks) / TimeSpan.TicksPerMillisecond;
+            if (lostMs < graceMs) return VoutMidDecision.WithinGrace;
+
+            return VoutMidDecision.Heal;
+        }
+
+        private void VoutMidPlayTick(LibVLCSharp.Shared.MediaPlayer player, LibVLC? owner, string path, bool strict)
+        {
+            try
+            {
+                if (!_videoPlaying || _isCleaningUp || _voutMidHealUsed) return;
+                if (!ReferenceEquals(player, _primaryMediaPlayer)) return;   // stale timer from a previous video
+
+                uint voutCount;
+                try { voutCount = player.VoutCount; } catch { return; }
+
+                var now = DateTime.UtcNow.Ticks;
+                var decision = EvaluateVoutMidPlay(voutCount, _voutEverSeen, _voutLostSinceTicks, now, VoutLostGraceMs, out var newLost);
+                _voutLostSinceTicks = newLost;
+
+                switch (decision)
+                {
+                    case VoutMidDecision.Healthy:
+                        _voutEverSeen = true;
+                        return;
+                    case VoutMidDecision.DeferToStartWatchdog:
+                    case VoutMidDecision.StartLossClock:
+                    case VoutMidDecision.WithinGrace:
+                        return;
+                    // VoutMidDecision.Heal falls through to the heal path below.
+                }
+
+                var lostMs = (now - _voutLostSinceTicks) / TimeSpan.TicksPerMillisecond;
+                _voutMidHealUsed = true;
+                var retired = RetireSharedLibVLC(owner, "video output lost mid-playback");
+                App.Logger?.Error(
+                    "VideoService: video output vanished mid-playback ({File}, gone {LostMs}ms) - white-screen mid-clip (retired={Retired}){Next}",
+                    Path.GetFileName(path), lostMs, retired,
+                    retired ? ", replaying on a fresh instance" : "; giving up on this video");
+
+                // Retire succeeded ⇒ replay the same clip once on the fresh instance; if the circuit
+                // breaker tripped, a replay would fail identically, so give up via the natural-end path.
+                DispatchVoutHeal(player, path, strict, retry: retired);
+            }
+            catch (Exception ex) { App.Logger?.Debug("VoutMidPlayTick error: {Error}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Shared UI-thread tail of both vout heal paths (start-of-play and mid-play). Either replays
+        /// the same video once on the freshly-rebuilt instance (<paramref name="retry"/>) or gives up
+        /// via the full natural-end <see cref="Cleanup"/>. Snapshots the teardown generation so a
+        /// racing teardown (panic, natural end, wedge rescue) or a newer video aborts this action — it
+        /// must never resurrect a video the user stopped, run reentrantly inside another teardown's
+        /// message pump, or kill a video it never belonged to.
+        /// </summary>
+        private void DispatchVoutHeal(LibVLCSharp.Shared.MediaPlayer player, string path, bool strict, bool retry)
+        {
+            var gen = _teardownGeneration;
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+            dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    if (_isCleaningUp || _teardownGeneration != gen || !_videoPlaying) return;
+                    // A different video may have started while this was queued — never kill it.
+                    if (!ReferenceEquals(player, _primaryMediaPlayer)) return;
+
+                    if (retry)
+                    {
+                        // Slot-preserving teardown, mirroring the attention-fail retry: CloseAll
+                        // does NOT release the InteractionQueue Video slot, so queued lock cards /
+                        // bubble counts can't start on top of the retry video; extend the stuck
+                        // timeout so the queue doesn't auto-complete the slot during the gap.
+                        _safetyTimer?.Stop();
+                        _fallbackSafetyTimer?.Stop();
+                        _fallbackSafetyTimer = null;
+                        _videoPlaying = false;
+                        CloseAll();
+                        App.InteractionQueue?.ExtendTimeout(300, InteractionQueueService.InteractionType.Video);
+                        App.Logger?.Information("VideoService: vout self-heal - replaying {File} on a fresh LibVLC instance",
+                            Path.GetFileName(path));
+                        PlayVideo(path, strict, isVoutRetry: true);
+                    }
+                    else
+                    {
+                        // Give up on this video via the FULL natural-end path: Cleanup raises
+                        // VideoEnded, resumes flashes/bubbles, releases the queue slot, and re-arms
+                        // the scheduler. ForceCleanup did none of that, which left ambient features
+                        // suppressed for the whole inter-video gap on chronically failing machines.
+                        Cleanup();
+                    }
+                }
+                catch (Exception ex) { App.Logger?.Warning(ex, "VideoService: vout self-heal dispatch failed"); }
+            }));
         }
 
         private void StartWedgeWatchdog()

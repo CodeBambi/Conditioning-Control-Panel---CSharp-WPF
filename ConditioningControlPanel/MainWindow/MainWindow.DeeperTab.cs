@@ -528,6 +528,35 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("ToggleEnhanceIfPossible_Changed: {Error}", ex.Message); }
         }
 
+        /// <summary>
+        /// User override (#596): reveal the BambiCloud site toggle on mods that hide it.
+        /// Persists to settings and immediately re-applies the site-toggle visibility.
+        /// </summary>
+        internal void ChkForceShowBambiCloud_Changed(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_isLoading) return;
+                var newValue = SettingsTab.ChkForceShowBambiCloud?.IsChecked == true;
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.ForceShowBambiCloud = newValue;
+                    App.Settings.Save();
+                }
+
+                // Re-apply the site-toggle visibility for the current mod without
+                // switching the active mod. Mirror InitializeModSelector's logic.
+                var modWantsBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
+                var showBambiCloud = modWantsBambiCloud || newValue;
+                SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
+                if (!modWantsBambiCloud && !newValue)
+                    SettingsTab.RbHypnoTube.IsChecked = true;
+
+                RefreshBrowserLoadingText();
+            }
+            catch (Exception ex) { App.Logger?.Debug("ChkForceShowBambiCloud_Changed: {Error}", ex.Message); }
+        }
+
         private void OnBrowserEnhanceMatchChanged(Services.Deeper.EnhancementLibraryEntry? match)
         {
             Dispatcher.BeginInvoke(() =>

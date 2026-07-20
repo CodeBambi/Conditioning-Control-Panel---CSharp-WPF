@@ -929,6 +929,19 @@ namespace ConditioningControlPanel.Models
             set { _excludeBambiCloudFromDucking = value; OnPropertyChanged(); }
         }
 
+        private bool _forceShowBambiCloud = false;
+        /// <summary>
+        /// User override: reveal the BambiCloud browser toggle even on mods whose
+        /// manifest hides it (ShowBambiCloudOption = false). The mod's own default
+        /// site (usually HypnoTube) stays selected; this only makes the BambiCloud
+        /// radio available to click. Mods that already show BambiCloud are unaffected.
+        /// </summary>
+        public bool ForceShowBambiCloud
+        {
+            get => _forceShowBambiCloud;
+            set { _forceShowBambiCloud = value; OnPropertyChanged(); }
+        }
+
         private bool _backgroundMusicEnabled = true;
         public bool BackgroundMusicEnabled
         {

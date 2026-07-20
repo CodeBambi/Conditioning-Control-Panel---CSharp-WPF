@@ -389,6 +389,10 @@ namespace ConditioningControlPanel.Services.Deeper
                     {
                         lock (_bandGate) _overlayBandKind[effect.EffectId!] = kind;
                     }
+                    // Mark a live Deeper overlay band so the z-order reconciler pins the tint ABOVE the
+                    // enhanced mandatory video (it otherwise sits below it — invisible — since 6.4.0's
+                    // unified compositor host, unlike the pre-compositor per-band topmost windows).
+                    App.Overlay?.BeginDeeperOverlayBand();
                     App.Overlay?.ShowOverlaySustained(kind, effect.Opacity);
                     break;
 
@@ -406,6 +410,7 @@ namespace ConditioningControlPanel.Services.Deeper
                         }
                     }
                     App.Overlay?.HideOverlaySustained(hideKind);
+                    App.Overlay?.EndDeeperOverlayBand();
                     break;
 
                 case EffectPhase.Restart:
