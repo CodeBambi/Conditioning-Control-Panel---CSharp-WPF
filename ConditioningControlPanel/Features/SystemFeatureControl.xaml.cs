@@ -46,6 +46,7 @@ namespace ConditioningControlPanel.Features
                 ChkMultiMon.IsChecked = s.DualMonitorEnabled;
                 ChkFillAllMon.IsChecked = s.FillAllMonitorsWithVideo;
                 ChkVideoGpuDecode.IsChecked = s.VideoForceHardwareDecoding;
+                ChkVideoBlurBg.IsChecked = s.VideoBlurredBackgroundEnabled;
                 ChkWinStart.IsChecked = Services.StartupManager.IsRegistered();
                 ChkVidLaunch.IsChecked = s.ForceVideoOnLaunch;
                 ChkAutoRun.IsChecked = s.AutoStartEngine;
@@ -73,6 +74,7 @@ namespace ConditioningControlPanel.Features
             if (e.PropertyName == nameof(Models.AppSettings.DualMonitorEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FillAllMonitorsWithVideo) ||
                 e.PropertyName == nameof(Models.AppSettings.VideoForceHardwareDecoding) ||
+                e.PropertyName == nameof(Models.AppSettings.VideoBlurredBackgroundEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.ForceVideoOnLaunch) ||
                 e.PropertyName == nameof(Models.AppSettings.AutoStartEngine) ||
                 e.PropertyName == nameof(Models.AppSettings.StartMinimized) ||
@@ -114,6 +116,16 @@ namespace ConditioningControlPanel.Features
             s.VideoForceHardwareDecoding = ChkVideoGpuDecode.IsChecked ?? false;
             App.Settings?.Save();
             App.Logger?.Information("Force video GPU decode set to {Enabled} (System popup)", s.VideoForceHardwareDecoding);
+        }
+
+        private void ChkVideoBlurBg_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.VideoBlurredBackgroundEnabled = ChkVideoBlurBg.IsChecked ?? true;
+            App.Settings?.Save();
+            App.Logger?.Information("Blurred video background set to {Enabled} (System popup)", s.VideoBlurredBackgroundEnabled);
         }
 
         private void ChkVidLaunch_Changed(object sender, RoutedEventArgs e)

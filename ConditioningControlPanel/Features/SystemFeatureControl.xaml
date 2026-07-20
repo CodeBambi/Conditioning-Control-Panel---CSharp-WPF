@@ -61,6 +61,21 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="Blurred video background" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="Fill the empty bars around a video that doesn't fit the screen (e.g. a vertical clip on a widescreen monitor) with a blurred, zoomed copy of the video, like TikTok. Turn OFF for plain black bars."
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkVideoBlurBg"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkVideoBlurBg_Changed" Unchecked="ChkVideoBlurBg_Changed"/>
+                </Grid>
+                <Grid Margin="0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <TextBlock Text="{loc:Str setting_win_start}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
                         <TextBlock Text="{loc:Str tooltip_launch_automatically_when_windows_starts}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11"

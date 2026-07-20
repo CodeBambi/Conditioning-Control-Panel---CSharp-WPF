@@ -10,6 +10,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.Windows.Forms;
 using NAudio.Wave;
@@ -179,6 +181,12 @@ namespace ConditioningControlPanel.Services
         private static TaskCompletionSource<bool> _libVLCReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly List<LibVLCSharp.Shared.MediaPlayer> _mediaPlayers = new();
         private readonly object _mediaPlayersLock = new();  // Thread-safe access to _mediaPlayers
+
+        // ---- Blurred-background (TikTok-style) render path ----
+        // Live memory-render surfaces (one per screen while a blurred-background video plays). Torn
+        // down in CloseAll — invalidates the frame buffer + unhooks the render tick, then frees the
+        // native buffer after a delay so an in-flight LibVLC frame can't touch freed memory.
+        private readonly List<BlurVmemSurface> _blurSurfaces = new();
 
         // Primary-monitor refs for the Deeper enhancement engine. Set when the
         // audio-bearing video window is created, cleared in CloseAll. Reading
@@ -1681,13 +1689,34 @@ namespace ConditioningControlPanel.Services
                     Height = screen.Bounds.Height / dpiScale
                 };
 
-                // Create LibVLC VideoView
-                var videoView = new VideoView
+                // Render path for THIS screen: the blurred-background composite (WPF Image pair fed
+                // by LibVLC memory callbacks — no HwndHost, so it composites in WPF) vs the classic
+                // VideoView. When the setting is on we ALWAYS use the composite: the decoder reports
+                // the true frame size through the video-format callback (reliable on the very first
+                // play, unlike a pre-parse of the container), and the blurred fill auto-hides for a
+                // clip that already matches the screen — so a landscape video pays no blur cost.
+                bool useBlur = App.Settings?.Current?.VideoBlurredBackgroundEnabled == true;
+
+                // Create the video surface: either the blurred-background composite or a VideoView.
+                VideoView? videoView = null;
+                BlurVmemSurface? blurSurface = null;
+                if (useBlur)
                 {
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-                    VerticalAlignment = VerticalAlignment.Stretch,
-                    Background = Brushes.Black
-                };
+                    double screenAspect = (double)screen.Bounds.Width / Math.Max(1, screen.Bounds.Height);
+                    blurSurface = new BlurVmemSurface(screenAspect);
+                    _blurSurfaces.Add(blurSurface);
+                    App.Logger?.Information("VideoService: blurred-background path armed for {File} on {Screen} (screenAspect={AR:0.000})",
+                        Path.GetFileName(path), screen.DeviceName, screenAspect);
+                }
+                else
+                {
+                    videoView = new VideoView
+                    {
+                        HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+                        VerticalAlignment = VerticalAlignment.Stretch,
+                        Background = Brushes.Black
+                    };
+                }
 
                 // Create media player for this video.
                 mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC!);
@@ -1859,7 +1888,9 @@ namespace ConditioningControlPanel.Services
             }
 
             var grid = new Grid { Background = Brushes.Black };
-            grid.Children.Add(videoView);
+            // Blurred path: the composite (blurred fill + sharp centred video) is pure WPF content;
+            // VideoView path: the airspace HwndHost surface. Either way the click overlay sits above.
+            grid.Children.Add(useBlur ? blurSurface!.Root : videoView!);
 
             // Add invisible click overlay - LibVLC uses Win32 child window that bypasses WPF events
             // This overlay catches all clicks before they reach the video surface
@@ -1897,8 +1928,13 @@ namespace ConditioningControlPanel.Services
             if (withAudio) win.Activate();
             DisableChildWindowInput(win);
 
-            // Attach media player to view and start playback
-            videoView.MediaPlayer = mediaPlayer;
+            // Attach media player to the surface and start playback. The blurred path wires LibVLC
+            // memory callbacks (SetVideoFormat + SetVideoCallbacks) instead of a VideoView; it must
+            // happen BEFORE Play() below, same as attaching a VideoView.
+            if (useBlur)
+                blurSurface!.Attach(mediaPlayer);
+            else
+                videoView!.MediaPlayer = mediaPlayer;
 
             // Create media - use file path directly for better compatibility
             // Media is disposed after Play() — LibVLC internally ref-counts, so this is safe
@@ -1963,7 +1999,13 @@ namespace ConditioningControlPanel.Services
                 // Arm the vout watchdog on the primary player: if no video output exists within the
                 // grace window the screen is white regardless of decode state (#557-#560/#574) —
                 // self-heal by retiring the shared instance and retrying once (see VoutWatchdogFire).
-                StartVoutWatchdog(mediaPlayer, path, strict);
+                // The blurred path renders through memory callbacks (no vout HWND, so none of the
+                // DXVA present failures the vout watchdog targets), so it uses a simpler frame-arrival
+                // watchdog instead: no frame within the grace window ⇒ skip to the next video.
+                if (useBlur)
+                    StartBlurFrameWatchdog(blurSurface!);
+                else
+                    StartVoutWatchdog(mediaPlayer, path, strict);
             }
 
                 App.Logger?.Debug("LibVLC video window on: {Screen} (audio: {Audio}, vol: {Vol}, mute: {Mute})",
@@ -2017,6 +2059,334 @@ namespace ConditioningControlPanel.Services
                 closeTimer.Start();
 
                 return fallbackWin;
+            }
+        }
+
+        /// <summary>
+        /// Memory-render buffer dimensions for a video of the given display size: the video aspect
+        /// (so LibVLC bakes in NO bars), with the longer side capped so decode + per-frame copy +
+        /// blur stay cheap, and both sides even.
+        /// </summary>
+        private static (uint W, uint H) ComputeBufferDims((int W, int H) dims)
+        {
+            int w = Math.Max(2, dims.W);
+            int h = Math.Max(2, dims.H);
+            const int cap = 1080; // long side; a portrait clip fills a 1080-tall screen at full crispness
+            int longSide = Math.Max(w, h);
+            double scale = longSide > cap ? (double)cap / longSide : 1.0;
+            uint bw = (uint)Math.Max(16, ((int)Math.Round(w * scale) + 1) & ~1);
+            uint bh = (uint)Math.Max(16, ((int)Math.Round(h * scale) + 1) & ~1);
+            return (bw, bh);
+        }
+
+        /// <summary>
+        /// Liveness watchdog for the blurred-background (memory-render) path: if the surface has
+        /// produced no frame within the grace window, the decode never started — skip to the next
+        /// video rather than sit on a black screen. Cheaper counterpart to StartVoutWatchdog, which
+        /// targets the VideoView/DXVA white-screen the memory path can't hit.
+        /// </summary>
+        private void StartBlurFrameWatchdog(BlurVmemSurface surface)
+        {
+            var gen = _teardownGeneration;
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(VoutGraceMs) };
+            timer.Tick += (s, e) =>
+            {
+                timer.Stop();
+                if (!_videoPlaying || gen != _teardownGeneration) return; // torn down / superseded
+                if (surface.HasRendered) return;
+                App.Logger?.Warning("VideoService: blurred-background video produced no frame within {Ms}ms — skipping to next", VoutGraceMs);
+                try { OnEnded(); } catch (Exception ex) { App.Logger?.Debug("StartBlurFrameWatchdog OnEnded threw: {E}", ex.Message); }
+            };
+            timer.Start();
+        }
+
+        /// <summary>
+        /// A fullscreen "blurred background" video surface built from LibVLC memory (vmem) callbacks:
+        /// a single decoded frame is displayed twice in pure WPF — stretched-to-fill + Gaussian blur
+        /// behind, and aspect-fit + sharp in front — so a vertical clip on a widescreen monitor fills
+        /// the pillarbox bars with an upscaled blur of itself (the TikTok / Shorts look) instead of
+        /// flat black. Uses memory rendering (no VideoView/HwndHost) precisely so the two layers
+        /// composite in WPF; an airspace HWND could not be blurred or stacked this way.
+        ///
+        /// Pattern (buffer + lock/display callbacks + CompositionTarget.Rendering blit + delayed
+        /// native teardown) mirrors <see cref="InlineLoopVideo"/> / <see cref="DualMonitorVideoService"/>.
+        /// </summary>
+        private sealed class BlurVmemSurface : IDisposable
+        {
+            [DllImport("kernel32.dll", EntryPoint = "RtlMoveMemory")]
+            private static extern void CopyMemory(IntPtr dest, IntPtr src, uint count);
+
+            private readonly double _screenAspect;
+            private readonly object _bufferLock = new();
+            private readonly System.Windows.Shapes.Rectangle _background;
+            private readonly ImageBrush _bgBrush;
+            private readonly Image _foreground;
+            private readonly System.Windows.Shapes.Rectangle _scrim;
+
+            // Set from the video-format callback once the decoder reports the real frame size.
+            private uint _w;
+            private uint _h;
+            private IntPtr _frameBuffer = IntPtr.Zero;
+            private WriteableBitmap? _bitmap;
+            private volatile bool _bufferValid;
+            private volatile bool _frameReady;
+            private volatile bool _hasRendered;
+            private bool _hooked;
+            private bool _disposed;
+
+            // Delegates handed to native LibVLC — kept in fields so the GC can't collect them
+            // while libvlc still holds the pointers (the callbacks fire for the whole playback).
+            private LibVLCSharp.Shared.MediaPlayer.LibVLCVideoFormatCb? _formatCb;
+            private LibVLCSharp.Shared.MediaPlayer.LibVLCVideoCleanupCb? _cleanupCb;
+            private LibVLCSharp.Shared.MediaPlayer.LibVLCVideoLockCb? _lockCb;
+            private LibVLCSharp.Shared.MediaPlayer.LibVLCVideoDisplayCb? _displayCb;
+
+            /// <summary>The WPF element to drop into the window's grid.</summary>
+            public FrameworkElement Root { get; }
+
+            /// <summary>True once at least one frame has been blitted to the surface.</summary>
+            public bool HasRendered => _hasRendered;
+
+            public BlurVmemSurface(double screenAspect)
+            {
+                _screenAspect = screenAspect > 0 ? screenAspect : (16.0 / 9.0);
+
+                // Blurred fill: same frame scaled to cover the whole screen (cropping the excess),
+                // heavily blurred. Hidden until the format callback decides bars are actually needed.
+                // Painted via an ImageBrush (not an Image) so the crop is anchored at the CENTRE —
+                // a plain Image + UniformToFill anchors the vertical crop at the top, so the side
+                // panels only ever showed the top of the frame (the character's scalp/hair).
+                _bgBrush = new ImageBrush
+                {
+                    Stretch = Stretch.UniformToFill,
+                    AlignmentX = AlignmentX.Center,
+                    AlignmentY = AlignmentY.Center
+                };
+                _background = new System.Windows.Shapes.Rectangle
+                {
+                    Fill = _bgBrush,
+                    HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Stretch,
+                    Visibility = Visibility.Collapsed,
+                    Effect = new BlurEffect
+                    {
+                        Radius = 48,
+                        KernelType = KernelType.Gaussian,
+                        RenderingBias = RenderingBias.Performance
+                    }
+                };
+
+                // Subtle dark scrim so the bright blurred fill doesn't wash out the video's edges.
+                _scrim = new System.Windows.Shapes.Rectangle
+                {
+                    Fill = new SolidColorBrush(Color.FromArgb(90, 0, 0, 0)),
+                    HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Stretch,
+                    Visibility = Visibility.Collapsed
+                };
+
+                // Sharp centred video: same frame, aspect-fit. Margins are transparent so the
+                // blurred fill shows through where the bars would otherwise be black.
+                _foreground = new Image
+                {
+                    Stretch = Stretch.Uniform,
+                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                var grid = new Grid { ClipToBounds = true, Background = Brushes.Black };
+                grid.Children.Add(_background);
+                grid.Children.Add(_scrim);
+                grid.Children.Add(_foreground);
+                Root = grid;
+            }
+
+            /// <summary>Wire LibVLC memory callbacks to this surface and start blitting. Must be
+            /// called before <c>MediaPlayer.Play</c>, on the UI thread. The buffer + bitmap are
+            /// created lazily inside the format callback once the decoder reports the real size.</summary>
+            public void Attach(LibVLCSharp.Shared.MediaPlayer player)
+            {
+                _formatCb = FormatCallback;
+                _cleanupCb = CleanupCallback;
+                _lockCb = LockCallback;
+                _displayCb = DisplayCallback;
+                player.SetVideoFormatCallbacks(_formatCb, _cleanupCb);
+                player.SetVideoCallbacks(_lockCb, null, _displayCb);
+                Hook();
+            }
+
+            /// <summary>
+            /// Called by LibVLC (native thread) with the decoder's real frame size. We pick a
+            /// buffer geometry matching the video aspect (so no bars are baked in), allocate it,
+            /// and marshal to the UI thread to (re)build the WriteableBitmap and decide whether the
+            /// blurred fill is needed for this screen.
+            /// </summary>
+            private uint FormatCallback(ref IntPtr opaque, IntPtr chroma, ref uint width, ref uint height,
+                                        ref uint pitches, ref uint lines)
+            {
+                uint vw = width, vh = height;
+                var (bw, bh) = ComputeBufferDims(((int)vw, (int)vh));
+
+                // Ask LibVLC for straight BGRA ("RV32"): 4 bytes/pixel, single plane.
+                WriteChroma(chroma, "RV32");
+                width = bw;
+                height = bh;
+                pitches = bw * 4;
+                lines = bh;
+
+                lock (_bufferLock)
+                {
+                    if (_frameBuffer != IntPtr.Zero)
+                    {
+                        try { Marshal.FreeHGlobal(_frameBuffer); } catch { /* ignore */ }
+                    }
+                    _frameBuffer = Marshal.AllocHGlobal((int)(bw * bh * 4));
+                    _w = bw;
+                    _h = bh;
+                    _bufferValid = true;
+                }
+
+                // Bars appear when the video aspect differs from the screen aspect. Only then do we
+                // pay for the blurred fill; a clip that already fills the screen shows just the sharp
+                // layer (which covers everything at Uniform == the whole screen).
+                double videoAspect = vh > 0 ? (double)vw / vh : _screenAspect;
+                bool needsBlur = Math.Abs(videoAspect / _screenAspect - 1.0) > 0.03;
+
+                App.Logger?.Information("VideoService: blurred-background format cb — video {VW}x{VH}, buffer {BW}x{BH}, blurFill={Blur}",
+                    vw, vh, bw, bh, needsBlur);
+
+                var disp = Application.Current?.Dispatcher;
+                if (disp != null && !disp.HasShutdownStarted)
+                    disp.BeginInvoke(new Action(() => RebuildBitmap(bw, bh, needsBlur)));
+
+                return 1; // one plane (RV32)
+            }
+
+            private void CleanupCallback(ref IntPtr opaque) { /* buffer is freed in Dispose */ }
+
+            private void RebuildBitmap(uint bw, uint bh, bool needsBlur)
+            {
+                if (_disposed) return;
+                try
+                {
+                    var bmp = new WriteableBitmap((int)bw, (int)bh, 96, 96, PixelFormats.Bgr32, null);
+                    lock (_bufferLock) { _bitmap = bmp; }
+                    _foreground.Source = bmp;
+                    _bgBrush.ImageSource = needsBlur ? bmp : null;
+                    _background.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+                    _scrim.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("BlurVmemSurface: bitmap rebuild failed: {Error}", ex.Message);
+                }
+            }
+
+            /// <summary>Write a 4-char FourCC into LibVLC's chroma buffer.</summary>
+            private static void WriteChroma(IntPtr chroma, string fourcc)
+            {
+                for (int i = 0; i < 4; i++)
+                    Marshal.WriteByte(chroma, i, (byte)(i < fourcc.Length ? fourcc[i] : 0));
+            }
+
+            private IntPtr LockCallback(IntPtr opaque, IntPtr planes)
+            {
+                lock (_bufferLock)
+                {
+                    if (!_bufferValid || _frameBuffer == IntPtr.Zero)
+                    {
+                        Marshal.WriteIntPtr(planes, IntPtr.Zero);
+                        return IntPtr.Zero;
+                    }
+                    Marshal.WriteIntPtr(planes, _frameBuffer);
+                    return IntPtr.Zero;
+                }
+            }
+
+            private void DisplayCallback(IntPtr opaque, IntPtr picture) => _frameReady = true;
+
+            private void Hook()
+            {
+                if (_hooked) return;
+                CompositionTarget.Rendering += OnRendering;
+                _hooked = true;
+            }
+
+            private void Unhook()
+            {
+                if (!_hooked) return;
+                try { CompositionTarget.Rendering -= OnRendering; } catch { /* ignore */ }
+                _hooked = false;
+            }
+
+            private void OnRendering(object? sender, EventArgs e)
+            {
+                if (!_bufferValid || !_frameReady) return;
+                _frameReady = false;
+
+                bool got = false;
+                try
+                {
+                    got = Monitor.TryEnter(_bufferLock, 8);
+                    if (!got) return;
+                    if (!_bufferValid || _frameBuffer == IntPtr.Zero) return;
+
+                    var bmp = _bitmap;
+                    // Bitmap not built yet, or its dims don't match the current buffer (a mid-stream
+                    // resolution change between FormatCallback and RebuildBitmap): skip this frame.
+                    if (bmp == null || bmp.PixelWidth != (int)_w || bmp.PixelHeight != (int)_h) return;
+
+                    bmp.Lock();
+                    try
+                    {
+                        CopyMemory(bmp.BackBuffer, _frameBuffer, _w * _h * 4);
+                        bmp.AddDirtyRect(new Int32Rect(0, 0, (int)_w, (int)_h));
+                    }
+                    finally
+                    {
+                        bmp.Unlock();
+                    }
+                    _hasRendered = true;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("BlurVmemSurface: frame copy error: {Error}", ex.Message);
+                }
+                finally
+                {
+                    if (got) Monitor.Exit(_bufferLock);
+                }
+            }
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+
+                // Invalidate the buffer first so LockCallback hands LibVLC nothing, and stop blitting.
+                _bufferValid = false;
+                _frameReady = false;
+                Unhook();
+
+                IntPtr buf;
+                lock (_bufferLock)
+                {
+                    buf = _frameBuffer;
+                    _frameBuffer = IntPtr.Zero;
+                    _bitmap = null;
+                }
+
+                // Free the native buffer only after a delay, so any frame still in flight on a
+                // LibVLC thread can't write into freed memory. The player is already stopped by
+                // CloseAll before this runs, so this is belt-and-suspenders.
+                if (buf != IntPtr.Zero)
+                {
+                    Task.Run(async () =>
+                    {
+                        await Task.Delay(500);
+                        try { Marshal.FreeHGlobal(buf); } catch { /* ignore */ }
+                    });
+                }
             }
         }
 
@@ -3334,6 +3704,19 @@ namespace ConditioningControlPanel.Services
                     }
                 }
                 _windows.Clear();
+
+                // Tear down any blurred-background memory-render surfaces: invalidate the frame
+                // buffer + unhook the render tick now (the players above are already stopped), then
+                // free the native buffer after a delay so an in-flight frame can't touch freed memory.
+                if (_blurSurfaces.Count > 0)
+                {
+                    foreach (var s in _blurSurfaces.ToList())
+                    {
+                        try { s.Dispose(); }
+                        catch (Exception ex) { App.Logger?.Debug("CloseAll: blur surface dispose failed - {Error}", ex.Message); }
+                    }
+                    _blurSurfaces.Clear();
+                }
 
                 if (!synchronous)
                     App.Overlay?.NotifyTopWindowClosed();

@@ -1544,6 +1544,22 @@ namespace ConditioningControlPanel.Models
             set { _fillAllMonitorsWithVideo = value; OnPropertyChanged(); }
         }
 
+        private bool _videoBlurredBackgroundEnabled = true;
+        /// <summary>
+        /// Fill the letterbox/pillarbox bars around a video that doesn't match the screen
+        /// aspect (e.g. a vertical clip on a widescreen monitor) with an upscaled, blurred
+        /// copy of the same video — the "blurred background" look from TikTok / YouTube Shorts,
+        /// instead of flat black bars. Still one decoder per screen: the blurred fill and the
+        /// sharp centred video are the SAME decoded frame composited in WPF (LibVLC memory
+        /// callbacks, no airspace). Turn off to fall back to the classic VideoView render path
+        /// with plain black bars.
+        /// </summary>
+        public bool VideoBlurredBackgroundEnabled
+        {
+            get => _videoBlurredBackgroundEnabled;
+            set { _videoBlurredBackgroundEnabled = value; OnPropertyChanged(); }
+        }
+
         private bool _restrictGazeContentToCalibratedScreen = true;
         /// <summary>
         /// When enabled (and a webcam calibration exists), all gaze-reactive
