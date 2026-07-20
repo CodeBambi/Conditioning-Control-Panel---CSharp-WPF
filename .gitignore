@@ -159,5 +159,11 @@ nul
 # scripts that make them are not. See tools/avatar-emotes/README.md (local only).
 tools/
 
+# ...except the Bureau pack-indexer (builds packs-index.json / bureau-catalogue.json
+# for the labeling game — no secrets, meant to be re-runnable by anyone).
+!ConditioningControlPanel/tools/
+ConditioningControlPanel/tools/*
+!ConditioningControlPanel/tools/pack-indexer/
+
 # Redistributables (re-downloadable from Microsoft; do not bloat the repo)
 redist/

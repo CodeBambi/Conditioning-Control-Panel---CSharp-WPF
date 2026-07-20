@@ -165,7 +165,8 @@ namespace ConditioningControlPanel.Services.Bureau
                     break;
                 case "next":
                     var packFilter = (string?)o["pack"];
-                    _ = Task.Run(() => HandleNextAsync(packFilter));
+                    var certify = o["certify"]?.Value<bool>() == true;
+                    _ = Task.Run(() => HandleNextAsync(packFilter, certify));
                     break;
                 case "packs":
                     _ = Task.Run(() => HandlePacksAsync());
@@ -199,14 +200,18 @@ namespace ConditioningControlPanel.Services.Bureau
 
         // ============================ handlers ============================
 
-        private static async Task HandleNextAsync(string? packFilter = null)
+        private static async Task HandleNextAsync(string? packFilter = null, bool certify = false)
         {
             try
             {
                 await BureauIndexService.EnsureBuiltAsync().ConfigureAwait(false);
 
-                var (status, body) = await ServerAsync(HttpMethod.Post, "/v2/bureau/next",
-                    new JObject { ["unified_id"] = App.Settings?.Current?.UnifiedId, ["count"] = ServerFetchCount })
+                // Certify-mode pulls the AI-proposed gold drafts (admin route);
+                // without credentials it falls through to regular casework.
+                var certifying = certify && !string.IsNullOrEmpty(AdminToken);
+                var reqBody = new JObject { ["unified_id"] = App.Settings?.Current?.UnifiedId, ["count"] = ServerFetchCount };
+                if (certifying) reqBody["certify"] = true;
+                var (status, body) = await ServerAsync(HttpMethod.Post, "/v2/bureau/next", reqBody, admin: certifying)
                     .ConfigureAwait(false);
 
                 if (status == 401 || status == 403)
@@ -222,6 +227,7 @@ namespace ConditioningControlPanel.Services.Bureau
                 }
 
                 var targets = body["targets"] as JArray ?? new JArray();
+                var proposals = certifying ? body["proposals"] as JObject : null;
                 var items = new List<object>();
                 foreach (var t in targets)
                 {
@@ -241,7 +247,11 @@ namespace ConditioningControlPanel.Services.Bureau
 
                     var decoded = BureauIndexService.DecodeFrame(target[..sep], frame);
                     if (decoded == null) continue;   // not in this user's packs / decoder divergence — skip
-                    items.Add(new { target, src = decoded.Value.DataUri, dims = new[] { decoded.Value.W, decoded.Value.H } });
+                    var boxes = proposals?[target];
+                    if (boxes != null)
+                        items.Add(new { target, src = decoded.Value.DataUri, dims = new[] { decoded.Value.W, decoded.Value.H }, boxes });
+                    else
+                        items.Add(new { target, src = decoded.Value.DataUri, dims = new[] { decoded.Value.W, decoded.Value.H } });
                 }
 
                 Post(new
