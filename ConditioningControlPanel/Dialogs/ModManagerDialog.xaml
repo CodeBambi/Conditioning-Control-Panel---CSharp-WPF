@@ -181,6 +181,30 @@
             <!-- Bottom Bar -->
             <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,12,12" Padding="15,10">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="BtnBrowseCatalogue" Content="{loc:Str btn_browse_mod_catalogue}" Click="BtnBrowseCatalogue_Click"
+                            ToolTip="{loc:Str tooltip_browse_mod_catalogue}"
+                            Background="{DynamicResource PanelAccentBrush}" Foreground="#B084DC" Padding="14,7" BorderThickness="0"
+                            Cursor="Hand" Margin="0,0,10,0" FontSize="12">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     <Button x:Name="BtnInstall" Content="{loc:Str btn_install_from_file}" Click="BtnInstall_Click"
                             Background="{DynamicResource PanelAccentBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
                             Cursor="Hand" Margin="0,0,10,0" FontSize="12">

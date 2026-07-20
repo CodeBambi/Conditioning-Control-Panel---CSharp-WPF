@@ -40,6 +40,25 @@ namespace ConditioningControlPanel
             Close();
         }
 
+        // The web catalogue is where shared mods "end up": community-made mods
+        // listed with their creator-hosted MEGA download links. Download the
+        // .ccpmod there, then drag it onto the main window (or use Install).
+        private void BtnBrowseCatalogue_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://app.cclabs.app/catalogue/mods",
+                    UseShellExecute = true,
+                });
+            }
+            catch (System.Exception ex)
+            {
+                App.Logger?.Warning(ex, "[ModManager] Failed to open mod catalogue URL");
+            }
+        }
+
         private void RefreshModList()
         {
             ModList.Items.Clear();

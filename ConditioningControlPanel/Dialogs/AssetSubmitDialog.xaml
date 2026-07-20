@@ -38,8 +38,9 @@
                        Foreground="#B0B0C0" FontSize="13" Margin="0,0,0,16"
                        TextTrimming="CharacterEllipsis"/>
 
-            <!-- Body copy -->
-            <TextBlock Grid.Row="2"
+            <!-- Body copy (swapped to the mod-specific explainer when the ctor
+                 asks for a download URL - mods are creator-hosted on MEGA) -->
+            <TextBlock Grid.Row="2" x:Name="TxtBody"
                        Text="{loc:Str dialog_catalogue_submit_asset_body}"
                        Foreground="#E0E0E0" FontSize="14" TextWrapping="Wrap" LineHeight="20"
                        VerticalAlignment="Top" Margin="0,0,0,6"/>

@@ -63,7 +63,19 @@ namespace ConditioningControlPanel
             }
 
             RecordCatalogueSubmission(CatalogueKindMods, mod.Id, result);
-            ShowCatalogueSubmissionResultToast(result);
+
+            // Mods get a dedicated success toast that says where the mod ends
+            // up (the web catalogue's Mods tab) and reminds the creator the
+            // .ccpmod stays hosted on THEIR MEGA - we only list the link.
+            if (result is SubmissionResult.Success)
+            {
+                App.Notifications?.Show(Loc.Get("catalogue_toast_mod_success"),
+                    Services.NotificationType.Success, TimeSpan.FromSeconds(10));
+            }
+            else
+            {
+                ShowCatalogueSubmissionResultToast(result);
+            }
         }
 
         // Drag-drop install: a .ccpmod downloaded from the web catalogue (MEGA)
