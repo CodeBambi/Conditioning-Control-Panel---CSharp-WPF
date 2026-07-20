@@ -32,6 +32,7 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
     private PixelRect _capScreenBounds;
     private double _capScaling = 1.0;
     private string? _lastProbe;
+    private string? _lastScrollProbe;
 
     public FeaturePopupWindow()
     {
@@ -55,17 +56,25 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
 
         PopupScroller.ScrollChanged += (_, _) => UpdateScrollProbe();
         LayoutUpdated += (_, _) => UpdatePopupProbe();
+        PositionChanged += (_, _) => UpdatePopupProbe(); // drags move the window without a layout pass
     }
+
+    /// <summary>Demo-run probe sink (SP-013 --popup-demo): probe lines are mirrored to stderr on WSLg, where no UIA exists.</summary>
+    public Action<string>? DiagnosticSink { get; set; }
 
     /// <summary>THE one close operation (W-04): title-bar button and Escape both land here.</summary>
     public void ClosePopup() => Close();
 
     /// <summary>
-    /// Escape closes the popup (WPF PreviewKeyDown tunnel parity, xaml.cs:45-58). A window
-    /// KeyBinding was tried first and does NOT fire here: KeyBinding objects in
-    /// Window.KeyBindings don't inherit DataContext, so the compiled CloseCommand binding
-    /// never resolved (found by the headless test). The tunnel override is also the WPF
-    /// shape. Both routes terminate in <see cref="ClosePopup"/> — ONE operation.
+    /// Escape closes the popup on the BUBBLE phase with a Handled guard (pre-completion
+    /// consult correction — an earlier comment said "tunnel"; a window KeyBinding was tried
+    /// first and does NOT fire here: KeyBinding objects in Window.KeyBindings don't inherit
+    /// DataContext, so the compiled CloseCommand binding never resolved — found by the
+    /// headless Escape test). Bubble + !e.Handled is the WPF carve-out's behavioral
+    /// equivalent (capability-inventory: "Escape remains available to an active key-capture
+    /// control when that control explicitly owns the key"): a child that handles Escape
+    /// keeps it. The demonstrator has no key-capture control (carve-out N/A here). Both
+    /// routes terminate in <see cref="ClosePopup"/> — ONE operation.
     /// </summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
@@ -245,9 +254,15 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
         var innerText = inner is null
             ? string.Empty
             : string.Create(CultureInfo.InvariantCulture, $" inner-extent {inner.Extent.Height:F1} inner-offset {inner.Offset.Y:F1}");
-        ScrollProbeText.Text = string.Create(
+        var text = string.Create(
             CultureInfo.InvariantCulture,
             $"scroll-probe: extent {PopupScroller.Extent.Height:F1} viewport {PopupScroller.Viewport.Height:F1} offset {PopupScroller.Offset.Y:F1}{innerText} final-in-viewport {(IsFinalControlInViewport() ? "true" : "false")}");
+        if (text != _lastScrollProbe)
+        {
+            _lastScrollProbe = text;
+            ScrollProbeText.Text = text;
+            DiagnosticSink?.Invoke(text);
+        }
     }
 
     private bool IsFinalControlInViewport()
@@ -272,6 +287,11 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
     /// <summary>Popup/scrollbar/thumb screen geometry (physical px) for the headed harness's real-input clicks.</summary>
     private void UpdatePopupProbe()
     {
+        if (VisualRoot is null)
+        {
+            return; // PositionChanged can fire before the visual tree attaches (WM_MOVE at creation)
+        }
+
         var size = PixelSize.FromSize(ClientSize, RenderScaling);
         // The Fluent template hosts horizontal AND vertical ScrollBars; the disabled
         // horizontal one stays collapsed at 0x0. Evidence is about the VERTICAL bar.
@@ -284,7 +304,9 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
 
         string Geometry(Control? control)
         {
-            if (control is null)
+            // PositionChanged can fire while parts of the tree are still unattached
+            // (WM_MOVE at creation) — PointToScreen throws on those; report "none" instead.
+            if (control is null || !control.IsAttachedToVisualTree())
             {
                 return "none";
             }
@@ -296,11 +318,12 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
 
         var text = string.Create(
             CultureInfo.InvariantCulture,
-            $"popup-probe: pos {Position.X},{Position.Y} size {size.Width}x{size.Height} scale {RenderScaling:0.##} scroller {Geometry(PopupScroller)} scrollbar {Geometry(scrollbar)} thumb {Geometry(thumb)} list {Geometry(list)}");
+            $"popup-probe: pos {Position.X},{Position.Y} size {size.Width}x{size.Height} scale {RenderScaling:0.##} maxHeight {MaxHeight:F0} scroller {Geometry(PopupScroller)} scrollbar {Geometry(scrollbar)} thumb {Geometry(thumb)} list {Geometry(list)}");
         if (text != _lastProbe)
         {
             _lastProbe = text;
             PopupProbeText.Text = text;
+            DiagnosticSink?.Invoke(text);
         }
     }
 }

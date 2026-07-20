@@ -1,0 +1,74 @@
+=== SP-013 popup demonstrator (WSLg/X11) ===
+session facts: WAYLAND_DISPLAY=wayland-0 DISPLAY=:0 XDG_SESSION_TYPE=unset kernel=6.6.114.1-microsoft-standard-WSL2
+--- contract: dotnet build CcpClient.sln ---
+
+Time Elapsed 00:00:04.69
+--- contract: CcpClient.Tests ---
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:   139, Skipped:     0, Total:   139, Duration: 2 s - CcpClient.Tests.dll (net10.0)
+--- contract: CcpClient.HeadlessTests ---
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    11, Skipped:     0, Total:    11, Duration: 1 s - CcpClient.HeadlessTests.dll (net10.0)
+--- X11 session enumeration facts ---
+[root] 4496x4000
+[taskbar] _NET_CLIENT_LIST ABSENT on this X root (port-lessons 2026-07-20) — name-resolved queries instead
+[workarea] _NET_WORKAREA:  no such atom on any window.
+--- popup session at AVALONIA_GLOBAL_SCALE_FACTOR=1 ---
+app pid: 1044
+[geometry] settled tree geo: 520x640+32+32  +2983+1748
+[geometry] popup 520x640 @ root 2983,1748 (physical px)
+[xprop popup — name-resolved]
+  _NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_NORMAL
+  _NET_WM_STATE(ATOM) = 
+  WM_TRANSIENT_FOR(WINDOW): window id # 0x60000f
+  WM_NORMAL_HINTS(WM_SIZE_HINTS):
+  		program specified location: 0, 0
+  		program specified size: 0 by 0
+  		program specified minimum size: 520 by 640
+  		program specified maximum size: 520 by 640
+  		program specified resize increment: 1 by 1
+  transient-for => 0x60000f (        0x60000f "CCP Client": ("dotnet" "CcpClient.Desktop")  520x680+38+59  +3021+1647)
+  [owner] PASS: WM_TRANSIENT_FOR names the dashboard window
+[app-probe] popup-probe: pos 2983,1748 size 520x640 scale 1 maxHeight 640 scroller 2984,1841,518,510 scrollbar 3486,1841,16,510 thumb 3486,1857,16,273 list none
+[app-probe] scroll-probe: extent 893.0 viewport 510.0 offset 0.0 final-in-viewport false
+[app-probe] layout-probe: card 488.0x71.0 DIP @ scale 1 @ screen 16,45
+[capping] root 4000 / scale 1 => expected capped popup height ~640px; measured 640px
+[capping] PASS: popup height == min(640 DIP, 0.9*workarea) of the owner monitor
+[containment] PASS: popup inside owner working area 4496x4000
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T022627/lane-1/spine-tasks/SP-013-popup-scrolling/evidence/wslg-popup-scale1.bmp (520x640)
+[capture] wslg-popup-scale1.bmp
+[close] OK: window 6291474 advertises WM_DELETE_WINDOW
+[close] OK: WM_DELETE_WINDOW sent to 6291474
+[close] PASS: app survived popup WM_DELETE_WINDOW (popup is not the main window)
+[close] dashboard WM_DELETE_WINDOW => app exit code 0
+--- popup session at AVALONIA_GLOBAL_SCALE_FACTOR=1.5 ---
+app pid: 1231
+[geometry] settled tree geo: 780x960+32+32  +3173+1787
+[geometry] popup 780x960 @ root 3173,1787 (physical px)
+[xprop popup — name-resolved]
+  _NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_NORMAL
+  _NET_WM_STATE(ATOM) = 
+  WM_TRANSIENT_FOR(WINDOW): window id # 0x60000f
+  WM_NORMAL_HINTS(WM_SIZE_HINTS):
+  		program specified location: 0, 0
+  		program specified size: 0 by 0
+  		program specified minimum size: 780 by 960
+  		program specified maximum size: 780 by 960
+  		program specified resize increment: 1 by 1
+  transient-for => 0x60000f (        0x60000f "CCP Client": ("dotnet" "CcpClient.Desktop")  780x1020+38+59  +3211+1686)
+  [owner] PASS: WM_TRANSIENT_FOR names the dashboard window
+[app-probe] popup-probe: pos 3173,1787 size 780x960 scale 1.5 maxHeight 640 scroller 3175,1928,776,763 scrollbar 3927,1928,24,763 thumb 3927,1952,24,411 list none
+[app-probe] scroll-probe: extent 885.3 viewport 508.7 offset 0.0 final-in-viewport false
+[app-probe] layout-probe: card 488.0x71.0 DIP @ scale 1 @ screen 16,45
+[capping] root 4000 / scale 1.5 => expected capped popup height ~960px; measured 960px
+[capping] PASS: popup height == min(640 DIP, 0.9*workarea) of the owner monitor
+[containment] PASS: popup inside owner working area 4496x4000
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T022627/lane-1/spine-tasks/SP-013-popup-scrolling/evidence/wslg-popup-scale1.5.bmp (780x960)
+[capture] wslg-popup-scale1.5.bmp
+[close] OK: window 6291474 advertises WM_DELETE_WINDOW
+[close] OK: WM_DELETE_WINDOW sent to 6291474
+[close] PASS: app survived popup WM_DELETE_WINDOW (popup is not the main window)
+[close] dashboard WM_DELETE_WINDOW => app exit code 0
+=== SP-013 WSLg gate done ===

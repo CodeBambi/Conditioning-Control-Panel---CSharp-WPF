@@ -1,7 +1,7 @@
 # STATUS: SP-013 — prove feature-popup scrolling
 
 **Current Step:** Step 4 — WSLg/X11 gate + board reconciliation + pre-completion consult
-**Last Updated:** 2026-07-20 (Step 3 complete: EVIDENCE PASS, 25 gates + 1 named touch gate)
+**Last Updated:** 2026-07-20 (Step 4 in progress: WSLg gate running)
 
 ### Step 1: WPF evidence + current v12 research + pre-approach consult
 **Status:** ✅ Complete
@@ -27,13 +27,13 @@
 - [x] A-013 MCP advisory on redacted AXAML snippets (ValidateXaml PASS; AnalyzePerformance REJECTED self-contradictory)
 
 ### Step 4: WSLg/X11 gate + board reconciliation + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress (work complete — review call pending)
 
-- [ ] WSL2 in-packet gate: contract green, render + capping + geometry session facts (no input automation)
-- [ ] record.md complete (design, citations, consult provenance, engine-review presence, evidence matrix, budgets)
-- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
-- [ ] task-board.md popup row → WIP with named remaining gates (never DONE)
-- [ ] STATUS.md accurate before .DONE
+- [x] WSL2 in-packet gate: contract green (139+11 = Windows counts), render + capping + geometry session facts at scale 1 + 1.5 (no input automation) — wslg-popup.sh, all PASS, exit 0
+- [x] record.md complete (design, citations, consult provenance, engine-review presence, evidence matrix, budgets)
+- [x] Pre-completion solo Fable 5 consult — APPROVE WITH THREE REQUIRED ANNOTATIONS (taskbar property-only, capping branch coverage, focus-restore scope); all applied to record.md + board row
+- [x] task-board.md popup row → WIP with named remaining gates (never DONE)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
 **Status:** ⬜ Not Started

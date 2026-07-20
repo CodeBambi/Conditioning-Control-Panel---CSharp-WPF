@@ -126,13 +126,14 @@ function Read-PopupProbe {
     $line = (Get-Texts $popup) | Where-Object { $_ -like 'popup-probe:*' } | Select-Object -First 1
     if ($null -eq $line) { return $null }
     $geom = '(-?\d+),(-?\d+),(\d+),(\d+)'
-    if ($line -notmatch "pos (-?\d+),(-?\d+) size (\d+)x(\d+) scale ([\d.]+) scroller $geom scrollbar $geom thumb $geom list ($geom|none)") { return $null }
+    if ($line -notmatch "pos (-?\d+),(-?\d+) size (\d+)x(\d+) scale ([\d.]+) maxHeight ([\d.]+) scroller $geom scrollbar $geom thumb $geom list ($geom|none)") { return $null }
     return @{
         Pos = @([int]$Matches[1], [int]$Matches[2]); Size = @([int]$Matches[3], [int]$Matches[4]); Scale = [double]$Matches[5]
-        Scroller = @([int]$Matches[6], [int]$Matches[7], [int]$Matches[8], [int]$Matches[9])
-        Scrollbar = @([int]$Matches[10], [int]$Matches[11], [int]$Matches[12], [int]$Matches[13])
-        Thumb = @([int]$Matches[14], [int]$Matches[15], [int]$Matches[16], [int]$Matches[17])
-        List = $(if ($Matches[18] -eq 'none') { $null } else { @([int]$Matches[19], [int]$Matches[20], [int]$Matches[21], [int]$Matches[22]) })
+        MaxHeight = [double]$Matches[6]
+        Scroller = @([int]$Matches[7], [int]$Matches[8], [int]$Matches[9], [int]$Matches[10])
+        Scrollbar = @([int]$Matches[11], [int]$Matches[12], [int]$Matches[13], [int]$Matches[14])
+        Thumb = @([int]$Matches[15], [int]$Matches[16], [int]$Matches[17], [int]$Matches[18])
+        List = $(if ($Matches[19] -eq 'none') { $null } else { @([int]$Matches[20], [int]$Matches[21], [int]$Matches[22], [int]$Matches[23]) })
         Raw = $line
     }
 }
@@ -412,6 +413,27 @@ Start-Sleep -Milliseconds 400
 $sp = Read-ScrollProbe
 Gate ($sp.Offset -gt $startOffset) 'thumb-drag-scrolled' "offset $startOffset -> $($sp.Offset)"
 Gate $sp.FinalInViewport 'thumb-drag-reaches-final-control' "final-in-viewport true; offset=$($sp.Offset) extent=$($sp.Extent)"
+Close-PopupEscape
+
+# Path F — title-bar drag (W-04: "draggable by its title bar"; pre-completion consult:
+# the only contract behavior with no evidence until now).
+$pp = Open-Popup
+$pp = Wait-PopupProbe { param($v) $v.Scrollbar[2] -gt 0 }
+$beforeX = $pp.Pos[0]; $beforeY = $pp.Pos[1]
+$titleCx = $beforeX + [int]($pp.Size[0] / 2); $titleCy = $beforeY + 24
+[PopupEvidenceNative]::SetCursorPos($titleCx, $titleCy) | Out-Null
+Start-Sleep -Milliseconds 150
+[PopupEvidenceNative]::mouse_event([PopupEvidenceNative]::LEFTDOWN, 0, 0, 0, [IntPtr]::Zero)
+for ($i = 1; $i -le 10; $i++) {
+    [PopupEvidenceNative]::SetCursorPos($titleCx + 10 * $i, $titleCy + 8 * $i) | Out-Null
+    [PopupEvidenceNative]::mouse_event([PopupEvidenceNative]::MOUSEMOVE, 0, 0, 0, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 40
+}
+[PopupEvidenceNative]::mouse_event([PopupEvidenceNative]::LEFTUP, 0, 0, 0, [IntPtr]::Zero)
+Start-Sleep -Milliseconds 500
+$ppAfter = Wait-Probe { Read-PopupProbe }
+$dx = $ppAfter.Pos[0] - $beforeX; $dy = $ppAfter.Pos[1] - $beforeY
+Gate ([Math]::Abs($dx - 100) -le 6 -and [Math]::Abs($dy - 80) -le 6) 'title-bar-drag-moves-popup' "pos ($beforeX,$beforeY) -> ($($ppAfter.Pos[0]),$($ppAfter.Pos[1])) — delta ($dx,$dy) = drag (100,80)"
 Close-PopupEscape
 
 # Path E — trackpad/touch. Digitizer PROBED up front. This workstation HAS a 2-point

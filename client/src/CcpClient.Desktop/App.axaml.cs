@@ -10,8 +10,13 @@ namespace CcpClient.Desktop;
 public partial class App : Application
 {
     private readonly ApplicationHost _host;
+    private readonly bool _popupDemo;
 
-    public App(ApplicationHost host) => _host = host;
+    public App(ApplicationHost host, bool popupDemo = false)
+    {
+        _host = host;
+        _popupDemo = popupDemo;
+    }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -27,7 +32,7 @@ public partial class App : Application
             // lifetime; Exit reaches the single guarded teardown entry point.
             desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
             desktop.Exit += (_, _) => _host.ShutdownAsync().GetAwaiter().GetResult();
-            desktop.MainWindow = new MainWindow(_host);
+            desktop.MainWindow = new MainWindow(_host, _popupDemo);
         }
 
         base.OnFrameworkInitializationCompleted();

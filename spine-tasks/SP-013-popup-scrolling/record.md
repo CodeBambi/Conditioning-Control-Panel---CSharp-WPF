@@ -83,10 +83,24 @@ Full verdict text received; key rulings applied to the design:
 - Synthetic content: variant switcher (TALL ~30 rows + final Button below fold / SHORT 3 rows / NESTED inner ListBox 200 DIP). UIA-readable scroll-probe TextBlock reporting live `Extent`/`Viewport`/`Offset` (ScrollChanged) — same pattern as the SP-007 layout probe.
 - Evidence: headed Windows task script on capture.ps1 helpers (launch/SetWindowPos-raise/UIA/CopyFromScreen + mouse_event wheel/drag + SendKeys Tab/Escape); touch probe first (absent ⇒ named manual gate); mixed scale via `AVALONIA_GLOBAL_SCALE_FACTOR=1.5`; K3 visual review; WSLg = render + capping + geometry session facts only (no input automation, SP-008 limit).
 
+## Step 4 — WSLg/X11 gate (2026-07-20, native-dir copy `~/ccp-sp013`, never /mnt/e)
+
+**Contract testCommand on WSL2 Ubuntu (controlling evidence, run directly — the MonitorCreate wrapper's output is suspect per port-lessons 2026-07-20):** `dotnet build CcpClient.sln -c Debug` 0W/0E; `CcpClient.Tests` **139/139**; `CcpClient.HeadlessTests` **11/11**. (First cold build+test ran in a background monitor; build artifacts confirmed, then the full testCommand was re-run inline for the numbers.)
+
+**WSLg/X11 session facts (`wslg-evidence.sh`; popup opens itself via `--popup-demo` — NO input automation, SP-008 named limit):**
+
+- **Render:** XGetImage captures of the popup's real X window — default `wslg-popup-tall-default.bmp` 520x640, 1.5× `wslg-popup-tall-scale1p5.bmp` 780x960; non-black pixel check 20800/20800 and 20238/20238 sampled (RENDER OK); K3 review of the 1.5× capture: full popup (title bar, variant buttons, TALL rows, scrollbar+thumb, probe texts) renders correctly.
+- **Capping + geometry (app-side probes via stderr, `DiagnosticSink`):** default run `popup-probe: pos 3173,1787 size 520x640 scale 1 maxHeight 640` + `scroll-probe: extent 893.0 viewport 510.0 offset 0.0`; 1.5× run `pos 2909,1718 size 780x960 scale 1.5 maxHeight 640` + `extent 885.3 viewport 508.7`. Owner-monitor working-area cap applied (maxHeight = min(640, 0.9×waDIP) = 640 on the large WSLg tiled root); fitted height = cap for TALL content; **×1.5 exact** (520→780, 640→960 physical — same SP-007 scaling honesty); scrollbar 16→24 px. Extent DIP differs from Windows (885 vs 948 — font metrics, honest platform difference, SP-007 precedent).
+- **`_NET_CLIENT_LIST`:** not used — window discovery went through `XQueryTree`/title in `xgetimage.py` (per-window probe, port-lessons 2026-07-20 honored; no enumeration claim).
+- **Wayland:** untouched (§5.1 open owner question; WSLg is XWayland). **Linux input-gesture acceptance: NAMED GATE** on the board row — no input automation was attempted here.
+
+**Mixed-scaling evidence:** delivered by the WSLg 1.5× run above (the env override is X11-only; all Windows monitors are 1.0 — Windows-150% stays SP-007's inherited named manual gate).
+
 ## Engine-review presence (T-2)
 
 - Step 1 plan review: **ABSENT** — `spine_review_step` returned `skipped=true` (`nested_spawn_blocked`, by design SP-195; `spawnFailed=false`). Engine runs code+final reviews post-.DONE.
 - Step 2 plan review: **ABSENT** — same (`skipped=true`, `spawnFailed=false`).
+- Step 3 plan review: **ABSENT** — same (`skipped=true`, `spawnFailed=false`).
 
 ## Step 2 implementation notes (2026-07-20)
 
@@ -133,6 +147,66 @@ Headed run on this workstation (3 monitors, all scale 1.0 per SP-007 record). Re
 6. **Fluent ScrollViewer template hosts horizontal AND vertical ScrollBars** — `OfType<ScrollBar>().FirstOrDefault()` can return the disabled HORIZONTAL one (collapsed, 0x0 at the scroller origin). Filter by `Orientation == Vertical`.
 7. **InjectTouchInput on this workstation:** init succeeds, then err=87 on most attempts; one run accepted 156 injections with zero app-visible effect. Unreliable-for-automation; named manual gate.
 
-## Evidence matrix + budgets
+7. **InjectTouchInput on this workstation:** init succeeds, then err=87 on most attempts; one run accepted 156 injections with zero app-visible effect. Unreliable-for-automation; named manual gate.
+8. **A MonitorCreate completion-loop agent ran UNSOLICITED overlapping WSLg work** (the `onDone` wake fired while I ran the same gate inline): it authored a duplicate script, re-ran the contract (corroborating 139/139 + 11/11), and left a gate log whose xprop/xwininfo probes hit stale window ids and whose `[containment] FAIL` was its OWN scripting bug (empty geometry fields), not a popup defect. The duplicate script + log were removed from the evidence set; my inline run is the controlling one. Genuine corroborating facts salvaged from its log: WSLg session shows `WAYLAND_DISPLAY=wayland-0` + `DISPLAY=:0` (XWayland, consistent with SP-007/008); X root 4496x4000 (tiled monitors); `_NET_CLIENT_LIST` ABSENT and `_NET_WORKAREA: no such atom` on this root (re-confirmed port-lessons 2026-07-20; "working area" on WSLg comes from the app's Screens API, not EWMH atoms).
 
-(filled in Steps 3-4)
+## Step 4 — WSLg/X11 gate (2026-07-20, `wslg-popup.sh`; full log `evidence/wslg-popup-gate.log`)
+
+Resume note: the previous session staged (uncommitted) the `--popup-demo` CLI hook (Program → App → MainWindow `Opened` → the REAL `FeaturePopupManager.Show()`), the popup `DiagnosticSink` (probe lines to stderr), `wslg-evidence.sh`, and first-pass artifacts (`wslg-popup-stderr-{default,scale1p5}.log`, `wslg-popup-tall-{default,scale1p5}.bmp`). This session completed the full gate; `wslg-popup.sh` subsumes `wslg-evidence.sh` (both kept — the older script is the provenance of the staged artifacts).
+
+- **Contract on WSL2** (native `~/ccp-sp013`, rsync, never /mnt/e): `dotnet build CcpClient.sln` green (4.7s incremental — the native dir pre-existed from the prior staging run which had measured the cold build; sources rsynced fresh), **139/139 CcpClient.Tests**, **11/11 CcpClient.HeadlessTests** — identical counts to Windows.
+- **Session facts:** WAYLAND_DISPLAY=wayland-0, DISPLAY=:0, XDG_SESSION_TYPE unset, kernel 6.6.114.1-microsoft-standard-WSL2; X root **4496x4000** (WSLg tiles the 3 physical monitors under one X root); **`_NET_CLIENT_LIST` ABSENT** (port-lessons 2026-07-20 honored — name-resolved queries instead); **`_NET_WORKAREA` also ABSENT** (so `Screen.WorkingArea` = screen Bounds on this box — the capping chain uses that).
+- **Scale 1.0:** popup `520x640 @ root +2983+1748`; `_NET_WM_WINDOW_TYPE=NORMAL`; `_NET_WM_STATE` EMPTY (no SKIP_TASKBAR atom — taskbar-absence is UNPROVABLE on WSLg: no client list and no X taskbar; defined-only per SP-012 accounting, Windows carries the property); **`WM_TRANSIENT_FOR = 0x60000f` = the "CCP Client" dashboard — OWNED confirmed on X11**; **`WM_NORMAL_HINTS` min=max=`520x640` — non-resizable confirmed on X11**; app probe `scale 1 maxHeight 640 size 520x640`; capping arithmetic PASS (rootH 4000 → cap min(640, 0.9×4000)=640 DIP → 640 physical, measured 640); containment PASS (inside 4496x4000); XGetImage capture renders for real (`wslg-popup-scale1.bmp`, visually verified: chrome, switcher, TALL rows, thumb-at-top scrollbar, probes readable).
+- **Scale 1.5 (mixed-scale; env override is X11-only):** popup `780x960` physical = 520x640 DIP ×1.5 @ +3173+1787; `maxHeight 640` DIP; min=max=`780x960`; transient-for PASS; capping PASS (960 = 640×1.5); containment PASS; capture `wslg-popup-scale1.5.bmp` visually verified (`scale 1.5` in probe).
+- **Graceful close (both scales):** popup `WM_DELETE_WINDOW` → **app SURVIVES** (ShutdownMode.OnMainWindowClose — the popup is not the main window); dashboard `WM_DELETE_WINDOW` → **exit 0**.
+- **Scroll probes at open (both scales):** extent 893.0/885.3 > viewport 510.0/508.7 → tall content exceeds the capped viewport; input GESTURES remain the named Linux gate (no input automation — SP-008).
+
+### Surprise 8 (durable)
+
+**X11 window ids captured early die.** The popup resizes/moves through three generations in its first ~2s (placeholder `0,0 520x360` uncapped → capped `360` → capped `640` positioned — visible across the probe generations in every stderr log). An id captured at first tree appearance returns `BadWindow` from xprop/xwininfo two seconds later (WSLg frame reparenting + id churn across the settle). The first gate draft failed exactly this way. `xprop -name` resolves the window fresh per query and is immune; geometry must be read from a SETTLED tree line (poll until two identical samples). Candidate for port-lessons (outside File Scope — orchestrator harvest).
+
+## Evidence matrix
+
+| Gate | Windows-headed (Step 3) | WSLg/X11 session facts (Step 4) | Wayland |
+|---|---|---|---|
+| Owned | popup nested under owner in UIA; focus restoration measured | `WM_TRANSIENT_FOR` → dashboard (both scales) | §5.1 untouched |
+| Modeless | dashboard interactions keep working (headed) | app survives popup `WM_DELETE_WINDOW` | §5.1 untouched |
+| Taskbar-absent | `ShowInTaskbar=false` set (AXAML); **no behavioral observation** (harness never enumerated the taskbar) | `_NET_WM_STATE` empty + `_NET_CLIENT_LIST` absent — **property-only on both platforms; see the consult finding below** | §5.1 untouched |
+| Non-resizable | `CanResize=false` set | `WM_NORMAL_HINTS` min=max=520x640 / 780x960 | §5.1 untouched |
+| Owner-monitor centering/clamp | DISPLAY2 primary + DISPLAY1 negative-origin secondary runs | popup lands in owner's tiled monitor region; containment PASS | §5.1 untouched |
+| Working-area capping | 520x640 capped at scale 1.0 | 640 DIP @1.0 (640px), 640 DIP @1.5 (960px) — arithmetic PASS | §5.1 untouched |
+| Capping branch coverage | colspan note: every observed session bound the **min(640,·) constant branch** (WAs 1032/2512 DIP Windows, 4000/2666 DIP WSLg — 0.9×WA always exceeded 640); the **0.9-fraction branch is unit-test evidence only**, never session-observed (binds only on short monitors) |||
+| Scroll: mouse wheel | PASS (offsets 100→200→300→400→444, stable at bottom) | named gate (no input automation) | §5.1 untouched |
+| Scroll: trackpad/touch | **NAMED MANUAL GATE** (digitizer probed; injection unreliable) | named gate | §5.1 untouched |
+| Scroll: keyboard focus | PASS (Tab trail → final control; bring-into-view → offset 428) | named gate | §5.1 untouched |
+| Scroll: scrollbar track | PASS (one page click → 444) | named gate | §5.1 untouched |
+| Scroll: thumb drag | PASS (real drag 0→444) | named gate | §5.1 untouched |
+| SHORT compact | PASS (extent 224 ≤ viewport 224; height 360 DIP, not 640) | TALL-only on WSLg (flag opens the default variant); unit/headless cover fit math | §5.1 untouched |
+| NESTED chaining | PASS (inner →1400 while outer 0; then outer 100→122) | named gate | §5.1 untouched |
+| Mixed scaling | all monitors 1.0 — Windows-150% remains SP-007's named manual gate | **×1.5 exact** (780x960 physical, `scale 1.5`, cap tracks DIP) | §5.1 untouched |
+| Observable scrolling evidence | changing Extent/Viewport/Offset recorded per path | probe lines recorded at open (offset 0 — no input claimed) | §5.1 untouched |
+| One close path | Escape ≡ title-bar button (real key + real click at UIA rect) | `WM_DELETE_WINDOW` graceful; dashboard close → exit 0 | §5.1 untouched |
+| Focus restoration | GetForegroundWindow = dashboard hwnd after the **Escape** close (close-button path shares the same `Closed` handler; not separately asserted) | not asserted (no activation control on WSLg — honest scope) | §5.1 untouched |
+| Render truth | K3 PASS (4 states) | XGetImage captures both scales, visually verified | §5.1 untouched |
+
+## Budgets
+
+- Windows-headed matrix: `popup-evidence.ps1` ~2.5 min/run; two full EVIDENCE PASS runs (25 PASS gates + 1 named GATE each); 4 PNG captures + `windows-headed-evidence.log`.
+- WSL2 contract: prior staging run measured the cold build; this gate's controlling re-run: build green (4.7s incremental), 139/139 (2s), 11/11 (1s) — identical counts both platforms.
+- WSLg evidence: two popup sessions (scale 1 + 1.5) inside the gate, ~15s each incl. settle waits; 2 BMP captures + full gate log (plus the 2 stderr probe logs + 2 BMPs from the first-pass script).
+- Test floor: 17 placement unit tests + 4 manager tests + 8 headless interaction tests (139/139, 11/11 both platforms).
+- No performance budget in this packet's scope.
+
+**Consult finding (durable, not buried): taskbar absence is property-only on EVERY platform.** Windows: the headed harness never enumerated the taskbar. X11: Avalonia 12.1.0 did NOT emit `_NET_WM_STATE_SKIP_TASKBAR` for `ShowInTaskbar=false` (observed `_NET_WM_STATE` empty at both scales) — on a real Linux desktop with a taskbar this popup may well APPEAR in it. The deliverable is the property, not the behavior; real-desktop taskbar behavior is unknown and belongs to W-04's real exercise gate (not a sixth named gate for this row).
+
+**Remaining named gates (for the board row):** (1) Linux input-gesture acceptance on X11 AND Wayland (wheel/trackpad-touch/keyboard/scrollbar/thumb — no input automation on WSLg; Wayland §5.1 untouched); (2) trackpad/touch on Windows (digitizer probed, injection unreliable — manual gate); (3) Windows-150% scaling (inherited SP-007 manual gate; ×1.5 measured on X11 instead); (4) owner height-fraction constants (640 DIP / 0.9 — WPF-parity, pending-owner); (5) W-04 exercise gate NOT discharged by this demonstrator (includes the taskbar-behavior finding above).
+
+## Pre-completion consult
+
+2026-07-20, solo per packet (Fable 5 requested; the consult tool does not surface the answering model id — verdict text as received). **APPROVE WITH THREE REQUIRED ANNOTATIONS** (annotation-fixable, no re-runs):
+
+1. **Taskbar-absent overclaim (ACCEPTED — annotated):** zero behavioral observation on either platform; X11 session fact is stronger than "unprovable" — Avalonia 12.1.0 affirmatively did NOT set `_NET_WM_STATE_SKIP_TASKBAR`; real-desktop taskbar behavior unknown, belongs to W-04's real exercise gate. Applied: matrix cell rewritten + durable finding paragraph above + board-row wording.
+2. **Capping branch coverage (ACCEPTED — annotated):** every observed session bound the min(640,·) constant branch; the 0.9-fraction branch is unit-test-only evidence. Applied as a matrix row.
+3. **Focus-restoration scope (ACCEPTED — wording):** asserted after the Escape close only; the close-button path shares the `Closed` handler but was not separately asserted. Matrix wording corrected.
+
+Also ruled: X11 evidence class honestly scoped (no centering claim on X11 — owner-region containment only; scroll probes claim offset 0 at open with no input; keep "session facts" language on the board, never "popup works on Linux"; keep the incremental-build honesty note). Nothing on the remaining-gates list is discharged — all five survive; the taskbar finding is W-04 exercise-gate territory, not a sixth gate.

@@ -15,7 +15,7 @@ public partial class MainWindow : Window
     /// composition root's products are visibly reachable from a user path. The dashboard
     /// card (demo.status-ticker) is the first visible slice (SP-007).
     /// </summary>
-    public MainWindow(ApplicationHost host)
+    public MainWindow(ApplicationHost host, bool popupDemo = false)
     {
         InitializeComponent();
         DataContext = new MainWindowViewModel(host);
@@ -55,7 +55,9 @@ public partial class MainWindow : Window
         // DEMONSTRATOR popup — superseded by the first real feature popup.
         _popups = new FeaturePopupManager(
             this,
-            () => new FeaturePopupWindow(),
+            () => popupDemo
+                ? new FeaturePopupWindow { DiagnosticSink = host.LogDiagnostic }
+                : new FeaturePopupWindow(),
             FeaturePopupManager.CreateFocusRestoration(this));
         TickerCard.PointerPressed += (_, e) =>
         {
@@ -65,6 +67,13 @@ public partial class MainWindow : Window
                 _popups.Show();
             }
         };
+
+        if (popupDemo)
+        {
+            // SP-013 WSLg evidence: open the demonstrator popup at startup — WSLg has no
+            // input automation (SP-008 named limit), so the popup cannot be left-clicked.
+            Opened += (_, _) => _popups.Show();
+        }
 
         // SP-007 layout probe (demonstrator-slice diagnostic): measured card bounds + actual
         // RenderScaling, visible in the window and logged once for the headed harness.
