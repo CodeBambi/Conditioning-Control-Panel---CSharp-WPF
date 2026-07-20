@@ -115,9 +115,9 @@ public sealed class AvatarAnimationEngineTests
         // Gate entry parks on the resume gate (not the clock): raw advances produce NO
         // emits and NO frame change for the whole frozen window.
         clock.Advance(4400);
-        await Task.Delay(150);
+        await Task.Delay(150, TestContext.Current.CancellationToken);
         clock.Advance(4000);
-        await Task.Delay(150);
+        await Task.Delay(150, TestContext.Current.CancellationToken);
         Assert.Equal((SyntheticAvatarPacks.ClipPoses, 0), engine.CurrentFrame);
         Assert.Equal(emittedAtPause, emitted);
 
@@ -145,7 +145,7 @@ public sealed class AvatarAnimationEngineTests
         engine.Start();
         engine.Pause();
         engine.Stop(); // teardown while paused
-        var outcome = await engine.Completion!.WaitAsync(TimeSpan.FromSeconds(5));
+        var outcome = await engine.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.IsType<OperationOutcome.Cancelled>(outcome);
         var log = new ListLogSink();
         await registry.CancelAndDrainAsync(log, TimeSpan.FromSeconds(1));
@@ -178,7 +178,7 @@ public sealed class AvatarAnimationEngineTests
         for (var cycle = 0; cycle < 10; cycle++)
         {
             participant.StopTube();
-            var outcome = await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5));
+            var outcome = await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
             Assert.IsType<OperationOutcome.Cancelled>(outcome);
             Assert.Equal(0, registry.OutstandingOperations);
 
@@ -190,7 +190,7 @@ public sealed class AvatarAnimationEngineTests
 
         var drainLog = new ListLogSink();
         participant.StopTube();
-        await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5));
+        await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         await registry.CancelAndDrainAsync(drainLog, TimeSpan.FromSeconds(1));
         Assert.Equal(0, registry.UnobservedOperations);
         Assert.Equal(0, registry.OutstandingOperations);
@@ -361,7 +361,7 @@ public sealed class AvatarAnimationEngineTests
     private static async Task StopAndAssertCancelledAsync(AvatarAnimationEngine engine)
     {
         engine.Stop();
-        var outcome = await engine.Completion!.WaitAsync(TimeSpan.FromSeconds(5));
+        var outcome = await engine.Completion!.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.IsType<OperationOutcome.Cancelled>(outcome);
     }
 
