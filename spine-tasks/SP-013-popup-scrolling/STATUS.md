@@ -1,7 +1,7 @@
 # STATUS: SP-013 — prove feature-popup scrolling
 
-**Current Step:** Step 5 — Testing & Verification
-**Last Updated:** 2026-07-20 (Step 4 complete: WSLg gate PASS both scales; consult APPROVE + 3 annotations applied; board WIP)
+**Current Step:** DONE (all 5 steps complete)
+**Last Updated:** 2026-07-20 (Step 5 complete: contract green Windows + WSL2, diff/scope clean; engine reviews absent ×5 per T-2)
 
 ### Step 1: WPF evidence + current v12 research + pre-approach consult
 **Status:** ✅ Complete
@@ -36,7 +36,7 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** 🔵 In Progress (checks green — review call pending)
+**Status:** ✅ Complete
 
 - [x] Contract testCommand green (Windows: build 0W/0E 1.5s, 139/139 CcpClient.Tests, 11/11 CcpClient.HeadlessTests — identical to WSL2 counts)
 - [x] `git diff --check` clean

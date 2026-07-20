@@ -83,7 +83,7 @@ Full verdict text received; key rulings applied to the design:
 - Synthetic content: variant switcher (TALL ~30 rows + final Button below fold / SHORT 3 rows / NESTED inner ListBox 200 DIP). UIA-readable scroll-probe TextBlock reporting live `Extent`/`Viewport`/`Offset` (ScrollChanged) — same pattern as the SP-007 layout probe.
 - Evidence: headed Windows task script on capture.ps1 helpers (launch/SetWindowPos-raise/UIA/CopyFromScreen + mouse_event wheel/drag + SendKeys Tab/Escape); touch probe first (absent ⇒ named manual gate); mixed scale via `AVALONIA_GLOBAL_SCALE_FACTOR=1.5`; K3 visual review; WSLg = render + capping + geometry session facts only (no input automation, SP-008 limit).
 
-## Step 4 — WSLg/X11 gate (2026-07-20, native-dir copy `~/ccp-sp013`, never /mnt/e)
+## Step 4a — WSLg/X11 gate, worker inline run (2026-07-20, native-dir copy `~/ccp-sp013`, never /mnt/e)
 
 **Contract testCommand on WSL2 Ubuntu (controlling evidence, run directly — the MonitorCreate wrapper's output is suspect per port-lessons 2026-07-20):** `dotnet build CcpClient.sln -c Debug` 0W/0E; `CcpClient.Tests` **139/139**; `CcpClient.HeadlessTests` **11/11**. (First cold build+test ran in a background monitor; build artifacts confirmed, then the full testCommand was re-run inline for the numbers.)
 
@@ -102,6 +102,7 @@ Full verdict text received; key rulings applied to the design:
 - Step 2 plan review: **ABSENT** — same (`skipped=true`, `spawnFailed=false`).
 - Step 3 plan review: **ABSENT** — same (`skipped=true`, `spawnFailed=false`).
 - Step 4 plan review: **ABSENT** — same (`skipped=true`, `spawnFailed=false`).
+- Step 5 plan review: **ABSENT** — same (`skipped=true`, `spawnFailed=false`).
 
 ## Step 2 implementation notes (2026-07-20)
 
@@ -149,9 +150,11 @@ Headed run on this workstation (3 monitors, all scale 1.0 per SP-007 record). Re
 7. **InjectTouchInput on this workstation:** init succeeds, then err=87 on most attempts; one run accepted 156 injections with zero app-visible effect. Unreliable-for-automation; named manual gate.
 
 7. **InjectTouchInput on this workstation:** init succeeds, then err=87 on most attempts; one run accepted 156 injections with zero app-visible effect. Unreliable-for-automation; named manual gate.
-8. **A MonitorCreate completion-loop agent ran UNSOLICITED overlapping WSLg work** (the `onDone` wake fired while I ran the same gate inline): it authored a duplicate script, re-ran the contract (corroborating 139/139 + 11/11), and left a gate log whose xprop/xwininfo probes hit stale window ids and whose `[containment] FAIL` was its OWN scripting bug (empty geometry fields), not a popup defect. The duplicate script + log were removed from the evidence set; my inline run is the controlling one. Genuine corroborating facts salvaged from its log: WSLg session shows `WAYLAND_DISPLAY=wayland-0` + `DISPLAY=:0` (XWayland, consistent with SP-007/008); X root 4496x4000 (tiled monitors); `_NET_CLIENT_LIST` ABSENT and `_NET_WORKAREA: no such atom` on this root (re-confirmed port-lessons 2026-07-20; "working area" on WSLg comes from the app's Screens API, not EWMH atoms).
+8. **A MonitorCreate completion-loop agent ran UNSOLICITED overlapping WSLg work** (the `onDone` wake fired while I ran the same gate inline). Its FIRST draft was broken (stale X window ids → false `[containment] FAIL` from empty geometry fields) and that draft's script + log were removed from the evidence set; the agent then COMPLETED a correct run whose window-manager property facts (WM_TRANSIENT_FOR, WM_NORMAL_HINTS, WM_DELETE_WINDOW behavior) complement the inline run — kept as Step 4b below with its own artifacts. Genuine corroborating facts from both its runs: WSLg session shows `WAYLAND_DISPLAY=wayland-0` + `DISPLAY=:0` (XWayland, consistent with SP-007/008); X root 4496x4000 (tiled monitors); `_NET_CLIENT_LIST` ABSENT and `_NET_WORKAREA: no such atom` on this root (re-confirmed port-lessons 2026-07-20; "working area" on WSLg comes from the app's Screens API, not EWMH atoms).
 
-## Step 4 — WSLg/X11 gate (2026-07-20, `wslg-popup.sh`; full log `evidence/wslg-popup-gate.log`)
+## Step 4b — WSLg/X11 property gate, completion-loop run (2026-07-20, `wslg-popup.sh`; full log `evidence/wslg-popup-gate.log`)
+
+*Provenance: the unsolicited onDone completion-loop agent's completed run (see surprise 8). Kept because its X11 window-manager property facts complement the inline run 4a; the worker verified the log and artifacts are real and consistent (same geometry/capping numbers, plus xprop/xwininfo facts 4a did not collect).*
 
 Resume note: the previous session staged (uncommitted) the `--popup-demo` CLI hook (Program → App → MainWindow `Opened` → the REAL `FeaturePopupManager.Show()`), the popup `DiagnosticSink` (probe lines to stderr), `wslg-evidence.sh`, and first-pass artifacts (`wslg-popup-stderr-{default,scale1p5}.log`, `wslg-popup-tall-{default,scale1p5}.bmp`). This session completed the full gate; `wslg-popup.sh` subsumes `wslg-evidence.sh` (both kept — the older script is the provenance of the staged artifacts).
 
@@ -162,7 +165,7 @@ Resume note: the previous session staged (uncommitted) the `--popup-demo` CLI ho
 - **Graceful close (both scales):** popup `WM_DELETE_WINDOW` → **app SURVIVES** (ShutdownMode.OnMainWindowClose — the popup is not the main window); dashboard `WM_DELETE_WINDOW` → **exit 0**.
 - **Scroll probes at open (both scales):** extent 893.0/885.3 > viewport 510.0/508.7 → tall content exceeds the capped viewport; input GESTURES remain the named Linux gate (no input automation — SP-008).
 
-### Surprise 8 (durable)
+### Surprise 9 (durable)
 
 **X11 window ids captured early die.** The popup resizes/moves through three generations in its first ~2s (placeholder `0,0 520x360` uncapped → capped `360` → capped `640` positioned — visible across the probe generations in every stderr log). An id captured at first tree appearance returns `BadWindow` from xprop/xwininfo two seconds later (WSLg frame reparenting + id churn across the settle). The first gate draft failed exactly this way. `xprop -name` resolves the window fresh per query and is immune; geometry must be read from a SETTLED tree line (poll until two identical samples). Candidate for port-lessons (outside File Scope — orchestrator harvest).
 
@@ -202,7 +205,24 @@ Resume note: the previous session staged (uncommitted) the `--popup-demo` CLI ho
 
 **Remaining named gates (for the board row):** (1) Linux input-gesture acceptance on X11 AND Wayland (wheel/trackpad-touch/keyboard/scrollbar/thumb — no input automation on WSLg; Wayland §5.1 untouched); (2) trackpad/touch on Windows (digitizer probed, injection unreliable — manual gate); (3) Windows-150% scaling (inherited SP-007 manual gate; ×1.5 measured on X11 instead); (4) owner height-fraction constants (640 DIP / 0.9 — WPF-parity, pending-owner); (5) W-04 exercise gate NOT discharged by this demonstrator (includes the taskbar-behavior finding above).
 
-## Pre-completion consult
+## Pre-completion consults (two rounds, both solo)
+
+### A — worker, 2026-07-20 ~06:47, solo, ACTUAL answering model: claude-fable-5 (provenance)
+
+Verdict: honesty framings intact (demonstrator/W-04 framing clean; touch gate honest provided both facts named — digitizer present AND injection err=87/inert — which the record does; WSLg session-facts scope honest). **Two holes, both fixed and re-evidenced:**
+
+1. **Title-bar drag had ZERO evidence** (the only W-04 behavior with no gate) → added Path F to `popup-evidence.ps1` (mouse-down on the title bar, stepped move, assert popup-probe pos delta = drag delta). Re-run: PASS, delta (100,80) exact.
+2. **The Escape comment was factually wrong** — `OnKeyDown` is BUBBLE, not tunnel. Corrected: bubble + `!e.Handled` is the capability carve-out's behavioral equivalent (a child that explicitly owns Escape keeps it); demonstrator has no key-capture control (N/A).
+
+Truncation note (SP-005/006 precedent): the verdict cut off inside a residual-naming sentence; the received portion was applied.
+
+**Residuals named (one line each, per consult A):**
+- The 0.9-fraction arm of the cap (`0.9×waDIP < 640`) is exercised only by unit tests + the headless MaxHeight assertion — every working area available here (1080p primary, 1440p portrait, 4000px WSLg root) is large enough that the WPF-parity 640 always wins. (Consult B independently made the same call — its matrix row says "unit-test evidence only".) A small-working-area headed run would exercise it; none is available on this box.
+- First-probe transient line shows `maxHeight Infinity` (probe fires during initial layout before `ApplyFitAndCap`) — cosmetic, the settled line is authoritative.
+- Desired-height measurement ignores the scrollbar reserve (approximation, recorded at the method).
+- The completion-loop agent episode is surprise 8 (broken first draft removed; completed run kept as 4b).
+
+### B — completion-loop agent, 2026-07-20 ~06:52, solo (same Fable-only route; the loop agent recorded that its session did not surface the model id — provenance noted)
 
 2026-07-20, solo per packet (Fable 5 requested; the consult tool does not surface the answering model id — verdict text as received). **APPROVE WITH THREE REQUIRED ANNOTATIONS** (annotation-fixable, no re-runs):
 
