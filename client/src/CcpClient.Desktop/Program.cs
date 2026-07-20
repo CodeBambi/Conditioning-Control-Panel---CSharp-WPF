@@ -109,10 +109,17 @@ public static class Program
         // left-clicked there, so it must open itself; probe facts go to stderr.
         var popupDemo = args.Contains("--popup-demo", StringComparer.Ordinal);
 
+        // SP-015 demonstrator flags: open the AvatarTube tube at startup (same WSLg
+        // no-input-automation reasoning), corrupt the pulse pack in-memory (typed
+        // undecodable-asset path evidence), and/or mirror the engine trace to a JSONL file.
+        var avatarDemo = args.Contains("--avatartube-demo", StringComparer.Ordinal);
+        var avatarCorrupt = args.Contains("--avatar-corrupt-demo", StringComparer.Ordinal);
+        var avatarTrace = ArgValue(args, "--avatar-trace");
+
         try
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
-            return BuildAvaloniaApp(host!, popupDemo).StartWithClassicDesktopLifetime(args);
+            return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -176,8 +183,10 @@ public static class Program
         };
     }
 
-    public static AppBuilder BuildAvaloniaApp(ApplicationHost host, bool popupDemo = false) => AppBuilder
-        .Configure<App>(() => new App(host, popupDemo))
+    public static AppBuilder BuildAvaloniaApp(
+        ApplicationHost host, bool popupDemo = false,
+        bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null) => AppBuilder
+        .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath))
         .UsePlatformDetect();
 
     private static string? ArgValue(string[] args, string flag)

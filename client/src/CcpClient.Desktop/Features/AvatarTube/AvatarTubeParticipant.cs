@@ -32,6 +32,7 @@ public sealed class AvatarTubeParticipant : IBackgroundParticipant
     private readonly ILogSink _log;
     private readonly Func<string, Stream> _openAsset;
     private readonly object _gate = new();
+    private int _corruptPackId = -1;
     private AvatarAnimationEngine? _engine;
     private AvatarPack? _pack;
     private Task<OperationOutcome>? _lastCompletion;
@@ -164,6 +165,19 @@ public sealed class AvatarTubeParticipant : IBackgroundParticipant
         }
     }
 
+    /// <summary>
+    /// Demo-only corruption seam (--avatar-corrupt-demo): the named pack's sheet bytes are
+    /// replaced by garbage on the next decode — the typed undecodable-asset path runs for
+    /// real without touching embedded assets.
+    /// </summary>
+    public void CorruptPackForDemo(int packId)
+    {
+        lock (_gate)
+        {
+            _corruptPackId = packId;
+        }
+    }
+
     /// <summary>Decode-probes one pack; on failure loads the static fallback and reports typed Degraded.</summary>
     private AvatarPack LoadPackUnsafe(int packId)
     {
@@ -171,7 +185,7 @@ public sealed class AvatarTubeParticipant : IBackgroundParticipant
             ?? throw new ArgumentException($"no synthetic pack with id {packId}", nameof(packId));
         try
         {
-            var pack = AvatarPackLoader.Load(def, _openAsset);
+            var pack = AvatarPackLoader.Load(def, OpenAssetChecked);
             _pack = pack;
             _activePackId = def.PackId;
             _capability = new CapabilityState.Available(
@@ -188,11 +202,21 @@ public sealed class AvatarTubeParticipant : IBackgroundParticipant
                 "static fallback avatar displayed",
                 new CapabilityReason(CapabilityReasonCodes.AssetUndecodable, ex.Message));
             _log.Log($"avatar-capability: Degraded (asset-undecodable) — {ex.Message}");
-            var fallback = AvatarPackLoader.Load(FallbackDef, _openAsset);
+            var fallback = AvatarPackLoader.Load(FallbackDef, OpenAssetChecked);
             _pack = fallback;
             _activePackId = def.PackId;
             return fallback;
         }
+    }
+
+    private Stream OpenAssetChecked(string path)
+    {
+        var corrupting = SyntheticAvatarPacks.All
+            .Where(d => d.PackId == _corruptPackId)
+            .Any(d => d.SheetPath == path);
+        return corrupting
+            ? new MemoryStream([0xDE, 0xAD, 0xBE, 0xEF])
+            : _openAsset(path);
     }
 
     private void OnEngineFrame(object? sender, AvatarFrameEventArgs args)

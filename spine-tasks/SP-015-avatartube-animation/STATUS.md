@@ -1,7 +1,7 @@
 # STATUS: SP-015 — prove AvatarTube rendered animation
 
-**Current Step:** Step 3 — demonstrator surface + behaviors
-**Last Updated:** 2026-07-20 (Step 2 complete)
+**Current Step:** Step 4 — Windows-headed evidence matrix
+**Last Updated:** 2026-07-20 (Step 3 complete)
 
 ### Step 1: Decoder claim verification + AvatarTube archaeology + pre-approach consult
 **Status:** ✅ Complete
@@ -21,10 +21,10 @@
 - [x] Unit tests: cadence math, successor-frame resume, pack-switch, registry-count stability
 
 ### Step 3: Demonstrator surface + behaviors
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Demonstrator surface: fade, looping, crossfades, click reaction, float, pause/resume, pack switch, attach/detach, owner transitions, cleanup
-- [ ] ONE engine, no parallel timers; constants recorded pending-owner
+- [x] Demonstrator surface: fade, looping, crossfades, click reaction, float, pause/resume, pack switch, attach/detach, owner transitions, cleanup
+- [x] ONE engine, no parallel timers; constants recorded pending-owner
 
 ### Step 4: Windows-headed evidence matrix
 **Status:** ⬜ Not Started

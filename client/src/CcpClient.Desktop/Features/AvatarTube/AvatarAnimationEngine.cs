@@ -117,10 +117,14 @@ public sealed record AvatarLayerState(int ClipId, int FrameIndex, double Opacity
 
 /// <summary>Raised whenever the rendered composition changed (frame, fade step, float step, mode).</summary>
 public sealed class AvatarFrameEventArgs(
-    int packId, AvatarMode mode, AvatarLayerState layerA, AvatarLayerState? layerB, double floatYDip, long wallNowMs)
+    AvatarPack pack, AvatarMode mode, AvatarLayerState layerA, AvatarLayerState? layerB, double floatYDip, long wallNowMs)
     : EventArgs
 {
-    public int PackId { get; } = packId;
+    /// <summary>The pack THESE frames belong to — self-sufficient across pack switches
+    /// (a queued post from the old pack renders the old frame, which is what was presented).</summary>
+    public AvatarPack Pack { get; } = pack;
+
+    public int PackId { get; } = pack.Def.PackId;
     public AvatarMode Mode { get; } = mode;
     public AvatarLayerState LayerA { get; } = layerA;
     public AvatarLayerState? LayerB { get; } = layerB;
@@ -616,7 +620,7 @@ public sealed class AvatarAnimationEngine
             var now = EffectiveNowUnsafe();
             var floatY = Math.Sin(2.0 * Math.PI * now / _options.FloatPeriodMs) * _options.FloatAmplitudeDip;
             args = new AvatarFrameEventArgs(
-                _pack.Def.PackId, _mode,
+                _pack, _mode,
                 new AvatarLayerState(_layerA.ClipId, _layerA.FrameIndex, _layerA.Opacity),
                 _layerB is null ? null : new AvatarLayerState(_layerB.ClipId, _layerB.FrameIndex, _layerB.Opacity),
                 floatY, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());

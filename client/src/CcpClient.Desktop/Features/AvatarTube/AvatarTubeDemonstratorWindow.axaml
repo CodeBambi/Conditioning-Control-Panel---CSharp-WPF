@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpClient.Desktop.Features.AvatarTube.AvatarTubeDemonstratorWindow"
+        Width="320" Height="380"
+        Title="AvatarTube DEMONSTRATOR (SP-015)"
+        Background="#FF141018"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual">
+  <StackPanel Margin="10">
+    <!-- Explicit DEMONSTRATOR label (SP-007/SP-013 pattern): really-functioning, superseded
+         by the first real AvatarTube feature, owner may async-veto. -->
+    <TextBlock Text="AvatarTube DEMONSTRATOR (SP-015) — synthetic packs, not a product feature; the first real AvatarTube supersedes it."
+               FontSize="10" Opacity="0.7" TextWrapping="Wrap" Foreground="#FFE8E0EE" />
+
+    <!-- The tube: two crossfade layers at natural size (crisp strip; nearest-neighbor),
+         float headroom 4 DIP all around so the strip never clips. Content bg = the
+         evidence ContentBg constants. -->
+    <Border x:Name="AvatarStage" Width="104" Height="136" Background="#FF141018"
+            Margin="0,8,0,0" HorizontalAlignment="Left">
+      <Canvas Width="104" Height="136">
+        <Canvas x:Name="FloatCanvas" Width="96" Height="128" Canvas.Left="4" Canvas.Top="4">
+          <Image x:Name="LayerAImage" Width="96" Height="128"
+                 RenderOptions.BitmapInterpolationMode="None" />
+          <Image x:Name="LayerBImage" Width="96" Height="128" Opacity="0"
+                 RenderOptions.BitmapInterpolationMode="None" />
+        </Canvas>
+      </Canvas>
+    </Border>
+
+    <TextBlock x:Name="CapabilityText" FontSize="10" Foreground="#FFE8E0EE" Margin="0,6,0,0" TextWrapping="Wrap" />
+    <TextBlock x:Name="ProbeText" FontSize="10" FontFamily="Consolas" Foreground="#FFB8F0B8" Margin="0,2,0,0"
+               Text="avatar-probe: pending" />
+
+    <!-- Demonstrator control strip (explicitly labeled; real user paths drive every behavior). -->
+    <TextBlock Text="demonstrator controls:" FontSize="9" Opacity="0.5" Foreground="#FFE8E0EE" Margin="0,8,0,2" />
+    <WrapPanel>
+      <Button x:Name="ModeButton" Content="Animate" Margin="0,0,6,4" Padding="8,2" />
+      <Button x:Name="TalkButton" Content="Talk" Margin="0,0,6,4" Padding="8,2" />
+      <Button x:Name="PauseButton" Content="Pause" Margin="0,0,6,4" Padding="8,2" />
+      <Button x:Name="PackButton" Content="Switch pack" Margin="0,0,6,4" Padding="8,2" />
+      <Button x:Name="AttachButton" Content="Detach" Margin="0,0,6,4" Padding="8,2" />
+    </WrapPanel>
+  </StackPanel>
+</Window>
