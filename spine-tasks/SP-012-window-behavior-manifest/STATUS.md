@@ -1,10 +1,10 @@
 # STATUS: SP-012 — build per-window behavior manifest
 
-**Current Step:** Step 1 — Retained-window inventory + pre-approach consult
+**Current Step:** Step 3 — Dashboard observability demonstrator
 **Last Updated:** 2026-07-20 (worker session start)
 
 ### Step 1: Retained-window inventory (completeness-checkable) + pre-approach consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
 - [x] STATUS.md updated before starting work
 - [x] Mechanical enumeration of ALL WPF windows (auditable method + raw list in record.md)
@@ -12,12 +12,12 @@
 - [x] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
 
 ### Step 2: Manifest authoring — named row per retained window
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] `client/docs/window-behavior-manifest.md` — named row per window, all acceptance fields with File.cs:line evidence + evidence class
-- [ ] Observation procedure per field (Windows UIA/headed; Linux wmctrl/xprop/XGetImage)
-- [ ] Platform-matrix columns "pending owner question"; WSLg/X11 only observed env; Wayland §5.1 untouched
-- [ ] Shared-chrome constraints section (constraints only, no design)
+- [x] `client/docs/window-behavior-manifest.md` — named row per window, all acceptance fields with File.cs:line evidence + evidence class
+- [x] Observation procedure per field (Windows UIA/headed; Linux wmctrl/xprop/XGetImage)
+- [x] Platform-matrix columns "pending owner question"; WSLg/X11 only observed env; Wayland §5.1 untouched
+- [x] Shared-chrome constraints section (constraints only, no design)
 
 ### Step 3: Dashboard observability demonstrator (observation-only)
 **Status:** ⬜ Not Started
