@@ -32,7 +32,7 @@ Execute `client/docs/task-board.md` row **"Prove feature-popup scrolling"** (P0,
 | Field | Value |
 |-------|-------|
 | testCommand | `dotnet build client/CcpClient.sln -c Debug --nologo && dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo && dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo` |
-| fileScopeMustChange | `client/src/CcpClient.Desktop/**` |
+| fileScopeMustChange | `client/src/CcpClient.Desktop/Features/FeaturePopupWindow.axaml`, `client/src/CcpClient.Desktop/Features/FeaturePopupWindow.axaml.cs` |
 | fileScopeMustNotChange | `ConditioningControlPanel/**`, `client/CcpClient.sln`, `client/spikes/**`, `.spine/**` |
 | artifactsMustExist | `spine-tasks/SP-013-popup-scrolling/record.md` |
 
@@ -51,7 +51,7 @@ Call `spine_review_step` after each step. **T-2 heading format is load-bearing**
 
 ### Step 2: Popup implementation (popup-local chrome, one command path)
 
-- [ ] Popup window: owned modeless `Show(dashboard)`, `ShowInTaskbar=false`, `CanResize=false`, `SystemDecorations.None` with popup-LOCAL title bar (drag via `BeginMoveDrag`, close button), Escape + close button through ONE command path; close-existing-before-new one-at-a-time manager; focus restoration to dashboard on close (W-04 contract)
+- [ ] Popup window at `client/src/CcpClient.Desktop/Features/FeaturePopupWindow.axaml(.cs)` (contract-named — do not rename): owned modeless `Show(dashboard)`, `ShowInTaskbar=false`, `CanResize=false`, `SystemDecorations.None` with popup-LOCAL title bar (drag via `BeginMoveDrag`, close button), Escape + close button through ONE command path; close-existing-before-new one-at-a-time manager; focus restoration to dashboard on close (W-04 contract)
 - [ ] Owner-monitor working-area capping: max height = WPF-parity fraction (recorded pending-owner) of the WORKING AREA of the monitor containing the dashboard, computed at open + on DPI/working-area change; centered on owner within that monitor
 - [ ] Unit tests: capping math (primary vs secondary monitor geometry, mixed scale), one-at-a-time manager transitions, command-path close (Escape ≡ close button ≡ one operation), focus-restoration call — SP-004 owned-operation discipline for any async
 
@@ -102,4 +102,5 @@ Call `spine_review_step` after each step. **T-2 heading format is load-bearing**
 ## Amendments
 
 - 2026-07-20 (authoring): **pre-authoring consult RAN — solo Fable 5 (requested `anthropic/claude-fable-5`; council unavailable per failed probe).** Verdicts applied: (a) demonstrator frame endorsed — really-functioning/labeled/superseded-by-first-real, NO W-04 exercise-gate discharge claim; (b) no shared chrome — popup-LOCAL title bar only (A-005 trap); (c) synthetic content must cover tall/short/nested-chaining by construction; (d) Escape + close button through ONE command path; (e) trackpad/touch PROBE-don't-promise (absent digitizer = named manual gate); (f) WSLg = render/capping/geometry session facts only, Linux input = named gate, annotate-don't-rewrite; (g) demonstrator height constant = WPF-parity, pending-owner; (h) Extent/Viewport/Offset recording REQUIRED (row's own verification language — omission = land REVISE).
+- 2026-07-20 (authoring): preflight `prelanded-file-scope` ⚠️ resolved — `fileScopeMustChange` redirected from the pre-existing `client/src/CcpClient.Desktop/**` glob to the two contract-named new deliverable files under `Features/`; Step 2 binds the filenames so the worker cannot drift them.
 - 2026-07-20 (authoring): `## Review Level: 2` structured heading emitted (T-2 fixed format). Launch: validate → analyze → plan → preflight → detached batch per owner cycle.
