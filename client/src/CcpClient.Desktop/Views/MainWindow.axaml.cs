@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Features;
 using CcpClient.Desktop.Lifecycle;
 
 namespace CcpClient.Desktop.Views;
@@ -49,8 +50,21 @@ public partial class MainWindow : Window
                 ((MainWindowViewModel)DataContext!).ToggleCommand.Execute(null);
             }
         };
-        // Left-click settings popup: CARVED OUT (A-005 per-window contract, dashboard/feature
-        // rows own it). No left-click handler is wired — a no-op would be a claim.
+        // Left-click opens the demonstrator's settings popup (SP-013; W-04 contract):
+        // one-at-a-time via FeaturePopupManager, owned modeless, focus restoration on close.
+        // DEMONSTRATOR popup — superseded by the first real feature popup.
+        _popups = new FeaturePopupManager(
+            this,
+            () => new FeaturePopupWindow(),
+            FeaturePopupManager.CreateFocusRestoration(this));
+        TickerCard.PointerPressed += (_, e) =>
+        {
+            if (e.GetCurrentPoint(TickerCard).Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonPressed)
+            {
+                e.Handled = true;
+                _popups.Show();
+            }
+        };
 
         // SP-007 layout probe (demonstrator-slice diagnostic): measured card bounds + actual
         // RenderScaling, visible in the window and logged once for the headed harness.
@@ -70,6 +84,10 @@ public partial class MainWindow : Window
     }
 
     private bool _layoutProbeLogged;
+    private FeaturePopupManager? _popups;
+
+    /// <summary>Demonstrator popup manager (SP-013); public so tests drive the real wiring.</summary>
+    public FeaturePopupManager Popups => _popups!;
 
     private static string Describe(CapabilityState state) => state switch
     {

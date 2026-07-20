@@ -1,10 +1,10 @@
 # STATUS: SP-013 — prove feature-popup scrolling
 
-**Current Step:** Step 1 — WPF evidence + v12 research + pre-approach consult
-**Last Updated:** 2026-07-20 (Step 1 started)
+**Current Step:** Step 3 — synthetic content + Windows-headed evidence matrix
+**Last Updated:** 2026-07-20 (Step 2 complete: 139 unit + 11 headless green)
 
 ### Step 1: WPF evidence + current v12 research + pre-approach consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
 - [x] STATUS.md updated before starting work
 - [x] WPF archaeology (FeaturePopupWindow + MainWindow.Presets.cs:846-873) with File.cs:line citations
@@ -12,11 +12,11 @@
 - [x] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
 
 ### Step 2: Popup implementation (popup-local chrome, one command path)
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Popup window: owned modeless, taskbar-absent, non-resizable, SystemDecorations.None + popup-local title bar (BeginMoveDrag + close), Escape ≡ close one command path, one-at-a-time manager, focus restoration
-- [ ] Owner-monitor working-area capping (WPF-parity fraction, pending-owner; open-time + DPI/working-area change)
-- [ ] Unit tests: capping math, one-at-a-time transitions, command-path close, focus restoration
+- [x] Popup window: owned modeless, taskbar-absent, non-resizable, WindowDecorations.None + popup-local title bar (BeginMoveDrag + close), Escape ≡ close one command path, one-at-a-time manager, focus restoration
+- [x] Owner-monitor working-area capping (WPF-parity fraction, pending-owner; open-time + owner-monitor/scaling change)
+- [x] Unit tests: capping math, one-at-a-time transitions, command-path close (headless — real routing), focus restoration
 
 ### Step 3: Synthetic content + Windows-headed evidence matrix
 **Status:** ⬜ Not Started

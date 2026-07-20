@@ -85,12 +85,20 @@ Full verdict text received; key rulings applied to the design:
 
 ## Engine-review presence (T-2)
 
-- Step 1 plan review: pending
+- Step 1 plan review: **ABSENT** — `spine_review_step` returned `skipped=true` (`nested_spawn_blocked`, by design SP-195; `spawnFailed=false`). Engine runs code+final reviews post-.DONE.
 
-## Evidence matrix + budgets
+## Step 2 implementation notes (2026-07-20)
 
-(to be filled in Steps 3-4)
+- Files: `Features/PopupPlacement.cs` (pure math), `Features/FeaturePopupManager.cs` (one-at-a-time + focus-restoration seam), `Features/FeaturePopupWindow.axaml(.cs)` (contract-named deliverable), `Features/SyntheticPopupContent.cs` (tall/short/nested), MainWindow.axaml.cs left-click wiring. Tests: `PopupPlacementTests` (17 cases), `FeaturePopupManagerTests` (4), `FeaturePopupHeadlessTests` (8 draw-level interaction tests). 139 unit + 11 headless green on Windows.
+- Command-path deviation (honest): packet lists "command-path close" under unit tests; the Escape/click ROUTING is Avalonia runtime behavior, so the equivalence test lives in `FeaturePopupHeadlessTests.Escape_And_CloseButton_BothClose_ThroughTheOnePath` (real KeyPress + real mouse click). The unit seam would be vacuous.
+- Surprises (see below): both found BY the headless tests.
 
 ## Surprises
 
-(to be filled during execution)
+1. **Avalonia 12.1.0 `ScrollViewer.Padding` clips the content tail.** With `Padding="16"` on the ScrollViewer, the presenter arranged the content 32 DIP shorter than its desired size (stack desired 1225, bounds 1193) — the final control was UNREACHABLE at max offset (extent 1193 < content bottom 1225). Measured in a throwaway headless debug test, fixed by moving the padding onto the inner `ContentControl` (extent then = 1225+32 = 1257, correct). Durable port lesson candidate — orchestrator's harvest call (port-lessons.md is outside this packet's File Scope).
+2. **`KeyBinding` in `Window.KeyBindings` does not inherit DataContext** — a compiled `{Binding CloseCommand}` on it never resolved (silent no-op), found by the headless Escape test. Replaced with a tunnel `OnKeyDown` override, which is ALSO the WPF shape (`PreviewKeyDown`, xaml.cs:45). The card's `Border.KeyBindings` (SP-007) works because the binding targets the Border's own DataContext inheritance.
+3. **ScrollViewer without `Background` does not hit-test its empty regions** — wheel events over content gaps never reached the presenter (hit falls to the window Border, outside the scroller's bubble path). `Background="Transparent"` on the scroller is required for wheel-anywhere scrolling (headless test caught it: wheel worked over ListBox items, not over the tall StackPanel).
+
+## Evidence matrix + budgets
+
+(filled in Steps 3-4)

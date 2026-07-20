@@ -1,0 +1,93 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:features="using:CcpClient.Desktop.Features"
+        x:Class="CcpClient.Desktop.Features.FeaturePopupWindow"
+        x:DataType="features:FeaturePopupWindow"
+        Title="Demo: Status Ticker — settings (demonstrator)"
+        Width="520" MinWidth="420" MinHeight="360"
+        WindowStartupLocation="Manual"
+        SizeToContent="Manual"
+        WindowDecorations="None"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Background="#FF141018">
+
+  <!-- ONE command path: Escape (tunnel key handling, WPF PreviewKeyDown parity) and the
+       title-bar close button (Click) both terminate in ClosePopup() (W-04; xaml.cs:45-71). -->
+
+  <Window.Styles>
+    <Style Selector="Button.variant">
+      <Setter Property="Padding" Value="10,4" />
+      <Setter Property="Background" Value="#FF2A2130" />
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style Selector="Button.variant:pointerover">
+      <Setter Property="BorderBrush" Value="#FFE066FF" />
+    </Style>
+  </Window.Styles>
+
+  <Border BorderBrush="#FFE066FF" BorderThickness="1">
+    <Grid RowDefinitions="Auto,*,Auto">
+
+      <!-- Popup-LOCAL title bar (A-005: no shared chrome framework). Drag via BeginMoveDrag. -->
+      <Border x:Name="TitleBar" Grid.Row="0"
+              Background="#FF241A2B"
+              BorderBrush="#FF3A2F3E" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <Border Width="28" Height="28" Margin="14,10,10,10"
+                  CornerRadius="6" Background="#33E066FF">
+            <TextBlock Text="⚙" FontSize="16" Foreground="#FFE066FF"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <TextBlock Grid.Column="1" Text="Demo: Status Ticker — settings (demonstrator)"
+                     VerticalAlignment="Center" Foreground="#FFE066FF"
+                     FontSize="15" FontWeight="SemiBold" />
+          <Button Grid.Column="2" x:Name="CloseButton"
+                  AutomationProperties.Name="popup close button"
+                  Width="38" Height="38"
+                  Background="Transparent" BorderThickness="0"
+                  Foreground="#FF9A8FA3" Content="✕"
+                  ToolTip.Tip="Close (Esc)" />
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" RowDefinitions="Auto,*">
+        <!-- Synthetic variant switcher (demonstrator evidence surface). -->
+        <StackPanel x:Name="VariantBar" Orientation="Horizontal" Margin="16,12,16,4" Spacing="8">
+          <Button x:Name="VariantTall" Classes="variant" Content="Tall"
+                  AutomationProperties.Name="variant tall" />
+          <Button x:Name="VariantShort" Classes="variant" Content="Short"
+                  AutomationProperties.Name="variant short" />
+          <Button x:Name="VariantNested" Classes="variant" Content="Nested list"
+                  AutomationProperties.Name="variant nested" />
+        </StackPanel>
+
+        <!-- Content host. Horizontal scrolling disabled (contract); AllowAutoHide=false so
+             the scrollbar is a stable click target (WPF parity: bars don't auto-hide).
+             Padding lives on the ContentControl: ScrollViewer.Padding in 12.1.0 arranges
+             the content 2xpadding shorter than its desired size (clipped tail; measured
+             in PopupDebugTests) — padding inside the presenter child avoids it. -->
+        <ScrollViewer x:Name="PopupScroller" Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      AllowAutoHide="False"
+                      Background="Transparent">
+          <ContentControl x:Name="ContentHost" Padding="16" />
+        </ScrollViewer>
+      </Grid>
+
+      <!-- Observable evidence channels (SP-007 layout-probe pattern): live Extent/Viewport/
+           Offset + final-control viewport state, and popup/scrollbar screen geometry for
+             the headed harness. UIA-readable; content-free diagnostics. -->
+      <StackPanel x:Name="ProbeFooter" Grid.Row="2" Margin="16,4,16,8">
+        <TextBlock x:Name="ScrollProbeText" FontSize="10" Opacity="0.6"
+                   Foreground="#FFE8E0EE" Text="scroll-probe: pending" />
+        <TextBlock x:Name="PopupProbeText" FontSize="10" Opacity="0.6"
+                   Foreground="#FFE8E0EE" Text="popup-probe: pending" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>
