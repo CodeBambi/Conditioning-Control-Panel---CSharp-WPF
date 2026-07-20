@@ -26,6 +26,9 @@ public static class CapabilityReasonCodes
 
     /// <summary>The probe itself faulted; the detail carries the exception class (contract §3 rule 3).</summary>
     public const string ProbeFault = "probe-fault";
+
+    /// <summary>An animation asset exists but cannot decode on this target (SP-015 AvatarTube demonstrator).</summary>
+    public const string AssetUndecodable = "asset-undecodable";
 }
 
 /// <summary>Structured reason: a stable code plus human diagnostic detail (contract §1).</summary>

@@ -26,6 +26,71 @@
       "heads": [ "desktop" ],
       "overridePolicy": "none",
       "trust": "full"
+    },
+    {
+      "id": "avatar.pack-circuit.sheet",
+      "source": "embedded",
+      "path": "Assets/avatar/pack-circuit.bmp",
+      "required": true,
+      "provenance": {
+        "origin": "Generated in-repo for SP-015 by SyntheticAvatarPacks (deterministic; machine-checkable strip; non-uniform delays; hash in task record)",
+        "license": "project-internal"
+      },
+      "heads": [ "desktop" ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "avatar.pack-circuit.def",
+      "source": "embedded",
+      "path": "Assets/avatar/pack-circuit.json",
+      "required": true,
+      "provenance": {
+        "origin": "Generated in-repo for SP-015 by SyntheticAvatarPacks from the in-code definition (single source of truth)",
+        "license": "project-internal"
+      },
+      "heads": [ "desktop" ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "avatar.pack-pulse.sheet",
+      "source": "embedded",
+      "path": "Assets/avatar/pack-pulse.bmp",
+      "required": true,
+      "provenance": {
+        "origin": "Generated in-repo for SP-015 by SyntheticAvatarPacks (deterministic; machine-checkable strip; non-uniform delays; hash in task record)",
+        "license": "project-internal"
+      },
+      "heads": [ "desktop" ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "avatar.pack-pulse.def",
+      "source": "embedded",
+      "path": "Assets/avatar/pack-pulse.json",
+      "required": true,
+      "provenance": {
+        "origin": "Generated in-repo for SP-015 by SyntheticAvatarPacks from the in-code definition (single source of truth)",
+        "license": "project-internal"
+      },
+      "heads": [ "desktop" ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "avatar.fallback",
+      "source": "embedded",
+      "path": "Assets/avatar/avatar-fallback.bmp",
+      "required": true,
+      "provenance": {
+        "origin": "Generated in-repo for SP-015 by SyntheticAvatarPacks (static fallback for the typed undecodable-asset path)",
+        "license": "project-internal"
+      },
+      "heads": [ "desktop" ],
+      "overridePolicy": "none",
+      "trust": "full"
     }
   ]
 }

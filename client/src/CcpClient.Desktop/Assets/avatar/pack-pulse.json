@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "packId": 1,
+  "name": "pulse",
+  "cellWidth": 96,
+  "cellHeight": 128,
+  "sheet": "Assets/avatar/pack-pulse.bmp",
+  "clips": [
+    {
+      "clipId": 0,
+      "name": "poses",
+      "frames": 4,
+      "delaysMs": [
+        1150,
+        1350,
+        950,
+        1250
+      ]
+    },
+    {
+      "clipId": 1,
+      "name": "idle",
+      "frames": 6,
+      "delaysMs": [
+        700,
+        520,
+        860,
+        610,
+        660,
+        560
+      ]
+    },
+    {
+      "clipId": 2,
+      "name": "idle2",
+      "frames": 5,
+      "delaysMs": [
+        590,
+        680,
+        510,
+        720,
+        620
+      ]
+    },
+    {
+      "clipId": 3,
+      "name": "talk",
+      "frames": 4,
+      "delaysMs": [
+        540,
+        470,
+        680,
+        590
+      ]
+    },
+    {
+      "clipId": 4,
+      "name": "reaction",
+      "frames": 5,
+      "delaysMs": [
+        620,
+        460,
+        840,
+        510,
+        670
+      ]
+    },
+    {
+      "clipId": 5,
+      "name": "click",
+      "frames": 4,
+      "delaysMs": [
+        560,
+        480,
+        640,
+        520
+      ]
+    }
+  ]
+}

@@ -30,6 +30,53 @@ public static class Program
             return VersionSelfCheck.Run(typeof(Program).Assembly, Console.Out);
         }
 
+        // SP-015 bounded diagnostics (same discipline: pre-phase, no window, no participants).
+        // --generate-avatar-packs <dir>: deterministic synthetic pack regeneration.
+        if (args.Contains(Features.AvatarTube.AvatarEvidence.GenerateFlag, StringComparer.Ordinal))
+        {
+            var index = Array.IndexOf(args, Features.AvatarTube.AvatarEvidence.GenerateFlag);
+            if (index + 1 >= args.Length)
+            {
+                Console.Error.WriteLine("usage: --generate-avatar-packs <directory>");
+                return 1;
+            }
+
+            var written = Features.AvatarTube.SyntheticAvatarPacks.WriteAll(args[index + 1]);
+            foreach (var file in written)
+            {
+                Console.Out.WriteLine($"generated: {file}");
+            }
+
+            return 0;
+        }
+
+        // --avatar-strip-decode --capture <bmp>: one capture's strip + content fraction as JSON.
+        if (args.Contains(Features.AvatarTube.AvatarEvidence.StripDecodeFlag, StringComparer.Ordinal))
+        {
+            var capture = ArgValue(args, "--capture");
+            if (capture is null)
+            {
+                Console.Error.WriteLine("usage: --avatar-strip-decode --capture <file.bmp>");
+                return 1;
+            }
+
+            return Features.AvatarTube.AvatarEvidence.StripDecode(capture, Console.Out);
+        }
+
+        // --avatar-sequence <samples.jsonl> --pack <pack.json> [--trace <trace.jsonl>]: named verdicts.
+        if (args.Contains(Features.AvatarTube.AvatarEvidence.SequenceFlag, StringComparer.Ordinal))
+        {
+            var samples = ArgValue(args, Features.AvatarTube.AvatarEvidence.SequenceFlag);
+            var pack = ArgValue(args, "--pack");
+            if (samples is null || pack is null)
+            {
+                Console.Error.WriteLine("usage: --avatar-sequence <samples.jsonl> --pack <pack.json> [--trace <trace.jsonl>]");
+                return 1;
+            }
+
+            return Features.AvatarTube.AvatarEvidence.RunSequence(samples, pack, ArgValue(args, "--trace"), Console.Out);
+        }
+
         // Phase 1 (Bootstrap) actions must exist before anything can fail: panic hooks
         // and the minimal logger seam (contract §1, §9).
         ILogSink log = new DebugLogSink();
@@ -132,4 +179,10 @@ public static class Program
     public static AppBuilder BuildAvaloniaApp(ApplicationHost host, bool popupDemo = false) => AppBuilder
         .Configure<App>(() => new App(host, popupDemo))
         .UsePlatformDetect();
+
+    private static string? ArgValue(string[] args, string flag)
+    {
+        var index = Array.IndexOf(args, flag);
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+    }
 }

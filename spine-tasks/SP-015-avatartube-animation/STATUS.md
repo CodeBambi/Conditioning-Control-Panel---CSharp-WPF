@@ -1,10 +1,10 @@
 # STATUS: SP-015 — prove AvatarTube rendered animation
 
-**Current Step:** Step 1 — decoder claim verification + archaeology + pre-approach consult
-**Last Updated:** 2026-07-20 (Step 1 started)
+**Current Step:** Step 3 — demonstrator surface + behaviors
+**Last Updated:** 2026-07-20 (Step 2 complete)
 
 ### Step 1: Decoder claim verification + AvatarTube archaeology + pre-approach consult
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete
 
 - [x] STATUS.md updated before starting work
 - [x] FIRST checkbox: pinned 12.1.0 decode/animate surface verified (never docs site); finding recorded
@@ -13,12 +13,12 @@
 - [x] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
 
 ### Step 2: Synthetic asset pipeline + animation engine
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] `SyntheticAvatarPacks.cs` — two packs, frame-indexed pixel strip, non-uniform delays, hashed
-- [ ] Packs routed through SP-009 manifest; `--verify-assets` green Debug + Release
-- [ ] SP-004-owned engine/timer; typed undecodable-asset capability state
-- [ ] Unit tests: cadence math, successor-frame resume, pack-switch, registry-count stability
+- [x] `SyntheticAvatarPacks.cs` — two packs, frame-indexed pixel strip, non-uniform delays, hashed
+- [x] Packs routed through SP-009 manifest; `--verify-assets` green Debug + Release
+- [x] SP-004-owned engine/timer; typed undecodable-asset capability state
+- [x] Unit tests: cadence math, successor-frame resume, pack-switch, registry-count stability
 
 ### Step 3: Demonstrator surface + behaviors
 **Status:** ⬜ Not Started

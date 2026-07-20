@@ -4,6 +4,8 @@ Worker session: batch `20260720T072956` lane-1. Review Level 2 (T-2 heading pres
 
 ## Step 1 — decoder claim verification (FIRST checkbox)
 
+**Engine-review presence (T-2):** `spine_review_step` step 1 type=plan → `skipped: true` (nested-spawn blocked by design SP-195; `reviewLevel: 2` echoed — heading parse holds). Engine code+final reviews run post-.DONE.
+
 **Claim under test:** "animated-GIF decode in Avalonia 12" — packet-declared UNVERIFIED CLAIM.
 
 **FINDING: the pinned Avalonia 12.1.0 surface has NO public animated-GIF decode/animate API. Own-frame composition is the demonstrator shape.**
@@ -66,3 +68,26 @@ Dashboard = a real movable/resizable/minimizable window; no session engine, no a
 7. **Temporal math lives in CcpVerify, not the script:** new pure sequence evaluator (samples JSON -> named PASS/FAIL verdicts: advance, no-blank, monotonic-modular, no-dup-run-beyond-hold, schedule-fit-1x, schedule-not-2x, schedule-not-half-x, resume-successor, pause-freeze, pack-switch-clean), unit-tested like CheckEvaluator (SP-008 pattern). The PS script stays dumb: capture -> decode -> append -> call evaluator once. Cadence tolerance windows are machine-checked, never hand-held PowerShell.
 8. **Crossfade strip-blend trap (false-blank):** mid-crossfade the two layers' strips BLEND and strip decode fails — a decode failure there is NOT a blank. During engine-declared crossfade windows (known from the frame trace) the no-blank gate = union-of-visible-content (incoming OR outgoing OR blend non-blank); strip assertions apply outside crossfade windows. The engine logs each applied frame (pack/clip/index + monotonic ticks) to ILogSink as a **frame trace** — corroboration and crossfade-window knowledge, never standalone liveness evidence (REJECT lesson stands).
 9. Under-thinking flagged: teardown ordering of the pause gate (point 1) and the false-positive risk of naive blank checks (point 8) — both designed in above.
+
+## Step 2 — synthetic asset pipeline + animation engine (DONE)
+
+**Engine-review presence (T-2):** `spine_review_step` step 2 type=plan → skipped (SP-195 by design; reviewLevel 2 echoed).
+
+**Files (all new unless noted):**
+- `client/src/CcpClient.Desktop/Features/AvatarTube/SyntheticAvatarPacks.cs` (contract-named): deterministic generator (pure integer math, no PRNG/clock) of TWO packs — `circuit` (id 0, cyan/magenta) and `pulse` (id 1, amber/green) — sprite-sheet BMP (row = clipId, col = frame; 6 clips × ≤6 frames of 96×128) + pack.json (per-frame NON-UNIFORM delays, all ≥ 430ms per consult #5); fallback sheet (pack 3, clip 7, single static frame at row 7); strip written into the painted cell directly.
+- `BmpCodec.cs`: pure 32/24-bpp BMP codec (bottom-up + top-down decode; BI_RGB only — rejections are loud). BMP = the cross-platform evidence format (XGetImage/CopyFromScreen both emit it; SP-013 precedent); zero decode dependencies anywhere.
+- `AvatarStripCodec.cs`: machine-checkable strip (magenta marker + 2 pack bits + 3 clip bits + 4 frame bits, 4×4 blocks, bottom-left 40×4); marker auto-locate in the bottom 16 rows (float/centering immune); luminance-bit decode with ambiguity rejection; `ContentFraction` for the union no-blank rule.
+- `AvatarPackLoader.cs`: stream-seam loader (production: StandardAssetLoader avares://; tests: in-memory/corrupt) + grid validation + per-frame strip self-check (generator/slicing drift fails loudly).
+- `AvatarSchedule.cs` + `AvatarSequenceEvaluator.cs`: pure cadence math + named verdicts (no-blank union, frames-advance, monotonic-modular + elapsed-bounded jumps, no-dup-run-beyond-hold with pause-window subtraction, schedule-fit 1x/not-2x/not-0.5x, pause-freeze, resume-successor, cadence-unchanged-after-resume, pack-switch-clean). Schedule tolerance 500ms — discrimination math recorded in-code (true-run quantization ~420ms + pause systematic ~300ms vs 2x misfit ~1000-1900ms / 0.5x ~2000-3800ms — decisive margin).
+- `AvatarAnimationEngine.cs`: ONE SP-004 owned operation per generation drives frames (monotonic deadline accumulation), engine-stepped crossfades (opacity sum == 1 invariant), dip-fades (identity swap at midpoint, deadlines on the DECLARED schedule — no drift), float (sin from the same effective clock every quantum). Pause = in-operation gate observing the generation token, freeze stamped at call time; resume = deadline re-base (successor-frame + unchanged cadence by construction). `IAvatarClock` seam (System/Manual) — cadence tests are deterministic. WPF-parity demonstrator constants pending-owner: fade 1000ms, min-hold 2000ms, click cooldown 3000ms, talk lead-out 500ms, dip 0.3/150ms, float ±4 DIP/2000ms, quantum 16ms.
+- `AvatarTubeParticipant.cs` (registered in CompositionRoot): pack decode-probe per activation (the capability probe), typed SP-006 state — `Available` on decode / `Degraded(asset-undecodable)` + static fallback (new reason code, additive) / bounded diagnostics (exactly one decode attempt per switch, no retry loop). Pack switch = same operation, atomic pack swap (old frames dropped before replacement activates — never two avatars, zero operation churn). `Completion` survives StopTube for awaiting.
+- `AvatarEvidence.cs` + Program.cs bounded flags (pre-phase, --verify-assets discipline): `--generate-avatar-packs <dir>`, `--avatar-strip-decode --capture <bmp>` (JSON line: decode + content fraction), `--avatar-sequence <samples.jsonl> --pack <def.json> [--trace <trace.jsonl>]` (named verdicts, exit 0/2).
+
+**Manifest:** 5 new embedded entries (2 sheets, 2 defs, 1 fallback) — `--verify-assets` PASS (7 entries) on **Debug AND Release** (Windows). Generation SHA-256 (recorded per packet):
+- pack-circuit.bmp `d8ecd4f8f98fa9b21f359d187fb25220fc4d15a8d6aa4de9853308b2b57f5f90`
+- pack-circuit.json `3dd71bbc2bced46eae4ba4b2ec302fdfb22384035511da84b2de2566596cc638`
+- pack-pulse.bmp `2834b81435cdcd4e0289c67d6ed82f1a78910268d14642095c933a447399bc11`
+- pack-pulse.json `a5c55b20718f093e621afbf2b7f088178cace8ba171c92958359a5b7fd08b207`
+- avatar-fallback.bmp `81844dfe4a34fdb7dc357b7e67721e2ce2fa52f68bd7f347279823a07871e8e0`
+
+**Tests (169/169 unit + 15/15 headless green, 0W/0E solution):** 23 new (pack/codecs/defs/loader/determinism-vs-committed-assets ×8, engine ×8, evaluator ×7) + 2 participant-count updates (3→4). Cadence asserted at exact declared non-uniform deadlines (±1 quantum); pause/resume = successor-frame + unchanged cadence at exact effective-time boundaries; pack switch + 10 start/stop cycles with REAL OperationRegistry counts (outstanding 1→0, subscribers constant 1, zero unobserved); undecodable → Degraded + fallback + exactly-one-attempt bound; evaluator verdicts pass/fail shapes incl. 2x/0.5x falsification; strip round-trip over every frame of both packs; committed assets pixel-identical to regeneration (determinism). Bugs caught by the tests: strip-blit erasing art alpha, unused-sheet-cell alpha holes, fallback grid mismatch, first-click cooldown overflow (`long.MinValue` arithmetic), pause-stamp timing (call-time vs loop-observe-time), stop-during-pause gate cancellation path, ManualAvatarClock park-race (test driver now parks-aware via `DelayPending`).
