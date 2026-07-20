@@ -186,7 +186,7 @@ called after each step (type=plan):
   `nested_spawn_blocked` in-worker BY DESIGN (SP-195/SP-278); engine runs reviews post-.DONE.
 - Step 2 (65a7002b): skipped=true, spawnFailed=false, reviewLevel=2 echoed — same by-design skip.
 - Step 3 (b3b921b6): skipped=true, spawnFailed=false, reviewLevel=2 echoed — same by-design skip.
-- Step 4: (recorded after the Step-4 commit below — same expected shape.)
+- Step 4 (020eb125): skipped=true, spawnFailed=false, reviewLevel=2 echoed — same by-design skip.
 No REVISE, no spawn failure (fail-closed rule never triggered). Engine-side code+final
 reviews are expected AFTER .DONE per SP-195; their presence is the engine's to record.
 
