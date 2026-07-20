@@ -1,0 +1,51 @@
+# STATUS: SP-015 — prove AvatarTube rendered animation
+
+**Current Step:** Not started
+**Last Updated:** 2026-07-20 (authored)
+
+### Step 1: Decoder claim verification + AvatarTube archaeology + pre-approach consult
+**Status:** ⬜ Not Started
+
+- [ ] STATUS.md updated before starting work
+- [ ] FIRST checkbox: pinned 12.1.0 decode/animate surface verified (never docs site); finding recorded
+- [ ] WPF + first-attempt archaeology with File.cs:line; leak REJECT lessons cited
+- [ ] Owner-transition demonstrable-vs-contract split decided from archaeology
+- [ ] Pre-approach solo Fable 5 consult (verdict in record.md BEFORE checkbox)
+
+### Step 2: Synthetic asset pipeline + animation engine
+**Status:** ⬜ Not Started
+
+- [ ] `SyntheticAvatarPacks.cs` — two packs, frame-indexed pixel strip, non-uniform delays, hashed
+- [ ] Packs routed through SP-009 manifest; `--verify-assets` green Debug + Release
+- [ ] SP-004-owned engine/timer; typed undecodable-asset capability state
+- [ ] Unit tests: cadence math, successor-frame resume, pack-switch, registry-count stability
+
+### Step 3: Demonstrator surface + behaviors
+**Status:** ⬜ Not Started
+
+- [ ] Demonstrator surface: fade, looping, crossfades, click reaction, float, pause/resume, pack switch, attach/detach, owner transitions, cleanup
+- [ ] ONE engine, no parallel timers; constants recorded pending-owner
+
+### Step 4: Windows-headed evidence matrix
+**Status:** ⬜ Not Started
+
+- [ ] CcpVerify named checks per behavior (deltas, no blanks, no duplicate-runs, cadence vs delays)
+- [ ] Resume-fast-forward check (successor frame + unchanged cadence)
+- [ ] Leak long-run: registry counts stable across many cycles
+- [ ] Click/crossfade named sequences; K3 where pixels matter; A-013 ValidateXaml-only if AXAML
+
+### Step 5: WSLg/X11 gate + board reconciliation + pre-completion consult
+**Status:** ⬜ Not Started
+
+- [ ] WSL2 gate: contract green; XGetImage frame-delta/no-blanks session facts (settled-tree); no Linux cadence claims
+- [ ] avatartube-demonstrator.md + record.md complete (decoder finding, lessons, consult provenance, budgets)
+- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
+- [ ] task-board.md row → WIP with named limits (never DONE)
+- [ ] STATUS.md accurate before .DONE
+
+### Step 6: Testing & Verification
+**Status:** ⬜ Not Started
+
+- [ ] Contract testCommand green (build 0W/0E + both test projects incl. new tests)
+- [ ] `git diff --check` clean
+- [ ] `git status --short` = File Scope only

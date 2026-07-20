@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-19
 **Status:** Active
-**Next Task ID:** SP-015
+**Next Task ID:** SP-016
 
 ---
 
@@ -32,7 +32,7 @@ Phase 1 COMPLETE 2026-07-19 (all nine rows landed, all WIP pending owner ratific
 | SP-012-window-behavior-manifest | Row: per-window behavior manifest (read-only WPF archaeology, zero deps) | **Done 2026-07-20** (landed `bc08dbeb`; batch `20260720T004519` — T-5 4th-occurrence recovery + human_base_diverged orch-first recovery; 79 retained rows W-01…W-79 with File.cs:line + code-derived class, procedure per field, matrix pending owner question, no Wayland column; demonstrator Windows 9/10 + WSLg 7/10 procedure-proven; engine reviews APPROVE+PASS; row stays WIP: exercise-every-row + owner matrix gates) | SP-011 |
 | SP-013-popup-scrolling | Row: prove feature-popup scrolling (builds the popup SP-007 carved out) | **Done 2026-07-20** (landed `8954de4b`; batch `20260720T022627` — 2h worker-timeout recovery + T-5 5th recovery, zero base-diverge; demonstrator popup implements W-04 contract; 25 Windows-headed PASS gates + touch manual gate; WSLg render/capping/ownership/×1.5 exact; 139/139 + 11/11 both platforms; engine reviews APPROVE+PASS; row stays WIP: 5 named gates incl. taskbar/Alt-Tab behavioral evidence) | SP-012 |
 | SP-014-quick-toggle-dispatch | Row: replace card-title quick-toggle dispatch — SCOPE to the demonstrator card with named limits (one card, one theme exist; full multi-card/multi-theme acceptance awaits real cards) | **Done 2026-07-20** (landed `dc3353bd`; batch `20260720T052700` — clean run + T-5 6th recovery; premise correction: title-keyed mechanism lived only in the FIRST attempt, WPF keyless; stable-ID dispatch + title-mutation negative test green both platforms; 144/144 + 15/15; 18-gate headed smoke incl. toggle-while-popup-open; engine reviews APPROVE+PASS; row stays WIP with named limits) | SP-013 |
-| SP-015-avatartube-animation | Row: prove AvatarTube rendered animation (needs asset pipeline thinking) | Not authored | SP-014 |
+| SP-015-avatartube-animation | Row: prove AvatarTube rendered animation (needs asset pipeline thinking) | Authored 2026-07-20 (pre-authoring Fable consult applied: GIF-decode = unverified first-checkbox claim, own-frame composition fallback; two synthetic packs via SP-009 manifest — no mod loader; frame-indexed non-uniform-delay machine-checkable assets; cadence Windows-headed only; resume-fast-forward assertion; real-registry leak counts; **Size L** per SP-013 timeout lesson) | SP-014 |
 
 **Excluded from Phase 2 (exclusion with rationale — rows stay OPEN, not BLOCKED):** camera provenance/acquisition/ONNX spikes + multi-monitor video-geometry spike + audio-backend spike (WSL2 evidence would be fake-by-construction for camera and unrepresentative for geometry; capability-honesty contract bans faked availability — audio noted as PARTIALLY viable later via WSLg PulseAudio: enumerate/select/fallback is real evidence, latency numbers are not); online-video handoff spike (after DTRH); AI provider spikes (after UI rows; the AI CONTRACT row is a Phase 2 optional tail — define-only, environment-free, unblocks nothing urgent).
 
