@@ -10,8 +10,9 @@ Worker session log. Enumeration method + raw inventory, classification decisions
 | 2 | type=plan after step-2 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip; reviewLevel echoed 2 — heading parsed) | NO in-worker |
 | 3 | type=plan after step-3 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
 | 4 | type=plan after step-4 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip; reviewLevel echoed 2) | NO in-worker |
+| 5 | type=plan after step-5 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip; reviewLevel echoed 2) | NO in-worker |
 
-(Row for step 5 is appended ONLY after the actual call happens — a presence log logs events that happened (pre-completion consult correction).)
+All five in-worker calls recorded as they happened.
 
 **In-worker skip = documented design (SP-195), NOT the T-2 regression** (reviewLevel echoed 2 in every response → the structured heading parses). Post-.DONE engine code+final review presence is observable only at land time; SP-011 proved reviews fire with the heading. If they skip post-.DONE here, that IS the regression — say so at land.
 
