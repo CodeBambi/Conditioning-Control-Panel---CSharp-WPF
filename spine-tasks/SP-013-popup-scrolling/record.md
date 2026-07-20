@@ -101,6 +101,7 @@ Full verdict text received; key rulings applied to the design:
 - Step 1 plan review: **ABSENT** — `spine_review_step` returned `skipped=true` (`nested_spawn_blocked`, by design SP-195; `spawnFailed=false`). Engine runs code+final reviews post-.DONE.
 - Step 2 plan review: **ABSENT** — same (`skipped=true`, `spawnFailed=false`).
 - Step 3 plan review: **ABSENT** — same (`skipped=true`, `spawnFailed=false`).
+- Step 4 plan review: **ABSENT** — same (`skipped=true`, `spawnFailed=false`).
 
 ## Step 2 implementation notes (2026-07-20)
 

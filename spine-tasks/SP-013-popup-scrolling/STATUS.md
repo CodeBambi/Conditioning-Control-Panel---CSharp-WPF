@@ -1,7 +1,7 @@
 # STATUS: SP-013 — prove feature-popup scrolling
 
-**Current Step:** Step 4 — WSLg/X11 gate + board reconciliation + pre-completion consult
-**Last Updated:** 2026-07-20 (Step 4 in progress: WSLg gate running)
+**Current Step:** Step 5 — Testing & Verification
+**Last Updated:** 2026-07-20 (Step 4 complete: WSLg gate PASS both scales; consult APPROVE + 3 annotations applied; board WIP)
 
 ### Step 1: WPF evidence + current v12 research + pre-approach consult
 **Status:** ✅ Complete
@@ -27,7 +27,7 @@
 - [x] A-013 MCP advisory on redacted AXAML snippets (ValidateXaml PASS; AnalyzePerformance REJECTED self-contradictory)
 
 ### Step 4: WSLg/X11 gate + board reconciliation + pre-completion consult
-**Status:** 🔵 In Progress (work complete — review call pending)
+**Status:** ✅ Complete
 
 - [x] WSL2 in-packet gate: contract green (139+11 = Windows counts), render + capping + geometry session facts at scale 1 + 1.5 (no input automation) — wslg-popup.sh, all PASS, exit 0
 - [x] record.md complete (design, citations, consult provenance, engine-review presence, evidence matrix, budgets)
@@ -36,8 +36,8 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress (checks green — review call pending)
 
-- [ ] Contract testCommand green (build 0W/0E + both test projects incl. new tests)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` = File Scope only
+- [x] Contract testCommand green (Windows: build 0W/0E 1.5s, 139/139 CcpClient.Tests, 11/11 CcpClient.HeadlessTests — identical to WSL2 counts)
+- [x] `git diff --check` clean
+- [x] `git status --short` = File Scope only (task-folder STATUS/record)
