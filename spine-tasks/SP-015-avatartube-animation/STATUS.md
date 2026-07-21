@@ -1,7 +1,7 @@
 # STATUS: SP-015 — prove AvatarTube rendered animation
 
-**Current Step:** Step 4 — Windows-headed evidence matrix (in progress)
-**Last Updated:** 2026-07-21 (Step 4 in progress; salvaged zombie WIP verified: build 0W/0E, 170/170 unit + 22/22 headless green; rerun of full matrix pending)
+**Current Step:** Step 5 — WSLg/X11 gate + board reconciliation + pre-completion consult
+**Last Updated:** 2026-07-21 (Step 4 GREEN: 66 gates G1-G14 after 6 script-hardening iterations; K3 visual PASS ×2)
 
 ### Step 1: Decoder claim verification + AvatarTube archaeology + pre-approach consult
 **Status:** ✅ Complete
@@ -27,15 +27,15 @@
 - [x] ONE engine, no parallel timers; constants recorded pending-owner
 
 ### Step 4: Windows-headed evidence matrix
-**Status:** 🔶 In Progress
+**Status:** ✅ Complete
 
-- [ ] CcpVerify named checks per behavior (deltas, no blanks, no duplicate-runs, cadence vs delays)
-- [ ] Resume-fast-forward check (successor frame + unchanged cadence)
-- [ ] Leak long-run: registry counts stable across many cycles
-- [ ] Click/crossfade named sequences; K3 where pixels matter; A-013 ValidateXaml-only if AXAML
+- [x] CcpVerify named checks per behavior (deltas, no blanks, no duplicate-runs, cadence vs delays) — 66 gates green (run.log)
+- [x] Resume-fast-forward check (successor frame + unchanged cadence, speed 1.023)
+- [x] Leak long-run: registry stable (outstanding=2 heartbeat+engine, subs=1 after 25 cycles)
+- [x] Click/crossfade named sequences; K3 visual PASS (mid-fade + fallback artifacts); no AXAML changed by this step (A-013 ValidateXaml n/a)
 
 ### Step 5: WSLg/X11 gate + board reconciliation + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔶 In Progress
 
 - [ ] WSL2 gate: contract green; XGetImage frame-delta/no-blanks session facts (settled-tree); no Linux cadence claims
 - [ ] avatartube-demonstrator.md + record.md complete (decoder finding, lessons, consult provenance, budgets)
