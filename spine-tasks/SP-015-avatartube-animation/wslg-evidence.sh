@@ -46,17 +46,23 @@ echo "[boot] tube X window present (probe capture ok)"
 
 SAMPLES="$ART/wslg-samples.jsonl"
 : > "$SAMPLES"
-echo "--- capture: 12 XGetImage shots @ ~800ms ---"
-for i in $(seq 1 12); do
+echo "--- capture: 16 XGetImage shots @ ~0.4s sleep (decode batched AFTER — per-shot app"
+echo "    spawn decode inflates the period past a frame hold and starves same-frame pairs) ---"
+SHOTS=()
+for i in $(seq 1 16); do
   # GNU date's %3N is not honored on this WSL image (full %N printed — garbage epoch-ms
   # overflowed the evaluator's elapsed math). Compose epoch-ms explicitly.
   T=$(( $(date +%s) * 1000 + $(date +%N) / 1000000 ))
   CAP="$ART/wslg-cap-$T.bmp"
   python3 "$DST/client/tools/verify/xgetimage.py" "$TITLE" "$CAP" || { kill $APP_PID 2>/dev/null; exit 1; }
+  SHOTS+=("$CAP")
+  sleep 0.4
+done
+for CAP in "${SHOTS[@]}"; do
+  T=$(basename "$CAP" .bmp); T=${T#wslg-cap-}
   LINE=$(dotnet "$DLL" --avatar-strip-decode --capture "$CAP" --scan) || true
   [ -n "$LINE" ] || { echo "FAIL: strip-decode empty for $CAP"; kill $APP_PID 2>/dev/null; exit 1; }
   echo "$LINE" | sed "s/\"T\":0/\"T\":$T/" >> "$SAMPLES"
-  sleep 0.8
 done
 kill $APP_PID 2>/dev/null; sleep 1
 
