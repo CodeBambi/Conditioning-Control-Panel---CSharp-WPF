@@ -52,7 +52,7 @@ public class DtrhSlotPickerHeadlessTests
         Assert.Contains("locked", cards[1].Classes);
         Assert.Contains("locked", cards[2].Classes);
         // Delete only exists on populated cards: fresh profile has no delete buttons.
-        Assert.DoesNotContain(picker.GetVisualDescendants().OfType<Button>(), b => Equals(b.Content, "🗑"));
+        Assert.DoesNotContain(picker.GetVisualDescendants().OfType<Button>(), b => Equals(b.Content, "✕"));
         picker.Close();
     }
 
@@ -84,7 +84,7 @@ public class DtrhSlotPickerHeadlessTests
         Assert.Equal(2, picker.SelectedSlot); // defaults to the active slot
 
         // The populated card carries a delete button; clicking it shows the confirm overlay.
-        var del = picker.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "🗑"));
+        var del = picker.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "✕"));
         del.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         var overlay = picker.FindControl<Border>("ConfirmOverlay")!;
         Assert.True(overlay.IsVisible);

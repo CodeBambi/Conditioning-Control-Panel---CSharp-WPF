@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="CcpClient.Desktop.Features.Dtrh.DtrhHostWindow"
-        Title="CCP — DTRH host (slice b1)"
+        Title="CCP — Down the Rabbit Hole"
         Width="1280" Height="800"
         Background="#0b0b16">
   <!--

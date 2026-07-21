@@ -193,7 +193,7 @@ public partial class DtrhSlotPickerWindow : Window
         {
             var del = new Button
             {
-                Content = "🗑",
+                Content = "✕",
                 Width = 28,
                 Height = 28,
                 Padding = new Avalonia.Thickness(0),
