@@ -1,7 +1,7 @@
 # STATUS: SP-016 — define provider-neutral AI operation contract
 
-**Current Step:** Step 3 — Typed vocabulary + seam mechanics + tests
-**Last Updated:** 2026-07-21 (Step 2 complete; plan review skipped — engine-owned SP-195)
+**Current Step:** Step 4 — WSL2 gate + board reconciliation + pre-completion consult
+**Last Updated:** 2026-07-21 (Step 3 complete: 211/211 + 22/22 green; plan review skipped — engine-owned SP-195)
 
 ### Step 1: AI archaeology + pre-approach consult
 **Status:** ✅ Complete
@@ -19,14 +19,14 @@
 - [x] Every section traces to archaeology evidence or marked greenfield-decision
 
 ### Step 3: Typed vocabulary + seam mechanics + tests
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete
 
-- [ ] `client/src/CcpClient.Desktop/Ai/AiOperationVocabulary.cs` + siblings
-- [ ] Memory/secret seams declared-only (no implementations)
-- [ ] Unit tests: envelope reject-by-default, per-command results, diagnostic content-freedom, generation-invalidation reuse, serialization round-trips
+- [x] `client/src/CcpClient.Desktop/Ai/AiOperationVocabulary.cs` + siblings
+- [x] Memory/secret seams declared-only (no implementations)
+- [x] Unit tests: envelope reject-by-default, per-command results, diagnostic content-freedom, generation-invalidation reuse, serialization round-trips
 
 ### Step 4: WSL2 gate + board reconciliation + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
 - [ ] WSL2 in-packet gate (`~/ccp-sp016`, never /mnt/e): contract testCommand green
 - [ ] record.md complete

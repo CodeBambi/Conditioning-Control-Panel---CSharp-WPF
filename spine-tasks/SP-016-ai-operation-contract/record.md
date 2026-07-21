@@ -69,5 +69,27 @@ Caution: diagnostic content-freedom proof must be STRUCTURAL — diagnostic reco
 
 - Step 1 plan review: `spine_review_step(step=1, type=plan)` → **SKIPPED by engine** (nested reviewer spawn blocked inside worker session; SP-195 — batch engine runs reviews after worker success). Artifact: `.reviews/1-20260721T082721.md`. Not a spawn failure (fail-closed rule not triggered).
 - Step 2 plan review: `spine_review_step(step=2, type=plan)` → **SKIPPED by engine** (same SP-195 mechanism). Artifact: `.reviews/2-20260721T083133.md`.
+- Step 3 plan review: `spine_review_step(step=3, type=plan)` → **SKIPPED by engine** (same SP-195 mechanism). Artifact: `.reviews/3-20260721T084703.md`.
+
+## WSL2 gate (Step 4)
+
+Native-dir copy `~/ccp-sp016` (tar pipe from /mnt/e into `~`, build+tests run in native dir only; bin/obj excluded from copy). Environment-free: no providers, no network, no Ollama, no cloud proxy — no provider claims made or needed.
+
+```
+$ dotnet build client/CcpClient.sln -c Debug --nologo
+    0 Warning(s)
+    0 Error(s)
+$ dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo
+Passed!  - Failed: 0, Passed: 211, Skipped: 0, Total: 211 - CcpClient.Tests.dll (net10.0)
+$ dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo
+Passed!  - Failed: 0, Passed: 22, Skipped: 0, Total: 22 - CcpClient.HeadlessTests.dll (net10.0)
+```
+
+Windows lane run (same commit): build 0W/0E; 211/211 + 22/22.
+
+## Surprises
+
+- The 11-command-kind round-trip test initially tripped the default `MaxCommandsPerResponse = 3` — the cap doing exactly its job; test raised the cap for that case.
+- No WSL2/Linux-specific behavior in this slice (pure vocabulary + JSON mechanics); the gate is a portability proof of the mechanics only.
 
 ### Pre-completion (Step 4) — pending
