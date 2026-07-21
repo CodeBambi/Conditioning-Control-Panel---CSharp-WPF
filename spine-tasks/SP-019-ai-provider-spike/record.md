@@ -127,4 +127,4 @@ Key rows: mid-stream cancel (18B partial body before cancel, typed Cancelled in 
 - Both new docs valid UTF-8 (iconv verified — CP1252 lesson).
 - `fileScopeMustChange` ✓ both changed; `artifactsMustExist` ✓ both exist; `fileScopeMustNotChange` ✓ untouched.
 
-**Step 5 engine-review presence (T-2):** `spine_review_step(step=5, type=plan)` → recorded after the call below.
+**Step 5 engine-review presence (T-2):** `spine_review_step(step=5, type=plan)` → `skipped=true` (nested_spawn_blocked by design), `spawnFailed=false`, `reviewLevel=2` echoed. Engine runs contract verification + code review (RL 2) after .DONE.
