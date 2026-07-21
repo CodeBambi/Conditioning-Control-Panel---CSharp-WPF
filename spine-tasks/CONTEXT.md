@@ -26,7 +26,7 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
-| SP-022-dtrh-admit | Row: admit DTRH browser and origin design (design-record: package pin 12.0.1 + Linux native deps from SP-011 evidence, minimal transport-only diff spec, loopback security/range/MIME/CORS contract approved-by-decree, NativeWebDialog Linux path, host slice cut b1…b5) | Authored 2026-07-21 | SP-020 |
+| SP-022-dtrh-admit | Row: admit DTRH browser and origin design (design-record: package pin 12.0.1 + Linux native deps from SP-011 evidence, minimal transport-only diff spec, loopback security/range/MIME/CORS contract approved-by-decree, NativeWebDialog Linux path, host slice cut b1…b5) | **Done 2026-07-21** (landed `451ac55e` ff; batch `20260721T174051` — clean single-worker run (~18 min), T-5 10th ON 2.10.0 (auto-clean doesn't cover .reviews/) → playbook; pin re-confirmed live both platforms; transport = minimal diff with Linux long-poll inbox (seq-retained + per-session token); 5 consult corrections applied as spec; slice cut b1…b5 approved; named risk → SP-023 first gate (invokeCSharpAction unproven on NativeWebDialog); 213/213 + 22/22 zero-drift; engine reviews APPROVE+PASS; admit row stays WIP pending owner async-veto) | SP-020 |
 
 ### Phase 4 — AI provider spike, optional T-1 tooling tail (COMPLETE 2026-07-21; RUN CLOSED OUT)
 
