@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "packId": 0,
+  "name": "circuit",
+  "cellWidth": 96,
+  "cellHeight": 128,
+  "sheet": "Assets/avatar/pack-circuit.bmp",
+  "clips": [
+    {
+      "clipId": 0,
+      "name": "poses",
+      "frames": 4,
+      "delaysMs": [
+        1250,
+        1000,
+        1400,
+        1100
+      ]
+    },
+    {
+      "clipId": 1,
+      "name": "idle",
+      "frames": 6,
+      "delaysMs": [
+        640,
+        480,
+        820,
+        550,
+        700,
+        600
+      ]
+    },
+    {
+      "clipId": 2,
+      "name": "idle2",
+      "frames": 5,
+      "delaysMs": [
+        530,
+        760,
+        470,
+        690,
+        580
+      ]
+    },
+    {
+      "clipId": 3,
+      "name": "talk",
+      "frames": 4,
+      "delaysMs": [
+        450,
+        620,
+        500,
+        730
+      ]
+    },
+    {
+      "clipId": 4,
+      "name": "reaction",
+      "frames": 5,
+      "delaysMs": [
+        520,
+        880,
+        430,
+        610,
+        560
+      ]
+    },
+    {
+      "clipId": 5,
+      "name": "click",
+      "frames": 4,
+      "delaysMs": [
+        500,
+        660,
+        440,
+        590
+      ]
+    }
+  ]
+}

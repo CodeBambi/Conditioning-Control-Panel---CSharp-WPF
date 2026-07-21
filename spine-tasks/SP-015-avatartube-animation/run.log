@@ -1,0 +1,116 @@
+=== SP-015 AvatarTube demonstrator - Windows-headed evidence matrix ===
+layout-probe: card 488.0x77.0 DIP @ scale 1 @ screen 128,182
+avatar-capability: Available — pack 'circuit' decoded
+PASS boot/probe - probe live: {"Pack":0,"Subs":1,"StageX":18,"Frame":3,"Scale":1.0,"StageY":200,"Outstanding":2,"Clip":0,"Mode":"Static"}
+PASS boot/static-mode - mode=Static
+-- G1 static pose fades (8s)
+PASS g1/pose-delta - distinct pose frames observed
+PASS g1/frames-advance - PASS frames-advance ? 4 distinct decoded frames across the sequence
+PASS g1/no-blank - PASS no-blank ? 28 captures: every one strip-decodes or shows visible content (crossfade/dip union)
+PASS g1/monotonic-modular-advance - PASS monotonic-modular-advance ? every decoded frame is a schedule-bounded forward step (no second-pipeline interleave)
+PASS g1/no-duplicate-run-beyond-hold - PASS no-duplicate-run-beyond-hold ? no identical-frame run outlives its declared hold
+PASS g1/float-liveness - PASS float-liveness ? same-frame content centroid oscillates up to 8,2px across 4 frame group(s), all within the ?7px float bound
+PASS g1/all-verdicts - ALL VERDICTS PASSED (8)
+-- G2 animated loop + cadence (13s)
+PASS g2/frames-advance - PASS frames-advance ? 9 distinct decoded frames across the sequence
+PASS g2/no-blank - PASS no-blank ? 45 captures: every one strip-decodes or shows visible content (crossfade/dip union)
+PASS g2/monotonic-modular-advance - PASS monotonic-modular-advance ? every decoded frame is a schedule-bounded forward step (no second-pipeline interleave)
+PASS g2/no-duplicate-run-beyond-hold - PASS no-duplicate-run-beyond-hold ? no identical-frame run outlives its declared hold
+PASS g2/schedule-fit-1x - PASS schedule-fit-1x ? 3/3 discriminating runs fit the declared 1x cadence (speed within ?0,20); clip 1 run (11 samples): speed=1,014 | clip 2 run (8 samples): speed=0,924 | clip 1 run (10 samples): speed=0,997
+PASS g2/schedule-not-2x-speed - PASS schedule-not-2x-speed ? 3/3 runs REJECT a 2x-speed schedule (multiplied-speed falsified); clip 1 run (11 samples): speed=1,014 | clip 2 run (8 samples): speed=0,924 | clip 1 run (10 samples): speed=0,997
+PASS g2/schedule-not-half-speed - PASS schedule-not-half-speed ? 3/3 runs REJECT a 0.5x-speed schedule; clip 1 run (11 samples): speed=1,014 | clip 2 run (8 samples): speed=0,924 | clip 1 run (10 samples): speed=0,997
+PASS g2/float-liveness - PASS float-liveness ? same-frame content centroid oscillates up to 8,0px across 8 frame group(s), all within the ?7px float bound
+PASS g2/all-verdicts - ALL VERDICTS PASSED (8)
+-- G3 idle rotation + crossfade (9s)
+PASS g3/idle-rotation - clips observed: 2,1
+PASS g3/frames-advance - PASS frames-advance ? 9 distinct decoded frames across the sequence
+PASS g3/no-blank - PASS no-blank ? 39 captures: every one strip-decodes or shows visible content (crossfade/dip union)
+PASS g3/monotonic-modular-advance - PASS monotonic-modular-advance ? every decoded frame is a schedule-bounded forward step (no second-pipeline interleave)
+PASS g3/all-verdicts - ALL VERDICTS PASSED (8)
+PASS g3/mid-fade-coverage - mid-fade capture at t=1784614340548
+PASS g3/mid-fade-artifact - E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260720T072956\lane-1\spine-tasks\SP-015-avatartube-animation\evidence\cap-g3-1784614340548.bmp
+-- G4 talk sequence (8s)
+PASS g4/talk+reaction-seen - clips: 3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,1,1,1,1,1,1,1
+PASS g4/talkreactionidle - talk@0 reaction@7 idle-after=True
+PASS g4/no-blank - PASS no-blank ? 31 captures: every one strip-decodes or shows visible content (crossfade/dip union)
+PASS g4/monotonic-modular-advance - PASS monotonic-modular-advance ? every decoded frame is a schedule-bounded forward step (no second-pipeline interleave)
+-- G5 click reaction (6s)
+PASS g5/click-clip-played - click emote clip rendered
+PASS g5/cooldown-ignored - duplicate click inside cooldown traced as ignored
+PASS g5/returns-to-idle - click@6 idle-after=True
+PASS g6/float-folded-into-g2 - centroid oscillation asserted by g2/float-liveness (window position checked in g10)
+-- G7 pause/resume (9s)
+PASS g7/frozen-identical - frozen frame: 3
+PASS g7/pause-freeze - PASS pause-freeze ? paused frame held across 6 captures (3324ms)
+PASS g7/resume-successor - PASS resume-successor ? post-resume frames continue the paused frame's successor chain (3->4)
+PASS g7/cadence-unchanged-after-resume - PASS cadence-unchanged-after-resume ? pre+post segments fit ONE schedule shifted by the 3324ms pause: speed 0,915 (1x within ?0,20)
+PASS g7/no-blank - PASS no-blank ? 23 captures: every one strip-decodes or shows visible content (crossfade/dip union)
+PASS g7/all-verdicts - ALL VERDICTS PASSED (8)
+-- G8 pack switch (6s)
+avatar-capability: Available — pack 'pulse' decoded
+PASS g8/pack-switch-clean - PASS pack-switch-clean ? 17 post-switch captures all decode pack 1, starting at frame 0 ? old pack fully disposed (never two avatars)
+PASS g8/no-blank - PASS no-blank ? 20 captures: every one strip-decodes or shows visible content (crossfade/dip union)
+PASS g8/frames-advance - PASS frames-advance ? 8 distinct decoded frames across the sequence
+PASS g8/all-verdicts - ALL VERDICTS PASSED (6)
+PASS g8/now-pulse - probe reports pack 1
+avatar-capability: Available — pack 'circuit' decoded
+PASS g8/back-to-circuit - probe reports pack 0
+-- G9 attach/detach (5s)
+PASS g9/detached-topmost - exstyle=0x00200108
+PASS g9/detached-ownerless - GW_OWNER=0x27E40464 != dashboard (hidden OffscreenParent per pinned 12.1.0 SetParent)
+PASS g9/attached-not-topmost - exstyle=0x00200100
+PASS g9/attached-owned - GW_OWNER == dashboard
+PASS g9/frames-advance - PASS frames-advance ? 7 distinct decoded frames across the sequence
+PASS g9/no-blank - PASS no-blank ? 16 captures: every one strip-decodes or shows visible content (crossfade/dip union)
+PASS g9/monotonic-modular-advance - PASS monotonic-modular-advance ? every decoded frame is a schedule-bounded forward step (no second-pipeline interleave)
+PASS g9/detached-survives-owner-minimize - detached tube stays visible with owner minimized
+-- G10 owner move
+PASS g10/tube-follows-owner - dash (136,88) tube (136,88)
+-- G11 owner minimize/restore
+PASS g11/tube-hidden-on-minimize - tube hidden with owner
+PASS g11/pause-traced - engine paused on owner minimize
+PASS g11/tube-restored - tube visible after restore
+PASS g11/resume-traced - engine resumed on owner restore
+PASS g11/probe-after-restore - frame=1 (was 4) - successor semantics by engine design + g7
+-- G12 leak long-run (25 cycles)
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Available — pack 'pulse' decoded
+PASS g12/registry-stable - outstanding=2 (heartbeat+engine) subs=1 after 25 cycles
+-- G13 cleanup
+PASS g13/tube-closed - tube window gone
+PASS g13/exit-zero - exit code 0
+-- G14 undecodable-asset typed state
+layout-probe: card 488.0x77.0 DIP @ scale 1 @ screen 232,286
+avatar-capability: Available — pack 'circuit' decoded
+avatar-capability: Degraded (asset-undecodable) — pack 'pulse' sheet 'Assets/avatar/pack-pulse.bmp' is undecodable: bmp: missing BM signature
+PASS g14/typed-degraded - capability avatar-animation: Degraded (asset-undecodable) - survives: static fallback avatar displayed
+PASS g14/fallback-rendered - strip decodes fallback identity pack=3 clip=7
+PASS g14/no-blank - PASS no-blank ? 1 captures: every one strip-decodes or shows visible content (crossfade/dip union)
+PASS g14/exit-zero - exit code 0
+
+EVIDENCE PASS - 66 gates green
+mid-fade artifact: E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260720T072956\lane-1\spine-tasks\SP-015-avatartube-animation\evidence\cap-g3-1784614340548.bmp
+fallback artifact: E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260720T072956\lane-1\spine-tasks\SP-015-avatartube-animation\evidence\cap-g14-fallback-1784614585118.bmp

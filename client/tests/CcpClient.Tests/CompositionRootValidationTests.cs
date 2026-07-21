@@ -52,7 +52,7 @@ public class CompositionRootValidationTests
 
         var host = root.Build(new StartupTrace());
 
-        Assert.Equal(3, host.Participants.Count);
+        Assert.Equal(4, host.Participants.Count);
         // Persistence contract §4 rule 1: the store registers first, so its phase-3 load
         // completes before any consumer participant starts.
         Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
@@ -60,6 +60,8 @@ public class CompositionRootValidationTests
         // SP-007: the demonstrator ticker registers AFTER the store — phase-3 start order
         // IS the restore-then-start ordering.
         Assert.IsType<CcpClient.Desktop.Features.StatusTickerParticipant>(host.Participants[2]);
+        // SP-015: the AvatarTube demonstrator (construction starts nothing).
+        Assert.IsType<CcpClient.Desktop.Features.AvatarTube.AvatarTubeParticipant>(host.Participants[3]);
     }
 
     [Fact]

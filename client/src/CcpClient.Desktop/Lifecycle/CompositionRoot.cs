@@ -91,6 +91,9 @@ public sealed class CompositionRoot
             // demo.status-ticker (SP-007): registered AFTER the store — phase-3 start order
             // IS the restore-then-start ordering (its start reads the restored flag).
             new Features.StatusTickerParticipant(infra.OwnerFor("StatusTicker"), infra.UiDispatch, store),
+            // SP-015 AvatarTube demonstrator: construction starts nothing; the tube opens
+            // on the user path (phase 4) via --avatartube-demo.
+            new Features.AvatarTube.AvatarTubeParticipant(infra.OwnerFor("AvatarTubeDemo"), infra.UiDispatch, infra.Log),
         ];
     }
 

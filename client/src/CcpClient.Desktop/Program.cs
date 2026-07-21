@@ -30,6 +30,55 @@ public static class Program
             return VersionSelfCheck.Run(typeof(Program).Assembly, Console.Out);
         }
 
+        // SP-015 bounded diagnostics (same discipline: pre-phase, no window, no participants).
+        // --generate-avatar-packs <dir>: deterministic synthetic pack regeneration.
+        if (args.Contains(Features.AvatarTube.AvatarEvidence.GenerateFlag, StringComparer.Ordinal))
+        {
+            var index = Array.IndexOf(args, Features.AvatarTube.AvatarEvidence.GenerateFlag);
+            if (index + 1 >= args.Length)
+            {
+                Console.Error.WriteLine("usage: --generate-avatar-packs <directory>");
+                return 1;
+            }
+
+            var written = Features.AvatarTube.SyntheticAvatarPacks.WriteAll(args[index + 1]);
+            foreach (var file in written)
+            {
+                Console.Out.WriteLine($"generated: {file}");
+            }
+
+            return 0;
+        }
+
+        // --avatar-strip-decode --capture <bmp>: one capture's strip + content fraction as JSON.
+        if (args.Contains(Features.AvatarTube.AvatarEvidence.StripDecodeFlag, StringComparer.Ordinal))
+        {
+            var capture = ArgValue(args, "--capture");
+            if (capture is null)
+            {
+                Console.Error.WriteLine("usage: --avatar-strip-decode --capture <file.bmp>");
+                return 1;
+            }
+
+            return Features.AvatarTube.AvatarEvidence.StripDecode(
+                capture, Console.Out,
+                fullWindow: args.Contains(Features.AvatarTube.AvatarEvidence.ScanFlag, StringComparer.Ordinal));
+        }
+
+        // --avatar-sequence <samples.jsonl> --pack <pack.json> [--trace <trace.jsonl>]: named verdicts.
+        if (args.Contains(Features.AvatarTube.AvatarEvidence.SequenceFlag, StringComparer.Ordinal))
+        {
+            var samples = ArgValue(args, Features.AvatarTube.AvatarEvidence.SequenceFlag);
+            var pack = ArgValue(args, "--pack");
+            if (samples is null || pack is null)
+            {
+                Console.Error.WriteLine("usage: --avatar-sequence <samples.jsonl> --pack <pack.json> [--trace <trace.jsonl>]");
+                return 1;
+            }
+
+            return Features.AvatarTube.AvatarEvidence.RunSequence(samples, pack, ArgValue(args, "--trace"), Console.Out);
+        }
+
         // Phase 1 (Bootstrap) actions must exist before anything can fail: panic hooks
         // and the minimal logger seam (contract §1, §9).
         ILogSink log = new DebugLogSink();
@@ -62,10 +111,19 @@ public static class Program
         // left-clicked there, so it must open itself; probe facts go to stderr.
         var popupDemo = args.Contains("--popup-demo", StringComparer.Ordinal);
 
+        // SP-015 demonstrator flags: open the AvatarTube tube at startup (same WSLg
+        // no-input-automation reasoning), corrupt the pulse pack in-memory (typed
+        // undecodable-asset path evidence), and/or mirror the engine trace to a JSONL file.
+        var avatarDemo = args.Contains("--avatartube-demo", StringComparer.Ordinal);
+        var avatarCorrupt = args.Contains("--avatar-corrupt-demo", StringComparer.Ordinal);
+        // WSLg has no input automation (SP-008 limit): the demo can open already animated.
+        var avatarAnimate = args.Contains("--avatar-animate", StringComparer.Ordinal);
+        var avatarTrace = ArgValue(args, "--avatar-trace");
+
         try
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
-            return BuildAvaloniaApp(host!, popupDemo).StartWithClassicDesktopLifetime(args);
+            return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace, avatarAnimate).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -129,7 +187,16 @@ public static class Program
         };
     }
 
-    public static AppBuilder BuildAvaloniaApp(ApplicationHost host, bool popupDemo = false) => AppBuilder
-        .Configure<App>(() => new App(host, popupDemo))
+    public static AppBuilder BuildAvaloniaApp(
+        ApplicationHost host, bool popupDemo = false,
+        bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
+        bool avatarAnimate = false) => AppBuilder
+        .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate))
         .UsePlatformDetect();
+
+    private static string? ArgValue(string[] args, string flag)
+    {
+        var index = Array.IndexOf(args, flag);
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+    }
 }

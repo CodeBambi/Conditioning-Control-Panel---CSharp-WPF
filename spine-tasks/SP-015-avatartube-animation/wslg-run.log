@@ -1,0 +1,41 @@
+=== SP-015 AvatarTube demonstrator (WSLg/X11) ===
+session facts: WAYLAND_DISPLAY=wayland-0 DISPLAY=:0 XDG_SESSION_TYPE=unset kernel=6.6.114.1-microsoft-standard-WSL2
+--- contract: dotnet build CcpClient.sln ---
+
+Time Elapsed 00:00:01.13
+--- contract: CcpClient.Tests ---
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:   176, Skipped:     0, Total:   176, Duration: 18 s - CcpClient.Tests.dll (net10.0)
+--- contract: CcpClient.HeadlessTests ---
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    22, Skipped:     0, Total:    22, Duration: 8 s - CcpClient.HeadlessTests.dll (net10.0)
+--- launch: --avatartube-demo --avatar-animate ---
+[boot] tube X window present (probe capture ok)
+--- capture: 16 XGetImage shots @ ~0.4s sleep (decode batched AFTER — per-shot app
+    spawn decode inflates the period past a frame hold and starves same-frame pairs) ---
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617716930.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617717383.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617717829.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617718275.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617718721.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617719167.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617719616.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617720065.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617720510.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617720956.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617721408.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617721855.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617722303.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617722752.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617723202.bmp (320x380)
+CAPTURE: /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260720T072956/lane-1/spine-tasks/SP-015-avatartube-animation/evidence/wslg/wslg-cap-1784617723648.bmp (320x380)
+--- evaluate: frames-advance / no-blank / float-liveness (session facts; cadence NOT claimed) ---
+PASS no-blank — 16 captures: every one strip-decodes or shows visible content (crossfade/dip union)
+PASS frames-advance — 8 distinct decoded frames across the sequence
+PASS float-liveness — same-frame content centroid oscillates up to 4.4px across 4 frame group(s), all within the ±7px float bound
+PASS monotonic-modular-advance — every decoded frame is a schedule-bounded forward step (no second-pipeline interleave)
+PASS no-duplicate-run-beyond-hold — no identical-frame run outlives its declared hold
+ALL VERDICTS PASSED (5)
+WSLG EVIDENCE DONE — frames-advance + no-blank + float-liveness PASS (session facts; cadence/timing Windows-headed only)
