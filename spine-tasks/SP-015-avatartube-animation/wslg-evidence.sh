@@ -48,7 +48,9 @@ SAMPLES="$ART/wslg-samples.jsonl"
 : > "$SAMPLES"
 echo "--- capture: 12 XGetImage shots @ ~800ms ---"
 for i in $(seq 1 12); do
-  T=$(date +%s%3N)
+  # GNU date's %3N is not honored on this WSL image (full %N printed — garbage epoch-ms
+  # overflowed the evaluator's elapsed math). Compose epoch-ms explicitly.
+  T=$(( $(date +%s) * 1000 + $(date +%N) / 1000000 ))
   CAP="$ART/wslg-cap-$T.bmp"
   python3 "$DST/client/tools/verify/xgetimage.py" "$TITLE" "$CAP" || { kill $APP_PID 2>/dev/null; exit 1; }
   LINE=$(dotnet "$DLL" --avatar-strip-decode --capture "$CAP" --scan) || true
