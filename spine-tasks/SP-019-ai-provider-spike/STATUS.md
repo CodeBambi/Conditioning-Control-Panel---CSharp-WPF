@@ -1,16 +1,16 @@
 # STATUS: SP-019 — spike cancellable AI providers and strict commands
 
 **Current Step:** Step 1 — provider/command archaeology + spike design + pre-approach consult
-**Last Updated:** 2026-07-21 (authored)
+**Last Updated:** 2026-07-21 (worker, Step 1 in progress)
 
 ### Step 1: Provider/command archaeology + spike design + pre-approach consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] STATUS.md updated before starting work
-- [ ] WPF + first-attempt archaeology (READ-ONLY, `File.cs:line`); command-safety REJECT lessons cited
-- [ ] Spike design (fake OpenAI-compatible loopback endpoint + failure injection; cancellation via SP-004 generations; canary executor; redaction + audit)
-- [ ] Ollama presence probe (session fact)
-- [ ] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
+- [x] STATUS.md updated before starting work
+- [x] WPF + first-attempt archaeology (READ-ONLY, `File.cs:line`); command-safety REJECT lessons cited
+- [x] Spike design (fake OpenAI-compatible loopback endpoint + failure injection; cancellation via SP-004 generations; canary executor; redaction + audit)
+- [x] Ollama presence probe (session fact)
+- [x] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
 
 ### Step 2: Loopback AI lab + redaction/audit core
 **Status:** ⬜ Not Started
