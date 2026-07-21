@@ -1,10 +1,10 @@
 # STATUS: SP-024 — DTRH host slice b2: save slots, picker/quick start, protocol v1
 
-**Current Step:** Step 1 — slots/picker/protocol archaeology + design + pre-approach consult
+**Current Step:** Step 3 — protocol v1 full vocabulary
 **Last Updated:** 2026-07-21 (Step 1 in progress)
 
 ### Step 1: Archaeology + design + pre-approach consult
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete
 
 - [x] STATUS.md updated before starting work
 - [x] WPF archaeology (READ-ONLY, `File.cs:line`): three-slot model, save picker, quick start, protocol usage
@@ -13,10 +13,10 @@
 - [x] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
 
 ### Step 2: Three local save slots (SP-005 machinery)
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] `Features/Dtrh/DtrhSaveSlots.cs`: three slots — create/select/persist/delete; schema-versioned, quarantine, journal, unknown-member preserve
-- [ ] Unit tests: lifecycle across reloads, corruption → quarantine + flagged defaults, ordering, empty-slot
+- [x] `Features/Dtrh/DtrhSaveSlots.cs`: three slots — create/select/persist/delete; schema-versioned, quarantine, journal, unknown-member preserve
+- [x] Unit tests: lifecycle across reloads, corruption → quarantine + flagged defaults, ordering, empty-slot
 
 ### Step 3: Protocol v1 full vocabulary
 **Status:** ⬜ Not Started

@@ -94,6 +94,9 @@ public sealed class CompositionRoot
             // SP-015 AvatarTube demonstrator: construction starts nothing; the tube opens
             // on the user path (phase 4) via --avatartube-demo.
             new Features.AvatarTube.AvatarTubeParticipant(infra.OwnerFor("AvatarTubeDemo"), infra.UiDispatch, infra.Log),
+            // SP-024 DTRH host slice b2: the three local save slots (SP-005 machinery per
+            // slot + DTRH-owned active-slot index), started after the demo store.
+            new Features.Dtrh.DtrhSaveSlots(infra, Path.GetDirectoryName(SettingsPathFactory())!),
             // SP-023 DTRH host slice b1: owns the §4 loopback origins + §3.3 inbox + bridge
             // token; the web surface itself is phase-4, selected by probed capability states.
             new Features.Dtrh.DtrhParticipant(infra.OwnerFor("DtrhHost"), infra.Log),
@@ -132,6 +135,8 @@ public sealed class CompositionRoot
         // Persistence contract §11: the store's flush is wired into the host's reserved
         // pre-drain slot. A custom participants factory without a store gets no flush.
         var store = participants.OfType<PersistenceStore<DemoSettings>>().FirstOrDefault();
+        // SP-024: the DTRH slot stores flush in the same reserved pre-drain slot.
+        var slotStores = participants.OfType<Features.Dtrh.DtrhSaveSlots>().FirstOrDefault();
 
         // Capability contract §3: the demonstrator probes are registered at composition
         // (never run here) and execute as owned operations in the CapabilityProbes phase.
@@ -153,7 +158,13 @@ public sealed class CompositionRoot
 
         return new ApplicationHost(
             log, participants, trace, infra.Registry, infra.UiDispatch,
-            preDrainFlush: store is null ? null : () => store.FlushAsync(DefaultFlushTimeout),
+            preDrainFlush: store is null && slotStores is null
+                ? null
+                : async () =>
+                {
+                    if (store is not null) await store.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
+                    if (slotStores is not null) await slotStores.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
+                },
             capabilities: capabilities, probeRunner: probeRunner);
     }
 }

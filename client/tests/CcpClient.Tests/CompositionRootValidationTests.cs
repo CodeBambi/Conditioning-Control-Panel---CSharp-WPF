@@ -52,7 +52,7 @@ public class CompositionRootValidationTests
 
         var host = root.Build(new StartupTrace());
 
-        Assert.Equal(5, host.Participants.Count);
+        Assert.Equal(6, host.Participants.Count);
         // Persistence contract §4 rule 1: the store registers first, so its phase-3 load
         // completes before any consumer participant starts.
         Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
@@ -62,6 +62,8 @@ public class CompositionRootValidationTests
         Assert.IsType<CcpClient.Desktop.Features.StatusTickerParticipant>(host.Participants[2]);
         // SP-015: the AvatarTube demonstrator (construction starts nothing).
         Assert.IsType<CcpClient.Desktop.Features.AvatarTube.AvatarTubeParticipant>(host.Participants[3]);
+        // SP-024: the DTRH save slots (SP-005 machinery per slot + index).
+        Assert.IsType<CcpClient.Desktop.Features.Dtrh.DtrhSaveSlots>(host.Participants[4]);
     }
 
     [Fact]
