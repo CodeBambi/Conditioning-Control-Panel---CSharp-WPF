@@ -127,6 +127,46 @@
 
 ---
 
+## Step 4 — picker + quick start + headed/WX evidence + board reconciliation
+
+### Product surface
+
+- **`DtrhSlotPickerWindow.axaml(.cs)`** — ports the WPF outcomes (per-block cites in code): three fixed-order cards, New Journey / populated (rank via the ChaosRanks threshold port `RankName` — ChaosRanks.cs:11-55) / Stitched-Shut locked (dimmed, unclickable, no delete), per-card delete with an IN-WINDOW confirm overlay (the MessageBox outcome, ported so the flow stays headless-testable — no second modal) incl. the stitch re-lock warning, folder footer + open-folder (explorer/xdg-open best-effort), Esc/Enter, cancel backs out. Visual grammar = the b1 host surface (#0b0b16 + pink accent) per dashboard-design (no theme-token system exists in the greenfield yet — recorded, not invented). Modal parity via ShowDialog.
+- **`DtrhLaunchCoordinator`** — the two WPF entries: `LaunchWithPickerAsync` (hero card: picker → DESCEND commits → descend → host) and `QuickStartAsync` (skips the picker, reuses the live slot — MainWindow.Lab.cs:161-165). Descend writes are awaited SP-004 owned completions; failures are typed diagnostics, never swallowed. Events HostOpened/FlowEnded drive the demo harness (auto-close arm; one-shot lifetime shutdown).
+- **File Scope amendment EXTENDED (same SP-023 norm, `fileScopeMustNotChange` untouched):** `Program.cs` (`--dtrh-quick`, `--dtrh-picker-timeout` flags), `App.axaml.cs` (the --dtrh-demo block routes through the coordinator; auto-close arms at HostOpened; one-shot FlowEnded → desktop.Shutdown). 3 wiring files total (CompositionRoot in Step 2).
+- `DtrhHostWindow` gains an optional slot param (status + diagnostic); title now "Down the Rabbit Hole" (WPF parity DtrhHostService.cs:113).
+- **Headless tests (4 new, draw-level):** fresh-profile card structure (3 cards, locked classes, New Journey, folder text, no delete buttons), populated card (rank/stats/last-played + delete → confirm overlay → erase → file gone → New Journey), commit/cancel outcomes, RankName thresholds. 26/26 green.
+
+### WH (Windows headed, DISPLAY3 owner convention — SetWindowPos to (-2576,1091) + GetWindowRect verified before EVERY capture; transcripts in `evidence/wh/`)
+
+- **Run A (picker open/list/select/confirm, `runA-picker.log`):** fresh profile → picker on DISPLAY3 (GetWindowRect `(-2576,1091)-(-1840,1610)` verified) → UIA dump = full content evidence (3 cards, New Journey, Stitched Shut ×2 with boudoir hints, folder path, Cancel/DESCEND) → `picker-fresh.png` (visually verified: selected-card accent glow, locked dimming) → UIA click DESCEND → host opens on slot 1 → **ENGINE LIVE** (`host-engine-live.png`: full Warren hub; dark=1.9%, ~200 colors) with the b2 dispatcher live in the log (`'MetaCommand' deferred to slice b4 (typed, not dropped)`) → real click + ESC-hold 1500ms → page `exit` → clean teardown. **File-content proof:** `dtrh_slot1.json` + `dtrh_slots.json` in the SP-005 document shape (schemaVersion + migrationJournal) — `slot1-file-proof.json`, `index-file-proof.json`.
+- **Run B (restart persistence + delete flow, `runB-restart.log`):** relaunch → slot 1 POPULATED in the picker (Curious, 0 descents, ✦0 drops, 🪙0 gold, "Last played Jul 21, 11:13 pm", delete button — UIA dump + `picker-restart.png`) → delete button (UIA InvokePattern) → confirm overlay (`picker-delete-confirm.png`: "Erase Save 1? …can't be undone") → Erase → card rebuilt as New Journey + `dtrh_slot1.json` deleted (index survives — WPF parity) → Cancel → exit WITHOUT launch, clean teardown.
+- **Run C (quick start end-to-end, `runC-quickstart.log`):** `--dtrh-quick` → `quick start — reusing slot 1 (picker skipped by design)` → slot file recreated → ENGINE LIVE (`quickstart-engine-live.png`, dark=1.9%) → window-close → FlowEnded → shutdown, exit clean. ESC-hold missed on this run (harness foreground/focus class — SP-023 recorded the same class; the ESC page-exit path itself is proven in run A; window-close teardown proven here).
+- **Run D:** re-capture after the ✕ glyph fix (below).
+
+### WX (WSL2 Ubuntu, WSLg X11-via-XWayland; `~/ccp-sp024` native ext4, never /mnt/e; no input automation; no timing claims; Wayland untouched)
+
+- **Contract testCommand on the synced tree:** sln 0W/0E; **291/291 + 26/26 green**.
+- **Probe round-trip with the b2 dispatcher (`wx/probe-wx.log`, EXIT=0):** `probe-p2h-ica` arrived via invokeCSharpAction (unknown type tolerated, harness-channel verbatim log); `check3 host->page DELIVERED via bridge.on {"type":"probe-h2p","via":"inbox"}`; preBuffer REPLAY delivered. NOTE: the probe harness now requires `--dtrh-quick` (b2 opens the picker first — see surprises).
+- **Picker render facts (`wx/picker-wx.log`, `wx/wx-picker.png`):** picker rendered on WSLg — xwd XGetImage of the window id (720x480, mean 10.9%, std 0.11 — content, not a dark surface; visually verified: full picker with Linux folder path). Timed-drive commit (30s, honestly labeled) → descend → dialog opens → **ENGINE LIVE on Linux** → auto-close → full teardown. Slot file proof on Linux: `wx/wx-slot1-proof.json`.
+- **Quick start on Linux (`wx/quick-wx.log`, EXIT=0):** `--dtrh-quick` → reused slot 1 (= Linux restart persistence: the slot existed from the prior run) → ENGINE LIVE → timed close → teardown end, exit 0.
+
+### Surprise ledger
+
+1. **The b2 flow broke the b1 probe harness** (`--dtrh-demo` alone now opens the picker; the probe page never loads) — harness entry is `--dtrh-quick` now. b3–b5 packets must know.
+2. **Coordinate click missed the delete button** (window not top at the point — SP-023's topmost lesson class); **UIA InvokePattern is the robust button driver** (name-matched, no coordinates); coordinate clicks remain fine for canvas/window bodies with a topmost raise.
+3. **🗑 renders as a glyph-fallback box** in the picker (Segoe Emoji coverage) → `✕` (headless test + capture updated).
+4. **`{0:N0}` group separators are culture-dependent** — headless assert on the label, not the formatted number.
+5. **ESC-hold exit missed on run C** (harness focus class; heartbeats proved no wedge; run A proved the path; window-close teardown proven on run C).
+6. **Run 2's exit-code echo was lost** (backgrounded subshell orphaned when the WSL session returned) — run 3 re-proved EXIT=0 in the foreground; recorded, not claimed for run 2.
+7. Emoji names in UIA dumps print as `??` (console codepage) — cosmetic; UIA matching by the exact char works.
+
+### Budgets
+
+Product sln build ~4-9s Windows incremental / ~15s WSL; tests 33s + 11s Windows, 19s + 10s WSL; headed runs A-D ~2min total; WX runs ~5min.
+
+---
+
 ## Step 2 — three local save slots (SP-005 machinery)
 
 - **`Features/Dtrh/DtrhSaveSlots.cs`** (contract-named): `DtrhSlotDocument` (schema v1: sparks/gold/runsCompleted/bestScore/craftedItems + ExtensionData), `DtrhSlotIndex` (activeSlot), `DtrhSlotSummary`, `DtrhSaveSlots : IBackgroundParticipant` — four `PersistenceStore<T>` instances (index + 3 slots), each with its OWN named owner (`Begin()` cancels the prior generation, OperationRegistry.cs:148-159). Files `dtrh_slot1..3.json` + `dtrh_slots.json` beside settings.json. Semantics per the Step-1 design: eager phase-3 load (missing stays file-less, corrupt quarantines once at startup — never at picker-open), summaries from loaded stores + file facts (no parallel read path), `SelectSlot` persists the index immediately (ChaosUpgrades.cs:230-243 parity, no banking of the outgoing slot), `DescendInto` persists a fresh document when empty, `DeleteSlot` deletes file+tmp, stops the old store (an in-flight write can't resurrect the file), reloads fresh. Stitch-lock ports ChaosSlotPickerWindow.xaml.cs:60-80 (any save's doll unlocks globally; a pre-existing save keeps its slot open).
