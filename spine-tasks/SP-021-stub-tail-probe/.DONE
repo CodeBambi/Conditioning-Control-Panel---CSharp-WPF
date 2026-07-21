@@ -1,0 +1,1 @@
+STUB-ONLY probe terminal marker (orchestrator-written 2026-07-21): the T-1 post-land reinstall gate's >16KB tail spawn proof ran as STUB batch 20260721T160403 (worker spawned + completed; @file artifacts 20,848B + 20,773B in %TEMP%). This packet is never run with a real worker; the stub lane was aborted and cleaned per the T-6 playbook.

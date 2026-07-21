@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** Active
-**Next Task ID:** SP-021
+**Next Task ID:** SP-022
 
 ---
 
@@ -28,6 +28,10 @@ Phase 3 COMPLETE 2026-07-21 (all three rows landed, all WIP pending owner ratifi
 |------|---------|--------|------|
 | SP-019-ai-provider-spike | Row: spike cancellable AI providers and strict commands | **Done 2026-07-21** (landed `fd375b62` ff; batch `20260721T130248` — clean single-worker run (~50 min), T-5 9th → playbook; fuzz 62/62 zero-execution proven both platforms vs SP-016's real validator; provider matrix 39 checks (cancellation/timeout/429/500/refusal/malformed + remote-host 0-send rejection); independent 29-secret grep ZERO hits; Ollama + cloud named limits; 213/213 + 22/22 zero-drift; engine reviews APPROVE+PASS; row stays WIP pending owner ratification) | SP-018 |
 | SP-020-spine-patch-mechanism | Row: T-1 durable pi-spine local-patch mechanism | **Done 2026-07-21** (landed `88c9301a` orch merge; batch `20260721T142240` — 3-attempt contract saga (authoring mustNotChange self-contradiction fixed base+lane; engine re-verifies against LANE packet copy) + human_base_diverged union + **gate approved UNCONSULTED in diverge recovery — violation recorded, post-hoc Fable RATIFIED**; inventory: 2 fsync present + 1 undocumented + 2 LOST to reinstall; T-12 stays upstream; scratch-cycle GREEN incl. >16KB-tail stub; 213/213 + 22/22 zero-drift; engine reviews APPROVE+PASS; row stays WIP: post-land real-reinstall gate + automation limit) | SP-019 |
+
+**SP-021-stub-tail-probe** (not a phase task): stub-only spawn-probe packet for the T-1 post-land reinstall gate (STUB batch `20260721T160403`; worker spawned + completed with a 20.8KB tail via the re-applied `@file` patch; stub lane aborted + cleaned per T-6; terminal marker `.DONE` orchestrator-written on base 2026-07-21 — never run real).
+
+**T-1 POST-LAND REAL-REINSTALL GATE DISCHARGED 2026-07-21 (run parked):** backup → TRUE fresh reinstall (rm `node_modules/pi-spine` first — npm skips re-extract of satisfied versions) → 5 patches missing (negative control) → apply (5) → verify exit 0 → `spine preflight` GREEN → dotnet allowlist FUNCTIONAL PASS → >16KB spawn proof → cleanup. T-1 row CLOSED on the board; 2.8.0→2.10.0 upgrade stays an owner decision.
 
 ### Phase 3 — AI contract, audio backend spike, online-video handoff spike (COMPLETE 2026-07-21)
 
