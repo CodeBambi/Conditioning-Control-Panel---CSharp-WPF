@@ -8,7 +8,7 @@ Packet emits structured `## Review Level: 2` heading. Per-call record:
 
 | Step | spine_review_step call | Result | Engine review fired? |
 |------|------------------------|--------|----------------------|
-| 1 | type=plan after step-1 commit | (filled at call time) | |
+| 1 | type=plan after step-1 commit | `skipped: true`, `spawnFailed: false` — SP-195 nested-spawn block, reviewLevel echoed 2 | NO in-worker (by design); engine reviews post-.DONE |
 
 ## Step 1 — pin re-verification, transport design, pre-approach consult
 

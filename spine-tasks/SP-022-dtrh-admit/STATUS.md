@@ -1,10 +1,10 @@
 # STATUS: SP-022 — admit DTRH browser and origin design
 
-**Current Step:** Step 1 — pin re-verification + transport design + pre-approach consult
-**Last Updated:** 2026-07-21 (worker, Step 1 in progress)
+**Current Step:** Step 2 — admission record + host slice cut
+**Last Updated:** 2026-07-21 (worker, Step 1 complete, review skipped by design SP-195)
 
 ### Step 1: Pin re-verification + transport design + pre-approach consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
 - [x] STATUS.md updated before starting work
 - [x] Package pin re-confirmed (live feed + spike restore/build re-run Windows AND WSL2 `~/ccp-sp022`); Linux native deps restated + apt-source check
@@ -12,10 +12,10 @@
 - [x] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
 
 ### Step 2: Admission record + host slice cut
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] `client/docs/dtrh-admission.md`: package pin, Linux natives, transport diff spec + per-direction matrix, loopback security contract (approved-by-decree), no-classic-fallback, Wayland named limit, payload hashes referenced
-- [ ] Host slice cut b1…b5 with per-slice acceptance mapping + evidence classes
+- [x] `client/docs/dtrh-admission.md`: package pin, Linux natives, transport diff spec + per-direction matrix, loopback security contract (approved-by-decree), no-classic-fallback, Wayland named limit, payload hashes referenced
+- [x] Host slice cut b1…b5 with per-slice acceptance mapping + evidence classes
 
 ### Step 3: Board reconciliation + record + pre-completion consult
 **Status:** ⬜ Not Started
