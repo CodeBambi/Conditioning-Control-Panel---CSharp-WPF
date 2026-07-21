@@ -1,10 +1,10 @@
 # STATUS: SP-018 — spike browser-to-native online-video handoff
 
-**Current Step:** Step 1 — video archaeology + source-matrix + package admission pre-approach consult
-**Last Updated:** 2026-07-21 (in progress)
+**Current Step:** Step 3 — Windows browser→native handoff evidence
+**Last Updated:** 2026-07-21 (Step 2 complete: 14/14 matrix PASS exit 0, audit GREEN)
 
 ### Step 1: Video archaeology + source-matrix definition + package admission pre-approach consult
-**Status:** 🔄 Outcomes done — plan review pending (RL2 order)
+**Status:** ✅ Complete (2026-07-21; in-worker plan review skipped by design SP-195)
 
 - [x] STATUS.md updated before starting work
 - [x] WPF + first-attempt video archaeology (READ-ONLY, `File.cs:line`); handoff REJECT lessons cited
@@ -13,14 +13,14 @@
 - [x] **Package admission solo Fable 5 consult** (verdict + actual answering model in record.md BEFORE checkbox)
 
 ### Step 2: Loopback source lab + native decode handoff core
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete (2026-07-21; in-worker plan review skipped by design SP-195)
 
-- [ ] `client/spikes/CcpSpike.VideoHandoff/` (out of solution; loopback lab: MP4/WebM synthetic, cookie/header-gated, signed-URL TTL, HLS, DASH, blob fixture, fake-DRM/EME)
-- [ ] Native decode probe: track metadata + time progression + end events per row; typed limitation reports
-- [ ] Redaction discipline + `--audit-logs` self-check implemented
+- [x] `client/spikes/CcpSpike.VideoHandoff/` (out of solution; loopback lab: MP4/WebM synthetic, cookie/header-gated, signed-URL TTL, HLS, DASH, blob fixture, fake-DRM/EME)
+- [x] Native decode probe: track metadata + time progression + end events per row; typed limitation reports
+- [x] Redaction discipline + `--audit-logs` self-check implemented (GREEN on evidence run)
 
 ### Step 3: Windows browser→native handoff evidence
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] WebView2 host: per-row discovery → transfer → decode-verified playback (or typed limitation), success + failure shapes
 - [ ] Expiring-URL valid+expired; cookie/header negative controls; blob:/MSE outcome; DRM detect-report asserted in logs
