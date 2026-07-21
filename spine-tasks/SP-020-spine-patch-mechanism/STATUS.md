@@ -1,6 +1,6 @@
 # STATUS: SP-020 — durable pi-spine local-patch mechanism (T-1)
 
-**Current Step:** Step 4 — board reconciliation + record + pre-completion consult
+**Current Step:** Step 5 — testing & verification
 **Last Updated:** 2026-07-21 (Step 1 in progress)
 
 ### Step 1: Empirical patch inventory + pre-approach consult
@@ -26,7 +26,7 @@
 - [x] Idempotence: apply → apply (0 applied, 5 skipped) → verify exit 0; loud-fail drift demo (named id, exit 1, zero writes); 2.10.0 cross-version apply+verify green
 
 ### Step 4: Board reconciliation + record + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete (plan review: engine-skipped by design)
 
 - [x] record.md complete
 - [x] Pre-completion solo Fable 5 consult APPROVE (verdict + actual model claude-fable-5 in record.md)
@@ -34,7 +34,7 @@
 - [ ] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
 - [ ] Contract testCommand green (client 0W/0E + both test projects — pollution guard)
 - [ ] `git diff --check` clean

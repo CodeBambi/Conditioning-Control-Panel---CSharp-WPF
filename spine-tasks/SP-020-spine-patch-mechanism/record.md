@@ -45,6 +45,7 @@
 | 1 | Step 1 plan | `skipped=true, spawnFailed=false, reviewLevel=2` — nested_spawn_blocked BY DESIGN (SP-195/SP-278); reviewLevel parsed 2 correctly (structured heading works); engine runs reviews post-.DONE |
 | 2 | Step 2 plan | `skipped=true, spawnFailed=false, reviewLevel=2` — same by-design skip |
 | 3 | Step 3 plan | `skipped=true, spawnFailed=false, reviewLevel=2` — same by-design skip |
+| 4 | Step 4 plan | `skipped=true, spawnFailed=false, reviewLevel=2` — same by-design skip |
 
 ## Step 2 — manifest + apply + verify
 
