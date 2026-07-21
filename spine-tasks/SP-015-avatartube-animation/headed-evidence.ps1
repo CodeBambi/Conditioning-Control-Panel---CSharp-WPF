@@ -274,7 +274,9 @@ $talkIdx = [Array]::IndexOf($seqClips, 3); $reactIdx = [Array]::IndexOf($seqClip
 $idleAfterReact = $false
 for ($i = $reactIdx; $i -lt $seqClips.Count; $i++) { if ($seqClips[$i] -in 1, 2) { $idleAfterReact = $true; break } }
 Gate (($talkIdx -ge 0) -and ($reactIdx -gt $talkIdx) -and $idleAfterReact) 'g4/talk→reaction→idle' "talk@$talkIdx reaction@$reactIdx idle-after=$idleAfterReact"
-Invoke-Sequence 'g4' (Save-Samples $g4 'g4') $true @('no-blank', 'monotonic-modular-advance')
+# Cadence/schedule-fit is G2/G7's claim — the talk trigger interrupts idle rotation
+# mid-clip by design, so scope g4 to its sequence verdicts (no all-verdicts gate).
+Invoke-Sequence 'g4' (Save-Samples $g4 'g4') $true @('no-blank', 'monotonic-modular-advance') $false
 
 # ---- G5: click reaction + cooldown (real click on the avatar) ----
 Write-Output '-- G5 click reaction (6s)'
