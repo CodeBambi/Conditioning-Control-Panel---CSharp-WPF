@@ -163,7 +163,11 @@
                 </Grid>
     
                 <UniformGrid Rows="1" Columns="2">
-                    <!-- Quiz Training Card -->
+                    <!-- Graded Intake card (was "Quiz Training").
+                         REBRAND: the classic AI quiz is HIDDEN, not deleted — it stays wired up as a
+                         fallback while the intake is in beta, and comes out for real once the intake
+                         has proven itself. Everything marked "HIDDEN (pending removal)" below is that
+                         old surface. Pop Quiz is NOT part of the rework and stays fully visible. -->
                     <Border Style="{StaticResource LabCard}">
                         <StackPanel>
                             <!-- hero header -->
@@ -190,7 +194,10 @@
                                             Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
                                         <Image Width="18" Height="18" Source="{Binding Source='❓', Converter={StaticResource EmojiToImageSource}}"/>
                                     </Border>
-                                    <TextBlock Text="{loc:Str label_quiz_training}" Style="{StaticResource LabCardTitle}"/>
+                                    <!-- Literal, not a loc key: the intake's own page content is
+                                         English-only, and the launch button beside it has always been
+                                         a literal too. Localise both together when the page localises. -->
+                                    <TextBlock Text="Graded Intake" Style="{StaticResource LabCardTitle}"/>
                                     <Border Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                                             CornerRadius="6" Padding="6,2" Margin="9,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="{loc:Str label_beta_2}" Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="9.5"/>
@@ -198,16 +205,20 @@
                                 </StackPanel>
                                 <Button x:Name="HelpBtnQuiz" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Quiz"/>
                             </Grid>
-                            <TextBlock Text="{loc:Str label_ai_generated_personality_quiz_10_questions_th}"
+                            <TextBlock Text="A banded descent that reads how you answer - and how long you take - and drafts a personalised session from it."
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
-    
-                            <CheckBox x:Name="ChkQuizFullscreen" x:FieldModifier="internal" Content="{loc:Str btn_fullscreen}" IsChecked="True"
+
+                            <!-- HIDDEN (pending removal): classic-quiz launch options. Still read by
+                                 BtnStartQuiz_Click below, so the fallback keeps its last-set values. -->
+                            <CheckBox x:Name="ChkQuizFullscreen" x:FieldModifier="internal" Content="{loc:Str btn_fullscreen}" IsChecked="True" Visibility="Collapsed"
                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,4"/>
-                            <CheckBox x:Name="ChkQuizDrone" x:FieldModifier="internal" Content="{loc:Str setting_play_drone_in_background}" IsChecked="False"
+                            <CheckBox x:Name="ChkQuizDrone" x:FieldModifier="internal" Content="{loc:Str setting_play_drone_in_background}" IsChecked="False" Visibility="Collapsed"
                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,10"/>
-    
+
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                                <Button x:Name="BtnStartQuiz" Content="{loc:Str btn_start_quiz}" Cursor="Hand"
+                                <!-- HIDDEN (pending removal): the classic AI quiz. Handler left intact
+                                     so it can be re-shown by deleting one attribute if the intake regresses. -->
+                                <Button x:Name="BtnStartQuiz" Content="{loc:Str btn_start_quiz}" Cursor="Hand" Visibility="Collapsed"
                                         Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="12"
                                         BorderThickness="0" Padding="12,8"
                                         Click="BtnStartQuiz_Click">
@@ -217,12 +228,13 @@
                                         </Style>
                                     </Button.Resources>
                                 </Button>
-                                <!-- "Graded Intake" web-core rework (Agent I): hosted in WebView2, drafts a
-                                     themed session from a banded-descent run. Placeholder name; user will rename. -->
-                                <Button x:Name="BtnStartIntake" Content="✨ Graded Intake" Cursor="Hand"
-                                        Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="12"
-                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="12,8" Margin="8,0,0,0"
-                                        ToolTip="The graded-intake rework — a banded descent that drafts a personalised session (Beta)."
+                                <!-- "Graded Intake": hosted in WebView2, drafts a themed session from a
+                                     banded-descent run. Now the card's PRIMARY (and only visible) action,
+                                     so it wears the filled style the classic quiz button used to. -->
+                                <Button x:Name="BtnStartIntake" Content="✨ Begin Intake" Cursor="Hand"
+                                        Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="12"
+                                        BorderThickness="0" Padding="12,8"
+                                        ToolTip="A banded descent that drafts a personalised session from how you answer (Beta)."
                                         Click="BtnStartIntake_Click">
                                     <Button.Resources>
                                         <Style TargetType="Border">
@@ -231,8 +243,10 @@
                                     </Button.Resources>
                                 </Button>
                                 <!-- "Beta Inspection Bureau" labeling game: served live from cclabs.app/bureau,
-                                     hosted in WebView2 via BureauHostService. Needs a logged-in account. -->
-                                <Button x:Name="BtnStartBureau" Content="🔍 Inspection Bureau" Cursor="Hand"
+                                     hosted in WebView2 via BureauHostService. Needs a logged-in account.
+                                     HIDDEN for now - the game and its server side stay fully wired; only
+                                     the entry point is withdrawn. Delete the Visibility to bring it back. -->
+                                <Button x:Name="BtnStartBureau" Content="🔍 Inspection Bureau" Cursor="Hand" Visibility="Collapsed"
                                         Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="12"
                                         BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="12,8" Margin="8,0,0,0"
                                         ToolTip="Clock in at the Beta Inspection Bureau - stamp dossiers, earn commendations, help train the censor (Beta)."

@@ -241,6 +241,13 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // REBRAND: the classic quiz is hidden behind the Graded Intake, so its
+                // past-runs list has nothing to advertise. Bail before touching visibility —
+                // the panel is Collapsed in XAML and this method was the only thing that
+                // ever un-collapsed it. History for the intake lives in the intake page.
+                // (Existing quiz history on disk is untouched; unhide and this lights up again.)
+                if (LabTab?.BtnStartQuiz?.Visibility != Visibility.Visible) return;
+
                 var history = QuizService.LoadHistory();
                 LabTab.PastQuizzesList.Children.Clear();
 

@@ -835,22 +835,25 @@ namespace ConditioningControlPanel.Services
             {
                 SectionId = "Quiz",
                 Icon = "\uD83E\uDDE0",
-                Title = "Quiz Training",
-                WhatItDoes = "AI-generated personality quizzes with 10 questions that adapt based on your answers. " +
-                             "Each quiz is unique — the AI reads your responses and tailors follow-up questions to dig deeper. " +
-                             "At the end you get a personality breakdown with scores and a summary of who you really are.",
+                // SectionId stays "Quiz" — it's the key HelpBtnQuiz's Tag resolves against, and the
+                // card it belongs to was rebranded from Quiz Training to the Graded Intake.
+                Title = "Graded Intake",
+                WhatItDoes = "A banded descent that grades you as you go. It opens gentle and gets less gentle, " +
+                             "reading not just what you pick but how long you took to pick it — and closes with a " +
+                             "grade, a judgment, and a session drafted to fit whoever the answers say you are.",
                 Tips = new List<string>
                 {
-                    "Enable 'Fullscreen' for a more immersive, distraction-free experience",
-                    "Turn on 'Play drone in background' for ambient audio during the quiz",
-                    "Answer honestly — the AI adapts questions based on your previous answers",
-                    "Your past quiz results are saved and viewable under 'Past Quizzes'",
-                    "Each quiz awards XP on completion"
+                    "Answer on instinct — hesitation is measured, so a considered lie still tells on you",
+                    "The bands lengthen as you descend; the pressure is meant to build, not to trick you",
+                    "Waiting always completes a beat — you are never stuck, even if you touch nothing",
+                    "The drafted session is saved automatically when the run ends",
+                    "Pop Quiz below is separate: short reinforcement questions that interrupt normal sessions"
                 },
-                HowItWorks = "The quiz uses an AI language model to generate questions one at a time. After each answer, " +
-                             "the AI considers your full answer history to craft the next question. Questions have 4 options " +
-                             "with hidden scores (1-4) that feed into your final personality breakdown. The 10th question is " +
-                             "always a dramatic finale. Results include category scores, a personality type, and a written summary."
+                HowItWorks = "The intake runs as five bands — Calibration, Establishing, Deepening, Climax, Recovery — " +
+                             "each pulling prompts from a themed bank at a heat level matched to how deep you are. Plain, " +
+                             "unadorned questions are seeded through every band so the effects never become the whole texture. " +
+                             "Your answers, latencies and refusals build a profile, and that profile picks the knobs on the " +
+                             "session you're handed at the end."
             },
 
             ["KeywordTriggers"] = new HelpContent
