@@ -78,11 +78,15 @@ function Dump-Uia {
 }
 
 function Click-Point($x, $y) {
+  # Raise first: a raw click lands on whatever is TOP at the point (SP-023/SP-024 lesson).
+  [W3]::SetWindowPos($h, [IntPtr]::new(-1), 0, 0, 0, 0, 0x0001 -bor 0x0002 -bor 0x0040) | Out-Null
+  Start-Sleep -Milliseconds 250
   [W3]::SetCursorPos($x, $y) | Out-Null
   Start-Sleep -Milliseconds 120
   [W3]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
   Start-Sleep -Milliseconds 80
   [W3]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+  [W3]::SetWindowPos($h, [IntPtr]::new(-2), 0, 0, 0, 0, 0x0001 -bor 0x0002) | Out-Null
   Write-Output "clicked screen ($x,$y)"
 }
 

@@ -224,7 +224,9 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
 
     /// <summary>The stitch-lock (WPF: ChaosSlotPickerWindow.xaml.cs:60-80): slots 2/3 are
     /// stitched shut until ANY save owns the Ragdoll / Porcelain craft; a pre-existing
-    /// save keeps its own slot open (back-compat).</summary>
+    /// save keeps its own slot open (back-compat). A DEGRADED slot also stays open:
+    /// re-locking would hide the quarantine flag behind a Stitched-Shut card (the WPF
+    /// corrupt card stayed visible + deletable).</summary>
     public bool IsSlotLocked(int slot, IReadOnlyList<DtrhSlotSummary> summaries)
     {
         if (slot is < 2 or > SlotCount)
@@ -238,7 +240,7 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
             anyDoll |= slot == 2 ? s.HasRagdoll : s.HasPorcelain;
         }
 
-        return !anyDoll && !summaries[slot - 1].Exists;
+        return !anyDoll && !summaries[slot - 1].Exists && !summaries[slot - 1].Degraded;
     }
 
     /// <summary>Commit the chosen slot (WPF: ChaosMeta.SwitchSlot, ChaosUpgrades.cs:230-243):

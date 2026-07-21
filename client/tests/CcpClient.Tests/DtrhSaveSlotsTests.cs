@@ -213,6 +213,24 @@ public class DtrhSaveSlotsTests
     }
 
     [Fact]
+    public async Task StitchLock_DegradedSlotStaysOpen_FlagNotHidden()
+    {
+        using var dir = new TempDir();
+        var slots = NewSlots(dir);
+        // A corrupt slot-2 save (no doll anywhere): quarantine at startup, then the lock
+        // must NOT hide the Degraded flag behind a Stitched-Shut card (pre-completion
+        // consult finding — the WPF corrupt card stayed visible + deletable).
+        File.WriteAllText(slots.SlotFilePath(2), "garbage {{{");
+        await slots.StartAsync(CancellationToken.None);
+
+        var summaries = slots.Summaries();
+        Assert.True(summaries[1].Degraded);
+        Assert.False(slots.IsSlotLocked(2, summaries));
+        Assert.True(slots.IsSlotLocked(3, summaries)); // untouched slot still locked
+        await slots.StopAsync();
+    }
+
+    [Fact]
     public async Task ActiveSlot_OutOfRange_ClampsToOne()
     {
         using var dir = new TempDir();

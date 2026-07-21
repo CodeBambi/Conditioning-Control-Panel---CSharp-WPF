@@ -124,6 +124,7 @@
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260721T204234.md` |
 | 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260721T205239.md` |
 | 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260721T210045.md` |
+| 4 | plan | (pending) | |
 
 ---
 
@@ -142,7 +143,8 @@
 - **Run A (picker open/list/select/confirm, `runA-picker.log`):** fresh profile → picker on DISPLAY3 (GetWindowRect `(-2576,1091)-(-1840,1610)` verified) → UIA dump = full content evidence (3 cards, New Journey, Stitched Shut ×2 with boudoir hints, folder path, Cancel/DESCEND) → `picker-fresh.png` (visually verified: selected-card accent glow, locked dimming) → UIA click DESCEND → host opens on slot 1 → **ENGINE LIVE** (`host-engine-live.png`: full Warren hub; dark=1.9%, ~200 colors) with the b2 dispatcher live in the log (`'MetaCommand' deferred to slice b4 (typed, not dropped)`) → real click + ESC-hold 1500ms → page `exit` → clean teardown. **File-content proof:** `dtrh_slot1.json` + `dtrh_slots.json` in the SP-005 document shape (schemaVersion + migrationJournal) — `slot1-file-proof.json`, `index-file-proof.json`.
 - **Run B (restart persistence + delete flow, `runB-restart.log`):** relaunch → slot 1 POPULATED in the picker (Curious, 0 descents, ✦0 drops, 🪙0 gold, "Last played Jul 21, 11:13 pm", delete button — UIA dump + `picker-restart.png`) → delete button (UIA InvokePattern) → confirm overlay (`picker-delete-confirm.png`: "Erase Save 1? …can't be undone") → Erase → card rebuilt as New Journey + `dtrh_slot1.json` deleted (index survives — WPF parity) → Cancel → exit WITHOUT launch, clean teardown.
 - **Run C (quick start end-to-end, `runC-quickstart.log`):** `--dtrh-quick` → `quick start — reusing slot 1 (picker skipped by design)` → slot file recreated → ENGINE LIVE (`quickstart-engine-live.png`, dark=1.9%) → window-close → FlowEnded → shutdown, exit clean. ESC-hold missed on this run (harness foreground/focus class — SP-023 recorded the same class; the ESC page-exit path itself is proven in run A; window-close teardown proven here).
-- **Run D:** re-capture after the ✕ glyph fix (below).
+- **Run D:** glyph-fix re-capture of the restart-populated picker (`picker-restart.png`, ✕ delete button renders).
+- **Run E-series (select-by-click + slot-2 descend):** pre-seeded `dtrh_slot2.json` (WPF back-compat clause: a pre-existing save keeps its slot open) → picker shows slot 2 unlocked + populated (Tempted / 4 descents / ✦7 / 🪙3 / best score / Last played — UIA dump) → raw click on card 2 moves the selection glow (`picker-slot2-selected.png`) → E8 (forensics below): timed commit of the slot-2 selection → `descending into slot 2` → ENGINE LIVE → auto-close → **exit=0** (`runE8-slot2.log`); index file proof `activeSlot: 2` + slot-2 file proof. E3–E7 harness wedge class recorded under forensics below.
 
 ### WX (WSL2 Ubuntu, WSLg X11-via-XWayland; `~/ccp-sp024` native ext4, never /mnt/e; no input automation; no timing claims; Wayland untouched)
 
@@ -160,6 +162,22 @@
 5. **ESC-hold exit missed on run C** (harness focus class; heartbeats proved no wedge; run A proved the path; window-close teardown proven on run C).
 6. **Run 2's exit-code echo was lost** (backgrounded subshell orphaned when the WSL session returned) — run 3 re-proved EXIT=0 in the foreground; recorded, not claimed for run 2.
 7. Emoji names in UIA dumps print as `??` (console codepage) — cosmetic; UIA matching by the exact char works.
+
+### Consults
+
+#### Pre-completion consult (Step 4)
+
+**Mode:** solo (council route broken — T-7). **Requested:** Fable 5. **Actual answering model:** NOT surfaced by the consult tool response (recorded honestly, same discipline as SP-022/SP-023).
+
+**Verdict: TWO fix-first items (both fixed before .DONE), rest approved.**
+1. **Select-by-click was unproven** (fresh profile locks cards 2/3; only default selection was exercised). Fixed two ways: (a) headless real-input test — ragdoll unlocks slot 2, `MouseDown`/`MouseUp` at card 2's center → `SelectedSlot` 1→2 + `sel` class moves + commit = 2 (`CardClick_ChangesSelection`); (b) headed: pre-seeded `dtrh_slot2.json` (the WPF back-compat clause — a pre-existing save keeps its slot open) → raw click on card 2 moved the selection glow (`picker-slot2-selected.png` / `e4-after-click.png`) → E8 descend into slot 2 end-to-end (below).
+2. **Corrupt slot 2/3 + stitch-lock hid the Degraded flag** (quarantined slot → Exists=false → slot re-locks → Stitched-Shut card hides the quarantine; the WPF corrupt card stayed visible + deletable). Fixed: `IsSlotLocked` treats a Degraded slot as open (one line + `StitchLock_DegradedSlotStaysOpen_FlagNotHidden` test).
+- Confirmed acceptable: eager-load at startup (quarantine once, consistent with the SP-005 main store); delete-via-store-recreation (owner accumulation bounded at 3/delete — recorded); modal ShowDialog flow (one-shot FlowEnded guard; WX empirically exercised); ForwardVersion-before-Unknown ordering.
+- Record-attribution nit (fixed): `picker-restart.png` is run D's re-capture (glyph fix) — restart persistence proven by run B's UIA dump + run D's capture, both with the populated card.
+
+### E-series forensics (harness-side wedge class, recorded honestly)
+
+Runs E3–E7 hit a reproducible harness anomaly: after cross-process drive of the MODAL picker (SetWindowPos incl. an HWND_TOPMOST wrapper + raw clicks + backgrounded/tee'd stderr), the app ended in a state with **zero HWNDs on the pid, the picker visually gone, the UI thread alive in `Dispatcher.MainLoop`, and `LaunchWithPickerAsync`'s `ShowDialog<bool>` task pending forever** (dotnet-dump evidence: dumpasync STACK 3 + main-thread clrstack). The picker HWND vanished without Avalonia's Closed event — no product path observes that (the Closed handler never ran, so no descend, no FlowEnded; the lifetime never saw last-window-close). E6 self-resolved after ~25 min; E7's process died silently with a truncated log (tee-subshell stderr loss). **E8 (foreground, plain `>`, no cross-process manipulation, timed commit) ran the identical product flow CLEAN: `picker timeout — committing current selection` → `descending into slot 2` → `auto-close armed` → `ENGINE LIVE` → `auto-close firing` → `flow ended` → `teardown end`, exit=0** (`runE8-slot2.log`). Verdict: harness-side (cross-process z-order/position manipulation of a modal + backgrounded stderr plumbing), NOT a product defect — runs A–D (UIA InvokePattern, no topmost on the modal) and E8 (no manipulation) never wedged. Harness rule going forward: **UIA InvokePattern or timed drive for modal buttons; topmost raise only for canvas clicks on non-modal windows; foreground runs for exit-code evidence.**
 
 ### Budgets
 

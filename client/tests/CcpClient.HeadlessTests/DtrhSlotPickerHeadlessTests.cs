@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using CcpClient.Desktop.Features.Dtrh;
@@ -113,6 +114,43 @@ public class DtrhSlotPickerHeadlessTests
         picker2.FindControl<Button>("CancelButton")!
             .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Assert.Null(picker2.ChosenSlot); // cancel backs out — no launch
+    }
+
+    [AvaloniaFact]
+    public async Task CardClick_ChangesSelection()
+    {
+        var (slots, _) = NewSlots();
+        // Unlock slot 2 the WPF way: any save's Ragdoll craft opens it globally.
+        await slots.DescendInto(1);
+        slots.StoreFor(1).Mutate(m => m.CraftedItems["ragdoll"] = 1);
+        await slots.StoreFor(1).SaveImmediate();
+
+        var picker = new DtrhSlotPickerWindow(slots);
+        picker.Show();
+        Assert.Equal(1, picker.SelectedSlot);
+
+        var cards = picker.GetVisualDescendants().OfType<Border>()
+            .Where(b => b.Classes.Contains("slot-card")).ToList();
+        Assert.DoesNotContain("locked", cards[1].Classes);
+
+        // Real headless input at card 2's center: PointerReleased on the card selects it
+        // (the pre-completion consult's fix-first: select-by-click was unproven).
+        // Walk visual ancestors accumulating offsets (API-stable; no TranslatePoint).
+        var windowPoint = new Avalonia.Point(cards[1].Bounds.Width / 2, cards[1].Bounds.Height / 2);
+        for (Avalonia.Visual? v = cards[1]; v is not null and not Window; v = v.GetVisualParent())
+        {
+            windowPoint = new Avalonia.Point(windowPoint.X + v.Bounds.X, windowPoint.Y + v.Bounds.Y);
+        }
+
+        picker.MouseDown(windowPoint, Avalonia.Input.MouseButton.Left);
+        picker.MouseUp(windowPoint, Avalonia.Input.MouseButton.Left);
+
+        Assert.Equal(2, picker.SelectedSlot);
+        Assert.Contains("sel", cards[1].Classes);
+        Assert.DoesNotContain("sel", cards[0].Classes);
+
+        picker.CommitCurrentSelection();
+        Assert.Equal(2, picker.ChosenSlot);
     }
 
     [Fact]
