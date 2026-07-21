@@ -1,7 +1,7 @@
 # STATUS: SP-020 — durable pi-spine local-patch mechanism (T-1)
 
 **Current Step:** DONE (all steps complete)
-**Last Updated:** 2026-07-21 (Step 1 in progress)
+**Last Updated:** 2026-07-21 (all steps complete)
 
 ### Step 1: Empirical patch inventory + pre-approach consult
 **Status:** ✅ Complete (plan review: engine-skipped by design, see record.md)
