@@ -1,10 +1,10 @@
 # STATUS: SP-016 — define provider-neutral AI operation contract
 
-**Current Step:** Step 1 — AI archaeology + pre-approach consult
-**Last Updated:** 2026-07-21 (Step 1 outcomes complete; review pending)
+**Current Step:** Step 2 — Contract document
+**Last Updated:** 2026-07-21 (Step 2 outcomes complete; review pending)
 
 ### Step 1: AI archaeology + pre-approach consult
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete
 
 - [x] STATUS.md updated before starting work
 - [x] WPF + first-attempt archaeology (READ-ONLY, `File.cs:line`)
@@ -13,10 +13,10 @@
 - [x] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
 
 ### Step 2: Contract document
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
-- [ ] `client/docs/ai-operation-contract.md` — named section per acceptance item
-- [ ] Every section traces to archaeology evidence or marked greenfield-decision
+- [x] `client/docs/ai-operation-contract.md` — named section per acceptance item
+- [x] Every section traces to archaeology evidence or marked greenfield-decision
 
 ### Step 3: Typed vocabulary + seam mechanics + tests
 **Status:** ⬜ Not Started

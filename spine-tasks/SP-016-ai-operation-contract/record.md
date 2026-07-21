@@ -65,4 +65,8 @@ Requested: `consult` mode=solo (owner direction 2026-07-19: all gates solo Fable
 (c) Gap: "per-command results" is a NAMED acceptance item — give it its own named section (13 sections total). Do NOT add sections for rate limits/quotas — archaeology facts inside relevant sections only.
 Caution: diagnostic content-freedom proof must be STRUCTURAL — diagnostic record exposes only enums, stable codes, counts, durations, generation/endpoint-class identifiers; no free-text field (exception `reason` = exception class names or stable codes, never messages — messages can embed user input). Test asserts the serialized property set is exactly the closed allow-list.
 
+## Engine-review presence (T-2)
+
+- Step 1 plan review: `spine_review_step(step=1, type=plan)` → **SKIPPED by engine** (nested reviewer spawn blocked inside worker session; SP-195 — batch engine runs reviews after worker success). Artifact: `.reviews/1-20260721T082721.md`. Not a spawn failure (fail-closed rule not triggered).
+
 ### Pre-completion (Step 4) — pending
