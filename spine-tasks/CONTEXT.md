@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** CLOSED-OUT — no claimable board work remains (see below)
-**Next Task ID:** SP-022
+**Next Task ID:** SP-023
 
 ---
 
