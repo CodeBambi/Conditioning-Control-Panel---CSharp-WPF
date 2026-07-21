@@ -67,6 +67,11 @@ internal sealed class ChaosWebViewHost : IDisposable
 
         /// <summary>Window title (shown on the taskbar/Alt-Tab in windowed mode).</summary>
         public string WindowTitle { get; init; } = "Conditioning Control Panel";
+
+        /// <summary>true = glue this window ABOVE MainWindow via native (GWL_HWNDPARENT) ownership,
+        /// so nothing the app does to main can bury the game surface. Set for the player-facing
+        /// game windows (DtRH, Graded Intake, Bureau). See <see cref="AttachMainWindowGlue"/>.</summary>
+        public bool OwnedByMainWindow { get; init; }
     }
 
     private readonly Options _opts;
@@ -77,6 +82,10 @@ internal sealed class ChaosWebViewHost : IDisposable
     private bool _disposed;
     private bool _isFullscreen;
     private double _windowedW, _windowedH;   // remembered windowed size (default 85% of screen)
+    private Window? _glueOwner;              // MainWindow, while OwnedByMainWindow glue is live
+    private EventHandler? _glueOwnerStateChanged;
+    private IntPtr _glueOwnerHandle;
+    private bool _glueAttached;
 
     public bool IsReady { get; private set; }
     public Window? Window => _window;
@@ -121,6 +130,7 @@ internal sealed class ChaosWebViewHost : IDisposable
         if (!_opts.InputEnabled)
             _window.SourceInitialized += (_, _) => ApplyPassiveExStyles(_window);
         _window.Show();
+        if (_opts.OwnedByMainWindow) AttachMainWindowGlue();
         if (_opts.InputEnabled) { try { _window.Activate(); } catch { } }
 
         _ = InitWebAsync();
@@ -152,6 +162,9 @@ internal sealed class ChaosWebViewHost : IDisposable
             _window.WindowState = WindowState.Normal;
         }
         _isFullscreen = fullscreen;
+        // WindowStyle/ResizeMode churn re-stamps the frame; re-assert the owner link so a
+        // fullscreen toggle can never silently unglue the window from main.
+        RefreshNativeOwner();
     }
 
     /// <summary>True while the window is borderless-fullscreen (host-owned, not the browser API).</summary>
@@ -197,6 +210,90 @@ internal sealed class ChaosWebViewHost : IDisposable
             _web?.Focus();
         }
         catch { }
+    }
+
+    // ============================ main-window glue ============================
+    //
+    // Native (Win32) ownership. A player-facing game window is OWNED by MainWindow, so the window
+    // manager itself keeps it directly above main and raises/lowers the pair as a GROUP. Whatever
+    // lifts main — the natively-owned avatar tube being re-activated by a bark, a flash/video
+    // window handing focus back when it closes, a tray restore, a panic Topmost pulse (which
+    // propagates to owned windows and back) — now carries the game surface up with it instead of
+    // burying it. No polling, no manual raises, nothing to race.
+    //
+    // This is the same cure the avatar tube got (AvatarTubeWindow.Windowing.ApplyNativeOwner):
+    // raw GWL_HWNDPARENT, NOT WPF's Window.Owner, which additionally drops the taskbar button and
+    // couples managed visibility. Topmost is deliberately NOT used — it would float the game over
+    // every OTHER application on the desktop, which is not what "above main" means.
+
+    private const int GWL_HWNDPARENT = -8;
+
+    /// <summary>Own this window to MainWindow and keep the link in step with main's window state.</summary>
+    private void AttachMainWindowGlue()
+    {
+        try
+        {
+            if (_window == null || _glueAttached) return;
+            var main = (Window?)App.MainWindowRef ?? Application.Current?.MainWindow;
+            if (main == null || ReferenceEquals(main, _window)) return;
+            var ownerHwnd = new WindowInteropHelper(main).Handle;
+            if (ownerHwnd == IntPtr.Zero) return;
+
+            _glueOwner = main;
+            _glueOwnerHandle = ownerHwnd;
+            _glueAttached = true;
+            RefreshNativeOwner();
+
+            // Windows hides a window's owned windows while the owner is MINIMIZED — with the glue
+            // on, minimizing main would make the game vanish (taskbar button and all) with no way
+            // back. Drop the link for the duration of the minimize, restore it when main returns.
+            // (Tray "minimize" is Hide(), not minimize, and does not cascade — DtRH relies on that.)
+            _glueOwnerStateChanged = (_, _) => RefreshNativeOwner();
+            main.StateChanged += _glueOwnerStateChanged;
+            App.Logger?.Information("{Tag}: glued above MainWindow (native owner)", _opts.LogTag);
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.AttachMainWindowGlue: {E}", _opts.LogTag, ex.Message); }
+    }
+
+    /// <summary>Re-assert the owner link, honouring main's current window state. No-op when the
+    /// host was not launched with <see cref="Options.OwnedByMainWindow"/>.</summary>
+    private void RefreshNativeOwner()
+    {
+        if (!_glueAttached) return;
+        ApplyNativeOwner(_glueOwner != null && _glueOwner.WindowState != WindowState.Minimized);
+    }
+
+    private void ApplyNativeOwner(bool owned)
+    {
+        try
+        {
+            if (_window == null) return;
+            var hwnd = new WindowInteropHelper(_window).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            SetWindowLongPtr(hwnd, GWL_HWNDPARENT, owned ? _glueOwnerHandle : IntPtr.Zero);
+            // Owner changes are cached — flush the frame so the z-order link takes effect now.
+            SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.ApplyNativeOwner: {E}", _opts.LogTag, ex.Message); }
+    }
+
+    /// <summary>Unhook the state listener and clear the native owner before the window closes, so
+    /// no stale owner link or event subscription outlives the host.</summary>
+    private void DetachMainWindowGlue()
+    {
+        if (!_glueAttached) return;
+        try
+        {
+            if (_glueOwner != null && _glueOwnerStateChanged != null)
+                _glueOwner.StateChanged -= _glueOwnerStateChanged;
+        }
+        catch { }
+        ApplyNativeOwner(false);
+        _glueAttached = false;
+        _glueOwner = null;
+        _glueOwnerStateChanged = null;
+        _glueOwnerHandle = IntPtr.Zero;
     }
 
     private async Task InitWebAsync()
@@ -341,6 +438,7 @@ internal sealed class ChaosWebViewHost : IDisposable
             }
         }
         catch { }
+        try { DetachMainWindowGlue(); } catch { }
         try { _web?.Dispose(); } catch { }
         try { _window?.Close(); } catch { }
         _web = null; _window = null; IsReady = false; _pending.Clear();
@@ -362,6 +460,13 @@ internal sealed class ChaosWebViewHost : IDisposable
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_FRAMECHANGED = 0x0020;
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 }

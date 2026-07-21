@@ -74,6 +74,9 @@ namespace ConditioningControlPanel.Services.Bureau
                     UserDataFolderName = "browser_data_bureau",
                     InputEnabled = true,
                     StartFullscreen = false,
+                    // Keep the Bureau above MainWindow (native ownership, not Topmost) — main is
+                    // raised by things a labeling shift doesn't control and used to bury the page.
+                    OwnedByMainWindow = true,
                     WindowTitle = ProductName,
                     LogTag = "BureauHost",
                     OnReady = OnPageReady,

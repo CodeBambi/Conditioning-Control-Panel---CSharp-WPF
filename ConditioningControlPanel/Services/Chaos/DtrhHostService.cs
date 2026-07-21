@@ -114,6 +114,11 @@ internal static class DtrhHostService
                 // button toggles borderless fullscreen. All effects are in-world now, so nothing
                 // needs the old topmost fullscreen surface.
                 StartFullscreen = false,
+                // Glue the descent above MainWindow via native ownership: main gets raised by
+                // plenty of things we don't control (avatar barks, a video window closing, a tray
+                // restore) and used to land on top of the game. Ownership makes the window manager
+                // keep the pair in order — without Topmost, which would cover other apps too.
+                OwnedByMainWindow = true,
                 WindowTitle = "Down the Rabbit Hole",
                 LogTag = "DtrhHost",
                 // The game's audio bed / drift voice must start without a click.
