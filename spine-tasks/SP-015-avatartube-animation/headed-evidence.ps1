@@ -346,23 +346,40 @@ Gate ((Read-Probe).Pack -eq 0) 'g8/back-to-circuit' 'probe reports pack 0'
 
 # ---- G9: attach/detach — style bits + pipeline preservation ----
 Write-Output '-- G9 attach/detach (5s)'
+$dashG9 = Get-Dashboard
+if ($null -eq $dashG9) { Fail 'dashboard window not found (g9 pre)' }
+$dashHwndG9 = [IntPtr]$dashG9.Current.NativeWindowHandle
+$script:dashHwnd = $dashHwndG9
 $g9a = Decode-Shots (Collect-Shots 'g9a' 1.5 260)
 Click-Button 'Detach'
 Start-Sleep -Milliseconds 400
 $exStyle = [AvNative]::GetWindowLong($script:tubeHwnd, [AvNative]::GWL_EXSTYLE)
 Gate (($exStyle -band [AvNative]::WS_EX_TOPMOST) -ne 0) 'g9/detached-topmost' ("exstyle=0x{0:X8}" -f $exStyle)
-Gate ([AvNative]::GetWindow($script:tubeHwnd, [AvNative]::GW_OWNER) -eq [IntPtr]::Zero) 'g9/detached-ownerless' 'GW_OWNER == 0'
+# Ownerless at the Win32 level = not owned by the DASHBOARD. GW_OWNER is NOT 0: Avalonia
+# 12.1.0 parents ShowInTaskbar=false windows to its hidden OffscreenParent window (pinned
+# source WindowImpl.cs SetParent: parentHwnd==0 && !ShowInTaskbar -> OffscreenParent).
+$ownerDetached = [AvNative]::GetWindow($script:tubeHwnd, [AvNative]::GW_OWNER)
+Gate ($ownerDetached -ne $dashHwndG9) 'g9/detached-ownerless' "GW_OWNER=0x$($ownerDetached.ToString('X')) != dashboard (hidden OffscreenParent per pinned 12.1.0 SetParent)"
 $g9b = Decode-Shots (Collect-Shots 'g9b' 1.5 260)
 Click-Button 'Attach'
 Start-Sleep -Milliseconds 400
-$dash = Get-Dashboard
-if ($null -eq $dash) { Fail 'dashboard window not found after attach' }
-$dashHwnd = [IntPtr]$dash.Current.NativeWindowHandle
 $exStyle2 = [AvNative]::GetWindowLong($script:tubeHwnd, [AvNative]::GWL_EXSTYLE)
 Gate (($exStyle2 -band [AvNative]::WS_EX_TOPMOST) -eq 0) 'g9/attached-not-topmost' ("exstyle=0x{0:X8}" -f $exStyle2)
-Gate ([AvNative]::GetWindow($script:tubeHwnd, [AvNative]::GW_OWNER) -eq $dashHwnd) 'g9/attached-owned' 'GW_OWNER == dashboard'
+Gate ([AvNative]::GetWindow($script:tubeHwnd, [AvNative]::GW_OWNER) -eq $dashHwndG9) 'g9/attached-owned' 'GW_OWNER == dashboard'
 $g9c = Decode-Shots (Collect-Shots 'g9c' 1 260)
 Invoke-Sequence 'g9' (Save-Samples (@($g9a) + @($g9b) + @($g9c)) 'g9') $false @('frames-advance', 'no-blank', 'monotonic-modular-advance')
+# Behavioral ownerless (after the sequence gates — a pause gap must not pollute them):
+# minimizing the dashboard must NOT hide the DETACHED tube (owned windows hide with owner).
+Click-Button 'Detach'
+Start-Sleep -Milliseconds 400
+[AvNative]::ShowWindow($dashHwndG9, [AvNative]::SW_MINIMIZE) | Out-Null
+Start-Sleep -Milliseconds 700
+Gate ([AvNative]::IsWindowVisible($script:tubeHwnd)) 'g9/detached-survives-owner-minimize' 'detached tube stays visible with owner minimized'
+[AvNative]::ShowWindow($dashHwndG9, [AvNative]::SW_RESTORE) | Out-Null
+Start-Sleep -Milliseconds 700
+Raise-Tube
+Click-Button 'Attach' # restore attached state for G10+
+Start-Sleep -Milliseconds 400
 
 # ---- G10: owner move — the tube follows the owner exactly ----
 Write-Output '-- G10 owner move'
@@ -383,12 +400,12 @@ Gate (($dashDx -ne 0 -or $dashDy -ne 0) -and ([Math]::Abs($tubeDx - $dashDx) -le
 # ---- G11: owner minimize → pause+hide; restore → resume+show ----
 Write-Output '-- G11 owner minimize/restore'
 $frameBeforeMin = (Read-Probe).Frame
-[AvNative]::ShowWindow($dashHwnd, [AvNative]::SW_MINIMIZE) | Out-Null
+[AvNative]::ShowWindow($script:dashHwnd, [AvNative]::SW_MINIMIZE) | Out-Null
 Start-Sleep -Milliseconds 900
 Gate (-not [AvNative]::IsWindowVisible($script:tubeHwnd)) 'g11/tube-hidden-on-minimize' 'tube hidden with owner'
 Gate (Trace-Contains 'pause-begin') 'g11/pause-traced' 'engine paused on owner minimize'
 $frameDuringMin = (Read-Probe)
-[AvNative]::ShowWindow($dashHwnd, [AvNative]::SW_RESTORE) | Out-Null
+[AvNative]::ShowWindow($script:dashHwnd, [AvNative]::SW_RESTORE) | Out-Null
 Start-Sleep -Milliseconds 900
 Raise-Tube
 Gate ([AvNative]::IsWindowVisible($script:tubeHwnd)) 'g11/tube-restored' 'tube visible after restore'
