@@ -68,5 +68,6 @@ Caution: diagnostic content-freedom proof must be STRUCTURAL — diagnostic reco
 ## Engine-review presence (T-2)
 
 - Step 1 plan review: `spine_review_step(step=1, type=plan)` → **SKIPPED by engine** (nested reviewer spawn blocked inside worker session; SP-195 — batch engine runs reviews after worker success). Artifact: `.reviews/1-20260721T082721.md`. Not a spawn failure (fail-closed rule not triggered).
+- Step 2 plan review: `spine_review_step(step=2, type=plan)` → **SKIPPED by engine** (same SP-195 mechanism). Artifact: `.reviews/2-20260721T083133.md`.
 
 ### Pre-completion (Step 4) — pending

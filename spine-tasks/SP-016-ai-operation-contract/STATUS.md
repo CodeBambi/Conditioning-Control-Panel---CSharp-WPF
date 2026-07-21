@@ -1,7 +1,7 @@
 # STATUS: SP-016 — define provider-neutral AI operation contract
 
-**Current Step:** Step 2 — Contract document
-**Last Updated:** 2026-07-21 (Step 2 outcomes complete; review pending)
+**Current Step:** Step 3 — Typed vocabulary + seam mechanics + tests
+**Last Updated:** 2026-07-21 (Step 2 complete; plan review skipped — engine-owned SP-195)
 
 ### Step 1: AI archaeology + pre-approach consult
 **Status:** ✅ Complete
@@ -13,13 +13,13 @@
 - [x] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
 
 ### Step 2: Contract document
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete
 
 - [x] `client/docs/ai-operation-contract.md` — named section per acceptance item
 - [x] Every section traces to archaeology evidence or marked greenfield-decision
 
 ### Step 3: Typed vocabulary + seam mechanics + tests
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
 - [ ] `client/src/CcpClient.Desktop/Ai/AiOperationVocabulary.cs` + siblings
 - [ ] Memory/secret seams declared-only (no implementations)
