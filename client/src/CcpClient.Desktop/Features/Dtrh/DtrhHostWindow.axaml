@@ -21,7 +21,11 @@
                    Text="DTRH web host: honest unsupported" />
         <TextBlock x:Name="UnsupportedDetail" Foreground="#c8c8dd" TextWrapping="Wrap" />
       </StackPanel>
-      <NativeWebView x:Name="Web" IsVisible="False" />
+      <!-- The NativeWebView is created PROGRAMMATICALLY and only on the embedded path:
+           in the tree it creates its native adapter whenever the window shows — even
+           IsVisible=false — which would start WebView2 on unsupported runs and attempt
+           the non-presenting embedded GTK adapter on Linux (SP-011 L4). -->
+      <Panel x:Name="WebHost" />
     </Panel>
   </DockPanel>
 </Window>

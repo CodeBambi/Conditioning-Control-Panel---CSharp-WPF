@@ -1,0 +1,33 @@
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+dtrh: auto-close armed at 12s
+layout-probe: card 488.0x77.0 DIP @ scale 1 @ screen 180,234
+dtrh: WebView2 UserDataFolder set; autoplay-policy=no-user-gesture-required
+dtrh: navigating embedded surface (page probe.html)
+panic: unhandled exception escaped the UI lifetime: System.Runtime.InteropServices.COMException (0x800700AA): The requested resource is in use. (0x800700AA)
+   at Avalonia.Controls.Win.WebView2.WebView2HwndAdapter.<CreateBuilder>g__InitializeAsync|7_1(IPlatformHandle thisHandle, ICoreWebView2Environment env, WindowsWebView2EnvironmentRequestedEventArgs environmentArgs)
+   at Avalonia.Controls.NativeWebViewControlHost.<CreateNativeControlCore>g__CompleteAdapter|10_1(AdapterWrapper wrapper)
+   at System.Threading.Tasks.Task.<>c.<ThrowAsync>b__124_0(Object state)
+   at Avalonia.Threading.SendOrPostCallbackDispatcherOperation.InvokeCore()
+   at Avalonia.Threading.DispatcherOperation.<>c.<Execute>b__56_0(Object s)
+   at Avalonia.Threading.CulturePreservingExecutionContext.CallbackWrapper(Object obj)
+   at System.Threading.ExecutionContext.RunInternal(ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunInternal(ExecutionContext executionContext, ContextCallback callback, Object state)
+   at Avalonia.Threading.CulturePreservingExecutionContext.Run(CulturePreservingExecutionContext executionContext, ContextCallback callback, Object state)
+   at Avalonia.Threading.DispatcherOperation.Execute()
+   at Avalonia.Threading.Dispatcher.ExecuteJob(DispatcherOperation job)
+   at Avalonia.Threading.Dispatcher.ExecuteJobsCore(Boolean fromExplicitBackgroundProcessingCallback)
+   at Avalonia.Threading.Dispatcher.Signaled()
+   at Avalonia.Win32.Win32DispatcherImpl.DispatchWorkItem()
+   at Avalonia.Win32.Win32Platform.WndProc(IntPtr hWnd, UInt32 msg, IntPtr wParam, IntPtr lParam)
+   at Avalonia.Win32.Interop.UnmanagedMethods.DispatchMessage(MSG& lpmsg)
+   at Avalonia.Win32.Win32DispatcherImpl.RunLoop(CancellationToken cancellationToken)
+   at Avalonia.Threading.DispatcherFrame.Run(IControlledDispatcherImpl impl)
+   at Avalonia.Threading.Dispatcher.PushFrame(DispatcherFrame frame)
+   at Avalonia.Threading.Dispatcher.MainLoop(CancellationToken cancellationToken)
+   at Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime.StartCore(String[] args)
+   at Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime.Start(String[] args)
+   at Avalonia.ClassicDesktopStyleApplicationLifetimeExtensions.StartWithClassicDesktopLifetime(AppBuilder builder, String[] args, Action`1 lifetimeBuilder)
+   at CcpClient.Desktop.Program.Main(String[] args) in E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260721T181508\lane-1\client\src\CcpClient.Desktop\Program.cs:line 136
+dtrh: participant stop begin
+dtrh: participant stop end

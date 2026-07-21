@@ -53,11 +53,14 @@ public static class DtrhCapabilityProbes
                         + "installer: https://developer.microsoft.com/en-us/microsoft-edge/webview2/"));
             }
 
-            var dll = Path.Combine(runtimeDir, "EmbeddedBrowserWebView.dll");
+            // Runtime layout (observed 2026-07-21, runtime 150.0.4078.83): the loader dll
+            // lives in the EBWebView/<arch> subdir, not at the version root.
+            var arch = Environment.Is64BitProcess ? "x64" : "x86";
+            var dll = Path.Combine(runtimeDir, "EBWebView", arch, "EmbeddedBrowserWebView.dll");
             if (!File.Exists(dll))
             {
                 return new CapabilityState.DependencyMissing("Microsoft Edge WebView2 Runtime",
-                    new CapabilityReason("dependency-missing", $"EmbeddedBrowserWebView.dll absent under {runtimeDir}"));
+                    new CapabilityReason("dependency-missing", $"EmbeddedBrowserWebView.dll absent at {dll}"));
             }
 
             // Exercise the exact load the package performs (12.0.1 binary evidence).

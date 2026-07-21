@@ -75,8 +75,10 @@ public sealed class DtrhParticipant : IBackgroundParticipant
         }
 
         Running = false;
+        _log.Log("dtrh: participant stop begin");
         Owner.Cancel();
         _server?.Dispose(); // idempotent; releases hanging long-polls before listeners stop
+        _log.Log("dtrh: participant stop end");
         return Task.CompletedTask;
     }
 }

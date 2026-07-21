@@ -27,7 +27,9 @@
 - [x] Unit tests: contract, inbox seq/ack/timeout/token, transport diff shape (245/245 both platforms)
 
 ### Step 4: Boot matrix (WH) + WSLg gate (WX) + board reconciliation + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔨 In Progress
+
+**Discoveries (worker, 2026-07-21):** File Scope expanded by 4 wiring files — see PROMPT.md Amendments (2026-07-21 worker entry). `fileScopeMustNotChange` untouched.
 
 - [ ] Windows headed boot matrix in-product: engine live, pixel-checked render, both-direction transports, preBuffer replay, autoplay, focus-claim, exit 0
 - [ ] WSL2 in-packet gate (`~/ccp-sp023`, never /mnt/e): contract green; NativeWebDialog render facts; FIRST-GATE transport path exercised; no timing claims; Wayland untouched

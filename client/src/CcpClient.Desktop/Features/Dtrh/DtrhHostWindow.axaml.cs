@@ -22,6 +22,7 @@ public partial class DtrhHostWindow : Window
     private readonly ApplicationHost _host;
     private readonly DtrhParticipant _dtrh;
     private readonly string _page;
+    private NativeWebView? _web;   // created programmatically, embedded path only (see axaml note)
     private NativeWebDialog? _dialog;
     private bool _sentBootMessages;
     private bool _engineLive;
@@ -75,6 +76,7 @@ public partial class DtrhHostWindow : Window
                 + $"capability {DtrhCapabilityProbes.DialogCapability}: {Describe(dialog)}";
             SetStatus("dtrh: honest unsupported (no classic fallback)");
             _host.LogDiagnostic("dtrh: no admitted web surface available — unsupported surface shown");
+            _host.LogDiagnostic("dtrh: " + UnsupportedDetail.Text.Replace("\n", " | "));
         }
     }
 
@@ -82,21 +84,22 @@ public partial class DtrhHostWindow : Window
 
     private void BeginEmbedded()
     {
-        Web.EnvironmentRequested += OnEnvironmentRequested;
-        Web.AdapterCreated += (_, _) => _host.LogDiagnostic($"dtrh: AdapterCreated info='{SafeAdapterInfo()}'");
-        Web.AdapterDestroyed += (_, _) => _host.LogDiagnostic("dtrh: AdapterDestroyed");
-        Web.WebMessageReceived += OnWebMessage;
-        Web.NavigationCompleted += OnNavigationCompleted;
-        Web.IsVisible = true;
+        _web = new NativeWebView();
+        _web.EnvironmentRequested += OnEnvironmentRequested;
+        _web.AdapterCreated += (_, _) => _host.LogDiagnostic($"dtrh: AdapterCreated info='{SafeAdapterInfo()}'");
+        _web.AdapterDestroyed += (_, _) => _host.LogDiagnostic("dtrh: AdapterDestroyed");
+        _web.WebMessageReceived += OnWebMessage;
+        _web.NavigationCompleted += OnNavigationCompleted;
+        WebHost.Children.Add(_web);
         var url = _dtrh.PageUrl(_page);
         SetStatus("dtrh: navigating (embedded)");
         _host.LogDiagnostic($"dtrh: navigating embedded surface (page {_page})");
-        Web.Source = new Uri(url);
+        _web.Source = new Uri(url);
     }
 
     private string SafeAdapterInfo()
     {
-        try { return Web.AdapterInfo?.ToString() ?? "(null)"; }
+        try { return _web?.AdapterInfo?.ToString() ?? "(null)"; }
         catch (Exception ex) { return $"(AdapterInfo threw {ex.GetType().Name})"; }
     }
 
@@ -175,6 +178,8 @@ public partial class DtrhHostWindow : Window
             try
             {
                 await Task.Delay(2000, _closing.Token);
+                // SendToPage marshals to the UI thread (WebView2 ExecuteScriptAsync is
+                // apartment-bound; from a pool thread the call silently never lands).
                 SendToPage(new { type = "probe-h2p", via = Surface == "embedded" ? "synthetic-dispatch" : "inbox" });
                 SendToPage(new { type = "probe-buffered", via = "pre-handler-send" });
             }
@@ -244,9 +249,17 @@ public partial class DtrhHostWindow : Window
         // Focus claim at ready (DtrhHostService.cs:169-172): keyboard focus does not land
         // in the web child on a fresh launch until a click — claim it now so ESC works.
         Activate();
-        if (Surface == "embedded")
+        _web?.Focus();
+        if (_web is not null)
         {
-            Web.Focus();
+            // Behavioral evidence of the claim (SP-011 W14 class): the page reports whether
+            // keyboard focus actually reached the document.
+            _ = _web.InvokeScript("document.hasFocus()")
+                .ContinueWith(
+                    t => _host.LogDiagnostic(t.IsFaulted
+                        ? $"dtrh: focus check faulted: {t.Exception?.GetBaseException().Message}"
+                        : $"dtrh: focus claimed at ready; document.hasFocus()={t.Result}"),
+                    TaskScheduler.Default);
         }
 
         SendToPage(new
@@ -291,10 +304,16 @@ public partial class DtrhHostWindow : Window
     /// </summary>
     public void SendToPage(object msg)
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => SendToPage(msg));
+            return;
+        }
+
         var json = JsonSerializer.Serialize(msg);
         if (Surface == "embedded")
         {
-            _ = Web.InvokeScript($"window.chrome.webview.dispatchEvent(new MessageEvent('message',{{data:{json}}}))")
+            _ = _web!.InvokeScript($"window.chrome.webview.dispatchEvent(new MessageEvent('message',{{data:{json}}}))")
                 .ContinueWith(
                     t => _host.LogDiagnostic($"dtrh: host->page dispatch faulted: {t.Exception?.GetBaseException().Message}"),
                     TaskContinuationOptions.OnlyOnFaulted);
