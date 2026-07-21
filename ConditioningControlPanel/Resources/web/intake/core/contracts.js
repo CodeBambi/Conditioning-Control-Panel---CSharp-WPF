@@ -69,16 +69,21 @@ export const BAND_DEPTH_FLOOR = Object.freeze({
 
 /* ----------------------------------------------------------------------------
  * NICHES + ROUTE
- * v1 niches are Bambi / Drone / Sissy (locked). Each bank supplies 3-5
- * archetypes; the engine reveals a primary + optional secondary from the
- * TRAJECTORY (not RNG), with shares that climb 5% -> 45% over the run.
+ * v1 niches are Bambi / Drone / Sissy, plus Circe (the Locked / keyholder
+ * register, mod builtin-locked). Each bank supplies 3-5 archetypes; the engine
+ * reveals a primary + optional secondary from the TRAJECTORY (not RNG), with
+ * shares that climb 5% -> 45% over the run.
+ * NOTE: all four banks are authored (banks/circe.json landed at v1.0.0, 629
+ * prompts, same shape as the other three), so IntakeHostService.SafeNiche's
+ * missing-bank clamp no longer trips for any v1 niche.
  * -------------------------------------------------------------------------- */
 export const Niche = Object.freeze({
   Bambi: 'bambi',
   Drone: 'drone',
   Sissy: 'sissy',
+  Circe: 'circe',
 });
-export const NICHES = Object.freeze([Niche.Bambi, Niche.Drone, Niche.Sissy]);
+export const NICHES = Object.freeze([Niche.Bambi, Niche.Drone, Niche.Sissy, Niche.Circe]);
 
 /**
  * @typedef {Object} Route  Revealed archetype trajectory (engine -> result/UI).
@@ -118,6 +123,18 @@ export const NICHES = Object.freeze([Niche.Bambi, Niche.Drone, Niche.Sissy]);
  * @property {number=}  affirmsMantra   TRUTHY flag (banks use 1): answering "correct" affirms this
  *                                       prompt as a mantra. The verbatim mantra text is the prompt's
  *                                       `answer` (a string) — seeded into QuizRunResult.affirmedMantras.
+ * @property {number=}  trick           TRUTHY flag (banks use 1): a TRICK QUESTION — a deliberately
+ *                                       broken variant of the boring heat-0 trivia whose only "correct"
+ *                                       option is an unrelated compliance line. The engine keeps these
+ *                                       OUT of the normal pool and serves them on its own sprinkle roll
+ *                                       (Deepening/Climax only); they score but are never punitive, are
+ *                                       exempt from the beats.js freeze gate, and carry no recorded VO.
+ * @property {number=}  freeChoice      TRUTHY flag (banks use 1): the prompt asks a PREFERENCE,
+ *                                       so it has no wrong answer — engine.buildOptions marks EVERY
+ *                                       option isCorrect with full score, and gradeBeat therefore
+ *                                       reads correct/score-1 whichever option is picked. Used by the
+ *                                       Calibration colour-preference beats (see core/palette.js);
+ *                                       `answer` stays present (index 0) purely for schema symmetry.
  * @property {string=}  interludeKind   Mechanic.Interlude only: 'watch' (spiral stare) | 'breathe'
  * @property {number=}  durationMs      Mechanic.Interlude only: how long the valley runs (default ~5000)
  */
@@ -168,6 +185,11 @@ export const NICHES = Object.freeze([Niche.Bambi, Niche.Drone, Niche.Sissy]);
  * @property {string[]} praise         niche praise phrases (effects' Praise pool)
  * @property {string[]} introLines     briefing-screen copy, shown in order (typewriter)
  * @property {string[]} outroLines     results-ceremony copy fragments
+ * @property {string[]=} countPhrases  fourth-wall replacements for the HUD counter's
+ *                                     TOTAL, in the niche's voice ("LET GO",
+ *                                     "ENUMERATION SUSPENDED"). Optional: a bank
+ *                                     without the key falls back to the clinical
+ *                                     default pool below.
  */
 export const DEFAULT_THEME = Object.freeze({
   accent: '#ff69b4',
@@ -197,6 +219,14 @@ export const DEFAULT_THEME = Object.freeze({
     'Assessment complete.',
     'Compiling classification…',
   ]),
+  // Shown in place of the HUD counter's TOTAL when the run "gives up on counting"
+  // (boot's fourth-wall break, Deepening onward). Clinical/neutral by design —
+  // every bank should override with its own register.
+  countPhrases: Object.freeze([
+    'IT DOESN’T MATTER', 'DON’T COUNT', 'AS MANY AS NEEDED', 'STILL COUNTING',
+    'ENUMERATION ERROR', 'MORE', 'NOT YET', 'KEEP GOING',
+    'UNTIL YOU STOP ASKING', 'TOTAL WITHHELD',
+  ]),
 });
 /** Resolve a bank's theme over DEFAULT_THEME (shallow per key; maps merged per band). */
 export function themeOf(bank) {
@@ -211,6 +241,7 @@ export function themeOf(bank) {
     praise: (Array.isArray(t.praise) && t.praise.length) ? t.praise.slice() : DEFAULT_THEME.praise.slice(),
     introLines: (Array.isArray(t.introLines) && t.introLines.length) ? t.introLines.slice() : DEFAULT_THEME.introLines.slice(),
     outroLines: (Array.isArray(t.outroLines) && t.outroLines.length) ? t.outroLines.slice() : DEFAULT_THEME.outroLines.slice(),
+    countPhrases: (Array.isArray(t.countPhrases) && t.countPhrases.length) ? t.countPhrases.slice() : DEFAULT_THEME.countPhrases.slice(),
   };
 }
 
@@ -554,6 +585,25 @@ export const STEER_BAND_WEIGHT = Object.freeze({
  * @property {boolean} rewardFired
  * @property {boolean} rewardDecoupled
  * @property {string[]} tags        tags credited by this answer
+ *
+ * --- WHICH OPTION WAS TAKEN (additive; Slice 1) -----------------------------
+ * The record above says only whether the answer was CORRECT. That is exposure
+ * data, not preference data: `tags` are credited unconditionally, so a run that
+ * refused every hot prompt tallies exactly the same tags as one that took them.
+ * The fields below carry the actual choice so C# (Services/Quiz/IntakeProfiler)
+ * can score endorsement instead of merely presence.
+ *
+ * @property {number}  chosenIndex   index into BeatSpec.options that was committed,
+ *                                    or -1 for free-input mechanics (mantra / check-in)
+ *                                    and interludes, which expose no option list.
+ * @property {string}  chosenLabel   the committed option's label ('' when chosenIndex < 0)
+ * @property {number}  optionCount   BeatSpec.options.length (0 for free input)
+ * @property {number}  promptHeat    the PROMPT's authored heat 0..5 (escalation weight)
+ * @property {number}  steerIntensity SteerRoll.intensity 0..1 that was applied to this beat
+ * @property {number}  timeoutMs     BeatSpec.timeoutMs (0 = untimed)
+ * @property {boolean} isTrick       bank entry carried `"trick": 1` — unanswerable by design
+ * @property {boolean} isFreeChoice  bank entry carried `"freeChoice": 1` — every option is
+ *                                    correct (colour picks), so `correct` carries no signal
  */
 
 /**

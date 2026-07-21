@@ -39,24 +39,43 @@ import {
   clamp01, smoothstep, lerp, bandIndex, hash01,
   AiWant,
 } from './contracts.js';
+import {
+  COLOR_TAG, MAX_COLOR_BEATS,
+  beginHarvest, harvestWantsMore, noteColorServed, closeHarvest,
+} from './palette.js';
 
 /* ----------------------------------------------------------------------------
- * TUNING CONSTANTS (pacing over ~50 graded beats; BUILD_PLAN.md §5 Phase 3).
- * Deepening + Climax carry the bulk (~60%) — that is where the spice lives and
- * the pool is deepest. Calibration serves ~9 from the big heat-0 pool.
+ * TUNING CONSTANTS (pacing over ~81 graded beats; BUILD_PLAN.md §5 Phase 3).
+ * The run used to be ~50 beats weighted 60% into Deepening + Climax, which made
+ * the descent land too fast: the camouflage phase was over before it had done
+ * its job. Two dilution passes have since stretched it:
+ *   pass 1  Calibration 9->16, Establishing 11->19 (+30% into the low-heat bands)
+ *   pass 2  every band grows again, MORE at the top than the bottom, so the run
+ *           gets longer and airier without flattening the climb:
+ *             Calibration  16 -> 21   (+30%)
+ *             Establishing 19 -> 25   (+30%)
+ *             Deepening    16 -> 19   (+20%)
+ *             Climax       14 -> 16   (+15%)
+ * The graded run is now ~81 beats. Deepening + Climax hold ~43% of them (was
+ * ~46%, originally ~60%), so pressure still concentrates late — it just arrives
+ * later and with more ordinary ground under it.
+ *
+ * The extra beats are not more of the same: PLAIN_SHARE below spends the deep
+ * bands' growth on boring trivia rather than additional spice (see that block).
+ * The heat-0 pool is 280 entries per bank, so the longer camouflage never runs dry.
  * -------------------------------------------------------------------------- */
 const DESCENT_BANDS = Object.freeze([Band.Calibration, Band.Establishing, Band.Deepening, Band.Climax]);
 const BASE_BEATS = Object.freeze({
-  [Band.Calibration]:  9,
-  [Band.Establishing]: 11,
-  [Band.Deepening]:    16,
-  [Band.Climax]:       14,
+  [Band.Calibration]:  21,
+  [Band.Establishing]: 25,
+  [Band.Deepening]:    19,
+  [Band.Climax]:       16,
 });
 const MIN_BEATS = 5;               // a band can be shortened to this, never skipped (all 5 bands sequence)
-const MAX_BEATS = 22;              // a band can be stretched to this by timid play
+const MAX_BEATS = 34;              // a band can be stretched to this by timid play (kept above the new bases)
 const RECOVERY_BEATS = 4;          // fixed, non-skippable walk-down (invariant #3)
 const CLIMAX_PEAK = 1.0;           // depth ceiling the Climax band ramps toward
-const EXPECTED_DESCENT = 50;       // sum(BASE_BEATS); drives progressive route-share climb
+const EXPECTED_DESCENT = 81;       // sum(BASE_BEATS); drives progressive route-share climb
 const HARD_BEAT_CAP = 1600;        // safety net so a never-aborted ENDLESS run still surfaces (many laps)
 
 /** heat window (0..5) the sequencer prefers per band; camouflage low, hot high. */
@@ -69,6 +88,92 @@ const HEAT_WINDOW = Object.freeze({
 /** fast+correct play INTENSIFIES instead of shortening: above this velocity the
  *  heat window's upper edge widens by +1 within the band (never shrinks a band). */
 const HOT_VELOCITY = 0.3;
+
+/** PLAIN BEATS — the deep bands' breathing room.
+ *
+ *  rollSteer() has no probability gate: in Deepening and Climax the band weight
+ *  is 0.65/1.0, so EVERY beat carrying options got a steer. The deep half of the
+ *  run therefore read as wall-to-wall interference, and interference that never
+ *  stops stops registering — there was no un-steered beat left for a steered one
+ *  to feel different from. Same reason TRICK_CHANCE is a sprinkle: the gag needs
+ *  a straight baseline, and by Deepening the baseline had disappeared.
+ *
+ *  A plain beat is ordinary low-heat trivia played completely straight: heat
+ *  pulled down to the Calibration window, NO steer, NO timed ring. Everything
+ *  else about it is a normal beat — same card, same voice seam, same grading —
+ *  so it is camouflage, not a rest screen, and the player cannot use it as a
+ *  reliable tell.
+ *
+ *  The share matches each band's growth (Deepening +20%, Climax +15%), which is
+ *  the point: the beats we added are the boring ones. Spice is unchanged in
+ *  absolute terms; it is simply spread thinner, and thinner in Deepening than in
+ *  Climax so the pressure gradient still tilts toward the end of the run.
+ *
+ *  SCHEDULED, NOT ROLLED — same reasoning as COLOR_MIN_GAP. A per-beat roll both
+ *  clumps and no-shows; a band that happened to roll zero plain beats would be
+ *  exactly the wall the player is complaining about. The slots are recomputed
+ *  from the LIVE planned count every call so a band stretched mid-flight by timid
+ *  play re-spaces instead of leaving its plain beats bunched at the front. */
+const PLAIN_SHARE = Object.freeze({
+  [Band.Deepening]: 0.20,
+  [Band.Climax]:    0.15,
+});
+/** Plain beats never open a band (the first beat sets the band's tone) and never
+ *  land in its last two (the bubble guarantee owns those — see buildDescentBeat). */
+const PLAIN_FIRST_SLOT = 1;
+const PLAIN_TAIL_MARGIN = 3;
+/** Heat window a plain beat draws from — deliberately Calibration's, not the
+ *  band's. A "plain" heat-4 confession is still a confession. */
+const PLAIN_HEAT_WINDOW = Object.freeze([0, 1]);
+
+/** TRICK QUESTIONS (banks/*.json entries carrying `"trick": 1`) — deliberately
+ *  broken variants of the boring heat-0 trivia (inverted units, scrambled
+ *  categories, a colour where a number belongs), played completely straight:
+ *  same card, same typewriter, same timer, same voice seam as a real question.
+ *  Three of the four options are plausible-but-meaningless throwaways; the only
+ *  "correct" one is an unrelated niche compliance line.
+ *
+ *  A SPRINKLE, NOT A THEME. The joke only works against an established baseline
+ *  of real trivia, so tricks are Deepening/Climax only (never Calibration /
+ *  Establishing / Recovery — see TRICK_CHANCE), never back-to-back, never a
+ *  band's opening beat, never its last two (which the bubble guarantee owns),
+ *  never a PLAIN slot (that beat's job is to be genuinely unremarkable), and
+ *  capped per run. At the base pacing that leaves 15 Deepening + 14 Climax beats
+ *  rollable, so the rates below land ~1.2 + ~1.7 ~= 2-3 tricks in an ~81-beat run
+ *  — the same absolute count as before the run was stretched, which is intended:
+ *  the gag does not scale with length any more than it scales with laps. Same HARD within-run no-repeat as any other
+ *  prompt (they share usedIds), and the bank holds 52 of them per niche. */
+const TRICK_CHANCE = Object.freeze({
+  [Band.Deepening]: 0.08,
+  [Band.Climax]:    0.12,
+});
+const TRICK_MAX_PER_RUN = 4;       // endless laps included — the gag does not scale
+
+/** COLOUR HARVEST SPACING (core/palette.js). The colour questions used to be
+ *  literally beats 1-5 of the run, which read as a SURVEY BLOCK bolted to the
+ *  front of the assessment. They are now spread evenly across the front stretch
+ *  of Calibration so ordinary heat-0 trivia falls between them and each one
+ *  arrives as an incidental question rather than part of a form.
+ *
+ *  The window is [COLOR_FIRST_SLOT .. planned - COLOR_TAIL_MARGIN] beat indices
+ *  (0-based, within the band), which at the base 21-beat Calibration puts the
+ *  five colour beats at indices 1,5,8,12,15 — questions 2,6,9,13,16 of the run.
+ *  Both edges are load-bearing:
+ *    - the FIRST slot is never index 0: the run opens on plain trivia, so the
+ *      colour question reads as one of the survey's own questions.
+ *    - the TAIL MARGIN keeps the last colour beat well clear of (a) the band's
+ *      bubble guarantee, which forces a BubblePop — and therefore that
+ *      mechanic's always-on loom backdrop — into the last two planned beats,
+ *      and (b) depth 0.20, where boot's HUD dial starts crossfading its spiral
+ *      glyph in. At index 15 of 21 the ramp is ~0.15 (+<=0.06 velocity nudge). */
+const COLOR_FIRST_SLOT = 1;
+const COLOR_TAIL_MARGIN = 6;
+/** Ordinary beats that must fall between two colour questions. The schedule
+ *  already spaces them, but a band re-planned mid-flight (timid play stretches
+ *  it, recovered play snaps it back) can shift two slots onto adjacent beats —
+ *  and two colour questions in a row is exactly the survey-block read this
+ *  spacing exists to kill. */
+const COLOR_MIN_GAP = 2;
 
 /** interviewer asides: roll chance per beat (never twice in a row; Recovery always speaks). */
 const INTERVIEWER_ROLL = 0.4;
@@ -196,6 +301,17 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   const rng = makeRng(seedInt);
 
   const byId = new Map(prompts.map((p) => [p.id, p]));
+  const trickPrompts = prompts.filter((p) => p && p.trick);   // served only via selectTrickPrompt()
+  /* COLOUR HARVEST (core/palette.js): the bank's colour-preference prompts,
+   * spread across the front of Calibration (COLOR_FIRST_SLOT/COLOR_TAIL_MARGIN)
+   * so the player has named their colours long before anything can weave a
+   * spiral out of them, without the questions arriving as a block. Arming the harvest with
+   * the real pool size means a bank without colour prompts closes it immediately
+   * and every spiral simply keeps its themed palette. */
+  const colorPrompts = prompts.filter((p) => p && Array.isArray(p.tags) && p.tags.includes(COLOR_TAG) && !p.trick);
+  const colorIds = new Set(colorPrompts.map((p) => p.id));
+  const colorPlan = Math.min(MAX_COLOR_BEATS, colorPrompts.length);
+  beginHarvest(colorPlan);
   const ladderPromptIds = new Set();
   for (const l of ladders) for (const r of (l.rungs || [])) ladderPromptIds.add(r.promptId);
 
@@ -237,6 +353,10 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   const lineMem = {};                     // band -> last-two interviewer line indices (no-repeat)
   const interludesInBand = {};            // band -> interludes inserted so far this band (reset per endless lap)
   let bubbleServedInBand = false;         // bubble guarantee: >=1 BubblePop per descent band
+  let colorBeatsServed = 0;               // colour beats served (drives the slot schedule)
+  let lastColorBeat = -99;                // beat index of the last colour beat (COLOR_MIN_GAP)
+  let trickServed = 0;                    // trick questions served this run (TRICK_MAX_PER_RUN)
+  let lastBeatWasTrick = false;           // never two trick questions back-to-back
   const servedByBand = {};                // band -> actual graded beats served (qTotal estimate)
 
   const t0 = nowMs();
@@ -356,12 +476,16 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
 
   // mode: 'strict' = inside the band heat window; 'wide' = softer allowed + rough hot
   // ceiling; 'any' = ignore heat entirely (last no-repeat widening before reuse).
-  function eligible(band, mode) {
-    const win = heatWindowFor(band);
+  // winOverride: a plain beat forces PLAIN_HEAT_WINDOW instead of the band's own,
+  // which is the whole difference between it and an ordinary deep-band beat.
+  function eligible(band, mode, winOverride) {
+    const win = winOverride || heatWindowFor(band);
     const out = [];
     for (const p of prompts) {
       if (usedIds.has(p.id)) continue;
       if (ladderPromptIds.has(p.id)) continue;  // ladder-owned prompts arrive only via the ladder
+      if (p.trick) continue;                    // trick questions arrive only via selectTrickPrompt()
+      if (colorIds.has(p.id)) continue;         // colour questions arrive only via selectColorPrompt()
       const heat = typeof p.heat === 'number' ? p.heat : 0;
       if (mode === 'strict') { if (heat < win[0] - 0.001 || heat > win[1] + 0.001) continue; }
       else if (mode === 'wide') { if (heat > win[1] + 1.5) continue; } // softer prompts ok, rough hot ceiling
@@ -380,7 +504,132 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     return pool[pool.length - 1];
   }
 
-  function selectPrompt(band) {
+  /** Roll for a TRICK QUESTION (see the TRICK_* block). Returns the prompt when
+   *  it fires, else null — every guard here exists to keep it a sprinkle. */
+  function selectTrickPrompt(band) {
+    const chance = TRICK_CHANCE[band] || 0;
+    if (chance <= 0) return null;                       // Deepening/Climax only
+    if (trickServed >= TRICK_MAX_PER_RUN) return null;
+    if (lastBeatWasTrick) return null;                  // never back-to-back
+    const planned = plannedBeats(band);
+    if (beatsInBand < 1) return null;                   // never a band's opening beat
+    if (beatsInBand >= planned - 2) return null;        // leave the tail to the bubble guarantee
+    if (rng() >= chance) return null;
+    const pool = trickPrompts.filter((p) => !usedIds.has(p.id) && requiresOk(p.requires));
+    if (!pool.length) return null;                      // no-repeat: a served trick never returns
+    const p = weightedPick(pool);
+    usedIds.add(p.id);
+    trickServed += 1;
+    return p;
+  }
+
+  /** Beat index (0-based, within Calibration) the i-th colour question is due
+   *  at: evenly spaced across [COLOR_FIRST_SLOT .. planned - COLOR_TAIL_MARGIN].
+   *  Recomputed from the LIVE planned count every call, so a band stretched by
+   *  timid play simply spreads the remaining colour beats wider — they can never
+   *  drift past the tail margin. Pure w.r.t. its arguments. */
+  function colorSlot(i, n, planned) {
+    const lo = COLOR_FIRST_SLOT;
+    const hi = Math.max(lo, planned - COLOR_TAIL_MARGIN);
+    if (n <= 1) return Math.round((lo + hi) / 2);
+    return lo + Math.round((i * (hi - lo)) / (n - 1));
+  }
+
+  /** COLOUR QUESTION (core/palette.js). Innocuous "which colour do you like
+   *  best?" beats whose options ARE colours; the picks build the run's spiral.
+   *
+   *  SPACING — spread across the front of Calibration on the colorSlot()
+   *  schedule (see COLOR_FIRST_SLOT / COLOR_TAIL_MARGIN), rolled ahead of trick
+   *  rolls / ladders / the weighted draw so a due colour beat always wins its
+   *  slot. `>=` (not `===`) against the slot means a slot can never be MISSED:
+   *  a schedule that shifts under a re-planned band just serves on the next beat.
+   *
+   *  ORDERING GUARANTEE — every colour question still lands, and the harvest
+   *  still closes, inside Calibration and before any spiral:
+   *    - the fullscreen loom garnish (effects.js) needs depth >= 0.10 and
+   *      intensity >= 0.20 — reachable late in Calibration now that the last
+   *      colour beat sits around index 10 — so the REAL guarantee is that
+   *      effects.js drops 'spiral' from the garnish bag (both the normal draw and
+   *      the jackpot force) while harvestOpen().
+   *    - the BubblePop loom backdrop (beats.js) is unconditional on that
+   *      mechanic, so buildDescentBeat REFUSES BubblePop in Calibration while
+   *      the harvest is open (see the spiralHold guard); the band's bubble
+   *      guarantee only fires in the last two planned beats, four beats after
+   *      the last colour slot, by which point the harvest is shut.
+   *    - the 'watch' interlude spiral is Deepening/Climax only.
+   *    - boot's HUD dial glyph only crossfades in above depth 0.20; the tail
+   *      margin keeps the last colour beat under it.
+   *
+   *  Returns null once 4 distinct colours are in, once the plan is spent, until
+   *  the next slot is due, or as soon as the run leaves Calibration (which also
+   *  shuts the harvest for good). */
+  function selectColorPrompt(band) {
+    if (band !== Band.Calibration) { closeHarvest(); return null; }
+    if (!harvestWantsMore()) return null;
+    const planned = plannedBeats(band);
+    if (beatsInBand >= planned - 2) return null;             // never collide with the bubble guarantee
+    if (beatsInBand < colorSlot(colorBeatsServed, colorPlan, planned)) return null; // not due yet
+    if (colorBeatsServed > 0 && beatsInBand < lastColorBeat + COLOR_MIN_GAP) return null; // never back-to-back
+    const pool = colorPrompts.filter((p) => !usedIds.has(p.id) && requiresOk(p.requires));
+    if (!pool.length) { closeHarvest(); return null; }
+    const p = weightedPick(pool);
+    usedIds.add(p.id);
+    colorBeatsServed += 1;
+    lastColorBeat = beatsInBand;
+    noteColorServed();
+    return p;
+  }
+
+  /** True when the beat about to be built at `beatsInBand` is a scheduled PLAIN
+   *  beat. Recomputed from the live planned count every call (see PLAIN_SHARE).
+   *
+   *  Slots are spread evenly across [PLAIN_FIRST_SLOT .. planned-PLAIN_TAIL_MARGIN].
+   *  With the shipped pacing that is 4 of 19 Deepening beats at indices 1,6,11,16
+   *  and 2 of 16 Climax beats at indices 1,13 — never adjacent at any planned
+   *  length, so a plain beat is always an island in steered water, never a lull. */
+  function plainSlots(band, planned) {
+    const share = PLAIN_SHARE[band] || 0;
+    if (share <= 0) return null;
+    const lo = PLAIN_FIRST_SLOT;
+    const hi = planned - PLAIN_TAIL_MARGIN;
+    if (hi < lo) return null;
+    const want = Math.min(hi - lo + 1, Math.round(planned * share));
+    if (want <= 0) return null;
+    const span = hi - lo;
+    const out = new Set();
+    for (let i = 0; i < want; i++) {
+      out.add(want === 1 ? lo + Math.round(span / 2)
+                         : lo + Math.round((span * i) / (want - 1)));
+    }
+    return out;
+  }
+  function isPlainSlot(band) {
+    const slots = plainSlots(band, plannedBeats(band));
+    return !!slots && slots.has(beatsInBand);
+  }
+
+  function selectPrompt(band, plain) {
+    // PLAIN BEAT: skip the colour harvest (Calibration-only anyway), the trick
+    // roll and the belief ladder outright. Every one of those is a beat with a
+    // point to make; a plain beat's entire job is to have none.
+    if (plain) {
+      let pool = eligible(band, 'strict', PLAIN_HEAT_WINDOW);
+      if (!pool.length) pool = eligible(band, 'strict', [0, 2]);   // widen one notch
+      if (pool.length) {
+        const p = weightedPick(pool);
+        usedIds.add(p.id); lastServedId = p.id;
+        return p;
+      }
+      // Low-heat pool exhausted (only a tiny bank reaches this): fall through and
+      // serve an ordinary beat rather than repeating a question.
+    }
+    // COLOUR QUESTIONS: the run's opening beats, ahead of everything else.
+    const color = selectColorPrompt(band);
+    if (color) { lastServedId = color.id; return color; }
+    // TRICK QUESTION: rolled ahead of everything else so it reads as an ordinary
+    // beat of the sequence rather than an interruption of one.
+    const trick = selectTrickPrompt(band);
+    if (trick) { lastServedId = trick.id; return trick; }
     // Belief-ladder gets priority in the deep bands (it IS the reactive spine).
     if ((band === Band.Establishing || band === Band.Deepening || band === Band.Climax) && rng() < 0.55) {
       const rung = nextLadderPrompt();
@@ -455,6 +704,15 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     // MC4 / Destruct / Funnel / BubblePop-with-options
     let labels = provided ? provided.slice(0, 4).map(String) : ['Yes', 'Maybe', 'Not really', 'No'];
     if (labels.length < 2) labels = labels.concat(['No', 'Maybe']).slice(0, 2);
+    // FREE CHOICE (`"freeChoice": 1`): the prompt asks a PREFERENCE, so it has no
+    // wrong answer — every option is correct and worth full marks. gradeBeat then
+    // reads correct/score-1/beatMax-1 whichever way the player goes, which keeps
+    // the streak, the velocity and the correct-rate honest across the colour
+    // beats instead of punishing someone for liking green. (The tags still vote
+    // the route exactly like any other heat-0 trivia beat.)
+    if (prompt && prompt.freeChoice) {
+      return labels.map((label, index) => ({ index, label, isCorrect: true, score: 1 }));
+    }
     let correctIdx = (typeof ans === 'number' && ans >= 0 && ans < labels.length) ? ans : 0;
     const opts = labels.map((label, index) => ({ index, label, isCorrect: index === correctIdx, score: index === correctIdx ? 1 : 0 }));
     if (!opts.some((o) => o.isCorrect)) { opts[0].isCorrect = true; opts[0].score = 1; }
@@ -560,6 +818,7 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   function recordAnswer(beat, ev) {
     if (!beat) return;
     const isInterlude = beat.mechanic === Mechanic.Interlude || (ev && ev.mechanic === Mechanic.Interlude);
+    const isTrick = !!(beat.prompt && beat.prompt.trick);
     const { correct, score, beatMax } = gradeBeat(beat, ev);
     const graded = !isInterlude && beat.band !== Band.Recovery;
     const tags = (beat.prompt && Array.isArray(beat.prompt.tags)) ? beat.prompt.tags : [];
@@ -569,10 +828,29 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     const rewardFired = graded && !!(rewardEvent && rewardEvent.fire);
     const rewardDecoupled = !!(rewardEvent && rewardEvent.decoupled);
 
+    // WHICH OPTION WAS TAKEN (additive; see contracts.js AnswerRecord). `correct`
+    // alone cannot tell an endorsement from a refusal — and `tags` are credited
+    // whichever way the answer went — so the choice itself is recorded here for
+    // the C# profiler. Free-input mechanics (mantra / check-in) and interludes
+    // expose no option list: chosenIndex -1 / chosenLabel '' / optionCount 0 mark
+    // them as un-scoreable rather than pretending index 0 was picked.
+    const optList = Array.isArray(beat.options) ? beat.options : [];
+    const chosenIndex = (ev && typeof ev.chosenIndex === 'number' && ev.chosenIndex >= 0 && ev.chosenIndex < optList.length)
+      ? ev.chosenIndex : -1;
+    const chosenOpt = chosenIndex >= 0 ? optList[chosenIndex] : null;
+
     result.trajectory.push({
       beatId: beat.id, band: beat.band, depth: beat.depth, mechanic: beat.mechanic,
       promptId: beat.prompt && beat.prompt.id, correct, score, latencyMs: (ev && ev.latencyMs) || 0,
       steered: !!(ev && ev.steered), rewardFired, rewardDecoupled, tags: tags.slice(),
+      chosenIndex,
+      chosenLabel: chosenOpt ? String(chosenOpt.label == null ? '' : chosenOpt.label) : '',
+      optionCount: optList.length,
+      promptHeat: (beat.prompt && typeof beat.prompt.heat === 'number') ? beat.prompt.heat : 0,
+      steerIntensity: (beat.steerRoll && typeof beat.steerRoll.intensity === 'number') ? beat.steerRoll.intensity : 0,
+      timeoutMs: (typeof beat.timeoutMs === 'number') ? beat.timeoutMs : 0,
+      isTrick,
+      isFreeChoice: !!(beat.prompt && beat.prompt.freeChoice),
     });
 
     if (graded) {
@@ -581,10 +859,17 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
       gradedAnswered += 1;
       if (correct) correctCount += 1;
       descentAnswered += 1;
-      streakRun = (correct && !(ev && ev.timedOut)) ? streakRun + 1 : 0; // wrong/timeout resets
-      updateVelocity(correct, ev);
-      for (const t of tags) result.tagTallies[t] = (result.tagTallies[t] || 0) + 1;
-      voteArchetypes(tags, correct);
+      // TRICK QUESTIONS still SCORE — missing one is the whole joke and it should
+      // show up in the tally — but an unanswerable question must not be punitive
+      // beyond that: it never breaks the streak, never brakes descent velocity
+      // (which would stretch the band as if the user had gone timid), and never
+      // votes the route, because "trick" is noise, not a preference signal.
+      if (!isTrick) {
+        streakRun = (correct && !(ev && ev.timedOut)) ? streakRun + 1 : 0; // wrong/timeout resets
+        updateVelocity(correct, ev);
+        for (const t of tags) result.tagTallies[t] = (result.tagTallies[t] || 0) + 1;
+        voteArchetypes(tags, correct);
+      }
       // affirm a mantra (mantra OR mono path) when the user commits it correctly
       if (correct && beat.prompt && beat.prompt.affirmsMantra && beat.prompt.answer != null) {
         const verbatim = String(beat.prompt.answer);
@@ -705,23 +990,35 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     state.depth = depth;
     state.band = band;
 
-    const src = selectPrompt(band);
+    const plain = isPlainSlot(band);
+    const src = selectPrompt(band, plain);
+    lastBeatWasTrick = !!src.trick;
     let mechanic = pickMechanic(src, band);
+    // SPIRAL HOLD: a BubblePop beat mounts an unconditional fullscreen loom
+    // backdrop (beats.js), and a loom is woven from the harvested colours — so
+    // while Calibration is still collecting them, that mechanic is withheld and
+    // the beat plays as plain MC4. Calibration's heat window admits heat-1
+    // bubble prompts, so this is a live path, not a theoretical one.
+    const spiralHold = band === Band.Calibration && harvestWantsMore();
+    if (spiralHold && mechanic === Mechanic.BubblePop) mechanic = Mechanic.MC4;
     // BUBBLE GUARANTEE: every descent band serves >=1 BubblePop. If the band hits
     // its last 2 planned beats dry, force it on the next option-compatible prompt.
-    if (!bubbleServedInBand && beatsInBand >= planned - 2 && mechanic !== Mechanic.BubblePop
+    if (!bubbleServedInBand && !spiralHold && beatsInBand >= planned - 2 && mechanic !== Mechanic.BubblePop
         && (OPTION_MECHANICS.has(mechanic) || (Array.isArray(src.options) && src.options.length))) {
       mechanic = Mechanic.BubblePop;
     }
     if (mechanic === Mechanic.BubblePop) bubbleServedInBand = true;
     const options = buildOptions(mechanic, src);
-    const steerRoll = rollSteer(band, depth, options.length > 0);
+    // A plain beat is served UNSTEERED. Note this also clears lastPrimarySteer,
+    // so the steer that follows it is free to repeat the one before — which is
+    // correct: with an unsteered beat between them they no longer read as a pair.
+    const steerRoll = rollSteer(band, depth, !plain && options.length > 0);
     const rewardPlan = planFor(band, depth, src) || fallbackPlan(band, depth, src);
 
     // TIMED PRESSURE: ~30% of MC4/YesNo beats in Deepening (and sub-0.9 Climax)
     // get a shrinking-ring timeout, shorter as depth rises; never back-to-back.
     let timeoutMs = 0;
-    const timedEligible = TIMED_MECHANICS.has(mechanic) && !lastBeatTimed
+    const timedEligible = !plain && TIMED_MECHANICS.has(mechanic) && !lastBeatTimed
       && (band === Band.Deepening || (band === Band.Climax && depth < 0.9));
     if (timedEligible && rng() < TIMED_ROLL) {
       const target = lerp(TIMED_MS_MAX, TIMED_MS_MIN, depth) + (rng() - 0.5) * 1000;

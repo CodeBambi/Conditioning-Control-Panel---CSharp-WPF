@@ -46,8 +46,18 @@
  *                            a depth-bias hint (a host that never rotates keeps
  *                            the original band-dressed tube).
  *
+ *   WALL DRESSING            from Section 2 onward, stretches of the bore are
+ *                            plastered with the user's own gifs (render/
+ *                            wallDecals.js — a port of DtRH's wallPosters.js).
+ *                            Band-driven: clean in Calibration, sparse patches
+ *                            in Establishing, busy in Deepening, saturated in
+ *                            Climax, scrubbed clean again through Recovery.
+ *                            Needs the optional `media` manifest; without it
+ *                            (or under reduced motion) the wall simply stays
+ *                            bare, exactly as before.
+ *
  * CONTRACT (contracts.js "BACKGROUND (Agent F)"):
- *   createBackground({ canvas }) -> { setDepth, setEnabled, dispose,
+ *   createBackground({ canvas, media? }) -> { setDepth, setEnabled, dispose,
  *     setBand, onAnswer, onReward, transition, setRouteTint, setSteerWarp,
  *     nextBiome }
  *
@@ -411,7 +421,7 @@ const BIOME_DRESSES = (Array.isArray(BIOMES_ALL) ? BIOMES_ALL : []).map((b) => (
 /* ==========================================================================
  * FACTORY
  * ========================================================================== */
-export function createBackground({ canvas }) {
+export function createBackground({ canvas, media }) {
   // --- shared state ---------------------------------------------------------
   let enabled = false;
   let disposed = false;
@@ -506,6 +516,11 @@ export function createBackground({ canvas }) {
   // WebGL bucket (populated by initWebGL)
   let three = null, renderer = null, scene = null, camera = null, mat = null, geo = null, mesh = null;
   let baseFov = 78, curFov = 78;
+  // Wall dressing (render/wallDecals.js — DtRH's wallPosters port). WebGL only,
+  // built once the tube exists and only when the manifest actually has media;
+  // null everywhere else (reduced motion, 2D fallback, no user assets).
+  let decals = null;
+  let tubeRadius = 5.2, tubeLength = 140;
   // 2D bucket
   let ctx2d = null;
 
@@ -578,6 +593,7 @@ export function createBackground({ canvas }) {
 
     const radial = tier === 'mobile' ? 18 : 32; // low-poly; shader does the detail
     const RADIUS = 5.2, LENGTH = 140;
+    tubeRadius = RADIUS; tubeLength = LENGTH;
     // Cylinder is along Y by default; rotate so its length runs down -Z.
     geo = new THREE.CylinderGeometry(RADIUS, RADIUS, LENGTH, radial, 1, true);
     geo.rotateX(Math.PI / 2);
@@ -634,7 +650,29 @@ export function createBackground({ canvas }) {
     // the 2D fallback rather than leaving the canvas an empty void.
     try { renderer.compile(scene, camera); } catch (e) { shaderFailed = shaderFailed || (e && e.message) || 'compile threw'; }
     if (shaderFailed) { teardownWebGL(); return false; }
+    initDecals();
     return true;
+  }
+
+  // Wall dressing: plastered sections of the user's gifs on the bore (Section 2
+  // onward). Lazily imported like three itself, so a broken/absent module can
+  // never cost us the tube — it just leaves the wall clean. Skipped outright
+  // under reduced motion and when the manifest carries no visual media.
+  function initDecals() {
+    if (reduced || decals) return;
+    const hasMedia = !!media && ((Array.isArray(media.gifs) && media.gifs.length)
+      || (Array.isArray(media.images) && media.images.length));
+    if (!hasMedia) return;
+    import('./wallDecals.js').then((m) => {
+      if (disposed || decals || mode === 'dead' || !scene || !three) return;
+      decals = m.createWallDecals({
+        THREE: three, scene, renderer, media, tier, radius: tubeRadius,
+      });
+      // catch up to whatever the run already told us (setBand/setDepth may have
+      // landed while the module was still loading)
+      decals.setDepth(bandBiasDepth);
+      if (curBand) decals.setBand(curBand);
+    }).catch((e) => { logSeam('wall decals unavailable (' + ((e && e.message) || e) + ')'); });
   }
 
   // --- 2D fallback init -----------------------------------------------------
@@ -910,7 +948,15 @@ export function createBackground({ canvas }) {
       u.uSpiralW.value = dressCur.spiralW;
       u.uGlowMul.value = dressCur.glowMul;
       u.uPulseAmt.value = dressCur.pulseAmt;
-      u.uFar.value = (mat.userData.LENGTH || 140) * 0.85 * dressCur.farMul;
+      const far = (mat.userData.LENGTH || 140) * 0.85 * dressCur.farMul;
+      u.uFar.value = far;
+      // Wall dressing rides the SAME scroll: one shader scroll unit advances the
+      // ring pattern by LENGTH/rings world units, so feeding the decals that
+      // distance glues them to the rings instead of sliding against them.
+      if (decals) {
+        try { decals.update(dt, dt * speed * (tubeLength / Math.max(1, dressCur.rings)), far); }
+        catch (_e) { /* one bad decal frame never kills the tube */ }
+      }
       // spiral slots: band crossfade — or the fork's counter-rotating twin
       if (trans && trans.kind === 'fork') {
         const fb = trans.forkBase;
@@ -998,6 +1044,8 @@ export function createBackground({ canvas }) {
   }
 
   function teardownWebGL() {
+    try { if (decals) decals.dispose(); } catch (_e) {}
+    decals = null;
     try { if (geo) geo.dispose(); } catch (_e) {}
     try { if (mat) mat.dispose(); } catch (_e) {}
     try {
@@ -1022,6 +1070,7 @@ export function createBackground({ canvas }) {
       if (disposed) return;
       targetIntensity = bgIntensityFor(depth);
       bandBiasDepth = clamp01(typeof depth === 'number' ? depth : 0); // steers biome pick
+      if (decals) decals.setDepth(bandBiasDepth); // density breathes within the band
     },
 
     /** Band.* -> per-band dressing target; the loop crossfades ~1.5s. Once biome
@@ -1030,6 +1079,10 @@ export function createBackground({ canvas }) {
     setBand(band) {
       if (disposed) return;
       curBand = band;
+      // The wall dressing is BAND-driven, never biome-driven: it stays clean
+      // through Calibration, thickens Establishing -> Climax, and is scrubbed
+      // off again through Recovery — so this runs before the biome bail-out.
+      if (decals) decals.setBand(band);
       if (biomeEngaged) return; // biomes own the dress now — don't stomp it
       const d = BAND_DRESS[band];
       if (!d) return; // unknown band -> keep the current dress

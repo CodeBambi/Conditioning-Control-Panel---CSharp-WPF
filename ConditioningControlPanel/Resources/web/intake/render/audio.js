@@ -48,12 +48,41 @@
  * existing master gain / brick-wall topology stays authoritative — no voice gets
  * its own path to the destination once the bed exists.
  *
+ * USER PREF BUSES (ui/prefs.js — the Options panel's volume sliders):
+ *   Three pref-aware gain nodes sit BETWEEN the existing per-voice gains and the
+ *   shared limiter, one per category:
+ *
+ *     merger -> lowpass -> binGain --> [binBus]   -\
+ *     one-shot voices ---------------> [fxBus]     --> limiter -> destination
+ *     VO buffer sources -------------> [voiceBus] -/
+ *
+ *   WHY a choke point and not a multiplier at ~30 call sites: every *Spec() here
+ *   is a PURE, headless-tested translation constant, and the caps math
+ *   (clampIntensity / clampToCaps) is invariant #2. Folding a user slider into
+ *   either would make the tested math and the shipped math diverge and would
+ *   conflate "how loud in the room" with "how hard the host may push". Three
+ *   nodes downstream of every gain leave all of that byte-identical — and they
+ *   also let a slider retune a line that is ALREADY playing, which per-call-site
+ *   multipliers cannot do. The bed's duck/suspend bookkeeping (voBedSaved /
+ *   bedSavedGain) still reads and writes binGain alone, so those latches keep
+ *   working untouched while binBus rides on top.
+ *
+ *   Final gain therefore stays: spec.gain * caps * prefs — multiplied, never
+ *   conflated. Pref changes GLIDE (setTargetAtTime) so a dragged slider never
+ *   clicks. VO additionally hard-gates: voiceScale() === 0 (the Voiceover OFF
+ *   switch, or master/voice at 0) makes playVoice a no-op that returns null and
+ *   still fires opts.onEnd — byte-identical to the existing muted path, so the
+ *   intro chain in boot.js and the garble chains in beats.js advance normally.
+ *
  * SIDE-EFFECT FREE AT IMPORT: the AudioContext is created LAZILY (first setDepth /
  * chime, armed to resume on the first user gesture). No WebAudio/DOM at load, so
  * importing never throws. Pure Hz/gain mappings are exported for headless tests.
  * ==========================================================================*/
 
 import { depthToChannels, clampToCaps, clampIntensity, RewardKind, clamp01, lerp } from '../core/contracts.js';
+import {
+  binauralScale, effectsScale, voiceScale, subscribe as subscribePrefs,
+} from '../ui/prefs.js';
 
 /* ----------------------------------------------------------------------------
  * PURE MAPPINGS — binauralDepth (0..1) -> Hz + amplitude. Exported + tested.
@@ -218,21 +247,26 @@ export function popSampleUrl() {
 }
 /** POP intensity -> real Pop.mp3 playback gain (sample carries its own envelope,
  *  limiter brick-walls the sum). Pops are punchy. Pure. */
-export function popSampleSpec(intensity) {
+export function popSampleSpec(intensity, rate) {
   const i = clamp01(intensity);
-  return { gain: 0.10 + i * 0.30 }; // 0.10 .. 0.40
+  // `rate` (0.5..2, default 1) pitches the pop up/down via playbackRate — the
+  // same mechanism the chime's streak pitch rides. Used by the bubble SPLIT
+  // chain: each generation is smaller, so each pop is a notch tighter.
+  const r = (typeof rate === 'number' && rate >= 0.5 && rate <= 2) ? rate : 1;
+  return { gain: 0.10 + i * 0.30, rate: r }; // 0.10 .. 0.40
 }
 /** POP synth fallback: a short bandpassed noise burst + a low sine thump.
  *  Used until Pop.mp3 decodes, and forever if it never does. Pure. */
-export function popSynthSpec(intensity) {
+export function popSynthSpec(intensity, rate) {
   const i = clamp01(intensity);
+  const r = (typeof rate === 'number' && rate >= 0.5 && rate <= 2) ? rate : 1;
   return {
     gain:     0.06 + i * 0.20,
-    noiseHz:  1800,   // bandpass center of the burst
-    noiseSec: 0.045,
-    thumpHz:  190,    // low sine thump start
-    thumpEnd: 60,     // ...gliding down under the burst
-    thumpSec: 0.11,
+    noiseHz:  1800 * r,   // bandpass center of the burst (pitched by `rate`)
+    noiseSec: 0.045 / r,
+    thumpHz:  190 * r,    // low sine thump start
+    thumpEnd: 60 * r,     // ...gliding down under the burst
+    thumpSec: 0.11 / r,
   };
 }
 
@@ -430,6 +464,9 @@ export function createAudio({ caps } = {}) {
   let gainL = null, gainR = null;
   let merger = null, lowpass = null, binGain = null, limiter = null;
   let started = false;
+  // USER PREF BUSES (see the header note): one gain node per category, sitting
+  // between every existing per-voice gain and the shared limiter.
+  let binBus = null, fxBus = null, voiceBus = null;
 
   let depthNow = 0;             // last requested depth (for lazy graph seed)
   let noiseBuf = null;          // shared 1s white-noise buffer (lazy, per ctx)
@@ -483,6 +520,40 @@ export function createAudio({ caps } = {}) {
     return ctx;
   }
 
+  /** Where a bus should currently point: the shared limiter once the bed graph
+   *  exists, the destination before that (mirrors routeOut's old rule). */
+  function busTarget(c) { return (started && limiter) ? limiter : c.destination; }
+
+  /** Create the three pref buses once, seeded from the CURRENT prefs. Safe to
+   *  call before the bed graph exists — they land on the destination and are
+   *  re-pointed at the limiter by rewireBuses() as soon as ensureGraph() runs.
+   *  Returns true when the buses are usable. Never throws. */
+  function ensureBuses(c) {
+    if (!c) return false;
+    if (fxBus) return true;
+    try {
+      const t = busTarget(c);
+      binBus   = c.createGain(); binBus.gain.value   = binauralScale();
+      fxBus    = c.createGain(); fxBus.gain.value    = effectsScale();
+      voiceBus = c.createGain(); voiceBus.gain.value = voiceScale();
+      binBus.connect(t); fxBus.connect(t); voiceBus.connect(t);
+      return true;
+    } catch (_e) {
+      binBus = fxBus = voiceBus = null;
+      return false;
+    }
+  }
+
+  /** Move the buses onto the limiter once the bed graph has come up. */
+  function rewireBuses() {
+    if (!fxBus || !limiter) return;
+    for (const b of [binBus, fxBus, voiceBus]) {
+      if (!b) continue;
+      try { b.disconnect(); } catch (_e) {}
+      try { b.connect(limiter); } catch (_e) {}
+    }
+  }
+
   /** Build the binaural graph once. Starts silent (gain 0) at the current depth. */
   function ensureGraph() {
     const c = ensureCtx();
@@ -512,11 +583,14 @@ export function createAudio({ caps } = {}) {
         limiter.ratio.value = 12; limiter.attack.value = 0.003; limiter.release.value = 0.25;
       } catch (_e) {}
 
+      ensureBuses(c);   // may already exist (a one-shot fired before the bed)
       merger.connect(lowpass); lowpass.connect(binGain);
-      binGain.connect(limiter); limiter.connect(c.destination);
+      binGain.connect(binBus || limiter);
+      limiter.connect(c.destination);
 
       oscL.start(); oscR.start();
       started = true;
+      rewireBuses();    // buses now point at the limiter, not the destination
     } catch (_e) {
       started = false;
     }
@@ -538,9 +612,18 @@ export function createAudio({ caps } = {}) {
 
   /* ----- one-shot plumbing --------------------------------------------------- */
 
-  /** Route a one-shot's output through the shared limiter (topology invariant). */
+  /** Route a one-shot's output through the EFFECTS pref bus and on into the
+   *  shared limiter (topology invariant). Falls back to the old direct wiring if
+   *  the bus could not be created. */
   function routeOut(c, node) {
-    node.connect((started && limiter) ? limiter : c.destination);
+    if (ensureBuses(c) && fxBus) { node.connect(fxBus); return; }
+    node.connect(busTarget(c));
+  }
+
+  /** Same, for spoken VO — the VOICE pref bus (its own slider + on/off switch). */
+  function routeVoice(c, node) {
+    if (ensureBuses(c) && voiceBus) { node.connect(voiceBus); return; }
+    node.connect(busTarget(c));
   }
 
   /** Shared 1s white-noise buffer (lazy per-context). */
@@ -784,11 +867,12 @@ export function createAudio({ caps } = {}) {
 
   /** Pop (real Pop.mp3): one shot at random-free single sample, gain from the
    *  clamped intensity, out through the shared limiter like every other voice. */
-  function popSample(c, intensity) {
-    const spec = popSampleSpec(intensity);
+  function popSample(c, intensity, rate) {
+    const spec = popSampleSpec(intensity, rate);
     const t0 = c.currentTime;
     const src = c.createBufferSource();
     src.buffer = popBuf;
+    if (spec.rate !== 1) { try { src.playbackRate.value = spec.rate; } catch (_e) {} }
     const g = c.createGain();
     g.gain.value = spec.gain;
     src.connect(g);
@@ -797,8 +881,8 @@ export function createAudio({ caps } = {}) {
   }
 
   /** Pop synth fallback — short bandpassed noise burst + a low sine thump. */
-  function popSynth(c, intensity) {
-    const spec = popSynthSpec(intensity);
+  function popSynth(c, intensity, rate) {
+    const spec = popSynthSpec(intensity, rate);
     const t0 = c.currentTime;
     // the burst
     const out = envOut(c, t0, spec.gain, 0.002, spec.noiseSec);
@@ -1062,14 +1146,23 @@ export function createAudio({ caps } = {}) {
    *  Starting a new voice STOPS the previous one (only one VO at a time). Ducks
    *  the bed while it plays; restores on end. `opts.onEnd` fires EXACTLY once —
    *  on natural end, on stop, or on a silent miss — so callers can chain lines.
-   *  Returns a handle { stop(fade) }, or null when audio can't play at all
-   *  (muted / no AudioContext) — in which case onEnd is still fired. */
+   *  `opts.rate` (0.25..3, default 1) plays the line slower/faster (pitch rides
+   *  with it — the buffer-source playbackRate) and `opts.offset` (seconds,
+   *  default 0) starts it PART-WAY IN. Both exist for the CORRUPTED QUESTION
+   *  set-piece in beats.js (stutter/chop/wobble garble); every other caller is
+   *  unaffected. Returns a handle { stop(fade) }, or null when audio can't play
+   *  at all (muted / no AudioContext) — in which case onEnd is still fired. */
   function playVoice(id, opts) {
     opts = opts || {};
     const onEnd = (typeof opts.onEnd === 'function') ? opts.onEnd : null;
     const fireEnd = () => { if (onEnd) { try { onEnd(); } catch (_e) {} } };
     if (typeof id !== 'string' || !id) { fireEnd(); return null; }
     if (_muted) { fireEnd(); return null; }
+    // VOICEOVER OFF (or master/voice slider at 0): behave EXACTLY like the muted
+    // path — fire onEnd once, return null. boot.js's intro chain treats a null
+    // handle as "advance immediately" and beats.js only ever ignores the handle,
+    // so a silent run paces itself the same as a missing VO file already does.
+    if (voiceScale() <= 0) { fireEnd(); return null; }
     const c = ensureCtx();
     if (!c) { fireEnd(); return null; }
 
@@ -1119,15 +1212,21 @@ export function createAudio({ caps } = {}) {
         duckBedForVoice();
         const src = c.createBufferSource();
         src.buffer = buf;
+        // optional garble controls (default: untouched 1.0 / from the top)
+        const rate = (typeof opts.rate === 'number' && opts.rate >= 0.25 && opts.rate <= 3)
+          ? opts.rate : 1;
+        const off = (typeof opts.offset === 'number' && opts.offset > 0
+          && opts.offset < Math.max(0, buf.duration - 0.15)) ? opts.offset : 0;
+        if (rate !== 1) { try { src.playbackRate.value = rate; } catch (_e) {} }
         const g = c.createGain();
         g.gain.value = VOICE_GAIN;
         src.connect(g);
-        routeOut(c, g);                          // through the SHARED limiter like every voice
+        routeVoice(c, g);                        // VOICE pref bus -> SHARED limiter
         srcRef = src; gainRef = g;
         try { src.onended = () => finishOnce(); } catch (_e) {}
-        src.start(c.currentTime);
+        src.start(c.currentTime, off);
         // belt-and-suspenders: onended can be unreliable on some hosts.
-        endTimer = setTimeout(finishOnce, Math.max(200, (buf.duration + 0.3) * 1000));
+        endTimer = setTimeout(finishOnce, Math.max(200, ((buf.duration - off) / rate + 0.3) * 1000));
       } catch (_e) {
         finishOnce();
       }
@@ -1362,16 +1461,18 @@ export function createAudio({ caps } = {}) {
   /** Pop one-shot: the app's REAL Pop.mp3 (synth burst until it decodes / if it
    *  never does), scaled by clamped intensity (invariant #2), through the shared
    *  limiter. Additive surface — callers guard `typeof audio.pop === 'function'`.
-   *  Default intensity when unspecified keeps a bubble-pop satisfyingly present. */
-  function pop(intensity) {
+   *  Default intensity when unspecified keeps a bubble-pop satisfyingly present.
+   *  Optional `rate` (0.5..2, default 1) pitches the pop — smaller bubble, tighter
+   *  pop (the BubblePop split chain steps it up one notch per generation). */
+  function pop(intensity, rate) {
     if (_muted) return;
     const i = clampIntensity(intensity == null ? 0.6 : intensity, capsOf());
     const c = ensureCtx();
     if (!c) return;
     loadPop(c); // no-op after the first call
     try {
-      if (popLoad === 'ready' && popBuf) popSample(c, i);
-      else popSynth(c, i);
+      if (popLoad === 'ready' && popBuf) popSample(c, i, rate);
+      else popSynth(c, i, rate);
     } catch (_e) {}
   }
 
@@ -1415,6 +1516,23 @@ export function createAudio({ caps } = {}) {
     };
     try { window.addEventListener(SFX_CUE_EVENT, sfxHook); } catch (_e) { sfxHook = null; }
   }
+
+  // LIVE PREF RETUNE: the Options panel can be opened from the pause menu mid-run,
+  // so a slider must retune the bed/effects/VO that are ALREADY sounding. Always
+  // GLIDE (setTargetAtTime) — stepping a gain node mid-signal clicks audibly.
+  // Cheap enough to run on every notify; prefs.setPref already suppresses
+  // no-change writes, so a dragged slider does not storm this.
+  const unsubPrefs = subscribePrefs((p) => {
+    try {
+      if (binBus)   glide(binBus.gain,   binauralScale(p), 0.30);
+      if (fxBus)    glide(fxBus.gain,    effectsScale(p),  0.15);
+      if (voiceBus) glide(voiceBus.gain, voiceScale(p),    0.15);
+      // Switching Voiceover OFF while a line is mid-sentence: fade it out for
+      // real rather than leaving a muted source running to its natural end (the
+      // stop() fade also unwinds the bed duck and fires the line's onEnd).
+      if (voiceScale(p) <= 0 && voHandle) stopVoice(0.2);
+    } catch (_e) {}
+  });
 
   /** Invariant #3: emerge — glide beat back to 10 Hz, carrier down, gain out. */
   function emerge() {
@@ -1527,6 +1645,7 @@ export function createAudio({ caps } = {}) {
       try { window.removeEventListener(SFX_CUE_EVENT, sfxHook); } catch (_e) {}
       sfxHook = null;
     }
+    try { if (typeof unsubPrefs === 'function') unsubPrefs(); } catch (_e) {}
     if (ctx) { try { ctx.close(); } catch (_e) {} }
     ctx = null; started = false; dead = false; noiseBuf = null;
     chimeBufs = []; chimeLoad = 'idle'; // re-fetch against a future fresh ctx
@@ -1543,6 +1662,7 @@ export function createAudio({ caps } = {}) {
     voCache.clear(); voLoading.clear();
     voDucked = false; voBedSaved = null; voToken++;
     oscL = oscR = gainL = gainR = merger = lowpass = binGain = limiter = null;
+    binBus = fxBus = voiceBus = null;   // rebuilt (from live prefs) on a fresh ctx
   }
 
   return { setDepth, chime, garnishCue, pop, sfx: playSfx, emerge, dispose, setMuted, isMuted,

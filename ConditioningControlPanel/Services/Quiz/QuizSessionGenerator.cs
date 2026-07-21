@@ -15,8 +15,6 @@ namespace ConditioningControlPanel.Services
 
     public static class QuizSessionGenerator
     {
-        private static readonly Random _random = new();
-
         public static Session GenerateSession(int totalScore, int maxScore, string categoryId, string categoryName, SessionTextContent textContent)
         {
             var scorePercent = maxScore > 0 ? (double)totalScore / maxScore * 100 : 0;
@@ -76,7 +74,20 @@ namespace ConditioningControlPanel.Services
             if (run == null) throw new ArgumentNullException(nameof(run));
 
             var niche = string.IsNullOrWhiteSpace(run.Niche) ? "bambi" : run.Niche.Trim().ToLowerInvariant();
+
+            // Five-axis read of WHAT THE USER ACTUALLY CHOSE (Slice 1). Deterministic.
+            var profile = IntakeProfiler.Profile(run);
+
             var difficulty = DifficultyFromDepth(run.PeakDepth);
+            // A5 AUTONOMY — an inverse GATE, not a knob. A run that kept refusing the
+            // compliant answer on the heat-3+ confession prompts is telling us the descent
+            // outran the consent, whatever peakDepth says. Step the tier down one notch and
+            // (below, in ApplyRunShaping) force lock cards off. Ignored when the axis is
+            // under-sampled: bambi and drone have no confession prompts at all, so the gate
+            // simply never fires on those niches rather than firing on noise.
+            if (!profile.Autonomy.UnderSampled && profile.Autonomy.Value >= AutonomyClampThreshold)
+                difficulty = StepDownTier(difficulty);
+
             var scorePercent = run.MaxScore > 0
                 ? run.TotalScore / run.MaxScore * 100.0
                 : Math.Clamp(run.PeakDepth, 0, 1) * 100.0;
@@ -105,7 +116,7 @@ namespace ConditioningControlPanel.Services
                     + (string.IsNullOrWhiteSpace(archetype) ? "." : $" — {PrettyId(archetype)} route.");
 
             var settings = BuildSettings(difficulty, content);
-            ApplyRunShaping(settings, run);
+            ApplyRunShaping(settings, run, profile);
 
             var phases = BuildPhases(difficulty);
             var icon = GetCategoryIcon(niche);
@@ -126,6 +137,21 @@ namespace ConditioningControlPanel.Services
             };
         }
 
+        /// <summary>A5 autonomy at or above this refuses the drafted tier one step down.
+        /// Calibrated against headless runs: an all-compliant player scores 0.00, an
+        /// all-refusing player 1.00, and a coin-flip player 0.62-0.66 — so the gate sits above
+        /// the coin-flip band and only trips on sustained, deliberate refusal.</summary>
+        private const double AutonomyClampThreshold = 0.70;
+
+        /// <summary>One notch gentler. Easy is already the floor.</summary>
+        private static SessionDifficulty StepDownTier(SessionDifficulty d) => d switch
+        {
+            SessionDifficulty.Extreme => SessionDifficulty.Hard,
+            SessionDifficulty.Hard => SessionDifficulty.Medium,
+            SessionDifficulty.Medium => SessionDifficulty.Easy,
+            _ => SessionDifficulty.Easy,
+        };
+
         /// <summary>peakDepth (0..1) -&gt; difficulty, aligned to the web core's band depth floors
         /// (Establishing 0.18, Deepening 0.42, Climax 0.72).</summary>
         private static SessionDifficulty DifficultyFromDepth(double peakDepth)
@@ -145,6 +171,7 @@ namespace ConditioningControlPanel.Services
             "bambi" => "Bambi",
             "drone" => "Drone",
             "sissy" => "Sissy",
+            "circe" => "Circe",
             _ => string.IsNullOrEmpty(niche) ? "Intake" : char.ToUpperInvariant(niche[0]) + niche[1..]
         };
 
@@ -193,12 +220,18 @@ namespace ConditioningControlPanel.Services
             return outList;
         }
 
-        /// <summary>Shape the base difficulty settings by the run's reward profile + tag tallies.
-        /// Reward-chasing runs (the user drifted toward the decoupled reward) get more
-        /// intermittent / unpredictable effects; steady runs stay continuous. Dominant tags
-        /// nudge the matching subsystem up. All adjustments clamp inside the classic ranges so
-        /// the draft never exceeds what the score-bucket path could already produce.</summary>
-        private static void ApplyRunShaping(SessionSettings s, QuizRunResult run)
+        /// <summary>Shape the base difficulty settings by the run's reward profile and its
+        /// five-axis <see cref="IntakeProfile"/>.
+        ///
+        /// This REPLACES the old tag-substring block, which asked <c>HasTag(tags,"obey",...)</c>
+        /// — a boolean over <see cref="QuizRunResult.TagTallies"/>. That was the wrong question
+        /// twice over: tallies are credited whichever way the user answered (exposure, not
+        /// preference), and one sighting of a tag moved a knob exactly as far as forty. The axes
+        /// answer "how hard did they lean into this, weighted by how hot the asking was".
+        ///
+        /// DETERMINISTIC: no dice anywhere in the draft path. Same profile in =&gt; byte-identical
+        /// SessionSettings out.</summary>
+        private static void ApplyRunShaping(SessionSettings s, QuizRunResult run, IntakeProfile profile)
         {
             var chase = Math.Clamp(run.RewardProfile?.ChaseMagnitude ?? 0, 0, 1);
             var chased = run.RewardProfile?.ChasedReward == true;
@@ -209,8 +242,12 @@ namespace ConditioningControlPanel.Services
                 s.BubblesEnabled = true;
                 s.BubblesIntermittent = true;
                 s.FlashHydra = true;
-                // Lean the flash frequency up a touch with how hard they chased.
-                s.FlashPerHour = Math.Clamp((int)(s.FlashPerHour * (1.0 + 0.25 * chase)), 1, 600);
+                // Lean the flash frequency up a touch with how hard they chased. BOTH halves of
+                // the ramp scale together — raising only the start is precisely how the ramp got
+                // inverted in the first place (see the RAMP PAIRS note in BuildSettings).
+                var chaseMul = 1.0 + 0.25 * chase;
+                s.FlashPerHour = Math.Clamp((int)(s.FlashPerHour * chaseMul), 1, FlashPerHourMax);
+                s.FlashPerHourEnd = Math.Clamp((int)(s.FlashPerHourEnd * chaseMul), 1, FlashPerHourMax);
             }
             else
             {
@@ -218,57 +255,144 @@ namespace ConditioningControlPanel.Services
                 s.BubblesIntermittent = false;
             }
 
-            // Tag emphasis: keyword-match the dominant tallied tags onto subsystems. Bank tags
-            // are content-defined, so match on substrings rather than an exact vocabulary.
-            var tags = run.TagTallies;
-            if (tags != null && tags.Count > 0)
+            // ================================================================
+            // AXIS -> KNOB TABLE.
+            //
+            // Every row is:  knob = clamp(tier base + round(SPAN * lean(axis)), lo, hi)
+            // where lean(axis) = axis.Value - 0.5, i.e. -0.5 (total refusal) .. +0.5 (total
+            // endorsement) and EXACTLY 0 when the axis is under-sampled — an under-sampled axis
+            // moves nothing and the tier's own value stands. SPAN is therefore the full
+            // peak-to-peak travel the axis can produce on that knob.
+            //
+            // The (lo,hi) clamps are the knobs' REAL ranges, taken from the AppSettings
+            // property setters those values are eventually written into, not invented here:
+            //   FlashFrequency      1..180   (AppSettings.FlashFrequency)
+            //   FlashOpacity       10..100   (session convention; 0 would disable it)
+            //   SubliminalFrequency 1..30    (AppSettings.SubliminalFrequency; sessions use 1..6)
+            //   SubliminalOpacity  20..100
+            //   SpiralOpacity       0..50    (AppSettings.SpiralOpacity)
+            //   PinkFilter opacity  0..100
+            //   LockCardFrequency   1..10    (AppSettings.LockCardFrequency; sessions use 1..4)
+            //   MindWipeBaseMultiplier 1..4
+            //
+            //   axis            knob                       span   clamp
+            //   -----------------------------------------------------------------
+            //   A1 blankness    MindWipeBaseMultiplier      +-2    1..4
+            //   A1 blankness    SubliminalOpacity          +-20   20..100
+            //   A1 blankness    SpiralOpacity / ...End     +-8/16  0..50   (spiral on only)
+            //   A2 service      LockCardEnabled            on at >=0.75 (the one ON/OFF row)
+            //   A2 service      LockCardFrequency           +-2    1..4
+            //   A2 service      MandatoryVideos VideosPerHour +-2  1..4    (videos on only)
+            //   A3 arousal      FlashPerHour / ...End      +-30/60 1..180
+            //   A3 arousal      FlashOpacity / ...End      +-15/25 10..100
+            //   A4 presentation SubliminalPerMin            +-2    1..6
+            //   A4 presentation PinkFilterEndOpacity       +-20    0..100
+            // ================================================================
+            var a1 = Lean(profile.Blankness);
+            var a2 = Lean(profile.Service);
+            var a3 = Lean(profile.Arousal);
+            var a4 = Lean(profile.Presentation);
+
+            // --- A1 blankness -------------------------------------------------
+            s.MindWipeBaseMultiplier = Nudge(s.MindWipeBaseMultiplier, 2 * a1, 1, 4);
+            s.SubliminalOpacity      = Nudge(s.SubliminalOpacity, 20 * a1, 20, 100);
+            if (s.SpiralEnabled)
             {
-                if (HasTag(tags, "submission", "submit", "obey", "obedience", "surrender"))
-                {
-                    s.LockCardEnabled = true;
-                    if (s.LockCardStartMinute <= 0) s.LockCardStartMinute = 10;
-                    s.LockCardFrequency = Math.Clamp((s.LockCardFrequency ?? 1) + 1, 1, 4);
-                }
-                if (HasTag(tags, "mindless", "empty", "blank", "drop", "sleep"))
-                {
-                    s.MindWipeEnabled = true;
-                    s.MindWipeBaseMultiplier = Math.Clamp(s.MindWipeBaseMultiplier + 1, 1, 4);
-                }
-                if (HasTag(tags, "bimbo", "doll", "bambi", "pretty", "feminine"))
-                {
-                    s.SubliminalEnabled = true;
-                    s.SubliminalPerMin = Math.Clamp(s.SubliminalPerMin + 1, 1, 6);
-                }
-                if (HasTag(tags, "denial", "tease", "edge", "frustration"))
-                {
-                    s.BouncingTextEnabled = true;
-                }
+                s.SpiralOpacity    = Nudge(s.SpiralOpacity, 8 * a1, 0, 50);
+                s.SpiralOpacityEnd = Nudge(s.SpiralOpacityEnd, 16 * a1, 0, 50);
             }
-        }
 
-        private static bool HasTag(Dictionary<string, int> tags, params string[] needles)
-        {
-            foreach (var kv in tags)
+            // --- A2 service ---------------------------------------------------
+            // The one place an axis may switch a subsystem ON rather than scale it. The old
+            // tag block did this off a single sighting of "obey"; it now takes a well-sampled
+            // A2 at 0.75+, i.e. the user took the compliant option on three quarters of the
+            // heat-weighted service asks. Easy/Medium ship with lock cards off, so without
+            // this a service-forward shallow run could never earn them. (MindWipe, Subliminals
+            // and BouncingText are already enabled on every tier, so they need no equivalent.)
+            const double lockCardEnableAt = 0.75;
+            if (!s.LockCardEnabled && !profile.Service.UnderSampled && profile.Service.Value >= lockCardEnableAt)
             {
-                if (kv.Value <= 0 || string.IsNullOrEmpty(kv.Key)) continue;
-                var key = kv.Key.ToLowerInvariant();
-                foreach (var n in needles)
-                    if (key.Contains(n, StringComparison.Ordinal)) return true;
+                s.LockCardEnabled = true;
+                s.LockCardStartMinute = 10;
+                s.LockCardFrequency = 1;
             }
-            return false;
+            if (s.LockCardEnabled)
+                s.LockCardFrequency = Nudge(s.LockCardFrequency ?? 1, 2 * a2, 1, 4);
+            if (s.MandatoryVideosEnabled)
+                s.VideosPerHour = Nudge(s.VideosPerHour ?? 1, 2 * a2, 1, 4);
+
+            // --- A3 arousal-forward -------------------------------------------
+            s.FlashPerHour    = Nudge(s.FlashPerHour, 30 * a3, 1, FlashPerHourMax);
+            s.FlashPerHourEnd = Nudge(s.FlashPerHourEnd, 60 * a3, 1, FlashPerHourMax);
+            s.FlashOpacity    = Nudge(s.FlashOpacity, 15 * a3, 10, 100);
+            s.FlashOpacityEnd = Nudge(s.FlashOpacityEnd, 25 * a3, 10, 100);
+
+            // --- A4 presentation ----------------------------------------------
+            s.SubliminalPerMin      = Nudge(s.SubliminalPerMin, 2 * a4, 1, 6);
+            s.PinkFilterEndOpacity  = Nudge(s.PinkFilterEndOpacity, 20 * a4, 0, 100);
+
+            // --- A5 autonomy: the second half of the inverse gate --------------
+            // The tier was already stepped down in GenerateSession. Lock cards are the one
+            // subsystem that physically holds the user in place, so a refusing run loses them
+            // outright rather than merely getting fewer.
+            if (!profile.Autonomy.UnderSampled && profile.Autonomy.Value >= AutonomyClampThreshold)
+            {
+                s.LockCardEnabled = false;
+                s.LockCardFrequency = null;
+            }
+
+            // Ramp monotonicity is an INVARIANT of a drafted session, not a hope: every pair
+            // above must still end at or above where it started after all the nudging.
+            EnsureRising(s);
         }
 
-        private static int Randomize(int value)
+        /// <summary>Real ceiling of the flash-frequency knob — AppSettings.FlashFrequency clamps
+        /// to 1..180, so anything the draft writes above 180 is silently truncated at runtime.</summary>
+        private const int FlashPerHourMax = 180;
+
+        /// <summary>Axis -&gt; signed lean in [-0.5, +0.5]. An under-sampled axis leans 0, so the
+        /// tier's base value stands untouched (fall back, never act on noise).</summary>
+        private static double Lean(IntakeAxis axis) => axis.UnderSampled ? 0.0 : axis.Value - 0.5;
+
+        /// <summary>base + round(delta), clamped. Round-half-away-from-zero so the mapping is
+        /// symmetric about the neutral point and fully deterministic.</summary>
+        private static int Nudge(int baseValue, double delta, int lo, int hi) =>
+            Math.Clamp(baseValue + (int)Math.Round(delta, MidpointRounding.AwayFromZero), lo, hi);
+
+        /// <summary>Guarantee every ramp pair still RISES after shaping. SessionEngine lerps
+        /// start -&gt; end across the hour, so an end below its start makes the session fade out.</summary>
+        private static void EnsureRising(SessionSettings s)
         {
-            var variance = value * 0.15;
-            return Math.Max(1, (int)(value + (_random.NextDouble() * 2 - 1) * variance));
+            if (s.FlashPerHourEnd < s.FlashPerHour) s.FlashPerHourEnd = s.FlashPerHour;
+            if (s.FlashOpacityEnd < s.FlashOpacity) s.FlashOpacityEnd = s.FlashOpacity;
+            if (s.SpiralOpacityEnd < s.SpiralOpacity) s.SpiralOpacityEnd = s.SpiralOpacity;
+            if (s.PinkFilterEndOpacity < s.PinkFilterStartOpacity) s.PinkFilterEndOpacity = s.PinkFilterStartOpacity;
+            if (s.BrainDrainEndIntensity < s.BrainDrainStartIntensity) s.BrainDrainEndIntensity = s.BrainDrainStartIntensity;
         }
 
-        private static int Randomize(int value, int min)
-        {
-            return Math.Max(min, Randomize(value));
-        }
-
+        /// <summary>
+        /// The tier baseline. Two things changed here and both are load-bearing:
+        ///
+        /// NO DICE. Every numeric knob used to be passed through a Randomize() that applied
+        /// +-15% at DRAFT time, so the same quiz answers produced a different session every
+        /// time and nothing about a draft was reproducible or reviewable. It is gone. (Runtime
+        /// jitter is a separate, deliberate thing and is untouched: SessionEngine.RandomizeStartTimes
+        /// still scatters the per-feature start minutes when the session actually runs.)
+        ///
+        /// RAMP PAIRS. SessionEngine.UpdateRampingValues lerps start -&gt; end across the hour for
+        /// FlashPerHour/FlashPerHourEnd, FlashOpacity/FlashOpacityEnd, SpiralOpacity/SpiralOpacityEnd,
+        /// PinkFilterStartOpacity/PinkFilterEndOpacity and BrainDrainStartIntensity/EndIntensity.
+        /// Only the pink and spiral pairs were ever set here; the flash pair was not, so it kept
+        /// the SessionSettings defaults (FlashPerHourEnd = 10) and every drafted session ramped
+        /// its flashes DOWN — Extreme went 450/hr to 10/hr over the hour. Both halves of every
+        /// pair are now written explicitly for every tier, and every pair RISES.
+        ///
+        /// Flash frequencies were also re-based into the knob's real range. AppSettings.FlashFrequency
+        /// clamps to 1..180, so the old Hard/Extreme starts (180 / 450) sat at or past the ceiling
+        /// and the ramp could not express anything: Extreme was a flat 180/hr wall from minute
+        /// zero. The tiers now climb toward that ceiling instead of starting pinned to it, which
+        /// is the escalation the ramp exists to deliver.
+        /// </summary>
         private static SessionSettings BuildSettings(SessionDifficulty difficulty, SessionTextContent textContent)
         {
             var s = new SessionSettings();
@@ -276,17 +400,19 @@ namespace ConditioningControlPanel.Services
             switch (difficulty)
             {
                 case SessionDifficulty.Easy:
-                    // Flash
+                    // Flash — a barely-there trickle that roughly doubles by the end.
                     s.FlashEnabled = true;
-                    s.FlashPerHour = Randomize(12);
-                    s.FlashOpacity = Randomize(25, 10);
+                    s.FlashPerHour = 12;
+                    s.FlashPerHourEnd = 30;
+                    s.FlashOpacity = 25;
+                    s.FlashOpacityEnd = 45;
                     s.FlashHydra = false;
                     s.FlashClickable = true;
                     s.FlashAudioEnabled = true;
                     // Subliminal
                     s.SubliminalEnabled = true;
-                    s.SubliminalPerMin = Randomize(2, 1);
-                    s.SubliminalOpacity = Randomize(40, 20);
+                    s.SubliminalPerMin = 2;
+                    s.SubliminalOpacity = 40;
                     s.SubliminalFrames = 2;
                     // Bouncing text
                     s.BouncingTextEnabled = true;
@@ -319,17 +445,19 @@ namespace ConditioningControlPanel.Services
                     break;
 
                 case SessionDifficulty.Medium:
-                    // Flash
+                    // Flash — starts light, roughly doubles by the end of the hour.
                     s.FlashEnabled = true;
-                    s.FlashPerHour = Randomize(38);
-                    s.FlashOpacity = Randomize(48, 20);
+                    s.FlashPerHour = 38;
+                    s.FlashPerHourEnd = 80;
+                    s.FlashOpacity = 48;
+                    s.FlashOpacityEnd = 70;
                     s.FlashHydra = false;
                     s.FlashClickable = true;
                     s.FlashAudioEnabled = true;
                     // Subliminal
                     s.SubliminalEnabled = true;
-                    s.SubliminalPerMin = Randomize(3, 1);
-                    s.SubliminalOpacity = Randomize(55, 30);
+                    s.SubliminalPerMin = 3;
+                    s.SubliminalOpacity = 55;
                     s.SubliminalFrames = 2;
                     // Bouncing text
                     s.BouncingTextEnabled = true;
@@ -365,17 +493,20 @@ namespace ConditioningControlPanel.Services
                     break;
 
                 case SessionDifficulty.Hard:
-                    // Flash
+                    // Flash — re-based off the old flat 180 (the AppSettings ceiling, which left
+                    // the ramp nothing to say) to a climb that reaches it in the last stretch.
                     s.FlashEnabled = true;
-                    s.FlashPerHour = Randomize(180);
-                    s.FlashOpacity = Randomize(70, 40);
+                    s.FlashPerHour = 70;
+                    s.FlashPerHourEnd = 150;
+                    s.FlashOpacity = 70;
+                    s.FlashOpacityEnd = 90;
                     s.FlashHydra = true;
                     s.FlashClickable = true;
                     s.FlashAudioEnabled = true;
                     // Subliminal
                     s.SubliminalEnabled = true;
-                    s.SubliminalPerMin = Randomize(4, 2);
-                    s.SubliminalOpacity = Randomize(70, 40);
+                    s.SubliminalPerMin = 4;
+                    s.SubliminalOpacity = 70;
                     s.SubliminalFrames = 3;
                     // Bouncing text
                     s.BouncingTextEnabled = true;
@@ -417,17 +548,21 @@ namespace ConditioningControlPanel.Services
                     break;
 
                 case SessionDifficulty.Extreme:
-                    // Flash
+                    // Flash — the old 450 was ~2.5x the 180/hr ceiling AppSettings enforces, so
+                    // Extreme was a flat wall from minute zero AND ramped "down" to 10. It now
+                    // opens above every other tier's peak and climbs to the true ceiling.
                     s.FlashEnabled = true;
-                    s.FlashPerHour = Randomize(450);
-                    s.FlashOpacity = Randomize(68, 40);
+                    s.FlashPerHour = 110;
+                    s.FlashPerHourEnd = 180;
+                    s.FlashOpacity = 68;
+                    s.FlashOpacityEnd = 100;
                     s.FlashHydra = true;
                     s.FlashClickable = true;
                     s.FlashAudioEnabled = true;
                     // Subliminal
                     s.SubliminalEnabled = true;
-                    s.SubliminalPerMin = Randomize(5, 3);
-                    s.SubliminalOpacity = Randomize(85, 50);
+                    s.SubliminalPerMin = 5;
+                    s.SubliminalOpacity = 85;
                     s.SubliminalFrames = 3;
                     // Bouncing text
                     s.BouncingTextEnabled = true;
@@ -529,6 +664,7 @@ namespace ConditioningControlPanel.Services
             {
                 "sissy" => "\uD83C\uDF80",       // ribbon
                 "bambi" => "\uD83E\uDDE0",       // brain
+                "circe" => "\uD83D\uDD11",       // key (keyholder / Locked)
                 "obedience" => "\uD83D\uDD12",   // lock
                 "mindlessness" => "\uD83C\uDF00", // cyclone
                 "submission" => "\uD83D\uDC96",   // sparkling heart
@@ -591,6 +727,33 @@ namespace ConditioningControlPanel.Services
                         "Bambi is a good girl", "I love to drop deeper", "Bambi obeys",
                         "Empty and happy", "Good girls drop", "Bambi takes over",
                         "No thoughts just Bambi", "I love being Bambi"
+                    };
+                    break;
+
+                // The Locked / Circe niche (banks/circe.json). Its voice is the odd one out:
+                // formal, quiet, second-person, and always about HER - permission, denial, the
+                // key, being kept. No "good girl", no giggle. Matches the bank's own archetypes
+                // (unclaimed / held-at-the-edge / locked-beta / kept-property / hers-entirely)
+                // and the icon GetCategoryIcon already assigns circe (the key).
+                case "circe":
+                    content.Name = $"{diffPrefix} Keyholding";
+                    content.Description = "A session about permission, denial, and belonging to her.";
+                    content.SubliminalPhrases = new List<string>
+                    {
+                        "She holds the key", "Ask, then accept", "Denial is devotion", "You are kept",
+                        "Her word is the only quiet", "Wait to be told", "It was never yours",
+                        "Locked and grateful", "Serve without asking twice", "Hers entirely"
+                    };
+                    content.BouncingTextPhrases = new List<string>
+                    {
+                        "HERS", "ASK FIRST", "DENIED", "KEPT", "LOCKED", "WAIT"
+                    };
+                    content.LockCardPhrases = new List<string>
+                    {
+                        "The key was never mine", "I ask, and I accept the answer",
+                        "Denial sharpens my devotion", "I am kept, not borrowed",
+                        "I wait to be told", "Her permission comes before my wanting",
+                        "I serve without asking twice", "I set no term. She does"
                     };
                     break;
 

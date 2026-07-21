@@ -87,5 +87,44 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("rewardFired")] public bool RewardFired { get; set; }
         [JsonProperty("rewardDecoupled")] public bool RewardDecoupled { get; set; }
         [JsonProperty("tags")] public List<string> Tags { get; set; } = new();
+
+        // ------------------------------------------------------------------
+        // WHICH OPTION WAS TAKEN (Slice 1; contracts.js AnswerRecord).
+        // Everything above records only WHETHER the answer was correct, and
+        // <see cref="Tags"/> is credited whichever way the answer went — so on
+        // its own the trajectory is exposure data, not preference data. The
+        // fields below carry the actual choice so <see cref="Services.IntakeProfiler"/>
+        // can score endorsement. Read by the profiler only; nothing else.
+        // ------------------------------------------------------------------
+
+        /// <summary>Index into the beat's option list that was committed. -1 for free-input
+        /// mechanics (mantra / check-in), interludes, and any trajectory written by a build
+        /// older than Slice 1 — the default is deliberately -1, NOT 0, so a missing field can
+        /// never be mistaken for "the user picked the first option".</summary>
+        [JsonProperty("chosenIndex")] public int ChosenIndex { get; set; } = -1;
+
+        /// <summary>Label of the committed option ("" when <see cref="ChosenIndex"/> is -1).</summary>
+        [JsonProperty("chosenLabel")] public string ChosenLabel { get; set; } = string.Empty;
+
+        /// <summary>Number of options the beat offered (0 for free input).</summary>
+        [JsonProperty("optionCount")] public int OptionCount { get; set; }
+
+        /// <summary>The prompt's authored heat 0..5 — how escalated the question itself was.
+        /// The profiler weights every axis by this.</summary>
+        [JsonProperty("promptHeat")] public int PromptHeat { get; set; }
+
+        /// <summary>SteerRoll intensity 0..1 applied to this beat (0 = unsteered / plain beat).</summary>
+        [JsonProperty("steerIntensity")] public double SteerIntensity { get; set; }
+
+        /// <summary>Beat timeout in ms (0 = untimed).</summary>
+        [JsonProperty("timeoutMs")] public int TimeoutMs { get; set; }
+
+        /// <summary>Bank entry carried <c>"trick": 1</c> — deliberately unanswerable, so it
+        /// carries no preference signal and every axis skips it.</summary>
+        [JsonProperty("isTrick")] public bool IsTrick { get; set; }
+
+        /// <summary>Bank entry carried <c>"freeChoice": 1</c> (the colour picks) — every option
+        /// is "correct", so <see cref="Correct"/> means nothing here and every axis skips it.</summary>
+        [JsonProperty("isFreeChoice")] public bool IsFreeChoice { get; set; }
     }
 }

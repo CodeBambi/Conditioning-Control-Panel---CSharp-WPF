@@ -61,6 +61,10 @@
 import {
   Mechanic, MECHANICS, Band, makeAnswerEvent, clamp01,
 } from '../core/contracts.js';
+import { spiralPalette } from '../core/palette.js';
+import { recordSpiral } from '../core/spiralLog.js';
+import { noteMedia } from '../core/mediaLog.js';
+import { tintColorOptions } from './optionTint.js';
 
 /* ----------------------------------------------------------------------------
  * PURE helpers (no DOM) — unit-tested headless. Exported for the smoke test.
@@ -224,10 +228,105 @@ const GLITCH_RUN_CHANCE = 0.10;
 /** Chance (per non-control click, once per beat) that a standard card melts away
  *  and skips to the next beat — a rare WHIMSY event (owner tuning: 1 in 30). */
 const MELT_CHANCE = 1 / 30;
+/** The card melt takes the VOICE down with it: the prompt line RESUMES from
+ *  where it had got to, slowed to this rate (a drawl), then its tail fades out
+ *  across the melt — the words sag as the card drips away. */
+const MELT_VOICE_RATE = 0.45;
+/** Only slur if the line is still plausibly speaking. Prompt clips run several
+ *  seconds; past this many seconds since it started we assume it has finished
+ *  and simply fade whatever is left (a stale offset would RESTART the clip,
+ *  since playVoice clamps an out-of-range offset back to 0). */
+const MELT_VOICE_MAX_ELAPSED_S = 4.5;
+/** Fraction of the melt that plays at the drawl before the fade-out begins. */
+const MELT_VOICE_SAG_FRAC = 0.45;
+/** Fade-out length (seconds) of the melting voice. Deliberately LONGER than the
+ *  ~950ms card melt: the visual is gone but the voice keeps sagging away under
+ *  the next card. It outlives the beat because our own stopVoice() already
+ *  detached the handle, so neither teardown nor the next line's one-VO-at-a-time
+ *  cut can reach it — it just decays to silence on its own schedule. */
+const MELT_VOICE_FADE_S = 2.4;
 /** On a slider beat where auto-rise WOULD arm (Climax/Recovery), chance (rolled
  *  ONCE per beat) that the autonomous rise actually arms; otherwise the slider
  *  stays fully manual. Wheel-nudge QoL is unaffected either way. */
 const SLIDER_AUTORISE_CHANCE = 0.30;
+
+/* ----------------------------------------------------------------------------
+ * CORRUPTED QUESTION EVENT (Deepening + Climax only) — OWNER TUNING BLOCK.
+ *   A question beat in one of the two deep bands may roll a CORRUPTION shortly
+ *   after the prompt lands. Two flavors, one roll:
+ *     A) GLITCH — the spoken VO is chopped/stuttered/pitch-wobbled, the written
+ *        prompt datamoshes (RGB-split ghosts + slice tear + character scramble)
+ *        and a deliberately BROKEN copy of one of the app's real reward GIFs
+ *        punches through over the line. The feed then "recovers" (text restored).
+ *     B) MELT — a long, slow blur/drip that dissolves the prompt TEXT ONLY,
+ *        leaving the question line empty. Card, options and every control stay
+ *        intact and usable (the line's height is pinned so nothing reflows).
+ *   Corruption is ATMOSPHERE, never a soft-lock: options are never touched and
+ *   the beat still resolves through the normal commit path. Grading is entirely
+ *   unchanged — a melted-away prompt still has exactly the same correct option
+ *   (the options carry the meaning; the prompt is flavor).
+ *   MUTUALLY EXCLUSIVE with the "are you sure?" jumpscare and the FREEZE GATE:
+ *   firing sets gateUsedThisBeat, so at most one set-piece ever owns a beat.
+ * -------------------------------------------------------------------------- */
+/** Per-band chance that a qualifying question beat corrupts. */
+const CORRUPT_CHANCE = {
+  [Band.Deepening]: 0.05,   // ~5% per qualifying beat
+  [Band.Climax]:    0.10,   // ~10% per qualifying beat
+};
+/** Flavor split: roll < this => GLITCH, else => MELT (0.5 = even coin). */
+const CORRUPT_GLITCH_SPLIT = 0.5;
+/** How long the GLITCH storm runs before the feed recovers (ms). */
+const CORRUPT_GLITCH_MS = 2600;
+/** How long the MELT takes to dissolve the prompt to nothing (ms). */
+const CORRUPT_MELT_MS = 9000;
+/** Earliest graded question (beat.meta.qIndex, 1-based) that may corrupt —
+ *  same reasoning as the freeze gate: this early it just reads as a bug. */
+const CORRUPT_MIN_Q = 3;
+/** Base opacity of the broken-GIF overlay BEFORE caps (flash/master) scale it. */
+const CORRUPT_GIF_ALPHA = 0.62;
+/** Backing-store width of the broken-GIF canvas — i.e. the pixelation grain
+ *  (CSS stretches it over the prompt box with image-rendering: pixelated). */
+const CORRUPT_GIF_PX = 56;
+/** Redraw period of the broken GIF (ms) — deliberately choppy, ~13fps. */
+const CORRUPT_GIF_FRAME_MS = 75;
+/** Glyph pool the prompt scrambles into while glitching. */
+const CORRUPT_SCRAMBLE = '#@%&*!/|<>_=+$?~^';
+
+/* ----------------------------------------------------------------------------
+ * OPTIONS HOLD — the answer buttons are not offered the instant the card mounts.
+ * The prompt gets to finish presenting itself first: the deep-band typewriter
+ * (~18ms/char) and the spoken VO both need room, and answering over the top of
+ * them was the other half of the speedrun problem. The buttons mount inert and
+ * invisible, then fade in together.
+ *   hold = clamp(TYPEWRITER_MS + AFTER_TYPE, MIN, MAX)
+ * A timed beat's clock is EXTENDED by the hold (see the timeout block) so the
+ * player never loses answer time to it. */
+const OPTIONS_HOLD_MIN_MS = 1500;   // floor — the owner-requested 1.5s
+const OPTIONS_HOLD_MAX_MS = 4000;   // ceiling, so a very long prompt can't stall the run
+const OPTIONS_HOLD_AFTER_TYPE_MS = 250; // beat of silence after the last character lands
+// (the reveal fade itself is the .ib-opts-grid transition, .26s, in the CSS below)
+
+/** Scramble a fraction (`amount`, 0..1) of a string's non-space chars. PURE. */
+export function scrambleText(src, amount) {
+  const s = String(src == null ? '' : src);
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === ' ' || ch === '\n' || Math.random() > amount) out += ch;
+    else out += CORRUPT_SCRAMBLE[(Math.random() * CORRUPT_SCRAMBLE.length) | 0];
+  }
+  return out;
+}
+
+/** Inject the corruption visuals lazily (only the first time a beat corrupts). */
+const IXCR_STYLE_ID = 'ib-corrupt-style';
+function ensureCorruptStyles() {
+  if (typeof document === 'undefined' || document.getElementById(IXCR_STYLE_ID)) return;
+  const s = document.createElement('style');
+  s.id = IXCR_STYLE_ID;
+  s.textContent = IXCR_CSS;
+  document.head.appendChild(s);
+}
 
 /** Inject the event's scoped styles + the freeze rule (only when it first fires). */
 const IXEV_STYLE_ID = 'ib-event-style';
@@ -241,7 +340,8 @@ function ensureEventStyles() {
 
 /* ----------------------------------------------------------------------------
  * "ARE YOU SURE?" FREEZE GATE (distinct from the once-per-run jumpscare above).
- *   When a WRONG discrete option is committed on an options beat, a 1-in-3 roll
+ *   When a WRONG discrete option is committed on an options beat in a DEEP band
+ *   (Deepening/Climax only — see FREEZE_GATE_BANDS), a 3% roll
  *   may FREEZE the whole game (tube, subliminals, ring, steers) instead of taking
  *   the wrong answer: a red typewriter taunt subtitle + a spoken VO taunt
  *   (sure_<niche>_NN) pop up, the correct option is highlighted, and only it is
@@ -249,10 +349,14 @@ function ensureEventStyles() {
  *   harder, and a rumble riser climbs; at 20s WE auto-pick the correct option
  *   (visible fake cursor), chime, and move on. Mutually exclusive with the
  *   jumpscare PER BEAT. Repeatable across beats (no once-per-run latch). */
-const FREEZE_GATE_CHANCE = 1 / 3;         // roll on each qualifying wrong press
+const FREEZE_GATE_CHANCE = 0.03;          // roll on each qualifying wrong press
+/** Descent bands the gate may fire in (bands 3 + 4 of the five-band walk).
+ *  Calibration/Establishing are never interrupted — the mechanic reads as a bug
+ *  that early — and Recovery is the walk-down, which never coerces. */
+const FREEZE_GATE_BANDS = [Band.Deepening, Band.Climax];
 const FREEZE_GATE_MS = 20000;             // stall window before we auto-pick
 const FREEZE_SUB_FALLBACK = 'Are you sure, sweetie?'; // no manifest/clip text
-const FREEZE_NICHES = ['bambi', 'sissy', 'drone'];
+const FREEZE_NICHES = ['bambi', 'sissy', 'drone', 'circe'];
 const FREEZE_DOT_Z = 2147480000;          // == steering HIJACK_Z (fake cursor on top)
 /** Mechanics with a discrete wrong/correct option set (skip sliders/mantra/
  *  interludes/BubblePop). Mono/Funnel never send a WRONG index to attempt(), so
@@ -332,7 +436,11 @@ function freshSpiralParams(make) {   // make: () => params object
   const sig = (o) => { try { return JSON.stringify(o); } catch (_e) { return String(Math.random()); } };
   for (let i = 0; i < 4 && sig(p) === window.__ixSpiralSig; i++) p = make();
   window.__ixSpiralSig = sig(p);
-  return p;
+  // The run's spirals are woven from the player's own harvested colours, so the
+  // outro shows them back (core/spiralLog.js -> boot.js runOutro). This is the
+  // one place every beats-side mount rolls its params, so it is the one place
+  // that has to record. Never throws; returns `p` untouched.
+  return recordSpiral(p);
 }
 
 /* ----------------------------------------------------------------------------
@@ -373,9 +481,12 @@ function fadeLayerOutRemove(node, outMs, removeMs) {
 /* ----------------------------------------------------------------------------
  * FACTORY
  * -------------------------------------------------------------------------- */
-export function createBeats({ root, effects, audio, steering, reward, caps, background, theme, media, niche } = {}) {
+export function createBeats({ root, effects, audio, steering, reward, caps, background, theme, media, niche, micEnabled } = {}) {
   const stage = root;
   caps = caps || {};
+  // Host's MicConsentGiven. Undefined (standalone/harness) => allowed, since there
+  // the browser's permission prompt is the only gate that exists.
+  const micAllowed = micEnabled !== false;
 
   // NEW RUN: re-arm the once-per-run "are you sure?" jumpscare latch.
   _ixEventFired = false;
@@ -404,6 +515,11 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
   // text-only). The manifest keys questions as 'q_'+<bank prompt id>; beat.prompt.id
   // IS that bank id for graded prompts (interlude/recovery/synthetic ids simply have
   // no manifest entry and resolve silently). Never throws, never breaks gameplay.
+  // TRICK QUESTIONS (`prompt.trick`) are deliberately UNVOICED — no q_*_trk_* clips
+  // exist. audio.loadVoBuffer() returns null on a missing manifest entry BEFORE any
+  // fetch and without logging, so they simply play text-only; the typewriter, the
+  // options hold and the timer ring are all independent of the VO, so timing is
+  // identical to a voiced beat. The silence reads as extra deadpan.
   function speakPrompt(beat) {
     try {
       const pid = beat && beat.prompt && beat.prompt.id;
@@ -460,7 +576,8 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
       // ---- "are you sure?" FREEZE GATE per-beat state --------------------
       let gateOptions = null;          // [{index,el,isCorrect,score}] captured at installSteering
       let gateFrozen = false;          // the freeze gate currently holds the scene frozen
-      let gateUsedThisBeat = false;    // jumpscare OR freeze gate fired this beat (mutual excl.)
+      let gateUsedThisBeat = false;    // jumpscare OR freeze gate OR corruption fired this beat (mutual excl.)
+      let corruptLive = false;         // a CORRUPTED QUESTION set-piece owns this beat
       const freezeSubs = [];           // (frozen:bool)=>void — ring/heartbeat pause hooks
       function notifyFreeze(v) {
         gateFrozen = !!v;
@@ -582,7 +699,8 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         // question card in a deep band may (rarely, once per run) intercept the
         // press with a frozen event card INSTEAD of committing it.
         if (index != null && maybeFireSureEvent(index, value)) return;
-        // "ARE YOU SURE?" FREEZE GATE: a wrong discrete press may (1-in-3, per beat)
+        // "ARE YOU SURE?" FREEZE GATE: a wrong discrete press may (3%, per beat,
+        // Deepening/Climax only)
         // freeze the whole game and force a re-pick INSTEAD of resolving wrong.
         // Runs AFTER the jumpscare gate (which returns first if it fired) so the
         // two are mutually exclusive per beat. Suppresses the incorrect-feedback
@@ -632,13 +750,21 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
       function maybeFireFreezeGate(index, value) {
         if (gateUsedThisBeat || gateFrozen || eventOpen || committed) return false;
         if (FREEZE_MECHS.indexOf(mech) < 0) return false;   // options beats only
+        // deep bands only — never in Calibration/Establishing/Recovery
+        if (FREEZE_GATE_BANDS.indexOf(beat && beat.band) < 0) return false;
+        // TRICK QUESTIONS are exempt (bank prompts flagged `trick`): their only
+        // "correct" option is a compliance non-sequitur, so a 20s red-tinted
+        // "are you sure?" that forces a re-pick onto it stops reading as a gag
+        // and starts reading as a punishment for a question nobody could answer.
+        // The miss IS the joke — let it pass and move on.
+        if (beat && beat.prompt && beat.prompt.trick) return false;
         const correct = gateOptions && gateOptions.find((o) => o && o.isCorrect && o.el);
         if (!correct) return false;                          // no target to highlight
         // only a WRONG discrete option press qualifies (scoreDelta <= 0)
         let delta = 0;
         try { delta = scoreDelta(beat, { chosenIndex: index, value }); } catch (_e) { delta = 1; }
         if (delta > 0) return false;
-        if (Math.random() >= FREEZE_GATE_CHANCE) return false;  // 1-in-3 roll
+        if (Math.random() >= FREEZE_GATE_CHANCE) return false;  // 3% roll
         gateUsedThisBeat = true;                              // lock the jumpscare out this beat
         startFreezeGate(correct);
         return true;
@@ -690,8 +816,14 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
 
         // ---- overlay DOM (on <body>, above card/steers, below the fake cursor) --
         const tint = el('div', 'ixfz-tint');
+        // The taunt is a WRAP + a TEXT child: the wrap owns the slow CSS swell
+        // (scale 1 -> 1.12 over the full 20s, skipped under reduced motion) and
+        // the child owns the JS tremble transform, so the two compose instead of
+        // one stomping the other's `transform`.
+        const subWrap = el('div', 'ixfz-subwrap' + (reduced ? '' : ' ixfz-swell'));
         const sub = el('div', 'ixfz-sub' + (reduced ? ' ixfz-reduced' : ''));
-        try { if (typeof document !== 'undefined') document.body.append(tint, sub); } catch (_e) {}
+        try { subWrap.appendChild(sub); } catch (_e) {}
+        try { if (typeof document !== 'undefined') document.body.append(tint, subWrap); } catch (_e) {}
 
         // taunt line: fallback text immediately, upgrade from the VO manifest.
         setFreezeSubText(sub, FREEZE_SUB_FALLBACK, reduced);
@@ -805,7 +937,7 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           rumble = null;
           try { stopVoice(0.1); } catch (_e) {}
           try { tint.remove(); } catch (_e) {}
-          try { sub.remove(); } catch (_e) {}
+          try { subWrap.remove(); } catch (_e) {}   // takes the sub child with it
           try { if (dot) dot.remove(); } catch (_e) {}
           notifyFreeze(false);
           try { if (typeof document !== 'undefined') document.body.classList.remove('ix-freeze'); } catch (_e) {}
@@ -1031,8 +1163,13 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
       // with a synthetic prompt (no bank id) — never voiced; every other mechanic
       // (incl. BubblePop, which carries a real bank prompt) speaks. A missing clip /
       // manifest entry is silent. Stopped on resolve/teardown via cleanups below.
+      // voiceStartedAt lets a set-piece resume the SAME line from roughly where
+      // it is now (playVoice takes an offset) instead of restarting it — see
+      // meltVoice() on the card-melt whimsy.
+      let voiceStartedAt = 0;
       if (mech !== Mechanic.Interlude) {
         speakPrompt(beat);
+        voiceStartedAt = Date.now();
         cleanups.push(() => stopVoice(0.3));
       }
 
@@ -1043,13 +1180,21 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         if (ri >= 0.5) { bgCall('setSteerWarp', ri); warpSet = true; }
       } catch (_e) {}
 
+      // ---- options hold (see the OPTIONS_HOLD_* block) --------------------
+      // Computed here (not after the switch) because the timeout below has to
+      // account for it. Mechanics with no option grid resolve to 0.
+      const optionsHoldMs = computeOptionsHold();
+
       // ---- timeout (auto-submit timedOut) + shrinking-ring pressure cue ---
+      // The clock is armed at mount but EXTENDED by the options hold, so a timed
+      // beat still gives its full intended answer window once the buttons land.
       if (beat.timeoutMs && beat.timeoutMs > 0) {
+        const totalMs = beat.timeoutMs + optionsHoldMs;
         timeoutTimer = setTimeout(() => {
           timeoutTimer = 0;
           finalize(lastAttemptIndex, lastAttemptValue, true);
-        }, beat.timeoutMs);
-        buildTimerRing(beat.timeoutMs);
+        }, totalMs);
+        buildTimerRing(totalMs);
       }
 
       // Normalize option specs -> {index,label,isCorrect,score}
@@ -1079,6 +1224,22 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         case Mechanic.Interlude:renderInterlude(); break;
         default:                renderChoices(rawOpts.length ? rawOpts : [{ index: 0, label: 'Continue', isCorrect: true, score: 1 }], 'ib-opts-grid');
       }
+
+      // COLOUR-NAMED OPTIONS wear their colour (render/optionTint.js): any
+      // `.ib-opt` whose label resolves through the harvest's own swatch table
+      // gets a dot + tinted border in that colour. Runs AFTER the switch so it
+      // covers whichever renderer built the grid, and BEFORE holdOptions so a
+      // held grid reveals already cued. From Band.Deepening on the cue
+      // deliberately lies (a different colour than the word) — the module owns
+      // that roll, including the exemption for the harvest prompts themselves.
+      try {
+        tintColorOptions(card, { prompt, band: beat.band, depth: beat.depth, caps, reduced });
+      } catch (_e) { /* a cue is decoration; it can never cost a beat */ }
+
+      // Hold the freshly-built option grid(s) until the prompt has finished
+      // presenting itself. Runs AFTER the switch so every options mechanic is
+      // covered, whichever renderer built the grid.
+      if (optionsHoldMs > 0) holdOptions(optionsHoldMs);
 
       // ---- occasional SLOW card tilt + almost-imperceptible sway (lv2+) ---
       // From Establishing (lv2) onward a small fraction (25%) of standard,
@@ -1152,14 +1313,18 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
       // creeping for the whole dwell. "More dramatic as we move on": the cap
       // ramps with progression — gentle (~1.06) in early climax, up to ~1.18 by
       // the last recovery beats — derived from qIndex (the 1-based graded
-      // counter) against a ~50 horizon, +0.006 per question past q30, HARD-
+      // counter) against a ~81 horizon, +0.006 per question past ZOOM_Q0, HARD-
       // capped below 1.2 so a 760px card + its buttons stay comfortably on a
       // 1366px viewport. Zoom rides its OWN outermost wrapper (one transform
       // per wrapper — the established tilt/sway pattern), composing untouched
       // with the tilt/sway transitions and the card's own entry/exit + melt.
       // Excluded like the tilt: fullscreen interludes + the 4th-wall BubblePop
       // field. Reduced motion skips it entirely (no wrapper created).
-      const ZOOM_Q0 = 30;         // ramp origin (early-climax territory)
+      // Ramp origin — early-climax territory. Tracks BASE_BEATS: after the second
+      // dilution pass Climax opens around q65 (21+25+19), so the old q50 origin
+      // would start the zoom in mid-DEEPENING and arrive at Climax already pinned
+      // near its cap. Kept just under the climax opener so the ramp spans the band.
+      const ZOOM_Q0 = 64;
       const zoomEligible = !reduced
         && (beat.band === Band.Climax || beat.band === Band.Recovery)
         && mech !== Mechanic.Interlude
@@ -1199,7 +1364,9 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         let melt1 = 0;
         cleanups.push(() => { if (melt1) clearTimeout(melt1); });
         const onCardClick = (e) => {
-          if (committed || meltUsed || gateFrozen) return;   // no melt while the freeze gate holds
+          // no melt while the freeze gate holds, and never on a corrupted beat
+          // (one set-piece per beat — corruption already owns the card).
+          if (committed || meltUsed || gateFrozen || corruptLive) return;
           try {
             if (e.target && e.target.closest
               && e.target.closest('button,input,textarea,select,a,[contenteditable]')) return;
@@ -1219,6 +1386,7 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           sfx('card-melt'); // gooey melt-on-click cue (no reform: fires once, at start)
           const meltMs = reduced ? 200 : 700;
           const holdMs = reduced ? 80 : 250;
+          meltVoice(meltMs + holdMs);   // the VOICE sags and dissolves with the card
           melt1 = setTimeout(() => {
             melt1 = 0;
             // no re-form: resolve as a gentle skip and advance to the next beat
@@ -1227,9 +1395,349 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         };
         card.addEventListener('click', onCardClick);
         cleanups.push(() => { try { card.removeEventListener('click', onCardClick); } catch (_e) {} });
+
+        // Melt the SPOKEN line along with the card: resume the same clip from
+        // roughly where it is now but slowed to a drawl (the audio layer plays one
+        // buffer at a time with no live rate control, so a re-trigger at an offset
+        // is the only way to bend a line already in flight), then fade the tail
+        // out across the melt so the voice dissolves instead of cutting.
+        // Reduced motion / a finished line / a missing clip -> plain fade.
+        function meltVoice(durMs) {
+          try {
+            const pid = beat && beat.prompt && beat.prompt.id;
+            const elapsed = voiceStartedAt ? (Date.now() - voiceStartedAt) / 1000 : 0;
+            const canSlur = !reduced && pid && voiceStartedAt
+              && audio && typeof audio.voice === 'function'
+              && elapsed > 0.15 && elapsed < MELT_VOICE_MAX_ELAPSED_S;
+            if (!canSlur) {
+              try { stopVoice(MELT_VOICE_FADE_S); } catch (_e) {}
+              return;
+            }
+            try { audio.voice('q_' + pid, { rate: MELT_VOICE_RATE, offset: elapsed }); } catch (_e) {}
+            let voT = setTimeout(() => {
+              voT = 0;
+              try { stopVoice(MELT_VOICE_FADE_S); } catch (_e) {}
+            }, Math.round(durMs * MELT_VOICE_SAG_FRAC));
+            cleanups.push(() => { if (voT) { clearTimeout(voT); voT = 0; } });
+          } catch (_e) {}
+        }
+      }
+
+      /* ---- CORRUPTED QUESTION (Deepening / Climax) ----------------------
+       * Rolled ONCE per beat, shortly after the prompt has finished revealing
+       * (so the glitch/melt hits a fully-typed line, not a half-typed one).
+       * See the CORRUPT_* tuning block at the top of the file. Never touches
+       * options, never resolves the beat, never throws. */
+      maybeArmCorruption();
+
+      function maybeArmCorruption() {
+        try {
+          if (mech === Mechanic.Interlude || mech === Mechanic.BubblePop) return;
+          const chance = CORRUPT_CHANCE[beat.band];
+          if (!chance) return;                                   // Deepening/Climax only
+          const qNo = (beat && beat.meta && beat.meta.qIndex) || 0;
+          if (qNo < CORRUPT_MIN_Q) return;
+          if (gateUsedThisBeat || gateFrozen || eventOpen || committed) return;
+          if (!promptText) return;                               // nothing to corrupt
+          if (Math.random() >= chance) return;
+          gateUsedThisBeat = true;    // MUTUAL EXCLUSION: jumpscare + freeze gate locked out
+          corruptLive = true;
+          const glitch = Math.random() < CORRUPT_GLITCH_SPLIT;
+          // wait out the deep-band typewriter reveal (~18ms/char) before breaking it
+          const revealMs = reduced ? 200 : (promptText.length * 18 + 260);
+          let armT = setTimeout(() => {
+            armT = 0;
+            if (committed || gateFrozen || eventOpen) { corruptLive = false; return; }
+            try { if (glitch) startCorruptGlitch(); else startCorruptMelt(); }
+            catch (_e) { corruptLive = false; }
+          }, revealMs);
+          cleanups.push(() => { if (armT) { clearTimeout(armT); armT = 0; } });
+        } catch (_e) { corruptLive = false; }
+      }
+
+      /* FLAVOR A — GLITCH. The line datamoshes + scrambles for CORRUPT_GLITCH_MS
+       * with a broken reward GIF punching through, then the feed RECOVERS (the
+       * original text is restored, so a late reader can still read the prompt).
+       * VO: the audio layer plays one buffered clip at a time, so the "garble"
+       * is built from what it really supports — hard re-triggers of the same
+       * line at random offsets with wobbled playbackRate (a skipping/stuttering
+       * record), a final hard cut, and a glitch stab layered over it. */
+      function startCorruptGlitch() {
+        ensureCorruptStyles();
+        const original = (q && q.textContent) || promptText;
+        const timers = [];
+        const after = (fn, ms) => { const id = setTimeout(() => { try { fn(); } catch (_e) {} }, ms); timers.push(id); return id; };
+        let scrambleTimer = 0;
+        let killGif = null;
+        let cleaned = false;
+
+        try {
+          q.dataset.ixcr = original;                 // RGB-split ghost copies read this
+          q.classList.add('ixcr-glitch');
+          if (reduced) q.classList.add('ixcr-reduced');
+        } catch (_e) {}
+
+        // audio: glitch stab (real sample w/ synth fallback) + a couple of blips
+        try { if (audio && typeof audio.glitch === 'function') audio.glitch(); } catch (_e) {}
+        try { if (audio && typeof audio.errorSpam === 'function' && !reduced) audio.errorSpam(3); } catch (_e) {}
+
+        // VO garble: chop the spoken prompt into stuttering re-triggers.
+        const pid = beat && beat.prompt && beat.prompt.id;
+        if (pid && audio && typeof audio.voice === 'function') {
+          if (reduced) {
+            after(() => { try { stopVoice(0.08); } catch (_e) {} }, 60);   // plain hard cut
+          } else {
+            let t = 0;
+            const chops = 3 + Math.floor(Math.random() * 3);               // 3..5 stutters
+            for (let i = 0; i < chops; i++) {
+              t += 130 + Math.random() * 220;
+              after(() => {
+                try { stopVoice(0.01); } catch (_e) {}
+                try {
+                  audio.voice('q_' + pid, {
+                    rate: 0.68 + Math.random() * 0.7,                      // 0.68..1.38
+                    offset: Math.random() * 1.6,                           // skip into the line
+                  });
+                } catch (_e) {}
+              }, t);
+            }
+            after(() => { try { stopVoice(0.02); } catch (_e) {} }, t + 200);   // hard cut
+          }
+        }
+
+        // text scramble (skipped under reduced motion: one static mangle instead)
+        if (reduced) {
+          try { q.textContent = scrambleText(original, 0.35); } catch (_e) {}
+        } else {
+          const tStart = now();
+          scrambleTimer = setInterval(() => {
+            const p = Math.min(1, (now() - tStart) / CORRUPT_GLITCH_MS);
+            const amount = 0.55 * (1 - p) + 0.12;      // heavy at first, settling
+            try {
+              const s = scrambleText(original, amount);
+              q.textContent = s;
+              q.dataset.ixcr = s;
+            } catch (_e) {}
+          }, 62);
+        }
+
+        killGif = mountBrokenGif();
+
+        function restore() {
+          if (cleaned) return;
+          cleaned = true;
+          corruptLive = false;
+          if (scrambleTimer) { try { clearInterval(scrambleTimer); } catch (_e) {} scrambleTimer = 0; }
+          for (const id of timers) { try { clearTimeout(id); } catch (_e) {} }
+          timers.length = 0;
+          try { if (killGif) killGif(); } catch (_e) {}
+          killGif = null;
+          try {
+            q.classList.remove('ixcr-glitch', 'ixcr-reduced');
+            delete q.dataset.ixcr;
+            q.textContent = original;                 // the feed recovers
+          } catch (_e) {}
+        }
+        after(restore, CORRUPT_GLITCH_MS);
+        cleanups.push(restore);                       // mid-beat teardown safe
+      }
+
+      /* FLAVOR B — MELT. A long, gradual blur/drip that dissolves the PROMPT
+       * TEXT ONLY, ending on an empty line. The line's box height is pinned
+       * first so the card/options never reflow, and pointer-events are dropped
+       * on the melting text so the beat stays fully usable underneath.
+       * VO melts with it: the line is re-triggered slowed (a drawl) and then
+       * faded out over ~1.6s instead of being cut. */
+      function startCorruptMelt() {
+        ensureCorruptStyles();
+        const meltMs = reduced ? 1400 : CORRUPT_MELT_MS;
+        let doneT = 0;
+        let voT = 0;
+        let cleaned = false;
+
+        try {
+          const h = q.offsetHeight;
+          if (h) q.style.minHeight = h + 'px';        // pin the box: no reflow when empty
+          q.style.setProperty('--ixcr-melt-ms', meltMs + 'ms');
+          q.classList.add('ixcr-melt' + (reduced ? ' ixcr-reduced' : ''));
+          q.style.pointerEvents = 'none';
+        } catch (_e) {}
+        sfx('card-melt');                             // gooey cue, once, at the start
+
+        // slowed VO drawl, then a long fade instead of a cut
+        const pid = beat && beat.prompt && beat.prompt.id;
+        if (!reduced && pid && audio && typeof audio.voice === 'function') {
+          try { audio.voice('q_' + pid, { rate: 0.82 }); } catch (_e) {}
+          voT = setTimeout(() => { voT = 0; try { stopVoice(1.6); } catch (_e) {} }, Math.round(meltMs * 0.55));
+        }
+
+        // kick the transition on the next frame so it actually animates
+        const go = () => {
+          try {
+            if (cleaned) return;
+            q.classList.add('ixcr-melt-go');
+          } catch (_e) {}
+        };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(go));
+        else go();
+
+        doneT = setTimeout(() => {
+          doneT = 0;
+          try {
+            q.textContent = '';                       // ends EMPTY (options untouched)
+            delete q.dataset.ixcr;
+          } catch (_e) {}
+          corruptLive = false;
+        }, meltMs + 120);
+
+        cleanups.push(() => {
+          if (cleaned) return;
+          cleaned = true;
+          corruptLive = false;
+          if (doneT) { clearTimeout(doneT); doneT = 0; }
+          if (voT) { clearTimeout(voT); voT = 0; }
+        });
+      }
+
+      /* Broken-GIF overlay for FLAVOR A: one of the app's REAL reward/flash GIFs
+       * (media.gifs, host-supplied data: URIs — the same pool the jumpscare draws
+       * from), deliberately destroyed. Method: a tiny backing-store canvas
+       * (CORRUPT_GIF_PX wide) that the CSS stretches over the prompt box with
+       * image-rendering: pixelated -> hard chunky pixels; redrawn choppily at
+       * ~13fps (sampling the live GIF's current frame), with random slice tears
+       * + an occasional STUCK frame + crushed contrast. Reduced motion: ONE
+       * static frame, no tearing, no redraw. Returns its own kill().
+       * Absent media (standalone browser / m2Test harness) -> a no-op. */
+      function mountBrokenGif() {
+        const noop = () => {};
+        try {
+          if (typeof document === 'undefined') return noop;
+          const gifs = (media && Array.isArray(media.gifs))
+            ? media.gifs.filter((u) => typeof u === 'string' && u.length > 0) : [];
+          if (!gifs.length) return noop;
+          const boxW = q.offsetWidth || 0;
+          const boxH = q.offsetHeight || 0;
+          if (!boxW || !boxH) return noop;
+
+          const wrap = el('div', 'ixcr-gifwrap');
+          const cv = document.createElement('canvas');
+          cv.className = 'ixcr-gif';
+          cv.width = CORRUPT_GIF_PX;
+          cv.height = Math.max(16, Math.round(CORRUPT_GIF_PX * (boxH / boxW)));
+          const ctx = cv.getContext ? cv.getContext('2d') : null;
+          if (!ctx) return noop;
+          try { ctx.imageSmoothingEnabled = false; } catch (_e) {}
+
+          // caps: flashOpacity + masterIntensity scale the overlay's presence
+          const fo = (caps && caps.flashOpacity != null) ? clamp01(caps.flashOpacity) : 1;
+          const mi = (caps && caps.masterIntensity != null) ? clamp01(caps.masterIntensity) : 1;
+          const alpha = clamp01(CORRUPT_GIF_ALPHA * fo * mi);
+          if (alpha <= 0.02) return noop;
+
+          wrap.style.left = (q.offsetLeft - 6) + 'px';
+          wrap.style.top = (q.offsetTop - 6) + 'px';
+          wrap.style.width = (boxW + 12) + 'px';
+          wrap.style.height = (boxH + 12) + 'px';
+          wrap.style.opacity = alpha.toFixed(3);
+          wrap.appendChild(cv);
+          card.appendChild(wrap);
+
+          let img = new Image();
+          let timer = 0;
+          let killed = false;
+          const draw = () => {
+            if (killed || !img || !img.width) return;
+            const W = cv.width, H = cv.height;
+            // occasional STUCK frame: skip the redraw entirely
+            if (!reduced && Math.random() < 0.18) return;
+            try {
+              ctx.clearRect(0, 0, W, H);
+              ctx.filter = 'contrast(1.9) saturate(0.55) brightness(1.1)';
+              // cover-crop the source into the box
+              const sr = img.width / img.height, dr = W / H;
+              let sw = img.width, sh = img.height, sx = 0, sy = 0;
+              if (sr > dr) { sw = img.height * dr; sx = (img.width - sw) / 2; }
+              else { sh = img.width / dr; sy = (img.height - sh) / 2; }
+              ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+              ctx.filter = 'none';
+              if (!reduced) {
+                // slice tear: shove a few random rows sideways (self-copy)
+                const slices = 2 + Math.floor(Math.random() * 3);
+                for (let i = 0; i < slices; i++) {
+                  const y = Math.floor(Math.random() * H);
+                  const h = 1 + Math.floor(Math.random() * Math.max(1, H / 6));
+                  const dx = Math.round((Math.random() * 2 - 1) * (W / 5));
+                  ctx.drawImage(cv, 0, y, W, h, dx, y, W, h);
+                }
+                // channel bruise: a magenta/cyan wash over one band
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.globalAlpha = 0.22;
+                ctx.fillStyle = Math.random() < 0.5 ? '#ff2bd0' : '#20e8ff';
+                const by = Math.floor(Math.random() * H);
+                ctx.fillRect(0, by, W, 1 + Math.floor(Math.random() * (H / 5)));
+                ctx.globalAlpha = 1;
+                ctx.globalCompositeOperation = 'source-over';
+              }
+            } catch (_e) {}
+          };
+          const kill = () => {
+            if (killed) return;
+            killed = true;
+            if (timer) { try { clearInterval(timer); } catch (_e) {} timer = 0; }
+            try { if (img) { img.onload = null; img.onerror = null; img.src = ''; } } catch (_e) {}
+            img = null;
+            try { wrap.remove(); } catch (_e) {}
+          };
+          img.onerror = kill;
+          img.onload = () => {
+            if (killed) return;
+            draw();
+            if (!reduced) timer = setInterval(draw, CORRUPT_GIF_FRAME_MS);
+          };
+          try { img.src = gifs[(Math.random() * gifs.length) | 0]; } catch (_e) { kill(); return noop; }
+          return kill;
+        } catch (_e) { return noop; }
       }
 
       /* ===== shared presentation helpers ================================= */
+
+      // How long the option buttons stay out of reach after mount. Sized to the
+      // deep-band typewriter (~18ms/char) so the line lands first, floored at
+      // OPTIONS_HOLD_MIN_MS and ceilinged so a long prompt can't stall the run.
+      // Mechanics without an option grid (interlude valleys, the 4th-wall bubble
+      // field, sliders/mantra which have their own affordance) hold nothing.
+      function computeOptionsHold() {
+        try {
+          if (mech === Mechanic.Interlude || mech === Mechanic.BubblePop) return 0;
+          if (mech === Mechanic.CheckIn || mech === Mechanic.Mantra) return 0;
+          const deepBand = beat.band === Band.Deepening || beat.band === Band.Climax;
+          const typeMs = (deepBand && !reduced) ? promptText.length * 18 : 0;
+          const want = typeMs + OPTIONS_HOLD_AFTER_TYPE_MS;
+          return Math.max(OPTIONS_HOLD_MIN_MS, Math.min(OPTIONS_HOLD_MAX_MS, want));
+        } catch (_e) { return OPTIONS_HOLD_MIN_MS; }
+      }
+
+      // Mount the option grid(s) inert + transparent, then fade them in together
+      // after `ms`. Inert matters as much as invisible: a fast player must not be
+      // able to click a button that has not been offered yet. Teardown mid-hold
+      // restores the grid (cleanups[]) so nothing can be left permanently hidden.
+      function holdOptions(ms) {
+        try {
+          const grids = card.querySelectorAll ? card.querySelectorAll('.ib-opts-grid') : null;
+          if (!grids || !grids.length) return;
+          const list = Array.prototype.slice.call(grids);
+          list.forEach((g) => { try { g.classList.add('ib-opts-held'); } catch (_e) {} });
+          const reveal = () => {
+            revealTimer = 0;
+            list.forEach((g) => { try { g.classList.remove('ib-opts-held'); } catch (_e) {} });
+          };
+          let revealTimer = setTimeout(reveal, ms);
+          cleanups.push(() => {
+            if (revealTimer) { clearTimeout(revealTimer); revealTimer = 0; }
+            reveal();
+          });
+        } catch (_e) {}
+      }
 
       // Deep-band prompt text: typewriter (~18ms/char, click-to-complete) on
       // first render, gentle "breathe" pulse after. Shallow bands: instant.
@@ -1396,8 +1904,14 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
             ];
             const swatches = (Array.isArray(m.LOOM_SWATCHES) ? m.LOOM_SWATCHES.slice() : [])
               .sort(() => Math.random() - 0.5).slice(0, 4);
-            const palette = themed.concat(swatches, '#ffffff')
-              .filter((c, i, a) => a.indexOf(c) === i);   // dedup, keep first
+            // THE PLAYER'S COLOURS WIN. spiralPalette() (core/palette.js) returns
+            // the 2-4 colours harvested by the Calibration colour questions, padded
+            // to four threads — deliberately NARROWER than the mixed pool below,
+            // because "this spiral is made of the colours you chose" is the point.
+            // A short/absent harvest falls straight through to the widened themed
+            // pool, which is exactly what this used to be.
+            const palette = spiralPalette(themed.concat(swatches, '#ffffff')
+              .filter((c, i, a) => a.indexOf(c) === i));  // dedup, keep first
             // fresh look per mount AND never the same spiral twice in a row
             // (cross-module no-repeat guard shared with effects.js via a window
             // signature — intentional duplication, no shared module).
@@ -1533,8 +2047,18 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
       // HOLDS STATION there for the whole live beat: a barely-moving dual-axis
       // sine bob around the slot (amp <=14px, ~4-7s per axis) is the only idle
       // motion — no travelling, and nothing but the float-away bubble ever
-      // crosses a viewport bound. Popping an option commits via attempt() —
-      // DURING the flight too (the beat is live the moment bubbles spawn).
+      // crosses a viewport bound. Popping an option SPLITS it (see below) and
+      // the last shard commits via attempt() — mid-flight pops land too (the
+      // beat is live the moment bubbles spawn).
+      //
+      // SPLIT CHAIN: an answer bubble does NOT end the beat when popped. Its
+      // burst begets 2-3 smaller bubbles that scatter out of the wreck, and
+      // those can beget again (up to 3 generations deep) — but a per-beat POP
+      // BUDGET (SPLIT_TOTAL, rolled 4-8) decides the family's TOTAL cost up
+      // front, so clearing one option is always 4-8 pops no matter how the
+      // player works it. Only the LAST pop of the family advances the beat
+      // (live count must hit 0), so the answer event fires exactly once. The
+      // float-away riser and the storm decoys are exempt (see canSplit).
       // At climax / depth >= .75 a POP STORM of hypnotic-word decoys
       // joins the field (sparkle + tiny nudge, no commit). Every pop bursts
       // into a chain of mini theme-word bubbles; the committed answer's chain
@@ -1623,32 +2147,57 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         // ---- float-away timing: the release bubble RISES out ON ITS OWN ---
         // No escape "window" gates it: the float-away bubble spawns below the
         // bottom edge and rises straight up and out the TOP (see the riser
-        // branch in the drift loop), tuned to FULLY leave the viewport ~8-11s
+        // branch in the drift loop), tuned to FULLY leave the viewport ~5.3-7.3s
         // after the beat opened on a 1080p-ish viewport (exitBudget is the
         // nominal estimate the hard backstop is rebased on). The scaffold's
         // generic timedOut auto-submit stays DISARMED for this mechanic.
         // escTimer remains only as the reduced-motion commit path + the endgame
         // respawn flag.
         if (timeoutTimer) { clearTimeout(timeoutTimer); timeoutTimer = 0; }
-        const exitBudget = 8000 + Math.random() * 3000;   // nominal top-exit ~8-11s
+        // ---- SPLIT-CHAIN BUSY GATE (see the split block below) -------------
+        // Clearing an answer bubble costs 4-8 pops (a few seconds), against the
+        // riser's ~5.3-7.3s exit — so this gate only has to cover the overhang, not
+        // carry a 15-pop marathon. While the player is ACTIVELY working a chain
+        // (live descendants AND a pop inside the last 3.5s) the riser crawls and
+        // both escape timers re-arm, so the beat can never be stolen out from
+        // under their hands; 3.5s of idle releases it and everything resumes at
+        // full speed, so waiting STILL always completes the beat (invariant #1)
+        // even mid-chain, and a dawdling chain no longer makes the beat drag.
+        let splitLive = 0;                 // live un-popped descendants (gen >= 1)
+        let lastPopAt = 0;
+        const CHAIN_IDLE_MS = 3500;
+        const chainBusy = () => splitLive > 0 && (now() - lastPopAt) < CHAIN_IDLE_MS;
+        const exitBudget = (8000 + Math.random() * 3000) / 1.5;   // nominal top-exit ~5.3-7.3s
         const escapeAt = (beat.timeoutMs && beat.timeoutMs > 0)
           ? beat.timeoutMs : 12000 + Math.random() * 4000;
         let escaping = false;
-        const escTimer = setTimeout(() => {
-          escaping = true;
-          if (reduced) {
-            try { flight.classList.add('is-done'); } catch (_e) {}
-            later(() => { if (!committed) finalize(floatOpt.index, undefined, false); }, 1100);
-          }
-        }, escapeAt);
+        let escTimer = 0;
+        const armEsc = (ms) => {
+          escTimer = setTimeout(() => {
+            if (chainBusy()) { armEsc(2000); return; }   // mid-chain: hold the endgame
+            escaping = true;
+            if (reduced) {
+              try { flight.classList.add('is-done'); } catch (_e) {}
+              later(() => { if (!committed) finalize(floatOpt.index, undefined, false); }, 1100);
+            }
+          }, ms);
+        };
+        armEsc(escapeAt);
         cleanups.push(() => clearTimeout(escTimer));
         // hard backstop (invariant #1): rebased on exitBudget with a wide margin
         // so it can NEVER fire before even a slow rise completes; if the rise
         // ever wedges, the float-away option still lands as a deliberate
-        // (non-timedOut) commit — waiting ALWAYS completes the beat.
-        const escBackstop = setTimeout(() => {
-          if (!committed) finalize(floatOpt.index, undefined, false);
-        }, exitBudget + 12000);
+        // (non-timedOut) commit — waiting ALWAYS completes the beat. A live
+        // split chain re-arms it (never fires under the player's hands), and the
+        // 3.5s idle window guarantees it still lands if they walk away mid-chain.
+        let escBackstop = 0;
+        const armBackstop = (ms) => {
+          escBackstop = setTimeout(() => {
+            if (chainBusy()) { armBackstop(4000); return; }
+            if (!committed) finalize(floatOpt.index, undefined, false);
+          }, ms);
+        };
+        armBackstop(exitBudget + 12000);
         cleanups.push(() => clearTimeout(escBackstop));
 
         // ---- detached chain/particle layer (juice only; self-cleans) ------
@@ -1729,7 +2278,11 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         const bubbles = [];
         let ord = 0;
 
-        function makeBubble(opt, word, delayMs) {
+        // `kin` (optional) marks a SPLIT CHILD: {gen, root, size}. Children wear
+        // the same body/label as their ancestor, are NOT registered for steering
+        // (the handle installs once, with the root els) and take their diameter
+        // from the split curve instead of the spawn bands below.
+        function makeBubble(opt, word, delayMs, kin) {
           const isOpt = !!opt;
           const wrap = el('div', 'ib-bubwrap');
           const btn = document.createElement('button');
@@ -1760,8 +2313,22 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           // overflow).
           const vwNow = (typeof window !== 'undefined' && window.innerWidth) || 1280;
           const bscale = Math.max(0.45, Math.min(1, vwNow / 1100));
-          const size = (isOpt ? 195 + Math.random() * 52 : 130 + Math.random() * 39) * bscale;
+          const size = kin ? kin.size
+            : (isOpt ? 195 + Math.random() * 52 : 130 + Math.random() * 39) * bscale;
           wrap.style.width = wrap.style.height = size.toFixed(0) + 'px';
+          if (kin) {
+            // children shrink, so the label/padding must shrink with them or a
+            // gen-3 bubble is all text and no bubble (29px/18px are the CSS
+            // defaults tuned for a ~220px body).
+            btn.classList.add('ib-bub-child');
+            btn.style.fontSize = Math.max(12, Math.min(29, Math.round(size * 0.13))) + 'px';
+            btn.style.padding = Math.max(5, Math.round(size * 0.08)) + 'px';
+            const lab = btn.querySelector('.ib-bublabel');   // sprite path only
+            if (lab) {
+              lab.style.padding = Math.max(2, Math.round(size * 0.03)) + 'px '
+                + Math.max(5, Math.round(size * 0.07)) + 'px';
+            }
+          }
           wrap.style.transform = 'translate3d(-9999px,-9999px,0)';
           wrap.appendChild(btn);
           flight.appendChild(wrap);   // fixed layer: viewport coords throughout
@@ -1787,10 +2354,19 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
             // slot spread (options only; assigned right after spawn)
             slotCol: null, slotRow: 0,
             popped: false, seeded: false, ord: ord++,
+            // SPLIT CHAIN: gen 0 = the option bubble the beat mounted; root =
+            // the gen-0 ancestor (null on a root); live = un-popped members of
+            // that family (roots only — the family's clear counter).
+            gen: kin ? kin.gen : 0, root: kin ? kin.root : null, live: kin ? 0 : 1,
           };
+          if (kin) {
+            // smaller body -> proportionally smaller idle bob, so a gen-3
+            // bubble never wanders out from under the cursor.
+            b.ampX *= 0.5; b.ampY *= 0.5;
+          }
           btn.addEventListener('click', () => onPop(b));
           bubbles.push(b);
-          if (isOpt) steerOpts.push({ index: opt.index, el: btn, isCorrect: opt.isCorrect, score: opt.score });
+          if (isOpt && !kin) steerOpts.push({ index: opt.index, el: btn, isCorrect: opt.isCorrect, score: opt.score });
           return b;
         }
 
@@ -1809,8 +2385,115 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           }
         }
 
+        // ---- SPLIT CHAIN (POP BUDGET) --------------------------------------
+        // Popping an ANSWER bubble does not end the beat: the burst BEGETS
+        // smaller bubbles that scatter out of the wreck, and those can beget
+        // again — but the family carries a BUDGET, so the TOTAL number of pops
+        // needed to clear it is decided up front and is ALWAYS 4-8.
+        //   A full binary chain (1 -> 2 -> 4 -> 8) cost 15 pops and read as a
+        // chore, so the depth is no longer what bounds the work: SPLIT_TOTAL
+        // does. The family is born owing (SPLIT_TOTAL - 1) unborn bubbles;
+        // every split spends 2 (or 3, to land odd totals exactly) out of that
+        // purse and stops splitting when the purse is empty. Whatever order the
+        // player pops in, the family costs EXACTLY SPLIT_TOTAL pops:
+        //   4 = 1 + 3          5 = 1 + 2 + 2        6 = 1 + 3 + 2
+        //   7 = 1 + 2 + 2 + 2  8 = 1 + 3 + 2 + 2
+        // so the nested "it splits again!" feel survives (up to 3 generations
+        // deep on the long plans) at a fraction of the clicks.
+        //   Only the LAST pop of the family advances the beat: the live counter
+        // must hit 0 before attempt() fires, so the answer event fires once.
+        //   Exempt: the float-away riser (it owns the "waiting IS choosing"
+        // contract and lives offscreen-bound, so popping it still commits at
+        // once) and the storm decoys (they already re-form forever — splitting
+        // them WOULD be unbounded).
+        const SPLIT_GENS = 3;                        // hard depth cap (belt+braces)
+        // Per-beat variety: 4..8 pops. Rolled once per beat so consecutive
+        // beats don't feel machined, never outside [4, 8].
+        const SPLIT_TOTAL = 4 + Math.floor(Math.random() * 5);
+        const SPLIT_SHRINK = [0.72, 0.76, 0.82];     // size factor, per generation
+        // Touch/pen floor: no generation ever goes under this, so the last
+        // shards stay a comfortable target even in a small window (a gen-3
+        // pixel-hunt would turn the toy into a chore). On a narrow window gens
+        // 2/3 simply land on the floor together instead of shrinking into
+        // confetti.
+        const SPLIT_MIN_PX = 54;
+        const famOf = (b) => b.root || b;
+        // How many children THIS pop begets: 0 once the family's purse is spent
+        // (or at the depth cap). An odd purse spends 3 first so the plan lands
+        // on its exact total; after that it is always 2 at a time.
+        function splitCount(fam, gen) {
+          if (gen >= SPLIT_GENS) return 0;
+          if (fam.budget == null) fam.budget = SPLIT_TOTAL - 1;
+          if (fam.budget < 2) return 0;
+          return (fam.budget % 2 === 1) ? 3 : 2;
+        }
+        const canSplit = (b) => !!b.opt
+          && !(opts.length > 1 && b.opt.index === floatOpt.index);
+
+        // gen >= 1 corpses leave the DOM once their burst animation is done
+        // (roots stay: steering holds their els). Nothing survives the beat —
+        // every wrapper lives on `flight`, which teardown fades and removes.
+        function retire(b) {
+          later(() => {
+            try { b.wrap.remove(); } catch (_e) {}
+            const i = bubbles.indexOf(b);
+            if (i >= 0) bubbles.splice(i, 1);
+          }, 480);
+        }
+
+        // The burst begets the children: they are born AT the parent's centre
+        // and fly outward to their scatter slots on the existing 'fly' easing,
+        // so the parent visibly becomes them.
+        function splitBubble(b, cx, cy, n) {
+          try {
+            const kids = Math.max(2, n | 0);   // the caller already paid for them
+            const gen = (b.gen || 0) + 1;
+            const shrink = SPLIT_SHRINK[Math.min(SPLIT_SHRINK.length - 1, gen - 1)];
+            const size = Math.max(SPLIT_MIN_PX, Math.min(b.size * 0.92, b.size * shrink));
+            const v = vp();
+            const base = Math.random() * Math.PI * 2;
+            const dist = b.size * 0.42 + size * (kids > 2 ? 0.46 : 0.34);
+            const fam = famOf(b);
+            for (let i = 0; i < kids; i++) {
+              const ang = base + (i * Math.PI * 2 / kids) + (Math.random() * 0.5 - 0.25);
+              const c = makeBubble(b.opt, null, 0, { gen, root: fam, size });
+              c.px = cx - size / 2; c.py = cy - size / 2;
+              c.fx = c.px; c.fy = c.py;
+              c.tx = Math.max(4, Math.min(v.w - size - 4, cx + Math.cos(ang) * dist - size / 2));
+              c.ty = Math.max(4, Math.min(v.h - size - 4, cy + Math.sin(ang) * dist - size / 2));
+              c.x = c.tx; c.y = c.ty;
+              if (reduced) {
+                // no flight under reduced motion: the children simply appear at
+                // their slots with the same fade the reduced spawn path uses
+                c.state = 'hover'; c.px = c.tx; c.py = c.ty; c.sway = 0;
+                c.wrap.classList.add('ib-bub-appear');
+              } else {
+                c.state = 'fly';
+                c.flyStart = -1;                       // stamped on the first frame
+                c.flyDur = 300 + Math.random() * 180;  // a burst, not a drift-in
+                c.sway = 4;
+              }
+              setPos(c);
+              fam.live = (fam.live || 0) + 1;
+              splitLive++;
+            }
+          } catch (_e) {}
+        }
+
         function respawn(b, gapMs) {
           b.btn.classList.remove('ib-pop');
+          // a re-formed family member is live again — put it back on the books
+          // BEFORE any branch clears `popped` (every option path below does).
+          if (b.opt) {
+            const fam = famOf(b);
+            fam.live = (fam.live || 0) + 1;
+            if ((b.gen || 0) >= 1) {
+              // children never re-fly from a viewport edge: they re-form in place
+              splitLive++;
+              b.popped = false;
+              return;
+            }
+          }
           if (b.state === 'rise' || b.state === 'escape') {
             // the rising float-away bubble: a veto re-form happens in place
             // (still full-size, still clickable) and the rise carries on
@@ -1834,9 +2517,48 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           if (committed || b.popped) return;
           b.popped = true;
           b.btn.classList.add('ib-pop');    // satisfying scale-burst (CSS)
-          try { if (audio && typeof audio.pop === 'function') audio.pop(); } catch (_e) {} // tactile bubble-burst
+          const gen = b.gen || 0;
+          // tactile bubble-burst — the SAME pop voice as always, stepped up one
+          // pitch notch per generation (smaller bubble, tighter pop) and eased
+          // down in level so a chain never piles up. intensity is clamped inside
+          // audio.pop() by the caps chain (invariant #2).
+          try {
+            if (audio && typeof audio.pop === 'function') {
+              audio.pop(Math.max(0.3, 0.62 - gen * 0.06), 1 + gen * 0.11);
+            }
+          } catch (_e) {}
           const cx = b.px + b.size / 2, cy = b.py + b.size / 2;
           if (b.opt) {
+            lastPopAt = now();
+            const fam = famOf(b);
+            fam.live = Math.max(0, (fam.live || 1) - 1);
+            if (gen >= 1) splitLive = Math.max(0, splitLive - 1);
+            // Reserve the children NOW (synchronously), not inside the deferred
+            // spawn: a second pop landing inside those 90ms must see the purse
+            // already debited, or the family's total would drift off plan.
+            const kids = canSplit(b) ? splitCount(fam, gen) : 0;
+            if (kids > 0) {
+              fam.budget -= kids;
+              // A SPLITTING pop advances NOTHING. The burst is the same droplet
+              // spray (thinner each generation) and the gen-0 pop still throws
+              // its mini-word chain; deeper gens get a sparkle instead, so the
+              // chain doesn't blizzard the field. Children spawn a beat later so
+              // the burst reads as begetting them.
+              spawnDroplets(cx, cy, Math.max(5, 9 - gen * 2));
+              if (gen === 0) spawnChain(cx, cy, false); else spawnSparkle(cx, cy);
+              later(() => { if (!committed) splitBubble(b, cx, cy, kids); }, 90);
+              if (gen >= 1) retire(b);
+              return;
+            }
+            if (fam.live > 0) {
+              // TERMINAL pop, siblings still floating: juice only. The beat
+              // clears when the LAST of the family is gone, never before.
+              spawnDroplets(cx, cy, 6);
+              spawnSparkle(cx, cy);
+              if (gen >= 1) retire(b);
+              return;
+            }
+            // the family is empty — THIS pop is the one that answers.
             spawnDroplets(cx, cy, 9);
             attempt(b.opt.index);           // commit path (may be steer-vetoed)
             if (committed) {
@@ -1969,18 +2691,32 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
                 b.riseBaseX = Math.max(4, Math.min(v.w - b.size - 4, rx));
                 b.px = b.riseBaseX;
                 b.py = v.h + b.size * 0.3;            // just below the bottom edge
-                // rise 100-140 px/s (viewport-scaled), tuned so the full top-exit
-                // lands ~8-11s in on a 1080p-ish viewport; sway +-30-50px scaled
+                // rise 150-210 px/s (viewport-scaled), tuned so the full top-exit
+                // lands ~5.3-7.3s in on a 1080p-ish viewport; sway +-30-50px scaled
+                //
+                // 50% FASTER than the original 8-11s tuning: at the old speed the
+                // riser read as stalled rather than serene — long enough that the
+                // player stopped believing it was moving and started hunting for a
+                // click. Everything downstream of the exit time is derived from
+                // exitBudget, so the two move together (see exitBudget above).
                 const travel = v.h + b.size * 1.3;    // spawn-below -> fully above
-                const targetSec = 8 + Math.random() * 3;
-                b.riseSpd = Math.max(100, Math.min(140, travel / targetSec)) * bscale;
+                const targetSec = (8 + Math.random() * 3) / 1.5;
+                b.riseSpd = Math.max(150, Math.min(210, travel / targetSec)) * bscale;
                 b.riseAmp = (30 + Math.random() * 20) * bscale;
                 b.risePer = 2.6 + Math.random() * 1.4;   // sway period (s)
                 setPos(b);
                 continue;
               }
               if (b.state === 'rise') {
-                b.py -= b.riseSpd * (dt / 1000);
+                // SPLIT-CHAIN COURTESY: while the player is actively clearing a
+                // split chain the riser slows to a crawl (and is hard-clamped
+                // short of the top edge) so it can NEVER steal the commit out
+                // from under a live chain. A 4-8 pop chain is short, so this is
+                // a brake, not a stall: it resumes at full speed the moment the
+                // chain goes idle (3.5s).
+                const busy = chainBusy();
+                b.py -= b.riseSpd * (dt / 1000) * (busy ? 0.2 : 1);
+                if (busy) b.py = Math.max(b.py, -b.size * 0.4);
                 const v = vp();
                 const sway = Math.sin(((t - b.riseStart) / 1000) * (Math.PI * 2 / b.risePer) + b.phase) * b.riseAmp;
                 b.px = Math.max(-b.size, Math.min(v.w, b.riseBaseX + sway));
@@ -2029,6 +2765,9 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
             if (b.state === 'fly') {
               // eased travel; a sine bulge bows the path so it reads organic.
               // Clickable the whole way — eager pops land mid-flight.
+              // flyStart -1 = a split child born between frames: stamp it now so
+              // its burst-out starts from THIS frame, not from time zero.
+              if (b.flyStart < 0) b.flyStart = t;
               const p = Math.min(1, (t - b.flyStart) / b.flyDur);
               const ep = easeFly(p);
               const bow = Math.sin(p * Math.PI) * b.sway * 1.6;
@@ -2251,7 +2990,9 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           const gifPool = (media && Array.isArray(media.gifs))
             ? media.gifs.filter((u) => typeof u === 'string' && u.length > 0) : [];
           if (gifPool.length) {
-            const g = gifPool[Math.floor(Math.random() * gifPool.length)];
+            // noteMedia rides the pick (core/mediaLog.js) so the archive can
+            // list the backdrop among the run's issued payloads.
+            const g = noteMedia(gifPool[Math.floor(Math.random() * gifPool.length)], 'gif');
             const gimg = document.createElement('img');
             gimg.className = 'ib-breathgif';
             gimg.src = g; gimg.alt = ''; gimg.draggable = false;
@@ -2416,6 +3157,17 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
 
         const mic = mkBtn('🎙 tap & say it', null, 'ib-opt ib-mic');
         card.appendChild(mic);
+        // PILL RULE: mic off in the app => the affordance is shown DISABLED, not
+        // hidden and not live. Hiding it would silently remove a feature the user
+        // owns; leaving it live would offer a button that can only fail. Greyed
+        // says "this exists, turn the mic on" — and type-it is still right there.
+        if (!micAllowed) {
+          mic.disabled = true;
+          mic.classList.add('is-off');
+          mic.textContent = '🎙 mic is off';
+          mic.title = 'Microphone is disabled in settings.';
+          mic.setAttribute('aria-disabled', 'true');
+        }
         let typeOffered = false;
         const offerType = mkBtn('type instead', () => {
           if (typeOffered) return; typeOffered = true;
@@ -2451,7 +3203,7 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         };
         rec.onend = () => { mic.classList.remove('is-live'); };
         mic.addEventListener('click', () => {
-          if (committed) return;
+          if (committed || !micAllowed) return;   // disabled is belt; this is braces
           try { rec.start(); mic.classList.add('is-live'); status.textContent = 'listening…'; }
           catch (_e) { /* start() throws if already running; ignore */ }
         });
@@ -2569,7 +3321,11 @@ const IB_CSS = `
 .ib-timer-arc { fill: none; stroke: var(--intake-accent, #ff69b4); stroke-width: 3; stroke-linecap: round; }
 .ib-timer.is-urgent .ib-timer-arc { stroke: #ff4d6d; filter: drop-shadow(0 0 4px rgba(255,77,109,.8)); }
 
-.ib-opts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ib-opts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; transition: opacity .26s ease, transform .26s ease; }
+/* OPTIONS HOLD: buttons wait out the prompt reveal — invisible AND unclickable.
+   visibility (not display) keeps the grid's box, so the card never reflows when
+   the options land. See the OPTIONS_HOLD_* constants. */
+.ib-opts-grid.ib-opts-held { opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(6px); }
 .ib-yesno { grid-template-columns: 1fr 1fr; }
 .ib-mono { display: flex; justify-content: center; }
 .ib-mono-btn { min-width: 60%; }
@@ -2629,6 +3385,17 @@ const IB_CSS = `
 /* mantra bail-out: dim secondary, but a real block button under the controls */
 .ib-mantra-skip { display: block; margin: 16px auto 0; text-decoration: none; padding: 12px 18px; }
 .ib-mic.is-live { background: var(--intake-accent, #ff69b4); color: #21121b; animation: ib-pulse 1.1s ease-in-out infinite; }
+/* Mic disabled in app settings — greyed, inert, still legible (WCAG-safe on the
+   card's dark face). No hover/active lift: it must not read as pressable. */
+.ib-mic.is-off,
+.ib-mic.is-off:hover,
+.ib-mic.is-off:active {
+  opacity: .48;
+  filter: grayscale(1);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
 @keyframes ib-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,105,180,.5); } 50% { box-shadow: 0 0 0 10px rgba(255,105,180,0); } }
 .ib-shake { animation: ib-shake .4s ease; }
 @keyframes ib-shake { 0%,100% { transform: translateX(0); } 20%,60% { transform: translateX(-6px); } 40%,80% { transform: translateX(6px); } }
@@ -3009,8 +3776,19 @@ const IXFZ_CSS = `
   opacity: 0;
   background: radial-gradient(120% 120% at 50% 50%, rgba(190,0,20,.28), rgba(150,0,16,.72));
 }
-.ixfz-sub {
+/* taunt WRAP: owns the placement + the slow swell (scale 1 -> 1.12 across the
+ * whole 20s stall). Lives on <body>, so the ix-freeze pause rule never stops it.
+ * The tremble transform stays on the .ixfz-sub child and composes with this. */
+.ixfz-subwrap {
   position: fixed; left: 4vw; right: 4vw; bottom: 8vh; z-index: 2147479500;
+  pointer-events: none; transform-origin: 50% 100%; will-change: transform;
+}
+.ixfz-swell { animation: ixfz-swell 20000ms cubic-bezier(.33,0,.67,1) forwards; }
+@keyframes ixfz-swell {
+  from { transform: scale(1); }
+  to   { transform: scale(1.12); }
+}
+.ixfz-sub {
   pointer-events: none; text-align: center;
   font-family: Arial, "Segoe UI", system-ui, sans-serif;
   font-weight: 900; font-size: clamp(30px, 5.2vw, 60px); line-height: 1.12;
@@ -3042,9 +3820,92 @@ body.ix-freeze .ib-opt.ixfz-correct { animation-play-state: running !important; 
   opacity: .32 !important; filter: grayscale(.5);
   pointer-events: none !important; cursor: default !important;
 }
-/* reduced motion: no subtitle tremble (JS already skips it), no pulse — a static ring */
+/* reduced motion: no subtitle tremble (JS already skips it), no swell (the class
+ * is already withheld), no pulse — a static ring */
 .ixfz-reduced { transform: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .ixfz-correct { animation: none; }
+  .ixfz-swell { animation: none; transform: none; }
+}
+`;
+
+/* ----------------------------------------------------------------------------
+ * CORRUPTED QUESTION styles (injected lazily by ensureCorruptStyles the first
+ * time a beat corrupts). Everything here is scoped to the PROMPT line (.ib-q)
+ * and a small absolutely-positioned overlay INSIDE the card — the options, the
+ * card chrome and the rest of the UI are never touched, so a corrupted beat
+ * stays fully answerable. Both flavors override the .ib-breathe idle animation
+ * (an animation would otherwise beat the melt's transition outright).
+ * (No stray backtick may ever appear inside this template literal.)
+ * -------------------------------------------------------------------------- */
+const IXCR_CSS = `
+/* ---- FLAVOR A: datamosh glitch on the prompt line ------------------------ */
+.ixcr-glitch {
+  position: relative;
+  animation: ixcr-jitter .16s steps(2, end) infinite !important;
+  text-shadow: 0 0 14px rgba(255,43,208,.35), 0 0 3px rgba(32,232,255,.25);
+}
+.ixcr-glitch::before, .ixcr-glitch::after {
+  content: attr(data-ixcr);
+  position: absolute; left: 0; top: 0; width: 100%;
+  pointer-events: none; opacity: .7; mix-blend-mode: screen;
+  font: inherit; line-height: inherit; letter-spacing: inherit;
+  white-space: pre-wrap; word-break: break-word;
+}
+.ixcr-glitch::before { color: #ff2bd0; animation: ixcr-tearA .27s steps(3, end) infinite; }
+.ixcr-glitch::after  { color: #20e8ff; animation: ixcr-tearB .34s steps(3, end) infinite; }
+@keyframes ixcr-jitter {
+  0%   { transform: translate(0,0) skewX(0deg); }
+  33%  { transform: translate(-2px,1px) skewX(-.6deg); }
+  66%  { transform: translate(2px,-1px) skewX(.5deg); }
+  100% { transform: translate(0,0) skewX(0deg); }
+}
+@keyframes ixcr-tearA {
+  0%   { clip-path: inset(0 0 62% 0); transform: translate(-5px,-1px); }
+  50%  { clip-path: inset(12% 0 46% 0); transform: translate(4px,0); }
+  100% { clip-path: inset(0 0 57% 0); transform: translate(-2px,2px); }
+}
+@keyframes ixcr-tearB {
+  0%   { clip-path: inset(46% 0 0 0); transform: translate(5px,1px); }
+  50%  { clip-path: inset(58% 0 8% 0); transform: translate(-4px,0); }
+  100% { clip-path: inset(52% 0 0 0); transform: translate(3px,-2px); }
+}
+
+/* broken reward GIF punching through over the line (canvas is tiny; the CSS
+ * stretch + pixelated rendering is what makes the chunky broken-feed look) */
+.ixcr-gifwrap {
+  position: absolute; z-index: 3; pointer-events: none; overflow: hidden;
+  mix-blend-mode: screen; border-radius: 6px;
+  animation: ib-fadein .12s linear both;
+}
+.ixcr-gif {
+  display: block; width: 100%; height: 100%;
+  image-rendering: pixelated; image-rendering: crisp-edges;
+}
+
+/* ---- FLAVOR B: slow melt of the prompt TEXT ONLY ------------------------- */
+.ixcr-melt {
+  animation: none !important;                 /* kill the .ib-breathe idle pulse */
+  transform-origin: 50% 0%; will-change: opacity, filter, transform;
+  transition:
+    opacity var(--ixcr-melt-ms, 9000ms) cubic-bezier(.35,0,.75,.4),
+    filter  var(--ixcr-melt-ms, 9000ms) ease-in,
+    transform var(--ixcr-melt-ms, 9000ms) cubic-bezier(.5,0,.8,.4);
+}
+.ixcr-melt.ixcr-melt-go {
+  opacity: 0; filter: blur(20px);
+  transform: translateY(28px) scaleY(1.35) scaleX(.99);
+}
+/* reduced motion: a plain, shorter fade (no blur, no drip, no jitter/ghosts) */
+.ixcr-melt.ixcr-reduced { transition: opacity var(--ixcr-melt-ms, 1400ms) linear; }
+.ixcr-melt.ixcr-reduced.ixcr-melt-go { opacity: 0; filter: none; transform: none; }
+.ixcr-glitch.ixcr-reduced { animation: none !important; text-shadow: none; }
+.ixcr-glitch.ixcr-reduced::before, .ixcr-glitch.ixcr-reduced::after { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ixcr-glitch { animation: none !important; text-shadow: none; }
+  .ixcr-glitch::before, .ixcr-glitch::after { display: none; }
+  .ixcr-gifwrap { animation: ib-fadein .3s linear both; }
+  .ixcr-melt { transition: opacity var(--ixcr-melt-ms, 1400ms) linear; }
+  .ixcr-melt.ixcr-melt-go { opacity: 0; filter: none; transform: none; }
 }
 `;

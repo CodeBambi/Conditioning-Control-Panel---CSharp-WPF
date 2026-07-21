@@ -66,6 +66,9 @@
  * ==========================================================================*/
 
 import { depthToChannels, clampToCaps, clampIntensity, RewardKind, lerp, clamp01 } from '../core/contracts.js';
+import { spiralPalette, harvestOpen } from '../core/palette.js';
+import { recordSpiral } from '../core/spiralLog.js';
+import { noteMedia } from '../core/mediaLog.js';
 
 /* ----------------------------------------------------------------------------
  * PURE MAPPING — clamped channel vector -> concrete render numbers.
@@ -82,6 +85,9 @@ const BUBBLE_MS = { slow: 2200, fast: 260 };
 /** Comfort ceiling on the full-screen flash wash so cap=1 is bright, not blinding.
  *  This is a safety clamp on the OUTPUT alpha, not a re-derivation of the curve. */
 const FLASH_ALPHA_CEIL = 0.85;
+
+/** Clamp to an arbitrary range (contracts only exports clamp01). Pure. */
+const clampRange = (v, lo, hi) => (v < lo ? lo : (v > hi ? hi : v));
 
 const _finiteInterval = (active, rate, slow, fast) =>
   active ? lerp(slow, fast, clamp01(rate)) : Infinity;
@@ -199,6 +205,19 @@ export function gifBurstOpacityForDepth(depth) {
   if (d >= 0.42) return 0.50; // Deepening
   if (d >= 0.18) return 0.30; // Establishing
   return 0.15;                // Calibration
+}
+
+/** Run-progress -> HOW MANY gifs one burst spills, owner-directed: about ONE at
+ *  the top of the run climbing to a crowd of ~10 by the bottom. The window
+ *  itself widens with depth (lo 1->5, hi 1->10) and the count is rolled INSIDE
+ *  that window, so two bursts at the same depth rarely match — it reads as a
+ *  spill, never as a counter ticking up. The caller keeps reduced motion at one
+ *  and clamps to the layer's node budget. Pure when `rand` (0..1) is supplied. */
+export function gifBurstCountForDepth(depth, rand = Math.random()) {
+  const d = clamp01(depth);
+  const lo = 1 + Math.round(d * 4);                 // 1 .. 5
+  const hi = Math.max(lo, 1 + Math.round(d * 9));   // 1 .. 10
+  return Math.min(hi, lo + Math.floor(clamp01(rand) * (hi - lo + 1)));
 }
 
 /** Streak value -> meter display numbers. Hidden under 2, capped at 10. Pure. */
@@ -408,7 +427,10 @@ function freshSpiralParams(make) {   // make: () => params object
   const sig = (o) => { try { return JSON.stringify(o); } catch { return String(Math.random()); } };
   for (let i = 0; i < 4 && sig(p) === window.__ixSpiralSig; i++) p = make();
   window.__ixSpiralSig = sig(p);
-  return p;
+  // Recap: the garnish spiral is woven from the player's harvested colours, so
+  // the outro re-renders it (core/spiralLog.js -> boot.js runOutro). Same hook
+  // beats.js installs in its own copy. Never throws; returns `p` untouched.
+  return recordSpiral(p);
 }
 
 /* Faint, niche-agnostic subliminal pool. Niche-specific words come from prompts/
@@ -445,6 +467,11 @@ const GIFBURST_FADE_MS    = 700;   // auto fade-out at the 6s cap
 const GIFBURST_DISMISS_MS = 200;   // click-dismiss: quick fade + shrink
 const GIFBURST_DRAG_PX    = 6;     // release under this travel = a click, not a drag
 const GIFBURST_FLING_MIN  = 0.45;  // px/ms release speed to fling (slower = drop in place)
+/** Concurrent burst gifs allowed on screen at once — the burst layer's OWN leak
+ *  guard (deliberately separate from MAX_MEDIA_NODES so a deep 10-gif spill can
+ *  never starve the ambient/polaroid budget, nor be starved BY it). */
+const GIFBURST_MAX_NODES  = 10;
+const GIFBURST_STAGGER_MS = 90;    // pop-in delay per burst member (spill, not pop)
 /** Window CustomEvent name effects fires when a spiral/sublim garnish shows —
  *  audio.js listens for it (same literal there; contracts.js stays untouched). */
 export const GARNISH_CUE_EVENT = 'intake-garnish';
@@ -510,9 +537,18 @@ const CSS = `
   transition:background .25s,box-shadow .25s;}
 .ixfx-seg.on{background:linear-gradient(90deg,var(--ixfx-a),var(--ixfx-a2));
   box-shadow:0 0 calc(4px + 10px * var(--ixfx-sglow,0)) var(--ixfx-a);}
-.ixfx-amb-root{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden;}
+/* ambient drifters live on <body> too (they must survive the stage wipe to
+   finish a 14-26s crossing), so their z-index competes at the ROOT level: the
+   layer is PREPENDED to <body> at the stage's own z-index (2), which keeps it
+   above the tube canvas (0) and the readability scrim (body::after, 1) but —
+   by DOM order — behind the stage, hud (3), aside (4) and everything above. */
+.ixfx-amb-root{position:fixed;inset:0;z-index:2;pointer-events:none;overflow:hidden;}
 .ixfx-amb{position:absolute;opacity:0;border-radius:12px;object-fit:cover;
   max-width:40vw;max-height:44vh;will-change:transform,opacity;filter:saturate(.85);}
+/* garnish layer lives on <body> as well (fullscreen washes outlive the card),
+   so its z-index competes at the ROOT level: same 5 as the burst root — above
+   stage/hud/aside, below the shell overlay (6), the loader (10) and the
+   jumpscare. DOM order keeps it under the burst gifs (see placeGarnish). */
 .ixfx-gl{position:fixed;inset:0;z-index:5;pointer-events:none;overflow:hidden;
   --ixfx-a:${DEFAULT_ACCENT};--ixfx-a2:${DEFAULT_ACCENT2};}
 .ixfx-gwash{position:absolute;inset:0;opacity:0;mix-blend-mode:screen;will-change:opacity;}
@@ -525,7 +561,10 @@ const CSS = `
   text-transform:lowercase;white-space:nowrap;opacity:0;filter:blur(1.2px);
   text-shadow:0 0 34px rgba(255,105,180,.5);}
 .ixfx-gspiral{position:absolute;inset:0;width:100%;height:100%;opacity:0;will-change:opacity;}
-.ixfx-burst-root{position:fixed;inset:0;z-index:7;pointer-events:none;overflow:hidden;}
+/* burst layer lives on <body> (it must survive the stage wipe), so its z-index
+   competes at the ROOT level: above the stage (2) / hud (3) / aside (4), below
+   the shell overlay (6), the loader (10) and the jumpscare. */
+.ixfx-burst-root{position:fixed;inset:0;z-index:5;pointer-events:none;overflow:hidden;}
 .ixfx-burst{position:absolute;border-radius:14px;object-fit:cover;opacity:0;
   pointer-events:auto;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;
   -webkit-user-drag:none;box-shadow:0 8px 34px rgba(0,0,0,.55),0 0 30px rgba(255,105,180,.4);
@@ -635,11 +674,13 @@ export function createEffects({ root, caps, media, theme } = {}) {
   const garnishBag = createGarnishBag(); // the always-different rotation
   let inRecovery = false;   // recover() arms it; setDepth() (normal drive) clears
 
-  // GifBurst layer (z7 foreground toy — clickable / flingable, single-instance).
-  // NOT a backdrop: it never ref-counts backdropRef, so cards stay solid behind it.
-  let burstRoot = null;     // .ixfx-burst-root container (own z7 layer)
-  let burstNow = null;      // the ONE live burst handle (NO-HYDRA guard)
-  let lastBurstGif = null;  // no immediate repeat of the last burst's gif
+  // GifBurst layer (foreground toy — clickable / flingable). NOT a backdrop: it
+  // never ref-counts backdropRef, so cards stay solid behind it. Parented to
+  // <body>, NOT to the stage — see the GIFBURST section header.
+  let burstRoot = null;      // .ixfx-burst-root container (own body-level layer)
+  const burstItems = new Set(); // every live gif handle (a burst = N of them)
+  let burstLiveCount = 0;    // concurrent burst <img> nodes (cap: GIFBURST_MAX_NODES)
+  let lastBurstGif = null;   // no immediate repeat of the last spawned gif
 
   // loom spiral machinery: module + ONE reusable field, all lazy. Params are
   // rolled FRESH per mount (freshSpiralParams) so no two spirals repeat.
@@ -661,8 +702,28 @@ export function createEffects({ root, caps, media, theme } = {}) {
     } catch (_e) {}
   }
 
+  /** Re-attach a layer the stage wipe orphaned. beats.js clears the shared stage
+   *  (`stage.innerHTML = ''`) at the top of EVERY render, which detaches our
+   *  layers along with the outgoing card; without this, everything mounted after
+   *  the first beat would draw into a node that is no longer in the document.
+   *  Cheap + guarded: a no-op while the layer is still attached. */
+  function reattach(el) {
+    if (el && !el.parentNode) { try { root.appendChild(el); } catch (_e) {} }
+  }
+
+  /** <body> host for the layers that must OUTLIVE the stage wipe: the ambient
+   *  drifters, the fullscreen garnishes and the gif burst. Anything parented to
+   *  the shared stage dies mid-life the moment the player answers (beats.js does
+   *  `stage.innerHTML = ''` at the top of every render); on <body> those layers
+   *  expire only on their own clocks. Falls back to `root` if the document has
+   *  no body yet — cheap insurance, never happens in the hosted page. */
+  function bodyHost() {
+    return (typeof document !== 'undefined' && document.body) ? document.body : root;
+  }
+
   function mount() {
-    if (mounted || !hasDOM) return;
+    if (!hasDOM) return;
+    if (mounted) { reattach(layer); return; }
     ensureStyles();
     try {
       layer = document.createElement('div');
@@ -689,6 +750,10 @@ export function createEffects({ root, caps, media, theme } = {}) {
   function removeNode(el) {
     live.delete(el);
     if (el && el._ixMedia) { el._ixMedia = false; mediaLiveCount = Math.max(0, mediaLiveCount - 1); }
+    // Burst gifs ride their OWN budget; freeing it here (not in the per-instance
+    // cleanup) keeps recover(0)'s bulk clear exact and the marker makes a
+    // double-remove idempotent, same contract as _ixMedia above.
+    if (el && el._ixBurst) { el._ixBurst = false; burstLiveCount = Math.max(0, burstLiveCount - 1); }
     // Backdrop bookkeeping: every removal path (garnishFade finish/cancel, spiral
     // stop, recover()/dispose bulk-clear) funnels through here, so one guarded
     // decrement per node keeps the shared ref-count exactly balanced. Clearing
@@ -984,7 +1049,9 @@ export function createEffects({ root, caps, media, theme } = {}) {
     if (!images.length || reducedMotion) return;
     if (clamp01(intensity) < 0.65) return;
     if (Math.random() > 0.4) return;
-    spawnPolaroid(pickOf(images), intensity);
+    // noteMedia rides the pick (core/mediaLog.js): the archive's "payloads
+    // issued" list is built from exactly the media a run actually showed.
+    spawnPolaroid(noteMedia(pickOf(images), 'image'), intensity);
   }
 
   /* ==========================================================================
@@ -1133,7 +1200,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
     if (!gifs.length) { dropShower(i); return; }
     const spec = gifBurstSpec(i);
     for (let k = 0; k < spec.count; k++) {
-      spawnGifNode(pickOf(gifs), {
+      spawnGifNode(noteMedia(pickOf(gifs), 'gif'), {
         sizePx: Math.round(spec.sizePx * (0.8 + Math.random() * 0.4)),
         holdMs: spec.holdMs + Math.round(Math.random() * 200),
         enterMs: spec.enterMs,
@@ -1452,7 +1519,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
           });
         }
         if (gifs.length) {
-          spawnGifNode(pickOf(gifs), {
+          spawnGifNode(noteMedia(pickOf(gifs), 'gif'), {
             sizePx: Math.round(240 + i * 160),
             holdMs: spec.spotlightMs,
             enterMs: 260,
@@ -1565,20 +1632,37 @@ export function createEffects({ root, caps, media, theme } = {}) {
 
   /* ==========================================================================
    * AMBIENT ASSET LAYER — a GIF/still occasionally DRIFTS across the viewport
-   * or GHOSTS in and out, ghost-faint, on its own z-1 layer BEHIND the question
+   * or GHOSTS in and out, ghost-faint, on its own layer BEHIND the question
    * card. Depth-gated cadence (ambientSpec), max 2 concurrent, lazy <img> with
    * onerror cleanup. Fully off: below depth ~0.2 / reduced motion / no media /
    * Recovery. Killed by recover() and dispose().
+   *
+   * OUTLIVES THE CARD: like the burst layer, this one is parented to <body>, NOT
+   * to the stage — a DRIFT is a 14-26s edge-to-edge crossing and the stage wipe
+   * (`stage.innerHTML = ''`, beats.js render) used to cut it dead the instant the
+   * player answered. On <body> a drifter finishes its travel off-screen and then
+   * removes itself on its own animation/safety clock.
    * ========================================================================*/
 
   function mountAmbient() {
-    if (ambRoot || !hasDOM) return;
+    if (!hasDOM) return;
+    const host = bodyHost();
+    // PREPENDED, not appended: at the same z-index as .intake-stage (2), DOM
+    // order decides, so a body-first layer paints BEHIND the card while still
+    // sitting above the tube canvas (z0) and the readability scrim (body::after
+    // z1) — exactly where the drifters drew as a stage child.
+    if (ambRoot) {
+      if (!ambRoot.parentNode) {              // paranoia: host swap / manual wipe
+        try { host.insertBefore(ambRoot, host.firstChild); } catch (_e) {}
+      }
+      return;
+    }
     ensureStyles();
     try {
       ambRoot = document.createElement('div');
       ambRoot.className = 'ixfx-amb-root';
       ambRoot.setAttribute('aria-hidden', 'true');
-      root.appendChild(ambRoot);
+      host.insertBefore(ambRoot, host.firstChild);
     } catch (_e) { ambRoot = null; }
   }
   function removeAmbientNode(el) {
@@ -1669,11 +1753,31 @@ export function createEffects({ root, caps, media, theme } = {}) {
    * BIG-REWARD GARNISHES — fullscreen pairings a fired reward sometimes earns:
    * pink wash / braindrain / subliminal word flashes / live LOOM SPIRAL. One
    * at a time (a new one fast-fades the old), rolled by pickGarnish, all on
-   * the z-5 garnish layer (above the stage, below the interstitial overlay).
+   * the z-5 garnish layer (above the stage/hud/aside, below the shell overlay
+   * z6, the loader z10 and the jumpscare).
+   *
+   * OUTLIVES THE CARD: parented to <body>, NOT to the stage — same reason as the
+   * burst layer. A garnish owns a multi-second timed life (garnishFade / the
+   * spiral's own rAF+timer) and the stage wipe used to kill the fullscreen wash
+   * mid-fade the instant the beat resolved. The layer is click-through
+   * (pointer-events:none in CSS), so surviving the swap can never eat a tap
+   * meant for the next card. It is inserted BEFORE the burst root when that
+   * exists so the backdrop-ish garnishes stay under the foreground gif toy
+   * (both are z5; DOM order breaks the tie deterministically).
    * ========================================================================*/
 
+  /** Put glRoot in the body, under the burst layer when that is already up. */
+  function placeGarnish(host) {
+    if (burstRoot && burstRoot.parentNode === host) host.insertBefore(glRoot, burstRoot);
+    else host.appendChild(glRoot);
+  }
   function mountGarnish() {
-    if (glRoot || !hasDOM) return;
+    if (!hasDOM) return;
+    const host = bodyHost();
+    if (glRoot) {
+      if (!glRoot.parentNode) { try { placeGarnish(host); } catch (_e) {} }
+      return;
+    }
     ensureStyles();
     try {
       glRoot = document.createElement('div');
@@ -1683,7 +1787,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
         glRoot.style.setProperty('--ixfx-a', accent);
         glRoot.style.setProperty('--ixfx-a2', accent2);
       } catch (_e) {}
-      root.appendChild(glRoot);
+      placeGarnish(host);
     } catch (_e) { glRoot = null; }
   }
   function endGarnish(handle) { if (garnishNow === handle) garnishNow = null; }
@@ -1910,7 +2014,11 @@ export function createEffects({ root, caps, media, theme } = {}) {
         track(el);
         el._ixBackdrop = true; backdropRef(true); // fullscreen live spiral: cards go see-through
         // FRESH params every mount + cross-module no-repeat: never the same spiral twice.
-        const palette = [accent, accent2, '#ffffff'];
+        // THE PLAYER'S COLOURS: spiralPalette() returns the 2-4 colours harvested
+        // by the Calibration colour questions (core/palette.js), padded to four
+        // threads; a short/absent harvest falls back to the theme palette below,
+        // which is exactly what this used to be.
+        const palette = spiralPalette([accent, accent2, '#ffffff']);
         const q = freshSpiralParams(() => m.randomParams2(palette));
         const span = Math.max(200, m.loopMs2(q));
         const field = ensureLoomField(m, w, h);
@@ -1991,7 +2099,13 @@ export function createEffects({ root, caps, media, theme } = {}) {
     if (!hasDOM || reducedMotion || inRecovery) return;
     const jackpot = !!rewardEvent.jackpot;
     if (!jackpot && (intensity < GARNISH_MIN_INTENSITY || depth < GARNISH_MIN_DEPTH)) return;
-    const kinds = loomDead ? GARNISH_KINDS.filter((n) => n !== 'spiral') : GARNISH_KINDS;
+    // The spiral is RETIRED while the loom import is dead AND while the colour
+    // harvest is still running: a spiral must never appear before the player has
+    // finished naming the colours it is woven from (core/palette.js). In practice
+    // the colour beats open the run at depths far under GARNISH_MIN_DEPTH, so
+    // this is belt-and-braces against a future re-tune of the depth floors.
+    const spiralOff = loomDead || harvestOpen();
+    const kinds = spiralOff ? GARNISH_KINDS.filter((n) => n !== 'spiral') : GARNISH_KINDS;
     const name = jackpot
       ? (garnishBag.force(['drain', 'spiral'].filter((n) => kinds.includes(n))) || garnishBag.draw(kinds))
       : garnishBag.draw(kinds);
@@ -2011,53 +2125,112 @@ export function createEffects({ root, caps, media, theme } = {}) {
   }
 
   /* ==========================================================================
-   * GIFBURST — an in-browser CCP-flash REWARD (owner-directed). ONE fullscreen
-   * GIF bursts in at a random spot/size, its opacity climbing by run band
+   * GIFBURST — an in-browser CCP-flash REWARD (owner-directed). A burst spills
+   * N fullscreen GIFs at random spots/sizes, their opacity climbing by run band
    * (0.15 / 0.30 / 0.50 / 0.75 / 1.00 via gifBurstOpacityForDepth). CLICK to
-   * dismiss, or GRAB + FLING it away. Max 6s of UNPAUSED life then it fades.
-   * SINGLE-INSTANCE / NO HYDRA: a new roll while one is alive is SKIPPED (never
-   * queued, never replaced). It is a FOREGROUND TOY — it does NOT ref-count
-   * backdropRef, so in-run cards stay solid behind it. Layer sits at z7 (above
-   * the z6 reward washes / z5 garnishes, below the z2147483000 jumpscare). All
-   * nodes/timers funnel through track/removeNode so recover(0) tears it out.
+   * dismiss one, or GRAB + FLING it away. Each gif gets its OWN ~6s of UNPAUSED
+   * life then fades on its own timer.
+   *
+   * COUNT SCALES WITH THE DESCENT (gifBurstCountForDepth): ~1 at the top of the
+   * run, a rolled 5..10 at the bottom. Reduced motion stays at exactly one.
+   *
+   * OUTLIVES THE CARD: the layer is parented to <body>, NOT to the stage —
+   * beats.js wipes the stage (`stage.innerHTML = ''`) at the top of every render,
+   * which used to kill a live burst the instant the next card mounted. On <body>
+   * the gifs survive the swap and expire only on their own clocks. z-index 5 puts
+   * them above the stage/hud/aside, below the shell overlay + the jumpscare.
+   *
+   * NO HYDRA is now a BUDGET, not a singleton: bursts may overlap (they must, or
+   * a 5s gif would block the next reward), but GIFBURST_MAX_NODES caps how many
+   * are ever on screen and a new burst is trimmed to the free budget (0 -> skip,
+   * never queued). It is a FOREGROUND TOY — it does NOT ref-count backdropRef,
+   * so in-run cards stay solid behind it. All nodes/timers funnel through
+   * track/removeNode + burstItems so recover(0) tears the whole spill out.
    * ========================================================================*/
   function mountBurstLayer() {
-    if (burstRoot || !hasDOM) return;
+    if (!hasDOM) return;
     ensureStyles();
+    // <body>, not `root` — see the section header (shared bodyHost() fallback).
+    const host = bodyHost();
+    if (burstRoot) {
+      if (!burstRoot.parentNode) { try { host.appendChild(burstRoot); } catch (_e) {} }
+      return;
+    }
     try {
       burstRoot = document.createElement('div');
       burstRoot.className = 'ixfx-burst-root';
       burstRoot.setAttribute('aria-hidden', 'true');
-      root.appendChild(burstRoot);
+      host.appendChild(burstRoot);
     } catch (_e) { burstRoot = null; }
   }
   function removeBurstLayer() {
     if (burstRoot) { try { if (burstRoot.parentNode) burstRoot.parentNode.removeChild(burstRoot); } catch (_e) {} }
     burstRoot = null;
   }
-  /** Tear down a live burst instantly (cancel timers, remove node, clear guard). */
-  function killBurst() { if (burstNow) { try { burstNow.cancel(); } catch (_e) {} } }
+  /** Tear every live burst gif down instantly (cancel timers, remove nodes). */
+  function killBurst() {
+    for (const h of Array.from(burstItems)) { try { h.cancel(); } catch (_e) {} }
+    burstItems.clear();
+    burstLiveCount = 0;
+  }
 
-  /** Fire ONE GifBurst at the given run depth. Bails (no queue) if one is already
-   *  alive, or without DOM / gifs. RM: no pop-in overshoot + no fling physics
-   *  (click-dismiss only), same opacity ladder + 6s cap. */
+  /** Fire a GifBurst at the given run depth: roll the count off the depth curve,
+   *  trim it to the free node budget, and spawn that many independent gifs.
+   *  Bails without DOM / gifs / budget. RM: exactly one gif, no pop-in overshoot
+   *  and no fling physics (click-dismiss only), same opacity ladder + 6s cap. */
   function showGifBurst(depth) {
     if (!hasDOM || !gifs.length) return;
-    if (burstNow) return;                       // NO HYDRA: at most one on screen
-    if (mediaLiveCount >= MAX_MEDIA_NODES) return;
+    const budget = GIFBURST_MAX_NODES - burstLiveCount;
+    if (budget <= 0) return;                    // ceiling: skip, never queue
     mountBurstLayer();
     if (!burstRoot) return;
+    const d = clamp01(depth);
+    const want = reducedMotion ? 1 : gifBurstCountForDepth(d);
+    const n = Math.max(1, Math.min(want, budget));
+    for (let i = 0; i < n; i++) {
+      try { spawnBurstGif(d, n, i); } catch (_e) { /* one bad node never kills the spill */ }
+    }
+  }
 
-    // pick a gif, avoiding an immediate repeat of the last burst's gif
+  /** ONE gif of a burst: `n` is the spill size and `i` this gif's slot in it
+   *  (drives the ring placement + the pop-in stagger). Fully independent — its
+   *  own life clock, its own drag/fling, its own cleanup. */
+  function spawnBurstGif(depth, n, i) {
+    if (!burstRoot) return;
+
+    // pick a gif, avoiding an immediate repeat of the last one spawned
     let url = pickOf(gifs);
     if (gifs.length > 1) { let g = 0; while (url === lastBurstGif && g++ < 6) url = pickOf(gifs); }
     lastBurstGif = url;
+    noteMedia(url, 'gif');   // ledger for the archive (core/mediaLog.js)
 
     const targetAlpha = clamp01(gifBurstOpacityForDepth(depth)) * clampIntensity(1, capsOf());
     const rot = (Math.random() * 16 - 8);       // slight ±8deg tilt
-    const sizeVmin = 30 + Math.random() * 20;   // large-ish, 30..50vmin
-    const leftPct = 8 + Math.random() * 58;     // biased inward so the box stays on-screen
-    const topPct  = 8 + Math.random() * 52;
+    // A single gif keeps the original free placement + size. A crowd is thrown
+    // around the centre on a jittered ring (varied angle/radius/size) so it reads
+    // as a burst instead of a stack, and shrinks as the count grows so ten of
+    // them still leave the card underneath readable.
+    const shrink = clampRange(1 - 0.055 * (n - 1), 0.5, 1);
+    const sizeVmin = (n === 1) ? (30 + Math.random() * 20)          // large-ish, 30..50vmin
+                               : (22 + Math.random() * 26) * shrink; // ~11..27vmin at n=10
+    let leftPct, topPct;
+    if (n === 1) {
+      leftPct = 8 + Math.random() * 58;         // biased inward so the box stays on-screen
+      topPct  = 8 + Math.random() * 52;
+    } else {
+      const ang = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.9;
+      const rad = 10 + Math.random() * 26;
+      // left/top anchor the box's TOP-LEFT, so pull back by ~a third of the box
+      // to sit it on the ring rather than hanging off it (units are close enough
+      // — the clamp below is what actually keeps everything on screen).
+      leftPct = 46 + Math.cos(ang) * rad * 1.15 - sizeVmin * 0.33;
+      topPct  = 44 + Math.sin(ang) * rad - sizeVmin * 0.33;
+    }
+    leftPct = clampRange(leftPct, 2, Math.max(6, 90 - sizeVmin * 0.55));
+    topPct  = clampRange(topPct,  2, Math.max(6, 86 - sizeVmin * 0.55));
+    // stagger the pop-ins (and the life clocks with them) so the spill lands as a
+    // cascade, not a single frame-slam. No stagger on the RM / no-WAAPI path.
+    const delayMs = (supportsAnim && !reducedMotion) ? i * GIFBURST_STAGGER_MS : 0;
 
     let el;
     try {
@@ -2065,7 +2238,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
       el.className = 'ixfx-burst';
       el.decoding = 'async';
       el.setAttribute('aria-hidden', 'true');
-      el._ixMedia = true; mediaLiveCount++;      // shares the media leak-guard counter
+      el._ixBurst = true; burstLiveCount++;      // burst layer's own leak-guard counter
       el.style.width = sizeVmin.toFixed(2) + 'vmin';
       el.style.height = 'auto';
       el.style.left = leftPct.toFixed(2) + '%';
@@ -2073,7 +2246,11 @@ export function createEffects({ root, caps, media, theme } = {}) {
       el.onerror = () => cleanup();              // bad url -> vanish, free the slot
       el.src = url;
       burstRoot.appendChild(el);
-    } catch (_e) { mediaLiveCount = Math.max(0, mediaLiveCount - 1); return; }
+    } catch (_e) {
+      // give the slot back only if we actually took one (marker = idempotent)
+      if (el && el._ixBurst) { el._ixBurst = false; burstLiveCount = Math.max(0, burstLiveCount - 1); }
+      return;
+    }
 
     track(el);                                   // recover(0) tears it out with the rest
 
@@ -2084,7 +2261,8 @@ export function createEffects({ root, caps, media, theme } = {}) {
     let moved = 0, downX = 0, downY = 0;
     let samples = [];                            // {x,y,t} for release velocity
     let popAnim = null;
-    let lifeTimer = 0, lifeRemaining = GIFBURST_LIFE_MS, lifeStart = 0;
+    // the stagger is added to the clock so a late member still gets its full ~6s
+    let lifeTimer = 0, lifeRemaining = GIFBURST_LIFE_MS + delayMs, lifeStart = 0;
     const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const resting = () => `translate(${curX.toFixed(1)}px,${curY.toFixed(1)}px) rotate(${rot.toFixed(2)}deg)`;
 
@@ -2102,8 +2280,8 @@ export function createEffects({ root, caps, media, theme } = {}) {
     function cleanup() {
       if (dead) return; dead = true; ended = true;
       if (lifeTimer) { clearTimeout(lifeTimer); lifeTimer = 0; }
-      removeNode(el);
-      if (burstNow === handle) burstNow = null;
+      removeNode(el);                            // frees this gif's node budget
+      burstItems.delete(handle);
     }
     function endWith(toTransform, durMs, easing) {
       if (ended) return; ended = true;
@@ -2203,17 +2381,26 @@ export function createEffects({ root, caps, media, theme } = {}) {
     } catch (_e) {}
 
     // --- entrance -------------------------------------------------------------
+    // While a staggered member is still waiting its turn it is invisible but
+    // would otherwise still be hit-testable, swallowing clicks meant for the card
+    // underneath — so it stays click-through until its pop-in has run.
+    if (delayMs > 0) { try { el.style.pointerEvents = 'none'; } catch (_e) {} }
+    const enablePointer = () => { try { el.style.pointerEvents = 'auto'; } catch (_e) {} };
     if (supportsAnim && !reducedMotion) {
       try {
         popAnim = el.animate(
           [{ opacity: 0, transform: `translate(0px,0px) rotate(${rot.toFixed(2)}deg) scale(.35)` },
            { opacity: targetAlpha, offset: 0.72, transform: `translate(0px,0px) rotate(${rot.toFixed(2)}deg) scale(1.09)` },
            { opacity: targetAlpha, transform: `translate(0px,0px) rotate(${rot.toFixed(2)}deg) scale(1)` }],
-          { duration: GIFBURST_POP_MS, easing: 'cubic-bezier(.2,.85,.35,1.25)', fill: 'forwards' });
-        popAnim.onfinish = () => { commitPop(); };
-      } catch (_e) { try { el.style.opacity = String(targetAlpha); el.style.transform = resting(); } catch (_e2) {} }
+          { duration: GIFBURST_POP_MS, delay: delayMs, easing: 'cubic-bezier(.2,.85,.35,1.25)', fill: 'both' });
+        popAnim.onfinish = () => { commitPop(); enablePointer(); };
+      } catch (_e) {
+        enablePointer();
+        try { el.style.opacity = String(targetAlpha); el.style.transform = resting(); } catch (_e2) {}
+      }
     } else {
-      // RM / no WAAPI: gentle fade-in, no overshoot.
+      // RM / no WAAPI: gentle fade-in, no overshoot (delayMs is 0 on this path).
+      enablePointer();
       try {
         el.style.transform = resting();
         el.style.transition = 'opacity 200ms ease';
@@ -2224,7 +2411,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
     }
 
     const handle = { cancel: () => cleanup() };
-    burstNow = handle;
+    burstItems.add(handle);
     startLife();
   }
 
@@ -2317,6 +2504,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
     mediaLiveCount = 0;
     removeGarnishLayer();
     removeBurstLayer();
+    burstItems.clear(); burstLiveCount = 0;   // killBurst() above already cancelled them
     lastBurstGif = null;
     if (layer) { try { if (layer.parentNode) layer.parentNode.removeChild(layer); } catch (_e) {} }
     layer = null; flashEl = null; mounted = false;

@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Chaos;
 
 namespace ConditioningControlPanel.Services.Quiz
 {
@@ -88,6 +89,9 @@ namespace ConditioningControlPanel.Services.Quiz
                     InputEnabled = true,
                     // A normal titled, resizable window — the page's dock button can go borderless.
                     StartFullscreen = false,
+                    // Keep the intake above MainWindow (native ownership, not Topmost) — main is
+                    // raised by things the run doesn't control and used to bury the page.
+                    OwnedByMainWindow = true,
                     WindowTitle = ProductName,
                     LogTag = "IntakeHost",
                     // The binaural audio bed must start without a user gesture.
@@ -152,6 +156,15 @@ namespace ConditioningControlPanel.Services.Quiz
                         steerValve = 1.0,         // full steering; a "play it straight" valve can wire here later
                         priorRun = (object?)null, // the page's own stats.js owns feed-forward (IndexedDB)
                         m2Test = _testMode,
+                        // MIC GATE. The say-it mantra beat offers a "tap & say it"
+                        // button; this is the app-wide consent flag every other mic
+                        // consumer already honours (AutonomyService, Deeper's
+                        // SpeakPromptSession). Without it the page probed only for the
+                        // Web Speech API and offered the affordance regardless of
+                        // whether the user had ever allowed the mic — the page cannot
+                        // see the WPF setting on its own. False => beats.js renders the
+                        // button disabled rather than live (type-it stays available).
+                        micEnabled = App.Settings?.Current?.MicConsentGiven == true,
                         // Reward media for the in-page effect layer (gif bursts / jackpot
                         // spotlights). Served through the ccp.assets virtual host mapped above;
                         // a small random sample per launch keeps the init message light.
@@ -206,6 +219,12 @@ namespace ConditioningControlPanel.Services.Quiz
                 case "intake-close":   // "are you sure? -> Yes" jumpscare ABORT
                     OnIntakeClose();
                     break;
+                case "loom-save":      // outro spiral recap: "Keep it" -> the Spirals library
+                    OnLoomSave(o);
+                    break;
+                case "intake-save-image":  // outro spiral recap: "Save PNG" -> intake_spirals/
+                    OnSaveSpiralImage(o);
+                    break;
                 case "exit-done":
                     DisposeAll();
                     break;
@@ -213,9 +232,11 @@ namespace ConditioningControlPanel.Services.Quiz
         }
 
         /// <summary>quiz-result { result: QuizRunResult } -&gt; deserialise + draft a themed CCP
-        /// session via <see cref="QuizSessionGenerator"/>, then offer to save it (mirrors the
-        /// classic quiz's "save session" flow). The window stays open — the page continues into
-        /// its Recovery band / summary and the user closes it when done.</summary>
+        /// session via <see cref="QuizSessionGenerator"/>, then AUTO-SAVE it into the
+        /// CustomSessions folder and announce it with a non-blocking toast. The window stays
+        /// open — the page continues into its Recovery band / summary and the user closes it
+        /// when done — so nothing here may block: the drafted session is the run's artifact and
+        /// must not be destroyable by dismissing a dialog.</summary>
         private static void OnQuizResult(JObject o)
         {
             QuizRunResult? run = null;
@@ -244,28 +265,57 @@ namespace ConditioningControlPanel.Services.Quiz
 
                 try
                 {
+                    // AUTO-SAVE, NO DIALOG. This used to put the drafted session behind a modal
+                    // SaveFileDialog: a run the user had just spent forty minutes descending
+                    // through was destroyed by one Escape key, with no recovery path and no
+                    // second chance (the QuizRunResult is not retained). The session is the
+                    // artifact of the run, so it is written straight into the CustomSessions
+                    // folder - where the Sessions tab already enumerates it - and the user is
+                    // told about it with a non-blocking toast instead of being interrupted
+                    // mid-Recovery-band by a file picker.
                     var session = QuizSessionGenerator.GenerateSession(run);
                     var fileService = new SessionFileService();
-                    var dialog = new Microsoft.Win32.SaveFileDialog
-                    {
-                        Title = $"Save {ProductName} Session",
-                        Filter = "Session files (*.session.json)|*.session.json",
-                        FileName = SessionFileService.GetExportFileName(session),
-                        DefaultExt = ".session.json",
-                        InitialDirectory = SessionFileService.CustomSessionsFolder,
-                    };
-                    var owner = _host?.Window;
-                    var shown = (owner != null && owner.IsLoaded) ? dialog.ShowDialog(owner) : dialog.ShowDialog();
+                    fileService.EnsureCustomFolderExists();
 
-                    if (shown == true)
-                    {
-                        fileService.ExportSession(session, dialog.FileName);
-                        App.Logger?.Information("IntakeHostService: drafted session '{Name}' -> {Path}",
-                            session.Name, dialog.FileName);
-                    }
+                    var path = UniqueSessionPath(SessionFileService.GetExportFileName(session));
+                    fileService.ExportSession(session, path);
+                    session.SourceFilePath = path;
+
+                    App.Logger?.Information("IntakeHostService: drafted session '{Name}' -> {Path}",
+                        session.Name, path);
+
+                    // The app's standard in-app toast surface (MainWindow's NotificationHost).
+                    // It queues internally when the host isn't attached yet, so this is safe
+                    // even if the intake window somehow outlives the main window's layout.
+                    App.Notifications?.Show(
+                        $"Session drafted: \"{session.Name}\" saved to your Sessions.",
+                        NotificationType.Success,
+                        TimeSpan.FromSeconds(8),
+                        "Show folder",
+                        () => { try { fileService.OpenCustomSessionsFolder(); } catch { } });
                 }
                 catch (Exception ex) { App.Logger?.Warning(ex, "IntakeHostService: session draft/save failed"); }
             });
+        }
+
+        /// <summary>A free path under CustomSessions for <paramref name="fileName"/> (which always
+        /// ends in <c>.session.json</c>). Two intakes on the same niche at the same tier produce
+        /// the same name, so collisions are the norm, not the exception: suffix <c>-2</c>,
+        /// <c>-3</c>, ... rather than silently overwriting the earlier draft. The counter is
+        /// bounded so a pathological folder can't spin here; the last candidate is taken as-is.</summary>
+        private static string UniqueSessionPath(string fileName)
+        {
+            const string ext = ".session.json";
+            var stem = fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase)
+                ? fileName[..^ext.Length]
+                : Path.GetFileNameWithoutExtension(fileName);
+            if (string.IsNullOrWhiteSpace(stem)) stem = "intake-session";
+
+            var folder = SessionFileService.CustomSessionsFolder;
+            var candidate = Path.Combine(folder, stem + ext);
+            for (var i = 2; i <= 999 && File.Exists(candidate); i++)
+                candidate = Path.Combine(folder, $"{stem}-{i}{ext}");
+            return candidate;
         }
 
         /// <summary>The in-page "are you sure? -&gt; Yes" jumpscare asks the window to close as an
@@ -281,6 +331,98 @@ namespace ConditioningControlPanel.Services.Quiz
             if (disp == null || disp.HasShutdownStarted) { DisposeAll(); return; }
             disp.BeginInvoke(() => DisposeAll());
         }
+
+        // ============================ outro spiral recap ============================
+
+        /// <summary>Folder the outro's "Save PNG" action writes to:
+        /// <c>%APPDATA%/ConditioningControlPanel/intake_spirals</c>. Deliberately NOT the
+        /// assets folder — a run's souvenir spirals should not silently join the user's flash
+        /// image pool — and deliberately NOT <see cref="DtrhLoomStore.SpiralsFolder"/>, whose
+        /// contents the Loom rack enumerates. Its own folder beside the rest of the user data,
+        /// the same convention every other intake artifact (intake_subject.txt) follows.</summary>
+        private static string SpiralImageFolder => Path.Combine(App.UserDataPath, "intake_spirals");
+
+        private const int MaxSpiralPngBase64Chars = 12 * 1024 * 1024;  // ~9MB decoded ceiling
+
+        /// <summary>
+        /// <c>loom-save { name, params, gifBase64, overwrite }</c> — byte-for-byte the message
+        /// THE LOOM's own editor sends, so the intake's recap spirals land in the SAME library
+        /// (<see cref="DtrhLoomStore"/>: slug whitelist, 12-file cap, GIF magic validation) and
+        /// show up in the Loom rack / SpiralFeatureControl with zero extra plumbing. The page's
+        /// params are schema-v2 loom params (they came out of <c>loomField.randomParams2</c>),
+        /// so the sidecar round-trips and the spiral re-opens in the editor unchanged.
+        /// </summary>
+        private static void OnLoomSave(JObject o)
+        {
+            try
+            {
+                var (ok, slug, error) = DtrhLoomStore.Save(
+                    (string?)o["name"], (string?)o["gifBase64"], o["params"], (bool?)o["overwrite"] ?? false);
+                _host?.Post(new { type = "loom-result", op = "save", ok, slug, error });
+                if (ok) App.Logger?.Information("IntakeHostService: recap spiral kept as {Slug}", slug);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("IntakeHostService.OnLoomSave: {E}", ex.Message);
+                try { _host?.Post(new { type = "loom-result", op = "save", ok = false, slug = (string?)null, error = "io-failed" }); }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// <c>intake-save-image { pngBase64, index }</c> — write one recap spiral as a PNG under
+        /// <see cref="SpiralImageFolder"/> and answer with the full path so the page can tell the
+        /// user exactly where it went. Validation is C#-authoritative: base64 length ceiling, PNG
+        /// magic, and a filename built entirely here (the page contributes only a clamped index),
+        /// so nothing the page sends can steer the write out of the folder.
+        /// </summary>
+        private static void OnSaveSpiralImage(JObject o)
+        {
+            string? error = null;
+            string? path = null;
+            try
+            {
+                var b64 = (string?)o["pngBase64"];
+                if (string.IsNullOrEmpty(b64) || b64.Length > MaxSpiralPngBase64Chars)
+                {
+                    error = "too-big";
+                }
+                else
+                {
+                    byte[] bytes;
+                    try { bytes = Convert.FromBase64String(b64); }
+                    catch { bytes = Array.Empty<byte>(); }
+
+                    if (!LooksLikePng(bytes))
+                    {
+                        error = "bad-image";
+                    }
+                    else
+                    {
+                        Directory.CreateDirectory(SpiralImageFolder);
+                        var index = Math.Clamp((int?)o["index"] ?? 1, 1, 99);
+                        var name = $"intake-spiral-{DateTime.Now:yyyyMMdd-HHmmss}-{index:D2}.png";
+                        var full = Path.Combine(SpiralImageFolder, name);
+                        File.WriteAllBytes(full, bytes);
+                        path = full;
+                        App.Logger?.Information("IntakeHostService: saved recap spiral -> {Path}", full);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("IntakeHostService.OnSaveSpiralImage: {E}", ex.Message);
+                error = "io-failed";
+            }
+
+            try { _host?.Post(new { type = "intake-save-image-result", ok = error == null, path, error }); }
+            catch { }
+        }
+
+        /// <summary>8-byte PNG signature — enough to reject arbitrary bytes.</summary>
+        private static bool LooksLikePng(byte[] b) =>
+            b.Length > 8 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47
+            && b[4] == 0x0D && b[5] == 0x0A && b[6] == 0x1A && b[7] == 0x0A;
 
         private static void OnBootError(string? msg)
         {
@@ -318,13 +460,71 @@ namespace ConditioningControlPanel.Services.Quiz
             masterIntensity = 1.0,
         };
 
-        /// <summary>Chosen niche for this run (Niche.* — bambi/drone/sissy). Best-effort mapped
-        /// from the app's active content mode; defaults to bambi. A dedicated picker is a Phase-3
-        /// UX concern.</summary>
+        /// <summary>Chosen niche for this run — DesiredNiche() clamped to a niche that actually has
+        /// a prompt bank on disk. A niche with no banks/&lt;niche&gt;.json would drop the page onto the
+        /// engine's tiny placeholder bank, so an unbacked niche degrades to bambi LOUDLY (one warning
+        /// per app session) instead of looking intentional. Drop the bank in and the clamp lifts.</summary>
         private static string SafeNiche()
+        {
+            var want = DesiredNiche();
+            if (BankExists(want)) return want;
+            if (!_bankFallbackWarned)
+            {
+                _bankFallbackWarned = true;
+                App.Logger?.Warning(
+                    "IntakeHostService: niche '{N}' has no prompt bank (Resources/web/intake/banks/{N}.json) — serving the bambi bank instead. Author that bank to fix.",
+                    want, want);
+            }
+            return "bambi";
+        }
+
+        /// <summary>True once the missing-bank warning has been logged this app session.</summary>
+        private static bool _bankFallbackWarned;
+
+        /// <summary>Does banks/&lt;niche&gt;.json ship with this build? Errs on the side of "yes" so an
+        /// IO hiccup never silently downgrades a niche that does have content.</summary>
+        private static bool BankExists(string niche)
+        {
+            if (niche == "bambi") return true;
+            try
+            {
+                return File.Exists(Path.Combine(
+                    AppContext.BaseDirectory, "Resources", "web", "intake", "banks", niche + ".json"));
+            }
+            catch { return true; }
+        }
+
+        /// <summary>Niche the ACTIVE MOD asks for (Niche.* — bambi/drone/sissy/circe), before the
+        /// bank-availability clamp. Mapped from the mod, not the legacy two-value ContentMode enum
+        /// (which has no drone value and collapses every non-sissy mod to BambiSleep — that mapping
+        /// served drone-mode users the whole bambi prompt bank). Built-in ids win; third-party mods
+        /// declare theirs via a manifest tag. Defaults to bambi. A dedicated picker is a Phase-3 UX
+        /// concern.</summary>
+        private static string DesiredNiche()
         {
             try
             {
+                var modId = App.Mods?.ActiveModId;
+                if (modId == BuiltInMods.DronificationId) return "drone";
+                if (modId == BuiltInMods.SissyHypnoId) return "sissy";
+                if (modId == BuiltInMods.LockedId) return "circe";
+
+                // Third-party .ccpmod: honor a bambi/drone/sissy/circe manifest tag if it declares
+                // one. Locked's own tags ("locked"/"chastity") read as circe too.
+                var tags = App.Mods?.ActiveMod?.Manifest?.Tags;
+                if (tags != null)
+                {
+                    foreach (var tag in tags)
+                    {
+                        if (string.Equals(tag, "drone", StringComparison.OrdinalIgnoreCase)) return "drone";
+                        if (string.Equals(tag, "sissy", StringComparison.OrdinalIgnoreCase)) return "sissy";
+                        if (string.Equals(tag, "circe", StringComparison.OrdinalIgnoreCase)) return "circe";
+                        if (string.Equals(tag, "locked", StringComparison.OrdinalIgnoreCase)) return "circe";
+                        if (string.Equals(tag, "chastity", StringComparison.OrdinalIgnoreCase)) return "circe";
+                    }
+                }
+
+                // No mod signal at all — fall back to the legacy content mode.
                 return App.Settings?.Current?.ContentMode == ContentMode.SissyHypno ? "sissy" : "bambi";
             }
             catch { return "bambi"; }

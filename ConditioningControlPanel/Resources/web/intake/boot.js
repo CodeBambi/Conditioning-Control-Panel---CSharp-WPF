@@ -23,7 +23,10 @@
 import * as shim from './web-shim.js';
 import { createAI } from './core/ai.js';
 import { createEngine } from './core/engine.js';
-import { PRODUCT_NAME, Band, BAND_ORDER, Mechanic, themeOf, clamp01, bandIndex } from './core/contracts.js';
+import { PRODUCT_NAME, Band, BAND_ORDER, themeOf, clamp01, bandIndex } from './core/contracts.js';
+import { resetPalette, noteColorPick, deepen, COLOR_TAG, harvestedColors, COLOR_SWATCHES } from './core/palette.js';
+import { resetSpiralLog, recordedSpirals, spiralCount } from './core/spiralLog.js';
+import { resetMediaLog, recordedMedia, mediaShownCount } from './core/mediaLog.js';
 
 /* ----------------------------------------------------------------------------
  * DOM handles — guarded so importing this module in node (no `document`) is
@@ -129,6 +132,10 @@ shim.onBoot(async (config) => {
     const createAudio  = await loadOptional('./render/audio.js', 'createAudio',  stubAudio);
     const createBg     = await loadOptional('./render/background.js','createBackground', stubBackground);
     const createSubs   = await loadOptional('./render/subliminals.js','createSubliminals', null);
+    // COLOUR FLASH: the fullscreen tint pulse fired when a Calibration colour
+    // question commits (core/palette.js). Optional like every render module —
+    // a missing file just means no flash, never a broken run.
+    const flashColor   = await loadOptional('./render/colorFlash.js', 'flashColor', () => false);
 
     const reward   = createReward({ config });
     const stats    = createStats();
@@ -142,7 +149,9 @@ shim.onBoot(async (config) => {
     // its stub instead of killing the boot — same seam, one level deeper.
     const effects  = tryMake('effects', () => createEffects({ root: dom.stage, caps: config.caps, media: config.media || null, theme }), stubEffects);
     const audio    = tryMake('audio', () => createAudio({ caps: config.caps }), stubAudio);
-    const background = tryMake('background', () => createBg({ canvas: dom.bg }), stubBackground);
+    // `media` is optional and only feeds the tube's wall dressing (gif-plastered
+    // wall sections); an older background that ignores it behaves exactly as before.
+    const background = tryMake('background', () => createBg({ canvas: dom.bg, media: config.media || null }), stubBackground);
     safeCall(background, 'setEnabled', true);
 
     // Steering is optional too; beats.js pulls it in itself in the real build,
@@ -160,12 +169,24 @@ shim.onBoot(async (config) => {
       ? config.subliminals.filter((s) => s && typeof s.text === 'string' && s.text.trim().length > 0) : [];
     subliminals = null; // mounted lazily in the beat loop once the run leaves Calibration
 
+    // COLOUR HARVEST: wipe last run's picks BEFORE the engine is built — the
+    // engine arms the harvest from the bank inside createEngine().
+    resetPalette();
+    // ...and the spirals those picks will weave, so the outro's recap gallery
+    // only ever shows THIS run's spirals (core/spiralLog.js).
+    resetSpiralLog();
+    // ...and the payloads the run will pay out, so the archive's file for THIS
+    // run lists only what THIS run actually showed (core/mediaLog.js).
+    resetMediaLog();
+
     const engine = createEngine({ bank, reward, ai, config, stats });
 
     // Real render if Agent C delivered it; else the inline stub renderer.
     const stubBeats = () => ({ render: (beat) => stubRenderBeat(beat, { effects, audio, steering, reward, caps: config.caps }) });
     const beats = createBeats
-      ? tryMake('beats', () => createBeats({ root: dom.stage, effects, audio, steering, reward, caps: config.caps, background, theme, media: config.media || null, niche: config.niche }), stubBeats)
+      // micEnabled: the host's MicConsentGiven. Absent (standalone/harness) => true,
+      // where the browser's own permission prompt is the gate and no WPF setting exists.
+      ? tryMake('beats', () => createBeats({ root: dom.stage, effects, audio, steering, reward, caps: config.caps, background, theme, media: config.media || null, niche: config.niche, micEnabled: config.micEnabled !== false }), stubBeats)
       : stubBeats();
 
     // --- fiction identity + feed-forward ----------------------------------
@@ -176,12 +197,57 @@ shim.onBoot(async (config) => {
     }
 
     if (dom.loader) dom.loader.hidden = true;
-    buildHud();
+
+    // --- kawaii MAIN MENU (ui/menu.js) ------------------------------------
+    // The storefront goes up the instant the loader drops and BEFORE buildHud /
+    // the clinical briefing, so the run's HUD never sits behind the title screen
+    // and the tonal handoff lands in the intended order: bubbly welcome, then
+    // cold clinic. Optional module — if ui/menu.js is missing or throws, the
+    // boot proceeds straight into the briefing exactly as it did before.
+    //   'quit' -> hand the window back to the host WITHOUT emitting a result,
+    //             so no session is drafted (shim.closeHost = `intake-close`).
+    if (!config.m2Test) {                          // headless harness: zero pacing
+      let menuChoice = 'begin';
+      try {
+        const menuMod = await import('./ui/menu.js');
+        if (menuMod && typeof menuMod.showMainMenu === 'function') {
+          // `stats` rides along so the menu can offer the Archive (ui/history.js)
+          // once there is at least one completed run to consult. Optional field:
+          // an older menu.js ignores it and shows exactly the buttons it always did.
+          menuChoice = await menuMod.showMainMenu({ theme, config, audio, background, stats, bank });
+        }
+      } catch (e) {
+        shim.log('main menu failed — entering briefing: ' + (e && e.message || e));
+      }
+      if (menuChoice === 'quit') {
+        shim.log('main menu: quit — closing without a run');
+        try { if (typeof shim.closeHost === 'function') shim.closeHost(); } catch (_e) {}
+        return;
+      }
+    }
+
+    buildHud(config.caps);
 
     // --- clinical briefing (skipped headless / in m2Test harness runs) ----
     const shellCtx = { config, theme, bank, background, subjectId, priorRun, audio };
     try { if (audio && typeof audio.sfx === 'function') audio.sfx('briefing-open'); } catch (_e) {} // run-start intake chime
     try { await runBriefing(shellCtx); } catch (e) { shim.log('briefing failed: ' + (e && e.message || e)); }
+
+    // --- in-game pause menu (ui/pause.js) ---------------------------------
+    // Installed AFTER the briefing and BEFORE the first beat, because its timing
+    // shim only governs timers created after it is installed — which is exactly
+    // the set that matters (every countdown beats.js arms per card). Optional
+    // like every other render module; a missing file just means no pause.
+    // Skipped in the m2Test harness: that path must stay zero-pacing/headless.
+    let pause = null;
+    if (!config.m2Test) {
+      try {
+        const pmod = await import('./ui/pause.js');
+        if (pmod && typeof pmod.installPause === 'function') {
+          pause = pmod.installPause({ audio, background, effects, caps: config.caps, config });
+        }
+      } catch (e) { shim.log('pause: install failed (' + (e && e.message || e) + ')'); }
+    }
 
     // --- the canonical beat loop -----------------------------------------
     const seenBands = new Set([Band.Calibration]); // the briefing covers Section 1
@@ -209,6 +275,13 @@ shim.onBoot(async (config) => {
       }
 
       setDepthEverywhere(beat.depth, beat.band, { effects, audio, background, subliminals });
+      // ...and tell the SHELL how deep we are. ui/pause.js forwards it to
+      // ui/corruption.js, which rots the kawaii palette + the shell song from
+      // band 3 onward. Cosmetic and optional: an older pause handle has no
+      // setBand and simply never corrupts.
+      if (pause && typeof pause.setBand === 'function') {
+        try { pause.setBand(beat.band, beat.depth); } catch (_e) { /* never fatal */ }
+      }
       // Living background: rotate to a fresh DtRH biome dress on every beat
       // (depth is set just above, so the pick is biased by it). Optional method —
       // safeCall no-ops on the stub/fallback background.
@@ -221,6 +294,15 @@ shim.onBoot(async (config) => {
       }
 
       const ev = await beats.render(beat);
+
+      // COLOUR HARVEST + FLASH. beats.finalize() resolves the render promise the
+      // instant the answer commits (the card's exit animation runs after), so
+      // this lands ON the pick: the screen washes with a deep version of the
+      // colour, over the exiting card and the swap breather below. Harvesting
+      // BEFORE engine.next(ev) matters — the engine reads the harvest count to
+      // decide whether the next Calibration beat is another colour question.
+      harvestColorPick(beat, ev, flashColor, config.caps);
+
       step = await engine.next(ev);
 
       // CARD-SWAP BREATHER: hold ~1s on the normal answer -> next-card swap so the
@@ -229,18 +311,22 @@ shim.onBoot(async (config) => {
       // speedrun gap. Deliberately excluded from every path that already carries
       // its own pacing, so nothing double-dips:
       //   - !step.done          : the run is over -> the OUTRO owns its long pacing.
-      //   - !ev.timedOut        : melt-skip (1-in-30) and genuine timeouts both
-      //                           resolve timedOut=true; they already "went away" on
-      //                           their own, so no extra hold is layered on them.
-      //   - not Interlude       : loom / breathe pacing valleys are already slow.
-      //   - next beat !bandNew   : a NEW band opens with a full interstitial ceremony
-      //                           at the top of the next iteration; holding in front
-      //                           of it would stack onto the band transition.
+      // This is a GUARANTEED FLOOR: every beat -> beat transition holds, with no
+      // per-path exclusions. The earlier version skipped the hold on timeouts /
+      // melt-skips, interludes and band-new transitions, which left enough instant
+      // swaps that the run still read as speedrunnable. The hold is unskippable by
+      // construction — the outgoing card is already gone and the next one has not
+      // mounted, so there is nothing on the stage to click through.
+      //   - !step.done : the run is over -> the OUTRO owns its long pacing.
+      //   - m2Test     : the headless harness runs with zero pacing.
       // (The jumpscare aborts the host, so the loop never continues past it; the
       //  freeze gate resolves as a normal ~20s ceremony where +1s is negligible.)
-      const nextBandNew = !!(step && !step.done && step.beat && step.beat.meta && step.beat.meta.bandNew === true);
-      if (!step.done && !ev.timedOut && beat.mechanic !== Mechanic.Interlude && !nextBandNew) {
+      if (!step.done) {
         await sleep(config.m2Test ? 0 : CARD_SWAP_EXTRA_MS);
+        // PAUSE GATE. sleep() already freezes on its own (pause.js shims
+        // setTimeout), but hold explicitly here too, so a resume can never land
+        // between the breather ending and the next card mounting.
+        if (pause) { try { await pause.gate(); } catch (_e) { /* never block the run */ } }
       }
 
       // Bambi-Sparkle sprinkle: a small chance after each card resolves to play
@@ -251,8 +337,11 @@ shim.onBoot(async (config) => {
       }
     }
 
+    // Run over: the pause menu belongs to the RUN, not the outro ceremony.
+    if (pause) { try { pause.dispose(); } catch (_e) {} pause = null; }
     // Run over: retire the subliminal bed before the surface/outro (idempotent if already gone).
     safeCall(subliminals, 'dispose'); subliminals = null;
+    teardownCounter();   // no held garble / falling clone may reach the outro
 
     // Recovery invariant: make sure we surface even if the engine ended abruptly.
     setDepthEverywhere(0, Band.Recovery, { effects, audio, background, subliminals });
@@ -261,7 +350,15 @@ shim.onBoot(async (config) => {
     try { if (audio && typeof audio.sfx === 'function') audio.sfx('surface-bloom'); } catch (_e) {} // run-end emerge bloom
 
     const result = step.result;
-    await (stats.record ? stats.record(result) : Promise.resolve());
+    // The archive's copy of the closing card (ui/history.js reads this back).
+    // Assembled HERE because boot is the only module that can see the resolved
+    // bank/theme, the fiction identity and both run ledgers at once. Wrapped:
+    // a failure to build the recap must never cost the run its stats record.
+    let recapExtras = null;
+    try { recapExtras = buildRecapExtras(result, shellCtx); }
+    catch (e) { shim.log('recap extras failed: ' + (e && e.message || e)); }
+    statsRef = stats;   // so the outro's weave actions can annotate this record
+    await (stats.record ? stats.record(result, recapExtras) : Promise.resolve());
     // Close the feed-forward loop: seed the NEXT run's BootConfig.priorRun.
     // Standalone persists it locally; hosted, the C# host reads stats/feedForward
     // for the next `init` (Agent I). Never let this throw past the run.
@@ -276,7 +373,9 @@ shim.onBoot(async (config) => {
     catch (e) { shim.log('outro failed: ' + (e && e.message || e)); showDoneFallback(result, ack); }
 
   } catch (err) {
+    disposePauseIfAny();   // `pause` is scoped to the try; reach it via its handle
     safeCall(subliminals, 'dispose'); subliminals = null;
+    teardownCounter();
     shim.log('boot/run failed: ' + (err && (err.stack || err.message) || err));
     shim.bootError(String(err && err.message || err));
     if (dom.loader) dom.loader.hidden = true;
@@ -291,6 +390,18 @@ shim.log('boot: ready posted');
  * SMALL SHELL HELPERS — DOM sugar, pacing, guarded optional calls.
  * -------------------------------------------------------------------------- */
 function sleep(ms) { return new Promise((r) => setTimeout(r, Math.max(0, ms | 0))); }
+
+/**
+ * Tear down the pause menu from a path that cannot see the beat loop's `pause`
+ * binding (the fatal catch). ui/pause.js publishes its live handle on window for
+ * exactly this; no import needed, so it is safe on the error path.
+ */
+function disposePauseIfAny() {
+  try {
+    const p = (typeof window !== 'undefined') ? window.__intakePauseHandle : null;
+    if (p && typeof p.dispose === 'function') p.dispose();
+  } catch (_e) { /* never fatal */ }
+}
 
 function el(tag, cls, text) {
   const n = doc.createElement(tag);
@@ -595,9 +706,85 @@ async function playGlitch(theme) {
  * 5. IN-FICTION HUD — question counter, a calibration dial whose needle morphs
  * into a slow spiral as depth rises, and the current section name. NEVER the
  * raw depth number or band id.
+ *
+ * THE COUNTER LIES. The engine's meta.qTotal is the honest estimate and stays
+ * authoritative for every internal system (pacing, bands, reward planning); the
+ * HUD never shows it. What the HUD shows is a DISPLAY LIE that opens at
+ * COUNTER_START_TOTAL (20), creeps upward in glitching revisions, and only ever
+ * catches the real number when the run is genuinely nearly over. See the
+ * COUNTER_* block for the schedule; the glitch borrows the CORRUPT_* datamosh
+ * vocabulary from render/beats.js (scramble pool + RGB-split ghosts + steps()
+ * jitter) so it reads as the same feed breaking, not a new effect.
  * -------------------------------------------------------------------------- */
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const hud = { built: false, q: null, dial: null, needle: null, spiral: null, section: null };
+
+/* ---- COUNTER LIE: creep schedule -----------------------------------------
+ * The schedule is written in terms of the LEAD (displayed total minus the
+ * question you are on) rather than the total itself, because the lead is what
+ * a player actually feels ("about a dozen to go"). It holds flat, then closes:
+ *   qIndex <= HOLD_Q                   -> exactly START_TOTAL (the run looks short)
+ *   after that, lead ramps linearly    -> from (START_TOTAL - HOLD_Q) down to
+ *                                         (real - REVEAL_P * real) at the reveal
+ * so the displayed total rises ~0.9 per question — always moving, never fast
+ * enough to be caught. Three invariants hold at every beat, in this order:
+ *   1. never below qIndex + MIN_LEAD  (a total under the question you are on is
+ *      an obvious tell — it would read as a bug, not as a lie);
+ *   2. never equal to the truth before REVEAL_P of the way through (capped at
+ *      real-2), so the real ~65 can't be inferred early;
+ *   3. never DECREASES (the displayed value is a running max), which also makes
+ *      endless mode — where real keeps growing — behave for free.
+ * Reference run (real=65, quantized by the bump gate below): 20 held to q9, then
+ * 22, 25, 29, 32, 36, 40, 43, 47, 50, 54, 57, 61, 63 and finally the true 65 at
+ * q60 — 92% of the way in, with five questions left. Fifteen revisions, each
+ * +2..+4, and the lead never leaves the 5..19 window. */
+const COUNTER_START_TOTAL = 20;   // the opening understatement
+const COUNTER_HOLD_Q      = 8;    // questions the opening total holds before creeping
+const COUNTER_REVEAL_P    = 0.9;  // fraction of the real run before the truth may show
+const COUNTER_MIN_LEAD    = 4;    // hard floor: displayed total >= qIndex + this
+/** A revision must be worth at least this much, and beats since the last one,
+ *  before it bumps — otherwise the number would tick +1 nearly every card and
+ *  stop reading as a glitchy re-estimate. */
+const COUNTER_BUMP_MIN    = 2;
+const COUNTER_BUMP_GAP_Q  = 4;
+/** How long the bump's scramble runs before the new number lands (ms). */
+const COUNTER_BUMP_MS     = 620;
+/** Per-band chance that the TOTAL is replaced by a fourth-wall phrase instead
+ *  (mirrors CORRUPT_CHANCE in beats.js: nothing before Deepening, escalating
+ *  into Climax). Recovery is the walk-down and never breaks the wall. */
+const COUNTER_PHRASE_CHANCE = {
+  [Band.Deepening]: 0.12,
+  [Band.Climax]:    0.22,
+};
+/** How long a phrase garbles before the coin flip resolves it (ms). */
+const COUNTER_PHRASE_MS   = 2000;
+/** Coin flip: roll < this => snap back to the number, else keep glitching until
+ *  the next card's render replaces it. */
+const COUNTER_PHRASE_SNAP = 0.5;
+/** Bands where the counter is loose enough to knock off (and to lie in words).
+ *  Latched: once live it stays live, including through Recovery. */
+const COUNTER_LIVE_BANDS  = [Band.Deepening, Band.Climax];
+/** Chance that a click actually detaches the counter. The other 3/4 wobble. */
+const COUNTER_FALL_CHANCE = 0.25;
+/** Glyph pool the counter scrambles into — same set as beats.js CORRUPT_SCRAMBLE. */
+const COUNTER_SCRAMBLE = '#@%&*!/|<>_=+$?~^';
+
+/** Whole-run counter state. Reset by resetCounter() at buildHud time. */
+const counter = {
+  shown: 0,        // displayed total, monotone (0 = nothing painted yet)
+  lastBumpQ: 0,    // qIndex of the last revision
+  live: false,     // latched: clickable + allowed to break the wall
+  fallen: false,   // knocked off — permanently gone for this run
+  master: 1,       // caps.masterIntensity
+  idx: null,       // "Q 23 /" span
+  tot: null,       // total-or-phrase span (the part that lies)
+  fx: [],          // live timers owned by a glitch/phrase
+  mem: [],         // last two phrase indices (no-repeat)
+  fall: null,      // body-parented falling clone
+  raf: 0,          // fall animation handle
+  fallT: 0,        // reduced-motion fade timer
+  wobbleT: 0,      // failed-click wobble timer
+};
 
 function svgEl(name, attrs) {
   const n = doc.createElementNS(SVG_NS, name);
@@ -605,11 +792,20 @@ function svgEl(name, attrs) {
   return n;
 }
 
-function buildHud() {
+function buildHud(caps) {
   if (!dom.hud || hud.built) return;
   try {
     dom.hud.innerHTML = '';
-    hud.q = el('span', 'intake-hud-q', '');
+    resetCounter(caps);
+    ensureCounterCss();
+    // The counter is two spans: an honest index and a total that lies. Only the
+    // total is ever scrambled/replaced, so "Q 23 /" stays readable throughout.
+    hud.q = el('span', 'intake-hud-q');
+    counter.idx = el('span', 'ixq-idx', '');
+    counter.tot = el('span', 'ixq-tot', '');
+    hud.q.appendChild(counter.idx);
+    hud.q.appendChild(counter.tot);
+    hud.q.addEventListener('click', onCounterClick);
 
     const svg = svgEl('svg', { viewBox: '0 0 40 40', class: 'intake-hud-dial', 'aria-hidden': 'true' });
     // gauge arc ticks (-120° .. +120°, 0° = straight up)
@@ -656,9 +852,7 @@ function sectionShortName(theme, band) {
 function updateHud(beat, theme) {
   if (!dom.hud || !hud.built) return;
   try {
-    const meta = beat.meta || {};
-    hud.q.textContent = (typeof meta.qIndex === 'number' && typeof meta.qTotal === 'number' && meta.qTotal > 0)
-      ? `Q ${meta.qIndex} / ~${meta.qTotal}` : '';
+    updateCounter(beat, theme);
     const dep = clamp01(beat.depth || 0);
     const morph = clamp01((dep - 0.2) / 0.55); // gauge -> spiral crossfade window
     if (hud.needle) {
@@ -671,6 +865,339 @@ function updateHud(beat, theme) {
     }
     hud.section.textContent = sectionShortName(theme, beat.band);
   } catch (_e) { /* HUD is cosmetic */ }
+}
+
+/* ----------------------------------------------------------------------------
+ * 5b. THE UNRELIABLE COUNTER — creep schedule, glitch bumps, the fourth-wall
+ * break and the knock-it-off interaction. Everything here is DISPLAY ONLY:
+ * beat.meta.qTotal is never shown and never modified.
+ * -------------------------------------------------------------------------- */
+
+/** Wipe all per-run counter state (called once per run, from buildHud). */
+function resetCounter(caps) {
+  teardownCounter();
+  counter.shown = 0;
+  counter.lastBumpQ = 0;
+  counter.live = false;
+  counter.fallen = false;
+  counter.mem.length = 0;
+  counter.master = (caps && caps.masterIntensity != null) ? caps.masterIntensity : 1;
+}
+
+/** Full-strength datamosh, or the soft path? Mirrors boot's gallery gate. */
+function counterAnimates() {
+  return !prefersReducedMotion() && counter.master >= 0.35;
+}
+
+/** Scramble a fraction of a string's non-space chars (beats.js scrambleText,
+ *  inlined here so the HUD never depends on the optional render module). */
+function counterScramble(src, amount) {
+  const s = String(src == null ? '' : src);
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === ' ' || Math.random() > amount) out += ch;
+    else out += COUNTER_SCRAMBLE[(Math.random() * COUNTER_SCRAMBLE.length) | 0];
+  }
+  return out;
+}
+
+/** The lie. Real qTotal in, displayed total out — see the COUNTER_* header. */
+function displayedTotal(qi, real) {
+  if (!(real > 0)) return counter.shown;
+  const start = Math.min(COUNTER_START_TOTAL, real);
+  const qR = Math.max(COUNTER_HOLD_Q + 1, COUNTER_REVEAL_P * real);   // reveal question
+  let t;
+  if (qi <= COUNTER_HOLD_Q) {
+    t = start;                                           // the opening understatement
+  } else {
+    const u = Math.min(1, (qi - COUNTER_HOLD_Q) / (qR - COUNTER_HOLD_Q));
+    const lead0 = start - COUNTER_HOLD_Q;                // lead as the creep begins
+    const lead1 = real - qR;                             // lead at the reveal point
+    t = Math.round(qi + lead0 + (lead1 - lead0) * u);
+  }
+  t = Math.max(t, qi + COUNTER_MIN_LEAD);                // never at/under the index
+  t = Math.min(t, (qi / real) < COUNTER_REVEAL_P ? real - 2 : real);  // truth stays hidden
+  return Math.max(t, counter.shown);                     // monotone: never counts down
+}
+
+/** Repaint both spans from state (no animation). */
+function paintCounter(qi) {
+  if (!counter.idx || !counter.tot) return;
+  counter.idx.textContent = `Q ${qi} / `;
+  counter.tot.textContent = `~${counter.shown}`;
+}
+
+/** Kill every timer a glitch/phrase owns and restore the plain number. Called
+ *  at the top of each render (so a held phrase can never survive into the next
+ *  beat) and by teardownCounter. Safe to call at any time. */
+function clearCounterFx() {
+  for (const stop of counter.fx) { try { stop(); } catch (_e) {} }
+  counter.fx.length = 0;
+  const tot = counter.tot;
+  if (!tot) return;
+  try {
+    tot.classList.remove('ixq-glitch', 'ixq-reduced');
+    delete tot.dataset.ixq;
+  } catch (_e) {}
+}
+
+/**
+ * Garble the TOTAL span for `ms`, settling on `text`.
+ * opts.keepChance — probability the garble is NOT resolved (it keeps running
+ *   until the next render clears it); opts.snapTo — what to paint instead of
+ *   `text` when it does resolve. Both optional (a bump passes neither).
+ */
+function garbleTotal(text, ms, opts) {
+  const tot = counter.tot;
+  if (!tot) return;
+  const keepChance = (opts && opts.keepChance) || 0;
+  const snapTo = (opts && opts.snapTo != null) ? opts.snapTo : text;
+  const soft = !counterAnimates();
+  const paint = (s) => { try { tot.textContent = s; tot.dataset.ixq = s; } catch (_e) {} };
+  let spin = 0;
+
+  try { tot.classList.add('ixq-glitch'); if (soft) tot.classList.add('ixq-reduced'); } catch (_e) {}
+  // Soft path (reduced motion / low master): the text lands immediately and just
+  // sits there — legible, no jitter, no RGB ghosts. The lie still happens.
+  paint(soft ? text : counterScramble(text, 0.9));
+  if (!soft) {
+    const t0 = Date.now();
+    spin = setInterval(() => {
+      const p = Math.min(1, (Date.now() - t0) / ms);
+      paint(counterScramble(text, 0.7 * (1 - p) + 0.08));   // heavy, then settling
+    }, 62);
+    counter.fx.push(() => { try { clearInterval(spin); } catch (_e) {} });
+  }
+
+  const settle = setTimeout(() => {
+    if (keepChance > 0 && Math.random() < keepChance) return;  // KEEP GLITCHING
+    if (spin) { try { clearInterval(spin); } catch (_e) {} spin = 0; }
+    try {
+      tot.classList.remove('ixq-glitch', 'ixq-reduced');
+      delete tot.dataset.ixq;
+      tot.textContent = snapTo;
+    } catch (_e) {}
+  }, ms);
+  counter.fx.push(() => { try { clearTimeout(settle); } catch (_e) {} });
+}
+
+/** Pick a fourth-wall phrase, avoiding the last two used. */
+function pickCountPhrase(theme) {
+  const pool = (theme && Array.isArray(theme.countPhrases) && theme.countPhrases.length)
+    ? theme.countPhrases : null;
+  if (!pool) return null;                                  // bank without the key
+  let idxs = pool.map((_, i) => i).filter((i) => !counter.mem.includes(i));
+  if (!idxs.length) idxs = pool.map((_, i) => i);
+  const idx = idxs[Math.floor(Math.random() * idxs.length)];
+  counter.mem.push(idx); if (counter.mem.length > 2) counter.mem.shift();
+  return pool[idx];
+}
+
+/** Per-beat counter pass: revise the lie, then roll for the wall break. */
+function updateCounter(beat, theme) {
+  if (counter.fallen || !counter.idx || !counter.tot) return;   // knocked off = gone
+  clearCounterFx();                                             // nothing leaks across beats
+  const meta = beat.meta || {};
+  const qi = (typeof meta.qIndex === 'number') ? meta.qIndex : 0;
+  const real = (typeof meta.qTotal === 'number') ? meta.qTotal : 0;
+  if (!qi || !(real > 0)) { counter.idx.textContent = ''; counter.tot.textContent = ''; return; }
+
+  // Once the run reaches Deepening the counter comes loose — clickable, and
+  // allowed to answer in words instead of numbers. Latched for the rest of it.
+  if (!counter.live && COUNTER_LIVE_BANDS.indexOf(beat.band) >= 0) {
+    counter.live = true;
+    try { hud.q.classList.add('ixq-live'); } catch (_e) {}
+  }
+
+  const target = displayedTotal(qi, real);
+  const first = !counter.shown;
+  // A revision must be worth showing: >= COUNTER_BUMP_MIN and >= COUNTER_BUMP_GAP_Q
+  // beats since the last one — UNLESS the index is closing on the displayed total,
+  // in which case it revises immediately (an honest-looking total can never be
+  // caught up to by the question number).
+  const forced = target > counter.shown && counter.shown < qi + COUNTER_MIN_LEAD;
+  const due = target - counter.shown >= COUNTER_BUMP_MIN && qi - counter.lastBumpQ >= COUNTER_BUMP_GAP_Q;
+  const bump = !first && (forced || due);
+  if (first || bump) { counter.shown = target; counter.lastBumpQ = qi; }
+  paintCounter(qi);
+  if (first) return;                                    // the opening 20 lands quietly
+
+  if (bump) { garbleTotal(`~${counter.shown}`, COUNTER_BUMP_MS, null); return; }
+
+  // FOURTH WALL (Deepening onward, escalating into Climax). Mutually exclusive
+  // with a bump, exactly like beats.js lets one set-piece own a beat.
+  const chance = COUNTER_PHRASE_CHANCE[beat.band] || 0;
+  if (!chance || !counter.live || Math.random() >= chance) return;
+  const phrase = pickCountPhrase(theme);
+  if (!phrase) return;
+  garbleTotal(phrase, COUNTER_PHRASE_MS, {
+    keepChance: 1 - COUNTER_PHRASE_SNAP,                // coin flip: snap back, or keep going
+    snapTo: `~${counter.shown}`,
+  });
+}
+
+/** Click on a loose counter: 1-in-4 it comes off for good, else it wobbles. */
+function onCounterClick() {
+  if (!counter.live || counter.fallen || !hud.q) return;
+  if (Math.random() < COUNTER_FALL_CHANCE) { knockCounterOff(); return; }
+  // The other three: a loose-fitting wobble that settles back — the tell that
+  // teaches the player it can be knocked off, so they keep poking it.
+  try {
+    hud.q.classList.remove('ixq-wobble');
+    void hud.q.offsetWidth;                             // restart the animation
+    hud.q.classList.add('ixq-wobble');
+    clearTimeout(counter.wobbleT);
+    counter.wobbleT = setTimeout(() => {
+      try { hud.q.classList.remove('ixq-wobble'); } catch (_e) {}
+    }, 560);
+  } catch (_e) { /* cosmetic */ }
+}
+
+/** Detach the counter: a body-parented clone falls out of frame and the real
+ *  span goes invisible but keeps its box, so the HUD row never reflows. There
+ *  is no respawn — the player has lost their sense of progress for good. */
+function knockCounterOff() {
+  counter.fallen = true;
+  counter.live = false;
+  clearCounterFx();
+  try {
+    hud.q.classList.remove('ixq-live', 'ixq-wobble');
+    hud.q.classList.add('ixq-gone');
+  } catch (_e) {}
+  try {
+    const r = hud.q.getBoundingClientRect();
+    const cs = (typeof getComputedStyle === 'function') ? getComputedStyle(hud.q) : null;
+    const clone = el('div', 'ixq-fall', hud.q.textContent || '');
+    clone.style.left = r.left + 'px';
+    clone.style.top = r.top + 'px';
+    if (cs) {
+      clone.style.fontFamily = cs.fontFamily; clone.style.fontSize = cs.fontSize;
+      clone.style.fontWeight = cs.fontWeight; clone.style.letterSpacing = cs.letterSpacing;
+      clone.style.textTransform = cs.textTransform; clone.style.color = cs.color;
+    }
+    // <body>, never the stage: beats.js wipes the stage on every render and the
+    // fall must outlive the card it started on (same reasoning as effects.js
+    // bodyHost()). The HUD itself is fixed-position, so the clone matches.
+    (doc.body || doc.documentElement).appendChild(clone);
+    counter.fall = clone;
+    if (counterAnimates()) startCounterFall(clone, r);
+    else {
+      clone.classList.add('ixq-fall-fade');              // reduced motion: it just goes
+      setTimeout(() => { try { clone.style.opacity = '0'; } catch (_e) {} }, 20);
+      counter.fallT = setTimeout(removeCounterFall, 620);
+    }
+  } catch (_e) { removeCounterFall(); }
+}
+
+/** Gravity + tumble + drift, on rAF, until it clears the bottom of the window. */
+function startCounterFall(node, rect) {
+  const G = 0.0024;                                     // px per ms^2
+  let x = 0, y = 0, rot = 0;
+  let vy = -0.05 - Math.random() * 0.05;                 // small hop as it detaches
+  const vx = (Math.random() < 0.5 ? -1 : 1) * (0.02 + Math.random() * 0.06);
+  const spin = (Math.random() < 0.5 ? -1 : 1) * (0.05 + Math.random() * 0.12); // deg/ms
+  const floor = ((typeof window !== 'undefined' && window.innerHeight) || 800) + 160;
+  let last = Date.now();
+  const tick = () => {
+    const t = Date.now(); const dt = Math.min(48, t - last); last = t;
+    vy += G * dt; y += vy * dt; x += vx * dt; rot += spin * dt;
+    try {
+      node.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${rot.toFixed(1)}deg)`;
+    } catch (_e) {}
+    if (rect.top + y > floor) { removeCounterFall(); return; }
+    counter.raf = requestAnimationFrame(tick);
+  };
+  counter.raf = requestAnimationFrame(tick);
+}
+
+/** Drop the falling clone + its clock. Idempotent. */
+function removeCounterFall() {
+  if (counter.raf) { try { cancelAnimationFrame(counter.raf); } catch (_e) {} counter.raf = 0; }
+  if (counter.fallT) { try { clearTimeout(counter.fallT); } catch (_e) {} counter.fallT = 0; }
+  if (counter.fall) { try { counter.fall.remove(); } catch (_e) {} counter.fall = null; }
+}
+
+/** Run-end / failure teardown: no timer, no garble and no falling clone may
+ *  survive into the outro. Idempotent. */
+function teardownCounter() {
+  clearCounterFx();
+  removeCounterFall();
+  if (counter.wobbleT) { try { clearTimeout(counter.wobbleT); } catch (_e) {} counter.wobbleT = 0; }
+  try { if (hud.q) hud.q.classList.remove('ixq-wobble', 'ixq-live'); } catch (_e) {}
+}
+
+/* Counter styles — a deliberate echo of beats.js's IXCR_CSS (same steps() jitter,
+ * same pink/cyan RGB-split ghosts read off a data attribute, same reduced-motion
+ * escape hatch), scoped to the HUD so it can never touch a card.
+ * (No stray backtick may ever appear inside this template literal.) */
+const IX_COUNTER_CSS = `
+.intake-hud-q.ixq-live { pointer-events: auto; cursor: pointer; }
+.intake-hud-q.ixq-gone { visibility: hidden; }
+.ixq-tot { display: inline-block; white-space: nowrap; }
+.ixq-glitch {
+  position: relative;
+  animation: ixq-jitter .16s steps(2, end) infinite;
+  text-shadow: 0 0 12px rgba(255,43,208,.35), 0 0 3px rgba(32,232,255,.25);
+}
+.ixq-glitch::before, .ixq-glitch::after {
+  content: attr(data-ixq);
+  position: absolute; left: 0; top: 0; white-space: nowrap;
+  pointer-events: none; opacity: .7; mix-blend-mode: screen;
+  font: inherit; letter-spacing: inherit;
+}
+.ixq-glitch::before { color: #ff2bd0; animation: ixq-tearA .27s steps(3, end) infinite; }
+.ixq-glitch::after  { color: #20e8ff; animation: ixq-tearB .34s steps(3, end) infinite; }
+@keyframes ixq-jitter {
+  0%   { transform: translate(0,0) skewX(0deg); }
+  33%  { transform: translate(-1px,1px) skewX(-.6deg); }
+  66%  { transform: translate(1px,-1px) skewX(.5deg); }
+  100% { transform: translate(0,0) skewX(0deg); }
+}
+@keyframes ixq-tearA {
+  0%   { clip-path: inset(0 0 62% 0); transform: translate(-3px,-1px); }
+  50%  { clip-path: inset(12% 0 46% 0); transform: translate(3px,0); }
+  100% { clip-path: inset(0 0 57% 0); transform: translate(-1px,2px); }
+}
+@keyframes ixq-tearB {
+  0%   { clip-path: inset(46% 0 0 0); transform: translate(3px,1px); }
+  50%  { clip-path: inset(58% 0 8% 0); transform: translate(-3px,0); }
+  100% { clip-path: inset(52% 0 0 0); transform: translate(2px,-2px); }
+}
+/* loose-fitting wobble on a click that did NOT knock it off */
+.ixq-wobble { display: inline-block; animation: ixq-wobble .52s cubic-bezier(.3,.9,.4,1) 1; }
+@keyframes ixq-wobble {
+  0%   { transform: rotate(0deg) translateY(0); }
+  18%  { transform: rotate(-4.5deg) translateY(2px); }
+  40%  { transform: rotate(3deg) translateY(-1px); }
+  62%  { transform: rotate(-1.8deg) translateY(1px); }
+  82%  { transform: rotate(.8deg) translateY(0); }
+  100% { transform: rotate(0deg) translateY(0); }
+}
+@keyframes ixq-blip { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+/* the detached clone, body-parented so the stage wipe can't take it */
+.ixq-fall {
+  position: fixed; z-index: 2147480000; pointer-events: none; white-space: nowrap;
+  will-change: transform, opacity;
+}
+.ixq-fall-fade { transition: opacity .5s ease; }
+/* soft path: legible number, no datamosh */
+.ixq-glitch.ixq-reduced { animation: none; text-shadow: none; }
+.ixq-glitch.ixq-reduced::before, .ixq-glitch.ixq-reduced::after { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ixq-glitch { animation: none; text-shadow: none; }
+  .ixq-glitch::before, .ixq-glitch::after { display: none; }
+  .ixq-wobble { animation: ixq-blip .3s linear 1; }
+}
+`;
+
+/** Inject the counter CSS once. No-op headlessly (guarded on `doc`). */
+function ensureCounterCss() {
+  if (!doc || doc.getElementById('ix-counter-css')) return;
+  const s = doc.createElement('style');
+  s.id = 'ix-counter-css';
+  s.textContent = IX_COUNTER_CSS;
+  (doc.head || doc.body || doc.documentElement).appendChild(s);
 }
 
 /* ----------------------------------------------------------------------------
@@ -704,6 +1231,27 @@ function applyRouteTint(engine, bank, background) {
 }
 
 /* ----------------------------------------------------------------------------
+ * 9b. COLOUR HARVEST — a Calibration colour-preference beat just committed.
+ * Resolve the chosen option's label to a swatch (core/palette.js), bank it for
+ * the spiral, and wash the screen with a deep version of it. A no-op on every
+ * other beat, on a timeout, and on a label the swatch table doesn't know.
+ * Cosmetic + additive: it can never fail the run.
+ * -------------------------------------------------------------------------- */
+function harvestColorPick(beat, ev, flashColor, caps) {
+  try {
+    const tags = (beat && beat.prompt && beat.prompt.tags) || [];
+    if (!Array.isArray(tags) || tags.indexOf(COLOR_TAG) < 0) return;
+    if (!ev || ev.timedOut || typeof ev.chosenIndex !== 'number') return;
+    const opt = beat.options && beat.options[ev.chosenIndex];
+    if (!opt || !opt.label) return;
+    const hex = noteColorPick(opt.label);
+    if (!hex) return;
+    shim.log(`colour pick: ${opt.label} -> ${hex}`);
+    if (typeof flashColor === 'function') flashColor(deepen(hex), { caps });
+  } catch (_e) { /* the flash is garnish; never break the loop */ }
+}
+
+/* ----------------------------------------------------------------------------
  * depth fan-out (shared by real + stub render)
  * -------------------------------------------------------------------------- */
 function setDepthEverywhere(depth, band, { effects, audio, background, subliminals }) {
@@ -725,6 +1273,95 @@ function gradeFor(result) {
   if (ratio >= 0.65) return 'B';
   if (ratio >= 0.50) return 'C';
   return 'D';
+}
+
+/* ----------------------------------------------------------------------------
+ * THE ARCHIVE'S COPY OF THE CLOSING CARD  (feeds core/stats.js -> ui/history.js)
+ *
+ * ui/history.js re-shows a past run the way the outro showed it: grade, primary
+ * classification, the numbers, the colours, the spirals, the payloads. All of
+ * that is resolved HERE, at run end, because it needs the bank + theme + the two
+ * run ledgers, none of which stats.js can see. Everything below is read from
+ * data that demonstrably exists — nothing is guessed except the drafted session
+ * NAME, which is flagged `derived` and explained at deriveSessionName().
+ * -------------------------------------------------------------------------- */
+
+/** Live stats handle, so the outro's weave actions can annotate the record they
+ *  belong to. Set at run end (just before stats.record); null until then. */
+let statsRef = null;
+
+/** Note a late addition to the run's stored record. Never throws, never waits. */
+function noteKeepsake(keepsake) {
+  try {
+    if (statsRef && typeof statsRef.annotateLast === 'function') {
+      statsRef.annotateLast({ keepsake });
+    }
+  } catch (_e) { /* the archive is never allowed to interrupt the ceremony */ }
+}
+
+/**
+ * The name C# will give the session drafted from this run.
+ *
+ * MIRROR, NOT A READ-BACK. The host does not tell the page what it drafted: the
+ * `quiz-result` message is one-way and IntakeHostService replies with nothing.
+ * The name is however fully deterministic from data the page already holds —
+ * QuizSessionGenerator.GetFallbackContent(niche, scorePercent) picks a prefix
+ * from the score and a noun from the niche, and GenerateSession only fills the
+ * name in when the content block left it blank (it always does, absent AI text).
+ * So this recomputes the same two inputs rather than inventing a placeholder. If
+ * the C# naming rule ever changes, this drifts — hence `derived: true`, and the
+ * archive prints it as "drafted as", never as a filename.
+ */
+const SESSION_NOUNS = Object.freeze({
+  sissy: 'Feminization',
+  bambi: 'Bambi Training',
+  circe: 'Keyholding',
+  obedience: 'Obedience Training',
+  mindlessness: 'Mindless Bliss',
+  submission: 'Submission',
+});
+function deriveSessionName(result) {
+  const niche = String((result && result.niche) || '').trim().toLowerCase();
+  const maxScore = (result && typeof result.maxScore === 'number') ? result.maxScore : 0;
+  const pct = maxScore > 0
+    ? (result.totalScore / maxScore) * 100
+    : clamp01((result && result.peakDepth) || 0) * 100;
+  const prefix = pct <= 25 ? 'Gentle' : pct <= 50 ? 'Guided' : pct <= 75 ? 'Intense' : 'Extreme';
+  return `${prefix} ${SESSION_NOUNS[niche] || 'Conditioning'}`;
+}
+
+/** Assemble the recap extras for stats.record(). Pure read — no side effects. */
+function buildRecapExtras(result, ctx) {
+  const { theme, bank, subjectId } = ctx || {};
+  const route = (result && result.route) || {};
+  const primary = findArchetype(bank, route.primaryArchetypeId);
+  const secondary = findArchetype(bank, route.secondaryArchetypeId);
+  return {
+    grade: gradeFor(result),
+    subject: formatSubject(theme || {}, subjectId),
+    sectionTitle: sectionShortName(theme || {}, result.deepestBand) || prettyId(result.deepestBand),
+    classification: {
+      primaryName: (primary && primary.name) || prettyId(route.primaryArchetypeId) || result.niche || '',
+      primaryShare: clamp01(route.primaryShare || 0),
+      primaryBlurb: (primary && primary.blurb) || '',
+      secondaryName: route.secondaryArchetypeId
+        ? ((secondary && secondary.name) || prettyId(route.secondaryArchetypeId)) : '',
+      secondaryShare: clamp01(route.secondaryShare || 0),
+      hue: (primary && typeof primary.hue === 'number') ? primary.hue : null,
+    },
+    session: {
+      // shim.isHosted is exactly what emitResult's ack reports, minus the ordering
+      // dependency (this is assembled before the emit).
+      delivered: shim.isHosted ? 'host' : 'local',
+      name: shim.isHosted ? deriveSessionName(result) : '',
+      derived: true,
+    },
+    colors: harvestedColors(),
+    spirals: recordedSpirals(),
+    spiralsRolled: spiralCount(),
+    media: recordedMedia(),
+    mediaShown: mediaShownCount(),
+  };
 }
 
 /* Scoped outro-recap CSS, injected once at run-end (see ensureOutroCss). Kept as
@@ -797,6 +1434,78 @@ const IX_OUTRO_CSS = `
   width: 64px; height: 64px;
 }
 
+/* THE WEAVE — the run's own spirals, re-rendered from their recorded params,
+   plus the colour harvest that fed them. Reads as an inlay strip on the record,
+   not a control panel: tiles are small, the actions only appear on hover/focus. */
+.ix-weaveblock { text-align: center; }
+.ix-palette-row {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 8px clamp(10px, 2vw, 18px); margin: 6px 0 4px;
+}
+.ix-palette-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: clamp(11px, 1.6vh, 13px); letter-spacing: .12em; text-transform: uppercase;
+  color: rgba(238, 232, 255, .78);
+}
+.ix-palette-dot {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .3);
+  box-shadow: 0 0 9px var(--ix-chip, rgba(255,105,180,.7));
+  background: var(--ix-chip, #ff69b4);
+}
+.ix-weave-grid {
+  display: grid; justify-content: center; gap: clamp(10px, 1.8vw, 16px);
+  grid-template-columns: repeat(auto-fit, minmax(104px, 118px));
+  margin-top: clamp(8px, 1.6vh, 14px);
+}
+.ix-weave-tile {
+  position: relative; margin: 0; border-radius: 10px; overflow: hidden;
+  background: rgba(20, 16, 31, .72);
+  border: 1px solid rgba(176, 108, 255, .28);
+  box-shadow: 0 0 16px rgba(176, 108, 255, .12);
+  opacity: 0; transform: translateY(6px);
+  transition: opacity .5s ease, transform .5s ease, box-shadow .3s ease;
+}
+.ix-weave-tile.is-shown { opacity: 1; transform: none; }
+.ix-weave-tile:hover, .ix-weave-tile:focus-within {
+  box-shadow: 0 0 22px rgba(255, 105, 180, .3);
+}
+.ix-weave-canvas { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; }
+.ix-weave-cap {
+  font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: rgba(238, 232, 255, .55); padding: 5px 0 6px;
+}
+/* actions: hidden until the tile is hovered/focused so the strip stays calm */
+.ix-weave-acts {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; opacity: 0; transition: opacity .22s ease;
+  background: linear-gradient(to top, rgba(12, 9, 20, .95), rgba(12, 9, 20, .72));
+}
+.ix-weave-tile:hover .ix-weave-acts,
+.ix-weave-tile:focus-within .ix-weave-acts { opacity: 1; }
+.ix-weave-act {
+  flex: 1 1 0; min-width: 0; cursor: pointer;
+  font: inherit; font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  padding: 7px 2px; color: rgba(238, 232, 255, .9);
+  background: none; border: 0; border-top: 1px solid rgba(176, 108, 255, .3);
+}
+.ix-weave-act + .ix-weave-act { border-left: 1px solid rgba(176, 108, 255, .3); }
+.ix-weave-act:hover:not(:disabled) { color: var(--intake-accent, #ff69b4); }
+.ix-weave-act:disabled { opacity: .45; cursor: default; }
+.ix-weave-status {
+  min-height: 1.2em; margin-top: clamp(6px, 1.2vh, 10px);
+  font-size: clamp(12px, 1.8vh, 14px); color: rgba(238, 232, 255, .72);
+}
+.ix-weave-status.is-bad { color: #ff8ba0; }
+.ix-weave-note {
+  font-size: clamp(11px, 1.6vh, 13px); letter-spacing: .08em;
+  color: rgba(238, 232, 255, .45); margin-top: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ix-weave-tile { transition: none !important; opacity: 1; transform: none; }
+  .ix-weave-acts { transition: none !important; opacity: 1; }
+}
+
 /* scroll affordances — only while overflowing; no motion under reduced-motion */
 .ix-scroll-fade, .ix-scroll-hint { opacity: 0; pointer-events: none; }
 .intake-outro.is-scrollable .ix-scroll-fade {
@@ -837,6 +1546,7 @@ async function runOutro(result, ack, ctx) {
   if (!dom.stage) return;
   ensureOutroCss();
   hideOverlay();
+  teardownCounter();                    // idempotent; the HUD fades out below
   if (dom.hud) dom.hud.classList.add('is-gone');
   if (dom.aside) dom.aside.classList.remove('is-on');
 
@@ -860,8 +1570,9 @@ async function runOutro(result, ack, ctx) {
   const slotHead   = el('div', 'ix-recap-headrow');
   const slotStats  = el('div', 'ix-recap-slot ix-recap-stats');
   const slotStmts  = el('div', 'ix-recap-slot ix-recap-stmts');
+  const slotWeave  = el('div', 'ix-recap-slot ix-recap-weave');
   const slotRecord = el('div', 'ix-recap-slot ix-recap-record');
-  cer.append(slotLines, slotHead, slotStats, slotStmts, slotRecord);
+  cer.append(slotLines, slotHead, slotStats, slotStmts, slotWeave, slotRecord);
 
   // Scroll affordances: bottom fade + chevron, shown only when there's more below
   // (toggled via .is-scrollable / .at-bottom). Purely CSS opacity; RM-safe.
@@ -957,6 +1668,11 @@ async function runOutro(result, ack, ctx) {
   syncScrollHint();
   await wait(1800);
 
+  // -- e2. THE WEAVE: this run's own spirals + the colours that made them ---
+  // Never allowed to cost the ceremony: a failure here logs and moves on.
+  try { await mountSpiralRecap(slotWeave, { config, wait, syncScrollHint }); }
+  catch (e) { shim.log('spiral recap failed: ' + (e && e.message || e)); }
+
   // -- f. the report-card artifact (folded in as the fitted record footer) --
   const cert = el('div', 'intake-cert');
   if (primary && typeof primary.hue === 'number') {
@@ -993,6 +1709,340 @@ async function runOutro(result, ack, ctx) {
   await sleep(30);
   cert.classList.add('is-shown');
   syncScrollHint();
+}
+
+/* ----------------------------------------------------------------------------
+ * THE WEAVE — the outro's spiral recap.
+ *
+ * core/spiralLog.js kept the params of every spiral the run mounted, and those
+ * spirals were woven from the colours the player named in Calibration
+ * (core/palette.js). Here they come back: the harvested swatches as chips, then
+ * the spirals themselves re-rendered live from their recorded params, with two
+ * host-backed actions per tile (keep it in THE LOOM · save it as a PNG).
+ *
+ * PERF CALL — ONE WebGL context, ONE rAF, ~12fps, 128px tiles.
+ *   Eight independent live spirals the way beats.js mounts them would be eight
+ *   WebGL contexts (the browser caps ~16 and evicts the oldest) on top of eight
+ *   rAF loops at viewport scale — a guaranteed WebView2 stall on the one screen
+ *   the player is meant to linger on. Instead a SINGLE 128x128 offscreen field
+ *   renderer is shared: the loop wakes at ~12fps, renders each tile's params
+ *   into that one field and blits it into the tile's 2D canvas. That is ~131k
+ *   shaded pixels per wake for the whole gallery (one fullscreen spiral is ~1M
+ *   per frame at 60fps), so the gallery costs a fraction of a single in-run
+ *   spiral while still moving. Under reduced motion / a low masterIntensity cap
+ *   / no WebGL, each tile is painted ONCE as a static frame and no loop starts.
+ *   The loop self-stops the moment the gallery leaves the DOM.
+ * -------------------------------------------------------------------------- */
+
+/** Live prefers-reduced-motion probe (called at render time, never at import). */
+function prefersReducedMotion() {
+  try {
+    return typeof window !== 'undefined' && !!window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (_e) { return false; }
+}
+
+/** hex -> the bank's own colour word ('#ff69b4' -> 'pink'), or the hex itself. */
+function swatchName(hex) {
+  const h = String(hex || '').toLowerCase();
+  for (const k of Object.keys(COLOR_SWATCHES)) if (COLOR_SWATCHES[k] === h) return k;
+  return h;
+}
+
+const WEAVE_TILE_PX = 128;   // shared field + tile backing store (CSS upscales)
+const WEAVE_FPS = 12;        // gallery wake rate (see the perf call above)
+
+async function mountSpiralRecap(slot, ctx) {
+  const { config, wait, syncScrollHint } = ctx;
+  const spirals = recordedSpirals();
+  const colors = harvestedColors();
+  // Nothing woven (a very shallow run, or no colour beats at all) -> no block;
+  // the empty slot collapses via CSS and the ceremony reads exactly as before.
+  if (!spirals.length) return;
+
+  const block = el('div', 'intake-outro-block ix-weaveblock');
+  block.appendChild(el('div', 'intake-outro-label', 'Woven from your colours'));
+
+  if (colors.length) {
+    const row = el('div', 'ix-palette-row');
+    for (const hex of colors) {
+      const chip = el('span', 'ix-palette-chip');
+      const dot = el('span', 'ix-palette-dot');
+      dot.style.setProperty('--ix-chip', hex);
+      chip.append(dot, el('span', null, swatchName(hex)));
+      row.appendChild(chip);
+    }
+    block.appendChild(row);
+  }
+
+  const grid = el('div', 'ix-weave-grid');
+  block.appendChild(grid);
+  const status = el('div', 'ix-weave-status');
+  block.appendChild(status);
+  const total = spiralCount();
+  if (total > spirals.length) {
+    block.appendChild(el('div', 'ix-weave-note', `${spirals.length} of ${total} kept from your descent.`));
+  }
+  slot.appendChild(block);
+
+  // The loom module is the same one the in-run spirals render through. A failed
+  // import (no such thing in the hosted build, but the harness can be served
+  // from anywhere) simply retires the whole block.
+  let m = null;
+  try { m = await import('../dtrh/shared/loomField.js'); }
+  catch (e) {
+    shim.log('weave: loom import failed: ' + (e && e.message || e));
+    try { block.remove(); } catch (_e) {}
+    return;
+  }
+
+  const reduced = prefersReducedMotion();
+  const master = (config.caps && config.caps.masterIntensity != null) ? config.caps.masterIntensity : 1;
+  const animate = !reduced && master >= 0.35 && !config.m2Test;
+
+  // ONE shared offscreen field for every tile (the perf call). Null = no WebGL,
+  // in which case each tile paints the v1 2D fallback the in-run spirals use.
+  let field = null;
+  try {
+    const off = doc.createElement('canvas');
+    off.width = WEAVE_TILE_PX; off.height = WEAVE_TILE_PX;
+    field = m.createFieldRenderer(off);
+  } catch (_e) { field = null; }
+
+  const tiles = [];
+  spirals.forEach((entry, i) => {
+    let q;
+    try { q = m.normalizeParams2(entry.params); } catch (_e) { return; }
+    const fig = el('figure', 'ix-weave-tile');
+    const canvas = doc.createElement('canvas');
+    canvas.className = 'ix-weave-canvas';
+    canvas.width = WEAVE_TILE_PX; canvas.height = WEAVE_TILE_PX;
+    const c2d = canvas.getContext('2d');
+    if (!c2d) return;
+    fig.appendChild(canvas);
+    fig.appendChild(el('figcaption', 'ix-weave-cap', 'No. ' + (i + 1)));
+    // Stagger the starting phases so the strip never pulses in lockstep.
+    const tile = { q, ctx: c2d, span: Math.max(200, m.loopMs2(q)), offset: i / spirals.length };
+    tiles.push(tile);
+    if (shim.isHosted) fig.appendChild(buildWeaveActions(m, q, i, status, grid));
+    grid.appendChild(fig);
+    setTimeout(() => { try { fig.classList.add('is-shown'); } catch (_e) {} }, 60 + i * 70);
+  });
+
+  if (!tiles.length) { try { block.remove(); } catch (_e) {} return; }
+
+  const paint = (tile, phase) => {
+    try {
+      if (field) m.composeFrame(tile.ctx, field, tile.q, phase, WEAVE_TILE_PX, WEAVE_TILE_PX);
+      else m.drawFallbackFrame(tile.ctx, tile.q, phase, WEAVE_TILE_PX, WEAVE_TILE_PX);
+    } catch (_e) { /* one bad tile must not stop the gallery */ }
+  };
+
+  // Static first frame either way, so a stopped/reduced gallery is never blank.
+  for (const t of tiles) paint(t, t.offset);
+
+  if (animate && typeof requestAnimationFrame === 'function') {
+    const t0 = performance.now();
+    let last = -1e9;
+    const step = (now) => {
+      // Self-stop: the outro is the last thing on the stage, but an abort/close
+      // can pull it out from under us mid-loop.
+      if (!grid.isConnected) {
+        // release the one shared context rather than leave it pinned
+        try { if (field) { const lose = field.gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); } }
+        catch (_e) { /* best-effort */ }
+        return;
+      }
+      if (now - last >= 1000 / WEAVE_FPS) {
+        last = now;
+        for (const t of tiles) paint(t, (((now - t0) / t.span) + t.offset) % 1);
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  if (typeof syncScrollHint === 'function') syncScrollHint();
+  await wait(1400);
+}
+
+/* ----------------------------------------------------------------------------
+ * THE TWO ACTIONS (hosted only — the web layer cannot write files).
+ *
+ *   KEEP IT  -> weave a GIF off-thread with the Loom's own encoder
+ *               (/dtrh/engine/loomWorker.js) and hand it to the host as a
+ *               `loom-save`, byte-for-byte the message THE LOOM sends. The
+ *               recorded params ARE schema-v2 loom params (they came out of
+ *               loomField.randomParams2), so the sidecar round-trips: the saved
+ *               spiral opens in the Loom editor exactly as it looked here.
+ *   SAVE PNG -> render one crisp frame at PNG_PX and hand the bytes to the host
+ *               as `intake-save-image`; C# writes it under the user data folder.
+ *
+ * Only ONE job runs at a time (a GIF encode is seconds of worker CPU): every
+ * button on the strip disables for the duration and the shared status line
+ * narrates. Standalone (harness.html / a browser) `shim.isHosted` is false and
+ * these buttons are never built at all.
+ * -------------------------------------------------------------------------- */
+const PNG_PX = 1024;
+
+let weaveWorker = null;    // lazily built loomWorker (GIF encoder)
+let weaveJobId = 0;
+let weavePending = null;   // { id, resolve } for the in-flight encode
+let weaveBusy = false;
+let weaveHostWired = false;
+let hostReply = null;      // { type, resolve } for the in-flight host round-trip
+
+/** Register the two host replies once. shim.on keeps ONE handler per type. */
+function ensureWeaveHostWiring() {
+  if (weaveHostWired || !shim.isHosted) return;
+  weaveHostWired = true;
+  const settle = (type, msg) => {
+    if (hostReply && hostReply.type === type) { const r = hostReply; hostReply = null; r.resolve(msg); }
+  };
+  shim.on('loom-result', (m) => settle('loom-result', m));
+  shim.on('intake-save-image-result', (m) => settle('intake-save-image-result', m));
+}
+
+/** Send `msg` and await the host's `replyType` (or time out). */
+function askHost(msg, replyType, timeoutMs) {
+  ensureWeaveHostWiring();
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (m) => { if (!done) { done = true; resolve(m); } };
+    hostReply = { type: replyType, resolve: finish };
+    setTimeout(() => { if (hostReply && hostReply.resolve === finish) hostReply = null; finish(null); },
+      Math.max(1000, timeoutMs | 0));
+    try { shim.send(msg); } catch (_e) { finish(null); }
+  });
+}
+
+/** ArrayBuffer -> base64, chunked so a multi-MB GIF can't blow the arg limit. */
+function b64FromBuffer(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(s);
+}
+
+/** Encode `q` to a GIF with the Loom's own worker. Resolves null on failure. */
+function weaveGif(q, onProgress) {
+  return new Promise((resolve) => {
+    try {
+      if (!weaveWorker) {
+        weaveWorker = new Worker('/dtrh/engine/loomWorker.js', { type: 'module' });
+        weaveWorker.onmessage = (e) => {
+          const msg = e.data || {};
+          if (!weavePending || msg.id !== weavePending.id) return;
+          if (msg.progress != null) { try { weavePending.onProgress(msg.progress); } catch (_e) {} return; }
+          const p = weavePending; weavePending = null;
+          p.resolve(msg.gif ? b64FromBuffer(msg.gif) : null);
+        };
+        weaveWorker.onerror = () => {
+          const p = weavePending; weavePending = null;
+          if (p) p.resolve(null);
+        };
+      }
+      const id = ++weaveJobId;
+      weavePending = { id, resolve, onProgress: onProgress || (() => {}) };
+      weaveWorker.postMessage({ id, params: q });
+    } catch (_e) { resolve(null); }
+  });
+}
+
+/** The two buttons for one tile. `status` is the block's shared status line. */
+function buildWeaveActions(m, q, index, status, grid) {
+  const acts = el('div', 'ix-weave-acts');
+  const keep = el('button', 'ix-weave-act', 'Keep it');
+  const save = el('button', 'ix-weave-act', 'Save PNG');
+  keep.type = 'button'; save.type = 'button';
+  acts.append(keep, save);
+
+  const say = (text, bad) => {
+    status.textContent = text;
+    status.classList.toggle('is-bad', !!bad);
+  };
+  const setBusy = (on) => {
+    weaveBusy = on;
+    const all = grid.querySelectorAll('.ix-weave-act');
+    for (const b of all) b.disabled = on;
+  };
+
+  keep.addEventListener('click', async () => {
+    if (weaveBusy) return;
+    setBusy(true);
+    say('weaving it into the loom…');
+    try {
+      const gifBase64 = await weaveGif(q, (p) => say(`weaving it into the loom… ${Math.round(p * 100)}%`));
+      if (!gifBase64) { say('the thread snapped. try another.', true); return; }
+      // Slug rules are C#-authoritative (DtrhLoomStore): [a-z0-9_-]{1,24}.
+      const name = `intake-${Date.now().toString(36).slice(-6)}-${index + 1}`;
+      const res = await askHost({ type: 'loom-save', name, params: q, gifBase64, overwrite: false },
+        'loom-result', 15000);
+      if (res && res.ok) {
+        say(`kept as "${res.slug}" — it's in your Spirals library now.`);
+        // ...and the archive's file for this run says which one you kept.
+        noteKeepsake({ kind: 'loom', index: index + 1, label: String(res.slug || name) });
+      }
+      else if (res && res.error === 'cap-reached') say('the loom rack is full — forget one in The Loom first.', true);
+      else if (res && res.error === 'too-big') say('that weave was too heavy to hang. try a simpler one.', true);
+      else say('the loom refused it' + (res && res.error ? ' (' + res.error + ')' : '') + '.', true);
+    } catch (e) {
+      say('the loom refused it.', true);
+      shim.log('weave keep failed: ' + (e && e.message || e));
+    } finally { setBusy(false); }
+  });
+
+  save.addEventListener('click', async () => {
+    if (weaveBusy) return;
+    setBusy(true);
+    say('printing it…');
+    try {
+      const png = renderSpiralPng(m, q);
+      if (!png) { say('could not print that one.', true); return; }
+      const res = await askHost({ type: 'intake-save-image', pngBase64: png, index: index + 1 },
+        'intake-save-image-result', 15000);
+      if (res && res.ok) {
+        say('saved to ' + (res.path || 'your user data folder') + '.');
+        noteKeepsake({ kind: 'png', index: index + 1, label: String(res.path || '') });
+      }
+      else say('could not save it' + (res && res.error ? ' (' + res.error + ')' : '') + '.', true);
+    } catch (e) {
+      say('could not print that one.', true);
+      shim.log('weave save failed: ' + (e && e.message || e));
+    } finally { setBusy(false); }
+  });
+
+  return acts;
+}
+
+/**
+ * One crisp still of `q` at PNG_PX, base64 (no data: prefix). Its own throwaway
+ * WebGL context — the gallery's shared field is only WEAVE_TILE_PX, and this
+ * runs once per click. The context is released immediately so the gallery's
+ * long-lived one is never the browser evicts.
+ */
+function renderSpiralPng(m, q) {
+  let out = null, gl = null;
+  try {
+    const target = doc.createElement('canvas');
+    target.width = PNG_PX; target.height = PNG_PX;
+    const c2d = target.getContext('2d');
+    if (!c2d) return null;
+    let big = null;
+    try {
+      const off = doc.createElement('canvas');
+      off.width = PNG_PX; off.height = PNG_PX;
+      big = m.createFieldRenderer(off);
+    } catch (_e) { big = null; }
+    if (big) { gl = big.gl; m.composeFrame(c2d, big, q, 0, PNG_PX, PNG_PX); }
+    else m.drawFallbackFrame(c2d, q, 0, PNG_PX, PNG_PX);
+    out = target.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
+  } catch (_e) { out = null; }
+  try { if (gl) { const lose = gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); } }
+  catch (_e) { /* best-effort */ }
+  return out;
 }
 
 /** Last-ditch plain results card if the ceremony itself throws. */
@@ -1096,7 +2146,11 @@ function stubReward() {
   };
 }
 function stubStats() {
-  return { record: async () => {}, feedForward: async () => null, aggregates: async () => ({}), exportAll: async () => ({}), deleteAll: async () => {} };
+  return {
+    record: async () => {}, feedForward: async () => null, aggregates: async () => ({}),
+    exportAll: async () => ({}), deleteAll: async () => {},
+    recentRuns: async () => [], annotateLast: async () => {},
+  };
 }
 function stubEffects({ root, caps, media, theme } = {}) {
   return { setDepth: () => {}, play: () => {}, recover: () => {} };
