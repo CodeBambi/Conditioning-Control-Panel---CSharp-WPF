@@ -1,16 +1,16 @@
 # STATUS: SP-024 — DTRH host slice b2: save slots, picker/quick start, protocol v1
 
 **Current Step:** Step 1 — slots/picker/protocol archaeology + design + pre-approach consult
-**Last Updated:** 2026-07-21 (authored)
+**Last Updated:** 2026-07-21 (Step 1 in progress)
 
 ### Step 1: Archaeology + design + pre-approach consult
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
-- [ ] STATUS.md updated before starting work
-- [ ] WPF archaeology (READ-ONLY, `File.cs:line`): three-slot model, save picker, quick start, protocol usage
-- [ ] Payload `protocol.js` archaeology (READ-ONLY): full v1 vocabulary + per-direction mapping
-- [ ] Design (slot store on SP-005, protocol dispatcher + tolerance decision, picker/quick-start surface)
-- [ ] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
+- [x] STATUS.md updated before starting work
+- [x] WPF archaeology (READ-ONLY, `File.cs:line`): three-slot model, save picker, quick start, protocol usage
+- [x] Payload `protocol.js` archaeology (READ-ONLY): full v1 vocabulary + per-direction mapping (bridge.js/boot.js — no protocol.js file exists; the protocol sources are bridge.js + send/handler sites)
+- [x] Design (slot store on SP-005, protocol dispatcher + tolerance decision, picker/quick-start surface)
+- [x] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
 
 ### Step 2: Three local save slots (SP-005 machinery)
 **Status:** ⬜ Not Started
