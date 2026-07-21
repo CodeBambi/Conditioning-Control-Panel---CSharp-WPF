@@ -1,7 +1,7 @@
 # STATUS: SP-023 — DTRH host slice b1: shell, origins, transport, boot matrix
 
-**Current Step:** Step 4 — Boot matrix (WH) + WSLg gate (WX) + board reconciliation + pre-completion consult
-**Last Updated:** 2026-07-21 (Steps 1-3 complete; unit/contract tests green both platforms)
+**Current Step:** COMPLETE (all 5 steps done; .DONE created)
+**Last Updated:** 2026-07-21 (Step 5 verified; contract green both platforms)
 
 ### Step 1: FIRST GATE + host design + pre-approach consult
 **Status:** ✅ Complete
@@ -27,20 +27,20 @@
 - [x] Unit tests: contract, inbox seq/ack/timeout/token, transport diff shape (245/245 both platforms)
 
 ### Step 4: Boot matrix (WH) + WSLg gate (WX) + board reconciliation + pre-completion consult
-**Status:** 🔨 In Progress
+**Status:** ✅ Complete
 
 **Discoveries (worker, 2026-07-21):** File Scope expanded by 4 wiring files — see PROMPT.md Amendments (2026-07-21 worker entry). `fileScopeMustNotChange` untouched.
 
-- [ ] Windows headed boot matrix in-product: engine live, pixel-checked render, both-direction transports, preBuffer replay, autoplay, focus-claim, exit 0
-- [ ] WSL2 in-packet gate (`~/ccp-sp023`, never /mnt/e): contract green; NativeWebDialog render facts; FIRST-GATE transport path exercised; no timing claims; Wayland untouched
-- [ ] record.md complete
-- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
-- [ ] Host row → `WIP` with slice-b1 evidence + named limits (never `DONE`)
-- [ ] STATUS.md accurate before .DONE
+- [x] Windows headed boot matrix in-product: engine live, pixel-checked render, both-direction transports, preBuffer replay, autoplay, focus-claim (`hasFocus()=true`), ESC-hold exit → **EXIT=0** (`evidence/wh/`)
+- [x] WSL2 in-packet gate (`~/ccp-sp023`, never /mnt/e): contract green (245/245 + 22/22, 0W/0E); NativeWebDialog render facts (xwd `evidence/wx/wx-render.png`); FIRST-GATE transport path exercised (invokeCSharpAction round-trip + inbox DELIVERED + retained replay); **engine live on Linux**; exit 0 via timed close; no input automation; no timing claims; Wayland untouched
+- [x] record.md complete (FIRST-GATE verdict + transcript, archaeology, design, consults, engine-review log, boot matrix transcripts, surprise ledger)
+- [x] Pre-completion consult (solo ×2 content-filter blocked, recorded; gut-check succeeded: NO fix-first — verdict in record.md)
+- [x] Host row → `WIP` with slice-b1 evidence + named limits (never `DONE`)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green (0W/0E incl. `-t:Rebuild`; both test projects)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` = File Scope only
+- [x] Contract testCommand green (Windows: sln 0W/0E on `-t:Rebuild`, 245/245 + 22/22; WSL2: 0W/0E, 245/245 + 22/22 — both on the final tree)
+- [x] `git diff --check` clean
+- [x] `git status --short` = File Scope only (untracked `.pi/loops/*.json` is engine-owned, never committed)

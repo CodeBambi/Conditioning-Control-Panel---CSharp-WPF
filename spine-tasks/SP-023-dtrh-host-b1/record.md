@@ -84,6 +84,9 @@ Source files: `ConditioningControlPanel/Chaos/ChaosWebViewHost.cs` (367 lines), 
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260721T182912.md` |
+| 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260721T190920.md` |
+| 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260721T190929.md` |
+| 4 | plan | SKIPPED BY DESIGN (same) | `.reviews/4-20260721T195452.md` |
 
 ---
 
@@ -140,4 +143,15 @@ Transcripts: `evidence/wx/probe-wx.log`, `evidence/wx/index-wx.log` (EXIT=0), `e
 
 #### Pre-completion consult (Step 4)
 
-PENDING
+**Attempts:** solo ×2 BLOCKED — the advisor call failed with a content-filter error class ("restrictions on violative cyber content"; the forwarded conversation carries the legacy product's vocabulary — recorded per SP-022's truncation/provenance discipline). **gut-check (3rd attempt) SUCCEEDED** — actual answering model not surfaced by the tool (recorded honestly).
+
+**Verdict (gut-check): NO fix-first in any of the three questions.** (a) File Scope amendment legitimate — the packet's own checkboxes are unsatisfiable without the four wiring files (stale File Scope, constitution's smallest-document rule), documented in four places, `fileScopeMustNotChange` untouched; stopping would have been wrong. (b) No overclaim — focus-honesty recording exactly right (harness foreground-lock theft vs verified `hasFocus()=true`; reproducible driver = spike's W15→W16 sequence); engine-live-on-Linux is real evidence. (c) All three named limits correctly deferred: 0x800700AA panic is loud (never faked), Linux timed-close honest under SP-008, the 1536-entry manifest is the cost of per-file case-drift honesty. **Condition: re-run the full Windows contract testCommand after the Step-4 code churn before .DONE** (done below).
+
+---
+
+## Step 5 — verification
+
+- Windows: `dotnet build client/CcpClient.sln -c Debug -t:Rebuild` **0W/0E**; CcpClient.Tests **245/245**; CcpClient.HeadlessTests **22/22** — all on the final tree (post Step-4 churn, per the pre-completion consult condition).
+- WSL2 (`~/ccp-sp023`, final tree): sln **0W/0E**; **245/245 + 22/22**.
+- `git diff --check` clean; `git status --short` = File Scope (+ amended) paths only; `.pi/loops/*.json` untracked (engine-owned).
+- Budgets: product sln build ~6s Windows / ~8s WSL (incremental); test suites 33s + 11s Windows, 17s + 10s WSL; `--verify-assets` sub-second (1538 copied entries).
