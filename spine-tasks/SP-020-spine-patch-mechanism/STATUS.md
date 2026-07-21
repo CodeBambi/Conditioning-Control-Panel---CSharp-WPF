@@ -1,6 +1,6 @@
 # STATUS: SP-020 — durable pi-spine local-patch mechanism (T-1)
 
-**Current Step:** Step 5 — testing & verification
+**Current Step:** DONE (all steps complete)
 **Last Updated:** 2026-07-21 (Step 1 in progress)
 
 ### Step 1: Empirical patch inventory + pre-approach consult
@@ -31,11 +31,11 @@
 - [x] record.md complete
 - [x] Pre-completion solo Fable 5 consult APPROVE (verdict + actual model claude-fable-5 in record.md)
 - [x] T-1 row → `WIP` with evidence + 3 named limits (post-land real-reinstall gate sharpened = FIRST application of the 2 lost patches; automation limit; T-12 stays-upstream decision) — never `DONE`
-- [ ] STATUS.md accurate before .DONE
+- [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green (client 0W/0E + both test projects — pollution guard)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` = File Scope only
+- [x] Contract testCommand green (build 0W/0E + 213/213 unit + 22/22 headless — pollution guard; zero client/src changes by design)
+- [x] `git diff --check` clean
+- [x] `git status --short` = File Scope only (tracked changes: .spine/patches/**, task-board.md, port-lessons.md, spine-tasks/SP-020/**; untracked `.pi/loops/*.json` = pi runtime artifact, never committed — SP-015 lesson)
