@@ -1,6 +1,6 @@
 {
   "packages": [
-    "npm:pi-spine@2.8.0",
+    "npm:pi-spine@2.10.0",
     "npm:@booplex/bpx-consult@0.10.1"
   ]
 }
