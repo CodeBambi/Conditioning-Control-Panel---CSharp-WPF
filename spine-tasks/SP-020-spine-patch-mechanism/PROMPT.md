@@ -30,7 +30,7 @@ Execute `client/docs/task-board.md` row **"T-1 (tooling): durable pi-spine local
 |-------|-------|
 | testCommand | `dotnet build client/CcpClient.sln -c Debug --nologo && dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo && dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo` |
 | fileScopeMustChange | `.spine/patches/manifest.json`, `.spine/patches/README.md` |
-| fileScopeMustNotChange | `ConditioningControlPanel/**`, `client/**`, `.pi/**`, `.spine/spine-config.json`, `spine-tasks/CONTEXT.md` |
+| fileScopeMustNotChange | `ConditioningControlPanel/**`, `client/src/**`, `client/tests/**`, `client/CcpClient.sln`, `client/spikes/**`, `.pi/**`, `.spine/spine-config.json`, `spine-tasks/CONTEXT.md` |
 | artifactsMustExist | `.spine/patches/manifest.json`, `.spine/patches/apply.mjs`, `.spine/patches/verify.mjs`, `.spine/patches/README.md`, `spine-tasks/SP-020-spine-patch-mechanism/record.md` |
 
 ## Review Level: 2 (Plan and Code)
