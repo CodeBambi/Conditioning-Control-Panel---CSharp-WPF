@@ -1,10 +1,10 @@
 # STATUS: SP-017 — spike cross-platform audio channel backend
 
-**Current Step:** Step 1 — backend research + package admission pre-approach consult
-**Last Updated:** 2026-07-21 (Step 1 in progress)
+**Current Step:** Step 3 — WSLg/PulseAudio gate + packaging evidence
+**Last Updated:** 2026-07-21 (Step 2 complete — 36/36 Windows observations green)
 
 ### Step 1: Backend research + package admission pre-approach consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
 - [x] STATUS.md updated before starting work
 - [x] WPF + first-attempt audio archaeology (READ-ONLY, `File.cs:line`)
@@ -13,14 +13,14 @@
 - [x] **Package admission solo Fable 5 consult** (SoundFlow 1.4.1 + Silk.NET.OpenAL 2.23.0/Soft.Native 1.23.1 + NAudio 2.2.1 Windows reference ADMITTED with 8 binding corrections; verdict + Fable 5 in record.md)
 
 ### Step 2: Spike host + Windows evidence
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] `client/spikes/CcpSpike.Audio/` (console, out of solution; synthetic generated tones)
-- [ ] Windows evidence per acceptance item, backend-event-verified: completion, interruption, pause/resume, bounded-latency overlapping SFX, whisper busy/completion, device enumerate/select/fallback, volume, teardown leak counts
-- [ ] Identical comparison per backend; failures recorded as findings
+- [x] `client/spikes/CcpSpike.Audio/` (console, out of solution; synthetic generated tones)
+- [x] Windows evidence per acceptance item, backend-event-verified: completion, interruption, pause/resume, bounded-latency overlapping SFX, whisper busy/completion, device enumerate/select/fallback, volume, teardown leak counts
+- [x] Identical comparison per backend; failures recorded as findings (SoundFlow wild-Id AV crash, NAudio Stop-fires-event, Silk enumeration limit, SFX measurement artifact + fix)
 
 ### Step 3: WSLg/PulseAudio gate + packaging evidence
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] WSL2 in-packet gate (`~/ccp-sp017`, never /mnt/e): REAL evidence = enumerate/select/fallback, event-verified completion, teardown, packaging (`ldd` per .so); NAMED LIMIT = no latency/timing claims on WSLg
 - [ ] Contract testCommand green on WSL2 (pollution guard)

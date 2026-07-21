@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SP-017 quarantined audio-backend spike host. NOT referenced by client/CcpClient.sln.
+    Inherits client/Directory.Build.props (single <Version> authority) — nothing else.
+    Console host: acceptance is backend-event-verified probe evidence, not a test project.
+    Package admission per spine-tasks/SP-017-audio-backend-spike/record.md Step-1 consult
+    (solo Fable 5, 2026-07-21): SoundFlow primary, Silk.NET.OpenAL secondary,
+    NAudio Windows-reference baseline only.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!--
+      Two TFMs: net10.0-windows carries the REAL NAudio harness (NAudio 2.2.1 puts
+      WaveOutEvent/MMDevice in windows-TFM assemblies only — verified by reflection on the
+      restored package); net10.0 compiles NAudioHarness's honest not-supported stub for
+      Linux builds/runs. WINDOWS symbol gates the split.
+    -->
+    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+    <RootNamespace>CcpSpike.Audio</RootNamespace>
+    <!-- NAudio.CoreAudioApi uses COM interop on Windows; harmless elsewhere. -->
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Admitted cross-platform candidates (exact versions pinned from the admission gate). -->
+    <PackageReference Include="SoundFlow" Version="1.4.1" />
+    <PackageReference Include="Silk.NET.OpenAL" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.OpenAL.Soft.Native" Version="1.23.1" />
+    <!-- Windows-reference baseline (WPF incumbent pins; Windows-only at runtime). -->
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+  </ItemGroup>
+
+</Project>
