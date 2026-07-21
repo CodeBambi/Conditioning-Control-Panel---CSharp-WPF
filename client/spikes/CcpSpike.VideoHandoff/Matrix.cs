@@ -68,7 +68,7 @@ public static class Matrix
             "HMAC-signed URL, TTL 300s, opened before expiry");
         await Add("M8-signed-expired", ProbeOutcome.SourceExpired,
             () => probe.RunAsync(lab.SignedUrl("/signed/clip.mp4", DateTimeOffset.UtcNow.AddSeconds(-60))),
-            "pre-expired signed URL → typed source-expired, no retry-storm (one decoder open)");
+            "pre-expired signed URL → typed source-expired at preflight, ZERO decoder opens, no retry-storm");
         await Add("M8-signed-badsig", ProbeOutcome.AuthRequired,
             () => { Redact.Register("sig", "deadbeef"); return probe.RunAsync(lab.Url("/signed/clip.mp4?exp=9999999999&sig=deadbeef")); },
             "tampered signature → 403 bad-signature");

@@ -1,105 +1,104 @@
-{"seq":1,"t":"2026-07-21T12:11:27.6434497+00:00","src":"main","msg":"spike start platform=windows lab=http://127.0.0.1:64534"}
-{"seq":2,"t":"2026-07-21T12:11:28.0903579+00:00","src":"browser","msg":"WebView2 env UserDataFolder=E:\\Code\\Conditioning-Control-Panel\\.worktrees\\spine-20260721T111026\\lane-1\\client\\spikes\\CcpSpike.VideoHandoff\\bin\\Debug\\net10.0\\scratch\\wv2-profile"}
-{"seq":3,"t":"2026-07-21T12:11:28.2707580+00:00","src":"browser","msg":"navigate http://127.0.0.1:64534/page/site.html"}
-{"seq":4,"t":"2026-07-21T12:11:28.4629333+00:00","src":"browser","msg":"AdapterCreated info=DetailedWebViewAdapterInfo { Type = WebView2, Engine = Blink, Version = 150.0.4078.83, IsSupported = True, IsInstalled = True, UnavailableReason = , SupportedScenarios = NativeControlHost }"}
-{"seq":5,"t":"2026-07-21T12:11:28.4951425+00:00","src":"lab","msg":"GET /page/site.html"}
-{"seq":6,"t":"2026-07-21T12:11:28.5149997+00:00","src":"lab","msg":"GET /media/clip.mp4"}
-{"seq":7,"t":"2026-07-21T12:11:28.5297854+00:00","src":"browser","msg":"NavigationCompleted success=True"}
-{"seq":8,"t":"2026-07-21T12:11:28.5298361+00:00","src":"lab","msg":"GET /favicon.ico"}
-{"seq":9,"t":"2026-07-21T12:11:28.5332484+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:64534/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
-{"seq":10,"t":"2026-07-21T12:11:28.5782015+00:00","src":"lab","msg":"GET /media/clip.mp4"}
-{"seq":11,"t":"2026-07-21T12:11:28.5901781+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:64534/media/clip.mp4 status=200 detail=ok"}
-{"seq":12,"t":"2026-07-21T12:11:28.5987283+00:00","src":"lab","msg":"GET /media/clip.mp4"}
-{"seq":13,"t":"2026-07-21T12:11:28.6261705+00:00","src":"lab","msg":"GET /media/clip.mp4"}
-{"seq":14,"t":"2026-07-21T12:11:30.4819234+00:00","src":"probe","msg":"decode url=http://127.0.0.1:64534/media/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=5 maxT=1500 maxPos=0.75 end=True => SUCCESS"}
-{"seq":15,"t":"2026-07-21T12:11:30.4832888+00:00","src":"browser","msg":"row B1-site-direct pass=True detail=discovered+transferred http://127.0.0.1:64534/media/clip.mp4 → h264 96x96 frames=37 end=True"}
-{"seq":16,"t":"2026-07-21T12:11:30.4840069+00:00","src":"browser","msg":"navigate http://127.0.0.1:64534/page/site-signed.html?ttl=300"}
-{"seq":17,"t":"2026-07-21T12:11:30.4876330+00:00","src":"lab","msg":"GET /page/site-signed.html"}
-{"seq":18,"t":"2026-07-21T12:11:30.4981003+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
-{"seq":19,"t":"2026-07-21T12:11:30.5020780+00:00","src":"browser","msg":"NavigationCompleted success=True"}
-{"seq":20,"t":"2026-07-21T12:11:30.5042833+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:64534/signed/clip.mp4?exp=1784636190&sig=sig:present(len=64)\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
-{"seq":21,"t":"2026-07-21T12:11:30.5074005+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
-{"seq":22,"t":"2026-07-21T12:11:30.5082841+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:64534/signed/clip.mp4?exp=1784636190&sig=sig:present(len=64) status=200 detail=ok"}
-{"seq":23,"t":"2026-07-21T12:11:30.5116005+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
-{"seq":24,"t":"2026-07-21T12:11:30.5256445+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
-{"seq":25,"t":"2026-07-21T12:11:32.3576255+00:00","src":"probe","msg":"decode url=http://127.0.0.1:64534/signed/clip.mp4?exp=1784636190&sig=sig:present(len=64) vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=5 maxT=1500 maxPos=0.75 end=True => SUCCESS"}
-{"seq":26,"t":"2026-07-21T12:11:32.3582312+00:00","src":"browser","msg":"row B2-site-signed-valid pass=True detail=valid signed URL transferred → decode-verified"}
-{"seq":27,"t":"2026-07-21T12:11:32.3589433+00:00","src":"browser","msg":"navigate http://127.0.0.1:64534/page/site-signed.html?ttl=-60"}
-{"seq":28,"t":"2026-07-21T12:11:32.3624910+00:00","src":"lab","msg":"GET /page/site-signed.html"}
-{"seq":29,"t":"2026-07-21T12:11:32.3688271+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
-{"seq":30,"t":"2026-07-21T12:11:32.3702900+00:00","src":"browser","msg":"NavigationCompleted success=True"}
-{"seq":31,"t":"2026-07-21T12:11:32.3726298+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:64534/signed/clip.mp4?exp=1784635832&sig=sig:present(len=64)\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
-{"seq":32,"t":"2026-07-21T12:11:32.3741858+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
-{"seq":33,"t":"2026-07-21T12:11:32.3752026+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:64534/signed/clip.mp4?exp=1784635832&sig=sig:present(len=64) status=403 detail=expired"}
-{"seq":34,"t":"2026-07-21T12:11:32.3754355+00:00","src":"browser","msg":"row B3-site-signed-expired pass=True detail=expired signed URL → typed source-expired (one decoder open, no retry)"}
-{"seq":35,"t":"2026-07-21T12:11:32.3760827+00:00","src":"browser","msg":"navigate http://127.0.0.1:64534/page/site-gated.html?kind=cookie"}
-{"seq":36,"t":"2026-07-21T12:11:32.3789362+00:00","src":"lab","msg":"GET /page/site-gated.html"}
-{"seq":37,"t":"2026-07-21T12:11:32.3855142+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
-{"seq":38,"t":"2026-07-21T12:11:32.3873817+00:00","src":"browser","msg":"NavigationCompleted success=True"}
-{"seq":39,"t":"2026-07-21T12:11:32.3894750+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:64534/gated-cookie/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
-{"seq":40,"t":"2026-07-21T12:11:32.3905538+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
-{"seq":41,"t":"2026-07-21T12:11:32.3909525+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:64534/gated-cookie/clip.mp4 status=401 detail=cookie-required"}
-{"seq":42,"t":"2026-07-21T12:11:32.3917974+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
-{"seq":43,"t":"2026-07-21T12:11:32.3956748+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
-{"seq":44,"t":"2026-07-21T12:11:32.3966782+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
-{"seq":45,"t":"2026-07-21T12:11:32.3976489+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:64534/relay/cookie/clip.mp4 status=200 detail=ok"}
-{"seq":46,"t":"2026-07-21T12:11:32.4005167+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
-{"seq":47,"t":"2026-07-21T12:11:32.4013022+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
-{"seq":48,"t":"2026-07-21T12:11:32.4017654+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
-{"seq":49,"t":"2026-07-21T12:11:32.4070020+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
-{"seq":50,"t":"2026-07-21T12:11:32.4076784+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
-{"seq":51,"t":"2026-07-21T12:11:32.4081112+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
-{"seq":52,"t":"2026-07-21T12:11:32.4162687+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
-{"seq":53,"t":"2026-07-21T12:11:32.4169480+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
-{"seq":54,"t":"2026-07-21T12:11:32.4174261+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
-{"seq":55,"t":"2026-07-21T12:11:32.4229899+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
-{"seq":56,"t":"2026-07-21T12:11:32.4236902+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
-{"seq":57,"t":"2026-07-21T12:11:32.4240825+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
-{"seq":58,"t":"2026-07-21T12:11:34.2508555+00:00","src":"probe","msg":"decode url=http://127.0.0.1:64534/relay/cookie/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=5 maxT=1500 maxPos=0.75 end=True => SUCCESS"}
-{"seq":59,"t":"2026-07-21T12:11:34.2511347+00:00","src":"browser","msg":"row B4-site-cookie pass=True detail=direct=auth-required (control); relay-mediated=decode-verified (proxy-mediated auth, pending-owner)"}
-{"seq":60,"t":"2026-07-21T12:11:34.2520308+00:00","src":"browser","msg":"navigate http://127.0.0.1:64534/page/site-gated.html?kind=header"}
-{"seq":61,"t":"2026-07-21T12:11:34.2553566+00:00","src":"lab","msg":"GET /page/site-gated.html"}
-{"seq":62,"t":"2026-07-21T12:11:34.2628418+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
-{"seq":63,"t":"2026-07-21T12:11:34.2646333+00:00","src":"browser","msg":"NavigationCompleted success=True"}
-{"seq":64,"t":"2026-07-21T12:11:34.2665740+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:64534/gated-header/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
-{"seq":65,"t":"2026-07-21T12:11:34.2677503+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
-{"seq":66,"t":"2026-07-21T12:11:34.2682429+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:64534/gated-header/clip.mp4 status=403 detail=header-required"}
-{"seq":67,"t":"2026-07-21T12:11:34.2691252+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
-{"seq":68,"t":"2026-07-21T12:11:34.2697687+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
-{"seq":69,"t":"2026-07-21T12:11:34.2701763+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
-{"seq":70,"t":"2026-07-21T12:11:34.2705577+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:64534/relay/header/clip.mp4 status=200 detail=ok"}
-{"seq":71,"t":"2026-07-21T12:11:34.2739287+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
-{"seq":72,"t":"2026-07-21T12:11:34.2747049+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
-{"seq":73,"t":"2026-07-21T12:11:34.2752340+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
-{"seq":74,"t":"2026-07-21T12:11:34.2811148+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
-{"seq":75,"t":"2026-07-21T12:11:34.2818215+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
-{"seq":76,"t":"2026-07-21T12:11:34.2823005+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
-{"seq":77,"t":"2026-07-21T12:11:34.2915597+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
-{"seq":78,"t":"2026-07-21T12:11:34.2924390+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
-{"seq":79,"t":"2026-07-21T12:11:34.2928389+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
-{"seq":80,"t":"2026-07-21T12:11:34.2990317+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
-{"seq":81,"t":"2026-07-21T12:11:34.2998710+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
-{"seq":82,"t":"2026-07-21T12:11:34.3002948+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
-{"seq":83,"t":"2026-07-21T12:11:36.1304717+00:00","src":"probe","msg":"decode url=http://127.0.0.1:64534/relay/header/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=5 maxT=1501 maxPos=0.75 end=True => SUCCESS"}
-{"seq":84,"t":"2026-07-21T12:11:36.1307866+00:00","src":"browser","msg":"row B5-site-header pass=True detail=direct=auth-required (control); relay-mediated=decode-verified (proxy-mediated auth, pending-owner)"}
-{"seq":85,"t":"2026-07-21T12:11:36.1316452+00:00","src":"browser","msg":"navigate http://127.0.0.1:64534/page/blob.html"}
-{"seq":86,"t":"2026-07-21T12:11:36.1352229+00:00","src":"lab","msg":"GET /page/blob.html"}
-{"seq":87,"t":"2026-07-21T12:11:36.1412582+00:00","src":"lab","msg":"GET /media/clip.webm"}
-{"seq":88,"t":"2026-07-21T12:11:36.1417582+00:00","src":"browser","msg":"NavigationCompleted success=True"}
-{"seq":89,"t":"2026-07-21T12:11:36.1446361+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"\\\",\\\"protocol\\\":null,\\\"logs\\\":[]}\""}
-{"seq":90,"t":"2026-07-21T12:11:36.3960864+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"blob:http://127.0.0.1:64534/336e73c5-f7ab-43e4-b261-6ab8a36019b7\\\",\\\"protocol\\\":\\\"blob:\\\",\\\"logs\\\":[\\\"blob-src-set protocol=blob:\\\",\\\"mse-append-ok\\\"]}\""}
-{"seq":91,"t":"2026-07-21T12:11:36.3967618+00:00","src":"browser","msg":"B6 typed-limitation blob-untransferable detection=protocol:blob: page-log=[blob-src-set protocol=blob: | mse-append-ok] — no decoder attempt, no capture/mirror fallback"}
-{"seq":92,"t":"2026-07-21T12:11:36.3969107+00:00","src":"browser","msg":"row B6-blob-mse pass=True detail=blob: detected on live DOM → typed blob-untransferable; mse-append-ok"}
-{"seq":93,"t":"2026-07-21T12:11:36.3974713+00:00","src":"browser","msg":"navigate http://127.0.0.1:64534/page/drm.html"}
-{"seq":94,"t":"2026-07-21T12:11:36.4006740+00:00","src":"lab","msg":"GET /page/drm.html"}
-{"seq":95,"t":"2026-07-21T12:11:36.4106514+00:00","src":"browser","msg":"NavigationCompleted success=True"}
-{"seq":96,"t":"2026-07-21T12:11:36.4161838+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:64534/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
-{"seq":97,"t":"2026-07-21T12:11:36.6676442+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:64534/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
-{"seq":98,"t":"2026-07-21T12:11:36.9185166+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:64534/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
-{"seq":99,"t":"2026-07-21T12:11:37.1697182+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:64534/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
-{"seq":100,"t":"2026-07-21T12:11:37.4199461+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:64534/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
-{"seq":101,"t":"2026-07-21T12:11:37.6698938+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:64534/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[\\\"eme-keysystem-access-granted keySystem=org.w3.clearkey\\\"]}\""}
-{"seq":102,"t":"2026-07-21T12:11:37.6703718+00:00","src":"browser","msg":"B7 typed-limitation drm-detected evidence=EME-usage page-log=[eme-keysystem-access-granted keySystem=org.w3.clearkey] — NO bypass/key-extraction/capture attempted"}
-{"seq":103,"t":"2026-07-21T12:11:37.6705361+00:00","src":"browser","msg":"row B7-drm-eme pass=True detail=EME signaling detected → typed drm-detected (no bypass attempted, asserted)"}
-{"seq":104,"t":"2026-07-21T12:11:37.6707359+00:00","src":"browser","msg":"browser-matrix done pass=7 fail=0"}
-{"seq":105,"t":"2026-07-21T12:11:37.6927957+00:00","src":"main","msg":"browser mode finished code=0"}
+{"seq":1,"t":"2026-07-21T12:30:43.7742969+00:00","src":"main","msg":"spike start platform=windows lab=http://127.0.0.1:50804"}
+{"seq":2,"t":"2026-07-21T12:30:44.1764994+00:00","src":"browser","msg":"WebView2 env UserDataFolder=E:\\Code\\Conditioning-Control-Panel\\.worktrees\\spine-20260721T111026\\lane-1\\client\\spikes\\CcpSpike.VideoHandoff\\bin\\Debug\\net10.0\\scratch\\wv2-profile"}
+{"seq":3,"t":"2026-07-21T12:30:44.3682565+00:00","src":"browser","msg":"navigate http://127.0.0.1:50804/page/site.html"}
+{"seq":4,"t":"2026-07-21T12:30:44.5001733+00:00","src":"browser","msg":"AdapterCreated info=DetailedWebViewAdapterInfo { Type = WebView2, Engine = Blink, Version = 150.0.4078.83, IsSupported = True, IsInstalled = True, UnavailableReason = , SupportedScenarios = NativeControlHost }"}
+{"seq":5,"t":"2026-07-21T12:30:44.5124789+00:00","src":"lab","msg":"GET /page/site.html"}
+{"seq":6,"t":"2026-07-21T12:30:44.5337312+00:00","src":"lab","msg":"GET /media/clip.mp4"}
+{"seq":7,"t":"2026-07-21T12:30:44.5470059+00:00","src":"browser","msg":"NavigationCompleted success=True"}
+{"seq":8,"t":"2026-07-21T12:30:44.5485212+00:00","src":"lab","msg":"GET /favicon.ico"}
+{"seq":9,"t":"2026-07-21T12:30:44.5508588+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:50804/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
+{"seq":10,"t":"2026-07-21T12:30:44.5945800+00:00","src":"lab","msg":"GET /media/clip.mp4"}
+{"seq":11,"t":"2026-07-21T12:30:44.6041909+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:50804/media/clip.mp4 status=200 detail=ok"}
+{"seq":12,"t":"2026-07-21T12:30:44.6129692+00:00","src":"lab","msg":"GET /media/clip.mp4"}
+{"seq":13,"t":"2026-07-21T12:30:44.6442809+00:00","src":"lab","msg":"GET /media/clip.mp4"}
+{"seq":14,"t":"2026-07-21T12:30:46.6056655+00:00","src":"probe","msg":"decode url=http://127.0.0.1:50804/media/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=39 timeChanges=5 maxT=1600 maxPos=0.80 wall=1962 end=True => SUCCESS"}
+{"seq":15,"t":"2026-07-21T12:30:46.6066325+00:00","src":"browser","msg":"row B1-site-direct pass=True detail=discovered+transferred http://127.0.0.1:50804/media/clip.mp4 → h264 96x96 frames=39 end=True"}
+{"seq":16,"t":"2026-07-21T12:30:46.6072482+00:00","src":"browser","msg":"navigate http://127.0.0.1:50804/page/site-signed.html?ttl=300"}
+{"seq":17,"t":"2026-07-21T12:30:46.6107823+00:00","src":"lab","msg":"GET /page/site-signed.html"}
+{"seq":18,"t":"2026-07-21T12:30:46.6185673+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
+{"seq":19,"t":"2026-07-21T12:30:46.6214945+00:00","src":"browser","msg":"NavigationCompleted success=True"}
+{"seq":20,"t":"2026-07-21T12:30:46.6240284+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:50804/signed/clip.mp4?exp=1784637346&sig=sig:present(len=64)\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
+{"seq":21,"t":"2026-07-21T12:30:46.6308859+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
+{"seq":22,"t":"2026-07-21T12:30:46.6317316+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:50804/signed/clip.mp4?exp=1784637346&sig=sig:present(len=64) status=200 detail=ok"}
+{"seq":23,"t":"2026-07-21T12:30:46.6344018+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
+{"seq":24,"t":"2026-07-21T12:30:46.6443301+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
+{"seq":25,"t":"2026-07-21T12:30:48.4729393+00:00","src":"probe","msg":"decode url=http://127.0.0.1:50804/signed/clip.mp4?exp=1784637346&sig=sig:present(len=64) vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=5 maxT=1500 maxPos=0.75 wall=1829 end=True => SUCCESS"}
+{"seq":26,"t":"2026-07-21T12:30:48.4732617+00:00","src":"browser","msg":"row B2-site-signed-valid pass=True detail=valid signed URL transferred → decode-verified"}
+{"seq":27,"t":"2026-07-21T12:30:48.4740404+00:00","src":"browser","msg":"navigate http://127.0.0.1:50804/page/site-signed.html?ttl=-60"}
+{"seq":28,"t":"2026-07-21T12:30:48.4777343+00:00","src":"lab","msg":"GET /page/site-signed.html"}
+{"seq":29,"t":"2026-07-21T12:30:48.4845862+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
+{"seq":30,"t":"2026-07-21T12:30:48.4858927+00:00","src":"browser","msg":"NavigationCompleted success=True"}
+{"seq":31,"t":"2026-07-21T12:30:48.4874500+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:50804/signed/clip.mp4?exp=1784636988&sig=sig:present(len=64)\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
+{"seq":32,"t":"2026-07-21T12:30:48.4888150+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
+{"seq":33,"t":"2026-07-21T12:30:48.4897029+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:50804/signed/clip.mp4?exp=1784636988&sig=sig:present(len=64) status=403 detail=expired"}
+{"seq":34,"t":"2026-07-21T12:30:48.4899709+00:00","src":"browser","msg":"row B3-site-signed-expired pass=True detail=expired signed URL → typed source-expired at preflight (ZERO decoder opens, no retry)"}
+{"seq":35,"t":"2026-07-21T12:30:48.4906400+00:00","src":"browser","msg":"navigate http://127.0.0.1:50804/page/site-gated.html?kind=cookie"}
+{"seq":36,"t":"2026-07-21T12:30:48.4929095+00:00","src":"lab","msg":"GET /page/site-gated.html"}
+{"seq":37,"t":"2026-07-21T12:30:48.4984118+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
+{"seq":38,"t":"2026-07-21T12:30:48.4999276+00:00","src":"browser","msg":"NavigationCompleted success=True"}
+{"seq":39,"t":"2026-07-21T12:30:48.5016434+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:50804/gated-cookie/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
+{"seq":40,"t":"2026-07-21T12:30:48.5025746+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
+{"seq":41,"t":"2026-07-21T12:30:48.5029257+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:50804/gated-cookie/clip.mp4 status=401 detail=cookie-required"}
+{"seq":42,"t":"2026-07-21T12:30:48.5035582+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
+{"seq":43,"t":"2026-07-21T12:30:48.5062877+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
+{"seq":44,"t":"2026-07-21T12:30:48.5070184+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
+{"seq":45,"t":"2026-07-21T12:30:48.5074485+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:50804/relay/cookie/clip.mp4 status=200 detail=ok"}
+{"seq":46,"t":"2026-07-21T12:30:48.5098236+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
+{"seq":47,"t":"2026-07-21T12:30:48.5105139+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
+{"seq":48,"t":"2026-07-21T12:30:48.5108866+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
+{"seq":49,"t":"2026-07-21T12:30:48.5164625+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
+{"seq":50,"t":"2026-07-21T12:30:48.5171723+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
+{"seq":51,"t":"2026-07-21T12:30:48.5178164+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
+{"seq":52,"t":"2026-07-21T12:30:48.5261290+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
+{"seq":53,"t":"2026-07-21T12:30:48.5267704+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
+{"seq":54,"t":"2026-07-21T12:30:48.5271531+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
+{"seq":55,"t":"2026-07-21T12:30:48.5333411+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
+{"seq":56,"t":"2026-07-21T12:30:48.5340224+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
+{"seq":57,"t":"2026-07-21T12:30:48.5343985+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
+{"seq":58,"t":"2026-07-21T12:30:50.3606933+00:00","src":"probe","msg":"decode url=http://127.0.0.1:50804/relay/cookie/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=5 maxT=1501 maxPos=0.75 wall=1835 end=True => SUCCESS"}
+{"seq":59,"t":"2026-07-21T12:30:50.3609209+00:00","src":"browser","msg":"row B4-site-cookie pass=True detail=direct=auth-required (control); relay-mediated=decode-verified (proxy-mediated auth, pending-owner)"}
+{"seq":60,"t":"2026-07-21T12:30:50.3617949+00:00","src":"browser","msg":"navigate http://127.0.0.1:50804/page/site-gated.html?kind=header"}
+{"seq":61,"t":"2026-07-21T12:30:50.3647193+00:00","src":"lab","msg":"GET /page/site-gated.html"}
+{"seq":62,"t":"2026-07-21T12:30:50.3716633+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
+{"seq":63,"t":"2026-07-21T12:30:50.3729932+00:00","src":"browser","msg":"NavigationCompleted success=True"}
+{"seq":64,"t":"2026-07-21T12:30:50.3749976+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:50804/gated-header/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
+{"seq":65,"t":"2026-07-21T12:30:50.3762210+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
+{"seq":66,"t":"2026-07-21T12:30:50.3766619+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:50804/gated-header/clip.mp4 status=403 detail=header-required"}
+{"seq":67,"t":"2026-07-21T12:30:50.3774312+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
+{"seq":68,"t":"2026-07-21T12:30:50.3781425+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
+{"seq":69,"t":"2026-07-21T12:30:50.3789306+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
+{"seq":70,"t":"2026-07-21T12:30:50.3793636+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:50804/relay/header/clip.mp4 status=200 detail=ok"}
+{"seq":71,"t":"2026-07-21T12:30:50.3819158+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
+{"seq":72,"t":"2026-07-21T12:30:50.3825831+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
+{"seq":73,"t":"2026-07-21T12:30:50.3829676+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
+{"seq":74,"t":"2026-07-21T12:30:50.3884388+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
+{"seq":75,"t":"2026-07-21T12:30:50.3889988+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
+{"seq":76,"t":"2026-07-21T12:30:50.3894032+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
+{"seq":77,"t":"2026-07-21T12:30:50.3976675+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
+{"seq":78,"t":"2026-07-21T12:30:50.3983482+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
+{"seq":79,"t":"2026-07-21T12:30:50.3988895+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
+{"seq":80,"t":"2026-07-21T12:30:50.4037933+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
+{"seq":81,"t":"2026-07-21T12:30:50.4044610+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
+{"seq":82,"t":"2026-07-21T12:30:50.4048085+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
+{"seq":83,"t":"2026-07-21T12:30:52.2339218+00:00","src":"probe","msg":"decode url=http://127.0.0.1:50804/relay/header/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=5 maxT=1501 maxPos=0.75 wall=1837 end=True => SUCCESS"}
+{"seq":84,"t":"2026-07-21T12:30:52.2341810+00:00","src":"browser","msg":"row B5-site-header pass=True detail=direct=auth-required (control); relay-mediated=decode-verified (proxy-mediated auth, pending-owner)"}
+{"seq":85,"t":"2026-07-21T12:30:52.2348484+00:00","src":"browser","msg":"navigate http://127.0.0.1:50804/page/blob.html"}
+{"seq":86,"t":"2026-07-21T12:30:52.2379543+00:00","src":"lab","msg":"GET /page/blob.html"}
+{"seq":87,"t":"2026-07-21T12:30:52.2436008+00:00","src":"lab","msg":"GET /media/clip.webm"}
+{"seq":88,"t":"2026-07-21T12:30:52.2438579+00:00","src":"browser","msg":"NavigationCompleted success=True"}
+{"seq":89,"t":"2026-07-21T12:30:52.2456370+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"\\\",\\\"protocol\\\":null,\\\"logs\\\":[]}\""}
+{"seq":90,"t":"2026-07-21T12:30:52.4972395+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"blob:http://127.0.0.1:50804/85ac9057-09b3-4e3a-bcf9-dee47a65929c\\\",\\\"protocol\\\":\\\"blob:\\\",\\\"logs\\\":[\\\"blob-src-set protocol=blob:\\\",\\\"mse-append-ok\\\"]}\""}
+{"seq":91,"t":"2026-07-21T12:30:52.4978952+00:00","src":"browser","msg":"B6 typed-limitation blob-untransferable detection=protocol:blob: page-log=[blob-src-set protocol=blob: | mse-append-ok] — no decoder attempt, no capture/mirror fallback"}
+{"seq":92,"t":"2026-07-21T12:30:52.4980621+00:00","src":"browser","msg":"row B6-blob-mse pass=True detail=blob: detected on live DOM → typed blob-untransferable; mse-append-ok"}
+{"seq":93,"t":"2026-07-21T12:30:52.4987274+00:00","src":"browser","msg":"navigate http://127.0.0.1:50804/page/drm.html"}
+{"seq":94,"t":"2026-07-21T12:30:52.5015490+00:00","src":"lab","msg":"GET /page/drm.html"}
+{"seq":95,"t":"2026-07-21T12:30:52.5113158+00:00","src":"browser","msg":"NavigationCompleted success=True"}
+{"seq":96,"t":"2026-07-21T12:30:52.5135725+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:50804/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
+{"seq":97,"t":"2026-07-21T12:30:52.7648583+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:50804/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
+{"seq":98,"t":"2026-07-21T12:30:53.0157451+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:50804/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
+{"seq":99,"t":"2026-07-21T12:30:53.2669516+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:50804/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[]}\""}
+{"seq":100,"t":"2026-07-21T12:30:53.5180688+00:00","src":"browser","msg":"discovery raw=\"{\\\"src\\\":\\\"http://127.0.0.1:50804/media/clip.mp4\\\",\\\"protocol\\\":\\\"http:\\\",\\\"logs\\\":[\\\"eme-keysystem-access-granted keySystem=org.w3.clearkey\\\"]}\""}
+{"seq":101,"t":"2026-07-21T12:30:53.5186059+00:00","src":"browser","msg":"B7 typed-limitation drm-detected evidence=EME-usage page-log=[eme-keysystem-access-granted keySystem=org.w3.clearkey] — NO bypass/key-extraction/capture attempted"}
+{"seq":102,"t":"2026-07-21T12:30:53.5187475+00:00","src":"browser","msg":"row B7-drm-eme pass=True detail=EME signaling detected (eme-keysystem-access-granted keySystem=org.w3.clearkey) → typed drm-detected (no bypass attempted, asserted)"}
+{"seq":103,"t":"2026-07-21T12:30:53.5189258+00:00","src":"browser","msg":"browser-matrix done pass=7 fail=0"}
+{"seq":104,"t":"2026-07-21T12:30:53.5390280+00:00","src":"main","msg":"browser mode finished code=0"}

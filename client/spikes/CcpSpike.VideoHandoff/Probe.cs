@@ -46,7 +46,12 @@ public sealed class Probe
     public const long MaxDurationMs = 2500;
     public const int MinFrames = 5;                  // 2s @ 10fps = 20 frames expected
     public const int MinTimeChanges = 3;             // real progression, not a single jump
-    public const long MinProgressSpanMs = 1000;      // positions must span >= 1s
+    public const long MinProgressSpanMs = 1000;      // positions must span >= 1s ...
+    public const float MinProgressPosition = 0.5f;   // ... or position >= 0.5 ...
+    // ... or frame-paced wall-clock playback (finding V8: adaptive demuxers FLAKILY report
+    // neither Time nor Position across runs; delivered frames + wall-time-to-end is the
+    // timeline progression evidence there).
+    public const long MinProgressWallMs = 1500;
     public const int EndWindowMs = 12000;            // EndReached must arrive within 12s of Play
     public const int ParseTimeoutMs = 10000;
 
@@ -114,14 +119,16 @@ public sealed class Probe
         // Track evidence: demuxer parse when available; decoder-format-observed otherwise
         // (HLS playlists expose no tracks at playlist level — finding V4).
         var trackEvidence = vTrack ?? (play.FormatObserved is { } f ? $"decoded:{f}" : null);
+        var progressed = play.MaxTime >= MinProgressSpanMs || play.MaxPosition >= MinProgressPosition
+            || (play.Frames >= MinFrames && play.WallMs >= MinProgressWallMs); // V8 fallback, pre-declared
         var success = play.EndReached
             && durationMs is >= MinDurationMs and <= MaxDurationMs
             && play.Frames >= MinFrames
             && play.Times.Length >= MinTimeChanges
-            && (play.MaxTime >= MinProgressSpanMs || play.MaxPosition >= 0.5f) // adaptive demuxers report Time=0; position is the progression evidence there
+            && progressed
             && trackEvidence is not null;
 
-        SpikeLog.Line("probe", $"decode url={Redact.Scrub(url)} vtrack={trackEvidence ?? "none"} atrack={aTrack ?? "none"} dur={durationMs} frames={play.Frames} timeChanges={play.Times.Length} maxT={play.MaxTime} maxPos={play.MaxPosition:F2} end={play.EndReached} => {(success ? "SUCCESS" : "FAIL")}");
+        SpikeLog.Line("probe", $"decode url={Redact.Scrub(url)} vtrack={trackEvidence ?? "none"} atrack={aTrack ?? "none"} dur={durationMs} frames={play.Frames} timeChanges={play.Times.Length} maxT={play.MaxTime} maxPos={play.MaxPosition:F2} wall={play.WallMs} end={play.EndReached} => {(success ? "SUCCESS" : "FAIL")}");
         return new ProbeReport(
             success ? ProbeOutcome.Success : ProbeOutcome.DecodeFailed,
             preflight.status, trackEvidence, aTrack, durationMs, play.Frames, play.Times.Length, play.MaxTime, play.EndReached,
@@ -177,7 +184,7 @@ public sealed class Probe
         return (vTrack, aTrack);
     }
 
-    private sealed record PlayResult(int Frames, long[] Times, long MaxTime, float MaxPosition, string? FormatObserved, bool EndReached);
+    private sealed record PlayResult(int Frames, long[] Times, long MaxTime, float MaxPosition, long WallMs, string? FormatObserved, bool EndReached);
 
     private string? _fmtObserved;
 
@@ -196,11 +203,13 @@ public sealed class Probe
         player.EndReached += (_, _) => endTcs.TrySetResult();
         player.EncounteredError += (_, _) => SpikeLog.Line("probe", $"EncounteredError src={Redact.Scrub(what)}");
         player.Play();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var endDone = await Task.WhenAny(endTcs.Task, Task.Delay(EndWindowMs));
+        sw.Stop();
         var endReached = endDone == endTcs.Task;
         long[] snapshot;
         lock (times) snapshot = times.ToArray();
-        return new PlayResult(_frames, snapshot, snapshot.Length > 0 ? snapshot.Max() : 0, maxPos, _fmtObserved, endReached);
+        return new PlayResult(_frames, snapshot, snapshot.Length > 0 ? snapshot.Max() : 0, maxPos, sw.ElapsedMilliseconds, _fmtObserved, endReached);
     }
 
     // Decoder-observed format (chroma/dims proposed by the DECODER, then we request RV32).

@@ -104,3 +104,25 @@ Browser layer `Browser.cs` (SP-011-pattern Avalonia host, SP-011-admitted `Avalo
 
 - **V5 — signed-token URLs persisted in the WebView2 HTTP cache** (`wv2-profile/EBWebView/Default/Cache/Cache_Data/data_1`, 2 sig hits — caught BY the audit on the first browser run). Mitigation: `Cache-Control: no-store` at the SOURCE on `/signed/*`, `/gated-*`, and the signed-embed page; re-run → **audit GREEN over the ENTIRE scratch INCLUDING the wv2-profile**. Product implication for the host row: token-bearing media URLs need no-store at the source and/or profile hygiene (owner decision).
 - Decode matrix re-verified after the Lab change: 14/14 PASS exit 0; audit GREEN.
+
+## Step 4 — WSLg/Linux gate (2026-07-21)
+
+In-packet copy `~/ccp-sp018` (tar over wsl, never /mnt/e for build/run; Browser.cs synced via /mnt/e copy only). WSL2 Ubuntu 26.04, SDK 10.0.110, distro **libvlc 3.0.23-1** (apt: libvlc5/libvlccore9 preinstalled — skew vs LibVLCSharp 3.10.0 binding recorded per admission consult).
+
+- **Native decode side REAL:** decode matrix **14/14 PASS exit 0** on WSLg (`evidence/run-wslg.jsonl`) — identical row outcomes to Windows incl. cookie/header relay + negative controls + signed valid/expired/badsig; vmem frame-level evidence holds; NO V1/V2/V3 crashes observed on Linux (HardExit still used by construction).
+- **Browser-discovery side EXCEEDS the SP-011 inheritance:** embedded WebKitGTK 2.52.3 (auto-fallback, NativeDialog-scenarios adapter — never presents visually per SP-011 L4, presentation irrelevant here) navigates AND **InvokeScript WORKS** — full discovery→transfer→decode pipeline REAL on WSLg: **7/7 PASS exit 0** (`evidence/run-wslg-browser.jsonl`). Two engine differences recorded: **V6** (WebKitGTK returns InvokeScript results RAW where WebView2 JSON-encodes — both shapes accepted) and **V7** (WebKitGTK denies ClearKey EME with TypeError — B7 passes on the ATTEMPT-as-signaling rule per the admission consult; granted-variant evidence is Windows-only). First fix needed on Linux: `Thread.SetApartmentState(STA)` is COM-only (PlatformNotSupportedException) — guarded to Windows.
+- **Sensitive-logging audit GREEN on WSLg** (decode + browser runs).
+- **Contract pollution guard on WSL2:** `CcpClient.sln` 0W/0E, `CcpClient.Tests` 213/213, `CcpClient.HeadlessTests` 22/22 (copy missed `client/tools` on first pass — CS0246 in VerifyHarnessTests; copied, re-ran green; recorded honestly).
+- Wayland untouched (§5.1). WSLg = X11/XWayland session facts.
+
+Deliverable `client/docs/video-handoff-spike.md` written: named observation per matrix row (M1-M10) with evidence class per platform, supported/unsupported matrix PENDING-OWNER, findings V1-V7, WPF contract, 10 named limits.
+
+## Step 4b — Pre-completion consult (solo Fable 5, 2026-07-21) + corrections
+
+**Verdict (actual answering model: solo consult route per board gate history — Fable-sanctioned, model not self-identified in output):** no row verdict dishonest WITH corrections; EME-denied-as-signaling DEFENSIBLE with named limits; relay pending-owner framing adequate with an added security note; .DONE blockers = remaining contract/board/git steps only. Corrections applied:
+1. **HLS/DASH claims re-scoped** — single-segment VOD HLS / single-chunk static DASH fixture scope now explicit in rows M3/M4 + named limit 11 (multi-segment/variant/live untested).
+2. **M8-expired wording fixed in CODE + doc** — "one decoder open" was wrong: preflight short-circuits, ZERO decoder opens. Matrix.cs/Browser.cs strings corrected and ALL FOUR evidence runs re-generated with final code (win decode ×2 stability 14/14, win browser 7/7, wsl decode 14/14, wsl browser 7/7; audits GREEN both platforms).
+3. **EME detection named limits added** (limit 12): fixture-instrumented detection; uncooperative-page detection needs host-injected observation (untested); `encrypted`-event variant untested; granted-keySystem/encrypted-reliant product detector has no Linux evidence yet.
+4. **Relay security note added** (limit 3): spike relay unauthenticated on 127.0.0.1; product relay needs origin/auth binding in the pending-owner decision.
+5. **Stale-evidence risk closed** — all evidence JSONL recopied from final-code runs.
+- **V8 (new finding, surfaced by the re-runs):** adaptive demuxer Time/Position reporting flaky ACROSS runs (maxPos 0.63→0.00 HLS-TS/DASH with identical frames+end) → pre-declared frame-paced wall-clock progression prong added (frames ≥5 AND wall ≥1500ms); doc thresholds updated.

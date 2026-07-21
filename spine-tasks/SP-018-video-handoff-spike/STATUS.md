@@ -1,7 +1,7 @@
 # STATUS: SP-018 — spike browser-to-native online-video handoff
 
-**Current Step:** Step 4 — WSLg/Linux gate + record + pre-completion consult + board reconciliation
-**Last Updated:** 2026-07-21 (Step 3 complete: browser matrix 7/7 PASS exit 0, audit GREEN incl. wv2-profile)
+**Current Step:** Step 5 — Testing & Verification
+**Last Updated:** 2026-07-21 (Step 4 complete: WSLg 14/14 + 7/7, contract guard green WSL2, doc + record + consult + board done)
 
 ### Step 1: Video archaeology + source-matrix definition + package admission pre-approach consult
 **Status:** ✅ Complete (2026-07-21; in-worker plan review skipped by design SP-195)
@@ -27,17 +27,17 @@
 - [x] **Sensitive-logging audit run green — recorded as evidence** (V5 cache-leak found+fixed, re-audit GREEN incl. profile)
 
 ### Step 4: WSLg/Linux gate + record + pre-completion consult + board reconciliation
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete (2026-07-21; in-worker plan review skipped by design SP-195)
 
-- [ ] WSL2 in-packet gate (`~/ccp-sp018`, never /mnt/e): native decode side REAL; browser-discovery limits named; contract green (pollution guard)
-- [ ] `client/docs/video-handoff-spike.md` — named observation per row + supported/unsupported matrix pending-owner
-- [ ] record.md complete
-- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
-- [ ] Board row → `WIP` with evidence + named limits (never `DONE`)
-- [ ] STATUS.md accurate before .DONE
+- [x] WSL2 in-packet gate (`~/ccp-sp018`, never /mnt/e): native decode side REAL (14/14); browser-discovery EXCEEDS SP-011 inheritance (7/7 real via WebKitGTK InvokeScript); contract green (213/213 + 22/22, 0W/0E)
+- [x] `client/docs/video-handoff-spike.md` — named observation per row + supported/unsupported matrix pending-owner
+- [x] record.md complete
+- [x] Pre-completion solo Fable 5 consult (verdict in record.md; 5 corrections applied incl. V8)
+- [x] Board row → `WIP` with evidence + named limits (never `DONE`)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] Contract testCommand green (client 0W/0E + both test projects; spike host builds clean separately)
 - [ ] `git diff --check` clean

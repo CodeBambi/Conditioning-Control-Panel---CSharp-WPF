@@ -29,7 +29,9 @@ public static class Browser
             }
             catch (Exception ex) { tcs.TrySetException(ex); }
         });
-        thread.SetApartmentState(ApartmentState.STA);
+        // Avalonia/WebView2 need an STA thread on Windows; SetApartmentState is COM-only and
+        // throws PlatformNotSupportedException on Linux (Avalonia/X11 needs no apartment).
+        if (OperatingSystem.IsWindows()) thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         return tcs.Task;
     }
@@ -146,7 +148,7 @@ public sealed class BrowserWindow : Window
             var d = await Discover(_lab.Url("/page/site-signed.html?ttl=-60"));
             var r = await probe.RunAsync(d.Src);
             Require(r.Outcome == ProbeOutcome.SourceExpired, $"expected SourceExpired got {r.Outcome}");
-            return "expired signed URL → typed source-expired (one decoder open, no retry)";
+            return "expired signed URL → typed source-expired at preflight (ZERO decoder opens, no retry)";
         });
 
         // B4 — cookie-gated: direct decoder open fails at the gate (negative control);
@@ -185,15 +187,16 @@ public sealed class BrowserWindow : Window
             return $"blob: detected on live DOM → typed blob-untransferable; {mse}";
         });
 
-        // B7 — DRM: EME usage observed (requestMediaKeySystemAccess resolved) → typed
-        // drm-detected limitation; no bypass/key-extraction/capture attempted (asserted).
+        // B7 — DRM: EME usage observed (requestMediaKeySystemAccess resolved OR refused — the
+        // ATTEMPT is the signaling, consult trap 3; granted=Windows/WebView2, denied=WebKitGTK
+        // which ships no ClearKey) → typed drm-detected limitation; no bypass attempted.
         await Scenario("B7-drm-eme", async () =>
         {
             var d = await Discover(_lab.Url("/page/drm.html"), waitFor: "eme-");
-            var granted = d.Logs.Any(l => l.StartsWith("eme-keysystem-access-granted", StringComparison.Ordinal));
-            Require(granted, $"EME usage not observed: [{string.Join(" | ", d.Logs)}]");
+            var eme = d.Logs.FirstOrDefault(l => l.StartsWith("eme-keysystem-access-", StringComparison.Ordinal));
+            Require(eme is not null, $"EME usage not observed: [{string.Join(" | ", d.Logs)}]");
             SpikeLog.Line("browser", $"B7 typed-limitation drm-detected evidence=EME-usage page-log=[{string.Join(" | ", d.Logs)}] — NO bypass/key-extraction/capture attempted");
-            return "EME signaling detected → typed drm-detected (no bypass attempted, asserted)";
+            return $"EME signaling detected ({eme}) → typed drm-detected (no bypass attempted, asserted)";
         });
     }
 
@@ -243,9 +246,12 @@ public sealed class BrowserWindow : Window
             {
                 var raw = await _web.InvokeScript(script);
                 SpikeLog.Line("browser", $"discovery raw={Redact.Scrub(raw ?? "null")}");
-                // InvokeScript returns the result JSON-encoded; our script returns a JSON string (double-encoded).
-                var inner = JsonSerializer.Deserialize<string>(raw ?? "null")
-                    ?? throw new InvalidOperationException("empty discovery result");
+                // Engine difference (finding V6): WebView2 returns the result JSON-ENCODED
+                // (our JSON string arrives double-encoded); WebKitGTK returns it RAW. Both are
+                // real transport shapes — accept both.
+                var inner = raw is not null && raw.TrimStart().StartsWith('"')
+                    ? JsonSerializer.Deserialize<string>(raw) ?? throw new InvalidOperationException("empty discovery result")
+                    : raw ?? throw new InvalidOperationException("empty discovery result");
                 using var doc = JsonDocument.Parse(inner);
                 var src = doc.RootElement.GetProperty("src").GetString() ?? "";
                 var proto = doc.RootElement.GetProperty("protocol").GetString() ?? "";
