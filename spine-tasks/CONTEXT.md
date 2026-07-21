@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** Active
-**Next Task ID:** SP-019
+**Next Task ID:** SP-020
 
 ---
 
@@ -19,6 +19,14 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 **Continuous-run authorization (owner decision 2026-07-18, chat):** the port runs autonomously until no claimable board work remains. SP-001 ratified; Phase 1 decomposition approved. Per-task owner checkpoints are replaced by mandatory **solo consults on `anthropic/claude-fable-5`**: pre-decomposition per phase, pre-approach and pre-completion per packet, pre-land for P0/high-risk work. Council stays off until the probe row passes; never substitute a weaker model for a failed Fable gate. **AMENDED 2026-07-19 (owner, chat): future questions/acceptations may go to the council consult** — council is the sanctioned fallback when Fable solo caps/fails (record the seats-unproven caveat with each verdict).
 
 **Pause protocol:** if the Fable 5 consult route errors or times out, assume the 5-hour subscription window is exhausted — safely park in-flight work (spine state is durable), write `.spine/handoff.md`, delete/pause loops and monitors, and STOP until the owner resumes with the session prompt. Same response to unresolvable ambiguity, safety/privacy questions, or repeated failure: pause, never improvise past a gate.
+
+### Phase 4 — AI provider spike, optional T-1 tooling tail
+
+Phase 3 COMPLETE 2026-07-21 (all three rows landed, all WIP pending owner ratification). Phase 4 decomposition approved by solo Fable consult 2026-07-21 (council unavailable T-7): **(a) AI provider spike CLAIMABLE NOW as ONE packet** — both former gates discharged (UI rows landed; SP-016's `AiCommandEnvelope` is the fuzz target); deterministic fake OpenAI-compatible loopback endpoint = the BETTER fuzz instrument (timeouts/429s/refusals/malformed/mid-stream-cancel on demand); real Ollama = bonus session fact or named limit; remote-host rejection = policy test vs non-loopback (no real remote needed); cloud = named limit (no credentials on this box). **(b) Quips/sound row stays BLOCKED** — "Linux audio-stack decision" is genuinely owner-only; SP-017's selection record is the decision INPUT, not the decision. **(c) SP-020 = T-1 tooling (durable patch manifest) as OPTIONAL tail after SP-019** — owner may prefer upstream fixes; T-3/T-5/T-8/T-12 stay rows, not packets. Serial. Only after SP-019 (+SP-020 judgment recorded) does zero-claimable hold → close-out report.
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-019-ai-provider-spike | Row: spike cancellable AI providers and strict commands (fuzz SP-016's real validator with zero-execution canary; fake OpenAI-compatible loopback lab w/ failure injection; cancellation/timeout/rate/error/refusal/malformed; remote-host rejection policy test; Ollama session fact or named limit; cloud named limit; no sensitive logs w/ audit) | Authored 2026-07-21 | SP-018 |
 
 ### Phase 3 — AI contract, audio backend spike, online-video handoff spike (COMPLETE 2026-07-21)
 
