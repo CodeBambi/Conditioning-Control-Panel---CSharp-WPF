@@ -59,17 +59,26 @@ function Get-Texts($window) {
     return $lines
 }
 function Get-Tube {
+    # OWNED windows nest under their owner in the UIA tree (they are not root children):
+    # while attached, the tube is a DESCENDANT of the dashboard element — matching on probe
+    # texts conflated the two windows and broke G9's window identity (dashboard hwnd read as
+    # the tube's). Match the WINDOW NAME, detached (root child) or attached (descendant).
     foreach ($w in (Get-Windows $script:proc.Id)) {
-        if ((Get-Texts $w) -match 'avatar-probe:') { return $w }
+        if ($w.Current.Name -like 'AvatarTube DEMONSTRATOR*') { return $w }
+        if ($w.Current.Name -eq 'CCP Client') {
+            $nameCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'AvatarTube DEMONSTRATOR (SP-015)')
+            $tube = $w.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $nameCond)
+            if ($null -ne $tube) { return $tube }
+        }
     }
     return $null
 }
 function Get-Dashboard {
-    # UIA tree queries can race window transitions (detach/attach) — retry briefly.
-    foreach ($try in 1..6) {
+    # The dashboard is always a root child (it owns, it is never owned). UIA tree queries
+    # can race window transitions (detach/attach) — retry generously.
+    foreach ($try in 1..15) {
         foreach ($w in (Get-Windows $script:proc.Id)) {
-            $t = Get-Texts $w
-            if (($t -match 'layout-probe:') -and -not ($t -match 'avatar-probe:')) { return $w }
+            if ($w.Current.Name -eq 'CCP Client') { return $w }
         }
         Start-Sleep -Milliseconds 400
     }
@@ -346,7 +355,9 @@ Gate ([AvNative]::GetWindow($script:tubeHwnd, [AvNative]::GW_OWNER) -eq [IntPtr]
 $g9b = Decode-Shots (Collect-Shots 'g9b' 1.5 260)
 Click-Button 'Attach'
 Start-Sleep -Milliseconds 400
-$dashHwnd = [IntPtr](Get-Dashboard).Current.NativeWindowHandle
+$dash = Get-Dashboard
+if ($null -eq $dash) { Fail 'dashboard window not found after attach' }
+$dashHwnd = [IntPtr]$dash.Current.NativeWindowHandle
 $exStyle2 = [AvNative]::GetWindowLong($script:tubeHwnd, [AvNative]::GWL_EXSTYLE)
 Gate (($exStyle2 -band [AvNative]::WS_EX_TOPMOST) -eq 0) 'g9/attached-not-topmost' ("exstyle=0x{0:X8}" -f $exStyle2)
 Gate ([AvNative]::GetWindow($script:tubeHwnd, [AvNative]::GW_OWNER) -eq $dashHwnd) 'g9/attached-owned' 'GW_OWNER == dashboard'
