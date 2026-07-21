@@ -1,18 +1,18 @@
 # STATUS: SP-020 — durable pi-spine local-patch mechanism (T-1)
 
-**Current Step:** Step 1 — empirical patch inventory + pre-approach consult
-**Last Updated:** 2026-07-21 (authored)
+**Current Step:** Step 2 — manifest + apply + verify
+**Last Updated:** 2026-07-21 (Step 1 in progress)
 
 ### Step 1: Empirical patch inventory + pre-approach consult
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
-- [ ] STATUS.md updated before starting work
-- [ ] Pristine scratch install (`%TEMP%/sp020-scratch`) + full recursive diff vs live `.pi/npm/node_modules/pi-spine`; EVERY delta classified (patch/noise/version-drift; windowsHide presence + load-bearing)
-- [ ] T-12 local-patch feasibility decision with code location
-- [ ] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
+- [x] STATUS.md updated before starting work
+- [x] Pristine scratch install (`%TEMP%/sp020-scratch` @2.8.0 == live version; latest 2.10.0 drift-checked) + full recursive diff vs live `.pi/npm/node_modules/pi-spine`; EVERY delta classified in record.md (2 fsync PRESENT, dotnet-allowlist LOST, @file-tail LOST, SKILL.md T-11 amendment PRESENT-undocumented, journal.mjs upstream-OK, windowsHide ABSENT/not load-bearing)
+- [x] T-12 local-patch feasibility decision: STAYS UPSTREAM (locations: git-helpers.mjs:22 `--no-index`, merge.mjs ~205-222 `git rm --cached` fallback, diagnosis-merge-failure.mjs repair command)
+- [x] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
 
 ### Step 2: Manifest + apply + verify
-**Status:** ⬜ Not Started
+**Status:** 🔵 In Progress
 
 - [ ] `.spine/patches/manifest.json` (anchor-based, machine-readable, rationale links)
 - [ ] `.spine/patches/apply.mjs` (idempotent, loud anchor-miss failure, all-or-nothing)
