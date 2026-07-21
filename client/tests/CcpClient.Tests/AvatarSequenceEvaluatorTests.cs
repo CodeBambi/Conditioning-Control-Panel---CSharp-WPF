@@ -232,7 +232,7 @@ public sealed class AvatarSequenceEvaluatorTests
         var frozen = alive.Select(s => s with { ContentCentroidY = 64.0 }).ToArray();
         Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(frozen, [], Pack), "float-liveness").Passed);
 
-        // Range beyond 2×(amplitude+2): content moved more than the float allows (window moved or wrong transform).
+        // Range beyond 2×(amplitude+3): content moved more than the float allows (window moved or wrong transform).
         var excessive = alive.Select((s, i) => s with { ContentCentroidY = 64.0 + 10.0 * Math.Sin(i / 1.5) }).ToArray();
         Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(excessive, [], Pack), "float-liveness").Passed);
 

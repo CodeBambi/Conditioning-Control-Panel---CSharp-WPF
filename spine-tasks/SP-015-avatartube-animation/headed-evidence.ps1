@@ -367,7 +367,7 @@ $exStyle2 = [AvNative]::GetWindowLong($script:tubeHwnd, [AvNative]::GWL_EXSTYLE)
 Gate (($exStyle2 -band [AvNative]::WS_EX_TOPMOST) -eq 0) 'g9/attached-not-topmost' ("exstyle=0x{0:X8}" -f $exStyle2)
 Gate ([AvNative]::GetWindow($script:tubeHwnd, [AvNative]::GW_OWNER) -eq $dashHwndG9) 'g9/attached-owned' 'GW_OWNER == dashboard'
 $g9c = Decode-Shots (Collect-Shots 'g9c' 1 260)
-Invoke-Sequence 'g9' (Save-Samples (@($g9a) + @($g9b) + @($g9c)) 'g9') $false @('frames-advance', 'no-blank', 'monotonic-modular-advance')
+Invoke-Sequence 'g9' (Save-Samples (@($g9a) + @($g9b) + @($g9c)) 'g9') $false @('frames-advance', 'no-blank', 'monotonic-modular-advance') $false
 # Behavioral ownerless (after the sequence gates — a pause gap must not pollute them):
 # minimizing the dashboard must NOT hide the DETACHED tube (owned windows hide with owner).
 Click-Button 'Detach'

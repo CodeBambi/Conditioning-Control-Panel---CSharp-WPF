@@ -186,7 +186,11 @@ public static class AvatarSequenceEvaluator
     /// </summary>
     private static AvatarVerdict EvaluateFloatLiveness(IReadOnlyList<AvatarSample> samples, IReadOnlyList<AvatarTraceEvent> trace)
     {
-        const double amplitudeBound = 4.0 + 2.0;
+        // ±4 DIP amplitude = 8px peak-to-peak at scale 1; +3px/side tolerance covers the
+        // fractional-offset nearest-neighbor resample noise (Step-4 rerun: a legitimate
+        // 12.9px group range exceeded the old ±2 tolerance's 12px bound; doubled amplitude
+        // (16px+) — the multiplied-transform defect — still fails at 14px).
+        const double amplitudeBound = 4.0 + 3.0;
         // Paused windows freeze the float legitimately — frozen samples are excluded.
         var pauseWindows = PauseWindows(trace);
         var groups = samples
