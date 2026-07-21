@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** Active
-**Next Task ID:** SP-018
+**Next Task ID:** SP-019
 
 ---
 
@@ -28,6 +28,7 @@ Phase 2 COMPLETE 2026-07-21 (all six rows landed, all WIP pending owner ratifica
 |------|---------|--------|------|
 | SP-016-ai-operation-contract | Row: define provider-neutral AI operation contract (define-only; typed outcomes, cancellation/generation, provider switching, interactive vs awareness, local memory, endpoint classification/disclosure, moderation, strict command envelope, per-command results, secret storage, offline behavior, content-free diagnostics) | **Done 2026-07-21** (landed `3ccb9edd` ff; batch `20260721T081732` — clean single-worker run (~48 min), then merge_blocked by tracked-ignored legacy scan → destructive drop-cached advice REFUSED → manual orch ff + gate-record recovery + integrate; 13 named contract sections; 213/213 + 22/22 both platforms; engine reviews APPROVE+PASS; row stays WIP pending owner ratification) | SP-015 |
 | SP-017-audio-backend-spike | Row: spike cross-platform audio channel backend (quarantined spike; backend comparison w/ exact versions/licenses/natives; voice completion/interruption/pause, bounded-latency overlapping SFX, whisper busy/completion, device enum/select/fallback, volume, teardown, packaging; explicit channel-ownership selection pending-owner; WSLg scoping: enumerate/select/fallback/teardown/packaging REAL, latency numbers Windows-headed only) | **Done 2026-07-21** (landed `a90043af` ff; batch `20260721T093546` — clean single-worker run (~80 min), T-12 deterministic merge_block → refused destructive advice → playbook recovery; SoundFlow+Silk.NET.OpenAL admitted via in-packet admission gate; 36/36 Windows observations ×3 backends + A11 coexistence probe; WSLg RDP-Sink/fallback/teardown/packaging REAL, latency disclaimed; SELECTION pending-owner (SoundFlow primary, explicit channel owners); 213/213 + 22/22 both platforms; engine reviews APPROVE+PASS; row stays WIP pending owner ratification) | SP-016 |
+| SP-018-video-handoff-spike | Row: spike browser-to-native online-video handoff (quarantined spike; matrix: direct MP4/WebM, HLS/DASH, target sites (owned/public only), cookies/headers, expiring URLs, blob:/MSE, DRM detect-report-only; NO sensitive logging (audit-the-logs checkbox); Linux browser-discovery limits per SP-011 inheritance, native decode side real) | Authored 2026-07-21 | SP-017 |
 
 ### Phase 2 — governance repairs, WebView/DTRH spike, dashboard-successor UI rows (COMPLETE 2026-07-21)
 
