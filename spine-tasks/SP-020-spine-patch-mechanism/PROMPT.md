@@ -30,7 +30,7 @@ Execute `client/docs/task-board.md` row **"T-1 (tooling): durable pi-spine local
 |-------|-------|
 | testCommand | `dotnet build client/CcpClient.sln -c Debug --nologo && dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo && dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo` |
 | fileScopeMustChange | `.spine/patches/manifest.json`, `.spine/patches/README.md` |
-| fileScopeMustNotChange | `ConditioningControlPanel/**`, `client/**`, `.pi/**`, `.spine/spine-config.json`, `spine-tasks/CONTEXT.md` |
+| fileScopeMustNotChange | `ConditioningControlPanel/**`, `client/src/**`, `client/tests/**`, `client/CcpClient.sln`, `client/spikes/**`, `.pi/**`, `.spine/spine-config.json`, `spine-tasks/CONTEXT.md` |
 | artifactsMustExist | `.spine/patches/manifest.json`, `.spine/patches/apply.mjs`, `.spine/patches/verify.mjs`, `.spine/patches/README.md`, `spine-tasks/SP-020-spine-patch-mechanism/record.md` |
 
 ## Review Level: 2 (Plan and Code)
@@ -96,3 +96,4 @@ Call `spine_review_step` after each step. **T-2 heading format is load-bearing**
 
 - 2026-07-21 (authoring): **owner decision (ask_user): author SP-020 now** (over skip-to-close-out). Phase 4 consult verdicts applied: optional tail confirmed as legitimate scope; evidence shaped as in-packet scratch cycle + post-land orchestrator real-reinstall gate (worker never touches real `.pi/npm` — engine-under-itself reinstall banned); T-12 local-patch feasibility is an inventory-driven decision, not assumed.
 - 2026-07-21 (authoring): `## Review Level: 2` structured heading emitted (T-2 fixed format). Launch: validate → analyze → plan → preflight → detached batch per owner cycle.
+- 2026-07-21 (contract fix, batch `20260721T142240` `contract_failed`): `fileScopeMustNotChange` was `client/**` — a blanket ban contradicting the declared File Scope's `client/docs/task-board.md` (T-1 row evidence edit, required pre-.DONE) and the Check-If-Affected `client/docs/port-lessons.md` convention; the worker did exactly what the packet said and the contract failed it. Narrowed to the quarantine-intent paths (`client/src/**`, `client/tests/**`, `client/CcpClient.sln`, `client/spikes/**`) per the SP-017/018/019 packets. **Packet-template lesson: at authoring, intersect the mustNotChange set against the File Scope list — `spine tasks validate` does not catch scope-set self-contradictions.** Retry launched after this fix.
