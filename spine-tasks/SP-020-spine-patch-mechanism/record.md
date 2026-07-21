@@ -49,7 +49,13 @@
 
 ## Step 2 — manifest + apply + verify
 
-(pending)
+**`.spine/patches/manifest.json`** — 5 anchor-based patches (67 lines, machine-readable): `fsync-r-plus-abort`, `fsync-r-plus-lifecycle-archive`, `dotnet-evidence-allowlist`, `worker-tail-at-file`, `skill-headed-evidence-sizing` (the undocumented 4th local patch found empirically). Per patch: id, repo-relative target under `.pi/npm/node_modules/pi-spine/`, unique anchor + replacement (byte-exact to the live patched tree, incl. the `// ponytail:` comments), rationale linking the T-row/lesson, `testedVersions: ["2.8.0", "2.10.0"]` (anchors verified byte-identical in both). Manifest was GENERATED from the live + pristine trees, never hand-transcribed.
+
+**`.spine/patches/apply.mjs`** (75 lines) — two phases: (1) validate ALL patches against the target tree with the consult-mandated tri-state + occurrence counting (anchor×1 → apply; replacement×1 → idempotent skip; anything else → FAIL loudly naming the patch id, exit 1); (2) only if every patch validated, write. All-or-nothing by construction — the drift demo (Step 3 item 9) proved zero writes on failure. `--root <dir>` targets a scratch install; defaults to the repo `.pi/npm`.
+
+**`.spine/patches/verify.mjs`** (70 lines) — per-patch `applied` / `missing` / `drifted` report; exit 0 only when all applied. Smoke at authoring time: pristine tree → 5 missing exit 1; live tree → 3 applied + 2 missing exit 1 (exactly the Step 1 inventory). Designed as the post-install/pre-batch loud missing-patch check.
+
+**`.spine/patches/README.md`** — the fragility problem (patches die on reinstall — 2 of the 5 empirically already dead), the mechanism, the re-apply trigger (after ANY pi-spine install/update: `node .spine/patches/apply.mjs && node .spine/patches/verify.mjs`), the honest automation limit (no npm-hook possible without engine modification — named limit: manual/orchestrator trigger + pre-launch verify wiring + the post-land real-reinstall gate), links to the board rows.
 
 ## Step 3 — scratch-cycle evidence (all OUTSIDE the repo, `%TEMP%`)
 
