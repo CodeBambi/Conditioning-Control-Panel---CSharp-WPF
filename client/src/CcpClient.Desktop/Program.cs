@@ -120,10 +120,21 @@ public static class Program
         var avatarAnimate = args.Contains("--avatar-animate", StringComparer.Ordinal);
         var avatarTrace = ArgValue(args, "--avatar-trace");
 
+        // SP-023 DTRH host slice b1: --dtrh-demo [page] opens the DTRH host shell at
+        // startup (same WSLg no-input-automation reasoning). page defaults to index.html;
+        // probe.html runs the transport-check matrix page. --dtrh-auto-close <seconds>
+        // closes the host window on a timer (WSLg exit evidence without input automation).
+        var dtrhDemo = args.Contains("--dtrh-demo", StringComparer.Ordinal);
+        var dtrhPage = ArgValue(args, "--dtrh-page") ?? "index.html";
+        var dtrhAutoClose = int.TryParse(ArgValue(args, "--dtrh-auto-close"), out var closeSeconds)
+            ? closeSeconds
+            : 0;
+
         try
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
-            return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace, avatarAnimate).StartWithClassicDesktopLifetime(args);
+            return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace, avatarAnimate,
+                dtrhDemo, dtrhPage, dtrhAutoClose).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -190,8 +201,10 @@ public static class Program
     public static AppBuilder BuildAvaloniaApp(
         ApplicationHost host, bool popupDemo = false,
         bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
-        bool avatarAnimate = false) => AppBuilder
-        .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate))
+        bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
+        int dtrhAutoCloseSeconds = 0) => AppBuilder
+        .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate,
+            dtrhDemo, dtrhPage, dtrhAutoCloseSeconds))
         .UsePlatformDetect();
 
     private static string? ArgValue(string[] args, string flag)

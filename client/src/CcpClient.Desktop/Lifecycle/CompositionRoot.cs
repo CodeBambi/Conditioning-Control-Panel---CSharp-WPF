@@ -94,6 +94,9 @@ public sealed class CompositionRoot
             // SP-015 AvatarTube demonstrator: construction starts nothing; the tube opens
             // on the user path (phase 4) via --avatartube-demo.
             new Features.AvatarTube.AvatarTubeParticipant(infra.OwnerFor("AvatarTubeDemo"), infra.UiDispatch, infra.Log),
+            // SP-023 DTRH host slice b1: owns the §4 loopback origins + §3.3 inbox + bridge
+            // token; the web surface itself is phase-4, selected by probed capability states.
+            new Features.Dtrh.DtrhParticipant(infra.OwnerFor("DtrhHost"), infra.Log),
         ];
     }
 
@@ -139,6 +142,13 @@ public sealed class CompositionRoot
             Task.FromResult(SessionProbe.Probe(new RuntimeSessionEnvironment())));
         capabilities.Register("atomic-filesystem", token =>
             Task.Run(() => AtomicFileSystemProbe.Probe(dataDirectory, new ProcMountsTable()), token));
+        // SP-023: the DTRH host's two admitted surfaces (admission §5), probed by
+        // exercising the exact dependency loads the WebView package performs (12.0.1
+        // binary-verified); rendering is claimed only by headed evidence, never here.
+        capabilities.Register(Features.Dtrh.DtrhCapabilityProbes.EmbeddedCapability, _ =>
+            Task.FromResult(Features.Dtrh.DtrhCapabilityProbes.ProbeEmbedded()));
+        capabilities.Register(Features.Dtrh.DtrhCapabilityProbes.DialogCapability, _ =>
+            Task.FromResult(Features.Dtrh.DtrhCapabilityProbes.ProbeDialog()));
         var probeRunner = new CapabilityProbeRunner(infra.Registry.OwnerFor("CapabilityProbes"), capabilities);
 
         return new ApplicationHost(

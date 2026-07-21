@@ -1,0 +1,21 @@
+20:18:37.711 spike: page=probe payload=/mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260721T181508/lane-1/ConditioningControlPanel/Resources/web/dtrh
+20:18:37.712 spike: overlay=/home/mich/ccp-sp023-firstgate/spike/overlay scratch=/home/mich/ccp-sp023-firstgate/spike/scratch
+20:18:37.761 loopback: page origin http://127.0.0.1:54553 (overlay-first /home/mich/ccp-sp023-firstgate/spike/overlay over READ-ONLY /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260721T181508/lane-1/ConditioningControlPanel/Resources/web/dtrh)
+20:18:37.762 loopback: media origin http://127.0.0.1:61279 (READ-ONLY /mnt/e/Code/Conditioning-Control-Panel/.worktrees/spine-20260721T181508/lane-1/ConditioningControlPanel/Resources/web/dtrh/assets, CORS scoped to http://127.0.0.1:54553)
+20:18:38.818 webview: EnvironmentRequested args=Avalonia.Platform.GtkWebViewEnvironmentRequestedEventArgs
+20:18:38.818 webview: GTK WebKit base dirs set under scratch
+20:18:39.010 spike: navigating http://127.0.0.1:54553/dtrh/probe.html t=1343ms (cold start)
+20:18:39.015 webview: EnvironmentRequested args=Avalonia.Platform.GtkWebViewEnvironmentRequestedEventArgs
+20:18:39.015 webview: GTK WebKit base dirs set under scratch
+20:18:39.017 webview(dialog): Show() called; render evidence via XGetImage capture
+20:18:39.157 webview(dialog): AdapterCreated
+20:18:39.169 webview: AdapterCreated info='DetailedWebViewAdapterInfo { Type = WebKitGtk, Engine = WebKit, Version = 2.52.3, IsSupported = True, IsInstalled = True, UnavailableReason = , SupportedScenarios = NativeDialog }'
+20:18:39.434 webview(dialog): NavigationStarted t=1767ms
+20:18:39.450 loopback: GET /dtrh/probe.html -> 200 2199B (overlay:probe.html)
+20:18:39.459 webview(dialog): NavigationCompleted t=1792ms success=True
+20:18:39.552 loopback: GET /dtrh/bridge.js -> 200 1808B (payload:bridge.js)
+20:18:39.561 page->host: {"type":"probe-p2h-ica","note":"invokeCSharpAction path"}
+20:19:04.014 spike: auto-quit
+20:19:04.015 spike: teardown t=26350ms engineLive=False heartbeats=0
+20:19:04.031 webview: AdapterDestroyed (renderer/host process failure surfaces here)
+20:19:04.031 spike: process exiting
