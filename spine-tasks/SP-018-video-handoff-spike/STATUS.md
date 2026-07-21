@@ -1,16 +1,16 @@
 # STATUS: SP-018 — spike browser-to-native online-video handoff
 
 **Current Step:** Step 1 — video archaeology + source-matrix + package admission pre-approach consult
-**Last Updated:** 2026-07-21 (authored)
+**Last Updated:** 2026-07-21 (in progress)
 
 ### Step 1: Video archaeology + source-matrix definition + package admission pre-approach consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 Outcomes done — plan review pending (RL2 order)
 
-- [ ] STATUS.md updated before starting work
-- [ ] WPF + first-attempt video archaeology (READ-ONLY, `File.cs:line`); handoff REJECT lessons cited
-- [ ] Source-matrix defined (every acceptance row → loopback fixture design + public test vectors w/ licenses)
-- [ ] Native decoder candidates from live feeds (exact versions/licenses/natives per OS)
-- [ ] **Package admission solo Fable 5 consult** (verdict + actual answering model in record.md BEFORE checkbox)
+- [x] STATUS.md updated before starting work
+- [x] WPF + first-attempt video archaeology (READ-ONLY, `File.cs:line`); handoff REJECT lessons cited
+- [x] Source-matrix defined (every acceptance row → loopback fixture design + public test vectors w/ licenses)
+- [x] Native decoder candidates from live feeds (exact versions/licenses/natives per OS)
+- [x] **Package admission solo Fable 5 consult** (verdict + actual answering model in record.md BEFORE checkbox)
 
 ### Step 2: Loopback source lab + native decode handoff core
 **Status:** ⬜ Not Started
