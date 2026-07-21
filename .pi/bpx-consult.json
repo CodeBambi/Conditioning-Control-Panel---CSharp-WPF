@@ -23,8 +23,8 @@
         "performance"
       ],
       "synthesizer": {
-        "model": "kimi-api/k3",
-        "thinkingLevel": "max"
+        "model": "anthropic/claude-fable-5",
+        "thinkingLevel": "high"
       },
       "parallel": true,
       "timeoutMs": 120000,
@@ -60,7 +60,7 @@
       "thinkingLevel": "max"
     },
     "performance": {
-      "defaultModel": "anthropic/claude-fable-5",
+      "defaultModel": "zai/glm-5.2",
       "thinkingLevel": "medium"
     }
   },
