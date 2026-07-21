@@ -118,8 +118,11 @@ public partial class App : Application
                         return;
                     }
 
-                    _host.LogDiagnostic("dtrh: host window closed — closing dashboard");
-                    dashboard.Close();
+                    _host.LogDiagnostic("dtrh: host window closed — shutting down the lifetime");
+                    // Explicit Shutdown, not dashboard.Close(): on the GTK backend closing the
+                    // MainWindow does not reliably end the classic lifetime here (SP-023 WX:
+                    // dashboard closed, IsVisible=false, yet Exit never fired — process hung).
+                    desktop.Shutdown();
                 };
                 if (_dtrhAutoCloseSeconds > 0)
                 {

@@ -102,3 +102,42 @@ Source files: `ConditioningControlPanel/Chaos/ChaosWebViewHost.cs` (367 lines), 
 - `LoopbackServer` (§4): two GET-only origins, overlay-first, Range 206/416, MIME allowlist pinned to the 9 swept extensions with **415 deny-by-default** + `nosniff` everywhere, OPTIONS preflight 204 `allow-headers: range`, CORS-on-errors, traversal refusal (encoded/dot/backslash/colon/leading-slash), localhost-only, sensitive-logging ban (route classes only; query strings stripped; token route logged as fixed classes).
 - `Inbox` (§3.3): monotonic seq from 1, retained-until-ack (`after` purges), long-poll with bounded injectable timeout, lost-response replay immunity, `ReleaseAll` sticky-release at teardown (found+fixed: a released poller looped back into a wait).
 - **Tests (all new, 245/245 + 22/22 green on Windows AND WSL2):** 7 inbox tests; 14 loopback contract tests (incl. token-required 404, 400-on-bad-after, seq/ack JSON shape, long-poll hang-then-deliver, sensitive-logging assertions); 4 bridge diff/provenance tests; 3 copied-direction manifest tests (real 1538-entry verification + synthetic case-drift + sweep); existing participant/capability-count assertions grown for the new registrations.
+
+---
+
+## Step 4 — boot matrix (WH) + WSLg gate (WX)
+
+### WH (Windows headed, WebView2 150.0.4078.83, adapter `SupportedScenarios = NativeControlHost`)
+
+Transcripts: `evidence/wh/probe-run5.log` (transport matrix), `evidence/wh/index-run3.log` (boot+exit), captures `evidence/wh/after-esc-tap.png` (definitive), `index-engine*.png`.
+
+- **Transport checks BOTH directions (probe page):** `probe-p2h-native` (native `window.chrome.webview.postMessage`) AND `probe-p2h-ica` (invokeCSharpAction) both raised `WebMessageReceived`; host→page synthetic dispatch DELIVERED (`check3 host->page DELIVERED via bridge.on: {"type":"probe-h2p","via":"synthetic-dispatch"}`); **preBuffer replay** on late registration delivered. EXIT=0.
+- **Boot matrix (index):** page `ready` → host flushed init+manifest (archaeology shapes) → `ENGINE LIVE`; pixel-checked render (`after-esc-tap.png`: full Warren hub — spiral tunnel WebGL, FALL IN, difficulty/duration pills, HUD, host status "dtrh: ENGINE LIVE"; pixel stats dark=32%/saturated=4%/407 distinct colors — never a black surface); autoplay flag applied at EnvironmentRequested (`--autoplay-policy=no-user-gesture-required` — log line; W10 spike proof of the flag's effect); **focus claimed at ready with `document.hasFocus()=true`** (InvokeScript check); heartbeats flowing; ESC-hold 1500ms (real keybd_event after a real click — W14 class) → page `exit` → host close → lifetime shutdown → **EXIT=0**, idempotent teardown.
+- **Focus honesty (advisor-reviewed recording):** the no-click claim IS verified at ready (`hasFocus()=true`), and run 1's ESC exit landed without any click ("dtrh: exit received" + clean teardown, `index-run.log`). Later ESC misses were harness-induced focus theft (powershell `SetForegroundWindow` denied by the foreground lock; another app held foreground — "foreground before click: Pal"), NOT a product defect. The reproducible exit driver = real click (the spike's own W15→W16 sequence) then ESC.
+
+### WX (WSL2 Ubuntu 26.04, WSLg X11-via-XWayland; no input automation; no timing claims; Wayland untouched)
+
+Transcripts: `evidence/wx/probe-wx.log`, `evidence/wx/index-wx.log` (EXIT=0), `evidence/wx/index-wx2.log`; capture `evidence/wx/wx-render.png`.
+
+- **Contract testCommand on the final tree** (`~/ccp-sp023`, native ext4): sln 0W/0E; **245/245 + 22/22 green**; `--verify-assets` PASS Debug+Release.
+- **Probe round-trip (FIRST-GATE path exercised in-product):** NativeWebDialog surface; `probe-p2h-ica` arrived (invokeCSharpAction page→host); `check3 host->page DELIVERED via bridge.on: {"type":"probe-h2p","via":"inbox"}` — **the §3.3 long-poll inbox works end-to-end**; `preBuffer REPLAY delivered` — retained delivery = replay-equivalence.
+- **Index run: `ENGINE LIVE` ON LINUX** (ready → init+manifest via inbox → engine live → heartbeats → media fetches) — beyond b1's required render+transport facts; **render session facts: XGetImage (xwd of the dialog window id; root-window XGetImage BadMatch-fails on WSLg) shows the full hub rendered for real** (`wx-render.png` 800x600, mean 7.7%, stddev 8778 — content, not a dark surface). WebKit stderr note recorded honestly: "WebKit wasn't able to find a WebVTT encoder" (gst-plugins-bad absent — environment note, not a DTRH dependency).
+- **Exit:** clean EXIT=0 with full teardown (`index-wx.log`, auto-close 10s). A second run (`index-wx2`) was session-killed before its 35s timer — recorded, not claimed.
+- **Linux exit evidence = timed close, not ESC** (no input automation, SP-008) — named limit on the board row.
+
+### Surprise ledger (all durable; the HttpListener one → port-lessons.md)
+
+1. **A FAILED `HttpListener.Start()` DISPOSES the instance** — retry loops must use a FRESH listener per attempt (the spike's reuse-shape could never have retried; masked there because its few connections never collided). And collisions are systematic: **the 49152–65535 contract range IS the OS dynamic client range** — outbound/TIME_WAIT sockets collide with binds. → port-lessons.md (UTF-8, CRLF preserved).
+2. **Avalonia `Window.Closed` re-fires during lifetime shutdown** (owned window closed again) — an unguarded Closed→Close() handler ping-pongs forever and the process never exits. One-shot guard.
+3. **GTK backend: closing the MainWindow does NOT reliably end the classic lifetime** (dashboard closed, IsVisible=false, Exit never fired) — explicit `desktop.Shutdown()` is the cross-platform exit.
+4. **WebView2 `ExecuteScriptAsync` is apartment-bound** — InvokeScript from a thread-pool thread silently never lands; SendToPage marshals to the UI thread.
+5. **WebView2 runtime layout:** the loader dll is `<version>/EBWebView/<arch>/EmbeddedBrowserWebView.dll`, not the version root (capability probe fixed; runtime 150.0.4078.83).
+6. **AXAML-declared NativeWebView creates its native adapter whenever the window shows — even IsVisible=false** (started a WebView2 on unsupported-path runs; would attempt the non-presenting embedded GTK adapter on Linux). Moved to programmatic creation on the embedded path only.
+7. **0x800700AA stale-profile lock** (W17 zombie class): back-to-back runs where a prior process was killed leave the WebView2 profile locked briefly → init panic (loud, exit 2). Recovery = kill stale msedgewebview2 children; proper recovery/watchdog = b5.
+8. **WSLg: XGetImage on the ROOT window BadMatch-fails; capture per-window-id via xwd** (x11-apps + imagemagick installed via root).
+
+### Consults
+
+#### Pre-completion consult (Step 4)
+
+PENDING
