@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>SoundFlow</id>
+    <version>1.4.1</version>
+    <title>SoundFlow</title>
+    <authors>SoundFlow</authors>
+    <license type="file">LICENSE.md</license>
+    <licenseUrl>https://aka.ms/deprecateLicenseUrl</licenseUrl>
+    <icon>logo.png</icon>
+    <readme>README.md</readme>
+    <projectUrl>https://github.com/LSXPrime/SoundFlow</projectUrl>
+    <description>A powerful and extensible cross-platform .NET audio engine. provides comprehensive audio processing capabilities including playback, recording, effects, analysis, and visualization, built with a modular and high-performance architecture.</description>
+    <releaseNotes>https://github.com/LSXPrime/SoundFlow/releases</releaseNotes>
+    <copyright>Copyright (c) 2025 LSXPrime</copyright>
+    <tags>audio, sound, mp3, wav, playback, record, voice, volume, fft, simd, crossplatform, miniaudio, c#, .net, echo, noise</tags>
+    <repository type="Github" url="https://github.com/LSXPrime/SoundFlow" commit="16aa7783cf512cb2c89b11f0b774407104b4361a" />
+    <dependencies>
+      <group targetFramework="net8.0" />
+    </dependencies>
+  </metadata>
+</package>

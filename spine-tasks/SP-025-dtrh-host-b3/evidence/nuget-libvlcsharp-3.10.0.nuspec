@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>LibVLCSharp</id>
+    <version>3.10.0</version>
+    <title>LibVLCSharp</title>
+    <authors>VideoLAN</authors>
+    <license type="expression">LGPL-2.1-or-later</license>
+    <licenseUrl>https://licenses.nuget.org/LGPL-2.1-or-later</licenseUrl>
+    <icon>icon.png</icon>
+    <readme>README.md</readme>
+    <description>LibVLCSharp is a cross-platform audio and video API for .NET platforms based on VideoLAN's LibVLC Library. It provides a comprehensive multimedia API that can be used across mobile, server and desktop to render video and output audio. Mono, .NET Framework and .NET Core runtimes are supported.
+
+This package contains the core features of LibVLCSharp (libvlc loading and initialization, .NET-friendly classes to ease the use of libvlc...). All other `LibVLCSharp.*` packages depend on this one.
+Features:
+- Play every media file formats, every codec and every streaming protocols
+- Run on every platform, from desktop (Windows, Linux, Mac) to mobile (Android, iOS) and TVs
+- Hardware and efficient decoding on every platform, up to 8K
+- Network browsing for distant filesystems (SMB, FTP, SFTP, NFS...) and servers (UPnP, DLNA)
+- Playback of Audio CD, DVD and Bluray with menu navigation
+- Support for HDR, including tonemapping for SDR streams
+- Audio passthrough with SPDIF and HDMI, including for Audio HD codecs, like DD+, TrueHD or DTS-HD
+- Support for video and audio filters
+- Support for 360 video and 3D audio playback, including Ambisonics
+- Able to cast and stream to distant renderers, like Chromecast and UPnP renderers.
+
+This package also contains the views for the following platforms:
+
+- Android
+- iOS
+- Mac
+- tvOS
+
+If you need Xamarin.Forms support, see LibVLCSharp.Forms. 
+
+LibVLC needs to be installed separately, see VideoLAN.LibVLC.* packages.</description>
+    <releaseNotes>https://code.videolan.org/videolan/LibVLCSharp/blob/master/NEWS</releaseNotes>
+    <tags>libvlc vlc videolan native c/c++ video audio player media mediaplayer codec ffmpeg xamarin graphics ios android linux windows macos cross-platform</tags>
+    <repository type="git" url="https://code.videolan.org/videolan/LibVLCSharp" commit="59d70e96026229e7c232ce5074ecefbf6f8959b6" />
+    <dependencies>
+      <group targetFramework="MonoAndroid8.1">
+        <dependency id="System.Net.Http" version="4.3.4" exclude="Build,Analyzers" />
+        <dependency id="System.Private.Uri" version="4.3.2" exclude="Build,Analyzers" />
+        <dependency id="System.Text.RegularExpressions" version="4.3.1" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net10.0" />
+      <group targetFramework="net10.0-android36.0">
+        <dependency id="LibVLCSharp.Android.AWindowModern" version="3.10.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net10.0-ios26.0" />
+      <group targetFramework=".NETFramework4.0">
+        <dependency id="Microsoft.Bcl.Async" version="1.0.168" exclude="Build,Analyzers" />
+        <dependency id="System.ValueTuple" version="4.5.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETFramework4.7.1">
+        <dependency id="System.Memory" version="4.6.0" exclude="Build,Analyzers" />
+        <dependency id="System.Net.Http" version="4.3.4" exclude="Build,Analyzers" />
+        <dependency id="System.Private.Uri" version="4.3.2" exclude="Build,Analyzers" />
+        <dependency id="System.Text.RegularExpressions" version="4.3.1" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net6.0" />
+      <group targetFramework="net8.0" />
+      <group targetFramework="net9.0" />
+      <group targetFramework="net9.0-android35.0">
+        <dependency id="LibVLCSharp.Android.AWindowModern" version="3.10.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net9.0-ios18.0" />
+      <group targetFramework="net9.0-macos15.0" />
+      <group targetFramework="net9.0-tvos18.0" />
+      <group targetFramework=".NETStandard1.1">
+        <dependency id="NETStandard.Library" version="1.6.1" exclude="Build,Analyzers" />
+        <dependency id="System.Memory" version="4.5.4" exclude="Build,Analyzers" />
+        <dependency id="System.Net.Http" version="4.3.4" exclude="Build,Analyzers" />
+        <dependency id="System.Private.Uri" version="4.3.2" exclude="Build,Analyzers" />
+        <dependency id="System.Text.RegularExpressions" version="4.3.1" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETStandard2.0">
+        <dependency id="System.Memory" version="4.6.0" exclude="Build,Analyzers" />
+        <dependency id="System.Private.Uri" version="4.3.2" exclude="Build,Analyzers" />
+        <dependency id="System.Text.RegularExpressions" version="4.3.1" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETStandard2.1">
+        <dependency id="System.Private.Uri" version="4.3.2" exclude="Build,Analyzers" />
+        <dependency id="System.Text.RegularExpressions" version="4.3.1" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="Xamarin.iOS1.0">
+        <dependency id="System.Net.Http" version="4.3.4" exclude="Build,Analyzers" />
+        <dependency id="System.Private.Uri" version="4.3.2" exclude="Build,Analyzers" />
+        <dependency id="System.Text.RegularExpressions" version="4.3.1" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="Xamarin.Mac2.0">
+        <dependency id="System.Net.Http" version="4.3.4" exclude="Build,Analyzers" />
+        <dependency id="System.Private.Uri" version="4.3.2" exclude="Build,Analyzers" />
+        <dependency id="System.Text.RegularExpressions" version="4.3.1" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+    <frameworkAssemblies>
+      <frameworkAssembly assemblyName="System.IO" targetFramework=".NETFramework4.7.1" />
+      <frameworkAssembly assemblyName="System.Runtime" targetFramework=".NETFramework4.7.1" />
+      <frameworkAssembly assemblyName="System.Security.Cryptography.Algorithms" targetFramework=".NETFramework4.7.1" />
+      <frameworkAssembly assemblyName="System.Security.Cryptography.Encoding" targetFramework=".NETFramework4.7.1" />
+      <frameworkAssembly assemblyName="System.Security.Cryptography.Primitives" targetFramework=".NETFramework4.7.1" />
+      <frameworkAssembly assemblyName="System.Security.Cryptography.X509Certificates" targetFramework=".NETFramework4.7.1" />
+      <frameworkAssembly assemblyName="System.Text.RegularExpressions" targetFramework=".NETFramework4.7.1" />
+      <frameworkAssembly assemblyName="Java.Interop" targetFramework="MonoAndroid8.1" />
+      <frameworkAssembly assemblyName="System.Drawing.Common.dll" targetFramework="Xamarin.iOS1.0, Xamarin.Mac2.0" />
+      <frameworkAssembly assemblyName="Xamarin.Mac" targetFramework="Xamarin.Mac2.0" />
+    </frameworkAssemblies>
+  </metadata>
+</package>

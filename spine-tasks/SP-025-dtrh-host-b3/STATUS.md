@@ -1,15 +1,15 @@
 ## STATUS: SP-025 — DTRH host slice b3: native SFX/audio/video + freeze + rendered tint safety
-**Current Step:** Step 1 — SFX/freeze/tint/video archaeology + design + package admission + pre-approach consult
-**Last Updated:** 2026-07-21 (authored)
+**Current Step:** Step 2 — native effects core (SFX + freeze + tint mechanism)
+**Last Updated:** 2026-07-22 (Step 1 complete — archaeology/admission/design/consult in record.md)
 **Blockers:** none
 
 ### Step 1: archaeology + admission + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (sfx/freeze/tint/native-video sites, `File.cs:line`)
-- [ ] Payload protocol.js field verification for b3-owned messages
-- [ ] Package admission gate (SoundFlow live-feed re-confirm; video backend decision)
-- [ ] Design (DtrhNativeEffects, freeze semantics, divergence decision framing)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (sfx/freeze/tint/native-video sites, `File.cs:line`)
+- [x] Payload protocol.js field verification for b3-owned messages
+- [x] Package admission gate (SoundFlow live-feed re-confirm; video backend decision)
+- [x] Design (DtrhNativeEffects, freeze semantics, divergence decision framing)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: native effects core
 - [ ] DtrhNativeEffects.cs (SFX pool / freeze / tint mechanism)
