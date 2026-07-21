@@ -10,6 +10,7 @@ Packet emits structured `## Review Level: 2` heading. Per-call record:
 |------|------------------------|--------|----------------------|
 | 1 | type=plan after step-1 commit | `skipped: true`, `spawnFailed: false` — SP-195 nested-spawn block, reviewLevel echoed 2 | NO in-worker (by design); engine reviews post-.DONE |
 | 2 | type=plan after step-2 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
+| 3 | type=plan after step-3 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
 
 ## Step 1 — pin re-verification, transport design, pre-approach consult
 
@@ -86,4 +87,9 @@ Total matches the SP-011 tree-hash claim (1536 files). All 9 extensions are cove
 
 ## Step 4 — verification
 
-(filled after run)
+- Contract testCommand **green on Windows:** `dotnet build client/CcpClient.sln` 0W/0E (6.21s); `CcpClient.Tests` **213/213**; `CcpClient.HeadlessTests` **22/22**.
+- Pollution guard **green on WSL2** (~/ccp-sp022, re-rsync'd): build 0W/0E (8.74s); 213/213; 22/22.
+- Spike re-build outputs recorded separately (Step 1): Windows 0W/0E 5.56s; WSL2 0W/0E 8.11s.
+- `git diff --check` clean. `git status --short` empty after step commits.
+- File-scope audit vs batch base (my 3 step commits): changed paths = `client/docs/dtrh-admission.md`, `client/docs/task-board.md`, `spine-tasks/SP-022-dtrh-admit/**` ONLY. Forbidden paths (`ConditioningControlPanel/**`, `client/src/**`, `client/tests/**`, `client/CcpClient.sln`, `client/spikes/**`, `.spine/**`) verified CLEAN. fileScopeMustChange (dtrh-admission.md) ✓. artifactsMustExist: dtrh-admission.md ✓, record.md ✓.
+- Completion criteria: all met — package pin re-confirmed from live feed + restore/build re-run on BOTH platforms; Linux native deps pinned with apt names/versions; transport = minimal transport-only diff spec with per-direction matrix + DECIDED Linux host→page (long-poll inbox); loopback security contract written, approved-by-decree; no classic fallback; Wayland named limit; slice cut b1…b5 with acceptance mapping + evidence classes; board admit row WIP with named limits (never DONE); both solo Fable consults persisted with actual answering models + truncation provenance.

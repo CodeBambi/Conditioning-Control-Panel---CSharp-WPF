@@ -1,7 +1,7 @@
 # STATUS: SP-022 — admit DTRH browser and origin design
 
-**Current Step:** Step 4 — testing & verification
-**Last Updated:** 2026-07-21 (worker, Steps 1–3 complete, reviews skipped by design SP-195)
+**Current Step:** Complete — .DONE
+**Last Updated:** 2026-07-21 (worker, all steps complete)
 
 ### Step 1: Pin re-verification + transport design + pre-approach consult
 **Status:** ✅ Complete
@@ -26,8 +26,8 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 4: Testing & Verification
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green (client 0W/0E + both test projects — pollution guard)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` = File Scope only
+- [x] Contract testCommand green (client 0W/0E + both test projects — pollution guard; Windows 213/213 + 22/22, WSL2 213/213 + 22/22)
+- [x] `git diff --check` clean
+- [x] `git status --short` = File Scope only
