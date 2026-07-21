@@ -1,16 +1,16 @@
 # STATUS: SP-023 — DTRH host slice b1: shell, origins, transport, boot matrix
 
 **Current Step:** Step 1 — FIRST GATE: NativeWebDialog invokeCSharpAction proof + host design + pre-approach consult
-**Last Updated:** 2026-07-21 (authored)
+**Last Updated:** 2026-07-21 (Step 1 in progress)
 
 ### Step 1: FIRST GATE + host design + pre-approach consult
-**Status:** ⬜ Not Started
+**Status:** 🔨 In Progress
 
-- [ ] STATUS.md updated before starting work
-- [ ] **FIRST CHECKBOX:** `invokeCSharpAction` page→host on NativeWebDialog — WSLg proof, binary verdict + transcript (PROVEN or poll-both-ways fallback named-limit)
-- [ ] WPF DTRH host archaeology (READ-ONLY, `File.cs:line`)
-- [ ] Host design (per-platform shape, capability states, payload serving class + rationale, bridge.js provenance plan)
-- [ ] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
+- [x] STATUS.md updated before starting work
+- [x] **FIRST CHECKBOX:** `invokeCSharpAction` page→host on NativeWebDialog — **PROVEN** on WSLg 2026-07-21 (spike `--dialog --page probe`, `page->host: {"type":"probe-p2h-ica"...}` arrived via dialog `WebMessageReceived`; transcript `evidence/first-gate-dialog-ica.log`). Linux page→host = invokeCSharpAction per §3.2 — no fallback needed
+- [x] WPF DTRH host archaeology (READ-ONLY, `File.cs:line`) — ChaosWebViewHost.cs / DtrhHostService.cs / bridge.js / boot.js citations in record.md
+- [x] Host design (per-platform shape, capability states, payload serving class + rationale, bridge.js provenance plan) — record.md Step 1
+- [x] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox) — 4 corrections folded in (query-strip logging; probe = Step-2 research; injectable long-poll timeout; reload semantics)
 
 ### Step 2: Host shell + package integration
 **Status:** ⬜ Not Started
