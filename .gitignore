@@ -176,3 +176,7 @@ redist/
 .spine/batch-history.json
 .spine/run-metrics.jsonl
 .worktrees/
+
+# Session metadata (engine/pi runtime debris — never track; SP-023 land standing order)
+.pi/loops/
+.pi/tasks/
