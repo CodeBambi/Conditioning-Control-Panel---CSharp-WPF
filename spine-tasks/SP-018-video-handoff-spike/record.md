@@ -73,7 +73,7 @@ Header/cookie capability note: libvlc media options support `:http-user-agent` /
 
 Step-3 browser package named in admission: SP-011-admitted `Avalonia.Controls.WebView` 12.0.1 (MIT) — reuse, no new package.
 
-Engine-review log (T-2): Step 1 `spine_review_step` type=plan → **SKIPPED in-worker by design (SP-195)** (`skipped=true`, `spawnFailed=false`, reviewLevel echoed 2); artifact `1-20260721T112312.md`; engine runs reviews after .DONE.
+Engine-review log (T-2): Steps 1-4 `spine_review_step` type=plan → ALL **SKIPPED in-worker by design (SP-195)** (`skipped=true`, `spawnFailed=false`, reviewLevel echoed 2; artifacts `1-20260721T112312.md`, `2-20260721T115914.md`, `3-20260721T121349.md`, `4-20260721T123451.md`); engine runs reviews after .DONE.
 
 ## Step 2 — Loopback source lab + native decode handoff core (Windows, 2026-07-21)
 
@@ -126,3 +126,9 @@ Deliverable `client/docs/video-handoff-spike.md` written: named observation per 
 4. **Relay security note added** (limit 3): spike relay unauthenticated on 127.0.0.1; product relay needs origin/auth binding in the pending-owner decision.
 5. **Stale-evidence risk closed** — all evidence JSONL recopied from final-code runs.
 - **V8 (new finding, surfaced by the re-runs):** adaptive demuxer Time/Position reporting flaky ACROSS runs (maxPos 0.63→0.00 HLS-TS/DASH with identical frames+end) → pre-declared frame-paced wall-clock progression prong added (frames ≥5 AND wall ≥1500ms); doc thresholds updated.
+
+## Step 5 — Testing & Verification (Windows, 2026-07-21)
+
+- Contract testCommand GREEN: `dotnet build client/CcpClient.sln -c Debug` **0W/0E**; `CcpClient.Tests` **213/213**; `CcpClient.HeadlessTests` **22/22**. (WSL2 guard: 0W/0E + 213/213 + 22/22 — Step 4.)
+- Spike host builds clean separately: **0W/0E** (never in the solution).
+- `git diff --check` clean; lane changed-file list audited against File Scope: only `client/spikes/CcpSpike.VideoHandoff/**`, `client/docs/video-handoff-spike.md`, `client/docs/task-board.md`, `client/docs/port-lessons.md` (Documentation-Requirements "Check If Affected" — V3/V5 durable entries), `spine-tasks/SP-018-video-handoff-spike/**`. ZERO `ConditioningControlPanel/**`, `client/CcpClient.sln`, `client/src/**`, `client/tests/**`, `.spine/**` changes — quarantine holds.

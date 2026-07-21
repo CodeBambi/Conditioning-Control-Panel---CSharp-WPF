@@ -1,7 +1,7 @@
 # STATUS: SP-018 — spike browser-to-native online-video handoff
 
-**Current Step:** Step 5 — Testing & Verification
-**Last Updated:** 2026-07-21 (Step 4 complete: WSLg 14/14 + 7/7, contract guard green WSL2, doc + record + consult + board done)
+**Current Step:** DONE — all steps complete
+**Last Updated:** 2026-07-21 (Step 5 green: Windows contract 0W/0E + 213/213 + 22/22, diff-check clean, scope audited)
 
 ### Step 1: Video archaeology + source-matrix definition + package admission pre-approach consult
 **Status:** ✅ Complete (2026-07-21; in-worker plan review skipped by design SP-195)
@@ -37,8 +37,8 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete (2026-07-21)
 
-- [ ] Contract testCommand green (client 0W/0E + both test projects; spike host builds clean separately)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` = File Scope only
+- [x] Contract testCommand green (client 0W/0E + 213/213 + 22/22 Windows AND WSL2; spike host builds clean separately 0W/0E)
+- [x] `git diff --check` clean
+- [x] `git status --short` = File Scope only (audited lane diff: spike + 3 docs + task folder only)
