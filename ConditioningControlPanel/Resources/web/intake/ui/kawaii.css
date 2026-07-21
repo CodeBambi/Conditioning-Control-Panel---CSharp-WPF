@@ -821,3 +821,76 @@ body.ix-paused .kw-pause-btn::after { animation-play-state: running !important; 
 /* Reduced motion: no tumble, just gone. Declared AFTER the rule above so its
    transition wins for this one variant. */
 .kw-quit-fall--plain { transition: opacity 380ms ease, transform 380ms ease; }
+
+/* ---- "YOUR QUIT BUTTON IS GENERATING"  (owner: ui/pause.js) ---------------
+ * The confirming press does not quit, it places an order. The spent original
+ * stays in the column, greyed, and this block appears under it with a countdown
+ * that gets slower the closer it gets and a 1-in-3 chance of failing the build
+ * outright at three seconds. Styled as a polite little progress panel, because
+ * the joke only lands if it first looks completely routine. */
+.kw-quit-spent {
+  opacity: .5;
+  filter: saturate(.5);
+  cursor: default;
+}
+
+.kw-quit-gen {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 2px;
+  padding: 10px 12px 12px;
+  border: 2px dashed #ffc9d1;
+  border-radius: var(--kw-radius, 14px);
+  background: rgba(255, 255, 255, .55);
+}
+.kw-quit-gen__line {
+  margin: 0;
+  font-size: .86rem;
+  line-height: 1.35;
+  color: var(--kw-ink-soft);
+}
+.kw-quit-gen__bar {
+  position: relative;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(231, 95, 168, .16);
+  overflow: hidden;
+}
+.kw-quit-gen__fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--kw-pink, #ff8ec4), var(--kw-pink-deep, #e75fa8));
+  /* Eased, so a tick that took four real seconds still slides like a tick that
+     took one. The bar is what sells the ramp as normal. */
+  transition: width 320ms ease;
+}
+
+/* The build failing. The panel jitters, the bar goes to noise (JS drives the
+   width), and the border borrows the disclaimer's red for the moment. */
+.kw-quit-gen.is-glitching {
+  border-color: rgba(216, 17, 43, .55);
+  animation: kw-quit-gen-glitch 180ms steps(2, end) infinite;
+}
+.kw-quit-gen.is-glitching .kw-quit-gen__line { color: var(--kw-red, #d8112b); }
+.kw-quit-gen.is-glitching .kw-quit-gen__fill {
+  transition: none;                       /* the scramble must read as noise */
+  background: repeating-linear-gradient(90deg, #d8112b 0 6px, #ff8ec4 6px 12px);
+}
+@keyframes kw-quit-gen-glitch {
+  0%   { transform: translate3d(0, 0, 0); }
+  25%  { transform: translate3d(-2px, 1px, 0); }
+  50%  { transform: translate3d(2px, -1px, 0); }
+  75%  { transform: translate3d(-1px, -1px, 0); }
+  100% { transform: translate3d(1px, 1px, 0); }
+}
+
+.kw-quit-gen.is-ready { border-style: solid; border-color: #ffc9d1; }
+.kw-quit-gen.is-ready .kw-quit-gen__line { color: var(--kw-pink-deep, #e75fa8); }
+.kw-quit-gen__btn { width: 100%; animation: kw-pop-in 260ms ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kw-quit-gen__fill { transition: none; }
+  .kw-quit-gen.is-glitching { animation: none; }
+  .kw-quit-gen__btn { animation: none; }
+}

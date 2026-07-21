@@ -68,6 +68,34 @@ import { setBandDepth, resetCorruption, isDeepBand } from './corruption.js';
  */
 const QUIT_FALL_CHANCE = 0.10;
 
+/**
+ * THE QUIT BUTTON IS GENERATING. The confirming press does not quit — it queues
+ * your quit button for manufacture, and you are invited to wait for it.
+ *
+ * The countdown is honest for the first five seconds and then quietly stops
+ * being honest: from 10 downward each second costs 16% more real time than the
+ * one before, so "10 seconds left" is really ~21, and the number keeps dropping
+ * at a plausible-looking rate the whole way. Nobody catches the ramp in the
+ * first few ticks, which is the point — it has to feel like an ordinary
+ * progress bar right up until it feels like a joke.
+ *
+ * Then, with three seconds left, a 1-in-3 roll fails the build and re-queues it
+ * at 8 or 9. The roll happens EVERY time the countdown passes 3, so it can fire
+ * more than once; at p=1/3 the expected number of extra loops is 0.5 and the
+ * ceremony terminates with probability 1.
+ *
+ * The player is never trapped. Resume, Options, Escape and the scrim all still
+ * work, the host window's own close still works, and leaving the pause menu
+ * cancels the whole thing — a later pause starts over from an unarmed Quit.
+ */
+const QUIT_GEN_START      = 15;    // seconds on the clock at queue time
+const QUIT_GEN_HONEST_TO  = 10;    // ticks above this are a real second each
+const QUIT_GEN_DRAG       = 1.16;  // each tick at or below that costs 16% more
+const QUIT_GEN_GLITCH_AT  = 3;     // "a few seconds left"
+const QUIT_GEN_GLITCH_P   = 0.33;
+const QUIT_GEN_REQUEUE    = [8, 9];
+const QUIT_GEN_GLITCH_MS  = 900;   // how long the failure reads before re-queuing
+
 /* ----------------------------------------------------------------------------
  * MODULE STATE — one pause per page. installPause() disposes any predecessor.
  * -------------------------------------------------------------------------- */
@@ -301,6 +329,17 @@ export function installPause(ctx = {}) {
   let fallRaf = 0;
   let fallT = 0;
 
+  /* ---- the generating-quit-button ceremony (see QUIT_GEN_* above) --------- */
+  let genNode = null;            // the whole "generating…" block, inside the panel
+  let genLine = null;            // its status line
+  let genFill = null;            // its progress bar fill
+  let genBtn = null;             // the generated Quit, revealed at zero
+  let genT = 0;                  // native timeout for the next tick
+  let genScramble = 0;           // native interval that garbles the number mid-glitch
+  let genLeft = 0;               // seconds still on the clock
+  let genSpan = QUIT_GEN_START;  // seconds this cycle started from (drives the bar)
+  let quitReleased = false;      // the generated button exists and actually quits
+
   // A fresh run must never inherit the last one's rot (same page, second boot).
   resetCorruption();
 
@@ -480,6 +519,7 @@ export function installPause(ctx = {}) {
     confirmQuit = false;
     quitFallen = false;
     removeQuitFall();
+    cancelQuitGeneration();
     resetQuitButton(root);
     open_ = true;
     lastFocus = doc.activeElement;
@@ -498,6 +538,10 @@ export function installPause(ctx = {}) {
     try { if (root.parentNode) root.parentNode.removeChild(root); } catch (_e) {}
     btn.classList.remove('is-hidden');
     removeQuitFall();   // a clone still in the air does not follow us into the run
+    // Resuming abandons the order. Nothing keeps ticking behind the run, and the
+    // next pause starts over from an unarmed Quit — which is the escape hatch
+    // that makes the whole gag safe to ship.
+    cancelQuitGeneration();
 
     // Unfreeze the layers first, then the clocks, so the first thawed frame
     // already has a live background/audio to draw against.
@@ -557,6 +601,12 @@ export function installPause(ctx = {}) {
   function doQuit(el) {
     if (quitting || quitFallen) return;
 
+    // The generated button is the only one that actually leaves. It carries the
+    // same data-act, so it arrives here — and it skips every ceremony, because
+    // the player has already served the whole sentence to get it.
+    if (quitReleased) { finishQuit(el); return; }
+    if (genNode) return;            // still generating; the spent original is inert
+
     /* THE PRANK ROLLS HERE — on the FIRST press, before the confirm is armed, so
      * the button comes off in the player's hand instead of ever asking "really?".
      *
@@ -580,6 +630,12 @@ export function installPause(ctx = {}) {
       return;
     }
 
+    // The confirming press does not quit. It orders you a quit button.
+    startQuitGeneration(el);
+  }
+
+  /** The actual wind-down. Only reachable from the GENERATED button. */
+  function finishQuit(el) {
     quitting = true;
     if (el) { el.textContent = 'Closing…'; el.disabled = true; }
     // Abort: no QuizRunResult is emitted, so no session is drafted.
@@ -589,6 +645,125 @@ export function installPause(ctx = {}) {
     try { shim.log('pause: quit run'); } catch (_e) {}
     if (shim.isHosted) { try { shim.send({ type: 'exit' }); } catch (_e) {} }
     else { try { shim.closeHost(); } catch (_e) {} }
+  }
+
+  /* ---- "Your quit button is generating" ----------------------------------
+   * EVERY TIMER IN HERE IS NATIVE. The menu is open, which means the shimmed
+   * setTimeout has banked its pending callbacks and both clocks are frozen —
+   * a countdown driven by the global timers would sit at 15 forever. Same
+   * reasoning as startQuitFall() below. */
+
+  /** Real milliseconds the tick that leaves `n` on the clock is made to last. */
+  function genTickMs(n) {
+    if (n > QUIT_GEN_HONEST_TO) return 1000;
+    return Math.round(1000 * Math.pow(QUIT_GEN_DRAG, QUIT_GEN_HONEST_TO - n));
+  }
+
+  function startQuitGeneration(el) {
+    if (genNode) return;                       // already queued; the press was a double
+    try { shim.log('pause: quit button queued for generation'); } catch (_e) {}
+
+    // The armed original stays in place, spent: it keeps the actions column the
+    // same height and it reads as the thing that DID something.
+    if (el) {
+      try {
+        el.textContent = 'Quit request received.';
+        el.classList.remove('kw-pause-quit--armed');
+        el.classList.add('kw-quit-spent');
+        el.disabled = true;
+      } catch (_e) {}
+    }
+    // A disabled control must not keep the keyboard.
+    const res = root.querySelector('[data-act="resume"]');
+    if (res) { try { res.focus(); } catch (_e) {} }
+
+    genNode = buildQuitGen(doc);
+    genLine = genNode.querySelector('.kw-quit-gen__line');
+    genFill = genNode.querySelector('.kw-quit-gen__fill');
+    genBtn  = genNode.querySelector('.kw-quit-gen__btn');
+    try {
+      const acts = root.querySelector('.kw-pause-actions');
+      if (acts) acts.appendChild(genNode); else return cancelQuitGeneration();
+    } catch (_e) { return cancelQuitGeneration(); }
+
+    genLeft = QUIT_GEN_START;
+    genSpan = QUIT_GEN_START;
+    renderQuitGen();
+    stepQuitGen();
+  }
+
+  function renderQuitGen() {
+    if (genLine) {
+      genLine.textContent =
+        'Your quit button is generating, wait ' + genLeft + ' second' + (genLeft === 1 ? '' : 's');
+    }
+    if (genFill) {
+      const done = genSpan > 0 ? (genSpan - genLeft) / genSpan : 1;
+      try { genFill.style.width = (Math.max(0, Math.min(1, done)) * 100).toFixed(1) + '%'; } catch (_e) {}
+    }
+  }
+
+  function stepQuitGen() {
+    genT = N.setTimeout(() => {
+      genT = 0;
+      if (destroyed || !genNode) return;
+      genLeft -= 1;
+      if (genLeft <= 0) { releaseQuitButton(); return; }
+      renderQuitGen();
+      if (genLeft === QUIT_GEN_GLITCH_AT && Math.random() < QUIT_GEN_GLITCH_P) { glitchRequeue(); return; }
+      stepQuitGen();
+    }, genTickMs(genLeft));
+  }
+
+  /** The build fails on the home straight and goes back in the queue at 8 or 9. */
+  function glitchRequeue() {
+    try { shim.log('pause: quit generation failed, re-queued'); } catch (_e) {}
+    const animates = fallAnimates();
+    if (genNode && animates) { try { genNode.classList.add('is-glitching'); } catch (_e) {} }
+    if (genLine) genLine.textContent = 'Generation failed. Re-queuing your quit button…';
+    // The number garbles while the failure reads — but only if this player has
+    // motion turned on, since it is pure decoration.
+    if (animates) {
+      genScramble = N.setInterval(() => {
+        if (!genFill) return;
+        try { genFill.style.width = (10 + Math.random() * 85).toFixed(1) + '%'; } catch (_e) {}
+      }, 70);
+    }
+    genT = N.setTimeout(() => {
+      genT = 0;
+      if (genScramble) { N.clearInterval(genScramble); genScramble = 0; }
+      if (destroyed || !genNode) return;
+      try { genNode.classList.remove('is-glitching'); } catch (_e) {}
+      genLeft = QUIT_GEN_REQUEUE[Math.floor(Math.random() * QUIT_GEN_REQUEUE.length)];
+      genSpan = genLeft;
+      renderQuitGen();
+      stepQuitGen();
+    }, animates ? QUIT_GEN_GLITCH_MS : 420);
+  }
+
+  /** Zero at last. The generated button appears and it is a real one. */
+  function releaseQuitButton() {
+    quitReleased = true;
+    if (genFill) { try { genFill.style.width = '100%'; } catch (_e) {} }
+    if (genLine) genLine.textContent = 'Your quit button is ready. Thank you for waiting ♥';
+    if (genNode) { try { genNode.classList.add('is-ready'); } catch (_e) {} }
+    if (genBtn) {
+      try {
+        genBtn.hidden = false;
+        genBtn.disabled = false;
+        genBtn.focus();
+      } catch (_e) {}
+    }
+    try { shim.log('pause: quit button generated'); } catch (_e) {}
+  }
+
+  /** Tear the ceremony down. Idempotent; safe from close/open/dispose. */
+  function cancelQuitGeneration() {
+    if (genT) { try { N.clearTimeout(genT); } catch (_e) {} genT = 0; }
+    if (genScramble) { try { N.clearInterval(genScramble); } catch (_e) {} genScramble = 0; }
+    if (genNode) { try { if (genNode.parentNode) genNode.parentNode.removeChild(genNode); } catch (_e) {} }
+    genNode = genLine = genFill = genBtn = null;
+    quitReleased = false;
   }
 
   /**
@@ -707,7 +882,7 @@ export function installPause(ctx = {}) {
     const q = r.querySelector('[data-act="quit"]');
     if (!q || quitting) return;
     q.textContent = 'Quit run';
-    q.classList.remove('kw-pause-quit--armed', 'kw-quit-gone');
+    q.classList.remove('kw-pause-quit--armed', 'kw-quit-gone', 'kw-quit-spent');
     q.disabled = false;
   }
 
@@ -725,6 +900,7 @@ export function installPause(ctx = {}) {
     if (open_) close();
     destroyed = true;
     removeQuitFall();
+    cancelQuitGeneration();
     // The run is over: the shell goes back to being innocent. boot.js disposes
     // the pause menu before the outro ceremony, so this is also what guarantees
     // a SECOND run in the same page starts from a clean palette and a clean
@@ -826,6 +1002,44 @@ function buildRoot(doc) {
 
   root.appendChild(panel);
   return root;
+}
+
+/**
+ * The "your quit button is generating" block: a status line, a progress bar
+ * that is telling the truth about a lie, and the generated Quit button itself,
+ * built hidden and revealed at zero.
+ *
+ * aria-live is deliberately OFF. A screen reader announcing a new number every
+ * second for half a minute is not a joke, it is an assault; the block announces
+ * itself once when the button appears and takes focus instead.
+ */
+function buildQuitGen(doc) {
+  const wrap = doc.createElement('div');
+  wrap.className = 'kw-quit-gen';
+  wrap.setAttribute('role', 'status');
+  wrap.setAttribute('aria-live', 'off');
+
+  const line = doc.createElement('p');
+  line.className = 'kw-quit-gen__line';
+  wrap.appendChild(line);
+
+  const bar = doc.createElement('div');
+  bar.className = 'kw-quit-gen__bar';
+  const fill = doc.createElement('span');
+  fill.className = 'kw-quit-gen__fill';
+  bar.appendChild(fill);
+  wrap.appendChild(bar);
+
+  const b = doc.createElement('button');
+  b.type = 'button';
+  b.className = 'kw-btn kw-btn--soft kw-pause-quit kw-quit-gen__btn';
+  b.setAttribute('data-act', 'quit');
+  b.textContent = 'Quit run ♥';
+  b.disabled = true;
+  b.hidden = true;
+  wrap.appendChild(b);
+
+  return wrap;
 }
 
 function mkBtn(doc, act, label, cls) {
