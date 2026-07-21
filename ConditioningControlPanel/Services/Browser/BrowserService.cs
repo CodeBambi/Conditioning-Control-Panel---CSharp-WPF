@@ -386,16 +386,19 @@ namespace ConditioningControlPanel.Services
                                 cancelPendingStop();
                                 report('ended');
                             }
-                            // pause/emptied fire constantly during seeks, buffering, ad breaks and
-                            // quality switches. Reporting those directly would end the session
-                            // mid-video and re-open the floodgates, so require the stop to persist.
+                            // pause/emptied also fire during seeks, buffering, ad breaks and
+                            // quality switches, so a stop must persist before we believe it —
+                            // but only briefly. A paused video counts as done: the user has
+                            // stopped watching, and holding the app back while a video sits
+                            // paused indefinitely is worse than resuming a little early. A
+                            // resume simply opens a fresh session.
                             function onMaybeStop(e) {
                                 if (!active || e.target !== active) return;
                                 cancelPendingStop();
                                 pauseTimer = setTimeout(function() {
                                     pauseTimer = null;
                                     if (active && active.paused && !active.ended) report('paused');
-                                }, 4000);
+                                }, 2000);
                             }
 
                             function bind(m) {
@@ -404,7 +407,10 @@ namespace ConditioningControlPanel.Services
                                 m.addEventListener('playing', onPlaying);
                                 m.addEventListener('ended', onEnded);
                                 m.addEventListener('pause', onMaybeStop);
-                                m.addEventListener('emptied', onMaybeStop);
+                                // NOT 'emptied': players fire it whenever they swap the source
+                                // (ad roll, quality switch, next-in-playlist) and the element is
+                                // momentarily paused, which reported a stop ~6-8s into every
+                                // video. The heartbeat covers a source swap that never resumes.
                                 // Already mid-playback when we bound (SPA route change, late inject).
                                 if (!m.paused && !m.ended && m.readyState >= 3) onPlaying({ target: m });
                             }

@@ -3701,12 +3701,11 @@ namespace ConditioningControlPanel.Models
 
         private bool _takeoverVideosStrict = false;
         /// <summary>
-        /// Opt-in: mandatory videos launched by Takeover play with Strict Lock (no skip,
-        /// no ESC). Default OFF — Takeover videos have always been skippable so surprise
-        /// autonomous videos can be dismissed; this lets users who want the full loss of
-        /// control turn that on (support request, 2026-07-10). Passed to
-        /// VideoService.TriggerVideo as strictOverride, independent of the global
-        /// StrictLockEnabled.
+        /// RETIRED — no longer read or surfaced in the UI. Takeover videos are plain mandatory
+        /// videos and follow the global StrictLockEnabled flag like every other one; having a
+        /// second, independent notion of "strict" meant Takeover imposed unskippable videos (and
+        /// its own consent dialog) regardless of the mandatory-video setting. Kept only so
+        /// existing settings.json files continue to deserialize.
         /// </summary>
         [JsonProperty]
         public bool TakeoverVideosStrict

@@ -47,6 +47,39 @@ public class BrowserMediaGateTests
         => Assert.False(BrowserMediaService.ResolveDeferInterruptions(
             protectEnabled: true, isPlaying: false, secondsSinceEnded: 0, graceSeconds: -30));
 
+    // The cool-off must apply ONLY to starting another video. Making it block everything meant
+    // Takeover's countdown bar completed and then sat idle for the whole grace window, and the
+    // mandatory-video scheduler was starved out entirely.
+    [Fact]
+    public void CoolOff_BlocksAnotherVideo_ButNotOtherActions()
+    {
+        const double justEnded = 5;
+        Assert.True(BrowserMediaService.ResolveDeferInterruptions(
+            true, isPlaying: false, secondsSinceEnded: justEnded, graceSeconds: 45,
+            includeCoolOff: true), "a new video must wait out the cool-off");
+        Assert.False(BrowserMediaService.ResolveDeferInterruptions(
+            true, isPlaying: false, secondsSinceEnded: justEnded, graceSeconds: 45,
+            includeCoolOff: false), "non-video actions must be free the moment playback stops");
+    }
+
+    [Fact]
+    public void LivePlayback_BlocksBothGates()
+    {
+        Assert.True(BrowserMediaService.ResolveDeferInterruptions(
+            true, isPlaying: true, secondsSinceEnded: double.PositiveInfinity, 45, includeCoolOff: true));
+        Assert.True(BrowserMediaService.ResolveDeferInterruptions(
+            true, isPlaying: true, secondsSinceEnded: double.PositiveInfinity, 45, includeCoolOff: false));
+    }
+
+    [Fact]
+    public void OptedOut_ReleasesBothGates()
+    {
+        Assert.False(BrowserMediaService.ResolveDeferInterruptions(
+            false, isPlaying: true, secondsSinceEnded: 0, 45, includeCoolOff: true));
+        Assert.False(BrowserMediaService.ResolveDeferInterruptions(
+            false, isPlaying: true, secondsSinceEnded: 0, 45, includeCoolOff: false));
+    }
+
     [Fact]
     public void ProtectionDefaultsOn_SoTheFixAppliesWithoutOptIn()
     {

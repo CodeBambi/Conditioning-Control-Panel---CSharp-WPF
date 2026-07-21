@@ -56,13 +56,21 @@ public sealed class BrowserMediaService
     private DateTime _lastEndedUtc = DateTime.MinValue;
     private bool _holdsQueueSlot;
     private int _sessionGeneration;
+    /// <summary>Whether the CURRENT session has ever reported playback. Distinguishes "still
+    /// loading" from "was playing and stopped", which the navigated/heartbeat paths both need.</summary>
+    private bool _hasEverPlayed;
 
     private DispatcherTimer? _heartbeatTimer;
 
-    /// <summary>How long we tolerate silence from the page's progress heartbeat before deciding
-    /// the session is dead. The injected script ticks every 5s while playing, so 20s means four
-    /// missed ticks — long enough to ride out a stall or a slow SPA route change.</summary>
+    /// <summary>How long we tolerate silence from the page's progress heartbeat once playback has
+    /// actually started. The injected script ticks every 5s, so 20s means four missed ticks —
+    /// long enough to ride out a stall or a slow SPA route change.</summary>
     private const double HeartbeatTimeoutSeconds = 20;
+
+    /// <summary>Grace for a claimed session that has NOT yet reported playback. Page load, ad
+    /// pre-roll and a blocked autoplay the user has to click through all live in this window, and
+    /// killing the claim at 20s meant a takeover was torn down before its video ever began.</summary>
+    private const double LoadWindowTimeoutSeconds = 60;
 
     /// <summary>Grace added on top of a takeover clip's reported length before the hard stop.</summary>
     private const double TakeoverGraceSeconds = 15;
@@ -80,43 +88,56 @@ public sealed class BrowserMediaService
     public MediaOwner? Owner { get { lock (_lock) return _owner; } }
 
     /// <summary>
-    /// The one gate every interrupting subsystem asks. True while media is playing AND for a
-    /// configurable cool-off afterwards — the cool-off is what stops a mandatory video or a fresh
-    /// Takeover action from firing the instant a clip ends ("restarts during or immediately
-    /// after"). Returns false when the user has opted out of protection.
+    /// Gate for anything that would interrupt playback ALREADY IN PROGRESS — mandatory videos,
+    /// Takeover actions, chaos effects. Deliberately does NOT include the post-playback cool-off:
+    /// making the cool-off block everything meant Takeover's countdown bar completed and then sat
+    /// doing nothing for the whole grace window, and starved mandatory videos entirely. Once the
+    /// video is actually over, she's free to act again immediately.
     /// </summary>
-    public bool ShouldDeferInterruptions
+    public bool ShouldDeferInterruptions => EvaluateGate(includeCoolOff: false);
+
+    /// <summary>
+    /// Gate for starting a NEW video — a fresh web-video takeover, a chaos HT-link bubble. Adds
+    /// the cool-off on top of live playback, so one clip is never chased straight back by another
+    /// ("restarts a video during or immediately after", and back-to-back web videos). Everything
+    /// that isn't itself a video should use <see cref="ShouldDeferInterruptions"/> instead.
+    /// </summary>
+    public bool ShouldDeferNewVideo => EvaluateGate(includeCoolOff: true);
+
+    private bool EvaluateGate(bool includeCoolOff)
     {
-        get
+        var settings = App.Settings?.Current;
+        lock (_lock)
         {
-            var settings = App.Settings?.Current;
-            lock (_lock)
-            {
-                var sinceEnded = _lastEndedUtc == DateTime.MinValue
-                    ? double.PositiveInfinity
-                    : (DateTime.UtcNow - _lastEndedUtc).TotalSeconds;
-                return ResolveDeferInterruptions(
-                    settings?.ProtectBrowserVideoPlayback ?? false,
-                    _isPlaying,
-                    sinceEnded,
-                    settings?.BrowserVideoGraceSeconds ?? 0);
-            }
+            var sinceEnded = _lastEndedUtc == DateTime.MinValue
+                ? double.PositiveInfinity
+                : (DateTime.UtcNow - _lastEndedUtc).TotalSeconds;
+            return ResolveDeferInterruptions(
+                settings?.ProtectBrowserVideoPlayback ?? false,
+                _isPlaying,
+                sinceEnded,
+                settings?.BrowserVideoGraceSeconds ?? 0,
+                includeCoolOff);
         }
     }
 
     /// <summary>
-    /// Pure decision behind <see cref="ShouldDeferInterruptions"/>, split out so it is testable
-    /// without a WPF <c>Application</c> or the static settings singleton.
+    /// Pure decision behind both gates, split out so it is testable without a WPF
+    /// <c>Application</c> or the static settings singleton.
     /// </summary>
     /// <param name="protectEnabled">The user's ProtectBrowserVideoPlayback preference.</param>
     /// <param name="isPlaying">Whether browser media is currently playing.</param>
     /// <param name="secondsSinceEnded">Seconds since the last session ended; infinity if none.</param>
     /// <param name="graceSeconds">Configured cool-off window.</param>
+    /// <param name="includeCoolOff">True for "don't start another video", false for
+    /// "don't interrupt what's playing".</param>
     public static bool ResolveDeferInterruptions(
-        bool protectEnabled, bool isPlaying, double secondsSinceEnded, int graceSeconds)
+        bool protectEnabled, bool isPlaying, double secondsSinceEnded, int graceSeconds,
+        bool includeCoolOff = true)
     {
         if (!protectEnabled) return false;
         if (isPlaying) return true;
+        if (!includeCoolOff) return false;
         if (double.IsInfinity(secondsSinceEnded) || double.IsNaN(secondsSinceEnded)) return false;
         return secondsSinceEnded < Math.Max(0, graceSeconds);
     }
@@ -147,6 +168,7 @@ public sealed class BrowserMediaService
             _isTakeover = true;
             _holdsQueueSlot = App.InteractionQueue != null;
             _durationSeconds = 0;
+            _hasEverPlayed = false;
             // Not _isPlaying yet — that waits for the page to actually report playback. The
             // heartbeat timer covers the load window so a page that never plays still releases.
             _lastHeartbeatUtc = DateTime.UtcNow;
@@ -173,6 +195,7 @@ public sealed class BrowserMediaService
             _owner = owner;
             _isTakeover = takeover;
             _durationSeconds = 0;
+            _hasEverPlayed = false;
             _lastHeartbeatUtc = DateTime.UtcNow;
 
             if (!_holdsQueueSlot && App.InteractionQueue != null)
@@ -203,6 +226,7 @@ public sealed class BrowserMediaService
         {
             becamePlaying = !_isPlaying;
             _isPlaying = true;
+            _hasEverPlayed = true;
             _lastHeartbeatUtc = DateTime.UtcNow;
 
             if (_owner == null)
@@ -280,11 +304,25 @@ public sealed class BrowserMediaService
             wasPlaying = _isPlaying;
             if (!wasPlaying && _owner == null) return; // already idle
 
+            // A takeover navigates the browser, so the OUTGOING page fires pagehide ~0.4s after
+            // we claimed the slot for the INCOMING one. Honouring that tore down the claim before
+            // the new video ever loaded: the session then re-opened as MediaOwner.User, losing
+            // takeover status (and its duration hard stop) and starting a bogus cool-off at
+            // navigation time. A navigation before this session has ever played is the expected
+            // transition INTO it, not the end of it.
+            if (reason == "navigated" && !_hasEverPlayed && _owner.HasValue)
+            {
+                _lastHeartbeatUtc = DateTime.UtcNow;   // keep the load window open
+                App.Logger?.Debug("BrowserMedia: ignoring pagehide from the outgoing page ({Owner} claim still loading)", _owner);
+                return;
+            }
+
             _sessionGeneration++;   // invalidates any pending hard stop
             _isPlaying = false;
             _isTakeover = false;
             _owner = null;
             _durationSeconds = 0;
+            _hasEverPlayed = false;
             _lastEndedUtc = DateTime.UtcNow;
             releaseSlot = _holdsQueueSlot;
             _holdsQueueSlot = false;
@@ -444,16 +482,21 @@ public sealed class BrowserMediaService
     {
         double silentFor;
         bool takeover;
+        double timeout;
         lock (_lock)
         {
             if (_owner == null && !_isPlaying) { StopHeartbeatTimer(); return; }
             silentFor = (DateTime.UtcNow - _lastHeartbeatUtc).TotalSeconds;
             takeover = _isTakeover;
+            // Before the first playback report we're still in the load window (page load, ad
+            // pre-roll, blocked autoplay awaiting a click) and must be far more patient.
+            timeout = _hasEverPlayed ? HeartbeatTimeoutSeconds : LoadWindowTimeoutSeconds;
         }
 
-        if (silentFor < HeartbeatTimeoutSeconds) return;
+        if (silentFor < timeout) return;
 
-        App.Logger?.Warning("BrowserMedia: no heartbeat for {Silent:F0}s - ending session", silentFor);
+        App.Logger?.Warning("BrowserMedia: no heartbeat for {Silent:F0}s (limit {Limit:F0}s) - ending session",
+            silentFor, timeout);
         if (takeover) ForceEndCore("heartbeat-lost");
         else OnMediaStopped("heartbeat-lost");
     }

@@ -1404,15 +1404,32 @@ namespace ConditioningControlPanel.Services
             return win;
         }
 
-        private void ScheduleNext()
+        /// <summary>Short re-check used when a tick was skipped because something was in the way,
+        /// rather than because the interval elapsed normally.</summary>
+        private const double SkipRetrySeconds = 30;
+
+        /// <param name="retrySeconds">When set, wait this long instead of a full fresh interval.
+        /// A skipped tick MUST use this: recomputing the full 3600/VideosPerHour gap threw away
+        /// all the time already elapsed, so with browser videos in play the mandatory scheduler
+        /// was pushed back indefinitely and never fired at all.</param>
+        private void ScheduleNext(double? retrySeconds = null)
         {
             if (!_isRunning || !App.Settings.Current.MandatoryVideosEnabled) return;
 
-            var perHour = Math.Max(1, App.Settings.Current.VideosPerHour);
-            var secs = 3600.0 / perHour * (0.8 + _random.NextDouble() * 0.4);
+            double secs;
+            if (retrySeconds.HasValue)
+            {
+                secs = retrySeconds.Value;
+            }
+            else
+            {
+                var perHour = Math.Max(1, App.Settings.Current.VideosPerHour);
+                secs = 3600.0 / perHour * (0.8 + _random.NextDouble() * 0.4);
+                secs = Math.Max(60, secs);
+            }
 
             _scheduler?.Stop();
-            _scheduler = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Max(60, secs)) };
+            _scheduler = new DispatcherTimer { Interval = TimeSpan.FromSeconds(secs) };
             _scheduler.Tick += (s, e) =>
             {
                 _scheduler?.Stop();
@@ -1423,21 +1440,21 @@ namespace ConditioningControlPanel.Services
                         if (App.BrowserMedia?.ShouldDeferInterruptions == true ||
                             App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.WebVideo)
                         {
-                            // A browser video is playing (user- or app-started) or just finished —
-                            // don't stack a mandatory video (and its audio) on top, and don't fire
-                            // the instant it ends either (BUG-XRFQH4AHDN). Nothing
+                            // A browser video is playing (user- or app-started) — don't stack a
+                            // mandatory video (and its audio) on top (BUG-XRFQH4AHDN). Nothing
                             // else re-arms us in this branch (there's no mandatory-video Cleanup
-                            // to follow), so reschedule to retry once the web video has ended.
+                            // to follow), so retry SHORTLY — a full fresh interval here meant a
+                            // steady diet of web videos starved mandatory ones completely.
                             // Reschedule rather than queue: an ambient video shouldn't pile up
                             // behind a possibly-long web video.
-                            App.Logger?.Information("VideoService: scheduler tick skipped — web video active; rescheduling");
-                            ScheduleNext();
+                            App.Logger?.Information("VideoService: scheduler tick skipped — browser media active; retrying in {Retry}s", SkipRetrySeconds);
+                            ScheduleNext(SkipRetrySeconds);
                         }
                         else if (_isCleaningUp)
                         {
-                            // Previous video's teardown still pumping — same reschedule logic.
-                            App.Logger?.Information("VideoService: scheduler tick skipped — cleanup in progress; rescheduling");
-                            ScheduleNext();
+                            // Previous video's teardown still pumping — same short-retry logic.
+                            App.Logger?.Information("VideoService: scheduler tick skipped — cleanup in progress; retrying in {Retry}s", SkipRetrySeconds);
+                            ScheduleNext(SkipRetrySeconds);
                         }
                         else
                         {

@@ -194,9 +194,9 @@ public sealed class HtLinkPayload : EffectPayload
         {
             // Never navigate over a video that's already playing — this payload used to fire
             // blind, which is the "AI effects just stop your video halfway through" report.
-            if (App.BrowserMedia?.ShouldDeferInterruptions == true)
+            if (App.BrowserMedia?.ShouldDeferNewVideo == true)
             {
-                App.Logger?.Debug("HtLinkPayload: browser media active - skipping");
+                App.Logger?.Debug("HtLinkPayload: browser media active (or in cool-off) - skipping");
                 return;
             }
 

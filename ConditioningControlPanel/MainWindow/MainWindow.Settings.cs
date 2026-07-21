@@ -202,7 +202,6 @@ namespace ConditioningControlPanel
             BambiTakeoverTab.ChkAutonomyVideo.IsChecked = s.AutonomyCanTriggerVideo;
             BambiTakeoverTab.ChkAutonomyWebVideo.IsChecked = s.AutonomyCanTriggerWebVideo;
             BambiTakeoverTab.ChkProtectBrowserVideo.IsChecked = s.ProtectBrowserVideoPlayback;
-            BambiTakeoverTab.ChkTakeoverVideosStrict.IsChecked = s.TakeoverVideosStrict;
             BambiTakeoverTab.ChkAutonomySubliminal.IsChecked = s.AutonomyCanTriggerSubliminal;
             BambiTakeoverTab.ChkAutonomyBubbles.IsChecked = s.AutonomyCanTriggerBubbles;
             BambiTakeoverTab.ChkAutonomyComment.IsChecked = s.AutonomyCanComment;

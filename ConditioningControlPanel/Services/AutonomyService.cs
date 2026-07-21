@@ -1034,8 +1034,12 @@ namespace ConditioningControlPanel.Services
             // Web video - plays random HypnoTube video fullscreen in browser.
             // Exclude while a mandatory video is on screen so we pick a different action
             // rather than stacking two videos (BUG-XRFQH4AHDN).
+            // ShouldDeferNewVideo (not ...Interruptions): the cool-off applies to starting ANOTHER
+            // video, so one web video is never chased straight back by the next. Other action
+            // types stay eligible during the cool-off, which is what keeps the countdown bar
+            // honest instead of completing and doing nothing.
             if (settings.AutonomyCanTriggerWebVideo
-                && App.BrowserMedia?.ShouldDeferInterruptions != true
+                && App.BrowserMedia?.ShouldDeferNewVideo != true
                 && App.Video?.IsPlaying != true)
                 candidates.Add((AutonomyActionType.WebVideo, 20));
 
@@ -1360,11 +1364,11 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Trigger video with takeover strictness (non-strict unless the user opted in
-        /// via TakeoverVideosStrict). Strictness is passed per-call instead of the old
-        /// "flip global StrictLockEnabled off for 3 seconds" dance — that window made
-        /// engine-scheduled videos come up non-strict and raced every other reader of
-        /// the setting (see SessionEngine's session-start snapshot workaround).
+        /// Trigger a plain mandatory video. Strictness is NOT overridden here: a Takeover video
+        /// is just a mandatory video that she picked the moment for, so it follows the same
+        /// global StrictLockEnabled flag as every other mandatory video. The old per-call
+        /// TakeoverVideosStrict override made Takeover videos unskippable independently of the
+        /// mandatory-video setting, which is not what "strict" means anywhere else in the app.
         /// </summary>
         private void TriggerVideoSafely()
         {
@@ -1377,7 +1381,9 @@ namespace ConditioningControlPanel.Services
             // TriggerVideo is the authoritative arbiter.
             if (App.BrowserMedia?.ShouldDeferInterruptions == true) return;
 
-            App.Video?.TriggerVideo(strictOverride: settings.TakeoverVideosStrict);
+            // No strictOverride: null means "read the global StrictLockEnabled", i.e. behave
+            // exactly like a normally-scheduled mandatory video.
+            App.Video?.TriggerVideo();
         }
 
         /// <summary>
@@ -1386,8 +1392,9 @@ namespace ConditioningControlPanel.Services
         private void TriggerWebVideoFullscreen()
         {
             // Never interrupt media already playing in the browser — including a video the user
-            // started themselves, which this could not see before BrowserMediaService existed.
-            if (App.BrowserMedia?.ShouldDeferInterruptions == true)
+            // started themselves, which this could not see before BrowserMediaService existed —
+            // and never chase one clip straight back with another (hence ...NewVideo).
+            if (App.BrowserMedia?.ShouldDeferNewVideo == true)
             {
                 App.Logger?.Information("AutonomyService: Browser media active (or in cool-off), skipping web video");
                 return;
