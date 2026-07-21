@@ -28,9 +28,9 @@
 ### Step 4: Board reconciliation + record + pre-completion consult
 **Status:** ⬜ Not Started
 
-- [ ] record.md complete
-- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
-- [ ] T-1 row → `WIP` with evidence + named limits (post-land real-reinstall gate; automation limit; T-12 decision) — never `DONE`
+- [x] record.md complete
+- [x] Pre-completion solo Fable 5 consult APPROVE (verdict + actual model claude-fable-5 in record.md)
+- [x] T-1 row → `WIP` with evidence + 3 named limits (post-land real-reinstall gate sharpened = FIRST application of the 2 lost patches; automation limit; T-12 stays-upstream decision) — never `DONE`
 - [ ] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification

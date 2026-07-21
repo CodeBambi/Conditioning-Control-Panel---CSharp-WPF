@@ -43,6 +43,8 @@
 | Call | Step/Type | Result |
 |------|-----------|--------|
 | 1 | Step 1 plan | `skipped=true, spawnFailed=false, reviewLevel=2` — nested_spawn_blocked BY DESIGN (SP-195/SP-278); reviewLevel parsed 2 correctly (structured heading works); engine runs reviews post-.DONE |
+| 2 | Step 2 plan | `skipped=true, spawnFailed=false, reviewLevel=2` — same by-design skip |
+| 3 | Step 3 plan | `skipped=true, spawnFailed=false, reviewLevel=2` — same by-design skip |
 
 ## Step 2 — manifest + apply + verify
 
@@ -69,7 +71,24 @@
 
 ## Step 4 — board reconciliation + pre-completion consult
 
-(pending)
+### Pre-completion consult (Step 4, solo)
+
+- **Requested route:** solo (council route broken, T-7).
+- **ACTUAL answering model:** claude-fable-5 (consistent with requested route).
+- **Verdict: APPROVE — mechanism and evidence chain sound; three record-level additions (applied below); no code changes.**
+  1. **pi-side `@file` expansion = inherited evidence, not fresh proof** (recorded — see Evidence-honesty notes below).
+  2. **Live tree is missing 2 patches RIGHT NOW** — the post-land gate is when `dotnet-evidence-allowlist` and `worker-tail-at-file` are applied to the real `.pi/npm` for the FIRST time; until then any dotnet gate-evidence run or >16KB tail hits unpatched paths (sharpened in board row limit + post-land checklist below).
+  3. Hidden-.git EPERM: recorded surprise is the right home, NOT a 6th patch (fails the strictly-load-bearing admission rule; real repo carries `core.hidedotfiles=false`; worse blast-radius-to-benefit than T-12). Port-lessons one-liner sanctioned.
+
+### Evidence-honesty notes (consult additions)
+
+- **@file end-to-end:** the proof stops at the arg-builder by design (spawning pi in scratch = nested spawn). pi-side `@file` expansion of the TAIL arg is INHERITED evidence: (a) the same argv already carries `@${promptPath}` for PROMPT.md and `pi -p` demonstrably expands it (every batch runs this way), and (b) the lost original patch used this exact shape and worked (SP-004 fix, port-lessons 2026-07-19). The 32KB CreateProcess failure mode lives at `spawnSync("pi", piArgs)` — exactly what the arg-builder proof covers (argv 294 chars patched vs 20,871 inline pristine).
+- **Tri-state coverage:** the drift demo exercised anchor×0/replacement×0 (apply) and verify's missing/drifted/applied states; the "both present" branch shares the same else-path (trivially covered). `String.replace` `$`-pattern hazards are empirically excluded: verify counts the exact replacement string post-apply (passed) and patched scratch2 files diffed byte-identical to the live tree.
+- **Post-land orchestrator gate checklist (copy-pasteable):**
+  1. Park the run; reinstall/update pi-spine in the real repo `.pi/npm` (the ONLY reinstall moment).
+  2. `node .spine/patches/apply.mjs && node .spine/patches/verify.mjs` (exit 0 required).
+  3. Record: this is the FIRST application of `dotnet-evidence-allowlist` + `worker-tail-at-file` to the real tree — until this gate, the real install runs unpatched for those two.
+  4. Wire `node .spine/patches/verify.mjs` as a pre-launch step in steering-loop templates (the loud missing-patch check).
 
 ## Budgets / surprises
 
