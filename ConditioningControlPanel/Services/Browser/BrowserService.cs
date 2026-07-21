@@ -85,6 +85,9 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<string>? TitleChanged;
         public event EventHandler<bool>? FullscreenChanged;
         public event EventHandler<CoreWebView2ProcessFailedEventArgs>? BrowserProcessFailed;
+        /// <summary>Web messages posted from a subframe (iframe-hosted players). The top-level
+        /// CoreWebView2.WebMessageReceived never sees these, so consumers must handle both.</summary>
+        public event EventHandler<CoreWebView2WebMessageReceivedEventArgs>? FrameWebMessageReceived;
 
         public bool IsInitialized => _isInitialized;
         public bool IsFullscreen { get; private set; }
@@ -315,6 +318,151 @@ namespace ConditioningControlPanel.Services
                 catch (Exception scriptEx)
                 {
                     App.Logger?.Warning(scriptEx, "Failed to inject CCP forced-fullscreen exit detector");
+                }
+
+                // Always-on media reporter. This used to live inside MainWindow's one-shot
+                // AutoPlayAndFullscreenVideoAsync injection, which only ran for navigations made
+                // with autoPlayFullscreen:true — so a video the USER started by browsing to a page
+                // and clicking play was completely invisible to the app, and every other subsystem
+                // happily fired on top of it. As a document-created script it binds on every page,
+                // for app- and user-started playback alike, and feeds BrowserMediaService.
+                try
+                {
+                    await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
+                        (function() {
+                            if (window.__ccpMediaBound) return;
+                            window.__ccpMediaBound = true;
+
+                            function post(o) {
+                                try { window.chrome.webview.postMessage(JSON.stringify(o)); } catch (_) {}
+                            }
+                            function durOf(m) {
+                                var d = m.duration;
+                                return (isFinite(d) && d > 0) ? d : 0;   // live streams report 0/Infinity
+                            }
+                            // Thumbnail hover-previews on HypnoTube are muted, tiny, autoplaying
+                            // <video> elements. Treating those as 'the user is watching something'
+                            // would suppress the whole app while merely mousing over a grid, so a
+                            // session requires audible playback in a real player-sized element.
+                            function isRealPlayback(m) {
+                                if (!m || m.muted) return false;
+                                if (m.tagName === 'AUDIO') return true;
+                                return (m.offsetWidth || 0) >= 200;
+                            }
+
+                            var active = null, beat = null, pauseTimer = null;
+
+                            function startBeat() {
+                                if (beat) return;
+                                beat = setInterval(function() {
+                                    if (!active || active.paused || active.ended) return;
+                                    post({ type: 'ccpMedia', state: 'progress',
+                                           pos: active.currentTime || 0, dur: durOf(active) });
+                                }, 5000);
+                            }
+                            function stopBeat() {
+                                if (beat) { clearInterval(beat); beat = null; }
+                            }
+                            function report(reason) {
+                                active = null;
+                                stopBeat();
+                                post({ type: 'ccpMedia', state: 'stopped', reason: reason });
+                            }
+                            function cancelPendingStop() {
+                                if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = null; }
+                            }
+
+                            function onPlaying(e) {
+                                var m = e.target;
+                                if (!isRealPlayback(m)) return;
+                                cancelPendingStop();
+                                active = m;
+                                post({ type: 'ccpMedia', state: 'playing',
+                                       pos: m.currentTime || 0, dur: durOf(m) });
+                                startBeat();
+                            }
+                            function onEnded(e) {
+                                if (active && e.target !== active) return;
+                                cancelPendingStop();
+                                report('ended');
+                            }
+                            // pause/emptied fire constantly during seeks, buffering, ad breaks and
+                            // quality switches. Reporting those directly would end the session
+                            // mid-video and re-open the floodgates, so require the stop to persist.
+                            function onMaybeStop(e) {
+                                if (!active || e.target !== active) return;
+                                cancelPendingStop();
+                                pauseTimer = setTimeout(function() {
+                                    pauseTimer = null;
+                                    if (active && active.paused && !active.ended) report('paused');
+                                }, 4000);
+                            }
+
+                            function bind(m) {
+                                if (!m || m.__ccpMediaHooked) return;
+                                m.__ccpMediaHooked = true;
+                                m.addEventListener('playing', onPlaying);
+                                m.addEventListener('ended', onEnded);
+                                m.addEventListener('pause', onMaybeStop);
+                                m.addEventListener('emptied', onMaybeStop);
+                                // Already mid-playback when we bound (SPA route change, late inject).
+                                if (!m.paused && !m.ended && m.readyState >= 3) onPlaying({ target: m });
+                            }
+                            function scan() {
+                                try {
+                                    var all = document.querySelectorAll('video,audio');
+                                    for (var i = 0; i < all.length; i++) bind(all[i]);
+                                } catch (_) {}
+                            }
+
+                            function init() {
+                                scan();
+                                try {
+                                    new MutationObserver(scan).observe(
+                                        document.documentElement, { childList: true, subtree: true });
+                                } catch (_) {}
+                                // Belt and braces for players that swap elements without mutating
+                                // the observed tree (some use shadow DOM / canvas-backed hosts).
+                                setInterval(scan, 3000);
+                            }
+                            if (document.readyState === 'loading')
+                                document.addEventListener('DOMContentLoaded', init);
+                            else
+                                init();
+
+                            // Leaving the page ends the session immediately rather than waiting
+                            // for the C# heartbeat timeout.
+                            window.addEventListener('pagehide', function() { report('navigated'); });
+                        })();
+                    ");
+                }
+                catch (Exception scriptEx)
+                {
+                    App.Logger?.Warning(scriptEx, "Failed to inject CCP media reporter");
+                }
+
+                // Document-created scripts run in subframes too, but a subframe's
+                // postMessage raises CoreWebView2Frame.WebMessageReceived — NOT the top-level
+                // event — so without this an <iframe>-hosted player reports nothing and its
+                // playback stays invisible. Forward frame messages to the same consumer.
+                try
+                {
+                    _webView.CoreWebView2.FrameCreated += (s, args) =>
+                    {
+                        try
+                        {
+                            args.Frame.WebMessageReceived += (fs, fe) =>
+                                FrameWebMessageReceived?.Invoke(this, fe);
+                        }
+                        catch (Exception frameEx)
+                        {
+                            App.Logger?.Debug("Failed to hook frame web message: {Error}", frameEx.Message);
+                        }
+                    };
+                }
+                catch (Exception frameHookEx)
+                {
+                    App.Logger?.Warning(frameHookEx, "Failed to hook FrameCreated for media reporting");
                 }
 
                 // Navigate to URL

@@ -192,10 +192,24 @@ public sealed class HtLinkPayload : EffectPayload
     {
         try
         {
+            // Never navigate over a video that's already playing — this payload used to fire
+            // blind, which is the "AI effects just stop your video halfway through" report.
+            if (App.BrowserMedia?.ShouldDeferInterruptions == true)
+            {
+                App.Logger?.Debug("HtLinkPayload: browser media active - skipping");
+                return;
+            }
+
             var url = HtLinkPool.PickRandom();
             if (string.IsNullOrWhiteSpace(url)) return;
             if (Application.Current?.MainWindow is MainWindow mw)
+            {
+                // Claim the slot before navigating so nothing else stacks on the clip we open.
+                if (App.BrowserMedia?.BeginTakeover(
+                        Services.Browser.BrowserMediaService.MediaOwner.Chaos) == false)
+                    return;
                 mw.NavigateToUrlInBrowser(url!, autoPlayFullscreen: true);
+            }
         }
         catch (Exception ex) { App.Logger?.Debug("HtLinkPayload: {E}", ex.Message); }
     }

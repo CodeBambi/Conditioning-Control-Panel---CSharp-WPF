@@ -72,7 +72,10 @@ namespace ConditioningControlPanel
                         if (_browser?.WebView?.CoreWebView2 != null)
                         {
                             _browser.WebView.CoreWebView2.WebMessageReceived += OnBrowserWebMessageReceived;
-                            App.Logger?.Information("Browser WebMessageReceived handler attached");
+                            // Same handler for subframe messages — iframe-hosted players post to
+                            // the frame's event, not the top-level one.
+                            _browser.FrameWebMessageReceived += OnBrowserWebMessageReceived;
+                            App.Logger?.Information("Browser WebMessageReceived handler attached (top-level + frames)");
                         }
 
                         // Phase 9: wire Deeper auto-discovery onto the WebView.
@@ -473,17 +476,11 @@ namespace ConditioningControlPanel
                             }
                         }
                         if (video) {
-                            let notified = false;
+                            // NOTE: playback lifecycle (started / duration / ended) is NOT reported
+                            // here any more — the always-on reporter injected by BrowserService owns
+                            // it, so user-started videos are tracked too. This script is now only
+                            // responsible for the fullscreen takeover itself.
 
-                            // Notify C# that video playback ended
-                            const notifyVideoEnded = (reason) => {
-                                if (!notified) {
-                                    notified = true;
-                                    window.chrome.webview.postMessage({ type: 'videoEnded', reason: reason });
-                                }
-                            };
-
-                            // Exit fullscreen helper
                             const exitFullscreen = () => {
                                 if (document.exitFullscreen) {
                                     document.exitFullscreen();
@@ -494,54 +491,42 @@ namespace ConditioningControlPanel
                                 }
                             };
 
-                            // When video ends, exit fullscreen and notify
-                            video.addEventListener('ended', () => {
-                                console.log('Video ended, exiting fullscreen');
-                                exitFullscreen();
-                                notifyVideoEnded('ended');
-                            }, { once: true });
+                            let fsNotified = false;
+                            const notifyFsExit = () => {
+                                if (fsNotified) return;
+                                fsNotified = true;
+                                window.chrome.webview.postMessage({ type: 'fsExit' });
+                            };
 
-                            // Double-click to exit fullscreen and notify
+                            // When the clip ends, drop out of fullscreen. Whether the SESSION ended
+                            // is the reporter's call — sites auto-advance, and the user may keep
+                            // watching.
+                            video.addEventListener('ended', () => { exitFullscreen(); notifyFsExit(); }, { once: true });
+
                             video.addEventListener('dblclick', (e) => {
                                 if (document.fullscreenElement || document.webkitFullscreenElement) {
-                                    console.log('Double-click, exiting fullscreen');
                                     exitFullscreen();
-                                    notifyVideoEnded('doubleclick');
+                                    notifyFsExit();
                                     e.preventDefault();
                                     e.stopPropagation();
                                 }
                             });
 
-                            // Also notify when fullscreen is exited by any means (Escape key, etc.)
+                            // Track fullscreen exit properly. The old handler used { once: true }
+                            // and was registered BEFORE requestFullscreen() — so ENTERING fullscreen
+                            // fired it, the body no-opped (fullscreenElement was set) and the
+                            // listener was consumed, meaning the real exit was never reported.
+                            // Now: persistent listener, and we only arm the exit once we have
+                            // actually observed fullscreen being entered.
+                            let enteredFs = false;
                             document.addEventListener('fullscreenchange', () => {
-                                if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-                                    notifyVideoEnded('fullscreenExit');
-                                }
-                            }, { once: true });
+                                const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+                                if (inFs) { enteredFs = true; return; }
+                                if (enteredFs) notifyFsExit();
+                            });
 
-                            // Notify C# that playback has actually begun so the autonomy
-                            // watchdog (30s) can be cancelled — long videos must NOT free
-                            // up _webVideoActive while still on screen.
-                            const notifyVideoStarted = () => {
-                                window.chrome.webview.postMessage({ type: 'videoStarted' });
-                            };
-
-                            // Report the real video length so C# can enforce it. Relying on
-                            // the 'ended' event alone let the takeover outlive the video:
-                            // sites auto-advance to the next clip after 'ended' consumes our
-                            // once-handlers, so playback just kept going (#484).
-                            const notifyDuration = () => {
-                                if (isFinite(video.duration) && video.duration > 0) {
-                                    window.chrome.webview.postMessage({ type: 'videoDuration', seconds: video.duration });
-                                }
-                            };
-                            if (video.readyState >= 1) notifyDuration();
-                            else video.addEventListener('loadedmetadata', notifyDuration, { once: true });
-
-                            // Start playing and go fullscreen
                             video.muted = false;
-                            video.play().then(() => {
-                                notifyVideoStarted();
+                            const goFullscreen = () => {
                                 if (video.requestFullscreen) {
                                     video.requestFullscreen();
                                 } else if (video.webkitRequestFullscreen) {
@@ -549,15 +534,20 @@ namespace ConditioningControlPanel
                                 } else if (video.msRequestFullscreen) {
                                     video.msRequestFullscreen();
                                 }
-                            }).catch(e => {
+                            };
+                            video.play().then(goFullscreen).catch(e => {
                                 console.log('Autoplay blocked:', e);
-                                // Still notify so the watchdog doesn't fire mid-playback if
-                                // the user manually unblocks/plays the video later.
-                                video.addEventListener('playing', notifyVideoStarted, { once: true });
+                                // Retry the fullscreen request when the user unblocks playback —
+                                // previously fullscreen was simply never requested on this path,
+                                // so the takeover silently degraded to a windowed video.
+                                video.addEventListener('playing', goFullscreen, { once: true });
                             });
                         } else {
                             console.log('No video element found after retries');
-                            window.chrome.webview.postMessage({ type: 'videoEnded', reason: 'noVideoElement' });
+                            // Only the takeover failed to find a player. Do NOT report the media
+                            // session as stopped — the page may still play, and the C# heartbeat
+                            // will retire the session if it genuinely never starts.
+                            window.chrome.webview.postMessage({ type: 'fsExit' });
                         }
                     })();
                 ";
@@ -701,32 +691,46 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                // Parse the JSON message
+                // Always-on media reporter (BrowserService document-created script). Fires for
+                // user-started playback as well as app-started, which is what makes browser
+                // videos visible to the rest of the app at all.
+                if (message.Contains("\"type\":\"ccpMedia\""))
+                {
+                    HandleBrowserMediaMessage(message);
+                    return;
+                }
+
+                // Legacy one-shot takeover messages. The media lifecycle now comes from the
+                // always-on reporter above; these remain for the BambiCloud playlist injection
+                // (audio player with a bespoke play-button click) and are idempotent against it.
                 if (message.Contains("\"type\":\"videoStarted\""))
                 {
-                    // Playback confirmed - cancel the autonomy load-failure watchdog so
-                    // long videos can't have _webVideoActive flipped off mid-stream.
-                    App.Logger?.Information("Web video playback started");
-                    App.Autonomy?.OnWebVideoStarted();
+                    App.Logger?.Information("Web video playback started (takeover injection)");
+                    App.BrowserMedia?.OnMediaPlaying(0);
                 }
                 else if (message.Contains("\"type\":\"videoEnded\""))
                 {
-                    // Video ended or fullscreen exited - notify AutonomyService
-                    App.Logger?.Information("Web video playback ended");
-                    App.Autonomy?.OnWebVideoEnded();
+                    App.Logger?.Information("Web video playback ended (takeover injection)");
+                    App.BrowserMedia?.OnMediaStopped("takeover-injection");
                     ExitBrowserFullscreen();
                 }
                 else if (message.Contains("\"type\":\"videoDuration\""))
                 {
-                    // Real video length reported by the injected JS — lets autonomy
-                    // enforce the takeover actually ending when the video does (#484).
                     var secMatch = System.Text.RegularExpressions.Regex.Match(message, "\"seconds\":([0-9.]+)");
                     if (secMatch.Success && double.TryParse(secMatch.Groups[1].Value,
                             System.Globalization.NumberStyles.Float,
                             System.Globalization.CultureInfo.InvariantCulture, out var seconds))
                     {
-                        App.Autonomy?.OnWebVideoDuration(seconds);
+                        App.BrowserMedia?.OnMediaPlaying(seconds);
                     }
+                }
+                // The user left fullscreen but the page may still be playing. This ends the
+                // TAKEOVER only — conflating it with "media stopped" is what let a stray
+                // fullscreenchange free the app to interrupt a video the user was still watching.
+                else if (message.Contains("\"type\":\"fsExit\""))
+                {
+                    App.BrowserMedia?.OnFullscreenExited();
+                    ExitBrowserFullscreen();
                 }
                 // Audio sync messages
                 else if (message.Contains("\"type\":\"audioSyncVideoDetected\""))
@@ -752,6 +756,41 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to process browser web message");
+            }
+        }
+
+        /// <summary>
+        /// Routes a 'ccpMedia' report from the always-on media reporter into
+        /// <see cref="Services.Browser.BrowserMediaService"/>. Shape:
+        /// <c>{type:'ccpMedia', state:'playing'|'progress'|'stopped', pos, dur, reason}</c>.
+        /// </summary>
+        private void HandleBrowserMediaMessage(string message)
+        {
+            if (App.BrowserMedia == null) return;
+
+            try
+            {
+                var o = Newtonsoft.Json.Linq.JObject.Parse(message);
+                var state = (string?)o["state"];
+                var pos = (double?)o["pos"] ?? 0;
+                var dur = (double?)o["dur"] ?? 0;
+
+                switch (state)
+                {
+                    case "playing":
+                        App.BrowserMedia.OnMediaPlaying(dur);
+                        break;
+                    case "progress":
+                        App.BrowserMedia.OnMediaProgress(pos, dur);
+                        break;
+                    case "stopped":
+                        App.BrowserMedia.OnMediaStopped((string?)o["reason"] ?? "page");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to parse ccpMedia message: {Error}", ex.Message);
             }
         }
 
@@ -2391,6 +2430,12 @@ namespace ConditioningControlPanel
         public void PlayHypnotubeFromRemote(string url)
         {
             _remoteBrowserVideoActive = true;
+            // A controller command is an explicit instruction from another person, so it takes
+            // precedence over an in-flight video rather than being refused — but it must hand the
+            // session over cleanly instead of navigating out from under the previous claim and
+            // leaving it stranded.
+            App.BrowserMedia?.ReplaceSession(
+                Services.Browser.BrowserMediaService.MediaOwner.Remote, takeover: true);
             NavigateToUrlInBrowser(url, autoPlayFullscreen: true);
         }
 

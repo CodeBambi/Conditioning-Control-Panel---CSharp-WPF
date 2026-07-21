@@ -694,6 +694,8 @@
   "label_time_aware": "時間認識",
   "label_basic": "ベーシック",
   "label_web_videos": "Web動画",
+  "label_protect_browser_video": "Protect Web Video",
+  "tooltip_protect_browser_video": "Nothing interrupts a video playing in the built-in browser - not mandatory videos, Takeover actions or AI effects. Applies to videos you started yourself, and holds briefly after one ends. Off = old behaviour",
   "label_takeover_strict_videos": "厳格動画",
   "tooltip_takeover_strict_videos": "テイクオーバーが再生する動画に厳格ロックを適用（スキップ・ESC不可）。オフ＝常にスキップ可能",
   "title_discord_linked": "Discord連携済み",

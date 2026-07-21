@@ -961,6 +961,35 @@ namespace ConditioningControlPanel.Models
             set { _browserVideoMuted = value; OnPropertyChanged(); }
         }
 
+        private bool _protectBrowserVideoPlayback = true;
+        /// <summary>
+        /// When true, nothing interrupts a video playing in the integrated browser — not the
+        /// mandatory-video scheduler, not Takeover actions, not chaos effect bubbles. Applies to
+        /// videos the user started themselves as well as ones the app started, and holds for
+        /// <see cref="BrowserVideoGraceSeconds"/> after playback stops so a clip isn't immediately
+        /// followed by an interruption. Default on: web videos being interruptible was reported
+        /// as the single most disruptive behaviour of the browser feature.
+        /// </summary>
+        [JsonProperty]
+        public bool ProtectBrowserVideoPlayback
+        {
+            get => _protectBrowserVideoPlayback;
+            set { _protectBrowserVideoPlayback = value; OnPropertyChanged(); }
+        }
+
+        private int _browserVideoGraceSeconds = 45;
+        /// <summary>
+        /// Cool-off after a browser video ends during which interruptions are still deferred.
+        /// Without this, the mandatory-video scheduler's reschedule and Takeover's retry tick can
+        /// both fire on the very next tick, which read as "it restarted a video immediately after".
+        /// </summary>
+        [JsonProperty]
+        public int BrowserVideoGraceSeconds
+        {
+            get => _browserVideoGraceSeconds;
+            set { _browserVideoGraceSeconds = Math.Max(0, Math.Min(600, value)); OnPropertyChanged(); }
+        }
+
         private string? _rememberedConfigJson;
         /// <summary>
         /// One-slot snapshot for the header "Remember" button — the conditioning

@@ -348,6 +348,10 @@ namespace ConditioningControlPanel
         /// <summary>Offline "Hey Bambi" wake-word spotter (sherpa-onnx KWS, no key). Unavailable until the model is dropped into Resources\Models\sherpa-kws\; the wake loop falls back to Vosk when so.</summary>
         public static Services.Speech.SherpaWakeService WakeWord { get; private set; } = null!;
         public static InteractionQueueService InteractionQueue { get; private set; } = null!;
+        /// <summary>Single source of truth for web media playing in the embedded browser (user- or
+        /// app-started). Every subsystem that could interrupt playback asks its
+        /// <c>ShouldDeferInterruptions</c> gate.</summary>
+        public static Services.Browser.BrowserMediaService BrowserMedia { get; private set; } = null!;
         public static ContentPackService ContentPacks { get; private set; } = null!;
         public static CompanionService Companion { get; private set; } = null!;
         public static CommunityPromptService CommunityPrompts { get; private set; } = null!;
@@ -1398,6 +1402,7 @@ namespace ConditioningControlPanel
             Services.Chaos.ChaosMeta.Init();   // load persistent Chaos meta-progression before the run service
             Chaos = new Services.Chaos.ChaosModeService();
             InteractionQueue = new InteractionQueueService();
+            BrowserMedia = new Services.Browser.BrowserMediaService();   // must precede any browser navigation
             LockCard = new LockCardService();
             PopQuiz = new PopQuizService();
             BubbleCount = new BubbleCountService();

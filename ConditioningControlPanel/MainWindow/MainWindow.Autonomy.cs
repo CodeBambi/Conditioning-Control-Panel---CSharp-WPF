@@ -296,6 +296,7 @@ namespace ConditioningControlPanel
             App.Settings.Current.AutonomyCanTriggerFlash = BambiTakeoverTab.ChkAutonomyFlash.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerVideo = BambiTakeoverTab.ChkAutonomyVideo.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerWebVideo = BambiTakeoverTab.ChkAutonomyWebVideo.IsChecked ?? false;
+            App.Settings.Current.ProtectBrowserVideoPlayback = BambiTakeoverTab.ChkProtectBrowserVideo.IsChecked ?? false;
 
             // Strict takeover videos are a no-escape amplifier (surprise fullscreen videos
             // with no skip/ESC; combined with a disabled panic key there is NO way out) —

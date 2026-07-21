@@ -101,15 +101,13 @@ namespace ConditioningControlPanel.Services
         private bool _pinkFilterPulseActive = false;
         private bool _bubblesPulseActive = false;
         private bool _bouncingTextPulseActive = false;
-        private bool _webVideoActive = false; // Blocks all actions while web video plays fullscreen
-
         /// <summary>
-        /// True while a fullscreen browser/HypnoTube web video is on screen. The mandatory
-        /// VideoService scheduler reads this so it won't stack a mandatory video (and its audio)
-        /// on top of a web video — and vice versa (BUG-XRFQH4AHDN).
+        /// True while web media is playing in the embedded browser. Now delegates to
+        /// <see cref="Services.Browser.BrowserMediaService"/>, which tracks USER-started playback
+        /// too — this used to be a local flag only autonomy's own takeover ever set, so a video
+        /// the user started themselves was invisible and everything fired on top of it.
         /// </summary>
-        public bool IsWebVideoActive => _webVideoActive;
-        private int _webVideoWatchdogGeneration = 0; // Invalidates stale watchdog callbacks
+        public bool IsWebVideoActive => App.BrowserMedia?.IsPlaying == true;
         private HashSet<string> _shownWebVideos = new(); // Track shown videos to avoid repeats
         // Separate generation counters for each pulse type to avoid cross-invalidation
         private int _spiralPulseGeneration = 0;
@@ -769,7 +767,7 @@ namespace ConditioningControlPanel.Services
                 var timeCooldownActive = timeSinceLast < cooldownSec;
 
                 App.Logger?.Information(
-                    "AutonomyService HEARTBEAT: Enabled={Enabled}, RandomTimer={Random}, IdleTimer={Idle}, Cooldown={Cooldown}, TimeCooldown={TimeCooldown} ({Elapsed:F0}s/{Required}s), WebVideo={WebVideo}, QueueBusy={Busy}",
+                    "AutonomyService HEARTBEAT: Enabled={Enabled}, RandomTimer={Random}, IdleTimer={Idle}, Cooldown={Cooldown}, TimeCooldown={TimeCooldown} ({Elapsed:F0}s/{Required}s), WebMedia={WebMedia}/{Owner}, DeferInterrupts={Defer}, QueueBusy={Busy}",
                     _isEnabled,
                     nextRandomTick,
                     nextIdleTick,
@@ -777,7 +775,9 @@ namespace ConditioningControlPanel.Services
                     timeCooldownActive,
                     timeSinceLast,
                     cooldownSec,
-                    _webVideoActive,
+                    App.BrowserMedia?.IsPlaying == true,
+                    App.BrowserMedia?.Owner,
+                    App.BrowserMedia?.ShouldDeferInterruptions == true,
                     App.InteractionQueue?.IsBusy == true);
             };
             _heartbeatTimer.Start();
@@ -892,10 +892,14 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
-            // Don't take actions while web video is playing fullscreen
-            if (_webVideoActive)
+            // Don't take actions while the user is watching a browser video — or during the
+            // cool-off right after one. Previously this only covered autonomy's OWN takeover, so
+            // Flash/Subliminal/MindWipe/PinkFilter/BouncingText/LockCard all fired straight over
+            // a video the user had started, which is the "AI effects stop your video halfway
+            // through" report.
+            if (App.BrowserMedia?.ShouldDeferInterruptions == true)
             {
-                App.Logger?.Debug("AutonomyService: CanTakeAction=false - web video playing fullscreen");
+                App.Logger?.Debug("AutonomyService: CanTakeAction=false - browser video playing (or in cool-off)");
                 return false;
             }
 
@@ -1030,7 +1034,9 @@ namespace ConditioningControlPanel.Services
             // Web video - plays random HypnoTube video fullscreen in browser.
             // Exclude while a mandatory video is on screen so we pick a different action
             // rather than stacking two videos (BUG-XRFQH4AHDN).
-            if (settings.AutonomyCanTriggerWebVideo && !_webVideoActive && App.Video?.IsPlaying != true)
+            if (settings.AutonomyCanTriggerWebVideo
+                && App.BrowserMedia?.ShouldDeferInterruptions != true
+                && App.Video?.IsPlaying != true)
                 candidates.Add((AutonomyActionType.WebVideo, 20));
 
             // Wallpaper shuffle - subtle desktop wallpaper change
@@ -1365,11 +1371,11 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            // Skip mandatory video if a web video is currently active — playing both
+            // Skip mandatory video if browser media is playing (or in cool-off) — playing both
             // simultaneously stacks two videos on screen, which is what users reported
             // in BUG-XRFQH4AHDN. Advisory fast-path; the interaction queue inside
             // TriggerVideo is the authoritative arbiter.
-            if (_webVideoActive) return;
+            if (App.BrowserMedia?.ShouldDeferInterruptions == true) return;
 
             App.Video?.TriggerVideo(strictOverride: settings.TakeoverVideosStrict);
         }
@@ -1379,9 +1385,11 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void TriggerWebVideoFullscreen()
         {
-            if (_webVideoActive)
+            // Never interrupt media already playing in the browser — including a video the user
+            // started themselves, which this could not see before BrowserMediaService existed.
+            if (App.BrowserMedia?.ShouldDeferInterruptions == true)
             {
-                App.Logger?.Information("AutonomyService: Web video already active, skipping");
+                App.Logger?.Information("AutonomyService: Browser media active (or in cool-off), skipping web video");
                 return;
             }
 
@@ -1401,19 +1409,15 @@ namespace ConditioningControlPanel.Services
             // video still reads as not playing; the queue slot is claimed synchronously at
             // trigger time so TryStart cannot. Never queue web videos — autonomy's own
             // retry tick re-attempts within RetryIntervalSeconds anyway.
-            if (App.InteractionQueue != null && !App.InteractionQueue.TryStart(
-                    InteractionQueueService.InteractionType.WebVideo, () => { }, queue: false))
-            {
-                App.Logger?.Information("AutonomyService: Fullscreen slot busy ({Current}), skipping web video",
-                    App.InteractionQueue.CurrentInteraction);
+            if (App.BrowserMedia?.BeginTakeover(
+                    Services.Browser.BrowserMediaService.MediaOwner.Autonomy) == false)
                 return;
-            }
 
             var videoLinks = AvatarTubeWindow.KnownVideoLinks;
             if (videoLinks == null || videoLinks.Count == 0)
             {
                 App.Logger?.Warning("AutonomyService: No known video links available");
-                App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.WebVideo);
+                App.BrowserMedia?.OnMediaStopped("no-links");
                 return;
             }
 
@@ -1446,33 +1450,14 @@ namespace ConditioningControlPanel.Services
             if (mainWindow == null)
             {
                 App.Logger?.Warning("AutonomyService: MainWindow not found, cannot play web video");
-                App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.WebVideo);
+                App.BrowserMedia?.OnMediaStopped("no-mainwindow");
                 return;
             }
 
-            // Mark video as active - blocks other autonomy actions
-            _webVideoActive = true;
-            var watchdogGen = ++_webVideoWatchdogGeneration;
-
-            // Safety watchdog: auto-reset after 30 seconds if OnWebVideoEnded never fires
-            // (page should load within ~10s; 30s is generous but doesn't block autonomy for ages)
-            Task.Delay(TimeSpan.FromSeconds(30)).ContinueWith(_ =>
-            {
-                if (Application.Current?.Dispatcher == null) return;
-                try
-                {
-                    if (_webVideoActive && _webVideoWatchdogGeneration == watchdogGen)
-                    {
-                        _webVideoActive = false;
-                        App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.WebVideo);
-                        App.Logger?.Warning("AutonomyService: Web video watchdog fired - resetting stuck _webVideoActive after 30s");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("AutonomyService: web video watchdog failed: {Error}", ex.Message);
-                }
-            });
+            // No local watchdog any more: BrowserMediaService's heartbeat covers both the load
+            // window and playback. The old fixed 30s timer could not tell "the page never played"
+            // from "a long video is still playing", so it either released too early or relied on
+            // a chain of generation counters to stay out of the way.
 
             // Navigate to video with fullscreen autoplay
             if (mainWindow.NavigateToUrlInBrowser(videoUrl, autoPlayFullscreen: true))
@@ -1481,160 +1466,30 @@ namespace ConditioningControlPanel.Services
             }
             else
             {
-                // Navigation failed - reset state
-                _webVideoActive = false;
-                App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.WebVideo);
+                App.BrowserMedia?.OnMediaStopped("navigation-failed");
                 App.Logger?.Warning("AutonomyService: Failed to navigate to web video - browser not available");
             }
         }
 
-        /// <summary>
-        /// Called by MainWindow when the injected JS confirms a web video has actually begun
-        /// playing. Cancels the load-failure watchdog so it can't reset _webVideoActive while
-        /// the video is still on screen, and ensures the flag is set even when the navigation
-        /// was triggered by a user-clicked link rather than by autonomy itself.
-        /// </summary>
-        public void OnWebVideoStarted()
-        {
-            // Bump generation so any pending Task.Delay watchdog from TriggerWebVideoFullscreen
-            // becomes a no-op when it fires.
-            _webVideoWatchdogGeneration++;
-
-            if (!_webVideoActive)
-            {
-                _webVideoActive = true;
-                // Best-effort claim: the navigation already happened (user-clicked link),
-                // so we can't skip it — but registering with the queue keeps scheduled
-                // interactions from stacking on top for the rest of the playback.
-                App.InteractionQueue?.TryStart(
-                    InteractionQueueService.InteractionType.WebVideo, () => { }, queue: false);
-                App.Logger?.Information("AutonomyService: Web video started (external trigger), blocking autonomy actions");
-            }
-            else
-            {
-                App.Logger?.Debug("AutonomyService: Web video confirmed playing, watchdog cancelled");
-            }
-
-            // Pending-duration leash: the queue's default stuck window is 5 minutes, which
-            // would force-end a healthy video that never reports a duration (live streams,
-            // JS injection miss). Give it an hour up front; OnWebVideoDuration tightens
-            // this to the real length + grace. Type-guarded: no-ops unless WE hold the slot.
-            App.InteractionQueue?.ExtendTimeout(3600, InteractionQueueService.InteractionType.WebVideo);
-        }
+        // Web-video lifecycle (started / ended / duration / watchdogs / hard stop) now lives in
+        // BrowserMediaService, which sees user-started playback too. The two methods below stay
+        // as forwarders because several UI teardown paths (panic, session end, feature toggles)
+        // call them; ForceEndWebVideoTakeoverCore in particular must remain synchronous for the
+        // interaction queue's stuck recovery, which requires teardown to complete before the
+        // slot frees.
 
         /// <summary>
-        /// Called by MainWindow when a web video finishes or exits fullscreen.
-        /// Resets the web video active state to allow other autonomy actions.
+        /// Hard-terminates a fullscreen web-video takeover from outside the page's normal
+        /// lifecycle (queue stuck recovery, panic, session end, user force-reset).
         /// </summary>
-        public void OnWebVideoEnded()
-        {
-            // Also bump the watchdog generation - if a stale watchdog is still pending,
-            // we don't want it firing later and overwriting state for a new video.
-            _webVideoWatchdogGeneration++;
-            _webVideoDurationGeneration++;   // cancel the pending duration hard stop too
-
-            if (_webVideoActive)
-            {
-                _webVideoActive = false;
-                App.Logger?.Information("AutonomyService: Web video ended, autonomy actions resumed");
-            }
-
-            // Release the fullscreen slot (dequeues any waiting interaction). Idempotent
-            // and type-guarded — the JS 'ended', fullscreen-exit and duration hard stop
-            // can all fire for the same video; only the first release matters.
-            App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.WebVideo);
-        }
-
-        /// <summary>
-        /// Hard-terminates a fullscreen web-video takeover from outside the normal JS
-        /// lifecycle (interaction-queue stuck recovery, user force-reset): ends the
-        /// browser takeover and runs the normal ended bookkeeping (flag + slot release).
-        /// Marshals to the UI thread if needed; on the UI thread it runs synchronously.
-        /// </summary>
-        public void ForceEndWebVideoTakeover()
-        {
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher == null || dispatcher.HasShutdownStarted)
-            {
-                OnWebVideoEnded(); // no UI to tear down; still release the flag + queue slot
-                return;
-            }
-            if (dispatcher.CheckAccess())
-                ForceEndWebVideoTakeoverCore();
-            else
-                dispatcher.BeginInvoke(ForceEndWebVideoTakeoverCore);
-        }
+        public void ForceEndWebVideoTakeover() =>
+            App.BrowserMedia?.ForceEnd("autonomy-force-end");
 
         /// <summary>
         /// Synchronous body of <see cref="ForceEndWebVideoTakeover"/> — UI thread only.
-        /// Callers that must guarantee "teardown happened before the queue slot frees"
-        /// (stuck recovery, the duration hard stop's generation re-check) call this
-        /// directly so no extra dispatcher hop can interleave a new video in between.
         /// </summary>
-        internal void ForceEndWebVideoTakeoverCore()
-        {
-            try
-            {
-                var mainWindow = App.MainWindowRef
-                    ?? Application.Current?.MainWindow as MainWindow
-                    ?? Application.Current?.Windows.OfType<MainWindow>().FirstOrDefault();
-                mainWindow?.EndWebVideoTakeover();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "AutonomyService: force-ending web video takeover failed");
-            }
-            finally
-            {
-                OnWebVideoEnded();
-            }
-        }
-
-        // Generation counter for the duration-based hard stop. Separate from the load
-        // watchdog generation: OnWebVideoStarted bumps that one (and started/duration
-        // messages can arrive in either order), while only OnWebVideoEnded should cancel
-        // a scheduled hard stop.
-        private int _webVideoDurationGeneration;
-
-        /// <summary>
-        /// Called by MainWindow when the injected JS reports the video's real length.
-        /// Schedules a hard stop at duration + grace: relying on the JS 'ended' event
-        /// alone let the takeover run past the video — sites auto-advance to the next
-        /// clip after 'ended' consumes the once-only handlers (#484). The 'ended' path
-        /// is still the normal, earlier terminator.
-        /// </summary>
-        public void OnWebVideoDuration(double seconds)
-        {
-            if (!_webVideoActive) return;
-            if (double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds <= 0) return; // live streams etc.
-
-            var gen = ++_webVideoDurationGeneration;
-            var cap = TimeSpan.FromSeconds(Math.Min(seconds + 15, 3600)); // +15s grace, 1h sanity ceiling
-            App.Logger?.Information("AutonomyService: Web video reports {Seconds:F0}s - hard stop scheduled at +{Cap:F0}s",
-                seconds, cap.TotalSeconds);
-
-            // Keep the interaction queue's stuck-recovery from force-ending a long video
-            // mid-play (its default window is 5 minutes) — mirrors the native VLC path.
-            // Type-guarded: if our best-effort claim failed (slot held by something else),
-            // this must NOT stretch that other interaction's recovery window.
-            App.InteractionQueue?.ExtendTimeout(cap.TotalSeconds, InteractionQueueService.InteractionType.WebVideo);
-
-            Task.Delay(cap).ContinueWith(_ =>
-            {
-                if (!_webVideoActive || _webVideoDurationGeneration != gen) return;
-                if (Application.Current?.Dispatcher == null) return;
-                Application.Current.Dispatcher.BeginInvoke(() =>
-                {
-                    // Re-check on the UI thread: the video may have ended (and a new one
-                    // started) between the timer firing and this dispatch. The teardown
-                    // must run synchronously HERE — another dispatcher hop between this
-                    // check and the teardown would let a fresh video start and be killed.
-                    if (!_webVideoActive || _webVideoDurationGeneration != gen) return;
-                    App.Logger?.Information("AutonomyService: Web video ran past its reported length - force-ending takeover");
-                    ForceEndWebVideoTakeoverCore();
-                });
-            });
-        }
+        internal void ForceEndWebVideoTakeoverCore() =>
+            App.BrowserMedia?.ForceEndCore("autonomy-force-end");
 
         /// <summary>
         /// Temporarily pulse brain drain to higher intensity

@@ -1344,6 +1344,8 @@
   "label_time_aware": "时间感知",
   "label_basic": "基础",
   "label_web_videos": "网页视频",
+  "label_protect_browser_video": "Protect Web Video",
+  "tooltip_protect_browser_video": "Nothing interrupts a video playing in the built-in browser - not mandatory videos, Takeover actions or AI effects. Applies to videos you started yourself, and holds briefly after one ends. Off = old behaviour",
   "label_takeover_strict_videos": "严格视频",
   "tooltip_takeover_strict_videos": "接管启动的视频使用严格锁定（不可跳过、不可按ESC）。关闭 = 始终可跳过",
   "title_discord_linked": "Discord已关联",

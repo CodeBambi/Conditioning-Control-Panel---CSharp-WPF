@@ -344,7 +344,7 @@ public class InteractionQueueService
                     App.BubbleCount?.ForceCleanup();
                     break;
                 case InteractionType.WebVideo:
-                    App.Autonomy?.ForceEndWebVideoTakeoverCore(); // sync teardown, then releases
+                    App.BrowserMedia?.ForceEndCore("queue-stuck-recovery"); // sync teardown, then releases
                     break;
             }
         }

@@ -1420,11 +1420,12 @@ namespace ConditioningControlPanel.Services
                 {
                     if (_isRunning && !_videoPlaying && !_triggerInProgress)
                     {
-                        if (App.Autonomy?.IsWebVideoActive == true ||
+                        if (App.BrowserMedia?.ShouldDeferInterruptions == true ||
                             App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.WebVideo)
                         {
-                            // A fullscreen browser/HypnoTube video is on screen — don't stack a
-                            // mandatory video (and its audio) on top (BUG-XRFQH4AHDN). Nothing
+                            // A browser video is playing (user- or app-started) or just finished —
+                            // don't stack a mandatory video (and its audio) on top, and don't fire
+                            // the instant it ends either (BUG-XRFQH4AHDN). Nothing
                             // else re-arms us in this branch (there's no mandatory-video Cleanup
                             // to follow), so reschedule to retry once the web video has ended.
                             // Reschedule rather than queue: an ambient video shouldn't pile up

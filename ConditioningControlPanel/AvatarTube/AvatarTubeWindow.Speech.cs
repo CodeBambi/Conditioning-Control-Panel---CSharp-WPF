@@ -1187,6 +1187,11 @@ namespace ConditioningControlPanel
 
                 App.Logger?.Information("MainWindow found: {Found}", mainWindow != null);
 
+                // The user clicked this themselves, so never refuse it — but hand the session
+                // over explicitly rather than navigating out from under a previous claim.
+                App.BrowserMedia?.ReplaceSession(
+                    Services.Browser.BrowserMediaService.MediaOwner.AvatarLink, takeover: true);
+
                 if (mainWindow?.NavigateToUrlInBrowser(url, autoPlayFullscreen: true) == true)
                 {
                     App.Logger?.Information("Speech bubble link routed to embedded browser: {Url}", url);

@@ -676,6 +676,8 @@
   "label_time_aware": "С учётом времени",
   "label_basic": "Базовый",
   "label_web_videos": "Веб-видео",
+  "label_protect_browser_video": "Protect Web Video",
+  "tooltip_protect_browser_video": "Nothing interrupts a video playing in the built-in browser - not mandatory videos, Takeover actions or AI effects. Applies to videos you started yourself, and holds briefly after one ends. Off = old behaviour",
   "label_takeover_strict_videos": "Строгие видео",
   "tooltip_takeover_strict_videos": "Видео, запущенные захватом, используют строгую блокировку (без пропуска и ESC). Выкл = всегда можно пропустить",
   "title_discord_linked": "Discord привязан",
