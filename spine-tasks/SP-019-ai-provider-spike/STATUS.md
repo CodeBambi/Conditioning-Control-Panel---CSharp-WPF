@@ -1,7 +1,7 @@
 # STATUS: SP-019 — spike cancellable AI providers and strict commands
 
-**Current Step:** Step 4 — provider-behavior evidence + WSL2 gate + record + pre-completion consult + board reconciliation
-**Last Updated:** 2026-07-21 (worker, Step 3 complete)
+**Current Step:** Step 5 — testing & verification
+**Last Updated:** 2026-07-21 (worker, Step 4 complete)
 
 ### Step 1: Provider/command archaeology + spike design + pre-approach consult
 **Status:** ✅ Complete
@@ -27,18 +27,18 @@
 - [x] `--audit-logs` GREEN over the fuzz run
 
 ### Step 4: Provider-behavior evidence + WSL2 gate + record + pre-completion consult + board reconciliation
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] Provider matrix: cancellation (no late result), timeout (typed, no hang), 429 (typed, no retry-storm), 5xx, refusal, malformed/truncated (never partial apply)
-- [ ] Remote-host rejection before socket open (policy test, no real remote); Ollama session fact or named limit; cloud named limit
-- [ ] WSL2 in-packet gate (`~/ccp-sp019`, never /mnt/e): fuzz + lab green on Linux; contract green (pollution guard)
-- [ ] `client/docs/ai-provider-spike.md` + record.md complete
-- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
-- [ ] Board row → `WIP` with evidence + named limits (never `DONE`)
-- [ ] STATUS.md accurate before .DONE
+- [x] Provider matrix: cancellation (no late result), timeout (typed, no hang), 429 (typed, no retry-storm), 5xx, refusal, malformed/truncated (never partial apply)
+- [x] Remote-host rejection before socket open (policy test, no real remote); Ollama session fact or named limit; cloud named limit
+- [x] WSL2 in-packet gate (`~/ccp-sp019`, never /mnt/e): fuzz + lab green on Linux; contract green (pollution guard)
+- [x] `client/docs/ai-provider-spike.md` + record.md complete
+- [x] Pre-completion solo Fable 5 consult (verdict in record.md)
+- [x] Board row → `WIP` with evidence + named limits (never `DONE`)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] Contract testCommand green (client 0W/0E + both test projects; spike host builds clean separately)
 - [ ] `git diff --check` clean

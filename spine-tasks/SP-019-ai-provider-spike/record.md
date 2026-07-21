@@ -104,3 +104,13 @@ Key rows: mid-stream cancel (18B partial body before cancel, typed Cancelled in 
 **WSL2 gate (`~/ccp-sp019`):** spike build 0E; fuzz 62/62; matrix GREEN; selftest GREEN; `--audit-logs` GREEN on Linux. Contract pollution guard green on BOTH platforms — Windows: sln 0W/0E, 213/213 unit + 22/22 headless; WSL2: 213/213 + 22/22 (identical counts to SP-016/017/018).
 
 **Step 4 engine-review presence (T-2):** recorded below after the review call.
+
+### 4b — Pre-completion consult (solo Fable 5, 2026-07-21)
+
+**Route:** solo consult (Fable-sanctioned per board gate history; actual answering model not self-identified in output, recorded honestly).
+
+**Verdict: evidence sound — proceed, with four corrections (all applied):**
+1. Doc acceptance-item headings renamed to name the instrument ("fake loopback lab") — the "Approved OpenAI-compatible endpoint" heading overclaimed (no real approved endpoint contacted); board wording leads with the fake lab as primary instrument.
+2. Named limit added: `NotExecuted(SupersededGeneration)` is not validator-reachable (execution-pipeline vocabulary; supersession proven at operation level; verdict lands with the execution row).
+3. Zero-execution strengthened: the spike is a separate assembly with NO `InternalsVisibleTo` anywhere in `client/src` (verified by grep) — `AiExecutionPlan`'s internal ctor is genuinely unconstructible from consumer code; type-enforcement is proven at the assembly boundary.
+4. Finding F1 recategorized: NOT a Decisions-needed owner question — it is an engineering defect against the owner-ratified contract §8 strict-schema intent (parser-differential hazard); filed as a follow-up fix (reject duplicates) for the AI implementation row.
