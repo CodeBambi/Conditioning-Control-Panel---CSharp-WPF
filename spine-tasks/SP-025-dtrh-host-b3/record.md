@@ -5,6 +5,23 @@
 
 ---
 
+## Engine-review log (T-2)
+
+| Step | Type | Result | Artifact |
+|------|------|--------|----------|
+| 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260721T231721.md` |
+
+---
+
+## Step 2 — native effects core (SFX + freeze + tint mechanism)
+
+- **`Features/Dtrh/DtrhNativeEffects.cs`** (contract-named): seams `IDtrhAudioBackend`/`IDtrhAudioPlayer`/`IDtrhVideoBackend` (unit tests run on recording fakes — never the real backends) + the effects owner. SFX: bounded pool **8 max, drop-on-overflow** (packet decree; ChaosSfx.cs:91-107 cap-6 parity cited), scale default 0.6, `wave_clear`/`ripple_cast` special-case candidate chains, case-insensitive file match (Linux-honest), silent-no-op unresolved (logged), VN mix gate (`:223` parity), volume = clamp(master×scale) (`ChaosSfx.cs:96-103`; master = init masterVolume, b2 currently 80 — consult item 8). Voice: exclusive stop-replace + generation/identity token (F2), pause-only-when-Playing/resume-only-when-Paused (Speech.cs:1651-1669). Freeze: idempotent dedup, video `SetPaused` + voice pause/resume, `NotifyRunBoundary()` (`:252`/`:259`/`:513` hygiene), `NotifySessionStart()` (`:71`), `Teardown()` mid-freeze force-resume unwedge (`:896`) then stop+dispose. fire-payload: video → covering-video pool play + 15s segment cap (EffectPayload.cs SEGMENT_SEC parity) + VideoStarted/VideoEnded events for the host's payload-state mirror; audio → one-shot whisper from the payload `sub_*.mp3` pool; other kinds logged-ignored (`:505-510`); strength/durationMult accepted NON-CONSUMED (WPF behavior + first-attempt lesson).
+- **`Features/Dtrh/SoundFlowDtrhAudio.cs`**: the real backend on SoundFlow 1.4.1 (API shape mirrors the admitted SP-017 harness): one playback device, per-channel SoundPlayers on MasterMixer, **F1 discipline** (re-enumerate immediately before init, match by NAME, fresh DeviceInfo only, missing name → default), 10 ms period (spike-recorded quantization).
+- **`Features/Dtrh/LibVlcDtrhVideo.cs`**: the real backend on LibVLCSharp 3.10.0 with the SP-018 findings as binding disciplines — V1 software decode, V2 vmem vout (frame-level decode proof), V3 one app-lifetime LibVLC+MediaPlayer with release-at-exit SKIPPED; **Stop() on a background thread** (vmem deadlock class); vmem delegates + frame pin rooted for the process lifetime; UI-thread bitmap swap (WriteableBitmap Bgra8888 ← RV32).
+- **V3 dev-loop experiment (consult item 3, try-before-leak):** `evidence/devloop/` scratch console (NOT in the sln), product shape (persistent player, media replaced per fire): **5/5 cycles CLEAN — EndReached → background Stop → Media.Dispose, exit 0** (`evidence/devloop/v3-transcript.txt`, reproduced twice). The probe-shape segfault does NOT transfer; media release-on-replace is ENABLED with the transcript as evidence. Trailing libvlc stderr noise at process teardown (converter/vout errors) recorded — release-at-exit stays skipped.
+- **csproj pins (File Scope: Desktop head only):** SoundFlow 1.4.1 + LibVLCSharp 3.10.0 + VideoLAN.LibVLC.Windows 3.0.23.1, each with the live-feed admission comment.
+- **Tests (16 new, `DtrhNativeEffectsTests.cs`):** pool bound + drop + reclaim-on-PlaybackEnded, special-case chains + dedicated-wins + case-insensitive + silent-no-op, volume curve values, VN gate (sfx gated, whisper NOT — WPF-mirrored) + idempotent transitions, whisper stop-replace + F2 generation token, freeze idempotent dedup + pause/resume-state discipline, run-boundary clears stale freeze+duck, teardown mid-freeze unwedge-then-stop + idempotency, fire-payload video pool/started/segment-cap + empty-pool silent + unknown-kind ignored + backend end/error → VideoEnded. **308/308 unit + 27/27 headless green; sln Rebuild 0W/0E** (one xUnit2013 analyzer warning found on Rebuild per the xUnit1051 lesson — fixed at source).
+
 ## Step 1 — archaeology + package admission + design + pre-approach consult
 
 ### WPF archaeology (READ-ONLY, `File.cs:line`)

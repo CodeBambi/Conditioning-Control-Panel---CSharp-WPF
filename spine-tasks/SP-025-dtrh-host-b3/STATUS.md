@@ -1,6 +1,6 @@
 ## STATUS: SP-025 — DTRH host slice b3: native SFX/audio/video + freeze + rendered tint safety
-**Current Step:** Step 2 — native effects core (SFX + freeze + tint mechanism)
-**Last Updated:** 2026-07-22 (Step 1 complete — archaeology/admission/design/consult in record.md)
+**Current Step:** Step 3 — protocol upgrade Deferred → Handled
+**Last Updated:** 2026-07-22 (Step 2 complete — 308/308 + 27/27, Rebuild 0W/0E)
 **Blockers:** none
 
 ### Step 1: archaeology + admission + pre-approach consult
@@ -12,8 +12,8 @@
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: native effects core
-- [ ] DtrhNativeEffects.cs (SFX pool / freeze / tint mechanism)
-- [ ] Unit tests (pool bounds, freeze idempotency/stale/unwedge, tint transitions, tolerance)
+- [x] DtrhNativeEffects.cs (SFX pool / freeze / tint mechanism)
+- [x] Unit tests (pool bounds, freeze idempotency/stale/unwedge, tint transitions, tolerance)
 
 ### Step 3: protocol upgrade Deferred → Handled
 - [ ] b3-owned messages wired to real effects

@@ -1,0 +1,50 @@
+clip=E:/Code/Conditioning-Control-Panel/.worktrees/spine-20260721T225836/lane-1/client/src/CcpClient.Desktop/bin/Debug/net10.0/payload/dtrh/assets/bubbles/spiral.webm
+libvlc up
+vmem wired (spike shape)
+cycle 1: play
+cycle 1: endReached=True frames=27
+cycle 1: stop (background thread — vmem deadlock class)
+cycle 1: MEDIA.DISPOSE — the V3 suspect
+cycle 1: media disposed CLEAN
+cycle 2: play
+cycle 2: endReached=True frames=54
+cycle 2: stop (background thread — vmem deadlock class)
+cycle 2: MEDIA.DISPOSE — the V3 suspect
+cycle 2: media disposed CLEAN
+cycle 3: play
+cycle 3: endReached=True frames=81
+cycle 3: stop (background thread — vmem deadlock class)
+cycle 3: MEDIA.DISPOSE — the V3 suspect
+cycle 3: media disposed CLEAN
+cycle 4: play
+cycle 4: endReached=True frames=108
+cycle 4: stop (background thread — vmem deadlock class)
+cycle 4: MEDIA.DISPOSE — the V3 suspect
+cycle 4: media disposed CLEAN
+cycle 5: play
+cycle 5: endReached=True frames=135
+cycle 5: stop (background thread — vmem deadlock class)
+cycle 5: MEDIA.DISPOSE — the V3 suspect
+cycle 5: media disposed CLEAN
+all 5 cycles clean — Media.Dispose after EndReached is SAFE in the product shape
+[000001abca5dbda0] main filter error: Failed to create video converter
+[000001abca5e70b0] main vout display error: Failed to set on top
+[000001abca671eb0] main filter error: Failed to create video converter
+[000001abca5e70b0] main vout display error: Failed to set on top
+[000001abca6272c0] main filter error: Failed to create video converter
+[000001abca5aafc0] main vout display error: Failed to set on top
+[000001abca6272c0] main filter error: Failed to create video converter
+[000001abca5aafc0] main vout display error: Failed to set on top
+[000001abca54b290] main filter error: Failed to create video converter
+[000001abca575470] main vout display error: Failed to set on top
+[000001abca54b290] main filter error: Failed to create video converter
+[000001abca508a50] main vout display error: Failed to set on top
+[000001abca8cec50] main filter error: Failed to create video converter
+[000001abca508a50] main vout display error: Failed to set on top
+[000001abca8cec50] main filter error: Failed to create video converter
+[000001abca508a50] main vout display error: Failed to set on top
+[000001abca5c2970] main filter error: Failed to create video converter
+[000001abca6a45d0] main vout display error: Failed to set on top
+[000001abca6a45d0] main filter error: Failed to create video converter
+[000001abca52a210] main vout display error: Failed to set on top
+EXIT=0

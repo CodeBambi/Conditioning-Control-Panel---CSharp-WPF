@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- SP-025 Step-2 dev-loop scratch (NOT in client/CcpClient.sln): the V3 experiment the
+       pre-approach consult demanded — does Media.Dispose after EndReached segfault in the
+       PRODUCT shape (persistent app-lifetime player, media replaced per fire)? Transcript
+       lands in spine-tasks/SP-025-dtrh-host-b3/evidence/. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="LibVLCSharp" Version="3.10.0" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1" />
+  </ItemGroup>
+</Project>

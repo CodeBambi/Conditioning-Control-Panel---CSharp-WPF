@@ -28,6 +28,16 @@
     <!-- SP-023 / dtrh-admission.md §1: pinned 12.0.1 (current latest, MIT, dep
          Avalonia@12.0.0 minimum — nearest-wins to the 12.1.0 baseline). -->
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
+    <!-- SP-025 / audio-backend-spike.md §1 (live-feed re-confirmed 2026-07-22): SoundFlow
+         1.4.1, MIT (nupkg LICENSE.md), net8.0 TFM (runs on net10.0), bundled miniaudio
+         natives per-RID (win-x64/linux-x64) — flows into SP-010 natives-beside-exe. -->
+    <PackageReference Include="SoundFlow" Version="1.4.1" />
+    <!-- SP-025 / video-handoff-spike.md §1 (live-feed re-confirmed 2026-07-22): LibVLCSharp
+         3.10.0 (LGPL-2.1-or-later — SP-010 sidecar note, pending-owner) + bundled libvlc
+         win-x64 3.0.23.1. Linux uses the distro libvlc 3.0.23-1 (apt libvlc5/libvlccore9 —
+         no official Linux libvlc nuget exists, SP-018). -->
+    <PackageReference Include="LibVLCSharp" Version="3.10.0" />
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1" />
   </ItemGroup>
 
   <ItemGroup>
