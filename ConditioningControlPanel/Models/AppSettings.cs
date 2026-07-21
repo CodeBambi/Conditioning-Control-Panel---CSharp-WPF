@@ -2710,6 +2710,22 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Graded Intake (web core window mode)
+
+        private bool _intakeFullscreen = false;
+        /// <summary>Launch the Graded Intake window borderless-fullscreen. The SINGLE source of
+        /// truth for the mode: the page never stores it (a localStorage copy would disagree with
+        /// the window the host had already built), it only mirrors what C# echoes back. Written
+        /// by IntakeHostService whenever the page's toggle moves, so "how I left it" is how it
+        /// comes back. Defaults off - a Lab tool opening windowed is the recoverable state.</summary>
+        public bool IntakeFullscreen
+        {
+            get => _intakeFullscreen;
+            set { _intakeFullscreen = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Pop Quiz (Session reinforcement questions)
 
         private bool _popQuizEnabled = false;

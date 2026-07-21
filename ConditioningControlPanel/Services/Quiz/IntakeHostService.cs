@@ -23,11 +23,14 @@ namespace ConditioningControlPanel.Services.Quiz
     ///   Page -&gt; Host:  ready · log                    (consumed inside ChaosWebViewHost)
     ///                  boot-error · heartbeat · pong
     ///                  quiz-result { result }         -&gt; C# QuizSessionGenerator drafts a session
+    ///                  session-drafted { ok, name, path } &lt;- host's reply to quiz-result
     ///                  exit                           -&gt; graceful teardown
     ///
-    /// Unlike DtRH this is a windowed Lab tool, not a screen-owning game: it does NOT minimise
-    /// the main window, hosts nothing native (the effect layer is fully self-contained in-page),
-    /// and needs no meta/loom/haptics plumbing. It keeps the same hardening the DtRH host has:
+    /// Unlike DtRH this is a windowed Lab tool, not a screen-owning game: it hosts nothing native
+    /// (the effect layer is fully self-contained in-page) and needs no meta/loom/haptics plumbing.
+    /// It DOES duck the control panel out of the way at launch, but with a plain minimize rather
+    /// than DtRH's tray tuck (see <see cref="DuckMainWindow"/>), and puts it back on every close
+    /// path. It keeps the same hardening the DtRH host has:
     /// per-instance user-data folder, hardened settings (no devtools), navigation lockdown,
     /// queue-until-ready bridge, a heartbeat watchdog and a relaunch-once recovery ladder.
     /// </summary>
@@ -53,6 +56,9 @@ namespace ConditioningControlPanel.Services.Quiz
         private static bool _relaunchedOnce;
         private static bool _testMode;
         private static bool _disposing;   // reentrancy guard (Dispose closes the window -> Closed -> DisposeAll)
+        private static bool _recoveryWindowed;   // this relaunch is a recovery: ignore the remembered fullscreen
+        private static bool _duckedMainWindow;                 // WE minimized main at launch, so WE owe a restore
+        private static WindowState _mainStateBeforeDuck = WindowState.Normal;
 
         public static bool IsActive => _host != null;
 
@@ -87,8 +93,12 @@ namespace ConditioningControlPanel.Services.Quiz
                     Mappings = mappings,
                     UserDataFolderName = "browser_data_intake",
                     InputEnabled = true,
-                    // A normal titled, resizable window — the page's dock button can go borderless.
-                    StartFullscreen = false,
+                    // Window mode is REMEMBERED (AppSettings.IntakeFullscreen), so the window is
+                    // BUILT in the mode the player left it in rather than flipping a beat after
+                    // boot. A recovery relaunch always comes back windowed: if the page wedged
+                    // once it may wedge again, and a titled window is the state every ordinary
+                    // Windows exit still works from.
+                    StartFullscreen = !_recoveryWindowed && App.Settings?.Current?.IntakeFullscreen == true,
                     // Keep the intake above MainWindow (native ownership, not Topmost) — main is
                     // raised by things the run doesn't control and used to bury the page.
                     OwnedByMainWindow = true,
@@ -100,11 +110,13 @@ namespace ConditioningControlPanel.Services.Quiz
                     OnMessage = OnPageMessage,
                     OnProcessFailed = OnProcessFailed,
                 });
+                _recoveryWindowed = false;   // consumed by the Options above; the next launch is normal again
                 _host.Show();
                 // Windowed Lab tool: the user closes it via the title-bar X. Tear down cleanly so
                 // IsActive resets and the heartbeat watchdog can't relaunch a window the user shut.
                 if (_host.Window != null) _host.Window.Closed += (_, _) => DisposeAll();
                 StartHeartbeatWatch();
+                DuckMainWindow();
                 App.Logger?.Information("IntakeHostService: launched{T}", testMode ? " (test)" : "");
             }
             catch (Exception ex)
@@ -132,6 +144,69 @@ namespace ConditioningControlPanel.Services.Quiz
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("IntakeHostService.CloseActive: {E}", ex.Message); DisposeAll(); }
+        }
+
+        // ============================ ducking the control panel ============================
+
+        /// <summary>
+        /// Get the control panel out of the way once the intake window is up. Deliberately a plain
+        /// MINIMIZE and not DtRH's <c>MinimizeToTrayForChaos</c> tray tuck: DtRH is screen-owning
+        /// and takes the desktop for the length of a descent, whereas this is a windowed Lab tool -
+        /// making the app's taskbar button disappear for it would read as a crash. Minimized, main
+        /// is one Alt-Tab away and the intake keeps its own button beside it.
+        ///
+        /// This is only safe because <see cref="ChaosWebViewHost"/> now un-glues itself for the
+        /// duration of an owner minimize: the intake is natively OWNED by main (so nothing in the
+        /// app can bury it), and Windows hides owned windows along with a minimizing owner. Without
+        /// that decoupling this call would minimize the game the moment it launched.
+        ///
+        /// No-op when main is already minimized or tray-hidden - the user's own last word on the
+        /// window stands, and we take no restore debt we did not earn.
+        /// </summary>
+        private static void DuckMainWindow()
+        {
+            try
+            {
+                var main = (Window?)App.MainWindowRef ?? Application.Current?.MainWindow;
+                if (main == null || !main.IsVisible || main.WindowState == WindowState.Minimized) return;
+                _mainStateBeforeDuck = main.WindowState;   // a maximized panel must come back maximized
+                main.WindowState = WindowState.Minimized;
+                _duckedMainWindow = true;
+                // Minimizing main hands activation to whatever is next in the z-order; take it back
+                // so the page keeps keyboard focus from the first frame.
+                _host?.FocusWeb();
+                App.Logger?.Information("IntakeHostService: ducked MainWindow (was {S})", _mainStateBeforeDuck);
+            }
+            catch (Exception ex) { App.Logger?.Debug("IntakeHostService.DuckMainWindow: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Undo <see cref="DuckMainWindow"/>. Called from <see cref="DisposeAll"/>, which is the
+        /// single funnel every close path runs through - title-bar X (Window.Closed), the page's
+        /// "are you sure? -&gt; Yes" abort, exit/exit-done, boot-error, the heartbeat/process-failed
+        /// recovery ladder and <see cref="CloseActive"/>'s watchdog - because a tool that minimizes
+        /// the app and then leaves it minimized on exit is a worse bug than the one the duck fixes.
+        ///
+        /// Two deliberate no-ops: main tray-hidden (not visible) or already restored by the user -
+        /// in both cases they moved the window after we did, and their choice wins.
+        /// </summary>
+        private static void RestoreMainWindow()
+        {
+            if (!_duckedMainWindow) return;
+            _duckedMainWindow = false;
+            try
+            {
+                var disp = Application.Current?.Dispatcher;
+                if (disp == null || disp.HasShutdownStarted) return;   // app is going away regardless
+                var main = (Window?)App.MainWindowRef ?? Application.Current?.MainWindow;
+                if (main == null || !main.IsVisible) return;
+                if (main.WindowState != WindowState.Minimized) return;
+                main.WindowState = _mainStateBeforeDuck == WindowState.Maximized
+                    ? WindowState.Maximized
+                    : WindowState.Normal;
+                try { main.Activate(); } catch { }
+            }
+            catch (Exception ex) { App.Logger?.Debug("IntakeHostService.RestoreMainWindow: {E}", ex.Message); }
         }
 
         // ============================ boot ============================
@@ -189,6 +264,10 @@ namespace ConditioningControlPanel.Services.Quiz
                         authToken = SafeAuthToken(),
                     },
                 });
+                // ...and tell the page which window it is actually painted in. ui/fullscreen.js
+                // NEVER assumes: its affordances read the echoed state, so a run launched
+                // straight into a remembered fullscreen still labels its exit correctly.
+                if (_host != null) _host.Post(new { type = "fullscreen", on = _host.IsFullscreen });
                 App.Logger?.Information("IntakeHostService: sent init (niche={N})", SafeNiche());
             }
             catch (Exception ex) { App.Logger?.Warning("IntakeHostService.OnPageReady: {E}", ex.Message); }
@@ -212,6 +291,9 @@ namespace ConditioningControlPanel.Services.Quiz
                 case "boot-error":
                     OnBootError((string?)o["msg"]);
                     break;
+                case "fullscreen-set":   // pause menu / Options / F11: C# owns the borderless toggle
+                    ApplyHostFullscreen((bool?)o["on"] ?? false);
+                    break;
                 case "exit":       // page-initiated wind-down (its own exit affordance)
                     _exiting = true;
                     ArmExitWatchdog();
@@ -229,6 +311,42 @@ namespace ConditioningControlPanel.Services.Quiz
                     DisposeAll();
                     break;
             }
+        }
+
+        // ============================ window mode ============================
+
+        /// <summary>
+        /// Page-driven fullscreen, mirroring <see cref="Services.Chaos.DtrhHostService"/>: the
+        /// page asks C# to borderless-toggle its OWN window instead of calling the browser
+        /// Fullscreen API. That is not a style preference - the browser API eats the first
+        /// Escape to leave fullscreen and a page cannot preventDefault it, and this page's
+        /// Escape is already spoken for several rungs deep (steering's hijack disarm, the pause
+        /// menu, the Options panel). Owning the window here leaves that ladder untouched.
+        ///
+        /// The resulting REAL window state is echoed back - never the requested one - so the
+        /// page's labels can't claim a mode we failed to enter, and it is persisted so the next
+        /// launch builds the window the player left in rather than flipping after boot.
+        /// </summary>
+        private static void ApplyHostFullscreen(bool on)
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (_host == null) return;
+                    _host.SetFullscreen(on);
+                    _host.Post(new { type = "fullscreen", on = _host.IsFullscreen });
+                    var settings = App.Settings?.Current;
+                    if (settings != null && settings.IntakeFullscreen != _host.IsFullscreen)
+                    {
+                        settings.IntakeFullscreen = _host.IsFullscreen;
+                        App.Settings?.Save();
+                    }
+                }
+                catch (Exception ex) { App.Logger?.Debug("IntakeHostService.fullscreen: {E}", ex.Message); }
+            });
         }
 
         /// <summary>quiz-result { result: QuizRunResult } -&gt; deserialise + draft a themed CCP
@@ -293,8 +411,25 @@ namespace ConditioningControlPanel.Services.Quiz
                         TimeSpan.FromSeconds(8),
                         "Show folder",
                         () => { try { fileService.OpenCustomSessionsFolder(); } catch { } });
+
+                    // TELL THE PAGE. quiz-result used to be one-way, so the certificate could
+                    // only ever say "Session drafting..." and then sit there forever - the run's
+                    // single most important outcome rendered as a spinner that never resolves.
+                    // The page now names the session it earned. This is also the only honest
+                    // source for the Records Office's session name: without it the archive has
+                    // to re-derive the name by mirroring GetFallbackContent, which silently
+                    // drifts the moment that rule changes.
+                    _host?.Post(new { type = "session-drafted", ok = true, name = session.Name, path });
                 }
-                catch (Exception ex) { App.Logger?.Warning(ex, "IntakeHostService: session draft/save failed"); }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "IntakeHostService: session draft/save failed");
+                    // Failure is reported too: a certificate stuck on "drafting" is worse than
+                    // one that says the draft failed, because only the latter tells the user to
+                    // stop waiting. Their answers are still recorded either way.
+                    try { _host?.Post(new { type = "session-drafted", ok = false, name = (string?)null, path = (string?)null }); }
+                    catch { }
+                }
             });
         }
 
@@ -847,6 +982,10 @@ namespace ConditioningControlPanel.Services.Quiz
                 if (retry)
                 {
                     _relaunchedOnce = true;
+                    // Come back WINDOWED regardless of the remembered mode. The page just wedged
+                    // or died; if the relaunch does the same, a titled window still has a close
+                    // button and the remembered preference is untouched for the next real launch.
+                    _recoveryWindowed = true;
                     Launch(wasTest);
                 }
             });
@@ -879,6 +1018,8 @@ namespace ConditioningControlPanel.Services.Quiz
                 try { _host?.Dispose(); } catch { }
                 _host = null;
                 _exiting = false;
+                // Give the control panel back before anything else can claim the foreground.
+                RestoreMainWindow();
                 App.Logger?.Information("IntakeHostService: closed");
             }
             finally { _disposing = false; }

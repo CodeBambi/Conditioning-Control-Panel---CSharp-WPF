@@ -56,6 +56,7 @@ import * as shim from '../web-shim.js';
 import { getPrefs, subscribe } from './prefs.js';
 import { startMenuMusic, stopMenuMusic } from './menuMusic.js';
 import { setBandDepth, resetCorruption, isDeepBand } from './corruption.js';
+import * as fullscreen from './fullscreen.js';
 
 /**
  * THE QUIT BUTTON FALLS OFF. From band 3 onward (Deepening / Climax / Recovery
@@ -372,8 +373,23 @@ export function installPause(ctx = {}) {
     const act = t.getAttribute('data-act');
     if (act === 'resume') close();
     else if (act === 'options') doOptions();
+    else if (act === 'fullscreen') fullscreen.toggle();
     else if (act === 'quit') doQuit(t);
   });
+
+  /* ---- window mode -------------------------------------------------------
+   * The button is a live mirror of the actual window, never of an intent: when
+   * hosted, `fullscreen.isActive()` only flips once C# has echoed the window it
+   * really built, so the label can never claim a mode we are not in. Repainted
+   * on every confirmed change (this button, the Options row, F11) and on open. */
+  const fsBtn = root.querySelector('[data-act="fullscreen"]');
+  if (fsBtn && !fullscreen.supported) fsBtn.hidden = true;
+  const syncFsBtn = () => {
+    if (!fsBtn || !fullscreen.supported) return;
+    fsBtn.textContent = fullscreen.actionLabel();
+  };
+  const unsubFs = fullscreen.subscribe(syncFsBtn);
+  syncFsBtn();
   // Clicking the scrim resumes — the same forgiving gesture the menu uses.
   const scrim = root.querySelector('.kw-pause-scrim');
   if (scrim) scrim.addEventListener('click', () => close());
@@ -435,6 +451,11 @@ export function installPause(ctx = {}) {
 
   const keyBlocker = (e) => {
     if (!open_) return;
+    // F11 is never the run's to swallow. ui/fullscreen.js registers its own
+    // window/capture handler at module load — i.e. before this one — so this is
+    // strictly belt-and-braces, but a key whose entire job is "get me my title
+    // bar back" must not depend on listener ordering to keep working.
+    if (e.key === 'F11') return;
     // The Options panel is a modal child of this root and owns its own keyboard,
     // Escape included (it closes ITSELF and stops propagation). Never pop two
     // layers on one keypress.
@@ -521,6 +542,7 @@ export function installPause(ctx = {}) {
     removeQuitFall();
     cancelQuitGeneration();
     resetQuitButton(root);
+    syncFsBtn();
     open_ = true;
     lastFocus = doc.activeElement;
     if (!root.isConnected) doc.body.appendChild(root);
@@ -911,6 +933,7 @@ export function installPause(ctx = {}) {
     for (const t of KEY_EVENTS) win.removeEventListener(t, keyBlocker, true);
     for (const t of PTR_EVENTS) win.removeEventListener(t, ptrBlocker, true);
     try { unsubPrefs(); } catch (_e) {}
+    try { unsubFs(); } catch (_e) {}
     try { if (btn.parentNode) btn.parentNode.removeChild(btn); } catch (_e) {}
     try { if (root.parentNode) root.parentNode.removeChild(root); } catch (_e) {}
     const waiters = gateWaiters.splice(0, gateWaiters.length);
@@ -988,6 +1011,11 @@ function buildRoot(doc) {
   acts.className = 'kw-pause-actions';
   acts.appendChild(mkBtn(doc, 'resume', 'Resume ♥', 'kw-btn'));
   acts.appendChild(mkBtn(doc, 'options', 'Options', 'kw-btn kw-btn--soft'));
+  // THE WAY OUT OF FULLSCREEN. Deliberately a first-class button and not a row
+  // inside Options: the whole safety argument for a fullscreen mode is that
+  // leaving it is never a hunt, and this menu is one Escape away from anywhere
+  // in the run. It is also the one button in this column no prank ever touches.
+  acts.appendChild(mkBtn(doc, 'fullscreen', 'Fullscreen', 'kw-btn kw-btn--soft kw-pause-fs'));
   acts.appendChild(mkBtn(doc, 'quit', 'Quit run', 'kw-btn kw-btn--soft kw-pause-quit'));
   panel.appendChild(acts);
 

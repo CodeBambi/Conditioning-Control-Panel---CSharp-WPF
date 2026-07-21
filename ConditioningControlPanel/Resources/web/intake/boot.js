@@ -27,6 +27,12 @@ import { PRODUCT_NAME, Band, BAND_ORDER, themeOf, clamp01, bandIndex } from './c
 import { resetPalette, noteColorPick, deepen, COLOR_TAG, harvestedColors, COLOR_SWATCHES } from './core/palette.js';
 import { resetSpiralLog, recordedSpirals, spiralCount } from './core/spiralLog.js';
 import { resetMediaLog, recordedMedia, mediaShownCount } from './core/mediaLog.js';
+// Side-effect import: ui/fullscreen.js binds F11 and the host's window-mode echo
+// at load. Both consumers (ui/options.js, ui/pause.js) are lazy, and F11 has to
+// work from the loader onward — including a run that launched straight into a
+// remembered fullscreen and has not opened a menu yet. Import-safe: every DOM
+// touch inside it is guarded, exactly like the handles below.
+import './ui/fullscreen.js';
 
 /* ----------------------------------------------------------------------------
  * DOM handles — guarded so importing this module in node (no `document`) is
@@ -1266,6 +1272,17 @@ function setDepthEverywhere(depth, band, { effects, audio, background, sublimina
  * reveal -> recorded statements -> stats -> the report-card artifact. Stages
  * auto-advance; a click skips ahead. Replaces the old 3-line showDone.
  * -------------------------------------------------------------------------- */
+/** The printed "Susceptibility index". The engine now supplies peakDepth discounted
+ *  by compliance (engine finalize), because raw peakDepth climbs on the descent
+ *  clock whether or not the subject came along - a run that answered nothing still
+ *  peaked ~0.96 and printed "96% susceptible" next to a D. Older/stub results that
+ *  predate the field fall back to peakDepth. */
+function susceptibilityOf(result) {
+  if (!result) return 0;
+  const s = (typeof result.susceptibility === 'number') ? result.susceptibility : result.peakDepth;
+  return clamp01(s || 0);
+}
+
 function gradeFor(result) {
   const ratio = (result.maxScore > 0) ? clamp01(result.totalScore / result.maxScore) : 0;
   if (ratio >= 0.92) return 'S';
@@ -1297,6 +1314,76 @@ function noteKeepsake(keepsake) {
       statsRef.annotateLast({ keepsake });
     }
   } catch (_e) { /* the archive is never allowed to interrupt the ceremony */ }
+}
+
+/* ----------------------------------------------------------------------------
+ * SESSION HANDOFF — the certificate waits for the thing the run was FOR.
+ *
+ * The host drafts a CCP session from the finished run and saves it. Until it
+ * says so, the certificate holds two promises open: the handoff line pulses,
+ * and the exit stays shut.
+ *
+ * Both timers exist for the same reason — nobody may be trapped, and nobody may
+ * lose the session by reflex:
+ *  - TIMEOUT: if the host never answers (it is one BeginInvoke away from a
+ *    dispatcher that could be shutting down), the exit opens anyway and the line
+ *    says drafting is still in progress rather than claiming success.
+ *  - MIN HOLD: the reply usually lands in well under a second, which would let
+ *    an already-moving cursor sail straight through a button that was disabled
+ *    for two frames. Holding it briefly makes the wait perceptible, so the click
+ *    that follows is a decision.
+ * -------------------------------------------------------------------------- */
+const SESSION_REPLY_TIMEOUT_MS = 12000;
+const EXIT_MIN_HOLD_MS = 2000;
+
+function armSessionHandoff(lineEl, exitBtn) {
+  let settled = false;
+  const armedAt = Date.now();
+  exitBtn.disabled = true;
+  exitBtn.textContent = 'Drafting your session…';
+
+  const open = (text, ok) => {
+    if (settled) return;
+    settled = true;
+    if (lineEl) {
+      lineEl.classList.remove('is-pending');
+      if (ok) lineEl.classList.add('is-done');
+      lineEl.textContent = text;
+    }
+    const held = Math.max(0, EXIT_MIN_HOLD_MS - (Date.now() - armedAt));
+    setTimeout(() => {
+      try { exitBtn.disabled = false; exitBtn.textContent = 'Return to the Lab'; } catch (_e) {}
+    }, held);
+  };
+
+  try {
+    shim.on('session-drafted', (m) => {
+      const ok = !!(m && m.ok);
+      const name = (m && m.name) ? String(m.name) : '';
+      open(ok && name
+        ? `Session drafted: “${name}” — saved to your Sessions.`
+        : 'Session draft failed. Your answers were still recorded.', ok);
+      // THE ARCHIVE GETS THE REAL NAME. buildRecapExtras had to mirror the C#
+      // naming rule to have anything to show (see deriveSessionName); now that
+      // the host has named it for real, overwrite the guess and drop the
+      // `derived` flag so the Records Office can stop hedging.
+      if (ok && name) {
+        try {
+          statsRef && statsRef.annotateLast && statsRef.annotateLast({
+            session: {
+              delivered: 'host',
+              name,
+              path: (m && m.path) ? String(m.path) : '',
+              derived: false,
+            },
+          });
+        } catch (_e) { /* never at the ceremony's expense */ }
+      }
+    });
+  } catch (_e) { /* standalone: no host, so nothing to wait for */ }
+
+  setTimeout(() => open('Still drafting — it will appear in your Sessions.', false),
+    SESSION_REPLY_TIMEOUT_MS);
 }
 
 /**
@@ -1530,6 +1617,26 @@ const IX_OUTRO_CSS = `
 }
 @media (prefers-reduced-motion: reduce) {
   .ix-scroll-fade { transition: none !important; }
+}
+/* Handoff line: pulses while the host is still drafting, goes solid (and pink,
+   the accent the grade uses) once the session has a name. */
+.intake-cert-handoff.is-pending { animation: ix-handoff-pulse 1.6s ease-in-out infinite; }
+.intake-cert-handoff.is-done { color: var(--intake-accent, #ff69b4); }
+@keyframes ix-handoff-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+/* The way out, held shut until the draft lands. Greyed and inert, never hidden:
+   the player must be able to SEE that leaving is coming, or waiting reads as a
+   hang. No hover lift while disabled — it must not look pressable. */
+.intake-cert-exit[disabled],
+.intake-cert-exit[disabled]:hover,
+.intake-cert-exit[disabled]:active {
+  opacity: .42;
+  filter: grayscale(1);
+  cursor: progress;
+  transform: none;
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .intake-cert-handoff.is-pending { animation: none; }
 }`;
 
 /** Inject the scoped outro CSS once. No-op headlessly (guarded on `doc`). */
@@ -1661,7 +1768,7 @@ async function runOutro(result, ack, ctx) {
     cell.appendChild(el('div', 'intake-stat-label', label));
     statsBlock.appendChild(cell);
   };
-  addStat('Susceptibility index', `${Math.round(clamp01(result.peakDepth || 0) * 100)}%`);
+  addStat('Susceptibility index', `${Math.round(susceptibilityOf(result) * 100)}%`);
   addStat('Deepest section', sectionShortName(theme, result.deepestBand) || prettyId(result.deepestBand) || '—');
   addStat('Questions answered', String(qCount));
   slotStats.appendChild(statsBlock);
@@ -1691,19 +1798,34 @@ async function runOutro(result, ack, ctx) {
   row('Subject', formatSubject(theme, subjectId));
   row('Classification', primaryName + (share > 0 ? ` (${share}%)` : ''));
   row('Grade', letter);
-  row('Susceptibility', `${Math.round(clamp01(result.peakDepth || 0) * 100)}%`);
+  row('Susceptibility', `${Math.round(susceptibilityOf(result) * 100)}%`);
   row('Date', new Date().toLocaleDateString());
   cert.appendChild(rowsWrap);
   const seal = el('div', 'intake-cert-seal');
   seal.appendChild(el('span', null, 'CRA'));
   seal.appendChild(el('span', 'intake-cert-seal-sub', 'CERTIFIED'));
   cert.appendChild(seal);
-  const handoff = ack.delivered === 'host' ? 'Session drafting…' : 'Saved locally.';
-  cert.appendChild(el('div', 'intake-cert-handoff', handoff));
+  // -- the handoff line + the way out ---------------------------------------
+  // The drafted session is what the whole descent was FOR, so the certificate
+  // waits for it and then names it. Before the host replies this line is a live
+  // "drafting" state, not a claim that anything was saved.
+  const hosted = ack.delivered === 'host';
+  const handoffEl = el('div', 'intake-cert-handoff', hosted ? 'Drafting your session…' : 'Saved locally.');
+  if (hosted) handoffEl.classList.add('is-pending');
+  cert.appendChild(handoffEl);
   if (config.hosted) {
+    // THE EXIT IS HELD SHUT UNTIL THE DRAFT LANDS. This button sits directly
+    // under the grade, which is exactly where a finished player's eye and cursor
+    // already are — so an instinctive click used to throw away the session on the
+    // way past, silently, with no second chance (the QuizRunResult is not kept).
+    // Disabled-and-narrating turns that reflex into a two-second wait instead of
+    // a loss, and the label tells them why they're waiting. The timeout below
+    // guarantees it always opens, so nobody can be trapped by a host that never
+    // answers.
     const exit = el('button', 'intake-begin intake-cert-exit', 'Return to the Lab');
     exit.addEventListener('click', () => { try { shim.send({ type: 'exit' }); } catch (_e) {} });
     cert.appendChild(exit);
+    if (hosted) armSessionHandoff(handoffEl, exit);
   }
   slotRecord.appendChild(cert);
   await sleep(30);

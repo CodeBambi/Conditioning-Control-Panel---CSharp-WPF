@@ -86,6 +86,8 @@ internal sealed class ChaosWebViewHost : IDisposable
     private EventHandler? _glueOwnerStateChanged;
     private IntPtr _glueOwnerHandle;
     private bool _glueAttached;
+    private HwndSource? _glueHwndSource;     // our own window's source, while the cascade veto is hooked
+    private HwndSourceHook? _glueWndHook;
 
     public bool IsReady { get; private set; }
     public Window? Window => _window;
@@ -248,7 +250,31 @@ internal sealed class ChaosWebViewHost : IDisposable
             // on, minimizing main would make the game vanish (taskbar button and all) with no way
             // back. Drop the link for the duration of the minimize, restore it when main returns.
             // (Tray "minimize" is Hide(), not minimize, and does not cascade — DtRH relies on that.)
-            _glueOwnerStateChanged = (_, _) => RefreshNativeOwner();
+            //
+            // StateChanged ALONE was never enough: it is raised off main's WM_SIZE, i.e. after the
+            // window manager has already run the cascade, so by the time the link was dropped the
+            // game window had been hidden and clearing GWL_HWNDPARENT did not bring it back. That
+            // is why minimizing main still took the intake down with it. Three layers now:
+            //   1. VetoCascadeHide  — the WM_SHOWWINDOW/SW_PARENTCLOSING notification the cascade
+            //                         sends us first; un-glue there and refuse the hide (this is
+            //                         the only layer that runs BEFORE we are hidden).
+            //   2. StateChanged     — re-assert the link for main's new state (and re-raise above
+            //                         main when it comes back).
+            //   3. a deferred visibility repair — if the hide still landed (the ordering of the
+            //                         cascade against the owner's WM_SIZE is not contractual), show
+            //                         ourselves again once the pump has drained.
+            HookCascadeVeto();
+            _glueOwnerStateChanged = (_, _) =>
+            {
+                RefreshNativeOwner();
+                try
+                {
+                    _window?.Dispatcher.BeginInvoke(
+                        System.Windows.Threading.DispatcherPriority.Background,
+                        new Action(EnsureNativeVisible));
+                }
+                catch { }
+            };
             main.StateChanged += _glueOwnerStateChanged;
             App.Logger?.Information("{Tag}: glued above MainWindow (native owner)", _opts.LogTag);
         }
@@ -260,7 +286,11 @@ internal sealed class ChaosWebViewHost : IDisposable
     private void RefreshNativeOwner()
     {
         if (!_glueAttached) return;
-        ApplyNativeOwner(_glueOwner != null && _glueOwner.WindowState != WindowState.Minimized);
+        bool ownerDown = _glueOwner == null || _glueOwner.WindowState == WindowState.Minimized;
+        ApplyNativeOwner(!ownerDown);
+        // Main is minimized: nothing can bury us, so the link buys nothing and the cascade would
+        // only take us down with it. Make sure we survived it.
+        if (ownerDown) EnsureNativeVisible();
     }
 
     private void ApplyNativeOwner(bool owned)
@@ -274,8 +304,69 @@ internal sealed class ChaosWebViewHost : IDisposable
             // Owner changes are cached — flush the frame so the z-order link takes effect now.
             SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            // Ownership is a rule about the FUTURE ("main may never be placed above this window"),
+            // not a reorder: a link re-attached while main happens to sit on top would leave the
+            // page buried under it forever. Now that the link is dropped and restored across every
+            // minimize, slot ourselves directly above main each time we take it — without
+            // activating, so re-gluing never steals focus from whatever the user is doing.
+            if (owned && _glueOwnerHandle != IntPtr.Zero)
+                SetWindowPos(hwnd, _glueOwnerHandle, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
         catch (Exception ex) { App.Logger?.Debug("{Tag}.ApplyNativeOwner: {E}", _opts.LogTag, ex.Message); }
+    }
+
+    /// <summary>
+    /// Layer 1 of the minimize decoupling: WM_SHOWWINDOW with lParam == SW_PARENTCLOSING is the
+    /// notification the window manager sends an OWNED window just before hiding it along with its
+    /// minimizing owner. Handling it without letting DefWindowProc run refuses that hide — and it
+    /// is the only hook that fires before we are gone, whichever way main got minimized (title-bar
+    /// button, taskbar click, Win+D, or the app minimizing itself, as the intake launch does).
+    /// The owner link is dropped in the same breath so nothing re-hides us afterwards.
+    /// </summary>
+    private void HookCascadeVeto()
+    {
+        try
+        {
+            if (_window == null || _glueWndHook != null) return;
+            var hwnd = new WindowInteropHelper(_window).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            var src = HwndSource.FromHwnd(hwnd);
+            if (src == null) return;
+            _glueWndHook = VetoCascadeHide;
+            _glueHwndSource = src;
+            src.AddHook(_glueWndHook);
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.HookCascadeVeto: {E}", _opts.LogTag, ex.Message); }
+    }
+
+    private IntPtr VetoCascadeHide(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (_glueAttached && msg == WM_SHOWWINDOW
+            && wParam == IntPtr.Zero                       // fShow = FALSE, i.e. "about to hide"
+            && lParam.ToInt64() == SW_PARENTCLOSING)
+        {
+            ApplyNativeOwner(false);
+            handled = true;   // swallow it: DefWindowProc is what would hide us
+        }
+        return IntPtr.Zero;
+    }
+
+    /// <summary>Layer 3: undo a cascade hide that got through. WPF still believes the window is
+    /// Visible (the hide happened entirely in USER32, behind its back), so this is a native-only
+    /// repair — no WPF visibility churn, no relayout, and SW_SHOWNA rather than SW_SHOW so ducking
+    /// main never yanks focus back to the page.</summary>
+    private void EnsureNativeVisible()
+    {
+        try
+        {
+            if (_disposed || _window == null) return;
+            if (_window.Visibility != Visibility.Visible) return;   // we hid it on purpose
+            var hwnd = new WindowInteropHelper(_window).Handle;
+            if (hwnd == IntPtr.Zero || IsWindowVisible(hwnd)) return;
+            ShowWindow(hwnd, SW_SHOWNA);
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.EnsureNativeVisible: {E}", _opts.LogTag, ex.Message); }
     }
 
     /// <summary>Unhook the state listener and clear the native owner before the window closes, so
@@ -289,11 +380,19 @@ internal sealed class ChaosWebViewHost : IDisposable
                 _glueOwner.StateChanged -= _glueOwnerStateChanged;
         }
         catch { }
+        try
+        {
+            if (_glueHwndSource != null && _glueWndHook != null)
+                _glueHwndSource.RemoveHook(_glueWndHook);
+        }
+        catch { }
         ApplyNativeOwner(false);
         _glueAttached = false;
         _glueOwner = null;
         _glueOwnerStateChanged = null;
         _glueOwnerHandle = IntPtr.Zero;
+        _glueHwndSource = null;
+        _glueWndHook = null;
     }
 
     private async Task InitWebAsync()
@@ -458,6 +557,9 @@ internal sealed class ChaosWebViewHost : IDisposable
     }
 
     private const int GWL_EXSTYLE = -20;
+    private const int WM_SHOWWINDOW = 0x0018;
+    private const int SW_PARENTCLOSING = 1;   // lParam of the owner-minimize cascade's WM_SHOWWINDOW
+    private const int SW_SHOWNA = 8;          // show at current size/pos WITHOUT activating
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const uint SWP_NOSIZE = 0x0001;
@@ -469,4 +571,6 @@ internal sealed class ChaosWebViewHost : IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 }

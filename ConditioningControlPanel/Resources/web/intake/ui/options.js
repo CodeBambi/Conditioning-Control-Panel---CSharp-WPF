@@ -24,6 +24,7 @@
 import {
   getPrefs, setPref, resetPrefs, subscribe as subscribePrefs,
 } from './prefs.js';
+import * as fullscreen from './fullscreen.js';
 
 /* ----------------------------------------------------------------------------
  * AUDITION CUES — both ids are verified to exist on disk:
@@ -155,6 +156,35 @@ export function openOptions(opts) {
       return btn;
     }
 
+    /**
+     * A boolean row that is NOT backed by prefs.js — same pill, but it reads and
+     * writes live state somewhere else. Used for the window mode, which is owned
+     * by the C# host (see ui/fullscreen.js) and must never be duplicated into
+     * localStorage, or the two stores would disagree the first time the host
+     * launched the window in the remembered mode.
+     */
+    function buildSwitch(label, hint, read, flip) {
+      const row = el('div', 'kw-row');
+      const lab = el('div', 'kw-row__label', label);
+      const btn = el('button', 'kw-toggle');
+      btn.type = 'button';
+      btn.setAttribute('role', 'switch');
+      btn.setAttribute('aria-label', label);
+      const note = el('div', 'kw-options__hint', hint);
+
+      const go = () => { flip(); };
+      on(btn, 'click', go);
+      on(btn, 'keydown', (e) => {
+        if (e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); go(); }
+      });
+
+      row.appendChild(lab);
+      row.appendChild(btn);
+      row.appendChild(note);
+      body.appendChild(row);
+      return { btn, read };
+    }
+
     /** A 0..100 slider row backed by a native <input type=range>. */
     function buildSlider(key, label, hint, onRelease) {
       const row = el('div', 'kw-row');
@@ -220,6 +250,25 @@ export function openOptions(opts) {
       'sparkles', 'Sparkles', 'Twinkles and rainbows on the menus.',
     );
 
+    /* --- the window itself --------------------------------------------------
+     * The discoverable home for the mode: settable from the main menu BEFORE a
+     * run, and from the pause menu during one. The pause menu carries its own
+     * direct button as well — that one is the escape hatch, this one is the
+     * setting. Both drive ui/fullscreen.js, and the subscription below repaints
+     * this pill when the other affordance (or F11) moves it, so they cannot
+     * disagree. Hidden entirely where the platform has no fullscreen at all,
+     * rather than sitting here dead. */
+    let fsSwitch = null;
+    let unsubFs = null;
+    if (fullscreen.supported) {
+      body.appendChild(el('hr', 'kw-options__sep'));
+      fsSwitch = buildSwitch(
+        'Fullscreen', 'Fills the screen. F11 also toggles it, any time.',
+        () => fullscreen.isActive(), () => fullscreen.toggle(),
+      );
+      unsubFs = fullscreen.subscribe(() => paint());
+    }
+
     /* --- footer ------------------------------------------------------------ */
     const foot = el('div', 'kw-options__foot');
     panel.appendChild(foot);
@@ -258,6 +307,7 @@ export function openOptions(opts) {
         voToggle.setAttribute('aria-checked', p.voEnabled ? 'true' : 'false');
         musicToggle.setAttribute('aria-checked', p.musicOn ? 'true' : 'false');
         sparkleToggle.setAttribute('aria-checked', p.sparkles ? 'true' : 'false');
+        if (fsSwitch) fsSwitch.btn.setAttribute('aria-checked', fsSwitch.read() ? 'true' : 'false');
         for (const r of SLIDER_ROWS) {
           const s = sliders[r.key];
           const v = Math.round((p[r.key] || 0) * 100);
@@ -284,6 +334,7 @@ export function openOptions(opts) {
       closed = true;
       stopAudition();
       try { unsubPrefs(); } catch (_e) {}
+      try { if (unsubFs) unsubFs(); } catch (_e) {}
       for (const [t, type, fn, o] of listeners) {
         try { t.removeEventListener(type, fn, o); } catch (_e) {}
       }

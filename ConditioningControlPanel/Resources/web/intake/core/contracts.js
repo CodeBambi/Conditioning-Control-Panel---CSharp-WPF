@@ -90,8 +90,14 @@ export const NICHES = Object.freeze([Niche.Bambi, Niche.Drone, Niche.Sissy, Nich
  * @property {string}  primary              niche id (Niche.*)
  * @property {string}  primaryArchetypeId   dominant archetype from trajectory
  * @property {string=} secondaryArchetypeId runner-up archetype (may be absent)
- * @property {number}  primaryShare         0..1, climbs toward ~0.45 by Climax
+ * @property {number}  primaryShare         0..1 "expression": how strongly this archetype is
+ *                                          expressed (commitment + vote dominance), revealed
+ *                                          progressively across the descent. It used to be a
+ *                                          flat lerp of run progress, which printed the same
+ *                                          "45% expression" on every completed run.
  * @property {number}  secondaryShare       0..1, <= primaryShare
+ * @property {number=} commitment           0..1 scalar the tier gate runs on; keeps grade /
+ *                                          susceptibility / classification from contradicting
  */
 
 /**
@@ -99,6 +105,13 @@ export const NICHES = Object.freeze([Niche.Bambi, Niche.Drone, Niche.Sissy, Nich
  * @property {string}   id
  * @property {string}   name
  * @property {string[]} tags     tags that vote this archetype up when answered
+ * @property {number=}  tier     0 = most tentative .. N = most committed. The engine's
+ *                                commitment scalar (compliance + depth reached + how much
+ *                                of the descent was walked) opens a WINDOW of tiers and the
+ *                                tag votes pick within it, so a high-grade high-susceptibility
+ *                                run cannot be labelled a beginner and a refusal cannot be
+ *                                labelled devout. Omitted -> the archetype's array position is
+ *                                used (every shipped bank is authored tentative -> committed).
  * @property {string=}  blurb    route-reveal copy shown at the end
  * @property {number=}  hue      signature hue 0..360 — the tube adopts it as the route
  *                                solidifies (Background.setRouteTint) and the outro card tints with it
@@ -494,7 +507,7 @@ export const Steer = Object.freeze({
   Decay:       'decay',        // wrong option decays/erodes over time
   MeltAway:    'melt-away',     // wrong option melts/falls on press — veto'd, no commit
   BottomlessNo:'bottomless-no', // refusal/wrong press peels a decoy 'card' off a stack; N (6-10) fall free, then it commits
-  HoverSwap:   'hover-swap',    // hovering the WRONG option makes Yes/No trade places N (4-7) times, nudging the cursor onto correct
+  HoverSwap:   'hover-swap',    // hovering the WRONG option makes a two-option pair trade places N (4-6) times, nudging the cursor onto correct
   MouseHijack: 'mouse-hijack',  // after lingering (lv3+), the real cursor is hidden and a VIRTUAL cursor is dragged toward the CORRECT option with a ramping pull until it auto-commits; fightable at first, aborts on Escape / hard fight
 });
 export const STEERS = Object.freeze(Object.values(Steer));
@@ -617,7 +630,9 @@ export const STEER_BAND_WEIGHT = Object.freeze({
  * @property {string}        product        PRODUCT_NAME at emit time
  * @property {string}        niche          Niche.*
  * @property {Route}         route
- * @property {number}        peakDepth      0..1
+ * @property {number}        peakDepth      0..1 how deep the SESSION went (clock-driven)
+ * @property {number=}       susceptibility 0..1 peakDepth discounted by compliance - the figure
+ *                                          the outro prints, so it cannot contradict the grade
  * @property {string}        deepestBand    Band.*
  * @property {RewardProfile} rewardProfile
  * @property {AnswerRecord[]} trajectory
@@ -636,6 +651,7 @@ export function emptyResult(niche = Niche.Bambi) {
     niche,
     route: { primary: niche, primaryArchetypeId: '', secondaryArchetypeId: undefined, primaryShare: 0, secondaryShare: 0 },
     peakDepth: 0,
+    susceptibility: 0,
     deepestBand: Band.Calibration,
     rewardProfile: { chasedReward: false, chaseMagnitude: 0 },
     trajectory: [],
