@@ -11,6 +11,7 @@ Packet emits structured `## Review Level: 2` heading. Per-call record:
 | 1 | type=plan after step-1 commit | `skipped: true`, `spawnFailed: false` — "Nested reviewer spawn blocked inside pi worker session (SP-195); batch engine runs reviews after worker success" | NO in-worker (by design); post-.DONE engine review observable at land time |
 | 2 | type=plan after step-2 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
 | 3 | type=plan after step-3 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
+| 4 | type=plan after step-4 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
 
 ## Step 1 — backend research + package admission pre-approach consult
 
@@ -103,6 +104,8 @@ Presented: candidate matrix above + rejections + spike design (one device/contex
   - win-x64 (`scratch/pub-win`): apphost + `miniaudio.dll` + `soft_oal.dll` sidecars; published binary ran both backends, exit 0. NAudio: no natives (inbox winmm).
   - Session fact: the SP-010 natives-beside-exe layout absorbs both candidates' natives with zero packaging work.
 
+
+
 ## Step 4 — evidence doc, selection record, consults
 
 - Deliverable `client/docs/audio-backend-spike.md` written: named observations A1-A10 per backend, findings F1-F5, WPF contract table, explicit channel-ownership SELECTION (SoundFlow primary; voice/whisper/SFX owners with generation-token discipline and drop-on-overflow SFX cap; ONE generic player rejected) recorded PENDING-OWNER; 8 named limits.
@@ -115,3 +118,11 @@ Presented: candidate matrix above + rejections + spike design (one device/contex
   5. **Material gap closed empirically (consult's preferred path): combined-coexistence probe ADDED** (voice+whisper+3 SFX concurrent — the arbitration row's exact interaction). Windows: all three backends green (3/3 SFX, busy transitions correct, whisper+voice ends in-window, exactly 1 uncontaminated voice raw end). WSLg: soundflow+openal green (window fits = session facts). Added as deliverable row A11.
   - F1 discipline sharpened per Q3: **re-enumerate immediately before init, match by NAME, pass the FRESH DeviceInfo struct, persist NAME never Id** (implemented in `SoundFlowHarness.TryInit` — `UpdateAudioDevicesInfo()` at init time); residual TOCTOU stays open by design until the SP-006-deferred re-probe row. NO re-probe machinery added to the spike (consult: don't expand scope).
   - Mid-playback device loss/switch untested → named limit 10 (`SwitchDevice` exists on the SoundFlow API surface, untested — feeds the quips row's "stale-device fallback" acceptance).
+
+## Step 5 — verification
+
+- Contract testCommand green on **Windows**: `dotnet build client/CcpClient.sln` 0W/0E; `CcpClient.Tests` 213/213; `CcpClient.HeadlessTests` 22/22. (WSL2: 0W/0E + 213/213 + 22/22, Step 3.)
+- Spike host builds clean separately: both TFMs 0W/0E; published artifacts run (Step 3).
+- `git diff --check` clean.
+- File-scope audit vs batch base ea1c8809: changed paths = client/docs/audio-backend-spike.md, client/docs/task-board.md, client/spikes/CcpSpike.Audio/**, spine-tasks/SP-017-audio-backend-spike/** ONLY. Forbidden paths (ConditioningControlPanel/**, client/CcpClient.sln, client/src/**, client/tests/**, .spine/**) verified CLEAN. fileScopeMustChange both present; artifactsMustExist both present. One stray pi-loop runtime file from this session's monitor (untracked, outside File Scope) deleted (SP-011 precedent).
+- Completion criteria: all met — named observation per acceptance item per admitted backend (A1-A11 + honest not-supported for NAudio/Linux); SELECTION recorded with explicit channel ownership + license/native/maintenance matrix, pending-owner; WSLg real evidence (enumerate/select/fallback, event-verified completion, teardown, packaging) with Linux latency/timing named-limit; Wayland untouched; quarantine holds (zero client/src/tests/sln changes, contract green both platforms); both solo Fable consults persisted with actual answering model; board row WIP not DONE.
