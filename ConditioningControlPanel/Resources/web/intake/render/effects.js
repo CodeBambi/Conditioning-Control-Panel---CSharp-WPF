@@ -192,6 +192,11 @@ export function gifBurstSpec(intensity) {
  * -------------------------------------------------------------------------- */
 export const GIFBURST_KIND = 'gifburst';
 
+/** GIF RAIN — the burst's rarer sibling (the DTRH gif-cascade port). Same
+ *  contract-gap story as GIFBURST_KIND above: the literal is duplicated in
+ *  core/reward.js, which is where the roll that fires it lives. */
+export const GIFRAIN_KIND = 'gifrain';
+
 /** Run-progress -> GifBurst opacity, HARDCODED per owner (no settings). The
  *  owner's ladder is BY BAND (Calibration .15 / Establishing .30 / Deepening
  *  .50 / Climax .75 / Recovery 1.00). effects.js only receives a depth scalar,
@@ -472,6 +477,19 @@ const GIFBURST_FLING_MIN  = 0.45;  // px/ms release speed to fling (slower = dro
  *  never starve the ambient/polaroid budget, nor be starved BY it). */
 const GIFBURST_MAX_NODES  = 10;
 const GIFBURST_STAGGER_MS = 90;    // pop-in delay per burst member (spill, not pop)
+/** GIF RAIN — the rarer sibling of the burst (see the GIFRAIN section below).
+ *  These are DTRH's numbers verbatim (dtrh/game/payloadFx.js gifCascade, itself
+ *  the port of the C# ChaosGifCascadeOverlay): SPAWN_RATE 1.67/s across a ~6s
+ *  window (~10 gifs) with a 2.4-3.8s fall. Kept as-is — the intake's viewport is
+ *  the same fullscreen page DTRH rains into, so nothing here needed retuning. */
+const GIFRAIN_WINDOW_MS   = 6000;
+const GIFRAIN_GAP_MS      = 1000 / 1.67;
+const GIFRAIN_FALL_MIN_S  = 2.4;
+const GIFRAIN_FALL_SPAN_S = 1.4;
+/** Concurrent falling gifs — DTRH's MAX_CASCADE, and the rain layer's OWN leak
+ *  guard (same reasoning as GIFBURST_MAX_NODES: never share a budget between two
+ *  layers that can be live at the same time). */
+const GIFRAIN_MAX_NODES   = 14;
 /** Window CustomEvent name effects fires when a spiral/sublim garnish shows —
  *  audio.js listens for it (same literal there; contracts.js stays untouched). */
 export const GARNISH_CUE_EVENT = 'intake-garnish';
@@ -570,6 +588,22 @@ const CSS = `
   -webkit-user-drag:none;box-shadow:0 8px 34px rgba(0,0,0,.55),0 0 30px rgba(255,105,180,.4);
   will-change:transform,opacity;}
 .ixfx-burst.ixfx-grabbing{cursor:grabbing;}
+/* rain layer lives on <body> for the same reason as the burst layer (a 3s fall
+   must outlive the stage wipe). Click-through and DOM-ordered UNDER the burst,
+   so the foreground gif toy is always the thing your pointer finds. The fall is
+   a CSS *animation*, not a WAAPI one, precisely because the pause menu holds CSS
+   animations with animation-play-state (ui/pause.js) — a paused run's rain hangs
+   in the air instead of finishing behind the menu. */
+.ixfx-rain-root{position:fixed;inset:0;z-index:5;pointer-events:none;overflow:hidden;}
+.ixfx-rain{position:absolute;top:-28vh;width:22vmin;border-radius:10px;opacity:0;
+  object-fit:cover;box-shadow:0 6px 30px rgba(0,0,0,.45);
+  filter:drop-shadow(0 0 14px rgba(255,105,180,.55));will-change:transform,opacity;
+  animation:ixfx-rainfall var(--ixfx-fall,3s) linear forwards;}
+@keyframes ixfx-rainfall{
+  0%{transform:translateY(0) scale(.45);opacity:0;}
+  12%{opacity:var(--ixfx-rain-a,.9);}
+  90%{opacity:var(--ixfx-rain-a,.9);}
+  100%{transform:translateY(150vh) scale(1);opacity:0;}}
 @media (prefers-reduced-motion: reduce){
   .ixfx-sub,.ixfx-bubble,.ixfx-particle{transition:none;}
 }`;
@@ -682,6 +716,16 @@ export function createEffects({ root, caps, media, theme } = {}) {
   let burstLiveCount = 0;    // concurrent burst <img> nodes (cap: GIFBURST_MAX_NODES)
   let lastBurstGif = null;   // no immediate repeat of the last spawned gif
 
+  // GifRain layer (the DTRH cascade port). Like the burst it is body-parented and
+  // has its own node budget; unlike the burst it is a SINGLETON downpour — a
+  // second trigger extends the live window instead of starting a second rAF loop.
+  let rainRoot = null;       // .ixfx-rain-root container
+  let rainLiveCount = 0;     // concurrent falling <img> nodes (cap: GIFRAIN_MAX_NODES)
+  let rainCancel = null;     // cancel handle for the one live downpour (null = dry)
+  let rainEndAt = 0;         // spawn-window deadline (extended by a re-trigger)
+  let rainDepth = 0;         // band depth the live downpour draws its opacity from
+  let lastRainUrl = null;    // no immediate repeat of the last spawned drop
+
   // loom spiral machinery: module + ONE reusable field, all lazy. Params are
   // rolled FRESH per mount (freshSpiralParams) so no two spirals repeat.
   let loomMod = null, loomDead = false;
@@ -754,6 +798,9 @@ export function createEffects({ root, caps, media, theme } = {}) {
     // cleanup) keeps recover(0)'s bulk clear exact and the marker makes a
     // double-remove idempotent, same contract as _ixMedia above.
     if (el && el._ixBurst) { el._ixBurst = false; burstLiveCount = Math.max(0, burstLiveCount - 1); }
+    // ...and the rain rides a third budget, freed here on every removal path
+    // (animationend, the safety-net timer, killRain, recover(0)'s bulk clear).
+    if (el && el._ixRain) { el._ixRain = false; rainLiveCount = Math.max(0, rainLiveCount - 1); }
     // Backdrop bookkeeping: every removal path (garnishFade finish/cancel, spiral
     // stop, recover()/dispose bulk-clear) funnels through here, so one guarded
     // decrement per node keeps the shared ref-count exactly balanced. Clearing
@@ -2415,6 +2462,129 @@ export function createEffects({ root, caps, media, theme } = {}) {
     startLife();
   }
 
+  /* ==========================================================================
+   * GIFRAIN — the DTRH gif-cascade, ported as a RARE reward. Where the burst
+   * throws a spill of grabbable gifs AT you, the rain lets them fall PAST you:
+   * drops enter above the viewport, slide the whole screen height while growing
+   * from 0.45x to 1x, and leave. It is the port of dtrh/game/payloadFx.js
+   * gifCascade (itself the port of the C# ChaosGifCascadeOverlay), numbers
+   * unchanged — 1.67 spawns/s across a ~6s window, 2.4-3.8s per fall — with the
+   * same three bits of bookkeeping that keep DTRH's version bounded: a spawn
+   * loop with an explicit deadline, a live-node cap (MAX_CASCADE -> 14), and a
+   * cancel handle so a teardown can stop the loop mid-window.
+   *
+   * WHAT IS DELIBERATELY DIFFERENT FROM DTRH:
+   *   · SINGLETON. DTRH can stack cascades (each pop makes its own loop); a
+   *     reward roll here can repeat, so a re-trigger EXTENDS the live window
+   *     rather than adding a second loop — same idiom as payloadFx's holdOn
+   *     refreshing a deadline instead of stacking overlays.
+   *   · Opacity rides the SAME band ladder as the burst (gifBurstOpacityForDepth
+   *     x caps), so rain and burst read as one family instead of the rain being
+   *     the one effect in the run that ignores the descent.
+   *   · It draws from the whole visual manifest (gifs + stills), like the drain
+   *     wash does — DTRH's anyImageUrl does the same. Every pick is logged
+   *     through noteMedia so the Records Office lists what the rain paid you.
+   *
+   * TIMING: the spawn loop is a GLOBAL rAF + performance.now and the fall is a
+   * CSS animation, so the whole downpour freezes under the pause menu's shim
+   * without a single pause-aware line here (ui/pause.js header).
+   * ========================================================================*/
+
+  /** Put rainRoot in the body UNDER the garnish + burst layers (all three are
+   *  z5; DOM order breaks the tie). Falls back to a plain append. */
+  function placeRain(host) {
+    const under = (glRoot && glRoot.parentNode === host) ? glRoot
+                : (burstRoot && burstRoot.parentNode === host) ? burstRoot : null;
+    if (under) host.insertBefore(rainRoot, under); else host.appendChild(rainRoot);
+  }
+  function mountRainLayer() {
+    if (!hasDOM) return;
+    ensureStyles();
+    const host = bodyHost();
+    if (rainRoot) {
+      if (!rainRoot.parentNode) { try { placeRain(host); } catch (_e) {} }
+      return;
+    }
+    try {
+      rainRoot = document.createElement('div');
+      rainRoot.className = 'ixfx-rain-root';
+      rainRoot.setAttribute('aria-hidden', 'true');
+      placeRain(host);
+    } catch (_e) { rainRoot = null; }
+  }
+  function removeRainLayer() {
+    if (rainRoot) { try { if (rainRoot.parentNode) rainRoot.parentNode.removeChild(rainRoot); } catch (_e) {} }
+    rainRoot = null;
+    lastRainUrl = null;
+  }
+  /** Stop the downpour AND clear whatever is still falling (recover/dispose). */
+  function killRain() {
+    if (rainCancel) { try { rainCancel(); } catch (_e) {} rainCancel = null; }
+    for (const el of Array.from(live)) if (el && el._ixRain) removeNode(el);
+    rainLiveCount = 0;
+  }
+
+  /** Start (or extend) the downpour at the given run depth. Bails without DOM
+   *  or media; the caller handles the no-media degrade. */
+  function showGifRain(depth) {
+    if (!hasDOM || !ambientPool.length) return;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    rainDepth = clamp01(depth);
+    if (rainCancel) { rainEndAt = Math.max(rainEndAt, now + GIFRAIN_WINDOW_MS); return; }
+    mountRainLayer();
+    if (!rainRoot) return;
+    rainEndAt = now + GIFRAIN_WINDOW_MS;
+    let nextAt = now, stopped = false, raf = 0;
+    const step = (t) => {
+      raf = 0;
+      if (stopped) return;
+      // DTRH's catch-up spawn: a long frame pays out every drop it slept
+      // through, and the `t < rainEndAt` guard is what bounds the whole loop.
+      while (t >= nextAt && t < rainEndAt) { spawnRainDrop(rainDepth); nextAt += GIFRAIN_GAP_MS; }
+      if (t >= rainEndAt) { rainCancel = null; return; } // window done; drops finish falling
+      raf = requestAnimationFrame(step);
+    };
+    rainCancel = () => {
+      stopped = true;
+      if (raf) { try { cancelAnimationFrame(raf); } catch (_e) {} raf = 0; }
+    };
+    raf = requestAnimationFrame(step);
+  }
+
+  /** ONE falling drop. Own fall duration, own safety-net removal. */
+  function spawnRainDrop(depth) {
+    if (!rainRoot || rainLiveCount >= GIFRAIN_MAX_NODES) return;
+    let url = pickOf(ambientPool);
+    if (ambientPool.length > 1) { let g = 0; while (url === lastRainUrl && g++ < 6) url = pickOf(ambientPool); }
+    lastRainUrl = url;
+    noteMedia(url, gifs.indexOf(url) >= 0 ? 'gif' : 'image'); // ledger (core/mediaLog.js)
+
+    const alpha = clamp01(gifBurstOpacityForDepth(depth)) * clampIntensity(1, capsOf());
+    const fallS = GIFRAIN_FALL_MIN_S + Math.random() * GIFRAIN_FALL_SPAN_S;
+    let el;
+    try {
+      el = document.createElement('img');
+      el.className = 'ixfx-rain';
+      el.decoding = 'async';
+      el.setAttribute('aria-hidden', 'true');
+      el._ixRain = true; rainLiveCount++;     // rain layer's own leak-guard counter
+      el.style.left = (4 + Math.random() * 80).toFixed(2) + 'vw';
+      el.style.setProperty('--ixfx-fall', fallS.toFixed(2) + 's');
+      el.style.setProperty('--ixfx-rain-a', String(alpha));
+      el.onerror = () => removeNode(el);      // bad url -> vanish, free the slot
+      el.src = url;
+      rainRoot.appendChild(el);
+    } catch (_e) {
+      if (el && el._ixRain) { el._ixRain = false; rainLiveCount = Math.max(0, rainLiveCount - 1); }
+      return;
+    }
+    el.addEventListener('animationend', () => removeNode(el), { once: true });
+    // Safety net on the GLOBAL clock: if animationend never fires (decode failure,
+    // a tab that never composited the layer) the node still goes. Pausing stops
+    // the CSS fall and this timer together, so the slack stays honest.
+    track(el, Math.round(fallS * 1000) + 900);
+  }
+
   /* ----- public API --------------------------------------------------------- */
 
   /** Drive the ambient stack from one depth scalar (invariant #2: via caps). */
@@ -2474,6 +2644,19 @@ export function createEffects({ root, caps, media, theme } = {}) {
         else runVariant(RewardKind.Flash, FLASH_VARIANTS, intensity);
         break;
       }
+      case GIFRAIN_KIND: {
+        // The rare one. Reduced motion gets the burst instead of a screenful of
+        // falling gifs (the burst's own RM path is a single, still node) — the
+        // reward still pays, it just stops moving.
+        const d = clamp01(typeof depth === 'number' ? depth : depthNow);
+        if (reducedMotion || !ambientPool.length) {
+          // showGifBurst needs real gifs; with neither pool the fired reward
+          // still pays SOMETHING (same degrade as the GifBurst kind above).
+          if (gifs.length) { try { showGifBurst(d); } catch (_e) {} }
+          else runVariant(RewardKind.Flash, FLASH_VARIANTS, intensity);
+        } else { try { showGifRain(d); } catch (_e) {} }
+        break;
+      }
       case RewardKind.None:
       default: break;
     }
@@ -2491,6 +2674,7 @@ export function createEffects({ root, caps, media, theme } = {}) {
     killAmbient();
     preemptGarnish();
     killBurst();              // foreground toy: clear it on any recover()
+    killRain();               // ...and the downpour stops with it
     if (d > 0.0005) { applyDepth(d); return; }
     // full surfacing: stop spawning, drop every live node, hide + remove layers.
     depthNow = 0;
@@ -2506,6 +2690,8 @@ export function createEffects({ root, caps, media, theme } = {}) {
     removeBurstLayer();
     burstItems.clear(); burstLiveCount = 0;   // killBurst() above already cancelled them
     lastBurstGif = null;
+    removeRainLayer();
+    rainLiveCount = 0; rainCancel = null; rainEndAt = 0;   // killRain() above already stopped it
     if (layer) { try { if (layer.parentNode) layer.parentNode.removeChild(layer); } catch (_e) {} }
     layer = null; flashEl = null; mounted = false;
   }

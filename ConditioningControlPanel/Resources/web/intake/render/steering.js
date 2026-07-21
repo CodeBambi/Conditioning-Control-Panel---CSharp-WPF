@@ -29,6 +29,7 @@ import {
   Steer, STEERS, STEER_BAND_WEIGHT, Band, Mechanic,
   clamp01, lerp,
 } from '../core/contracts.js';
+import { getPrefs } from '../ui/prefs.js';
 
 /** Generic SFX seam: steering holds no audio handle, so — like effects.js — it
  *  reaches audio.js through the 'intake-sfx' window CustomEvent. Never throws. */
@@ -101,25 +102,53 @@ export function isBottomlessEligible(ctx, plan) {
 
 /* ----------------------------------------------------------------------------
  * HoverSwap (owner-directed) — a SECOND self-rolled overlay steer (like BottomlessNo,
- * NOT in the engine's STEER_POOL). On a YesNo beat, HOVERING the WRONG/refuse option
- * makes the two buttons trade places (a smooth ~210ms translate exchange), so the
- * cursor ends up over the CORRECT option's new position — a gentle coercion toward the
- * right answer. N (4..7, drawn once) swaps happen, each feeding the escape guard, then it
- * disarms and the buttons behave normally. Friction, NOT lockout: it only MOVES buttons,
- * it NEVER intercepts a click (a click always lands on whatever is under the cursor); a
- * guard trip glides both buttons home. Eligible bands are Deepening/Climax (Recovery
- * never coerces — engine contract). It is a refusal-gate steer, so it yields to every
- * engine refusal gate AND to BottomlessNo (exactly one refusal gate owns a beat), and to
- * any steer that already drives the options' TRANSLATE (so the swap can't be clobbered).
+ * NOT in the engine's STEER_POOL). On a BINARY beat (YesNo, or an MC4 the bank authored
+ * with exactly two labels), HOVERING the WRONG/refuse option makes the two buttons trade
+ * places (a smooth ~210ms translate exchange), so the cursor ends up over the CORRECT
+ * option's new position — a gentle coercion toward the right answer. N (4..6, drawn once)
+ * swaps happen, each feeding the escape guard, then it disarms and the buttons behave
+ * normally. Friction, NOT lockout: it only MOVES buttons, it NEVER intercepts a click (a
+ * click always lands on whatever is under the cursor); a guard trip glides both buttons
+ * home. Eligible bands are Deepening/Climax (Recovery never coerces — engine contract).
+ * It is a refusal-gate steer, so it yields to every engine refusal gate AND to
+ * BottomlessNo (exactly one refusal gate owns a beat), and to any steer that already
+ * drives the options' TRANSLATE (so the swap can't be clobbered). It is also mutually
+ * exclusive with MouseHijack, which is rolled after it and stands down when it wins.
+ * It is a POINTER gag and nothing else: the swap rides transforms only, so DOM order —
+ * and therefore tab order and screen-reader order — never moves, and keyboard focus /
+ * Enter reach both options unmolested (nothing here listens to focus or keys).
+ * Reduced motion / sparkles-off users are exempt entirely (hoverSwapMuted).
  * -------------------------------------------------------------------------- */
 const HOVERSWAP_CHANCE = 0.06;                  // ~6% of eligible beats (owner-directed)
-const HOVERSWAP_MIN = 4, HOVERSWAP_MAX = 7;     // swap count is drawn in [4,7]
+const HOVERSWAP_MIN = 4, HOVERSWAP_MAX = 6;     // swap count is drawn in [4,6]
 const HOVERSWAP_BANDS = new Set([Band.Deepening, Band.Climax]); // Recovery never coerces -> excluded
+/** Mechanics whose options are plain, statically-laid-out buttons the pair-swap can trade.
+ *  YesNo is always a pair; MC4 is a pair whenever the bank authored exactly two labels (the
+ *  option-count check below is what actually gates it). Funnel/Destruct are excluded even at
+ *  two options: both REWRITE a button on press (dissolve->respawn / shatter), and a rewrite
+ *  racing a translate exchange reads as a bug rather than a gag. BubblePop is excluded because
+ *  its "buttons" are already in flight on their own layer. */
+const HOVERSWAP_MECHANICS = new Set([Mechanic.YesNo, Mechanic.MC4]);
 /** steers that continuously drive an option's translate (tx/ty). HoverSwap owns the swap
  *  translate, so it yields whenever any of these is live to avoid a per-tick tug-of-war
  *  (scale-only steers — SizeSkew/Tunnel/LateBloom — compose fine via applyTf and are NOT
  *  excluded). Mirrors BottomlessNo's WRONG_TRANSFORM_STEERS note. */
 const POSITION_STEERS = new Set([Steer.Magnet, Steer.Flee, Steer.Exile, Steer.DriftResolve]);
+
+/** Is the pointer gag muted for this user? DOM/prefs-aware, so it lives OUTSIDE the
+ *  pure eligibility predicate. Two ways out, and both mean NO SWAP AT ALL rather than
+ *  an instant teleport: an instant exchange is strictly worse for a reduced-motion
+ *  user than none — it removes the animation that made the rearrangement legible and
+ *  leaves only the disorientation. `sparkles` is the same opt-out the rest of the shell
+ *  reads for "calmer, please", and a self-rearranging interface is squarely that. */
+function hoverSwapMuted(win) {
+  try {
+    const w = win || (typeof window !== 'undefined' ? window : null);
+    if (w && w.matchMedia && w.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+  } catch (_e) {}
+  try { if (getPrefs().sparkles === false) return true; } catch (_e) {}
+  return false;
+}
 
 /** Swap count drawn in [HOVERSWAP_MIN, HOVERSWAP_MAX] inclusive. PURE. */
 export function hoverSwapCount(rand = Math.random) {
@@ -135,8 +164,9 @@ export function isHoverSwapEligible(ctx, plan) {
   if (!ctx) return false;
   if (masterOf(ctx.caps) <= 0) return false;                    // user disabled steering strength
   if (!HOVERSWAP_BANDS.has(ctx.band)) return false;             // Deepening/Climax only
-  if (ctx.mechanic !== Mechanic.YesNo) return false;            // 2 discrete options only
+  if (!HOVERSWAP_MECHANICS.has(ctx.mechanic)) return false;     // plain button pairs only
   const opts = Array.isArray(ctx.options) ? ctx.options : [];
+  if (opts.length !== 2) return false;                          // the gag IS the pair trading places
   const hasWrong = opts.some((o) => o && o.el && !o.isCorrect); // need a wrong/refuse target
   const hasCorrect = opts.some((o) => o && o.el && o.isCorrect); // ...and a correct one to swap onto
   if (!hasWrong || !hasCorrect) return false;
@@ -306,7 +336,11 @@ function installSteering(ctx, factoryCaps, factoryMedia) {
   // HoverSwap overlay: a SECOND self-rolled refusal-gate steer (~6% of eligible beats).
   // Mutually exclusive with BottomlessNo — both are self-rolled gates and the invariant
   // is exactly ONE refusal gate per beat, so it yields when BottomlessNo already rolled.
-  const hoverSwap = !bottomless && isHoverSwapEligible(beatCtx, plan) && Math.random() < HOVERSWAP_CHANCE;
+  // Muted users are filtered HERE rather than inside the installer so a muted beat is
+  // still free to arm the linger-triggered MouseHijack below (which does its own RM
+  // gate) instead of being silently spent on a gag that will never run.
+  const hoverSwap = !bottomless && !hoverSwapMuted(null)
+    && isHoverSwapEligible(beatCtx, plan) && Math.random() < HOVERSWAP_CHANCE;
 
   // MouseHijack: a THIRD self-rolled steer, but LINGER-triggered (armed silently now;
   // it rolls its ~40% "we MIGHT" only after ~9s of un-committed dwell — see installer).
@@ -1552,9 +1586,13 @@ const INSTALLERS = {
     }
   },
 
-  /* Owner-directed "HoverSwap". On a YesNo beat, HOVERING the WRONG/refuse option makes the
-     two buttons trade places — a smooth ~210ms translate exchange (reduced motion: instant) —
-     so the cursor ends up over the CORRECT option's new slot. N (4..7) swaps happen, each
+  /* Owner-directed "HoverSwap". On a two-option beat (YesNo, or an MC4 the bank authored with
+     exactly two labels), HOVERING the WRONG/refuse option makes the two buttons trade places —
+     a smooth ~210ms translate exchange — so the cursor ends up over the CORRECT option's new
+     slot. The slide is the whole point: the pair has to be SEEN swapping, or the beat reads as
+     a click that mis-registered instead of an interface rearranging itself, which is why a
+     reduced-motion / sparkles-off user gets no swap at all rather than a teleport (gated at the
+     roll site — see hoverSwapMuted). N (4..6) swaps happen, each
      bumping the escape guard, then it disarms and the buttons settle WHERE THEY ARE (never a
      snap-back — that would be a free tell). It ONLY moves buttons: clicks are never intercepted,
      so a mid-swap click always registers on the button actually under the cursor. A guard trip
@@ -1566,13 +1604,14 @@ const INSTALLERS = {
     const wrong = S.wrong[0];
     if (!correct || !wrong || !correct.el || !wrong.el) return;
 
-    let reduce = false;
-    try { reduce = !!(S.win.matchMedia && S.win.matchMedia('(prefers-reduced-motion:reduce)').matches); } catch (_e) {}
+    // Defensive second gate: the roll site already filters muted users, but this installer is
+    // also reachable if HoverSwap ever lands in the engine's STEER_POOL. No animation = no gag.
+    if (hoverSwapMuted(S.win)) return;
 
     const SWAP_MS = 210;          // 180-250ms smooth position exchange
     const DEBOUNCE_MS = 350;      // ignore re-entry for ~350ms after a swap completes
 
-    let remaining = hoverSwapCount();   // 4..7 swaps this beat
+    let remaining = hoverSwapCount();   // 4..6 swaps this beat
     let swapped = false;                // are the two buttons currently exchanged?
     let locked = false;                 // debounce + mid-animation lock (one swap per physical hover)
     let disarmed = false;               // set by exhaustion OR by a guard trip (whichever lands first)
@@ -1593,9 +1632,9 @@ const INSTALLERS = {
       // Paint the current swapped/unswapped translate onto the shared tf. correct takes +delta
       // (into wrong's slot) and wrong takes -delta (into correct's slot) when swapped, else 0.
       // applyTf preserves any co-active scale, so this composes cleanly. `animate` drives the
-      // transition (off under reduced motion).
+      // transition — the visible glide is what sells "the interface moved", so it is never off.
       const paint = (animate) => {
-        const trans = (animate && !reduce) ? `transform ${SWAP_MS}ms cubic-bezier(.2,.8,.2,1)` : '';
+        const trans = animate ? `transform ${SWAP_MS}ms cubic-bezier(.2,.8,.2,1)` : '';
         const pairs = [[correct.el, 1], [wrong.el, -1]];
         for (const [el, sign] of pairs) {
           el.style.transition = trans;
@@ -1615,7 +1654,7 @@ const INSTALLERS = {
         if (disarmed) return;               // already settled by exhaustion -> keep current positions
         disarmed = true;
         swapped = false;
-        const trans = reduce ? '' : 'transform 200ms cubic-bezier(.2,.8,.2,1)';
+        const trans = 'transform 200ms cubic-bezier(.2,.8,.2,1)';
         for (const el of [correct.el, wrong.el]) {
           el.style.transition = trans;
           const st = S.tf(el);
@@ -1625,14 +1664,18 @@ const INSTALLERS = {
       };
       S.guard.onFrictionRelease(disarmToHome);
 
-      const doSwap = () => {
+      const doSwap = (e) => {
         if (disarmed || locked || remaining <= 0) return;   // debounce + spent guard
+        // NEVER swap out from under a press in progress: entering the wrong option with the
+        // primary button already held is a drag, and moving the target mid-click would turn
+        // the gag into a stolen answer.
+        if (e && (e.buttons & 1) === 1) return;
         locked = true;
         swapped = !swapped;
-        paint(true);                                        // animate the exchange (instant under RM)
+        paint(true);                                        // animate the exchange
         S.guard.bump(wrong.index, 0);                       // each swap feeds the escape guard (invariant #1)
         remaining -= 1;
-        const settleMs = (reduce ? 0 : SWAP_MS) + DEBOUNCE_MS;
+        const settleMs = SWAP_MS + DEBOUNCE_MS;
         const t = S.win.setTimeout(() => {
           locked = false;
           if (remaining <= 0) disarmByExhaustion();

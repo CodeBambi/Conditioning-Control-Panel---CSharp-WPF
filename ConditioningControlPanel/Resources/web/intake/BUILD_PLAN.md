@@ -579,10 +579,13 @@ pending.
    handoff + hosted-only exit button preserved); clamp() sizing keyed to vh; .ix-outro-scroll
    frame (max-height 100dvh-28px, thin scrollbar, overflow-only fade+chevron hint) = nothing ever
    unreachable. RM: fade transition disabled.
-50. **HoverSwap steer** (steering.js + contracts.js) — ~6% YesNo Deepening/Climax; pointerenter
-   on WRONG option swaps the pair (~210ms transform exchange, cursor lands on correct), N=4..7,
-   350ms re-entry debounce; exhaustion leaves current positions (no snap-back tell);
-   frictionRelease glides both home; never intercepts clicks; yields to refusal gates +
+50. **HoverSwap steer** (steering.js + contracts.js) — ~6% of BINARY beats (YesNo, or MC4 with
+   exactly 2 options) in Deepening/Climax; pointerenter on WRONG option swaps the pair (~210ms
+   transform exchange, cursor lands on correct), N=4..6, 350ms re-entry debounce; skipped while
+   the primary button is held (never swaps mid-click); exhaustion leaves current positions (no
+   snap-back tell); frictionRelease glides both home; never intercepts clicks; transform-only so
+   tab/AT order never moves; reduced-motion OR sparkles-off = no swap at all (hoverSwapMuted,
+   gated at the roll site so MouseHijack can still take the beat); yields to refusal gates +
    position steers + BottomlessNo. hoverswap-test 5028 asserts green.
 51. **GifBurst reward** (effects.js + reward.js) — 'gifburst' kind, 18% roll (after BubblePop,
    before heat rules); ONE gif 30-50vmin ±8deg, pop-in, opacity by depth->band ladder

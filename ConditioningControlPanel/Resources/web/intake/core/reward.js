@@ -78,6 +78,15 @@ const STREAK_STEP = 0.03;        // intensity multiplier step per streak beat
 const GIFBURST_KIND = 'gifburst';
 const GIFBURST_CHANCE = 0.18;
 
+/* GifRain: the burst's RARE sibling — a ~6s downpour of falling gifs (the DTRH
+ * gif-cascade port, rendered in effects.js). Deliberately a fraction of the
+ * burst's weight: it owns the screen for six seconds, so at ~5% of the beats
+ * that survive the burst roll (~4% overall) a player meets it a couple of times
+ * in a long descent and it stays a prize instead of becoming wallpaper. Rolled
+ * AFTER the burst so the burst's existing 18% tuning is untouched. */
+const GIFRAIN_KIND = 'gifrain';
+const GIFRAIN_CHANCE = 0.05;
+
 function baseChanceFor(mode, band, depth) {
   if (band === Band.Recovery) return 0;             // recovery never rewards (inv #3)
   switch (mode) {
@@ -129,6 +138,7 @@ function pickKind(band, depth, prompt) {
   // GifBurst joins the roll as a random in-browser flash reward (BubblePop still
   // wins — its bubble IS the reward). Opacity ramps by band inside effects.js.
   if (Math.random() < GIFBURST_CHANCE) return GIFBURST_KIND;
+  if (Math.random() < GIFRAIN_CHANCE) return GIFRAIN_KIND;
   if (heat >= 4) return RewardKind.Drop;    // hottest -> gif burst / subliminal drop
   if (heat >= 3) return RewardKind.Praise;  // voiced/subtitled affirmation
   if (depth >= 0.6) return RewardKind.Flash;

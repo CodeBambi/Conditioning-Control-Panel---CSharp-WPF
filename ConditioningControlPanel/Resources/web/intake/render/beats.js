@@ -226,8 +226,11 @@ let _ixEventFired = false;
 const GLITCH_RUN_CHANCE = 0.10;
 
 /** Chance (per non-control click, once per beat) that a standard card melts away
- *  and skips to the next beat — a rare WHIMSY event (owner tuning: 1 in 30). */
-const MELT_CHANCE = 1 / 30;
+ *  and skips to the next beat — a rare WHIMSY event (owner tuning: 1 in 45).
+ *  Halved in frequency from the original 1-in-30: the melt SKIPS the beat, so
+ *  every one of these costs the run a graded answer, and at 1-in-30 it was
+ *  landing often enough to read as a mechanic rather than as an accident. */
+const MELT_CHANCE = 1 / 45;
 /** The card melt takes the VOICE down with it: the prompt line RESUMES from
  *  where it had got to, slowed to this rate (a drawl), then its tail fades out
  *  across the melt — the words sag as the card drips away. */
@@ -1344,9 +1347,9 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
 
       if (stage) stage.appendChild(mountEl);
 
-      // ---- 1-in-30 melt-on-card-click -> SKIP to next beat (standard cards) ----
+      // ---- 1-in-45 melt-on-card-click -> SKIP to next beat (standard cards) ----
       // Clicking anywhere on the card that is NOT an interactive control has a
-      // MELT_CHANCE (1 in 30, ONCE per beat) to melt the whole card away. The card does
+      // MELT_CHANCE (1 in 45, ONCE per beat) to melt the whole card away. The card does
       // NOT re-form: once the melt animation settles the beat RESOLVES and the
       // run advances. The melt is a WHIMSY event, not an answer — it resolves
       // through the gentlest existing skip path (finalize(undefined, undefined,
@@ -1371,7 +1374,7 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
             if (e.target && e.target.closest
               && e.target.closest('button,input,textarea,select,a,[contenteditable]')) return;
           } catch (_e) {}
-          if (Math.random() >= MELT_CHANCE) return;   // 1-in-30 chance, else a normal click
+          if (Math.random() >= MELT_CHANCE) return;   // 1-in-45 chance, else a normal click
           meltUsed = true;                      // max once per beat
           card.style.pointerEvents = 'none';    // nothing is clickable on a melting card
           // Clear the beat's auto-advance timer so it can't resolve BEHIND the
