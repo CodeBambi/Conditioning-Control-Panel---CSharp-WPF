@@ -1,0 +1,71 @@
+v6.5.0 - Questioning... the narrative? 🤭🩷
+
+The Graded Intake leaves the Lab. It is out of beta, it has its own door, and
+every supporter tier can walk through it. Underneath, a long run of fixes to
+video, flashes, overlays and the companion.
+
+✨ THE GRADED INTAKE
+- A guided intake interview, now front and centre instead of buried in the Lab.
+  Available to all supporters.
+- It asks you questions. It listens to how you answer, not just what you answer,
+  and it keeps adjusting as it goes. Every question is voiced.
+- When you are done it writes you a session built from your own answers and
+  saves it straight to your Sessions, ready to run.
+- The closing assessment now reflects how you actually answered. Previously it
+  had a favourite verdict and gave it to almost everyone.
+- From your second visit onward you can open your file and read back your past
+  visits: what you were graded, what you were given, what you kept.
+- Fullscreen, from the pause menu or F11, and it remembers.
+- The intake window now minimises on its own instead of collapsing with the main
+  window, and the control panel steps out of your way while you are in there.
+
+[DISCLAIMER: your answers WILL be recorded. By proceeding you accept that your
+answers will be used to enhance and deepen your conditioning experience]
+
+🔬 THE LAB
+- Something is being prepared in the space the quizzes left behind. It is not
+  ready to be looked at yet.
+- Pop Quiz is unchanged and stays where it is.
+
+🎬 VIDEO
+- Web videos you start yourself are no longer cut off halfway through by
+  Takeover, AI effects or mandatory videos. The app only ever noticed videos it
+  opened itself, so anything you browsed to and pressed play on was invisible to
+  it and everything else talked straight over the top.
+- Fixed Takeover stalling after a web video, web videos arriving back to back,
+  and mandatory videos going quiet afterwards.
+- Fixed clips ending a few seconds in on sites that swap sources mid-video, such
+  as ad breaks and quality switches.
+- A video that turns into a white screen partway through now heals itself. The
+  recovery only ran at the start of a clip, so an output that vanished mid-play
+  stayed broken until you intervened. (#600)
+- Videos that do not match your screen shape now fill the frame with a blurred
+  backdrop of themselves instead of sitting in black bars.
+- Removed the separate "Strict Videos" toggle from Takeover. A second, private
+  idea of "strict" meant Takeover could impose unskippable videos even with
+  mandatory videos set to skippable. Strictness now follows the global setting
+  like every other video.
+
+⚡ FLASHES & OVERLAYS
+- The simultaneous-images slider works above 10 again. The newer render modes
+  were still applying the old ceiling of 10 that only the classic mode needs.
+  (#601)
+- Popped dashboard trigger bubbles now flash for your Flash Duration instead of
+  lingering for three or four seconds. (#593)
+- Deeper enhancement bands are visible over the mandatory video again. They were
+  being pinned underneath it by the rule that stops ordinary overlays burying a
+  video, even though a Deeper band is the video's own effect.
+
+💗 COMPANION
+- The avatar tube no longer floats alone on top of unrelated windows while the
+  main window stays buried behind them. The pair is now held together by the
+  window manager itself rather than by a stack of manual raises, so they cannot
+  drift apart.
+
+🧩 MODS
+- New "Show BambiCloud" option for mods that hide the button, so you can reach
+  the site without leaving your mod. (#596)
+- Sharing a mod now explains what actually happens to it, and there is a Get
+  Mods button that opens the catalogue.
+
+Season: Jelly July
