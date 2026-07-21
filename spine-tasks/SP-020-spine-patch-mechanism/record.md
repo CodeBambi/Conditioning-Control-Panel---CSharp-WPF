@@ -48,9 +48,24 @@
 
 (pending)
 
-## Step 3 — scratch-cycle evidence
+## Step 3 — scratch-cycle evidence (all OUTSIDE the repo, `%TEMP%`)
 
-(pending)
+**Cycle (chronological, `%TEMP%/sp020-scratch2`, fresh `npm i pi-spine@2.8.0`):**
+
+1. **Negative control** — `verify.mjs --root scratch2`: all 5 patches `missing`, exit 1. (Fresh install provably patch-free.)
+2. **apply** — 5 applied, 0 skipped, exit 0. **verify** — all applied, exit 0.
+3. **Idempotence** — second apply: 0 applied, 5 "already applied", exit 0; verify exit 0. No double-patch (occurrence-counted tri-state prevents it).
+4. **Byte-parity cross-check** — patched scratch2 `abort.mjs` / `lifecycle-archive.mjs` / `SKILL.md` `diff`-identical to the live main-repo tree (the manifest reproduces the live patches exactly).
+5. **Scratch `spine preflight` GREEN** — minimal spine project scaffolded in scratch2 via the scratch install's own `spine init --force` (15/15 checks ✅ incl. tasks-validate, plan).
+6. **dotnet allowlist proven** — `parseEvidenceCommandChain("dotnet build … && dotnet test …")` ACCEPTED on patched, rejected on pristine negative control with `evidence executable not allowed: dotnet` (both in one run of the proof script).
+7. **@file worker-tail proven** — exported `buildWorkerPiArgs` (runner line 80: "exported for unit tests") on the PATCHED install with a 20KB referenceDoc: last arg `@…\spine-worker-tail-<pid>.txt`, temp file 20,771B (>16KB), total argv 162 chars (<32,767). Small tail (685B) stays inline. PRISTINE negative control: same config → 20,771B tail pushed INLINE (total argv 20,871 — the SP-004 bug shape). **Airtight provenance re-run with the batch's actual config** (`loadSpineConfig(scratch2)` → `referenceDocs: ["docs/fat-reference.md"]`): tail 20,846B → `@file`, argv 294 chars.
+8. **STUB batch E2E GREEN** — `SPINE_WORKER_STUB=1 spine batch start SP-999 --attached` → stub worker `.DONE` → `gate approve` → `integrate` (merge `ff1e32d`: `.DONE` + STATUS.md into main via lane→orch) → `batch complete` → `status`: Idle. The batch ran under a spine-config whose referenceDocs produce a >16KB tail (item 7's provenance re-run). Two earlier batch aborts exercised the fsync-patched `abort.mjs`/`lifecycle-archive.mjs` archive paths ("aborted and archived", zero EPERM).
+9. **Loud-fail (all-or-nothing) proven** — drift injected into `abort.mjs` of a throwaway copy: apply fails `FAIL fsync-r-plus-abort: anchor×0 replacement×0 — version drift`, exit 1, **zero files modified** (the other 4 applicable patches validated but nothing written).
+10. **Cross-version** — apply+verify against pristine **2.10.0**: 5 applied, verify exit 0 (anchors hold across 2.8.0→2.10.0).
+
+**Environment surprise (recorded, NOT a new patch):** `git init` in `%TEMP%` created a hidden `.git` dir (git-for-Windows default; the real repo sets local `core.hidedotfiles=false`), `git worktree add` propagated H to the worktree `.git` pointer, and Node `writeFileSync` EPERMs opening hidden files — breaking the engine's `normalizeLaneWorktreeGitPaths` rewrite. Fixed in scratch via `git config core.hidedotfiles false` (matching the real repo). Latent upstream fragility worth knowing; out of T-1 scope (the real-repo flow never produces hidden `.git`).
+
+**Packet-assumption correction (from pre-approach consult):** stub mode never builds pi args (runner stub path writes `.DONE` directly) and `SPINE_WORKER_PI_AGENT=0` exits before `buildWorkerPiArgs` — so "stub batch proves @file" is empirically impossible; the honest evidence is item 7 (the exact inline-vs-@file decision point feeding `spawnSync("pi", piArgs)`) + item 8 (engine E2E green with the >16KB-producing config).
 
 ## Step 4 — board reconciliation + pre-completion consult
 

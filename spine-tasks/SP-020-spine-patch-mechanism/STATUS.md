@@ -1,6 +1,6 @@
 # STATUS: SP-020 — durable pi-spine local-patch mechanism (T-1)
 
-**Current Step:** Step 3 — scratch-cycle evidence
+**Current Step:** Step 4 — board reconciliation + record + pre-completion consult
 **Last Updated:** 2026-07-21 (Step 1 in progress)
 
 ### Step 1: Empirical patch inventory + pre-approach consult
@@ -20,10 +20,10 @@
 - [x] `.spine/patches/README.md` (re-apply trigger, honest automation limit: no npm-hook possible, manual/orchestrator trigger + pre-launch verify + post-land real-reinstall gate)
 
 ### Step 3: Scratch-cycle evidence (OUTSIDE the repo)
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete (plan review: engine-skipped by design)
 
-- [ ] `%TEMP%/sp020-scratch2`: fresh install → negative control (patches absent) → apply → verify exit 0 → scratch `spine preflight` GREEN → dotnet-allowlist proven → >16KB-tail STUB batch → transcripts in record.md
-- [ ] Idempotence: apply → apply → verify
+- [x] `%TEMP%/sp020-scratch2`: fresh install → negative control (5 missing, exit 1) → apply (5/5) → verify exit 0 → scratch `spine preflight` GREEN (15/15) → dotnet-allowlist proven (accepted patched / rejected pristine) → >16KB-tail @file proven at arg-builder (20,771B → @file, argv 162 chars; pristine inline negative control) + STUB batch E2E green (start→.DONE→gate→integrate ff1e32d→complete) under the >16KB-producing config; transcripts in record.md
+- [x] Idempotence: apply → apply (0 applied, 5 skipped) → verify exit 0; loud-fail drift demo (named id, exit 1, zero writes); 2.10.0 cross-version apply+verify green
 
 ### Step 4: Board reconciliation + record + pre-completion consult
 **Status:** ⬜ Not Started
