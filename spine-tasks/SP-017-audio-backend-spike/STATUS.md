@@ -1,7 +1,7 @@
 # STATUS: SP-017 — spike cross-platform audio channel backend
 
-**Current Step:** Step 4 — selection record + board reconciliation + pre-completion consult
-**Last Updated:** 2026-07-21 (Step 3 complete — WSLg + packaging green both RIDs)
+**Current Step:** Step 5 — Testing & Verification
+**Last Updated:** 2026-07-21 (Step 4 complete — consult APPROVE w/ 5 corrections applied)
 
 ### Step 1: Backend research + package admission pre-approach consult
 **Status:** ✅ Complete
@@ -27,16 +27,16 @@
 - [x] Self-contained publish win-x64 + linux-x64, native sidecars present/loading (miniaudio.dll/libminiaudio.so, soft_oal.dll/libopenal.so — session facts)
 
 ### Step 4: Selection record + board reconciliation + pre-completion consult
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] `client/docs/audio-backend-spike.md` — named observation per item per backend + matrix + explicit channel-ownership SELECTION (pending-owner)
-- [ ] record.md complete
-- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
-- [ ] Board row → `WIP` with evidence + named limits (never `DONE`)
-- [ ] STATUS.md accurate before .DONE
+- [x] `client/docs/audio-backend-spike.md` — named observation per item per backend (A1-A11) + matrix + explicit channel-ownership SELECTION (pending-owner)
+- [x] record.md complete
+- [x] Pre-completion solo Fable 5 consult (APPROVE with five corrections — all applied incl. coexistence probe A11)
+- [x] Board row → `WIP` with evidence + named limits (never `DONE`)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] Contract testCommand green (client 0W/0E + both test projects; spike host builds clean separately)
 - [ ] `git diff --check` clean

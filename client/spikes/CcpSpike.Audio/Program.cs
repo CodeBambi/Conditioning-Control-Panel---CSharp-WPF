@@ -343,6 +343,39 @@ public static class Program
             busyAfterCompletion = busyAfter,
             busyClearedByRealCompletion = busyAtStart && !busyAfter && wEnd != null
         });
+
+        // ---- combined coexistence: voice + whisper + 3 SFX simultaneously on one device/mixer
+        // (pre-completion consult: the arbitration row gates barks on the whisper busy flag WHILE
+        // SFX churns — exercise exactly that interaction; window fits on WSLg are session facts,
+        // not timing guarantees, per the named Linux timing limit)
+        h.ClearVoiceEnd();
+        var rawBase = h.VoiceRawEndCount;
+        h.VoicePlay(voice, 1.0f);     // 2500 ms
+        h.WhisperPlay(whisper, 0.8f); // 1500 ms
+        var tc = NowMs();
+        var sfxH = new long[3];
+        for (int i = 0; i < 3; i++) { SleepUntil(tc, i * 40); sfxH[i] = h.SfxPlay(sfx, 0.5f); }
+        var busyDuring = h.WhisperBusy;
+        var sfxAllStarted = WaitFor(() => sfxH.All(x => h.SfxPositionSec(x) > 0) ? NowMs() : (double?)null, 2000) != null;
+        var sfxAllCompleted = WaitFor(() => sfxH.All(x => !h.SfxActive(x)) ? NowMs() : (double?)null, 3000) != null;
+        var wEnd2 = WaitFor(() => h.WhisperEndAtMs, ToneGen.WhisperMs + 2500);
+        var busyCleared2 = busyDuring && !h.WhisperBusy && wEnd2 != null;
+        var vEnd2 = WaitFor(() => h.VoiceEndAtMs, (int)(tc + ToneGen.VoiceMs + 2500 - NowMs()));
+        h.VoiceStop();
+        emit(h.Name, "combined-coexistence", new
+        {
+            whisperBusyDuring = busyDuring,
+            sfxAllStarted,
+            sfxAllCompleted,
+            whisperEndAtMs = wEnd2 != null ? Math.Round(wEnd2.Value - tc, 1) : (double?)null,
+            whisperBusyClearedByRealEvent = busyCleared2,
+            voiceEndAtMs = vEnd2 != null ? Math.Round(vEnd2.Value - tc, 1) : (double?)null,
+            voiceEndWithinWindow = vEnd2 != null &&
+                                   vEnd2 - tc >= ToneGen.VoiceMs - CompletionSlopEarlyMs &&
+                                   vEnd2 - tc <= ToneGen.VoiceMs + CompletionSlopLateMs,
+            voiceRawEndEvents = h.VoiceRawEndCount - rawBase,
+            note = "voice+whisper+3 SFX concurrent; exactly 1 voice raw end = natural completion, uncontaminated by whisper/SFX events"
+        });
     }
 
     /// <summary>Teardown probe: M init/play/dispose cycles, OS handle + thread counts around them.</summary>

@@ -59,11 +59,14 @@ public sealed class SoundFlowHarness : HarnessBase
             {
                 // SP-017 FINDING (observed 2x, 2026-07-21): an unvalidated DeviceInfo.Id reaches
                 // ma_device_init as a wild native pointer -> uncatchable access violation
-                // (0xC0000005, process-fatal). Invalid ids must be refused at the validation
-                // layer BEFORE any native init. Ids are process-lifetime POINTERS (they differ
-                // across runs) -> product must match devices by NAME (WPF parity: FriendlyName
-                // prefix matching, AudioService.cs:219-296), never persist the Id.
-                var found = _engine!.PlaybackDevices.Any(d => d.Id.ToString() == deviceId);
+                // (0xC0000005, process-fatal). Pre-completion-consult-sharpened discipline:
+                // RE-ENUMERATE immediately before init and pass the FRESH snapshot's DeviceInfo
+                // struct — never a stored one (Ids are process-lifetime POINTERS; persist the
+                // NAME, WPF FriendlyName parity, AudioService.cs:219-296). Residual TOCTOU
+                // (device vanishing mid-init) stays open by design until the SP-006-deferred
+                // re-probe row owns hot-plug semantics.
+                _engine!.UpdateAudioDevicesInfo();
+                var found = _engine.PlaybackDevices.Any(d => d.Id.ToString() == deviceId);
                 if (!found)
                 {
                     error = "device id not in backend enumeration - refused before native init (unvalidated Id => native AV crash, recorded finding)";

@@ -10,6 +10,7 @@ Packet emits structured `## Review Level: 2` heading. Per-call record:
 |------|------------------------|--------|----------------------|
 | 1 | type=plan after step-1 commit | `skipped: true`, `spawnFailed: false` — "Nested reviewer spawn blocked inside pi worker session (SP-195); batch engine runs reviews after worker success" | NO in-worker (by design); post-.DONE engine review observable at land time |
 | 2 | type=plan after step-2 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
+| 3 | type=plan after step-3 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
 
 ## Step 1 — backend research + package admission pre-approach consult
 
@@ -68,3 +69,49 @@ Presented: candidate matrix above + rejections + spike design (one device/contex
 8. Device fallback = invalid-device fallback (fabricated/stale DeviceInfo; `alcOpenDevice("bogus")` → null → default path), recorded as invalid-device fallback, never "unplug". WSLg enumeration evidence from the backend itself.
 
 **Truncation completion (declared, faithful to verdict shape):** the response cut mid-item-8 ("enumerating the PulseServ…"); the item-8 completion above is the obvious remainder. Q3 (one device/context vs per-channel) received no visible answer before truncation → worker proceeds with the declared ONE playback device/context + per-channel players/mixer shape: it matches the WPF OS-mixing behavior (N WaveOutEvents on one default endpoint), exercises the row's explicit-channel-ownership requirement with the fewest moving parts, and per-device-per-channel multiplies handles without any WPF behavioral requirement. Owner ratifies the final topology with the spike evidence.
+
+## Step 2 — spike host + Windows evidence
+
+### Host shape
+- `client/spikes/CcpSpike.Audio/` — net10.0 + net10.0-windows multi-TFM console, NOT in `client/CcpClient.sln` (verified), inherits `client/Directory.Build.props` only. Two TFMs because NAudio 2.2.1 ships `WaveOutEvent`/MMDevice in windows-TFM assemblies ONLY (verified by reflection on the restored nupkg — `net6.0/NAudio.dll` has no `WaveOut`/`WaveOutEvent`); the net10.0 build compiles an honest not-supported NAudio stub.
+- Packages exactly as admitted: SoundFlow 1.4.1, Silk.NET.OpenAL 2.23.0 + Soft.Native 1.23.1, NAudio 2.2.1 + NAudio.Wasapi 2.2.1. Clean restore, 0W/0E build both TFMs.
+- Synthetic tones generated at runtime (`ToneGen`): sample-exact 48 kHz PCM16 mono — voice 2500 ms, SFX 300 ms, whisper 1500 ms (frames asserted divisible; expected durations exact per consult item 7). No WPF assets, no copyrighted fixtures.
+- Identical probe suite per backend (`Program.RunBackend`): devices enumerate/select/invalid-fallback → volume → voice completion → interruption → pause/resume → SFX overlap ×8 → whisper busy → teardown ×10 cycles. JSONL per observation; shared monotonic clock.
+
+### Worker bugs found+fixed during the runs (worker-owned, recorded so the evidence is never misread)
+- **Monotonic-clock bug (the big one):** `NowMs()` initially computed `Stopwatch.GetElapsedTime(GetTimestamp())` ≈ 0 always → every `WaitFor` with a null probe became an infinite loop (300s hang) and early end-signal stamps were garbage ("completion at 4.5ms"). Fixed to `GetTimestamp()*1000/Frequency`. The 4.5ms completion value in the first full run was THIS bug, not a backend behavior.
+- **SFX measurement artifact (F4):** poll-after-all-triggers + 120ms clip → clips finished before first poll read 0 offsets (OpenAL "4/8 started" false negative) and a spurious ~30ms/index latency ladder on ALL backends. Fixed: interleaved polling in the spacing gaps + 300ms clip → ladder collapsed to tight distributions (soundflow 13.7-15.9ms, openal 15.0-28.9ms, naudio 0.5-12.8ms).
+- Volatile-field compile iterations (double?/long can't be volatile → Volatile.Read/Write on plain long ticks); NAudio bogus-id FormatException (harness boundary must not throw — maps to out-of-range device number probe).
+- `--diag` isolation mode timed SoundFlow Stop/Remove/Dispose individually (all instant — the hang was the clock bug, NOT a SoundFlow blocking Stop; that hypothesis was FALSIFIED before being recorded as a backend fact).
+
+### Backend findings (product-relevant, preserved in the deliverable)
+- **F1 SoundFlow wild-Id AV crash** (0xC0000005, 2× observed; native stack `SoundFlow.Backends.MiniAudio.Native.DeviceInit` ← `MiniAudioEngine.InitializePlaybackDevice` ← `SoundFlowHarness.TryInit`): unvalidated DeviceInfo.Id is process-fatal; ids are process-lifetime POINTERS (differ across runs) → validate against enumeration, match by NAME (WPF FriendlyName parity). Fallback moved to the validation layer and proven there.
+- **F2 NAudio fires PlaybackStopped on explicit Stop()** (raw +1) — interrupt≠completion needs identity/generation filtering; SoundFlow/OpenAL fired ZERO events on stop. Harness implements player-identity filtering (raw count + filtered signal both recorded per probe).
+- **F3 Silk 2.23 enumeration limit**: no AllDevicesSpecifier enum; string marshaler returns first multi-string entry only (2 entries vs 13/14 real). Recorded, not patched.
+- **F5 SoundFlow maintainer hiatus** (verbatim README line) in the matrix.
+- Windows device environment: 13 real endpoints (BEACN stack); NAudio wave-caps names truncated at 31 chars ("Mic Relay (Do Not Use) (BEACN S") — the WPF prefix-matching pain, parity evidence.
+- Windows evidence (final corrected run, `evidence/run-windows.jsonl`): 36/36 observations green — values in `client/docs/audio-backend-spike.md` §3.
+
+## Step 3 — WSLg/PulseAudio gate + packaging evidence
+
+- Native-dir copy `~/ccp-sp017` (rsync, never /mnt/e — SP-005 pattern). Build `-f net10.0` 0W/0E; full probe run exit 0 (`evidence/run-wslg.jsonl`, 26 observations).
+- **REAL WSLg evidence (claimed):** SoundFlow enumerates "RDP Sink" (backend evidence — no pactl on the image); device init/select/fallback OK; voice completion 2506.3ms in-window (native event); whisper completion 1505.8ms; teardown Δ0/Δ0; OpenAL same shape (completion 2529.5ms via named poll; fallback via alcOpenDevice null → default). NAudio: honest not-supported, no native calls.
+- **NAMED LIMIT (not claimed):** all latency/overlap-timing numbers on WSLg (values exist in the log as session facts; jitter domain per packet framing (a)).
+- **Contract pollution guard on WSL2:** `dotnet build CcpClient.sln` 0W/0E; `CcpClient.Tests` 213/213; `CcpClient.HeadlessTests` 22/22.
+- **Packaging (SP-010 strategy, `PublishSingleFile=true`, SDK-default native layout):**
+  - linux-x64 (`~/ccp-sp017/pub-linux`): apphost + `libminiaudio.so` + `libopenal.so` sidecars. `ldd libminiaudio.so` = linux-vdso/libm/libc only (libpulse DLOPENED at runtime — proven by RDP Sink enumeration succeeding from the published artifact); `ldd libopenal.so` = libstdc++/libm/libgcc_s/libc. Published binary ran devices probes for both backends, exit 0.
+  - win-x64 (`scratch/pub-win`): apphost + `miniaudio.dll` + `soft_oal.dll` sidecars; published binary ran both backends, exit 0. NAudio: no natives (inbox winmm).
+  - Session fact: the SP-010 natives-beside-exe layout absorbs both candidates' natives with zero packaging work.
+
+## Step 4 — evidence doc, selection record, consults
+
+- Deliverable `client/docs/audio-backend-spike.md` written: named observations A1-A10 per backend, findings F1-F5, WPF contract table, explicit channel-ownership SELECTION (SoundFlow primary; voice/whisper/SFX owners with generation-token discipline and drop-on-overflow SFX cap; ONE generic player rejected) recorded PENDING-OWNER; 8 named limits.
+- Board row updated → WIP (never DONE).
+- **Pre-completion solo consult (Fable 5):** **VERDICT: APPROVE with five corrections** — "the evidence set is sound and unusually well-instrumented (the raw-vs-filtered end-signal design and the preserved F4 artifact run are exactly right), but four claims need sharpening and one real gap needs either a cheap probe or a named limit before .DONE." All five applied:
+  1. WSLg completion "in-window" was quietly a timing claim → reworded A1 + note: event+full-duration position = completion proven; window fit = session fact, not a timing guarantee.
+  2. OpenAL "zero end events after stop" is by-construction (stop deletes the source), NOT a backend observation like SoundFlow's zero — asymmetry made explicit in A2 and the board row.
+  3. SoundFlow fallback TOCTOU named: fabricated-id PROVEN; genuinely-stale-device (removed between enumeration and init) untested → named limit 9.
+  4. Volume mechanism-only row: honest as stated, no change.
+  5. **Material gap closed empirically (consult's preferred path): combined-coexistence probe ADDED** (voice+whisper+3 SFX concurrent — the arbitration row's exact interaction). Windows: all three backends green (3/3 SFX, busy transitions correct, whisper+voice ends in-window, exactly 1 uncontaminated voice raw end). WSLg: soundflow+openal green (window fits = session facts). Added as deliverable row A11.
+  - F1 discipline sharpened per Q3: **re-enumerate immediately before init, match by NAME, pass the FRESH DeviceInfo struct, persist NAME never Id** (implemented in `SoundFlowHarness.TryInit` — `UpdateAudioDevicesInfo()` at init time); residual TOCTOU stays open by design until the SP-006-deferred re-probe row. NO re-probe machinery added to the spike (consult: don't expand scope).
+  - Mid-playback device loss/switch untested → named limit 10 (`SwitchDevice` exists on the SoundFlow API surface, untested — feeds the quips row's "stale-device fallback" acceptance).
