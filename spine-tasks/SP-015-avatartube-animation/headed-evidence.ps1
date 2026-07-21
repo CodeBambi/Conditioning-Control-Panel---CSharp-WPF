@@ -27,6 +27,8 @@ public class AvNative {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern bool SendMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out RECT r);
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
     public const uint LEFTDOWN = 0x0002, LEFTUP = 0x0004;
     public const uint SWP_NOMOVE = 0x0002, SWP_NOSIZE = 0x0001, SWP_SHOWWINDOW = 0x0040;
     public const int GWL_EXSTYLE = -20; public const int WS_EX_TOPMOST = 0x0008;
@@ -112,6 +114,13 @@ function Click-Button([string]$name) {
         }
     }
     Fail "button '$name' not found on tube"
+}
+# GetWindowRect helper: UIA BoundingRectangle diverges from the real frame on this box
+# (measured (34,57)px off) — caption math must use the Win32 rect.
+function Get-WinRect([IntPtr]$hwnd) {
+    $rc = New-Object AvNative+RECT
+    [AvNative]::GetWindowRect($hwnd, [ref]$rc) | Out-Null
+    return $rc
 }
 function Raise-Tube {
     $tube = Get-Tube
@@ -385,18 +394,27 @@ Start-Sleep -Milliseconds 400
 
 # ---- G10: owner move — the tube follows the owner exactly ----
 Write-Output '-- G10 owner move'
-$tubeRect0 = (Get-Tube).Current.BoundingRectangle
-$dashRect0 = (Get-Dashboard).Current.BoundingRectangle
-$dragX = [int]($dashRect0.X + $dashRect0.Width / 2); $dragY = [int]($dashRect0.Y + 10)
-[AvNative]::SetCursorPos($dragX, $dragY) | Out-Null; Start-Sleep -Milliseconds 150
-[AvNative]::mouse_event([AvNative]::LEFTDOWN, 0, 0, 0, [IntPtr]::Zero)
-foreach ($step in 1..8) { [AvNative]::SetCursorPos($dragX + $step * 17, $dragY + $step * 11) | Out-Null; Start-Sleep -Milliseconds 40 }
-[AvNative]::mouse_event([AvNative]::LEFTUP, 0, 0, 0, [IntPtr]::Zero)
+# Pre-position the dashboard at (500,200) so the tube is UNCLAMPED (RepositionToOwner
+# clamps at X>=0; a near-left-edge owner pins the tube at 0 and follow-delta would fail
+# legitimately). The pre-position itself exercises PositionChanged-follow; the gate then
+# measures the REAL caption drag's deltas. Caption point: GetWindowRect top +12 — above
+# the tube's top (owner.Y+20) so the clamped/overlapping tube can never eat the drag.
+[AvNative]::SetWindowPos($script:dashHwnd, [IntPtr]::Zero, 500, 200, 0, 0,
+    [AvNative]::SWP_NOSIZE -bor [AvNative]::SWP_NOACTIVATE) | Out-Null
 Start-Sleep -Milliseconds 700
-$tubeRect1 = (Get-Tube).Current.BoundingRectangle
-$dashRect1 = (Get-Dashboard).Current.BoundingRectangle
-$tubeDx = $tubeRect1.X - $tubeRect0.X; $tubeDy = $tubeRect1.Y - $tubeRect0.Y
-$dashDx = $dashRect1.X - $dashRect0.X; $dashDy = $dashRect1.Y - $dashRect0.Y
+$rc0 = Get-WinRect $script:dashHwnd
+$rt0 = Get-WinRect $script:tubeHwnd
+$dragX = $rc0.R - 200; $dragY = $rc0.T + 12
+[AvNative]::SetCursorPos($dragX, $dragY) | Out-Null; Start-Sleep -Milliseconds 300
+[AvNative]::mouse_event([AvNative]::LEFTDOWN, 0, 0, 0, [IntPtr]::Zero)
+Start-Sleep -Milliseconds 150
+foreach ($step in 1..8) { [AvNative]::SetCursorPos($dragX + $step * 17, $dragY + $step * 11) | Out-Null; Start-Sleep -Milliseconds 60 }
+[AvNative]::mouse_event([AvNative]::LEFTUP, 0, 0, 0, [IntPtr]::Zero)
+Start-Sleep -Milliseconds 800
+$rc1 = Get-WinRect $script:dashHwnd
+$rt1 = Get-WinRect $script:tubeHwnd
+$dashDx = $rc1.L - $rc0.L; $dashDy = $rc1.T - $rc0.T
+$tubeDx = $rt1.L - $rt0.L; $tubeDy = $rt1.T - $rt0.T
 Gate (($dashDx -ne 0 -or $dashDy -ne 0) -and ([Math]::Abs($tubeDx - $dashDx) -le 4) -and ([Math]::Abs($tubeDy - $dashDy) -le 4)) 'g10/tube-follows-owner' "dash ($dashDx,$dashDy) tube ($tubeDx,$tubeDy)"
 
 # ---- G11: owner minimize → pause+hide; restore → resume+show ----
