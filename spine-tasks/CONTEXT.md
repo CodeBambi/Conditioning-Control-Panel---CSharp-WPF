@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** Active
-**Next Task ID:** SP-020
+**Next Task ID:** SP-021
 
 ---
 
@@ -27,6 +27,7 @@ Phase 3 COMPLETE 2026-07-21 (all three rows landed, all WIP pending owner ratifi
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
 | SP-019-ai-provider-spike | Row: spike cancellable AI providers and strict commands | **Done 2026-07-21** (landed `fd375b62` ff; batch `20260721T130248` — clean single-worker run (~50 min), T-5 9th → playbook; fuzz 62/62 zero-execution proven both platforms vs SP-016's real validator; provider matrix 39 checks (cancellation/timeout/429/500/refusal/malformed + remote-host 0-send rejection); independent 29-secret grep ZERO hits; Ollama + cloud named limits; 213/213 + 22/22 zero-drift; engine reviews APPROVE+PASS; row stays WIP pending owner ratification) | SP-018 |
+| SP-020-spine-patch-mechanism | Row: T-1 durable pi-spine local-patch mechanism (checked-in anchor-based manifest + idempotent apply + verify in `.spine/patches/`; empirical inventory incl. windowsHide; scratch-cycle evidence OUTSIDE repo; real `.pi/npm` reinstall = post-land orchestrator gate — owner decision 2026-07-21: author now) | Authored 2026-07-21 | SP-019 |
 
 ### Phase 3 — AI contract, audio backend spike, online-video handoff spike (COMPLETE 2026-07-21)
 
