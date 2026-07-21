@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** CLOSED-OUT — no claimable board work remains (see below)
-**Next Task ID:** SP-024
+**Next Task ID:** SP-025
 
 ---
 
@@ -28,6 +28,7 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 |------|---------|--------|------|
 | SP-022-dtrh-admit | Row: admit DTRH browser and origin design (design-record: package pin 12.0.1 + Linux native deps from SP-011 evidence, minimal transport-only diff spec, loopback security/range/MIME/CORS contract approved-by-decree, NativeWebDialog Linux path, host slice cut b1…b5) | **Done 2026-07-21** (landed `451ac55e` ff; batch `20260721T174051` — clean single-worker run (~18 min), T-5 10th ON 2.10.0 (auto-clean doesn't cover .reviews/) → playbook; pin re-confirmed live both platforms; transport = minimal diff with Linux long-poll inbox (seq-retained + per-session token); 5 consult corrections applied as spec; slice cut b1…b5 approved; named risk → SP-023 first gate (invokeCSharpAction unproven on NativeWebDialog); 213/213 + 22/22 zero-drift; engine reviews APPROVE+PASS; admit row stays WIP pending owner async-veto) | SP-020 |
 | SP-023-dtrh-host-b1 | Row: implement web-only DTRH host — slice b1 (host shell + loopback origins + transport diff + boot matrix) | **Done 2026-07-21** (landed `31e31d2d`; batch `20260721T181508` — clean single-worker run (~100 min), T-5 11th → playbook; FIRST GATE PROVEN (invokeCSharpAction on NativeWebDialog, WSLg transcript); host shell Windows-embedded/Linux-dialog with probed typed states; §4 loopback + §3.3 inbox (long-poll, seq-retained, per-session token); boot matrix GREEN BOTH platforms; 245/245 + 22/22 both platforms; payload = first copied manifest consumer (1536+2 entries); worker FR-WORK-06 scope expansion endorsed (norm exemplar); 3rd engine-debris sweep removed pre-integrate + .gitignore hygiene; engine reviews APPROVE+PASS; row stays WIP incl. published-artifact payload location undecided) | SP-022 |
+| SP-024-dtrh-host-b2 | Row: implement web-only DTRH host — slice b2 (three local save slots + save picker/quick start + protocol v1 full vocabulary; slots on SP-005 machinery; DISPLAY3 convention first headed packet since the owner directive) | Authored 2026-07-21 | SP-023 |
 
 ### Phase 4 — AI provider spike, optional T-1 tooling tail (COMPLETE 2026-07-21; RUN CLOSED OUT)
 
