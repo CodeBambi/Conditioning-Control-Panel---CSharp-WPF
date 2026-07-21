@@ -1,0 +1,20 @@
+{
+  "nextId": 2,
+  "loops": [
+    {
+      "id": "1",
+      "prompt": "Check the SP-015 headed evidence matrix output: report PASS/FAIL per gate (g1-g14), any FAIL detail, and the evidence file counts in spine-tasks/SP-015-avatartube-animation/evidence/",
+      "trigger": {
+        "type": "event",
+        "source": "monitor:done",
+        "filter": "{\"monitorId\":\"1\"}"
+      },
+      "status": "active",
+      "recurring": false,
+      "createdAt": 1784592431816,
+      "updatedAt": 1784592431816,
+      "expiresAt": 1785197231816,
+      "fireCount": 0
+    }
+  ]
+}
