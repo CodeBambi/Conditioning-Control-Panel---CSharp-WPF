@@ -52,24 +52,40 @@ public static class AvatarEvidence
         {
             var decodedFull = AvatarStripCodec.TryDecodeFullWindow(
                 bgra, width, height, out var packF, out var clipF, out var frameF, out var stripX, out var stripY, out var failureF);
-            double contentF = 0.0;
-            var centroidF = -1.0;
+            double contentF;
+            double centroidF;
             if (decodedFull)
             {
                 // The strip sits at the bottom-left of its 96x128 frame cell: the cell spans
                 // (stripX, stripY + stripHeight - cellHeight). Measure content over the CELL,
                 // not the window — the window's chrome/text would swamp the no-blank signal.
+                // The centroid is reported WINDOW-RELATIVE (cellTop + cell-centroid): the
+                // located cell rides the float transform, so a cell-relative centroid is
+                // constant and the float-liveness signal would read zero (WSLg Step-5 finding).
                 var cellTop = stripY + AvatarStripCodec.StripHeight - SyntheticAvatarPacks.CellHeight;
                 if (cellTop >= 0 && stripX + SyntheticAvatarPacks.CellWidth <= width)
                 {
                     var cell = ExtractRegion(bgra, width, stripX, cellTop, SyntheticAvatarPacks.CellWidth, SyntheticAvatarPacks.CellHeight);
-                    (contentF, centroidF) = AvatarStripCodec.ContentMeasure(cell, SyntheticAvatarPacks.CellWidth, SyntheticAvatarPacks.CellHeight, ContentBgR, ContentBgG, ContentBgB, tolerance: 16);
+                    double cellCy;
+                    (contentF, cellCy) = AvatarStripCodec.ContentMeasure(cell, SyntheticAvatarPacks.CellWidth, SyntheticAvatarPacks.CellHeight, ContentBgR, ContentBgG, ContentBgB, tolerance: 16);
+                    centroidF = cellCy < 0 ? -1.0 : cellTop + cellCy;
                 }
                 else
                 {
                     decodedFull = false;
+                    contentF = 0.0;
+                    centroidF = -1.0;
                     failureF = $"cell-outside-capture: strip at {stripX},{stripY} implies cell top {cellTop}";
                 }
+            }
+            else
+            {
+                // Decode failure mid-crossfade is NOT blank (consult verdict #8): a
+                // marker-independent content signal over the whole window — saturated bright
+                // pixels. The synthetic art is saturated cyan/magenta/amber; text, the dark
+                // background, and a truly unpainted (black) window never saturate, so this
+                // separates a blend from a genuine blank without any layout constants.
+                (contentF, centroidF) = SaturatedContentMeasure(bgra, width, height);
             }
 
             output.WriteLine(JsonSerializer.Serialize(new SampleLine(0, decodedFull, decodedFull ? packF : -1, decodedFull ? clipF : -1, decodedFull ? frameF : -1, contentF, centroidF, failureF)));
@@ -94,6 +110,36 @@ public static class AvatarEvidence
         }
 
         return region;
+    }
+
+    /// <summary>
+    /// Fraction + Y centroid of saturated bright pixels (channel spread > 60, max channel > 60).
+    /// The synthetic avatar art is fully saturated; neutral text/background/black never is.
+    /// </summary>
+    private static (double Fraction, double CentroidY) SaturatedContentMeasure(byte[] bgra, int width, int height)
+    {
+        var matched = 0L;
+        var ySum = 0L;
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var offset = (y * width + x) * 4;
+                int r = bgra[offset + 2];
+                int g = bgra[offset + 1];
+                int b = bgra[offset + 0];
+                var max = Math.Max(r, Math.Max(g, b));
+                var min = Math.Min(r, Math.Min(g, b));
+                if (max > 60 && max - min > 60)
+                {
+                    matched++;
+                    ySum += y;
+                }
+            }
+        }
+
+        var total = (long)width * height;
+        return (total == 0 ? 0.0 : (double)matched / total, matched == 0 ? -1.0 : (double)ySum / matched);
     }
 
     /// <summary>Reads a text file another process may hold open for writing.</summary>

@@ -226,6 +226,54 @@ public sealed class AvatarPackTests
     }
 
     [Fact]
+    public void StripDecode_FullWindowMode_DecodeFailure_ReportsSaturatedContent_NotBlank()
+    {
+        // Mid-crossfade the strip blends and decode fails — that is NOT blank (consult
+        // verdict #8). The failure path reports saturated-bright content over the window:
+        // a marker-less window WITH saturated art reads live; a truly black window reads blank.
+        const int winW = 200;
+        const int winH = 160;
+        var live = new byte[winW * winH * 4];
+        for (var y = 40; y < 120; y++)
+        {
+            for (var x = 20; x < 100; x++)
+            {
+                var off = (y * winW + x) * 4;
+                live[off + 0] = 255; // saturated cyan block (no marker anywhere)
+                live[off + 1] = 255;
+                live[off + 2] = 0;
+                live[off + 3] = 255;
+            }
+        }
+
+        var livePath = Path.Combine(Path.GetTempPath(), $"sp015-scanlive-{Guid.NewGuid():N}.bmp");
+        var blackPath = Path.Combine(Path.GetTempPath(), $"sp015-scanblack-{Guid.NewGuid():N}.bmp");
+        try
+        {
+            File.WriteAllBytes(livePath, BmpCodec.Encode32(winW, winH, live));
+            File.WriteAllBytes(blackPath, BmpCodec.Encode32(winW, winH, new byte[winW * winH * 4]));
+
+            var liveWriter = new StringWriter();
+            Assert.Equal(2, AvatarEvidence.StripDecode(livePath, liveWriter, fullWindow: true)); // decode fails loudly
+            Assert.Contains("\"Decoded\":false", liveWriter.ToString());
+            var liveJson = System.Text.Json.JsonDocument.Parse(liveWriter.ToString());
+            Assert.True(liveJson.RootElement.GetProperty("Content").GetDouble() > AvatarSequenceEvaluator.DefaultBlankFractionThreshold,
+                "saturated art without a marker must not read blank");
+
+            var blackWriter = new StringWriter();
+            Assert.Equal(2, AvatarEvidence.StripDecode(blackPath, blackWriter, fullWindow: true));
+            var blackJson = System.Text.Json.JsonDocument.Parse(blackWriter.ToString());
+            Assert.True(blackJson.RootElement.GetProperty("Content").GetDouble() < AvatarSequenceEvaluator.DefaultBlankFractionThreshold,
+                "a truly black window must read blank");
+        }
+        finally
+        {
+            File.Delete(livePath);
+            File.Delete(blackPath);
+        }
+    }
+
+    [Fact]
     public void Definitions_AreNonUniform_AndCommittedJsonMatchesInCodeSource()
     {
         foreach (var def in SyntheticAvatarPacks.All)
