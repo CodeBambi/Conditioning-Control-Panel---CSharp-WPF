@@ -124,7 +124,15 @@
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260721T204234.md` |
 | 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260721T205239.md` |
 | 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260721T210045.md` |
-| 4 | plan | (pending) | |
+| 4 | plan | SKIPPED BY DESIGN (same) | `.reviews/4-20260721T222632.md` |
+
+---
+
+## Step 5 — verification (final tree, post consult fixes)
+
+- **Windows:** `dotnet build client/CcpClient.sln -c Debug -t:Rebuild` **0W/0E** (warnings measured on Rebuild per the xUnit1051 lesson); CcpClient.Tests **292/292**; CcpClient.HeadlessTests **27/27**.
+- **WSL2 (`~/ccp-sp024`, re-synced final tree):** sln **0W/0E**; **292/292 + 27/27**.
+- `git diff --check` clean; `git status --short` = File Scope paths only (record.md tail).
 
 ---
 

@@ -1,6 +1,6 @@
 # STATUS: SP-024 — DTRH host slice b2: save slots, picker/quick start, protocol v1
 
-**Current Step:** Step 5 — testing & verification
+**Current Step:** done — all steps complete
 **Last Updated:** 2026-07-21 (Step 1 in progress)
 
 ### Step 1: Archaeology + design + pre-approach consult
@@ -36,8 +36,8 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green (0W/0E incl. `-t:Rebuild`; both test projects)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` = File Scope only
+- [x] Contract testCommand green (0W/0E incl. `-t:Rebuild`; both test projects)
+- [x] `git diff --check` clean
+- [x] `git status --short` = File Scope only
