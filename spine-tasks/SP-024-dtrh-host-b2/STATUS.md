@@ -1,6 +1,6 @@
 # STATUS: SP-024 — DTRH host slice b2: save slots, picker/quick start, protocol v1
 
-**Current Step:** Step 3 — protocol v1 full vocabulary
+**Current Step:** Step 4 — picker + quick start + headed/WX evidence + board reconciliation
 **Last Updated:** 2026-07-21 (Step 1 in progress)
 
 ### Step 1: Archaeology + design + pre-approach consult
@@ -19,10 +19,10 @@
 - [x] Unit tests: lifecycle across reloads, corruption → quarantine + flagged defaults, ordering, empty-slot
 
 ### Step 3: Protocol v1 full vocabulary
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] `Features/Dtrh/DtrhProtocol.cs`: full v1 message set, per-direction dispatch, typed outcomes, unknown-message tolerance
-- [ ] Unit tests: every message round-trips (shapes match payload sources); tolerance proven (typed, logged, no crash, no silent drop)
+- [x] `Features/Dtrh/DtrhProtocol.cs`: full v1 message set, per-direction dispatch, typed outcomes, unknown-message tolerance
+- [x] Unit tests: every message round-trips (shapes match payload sources); tolerance proven (typed, logged, no crash, no silent drop)
 
 ### Step 4: Picker + quick start + headed/WX evidence + board reconciliation + pre-completion consult
 **Status:** ⬜ Not Started

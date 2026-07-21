@@ -192,20 +192,54 @@ public partial class DtrhHostWindow : Window
     private void OnWebMessage(object? sender, WebMessageReceivedEventArgs e)
     {
         var body = e.Body ?? "";
-        string type;
-        try { type = JsonDocument.Parse(body).RootElement.GetProperty("type").GetString() ?? "?"; }
-        catch { type = "(unparseable)"; }
-
-        switch (type)
+        // Protocol v1 dispatcher (SP-024 slice b2): every frame parses to a TYPED outcome —
+        // Handled, Deferred(slice), UnknownType, ForwardVersion, Malformed. Never silent,
+        // never crashes. Presence+shape logging only (§4.8 sensitive-logging ban).
+        switch (DtrhProtocol.ParsePageMessage(body))
         {
-            case "heartbeat":
+            case DtrhProtocol.DtrhPageParseResult.Parsed parsed:
+                DispatchPageMessage(parsed.Message);
+                return;
+            case DtrhProtocol.DtrhPageParseResult.UnknownType unknown:
+                // Transport-probe messages (boot-matrix harness, not product protocol)
+                // surface verbatim as both-directions evidence.
+                if (unknown.Type.StartsWith("probe-", StringComparison.Ordinal))
+                {
+                    _host.LogDiagnostic($"dtrh: {body}");
+                }
+                else
+                {
+                    _host.LogDiagnostic($"dtrh: unknown page message type '{unknown.Type}' — tolerated (typed, not dropped)");
+                }
+
+                return;
+            case DtrhProtocol.DtrhPageParseResult.ForwardVersion forward:
+                _host.LogDiagnostic(
+                    $"dtrh: page message '{forward.Type}' declares protocol {forward.Protocol} > {DtrhProtocol.Version} — tolerated (forward-version, not acted on)");
+                return;
+            case DtrhProtocol.DtrhPageParseResult.Malformed malformed:
+                _host.LogDiagnostic($"dtrh: malformed page message ({malformed.Reason}) — tolerated");
+                return;
+        }
+    }
+
+    private void DispatchPageMessage(DtrhProtocol.DtrhPageMessage message)
+    {
+        if (DtrhProtocol.Classify(message) is DtrhProtocol.DtrhDispatchClass.Deferred deferred)
+        {
+            _host.LogDiagnostic($"dtrh: '{message.GetType().Name}' deferred to slice {deferred.Slice} (typed, not dropped)");
+            return;
+        }
+
+        switch (message)
+        {
+            case DtrhProtocol.DtrhPageMessage.Heartbeat:
                 _heartbeats++;
                 if (_heartbeats % 15 == 1) _host.LogDiagnostic($"dtrh: heartbeat #{_heartbeats}");
                 return;
-            case "log":
-                var msg = JsonDocument.Parse(body).RootElement.GetProperty("msg").GetString();
-                _host.LogDiagnostic($"dtrh page log: {msg}");
-                if (msg?.Contains("engine live") == true)
+            case DtrhProtocol.DtrhPageMessage.Log log:
+                _host.LogDiagnostic($"dtrh page log: {log.Msg}");
+                if (log.Msg?.Contains("engine live") == true)
                 {
                     _engineLive = true;
                     _host.LogDiagnostic("dtrh: ENGINE LIVE");
@@ -213,26 +247,29 @@ public partial class DtrhHostWindow : Window
                 }
 
                 return;
-            case "ready":
+            case DtrhProtocol.DtrhPageMessage.Ready:
                 _host.LogDiagnostic("dtrh: ready received — flushing init+manifest");
                 SendBootMessages();
                 return;
-            case "exit":
+            case DtrhProtocol.DtrhPageMessage.Exit:
                 _host.LogDiagnostic("dtrh: exit received — closing");
                 Close();
                 return;
-            case "fullscreen-set":
-                var fsOn = JsonDocument.Parse(body).RootElement.TryGetProperty("on", out var f) && f.GetBoolean();
-                WindowState = fsOn ? WindowState.FullScreen : WindowState.Normal;
-                _host.LogDiagnostic($"dtrh: fullscreen-set on={fsOn} -> WindowState={WindowState}");
+            case DtrhProtocol.DtrhPageMessage.FullscreenSet fullscreenSet:
+                WindowState = fullscreenSet.On ? WindowState.FullScreen : WindowState.Normal;
+                _host.LogDiagnostic($"dtrh: fullscreen-set on={fullscreenSet.On} -> WindowState={WindowState}");
+                // WPF parity (DtrhHostService.cs:430): echo the resulting state so the
+                // page's dock button + Esc ladder stay in sync.
+                SendToPage(DtrhProtocol.BuildFullscreen(WindowState == WindowState.FullScreen));
                 return;
-            default:
-                // Transport-probe messages surface verbatim (both-directions evidence).
-                if (type.StartsWith("probe-", StringComparison.Ordinal))
-                {
-                    _host.LogDiagnostic($"dtrh: {body}");
-                }
-
+            case DtrhProtocol.DtrhPageMessage.BootError bootError:
+                // Typed non-silent outcome (Step 1 consult): the WPF reaction (classic-game
+                // fallback) is BANNED in greenfield (admission §5); the page already shows
+                // its own honest no-WebGL surface (boot.js:82-101). Host closes with a
+                // diagnostic — never a silent black window.
+                _host.LogDiagnostic($"dtrh: boot-error from page ({(bootError.Msg is { Length: > 0 } m ? m : "no detail")}) — closing honestly (no classic fallback)");
+                SetStatus("dtrh: page reported boot-error — closed honestly");
+                Close();
                 return;
         }
     }
@@ -262,38 +299,29 @@ public partial class DtrhHostWindow : Window
                     TaskScheduler.Default);
         }
 
-        SendToPage(new
-        {
-            type = "init",
-            protocol = 1,
-            settings = new { masterVolume = 80 },
-            modId = "builtin-sissyhypno",
-            modContent = (object?)null,
-            runSetup = new
-            {
-                difficulty = "Easy",
-                durationSec = 180,
-                waveCount = 5,
-                motion = "Mixed",
-                enabledVariants = (object?)null,
-                effectIntensity = 0.85,
-                colorFlashes = true,
-                boonDraftEnabled = true,
-                allowCurses = true,
-                dartersEnabled = true,
-                key1 = "Q",
-                key2 = "E",
-            },
-            m2Test = false,
-        });
-        SendToPage(new
-        {
-            type = "manifest",
-            images = new[] { new { name = "bubble.png", url = $"{_dtrh.Server.MediaOrigin}/media/bubbles/bubble.png" } },
-            videos = new[] { new { name = "spiral.webm", url = $"{_dtrh.Server.MediaOrigin}/media/bubbles/spiral.webm" } },
-            skipped = 0,
-            truncated = false,
-        });
+        SendToPage(DtrhProtocol.BuildInit(
+            masterVolume: 80,
+            modId: "builtin-sissyhypno",
+            modContent: null,
+            runSetup: new DtrhProtocol.DtrhRunSetup(
+                Difficulty: "Easy",
+                DurationSec: 180,
+                WaveCount: 5,
+                Motion: "Mixed",
+                EnabledVariants: null,
+                EffectIntensity: 0.85,
+                ColorFlashes: true,
+                BoonDraftEnabled: true,
+                AllowCurses: true,
+                DartersEnabled: true,
+                Key1: "Q",
+                Key2: "E"),
+            m2Test: false));
+        SendToPage(DtrhProtocol.BuildManifest(
+            images: [new DtrhProtocol.DtrhManifestEntry("bubble.png", $"{_dtrh.Server.MediaOrigin}/media/bubbles/bubble.png")],
+            videos: [new DtrhProtocol.DtrhManifestEntry("spiral.webm", $"{_dtrh.Server.MediaOrigin}/media/bubbles/spiral.webm")],
+            skipped: 0,
+            truncated: false));
         SetStatus("dtrh: init+manifest sent");
     }
 
@@ -310,7 +338,7 @@ public partial class DtrhHostWindow : Window
             return;
         }
 
-        var json = JsonSerializer.Serialize(msg);
+        var json = DtrhProtocol.SerializeForPage(msg);
         if (Surface == "embedded")
         {
             _ = _web!.InvokeScript($"window.chrome.webview.dispatchEvent(new MessageEvent('message',{{data:{json}}}))")

@@ -122,3 +122,4 @@
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260721T204234.md` |
+| 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260721T205239.md` |
