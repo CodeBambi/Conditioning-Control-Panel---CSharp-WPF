@@ -65,4 +65,30 @@ Quarantined host `client/spikes/CcpSpike.AiProvider/` (console, net10.0, **NOT**
 3. **Loopback-only admission policy = honest shape** (minimal conservative policy compatible with the loopback lab; allow-list governance stays pending-owner). Rejection demonstrated on BOTH `RemoteHostOllama` and `ThirdPartyCloud` classes — a policy that rejects only one class could be an ollama special-case passing accidentally. Include a DNS-name-to-loopback near-miss (e.g. `localhost.` with trailing dot, or a name that would resolve to 127.0.0.1): `Uri.IsLoopback` is literal-only, classification is config-pure, rejection proves no DNS probe.
 4. **Cancellation/generation proof hardening:** (a) instrument a single client send seam (send-attempt counter) — policy-rejected endpoints assert counter == 0 (proof no socket, not just fast return); also use an unroutable-but-non-loopback IP (192.0.2.1 TEST-NET-1) and a nonexistent DNS name: policy rejection must be instant + code = policy (never connect-refused/DNS-error); (b) hang-stream row asserts partial-body-bytes > 0 before cancel (true mid-stream, not header-time); (c) **dual-transport stale proof:** cancelled transport dies by token (no late result exists), so ALSO drive a detached/lab-delayed completion path that ignores the token and returns after generation advance — assert exactly one discard at the application seam (SP-004's actual mechanism is at application time); (d) assert cancelled rows leave no in-flight work (pending-count zero, no unobserved task exceptions).
 
+**Step 1 engine-review presence (T-2):** `spine_review_step(step=1, type=plan)` → `skipped=true` (nested_spawn_blocked by design, SP-195/SP-278), `spawnFailed=false`, `reviewLevel=2` echoed. Engine runs plan/code review after .DONE.
+
 Design updated accordingly; Step 2 implements.
+
+---
+
+## Step 2 — loopback AI lab + redaction/audit core
+
+`client/spikes/CcpSpike.AiProvider/` (quarantined, NOT in `client/CcpClient.sln`; ProjectReference to `CcpClient.Desktop` only):
+- `AiLab.cs` — HttpListener 127.0.0.1 ephemeral, POST `/v1/chat/completions` only; in-proc failure-injection mode queue (Ok/Timeout/Rate429/Error500/Refusal/Malformed/Truncated/HangStream); per-request lab-side records (auth presence+len, body byte count, client-gone detection — the falsifiable server side).
+- `SpikeAiClient.cs` — cancellable client: loopback-only admission policy (SendAttempts counter proves zero sockets on rejection), linked-CTS per-request timeout disambiguated from external cancellation (`OperationCanceledException when ct.IsCancellationRequested` vs linked-fired-only), exactly-one bounded retry on 429/5xx with clamped Retry-After, stream reads with partial-byte counting, SP-004 application seam (`ApplyResult` — stale generations discarded with explicit STALE-DISCARD record), detached completion path for the dual-transport stale proof, content-free `AiDiagnosticRecord` per operation; envelope validation via SP-016's REAL `AiEnvelopeValidator`.
+- `Redact.cs`/`SpikeLog.cs`/`Program.cs` — SP-018 pattern; `--audit-logs DIR`.
+- `SelfTest.cs` — Step-2 smoke: Ok round-trip (typed Completed + canary pair), policy rejection (ThirdPartyCloud 192.0.2.1, 0 send attempts, 0ms), bounded timeout (812ms for an 800ms bound, no hang). ALL PASS on Windows; `--audit-logs` GREEN.
+
+**Step 2 engine-review presence (T-2):** `spine_review_step(step=2, type=plan)` → `skipped=true` (nested_spawn_blocked by design), `spawnFailed=false`, `reviewLevel=2` echoed.
+
+---
+
+## Step 3 — strict-envelope fuzz evidence (zero-execution)
+
+`Fuzz.cs`: **62 cases GREEN on Windows** (`--fuzz`), `--audit-logs` GREEN over the fuzz run. Every rejected class: `Plan == null` (type-enforced — the validator's internal `AiExecutionPlan` ctor), `Reply == null` (contract §9 rule 4), canary silent. Every accepted class: canary records EXACTLY the plan's commands in order.
+
+Coverage: valid falsifiable pairs (single, numeric boundaries 0/8/10/150/100 + 30 + 60 + 5 + 600, text limits 80/200, astral-char UTF-16 boundary 78+astral=80 valid / 79+astral=81 rejected, empty commands, getbacktome 1/600) · envelope-root rejections (array/string/number/bool/null, unknown field, reply/commands wrong type) · malformed JSON (truncated, garbage, trailing comma, comment, NaN token, depth-64 bomb > MaxDepth 16, balanced shallow array → root-not-object) · duplicate-key probe (below) · invalid schema (unknown command ×1 + enum near-misses casing/space, missing/wrong-type command/data fields, extra fields at command+data level, string/float/float-int/bool wrong types, int32-overflow-as-wrong-type observed) · mixed atomic rejection (valid siblings → `NotExecuted(EnvelopeRejected)`, reply suppressed, canary silent — contract §8 rule 3 re-verified) · out-of-range (amount ±, 81/201 text, 31 overlay, haptic 0.61/-0.1, delay 0/601, empty token) · media paths (traversal, UNC, extension, escapes-root, path-and-random, valid-under-root) · moderated (`Block` → `ModerationBlocked` verdict, envelope accepted, command NOT in plan, canary never sees it; mixed block+valid → valid sibling executes, moderated never; `SoftHit` pass-through recorded) · consent-gated (master off, per-effect off) · cap (4-of-3: 4th = `NotExecuted(CapExceeded)`, canary exactly 3). Vocabulary coverage asserted: all 7 verdict types + both fuzz-reachable NotExecuted reasons; `AiDiagnosticCodes.VerdictCode` closed mapping never returns "unknown".
+
+**Finding F1 (duplicate-key semantics, OBSERVED, honestly recorded):** `System.Text.Json` accepts duplicate object keys; the validator's `TryGetProperty` is last-wins while `EnumerateObject` sees every occurrence. A payload with `amount:9, amount:1` (first out-of-range, last in-range) is ACCEPTED with the last value; the reverse order rejects. Duplicate keys are NOT rejected per se — a validator behavior gap vs strict-schema intent, recorded for the owner/follow-up (no product-code change in this spike).
+
+**Step 3 engine-review presence (T-2):** recorded below after the review call.

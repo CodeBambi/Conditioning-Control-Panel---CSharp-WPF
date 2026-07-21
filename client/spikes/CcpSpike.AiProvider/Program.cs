@@ -43,7 +43,7 @@ public static class Program
         {
             var code = args.Length >= 1 && args[0] == "--selftest"
                 ? await SelfTest.RunAsync()
-                : await SelfTest.RunAsync();
+                : Fuzz.Run();
             SpikeLog.Line("main", $"spike done code={code}");
             return code;
         }
