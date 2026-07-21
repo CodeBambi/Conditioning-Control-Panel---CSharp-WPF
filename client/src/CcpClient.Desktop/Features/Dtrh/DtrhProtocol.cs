@@ -185,9 +185,15 @@ public static class DtrhProtocol
         DtrhPageMessage.Ready or DtrhPageMessage.Log or DtrhPageMessage.Heartbeat
             or DtrhPageMessage.Exit or DtrhPageMessage.FullscreenSet
             or DtrhPageMessage.BootError => DtrhDispatchClass.Handled.Instance,
-        // b3: native SFX/audio/video + freeze (voice duck rides the bark path).
+        // b3 (SP-025): native SFX/whisper/video + freeze + VN mix gate — REAL effects via
+        // DtrhNativeEffects, wired in the host window.
         DtrhPageMessage.VnSpeaking or DtrhPageMessage.Sfx or DtrhPageMessage.FirePayload
-            or DtrhPageMessage.FreezeState or DtrhPageMessage.Bark => new DtrhDispatchClass.Deferred("b3"),
+            or DtrhPageMessage.FreezeState => DtrhDispatchClass.Handled.Instance,
+        // Bark ARBITRATION (event → voiceline over CCP bark pools + cooldowns,
+        // DtrhHostService.cs:605-672 → BarkService) is a subsystem no slice owns; the
+        // quips/sound-arbitration board row owns it (SP-025 consult — b2's "b3 (voice)"
+        // mapping corrected: the voice CHANNEL landed in b3, arbitration did not).
+        DtrhPageMessage.Bark => new DtrhDispatchClass.Deferred("voice-arbitration (quips row)"),
         // b4: progression/payout + Loom + media stats.
         DtrhPageMessage.MetaCommand or DtrhPageMessage.RequestRun or DtrhPageMessage.RunStarted
             or DtrhPageMessage.RunEnded or DtrhPageMessage.AssetStats

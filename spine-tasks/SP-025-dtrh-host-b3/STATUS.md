@@ -1,6 +1,6 @@
 ## STATUS: SP-025 — DTRH host slice b3: native SFX/audio/video + freeze + rendered tint safety
-**Current Step:** Step 3 — protocol upgrade Deferred → Handled
-**Last Updated:** 2026-07-22 (Step 2 complete — 308/308 + 27/27, Rebuild 0W/0E)
+**Current Step:** Step 4 — headed/WX evidence + divergence executed + board + pre-completion consult
+**Last Updated:** 2026-07-22 (Step 3 complete — 313/313 + 29/29, Rebuild 0W/0E; File Scope amendment: Program.cs + App.axaml.cs --dtrh-fx-drive wiring, SP-023 norm)
 **Blockers:** none
 
 ### Step 1: archaeology + admission + pre-approach consult
@@ -16,9 +16,9 @@
 - [x] Unit tests (pool bounds, freeze idempotency/stale/unwedge, tint transitions, tolerance)
 
 ### Step 3: protocol upgrade Deferred → Handled
-- [ ] b3-owned messages wired to real effects
-- [ ] Run lifecycle freeze invariants (start/end/teardown)
-- [ ] Unit tests (dispatch, ordering, idempotency, Deferred remains for b4/b5)
+- [x] b3-owned messages wired to real effects
+- [x] Run lifecycle freeze invariants (start/end/teardown)
+- [x] Unit tests (dispatch, ordering, idempotency, Deferred remains for b4/b5)
 
 ### Step 4: headed/WX evidence + divergence executed + board + pre-completion consult
 - [ ] DISPLAY3 headed evidence (SFX events, freeze/tint pixels, real media playback, teardown)

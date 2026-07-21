@@ -1,0 +1,14 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpClient.Desktop.Features.Dtrh.DtrhVideoWindow"
+        Width="960" Height="540"
+        Background="Black"
+        Topmost="True"
+        WindowStartupLocation="CenterOwner"
+        Title="CCP — DTRH video">
+  <!-- SP-025 slice b3: the covering native video (WPF mandatory-video outcome,
+       EffectPayload.cs:139-159). b3 scope = native PLAYBACK + freeze interplay; true
+       fullscreen multi-monitor presentation is the unified-video board row (BLOCKED).
+       Black background = the letterbox surface behind the aspect-fit frame. -->
+  <Image Name="FrameImage" Stretch="Uniform" />
+</Window>

@@ -26,11 +26,13 @@ public class DtrhProtocolTests
         yield return ["{\"type\":\"fullscreen-set\",\"on\":true}", typeof(DtrhProtocol.DtrhPageMessage.FullscreenSet), null];
         yield return ["{\"type\":\"boot-error\",\"msg\":\"WebGL context creation failed\"}", typeof(DtrhProtocol.DtrhPageMessage.BootError), null];
         yield return ["{\"type\":\"pong\",\"t\":7}", typeof(DtrhProtocol.DtrhPageMessage.Pong), "b5"];
-        yield return ["{\"type\":\"vn-speaking\",\"on\":true}", typeof(DtrhProtocol.DtrhPageMessage.VnSpeaking), "b3"];
-        yield return ["{\"type\":\"sfx\",\"name\":\"wave_clear\",\"scale\":0.8}", typeof(DtrhProtocol.DtrhPageMessage.Sfx), "b3"];
-        yield return ["{\"type\":\"fire-payload\",\"kind\":\"video\",\"strength\":60,\"durationMult\":1.5}", typeof(DtrhProtocol.DtrhPageMessage.FirePayload), "b3"];
-        yield return ["{\"type\":\"freeze-state\",\"on\":true}", typeof(DtrhProtocol.DtrhPageMessage.FreezeState), "b3"];
-        yield return ["{\"type\":\"bark\",\"event\":\"wave-cleared\",\"wave\":3}", typeof(DtrhProtocol.DtrhPageMessage.Bark), "b3"];
+        yield return ["{\"type\":\"vn-speaking\",\"on\":true}", typeof(DtrhProtocol.DtrhPageMessage.VnSpeaking), null];
+        yield return ["{\"type\":\"sfx\",\"name\":\"wave_clear\",\"scale\":0.8}", typeof(DtrhProtocol.DtrhPageMessage.Sfx), null];
+        yield return ["{\"type\":\"fire-payload\",\"kind\":\"video\",\"strength\":60,\"durationMult\":1.5}", typeof(DtrhProtocol.DtrhPageMessage.FirePayload), null];
+        yield return ["{\"type\":\"freeze-state\",\"on\":true}", typeof(DtrhProtocol.DtrhPageMessage.FreezeState), null];
+        // SP-025: bark re-labeled (b2 said "b3") — arbitration is the quips/sound row's
+        // subsystem; the voice CHANNEL landed in b3 without it.
+        yield return ["{\"type\":\"bark\",\"event\":\"wave-cleared\",\"wave\":3}", typeof(DtrhProtocol.DtrhPageMessage.Bark), "voice-arbitration (quips row)"];
         yield return ["{\"type\":\"meta-command\",\"op\":\"add-gold\",\"amount\":50}", typeof(DtrhProtocol.DtrhPageMessage.MetaCommand), "b4"];
         yield return ["{\"type\":\"request-run\",\"setup\":{\"difficulty\":\"Hard\"}}", typeof(DtrhProtocol.DtrhPageMessage.RequestRun), "b4"];
         yield return ["{\"type\":\"run-started\",\"difficulty\":\"Gentle\",\"mode\":\"dtrh-web\"}", typeof(DtrhProtocol.DtrhPageMessage.RunStarted), "b4"];

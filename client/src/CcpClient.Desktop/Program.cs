@@ -136,12 +136,16 @@ public static class Program
         var dtrhAutoClose = int.TryParse(ArgValue(args, "--dtrh-auto-close"), out var closeSeconds)
             ? closeSeconds
             : 0;
+        // SP-025 slice b3: --dtrh-fx-drive "<steps>" — HARNESS-ONLY timed injection of raw
+        // page JSON through the real dispatch path (headed/WX native-effects evidence
+        // without gameplay; runs are b4-gated).
+        var dtrhFxDrive = ArgValue(args, "--dtrh-fx-drive");
 
         try
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
             return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace, avatarAnimate,
-                dtrhDemo, dtrhPage, dtrhAutoClose, dtrhQuick, dtrhPickerTimeout).StartWithClassicDesktopLifetime(args);
+                dtrhDemo, dtrhPage, dtrhAutoClose, dtrhQuick, dtrhPickerTimeout, dtrhFxDrive).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -209,9 +213,10 @@ public static class Program
         ApplicationHost host, bool popupDemo = false,
         bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
         bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
-        int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0) => AppBuilder
+        int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0,
+        string? dtrhFxDrive = null) => AppBuilder
         .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate,
-            dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds))
+            dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds, dtrhFxDrive))
         .UsePlatformDetect();
 
     private static string? ArgValue(string[] args, string flag)

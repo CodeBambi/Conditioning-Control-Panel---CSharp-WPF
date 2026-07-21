@@ -10,8 +10,19 @@
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260721T231721.md` |
+| 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260721T233648.md` |
+| 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260722T000000.md` |
 
 ---
+
+## Step 3 — protocol upgrade Deferred → Handled
+
+- **`DtrhProtocol.Classify`:** `VnSpeaking`/`Sfx`/`FirePayload`/`FreezeState` → `Handled`; **`Bark` re-labeled `Deferred("voice-arbitration (quips row)")`** (consult item 2 — arbitration is the quips/sound-arbitration row's subsystem; the voice CHANNEL landed in b3). b4/b5 deferrals unchanged.
+- **`DtrhFxRouter`** (new, UI-free for fake-driven tests): the four upgraded messages → real effects; `TryRunBoundaryHygiene` = the run-started/run-ended freeze/duck cleanup (WPF `:252`/`:259`/`:513` parity) riding the typed `Deferred(b4)` — consult item 4, invoked BEFORE the deferral log.
+- **Host window wiring (`DtrhHostWindow.axaml.cs`):** window-scoped effects lifetime (Opened → real backends + `NotifySessionStart` `:71` parity; Closing → `Teardown` `:896` unwedge → effects dispose → SoundFlow dispose (A8 Δ0/Δ0); libvlc release-at-exit skipped V3). Audio init failure → "audio disabled this session" (WPF device-missing parity). payload-state mirror: VideoStarted → `payload-state video on` + covering `DtrhVideoWindow`; VideoEnded → `payload-state video off` + window close + focus reclaim (`:764-775` parity). OnWebMessage refactored to `HandleWebMessageBody(string)` — the REAL parse+dispatch path the fx-drive feeds (consult item 7).
+- **`DtrhVideoWindow`** (new): the covering topmost black window presenting vmem frames (event-driven `FramePresented` → `Image.Source`, never a render timer). b3 scope = native PLAYBACK + freeze interplay; true fullscreen multi-monitor presentation = the BLOCKED unified-video board row (scope boundary recorded).
+- **File Scope amendment (SP-023/SP-024 norm, documented here + STATUS + record + board row; `fileScopeMustNotChange` untouched):** `Program.cs` + `App.axaml.cs` — `--dtrh-fx-drive "<steps>"` HARNESS-ONLY timed injection of raw page JSON (`sfx:name[:scale]@t; payload:video|audio@t; freeze:on|off@t; vn:on|off@t; run-started@t; run-ended@t`) for headed/WX evidence without gameplay (runs are b4-gated). `DtrhLaunchCoordinator` (in-scope) threads it.
+- **Tests:** `DtrhProtocolTests` classification expectations updated (4 upgrades + bark re-label); `DtrhFxRouterTests` (5 new): b3 Handled classification, bark/b4/b5 deferrals unchanged, every upgraded message dispatches to the recorded fake incl. VN-gate ordering, run-boundary hygiene + classification-stays-b4, non-b3 ignored. `DtrhVideoWindowHeadlessTests` (2 new, draw-level): presented frame lands on the Image (black/Uniform/topmost facts), late frame after close never throws. **313/313 unit + 29/29 headless green; sln Rebuild 0W/0E.**
 
 ## Step 2 — native effects core (SFX + freeze + tint mechanism)
 

@@ -21,12 +21,14 @@ public partial class App : Application
     private readonly int _dtrhAutoCloseSeconds;
     private readonly bool _dtrhQuick;
     private readonly int _dtrhPickerTimeoutSeconds;
+    private readonly string? _dtrhFxDrive;
     private StreamWriter? _avatarTraceWriter;
 
     public App(ApplicationHost host, bool popupDemo = false,
         bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
         bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
-        int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0)
+        int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0,
+        string? dtrhFxDrive = null)
     {
         _host = host;
         _popupDemo = popupDemo;
@@ -39,6 +41,7 @@ public partial class App : Application
         _dtrhAutoCloseSeconds = dtrhAutoCloseSeconds;
         _dtrhQuick = dtrhQuick;
         _dtrhPickerTimeoutSeconds = dtrhPickerTimeoutSeconds;
+        _dtrhFxDrive = dtrhFxDrive;
     }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -105,7 +108,7 @@ public partial class App : Application
             // evidence); WSLg has no input automation — SP-008 named limit.
             if (_dtrhDemo)
             {
-                var coordinator = new Features.Dtrh.DtrhLaunchCoordinator(_host, dashboard, _dtrhPage);
+                var coordinator = new Features.Dtrh.DtrhLaunchCoordinator(_host, dashboard, _dtrhPage, _dtrhFxDrive);
                 var flowEndedOnce = 0;
                 coordinator.FlowEnded += () =>
                 {

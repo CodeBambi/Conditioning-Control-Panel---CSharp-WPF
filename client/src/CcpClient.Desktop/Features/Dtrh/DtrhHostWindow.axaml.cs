@@ -22,12 +22,19 @@ public partial class DtrhHostWindow : Window
     private readonly ApplicationHost _host;
     private readonly DtrhParticipant _dtrh;
     private readonly string _page;
+    private readonly string? _fxDrive;
     private NativeWebView? _web;   // created programmatically, embedded path only (see axaml note)
     private NativeWebDialog? _dialog;
     private bool _sentBootMessages;
     private bool _engineLive;
     private int _heartbeats;
     private readonly CancellationTokenSource _closing = new();
+    // SP-025 slice b3: the native effects owner + its router/backends (window-scoped
+    // lifetime — constructed at Opened, torn down at Closing; DisposeAll :896 parity).
+    private DtrhNativeEffects? _fx;
+    private DtrhFxRouter? _router;
+    private SoundFlowDtrhAudio? _audio;
+    private DtrhVideoWindow? _videoWindow;
 
     /// <summary>Boot-matrix facts (headed harness + diagnostics). Content-free.</summary>
     public bool EngineLive => _engineLive;
@@ -36,11 +43,12 @@ public partial class DtrhHostWindow : Window
 
     public string Surface { get; private set; } = "pending";
 
-    public DtrhHostWindow(ApplicationHost host, string page = "index.html", int? slot = null)
+    public DtrhHostWindow(ApplicationHost host, string page = "index.html", int? slot = null, string? fxDrive = null)
     {
         _host = host;
         _dtrh = host.Participants.OfType<DtrhParticipant>().Single();
         _page = page;
+        _fxDrive = fxDrive;
         InitializeComponent();
         if (slot is not null)
         {
@@ -48,10 +56,16 @@ public partial class DtrhHostWindow : Window
             _host.LogDiagnostic($"dtrh: host window opening on slot {slot}");
         }
 
-        Opened += (_, _) => Begin();
+        Opened += (_, _) =>
+        {
+            InitNativeEffects();
+            Begin();
+            ScheduleFxDrive();
+        };
         Closing += (_, _) =>
         {
             _closing.Cancel();
+            TeardownNativeEffects();
             TryCloseDialog();
         };
     }
@@ -84,6 +98,153 @@ public partial class DtrhHostWindow : Window
             _host.LogDiagnostic("dtrh: no admitted web surface available — unsupported surface shown");
             _host.LogDiagnostic("dtrh: " + UnsupportedDetail.Text.Replace("\n", " | "));
         }
+    }
+
+    // ---------- b3 native effects (SP-025) ----------
+
+    /// <summary>The media roots the effects resolve against: the served payload assets
+    /// (overlay-first, §4 mirrored host-side). The overlay assets dir is product-owned
+    /// (harness staging for evidence lands there at RUN time — never in the read-only
+    /// payload, never a Z:\ reference).</summary>
+    private static string PayloadAssets => DtrhParticipant.MediaRoot;
+
+    private static string OverlayAssets => Path.Combine(DtrhParticipant.OverlayRoot, "assets");
+
+    private void InitNativeEffects()
+    {
+        _audio = new SoundFlowDtrhAudio(_host.LogDiagnostic);
+        if (!_audio.TryInit(null, out var audioError))
+        {
+            // WPF parity (AudioService device-missing outcome): no device = audio disabled
+            // for the session, never a crash. CreatePlayer guards log-and-drop downstream.
+            _host.LogDiagnostic($"dtrh: audio backend init failed ({audioError}) — audio disabled this session");
+        }
+
+        var video = new LibVlcDtrhVideo(_host.LogDiagnostic, action => Dispatcher.UIThread.Post(action));
+        _fx = new DtrhNativeEffects(_audio, video, new DtrhNativeEffectsOptions
+        {
+            SfxRoots = [Path.Combine(PayloadAssets, "bubbles", "sfx"), Path.Combine(OverlayAssets, "bubbles", "sfx")],
+            WhisperRoots = [Path.Combine(PayloadAssets, "bubbles", "voices"), Path.Combine(OverlayAssets, "bubbles", "voices")],
+            VideoRoots = [PayloadAssets, OverlayAssets],
+            MasterVolume = 80, // the init literal this window sends (b2); the settings seam is b4.
+        }, _host.LogDiagnostic);
+        _fx.VideoStarted += OnFxVideoStarted;
+        _fx.VideoEnded += OnFxVideoEnded;
+        _fx.NotifySessionStart(); // Launch :71 parity — every session begins unfrozen/unducked
+        _router = new DtrhFxRouter(_fx, _host.LogDiagnostic);
+        _host.LogDiagnostic("dtrh: native effects up (SFX pool 8/drop, voice, vmem video, freeze)");
+    }
+
+    private void TeardownNativeEffects()
+    {
+        try { _videoWindow?.Close(); } catch { /* best-effort */ }
+        _videoWindow = null;
+        // DisposeAll :896 parity: NEVER leave a clip wedged paused if the window dies
+        // mid-freeze — Teardown force-resumes before stopping.
+        try { _fx?.Teardown(); } catch { /* best-effort */ }
+        try { _fx?.Dispose(); } catch { /* best-effort */ }
+        _fx = null;
+        _router = null;
+        // SoundFlow teardown is proven Δ0 handles/Δ0 threads (SP-017 A8); libvlc release
+        // at exit stays SKIPPED (V3 — OS reclaims; unified-video row owns clean teardown).
+        try { _audio?.Dispose(); } catch { /* best-effort */ }
+        _audio = null;
+    }
+
+    /// <summary>payload-state {kind:'video', on} + covering window (DtrhHostService.cs:744
+    /// parity): the page pauses/ducks while a native video covers it.</summary>
+    private void OnFxVideoStarted(object? sender, EventArgs e)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => OnFxVideoStarted(sender, e));
+            return;
+        }
+
+        SendToPage(DtrhProtocol.BuildPayloadState("video", true));
+        if (_videoWindow is null && _fx is not null)
+        {
+            _videoWindow = new DtrhVideoWindow(_fx.Video);
+            _videoWindow.Closed += (_, _) => _videoWindow = null;
+            _videoWindow.Show(this);
+        }
+
+        _host.LogDiagnostic("dtrh: payload-state video on (covering window shown)");
+    }
+
+    /// <summary>Video ended/capped/stopped (DtrhHostService.cs:764-775 parity): tell the
+    /// page, close the covering window, reclaim keyboard focus for the game.</summary>
+    private void OnFxVideoEnded(object? sender, EventArgs e)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => OnFxVideoEnded(sender, e));
+            return;
+        }
+
+        SendToPage(DtrhProtocol.BuildPayloadState("video", false));
+        try { _videoWindow?.Close(); } catch { /* best-effort */ }
+        _videoWindow = null;
+        Activate();
+        _web?.Focus();
+        _host.LogDiagnostic("dtrh: payload-state video off (focus reclaimed)");
+    }
+
+    // ---------- b3 harness drive (--dtrh-fx-drive; harness-only) ----------
+
+    /// <summary>HARNESS-ONLY (headed/WX evidence without gameplay — runs are b4-gated so
+    /// the page cannot originate these messages in-slice): a timed script of RAW page
+    /// JSON fed through the REAL parse+dispatch path (pre-approach consult item 7).
+    /// Steps: <code>sfx:name[:scale]@t; payload:video|audio@t; freeze:on|off@t;
+    /// vn:on|off@t; run-started@t; run-ended@t</code> (@t seconds, default spacing 4s).</summary>
+    private void ScheduleFxDrive()
+    {
+        if (string.IsNullOrWhiteSpace(_fxDrive)) return;
+        _host.LogDiagnostic($"dtrh: fx-drive armed (HARNESS-ONLY): {_fxDrive}");
+        var steps = _fxDrive.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var index = 0;
+        foreach (var step in steps)
+        {
+            index++;
+            var at = step.IndexOf('@');
+            var seconds = at >= 0 && double.TryParse(step[(at + 1)..], out var s) ? s : index * 4.0;
+            var json = FxDriveStepToJson(at >= 0 ? step[..at] : step);
+            if (json is null)
+            {
+                _host.LogDiagnostic($"dtrh: fx-drive step '{step}' unknown — skipped (harness)");
+                continue;
+            }
+
+            _ = Task.Delay(TimeSpan.FromSeconds(seconds), _closing.Token).ContinueWith(
+                t =>
+                {
+                    if (t.IsCanceled) return;
+                    _host.LogDiagnostic($"dtrh: fx-drive injecting '{step}' (raw JSON through the real dispatch path)");
+                    Dispatcher.UIThread.Post(() => HandleWebMessageBody(json));
+                }, TaskScheduler.Default);
+        }
+    }
+
+    private static string? FxDriveStepToJson(string step) => step switch
+    {
+        "freeze:on" => "{\"type\":\"freeze-state\",\"on\":true}",
+        "freeze:off" => "{\"type\":\"freeze-state\",\"on\":false}",
+        "vn:on" => "{\"type\":\"vn-speaking\",\"on\":true}",
+        "vn:off" => "{\"type\":\"vn-speaking\",\"on\":false}",
+        "payload:video" => "{\"type\":\"fire-payload\",\"kind\":\"video\",\"strength\":60,\"durationMult\":1.0}",
+        "payload:audio" => "{\"type\":\"fire-payload\",\"kind\":\"audio\",\"strength\":60,\"durationMult\":1.0}",
+        "run-started" => "{\"type\":\"run-started\",\"difficulty\":\"Gentle\",\"mode\":\"dtrh-web\"}",
+        "run-ended" => "{\"type\":\"run-ended\",\"score\":0,\"durationSec\":1,\"difficulty\":\"Gentle\"}",
+        _ when step.StartsWith("sfx:", StringComparison.Ordinal) => SfxDriveJson(step[4..]),
+        _ => null,
+    };
+
+    private static string SfxDriveJson(string rest)
+    {
+        var parts = rest.Split(':');
+        var name = System.Text.Json.JsonSerializer.Serialize(parts[0]);
+        var scale = parts.Length > 1 && double.TryParse(parts[1], out var s) ? s : 0.6;
+        return $"{{\"type\":\"sfx\",\"name\":{name},\"scale\":{scale}}}";
     }
 
     // ---------- Windows: embedded WebView2 ----------
@@ -197,7 +358,13 @@ public partial class DtrhHostWindow : Window
 
     private void OnWebMessage(object? sender, WebMessageReceivedEventArgs e)
     {
-        var body = e.Body ?? "";
+        HandleWebMessageBody(e.Body ?? "");
+    }
+
+    /// <summary>The real parse+dispatch path for one page→host frame (also what the
+    /// harness-only fx-drive feeds — consult item 7).</summary>
+    private void HandleWebMessageBody(string body)
+    {
         // Protocol v1 dispatcher (SP-024 slice b2): every frame parses to a TYPED outcome —
         // Handled, Deferred(slice), UnknownType, ForwardVersion, Malformed. Never silent,
         // never crashes. Presence+shape logging only (§4.8 sensitive-logging ban).
@@ -233,6 +400,15 @@ public partial class DtrhHostWindow : Window
     {
         if (DtrhProtocol.Classify(message) is DtrhProtocol.DtrhDispatchClass.Deferred deferred)
         {
+            // b3 run-boundary hygiene (pre-approach consult item 4): run-started/run-ended
+            // STAY Deferred(b4), but the stale-freeze/stale-duck cleanup (WPF run-started
+            // :252/:259, run-ended :513) is a b3 safety invariant — invoked BEFORE the
+            // typed-deferral log.
+            if (_router?.TryRunBoundaryHygiene(message) == true)
+            {
+                _host.LogDiagnostic("dtrh: run-boundary freeze/duck hygiene applied (message stays Deferred(b4))");
+            }
+
             _host.LogDiagnostic($"dtrh: '{message.GetType().Name}' deferred to slice {deferred.Slice} (typed, not dropped)");
             return;
         }
@@ -276,6 +452,19 @@ public partial class DtrhHostWindow : Window
                 _host.LogDiagnostic($"dtrh: boot-error from page ({(bootError.Msg is { Length: > 0 } m ? m : "no detail")}) — closing honestly (no classic fallback)");
                 SetStatus("dtrh: page reported boot-error — closed honestly");
                 Close();
+                return;
+            // SP-025 slice b3: the native-effects messages route to REAL effects.
+            case DtrhProtocol.DtrhPageMessage.Sfx:
+            case DtrhProtocol.DtrhPageMessage.FirePayload:
+            case DtrhProtocol.DtrhPageMessage.FreezeState:
+            case DtrhProtocol.DtrhPageMessage.VnSpeaking:
+                if (_router is null)
+                {
+                    _host.LogDiagnostic($"dtrh: '{message.GetType().Name}' arrived before native effects init — logged, not acted on");
+                    return;
+                }
+
+                _router.Handle(message);
                 return;
         }
     }
