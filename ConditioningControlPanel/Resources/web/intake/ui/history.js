@@ -384,7 +384,7 @@ export function openHistory(opts) {
         const bits = [
           stamp(rec.at),
           titleCase(str(rec.deepestBand) || 'calibration'),
-          'susceptibility ' + pct(rec.peakDepth),
+          'susceptibility ' + pct(rec.susceptibility != null ? rec.susceptibility : rec.peakDepth),
         ];
         if (rec.endless) bits.push('endless');
         main.appendChild(el('div', 'ixh-file-meta', bits.join(' · ')));
@@ -452,7 +452,7 @@ export function openHistory(opts) {
         c.appendChild(el('div', 'ixh-stat-k', label));
         tiles.appendChild(c);
       };
-      tile('Susceptibility index', pct(rec.peakDepth));
+      tile('Susceptibility index', pct(rec.susceptibility != null ? rec.susceptibility : rec.peakDepth));
       tile('Deepest section', str(recap.sectionTitle) || titleCase(str(rec.deepestBand)) || '—');
       tile('Questions answered', String(num(ans.answered, num(rec.beatCount))));
       if (num(rec.maxScore) > 0) tile('Composite score', pct(rec.scoreRate));

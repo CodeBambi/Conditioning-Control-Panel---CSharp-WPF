@@ -78,6 +78,63 @@ const CLIMAX_PEAK = 1.0;           // depth ceiling the Climax band ramps toward
 const EXPECTED_DESCENT = 81;       // sum(BASE_BEATS); drives progressive route-share climb
 const HARD_BEAT_CAP = 1600;        // safety net so a never-aborted ENDLESS run still surfaces (many laps)
 
+/* ----------------------------------------------------------------------------
+ * ROUTE / CLASSIFICATION MODEL  (see voteArchetypes + updateRoute)
+ *
+ * WHAT WENT WRONG BEFORE (measured, not guessed): the route was a raw count of
+ * tag hits, unweighted by heat, and credited whichever way the answer went. The
+ * heat-0 pool is 285 prompts per bank and EVERY ONE of them carries `trivia` +
+ * `curious` — tags owned exclusively by the most tentative archetype. Calibration
+ * (21 beats, heat window [0,1]) plus Establishing (25 beats, [1,2]) is 46 of the
+ * 81 graded beats, so the shallow half of the run structurally outvoted the deep
+ * half before the deep half had been asked a single question. Headless sweeps
+ * over 42 synthetic runs returned "Curious Listener" for 21/21 bambi runs and
+ * "Closet Sissy" for 18/21 sissy runs - a full-compliance S-grade run and a
+ * never-answered-anything D-grade run produced the SAME label. `deep-bambi`,
+ * `gone-bambi`, `sissy-princess` and `full-sissy` were unreachable.
+ *
+ * THE MODEL NOW HAS THREE PARTS:
+ *
+ *  1. HEAT-WEIGHTED, SIGNED VOTES. A heat-0 trivia answer is camouflage, not a
+ *     preference signal, so it barely votes; a heat-5 surrender commit votes ~17x
+ *     harder. And the DIRECTION of the answer matters: picking the least-endorsing
+ *     option or timing out votes the tags DOWN, because declining a confession is
+ *     evidence against "confessor", not for it.
+ *
+ *  2. A COMMITMENT SCALAR reconciles the three numbers the outro prints. Grade is
+ *     score ratio, susceptibility is peak depth, and the classification used to be
+ *     computed from neither - which is exactly how "grade A / 100% susceptible /
+ *     Closet Sissy" happened. commitmentScore() blends compliance, depth reached
+ *     and how much of the descent was actually walked, and it GATES which tier of
+ *     archetype the run can land on. Grade and classification can no longer point
+ *     in opposite directions.
+ *
+ *  3. TIERS. Each bank lists its archetypes tentative -> committed and tags them
+ *     with `tier` (0..4; falls back to array position for banks that omit it).
+ *     Commitment opens a WINDOW of tiers, and the tag votes choose the flavour
+ *     WITHIN that window. The tentative tiers stay fully reachable - a run that
+ *     refuses or bails simply never opens the window past tier 0/1 - but a long
+ *     compliant descent can no longer be told it is a beginner.
+ * -------------------------------------------------------------------------- */
+
+/** Vote weight per prompt heat (0..5). Heat-0 trivia is 285/629 of the bank and
+ *  is deliberately near-worthless as a signal; the hot end is where identity is
+ *  actually expressed. */
+const HEAT_VOTE = Object.freeze([0.15, 0.55, 1.0, 1.6, 2.1, 2.6]);
+
+/** How commitment is assembled (weights sum to 1). Compliance leads because it is
+ *  the one signal a refuser cannot fake: peak depth climbs even for someone who
+ *  answers nothing (the descent runs on a clock, not on consent), and completion
+ *  alone only proves you sat still. */
+const COMMIT_W = Object.freeze({ compliance: 0.60, reach: 0.15, progress: 0.25 });
+
+/** commitment -> tier window. `ceil` opens the top of the window, `floor` raises
+ *  the bottom so a deeply committed run cannot be handed a tentative label. Both
+ *  are expressed as fractions of the bank's own top tier, so a 3-archetype bank
+ *  behaves the same as a 5-archetype one. */
+const TIER_CEIL = Object.freeze({ at0: 0.18, span: 0.72 });   // opens tier 1 at ~0.27, tops out at ~0.90
+const TIER_FLOOR = Object.freeze({ at0: 0.40, span: 0.62 });  // starts lifting at 0.40, pins the top tier near 1.0
+
 /** heat window (0..5) the sequencer prefers per band; camouflage low, hot high. */
 const HEAT_WINDOW = Object.freeze({
   [Band.Calibration]:  [0, 1],
@@ -406,7 +463,9 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     const prior = cfg.priorRun;
     if (prior && prior.route && prior.route.primaryArchetypeId) {
       const id = prior.route.primaryArchetypeId;
-      if (archetypes.some((a) => a.id === id)) archetypeVotes.set(id, 0.5); // faint head-start, easily overtaken
+      // Faint head-start, easily overtaken — worth roughly two hot answers on the
+      // heat-weighted scale (votes used to be raw counts, where 0.5 meant the same).
+      if (archetypes.some((a) => a.id === id)) archetypeVotes.set(id, 4);
     }
   })();
 
@@ -436,8 +495,12 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   /* --------------------------------------------------------------------------
    * PROMPT SELECTION — ladder-first (deep bands), then heat-banded weighted.
    * ------------------------------------------------------------------------ */
+  /** Which archetype's ladder to deepen first. Follows the REVEALED route so the
+   *  ladders a player climbs match the classification they are being walked toward
+   *  (votes alone can now be negative, which made the raw argmax meaningless). */
   function leadingArchetypeId() {
-    let best = null; let bestV = -1;
+    if (route.primaryArchetypeId) return route.primaryArchetypeId;
+    let best = null; let bestV = -Infinity;
     for (const a of archetypes) {
       const v = archetypeVotes.get(a.id) || 0;
       if (v > bestV) { bestV = v; best = a.id; }
@@ -868,7 +931,8 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
         streakRun = (correct && !(ev && ev.timedOut)) ? streakRun + 1 : 0; // wrong/timeout resets
         updateVelocity(correct, ev);
         for (const t of tags) result.tagTallies[t] = (result.tagTallies[t] || 0) + 1;
-        voteArchetypes(tags, correct);
+        voteArchetypes(tags, (beat.prompt && beat.prompt.heat) || 0,
+          endorsementOf(beat, ev, correct, score, beatMax));
       }
       // affirm a mantra (mantra OR mono path) when the user commits it correctly
       if (correct && beat.prompt && beat.prompt.affirmsMantra && beat.prompt.answer != null) {
@@ -880,9 +944,31 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     updateRoute();
   }
 
-  function voteArchetypes(tags, correct) {
-    if (!tags.length) return;
-    const w = correct ? 1.5 : 1; // engaging at all reveals interest; a correct commit reveals more
+  /** How strongly (and in which direction) an answer endorsed what it was asked.
+   *  +1 = took the most-committing option / said the mantra verbatim.
+   *  -1 = took the least-committing option, got it wrong, or let it time out.
+   *  Free check-ins expose no option list, so engaging at all is a soft +0.5 —
+   *  real, but never as loud as picking the endorsing answer off a real fork. */
+  function endorsementOf(beat, ev, correct, score, beatMax) {
+    if (ev && ev.timedOut) return -1;
+    const optList = Array.isArray(beat.options) ? beat.options : [];
+    if (optList.length > 1 && beatMax > 0) {
+      let min = Infinity;
+      for (const o of optList) min = Math.min(min, (o && typeof o.score === 'number') ? o.score : 0);
+      const span = beatMax - min;
+      if (span > 0) return Math.max(-1, Math.min(1, ((score - min) / span) * 2 - 1));
+    }
+    if (beat.mechanic === Mechanic.Mantra || beat.mechanic === Mechanic.Mono) return correct ? 1 : -1;
+    if (!optList.length) return correct ? 0.5 : -1;
+    return correct ? 1 : -1;
+  }
+
+  /** Signed, heat-weighted archetype vote. See the ROUTE / CLASSIFICATION MODEL
+   *  block for why both the sign and the heat weight exist. */
+  function voteArchetypes(tags, heat, endorsement) {
+    if (!tags.length || !endorsement) return;
+    const h = Math.max(0, Math.min(HEAT_VOTE.length - 1, Math.round(heat || 0)));
+    const w = HEAT_VOTE[h] * endorsement;
     for (const a of archetypes) {
       const atags = Array.isArray(a.tags) ? a.tags : [];
       let hit = 0;
@@ -891,20 +977,77 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     }
   }
 
+  /** Tier of an archetype: explicit `tier` if the bank declares one, else its
+   *  position in the list (every shipped bank is authored tentative -> committed). */
+  function tierOf(a, i) {
+    return (a && typeof a.tier === 'number' && isFinite(a.tier)) ? a.tier : i;
+  }
+  const TOP_TIER = archetypes.reduce((m, a, i) => Math.max(m, tierOf(a, i)), 0);
+
+  /** 0..1 — how much of themselves the run actually gave. The single number that
+   *  keeps grade, susceptibility and classification from contradicting each other. */
+  function commitmentScore() {
+    const compliance = result.maxScore > 0 ? clamp01(result.totalScore / result.maxScore) : 0;
+    const reach = clamp01(result.peakDepth || 0);
+    const progress = clamp01(gradedAnswered / EXPECTED_DESCENT);
+    return clamp01(COMMIT_W.compliance * compliance + COMMIT_W.reach * reach + COMMIT_W.progress * progress);
+  }
+
   function updateRoute() {
-    const sorted = archetypes
-      .map((a) => ({ id: a.id, v: archetypeVotes.get(a.id) || 0 }))
-      .sort((x, y) => y.v - x.v);
+    const commitment = commitmentScore();
+
+    // commitment opens a tier WINDOW; the tag votes pick the flavour inside it.
+    const ceilFrac = clamp01((commitment - TIER_CEIL.at0) / TIER_CEIL.span);
+    const floorFrac = clamp01((commitment - TIER_FLOOR.at0) / TIER_FLOOR.span);
+    const maxTier = Math.round(ceilFrac * TOP_TIER);
+    const minTier = Math.min(maxTier, Math.floor(floorFrac * TOP_TIER));
+
+    const all = archetypes.map((a, i) => ({ id: a.id, tier: tierOf(a, i), v: archetypeVotes.get(a.id) || 0 }));
+    let cands = all.filter((c) => c.tier >= minTier && c.tier <= maxTier);
+    if (!cands.length) {
+      // pathological bank (tiers with holes) — fall back to the nearest tier.
+      const target = (minTier + maxTier) / 2;
+      let best = Infinity;
+      for (const c of all) best = Math.min(best, Math.abs(c.tier - target));
+      cands = all.filter((c) => Math.abs(c.tier - target) === best);
+    }
+    // highest vote wins; ties resolve to the LOWER tier (never over-claim on a coin flip).
+    cands.sort((x, y) => (y.v - x.v) || (x.tier - y.tier));
+
+    // Nothing in the window was endorsed at all -> name the least-claiming one in it.
+    const anyPositive = cands.some((c) => c.v > 0);
+    const top = anyPositive ? cands[0] : cands.reduce((lo, c) => (c.tier < lo.tier ? c : lo), cands[0]);
+    const runner = cands.find((c) => c !== top && c.v > 0);
+
+    // EXPRESSION — a real number now, not the old lerp(0.05, 0.45, progress) that
+    // printed "45% expression" on every completed run regardless of what happened.
+    // Dominance is how lopsided the vote is against an even split of the window.
+    const pos = cands.filter((c) => c.v > 0);
+    const totalPos = pos.reduce((s, c) => s + c.v, 0);
+    const n = Math.max(1, cands.length);
+    const frac = (totalPos > 0 && top.v > 0) ? (top.v / totalPos) : (1 / n);
+    const even = 1 / n;
+    // A one-archetype window cannot express dominance at all, so it reports neutral
+    // rather than a spurious 100% (which used to read as MORE expressed than a run
+    // that actually beat four rivals).
+    const dominance = (n > 1) ? clamp01((frac - even) / (1 - even)) : 0.5;
+    const expressed = clamp01(0.30 + 0.45 * commitment + 0.25 * dominance);
+
+    // The reveal still CLIMBS across the run (the tube tint reads this as strength);
+    // it just resolves to an honest figure instead of a fixed 45%.
     const progress = phase === 'descent' ? clamp01(descentAnswered / EXPECTED_DESCENT) : 1;
-    const primaryShare = lerp(0.05, 0.45, progress);
+    const primaryShare = clamp01(lerp(0.05, expressed, progress));
+
     route.primary = niche;
-    const top = sorted[0];
-    const runner = sorted[1];
-    route.primaryArchetypeId = (top && top.v > 0) ? top.id : (archetypes[0] && archetypes[0].id) || niche;
+    route.commitment = commitment;
+    route.primaryArchetypeId = (top && top.id) || (archetypes[0] && archetypes[0].id) || niche;
     route.primaryShare = primaryShare;
-    if (runner && runner.v > 0 && top && top.v > 0) {
+    if (runner && top && top.v > 0) {
+      // squared so a close-second (adjacent tiers share most of their tags) still
+      // reads as a secondary rather than tying the headline classification.
+      const ratio = clamp01(runner.v / top.v);
       route.secondaryArchetypeId = runner.id;
-      route.secondaryShare = clamp01(primaryShare * (runner.v / top.v));
+      route.secondaryShare = clamp01(primaryShare * ratio * ratio);
     } else {
       route.secondaryArchetypeId = undefined;
       route.secondaryShare = 0;
@@ -1093,10 +1236,18 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   function finalize() {
     phase = 'done';
     updateRoute();                       // final progress -> shares reach ~0.45
-    result.route = { primary: route.primary, primaryArchetypeId: route.primaryArchetypeId, secondaryArchetypeId: route.secondaryArchetypeId, primaryShare: route.primaryShare, secondaryShare: route.secondaryShare };
+    result.route = { primary: route.primary, primaryArchetypeId: route.primaryArchetypeId, secondaryArchetypeId: route.secondaryArchetypeId, primaryShare: route.primaryShare, secondaryShare: route.secondaryShare, commitment: route.commitment };
     result.niche = niche;
     result.product = PRODUCT_NAME;
     result.rewardProfile = computeRewardProfile();
+    // SUSCEPTIBILITY vs PEAK DEPTH. peakDepth is how deep the SESSION went, and it
+    // climbs on a clock whether or not the subject came along — a run that answered
+    // nothing at all still peaked at 0.96, which the outro then printed as "96%
+    // susceptibility" beside a D. Susceptibility is that depth discounted by how much
+    // the subject actually gave to it, so the three headline numbers agree. peakDepth
+    // itself is untouched (the C# session generator maps it to difficulty).
+    result.susceptibility = clamp01(clamp01(result.peakDepth || 0)
+      * (0.35 + 0.65 * (result.maxScore > 0 ? clamp01(result.totalScore / result.maxScore) : 0)));
     result.endless = endless;
     result.endedAtMs = nowMs() - t0;
     return result;

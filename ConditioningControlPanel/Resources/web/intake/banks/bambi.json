@@ -48,35 +48,40 @@
   "archetypes": [
     {
       "id": "curious-listener",
-      "name": "Curious Listener",
+      "name": "Still Awake",
+      "tier": 0,
       "hue": 210,
       "tags": ["curious", "trivia", "soft", "relax"],
-      "blurb": "You're just peeking in, letting a soft voice keep you company. Nothing has taken hold yet - but you keep coming back to listen."
+      "blurb": "You stayed up top the whole way. The voice was right there and you kept both hands on your own thoughts - which is allowed, it just means Bambi got very little to work with tonight."
     },
     {
       "id": "trance-dabbler",
-      "name": "Trance Dabbler",
+      "name": "Half Under",
+      "tier": 1,
       "hue": 270,
       "tags": ["trance", "relax", "trigger", "sinking"],
-      "blurb": "You've felt the pull. The slowing, the sinking, the quiet. You like how it feels to let your thoughts go soft for a while."
+      "blurb": "You went soft in places and caught yourself in others. The pull is not in doubt - you simply kept surfacing before it could finish the sentence."
     },
     {
       "id": "bambi-in-training",
       "name": "Bambi in Training",
+      "tier": 2,
       "hue": 315,
       "tags": ["trigger", "obedience", "uniform", "giggly", "good-girl"],
-      "blurb": "The triggers are starting to work. Good Girl warms you, the persona is forming, and obeying is starting to feel nicer than thinking."
+      "blurb": "The triggers land now. Good Girl warms you before you decide to be warmed, the persona has a shape, and obeying already costs less than thinking."
     },
     {
       "id": "deep-bambi",
       "name": "Deep Bambi",
+      "tier": 3,
       "hue": 330,
       "tags": ["dropping", "blank", "doll", "surrender", "good-girl"],
-      "blurb": "You drop fast now. The triggers pull you under, the old self fades when Bambi wakes, and going blank feels like coming home."
+      "blurb": "You drop fast now. The triggers pull you under, the old self steps aside when Bambi wakes, and going blank feels like coming home."
     },
     {
       "id": "gone-bambi",
       "name": "Gone Bambi",
+      "tier": 4,
       "hue": 345,
       "tags": ["cockslut", "surrender", "blank", "doll", "arousal"],
       "blurb": "There's barely anyone left but Bambi, and she wouldn't have it any other way. Empty, giggly, obedient - exactly where she belongs."

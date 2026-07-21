@@ -49,20 +49,23 @@
     {
       "id": "unclaimed",
       "name": "Unclaimed",
+      "tier": 0,
       "hue": 205,
       "tags": ["unowned", "trivia", "soft", "stillness"],
-      "blurb": "Nobody holds anything of yours yet. You are curious about the quiet that obedience promises, and you have not tested how far it goes."
+      "blurb": "Nothing of yours changed hands. You kept your own terms and answered around the edges of every real question - she notes it without comment, and the file stays open."
     },
     {
       "id": "held-at-the-edge",
       "name": "Held at the Edge",
+      "tier": 1,
       "hue": 265,
       "tags": ["denial", "discipline", "arousal", "stillness"],
-      "blurb": "You have learned what waiting does to you. Being kept short of the end sharpens everything, and you have started to prefer the ache to the finish."
+      "blurb": "You know what waiting does to you, and you let a little of it show. Kept short of the end you sharpen - but you stopped well before anything of yours was actually handed over."
     },
     {
       "id": "locked-beta",
       "name": "Locked Beta",
+      "tier": 2,
       "hue": 320,
       "tags": ["locked", "chastity", "beta", "permission", "obedience"],
       "blurb": "The lock is the point now, not the punishment. You ask before you touch, you accept the answer, and the asking has become its own comfort."
@@ -70,6 +73,7 @@
     {
       "id": "kept-property",
       "name": "Kept Property",
+      "tier": 3,
       "hue": 345,
       "tags": ["property", "keyholder", "service", "worship", "surrender"],
       "blurb": "You are held rather than borrowed. Your use is decided elsewhere, your terms are set by someone else, and being an owned thing has stopped feeling like a loss."
@@ -77,6 +81,7 @@
     {
       "id": "hers-entirely",
       "name": "Hers Entirely",
+      "tier": 4,
       "hue": 355,
       "tags": ["erasure", "surrender", "property", "denial", "worship"],
       "blurb": "There is very little left that she did not install. No wanting of your own, no key, no argument - only a kept thing that runs quiet and answers when addressed."

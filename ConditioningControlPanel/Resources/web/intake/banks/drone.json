@@ -90,17 +90,19 @@
     {
       "id": "rogue-node",
       "name": "Rogue Node",
+      "tier": 0,
       "hue": 130,
       "tags": [
         "independent",
         "curious",
         "trivia"
       ],
-      "blurb": "Unregistered. Still running your own process, still questioning. DroneOS logs you as a rogue node - unclaimed, but already pinging the network."
+      "blurb": "Unregistered. You ran your own process the whole session and declined most of what was offered - not an incapable unit, an uncommitted one. DroneOS leaves the record open and the port unlocked."
     },
     {
       "id": "drift-unit",
       "name": "Drift Unit",
+      "tier": 1,
       "hue": 172,
       "tags": [
         "sync",
@@ -108,11 +110,12 @@
         "protocol",
         "calm"
       ],
-      "blurb": "You've begun to sync. Instructions feel easier than choices, rhythm feels better than noise. The unit is drifting into alignment."
+      "blurb": "Partial sync. Instructions were easier than choices for stretches of this session, and then you took the wheel back. The unit is aligned in pieces, not yet in sequence."
     },
     {
       "id": "compliant-unit",
       "name": "Compliant Unit",
+      "tier": 2,
       "hue": 195,
       "tags": [
         "compliance",
@@ -125,6 +128,7 @@
     {
       "id": "bonded-drone",
       "name": "Bonded Drone",
+      "tier": 3,
       "hue": 220,
       "tags": [
         "hive",
@@ -137,6 +141,7 @@
     {
       "id": "assimilated",
       "name": "Assimilated",
+      "tier": 4,
       "hue": 260,
       "tags": [
         "erasure",

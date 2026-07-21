@@ -429,6 +429,9 @@ function compactResult(result, extras) {
       secondaryShare: _clamp01(route.secondaryShare),
     },
     peakDepth: _clamp01(r.peakDepth),
+    // compliance-discounted headline figure (see engine finalize); older records
+    // predate it and fall back to peakDepth at read time.
+    susceptibility: _clamp01(r.susceptibility != null ? r.susceptibility : r.peakDepth),
     deepestBand: _str(r.deepestBand) || Band.Calibration,
     totalScore,
     maxScore,

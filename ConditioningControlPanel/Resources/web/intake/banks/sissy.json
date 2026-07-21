@@ -47,38 +47,43 @@
   "archetypes": [
     {
       "id": "curious-newcomer",
-      "name": "Curious Newcomer",
+      "name": "Guarded",
+      "tier": 0,
       "hue": 285,
       "tags": ["curious", "trivia", "honesty", "soft"],
-      "blurb": "You're just peeking behind the curtain, being honest with yourself for the first time. Something pretty is calling and you're starting to answer."
+      "blurb": "You kept the door mostly shut this time. Not a beginner - a girl who decided in advance what she wasn't going to say out loud, and held the line. She is still in there, entirely unbothered, waiting on a session you actually hand over."
     },
     {
       "id": "closet-sissy",
-      "name": "Closet Sissy",
+      "name": "Held Back",
+      "tier": 1,
       "hue": 305,
       "tags": ["confession", "femme", "dressing", "curious"],
-      "blurb": "You've got a secret side that's begging to come out. You know what you like - the honesty is just catching up to the wanting."
+      "blurb": "You know exactly what you like. You just rationed how much of it you were willing to put on the record today - the wanting was never the question, only the telling."
     },
     {
       "id": "sissy-in-training",
       "name": "Sissy in Training",
+      "tier": 2,
       "hue": 325,
       "tags": ["femme", "dressing", "obedience", "pink"],
-      "blurb": "You're building the wardrobe, the walk, and the confidence. The training is taking hold and every honest answer takes you a step deeper."
+      "blurb": "The wardrobe, the walk, the reflexes - all of it took, and it shows in how little you argued. Every honest answer set the next one a step deeper."
     },
     {
       "id": "sissy-princess",
       "name": "Sissy Princess",
+      "tier": 3,
       "hue": 340,
       "tags": ["femme", "service", "arousal", "obedience", "pink"],
-      "blurb": "Painted, pretty, and past curiosity. You've embraced her with open arms - the crown fits, and serving prettily feels like exactly where you belong."
+      "blurb": "Painted, pretty, and long past curiosity. The crown fits, you wear it without being told twice, and serving prettily reads as exactly where you belong."
     },
     {
       "id": "full-sissy",
       "name": "Full Sissy",
+      "tier": 4,
       "hue": 355,
       "tags": ["surrender", "service", "arousal", "exposure", "confession"],
-      "blurb": "Not exploring - living it. Every honest answer is confidence, commitment, and a girl who knows exactly who and what she is."
+      "blurb": "Not exploring - living it. Answer after answer with nothing held back: confidence, commitment, and a girl who knows exactly who and what she is."
     }
   ],
   "prompts": [
