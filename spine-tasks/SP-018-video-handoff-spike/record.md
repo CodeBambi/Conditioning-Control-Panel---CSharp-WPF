@@ -90,3 +90,17 @@ Spike host `client/spikes/CcpSpike.VideoHandoff/` (console, NOT in the solution;
 - **V4 — HLS playlists expose no tracks at playlist level via LibVLCSharp 3.10 parse API** (sub-items absent for media playlists; debug-logged). Track evidence for HLS = decoder-format-callback observed chroma/dims (`decoded:I420 96x98` — decoder-proposed dims include H.264 coded-height padding) + demuxer duration; codec NAME for HLS not observable through this API (recorded, not faked). DASH parse DOES expose `h264 96x96` directly. Adaptive demuxers report Time=0 → position-based progression evidence (`maxPos`) used per pre-declared threshold.
 
 **Redaction discipline:** central `Redact` registry; every log line scrubbed; lab shapes cookie/header/sig at source (`cookie=present(len=40)` etc.); `--audit-logs` re-registers the accumulated registry (append-per-run — audit covers EVERY emitted log) and FAILS on any secret value. **Audit GREEN on the full evidence run (exit 0, zero hits).** badsig literal `deadbeef` registered for shape-consistency. Relay logs in audit scope (relay is where the secret lives).
+
+## Step 3 — Windows browser→native handoff evidence (2026-07-21)
+
+Browser layer `Browser.cs` (SP-011-pattern Avalonia host, SP-011-admitted `Avalonia.Controls.WebView` 12.0.1, WebView2 150.0.4078.83 Blink; code-only UI on a dedicated STA thread; app.manifest per SP-011 integration consequence). Per row: live-DOM discovery via `InvokeScript` (double-encoded JSON) → transfer → decode-event verification or typed limitation. **7/7 PASS, exit 0** (`evidence/run-windows-browser.jsonl`, 105 obs):
+
+- **B1 site-direct (M5+M1 shape):** discovered `src` off the live element → transferred → h264 96x96, 37 frames, EndReached.
+- **B2 signed-valid:** full signed URL discovered from the page → decode-verified.
+- **B3 signed-expired:** typed `source-expired` at transfer (one decoder open, no retry-storm).
+- **B4 cookie / B5 custom-header:** negative control direct-open → typed `auth-required` (401/403); host-owned credential via relay → decode-verified. Evidence classes SPLIT per consult (direct-decoder-auth vs proxy-mediated-auth; relay = strategy evidence pending-owner).
+- **B6 blob:/MSE:** protocol `blob:` read off the LIVE DOM (not asserted); page really fetched + objectURL'd the media (`blob-src-set`) and MSE append SUCCEEDED (`mse-append-ok` — WebM/vp8 SourceBuffer); typed `blob-untransferable` — no decoder attempt, no browser-fullscreen/capture fallback.
+- **B7 DRM:** EME USAGE observed (`eme-keysystem-access-granted keySystem=org.w3.clearkey` — requestMediaKeySystemAccess resolved on the page, consult trap 3 honored) → typed `drm-detected`; no bypass/key-extraction/capture attempted (asserted in log).
+
+- **V5 — signed-token URLs persisted in the WebView2 HTTP cache** (`wv2-profile/EBWebView/Default/Cache/Cache_Data/data_1`, 2 sig hits — caught BY the audit on the first browser run). Mitigation: `Cache-Control: no-store` at the SOURCE on `/signed/*`, `/gated-*`, and the signed-embed page; re-run → **audit GREEN over the ENTIRE scratch INCLUDING the wv2-profile**. Product implication for the host row: token-bearing media URLs need no-store at the source and/or profile hygiene (owner decision).
+- Decode matrix re-verified after the Lab change: 14/14 PASS exit 0; audit GREEN.

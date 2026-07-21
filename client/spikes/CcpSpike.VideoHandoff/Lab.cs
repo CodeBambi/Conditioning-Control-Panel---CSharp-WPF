@@ -91,17 +91,20 @@ public sealed class Lab : IDisposable
                     await ServeFile(res, "clip.webm", "video/webm", req);
                     return;
                 case "/gated-cookie/clip.mp4":
+                    NoStore(res);
                     GateObservations.Enqueue($"gated-cookie presented={(req.Headers["Cookie"] is null ? "absent" : req.Headers["Cookie"] == $"spike_gate={CookieValue}" ? "valid" : "invalid")}");
                     if (req.Headers["Cookie"] != $"spike_gate={CookieValue}") { await Write(res, 401, "text/plain", "cookie-required"u8.ToArray()); return; }
                     await ServeFile(res, "clip.mp4", "video/mp4", req);
                     return;
                 case "/gated-header/clip.mp4":
+                    NoStore(res);
                     GateObservations.Enqueue($"gated-header presented={(req.Headers["X-Spike-Gate"] is null ? "absent" : req.Headers["X-Spike-Gate"] == HeaderValue ? "valid" : "invalid")}");
                     if (req.Headers["X-Spike-Gate"] != HeaderValue) { await Write(res, 403, "text/plain", "header-required"u8.ToArray()); return; }
                     await ServeFile(res, "clip.mp4", "video/mp4", req);
                     return;
                 case "/signed/clip.mp4":
                 {
+                    NoStore(res);
                     var expRaw = req.QueryString["exp"];
                     var sig = req.QueryString["sig"] ?? "";
                     if (!long.TryParse(expRaw, out var expUnix)) { await Write(res, 403, "text/plain", "bad-signature"u8.ToArray()); return; }
@@ -127,6 +130,23 @@ public sealed class Lab : IDisposable
                     await Write(res, 200, "text/html", Encoding.UTF8.GetBytes(
                         "<!doctype html><html><body><video id=\"v\" src=\"" + Url("/media/clip.mp4") + "\" controls></video></body></html>"));
                     return;
+                case "/page/site-signed.html":
+                {
+                    NoStore(res);
+                    // Freshly-signed embed per request (HMAC key is per-run; the page is the discovery surface).
+                    var ttl = long.TryParse(req.QueryString["ttl"], out var t) ? t : 300;
+                    var signed = SignedUrl("/signed/clip.mp4", DateTimeOffset.UtcNow.AddSeconds(ttl));
+                    await Write(res, 200, "text/html", Encoding.UTF8.GetBytes(
+                        "<!doctype html><html><body><video id=\"v\" src=\"" + signed + "\" controls></video></body></html>"));
+                    return;
+                }
+                case "/page/site-gated.html":
+                {
+                    var kind = req.QueryString["kind"] == "header" ? "header" : "cookie";
+                    await Write(res, 200, "text/html", Encoding.UTF8.GetBytes(
+                        "<!doctype html><html><body><video id=\"v\" src=\"" + Url($"/gated-{kind}/clip.mp4") + "\" controls></video></body></html>"));
+                    return;
+                }
                 case "/page/blob.html":
                     await Write(res, 200, "text/html", Encoding.UTF8.GetBytes(BlobPage
                         .Replace("MEDIA_URL", Url("/media/clip.webm"), StringComparison.Ordinal)
@@ -187,6 +207,10 @@ public sealed class Lab : IDisposable
         await res.OutputStream.WriteAsync(body);
     }
 
+
+    /// <summary>Finding V5: token-bearing URLs persisted in the WebView2 HTTP cache without this.
+    /// no-store at the SOURCE keeps signed/gated artifacts out of the browser profile.</summary>
+    private static void NoStore(HttpListenerResponse res) => res.AddHeader("Cache-Control", "no-store");
     private async Task ServeFile(HttpListenerResponse res, string relName, string mime, HttpListenerRequest req)
     {
         var full = Path.Combine(_fixtures, relName);

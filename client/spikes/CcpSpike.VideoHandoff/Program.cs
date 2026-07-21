@@ -53,6 +53,15 @@ public static class Program
                 return 2; // unreachable
             }
 
+            if (args.Length >= 1 && args[0] == "--browser")
+            {
+                var code = await Browser.RunAsync(lab, scratch);
+                SpikeLog.Line("main", $"browser mode finished code={code}");
+                PersistSecrets(scratch);
+                Probe.HardExit(code);
+                return 2; // unreachable
+            }
+
             var rows = await Matrix.RunDecodeLevelAsync(lab);
             var failed = rows.Count(r => !r.Pass);
             SpikeLog.Line("main", $"matrix done rows={rows.Count} failed={failed}");

@@ -1,128 +1,128 @@
-{"seq":1,"t":"2026-07-21T11:57:05.9913350+00:00","src":"main","msg":"spike start platform=windows lab=http://127.0.0.1:51526"}
-{"seq":2,"t":"2026-07-21T11:57:06.1273859+00:00","src":"lab","msg":"GET /media/clip.mp4"}
-{"seq":3,"t":"2026-07-21T11:57:06.1346545+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/media/clip.mp4 status=200 detail=ok"}
-{"seq":4,"t":"2026-07-21T11:57:06.1405996+00:00","src":"lab","msg":"GET /media/clip.mp4"}
-{"seq":5,"t":"2026-07-21T11:57:06.1605276+00:00","src":"lab","msg":"GET /media/clip.mp4"}
-{"seq":6,"t":"2026-07-21T11:57:08.0554073+00:00","src":"probe","msg":"decode url=http://127.0.0.1:51526/media/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=5 maxT=1501 maxPos=0.75 end=True => SUCCESS"}
-{"seq":7,"t":"2026-07-21T11:57:08.0632690+00:00","src":"matrix","msg":"row M1-direct-mp4 expected=Success actual=Success pass=True vtrack=h264 96x96 dur=2000 tc=5 end=True detail=plain MP4 over loopback HTTP"}
-{"seq":8,"t":"2026-07-21T11:57:08.0683143+00:00","src":"lab","msg":"GET /media/clip.webm"}
-{"seq":9,"t":"2026-07-21T11:57:08.0688972+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/media/clip.webm status=200 detail=ok"}
-{"seq":10,"t":"2026-07-21T11:57:08.0704363+00:00","src":"lab","msg":"GET /media/clip.webm"}
-{"seq":11,"t":"2026-07-21T11:57:08.0746662+00:00","src":"lab","msg":"GET /media/clip.webm"}
-{"seq":12,"t":"2026-07-21T11:57:08.0799873+00:00","src":"lab","msg":"GET /media/clip.webm"}
-{"seq":13,"t":"2026-07-21T11:57:08.0840082+00:00","src":"lab","msg":"GET /media/clip.webm"}
-{"seq":14,"t":"2026-07-21T11:57:09.6008108+00:00","src":"probe","msg":"decode url=http://127.0.0.1:51526/media/clip.webm vtrack=VP80 96x96 atrack=vorb 44100Hz dur=2003 frames=30 timeChanges=4 maxT=1189 maxPos=0.59 end=True => SUCCESS"}
-{"seq":15,"t":"2026-07-21T11:57:09.6011165+00:00","src":"matrix","msg":"row M2-direct-webm expected=Success actual=Success pass=True vtrack=VP80 96x96 dur=2003 tc=4 end=True detail=plain WebM over loopback HTTP"}
-{"seq":16,"t":"2026-07-21T11:57:09.6025965+00:00","src":"lab","msg":"GET /hls-fmp4/vod.m3u8"}
-{"seq":17,"t":"2026-07-21T11:57:09.6041534+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/hls-fmp4/vod.m3u8 status=200 detail=ok"}
-{"seq":18,"t":"2026-07-21T11:57:09.6063223+00:00","src":"lab","msg":"GET /hls-fmp4/vod.m3u8"}
-{"seq":19,"t":"2026-07-21T11:57:09.6179488+00:00","src":"lab","msg":"GET /hls-fmp4/vod.m3u8"}
-{"seq":20,"t":"2026-07-21T11:57:09.6249496+00:00","src":"lab","msg":"GET /hls-fmp4/init.mp4"}
-{"seq":21,"t":"2026-07-21T11:57:09.6263174+00:00","src":"lab","msg":"GET /hls-fmp4/vod0.m4s"}
-{"seq":22,"t":"2026-07-21T11:57:11.5487511+00:00","src":"probe","msg":"decode url=http://127.0.0.1:51526/hls-fmp4/vod.m3u8 vtrack=decoded:I420 96x98 atrack=none dur=2000 frames=36 timeChanges=6 maxT=1256 maxPos=0.63 end=True => SUCCESS"}
-{"seq":23,"t":"2026-07-21T11:57:11.5490793+00:00","src":"matrix","msg":"row M3-hls-fmp4 expected=Success actual=Success pass=True vtrack=decoded:I420 96x98 dur=2000 tc=6 end=True detail=HLS v7 fMP4 VOD playlist (EXT-X-MAP + one .m4s)"}
-{"seq":24,"t":"2026-07-21T11:57:11.5505172+00:00","src":"lab","msg":"GET /hls-ts/vod.m3u8"}
-{"seq":25,"t":"2026-07-21T11:57:11.5511588+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/hls-ts/vod.m3u8 status=200 detail=ok"}
-{"seq":26,"t":"2026-07-21T11:57:11.5543935+00:00","src":"lab","msg":"GET /hls-ts/vod.m3u8"}
-{"seq":27,"t":"2026-07-21T11:57:11.5644431+00:00","src":"lab","msg":"GET /hls-ts/vod.m3u8"}
-{"seq":28,"t":"2026-07-21T11:57:11.5711977+00:00","src":"lab","msg":"GET /hls-ts/vod0.ts"}
-{"seq":29,"t":"2026-07-21T11:57:13.4555632+00:00","src":"probe","msg":"decode url=http://127.0.0.1:51526/hls-ts/vod.m3u8 vtrack=decoded:I420 96x98 atrack=none dur=2000 frames=34 timeChanges=6 maxT=1403 maxPos=0.70 end=True => SUCCESS"}
-{"seq":30,"t":"2026-07-21T11:57:13.4560593+00:00","src":"matrix","msg":"row M3b-hls-ts expected=Success actual=Success pass=True vtrack=decoded:I420 96x98 dur=2000 tc=6 end=True detail=HLS MPEG-TS VOD playlist"}
-{"seq":31,"t":"2026-07-21T11:57:13.4572955+00:00","src":"lab","msg":"GET /dash/vod.mpd"}
-{"seq":32,"t":"2026-07-21T11:57:13.4578664+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/dash/vod.mpd status=200 detail=ok"}
-{"seq":33,"t":"2026-07-21T11:57:13.4604041+00:00","src":"lab","msg":"GET /dash/vod.mpd"}
-{"seq":34,"t":"2026-07-21T11:57:13.4704627+00:00","src":"lab","msg":"GET /dash/vod.mpd"}
-{"seq":35,"t":"2026-07-21T11:57:13.4793889+00:00","src":"lab","msg":"GET /dash/init-stream0.m4s"}
-{"seq":36,"t":"2026-07-21T11:57:13.4808204+00:00","src":"lab","msg":"GET /dash/chunk-stream0-00001.m4s"}
-{"seq":37,"t":"2026-07-21T11:57:13.4825125+00:00","src":"lab","msg":"GET /dash/chunk-stream0-00002.m4s"}
-{"seq":38,"t":"2026-07-21T11:57:15.4034610+00:00","src":"probe","msg":"decode url=http://127.0.0.1:51526/dash/vod.mpd vtrack=h264 96x96 atrack=none dur=2000 frames=36 timeChanges=6 maxT=1454 maxPos=0.73 end=True => SUCCESS"}
-{"seq":39,"t":"2026-07-21T11:57:15.4037283+00:00","src":"matrix","msg":"row M4-dash expected=Success actual=Success pass=True vtrack=h264 96x96 dur=2000 tc=6 end=True detail=DASH static MPD (SegmentTemplate, fMP4)"}
-{"seq":40,"t":"2026-07-21T11:57:15.4050100+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
-{"seq":41,"t":"2026-07-21T11:57:15.4057876+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/gated-cookie/clip.mp4 status=401 detail=cookie-required"}
-{"seq":42,"t":"2026-07-21T11:57:15.4082741+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
-{"seq":43,"t":"2026-07-21T11:57:15.4090563+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
-{"seq":44,"t":"2026-07-21T11:57:15.4123638+00:00","src":"probe","msg":"parse status=Failed url=http://127.0.0.1:51526/gated-cookie/clip.mp4"}
-{"seq":45,"t":"2026-07-21T11:57:15.4124937+00:00","src":"matrix","msg":"row M6-direct-decoder-auth expected=DecodeFailed actual=DecodeFailed pass=True vtrack=- dur=0 tc=0 end=False detail=libvlc media-option direct cookie attempt — expected UNSUPPORTED (no :http-cookie in libvlc 3.x); lab gate log is the arbiter"}
-{"seq":46,"t":"2026-07-21T11:57:15.4132445+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
-{"seq":47,"t":"2026-07-21T11:57:15.4157863+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
-{"seq":48,"t":"2026-07-21T11:57:15.4165928+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
-{"seq":49,"t":"2026-07-21T11:57:15.4169800+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/relay/cookie/clip.mp4 status=200 detail=ok"}
-{"seq":50,"t":"2026-07-21T11:57:15.4182427+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
-{"seq":51,"t":"2026-07-21T11:57:15.4189264+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
-{"seq":52,"t":"2026-07-21T11:57:15.4192655+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
-{"seq":53,"t":"2026-07-21T11:57:15.4229729+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
-{"seq":54,"t":"2026-07-21T11:57:15.4235813+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
-{"seq":55,"t":"2026-07-21T11:57:15.4239008+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
-{"seq":56,"t":"2026-07-21T11:57:15.4304463+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
-{"seq":57,"t":"2026-07-21T11:57:15.4310081+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
-{"seq":58,"t":"2026-07-21T11:57:15.4313497+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
-{"seq":59,"t":"2026-07-21T11:57:15.4366576+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
-{"seq":60,"t":"2026-07-21T11:57:15.4372253+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
-{"seq":61,"t":"2026-07-21T11:57:15.4376093+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
-{"seq":62,"t":"2026-07-21T11:57:17.3030913+00:00","src":"probe","msg":"decode url=http://127.0.0.1:51526/relay/cookie/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=6 maxT=1701 maxPos=0.85 end=True => SUCCESS"}
-{"seq":63,"t":"2026-07-21T11:57:17.3033460+00:00","src":"matrix","msg":"row M6-relay-mediated expected=Success actual=Success pass=True vtrack=h264 96x96 dur=2000 tc=6 end=True detail=relay injects cookie upstream (proxy-mediated auth; strategy evidence, pending-owner)"}
-{"seq":64,"t":"2026-07-21T11:57:17.3044664+00:00","src":"lab","msg":"GET /relay/nocookie/clip.mp4"}
-{"seq":65,"t":"2026-07-21T11:57:17.3051345+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
-{"seq":66,"t":"2026-07-21T11:57:17.3054292+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=absent inject-header=absent upstream-status=401"}
-{"seq":67,"t":"2026-07-21T11:57:17.3057683+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/relay/nocookie/clip.mp4 status=401 detail=cookie-required"}
-{"seq":68,"t":"2026-07-21T11:57:17.3059177+00:00","src":"matrix","msg":"row M6-relay-negative-control expected=AuthRequired actual=AuthRequired pass=True vtrack=- dur=0 tc=0 end=False detail=relay WITHOUT injection must propagate upstream 401 — no decode events"}
-{"seq":69,"t":"2026-07-21T11:57:17.3065604+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
-{"seq":70,"t":"2026-07-21T11:57:17.3070448+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/gated-header/clip.mp4 status=403 detail=header-required"}
-{"seq":71,"t":"2026-07-21T11:57:17.3087966+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
-{"seq":72,"t":"2026-07-21T11:57:17.3096007+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
-{"seq":73,"t":"2026-07-21T11:57:17.3120666+00:00","src":"probe","msg":"parse status=Failed url=http://127.0.0.1:51526/gated-header/clip.mp4"}
-{"seq":74,"t":"2026-07-21T11:57:17.3121643+00:00","src":"matrix","msg":"row M7-direct-decoder-auth expected=DecodeFailed actual=DecodeFailed pass=True vtrack=- dur=0 tc=0 end=False detail=no arbitrary-header mechanism in libvlc 3.x media options; raw open must fail at the gate"}
-{"seq":75,"t":"2026-07-21T11:57:17.3129235+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
-{"seq":76,"t":"2026-07-21T11:57:17.3135221+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
-{"seq":77,"t":"2026-07-21T11:57:17.3138870+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
-{"seq":78,"t":"2026-07-21T11:57:17.3142026+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/relay/header/clip.mp4 status=200 detail=ok"}
-{"seq":79,"t":"2026-07-21T11:57:17.3156121+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
-{"seq":80,"t":"2026-07-21T11:57:17.3161854+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
-{"seq":81,"t":"2026-07-21T11:57:17.3165953+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
-{"seq":82,"t":"2026-07-21T11:57:17.3217360+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
-{"seq":83,"t":"2026-07-21T11:57:17.3225337+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
-{"seq":84,"t":"2026-07-21T11:57:17.3229234+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
-{"seq":85,"t":"2026-07-21T11:57:17.3311797+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
-{"seq":86,"t":"2026-07-21T11:57:17.3320448+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
-{"seq":87,"t":"2026-07-21T11:57:17.3324210+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
-{"seq":88,"t":"2026-07-21T11:57:17.3391179+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
-{"seq":89,"t":"2026-07-21T11:57:17.3397947+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
-{"seq":90,"t":"2026-07-21T11:57:17.3403035+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
-{"seq":91,"t":"2026-07-21T11:57:19.2280170+00:00","src":"probe","msg":"decode url=http://127.0.0.1:51526/relay/header/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=6 maxT=1702 maxPos=0.85 end=True => SUCCESS"}
-{"seq":92,"t":"2026-07-21T11:57:19.2283218+00:00","src":"matrix","msg":"row M7-relay-mediated expected=Success actual=Success pass=True vtrack=h264 96x96 dur=2000 tc=6 end=True detail=relay injects X-Spike-Gate upstream (proxy-mediated auth; strategy evidence, pending-owner)"}
-{"seq":93,"t":"2026-07-21T11:57:19.2295404+00:00","src":"lab","msg":"GET /relay/noheader/clip.mp4"}
-{"seq":94,"t":"2026-07-21T11:57:19.2302588+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
-{"seq":95,"t":"2026-07-21T11:57:19.2305522+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=absent upstream-status=403"}
-{"seq":96,"t":"2026-07-21T11:57:19.2308326+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/relay/noheader/clip.mp4 status=403 detail=header-required"}
-{"seq":97,"t":"2026-07-21T11:57:19.2309837+00:00","src":"matrix","msg":"row M7-relay-negative-control expected=AuthRequired actual=AuthRequired pass=True vtrack=- dur=0 tc=0 end=False detail=relay WITHOUT injection must propagate upstream 403 — no decode events"}
-{"seq":98,"t":"2026-07-21T11:57:19.2326858+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
-{"seq":99,"t":"2026-07-21T11:57:19.2332516+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/signed/clip.mp4?exp=1784635339&sig=sig:present(len=64) status=200 detail=ok"}
-{"seq":100,"t":"2026-07-21T11:57:19.2349542+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
-{"seq":101,"t":"2026-07-21T11:57:19.2459697+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
-{"seq":102,"t":"2026-07-21T11:57:21.1270041+00:00","src":"probe","msg":"decode url=http://127.0.0.1:51526/signed/clip.mp4?exp=1784635339&sig=sig:present(len=64) vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=5 maxT=1600 maxPos=0.80 end=True => SUCCESS"}
-{"seq":103,"t":"2026-07-21T11:57:21.1272474+00:00","src":"matrix","msg":"row M8-signed-valid expected=Success actual=Success pass=True vtrack=h264 96x96 dur=2000 tc=5 end=True detail=HMAC-signed URL, TTL 300s, opened before expiry"}
-{"seq":104,"t":"2026-07-21T11:57:21.1285683+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
-{"seq":105,"t":"2026-07-21T11:57:21.1289553+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/signed/clip.mp4?exp=1784634981&sig=sig:present(len=64) status=403 detail=expired"}
-{"seq":106,"t":"2026-07-21T11:57:21.1291503+00:00","src":"matrix","msg":"row M8-signed-expired expected=SourceExpired actual=SourceExpired pass=True vtrack=- dur=0 tc=0 end=False detail=pre-expired signed URL → typed source-expired, no retry-storm (one decoder open)"}
-{"seq":107,"t":"2026-07-21T11:57:21.1300110+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=8)"}
-{"seq":108,"t":"2026-07-21T11:57:21.1303310+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:51526/signed/clip.mp4?exp=9999999999&sig=sig:present(len=8) status=403 detail=bad-signature"}
-{"seq":109,"t":"2026-07-21T11:57:21.1304828+00:00","src":"matrix","msg":"row M8-signed-badsig expected=AuthRequired actual=AuthRequired pass=True vtrack=- dur=0 tc=0 end=False detail=tampered signature → 403 bad-signature"}
-{"seq":110,"t":"2026-07-21T11:57:21.1307303+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=absent"}
-{"seq":111,"t":"2026-07-21T11:57:21.1309222+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=absent"}
-{"seq":112,"t":"2026-07-21T11:57:21.1310085+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=absent"}
-{"seq":113,"t":"2026-07-21T11:57:21.1310681+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=valid"}
-{"seq":114,"t":"2026-07-21T11:57:21.1311267+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=valid"}
-{"seq":115,"t":"2026-07-21T11:57:21.1311793+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=valid"}
-{"seq":116,"t":"2026-07-21T11:57:21.1312312+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=valid"}
-{"seq":117,"t":"2026-07-21T11:57:21.1312884+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=valid"}
-{"seq":118,"t":"2026-07-21T11:57:21.1313400+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=absent"}
-{"seq":119,"t":"2026-07-21T11:57:21.1314217+00:00","src":"matrix","msg":"gate-observation gated-header presented=absent"}
-{"seq":120,"t":"2026-07-21T11:57:21.1314783+00:00","src":"matrix","msg":"gate-observation gated-header presented=absent"}
-{"seq":121,"t":"2026-07-21T11:57:21.1315319+00:00","src":"matrix","msg":"gate-observation gated-header presented=absent"}
-{"seq":122,"t":"2026-07-21T11:57:21.1315830+00:00","src":"matrix","msg":"gate-observation gated-header presented=valid"}
-{"seq":123,"t":"2026-07-21T11:57:21.1316421+00:00","src":"matrix","msg":"gate-observation gated-header presented=valid"}
-{"seq":124,"t":"2026-07-21T11:57:21.1317397+00:00","src":"matrix","msg":"gate-observation gated-header presented=valid"}
-{"seq":125,"t":"2026-07-21T11:57:21.1318937+00:00","src":"matrix","msg":"gate-observation gated-header presented=valid"}
-{"seq":126,"t":"2026-07-21T11:57:21.1319840+00:00","src":"matrix","msg":"gate-observation gated-header presented=valid"}
-{"seq":127,"t":"2026-07-21T11:57:21.1320617+00:00","src":"matrix","msg":"gate-observation gated-header presented=absent"}
-{"seq":128,"t":"2026-07-21T11:57:21.1324077+00:00","src":"main","msg":"matrix done rows=14 failed=0"}
+{"seq":1,"t":"2026-07-21T12:11:56.0833889+00:00","src":"main","msg":"spike start platform=windows lab=http://127.0.0.1:62699"}
+{"seq":2,"t":"2026-07-21T12:11:56.2485221+00:00","src":"lab","msg":"GET /media/clip.mp4"}
+{"seq":3,"t":"2026-07-21T12:11:56.2562156+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/media/clip.mp4 status=200 detail=ok"}
+{"seq":4,"t":"2026-07-21T12:11:56.2622607+00:00","src":"lab","msg":"GET /media/clip.mp4"}
+{"seq":5,"t":"2026-07-21T12:11:56.2826874+00:00","src":"lab","msg":"GET /media/clip.mp4"}
+{"seq":6,"t":"2026-07-21T12:11:58.1757063+00:00","src":"probe","msg":"decode url=http://127.0.0.1:62699/media/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=37 timeChanges=5 maxT=1600 maxPos=0.80 end=True => SUCCESS"}
+{"seq":7,"t":"2026-07-21T12:11:58.1837806+00:00","src":"matrix","msg":"row M1-direct-mp4 expected=Success actual=Success pass=True vtrack=h264 96x96 dur=2000 tc=5 end=True detail=plain MP4 over loopback HTTP"}
+{"seq":8,"t":"2026-07-21T12:11:58.1858265+00:00","src":"lab","msg":"GET /media/clip.webm"}
+{"seq":9,"t":"2026-07-21T12:11:58.1864655+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/media/clip.webm status=200 detail=ok"}
+{"seq":10,"t":"2026-07-21T12:11:58.1885421+00:00","src":"lab","msg":"GET /media/clip.webm"}
+{"seq":11,"t":"2026-07-21T12:11:58.1928044+00:00","src":"lab","msg":"GET /media/clip.webm"}
+{"seq":12,"t":"2026-07-21T12:11:58.1992092+00:00","src":"lab","msg":"GET /media/clip.webm"}
+{"seq":13,"t":"2026-07-21T12:11:58.2042867+00:00","src":"lab","msg":"GET /media/clip.webm"}
+{"seq":14,"t":"2026-07-21T12:11:59.7229643+00:00","src":"probe","msg":"decode url=http://127.0.0.1:62699/media/clip.webm vtrack=VP80 96x96 atrack=vorb 44100Hz dur=2003 frames=30 timeChanges=4 maxT=1189 maxPos=0.59 end=True => SUCCESS"}
+{"seq":15,"t":"2026-07-21T12:11:59.7232831+00:00","src":"matrix","msg":"row M2-direct-webm expected=Success actual=Success pass=True vtrack=VP80 96x96 dur=2003 tc=4 end=True detail=plain WebM over loopback HTTP"}
+{"seq":16,"t":"2026-07-21T12:11:59.7245630+00:00","src":"lab","msg":"GET /hls-fmp4/vod.m3u8"}
+{"seq":17,"t":"2026-07-21T12:11:59.7261507+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/hls-fmp4/vod.m3u8 status=200 detail=ok"}
+{"seq":18,"t":"2026-07-21T12:11:59.7278055+00:00","src":"lab","msg":"GET /hls-fmp4/vod.m3u8"}
+{"seq":19,"t":"2026-07-21T12:11:59.7381030+00:00","src":"lab","msg":"GET /hls-fmp4/vod.m3u8"}
+{"seq":20,"t":"2026-07-21T12:11:59.7447638+00:00","src":"lab","msg":"GET /hls-fmp4/init.mp4"}
+{"seq":21,"t":"2026-07-21T12:11:59.7461672+00:00","src":"lab","msg":"GET /hls-fmp4/vod0.m4s"}
+{"seq":22,"t":"2026-07-21T12:12:01.6691775+00:00","src":"probe","msg":"decode url=http://127.0.0.1:62699/hls-fmp4/vod.m3u8 vtrack=decoded:I420 96x98 atrack=none dur=2000 frames=36 timeChanges=6 maxT=1105 maxPos=0.55 end=True => SUCCESS"}
+{"seq":23,"t":"2026-07-21T12:12:01.6694876+00:00","src":"matrix","msg":"row M3-hls-fmp4 expected=Success actual=Success pass=True vtrack=decoded:I420 96x98 dur=2000 tc=6 end=True detail=HLS v7 fMP4 VOD playlist (EXT-X-MAP + one .m4s)"}
+{"seq":24,"t":"2026-07-21T12:12:01.6708580+00:00","src":"lab","msg":"GET /hls-ts/vod.m3u8"}
+{"seq":25,"t":"2026-07-21T12:12:01.6714142+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/hls-ts/vod.m3u8 status=200 detail=ok"}
+{"seq":26,"t":"2026-07-21T12:12:01.6740585+00:00","src":"lab","msg":"GET /hls-ts/vod.m3u8"}
+{"seq":27,"t":"2026-07-21T12:12:01.6862154+00:00","src":"lab","msg":"GET /hls-ts/vod.m3u8"}
+{"seq":28,"t":"2026-07-21T12:12:01.6944539+00:00","src":"lab","msg":"GET /hls-ts/vod0.ts"}
+{"seq":29,"t":"2026-07-21T12:12:03.5827193+00:00","src":"probe","msg":"decode url=http://127.0.0.1:62699/hls-ts/vod.m3u8 vtrack=decoded:I420 96x98 atrack=none dur=2000 frames=34 timeChanges=6 maxT=1302 maxPos=0.65 end=True => SUCCESS"}
+{"seq":30,"t":"2026-07-21T12:12:03.5831730+00:00","src":"matrix","msg":"row M3b-hls-ts expected=Success actual=Success pass=True vtrack=decoded:I420 96x98 dur=2000 tc=6 end=True detail=HLS MPEG-TS VOD playlist"}
+{"seq":31,"t":"2026-07-21T12:12:03.5845785+00:00","src":"lab","msg":"GET /dash/vod.mpd"}
+{"seq":32,"t":"2026-07-21T12:12:03.5852473+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/dash/vod.mpd status=200 detail=ok"}
+{"seq":33,"t":"2026-07-21T12:12:03.5879611+00:00","src":"lab","msg":"GET /dash/vod.mpd"}
+{"seq":34,"t":"2026-07-21T12:12:03.5987072+00:00","src":"lab","msg":"GET /dash/vod.mpd"}
+{"seq":35,"t":"2026-07-21T12:12:03.6073309+00:00","src":"lab","msg":"GET /dash/init-stream0.m4s"}
+{"seq":36,"t":"2026-07-21T12:12:03.6087107+00:00","src":"lab","msg":"GET /dash/chunk-stream0-00001.m4s"}
+{"seq":37,"t":"2026-07-21T12:12:03.6105973+00:00","src":"lab","msg":"GET /dash/chunk-stream0-00002.m4s"}
+{"seq":38,"t":"2026-07-21T12:12:05.5375654+00:00","src":"probe","msg":"decode url=http://127.0.0.1:62699/dash/vod.mpd vtrack=h264 96x96 atrack=none dur=2000 frames=36 timeChanges=6 maxT=1356 maxPos=0.68 end=True => SUCCESS"}
+{"seq":39,"t":"2026-07-21T12:12:05.5379293+00:00","src":"matrix","msg":"row M4-dash expected=Success actual=Success pass=True vtrack=h264 96x96 dur=2000 tc=6 end=True detail=DASH static MPD (SegmentTemplate, fMP4)"}
+{"seq":40,"t":"2026-07-21T12:12:05.5393480+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
+{"seq":41,"t":"2026-07-21T12:12:05.5402089+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/gated-cookie/clip.mp4 status=401 detail=cookie-required"}
+{"seq":42,"t":"2026-07-21T12:12:05.5437390+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
+{"seq":43,"t":"2026-07-21T12:12:05.5445267+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
+{"seq":44,"t":"2026-07-21T12:12:05.5478165+00:00","src":"probe","msg":"parse status=Failed url=http://127.0.0.1:62699/gated-cookie/clip.mp4"}
+{"seq":45,"t":"2026-07-21T12:12:05.5479742+00:00","src":"matrix","msg":"row M6-direct-decoder-auth expected=DecodeFailed actual=DecodeFailed pass=True vtrack=- dur=0 tc=0 end=False detail=libvlc media-option direct cookie attempt — expected UNSUPPORTED (no :http-cookie in libvlc 3.x); lab gate log is the arbiter"}
+{"seq":46,"t":"2026-07-21T12:12:05.5488053+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
+{"seq":47,"t":"2026-07-21T12:12:05.5521198+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
+{"seq":48,"t":"2026-07-21T12:12:05.5530029+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
+{"seq":49,"t":"2026-07-21T12:12:05.5534094+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/relay/cookie/clip.mp4 status=200 detail=ok"}
+{"seq":50,"t":"2026-07-21T12:12:05.5550746+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
+{"seq":51,"t":"2026-07-21T12:12:05.5559705+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
+{"seq":52,"t":"2026-07-21T12:12:05.5564061+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
+{"seq":53,"t":"2026-07-21T12:12:05.5618733+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
+{"seq":54,"t":"2026-07-21T12:12:05.5625116+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
+{"seq":55,"t":"2026-07-21T12:12:05.5628853+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
+{"seq":56,"t":"2026-07-21T12:12:05.5695417+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
+{"seq":57,"t":"2026-07-21T12:12:05.5702162+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
+{"seq":58,"t":"2026-07-21T12:12:05.5705676+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
+{"seq":59,"t":"2026-07-21T12:12:05.5761614+00:00","src":"lab","msg":"GET /relay/cookie/clip.mp4"}
+{"seq":60,"t":"2026-07-21T12:12:05.5768066+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4 cookie=present(len=40)"}
+{"seq":61,"t":"2026-07-21T12:12:05.5771821+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=cookie:present(len=29) inject-header=absent upstream-status=200"}
+{"seq":62,"t":"2026-07-21T12:12:07.5457968+00:00","src":"probe","msg":"decode url=http://127.0.0.1:62699/relay/cookie/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=39 timeChanges=6 maxT=1700 maxPos=0.85 end=True => SUCCESS"}
+{"seq":63,"t":"2026-07-21T12:12:07.5460442+00:00","src":"matrix","msg":"row M6-relay-mediated expected=Success actual=Success pass=True vtrack=h264 96x96 dur=2000 tc=6 end=True detail=relay injects cookie upstream (proxy-mediated auth; strategy evidence, pending-owner)"}
+{"seq":64,"t":"2026-07-21T12:12:07.5473352+00:00","src":"lab","msg":"GET /relay/nocookie/clip.mp4"}
+{"seq":65,"t":"2026-07-21T12:12:07.5481342+00:00","src":"lab","msg":"GET /gated-cookie/clip.mp4"}
+{"seq":66,"t":"2026-07-21T12:12:07.5484490+00:00","src":"lab","msg":"relay upstream=/gated-cookie/clip.mp4 inject-cookie=absent inject-header=absent upstream-status=401"}
+{"seq":67,"t":"2026-07-21T12:12:07.5487134+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/relay/nocookie/clip.mp4 status=401 detail=cookie-required"}
+{"seq":68,"t":"2026-07-21T12:12:07.5488606+00:00","src":"matrix","msg":"row M6-relay-negative-control expected=AuthRequired actual=AuthRequired pass=True vtrack=- dur=0 tc=0 end=False detail=relay WITHOUT injection must propagate upstream 401 — no decode events"}
+{"seq":69,"t":"2026-07-21T12:12:07.5495601+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
+{"seq":70,"t":"2026-07-21T12:12:07.5499804+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/gated-header/clip.mp4 status=403 detail=header-required"}
+{"seq":71,"t":"2026-07-21T12:12:07.5517888+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
+{"seq":72,"t":"2026-07-21T12:12:07.5525935+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
+{"seq":73,"t":"2026-07-21T12:12:07.5557401+00:00","src":"probe","msg":"parse status=Failed url=http://127.0.0.1:62699/gated-header/clip.mp4"}
+{"seq":74,"t":"2026-07-21T12:12:07.5559224+00:00","src":"matrix","msg":"row M7-direct-decoder-auth expected=DecodeFailed actual=DecodeFailed pass=True vtrack=- dur=0 tc=0 end=False detail=no arbitrary-header mechanism in libvlc 3.x media options; raw open must fail at the gate"}
+{"seq":75,"t":"2026-07-21T12:12:07.5567804+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
+{"seq":76,"t":"2026-07-21T12:12:07.5574168+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
+{"seq":77,"t":"2026-07-21T12:12:07.5578659+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
+{"seq":78,"t":"2026-07-21T12:12:07.5581612+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/relay/header/clip.mp4 status=200 detail=ok"}
+{"seq":79,"t":"2026-07-21T12:12:07.5594218+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
+{"seq":80,"t":"2026-07-21T12:12:07.5599617+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
+{"seq":81,"t":"2026-07-21T12:12:07.5603932+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
+{"seq":82,"t":"2026-07-21T12:12:07.5666676+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
+{"seq":83,"t":"2026-07-21T12:12:07.5673453+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
+{"seq":84,"t":"2026-07-21T12:12:07.5677314+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
+{"seq":85,"t":"2026-07-21T12:12:07.5751606+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
+{"seq":86,"t":"2026-07-21T12:12:07.5757912+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
+{"seq":87,"t":"2026-07-21T12:12:07.5761339+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
+{"seq":88,"t":"2026-07-21T12:12:07.5819801+00:00","src":"lab","msg":"GET /relay/header/clip.mp4"}
+{"seq":89,"t":"2026-07-21T12:12:07.5826655+00:00","src":"lab","msg":"GET /gated-header/clip.mp4 x-spike-gate=present(len=29)"}
+{"seq":90,"t":"2026-07-21T12:12:07.5830085+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=header:present(len=29) upstream-status=200"}
+{"seq":91,"t":"2026-07-21T12:12:09.5536468+00:00","src":"probe","msg":"decode url=http://127.0.0.1:62699/relay/header/clip.mp4 vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=39 timeChanges=6 maxT=1701 maxPos=0.85 end=True => SUCCESS"}
+{"seq":92,"t":"2026-07-21T12:12:09.5539941+00:00","src":"matrix","msg":"row M7-relay-mediated expected=Success actual=Success pass=True vtrack=h264 96x96 dur=2000 tc=6 end=True detail=relay injects X-Spike-Gate upstream (proxy-mediated auth; strategy evidence, pending-owner)"}
+{"seq":93,"t":"2026-07-21T12:12:09.5551771+00:00","src":"lab","msg":"GET /relay/noheader/clip.mp4"}
+{"seq":94,"t":"2026-07-21T12:12:09.5560448+00:00","src":"lab","msg":"GET /gated-header/clip.mp4"}
+{"seq":95,"t":"2026-07-21T12:12:09.5563299+00:00","src":"lab","msg":"relay upstream=/gated-header/clip.mp4 inject-cookie=absent inject-header=absent upstream-status=403"}
+{"seq":96,"t":"2026-07-21T12:12:09.5566048+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/relay/noheader/clip.mp4 status=403 detail=header-required"}
+{"seq":97,"t":"2026-07-21T12:12:09.5567145+00:00","src":"matrix","msg":"row M7-relay-negative-control expected=AuthRequired actual=AuthRequired pass=True vtrack=- dur=0 tc=0 end=False detail=relay WITHOUT injection must propagate upstream 403 — no decode events"}
+{"seq":98,"t":"2026-07-21T12:12:09.5581988+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
+{"seq":99,"t":"2026-07-21T12:12:09.5587946+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/signed/clip.mp4?exp=1784636229&sig=sig:present(len=64) status=200 detail=ok"}
+{"seq":100,"t":"2026-07-21T12:12:09.5607371+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
+{"seq":101,"t":"2026-07-21T12:12:09.5705272+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
+{"seq":102,"t":"2026-07-21T12:12:11.5463642+00:00","src":"probe","msg":"decode url=http://127.0.0.1:62699/signed/clip.mp4?exp=1784636229&sig=sig:present(len=64) vtrack=h264 96x96 atrack=mp4a 44100Hz dur=2000 frames=39 timeChanges=6 maxT=1800 maxPos=0.90 end=True => SUCCESS"}
+{"seq":103,"t":"2026-07-21T12:12:11.5466152+00:00","src":"matrix","msg":"row M8-signed-valid expected=Success actual=Success pass=True vtrack=h264 96x96 dur=2000 tc=6 end=True detail=HMAC-signed URL, TTL 300s, opened before expiry"}
+{"seq":104,"t":"2026-07-21T12:12:11.5479777+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=64)"}
+{"seq":105,"t":"2026-07-21T12:12:11.5483880+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/signed/clip.mp4?exp=1784635871&sig=sig:present(len=64) status=403 detail=expired"}
+{"seq":106,"t":"2026-07-21T12:12:11.5485405+00:00","src":"matrix","msg":"row M8-signed-expired expected=SourceExpired actual=SourceExpired pass=True vtrack=- dur=0 tc=0 end=False detail=pre-expired signed URL → typed source-expired, no retry-storm (one decoder open)"}
+{"seq":107,"t":"2026-07-21T12:12:11.5494155+00:00","src":"lab","msg":"GET /signed/clip.mp4 sig=present(len=8)"}
+{"seq":108,"t":"2026-07-21T12:12:11.5497469+00:00","src":"probe","msg":"preflight url=http://127.0.0.1:62699/signed/clip.mp4?exp=9999999999&sig=sig:present(len=8) status=403 detail=bad-signature"}
+{"seq":109,"t":"2026-07-21T12:12:11.5498923+00:00","src":"matrix","msg":"row M8-signed-badsig expected=AuthRequired actual=AuthRequired pass=True vtrack=- dur=0 tc=0 end=False detail=tampered signature → 403 bad-signature"}
+{"seq":110,"t":"2026-07-21T12:12:11.5500783+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=absent"}
+{"seq":111,"t":"2026-07-21T12:12:11.5502096+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=absent"}
+{"seq":112,"t":"2026-07-21T12:12:11.5502719+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=absent"}
+{"seq":113,"t":"2026-07-21T12:12:11.5503264+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=valid"}
+{"seq":114,"t":"2026-07-21T12:12:11.5503883+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=valid"}
+{"seq":115,"t":"2026-07-21T12:12:11.5504444+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=valid"}
+{"seq":116,"t":"2026-07-21T12:12:11.5504950+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=valid"}
+{"seq":117,"t":"2026-07-21T12:12:11.5505435+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=valid"}
+{"seq":118,"t":"2026-07-21T12:12:11.5506010+00:00","src":"matrix","msg":"gate-observation gated-cookie presented=absent"}
+{"seq":119,"t":"2026-07-21T12:12:11.5506565+00:00","src":"matrix","msg":"gate-observation gated-header presented=absent"}
+{"seq":120,"t":"2026-07-21T12:12:11.5507093+00:00","src":"matrix","msg":"gate-observation gated-header presented=absent"}
+{"seq":121,"t":"2026-07-21T12:12:11.5507583+00:00","src":"matrix","msg":"gate-observation gated-header presented=absent"}
+{"seq":122,"t":"2026-07-21T12:12:11.5508193+00:00","src":"matrix","msg":"gate-observation gated-header presented=valid"}
+{"seq":123,"t":"2026-07-21T12:12:11.5508725+00:00","src":"matrix","msg":"gate-observation gated-header presented=valid"}
+{"seq":124,"t":"2026-07-21T12:12:11.5509302+00:00","src":"matrix","msg":"gate-observation gated-header presented=valid"}
+{"seq":125,"t":"2026-07-21T12:12:11.5510386+00:00","src":"matrix","msg":"gate-observation gated-header presented=valid"}
+{"seq":126,"t":"2026-07-21T12:12:11.5511019+00:00","src":"matrix","msg":"gate-observation gated-header presented=valid"}
+{"seq":127,"t":"2026-07-21T12:12:11.5511548+00:00","src":"matrix","msg":"gate-observation gated-header presented=absent"}
+{"seq":128,"t":"2026-07-21T12:12:11.5515045+00:00","src":"main","msg":"matrix done rows=14 failed=0"}

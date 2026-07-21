@@ -17,6 +17,8 @@
     <LangVersion>12.0</LangVersion>
     <RootNamespace>CcpSpike.VideoHandoff</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- NativeControlHost (WebView) needs supportedOS in the Win32 manifest (SP-011 integration consequence). -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +26,7 @@
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1" />
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
   </ItemGroup>
 
   <ItemGroup>

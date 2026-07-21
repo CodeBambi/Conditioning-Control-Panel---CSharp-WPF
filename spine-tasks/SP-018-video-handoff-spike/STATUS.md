@@ -1,7 +1,7 @@
 # STATUS: SP-018 — spike browser-to-native online-video handoff
 
-**Current Step:** Step 3 — Windows browser→native handoff evidence
-**Last Updated:** 2026-07-21 (Step 2 complete: 14/14 matrix PASS exit 0, audit GREEN)
+**Current Step:** Step 4 — WSLg/Linux gate + record + pre-completion consult + board reconciliation
+**Last Updated:** 2026-07-21 (Step 3 complete: browser matrix 7/7 PASS exit 0, audit GREEN incl. wv2-profile)
 
 ### Step 1: Video archaeology + source-matrix definition + package admission pre-approach consult
 **Status:** ✅ Complete (2026-07-21; in-worker plan review skipped by design SP-195)
@@ -20,14 +20,14 @@
 - [x] Redaction discipline + `--audit-logs` self-check implemented (GREEN on evidence run)
 
 ### Step 3: Windows browser→native handoff evidence
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete (2026-07-21; in-worker plan review skipped by design SP-195)
 
-- [ ] WebView2 host: per-row discovery → transfer → decode-verified playback (or typed limitation), success + failure shapes
-- [ ] Expiring-URL valid+expired; cookie/header negative controls; blob:/MSE outcome; DRM detect-report asserted in logs
-- [ ] **Sensitive-logging audit run green — recorded as evidence**
+- [x] WebView2 host: per-row discovery → transfer → decode-verified playback (or typed limitation), success + failure shapes (7/7)
+- [x] Expiring-URL valid+expired; cookie/header negative controls; blob:/MSE outcome; DRM detect-report asserted in logs
+- [x] **Sensitive-logging audit run green — recorded as evidence** (V5 cache-leak found+fixed, re-audit GREEN incl. profile)
 
 ### Step 4: WSLg/Linux gate + record + pre-completion consult + board reconciliation
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] WSL2 in-packet gate (`~/ccp-sp018`, never /mnt/e): native decode side REAL; browser-discovery limits named; contract green (pollution guard)
 - [ ] `client/docs/video-handoff-spike.md` — named observation per row + supported/unsupported matrix pending-owner

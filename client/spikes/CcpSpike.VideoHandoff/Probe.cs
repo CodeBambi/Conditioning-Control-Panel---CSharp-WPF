@@ -150,13 +150,14 @@ public sealed class Probe
         var direct = Describe(media);
         // HLS playlist parse reports duration but no tracks at playlist level; the segment
         // sub-items carry the real ES metadata (finding V4 — observed on both fMP4 and TS variants).
-        if (direct.V is not null || depth >= 2 || media.SubItems.Count == 0) return direct;
-        var sub = media.SubItems[0];
+        var items = media.SubItems;
+        if (direct.V is not null || depth >= 2 || items is null || items.Count == 0) return direct;
+        var sub = items[0] ?? throw new InvalidOperationException("null sub-item");
         try
         {
             using var cts = new CancellationTokenSource(ParseTimeoutMs);
             var st = await sub.Parse(MediaParseOptions.ParseNetwork, ParseTimeoutMs, cts.Token);
-            SpikeLog.Line("probe", $"describe-deep subitems={media.SubItems.Count} sub-parse={st} sub-tracks={sub.Tracks.Length}");
+            SpikeLog.Line("probe", $"describe-deep subitems={items.Count} sub-parse={st} sub-tracks={sub.Tracks?.Length ?? 0}");
             if (st != MediaParsedStatus.Done) return direct;
         }
         catch (Exception ex) { SpikeLog.Line("probe", $"describe-deep threw {ex.GetType().Name}"); return direct; }
