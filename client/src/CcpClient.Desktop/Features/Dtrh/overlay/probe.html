@@ -1,0 +1,59 @@
+<!doctype html>
+<!-- SP-023 product transport probe (NEW overlay path — never shadows a payload file).
+     Imports the PRODUCT bridge.js derivative and proves the admitted transport matrix
+     (dtrh-admission.md §3.2) on whichever engine hosts it:
+       check1  which JS host objects exist;
+       check2  page->host raw transports raise the host's WebMessageReceived;
+       check3  host->page delivery through bridge.on (Windows: synthetic dispatch;
+               Linux: long-poll inbox) incl. preBuffer replay on late registration.
+     Every line is mirrored via bridge.log so the host sees results WITHOUT
+     InvokeScript (NativeWebDialog GTK backend constraint, SP-011 L7). -->
+<meta charset="utf-8">
+<title>PROBING</title>
+<pre id="out">PROBING</pre>
+<script type="module">
+const out = document.getElementById('out');
+const lines = [];
+let bridge = null;
+const rec = (s) => {
+  lines.push(s);
+  out.textContent = lines.join('\n');
+  if (bridge) bridge.log('probe: ' + s);
+};
+
+rec('check1 window.chrome.webview: ' + ((window.chrome && window.chrome.webview) ? 'PRESENT' : 'ABSENT'));
+rec('check1b invokeCSharpAction: ' + (typeof window.invokeCSharpAction));
+
+try {
+  bridge = await import('./bridge.js');
+  rec('bridge.js imported (product derivative, blob 13af3f4d + §3.1 diff); isHosted=' + bridge.isHosted);
+} catch (e) {
+  rec('bridge.js import FAILED: ' + (e && e.message));
+}
+
+if (window.chrome && window.chrome.webview) {
+  window.chrome.webview.postMessage({ type: 'probe-p2h-native', note: 'native window.chrome.webview.postMessage' });
+  rec('sent probe-p2h-native');
+}
+if (typeof window.invokeCSharpAction === 'function') {
+  window.invokeCSharpAction(JSON.stringify({ type: 'probe-p2h-ica', note: 'invokeCSharpAction path' }));
+  rec('sent probe-p2h-ica');
+}
+
+if (bridge) {
+  bridge.on('probe-h2p', (m) => {
+    rec('check3 host->page DELIVERED via bridge.on: ' + JSON.stringify(m));
+    document.title = 'PROBE-DONE';
+  });
+  rec('bridge.on(probe-h2p) registered; awaiting host send');
+  // preBuffer check: the host sends probe-buffered BEFORE this delayed registration;
+  // the bridge must buffer it and replay on on() (ordering contract).
+  setTimeout(() => {
+    bridge.on('probe-buffered', (m) => {
+      rec('preBuffer REPLAY delivered on late registration: ' + JSON.stringify(m));
+    });
+    rec('late handler registered for probe-buffered (after host send)');
+  }, 4000);
+}
+rec('probe module complete');
+</script>

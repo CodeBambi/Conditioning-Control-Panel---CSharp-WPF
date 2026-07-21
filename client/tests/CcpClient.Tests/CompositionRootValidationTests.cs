@@ -52,7 +52,7 @@ public class CompositionRootValidationTests
 
         var host = root.Build(new StartupTrace());
 
-        Assert.Equal(4, host.Participants.Count);
+        Assert.Equal(5, host.Participants.Count);
         // Persistence contract §4 rule 1: the store registers first, so its phase-3 load
         // completes before any consumer participant starts.
         Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);

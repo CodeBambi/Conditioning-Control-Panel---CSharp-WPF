@@ -123,11 +123,56 @@ public class AssetManifestTests
     }
 
     [Fact]
-    public void CopiedDirection_ManifestDeclaresNoCopiedEntries()
+    public void CopiedDirection_RealManifest_AllCopiedEntriesPresentCaseExact_SweepClean()
     {
-        // Assert-empty, don't invent (consult pin 4): zero copied assets exist; the output
-        // directory convention arrives with the first copied consumer (A-014).
-        Assert.DoesNotContain(LoadRealManifest(), e => e.Source == AssetSource.Copied);
+        // SP-023 (first copied consumer — the documented extension of the assert-empty
+        // direction): 1538 copied entries (1536 DTRH payload + 2 product overlay) verified
+        // against the REAL output directory — existence, ordinal case-exactness, sweep.
+        var entries = LoadRealManifest();
+        var copied = entries.Where(e => e.Source == AssetSource.Copied).ToArray();
+        Assert.Equal(1538, copied.Length);
+        Assert.Contains(copied, e => e.Id == "dtrh.payload/bridge.js"
+            && e.Path == "payload/dtrh/bridge.js" && e.Required && e.Trust == "full");
+        Assert.Contains(copied, e => e.Id == "dtrh.overlay/bridge.js"
+            && e.Path == "payload-overlay/bridge.js");
+        var outputRoot = Path.GetDirectoryName(DesktopAssembly.Location)!;
+        var failures = AssetVerifier.VerifyCopied(entries, outputRoot);
+        Assert.Empty(failures);
+    }
+
+    [Fact]
+    public void CopiedDirection_CaseDrift_IsNamedFailure()
+    {
+        // ext4 vs NTFS drift protection (SP-009 §3): a differently-cased on-disk file must
+        // fail the ordinal walk even though File.Exists would tolerate it on NTFS.
+        var root = Path.Combine(Path.GetTempPath(), "ccp-sp023-manifest-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "PAYLOAD"));
+        File.WriteAllText(Path.Combine(root, "PAYLOAD", "File.PNG"), "x");
+        var entries = new[]
+        {
+            new AssetEntry("test.copied", AssetSource.Copied, "payload/File.PNG", true,
+                new AssetProvenance("synthetic", "test"), ["desktop"], "none", "full"),
+        };
+        var failures = AssetVerifier.VerifyCopied(entries, root);
+        Assert.Contains(failures, f => f.Reason == "copied-missing-or-case-drift");
+    }
+
+    [Fact]
+    public void CopiedDirection_UnmanifestedFile_SweepFailsAndNamesIt()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ccp-sp023-manifest-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "payload"));
+        File.WriteAllText(Path.Combine(root, "payload", "listed.png"), "x");
+        File.WriteAllText(Path.Combine(root, "payload", "sneaky.png"), "x");
+        var entries = new[]
+        {
+            new AssetEntry("test.copied", AssetSource.Copied, "payload/listed.png", true,
+                new AssetProvenance("synthetic", "test"), ["desktop"], "none", "full"),
+        };
+        var failures = AssetVerifier.VerifyCopied(entries, root);
+        Assert.Contains(failures, f => f.Reason == "unmanifested-copied-asset"
+            && f.Path == "payload/sneaky.png");
+        Assert.DoesNotContain(failures, f => f.Path == "payload/listed.png");
     }
 
     [Fact]

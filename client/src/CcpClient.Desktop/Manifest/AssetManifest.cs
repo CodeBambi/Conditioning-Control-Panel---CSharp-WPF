@@ -284,6 +284,76 @@ public static class AssetVerifier
     }
 
     /// <summary>
+    /// Copied direction (asset-manifest.md §Two-direction rule 4, extended by SP-023 — the
+    /// first copied consumer, per the documented extension point): forward = every required
+    /// copied entry exists under <paramref name="outputRoot"/> with ordinal case-exact
+    /// segments (File.Exists alone is case-tolerant on NTFS — the walk enumerates and
+    /// compares ordinal on every platform); sweep = every file under each copied top-level
+    /// root has a manifest entry. Output-relative checks are the POINT of the copied class;
+    /// the stream-only constraint applies to embedded assets only.
+    /// </summary>
+    public static IReadOnlyList<AssetVerificationFailure> VerifyCopied(IReadOnlyList<AssetEntry> entries, string outputRoot)
+    {
+        var failures = new List<AssetVerificationFailure>();
+        var copied = entries.Where(e => e.Source == AssetSource.Copied).ToArray();
+        var copiedPaths = copied.Select(e => e.Path).ToHashSet(StringComparer.Ordinal);
+
+        foreach (var entry in copied.Where(e => e.Required))
+        {
+            if (!ExistsCaseExact(outputRoot, entry.Path))
+            {
+                failures.Add(new AssetVerificationFailure(entry.Id, entry.Path, "copied-missing-or-case-drift"));
+            }
+        }
+
+        foreach (var root in copiedPaths.Select(p => p.Split('/')[0]).Distinct(StringComparer.Ordinal))
+        {
+            var rootDir = Path.Combine(outputRoot, root);
+            if (!Directory.Exists(rootDir))
+            {
+                continue; // every file under it was already reported by the forward direction
+            }
+
+            foreach (var file in Directory.EnumerateFiles(rootDir, "*", SearchOption.AllDirectories))
+            {
+                var rel = Path.GetRelativePath(outputRoot, file).Replace(Path.DirectorySeparatorChar, '/');
+                if (!copiedPaths.Contains(rel))
+                {
+                    failures.Add(new AssetVerificationFailure(rel, rel, "unmanifested-copied-asset"));
+                }
+            }
+        }
+
+        return failures;
+    }
+
+    private static bool ExistsCaseExact(string root, string relPath)
+    {
+        var current = root;
+        var segments = relPath.Split('/');
+        for (var i = 0; i < segments.Length; i++)
+        {
+            if (!Directory.Exists(current))
+            {
+                return false;
+            }
+
+            var names = i == segments.Length - 1
+                ? Directory.EnumerateFiles(current).Select(Path.GetFileName)
+                : Directory.EnumerateDirectories(current).Select(Path.GetFileName);
+            var match = names.FirstOrDefault(n => string.Equals(n, segments[i], StringComparison.Ordinal));
+            if (match is null)
+            {
+                return false;
+            }
+
+            current = Path.Combine(current, match);
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Bundle-ROOT entries starting with '!' are Avalonia compiler-owned metadata (observed
     /// 2026-07-19 on 12.1.0: <c>!AvaloniaResourceXamlInfo</c>, the compiled-XAML
     /// ClassToResourcePathIndex; the bundle itself is <c>!AvaloniaResources</c>). The rule is
@@ -336,7 +406,7 @@ public static class AssetSelfCheck
             return 1;
         }
 
-        var failures = AssetVerifier.Verify(entries, assembly);
+        var failures = AssetVerifier.Verify(entries, assembly).ToList();
         foreach (var entry in entries.Where(e => e is { Source: AssetSource.Embedded, Required: true }))
         {
             if (failures.Any(f => f.Id == entry.Id && f.Path == entry.Path))
@@ -345,6 +415,25 @@ public static class AssetSelfCheck
             }
 
             output.WriteLine($"asset OK {entry.Id} {entry.Path}");
+        }
+
+        // Copied direction (SP-023, first copied consumer): output-relative existence +
+        // case-exactness + completeness sweep, rooted at the binary's own directory (the
+        // stream-only constraint is embedded-only by design; copied checks are
+        // output-relative by definition and single-file-safe: content sits BESIDE the exe).
+        var copiedEntries = entries.Where(e => e.Source == AssetSource.Copied).ToArray();
+        if (copiedEntries.Length > 0)
+        {
+            var copiedFailures = AssetVerifier.VerifyCopied(entries, AppContext.BaseDirectory);
+            foreach (var failure in copiedFailures)
+            {
+                failures.Add(failure);
+            }
+
+            if (copiedFailures.Count == 0)
+            {
+                output.WriteLine($"asset OK copied: {copiedEntries.Length} entries present, case-exact, sweep clean");
+            }
         }
 
         foreach (var failure in failures)

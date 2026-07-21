@@ -348,7 +348,9 @@ public class CapabilityTests
             Assert.Contains("CapabilityProbes: ok", trace.Entries);
 
             var capabilities = Assert.IsType<CapabilityRegistry>(host!.Capabilities);
-            Assert.Equal(["display-session", "atomic-filesystem"], capabilities.Names);
+            Assert.Equal(
+                ["display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog"],
+                capabilities.Names);
 
             // Real session probe: this test machine is Windows or a sessioned Linux.
             Assert.IsType<CapabilityState.Available>(capabilities.GetState("display-session"));
@@ -358,6 +360,19 @@ public class CapabilityTests
             var fsState = capabilities.GetState("atomic-filesystem");
             Assert.True(fsState is CapabilityState.Available or CapabilityState.Degraded,
                 $"unexpected fs state: {fsState}");
+
+            // SP-023 DTRH probes: ran for real against this machine's engines — every
+            // platform reports an honest typed state (Available with dependency evidence,
+            // Unavailable with the admitted-shape reason, or DependencyMissing), never
+            // not-probed after the phase.
+            foreach (var name in new[] { "dtrh-webview-embedded", "dtrh-web-dialog" })
+            {
+                var state = capabilities.GetState(name);
+                Assert.True(
+                    state is CapabilityState.Available or CapabilityState.Unavailable
+                        or CapabilityState.DependencyMissing,
+                    $"unexpected {name} state: {state}");
+            }
         }
         finally
         {

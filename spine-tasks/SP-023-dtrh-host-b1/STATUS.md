@@ -1,10 +1,10 @@
 # STATUS: SP-023 — DTRH host slice b1: shell, origins, transport, boot matrix
 
-**Current Step:** Step 1 — FIRST GATE: NativeWebDialog invokeCSharpAction proof + host design + pre-approach consult
-**Last Updated:** 2026-07-21 (Step 1 in progress)
+**Current Step:** Step 4 — Boot matrix (WH) + WSLg gate (WX) + board reconciliation + pre-completion consult
+**Last Updated:** 2026-07-21 (Steps 1-3 complete; unit/contract tests green both platforms)
 
 ### Step 1: FIRST GATE + host design + pre-approach consult
-**Status:** 🔨 In Progress
+**Status:** ✅ Complete
 
 - [x] STATUS.md updated before starting work
 - [x] **FIRST CHECKBOX:** `invokeCSharpAction` page→host on NativeWebDialog — **PROVEN** on WSLg 2026-07-21 (spike `--dialog --page probe`, `page->host: {"type":"probe-p2h-ica"...}` arrived via dialog `WebMessageReceived`; transcript `evidence/first-gate-dialog-ica.log`). Linux page→host = invokeCSharpAction per §3.2 — no fallback needed
@@ -13,18 +13,18 @@
 - [x] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox) — 4 corrections folded in (query-strip logging; probe = Step-2 research; injectable long-poll timeout; reload semantics)
 
 ### Step 2: Host shell + package integration
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] csproj: WebView pinned per admission §1 + app.manifest supportedOS; build 0W/0E both platforms
-- [ ] `Features/Dtrh/DtrhHostWindow.axaml(.cs)`: Windows embedded + Linux NativeWebDialog; typed capability states; composition root + SP-004 owned lifecycle
-- [ ] Payload through SP-009 manifest (`--verify-assets` green Debug+Release); bridge.js derivative + transport diff (hashes recorded)
+- [x] csproj: WebView pinned per admission §1 + app.manifest supportedOS; build 0W/0E both platforms
+- [x] `Features/Dtrh/DtrhHostWindow.axaml(.cs)`: Windows embedded + Linux NativeWebDialog; typed capability states; composition root + SP-004 owned lifecycle
+- [x] Payload through SP-009 manifest (`--verify-assets` green Debug+Release, Windows+WSL2); bridge.js derivative + transport diff (hashes recorded)
 
 ### Step 3: Loopback origin serving + inbox endpoint
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] §4 origin server: two GET-only localhost origins, overlay-first, Range, MIME allowlist, CORS preflight, traversal refusal, sensitive-logging ban
-- [ ] §3.3 inbox: long-poll `GET /bridge/inbox?after=N`, monotonic seq, retain-until-ack, per-session unguessable token in route path
-- [ ] Unit tests: contract, inbox seq/ack/timeout/token, transport diff shape
+- [x] §4 origin server: two GET-only localhost origins, overlay-first, Range, MIME allowlist, CORS preflight, traversal refusal, sensitive-logging ban
+- [x] §3.3 inbox: long-poll `GET /bridge/<token>/inbox?after=N`, monotonic seq, retain-until-ack, per-session unguessable token in route path
+- [x] Unit tests: contract, inbox seq/ack/timeout/token, transport diff shape (245/245 both platforms)
 
 ### Step 4: Boot matrix (WH) + WSLg gate (WX) + board reconciliation + pre-completion consult
 **Status:** ⬜ Not Started

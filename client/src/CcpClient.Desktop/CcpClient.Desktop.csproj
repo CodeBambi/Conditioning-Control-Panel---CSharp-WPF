@@ -12,6 +12,9 @@
          through the composition root with injected dependencies (startup-shutdown-contract §7),
          never via the runtime XAML loader. -->
     <NoWarn>$(NoWarn);AVLN3001</NoWarn>
+    <!-- SP-023 / dtrh-admission.md §1 integration consequence: Avalonia's Win32
+         NativeControlHost crashes without supportedOS entries (SP-011 empirical). -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +25,29 @@
     <PackageReference Include="Avalonia" Version="12.1.0" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
+    <!-- SP-023 / dtrh-admission.md §1: pinned 12.0.1 (current latest, MIT, dep
+         Avalonia@12.0.0 minimum — nearest-wins to the 12.1.0 baseline). -->
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- SP-023 payload serving (asset class: copied — SP-009 first copied consumer).
+         The DTRH payload stays READ-ONLY in the legacy tree (trust anchor: git tree
+         40be29df, dtrh-admission.md §6); a LINKED glob copies the bytes unmodified to
+         output payload/dtrh/ — the single source of truth is never duplicated in git.
+         WPF archaeology: identical Content-copy-to-output shape (csproj:349-357). -->
+    <Content Include="..\..\..\ConditioningControlPanel\Resources\web\dtrh\**\*">
+      <Link>payload\dtrh\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <!-- Product-owned overlay (served overlay-first; exactly ONE payload shadow:
+         bridge.js = blob 13af3f4d + the §3.1 transport diff). -->
+    <Content Include="Features\Dtrh\overlay\**\*">
+      <Link>payload-overlay\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

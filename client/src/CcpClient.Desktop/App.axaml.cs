@@ -16,11 +16,13 @@ public partial class App : Application
     private readonly bool _avatarCorrupt;
     private readonly string? _avatarTracePath;
     private readonly bool _avatarAnimate;
+    private readonly bool _dtrhDemo;
+    private readonly string _dtrhPage;
     private StreamWriter? _avatarTraceWriter;
 
     public App(ApplicationHost host, bool popupDemo = false,
         bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
-        bool avatarAnimate = false)
+        bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html")
     {
         _host = host;
         _popupDemo = popupDemo;
@@ -28,6 +30,8 @@ public partial class App : Application
         _avatarCorrupt = avatarCorrupt;
         _avatarTracePath = avatarTracePath;
         _avatarAnimate = avatarAnimate;
+        _dtrhDemo = dtrhDemo;
+        _dtrhPage = dtrhPage;
     }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -84,6 +88,22 @@ public partial class App : Application
                         tube.Show(dashboard);
                     }
                 };
+            }
+
+            // SP-023 DTRH host slice b1 DEMONSTRATOR (--dtrh-demo): opens the host shell
+            // at startup (WSLg has no input automation — SP-008 named limit). The demo IS
+            // the boot matrix: closing the host window ends the app (exit 0 evidence).
+            if (_dtrhDemo)
+            {
+                var dtrhWindow = new Features.Dtrh.DtrhHostWindow(_host, _dtrhPage);
+                dashboard.Opened += (_, _) =>
+                {
+                    if (!dtrhWindow.IsVisible)
+                    {
+                        dtrhWindow.Show(dashboard);
+                    }
+                };
+                dtrhWindow.Closed += (_, _) => dashboard.Close();
             }
         }
 

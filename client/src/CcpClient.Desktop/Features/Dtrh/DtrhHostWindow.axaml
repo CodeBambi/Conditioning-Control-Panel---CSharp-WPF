@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpClient.Desktop.Features.Dtrh.DtrhHostWindow"
+        Title="CCP — DTRH host (slice b1)"
+        Width="1280" Height="800"
+        Background="#0b0b16">
+  <!--
+    SP-023 DTRH host shell (dtrh-admission.md §5): the embedded NativeWebView is the
+    WINDOWS surface (WebView2); on Linux the game rides a NativeWebDialog toplevel and
+    this window carries the honest state surface only. Where neither capability is
+    Available the honest unsupported surface shows — no classic fallback, ever.
+  -->
+  <DockPanel>
+    <TextBlock x:Name="Status" DockPanel.Dock="Bottom"
+               Foreground="#ff9ad5" Background="#141422" Padding="6"
+               FontFamily="Consolas" FontSize="12"
+               Text="dtrh host booting" />
+    <Panel>
+      <StackPanel x:Name="UnsupportedPanel" IsVisible="False" Margin="24" Spacing="8">
+        <TextBlock Foreground="#ff9ad5" FontSize="18" FontWeight="Bold"
+                   Text="DTRH web host: honest unsupported" />
+        <TextBlock x:Name="UnsupportedDetail" Foreground="#c8c8dd" TextWrapping="Wrap" />
+      </StackPanel>
+      <NativeWebView x:Name="Web" IsVisible="False" />
+    </Panel>
+  </DockPanel>
+</Window>
