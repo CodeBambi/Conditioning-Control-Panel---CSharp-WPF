@@ -125,6 +125,7 @@
 | 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260721T205239.md` |
 | 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260721T210045.md` |
 | 4 | plan | SKIPPED BY DESIGN (same) | `.reviews/4-20260721T222632.md` |
+| 5 | plan | SKIPPED BY DESIGN (same) | `.reviews/5-20260721T222959.md` |
 
 ---
 
