@@ -1,8 +1,8 @@
 # Conditioning-Control-Panel — Context
 
-**Last Updated:** 2026-07-19
+**Last Updated:** 2026-07-21
 **Status:** Active
-**Next Task ID:** SP-016
+**Next Task ID:** SP-017
 
 ---
 
@@ -20,9 +20,15 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **Pause protocol:** if the Fable 5 consult route errors or times out, assume the 5-hour subscription window is exhausted — safely park in-flight work (spine state is durable), write `.spine/handoff.md`, delete/pause loops and monitors, and STOP until the owner resumes with the session prompt. Same response to unresolvable ambiguity, safety/privacy questions, or repeated failure: pause, never improvise past a gate.
 
-### Phase 2 — governance repairs, WebView/DTRH spike, dashboard-successor UI rows
+### Phase 3 — AI contract, audio backend spike, online-video handoff spike
 
-**Phase 2 COMPLETE 2026-07-21** (all six rows landed, all WIP pending owner ratification). Phase 1 COMPLETE 2026-07-19 (all nine rows landed, all WIP pending owner ratification). Phase 2 decomposition approved by solo Fable consult 2026-07-19 (council unavailable — probe FAILED, seats unproven, T-7 3rd recurrence). **Next: Phase 3 decomposition — re-derive scope from unblocked board rows (spike landings may have unblocked rows), solo Fable decomposition consult, then author.**
+Phase 2 COMPLETE 2026-07-21 (all six rows landed, all WIP pending owner ratification). Phase 3 decomposition approved by solo Fable consult 2026-07-21 (council unavailable T-7): AI contract FIRST (define-only, gates later AI rows) → audio spike (WSLg PulseAudio honest scoping; unblocks quips/sound) → handoff spike (does NOT depend on the owner-blocked DTRH admit; cookies/headers no-sensitive-logging checkbox + DRM detect-only encoded). Serial execution (headed-focus discipline). **Geometry spike stays EXCLUDED** (hot-plug/rotation/rearrangement = owner-present display-topology work, not autonomous; WSLg tiles monitors under one X root — unrepresentative regardless). Camera rows (WSL2-fake), MCP audit (owner Sentry gate), all BLOCKED rows, and the 15 WIP ratification rows stay untouched.
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-016-ai-operation-contract | Row: define provider-neutral AI operation contract (define-only; typed outcomes, cancellation/generation, provider switching, interactive vs awareness, local memory, endpoint classification/disclosure, moderation, strict command envelope, per-command results, secret storage, offline behavior, content-free diagnostics) | Authored 2026-07-21 | SP-015 |
+
+### Phase 2 — governance repairs, WebView/DTRH spike, dashboard-successor UI rows (COMPLETE 2026-07-21)
 
 **Orchestrator-side items (no packets):** (a) council probe — EXECUTED 2026-07-19, FAILED (empty synthesizer + silent wrong-model substitution; board probe row WIP with evidence); (b) T-2 — ROOT-CAUSED 2026-07-19: packets wrote Review Level as bold prose, engine regex requires `## Review Level: N` heading; template fixed from SP-011 on; closes on empirical review presence.
 
@@ -84,3 +90,4 @@ Excluded from milestone 1: all BLOCKED rows, all spikes (WebView/DTRH, video han
 5. **Stub first:** run `SPINE_WORKER_STUB=1 spine batch start <id>` once per new packet shape before real workers.
 6. **Testing commands:** `.spine/spine-config.json` `testing.*` carry the real client commands since SP-002 land (2026-07-18): `dotnet build client/CcpClient.sln -c Debug --nologo` / `dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo`. Each packet's `## Contract` `testCommand` may still narrow scope. NOTE: the spine gate-evidence executable allowlist (`evidence-command.mjs`) is node-only upstream; `dotnet` was added via local node_modules patch (does NOT survive pi-spine reinstall — re-apply with the fsync patch; see port-lessons).
 7. **Board reconciliation:** every task updates its `client/docs/task-board.md` row before `.DONE`; the board wins over spine state on conflict.
+8. **T-11 packet sizing (2026-07-21):** headed-evidence-heavy packets must size each step to <2h of worker budget, or split capture vs evaluation/docs into separate packets/steps (SP-013 2h timeout; SP-015 2h + 4h-even-with-override). Orchestrators set `SPINE_WORKER_PI_TIMEOUT_MS=14400000` in the launch/resume shell for headed packets by default (confirmed inherited).
