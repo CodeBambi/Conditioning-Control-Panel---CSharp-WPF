@@ -1,16 +1,16 @@
 # STATUS: SP-017 — spike cross-platform audio channel backend
 
 **Current Step:** Step 1 — backend research + package admission pre-approach consult
-**Last Updated:** 2026-07-21 (authored)
+**Last Updated:** 2026-07-21 (Step 1 in progress)
 
 ### Step 1: Backend research + package admission pre-approach consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] STATUS.md updated before starting work
-- [ ] WPF + first-attempt audio archaeology (READ-ONLY, `File.cs:line`)
-- [ ] Candidate backends from live feeds: exact versions, licenses (+ packaging implications), native deps per OS, maintenance signal
-- [ ] WSLg PulseAudio reality check (session facts)
-- [ ] **Package admission solo Fable 5 consult** (1–2 cross-platform candidates + NAudio Windows reference admitted; verdict + actual answering model in record.md BEFORE checkbox)
+- [x] STATUS.md updated before starting work
+- [x] WPF + first-attempt audio archaeology (READ-ONLY, `File.cs:line`)
+- [x] Candidate backends from live feeds: exact versions, licenses (+ packaging implications), native deps per OS, maintenance signal
+- [x] WSLg PulseAudio reality check (session facts)
+- [x] **Package admission solo Fable 5 consult** (SoundFlow 1.4.1 + Silk.NET.OpenAL 2.23.0/Soft.Native 1.23.1 + NAudio 2.2.1 Windows reference ADMITTED with 8 binding corrections; verdict + Fable 5 in record.md)
 
 ### Step 2: Spike host + Windows evidence
 **Status:** ⬜ Not Started
