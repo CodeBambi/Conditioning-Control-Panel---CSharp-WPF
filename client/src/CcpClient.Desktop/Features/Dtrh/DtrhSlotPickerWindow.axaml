@@ -1,0 +1,93 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpClient.Desktop.Features.Dtrh.DtrhSlotPickerWindow"
+        Title="CCP — DTRH save picker"
+        Width="720" Height="480" CanResize="False"
+        Background="#0b0b16"
+        WindowStartupLocation="CenterOwner">
+  <!--
+    SP-024 slice b2: the pre-descent save picker. Ports the WPF OUTCOMES
+    (ChaosSlotPickerWindow.xaml.cs — archaeology cites in SP-024 record Step 1), never
+    the WPF mechanics. Visual grammar follows the b1 host surface (DtrhHostWindow.axaml:
+    dark #0b0b16, pink accent) per dashboard-design — the greenfield has no theme-token
+    system yet (recorded, not invented).
+  -->
+  <Window.Styles>
+    <Style Selector="Border.slot-card">
+      <Setter Property="Background" Value="#1C1A36"/>
+      <Setter Property="BorderBrush" Value="#44E84393"/>
+      <Setter Property="BorderThickness" Value="1.5"/>
+      <Setter Property="CornerRadius" Value="13"/>
+      <Setter Property="Margin" Value="9,0,9,0"/>
+      <Setter Property="Width" Value="196"/>
+      <Setter Property="Height" Value="268"/>
+    </Style>
+    <Style Selector="Border.slot-card.sel">
+      <Setter Property="Background" Value="#2A2042"/>
+      <Setter Property="BorderBrush" Value="#E84393"/>
+      <Setter Property="BorderThickness" Value="2.5"/>
+      <Setter Property="BoxShadow" Value="0 0 18 0 #8CE84393"/>
+    </Style>
+    <Style Selector="Border.slot-card.locked">
+      <Setter Property="Opacity" Value="0.45"/>
+    </Style>
+    <Style Selector="Button.picker">
+      <Setter Property="Background" Value="#2A2042"/>
+      <Setter Property="Foreground" Value="#ff9ad5"/>
+      <Setter Property="BorderBrush" Value="#44E84393"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="18,8"/>
+      <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <Style Selector="Button.picker-primary">
+      <Setter Property="Background" Value="#E84393"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+  </Window.Styles>
+
+  <Panel>
+    <DockPanel Margin="20">
+      <StackPanel DockPanel.Dock="Top" Spacing="4">
+        <TextBlock Text="Choose your descent" Foreground="#ff9ad5" FontSize="20" FontWeight="Bold"/>
+        <TextBlock Text="three local saves — they live only in the folder below"
+                   Foreground="#88A0A0C0" FontSize="12"/>
+      </StackPanel>
+
+      <StackPanel DockPanel.Dock="Bottom" Spacing="10" Margin="0,14,0,0">
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+          <TextBlock Text="Saves folder:" Foreground="#88A0A0C0" FontSize="11" VerticalAlignment="Center"/>
+          <TextBlock x:Name="PathText" Foreground="#AAB8B8D0" FontSize="11" VerticalAlignment="Center"/>
+          <Button x:Name="OpenFolderButton" Classes="picker" FontSize="11" Padding="10,4"
+                  Content="Open folder"/>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+          <Button x:Name="CancelButton" Classes="picker" Content="Cancel"/>
+          <Button x:Name="DescendButton" Classes="picker picker-primary" Content="DESCEND"/>
+        </StackPanel>
+      </StackPanel>
+
+      <!-- Cards are built in code-behind from the live slot summaries (data-driven,
+           like the WPF picker's RebuildCards). -->
+      <StackPanel x:Name="SlotsPanel" Orientation="Horizontal" HorizontalAlignment="Center"
+                  VerticalAlignment="Center"/>
+    </DockPanel>
+
+    <!-- In-window delete confirmation (the WPF MessageBox outcome, ported as an overlay
+         so the flow stays headless-testable and never spawns a second modal). -->
+    <Border x:Name="ConfirmOverlay" IsVisible="False" Background="#CC000000">
+      <Border Background="#1C1A36" BorderBrush="#E84393" BorderThickness="1.5" CornerRadius="13"
+              Padding="24" Width="420" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="14">
+          <TextBlock Text="Erase save" Foreground="#ff9ad5" FontSize="16" FontWeight="Bold"/>
+          <TextBlock x:Name="ConfirmText" Foreground="White" FontSize="13" TextWrapping="Wrap"/>
+          <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+            <Button x:Name="ConfirmCancelButton" Classes="picker" Content="Cancel"/>
+            <Button x:Name="ConfirmEraseButton" Classes="picker picker-primary" Content="Erase"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Border>
+  </Panel>
+</Window>

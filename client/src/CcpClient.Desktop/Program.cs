@@ -120,12 +120,19 @@ public static class Program
         var avatarAnimate = args.Contains("--avatar-animate", StringComparer.Ordinal);
         var avatarTrace = ArgValue(args, "--avatar-trace");
 
-        // SP-023 DTRH host slice b1: --dtrh-demo [page] opens the DTRH host shell at
-        // startup (same WSLg no-input-automation reasoning). page defaults to index.html;
-        // probe.html runs the transport-check matrix page. --dtrh-auto-close <seconds>
-        // closes the host window on a timer (WSLg exit evidence without input automation).
+        // SP-023 DTRH host slice b1: --dtrh-demo [page] opens the DTRH flow at startup
+        // (same WSLg no-input-automation reasoning). b2 (SP-024): the default path opens
+        // the save picker first (hero-card outcome); --dtrh-quick skips it (Quick Start
+        // outcome). --dtrh-picker-timeout <seconds> auto-commits the picker's current
+        // selection (timed drive for no-input platforms — never an input claim).
+        // --dtrh-auto-close <seconds> closes the host window on a timer (WSLg exit
+        // evidence without input automation).
         var dtrhDemo = args.Contains("--dtrh-demo", StringComparer.Ordinal);
         var dtrhPage = ArgValue(args, "--dtrh-page") ?? "index.html";
+        var dtrhQuick = args.Contains("--dtrh-quick", StringComparer.Ordinal);
+        var dtrhPickerTimeout = int.TryParse(ArgValue(args, "--dtrh-picker-timeout"), out var pickerSeconds)
+            ? pickerSeconds
+            : 0;
         var dtrhAutoClose = int.TryParse(ArgValue(args, "--dtrh-auto-close"), out var closeSeconds)
             ? closeSeconds
             : 0;
@@ -134,7 +141,7 @@ public static class Program
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
             return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace, avatarAnimate,
-                dtrhDemo, dtrhPage, dtrhAutoClose).StartWithClassicDesktopLifetime(args);
+                dtrhDemo, dtrhPage, dtrhAutoClose, dtrhQuick, dtrhPickerTimeout).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -202,9 +209,9 @@ public static class Program
         ApplicationHost host, bool popupDemo = false,
         bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
         bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
-        int dtrhAutoCloseSeconds = 0) => AppBuilder
+        int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0) => AppBuilder
         .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate,
-            dtrhDemo, dtrhPage, dtrhAutoCloseSeconds))
+            dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds))
         .UsePlatformDetect();
 
     private static string? ArgValue(string[] args, string flag)

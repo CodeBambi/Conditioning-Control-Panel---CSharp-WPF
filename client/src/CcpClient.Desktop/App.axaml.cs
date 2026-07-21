@@ -19,12 +19,14 @@ public partial class App : Application
     private readonly bool _dtrhDemo;
     private readonly string _dtrhPage;
     private readonly int _dtrhAutoCloseSeconds;
+    private readonly bool _dtrhQuick;
+    private readonly int _dtrhPickerTimeoutSeconds;
     private StreamWriter? _avatarTraceWriter;
 
     public App(ApplicationHost host, bool popupDemo = false,
         bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
         bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
-        int dtrhAutoCloseSeconds = 0)
+        int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0)
     {
         _host = host;
         _popupDemo = popupDemo;
@@ -35,6 +37,8 @@ public partial class App : Application
         _dtrhDemo = dtrhDemo;
         _dtrhPage = dtrhPage;
         _dtrhAutoCloseSeconds = dtrhAutoCloseSeconds;
+        _dtrhQuick = dtrhQuick;
+        _dtrhPickerTimeoutSeconds = dtrhPickerTimeoutSeconds;
     }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -95,37 +99,35 @@ public partial class App : Application
                 };
             }
 
-            // SP-023 DTRH host slice b1 DEMONSTRATOR (--dtrh-demo): opens the host shell
-            // at startup (WSLg has no input automation — SP-008 named limit). The demo IS
-            // the boot matrix: closing the host window ends the app (exit 0 evidence).
+            // SP-023/SP-024 DTRH DEMONSTRATOR (--dtrh-demo): b2 opens the save picker
+            // first (hero-card outcome); --dtrh-quick skips it (Quick Start outcome).
+            // The flow ending (host closed / picker cancelled) ends the app (exit 0
+            // evidence); WSLg has no input automation — SP-008 named limit.
             if (_dtrhDemo)
             {
-                var dtrhWindow = new Features.Dtrh.DtrhHostWindow(_host, _dtrhPage);
-                dashboard.Opened += (_, _) =>
+                var coordinator = new Features.Dtrh.DtrhLaunchCoordinator(_host, dashboard, _dtrhPage);
+                var flowEndedOnce = 0;
+                coordinator.FlowEnded += () =>
                 {
-                    if (!dtrhWindow.IsVisible)
-                    {
-                        dtrhWindow.Show(dashboard);
-                    }
-                };
-                var dtrhClosedOnce = 0;
-                dtrhWindow.Closed += (_, _) =>
-                {
-                    // One-shot: the lifetime's own shutdown closes the owned window again
-                    // (Closed re-fires), which would ping-pong Close() forever (SP-023).
-                    if (Interlocked.Exchange(ref dtrhClosedOnce, 1) != 0)
+                    // One-shot: picker-cancel and host-close both raise FlowEnded, and the
+                    // lifetime's own shutdown closes owned windows again (SP-023 ping-pong).
+                    if (Interlocked.Exchange(ref flowEndedOnce, 1) != 0)
                     {
                         return;
                     }
 
-                    _host.LogDiagnostic("dtrh: host window closed — shutting down the lifetime");
+                    _host.LogDiagnostic("dtrh: flow ended — shutting down the lifetime");
                     // Explicit Shutdown, not dashboard.Close(): on the GTK backend closing the
-                    // MainWindow does not reliably end the classic lifetime here (SP-023 WX:
-                    // dashboard closed, IsVisible=false, yet Exit never fired — process hung).
+                    // MainWindow does not reliably end the classic lifetime here (SP-023 WX).
                     desktop.Shutdown();
                 };
-                if (_dtrhAutoCloseSeconds > 0)
+                coordinator.HostOpened += () =>
                 {
+                    if (_dtrhAutoCloseSeconds <= 0)
+                    {
+                        return;
+                    }
+
                     // WSLg exit evidence without input automation (SP-008 named limit):
                     // the timed close exercises the same idempotent teardown path.
                     _host.LogDiagnostic($"dtrh: auto-close armed at {_dtrhAutoCloseSeconds}s");
@@ -133,12 +135,44 @@ public partial class App : Application
                         _ => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                         {
                             _host.LogDiagnostic("dtrh: auto-close firing");
-                            if (dtrhWindow.IsVisible)
+                            if (coordinator.HostWindow?.IsVisible == true)
                             {
-                                dtrhWindow.Close();
+                                coordinator.HostWindow.Close();
                             }
                         }), TaskScheduler.Default);
-                }
+                };
+                dashboard.Opened += (_, _) =>
+                {
+                    if (coordinator.HostWindow is not null || coordinator.Picker is not null)
+                    {
+                        return;
+                    }
+
+                    if (_dtrhQuick)
+                    {
+                        _ = coordinator.QuickStartAsync();
+                    }
+                    else
+                    {
+                        _ = coordinator.LaunchWithPickerAsync();
+                        if (_dtrhPickerTimeoutSeconds > 0)
+                        {
+                            // No-input platforms (SP-008): a TIMED commit of the picker's
+                            // current selection — the same commit path DESCEND takes,
+                            // honestly labeled as timed drive, never an input claim.
+                            _host.LogDiagnostic($"dtrh: picker timeout armed at {_dtrhPickerTimeoutSeconds}s");
+                            _ = Task.Delay(TimeSpan.FromSeconds(_dtrhPickerTimeoutSeconds)).ContinueWith(
+                                _ => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                                {
+                                    if (coordinator.Picker is { IsVisible: true } picker)
+                                    {
+                                        _host.LogDiagnostic("dtrh: picker timeout — committing current selection (timed drive, not input)");
+                                        picker.CommitCurrentSelection();
+                                    }
+                                }), TaskScheduler.Default);
+                        }
+                    }
+                };
             }
         }
 

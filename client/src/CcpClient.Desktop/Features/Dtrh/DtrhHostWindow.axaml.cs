@@ -36,12 +36,18 @@ public partial class DtrhHostWindow : Window
 
     public string Surface { get; private set; } = "pending";
 
-    public DtrhHostWindow(ApplicationHost host, string page = "index.html")
+    public DtrhHostWindow(ApplicationHost host, string page = "index.html", int? slot = null)
     {
         _host = host;
         _dtrh = host.Participants.OfType<DtrhParticipant>().Single();
         _page = page;
         InitializeComponent();
+        if (slot is not null)
+        {
+            SetStatus($"dtrh: descending into slot {slot}");
+            _host.LogDiagnostic($"dtrh: host window opening on slot {slot}");
+        }
+
         Opened += (_, _) => Begin();
         Closing += (_, _) =>
         {
