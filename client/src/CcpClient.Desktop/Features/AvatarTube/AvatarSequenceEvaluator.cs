@@ -31,23 +31,39 @@ public static class AvatarSchedule
     }
 
     /// <summary>
-    /// Phase fit: the maximal absolute residual of samples against
-    /// <c>t = phase + scale · cum(ordinal)</c> with the best median phase. A 1x fit within
-    /// tolerance PROVES declared cadence; a failed 2x/0.5x fit FALSIFIES multiplied/halved
-    /// speed — non-uniform delays make the schedules distinguishable (packet rule).
+    /// Least-squares SPEED estimate of observed samples against the declared schedule:
+    /// fits <c>t = phase + speed · cum(ordinal)</c> and returns the speed (1.0 = declared
+    /// cadence, 0.5 = doubled speed, 2.0 = halved). Within-hold capture quantization is
+    /// ZERO-MEAN noise on the slope (unlike max-residual phase fits, whose error grows with
+    /// the clip's longest hold — the 1400ms pose hold produced 704ms phantom residuals
+    /// under a residual fit, SP-015 Step 4 finding). Non-uniform delays keep the slope
+    /// identifiable; capture-timestamp jitter contributes ~jitter/span (≤0.07 at span ≥3s).
     /// </summary>
-    public static long MaxResidual(
-        IReadOnlyList<(long TimestampMs, int Ordinal)> samples, IReadOnlyList<int> delaysMs, double scale)
+    public static double SpeedEstimate(
+        IReadOnlyList<(long TimestampMs, int Ordinal)> samples, IReadOnlyList<int> delaysMs)
     {
         var cum = Cumulative(delaysMs);
-        var offsets = samples
-            .Select(s => s.TimestampMs - (long)Math.Round(scale * CumulativeAt(delaysMs, cum, s.Ordinal)))
-            .OrderBy(v => v)
-            .ToArray();
-        var phase = offsets[offsets.Length / 2];
-        return samples
-            .Select(s => Math.Abs(s.TimestampMs - (phase + (long)Math.Round(scale * CumulativeAt(delaysMs, cum, s.Ordinal)))))
-            .Max();
+        var n = samples.Count;
+        double xMean = 0, yMean = 0;
+        var xs = new double[n];
+        for (var i = 0; i < n; i++)
+        {
+            xs[i] = CumulativeAt(delaysMs, cum, samples[i].Ordinal);
+            xMean += xs[i];
+            yMean += samples[i].TimestampMs;
+        }
+
+        xMean /= n;
+        yMean /= n;
+        double sxx = 0, sxy = 0;
+        for (var i = 0; i < n; i++)
+        {
+            var dx = xs[i] - xMean;
+            sxx += dx * dx;
+            sxy += dx * (samples[i].TimestampMs - yMean);
+        }
+
+        return sxx <= 0 ? double.NaN : sxy / sxx;
     }
 }
 
@@ -89,15 +105,30 @@ public sealed record AvatarVerdict(string Name, bool Passed, string Detail)
 public static class AvatarSequenceEvaluator
 {
     /// <summary>
-    /// Schedule-fit tolerance. Discrimination math (why 500ms keeps falsification robust):
-    /// capture sampling at ~100-200ms spacing over NON-UNIFORM delays quantizes true-run
-    /// residuals to ~420ms worst-case, and a pause/resume window adds a systematic
-    /// mid-hold offset (~300ms) — 350ms was empirically too tight (evaluator tests).
-    /// Multiplied-speed misfit grows ~cum(k)/2: ~1000-1900ms over one idle pass for 2x,
-    /// ~2000-3800ms for 0.5x — both far beyond 500ms, so 2x/0.5x rejection stays decisive.
+    /// Schedule-fit windows on the estimated speed (see AvatarSchedule.SpeedEstimate for why
+    /// a slope, not a max-residual). 1x acceptance ±0.20 absorbs capture-period aliasing on
+    /// short runs (a ~264ms capture cadence against 480-820ms holds produces within-hold
+    /// placement bias up to ±0.17 on 4-ordinal runs — Step-4 finding) while staying
+    /// decisively clear of the falsified speeds: the 2x window [0.35,0.65] and the 0.5x
+    /// window [1.7,2.3] bracket the defect speeds with a >=0.15 margin on every side.
+    /// Runs need >= 8 samples and >= 4 distinct ordinals to discriminate; shorter runs emit
+    /// NO schedule verdicts (honest silence, never a phantom pass/fail).
     /// </summary>
-    public const double DefaultScheduleToleranceMs = 500;
-    public const double DefaultBlankFractionThreshold = 0.05;
+    public const double SpeedFit1xTolerance = 0.20;
+    public const int SpeedFitMinSamples = 8;
+    public const int SpeedFitMinDistinctOrdinals = 4;
+    public const double TwoSpeedWindowMin = 0.35;
+    public const double TwoSpeedWindowMax = 0.65;
+    public const double HalfSpeedWindowMin = 1.7;
+    public const double HalfSpeedWindowMax = 2.3;
+    /// <summary>
+    /// Blank threshold on content fraction (undecoded captures only — the union rule).
+    /// 0.02 sits below the SPARSEST legitimate frame (reaction art ≈ 0.033, generator's
+    /// 13-block radiating pattern + scan mark) and above a true blank (uniform stage bg
+    /// renders exactly 0.000 in lossless BMP captures) — both margins verified in Step-4
+    /// headed evidence (G4 false positive at the old 0.05, fraction 0.031).
+    /// </summary>
+    public const double DefaultBlankFractionThreshold = 0.02;
     public const long DefaultHoldSlackMs = 300;
 
     public static IReadOnlyList<AvatarVerdict> Evaluate(
@@ -117,14 +148,25 @@ public static class AvatarSequenceEvaluator
         verdicts.Add(EvaluateFloatLiveness(samples, trace));
         verdicts.AddRange(EvaluateRuns(samples, pack, trace));
 
-        var pauseBegin = trace.LastOrDefault(e => e.Kind == AvatarTraceEvent.PauseBegin);
-        var pauseEnd = trace.LastOrDefault(e => e.Kind == AvatarTraceEvent.PauseEnd);
+        // Pause/pack-switch verdicts bind to events INSIDE the samples' window (+3s pre-
+        // margin for the event driving what follows it): the trace is session-global but
+        // each evaluation is a time slice — a stale pause from an earlier gate must never
+        // be judged against this slice's samples (Step-4 finding: G7's pause phantom-
+        // FAILED G8's evaluation with "no decoded captures inside the pause window").
+        const long preMarginMs = 3000;
+        var windowBegin = samples.Min(s => s.TimestampMs) - preMarginMs;
+        var windowEnd = samples.Max(s => s.TimestampMs);
+        var pauseBegin = trace.LastOrDefault(e => e.Kind == AvatarTraceEvent.PauseBegin
+            && e.TimestampMs >= windowBegin && e.TimestampMs <= windowEnd);
+        var pauseEnd = trace.LastOrDefault(e => e.Kind == AvatarTraceEvent.PauseEnd
+            && e.TimestampMs >= windowBegin && e.TimestampMs <= windowEnd);
         if (pauseBegin is not null && pauseEnd is not null)
         {
             verdicts.AddRange(EvaluatePauseResume(samples, pack, pauseBegin, pauseEnd));
         }
 
-        var packSwitch = trace.LastOrDefault(e => e.Kind == AvatarTraceEvent.PackSwitch);
+        var packSwitch = trace.LastOrDefault(e => e.Kind == AvatarTraceEvent.PackSwitch
+            && e.TimestampMs >= windowBegin && e.TimestampMs <= windowEnd);
         if (packSwitch is not null)
         {
             verdicts.Add(EvaluatePackSwitch(samples, packSwitch));
@@ -134,35 +176,53 @@ public static class AvatarSequenceEvaluator
     }
 
     /// <summary>
-    /// Gentle-float liveness: the content Y centroid oscillates with the float transform —
-    /// range >= 1px (alive) and bounded by the demonstrator amplitude (4 DIP) + capture
-    /// tolerance (never the top-level window moving: window position is separate evidence).
+    /// Gentle-float liveness, measured WITHIN one rendered identity: samples group by
+    /// (pack, clip, frame); inside a group the strip/content is identical, so centroid
+    /// motion is the float transform only — never pose art changes (Step-4 finding: raw
+    /// cross-frame centroids conflate art with float, 14.3px phantom against a 12px bound).
+    /// Dip/crossfade-edge captures of the same identity show LESS content and are excluded
+    /// (relative-content floor). Alive = some group oscillates >= 1px; bounded = every
+    /// group stays inside 2x the demonstrator amplitude + capture tolerance.
     /// </summary>
     private static AvatarVerdict EvaluateFloatLiveness(IReadOnlyList<AvatarSample> samples, IReadOnlyList<AvatarTraceEvent> trace)
     {
         const double amplitudeBound = 4.0 + 2.0;
         // Paused windows freeze the float legitimately — frozen samples are excluded.
         var pauseWindows = PauseWindows(trace);
-        var measured = samples
-            .Where(s => s.ContentCentroidY >= 0 && !pauseWindows.Any(w => s.TimestampMs >= w.Begin && s.TimestampMs <= w.End))
-            .Select(s => s.ContentCentroidY)
-            .ToArray();
-        if (measured.Length < 2)
+        var groups = samples
+            .Where(s => s.Decoded && s.ContentCentroidY >= 0
+                && !pauseWindows.Any(w => s.TimestampMs >= w.Begin && s.TimestampMs <= w.End))
+            .GroupBy(s => (s.PackId, s.ClipId, s.FrameIndex));
+        var ranges = new List<double>();
+        foreach (var group in groups)
         {
-            return new AvatarVerdict("float-liveness", false, $"only {measured.Length} sample(s) with a measurable centroid");
+            if (group.Count() < 2)
+            {
+                continue;
+            }
+
+            var maxContent = group.Max(s => s.ContentFraction);
+            var pure = group.Where(s => s.ContentFraction >= 0.8 * maxContent).Select(s => s.ContentCentroidY).ToArray();
+            if (pure.Length >= 2)
+            {
+                ranges.Add(pure.Max() - pure.Min());
+            }
         }
 
-        var min = measured.Min();
-        var max = measured.Max();
-        var range = max - min;
-        var withinAmplitude = range <= 2 * amplitudeBound;
-        var passed = range >= 1.0 && withinAmplitude;
+        if (ranges.Count == 0)
+        {
+            return new AvatarVerdict("float-liveness", false, "no frame identity captured twice — float motion not measurable");
+        }
+
+        var maxRange = ranges.Max();
+        var bounded = ranges.All(r => r <= 2 * amplitudeBound);
+        var passed = maxRange >= 1.0 && bounded;
         return new AvatarVerdict(
             "float-liveness",
             passed,
             passed
-                ? $"content centroid oscillates {range:F1}px within the ±{amplitudeBound}px float bound"
-                : $"centroid range {range:F1}px (need >= 1px alive and <= {2 * amplitudeBound}px bounded)");
+                ? $"same-frame content centroid oscillates up to {maxRange:F1}px across {ranges.Count} frame group(s), all within the ±{amplitudeBound}px float bound"
+                : $"same-frame centroid ranges [{string.Join(", ", ranges.Select(r => r.ToString("F1")))}]px (need max >= 1px alive, all <= {2 * amplitudeBound}px bounded)");
     }
 
     private static AvatarVerdict EvaluateNoBlank(IReadOnlyList<AvatarSample> samples)
@@ -240,6 +300,15 @@ public static class AvatarSequenceEvaluator
 
         foreach (var run in runs)
         {
+            // Foreign-pack runs (a pack-switch sequence evaluated against ONE def) carry a
+            // different declared schedule — per-run checks against this def are meaningless;
+            // the pack-switch-clean verdict judges them (Step-4 finding: pulse's run judged
+            // against circuit's delays phantom-failed dup-run + schedule-fit).
+            if (run[0].PackId != pack.PackId)
+            {
+                continue;
+            }
+
             var clip = pack.Clip(run[0].ClipId);
             var frames = clip.Frames;
 
@@ -291,9 +360,13 @@ public static class AvatarSequenceEvaluator
                 runStart = i;
             }
 
-            // Schedule fit on runs long enough to discriminate (ordinal-unwrapped).
+            // Schedule fit on runs long enough to discriminate (ordinal-unwrapped). Runs
+            // spanning a PAUSE are excluded: the pause gap inflates wall time without frame
+            // progress (Step-4 finding: pause-spanning run measured speed 2.22) — pause-
+            // shifted cadence is the cadence-unchanged-after-resume verdict's job.
             var distinct = run.Select(s => s.FrameIndex).Distinct().Count();
-            if (run.Count >= 4 && distinct >= 3)
+            var spansPause = pauseWindows.Any(w => run[^1].TimestampMs > w.Begin && run[0].TimestampMs < w.End);
+            if (!spansPause && run.Count >= SpeedFitMinSamples && distinct >= SpeedFitMinDistinctOrdinals)
             {
                 fitRuns++;
                 var ordinals = new List<(long, int)> { (run[0].TimestampMs, run[0].FrameIndex) };
@@ -303,13 +376,11 @@ public static class AvatarSequenceEvaluator
                     ordinals.Add((run[i].TimestampMs, ordinals[^1].Item2 + jump));
                 }
 
-                var residual1x = AvatarSchedule.MaxResidual(ordinals, clip.DelaysMs, 1.0);
-                var residual2x = AvatarSchedule.MaxResidual(ordinals, clip.DelaysMs, 0.5);
-                var residualHalf = AvatarSchedule.MaxResidual(ordinals, clip.DelaysMs, 2.0);
-                if (residual1x <= DefaultScheduleToleranceMs) fit1xPassed++;
-                if (residual2x > DefaultScheduleToleranceMs) fit2xRejected++;
-                if (residualHalf > DefaultScheduleToleranceMs) fitHalfRejected++;
-                fitDetails.Add($"clip {run[0].ClipId} run ({run.Count} samples): 1x={residual1x}ms 2x={residual2x}ms 0.5x={residualHalf}ms");
+                var speed = AvatarSchedule.SpeedEstimate(ordinals, clip.DelaysMs);
+                if (Math.Abs(speed - 1.0) <= SpeedFit1xTolerance) fit1xPassed++;
+                if (double.IsNaN(speed) || speed < TwoSpeedWindowMin || speed > TwoSpeedWindowMax) fit2xRejected++;
+                if (double.IsNaN(speed) || speed < HalfSpeedWindowMin || speed > HalfSpeedWindowMax) fitHalfRejected++;
+                fitDetails.Add($"clip {run[0].ClipId} run ({run.Count} samples): speed={speed:F3}");
             }
         }
 
@@ -332,7 +403,7 @@ public static class AvatarSequenceEvaluator
             yield return new AvatarVerdict(
                 "schedule-fit-1x",
                 fit1xPassed == fitRuns,
-                $"{fit1xPassed}/{fitRuns} discriminating runs fit the declared 1x cadence within {DefaultScheduleToleranceMs}ms; {string.Join(" | ", fitDetails)}");
+                $"{fit1xPassed}/{fitRuns} discriminating runs fit the declared 1x cadence (speed within ±{SpeedFit1xTolerance:F2}); {string.Join(" | ", fitDetails)}");
             yield return new AvatarVerdict(
                 "schedule-not-2x-speed",
                 fit2xRejected == fitRuns,
@@ -373,7 +444,8 @@ public static class AvatarSequenceEvaluator
         var pausedFrame = frozenDistinct[0];
         var clip = pack.Clip(pausedFrame.ClipId);
         var successor = (pausedFrame.FrameIndex + 1) % clip.Frames;
-        var after = samples.Where(s => s.TimestampMs > pauseEnd.TimestampMs && s.Decoded && s.ClipId == pausedFrame.ClipId).ToArray();
+        var maxGap = 2L * clip.DelaysMs.Max() + DefaultHoldSlackMs;
+        var after = PauseAdjacentRun(samples, pausedFrame.ClipId, pauseEnd.TimestampMs, forward: true, maxGap);
         var firstDistinct = after.Select(s => s.FrameIndex).Distinct().Take(2).ToArray();
         var successorOk = firstDistinct.Length > 0 && firstDistinct[0] is var first && (first == pausedFrame.FrameIndex || first == successor)
             && (firstDistinct.Length < 2 || firstDistinct[1] == (first == pausedFrame.FrameIndex ? successor : (successor + 1) % clip.Frames));
@@ -385,9 +457,14 @@ public static class AvatarSequenceEvaluator
                 : $"post-resume frames {string.Join(",", firstDistinct)} are not the paused frame {pausedFrame.FrameIndex}/successor {successor} chain");
 
         // Cadence unchanged: pre- and post-pause segments share one schedule shifted by the
-        // pause duration (the engine's deadline re-base).
-        var before = samples.Where(s => s.TimestampMs < pauseBegin.TimestampMs && s.Decoded && s.ClipId == pausedFrame.ClipId).ToArray();
-        if (before.Length >= 3 && after.Length >= 3)
+        // pause duration (the engine's deadline re-base). PAUSE-ADJACENT contiguous runs
+        // only: samples captured seconds away from the pause belong to another pass/rotation
+        // and make the ordinal bridge invalid (Step-4 finding: phantom speed 4.16 from a
+        // 7.5s stale pre-pause segment; the capture-first script order is the harness fix,
+        // this adjacency bound is the evaluator guard).
+        var before = PauseAdjacentRun(samples, pausedFrame.ClipId, pauseBegin.TimestampMs, forward: false, maxGap);
+        var distinctOrdinals = before.Select(s => s.FrameIndex).Concat(after.Select(s => s.FrameIndex)).Distinct().Count();
+        if (before.Length >= 3 && after.Length >= 2 && before.Length + after.Length >= 6 && distinctOrdinals >= 4)
         {
             var ordinals = new List<(long, int)>();
             var ordinal = before[0].FrameIndex;
@@ -407,12 +484,66 @@ public static class AvatarSequenceEvaluator
                 ordinals.Add((sample.TimestampMs - pauseDuration, ordinal));
             }
 
-            var residual = AvatarSchedule.MaxResidual(ordinals, clip.DelaysMs, 1.0);
+            var speed = AvatarSchedule.SpeedEstimate(ordinals, clip.DelaysMs);
             yield return new AvatarVerdict(
                 "cadence-unchanged-after-resume",
-                residual <= DefaultScheduleToleranceMs,
-                $"pre+post segments fit ONE schedule shifted by the {pauseDuration}ms pause: max residual {residual}ms (tolerance {DefaultScheduleToleranceMs}ms)");
+                Math.Abs(speed - 1.0) <= SpeedFit1xTolerance,
+                $"pre+post segments fit ONE schedule shifted by the {pauseDuration}ms pause: speed {speed:F3} (1x within ±{SpeedFit1xTolerance:F2})");
         }
+        else
+        {
+            yield return new AvatarVerdict(
+                "cadence-unchanged-after-resume",
+                false,
+                $"insufficient pause-adjacent coverage: {before.Length} before (need >=3) / {after.Length} after (need >=2) samples, {distinctOrdinals} distinct ordinals (need >=4) within {maxGap}ms of the pause");
+        }
+    }
+
+    /// <summary>
+    /// The maximal contiguous same-clip decoded run adjacent to a boundary: the first/last
+    /// sample must lie within <paramref name="maxGap"/> of the boundary and consecutive
+    /// samples within <paramref name="maxGap"/> of each other — anything beyond belongs to
+    /// another pass and must never enter the cadence bridge.
+    /// </summary>
+    private static AvatarSample[] PauseAdjacentRun(
+        IReadOnlyList<AvatarSample> samples, int clipId, long boundaryMs, bool forward, long maxGap)
+    {
+        var adjacent = samples
+            .Where(s => s.Decoded && s.ClipId == clipId
+                && (forward ? s.TimestampMs > boundaryMs : s.TimestampMs < boundaryMs))
+            .OrderBy(s => s.TimestampMs)
+            .ToArray();
+        var run = new List<AvatarSample>();
+        if (forward)
+        {
+            foreach (var sample in adjacent)
+            {
+                var anchor = run.Count == 0 ? boundaryMs : run[^1].TimestampMs;
+                if (sample.TimestampMs - anchor > maxGap)
+                {
+                    break;
+                }
+
+                run.Add(sample);
+            }
+        }
+        else
+        {
+            foreach (var sample in adjacent.Reverse())
+            {
+                var anchor = run.Count == 0 ? boundaryMs : run[^1].TimestampMs;
+                if (anchor - sample.TimestampMs > maxGap)
+                {
+                    break;
+                }
+
+                run.Add(sample);
+            }
+
+            run.Reverse();
+        }
+
+        return run.ToArray();
     }
 
     private static AvatarVerdict EvaluatePackSwitch(IReadOnlyList<AvatarSample> samples, AvatarTraceEvent packSwitch)

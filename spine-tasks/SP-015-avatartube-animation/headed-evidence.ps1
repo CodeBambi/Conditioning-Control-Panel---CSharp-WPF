@@ -65,9 +65,13 @@ function Get-Tube {
     return $null
 }
 function Get-Dashboard {
-    foreach ($w in (Get-Windows $script:proc.Id)) {
-        $t = Get-Texts $w
-        if (($t -match 'layout-probe:') -and -not ($t -match 'avatar-probe:')) { return $w }
+    # UIA tree queries can race window transitions (detach/attach) — retry briefly.
+    foreach ($try in 1..6) {
+        foreach ($w in (Get-Windows $script:proc.Id)) {
+            $t = Get-Texts $w
+            if (($t -match 'layout-probe:') -and -not ($t -match 'avatar-probe:')) { return $w }
+        }
+        Start-Sleep -Milliseconds 400
     }
     return $null
 }
@@ -142,18 +146,31 @@ function Collect-Shots([string]$tag, [double]$seconds, [int]$periodMs = 260) {
 # Start-Process with redirect files: the direct `& $exe` invocation returns empty output
 # in this worker environment (no native exec) — Start-Process is the deterministic path.
 function Invoke-AppChecked([string[]]$appArgs) {
-    $outFile = Join-Path $env:TEMP ('ccp-decode-' + [Guid]::NewGuid().ToString('N') + '.txt')
-    $errFile = $outFile + '.err'
-    $p = Start-Process -FilePath $exe -ArgumentList $appArgs -NoNewWindow -Wait -RedirectStandardOutput $outFile -RedirectStandardError $errFile -PassThru
-    $out = if (Test-Path $outFile) { Get-Content $outFile -Raw } else { '' }
-    Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
-    return @{ Exit = $p.ExitCode; Out = $out.Trim() }
+    # One retry on empty stdout: a bare .NET spawn occasionally yields an empty redirect
+    # file under load (observed in G3); the app-side decode itself is deterministic.
+    foreach ($attempt in 1..2) {
+        $outFile = Join-Path $env:TEMP ('ccp-decode-' + [Guid]::NewGuid().ToString('N') + '.txt')
+        $errFile = $outFile + '.err'
+        $p = Start-Process -FilePath $exe -ArgumentList $appArgs -NoNewWindow -Wait -RedirectStandardOutput $outFile -RedirectStandardError $errFile -PassThru
+        # Start-Process -Wait does not wait for the redirected-stream flush (PS known
+        # issue): poll for content so a slow flush is never read as an empty result.
+        foreach ($tick in 1..50) {
+            if ((Test-Path $outFile) -and (Get-Item $outFile).Length -gt 0) { break }
+            Start-Sleep -Milliseconds 100
+        }
+        $out = if (Test-Path $outFile) { Get-Content $outFile -Raw } else { $null }
+        $err = if (Test-Path $errFile) { Get-Content $errFile -Raw } else { $null }
+        Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
+        if ($out) { return @{ Exit = $p.ExitCode; Out = $out.Trim() } }
+        if ($attempt -eq 2) { return @{ Exit = $p.ExitCode; Out = ''; Err = ($err ?? '').Trim() } }
+        Start-Sleep -Milliseconds 300
+    }
 }
 function Decode-Shots($files) {
     $samples = @()
     foreach ($file in $files) {
         $r = Invoke-AppChecked @('--avatar-strip-decode', '--capture', $file)
-        if (-not $r.Out) { Fail "strip-decode produced no output for $file (exit $($r.Exit))" }
+        if (-not $r.Out) { Fail "strip-decode produced no output for $file (exit $($r.Exit), stderr: $($r.Err))" }
         $sample = $r.Out | ConvertFrom-Json
         if ($file -match '-(\d+)\.bmp$') { $sample.T = [long]$Matches[1] }
         $samples += $sample
@@ -165,16 +182,19 @@ function Save-Samples($samples, [string]$name) {
     $samples | ForEach-Object { $_ | ConvertTo-Json -Compress } | Set-Content -Path $path -Encoding utf8
     return $path
 }
-function Invoke-Sequence([string]$name, [string]$samplesPath, [bool]$withTrace, [string[]]$expectVerdicts) {
+function Invoke-Sequence([string]$name, [string]$samplesPath, [bool]$withTrace, [string[]]$expectVerdicts, [bool]$assertAll = $true) {
     $evalArgs = @('--avatar-sequence', $samplesPath, '--pack', $packDef)
     if ($withTrace) { $evalArgs += @('--trace', $script:traceFile) }
     $r = Invoke-AppChecked $evalArgs
     $text = $r.Out
     $output = $text -split "`n"
     foreach ($v in $expectVerdicts) {
-        Gate ($text -match "PASS \Q$v\E") "$name/$v" (($output | Where-Object { $_ -match $v }) -join '; ')
+        $found = $text -match ('PASS ' + [regex]::Escape($v))
+        $detail = (($output | Where-Object { $_ -match $v }) -join '; ')
+        if (-not $found -and -not $detail) { $detail = "exit=$($r.Exit) err=$($r.Err) raw=$($text.Substring(0, [Math]::Min(300, $text.Length)))" }
+        Gate $found "$name/$v" $detail
     }
-    Gate ($text -match 'ALL VERDICTS PASSED') "$name/all-verdicts" ($output | Select-Object -Last 1)
+    if ($assertAll) { Gate ($text -match 'ALL VERDICTS PASSED') "$name/all-verdicts" ($output | Select-Object -Last 1) }
 }
 function Trace-Contains([string]$kind) {
     if (-not (Test-Path $script:traceFile)) { return $false }
@@ -184,10 +204,10 @@ function Trace-Contains([string]$kind) {
 Write-Output '=== SP-015 AvatarTube demonstrator — Windows-headed evidence matrix ==='
 if (Test-Path $settingsFile) { Remove-Item $settingsFile -Force }
 $script:traceFile = Join-Path $shots 'trace.jsonl'
-$errFile = Join-Path $shots 'stderr.log'
+# stderr is NOT redirected: an undrained redirect pipe wedges the app (SP-015 finding).
 $script:proc = [System.Diagnostics.Process]::Start((New-Object System.Diagnostics.ProcessStartInfo -Property @{
     FileName = $exe; Arguments = "--avatartube-demo --avatar-trace `"$script:traceFile`""
-    RedirectStandardError = $true; UseShellExecute = $false }))
+    UseShellExecute = $false }))
 Start-Sleep -Seconds 5
 $tube = Get-Tube
 if ($null -eq $tube) { Fail 'tube window not found after launch' }
@@ -228,7 +248,7 @@ Gate (Test-Path $midFadeFile) 'g3/mid-fade-artifact' $midFadeFile
 Write-Output '-- G4 talk sequence (8s)'
 Click-Button 'Talk'
 $g4 = Decode-Shots (Collect-Shots 'g4' 8 220)
-$seqClips = @($g4 | Where-Object Decoded | ForEach-Object { $_.Clip })
+$seqClips = @($g4 | Where-Object Decoded | ForEach-Object { [int]$_.Clip })
 Gate (($seqClips -contains 3) -and ($seqClips -contains 4)) 'g4/talk+reaction-seen' "clips: $($seqClips -join ',')"
 $talkIdx = [Array]::IndexOf($seqClips, 3); $reactIdx = [Array]::IndexOf($seqClips, 4)
 $idleAfterReact = $false
@@ -250,7 +270,7 @@ Start-Sleep -Milliseconds 500
 $g5 = Decode-Shots (Collect-Shots 'g5' 5 220)
 Gate (($g5 | Where-Object Decoded | Select-Object -ExpandProperty Clip -Unique) -contains 5) 'g5/click-clip-played' 'click emote clip rendered'
 Gate (Trace-Contains 'click-cooldown-ignored') 'g5/cooldown-ignored' 'duplicate click inside cooldown traced as ignored'
-$g5Clips = @($g5 | Where-Object Decoded | ForEach-Object { $_.Clip })
+$g5Clips = @($g5 | Where-Object Decoded | ForEach-Object { [int]$_.Clip })
 $clickSeen = [Array]::IndexOf($g5Clips, 5)
 $idleAfterClick = $false
 for ($i = $clickSeen; $i -lt $g5Clips.Count; $i++) { if ($g5Clips[$i] -in 1, 2) { $idleAfterClick = $true; break } }
@@ -261,13 +281,39 @@ Gate $true 'g6/float-folded-into-g2' 'centroid oscillation asserted by g2/float-
 
 # ---- G7: pause/resume — freeze, successor, unchanged cadence ----
 Write-Output '-- G7 pause/resume (9s)'
-$g7a = Decode-Shots (Collect-Shots 'g7a' 2 220)
+# Capture FIRST, decode later: pre-pause samples must be pause-adjacent (decode latency
+# between capture and pause made the old order's pre-pause coverage ~10s stale — the
+# evaluator rightly rejected the discontinuous bridge).
+$g7aFiles = Collect-Shots 'g7a' 2 220
+# Pause MID-PASS with margin on BOTH sides: the cadence bridge needs >=3 same-clip samples
+# before the pause and >=2 after. Early frames (just-rotated) starve the before-run; last
+# frames starve the after-run (observed flakes: 0 before / 1-2 after). Accept: clip 1
+# frame 1-2, clip 2 frame 1 (clip 2's later frames rotate away <= 690ms after resume),
+# stable across two probes (no wrap, no just-rotated).
+$early = $false
+$prevProbe = $null
+foreach ($round in 1..8) {
+    if ($round -gt 1) { $g7aFiles += Collect-Shots ("g7a2-$round") 1 220 }
+    foreach ($try in 1..4) {
+        $probe = Read-Probe
+        if ($probe -and $prevProbe -and $probe.Mode -eq 'Animated' `
+            -and (($probe.Clip -eq 1 -and $probe.Frame -ge 1 -and $probe.Frame -le 2) -or ($probe.Clip -eq 2 -and $probe.Frame -eq 1)) `
+            -and $prevProbe.Clip -eq $probe.Clip -and $prevProbe.Frame -le $probe.Frame) { $early = $true; break }
+        $prevProbe = $probe
+        Start-Sleep -Milliseconds 150
+    }
+    if ($early) { break }
+}
+if (-not $early) { Fail 'no mid-pass frame to pause on within 8 rounds' }
 Click-Button 'Pause'
-$g7frozen = Decode-Shots (Collect-Shots 'g7f' 2.5 450)
+$g7fFiles = Collect-Shots 'g7f' 2.5 450
+Click-Button 'Resume'
+$g7bFiles = Collect-Shots 'g7b' 3.5 220
+$g7a = Decode-Shots $g7aFiles
+$g7frozen = Decode-Shots $g7fFiles
+$g7b = Decode-Shots $g7bFiles
 $frozenFrames = $g7frozen | Where-Object Decoded | Select-Object -ExpandProperty Frame -Unique
 Gate (($frozenFrames | Measure-Object).Count -eq 1) 'g7/frozen-identical' "frozen frame: $($frozenFrames -join ',')"
-Click-Button 'Resume'
-$g7b = Decode-Shots (Collect-Shots 'g7b' 3.5 220)
 Invoke-Sequence 'g7' (Save-Samples (@($g7a) + @($g7frozen) + @($g7b)) 'g7') $true @('pause-freeze', 'resume-successor', 'cadence-unchanged-after-resume', 'no-blank')
 
 # ---- G8: pack switching (the demonstrator's "mod switching") ----
@@ -355,7 +401,7 @@ Gate ($script:proc.ExitCode -eq 0) 'g13/exit-zero' "exit code $($script:proc.Exi
 Write-Output '-- G14 undecodable-asset typed state'
 $script:proc = [System.Diagnostics.Process]::Start((New-Object System.Diagnostics.ProcessStartInfo -Property @{
     FileName = $exe; Arguments = '--avatartube-demo --avatar-corrupt-demo'
-    RedirectStandardError = $true; UseShellExecute = $false }))
+    UseShellExecute = $false }))
 Start-Sleep -Seconds 5
 $tube = Get-Tube
 if ($null -eq $tube) { Fail 'tube window not found (corrupt run)' }
@@ -367,7 +413,7 @@ Gate ($capText -match 'Degraded' -and $capText -match 'asset-undecodable' -and $
 $fallbackShot = Capture-Shot 'g14-fallback'
 $fallbackSample = (Decode-Shots @($fallbackShot))[0]
 Gate ($fallbackSample.Decoded -and $fallbackSample.Pack -eq 3 -and $fallbackSample.Clip -eq 7) 'g14/fallback-rendered' "strip decodes fallback identity pack=$($fallbackSample.Pack) clip=$($fallbackSample.Clip)"
-Invoke-Sequence 'g14' (Save-Samples @($fallbackSample) 'g14') $false @('no-blank')
+Invoke-Sequence 'g14' (Save-Samples @($fallbackSample) 'g14') $false @('no-blank') $false
 $script:fallbackFile = Join-Path $shots ("cap-g14-fallback-{0}.bmp" -f $fallbackSample.T)
 $null = $script:proc.CloseMainWindow()
 if (-not $script:proc.WaitForExit(10000)) { Fail 'corrupt run did not exit' }

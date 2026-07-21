@@ -1,0 +1,40 @@
+{"T":1784607341875,"Decoded":false,"Pack":-1,"Clip":-1,"Frame":-1,"Content":0.24010180995475114,"Cy":66.94287396937574,"Failure":"no-marker: strip marker not found in bottom band"}
+{"T":1784607342205,"Decoded":true,"Pack":0,"Clip":1,"Frame":1,"Content":0.12217194570135746,"Cy":69.78587962962963,"Failure":null}
+{"T":1784607342536,"Decoded":true,"Pack":0,"Clip":1,"Frame":2,"Content":0.125,"Cy":67.55995475113122,"Failure":null}
+{"T":1784607342855,"Decoded":true,"Pack":0,"Clip":1,"Frame":2,"Content":0.12415158371040724,"Cy":64.11958997722095,"Failure":null}
+{"T":1784607343178,"Decoded":true,"Pack":0,"Clip":1,"Frame":3,"Content":0.12528280542986425,"Cy":63.996613995485326,"Failure":null}
+{"T":1784607343506,"Decoded":true,"Pack":0,"Clip":1,"Frame":3,"Content":0.12528280542986425,"Cy":66.99661399548533,"Failure":null}
+{"T":1784607343834,"Decoded":true,"Pack":0,"Clip":1,"Frame":4,"Content":0.12415158371040724,"Cy":70.70728929384966,"Failure":null}
+{"T":1784607344159,"Decoded":true,"Pack":0,"Clip":1,"Frame":4,"Content":0.12415158371040724,"Cy":71.70728929384966,"Failure":null}
+{"T":1784607344485,"Decoded":true,"Pack":0,"Clip":1,"Frame":5,"Content":0.12415158371040724,"Cy":69.00113895216401,"Failure":null}
+{"T":1784607344812,"Decoded":true,"Pack":0,"Clip":1,"Frame":5,"Content":0.12528280542986425,"Cy":65.57900677200902,"Failure":null}
+{"T":1784607345138,"Decoded":false,"Pack":-1,"Clip":-1,"Frame":-1,"Content":0.14338235294117646,"Cy":59.61143984220907,"Failure":"ambiguous-bit: luminance 203 at bit 0 (x=16 y=124)"}
+{"T":1784607345465,"Decoded":false,"Pack":-1,"Clip":-1,"Frame":-1,"Content":0.1419683257918552,"Cy":61.9203187250996,"Failure":"no-marker: strip marker not found in bottom band"}
+{"T":1784607345785,"Decoded":false,"Pack":-1,"Clip":-1,"Frame":-1,"Content":0.12047511312217195,"Cy":67.89553990610328,"Failure":"no-marker: strip marker not found in bottom band"}
+{"T":1784607346103,"Decoded":true,"Pack":0,"Clip":2,"Frame":1,"Content":0.12415158371040724,"Cy":70.82574031890661,"Failure":null}
+{"T":1784607346430,"Decoded":true,"Pack":0,"Clip":2,"Frame":2,"Content":0.12415158371040724,"Cy":69.11958997722095,"Failure":null}
+{"T":1784607346755,"Decoded":true,"Pack":0,"Clip":2,"Frame":2,"Content":0.12415158371040724,"Cy":65.11958997722095,"Failure":null}
+{"T":1784607347084,"Decoded":true,"Pack":0,"Clip":2,"Frame":3,"Content":0.12415158371040724,"Cy":63.413439635535305,"Failure":null}
+{"T":1784607347411,"Decoded":true,"Pack":0,"Clip":2,"Frame":3,"Content":0.12528280542986425,"Cy":65.99661399548533,"Failure":null}
+{"T":1784607347740,"Decoded":true,"Pack":0,"Clip":2,"Frame":4,"Content":0.125,"Cy":70.14366515837104,"Failure":null}
+{"T":1784607348066,"Decoded":true,"Pack":0,"Clip":2,"Frame":4,"Content":0.12415158371040724,"Cy":71.70728929384966,"Failure":null}
+{"T":1784607348390,"Decoded":false,"Pack":-1,"Clip":-1,"Frame":-1,"Content":0.1371606334841629,"Cy":65.56494845360825,"Failure":"no-marker: strip marker not found in bottom band"}
+{"T":1784607348716,"Decoded":false,"Pack":-1,"Clip":-1,"Frame":-1,"Content":0.17675339366515838,"Cy":61.5712,"Failure":"no-marker: strip marker not found in bottom band"}
+{"T":1784607349043,"Decoded":true,"Pack":0,"Clip":1,"Frame":1,"Content":0.12415158371040724,"Cy":62.825740318906604,"Failure":null}
+{"T":1784607349373,"Decoded":true,"Pack":0,"Clip":1,"Frame":2,"Content":0.12217194570135746,"Cy":64.08449074074075,"Failure":null}
+{"T":1784607349696,"Decoded":true,"Pack":0,"Clip":1,"Frame":2,"Content":0.12217194570135746,"Cy":68.08449074074075,"Failure":null}
+{"T":1784607350020,"Decoded":true,"Pack":0,"Clip":1,"Frame":3,"Content":0.12415158371040724,"Cy":71.41343963553531,"Failure":null}
+{"T":1784607350343,"Decoded":true,"Pack":0,"Clip":1,"Frame":3,"Content":0.12245475113122171,"Cy":69.5323325635104,"Failure":null}
+{"T":1784607350669,"Decoded":true,"Pack":0,"Clip":1,"Frame":4,"Content":0.12415158371040724,"Cy":66.70728929384966,"Failure":null}
+{"T":1784607350996,"Decoded":true,"Pack":0,"Clip":1,"Frame":4,"Content":0.125,"Cy":64.14366515837104,"Failure":null}
+{"T":1784607351322,"Decoded":true,"Pack":0,"Clip":1,"Frame":5,"Content":0.12528280542986425,"Cy":65.57900677200902,"Failure":null}
+{"T":1784607351647,"Decoded":true,"Pack":0,"Clip":1,"Frame":5,"Content":0.12415158371040724,"Cy":69.00113895216401,"Failure":null}
+{"T":1784607351972,"Decoded":false,"Pack":-1,"Clip":-1,"Frame":-1,"Content":0.14225113122171945,"Cy":67.0675944333996,"Failure":"ambiguous-bit: luminance 205 at bit 0 (x=16 y=132)"}
+{"T":1784607352298,"Decoded":false,"Pack":-1,"Clip":-1,"Frame":-1,"Content":0.14338235294117646,"Cy":66.59171597633136,"Failure":"no-marker: strip marker not found in bottom band"}
+{"T":1784607352622,"Decoded":false,"Pack":-1,"Clip":-1,"Frame":-1,"Content":0.1773190045248869,"Cy":62.98086124401914,"Failure":"no-marker: strip marker not found in bottom band"}
+{"T":1784607352948,"Decoded":true,"Pack":0,"Clip":2,"Frame":1,"Content":0.125,"Cy":63.26809954751131,"Failure":null}
+{"T":1784607353274,"Decoded":true,"Pack":0,"Clip":2,"Frame":2,"Content":0.12415158371040724,"Cy":64.11958997722095,"Failure":null}
+{"T":1784607353621,"Decoded":true,"Pack":0,"Clip":2,"Frame":2,"Content":0.12217194570135746,"Cy":67.08449074074075,"Failure":null}
+{"T":1784607353938,"Decoded":true,"Pack":0,"Clip":2,"Frame":3,"Content":0.12415158371040724,"Cy":71.41343963553531,"Failure":null}
+{"T":1784607354265,"Decoded":true,"Pack":0,"Clip":2,"Frame":3,"Content":0.12528280542986425,"Cy":70.99661399548533,"Failure":null}
+{"T":1784607354591,"Decoded":true,"Pack":0,"Clip":2,"Frame":4,"Content":0.12415158371040724,"Cy":67.70728929384966,"Failure":null}

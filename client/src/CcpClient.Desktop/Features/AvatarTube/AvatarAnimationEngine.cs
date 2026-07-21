@@ -160,7 +160,6 @@ public sealed class AvatarAnimationEngine
 {
     private readonly AsyncOperationOwner _owner;
     private readonly IAvatarClock _clock;
-    private readonly ILogSink _log;
     private readonly AvatarEngineOptions _options;
     private readonly object _gate = new();
 
@@ -187,7 +186,9 @@ public sealed class AvatarAnimationEngine
     {
         _owner = owner;
         _clock = clock;
-        _log = log;
+        // log is accepted for seam stability but intentionally unused: the engine's hot
+        // path must never touch a blocking log sink (see TraceUnsafe).
+        _ = log;
         _pack = pack;
         _options = options ?? new AvatarEngineOptions();
         _layerA = Layer.Start(pack, SyntheticAvatarPacks.ClipPoses, 0);
@@ -255,13 +256,24 @@ public sealed class AvatarAnimationEngine
 
     private void ResetPipelineUnsafe(int startClipId)
     {
+        // Rebase to the effective clock: Layer.Start stamps NextDeadlineMs as delays[0]
+        // (an uptime-relative value) — correct only at engine start. A mid-run reset
+        // (SetPack) would otherwise read the deadline as long-past and burst-advance
+        // through the whole clip in one tick (Step-4 headed finding: switch burst f0..f5).
+        var now = EffectiveNowUnsafe();
         _layerA = Layer.Start(_pack, startClipId, 0);
+        _layerA.NextDeadlineMs = now + _pack.Def.Clip(startClipId).DelaysMs[0];
         _layerB = null;
         _fade = null;
         _dip = null;
         _requests.Clear();
         _reactionAtMs = -1;
-        _currentClipStartMs = 0;
+        _currentClipStartMs = now;
+        // The idle-rotation cursor restarts with the pipeline: a stale ClipIdle2 cursor
+        // makes the first post-reset pass rotate back INTO ClipIdle (the current clip) —
+        // the identical-target no-op then wedges the layer at NextDeadlineMs=MaxValue
+        // (Step-4 headed finding: pack switch froze on the new pack's last idle frame).
+        _idleClip = SyntheticAvatarPacks.ClipIdle;
     }
 
     /// <summary>Cancels the generation (idempotent; the loop completes with typed Cancelled).</summary>
@@ -632,7 +644,10 @@ public sealed class AvatarAnimationEngine
     private void TraceUnsafe(string kind, int clipId, int frameIndex)
     {
         var wall = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        _log.Log($"avatar-trace: {kind} pack={_pack.Def.PackId} clip={clipId} frame={frameIndex} t={wall}");
+        // Trace events flow ONLY through the Traced event (the bounded JSONL sink). Never
+        // _log per frame: the DebugLogSink writes stderr, and a per-frame stderr write on
+        // the loop thread wedges the whole engine behind any undrained redirect pipe
+        // (Step-4 headed finding: 81s loop stall + catch-up burst, trace-gap forensics).
         Traced?.Invoke(this, new AvatarTraceEventArgs(kind, _pack.Def.PackId, clipId, frameIndex, wall));
     }
 

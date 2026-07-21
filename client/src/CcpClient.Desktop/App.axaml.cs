@@ -56,7 +56,10 @@ public partial class App : Application
                 var participant = _host.Participants.OfType<AvatarTubeParticipant>().Single();
                 if (_avatarTracePath is not null)
                 {
-                    _avatarTraceWriter = new StreamWriter(_avatarTracePath, append: false) { AutoFlush = true };
+                    // FileShare.Read: the evidence evaluator reads the trace WHILE the app
+                    // still runs (headed gates correlate captures against live trace events).
+                    var stream = new FileStream(_avatarTracePath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                    _avatarTraceWriter = new StreamWriter(stream) { AutoFlush = true };
                     participant.TraceSink = args => _avatarTraceWriter.WriteLine(AvatarEvidence.SerializeTrace(args));
                 }
 

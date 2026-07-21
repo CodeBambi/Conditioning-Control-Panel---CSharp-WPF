@@ -1,7 +1,7 @@
 # STATUS: SP-015 — prove AvatarTube rendered animation
 
-**Current Step:** Step 4 — Windows-headed evidence matrix
-**Last Updated:** 2026-07-20 (Step 3 complete)
+**Current Step:** Step 4 — Windows-headed evidence matrix (in progress)
+**Last Updated:** 2026-07-21 (Step 4 in progress; salvaged zombie WIP verified: build 0W/0E, 170/170 unit + 22/22 headless green; rerun of full matrix pending)
 
 ### Step 1: Decoder claim verification + AvatarTube archaeology + pre-approach consult
 **Status:** ✅ Complete
@@ -27,7 +27,7 @@
 - [x] ONE engine, no parallel timers; constants recorded pending-owner
 
 ### Step 4: Windows-headed evidence matrix
-**Status:** ⬜ Not Started
+**Status:** 🔶 In Progress
 
 - [ ] CcpVerify named checks per behavior (deltas, no blanks, no duplicate-runs, cadence vs delays)
 - [ ] Resume-fast-forward check (successor frame + unchanged cadence)

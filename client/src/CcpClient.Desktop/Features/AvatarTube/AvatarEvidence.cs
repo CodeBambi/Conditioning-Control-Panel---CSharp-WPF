@@ -48,6 +48,20 @@ public static class AvatarEvidence
         return decoded ? 0 : 2;
     }
 
+    /// <summary>Reads a text file another process may hold open for writing.</summary>
+    private static string[] ReadAllLinesShared(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+        var lines = new List<string>();
+        while (reader.ReadLine() is { } line)
+        {
+            lines.Add(line);
+        }
+
+        return lines.ToArray();
+    }
+
     /// <summary>Evaluates a samples file (+ optional trace) against a pack definition; prints named verdicts.</summary>
     public static int RunSequence(string samplesPath, string packPath, string? tracePath, TextWriter output)
     {
@@ -64,7 +78,9 @@ public static class AvatarEvidence
             .ToArray();
         var trace = tracePath is null || !File.Exists(tracePath)
             ? []
-            : File.ReadAllLines(tracePath)
+            // FileShare.ReadWrite: the writer (headed app) holds the trace open for write;
+            // Windows requires the READER to allow Write sharing or the open is refused.
+            : ReadAllLinesShared(tracePath)
                 .Where(l => !string.IsNullOrWhiteSpace(l))
                 .Select(l => JsonSerializer.Deserialize<TraceLine>(l) ?? throw new InvalidDataException($"bad trace line: {l}"))
                 .Select(l => new AvatarTraceEvent(l.T, l.Kind, l.Pack))

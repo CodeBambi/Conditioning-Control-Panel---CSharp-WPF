@@ -1,0 +1,25 @@
+=== SP-015 AvatarTube demonstrator - Windows-headed evidence matrix ===
+layout-probe: card 488.0x77.0 DIP @ scale 1 @ screen 128,182
+avatar-capability: Available — pack 'circuit' decoded
+PASS boot/probe - probe live: {"Outstanding":2,"Subs":1,"Clip":0,"Mode":"Static","Frame":3,"Scale":1.0,"StageY":200,"StageX":18,"Pack":0}
+PASS boot/static-mode - mode=Static
+-- G1 static pose fades (8s)
+PASS g1/pose-delta - distinct pose frames observed
+PASS g1/frames-advance - PASS frames-advance ? 4 distinct decoded frames across the sequence
+PASS g1/no-blank - PASS no-blank ? 25 captures: every one strip-decodes or shows visible content (crossfade/dip union)
+PASS g1/monotonic-modular-advance - PASS monotonic-modular-advance ? every decoded frame is a schedule-bounded forward step (no second-pipeline interleave)
+PASS g1/no-duplicate-run-beyond-hold - PASS no-duplicate-run-beyond-hold ? no identical-frame run outlives its declared hold
+PASS g1/float-liveness - PASS float-liveness ? same-frame content centroid oscillates up to 8,2px across 4 frame group(s), all within the ?6px float bound
+PASS g1/all-verdicts - ALL VERDICTS PASSED (8)
+-- G2 animated loop + cadence (13s)
+PASS g2/frames-advance - PASS frames-advance ? 9 distinct decoded frames across the sequence
+PASS g2/no-blank - PASS no-blank ? 40 captures: every one strip-decodes or shows visible content (crossfade/dip union)
+PASS g2/monotonic-modular-advance - PASS monotonic-modular-advance ? every decoded frame is a schedule-bounded forward step (no second-pipeline interleave)
+PASS g2/no-duplicate-run-beyond-hold - PASS no-duplicate-run-beyond-hold ? no identical-frame run outlives its declared hold
+PASS g2/schedule-fit-1x - PASS schedule-fit-1x ? 2/2 discriminating runs fit the declared 1x cadence (speed within ?0,20); clip 1 run (9 samples): speed=0,955 | clip 1 run (9 samples): speed=0,954
+PASS g2/schedule-not-2x-speed - PASS schedule-not-2x-speed ? 2/2 runs REJECT a 2x-speed schedule (multiplied-speed falsified); clip 1 run (9 samples): speed=0,955 | clip 1 run (9 samples): speed=0,954
+PASS g2/schedule-not-half-speed - PASS schedule-not-half-speed ? 2/2 runs REJECT a 0.5x-speed schedule; clip 1 run (9 samples): speed=0,955 | clip 1 run (9 samples): speed=0,954
+PASS g2/float-liveness - PASS float-liveness ? same-frame content centroid oscillates up to 8,0px across 9 frame group(s), all within the ?6px float bound
+PASS g2/all-verdicts - ALL VERDICTS PASSED (8)
+-- G3 idle rotation + crossfade (9s)
+FAIL: probe unreadable during capture (g3)

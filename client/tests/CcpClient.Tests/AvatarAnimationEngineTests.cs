@@ -49,6 +49,55 @@ public sealed class AvatarAnimationEngineTests
     }
 
     [Fact]
+    public async Task SetPack_AfterUptimeBeyondFirstDelay_RestartsAtFrameZero_WithoutBurstAdvance()
+    {
+        var (engine, clock, _, _) = CreateEngine();
+        engine.Start();
+        await SettleInitialAsync(clock);
+        engine.SetMode(AvatarMode.Animated);
+        await AdvanceUntilAsync(clock, () => engine.CurrentFrame.ClipId == SyntheticAvatarPacks.ClipIdle, 3000);
+
+        // Uptime past the new pack's first declared delay (700ms): the swap must rebase
+        // the frame clock — a stale deadline burst-advances through the whole clip in one
+        // tick (SP-015 Step-4 headed finding: switch burst f0..f5 at t+23ms).
+        var pulse = AvatarPackTests.LoadFromMemory(SyntheticAvatarPacks.Pulse,
+            SyntheticAvatarPacks.GenerateSheetPixels(SyntheticAvatarPacks.Pulse, out var pw, out _), pw);
+        engine.SetPack(pulse);
+        Assert.Equal((SyntheticAvatarPacks.ClipIdle, 0), engine.CurrentFrame);
+
+        // Frame 0 holds its declared delay under the rebased clock, then advances once.
+        var before = clock.NowMs;
+        await AdvanceToAsync(clock, before + 699);
+        Assert.Equal((SyntheticAvatarPacks.ClipIdle, 0), engine.CurrentFrame);
+        await AdvanceToAsync(clock, before + 700 + 32);
+        Assert.Equal((SyntheticAvatarPacks.ClipIdle, 1), engine.CurrentFrame);
+
+        await StopAndAssertCancelledAsync(engine);
+    }
+
+    [Fact]
+    public async Task SetPack_AfterIdleRotatedToIdle2_NewPackStillRotates_NoWedge()
+    {
+        var (engine, clock, _, _) = CreateEngine();
+        engine.Start();
+        await SettleInitialAsync(clock);
+        engine.SetMode(AvatarMode.Animated);
+        await AdvanceUntilAsync(clock, () => engine.CurrentFrame.ClipId == SyntheticAvatarPacks.ClipIdle2, 8000);
+
+        // Switch with the rotation cursor on idle2 (the Step-4 headed wedge condition):
+        // the new pack's idle pass must rotate ONWARD, never freeze on its last frame.
+        var pulse = AvatarPackTests.LoadFromMemory(SyntheticAvatarPacks.Pulse,
+            SyntheticAvatarPacks.GenerateSheetPixels(SyntheticAvatarPacks.Pulse, out var pw, out _), pw);
+        engine.SetPack(pulse);
+        Assert.Equal((SyntheticAvatarPacks.ClipIdle, 0), engine.CurrentFrame);
+
+        // One full pulse idle pass (3910ms) + entry crossfade: the pipeline must reach idle2.
+        await AdvanceUntilAsync(clock, () => engine.CurrentFrame.ClipId == SyntheticAvatarPacks.ClipIdle2, 7000,
+            () => $"stuck at {engine.CurrentFrame}", () => "");
+        await StopAndAssertCancelledAsync(engine);
+    }
+
+    [Fact]
     public async Task AnimatedMode_IdleAdvancesPerDelays_ThenRotatesToIdle2ViaCrossfade()
     {
         var (engine, clock, _, _) = CreateEngine();
@@ -246,11 +295,15 @@ public sealed class AvatarAnimationEngineTests
         engine.SetMode(AvatarMode.Animated);
         await AdvanceUntilAsync(clock, () => engine.CurrentFrame.ClipId == SyntheticAvatarPacks.ClipIdle, 3000);
 
+        // Cooldown-ignored is a TRACE event (the engine's hot path never logs, SP-015
+        // Step-4 finding) — collect the Traced stream, not the log sink.
+        var traced = new List<string>();
+        engine.Traced += (_, e) => { lock (traced) { traced.Add(e.Kind); } };
         // Accepted click: min-hold applies, then the click clip settles as layerA.
         engine.TriggerClick();
         // Duplicate click immediately after: inside the 3000ms cooldown — ignored + traced.
         engine.TriggerClick();
-        Assert.Contains(log.Lines, l => l.Contains("click-cooldown-ignored", StringComparison.Ordinal));
+        Assert.Contains(traced, k => k == "click-cooldown-ignored");
         await AdvanceUntilAsync(clock, () => engine.CurrentFrame.ClipId == SyntheticAvatarPacks.ClipClick, 6000,
             () => $"current={engine.CurrentFrame}", () => string.Join(" | ", log.Lines.TakeLast(8)));
         // One-shot: after its single pass the pipeline returns to an idle.

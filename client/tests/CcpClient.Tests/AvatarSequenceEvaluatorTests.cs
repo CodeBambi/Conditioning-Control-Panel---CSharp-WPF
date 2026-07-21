@@ -92,14 +92,39 @@ public sealed class AvatarSequenceEvaluatorTests
         Assert.True(ByName(verdicts, "schedule-not-half-speed").Passed, ByName(verdicts, "schedule-not-half-speed").Detail);
 
         // Doubled speed (the duplicate-pipeline/multiplied-speed defect): the 1x verdict
-        // must FAIL — non-uniform delays make the schedules distinguishable.
+        // must FAIL and the speed estimate must land inside the 2x window — non-uniform
+        // delays make the schedules distinguishable.
         var doubled = SimulateRun(0, SyntheticAvatarPacks.ClipIdle, Idle, startT: 10_000, captureEveryMs: 200, durationMs: 2100, speed: 2.0);
         var doubledVerdicts = AvatarSequenceEvaluator.Evaluate(doubled, [], Pack);
         Assert.False(ByName(doubledVerdicts, "schedule-fit-1x").Passed);
+        Assert.False(ByName(doubledVerdicts, "schedule-not-2x-speed").Passed);
+        Assert.True(ByName(doubledVerdicts, "schedule-not-half-speed").Passed);
 
         // Halved speed likewise falsified.
         var halved = SimulateRun(0, SyntheticAvatarPacks.ClipIdle, Idle, startT: 10_000, captureEveryMs: 200, durationMs: 8400, speed: 0.5);
-        Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(halved, [], Pack), "schedule-fit-1x").Passed);
+        var halvedVerdicts = AvatarSequenceEvaluator.Evaluate(halved, [], Pack);
+        Assert.False(ByName(halvedVerdicts, "schedule-fit-1x").Passed);
+        Assert.False(ByName(halvedVerdicts, "schedule-not-half-speed").Passed);
+        Assert.True(ByName(halvedVerdicts, "schedule-not-2x-speed").Passed);
+    }
+
+    [Fact]
+    public void ScheduleFit_LongHoldQuantizationDoesNotPhantomFail()
+    {
+        // SP-015 Step-4 headed finding: the pose clip's 1400ms holds quantize within-hold
+        // samples to residuals up to ~700ms — a max-residual phase fit phantom-FAILs the
+        // true 1x cadence. The speed estimate is quantization-robust: poses at headed
+        // capture spacing must pass, and a doubled-speed pose run must still fail.
+        var poses = Pack.Clip(SyntheticAvatarPacks.ClipPoses);
+        var truePoses = SimulateRun(0, SyntheticAvatarPacks.ClipPoses, poses, startT: 10_000, captureEveryMs: 348, durationMs: 8000, speed: 1.0);
+        var verdicts = AvatarSequenceEvaluator.Evaluate(truePoses, [], Pack);
+        Assert.True(ByName(verdicts, "schedule-fit-1x").Passed, ByName(verdicts, "schedule-fit-1x").Detail);
+        Assert.True(ByName(verdicts, "schedule-not-2x-speed").Passed, ByName(verdicts, "schedule-not-2x-speed").Detail);
+
+        var doubled = SimulateRun(0, SyntheticAvatarPacks.ClipPoses, poses, startT: 10_000, captureEveryMs: 348, durationMs: 4200, speed: 2.0);
+        var doubledVerdicts = AvatarSequenceEvaluator.Evaluate(doubled, [], Pack);
+        Assert.False(ByName(doubledVerdicts, "schedule-fit-1x").Passed);
+        Assert.False(ByName(doubledVerdicts, "schedule-not-2x-speed").Passed);
     }
 
     [Fact]
@@ -137,6 +162,7 @@ public sealed class AvatarSequenceEvaluatorTests
         {
             new AvatarSample(12_000, true, 0, 1, 2, 0.9, 40.0, null),
             new AvatarSample(14_000, true, 0, 1, 3, 0.9, 40.0, null), // CHANGED during pause
+            new AvatarSample(17_000, true, 0, 1, 4, 0.9, 40.0, null), // post-resume coverage (window includes pauseEnd)
         };
         var trace = new[]
         {
@@ -210,14 +236,19 @@ public sealed class AvatarSequenceEvaluatorTests
         var excessive = alive.Select((s, i) => s with { ContentCentroidY = 64.0 + 10.0 * Math.Sin(i / 1.5) }).ToArray();
         Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(excessive, [], Pack), "float-liveness").Passed);
 
+        // One sample per identity: float motion is not measurable — honest FAIL, never a pass.
+        var unmeasurable = alive.Where((s, i) => i < 6).ToArray();
+        Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(unmeasurable, [], Pack), "float-liveness").Passed);
+
         // Paused-window samples are excluded (a frozen float during pause is legitimate).
+        // Window covers i=2..5 (t=1400..2000): frame 0's group (i=0, i=6) still oscillates.
         var trace = new[]
         {
-            new AvatarTraceEvent(1400, AvatarTraceEvent.PauseBegin, 0),
-            new AvatarTraceEvent(3000, AvatarTraceEvent.PauseEnd, 0),
+            new AvatarTraceEvent(1300, AvatarTraceEvent.PauseBegin, 0),
+            new AvatarTraceEvent(2100, AvatarTraceEvent.PauseEnd, 0),
         };
         var withPause = alive.Select(s =>
-            s.TimestampMs >= 1400 && s.TimestampMs <= 3000 ? s with { ContentCentroidY = 64.0 } : s).ToArray();
+            s.TimestampMs >= 1300 && s.TimestampMs <= 2100 ? s with { ContentCentroidY = 64.0 } : s).ToArray();
         Assert.True(ByName(AvatarSequenceEvaluator.Evaluate(withPause, trace, Pack), "float-liveness").Passed);
     }
 }
