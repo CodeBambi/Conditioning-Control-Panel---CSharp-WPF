@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** Active
-**Next Task ID:** SP-017
+**Next Task ID:** SP-018
 
 ---
 
@@ -27,6 +27,7 @@ Phase 2 COMPLETE 2026-07-21 (all six rows landed, all WIP pending owner ratifica
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
 | SP-016-ai-operation-contract | Row: define provider-neutral AI operation contract (define-only; typed outcomes, cancellation/generation, provider switching, interactive vs awareness, local memory, endpoint classification/disclosure, moderation, strict command envelope, per-command results, secret storage, offline behavior, content-free diagnostics) | **Done 2026-07-21** (landed `3ccb9edd` ff; batch `20260721T081732` — clean single-worker run (~48 min), then merge_blocked by tracked-ignored legacy scan → destructive drop-cached advice REFUSED → manual orch ff + gate-record recovery + integrate; 13 named contract sections; 213/213 + 22/22 both platforms; engine reviews APPROVE+PASS; row stays WIP pending owner ratification) | SP-015 |
+| SP-017-audio-backend-spike | Row: spike cross-platform audio channel backend (quarantined spike; backend comparison w/ exact versions/licenses/natives; voice completion/interruption/pause, bounded-latency overlapping SFX, whisper busy/completion, device enum/select/fallback, volume, teardown, packaging; explicit channel-ownership selection pending-owner; WSLg scoping: enumerate/select/fallback/teardown/packaging REAL, latency numbers Windows-headed only) | Authored 2026-07-21 | SP-016 |
 
 ### Phase 2 — governance repairs, WebView/DTRH spike, dashboard-successor UI rows (COMPLETE 2026-07-21)
 
