@@ -54,7 +54,7 @@ click cooldown 3000ms, talk lead-out 500ms, dip 0.3/150ms, float ±4 DIP/2000ms,
 ## WSLg/X11 session facts (`wslg-evidence.sh`; no input automation — SP-008 named limit)
 
 - **Contract on WSL2** (native-dir `~/ccp-sp015`, rsync, never /mnt/e): `dotnet build
-  CcpClient.sln` green; **175/175 CcpClient.Tests + 22/22 CcpClient.HeadlessTests** —
+  CcpClient.sln` green; **176/176 CcpClient.Tests + 22/22 CcpClient.HeadlessTests** —
   identical counts to Windows.
 - **Session:** WAYLAND_DISPLAY=wayland-0, DISPLAY=:0 (XWayland), kernel 6.6.114.1 WSL2.
 - **Render:** 16/16 XGetImage full-window captures (320x380) of the animated demo
