@@ -91,6 +91,53 @@ public static class AvatarStripCodec
     }
 
     /// <summary>
+    /// Full-window variant for XGetImage captures (WSLg: no UIA, no reliable stage crop):
+    /// scans the ENTIRE image for the strip marker and reports the located strip origin so
+    /// the caller can bound content-measurement to the cell above the strip. A false-positive
+    /// magenta block does not kill the decode — scanning continues past bit-ambiguity.
+    /// Scale-1 captures only (blocks are <see cref="BlockSize"/> px).
+    /// </summary>
+    public static bool TryDecodeFullWindow(
+        byte[] bgra, int width, int height,
+        out int packId, out int clipId, out int frameIndex,
+        out int stripX, out int stripY, out string? failure)
+    {
+        packId = clipId = frameIndex = 0;
+        stripX = stripY = -1;
+        failure = null;
+        if (width < StripWidth || height < StripHeight + 2)
+        {
+            failure = $"capture {width}x{height} too small for strip";
+            return false;
+        }
+
+        for (var y = 0; y <= height - StripHeight; y++)
+        {
+            for (var x = 0; x <= width - StripWidth; x++)
+            {
+                if (!IsMarker(bgra, width, x, y))
+                {
+                    continue;
+                }
+
+                if (!TryReadBits(bgra, width, y, x + BlockSize, PackBits, out packId, out _)
+                    || !TryReadBits(bgra, width, y, x + BlockSize * (1 + PackBits), ClipBits, out clipId, out _)
+                    || !TryReadBits(bgra, width, y, x + BlockSize * (1 + PackBits + ClipBits), FrameBits, out frameIndex, out _))
+                {
+                    continue; // false-positive marker — keep scanning
+                }
+
+                stripX = x;
+                stripY = y;
+                return true;
+            }
+        }
+
+        failure = "no-marker: strip marker not found in full window";
+        return false;
+    }
+
+    /// <summary>
     /// Fraction of pixels differing from <paramref name="bgR/G/B"/> beyond tolerance — the
     /// union no-blank rule for crossfade windows (consult verdict #8): a capture whose
     /// strip does not decode during a declared crossfade is not blank if visible content

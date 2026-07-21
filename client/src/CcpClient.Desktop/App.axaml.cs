@@ -15,16 +15,19 @@ public partial class App : Application
     private readonly bool _avatarDemo;
     private readonly bool _avatarCorrupt;
     private readonly string? _avatarTracePath;
+    private readonly bool _avatarAnimate;
     private StreamWriter? _avatarTraceWriter;
 
     public App(ApplicationHost host, bool popupDemo = false,
-        bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null)
+        bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
+        bool avatarAnimate = false)
     {
         _host = host;
         _popupDemo = popupDemo;
         _avatarDemo = avatarDemo;
         _avatarCorrupt = avatarCorrupt;
         _avatarTracePath = avatarTracePath;
+        _avatarAnimate = avatarAnimate;
     }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -71,7 +74,7 @@ public partial class App : Application
                     participant.CorruptPackForDemo(SyntheticAvatarPacks.Pulse.PackId);
                 }
 
-                var tube = new AvatarTubeDemonstratorWindow(_host, dashboard, participant);
+                var tube = new AvatarTubeDemonstratorWindow(_host, dashboard, participant, _avatarAnimate);
                 // The owner must be visible before an owned window can show (Avalonia
                 // EnsureParentStateBeforeShow): open the tube right after the dashboard opens.
                 dashboard.Opened += (_, _) =>

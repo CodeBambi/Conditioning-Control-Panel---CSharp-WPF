@@ -18,14 +18,22 @@ public static class AvatarEvidence
     public const string SequenceFlag = "--avatar-sequence";
     public const string GenerateFlag = "--generate-avatar-packs";
 
+    /// <summary>CLI modifier for <see cref="StripDecodeFlag"/>: full-window marker scan (WSLg).</summary>
+    public const string ScanFlag = "--scan";
+
     /// <summary>One samples-file line (JSONL): capture timestamp + strip decode + content fraction + content Y centroid.</summary>
     public sealed record SampleLine(long T, bool Decoded, int Pack, int Clip, int Frame, double Content, double Cy, string? Failure);
 
     /// <summary>One trace-file line (JSONL), written by the participant's trace sink.</summary>
     public sealed record TraceLine(long T, string Kind, int Pack, int Clip, int Frame);
 
-    /// <summary>Decodes one BMP capture's strip; prints the JSON sample (without timestamp — the script owns time).</summary>
-    public static int StripDecode(string capturePath, TextWriter output)
+    /// <summary>
+    /// Decodes one BMP capture's strip; prints the JSON sample (without timestamp — the script owns time).
+    /// <paramref name="fullWindow"/> (CLI <see cref="ScanFlag"/>) scans the whole image for the strip
+    /// (WSLg XGetImage full-window captures — no UIA stage probe there) and bounds the content
+    /// measure to the located frame cell instead of the whole window.
+    /// </summary>
+    public static int StripDecode(string capturePath, TextWriter output, bool fullWindow = false)
     {
         byte[] bgra;
         int width;
@@ -40,12 +48,52 @@ public static class AvatarEvidence
             return 1;
         }
 
+        if (fullWindow)
+        {
+            var decodedFull = AvatarStripCodec.TryDecodeFullWindow(
+                bgra, width, height, out var packF, out var clipF, out var frameF, out var stripX, out var stripY, out var failureF);
+            double contentF = 0.0;
+            var centroidF = -1.0;
+            if (decodedFull)
+            {
+                // The strip sits at the bottom-left of its 96x128 frame cell: the cell spans
+                // (stripX, stripY + stripHeight - cellHeight). Measure content over the CELL,
+                // not the window — the window's chrome/text would swamp the no-blank signal.
+                var cellTop = stripY + AvatarStripCodec.StripHeight - SyntheticAvatarPacks.CellHeight;
+                if (cellTop >= 0 && stripX + SyntheticAvatarPacks.CellWidth <= width)
+                {
+                    var cell = ExtractRegion(bgra, width, stripX, cellTop, SyntheticAvatarPacks.CellWidth, SyntheticAvatarPacks.CellHeight);
+                    (contentF, centroidF) = AvatarStripCodec.ContentMeasure(cell, SyntheticAvatarPacks.CellWidth, SyntheticAvatarPacks.CellHeight, ContentBgR, ContentBgG, ContentBgB, tolerance: 16);
+                }
+                else
+                {
+                    decodedFull = false;
+                    failureF = $"cell-outside-capture: strip at {stripX},{stripY} implies cell top {cellTop}";
+                }
+            }
+
+            output.WriteLine(JsonSerializer.Serialize(new SampleLine(0, decodedFull, decodedFull ? packF : -1, decodedFull ? clipF : -1, decodedFull ? frameF : -1, contentF, centroidF, failureF)));
+            return decodedFull ? 0 : 2;
+        }
+
         // The tube's content background (AvatarTubeDemonstratorWindow) — the union no-blank
         // reference. Kept as constants here so the evaluator and the window share one value.
         var (content, centroidY) = AvatarStripCodec.ContentMeasure(bgra, width, height, ContentBgR, ContentBgG, ContentBgB, tolerance: 16);
         var decoded = AvatarStripCodec.TryDecode(bgra, width, height, out var pack, out var clip, out var frame, out var failure);
         output.WriteLine(JsonSerializer.Serialize(new SampleLine(0, decoded, decoded ? pack : -1, decoded ? clip : -1, decoded ? frame : -1, content, centroidY, failure)));
         return decoded ? 0 : 2;
+    }
+
+    /// <summary>Copies a (w,h) region at (x,y) out of a top-down BGRA buffer.</summary>
+    private static byte[] ExtractRegion(byte[] bgra, int width, int x, int y, int w, int h)
+    {
+        var region = new byte[w * h * 4];
+        for (var row = 0; row < h; row++)
+        {
+            Array.Copy(bgra, ((y + row) * width + x) * 4, region, row * w * 4, w * 4);
+        }
+
+        return region;
     }
 
     /// <summary>Reads a text file another process may hold open for writing.</summary>

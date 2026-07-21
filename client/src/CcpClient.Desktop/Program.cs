@@ -60,7 +60,9 @@ public static class Program
                 return 1;
             }
 
-            return Features.AvatarTube.AvatarEvidence.StripDecode(capture, Console.Out);
+            return Features.AvatarTube.AvatarEvidence.StripDecode(
+                capture, Console.Out,
+                fullWindow: args.Contains(Features.AvatarTube.AvatarEvidence.ScanFlag, StringComparer.Ordinal));
         }
 
         // --avatar-sequence <samples.jsonl> --pack <pack.json> [--trace <trace.jsonl>]: named verdicts.
@@ -114,12 +116,14 @@ public static class Program
         // undecodable-asset path evidence), and/or mirror the engine trace to a JSONL file.
         var avatarDemo = args.Contains("--avatartube-demo", StringComparer.Ordinal);
         var avatarCorrupt = args.Contains("--avatar-corrupt-demo", StringComparer.Ordinal);
+        // WSLg has no input automation (SP-008 limit): the demo can open already animated.
+        var avatarAnimate = args.Contains("--avatar-animate", StringComparer.Ordinal);
         var avatarTrace = ArgValue(args, "--avatar-trace");
 
         try
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
-            return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace).StartWithClassicDesktopLifetime(args);
+            return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace, avatarAnimate).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -185,8 +189,9 @@ public static class Program
 
     public static AppBuilder BuildAvaloniaApp(
         ApplicationHost host, bool popupDemo = false,
-        bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null) => AppBuilder
-        .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath))
+        bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
+        bool avatarAnimate = false) => AppBuilder
+        .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate))
         .UsePlatformDetect();
 
     private static string? ArgValue(string[] args, string flag)

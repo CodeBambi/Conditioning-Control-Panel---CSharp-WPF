@@ -136,6 +136,96 @@ public sealed class AvatarPackTests
     }
 
     [Fact]
+    public void Strip_FullWindowScan_LocatesMidImageCell_SkipsDecoyMarker_FailsLoudlyWhenAbsent()
+    {
+        // WSLg XGetImage captures the WHOLE window (no UIA stage probe): the strip can sit
+        // anywhere. Scan must find it mid-image, skip a decoy magenta block whose bit area
+        // is ambiguous, and fail loudly on a marker-less window.
+        var pack = LoadFromMemory(SyntheticAvatarPacks.Circuit,
+            SyntheticAvatarPacks.GenerateSheetPixels(SyntheticAvatarPacks.Circuit, out var sw, out _), sw);
+        var cell = pack.Frame(SyntheticAvatarPacks.ClipTalk, 2);
+        const int winW = 320;
+        const int winH = 380;
+        var capture = new byte[winW * winH * 4]; // black window
+
+        // Decoy at (20,30), EARLIER in scan order than the real strip: magenta marker block
+        // followed by mid-gray bit blocks (luminance 128 = ambiguous) — must be skipped.
+        for (var y = 30; y < 30 + AvatarStripCodec.StripHeight; y++)
+        {
+            for (var x = 20; x < 20 + AvatarStripCodec.StripWidth; x++)
+            {
+                var off = (y * winW + x) * 4;
+                var isMarker = x < 20 + AvatarStripCodec.BlockSize;
+                capture[off + 0] = isMarker ? (byte)255 : (byte)128;
+                capture[off + 1] = isMarker ? (byte)0 : (byte)128;
+                capture[off + 2] = isMarker ? (byte)255 : (byte)128;
+                capture[off + 3] = 255;
+            }
+        }
+
+        const int x0 = 10;
+        const int y0 = 44;
+        for (var y = 0; y < SyntheticAvatarPacks.CellHeight; y++)
+        {
+            Array.Copy(cell, y * SyntheticAvatarPacks.CellWidth * 4,
+                capture, ((y0 + y) * winW + x0) * 4, SyntheticAvatarPacks.CellWidth * 4);
+        }
+
+        var ok = AvatarStripCodec.TryDecodeFullWindow(capture, winW, winH,
+            out var packId, out var clipId, out var index, out var stripX, out var stripY, out var failure);
+        Assert.True(ok, failure);
+        Assert.Equal(SyntheticAvatarPacks.Circuit.PackId, packId);
+        Assert.Equal(SyntheticAvatarPacks.ClipTalk, clipId);
+        Assert.Equal(2, index);
+        // Center-sampling tolerates a ±2px locate shift (4px blocks, center sample) — the
+        // leftmost/topmost position whose center lands on the real marker wins the scan.
+        Assert.True(Math.Abs(stripX - x0) <= 2, $"stripX {stripX} vs cell x {x0}");
+        Assert.True(Math.Abs(stripY - (y0 + SyntheticAvatarPacks.CellHeight - AvatarStripCodec.StripHeight)) <= 2,
+            $"stripY {stripY} vs cell strip row {y0 + SyntheticAvatarPacks.CellHeight - AvatarStripCodec.StripHeight}");
+
+        Assert.False(AvatarStripCodec.TryDecodeFullWindow(new byte[winW * winH * 4], winW, winH,
+            out _, out _, out _, out _, out _, out var absent));
+        Assert.Contains("full window", absent);
+    }
+
+    [Fact]
+    public void StripDecode_FullWindowMode_DecodesCellContentFromWholeWindowCapture()
+    {
+        // End-to-end over the CLI surface: BMP on disk -> JSON sample with cell-bounded
+        // content (window chrome must not swamp the no-blank signal).
+        var pack = LoadFromMemory(SyntheticAvatarPacks.Circuit,
+            SyntheticAvatarPacks.GenerateSheetPixels(SyntheticAvatarPacks.Circuit, out var sw, out _), sw);
+        var cell = pack.Frame(SyntheticAvatarPacks.ClipIdle, 1);
+        const int winW = 300;
+        const int winH = 360;
+        var capture = new byte[winW * winH * 4];
+        const int x0 = 14;
+        const int y0 = 60;
+        for (var y = 0; y < SyntheticAvatarPacks.CellHeight; y++)
+        {
+            Array.Copy(cell, y * SyntheticAvatarPacks.CellWidth * 4,
+                capture, ((y0 + y) * winW + x0) * 4, SyntheticAvatarPacks.CellWidth * 4);
+        }
+
+        var path = Path.Combine(Path.GetTempPath(), $"sp015-scan-{Guid.NewGuid():N}.bmp");
+        try
+        {
+            File.WriteAllBytes(path, BmpCodec.Encode32(winW, winH, capture));
+            var writer = new StringWriter();
+            Assert.Equal(0, AvatarEvidence.StripDecode(path, writer, fullWindow: true));
+            var json = writer.ToString();
+            Assert.Contains($"\"Pack\":{SyntheticAvatarPacks.Circuit.PackId}", json);
+            Assert.Contains($"\"Clip\":{SyntheticAvatarPacks.ClipIdle}", json);
+            Assert.Contains("\"Frame\":1", json);
+            Assert.Contains("\"Decoded\":true", json);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Definitions_AreNonUniform_AndCommittedJsonMatchesInCodeSource()
     {
         foreach (var def in SyntheticAvatarPacks.All)

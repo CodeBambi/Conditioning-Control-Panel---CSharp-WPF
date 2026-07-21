@@ -117,7 +117,14 @@ function Raise-Tube {
 # stage (104x136 incl. the 4-DIP float headroom) — cropping tighter would clip the strip
 # at positive float offsets.
 function Capture-Shot([string]$tag) {
-    $probe = Read-Probe
+    # Retry the probe read: a UIA tree query can race a crossfade/rotation layout pass
+    # (run-3 died here at G3 on a single transient null).
+    $probe = $null
+    foreach ($try in 1..8) {
+        $probe = Read-Probe
+        if ($null -ne $probe) { break }
+        Start-Sleep -Milliseconds 200
+    }
     if ($null -eq $probe) { Fail "probe unreadable during capture ($tag)" }
     $tube = Get-Tube
     [AvNative]::SetWindowPos([IntPtr]$tube.Current.NativeWindowHandle, [AvNative]::HWND_TOPMOST, 0, 0, 0, 0,
@@ -202,6 +209,10 @@ function Trace-Contains([string]$kind) {
 }
 
 Write-Output '=== SP-015 AvatarTube demonstrator — Windows-headed evidence matrix ==='
+# Fresh run: drop stale caps/samples from prior partial runs so evidence/ holds exactly
+# one coherent session's artifacts.
+Remove-Item (Join-Path $shots 'cap-*.bmp') -Force -ErrorAction SilentlyContinue
+Remove-Item (Join-Path $shots 'g*.jsonl') -Force -ErrorAction SilentlyContinue
 if (Test-Path $settingsFile) { Remove-Item $settingsFile -Force }
 $script:traceFile = Join-Path $shots 'trace.jsonl'
 # stderr is NOT redirected: an undrained redirect pipe wedges the app (SP-015 finding).
@@ -281,30 +292,27 @@ Gate $true 'g6/float-folded-into-g2' 'centroid oscillation asserted by g2/float-
 
 # ---- G7: pause/resume — freeze, successor, unchanged cadence ----
 Write-Output '-- G7 pause/resume (9s)'
-# Capture FIRST, decode later: pre-pause samples must be pause-adjacent (decode latency
-# between capture and pause made the old order's pre-pause coverage ~10s stale — the
-# evaluator rightly rejected the discontinuous bridge).
-$g7aFiles = Collect-Shots 'g7a' 2 220
-# Pause MID-PASS with margin on BOTH sides: the cadence bridge needs >=3 same-clip samples
-# before the pause and >=2 after. Early frames (just-rotated) starve the before-run; last
-# frames starve the after-run (observed flakes: 0 before / 1-2 after). Accept: clip 1
-# frame 1-2, clip 2 frame 1 (clip 2's later frames rotate away <= 690ms after resume),
-# stable across two probes (no wrap, no just-rotated).
-$early = $false
+# Capture CONTINUOUSLY while hunting: the cadence bridge needs >=3 same-clip samples in the
+# 1940ms before the pause — hunting without capturing (the old order) starved exactly that
+# window (observed flakes: 0-1 before). Pause target = clip 1 (idle) frames 2-4: frame 2's
+# 820ms hold absorbs the probe-to-click latency (~550ms), frames 2-4 give 3+ distinct
+# ordinals before the pause; frame 5 and the crossfade boundaries are excluded (a frozen
+# blend would fail strip decode in the freeze gate).
+$g7aFiles = @()
+$accepted = $false
 $prevProbe = $null
-foreach ($round in 1..8) {
-    if ($round -gt 1) { $g7aFiles += Collect-Shots ("g7a2-$round") 1 220 }
-    foreach ($try in 1..4) {
-        $probe = Read-Probe
-        if ($probe -and $prevProbe -and $probe.Mode -eq 'Animated' `
-            -and (($probe.Clip -eq 1 -and $probe.Frame -ge 1 -and $probe.Frame -le 2) -or ($probe.Clip -eq 2 -and $probe.Frame -eq 1)) `
-            -and $prevProbe.Clip -eq $probe.Clip -and $prevProbe.Frame -le $probe.Frame) { $early = $true; break }
-        $prevProbe = $probe
-        Start-Sleep -Milliseconds 150
-    }
-    if ($early) { break }
+$deadline = (Get-Date).AddSeconds(30)
+while ((Get-Date) -lt $deadline -and -not $accepted) {
+    $g7aFiles += Capture-Shot 'g7a'
+    $probe = Read-Probe
+    if ($probe -and $prevProbe -and $probe.Mode -eq 'Animated' `
+        -and $probe.Clip -eq 1 -and $probe.Frame -ge 2 -and $probe.Frame -le 4 `
+        -and $prevProbe.Clip -eq 1 -and $prevProbe.Frame -le $probe.Frame) { $accepted = $true; break }
+    $prevProbe = $probe
+    Start-Sleep -Milliseconds 200
 }
-if (-not $early) { Fail 'no mid-pass frame to pause on within 8 rounds' }
+if (-not $accepted) { Fail 'no clip-1 mid-pass frame to pause on within 30s' }
+$g7aFiles += Capture-Shot 'g7a' # last pre-pause shot immediately before the click
 Click-Button 'Pause'
 $g7fFiles = Collect-Shots 'g7f' 2.5 450
 Click-Button 'Resume'

@@ -30,12 +30,15 @@ public partial class AvatarTubeDemonstratorWindow : Window
     private bool _attached = true;
     private bool _pauseToggled;
     private bool _cleanupDone;
+    private readonly bool _startAnimated;
 
-    public AvatarTubeDemonstratorWindow(ApplicationHost host, Window dashboard, AvatarTubeParticipant participant)
+    public AvatarTubeDemonstratorWindow(ApplicationHost host, Window dashboard, AvatarTubeParticipant participant,
+        bool startAnimated = false)
     {
         _host = host;
         _dashboard = dashboard;
         _participant = participant;
+        _startAnimated = startAnimated;
         InitializeComponent();
 
         Opened += OnOpened;
@@ -67,6 +70,13 @@ public partial class AvatarTubeDemonstratorWindow : Window
         // Phase-4 user path: decode-probe + engine start (idempotent; tests may have
         // already started the participant with an injected clock).
         _participant.StartTube();
+        // --avatar-animate: open already looping (WSLg evidence — no input automation there).
+        if (_startAnimated)
+        {
+            _participant.Engine?.SetMode(AvatarMode.Animated);
+            ModeButton.Content = "Static";
+        }
+
         RepositionToOwner();
     }
 
