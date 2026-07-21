@@ -31,3 +31,28 @@ public sealed record AiDiagnosticRecord(
     long DurationMilliseconds,
     int CommandCount,
     string[] CommandVerdictCodes);
+
+/// <summary>
+/// The closed verdict→code mapping (contract §12 rule 1): diagnostic verdict codes map
+/// from verdict TYPE names only — Field/Category/payload values never enter diagnostics.
+/// </summary>
+public static class AiDiagnosticCodes
+{
+    public static string VerdictCode(AiCommandVerdict verdict) => verdict switch
+    {
+        AiCommandVerdict.Valid => "valid",
+        AiCommandVerdict.UnknownCommand => "unknown-command",
+        AiCommandVerdict.MalformedData => "malformed-data",
+        AiCommandVerdict.OutOfRange => "out-of-range",
+        AiCommandVerdict.ModerationBlocked => "moderation-blocked",
+        AiCommandVerdict.ConsentGated => "consent-gated",
+        AiCommandVerdict.NotExecuted r => r.Reason switch
+        {
+            AiNotExecutedReason.EnvelopeRejected => "not-executed:envelope-rejected",
+            AiNotExecutedReason.CapExceeded => "not-executed:cap-exceeded",
+            AiNotExecutedReason.SupersededGeneration => "not-executed:superseded-generation",
+            _ => "not-executed:unknown",
+        },
+        _ => "unknown",
+    };
+}

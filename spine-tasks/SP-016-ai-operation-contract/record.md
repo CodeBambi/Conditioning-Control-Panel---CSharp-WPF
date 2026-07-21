@@ -80,16 +80,28 @@ $ dotnet build client/CcpClient.sln -c Debug --nologo
     0 Warning(s)
     0 Error(s)
 $ dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo
-Passed!  - Failed: 0, Passed: 211, Skipped: 0, Total: 211 - CcpClient.Tests.dll (net10.0)
+Passed!  - Failed: 0, Passed: 213, Skipped: 0, Total: 213 - CcpClient.Tests.dll (net10.0)
 $ dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo
 Passed!  - Failed: 0, Passed: 22, Skipped: 0, Total: 22 - CcpClient.HeadlessTests.dll (net10.0)
 ```
 
-Windows lane run (same commit): build 0W/0E; 211/211 + 22/22.
+(Run twice: first pass 211/211 pre-consult; re-run after the three consult-driven defect fixes above → 213/213. Output shown is the final post-fix run.)
+
+Windows lane run (same code): build 0W/0E; 213/213 + 22/22.
 
 ## Surprises
 
 - The 11-command-kind round-trip test initially tripped the default `MaxCommandsPerResponse = 3` — the cap doing exactly its job; test raised the cap for that case.
 - No WSL2/Linux-specific behavior in this slice (pure vocabulary + JSON mechanics); the gate is a portability proof of the mechanics only.
 
-### Pre-completion (Step 4) — pending
+### Pre-completion (Step 4) — solo consult
+
+Requested: `consult` mode=solo (Fable route per owner direction; actual answering model not exposed in tool output). Verdict: contract structure complete (13 sections, honesty framing satisfied, dispositions explicit); found three REAL defects, all fixed before close:
+
+1. **`UnknownCommand(name)` and `MalformedData(field, code)` could carry raw model output** (unknown command name / unknown field name), violating contract §9's own stable-token rule and creating a path into diagnostics. Fixed: `UnknownCommand` is now payload-free; unknown fields report the stable token `"(unrecognized)"`; regression tests added.
+2. **A rejected envelope still surfaced reply text** (contract ambiguity). Fixed mechanically: `AiEnvelopeResult.Reply` is null whenever `Accepted` is false; contract §9 rule 4 added (reply moderation is the pipeline's output boundary, not the validator's; a rejected envelope hands nothing showable or executable to anyone).
+3. **Diagnostic `CommandVerdictCodes` had no structural guarantee of payload-freedom.** Fixed: closed mapping `AiDiagnosticCodes.VerdictCode` (verdict TYPE names only, NotExecuted reasons expanded; Field/Category payloads structurally excluded); contract §12 rule 1 names the mapping; test asserts the mapping is closed and token-shaped.
+
+Design observation (no fix required, recorded): the haptic policy ceiling (`MaxHapticIntensity`) acts in schema-validation phase, so a runtime setting determines schema validity; the contract names the ceiling as the binding bound, and splitting physical bound (0..1) from policy ceiling is a spike-row decision.
+
+WSL2 gate re-run AFTER these fixes (the run recorded above is the post-fix run): 0W/0E, 213/213 + 22/22.

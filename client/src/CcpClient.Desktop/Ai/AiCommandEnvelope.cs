@@ -88,10 +88,13 @@ public abstract record AiCommandVerdict
         public static readonly Valid Instance = new();
     }
 
-    /// <summary>The command discriminator is not in the schema (reject-by-default).</summary>
-    public sealed record UnknownCommand(string Name) : AiCommandVerdict;
+    /// <summary>The command discriminator is not in the schema (reject-by-default). Carries NO payload: the submitted name is raw model output and must never flow into verdicts/diagnostics (contract §9).</summary>
+    public sealed record UnknownCommand : AiCommandVerdict
+    {
+        public static readonly UnknownCommand Instance = new();
+    }
 
-    /// <summary>A field is missing, wrong-typed, or structurally invalid. Code is a stable token (missing, wrong-type, unknown-field, …), never the raw value.</summary>
+    /// <summary>A field is missing, wrong-typed, or structurally invalid. Field is a schema-known name or the stable token "(unrecognized)" — never a model-supplied name; Code is a stable token (missing, wrong-type, unknown-field, …), never the raw value.</summary>
     public sealed record MalformedData(string Field, string Code) : AiCommandVerdict;
 
     /// <summary>A field violates its schema bound. Limit names the bound (e.g. "0-8", "max-80"), never the submitted value.</summary>
@@ -245,10 +248,11 @@ public static class AiEnvelopeValidator
             {
                 // Whole-envelope atomic rejection: schema-valid siblings are NotExecuted,
                 // never silently dropped and never executed (contract §8 rule 3, §9 rule 1).
+                // The reply text of a rejected envelope is NEVER surfaced (contract §9 rule 4).
                 var verdicts = new AiCommandVerdict[entries.Length];
                 for (var i = 0; i < entries.Length; i++)
                     verdicts[i] = failures[i] ?? new AiCommandVerdict.NotExecuted(AiNotExecutedReason.EnvelopeRejected);
-                return new AiEnvelopeResult(false, "command-invalid", reply, verdicts, null);
+                return new AiEnvelopeResult(false, "command-invalid", null, verdicts, null);
             }
 
             // Phase 2 — gating: consent toggles then moderation on every free-text field
@@ -283,7 +287,7 @@ public static class AiEnvelopeValidator
         foreach (var prop in el.EnumerateObject())
         {
             if (prop.Name is not ("command" or "data"))
-                return (null, new AiCommandVerdict.MalformedData(prop.Name, "unknown-field"));
+                return (null, new AiCommandVerdict.MalformedData(UnrecognizedField, "unknown-field"));
         }
 
         if (!el.TryGetProperty("command", out var nameEl))
@@ -293,7 +297,7 @@ public static class AiEnvelopeValidator
 
         var name = nameEl.GetString()!;
         if (!CommandNames.TryGetValue(name, out var kind))
-            return (null, new AiCommandVerdict.UnknownCommand(name));
+            return (null, AiCommandVerdict.UnknownCommand.Instance);
 
         if (!el.TryGetProperty("data", out var dataEl))
             return (null, new AiCommandVerdict.MalformedData("data", "missing"));
@@ -398,7 +402,7 @@ public static class AiEnvelopeValidator
                 return (new AiCommandData.GetBackToMe(token, delay, jsonOnly, text), null);
             }
             default:
-                return (null, new AiCommandVerdict.UnknownCommand(kind.ToString()));
+                return (null, AiCommandVerdict.UnknownCommand.Instance);
         }
     }
 
@@ -463,12 +467,14 @@ public static class AiEnvelopeValidator
         return null;
     }
 
+    private const string UnrecognizedField = "(unrecognized)";
+
     private static AiCommandVerdict? CheckFields(JsonElement data, params string[] allowed)
     {
         foreach (var prop in data.EnumerateObject())
         {
             if (!allowed.Contains(prop.Name, StringComparer.Ordinal))
-                return new AiCommandVerdict.MalformedData(prop.Name, "unknown-field");
+                return new AiCommandVerdict.MalformedData(UnrecognizedField, "unknown-field");
         }
         return null;
     }

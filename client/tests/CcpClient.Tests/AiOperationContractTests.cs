@@ -76,6 +76,37 @@ public class AiOperationContractTests
         Assert.All(result.Verdicts, v => Assert.IsType<AiCommandVerdict.Valid>(v));
     }
 
+    // ---- rejected envelopes surface nothing (contract §9 rule 4) ----
+
+    [Fact]
+    public void RejectedEnvelope_SurfacesNoReplyText()
+    {
+        var result = AiEnvelopeValidator.Validate(
+            """{ "reply": "showable text", "commands": [ { "command": "nope", "data": {} } ] }""", Permit);
+
+        Assert.False(result.Accepted);
+        Assert.Null(result.Reply);
+        Assert.Null(result.Plan);
+    }
+
+    // ---- diagnostic verdict-code mapping is closed and payload-free (contract §12 rule 1) ----
+
+    [Fact]
+    public void VerdictCode_MapsEveryVerdictType_ToStableToken()
+    {
+        foreach (var verdict in VerdictSamples())
+        {
+            var code = AiDiagnosticCodes.VerdictCode(verdict);
+            Assert.Matches("^[a-z:-]+$", code);
+            Assert.DoesNotContain("(", code);
+        }
+
+        Assert.Equal("valid", AiDiagnosticCodes.VerdictCode(AiCommandVerdict.Valid.Instance));
+        Assert.Equal("unknown-command", AiDiagnosticCodes.VerdictCode(AiCommandVerdict.UnknownCommand.Instance));
+        Assert.Equal("malformed-data", AiDiagnosticCodes.VerdictCode(new AiCommandVerdict.MalformedData("amount", "wrong-type")));
+        Assert.Equal("not-executed:envelope-rejected", AiDiagnosticCodes.VerdictCode(new AiCommandVerdict.NotExecuted(AiNotExecutedReason.EnvelopeRejected)));
+    }
+
     // ---- envelope: reject-by-default ----
 
     [Fact]
@@ -94,8 +125,7 @@ public class AiOperationContractTests
             """{ "commands": [ { "command": "mind_wipe", "data": {} } ] }""", Permit);
 
         Assert.False(result.Accepted);
-        var verdict = Assert.IsType<AiCommandVerdict.UnknownCommand>(Assert.Single(result.Verdicts));
-        Assert.Equal("mind_wipe", verdict.Name);
+        Assert.IsType<AiCommandVerdict.UnknownCommand>(Assert.Single(result.Verdicts));
         Assert.Null(result.Plan);
     }
 
@@ -107,7 +137,7 @@ public class AiOperationContractTests
 
         Assert.False(result.Accepted);
         var verdict = Assert.IsType<AiCommandVerdict.MalformedData>(Assert.Single(result.Verdicts));
-        Assert.Equal("evil", verdict.Field);
+        Assert.Equal("(unrecognized)", verdict.Field); // model-supplied names never enter verdicts (contract §9)
         Assert.Equal("unknown-field", verdict.Code);
     }
 
@@ -444,7 +474,7 @@ public class AiOperationContractTests
     private static IEnumerable<AiCommandVerdict> VerdictSamples()
     {
         yield return AiCommandVerdict.Valid.Instance;
-        yield return new AiCommandVerdict.UnknownCommand("nope");
+        yield return AiCommandVerdict.UnknownCommand.Instance;
         yield return new AiCommandVerdict.MalformedData("amount", "wrong-type");
         yield return new AiCommandVerdict.OutOfRange("frequency", "0-10");
         yield return new AiCommandVerdict.ModerationBlocked("cat-1");

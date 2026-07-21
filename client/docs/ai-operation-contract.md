@@ -105,14 +105,15 @@ Two operation classes with distinct contracts:
 
 1. Every command in a submitted envelope receives exactly one typed verdict in the envelope result, in order:
    - `Valid` — schema-valid and executable (execution may still be gated; §8 rule 6);
-   - `UnknownCommand(name)`;
-   - `MalformedData(field, code)` — `code` is a stable machine token, never raw JSON or user text;
+   - `UnknownCommand` — carries NO payload: the submitted name is raw model output and never enters a verdict;
+   - `MalformedData(field, code)` — `field` is a schema-known name or the stable token `(unrecognized)`, never a model-supplied name; `code` is a stable machine token, never raw JSON or user text;
    - `OutOfRange(field, limit)` — names the field and the violated bound;
    - `ModerationBlocked(category)` — §7 rule 2;
    - `ConsentGated(toggle)` — master/per-effect gate denied;
    - `NotExecuted(reason)` — the command was valid but did not run, with `reason` ∈ { `envelope-rejected`, `cap-exceeded`, `superseded-generation` }. A valid sibling in a rejected envelope is `NotExecuted(envelope-rejected)` — never silently dropped.
 2. The envelope result is a typed, serializable value — the honest record of *why nothing ran* — and is what the spike row's "zero execution on mixed/invalid payloads" asserts against.
 3. Execution results (when an execution row lands) extend this vocabulary per command; they never collapse two distinct failures into one string.
+4. A rejected envelope surfaces **no reply text**: the result's `Reply` is null whenever `Accepted` is false. Reply moderation is the operation pipeline's output boundary (§7 rule 1), not the validator's — the validator's job is to ensure a rejected envelope hands nothing showable or executable to anyone.
 
 ## 10. Secret storage
 
@@ -134,7 +135,7 @@ Two operation classes with distinct contracts:
 
 **Schema-level rule, not a convention.**
 
-1. The diagnostic record for AI operations (`AiDiagnosticRecord` in the typed vocabulary) exposes **only**: enums, stable machine-readable codes, counts, durations, generation identifiers, provider/endpoint *classes* (§6), and per-command verdict codes (§9). It has **no free-text field** that could carry a prompt, a completion, a user message, a window title, a keyword, or command payload text. Failure `reason` fields carry exception **class names** or stable codes — never exception messages, which can embed user input (pre-approach consult condition, record.md).
+1. The diagnostic record for AI operations (`AiDiagnosticRecord` in the typed vocabulary) exposes **only**: enums, stable machine-readable codes, counts, durations, generation identifiers, provider/endpoint *classes* (§6), and per-command verdict codes (§9). It has **no free-text field** that could carry a prompt, a completion, a user message, a window title, a keyword, or command payload text. Failure `reason` fields carry exception **class names** or stable codes — never exception messages, which can embed user input (pre-approach consult condition, record.md). Per-command verdict codes come from the closed mapping `AiDiagnosticCodes.VerdictCode` — verdict TYPE names only; `Field`/`CategoryCode`/reason payloads never enter diagnostics.
 2. The content-freedom proof is **structural**: a test asserts the serialized property set of the diagnostic record is exactly the closed allow-list of content-free fields. A test that checks one instance's values is not a schema proof.
 3. Diagnostics never contain memory contents (§5), secrets or secret values (§10), or raw envelopes. Logs that carry user text remain governed by the global privacy rules and are outside the diagnostic record's schema entirely.
 4. First-attempt `ConnectionDiagnosticResult`/`DiagnosticCategory` (`CCP.Core/Services/AIService/OpenAiService.cs:419,459`) — ADAPTED as the idea of typed endpoint diagnostics, content-free.
