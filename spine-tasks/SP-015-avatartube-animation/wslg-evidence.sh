@@ -51,8 +51,11 @@ echo "    spawn decode inflates the period past a frame hold and starves same-fr
 SHOTS=()
 for i in $(seq 1 16); do
   # GNU date's %3N is not honored on this WSL image (full %N printed — garbage epoch-ms
-  # overflowed the evaluator's elapsed math). Compose epoch-ms explicitly.
-  T=$(( $(date +%s) * 1000 + $(date +%N) / 1000000 ))
+  # overflowed the evaluator's elapsed math). Compose epoch-ms explicitly; %N CAN carry a
+  # leading zero — bash reads that as OCTAL and 8/9 abort the expansion ("value too great
+  # for base", killed earlier runs mid-loop). 10# forces base-10.
+  N=$(date +%N)
+  T=$(( $(date +%s) * 1000 + 10#$N / 1000000 ))
   CAP="$ART/wslg-cap-$T.bmp"
   python3 "$DST/client/tools/verify/xgetimage.py" "$TITLE" "$CAP" || { kill $APP_PID 2>/dev/null; exit 1; }
   SHOTS+=("$CAP")
