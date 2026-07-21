@@ -92,9 +92,13 @@ public partial class AvatarTubeDemonstratorWindow : Window
         FloatCanvas.RenderTransform = new TranslateTransform(0, args.FloatYDip);
 
         CapabilityText.Text = $"capability avatar-animation: {Describe(_participant.AvatarCapability)}";
+        // The stage's SCREEN origin + scale: the headed harness's capture rect (physical
+        // pixels, UIA-readable — the SP-007 layout-probe pattern).
+        var stageOrigin = AvatarStage.PointToScreen(new Point(0, 0));
         ProbeText.Text =
             $"avatar-probe: pack={args.PackId} clip={args.LayerA.ClipId} frame={args.LayerA.FrameIndex} " +
-            $"mode={args.Mode} outstanding={_host.Registry.OutstandingOperations} subs={_participant.FrameSubscriberCount}";
+            $"mode={args.Mode} outstanding={_host.Registry.OutstandingOperations} subs={_participant.FrameSubscriberCount} " +
+            $"stage={stageOrigin.X},{stageOrigin.Y} scale={RenderScaling:0.##}";
     }
 
     private void OnModeClick(object? sender, RoutedEventArgs e)
@@ -141,7 +145,7 @@ public partial class AvatarTubeDemonstratorWindow : Window
             : SyntheticAvatarPacks.Circuit.PackId;
         _participant.SwitchPack(other);
         // Pack-switch disposes the old pack's bitmaps (disposal parity); the cache rebuilds lazily.
-        PackButton.Content = other == SyntheticAvatarPacks.Pulse.PackId ? "Pack: pulse" : "Pack: circuit";
+        // Button label stays constant — it always switches to the other pack.
     }
 
     private void OnAttachClick(object? sender, RoutedEventArgs e)

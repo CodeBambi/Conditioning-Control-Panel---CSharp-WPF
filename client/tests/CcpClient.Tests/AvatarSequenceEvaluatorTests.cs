@@ -18,14 +18,14 @@ public sealed class AvatarSequenceEvaluatorTests
     {
         var samples = new[]
         {
-            new AvatarSample(1000, true, 0, 1, 2, 0.9, null),
-            new AvatarSample(1200, false, -1, -1, -1, 0.5, "ambiguous-bit"), // crossfade/dip blend: visible, not blank
-            new AvatarSample(1400, true, 0, 1, 3, 0.9, null),
+            new AvatarSample(1000, true, 0, 1, 2, 0.9, 40.0, null),
+            new AvatarSample(1200, false, -1, -1, -1, 0.5, 40.0, "ambiguous-bit"), // crossfade/dip blend: visible, not blank
+            new AvatarSample(1400, true, 0, 1, 3, 0.9, 40.0, null),
         };
         var verdicts = AvatarSequenceEvaluator.Evaluate(samples, [], Pack);
         Assert.True(ByName(verdicts, "no-blank").Passed, ByName(verdicts, "no-blank").Detail);
 
-        var withBlank = samples.Append(new AvatarSample(1600, false, -1, -1, -1, 0.01, "no-marker")).ToArray();
+        var withBlank = samples.Append(new AvatarSample(1600, false, -1, -1, -1, 0.01, -1.0, "no-marker")).ToArray();
         var failed = AvatarSequenceEvaluator.Evaluate(withBlank, [], Pack);
         Assert.False(ByName(failed, "no-blank").Passed);
     }
@@ -33,10 +33,10 @@ public sealed class AvatarSequenceEvaluatorTests
     [Fact]
     public void FramesAdvance_RequiresRenderedChange()
     {
-        var stuck = Enumerable.Range(0, 6).Select(i => new AvatarSample(1000 + i * 200, true, 0, 1, 2, 0.9, null)).ToArray();
+        var stuck = Enumerable.Range(0, 6).Select(i => new AvatarSample(1000 + i * 200, true, 0, 1, 2, 0.9, 40.0, null)).ToArray();
         Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(stuck, [], Pack), "frames-advance").Passed);
 
-        var moving = stuck.Append(new AvatarSample(2400, true, 0, 1, 3, 0.9, null)).ToArray();
+        var moving = stuck.Append(new AvatarSample(2400, true, 0, 1, 3, 0.9, 40.0, null)).ToArray();
         Assert.True(ByName(AvatarSequenceEvaluator.Evaluate(moving, [], Pack), "frames-advance").Passed);
     }
 
@@ -45,15 +45,15 @@ public sealed class AvatarSequenceEvaluatorTests
     {
         var backward = new[]
         {
-            new AvatarSample(1000, true, 0, 1, 3, 0.9, null),
-            new AvatarSample(1300, true, 0, 1, 1, 0.9, null), // backward without wrap: second-pipeline interleave
+            new AvatarSample(1000, true, 0, 1, 3, 0.9, 40.0, null),
+            new AvatarSample(1300, true, 0, 1, 1, 0.9, 40.0, null), // backward without wrap: second-pipeline interleave
         };
         Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(backward, [], Pack), "monotonic-modular-advance").Passed);
 
         var wrap = new[]
         {
-            new AvatarSample(1000, true, 0, 1, Idle.Frames - 1, 0.9, null),
-            new AvatarSample(1600, true, 0, 1, 0, 0.9, null), // legitimate wrap
+            new AvatarSample(1000, true, 0, 1, Idle.Frames - 1, 0.9, 40.0, null),
+            new AvatarSample(1600, true, 0, 1, 0, 0.9, 40.0, null), // legitimate wrap
         };
         Assert.True(ByName(AvatarSequenceEvaluator.Evaluate(wrap, [], Pack), "monotonic-modular-advance").Passed);
     }
@@ -63,8 +63,8 @@ public sealed class AvatarSequenceEvaluatorTests
     {
         var jump = new[]
         {
-            new AvatarSample(1000, true, 0, 1, 0, 0.9, null),
-            new AvatarSample(1100, true, 0, 1, 3, 0.9, null), // 3 frames in 100ms, min delay 480ms
+            new AvatarSample(1000, true, 0, 1, 0, 0.9, 40.0, null),
+            new AvatarSample(1100, true, 0, 1, 3, 0.9, 40.0, null), // 3 frames in 100ms, min delay 480ms
         };
         Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(jump, [], Pack), "monotonic-modular-advance").Passed);
     }
@@ -72,12 +72,12 @@ public sealed class AvatarSequenceEvaluatorTests
     [Fact]
     public void DuplicateRun_BeyondHoldFails_WithinHoldPasses()
     {
-        var within = Enumerable.Range(0, 3).Select(i => new AvatarSample(1000 + i * 200, true, 0, 1, 0, 0.9, null))
-            .Append(new AvatarSample(1650, true, 0, 1, 1, 0.9, null)).ToArray();
+        var within = Enumerable.Range(0, 3).Select(i => new AvatarSample(1000 + i * 200, true, 0, 1, 0, 0.9, 40.0, null))
+            .Append(new AvatarSample(1650, true, 0, 1, 1, 0.9, 40.0, null)).ToArray();
         Assert.True(ByName(AvatarSequenceEvaluator.Evaluate(within, [], Pack), "no-duplicate-run-beyond-hold").Passed);
 
         // Frame 0's hold is 640ms (+300 slack); a 1200ms identical run outlives it.
-        var beyond = Enumerable.Range(0, 7).Select(i => new AvatarSample(1000 + i * 200, true, 0, 1, 0, 0.9, null)).ToArray();
+        var beyond = Enumerable.Range(0, 7).Select(i => new AvatarSample(1000 + i * 200, true, 0, 1, 0, 0.9, 40.0, null)).ToArray();
         Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(beyond, [], Pack), "no-duplicate-run-beyond-hold").Passed);
     }
 
@@ -110,9 +110,9 @@ public sealed class AvatarSequenceEvaluatorTests
         var pausedFrame = before[^1];
         var frozen = new[]
         {
-            new AvatarSample(12_000, true, 0, SyntheticAvatarPacks.ClipIdle, pausedFrame.FrameIndex, 0.9, null),
-            new AvatarSample(14_000, true, 0, SyntheticAvatarPacks.ClipIdle, pausedFrame.FrameIndex, 0.9, null),
-            new AvatarSample(16_000, true, 0, SyntheticAvatarPacks.ClipIdle, pausedFrame.FrameIndex, 0.9, null),
+            new AvatarSample(12_000, true, 0, SyntheticAvatarPacks.ClipIdle, pausedFrame.FrameIndex, 0.9, 40.0, null),
+            new AvatarSample(14_000, true, 0, SyntheticAvatarPacks.ClipIdle, pausedFrame.FrameIndex, 0.9, 40.0, null),
+            new AvatarSample(16_000, true, 0, SyntheticAvatarPacks.ClipIdle, pausedFrame.FrameIndex, 0.9, 40.0, null),
         };
         // Resume: the engine resumes at the freeze point (elapsed 1400ms) — the paused
         // frame's hold completes, then the successor chain at declared cadence, wall times
@@ -135,8 +135,8 @@ public sealed class AvatarSequenceEvaluatorTests
     {
         var frozen = new[]
         {
-            new AvatarSample(12_000, true, 0, 1, 2, 0.9, null),
-            new AvatarSample(14_000, true, 0, 1, 3, 0.9, null), // CHANGED during pause
+            new AvatarSample(12_000, true, 0, 1, 2, 0.9, 40.0, null),
+            new AvatarSample(14_000, true, 0, 1, 3, 0.9, 40.0, null), // CHANGED during pause
         };
         var trace = new[]
         {
@@ -152,14 +152,14 @@ public sealed class AvatarSequenceEvaluatorTests
     {
         var samples = new[]
         {
-            new AvatarSample(1000, true, 0, 1, 2, 0.9, null),
-            new AvatarSample(2000, true, 1, 1, 0, 0.9, null),
-            new AvatarSample(2600, true, 1, 1, 1, 0.9, null),
+            new AvatarSample(1000, true, 0, 1, 2, 0.9, 40.0, null),
+            new AvatarSample(2000, true, 1, 1, 0, 0.9, 40.0, null),
+            new AvatarSample(2600, true, 1, 1, 1, 0.9, 40.0, null),
         };
         var trace = new[] { new AvatarTraceEvent(1500, AvatarTraceEvent.PackSwitch, 1) };
         Assert.True(ByName(AvatarSequenceEvaluator.Evaluate(samples, trace, Pack), "pack-switch-clean").Passed);
 
-        var dirty = samples.Append(new AvatarSample(3000, true, 0, 1, 4, 0.9, null)).ToArray();
+        var dirty = samples.Append(new AvatarSample(3000, true, 0, 1, 4, 0.9, 40.0, null)).ToArray();
         Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(dirty, trace, Pack), "pack-switch-clean").Passed);
     }
 
@@ -188,9 +188,36 @@ public sealed class AvatarSequenceEvaluatorTests
             }
 
             var ordinal = startOrdinal + cycles * clip.Frames + index;
-            samples.Add(new AvatarSample(startT + (long)t, true, packId, clipId, ordinal % clip.Frames, 0.9, null));
+            samples.Add(new AvatarSample(startT + (long)t, true, packId, clipId, ordinal % clip.Frames, 0.9,
+                64.0 + 3.0 * Math.Sin(t / 250.0), null));
         }
 
         return samples;
+    }
+
+    [Fact]
+    public void FloatLiveness_OscillationWithinBoundPasses_ConstantOrExcessiveFails()
+    {
+        var alive = Enumerable.Range(0, 12)
+            .Select(i => new AvatarSample(1000 + i * 200, true, 0, 1, i % Idle.Frames, 0.9, 64.0 + 2.5 * Math.Sin(i / 1.5), null))
+            .ToArray();
+        Assert.True(ByName(AvatarSequenceEvaluator.Evaluate(alive, [], Pack), "float-liveness").Passed);
+
+        var frozen = alive.Select(s => s with { ContentCentroidY = 64.0 }).ToArray();
+        Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(frozen, [], Pack), "float-liveness").Passed);
+
+        // Range beyond 2×(amplitude+2): content moved more than the float allows (window moved or wrong transform).
+        var excessive = alive.Select((s, i) => s with { ContentCentroidY = 64.0 + 10.0 * Math.Sin(i / 1.5) }).ToArray();
+        Assert.False(ByName(AvatarSequenceEvaluator.Evaluate(excessive, [], Pack), "float-liveness").Passed);
+
+        // Paused-window samples are excluded (a frozen float during pause is legitimate).
+        var trace = new[]
+        {
+            new AvatarTraceEvent(1400, AvatarTraceEvent.PauseBegin, 0),
+            new AvatarTraceEvent(3000, AvatarTraceEvent.PauseEnd, 0),
+        };
+        var withPause = alive.Select(s =>
+            s.TimestampMs >= 1400 && s.TimestampMs <= 3000 ? s with { ContentCentroidY = 64.0 } : s).ToArray();
+        Assert.True(ByName(AvatarSequenceEvaluator.Evaluate(withPause, trace, Pack), "float-liveness").Passed);
     }
 }

@@ -59,6 +59,7 @@ public sealed record AvatarSample(
     int ClipId,
     int FrameIndex,
     double ContentFraction,
+    double ContentCentroidY,
     string? Failure);
 
 /// <summary>One engine trace event the evaluator correlates captures against.</summary>
@@ -113,6 +114,7 @@ public static class AvatarSequenceEvaluator
 
         verdicts.Add(EvaluateNoBlank(samples));
         verdicts.Add(EvaluateFramesAdvance(samples));
+        verdicts.Add(EvaluateFloatLiveness(samples, trace));
         verdicts.AddRange(EvaluateRuns(samples, pack, trace));
 
         var pauseBegin = trace.LastOrDefault(e => e.Kind == AvatarTraceEvent.PauseBegin);
@@ -131,7 +133,38 @@ public static class AvatarSequenceEvaluator
         return verdicts;
     }
 
-    /// <summary>Union no-blank (consult verdict #8): every capture either strip-decodes OR shows visible content.</summary>
+    /// <summary>
+    /// Gentle-float liveness: the content Y centroid oscillates with the float transform —
+    /// range >= 1px (alive) and bounded by the demonstrator amplitude (4 DIP) + capture
+    /// tolerance (never the top-level window moving: window position is separate evidence).
+    /// </summary>
+    private static AvatarVerdict EvaluateFloatLiveness(IReadOnlyList<AvatarSample> samples, IReadOnlyList<AvatarTraceEvent> trace)
+    {
+        const double amplitudeBound = 4.0 + 2.0;
+        // Paused windows freeze the float legitimately — frozen samples are excluded.
+        var pauseWindows = PauseWindows(trace);
+        var measured = samples
+            .Where(s => s.ContentCentroidY >= 0 && !pauseWindows.Any(w => s.TimestampMs >= w.Begin && s.TimestampMs <= w.End))
+            .Select(s => s.ContentCentroidY)
+            .ToArray();
+        if (measured.Length < 2)
+        {
+            return new AvatarVerdict("float-liveness", false, $"only {measured.Length} sample(s) with a measurable centroid");
+        }
+
+        var min = measured.Min();
+        var max = measured.Max();
+        var range = max - min;
+        var withinAmplitude = range <= 2 * amplitudeBound;
+        var passed = range >= 1.0 && withinAmplitude;
+        return new AvatarVerdict(
+            "float-liveness",
+            passed,
+            passed
+                ? $"content centroid oscillates {range:F1}px within the ±{amplitudeBound}px float bound"
+                : $"centroid range {range:F1}px (need >= 1px alive and <= {2 * amplitudeBound}px bounded)");
+    }
+
     private static AvatarVerdict EvaluateNoBlank(IReadOnlyList<AvatarSample> samples)
     {
         var blanks = samples
@@ -157,13 +190,9 @@ public static class AvatarSequenceEvaluator
                 : $"only {distinct} distinct decoded frame(s) — rendered frames did not change");
     }
 
-    /// <summary>Per-run checks on maximal same-(pack,clip) segments.</summary>
-    private static IEnumerable<AvatarVerdict> EvaluateRuns(
-        IReadOnlyList<AvatarSample> samples, AvatarPackDef pack, IReadOnlyList<AvatarTraceEvent> trace)
+    private static List<(long Begin, long End)> PauseWindows(IReadOnlyList<AvatarTraceEvent> trace)
     {
-        // Pauses legitimately freeze a frame: pause windows are subtracted from run spans
-        // (a frozen frame is not a duplicate-run defect).
-        var pauseWindows = new List<(long Begin, long End)>();
+        var windows = new List<(long Begin, long End)>();
         AvatarTraceEvent? pending = null;
         foreach (var e in trace)
         {
@@ -173,11 +202,21 @@ public static class AvatarSequenceEvaluator
             }
             else if (e.Kind == AvatarTraceEvent.PauseEnd && pending is not null)
             {
-                pauseWindows.Add((pending.TimestampMs, e.TimestampMs));
+                windows.Add((pending.TimestampMs, e.TimestampMs));
                 pending = null;
             }
         }
 
+        return windows;
+    }
+
+    /// <summary>Per-run checks on maximal same-(pack,clip) segments.</summary>
+    private static IEnumerable<AvatarVerdict> EvaluateRuns(
+        IReadOnlyList<AvatarSample> samples, AvatarPackDef pack, IReadOnlyList<AvatarTraceEvent> trace)
+    {
+        // Pauses legitimately freeze a frame: pause windows are subtracted from run spans
+        // (a frozen frame is not a duplicate-run defect).
+        var pauseWindows = PauseWindows(trace);
         var runs = new List<List<AvatarSample>>();
         foreach (var sample in samples.Where(s => s.Decoded))
         {

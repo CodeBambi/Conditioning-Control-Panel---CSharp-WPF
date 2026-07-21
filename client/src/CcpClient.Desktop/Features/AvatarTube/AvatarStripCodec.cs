@@ -98,20 +98,38 @@ public static class AvatarStripCodec
     /// </summary>
     public static double ContentFraction(byte[] bgra, int width, int height, byte bgR, byte bgG, byte bgB, int tolerance)
     {
-        var matched = 0;
+        var (fraction, _) = ContentMeasure(bgra, width, height, bgR, bgG, bgB, tolerance);
+        return fraction;
+    }
+
+    /// <summary>
+    /// Content fraction + the Y centroid of non-background pixels (the float-liveness
+    /// signal: the whole content rides the float transform, so its centroid oscillates).
+    /// </summary>
+    public static (double Fraction, double CentroidY) ContentMeasure(
+        byte[] bgra, int width, int height, byte bgR, byte bgG, byte bgB, int tolerance)
+    {
+        var matched = 0L;
+        var ySum = 0L;
         var total = width * height;
-        for (var i = 0; i < total; i++)
+        for (var y = 0; y < height; y++)
         {
-            var offset = i * 4;
-            if (Math.Abs(bgra[offset + 2] - bgR) > tolerance
-                || Math.Abs(bgra[offset + 1] - bgG) > tolerance
-                || Math.Abs(bgra[offset] - bgB) > tolerance)
+            for (var x = 0; x < width; x++)
             {
-                matched++;
+                var offset = (y * width + x) * 4;
+                if (Math.Abs(bgra[offset + 2] - bgR) > tolerance
+                    || Math.Abs(bgra[offset + 1] - bgG) > tolerance
+                    || Math.Abs(bgra[offset] - bgB) > tolerance)
+                {
+                    matched++;
+                    ySum += y;
+                }
             }
         }
 
-        return total == 0 ? 0.0 : (double)matched / total;
+        var fraction = total == 0 ? 0.0 : (double)matched / total;
+        var centroid = matched == 0 ? -1.0 : (double)ySum / matched;
+        return (fraction, centroid);
     }
 
     private static void WriteBits(byte[] bgra, int frameWidth, int top, int left, int value, int bits)

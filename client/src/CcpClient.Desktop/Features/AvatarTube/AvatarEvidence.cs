@@ -18,8 +18,8 @@ public static class AvatarEvidence
     public const string SequenceFlag = "--avatar-sequence";
     public const string GenerateFlag = "--generate-avatar-packs";
 
-    /// <summary>One samples-file line (JSONL): capture timestamp + strip decode + content fraction.</summary>
-    public sealed record SampleLine(long T, bool Decoded, int Pack, int Clip, int Frame, double Content, string? Failure);
+    /// <summary>One samples-file line (JSONL): capture timestamp + strip decode + content fraction + content Y centroid.</summary>
+    public sealed record SampleLine(long T, bool Decoded, int Pack, int Clip, int Frame, double Content, double Cy, string? Failure);
 
     /// <summary>One trace-file line (JSONL), written by the participant's trace sink.</summary>
     public sealed record TraceLine(long T, string Kind, int Pack, int Clip, int Frame);
@@ -36,15 +36,15 @@ public static class AvatarEvidence
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            output.WriteLine(JsonSerializer.Serialize(new SampleLine(0, false, -1, -1, -1, 0.0, $"capture-decode: {ex.Message}")));
+            output.WriteLine(JsonSerializer.Serialize(new SampleLine(0, false, -1, -1, -1, 0.0, -1.0, $"capture-decode: {ex.Message}")));
             return 1;
         }
 
         // The tube's content background (AvatarTubeDemonstratorWindow) — the union no-blank
         // reference. Kept as constants here so the evaluator and the window share one value.
-        var content = AvatarStripCodec.ContentFraction(bgra, width, height, ContentBgR, ContentBgG, ContentBgB, tolerance: 16);
+        var (content, centroidY) = AvatarStripCodec.ContentMeasure(bgra, width, height, ContentBgR, ContentBgG, ContentBgB, tolerance: 16);
         var decoded = AvatarStripCodec.TryDecode(bgra, width, height, out var pack, out var clip, out var frame, out var failure);
-        output.WriteLine(JsonSerializer.Serialize(new SampleLine(0, decoded, decoded ? pack : -1, decoded ? clip : -1, decoded ? frame : -1, content, failure)));
+        output.WriteLine(JsonSerializer.Serialize(new SampleLine(0, decoded, decoded ? pack : -1, decoded ? clip : -1, decoded ? frame : -1, content, centroidY, failure)));
         return decoded ? 0 : 2;
     }
 
@@ -60,7 +60,7 @@ public static class AvatarEvidence
         var samples = File.ReadAllLines(samplesPath)
             .Where(l => !string.IsNullOrWhiteSpace(l))
             .Select(l => JsonSerializer.Deserialize<SampleLine>(l) ?? throw new InvalidDataException($"bad sample line: {l}"))
-            .Select(l => new AvatarSample(l.T, l.Decoded, l.Pack, l.Clip, l.Frame, l.Content, l.Failure))
+            .Select(l => new AvatarSample(l.T, l.Decoded, l.Pack, l.Clip, l.Frame, l.Content, l.Cy, l.Failure))
             .ToArray();
         var trace = tracePath is null || !File.Exists(tracePath)
             ? []

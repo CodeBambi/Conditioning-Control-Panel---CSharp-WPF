@@ -69,7 +69,15 @@ public partial class App : Application
                 }
 
                 var tube = new AvatarTubeDemonstratorWindow(_host, dashboard, participant);
-                tube.Show(dashboard);
+                // The owner must be visible before an owned window can show (Avalonia
+                // EnsureParentStateBeforeShow): open the tube right after the dashboard opens.
+                dashboard.Opened += (_, _) =>
+                {
+                    if (!tube.IsVisible)
+                    {
+                        tube.Show(dashboard);
+                    }
+                };
             }
         }
 
