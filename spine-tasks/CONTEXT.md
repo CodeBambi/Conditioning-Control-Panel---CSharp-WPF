@@ -1,7 +1,7 @@
 # Conditioning-Control-Panel — Context
 
 **Last Updated:** 2026-07-21
-**Status:** Active
+**Status:** CLOSED-OUT — no claimable board work remains (see below)
 **Next Task ID:** SP-022
 
 ---
@@ -20,7 +20,9 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **Pause protocol:** if the Fable 5 consult route errors or times out, assume the 5-hour subscription window is exhausted — safely park in-flight work (spine state is durable), write `.spine/handoff.md`, delete/pause loops and monitors, and STOP until the owner resumes with the session prompt. Same response to unresolvable ambiguity, safety/privacy questions, or repeated failure: pause, never improvise past a gate.
 
-### Phase 4 — AI provider spike, optional T-1 tooling tail
+### Phase 4 — AI provider spike, optional T-1 tooling tail (COMPLETE 2026-07-21; RUN CLOSED OUT)
+
+**RUN CLOSE-OUT 2026-07-21:** all claimable board rows are landed or discharged — SP-001…SP-020 (19 product/tooling rows, ALL WIP pending owner ratification) + T-1 CLOSED (mechanism delivered AND proven on the real tree). `spine plan pending`: **zero pending tasks** (all 21 folders have .DONE). Preflight green on the reinstalled+repatched engine tree. No active loops; 6 dead monitor husks (T-8 wrapper defect, inert). **Remaining work is owner-gated or excluded, never autonomous:** 19 WIP ratification rows; DTRH admit (owner reviews SP-011 spike) + DTRH host (blocked); quips/sound (Linux audio-stack decision is owner-only — SP-017 selection record is the input); AI companion (owner network/memory decisions — SP-016 contract + SP-019 spike are the inputs); camera×3 + geometry spikes (excluded: WSL2-fake / owner-present display-topology); MCP audit (owner Sentry gate); §5.1 Wayland owner question; Decisions-needed list; 2.8.0→2.10.0 engine upgrade decision. **Resume: owner pastes `client/docs/port-session-prompt.md`; reconciliation must verify, not trust.**
 
 Phase 3 COMPLETE 2026-07-21 (all three rows landed, all WIP pending owner ratification). Phase 4 decomposition approved by solo Fable consult 2026-07-21 (council unavailable T-7): **(a) AI provider spike CLAIMABLE NOW as ONE packet** — both former gates discharged (UI rows landed; SP-016's `AiCommandEnvelope` is the fuzz target); deterministic fake OpenAI-compatible loopback endpoint = the BETTER fuzz instrument (timeouts/429s/refusals/malformed/mid-stream-cancel on demand); real Ollama = bonus session fact or named limit; remote-host rejection = policy test vs non-loopback (no real remote needed); cloud = named limit (no credentials on this box). **(b) Quips/sound row stays BLOCKED** — "Linux audio-stack decision" is genuinely owner-only; SP-017's selection record is the decision INPUT, not the decision. **(c) SP-020 = T-1 tooling (durable patch manifest) as OPTIONAL tail after SP-019** — owner may prefer upstream fixes; T-3/T-5/T-8/T-12 stay rows, not packets. Serial. Only after SP-019 (+SP-020 judgment recorded) does zero-claimable hold → close-out report.
 
