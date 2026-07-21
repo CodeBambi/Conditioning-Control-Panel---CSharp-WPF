@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -75,7 +75,7 @@ namespace ConditioningControlPanel
             // in v5.9.8 — see Exclusives subsection below. The Lab stub itself
             // doesn't get a ? button (it's a navigation signpost, not a feature
             // surface).
-            SetHelpContent(LabTab.HelpBtnQuiz, "Quiz");
+            SetHelpContent(GradedIntakeTab.HelpBtnQuiz, "Quiz");
             // HelpBtnWebcamGames removed: the bundled Webcam Games card was split into
             // separate Gaze Minigame + Focus Gaze cards (each with its own ? button).
             SetHelpContent(LabTab.HelpBtnGazeMinigame, "GazeMinigame");

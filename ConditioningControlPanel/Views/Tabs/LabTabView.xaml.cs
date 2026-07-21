@@ -72,25 +72,12 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnStartChaos_Click(sender, e);
         }
-        private void BtnStartQuiz_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnStartQuiz_Click(sender, e);
-        }
-        private void BtnStartIntake_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnStartIntake_Click(sender, e);
-        }
+        // BtnStartQuiz / BtnStartIntake / BtnTestPopQuiz moved to GradedIntakeTabView
+        // when the Graded Intake graduated to its own Exclusives page.
         private void BtnStartBureau_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnStartBureau_Click(sender, e);
-        }
-        private void BtnTestPopQuiz_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnTestPopQuiz_Click(sender, e);
         }
         private void BtnWebcamDebugCalibrate_Click(object sender, RoutedEventArgs e)
         {
@@ -152,11 +139,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkFocusGaze_Changed(sender, e);
         }
-        private void ChkPopQuizEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkPopQuizEnabled_Changed(sender, e);
-        }
         private void ChkRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -191,11 +173,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.SliderMaxHapticIntensity_ValueChanged(sender, e);
-        }
-        private void SliderPopQuizFrequency_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderPopQuizFrequency_ValueChanged(sender, e);
         }
     }
 }

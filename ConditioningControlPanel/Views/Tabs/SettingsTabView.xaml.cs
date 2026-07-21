@@ -92,6 +92,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.PremiumChip_Click(PremiumFeature.Haptics);
         }
+        private void ChipGradedIntake_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.PremiumChip_Click(PremiumFeature.GradedIntake);
+        }
         private void ChipVoice_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

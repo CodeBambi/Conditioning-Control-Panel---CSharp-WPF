@@ -125,6 +125,21 @@
                             <TextBlock Text="Haptics" FontSize="9" Foreground="White" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
                         </StackPanel>
                     </Button>
+                    <!-- Graded Intake — a navigation shortcut, not a toggle: the intake runs in its
+                         own window and is started from its page, so this chip just opens that page
+                         (hence no state dot). -->
+                    <Button x:Name="ChipGradedIntake" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            Click="ChipGradedIntake_Click" ToolTip="Graded Intake — open the intake page">
+                        <StackPanel>
+                            <Grid Width="24" Height="24" HorizontalAlignment="Center">
+                                <Border CornerRadius="6" ClipToBounds="True">
+                                    <Image Source="pack://application:,,,/Resources/features/lab_quiz_hero.png"
+                                           Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                </Border>
+                            </Grid>
+                            <TextBlock Text="Intake" FontSize="9" Foreground="White" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="ChipVoice" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
                             Click="ChipVoice_Click" ToolTip="She's Listening — turn on voice control (&quot;Hey Bambi&quot;) and the mic">
                         <StackPanel>

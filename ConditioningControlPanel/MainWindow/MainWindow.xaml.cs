@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -1510,7 +1510,7 @@ namespace ConditioningControlPanel
                 // resources/features/lab_*_hero.png; the embedded pink ones are the fallback.
                 var labHeroMap = new (string resourcePath, ImageBrush? brush)[]
                 {
-                    ("features/lab_quiz_hero.png", LabTab.LabQuizHeroBrush),
+                    ("features/lab_quiz_hero.png", GradedIntakeTab.GradedIntakeHeroBrush),
                     ("features/lab_aimemory_hero.png", LabTab.LabAiMemoryHeroBrush),
                     ("features/lab_gaze_hero.png", LabTab.LabGazeHeroBrush),
                     ("features/lab_focusgaze_hero.png", LabTab.LabFocusHeroBrush),
@@ -2112,13 +2112,13 @@ namespace ConditioningControlPanel
                 LabTab.ChkWallpaperEnabled.IsChecked = true;
 
             // Initialize pop quiz UI from settings
-            if (LabTab.ChkPopQuizEnabled != null)
-                LabTab.ChkPopQuizEnabled.IsChecked = App.Settings.Current.PopQuizEnabled;
-            if (LabTab.SliderPopQuizFrequency != null)
+            if (GradedIntakeTab.ChkPopQuizEnabled != null)
+                GradedIntakeTab.ChkPopQuizEnabled.IsChecked = App.Settings.Current.PopQuizEnabled;
+            if (GradedIntakeTab.SliderPopQuizFrequency != null)
             {
-                LabTab.SliderPopQuizFrequency.Value = App.Settings.Current.PopQuizFrequency;
-                if (LabTab.TxtPopQuizFrequency != null)
-                    LabTab.TxtPopQuizFrequency.Text = $"{App.Settings.Current.PopQuizFrequency}/session hr";
+                GradedIntakeTab.SliderPopQuizFrequency.Value = App.Settings.Current.PopQuizFrequency;
+                if (GradedIntakeTab.TxtPopQuizFrequency != null)
+                    GradedIntakeTab.TxtPopQuizFrequency.Text = $"{App.Settings.Current.PopQuizFrequency}/session hr";
             }
 
             // Handle start minimized (to tray) - delay briefly to let window render properly first

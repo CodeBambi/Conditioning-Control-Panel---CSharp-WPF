@@ -844,6 +844,21 @@
                                             </StackPanel>
                                         </DockPanel>
                                     </Button>
+                                    <Button x:Name="BtnSubGradedIntake" Style="{StaticResource ExclusivesSubmenuButton}"
+                                            Click="BtnSubGradedIntake_Click">
+                                        <DockPanel LastChildFill="True">
+                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeGradedIntake"
+                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
+                                            </Border>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                       Source="{Binding Source='❓', Converter={StaticResource EmojiToImageSource}}"/>
+                                                <TextBlock Text="Graded Intake" Foreground="White" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Button>
                                     <Button x:Name="BtnSubHaptics" Style="{StaticResource ExclusivesSubmenuButton}"
                                             Click="BtnSubHaptics_Click">
                                         <DockPanel LastChildFill="True">
@@ -1106,6 +1121,11 @@
 
         <!-- She's Listening Tab — voice control Exclusive (offline mic commands + spoken mantras) -->
         <views:SheListeningTabView x:Name="SheListeningTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+
+
+        <!-- Graded Intake Tab — banded-descent intake Exclusive. Graduated out of the Lab;
+             the controls moved here verbatim (see GradedIntakeTabView.xaml). -->
+        <views:GradedIntakeTabView x:Name="GradedIntakeTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
 

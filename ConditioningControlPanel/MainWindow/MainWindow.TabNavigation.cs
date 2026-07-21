@@ -132,6 +132,7 @@ namespace ConditioningControlPanel
                 BlinkTrainerTab.Visibility = Visibility.Collapsed;
             }
             if (SheListeningTab != null) SheListeningTab.Visibility = Visibility.Collapsed;
+            if (GradedIntakeTab != null) GradedIntakeTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive. activeStyle is the primary-nav-only v6 variant —
             // quest sub-tabs and roadmap tracks use TabButtonActive directly (see lines further down).
@@ -325,6 +326,13 @@ namespace ConditioningControlPanel
                     SheListeningTab.Visibility = Visibility.Visible;
                     AnimateTabIn(SheListeningTab);
                     RefreshSheListeningTab();
+                    break;
+
+                case "gradedintake":
+                    GradedIntakeTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(GradedIntakeTab);
+                    RefreshGradedIntakeGate();
+                    RefreshPastQuizzes();
                     break;
 
             }

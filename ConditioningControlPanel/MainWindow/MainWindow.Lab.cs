@@ -85,15 +85,15 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            var fullscreen = LabTab.ChkQuizFullscreen?.IsChecked == true;
-            var playDrone = LabTab.ChkQuizDrone?.IsChecked == true;
+            var fullscreen = GradedIntakeTab.ChkQuizFullscreen?.IsChecked == true;
+            var playDrone = GradedIntakeTab.ChkQuizDrone?.IsChecked == true;
             var quizWindow = new QuizWindow(fullscreen, playDrone);
             quizWindow.Closed += (s, args) => RefreshPastQuizzes();
             quizWindow.Show();
         }
 
         /// <summary>
-        /// Lab → "Graded Intake" web-core rework. Hosts the decoupled intake page
+        /// Exclusives → "Graded Intake" web-core rework. Hosts the decoupled intake page
         /// (Resources/web/intake) in a WebView2 window via <see cref="Services.Quiz.IntakeHostService"/>,
         /// which drafts a themed CCP session from the run's QuizRunResult. Gated the same way as the
         /// classic AI quiz above (App.Ai.IsAvailable = cloud identity or Patreon AI access), since the
@@ -107,6 +107,15 @@ namespace ConditioningControlPanel
                 if (Services.Quiz.IntakeHostService.IsActive)
                 {
                     Services.Quiz.IntakeHostService.Launch();
+                    return;
+                }
+
+                // Tier-1 gate. GradedIntakeGate already covers the launch zone for free
+                // users; this is the belt-and-braces check behind it, matching how the
+                // other Exclusives short-circuit their own entry points.
+                if (App.Patreon?.HasPremiumAccess != true)
+                {
+                    ShowAppInfoPopup();
                     return;
                 }
 
@@ -237,6 +246,21 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Paints the Graded Intake page's t1 gate. Mirrors the Blink Trainer treatment:
+        /// the overlay provides the visual, IsEnabled stops keyboard tab-through behind it.
+        /// Pop Quiz sits outside the gated Border and stays reachable for everyone.
+        /// </summary>
+        internal void RefreshGradedIntakeGate()
+        {
+            if (GradedIntakeTab == null) return;
+            var premium = App.Patreon?.HasPremiumAccess == true;
+            if (GradedIntakeTab.GradedIntakeGate != null)
+                GradedIntakeTab.GradedIntakeGate.Visibility = premium ? Visibility.Collapsed : Visibility.Visible;
+            if (GradedIntakeTab.GradedIntakeGatedContent != null)
+                GradedIntakeTab.GradedIntakeGatedContent.IsEnabled = premium;
+        }
+
         private void RefreshPastQuizzes()
         {
             try
@@ -246,20 +270,20 @@ namespace ConditioningControlPanel
                 // the panel is Collapsed in XAML and this method was the only thing that
                 // ever un-collapsed it. History for the intake lives in the intake page.
                 // (Existing quiz history on disk is untouched; unhide and this lights up again.)
-                if (LabTab?.BtnStartQuiz?.Visibility != Visibility.Visible) return;
+                if (GradedIntakeTab?.BtnStartQuiz?.Visibility != Visibility.Visible) return;
 
                 var history = QuizService.LoadHistory();
-                LabTab.PastQuizzesList.Children.Clear();
+                GradedIntakeTab.PastQuizzesList.Children.Clear();
 
                 if (history.Count == 0)
                 {
-                    LabTab.TxtPastQuizzesHeader.Visibility = Visibility.Collapsed;
-                    LabTab.PastQuizzesPanel.Visibility = Visibility.Collapsed;
+                    GradedIntakeTab.TxtPastQuizzesHeader.Visibility = Visibility.Collapsed;
+                    GradedIntakeTab.PastQuizzesPanel.Visibility = Visibility.Collapsed;
                     return;
                 }
 
-                LabTab.TxtPastQuizzesHeader.Visibility = Visibility.Visible;
-                LabTab.PastQuizzesPanel.Visibility = Visibility.Visible;
+                GradedIntakeTab.TxtPastQuizzesHeader.Visibility = Visibility.Visible;
+                GradedIntakeTab.PastQuizzesPanel.Visibility = Visibility.Visible;
 
                 // Trend summary at top — show latest archetype + trend per category that has history.
                 // Group by TrendKey (CategoryId string), not the enum: custom categories all
@@ -303,7 +327,7 @@ namespace ConditioningControlPanel
                         FontWeight = FontWeights.SemiBold,
                         Margin = new Thickness(8, 3, 8, 3)
                     };
-                    LabTab.PastQuizzesList.Children.Add(trendRow);
+                    GradedIntakeTab.PastQuizzesList.Children.Add(trendRow);
                 }
 
                 foreach (var entry in history)
@@ -344,7 +368,7 @@ namespace ConditioningControlPanel
                         if (s is Border b) b.Background = System.Windows.Media.Brushes.Transparent;
                     };
 
-                    LabTab.PastQuizzesList.Children.Add(row);
+                    GradedIntakeTab.PastQuizzesList.Children.Add(row);
                 }
             }
             catch (Exception ex)
@@ -358,15 +382,15 @@ namespace ConditioningControlPanel
         internal void ChkPopQuizEnabled_Changed(object sender, RoutedEventArgs e)
         {
             if (App.Settings?.Current == null) return;
-            App.Settings.Current.PopQuizEnabled = LabTab.ChkPopQuizEnabled.IsChecked == true;
+            App.Settings.Current.PopQuizEnabled = GradedIntakeTab.ChkPopQuizEnabled.IsChecked == true;
         }
 
         internal void SliderPopQuizFrequency_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (App.Settings?.Current == null || LabTab.TxtPopQuizFrequency == null) return;
+            if (App.Settings?.Current == null || GradedIntakeTab.TxtPopQuizFrequency == null) return;
             var val = (int)Math.Round(e.NewValue);
             App.Settings.Current.PopQuizFrequency = val;
-            LabTab.TxtPopQuizFrequency.Text = $"{val}/session hr";
+            GradedIntakeTab.TxtPopQuizFrequency.Text = $"{val}/session hr";
         }
 
         internal void BtnTestPopQuiz_Click(object sender, RoutedEventArgs e)

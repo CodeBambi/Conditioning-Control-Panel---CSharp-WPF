@@ -7,7 +7,7 @@ using ConditioningControlPanel.Services;
 namespace ConditioningControlPanel
 {
     /// <summary>Features surfaced as quick-toggle chips on the dashboard premium rail.</summary>
-    public enum PremiumFeature { Takeover, Awareness, Haptics, Lockdown, Blink, Remote, Voice }
+    public enum PremiumFeature { Takeover, Awareness, Haptics, Lockdown, Blink, Remote, Voice, GradedIntake }
 
     // Dashboard premium quick-toggle rail (left of the feature grid).
     public partial class MainWindow
@@ -253,6 +253,10 @@ namespace ConditioningControlPanel
                     // Quick-start the She's Listening mic via the shared master toggle (consent +
                     // enable wake word + arm / or disarm). Decoupled from Takeover, so it works alone.
                     ToggleVoiceMic();
+                    break;
+                case PremiumFeature.GradedIntake:
+                    // Navigation shortcut, not a toggle — the intake starts from its own page.
+                    ShowTab("gradedintake");
                     break;
             }
             RefreshPremiumRail();
