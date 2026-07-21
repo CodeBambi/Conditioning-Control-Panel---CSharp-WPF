@@ -9,6 +9,7 @@ Packet emits structured `## Review Level: 2` heading. Per-call record:
 | Step | spine_review_step call | Result | Engine review fired? |
 |------|------------------------|--------|----------------------|
 | 1 | type=plan after step-1 commit | `skipped: true`, `spawnFailed: false` — SP-195 nested-spawn block, reviewLevel echoed 2 | NO in-worker (by design); engine reviews post-.DONE |
+| 2 | type=plan after step-2 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
 
 ## Step 1 — pin re-verification, transport design, pre-approach consult
 
@@ -49,4 +50,40 @@ Questions: (1) Linux host→page shape; (2) detection-branch shape; (3) b1…b5 
 
 ### Slice cut b1…b5 (pre-consult proposal, approved by the verdict's opening line)
 
-b1 host shell + loopback origins + transport diff applied + boot matrix re-run in-product (NativeWebDialog page→host risk first); b2 three local slots + save picker/quick start + protocol v1; b3 native SFX/audio/video + freeze + rendered tint safety; b4 progression/payout + Loom + user/mod media; b5 watchdog recovery (W17 zombie; native ProcessFailed via platform handle) + graceful exit + failure injection.
+b1 host shell + loopback origins + transport diff applied + boot matrix re-run in-product (NativeWebDialog page→host risk first); b2 three local slots + save picker/quick start + protocol v1; b3 native SFX/audio/video + freeze + rendered tint safety; b4 progression/payout + Loom + user/mod media; b5 watchdog recovery (W17 zombie; native ProcessFailed via platform handle) + graceful exit + failure injection. Final cut with acceptance mapping + evidence classes: dtrh-admission.md §7.
+
+## Step 2 — admission record + host slice cut
+
+- `client/docs/dtrh-admission.md` written and committed (00cc490f): §1 package pin, §2 Linux natives, §3 transport diff spec + per-direction matrix + long-poll inbox contract, §4 loopback security contract (approved-by-decree), §5 no-classic-fallback + Wayland named limit, §6 payload trust anchor, §7 slice cut b1…b5 with acceptance mapping + evidence classes (WH/WX/U), §8 non-claims.
+- All six pre-approach consult corrections folded in at authoring time (seq-numbered retained delivery, long-poll, per-session token, isHosted import-time fix, stringify ownership, WebSocket rejection reason).
+
+## Step 3 — pre-completion consult, corrections, board reconciliation
+
+### MIME extension sweep (Correction-1 evidence, read-only against the trust anchor)
+
+`git ls-tree -r 40be29df822bbfece639b435b0820419aed54c19 --name-only` → `evidence/dtrh-tree-files.txt`; extension counts:
+
+```
+.css 1  .gif 6  .html 2  .js 74  .json 1  .mp3 1306  .png 129  .webm 1  .webp 16   total 1536
+```
+
+Total matches the SP-011 tree-hash claim (1536 files). All 9 extensions are covered by the spike's MIME table — no fonts/models/wasm/shaders exist in the payload. The 415 deny-by-default tightening is now a PINNED value (§4.4 rewritten with the sweep line).
+
+### Pre-completion solo consult (2026-07-21, solo Fable route — actual answering model `anthropic/claude-fable-5` per T-7's only working route)
+
+**VERDICT (received text): "APPROVE with two corrections to fold in before .DONE — the record is honest and structurally complete, but one pinned value is not actually pinned and one per-platform divergence is unstated."**
+
+1. **Correction 1 — MIME 415 was unverified:** the "finite and known" claim was never enumerated. Fixed by the sweep above; §4.4 now pins the complete observed set with the transcript pointer.
+2. **Correction 2 — Linux dialog-compositing divergence unstated:** the admitted Linux shape is a separate WebKitGTK toplevel, so host-drawn tint/freeze cannot composite over the web surface as on Windows. Fixed: named in §3.2 (divergence paragraph) and b3's row, with the candidate uniform resolution (in-page tint/freeze via protocol v1 message) recorded as b3's decision.
+
+**TRUNCATION (provenance):** verdict text again cut off mid-sentence at the tail ("b3 decides with…"). Both corrections were received COMPLETE; any further remarks are lost in transit and recorded as such (2nd occurrence this task, SP-011 pattern).
+
+### Board reconciliation
+
+- Admit row → **WIP** with the full evidence block + five named limits (Wayland §5.1; Linux host→page = long-poll inbox + dialog page→host is b1's first gate; tint/freeze compositing divergence — b3 decides; WPE unmeasurable on WSLg; owner async-veto). Row never DONE by worker.
+- Host row stays BLOCKED, text annotated: "Admit landed 2026-07-21 (SP-022) — executes as slices b1…b5; first slice = SP-023."
+- Surprises this task: (a) both consult verdicts truncated in transit at the tail (SP-011 pattern, 2 occurrences) — content received complete in both cases, loss recorded; (b) pre-completion consult caught a genuinely unpinned value (MIME 415 tightening) — the sweep converted it to a pinned value; this is the consult gate working as designed. No port-lessons entry: both are already-recorded patterns (truncation provenance, consult-catches-unpinned-value).
+
+## Step 4 — verification
+
+(filled after run)
