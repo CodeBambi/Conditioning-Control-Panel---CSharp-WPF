@@ -1,7 +1,7 @@
 # STATUS: SP-019 — spike cancellable AI providers and strict commands
 
-**Current Step:** Step 5 — testing & verification
-**Last Updated:** 2026-07-21 (worker, Step 4 complete)
+**Current Step:** complete (all 5 steps done)
+**Last Updated:** 2026-07-21 (worker, Step 5 complete)
 
 ### Step 1: Provider/command archaeology + spike design + pre-approach consult
 **Status:** ✅ Complete
@@ -38,8 +38,8 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green (client 0W/0E + both test projects; spike host builds clean separately)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` = File Scope only
+- [x] Contract testCommand green (client 0W/0E + both test projects; spike host builds clean separately)
+- [x] `git diff --check` clean
+- [x] `git status --short` = File Scope only
