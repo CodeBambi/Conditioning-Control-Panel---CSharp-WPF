@@ -1,7 +1,7 @@
 # STATUS: SP-016 — define provider-neutral AI operation contract
 
-**Current Step:** Step 4 — WSL2 gate + board reconciliation + pre-completion consult
-**Last Updated:** 2026-07-21 (Step 3 complete: 211/211 + 22/22 green; plan review skipped — engine-owned SP-195)
+**Current Step:** DONE — all steps complete
+**Last Updated:** 2026-07-21 (Step 5 green: Rebuild 0W/0E, 213/213 + 22/22, diff-check clean, scope clean)
 
 ### Step 1: AI archaeology + pre-approach consult
 **Status:** ✅ Complete
@@ -26,17 +26,17 @@
 - [x] Unit tests: envelope reject-by-default, per-command results, diagnostic content-freedom, generation-invalidation reuse, serialization round-trips
 
 ### Step 4: WSL2 gate + board reconciliation + pre-completion consult
-**Status:** 🔵 In Progress
+**Status:** ✅ Complete
 
-- [ ] WSL2 in-packet gate (`~/ccp-sp016`, never /mnt/e): contract testCommand green
-- [ ] record.md complete
-- [ ] Pre-completion solo Fable 5 consult (verdict in record.md)
-- [ ] Board row → `WIP` with evidence + named limits (never `DONE`)
-- [ ] STATUS.md accurate before .DONE
+- [x] WSL2 in-packet gate (`~/ccp-sp016`, never /mnt/e): contract testCommand green
+- [x] record.md complete
+- [x] Pre-completion solo Fable 5 consult (verdict in record.md)
+- [x] Board row → `WIP` with evidence + named limits (never `DONE`)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** ⬜ Not Started
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green (build 0W/0E incl. `-t:Rebuild`; both test projects)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` = File Scope only
+- [x] Contract testCommand green (build 0W/0E incl. `-t:Rebuild`; both test projects)
+- [x] `git diff --check` clean
+- [x] `git status --short` = File Scope only
