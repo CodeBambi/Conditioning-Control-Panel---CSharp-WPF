@@ -61,6 +61,9 @@ public sealed class SpikeAiClient
     /// <summary>Send-seam instrumentation: incremented IMMEDIATELY before HttpClient.SendAsync. Policy-rejected operations must leave this at 0.</summary>
     public int SendAttempts { get; private set; }
 
+    /// <summary>Body bytes read so far by the in-flight request (mid-stream position proof for the hang row).</summary>
+    public int BytesReadSoFar { get; private set; }
+
     /// <summary>The current application generation (SP-004). Advanced by the harness on cancel/switch.</summary>
     public int CurrentGeneration { get; private set; }
 
@@ -104,6 +107,7 @@ public sealed class SpikeAiClient
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
         linked.CancelAfter(_requestTimeout);
+        BytesReadSoFar = 0;
 
         const int maxAttempts = 2; // initial + exactly one bounded retry (429/5xx only)
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
@@ -157,8 +161,8 @@ public sealed class SpikeAiClient
             {
                 // External cancellation — the ONLY cancellation mechanism (contract §2 rule 1).
                 var d3 = Diagnostic(AiDiagnosticOutcome.Cancelled, null, generation, started, 0, []);
-                SpikeLog.Line("client", $"gen={generation} CANCELLED by token (attempt in-flight)");
-                return new SpikeResult(SpikeOutcomeKind.Cancelled, null, generation, Elapsed(started), SendAttempts - labHitsBefore, 0, d3);
+                SpikeLog.Line("client", $"gen={generation} CANCELLED by token (attempt in-flight, partialBody={BytesReadSoFar}B)");
+                return new SpikeResult(SpikeOutcomeKind.Cancelled, null, generation, Elapsed(started), SendAttempts - labHitsBefore, BytesReadSoFar, d3);
             }
             catch (OperationCanceledException) when (linked.IsCancellationRequested && !ct.IsCancellationRequested)
             {
@@ -244,14 +248,17 @@ public sealed class SpikeAiClient
             new AiReply.Generated(result.Reply ?? "", AiEndpointClass.Loopback), generation, Elapsed(started), SendAttempts - labHitsBefore, partialBytes, dg);
     }
 
-    private static async Task<(string text, int bytes)> ReadBody(HttpResponseMessage resp, CancellationToken ct)
+    private async Task<(string text, int bytes)> ReadBody(HttpResponseMessage resp, CancellationToken ct)
     {
         await using var stream = await resp.Content.ReadAsStreamAsync(ct);
         using var ms = new MemoryStream();
         var buf = new byte[4096];
         int n;
         while ((n = await stream.ReadAsync(buf, ct)) > 0)
+        {
             ms.Write(buf, 0, n);
+            BytesReadSoFar += n;
+        }
         return (Encoding.UTF8.GetString(ms.ToArray()), (int)ms.Length);
     }
 

@@ -30,6 +30,9 @@ public enum LabMode
 
     /// <summary>200 headers + partial body flushed, then stall (mid-stream cancellation instrument).</summary>
     HangStream,
+
+    /// <summary>200 with the valid envelope after a 1.5s delay (late-completion instrument for the live stale-discard proof).</summary>
+    SlowOk,
 }
 
 /// <summary>Per-request lab-side record (what the SERVER saw — the falsifiable side of every client claim).</summary>
@@ -174,6 +177,19 @@ public sealed class AiLab : IDisposable
                 case LabMode.HangStream:
                     _records.Enqueue(await PartialThenStall(req, res, seq, mode, bodyBytes, auth));
                     break;
+
+                case LabMode.SlowOk:
+                    await Task.Delay(1500);
+                    try
+                    {
+                        await Write(res, 200, OkBody());
+                        _records.Enqueue(new LabRequestRecord(seq, "/v1/chat/completions", mode, bodyBytes, auth, "completed"));
+                    }
+                    catch
+                    {
+                        _records.Enqueue(new LabRequestRecord(seq, "/v1/chat/completions", mode, bodyBytes, auth, "client-gone"));
+                    }
+                    break;
             }
         }
         catch (Exception ex)
@@ -193,7 +209,8 @@ public sealed class AiLab : IDisposable
             await Task.Delay(100);
             try
             {
-                res.OutputStream.WriteByte(0); // never flushed; probes the connection
+                res.OutputStream.WriteByte(0); // never flushed alone; probes the connection
+                await res.OutputStream.FlushAsync(); // a dead client faults here
             }
             catch
             {
@@ -225,7 +242,11 @@ public sealed class AiLab : IDisposable
         for (var i = 0; i < 300; i++)
         {
             await Task.Delay(100);
-            try { await res.OutputStream.FlushAsync(); }
+            try
+            {
+                res.OutputStream.WriteByte(0);
+                await res.OutputStream.FlushAsync(); // a dead client faults here
+            }
             catch
             {
                 SpikeLog.Line("lab", $"#{seq} hang-stream ended: client-gone after ~{(i + 1) * 100}ms");

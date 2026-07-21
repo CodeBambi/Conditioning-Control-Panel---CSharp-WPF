@@ -43,7 +43,11 @@ public static class Program
         {
             var code = args.Length >= 1 && args[0] == "--selftest"
                 ? await SelfTest.RunAsync()
-                : Fuzz.Run();
+                : args.Length >= 1 && args[0] == "--fuzz"
+                    ? Fuzz.Run()
+                    : args.Length >= 1 && args[0] == "--matrix"
+                        ? await Matrix.RunAsync()
+                        : Combine(Fuzz.Run(), await Matrix.RunAsync());
             SpikeLog.Line("main", $"spike done code={code}");
             return code;
         }
@@ -52,6 +56,8 @@ public static class Program
             PersistSecrets(scratch);
         }
     }
+
+    private static int Combine(int a, int b) => a == 0 && b == 0 ? 0 : 1;
 
     /// <summary>Append this run's secrets to the registry (accumulates across runs so --audit-logs covers every emitted log).</summary>
     private static void PersistSecrets(string scratch)

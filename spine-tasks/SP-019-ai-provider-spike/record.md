@@ -91,4 +91,16 @@ Coverage: valid falsifiable pairs (single, numeric boundaries 0/8/10/150/100 + 3
 
 **Finding F1 (duplicate-key semantics, OBSERVED, honestly recorded):** `System.Text.Json` accepts duplicate object keys; the validator's `TryGetProperty` is last-wins while `EnumerateObject` sees every occurrence. A payload with `amount:9, amount:1` (first out-of-range, last in-range) is ACCEPTED with the last value; the reverse order rejects. Duplicate keys are NOT rejected per se — a validator behavior gap vs strict-schema intent, recorded for the owner/follow-up (no product-code change in this spike).
 
-**Step 3 engine-review presence (T-2):** recorded below after the review call.
+**Step 3 engine-review presence (T-2):** `spine_review_step(step=3, type=plan)` → `skipped=true` (nested_spawn_blocked by design), `spawnFailed=false`, `reviewLevel=2` echoed.
+
+---
+
+## Step 4 — provider-behavior evidence + WSL2 gate
+
+`Matrix.cs`: **39 checks GREEN on Windows, GREEN on Linux** (run in `~/ccp-sp019`, never /mnt/e — the lab is loopback = real Linux evidence). Two first-run failures found and fixed (honest record): (1) lab hang/timeout modes' disconnect probe (WriteByte without flush) never detected a dead client → strengthened to write+flush; (2) 429 hit-count raced with the row-2 timeout request's LATE lab record → hit assertions made mode-scoped (per-mode record counts), and the timeout row now synchronizes on the lab's client-gone record before the hit-count rows. Evidence detail in `client/docs/ai-provider-spike.md` §1-§9 (named observation per acceptance item).
+
+Key rows: mid-stream cancel (18B partial body before cancel, typed Cancelled in 0ms, generation advanced, lab observed client-gone — no late result can arrive on a cancelled transport) · timeout (797ms vs 800ms bound, token NOT cancelled — linked-CTS origin disambiguation) · 429 (typed quota-exhausted, EXACTLY 2 hits, Retry-After 1015ms honored, no storm) · 500 (typed, exactly 2) · refusal (typed Refused/content_filter/Output, exactly 1 hit) · malformed + truncated (typed MalformedOutput, exactly 1 hit, never partial apply — the truncated reply-text prefix never surfaced) · **LIVE stale discard** (lab SlowOk: a real late completion ARRIVED after generation advance; exactly 1 STALE-DISCARD at the application seam, zero applied — the dual-transport proof per the pre-approach consult) · remote-host rejection ×4 (ThirdPartyCloud 192.0.2.1, RemoteHostOllama 192.168.1.50, nonexistent.invalid pre-DNS, `localhost.` trailing-dot near-miss — all: policy code, sendAttempts=0, sub-ms) · Ollama probe ABSENT (named limit) · cloud named limit · hygiene: zero unobserved task exceptions.
+
+**WSL2 gate (`~/ccp-sp019`):** spike build 0E; fuzz 62/62; matrix GREEN; selftest GREEN; `--audit-logs` GREEN on Linux. Contract pollution guard green on BOTH platforms — Windows: sln 0W/0E, 213/213 unit + 22/22 headless; WSL2: 213/213 + 22/22 (identical counts to SP-016/017/018).
+
+**Step 4 engine-review presence (T-2):** recorded below after the review call.
