@@ -1,15 +1,15 @@
 # STATUS: SP-022 — admit DTRH browser and origin design
 
 **Current Step:** Step 1 — pin re-verification + transport design + pre-approach consult
-**Last Updated:** 2026-07-21 (authored)
+**Last Updated:** 2026-07-21 (worker, Step 1 in progress)
 
 ### Step 1: Pin re-verification + transport design + pre-approach consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
-- [ ] STATUS.md updated before starting work
-- [ ] Package pin re-confirmed (live feed + spike restore/build re-run Windows AND WSL2 `~/ccp-sp022`); Linux native deps restated + apt-source check
-- [ ] Transport design: minimal transport-only diff spec + Linux host→page shape DECIDED (poll-endpoint vs navigation vs named-limit)
-- [ ] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
+- [x] STATUS.md updated before starting work
+- [x] Package pin re-confirmed (live feed + spike restore/build re-run Windows AND WSL2 `~/ccp-sp022`); Linux native deps restated + apt-source check
+- [x] Transport design: minimal transport-only diff spec + Linux host→page shape DECIDED (poll-endpoint vs navigation vs named-limit)
+- [x] Pre-approach solo Fable 5 consult (verdict + actual answering model in record.md BEFORE checkbox)
 
 ### Step 2: Admission record + host slice cut
 **Status:** ⬜ Not Started

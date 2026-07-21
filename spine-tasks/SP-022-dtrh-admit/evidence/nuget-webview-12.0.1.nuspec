@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>Avalonia.Controls.WebView</id>
+    <version>12.0.1</version>
+    <authors>AvaloniaUI OÜ</authors>
+    <license type="expression">MIT</license>
+    <licenseUrl>https://licenses.nuget.org/MIT</licenseUrl>
+    <icon>icon.png</icon>
+    <readme>README.md</readme>
+    <projectUrl>https://avaloniaui.net/</projectUrl>
+    <description>Avalonia WebView component enables embedding web content in Avalonia applications for use cases like documentation, dashboards, and interactive content.</description>
+    <releaseNotes># 12.0.0
+
+- Compatibility with Avalonia 12.0
+- Dropped .NET Standard and .NET Framework support
+- NativeWebView now supports Linux with WpeWebView backend
+- NativeWebView and NativeWebDialog now support Browser backend, but with sandboxing limitations
+- NativeWebView and NativeWebDialog now have UserAgent property
+
+# 11.3.16
+
+- New WebViewAdapterInfo API to retrieve WebView engine and availability information
+- Implemented Android printing functions
+- Implemented `PrintToPdfStreamAsync(WebViewPrintSettings)` overload
+- Fixed Windows 7 support for WebView2
+- Experimental WebView2 offscreen rendering, can be enabled via WindowsWebView2EnvironmentRequestedEventArgs
+
+# 11.3.15
+
+- Fixed threading issue on XPF
+
+# 11.3.14
+
+- Fixed crash when using `NativeWebView.Background` on iOS
+
+# 11.3.13
+
+- Improves Mono AOT compatibility, removing warnings
+- Fixes GTK NativeWebDialog.Canceling event not being raised 
+
+# 11.3.11
+
+- First public NuGet release!
+- Adds `NativeWebView.ShowPrintUI` and `NativeWebView.PrintToPdfStreamAsync` methods for printing web content, supported on Windows, macOS and Linux GTK (with NativeWebDialog)
+
+# 11.3.10
+
+- Fixes Android WebAuthenticationBroker not working with major OAuth providers
+- Adds `WindowsWebView2EnvironmentRequestedEventArgs.AllowSingleSignOnUsingOSPrimaryAccount` parameter
+- Adds `EnvironmentRequestedEventArgs.GetDeferrer()` for async initialization of the webview environment, if necessary
+
+# 11.3.9
+
+- Implements Android `WebResourceRequested` header interception
+- Fixes Android `WebResourceRequested` not being executed on the UI thread
+
+# 11.3.8
+
+- Fixes Gtk `NativeWebDialog` depending on the libsoap3.0, even if it's not installed
+- Fixes Gtk `NativeWebDialog` relying on `g_timeout_add_once` on older platforms
+
+# 11.3.7
+
+- Implements Android `NativeWebDialog`
+- Implements Android `AndroidWebViewEnvironmentRequestedEventArgs`
+- Fixes Gtk `NativeWebDialog` crashing on some .NET runtime versions
+- Fixes Gtk AOT compilation
+
+# 11.3.6
+
+- Fixes GTK `NativeWebDialog` on XPF
+- Adds WebView2 STA thread check
+
+# 11.3.5
+
+- Fixes WebView2 on ARM64 processors
+
+# 11.3.4
+
+- Imroves automatic sizing of `NativeWebView`
+- Imrpoves NuGet packaging, readme, description
+
+# 11.3.3
+
+- Makes `NativeWebView` compatible with XPF
+
+# 11.3.2
+
+- Extended focus handling support for WebView2
+- Adds strong naming to the assembly
+- Implements `NativeWebView.Background`, with support for transparent background on some backends
+
+# 11.3.1
+
+- Implements `NativeWebView.EnvironmentRequested` and `NativeWebDialog.EnvironmentRequested`
+- Enhanced platform interop with typed `NativeWebView.TryGetPlatformHandle`
+- Added `AdapterInitialized` and `AdapterDestroyed`
+- Added `WebResourceRequested`
+- Added `WebAuthenticationBroker` options for `NonPersistent` and `NativeWebDialogFactory`
+
+# 11.3.0
+
+- Initial release</releaseNotes>
+    <copyright>Copyright 2019-2026 © AvaloniaUI OÜ</copyright>
+    <repository type="git" commit="8ae0a848102ad68a7cff54c48712871f78df7b9b" />
+    <dependencies>
+      <group targetFramework="net10.0">
+        <dependency id="Avalonia" version="12.0.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net10.0-android36.0">
+        <dependency id="Avalonia" version="12.0.0" exclude="Build,Analyzers" />
+        <dependency id="Avalonia.Android" version="12.0.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net10.0-browser1.0">
+        <dependency id="Avalonia" version="12.0.0" exclude="Build,Analyzers" />
+        <dependency id="Avalonia.Browser" version="12.0.0" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net8.0">
+        <dependency id="Avalonia" version="12.0.0" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+</package>
