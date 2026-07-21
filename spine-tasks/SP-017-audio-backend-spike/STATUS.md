@@ -1,7 +1,7 @@
 # STATUS: SP-017 — spike cross-platform audio channel backend
 
-**Current Step:** Step 3 — WSLg/PulseAudio gate + packaging evidence
-**Last Updated:** 2026-07-21 (Step 2 complete — 36/36 Windows observations green)
+**Current Step:** Step 4 — selection record + board reconciliation + pre-completion consult
+**Last Updated:** 2026-07-21 (Step 3 complete — WSLg + packaging green both RIDs)
 
 ### Step 1: Backend research + package admission pre-approach consult
 **Status:** ✅ Complete
@@ -20,14 +20,14 @@
 - [x] Identical comparison per backend; failures recorded as findings (SoundFlow wild-Id AV crash, NAudio Stop-fires-event, Silk enumeration limit, SFX measurement artifact + fix)
 
 ### Step 3: WSLg/PulseAudio gate + packaging evidence
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] WSL2 in-packet gate (`~/ccp-sp017`, never /mnt/e): REAL evidence = enumerate/select/fallback, event-verified completion, teardown, packaging (`ldd` per .so); NAMED LIMIT = no latency/timing claims on WSLg
-- [ ] Contract testCommand green on WSL2 (pollution guard)
-- [ ] Self-contained publish win-x64 + linux-x64, native sidecars present/loading (session facts)
+- [x] WSL2 in-packet gate (`~/ccp-sp017`, never /mnt/e): REAL evidence = enumerate/select/fallback (RDP Sink), event-verified completion, teardown, packaging (`ldd` per .so); NAMED LIMIT = no latency/timing claims on WSLg
+- [x] Contract testCommand green on WSL2 (0W/0E + 213/213 + 22/22 — pollution guard)
+- [x] Self-contained publish win-x64 + linux-x64, native sidecars present/loading (miniaudio.dll/libminiaudio.so, soft_oal.dll/libopenal.so — session facts)
 
 ### Step 4: Selection record + board reconciliation + pre-completion consult
-**Status:** ⬜ Not Started
+**Status:** 🔄 In Progress
 
 - [ ] `client/docs/audio-backend-spike.md` — named observation per item per backend + matrix + explicit channel-ownership SELECTION (pending-owner)
 - [ ] record.md complete

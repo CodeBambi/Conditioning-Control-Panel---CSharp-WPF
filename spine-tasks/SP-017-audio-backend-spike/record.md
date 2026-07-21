@@ -9,6 +9,7 @@ Packet emits structured `## Review Level: 2` heading. Per-call record:
 | Step | spine_review_step call | Result | Engine review fired? |
 |------|------------------------|--------|----------------------|
 | 1 | type=plan after step-1 commit | `skipped: true`, `spawnFailed: false` — "Nested reviewer spawn blocked inside pi worker session (SP-195); batch engine runs reviews after worker success" | NO in-worker (by design); post-.DONE engine review observable at land time |
+| 2 | type=plan after step-2 commit | `skipped: true`, `spawnFailed: false` (same SP-195 skip) | NO in-worker |
 
 ## Step 1 — backend research + package admission pre-approach consult
 
