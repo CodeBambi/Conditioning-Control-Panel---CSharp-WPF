@@ -1,7 +1,7 @@
 # STATUS: SP-017 — spike cross-platform audio channel backend
 
-**Current Step:** Step 5 — Testing & Verification
-**Last Updated:** 2026-07-21 (Step 4 complete — consult APPROVE w/ 5 corrections applied)
+**Current Step:** DONE (all 5 steps complete)
+**Last Updated:** 2026-07-21 (Step 5 verification green — .DONE next)
 
 ### Step 1: Backend research + package admission pre-approach consult
 **Status:** ✅ Complete
@@ -36,8 +36,8 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
-- [ ] Contract testCommand green (client 0W/0E + both test projects; spike host builds clean separately)
-- [ ] `git diff --check` clean
-- [ ] `git status --short` = File Scope only
+- [x] Contract testCommand green (client 0W/0E + both test projects 213/213 + 22/22 on Windows AND WSL2; spike host builds clean separately, both TFMs 0W/0E)
+- [x] `git diff --check` clean
+- [x] `git status --short` = File Scope only (stray session monitor file removed)
