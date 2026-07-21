@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "package": "pi-spine",
+  "installRoot": ".pi/npm/node_modules/pi-spine",
+  "testedVersions": [
+    "2.8.0",
+    "2.10.0"
+  ],
+  "note": "Anchor-based local patches. Re-apply after ANY pi-spine install/update: node .spine/patches/apply.mjs && node .spine/patches/verify.mjs",
+  "patches": [
+    {
+      "id": "fsync-r-plus-abort",
+      "target": "src/batch/abort.mjs",
+      "anchor": "\tconst fd = fs.openSync(archivePath, \"r\");\n\ttry {\n\t\tfs.fsyncSync(fd);",
+      "replacement": "\tconst fd = fs.openSync(archivePath, \"r+\"); // ponytail: Windows EPERMs fsync on read-only handles\n\ttry {\n\t\tfs.fsyncSync(fd);",
+      "rationale": "Windows EPERMs fsync on a read-only handle; abort archive write crashed (port-lessons 2026-07-18). Byte-exact to live tree.",
+      "testedVersions": [
+        "2.8.0",
+        "2.10.0"
+      ]
+    },
+    {
+      "id": "fsync-r-plus-lifecycle-archive",
+      "target": "src/batch/lifecycle-archive.mjs",
+      "anchor": "\tconst fd = fs.openSync(archivePath, \"r\");\n\ttry {\n\t\tfs.fsyncSync(fd);",
+      "replacement": "\tconst fd = fs.openSync(archivePath, \"r+\"); // ponytail: Windows EPERMs fsync on read-only handles\n\ttry {\n\t\tfs.fsyncSync(fd);",
+      "rationale": "Same fsync root cause as abort.mjs (port-lessons 2026-07-18). Byte-exact to live tree.",
+      "testedVersions": [
+        "2.8.0",
+        "2.10.0"
+      ]
+    },
+    {
+      "id": "dotnet-evidence-allowlist",
+      "target": "src/batch/evidence-command.mjs",
+      "anchor": "export const ALLOWED_EVIDENCE_EXECUTABLES = new Set([\"npm\", \"node\", \"pnpm\", \"yarn\", \"npx\"]);",
+      "replacement": "export const ALLOWED_EVIDENCE_EXECUTABLES = new Set([\"npm\", \"node\", \"pnpm\", \"yarn\", \"npx\", \"dotnet\"]); // ponytail: CCP gate evidence runs dotnet build/test (T-1)",
+      "rationale": "Gate-evidence executable allowlist rejects this repo's dotnet testCommand (T-1 row; port-lessons line 16). LOST to a past reinstall — re-authored.",
+      "testedVersions": [
+        "2.8.0",
+        "2.10.0"
+      ]
+    },
+    {
+      "id": "worker-tail-at-file",
+      "target": "bin/spine-worker-runner.mjs",
+      "anchor": "\t});\n\tpiArgs.push(tailPrompt);\n\treturn piArgs;",
+      "replacement": "\t});\n\t// ponytail: tails >16KB go to a temp @file — inline argv blew the Windows 32,767-char CreateProcess limit (SP-004 x3 silent worker deaths, T-1)\n\tif (tailPrompt.length > 16384) {\n\t\tconst tailPath = path.join(process.env.TEMP || process.env.TMP || \"/tmp\", `spine-worker-tail-${process.pid}.txt`);\n\t\tfs.writeFileSync(tailPath, tailPrompt, \"utf-8\");\n\t\tpiArgs.push(`@${tailPath}`);\n\t} else {\n\t\tpiArgs.push(tailPrompt);\n\t}\n\treturn piArgs;",
+      "rationale": "Worker tails >16KB written to %TEMP% and passed as @file; inline argv exceeded the Windows 32,767-char CreateProcess limit, killing SP-004's worker silently x3 (T-1 row; port-lessons 2026-07-19). LOST to a past reinstall — re-authored (fs/path already imported; no new imports).",
+      "testedVersions": [
+        "2.8.0",
+        "2.10.0"
+      ]
+    },
+    {
+      "id": "skill-headed-evidence-sizing",
+      "target": "skills/create-spine-tasks/SKILL.md",
+      "anchor": "**Rule of thumb:** More than **4** implementation steps → split. More than **8** file-scope paths → narrow or split.\n\n**Example (incident-driven):**",
+      "replacement": "**Rule of thumb:** More than **4** implementation steps → split. More than **8** file-scope paths → narrow or split.\n\n**Headed-evidence sizing (CCP local amendment, T-11 — dies on pi-spine reinstall, durable copy in spine-tasks/CONTEXT.md §Execution policy):** headed-capture/evidence-matrix steps (real app launches, pixel capture, input automation) empirically exceed a single 2h worker-stall budget when bundled with evaluation/docs (SP-013 2h timeout; SP-015 2h AND 4h-even-with-`SPINE_WORKER_PI_TIMEOUT_MS=14400000`). Size every headed step to **<2h of worker budget** or **split capture vs evaluation/docs into separate steps/packets**; orchestrators set the env override at launch for headed packets by default.\n\n**Example (incident-driven):**",
+      "rationale": "T-11 local amendment: headed-evidence step sizing (<2h or split). Found empirically as a 4th undocumented local patch; its own text says it dies on reinstall. Byte-exact to live tree.",
+      "testedVersions": [
+        "2.8.0",
+        "2.10.0"
+      ]
+    }
+  ]
+}

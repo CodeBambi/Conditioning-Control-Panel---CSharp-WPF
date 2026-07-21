@@ -38,6 +38,12 @@
   3. T-12: exclusion correct, and **reject the text-only variant too** (cost without benefit; orchestrator never auto-executes suggestions; every extra anchor is a future loud break). *(Applied — T-12 stays upstream.)*
   4. @file evidence: check `SPINE_WORKER_PI_AGENT=0` first. **Checked: it exits BEFORE `buildWorkerPiArgs` (runner line 406 vs 415)** — does not traverse the arg builder. Direct invocation of the exported `buildWorkerPiArgs` (exported precisely "for unit tests", runner line 80 comment) is the strongest honest evidence; it is the exact inline-vs-@file decision point feeding the `spawnSync("pi", piArgs)` that hit the 32,767-char limit. **Packet-assumption correction (prominent): `SPINE_WORKER_STUB=1` mode never builds pi args** (stub path writes .DONE directly), so the packet's "stub batch proves @file" framing is empirically wrong — the stub batch proves engine E2E green with patches applied; the @file proof is the arg-builder test + a stub batch whose tail config exceeds 16KB.
 
+### Engine-review presence log (T-2 heading-format check)
+
+| Call | Step/Type | Result |
+|------|-----------|--------|
+| 1 | Step 1 plan | `skipped=true, spawnFailed=false, reviewLevel=2` — nested_spawn_blocked BY DESIGN (SP-195/SP-278); reviewLevel parsed 2 correctly (structured heading works); engine runs reviews post-.DONE |
+
 ## Step 2 — manifest + apply + verify
 
 (pending)
