@@ -12,6 +12,15 @@
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260722T024313.md` |
 | 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260722T032045.md` |
 | 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260722T034114.md` |
+| 4 | plan | SKIPPED BY DESIGN (same) | `.reviews/4-20260722T044506.md` |
+
+---
+
+## Step 5 — verification (final tree, post consult fixes)
+
+- **Windows:** `dotnet build client/CcpClient.sln -c Debug -t:Rebuild` **0W/0E** (warnings measured on Rebuild per the xUnit1051 lesson); CcpClient.Tests **366/366**; CcpClient.HeadlessTests **29/29** (≥ the 313/29 b3 floor).
+- **WSL2 (`~/ccp-sp026`, synced final tree):** sln **0W/0E**; **366/366 + 29/29**; Rebuild 0 warnings.
+- `git diff --check` clean; `git status --short` = File Scope paths only (+ the documented 3-file wiring amendment: Program.cs / App.axaml.cs / Lifecycle/CompositionRoot.cs — per-file necessity in record Step 2 + STATUS + board row, SP-023 norm).
 
 ---
 

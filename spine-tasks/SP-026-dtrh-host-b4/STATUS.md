@@ -1,6 +1,6 @@
 ## STATUS: SP-026 — DTRH host slice b4: progression/payout, Loom, user/mod media
-**Current Step:** Step 5 — testing & verification (IN PROGRESS)
-**Last Updated:** 2026-07-22 (Step 4 complete — pre-completion consult APPROVE, fix-firsts applied, board row WIP)
+**Current Step:** Step 5 — testing & verification (COMPLETE — all criteria met)
+**Last Updated:** 2026-07-22 (contract green both platforms; diff-check clean; File Scope audit clean)
 **Blockers:** none
 **File Scope amendment (SP-023 norm, 3 wiring files, mustNotChange untouched):** Program.cs + App.axaml.cs (--dtrh-m2test flag threading) + Lifecycle/CompositionRoot.cs (data-dir thread to DtrhParticipant — sole registration site).
 
@@ -29,7 +29,7 @@
 - [x] Board row WIP with named limits
 - [x] STATUS.md accurate
 
-### Step 5: verification
-- [ ] testCommand green 0W/0E both platforms (≥313/29 floor)
-- [ ] git diff --check clean
-- [ ] git status shows File Scope only
+### Step 5: verification — COMPLETE
+- [x] testCommand green 0W/0E both platforms (366/366 + 29/29 ≥ 313/29 floor; Rebuild 0W)
+- [x] git diff --check clean
+- [x] git status shows File Scope only
