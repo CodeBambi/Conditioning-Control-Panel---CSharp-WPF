@@ -51,6 +51,59 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Register a session that was written to disk by something OTHER than the session
+        /// editor with the LIVE <see cref="Services.SessionManager"/>, so the Sessions tab
+        /// lists it immediately.
+        ///
+        /// BUG #614: the Graded Intake drafts a session and auto-saves it straight into the
+        /// CustomSessions folder (see IntakeHostService.OnQuizResult - deliberately no
+        /// SaveFileDialog). Nothing told the running SessionManager about the new file, and
+        /// <see cref="Services.SessionManager.LoadAllSessions"/> only ever runs once, from
+        /// <see cref="InitializeSessionManager"/> at startup. So the session existed on disk
+        /// but was invisible in the UI until the next app launch - which read, to the user,
+        /// as "the intake didn't create a session at all".
+        ///
+        /// This reuses the existing AddNewSession path (the one the editor's "save as new"
+        /// uses) rather than inventing a parallel one: it sets Source/SourceFilePath, resolves
+        /// an Id collision, re-writes the file at <paramref name="filePath"/> (idempotent - the
+        /// caller already wrote identical bytes there) and raises SessionAdded, which lands in
+        /// <see cref="OnSessionAdded"/> and builds the card + selects it.
+        ///
+        /// Safe to call before the manager exists (it is created on demand) and safe to call
+        /// off the UI thread. It NEVER throws at the caller: the file is already safely on disk
+        /// by the time we get here, and a failure to refresh a list must not be reported as a
+        /// failure to draft the session.
+        /// </summary>
+        public bool RegisterExternallySavedSession(Models.Session session, string filePath)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(filePath)) return false;
+
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(() => RegisterExternallySavedSession(session, filePath)));
+                return true;
+            }
+
+            try
+            {
+                if (_sessionManager == null) InitializeSessionManager();
+                if (_sessionManager == null) return false;
+
+                // Already known (e.g. a LoadAllSessions raced us, or a double-register)?
+                // Adding twice would leave two identical cards in the Sessions tab.
+                if (_sessionManager.GetSession(session.Id) != null) return true;
+
+                _sessionManager.AddNewSession(session, filePath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RegisterExternallySavedSession failed for '{Name}'", session.Name);
+                return false;
+            }
+        }
+
         private void OnSessionAdded(Models.Session session)
         {
             Dispatcher.Invoke(() =>

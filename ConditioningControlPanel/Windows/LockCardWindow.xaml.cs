@@ -159,7 +159,7 @@ namespace ConditioningControlPanel
                         SetForegroundWindow(_hwnd);
                     }
                     Activate();
-                    if (_voiceMode) Focus(); else TxtInput.Focus();
+                    FocusInput();
                 }), DispatcherPriority.Input);
             };
 
@@ -221,8 +221,6 @@ namespace ConditioningControlPanel
                 InputBorder.Visibility = Visibility.Collapsed;
                 VoicePanel.Visibility = Visibility.Visible;
                 TxtTitle.Text = "SAY IT TO UNLOCK";
-                TxtHint.Text = "Say the phrase out loud, clearly.";
-                TxtVoiceState.Text = _isPrimary ? "🎤 Listening…" : "🎤 Speak on the main monitor";
                 VoiceStateBrush.Color = VoicePink;
                 if (VoiceLevelFill.RenderTransform is ScaleTransform st) st.ScaleX = 0;
             }
@@ -253,22 +251,73 @@ namespace ConditioningControlPanel
                 WindowState = WindowState.Maximized;
             }
 
-            // Non-primary windows show synced text but input is read-only
+            // Primary owns the keyboard; the other monitors are read-only mirrors (see ApplyInputAffordance).
+            ApplyInputAffordance();
+
+            // Apply custom colors from settings
+            ApplyColors();
+        }
+
+        /// <summary>
+        /// Apply the input affordance for this window's CURRENT _isPrimary / _voiceMode: exactly one card
+        /// (the primary) owns the keyboard/mic, every other monitor is a read-only mirror that echoes what
+        /// the primary types. Single owner of that state so Configure and the #618 late promotion below can
+        /// never disagree about whether a given card can be typed into.
+        /// </summary>
+        private void ApplyInputAffordance()
+        {
             if (!_isPrimary)
             {
                 TxtInput.IsReadOnly = true;
                 TxtInput.Focusable = false;
                 TxtHint.Text = Loc.Get("label_input_synced_from_primary_monitor");
+                if (_voiceMode) TxtVoiceState.Text = "🎤 Speak on the main monitor";
             }
             else
             {
                 TxtInput.IsReadOnly = false;
                 TxtInput.Focusable = true;
-                if (!_voiceMode) TxtHint.Text = Loc.Get("label_type_the_phrase_exactly_as_shown_above");
+                if (_voiceMode)
+                {
+                    TxtVoiceState.Text = "🎤 Listening…";
+                    TxtHint.Text = "Say the phrase out loud, clearly.";
+                }
+                else TxtHint.Text = Loc.Get("label_type_the_phrase_exactly_as_shown_above");
             }
+        }
 
-            // Apply custom colors from settings
-            ApplyColors();
+        /// <summary>
+        /// Give this card the caret. In voice mode there is no visible textbox, so the Window itself takes
+        /// focus (keeps Esc and the key handler live); in typing mode the input does.
+        /// </summary>
+        private void FocusInput()
+        {
+            if (_voiceMode) Focus(); else TxtInput.Focus();
+        }
+
+        /// <summary>
+        /// #618: turn this already-shown mirror into the input owner. Only used when screen enumeration
+        /// claimed that NO monitor is Primary — see the promotion block in ShowOnAllMonitors. Restores the
+        /// input affordance Configure took away, then grabs foreground/focus exactly like OnShown's primary
+        /// path (and starts the voice-solve loop OnShown skipped for a mirror).
+        /// Show-path only: it assumes no input has been accepted by this card yet.
+        /// </summary>
+        private void PromoteToPrimary()
+        {
+            _isPrimary = true;
+            ApplyInputAffordance();
+
+            if (_hwnd != IntPtr.Zero)
+            {
+                SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                SetForegroundWindow(_hwnd);
+            }
+            Activate();
+            FocusInput();
+
+            // StartVoiceSolve is self-guarding (_voiceListening / !_voiceMode), so this is safe.
+            if (_voiceMode) StartVoiceSolve();
         }
 
         private void PositionOnScreen(System.Windows.Forms.Screen screen)
@@ -419,7 +468,7 @@ namespace ConditioningControlPanel
                 SetForegroundWindow(_hwnd);
             }
             Activate();
-            if (_voiceMode) Focus(); else TxtInput.Focus();
+            FocusInput();
 
             App.Logger?.Information("Lock Card shown - Phrase: {Phrase}, Repeats: {Repeats}, Strict: {Strict}, Voice: {Voice}, Monitors: {Count}",
                 _phrase, _requiredRepeats, _strictMode, _voiceMode, _allWindows.Count);
@@ -815,8 +864,10 @@ namespace ConditioningControlPanel
             VoicePanel.Visibility = Visibility.Collapsed;
             InputBorder.Visibility = Visibility.Visible;
             TxtTitle.Text = Loc.Get("label_type_to_unlock_2");
-            TxtHint.Text = Loc.Get("label_type_the_phrase_exactly_as_shown_above");
-            TxtInput.Focus();
+            // Re-derive the hint/read-only state from _isPrimary: DisableVoiceForAll runs this on the
+            // mirrors too, and they must keep saying "synced from primary" and must not grab focus (#618).
+            ApplyInputAffordance();
+            if (_isPrimary) FocusInput();
             App.Logger?.Information("LockCardWindow: fell back to typed solve (speech unavailable mid-card)");
         }
 
@@ -1271,7 +1322,10 @@ namespace ConditioningControlPanel
 
             foreach (var screen in screens)
             {
-                var isPrimary = screen.Primary;
+                // Exactly ONE card may own the keyboard (input syncs primary -> mirrors). A stale screen
+                // cache can report Primary on more than one entry after a topology change; taking only the
+                // first keeps the single-writer invariant instead of double-counting repeats (#618).
+                var isPrimary = screen.Primary && primaryWindow == null;
                 // Reuse a pre-realized shell from the pool (or realize one on a miss). Reusing means the
                 // Show() below re-shows an existing layered window instead of realizing a fresh one —
                 // no synchronous CompleteRender on the hot path, so no render-thread deadlock (#494).
@@ -1296,9 +1350,26 @@ namespace ConditioningControlPanel
                 UpdateWatchdogSnapshot();
             }
 
+            // #618: screen enumeration can hand us a topology in which NO screen reports Primary - a stale
+            // GetAllScreensCached() entry after a monitor hot-plug / RDP reconnect / display reconfiguration
+            // (the same enumeration hazard that already makes that helper defensive). Every card then comes
+            // up as a read-only mirror, primaryWindow stays null so nothing is even Activate()d, and the
+            // user is left staring at a fullscreen topmost cover that refuses keystrokes - panic key or
+            // reboot. A lock card must ALWAYS be solvable, so promote the first card we showed. Logged as a
+            // warning on purpose: if this fires, enumeration lied and we want it in the next activity log.
+            if (primaryWindow == null && _allWindows.Count > 0)
+            {
+                App.Logger?.Warning(
+                    "LockCardWindow: no screen reported Primary ({Count} enumerated) - promoting the first card to input owner so the lock stays solvable (#618)",
+                    screens.Length);
+                primaryWindow = _allWindows[0];
+                try { primaryWindow.PromoteToPrimary(); }
+                catch (Exception ex) { App.Logger?.Warning("LockCardWindow: primary promotion failed: {E}", ex.Message); }
+            }
+
             // Focus primary window
             primaryWindow?.Activate();
-            primaryWindow?.TxtInput.Focus();
+            primaryWindow?.FocusInput();
         }
     }
 }

@@ -1178,6 +1178,13 @@ namespace ConditioningControlPanel
             // to the logs folder when the dispatcher stops responding for 10s.
             Services.UiHangWatchdog.Start(Dispatcher);
 
+            // Flush-on-write trace for the mandatory-video show/heal path and the panic key
+            // (#616/#617/#621/#622/#623). Separate from the Serilog rolling file on purpose: the
+            // relaunch a user needs in order to FILE the report scrolls the freeze window out of
+            // the 100-line app-log tail, and a hard power reset can roll a buffered write back.
+            // Its own file + WriteThrough per line survives both. See VideoDiag.
+            Services.VideoDiag.Start(Dispatcher);
+
             splash?.SetProgress(0.1, "Initializing...");
 
             // Global exception handlers to catch and log crashes instead of hard crashing
@@ -1396,9 +1403,17 @@ namespace ConditioningControlPanel
             ScreenShake = new ScreenShakeService();
             Bubbles = new BubbleService();
             // Standalone corner-GIF overlays (Spiral card): restore any persisted overlays.
-            // RefreshOverlays marshals onto the dispatcher, so this queues until startup settles.
+            // Bug #625: RefreshOverlays only marshals when called OFF the UI thread - here we
+            // ARE the UI thread, so it used to run synchronously and Show() a transparent
+            // topmost window before MainWindow existed (reported startup crash after enabling
+            // a corner GIF). Explicitly defer to ApplicationIdle so the restore happens once
+            // startup has settled, and swallow+log any failure so it can never kill launch.
             CornerGif = new CornerGifService();
-            CornerGif.RefreshOverlays();
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { CornerGif?.RefreshOverlays(); }
+                catch (Exception ex) { Logger?.Error(ex, "Deferred CornerGif.RefreshOverlays failed"); }
+            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             Services.Chaos.ChaosMeta.Init();   // load persistent Chaos meta-progression before the run service
             Chaos = new Services.Chaos.ChaosModeService();
             InteractionQueue = new InteractionQueueService();

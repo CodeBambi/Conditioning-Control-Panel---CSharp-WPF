@@ -19,8 +19,10 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Tears down every overlay and re-shows the ones currently enabled in settings.
-        /// Safe to call from any thread; marshals to the UI thread. Call after any config change,
-        /// and once on startup to restore persisted overlays.
+        /// Safe to call from any thread; marshals to the UI thread. Note it runs SYNCHRONOUSLY
+        /// when already on the UI thread - callers that must not show windows yet (startup, see
+        /// bug #625) have to defer explicitly. Call after any config change, and once on startup
+        /// to restore persisted overlays.
         /// </summary>
         public void RefreshOverlays()
         {
@@ -140,11 +142,30 @@ namespace ConditioningControlPanel.Services
             double gifHeight = img.Height;
             img.Dispose();
 
+            // Bug #625: a decoded-but-degenerate image (0x0) makes the scale below divide by
+            // zero, and assigning the resulting NaN/Infinity to Window.Width/Height throws
+            // deep inside WPF layout - which, on the startup restore path, took the whole app
+            // down. Bail out loudly instead of handing WPF non-finite geometry.
+            if (gifWidth <= 0 || gifHeight <= 0)
+            {
+                App.Logger?.Warning("CornerGifService: GIF has degenerate size {W}x{H} ({Path}) - skipping overlay",
+                    gifWidth, gifHeight, gifUri);
+                return;
+            }
+
             // Scale to the user's longest-edge size (default 300).
             var targetSize = setting.Size > 0 ? setting.Size : 300;
             double scale = targetSize / Math.Max(gifWidth, gifHeight);
             double windowWidth = gifWidth * scale;
             double windowHeight = gifHeight * scale;
+
+            if (!double.IsFinite(scale) || !double.IsFinite(windowWidth) || !double.IsFinite(windowHeight)
+                || windowWidth <= 0 || windowHeight <= 0)
+            {
+                App.Logger?.Warning("CornerGifService: computed non-finite overlay geometry (scale={Scale}, {W}x{H}) - skipping overlay",
+                    scale, windowWidth, windowHeight);
+                return;
+            }
 
             var screen = System.Windows.Forms.Screen.PrimaryScreen;
             if (screen == null) return;

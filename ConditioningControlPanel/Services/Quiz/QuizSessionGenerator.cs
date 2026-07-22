@@ -111,6 +111,37 @@ namespace ConditioningControlPanel.Services
             var archetype = run.Route?.PrimaryArchetypeId ?? string.Empty;
             if (string.IsNullOrWhiteSpace(content.Name))
                 content.Name = $"{diffPrefix} {nicheDisplay} Intake";
+
+            // BUG #614: the comment above has always CLAIMED the naming was route-aware, but
+            // `archetype` was only ever spent on the description. The name came from
+            // GetFallbackContent, which is nothing but a score-derived prefix plus a fixed
+            // per-niche noun - so every circe run that peaked in Climax was called, verbatim,
+            // "Extreme Keyholding". Two runs in a row producing byte-identical names is
+            // indistinguishable from no session having been drafted at all, which is exactly
+            // how it was reported.
+            //
+            // The revealed primary archetype is the one thing that genuinely varies between
+            // two runs at the same tier (five per bank: unclaimed -> hers-entirely), and it is
+            // the most meaningful thing the run learned, so it goes in the name. The niche noun
+            // stays in front of it so the name still says what the session IS, and the
+            // difficulty prefix stays where it was. Result: "Extreme Keyholding - Hers
+            // Entirely" - short enough that GetExportFileName still produces a sane filename,
+            // and plain " - " rather than a colon/em-dash so nothing has to be sanitised away.
+            //
+            // No route revealed (or an AI-supplied name that already names the route) leaves
+            // the old name untouched. Collisions are still possible - same tier AND same route,
+            // or repeated runs by a settled user - which is precisely why
+            // IntakeHostService.UniqueSessionPath keeps its -2/-3 suffixing.
+            if (!string.IsNullOrWhiteSpace(archetype) && !string.IsNullOrWhiteSpace(content.Name))
+            {
+                var routeName = PrettyId(archetype);
+                if (!string.IsNullOrWhiteSpace(routeName)
+                    && content.Name.IndexOf(routeName, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    content.Name = $"{content.Name} - {routeName}";
+                }
+            }
+
             if (string.IsNullOrWhiteSpace(content.Description))
                 content.Description = $"A {difficulty} session drafted from your {nicheDisplay} Intake"
                     + (string.IsNullOrWhiteSpace(archetype) ? "." : $" — {PrettyId(archetype)} route.");
