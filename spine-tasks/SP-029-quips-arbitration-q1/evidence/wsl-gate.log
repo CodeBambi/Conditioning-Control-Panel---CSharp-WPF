@@ -1,0 +1,8 @@
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:01.82
+
+Passed!  - Failed:     0, Passed:   410, Skipped:     0, Total:   410, Duration: 17 s - CcpClient.Tests.dll (net10.0)
+
+Passed!  - Failed:     0, Passed:    29, Skipped:     0, Total:    29, Duration: 8 s - CcpClient.HeadlessTests.dll (net10.0)

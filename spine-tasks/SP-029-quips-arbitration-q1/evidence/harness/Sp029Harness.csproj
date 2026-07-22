@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- SP-029 Step-3 evidence harness — scratch console, NOT in client/CcpClient.sln
+       (SP-025 evidence/devloop precedent). Drives the REAL SoundArbitration on the REAL
+       SoundFlow backend; transcript is the backend-event evidence. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+    <AssemblyName>sp029-harness</AssemblyName>
+    <!-- Referencing the desktop head (WinExe) is fine — we never start the UI. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\client\src\CcpClient.Desktop\CcpClient.Desktop.csproj" />
+  </ItemGroup>
+
+</Project>

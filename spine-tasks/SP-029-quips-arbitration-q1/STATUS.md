@@ -9,7 +9,7 @@
 - [x] Design (SoundArbitration: channel ownership, queue+freshness, ducking, device re-probe, off-sync-context; q1/q2 boundary)
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
-### Step 2: arbitration core implementation — work complete (plan review pending)
+### Step 2: arbitration core implementation — COMPLETE (plan review engine-skipped SP-195, recorded)
 - [x] SoundArbitration.cs + types (ownership state machine, queue, ducking, device layer)
 - [x] Unit tests (generations, ordering/freshness, ducking symmetry+panic, device re-probe, off-sync-context regression) — 19 new, 410/410 green
 

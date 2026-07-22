@@ -98,4 +98,38 @@ Additional advisor flags (accepted):
 
 **Pre-declared Step-3 ducking evidence shape (advisor binding):** (a) refcount transitions 0→1→2→1→0 under real voice playback; (b) sink Apply/Restore invocation symmetry (counts, strength, order) on a recording probe sink; (c) watchdog force-unduck via injected clock; (d) panic release-all (ForceUnduck + PanicReset) releasing N overlapping holders with exactly one Restore; (e) no cross-app session-volume claim (typed Unavailable sink = named limit).
 
+- Step 2 plan review: `spine_review_step(step=2, type=plan)` → **SKIPPED by engine** (SP-195; `spawnFailed=false`, artifact `.reviews/2-20260722T112301.md`).
+
+## Step 3 — backend-event evidence + panic + WSL gate
+
+### Harness shape
+
+`evidence/harness/` — scratch console (NOT in `client/CcpClient.sln`, SP-025 `evidence/devloop` precedent), ProjectReference to `CcpClient.Desktop`, drives the REAL `SoundArbitration` on the REAL `SoundFlowAudioBackend` (SoundFlow 1.4.1). Self-contained tones (spike ToneGen shape copied — `client/spikes` read-only): voice 2500 ms/440 Hz, whisper 1500 ms/220 Hz, sfx 300 ms/2 kHz. Duck evidence on a recording PROBE sink (the q1 cross-app sink stays typed `Unavailable` — named limit; the pre-declared evidence shape from the Step-1 consult binding is honored: refcount transitions, Apply/Restore symmetry, watchdog on a real clock, panic release-all, never cross-app session-volume claims). Watchdog shortened to 3 s for the harness (options seam; WPF policy value 300_000 ms unchanged in product defaults). Exit 0 only when all checks pass.
+
+### Windows transcript (`evidence/run-windows.log`, EXIT=0, 28/28 PASS)
+
+- **Device layer:** 13 render endpoints enumerated (session facts); `Initialize("SP029 Bogus Device (never exists)")` → `not in fresh enumeration — falling back to default` → `Ready` (typed fallback, WPF AudioService.cs:292-293; never a stored Id — F1).
+- **Voice natural completion:** `VoiceCompleted(gen=1)` — backend PlaybackEnded, generation-filtered (never call-returned).
+- **Voice stop-replace:** gen 2 → 3; gen 3 completes; **interrupted gen 2 NEVER surfaced as completion** (F2 generation filter + SP-017 A2: SoundFlow fires zero end events on explicit Stop).
+- **Whisper busy:** `WhisperBusyChanged(True)` at play → `(False)` ONLY on the real completion event (replaces the WPF duration estimate, AudioService.cs:750-758).
+- **SFX pool:** 8/8 overlap Started; 9th `Dropped(PoolOverflow)` typed + logged `pool full (8)`; pool drains 8→0 on real PlaybackEnded reclaim.
+- **Off-sync-context (SP-025 regression, REAL backend):** `PlayVoice` from a dedicated thread carrying a NEVER-PUMPING SynchronizationContext completed within the 15 s join budget — no deadlock; the off-context-constructed player played and completed (gen=4). (First harness iteration of the UNIT test set the context on an xUnit runner thread and wedged the whole test process 14 min — fixed by containing the wedge condition on a dedicated thread; recorded as a test-authoring lesson.)
+- **Ducking under real playback (probe sink):** refcount 0→1→2 with ONE Apply at the first holder's strength; overlapping release 2→1 with NO restore; last release restores exactly once; watchdog force-unduck on the real clock; stale handle release ignored; ForceUnduck panic release-all with 3 overlapping holders → exactly ONE restore; post-panic releases stale no-ops.
+- **Error → typed outcome + panic:** missing file → `Failed(FileNotFoundException …)` typed + logged (never silent). Mid-play state (voice + whisper + 8 SFX + 2 queued + 1 duck) → `PanicReset` → `stopped 10 player(s), cleared 2 queued line(s), ducks force-released`; late backend events after panic = stale no-ops; channels recover (voice plays + completes, gen=8).
+- **Teardown leak counts:** handles 340→340 (delta 0), threads 16→16 (delta 0) — bounded (SP-017 discipline).
+
+### WSL2 in-packet gate (`~/ccp-sp029`, native ext4, never /mnt/e)
+
+- rsync from /mnt/e (source read-only; build/run native). Contract platform-dependent parts: `dotnet build client/CcpClient.sln -c Debug` **0W/0E**; `CcpClient.Tests` **410/410**; `CcpClient.HeadlessTests` **29/29** (`evidence/wsl-gate.log`).
+- **verify.mjs split (honest):** the contract's `node .spine/patches/verify.mjs` verifies the lane's pi-spine INSTALL state (Windows `.pi/npm/node_modules/pi-spine`) — platform-independent. Run on Windows: initial FAIL (reinstall 2.10.0 had removed all 6 patches) → `apply.mjs` re-applied 6 (SP-028 precedent, same lane condition) → `verify.mjs` **exit 0**. WSL has no node; running it there would verify nothing about Linux.
+- **Linux mechanism session facts** (`evidence/run-linux.log`, EXIT=0, 28/28 PASS): `1 render endpoint(s): RDP Sink` (SP-017 A6 class fact — enumeration mechanism, not a selection claim); the full harness matrix green on the REAL Linux backend: PlaybackEnded-driven completion/interruption/whisper-busy/SFX-reclaim, stale-NAME fallback, off-sync-context construction, ducking machinery, panic cleanup. **NO timing/latency claims** (WSLg jitter — SP-017 named limit); Wayland never claimed; no audibility claims.
+- **Teardown leak counts (Linux):** handles 66→66 (delta 0), threads 15→15 (delta 0) — bounded both platforms.
+
+### Surprises / durable-lesson candidates (for the orchestrator's land reconcile)
+
+1. **Never install a wedge-condition SynchronizationContext on an xUnit runner thread.** A never-pumping context set on a shared runner thread swallows the runner's own posted continuations and wedges the whole test process (14-min hang, exit 143 on timeout kill) even though the same test passes in isolation. Contain hostile sync contexts on a dedicated `Thread`. (Candidate for port-lessons: test-authoring discipline, SP-025-wedge-adjacent.)
+2. **wsl.exe stdout carries embedded NUL bytes** — capture through `tr -d '\0'`; never "fix" encoding with iconv after the fact (UTF-8 + NULs is not UTF-16 — one careless iconv destroyed a transcript; re-captured).
+3. **verify.mjs is install-state, not platform state** — after ANY pi-spine reinstall the contract's first command fails until `apply.mjs` re-runs; this is by design (SP-020) and the SP-028 precedent is to apply in-lane. Worth one line in the worker docs so a red contract gate isn't misread as task breakage.
+4. q1→q2 hand-off note: `SoundArbitrationOptions.VoicePacingDelay` default 2 s is the WPF floor (Speech.cs:112-119); the AI-bonus (+5 s) and per-char bonus (0.02 s/char>100) need the TEXT — the per-item `pacing` parameter is where q2 supplies them.
+
 ## Engine-review presence log (T-2)
