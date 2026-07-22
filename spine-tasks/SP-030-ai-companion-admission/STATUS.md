@@ -1,6 +1,6 @@
 ## STATUS: SP-030 — AI companion admission (design-record)
-**Current Step:** Step 3 — record.md + pre-completion consult
-**Last Updated:** 2026-07-22 (Step 2 complete)
+**Current Step:** complete
+**Last Updated:** 2026-07-22 (all steps complete; contract green 391/29 exact)
 **Blockers:** none
 
 ### Step 1: archaeology + consolidation + pre-approach consult (COMPLETE)
@@ -18,7 +18,7 @@
 - [x] Pre-completion solo consult + corrections
 - [x] STATUS.md accurate
 
-### Step 4: verification
-- [ ] testCommand green (verify.mjs exit 0; 0W/0E; 391/29 exact, no drift)
-- [ ] git diff --check clean
-- [ ] git status shows File Scope only
+### Step 4: verification (COMPLETE)
+- [x] testCommand green (verify.mjs exit 0; 0W/0E; 391/29 exact, no drift)
+- [x] git diff --check clean
+- [x] git status shows File Scope only

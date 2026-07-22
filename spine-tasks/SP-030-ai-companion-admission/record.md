@@ -40,6 +40,7 @@ Performed via the wpf-archaeologist agent plus direct gap-closing greps. Key fac
 
 - Step 1 `spine_review_step type=plan`: **SKIPPED in-worker by design (SP-195)** — tool returned `skipped: true`, `spawnFailed: false`, `reviewLevel: 2` echoed; artifact `.reviews/1-20260722T103145.md`. Engine runs reviews after `.DONE`.
 - Step 2 `spine_review_step type=plan`: **SKIPPED in-worker by design (SP-195)** — same shape; artifact `.reviews/2-20260722T103608.md`.
+- Step 3 `spine_review_step type=plan`: **SKIPPED in-worker by design (SP-195)** — same shape; artifact `.reviews/3-20260722T103856.md`.
 
 ## 5. Decisions + rejected alternatives
 
@@ -59,4 +60,9 @@ Recorded in admission §9 (verbatim decree citation + the pending-value list). N
 
 ## 8. Verification (Step 4)
 
-- (pending)
+- `node .spine/patches/verify.mjs`: initial FAIL (worktree pi-spine install unpatched — "reinstall removed it"); ran `.spine/patches/apply.mjs` (6/6 applied, writes confined to `.pi/npm/node_modules/pi-spine`, gitignored) → **verify.mjs OK, exit 0**.
+- `dotnet build client/CcpClient.sln -c Debug --nologo`: **0W/0E** (6.8s).
+- `dotnet test CcpClient.Tests`: **391/391 passed, 0 failed/skipped** — exactly the floor, zero drift.
+- `dotnet test CcpClient.HeadlessTests`: **29/29 passed** — exactly the floor, zero drift.
+- `git diff --check`: clean. `git status --short`: only File Scope paths (`client/docs/ai-companion-admission.md`, `spine-tasks/SP-030-ai-companion-admission/**`).
+- Zero product/test code changed by this task (design-record only); test-count floor unchanged by design.
