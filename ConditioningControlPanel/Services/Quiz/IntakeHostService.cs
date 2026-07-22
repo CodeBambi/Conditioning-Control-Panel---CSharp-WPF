@@ -746,8 +746,11 @@ namespace ConditioningControlPanel.Services.Quiz
 
                 return new
                 {
-                    gifs = Sample(gifs, rng, 10).Select(ToUrl).ToArray(),
-                    images = Sample(stills, rng, 10).Select(ToUrl).ToArray(),
+                    // 18 samples (was 10): the captcha grid items want 15-20 mounted
+                    // assets so tiles don't repeat within a 3x3; gifs/stills split is
+                    // unchanged. Host-side only (PROTOCOL 1 + web-shim.js untouched).
+                    gifs = Sample(gifs, rng, 18).Select(ToUrl).ToArray(),
+                    images = Sample(stills, rng, 18).Select(ToUrl).ToArray(),
                     bubbleSprite,
                     subliminals,
                 };

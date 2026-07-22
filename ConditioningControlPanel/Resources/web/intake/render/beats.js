@@ -67,6 +67,52 @@ import { noteMedia } from '../core/mediaLog.js';
 import { tintColorOptions } from './optionTint.js';
 
 /* ----------------------------------------------------------------------------
+ * CAPTCHA item family (Verify* mechanics) — lazy, guarded layer load.
+ *   The fake-captcha renderers live in ./captcha/index.js. We import the layer
+ *   ONCE, at the first createBeats() init, guarded so a TOTAL failure of the
+ *   captcha layer degrades every Verify* beat to plain rendering (never a blank
+ *   card) — the same loadOptional philosophy boot.js uses for the render stack.
+ *   Because the import is async, a Verify* beat that arrives before the layer
+ *   resolves simply falls back for that one beat. Nothing here runs at import
+ *   time (module-scope declarations only; the dynamic import fires from
+ *   loadCaptchaLayer(), called inside createBeats()).
+ * -------------------------------------------------------------------------- */
+/** Every Verify* Mechanic id (derived from the enum so all ten stay covered). */
+const CAPTCHA_MECHS = new Set(
+  MECHANICS.filter((m) => typeof m === 'string' && m.indexOf('verify') === 0),
+);
+let _captchaLayer = null;        // resolved ./captcha/index.js namespace, or null on failure
+let _captchaTried = false;
+function ixCaptchaLog(msg) {
+  try {
+    if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('intake-log', { detail: { msg: 'ib/captcha: ' + msg } }));
+    }
+  } catch (_e) {}
+}
+function loadCaptchaLayer() {
+  if (_captchaTried) return;
+  _captchaTried = true;
+  try {
+    import('./captcha/index.js')
+      .then((m) => { _captchaLayer = m || null; })
+      .catch((e) => { _captchaLayer = null; ixCaptchaLog('layer load failed: ' + (e && e.message)); });
+  } catch (e) { _captchaLayer = null; ixCaptchaLog('layer import threw: ' + (e && e.message)); }
+}
+/** The base Mechanic a Verify* beat degrades to, by the prompt's answer shape —
+ *  mirrors selectMechanic()'s own fallback ladder so the beat renders + grades
+ *  identically to a native beat of that shape. */
+function fallbackMechanicFor(beat) {
+  const opts = beat && Array.isArray(beat.options) ? beat.options : [];
+  if (opts.length >= 2) return Mechanic.MC4;
+  const ans = beat && beat.prompt ? beat.prompt.answer : undefined;
+  if (typeof ans === 'number') return Mechanic.CheckIn;
+  if (typeof ans === 'string') return Mechanic.Mantra;
+  if (typeof ans === 'boolean') return Mechanic.YesNo;
+  return Mechanic.Mono;
+}
+
+/* ----------------------------------------------------------------------------
  * PURE helpers (no DOM) — unit-tested headless. Exported for the smoke test.
  * -------------------------------------------------------------------------- */
 
@@ -487,6 +533,9 @@ function fadeLayerOutRemove(node, outMs, removeMs) {
 export function createBeats({ root, effects, audio, steering, reward, caps, background, theme, media, niche, micEnabled } = {}) {
   const stage = root;
   caps = caps || {};
+  // Kick the guarded, one-time captcha-layer import (Verify* mechanics). Safe to
+  // call repeatedly (latched); degrades to plain rendering if it never resolves.
+  loadCaptchaLayer();
   // Host's MicConsentGiven. Undefined (standalone/harness) => allowed, since there
   // the browser's permission prompt is the only gate that exists.
   const micAllowed = micEnabled !== false;
@@ -1149,6 +1198,80 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           markProgress: () => { steeredFlag = true; noteEffort(); armWatchdog(); },
         };
         try { steerHandle = steering.installSteering(ctx); } catch (_e) { steerHandle = null; }
+      }
+
+      // ---- CAPTCHA item family (Verify* mechanics) dispatch ---------------
+      // Verify* beats route to the captcha layer FIRST; a live item module owns
+      // the whole card body + the answer commit and we return early (the Promise
+      // resolves when the widget commits through the ctx.submit*/forceComplete
+      // helpers below). If the layer is missing/failed/not-implemented (canRender
+      // false or render() returns false), we REMAP beat.mechanic to the base
+      // mechanic for this prompt's answer shape, so selectMechanic() + the switch
+      // below render a native, completable, gradable beat (MC4/YesNo/CheckIn/
+      // Mantra/Mono). The engine holds this SAME beat object, so the remap also
+      // reaches gradeBeat — the fallback grades identically to a native beat and
+      // invariant #1 (friction, not lockout) is preserved. Placed before the
+      // `mech` resolution so the remap flows through selectMechanic naturally.
+      if (CAPTCHA_MECHS.has(beat.mechanic)) {
+        let captchaHandled = false;
+        if (_captchaLayer && typeof _captchaLayer.canRender === 'function'
+            && _captchaLayer.canRender(beat.mechanic)) {
+          // ctx: everything a captcha item renderer needs to build its widget and
+          // land exactly one answer. Commit helpers route through the SAME finalize/
+          // tryCommit path native mechanics use, so reward/streak/background/grading
+          // are identical. See the render contract in render/captcha/index.js.
+          const capOptions = (Array.isArray(beat.options) ? beat.options : []).map((o, i) => ({
+            index: typeof o.index === 'number' ? o.index : i,
+            label: o.label != null ? o.label : String(o.index != null ? o.index : i),
+            isCorrect: !!o.isCorrect,
+            score: typeof o.score === 'number' ? o.score : (o.isCorrect ? 1 : 0),
+          }));
+          const capCtx = {
+            beat,
+            prompt: beat.prompt || {},
+            options: capOptions,
+            mechanic: beat.mechanic,
+            band: beat.band,
+            depth: beat.depth,
+            meta: beat.meta,
+            timeoutMs: beat.timeoutMs || 0,
+            steerRoll: beat.steerRoll,
+            caps,
+            theme,
+            media,
+            niche: gateNiche,
+            reduced,
+            reducedMotion: reduced,
+            root: stage,
+            submitIndex(index, opts) {
+              if (opts && opts.steered) steeredFlag = true;
+              if (index != null) lastAttemptIndex = index;
+              finalize(index, undefined, false);
+            },
+            submitValue(value, opts) {
+              if (opts && opts.steered) steeredFlag = true;
+              if (value !== undefined) lastAttemptValue = value;
+              finalize(undefined, value, false);
+            },
+            submitTimeout() { finalize(lastAttemptIndex, lastAttemptValue, true); },
+            forceComplete(index) {
+              steeredFlag = true;
+              if (index != null) lastAttemptIndex = index;
+              tryCommit(index, { force: true });
+            },
+            installSteering(steerOptions) { installSteering(steerOptions); },
+            speakPrompt() { speakPrompt(beat); },
+            sfx(id, intensity, opts) { return sfx(id, intensity, opts); },
+            onCleanup(fn) { if (typeof fn === 'function') cleanups.push(fn); },
+            chrome: _captchaLayer.chrome,
+          };
+          const capHelpers = { chrome: _captchaLayer.chrome, Mechanic, Band, clamp01, makeAnswerEvent };
+          try {
+            captchaHandled = _captchaLayer.render(beat.mechanic, capCtx, capHelpers) === true;
+          } catch (_e) { captchaHandled = false; }
+        }
+        if (captchaHandled) return;                 // the captcha widget owns this beat
+        beat.mechanic = fallbackMechanicFor(beat);  // else degrade to the native base mechanic
       }
 
       // ---- build the card scaffold ---------------------------------------

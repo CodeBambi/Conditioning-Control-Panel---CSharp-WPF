@@ -298,6 +298,19 @@ export const Mechanic = Object.freeze({
   Funnel:    'funnel',     // wrong dissolves -> respawns as the right one
   Destruct:  'destruct',   // correct melts/shatters/falls but registers the answer
   Interlude: 'interlude',  // non-question pacing valley: 'watch' (spiral stare) or 'breathe'
+  // --- FAKE-CAPTCHA item family (render/captcha/*, dispatched at beats.js:1218) ---
+  // Verification-chrome items that render through the captcha layer; each degrades
+  // to the base mechanic for its prompt's answer shape when the layer is absent.
+  VerifyGrid:       'verifygrid',       // reCAPTCHA tile grid -> bitmask (index list + count)
+  VerifyCheckbox:   'verifycheckbox',   // "I am not a robot" checkbox -> bool + hold telemetry
+  VerifyTranscribe: 'verifytranscribe', // distorted-text transcription -> verbatim string
+  VerifyCustody:    'verifycustody',    // chain-of-custody docket -> bool per row (metadata detonation)
+  VerifyStillness:  'verifystillness',  // Turnstile passive-scan hold -> bool + interference count
+  VerifyRegen:      'verifyregen',      // next-tier PLACEHOLDER: regenerating "select until none remain" grid
+  VerifySegment:    'verifysegment',    // next-tier PLACEHOLDER: 4x4 unblur segmentation reveal
+  VerifyRotate:     'verifyrotate',     // next-tier PLACEHOLDER: rotate-to-upright (FunCaptcha) dwell
+  VerifyGaze:       'verifygaze',       // next-tier PLACEHOLDER: fake camera-free gaze calibration
+  VerifyRecall:     'verifyrecall',     // next-tier PLACEHOLDER: Recovery recognition-audit old/new grid
 });
 export const MECHANICS = Object.freeze(Object.values(Mechanic));
 
