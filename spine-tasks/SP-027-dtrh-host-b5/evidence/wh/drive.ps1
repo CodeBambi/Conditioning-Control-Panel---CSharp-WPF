@@ -27,6 +27,7 @@ public static class W3 {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(System.IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(System.IntPtr h, System.IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr h);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte s, uint f, UIntPtr e);
@@ -126,20 +127,63 @@ switch ($Action) {
     Write-Output ("captured {0}x{1} -> {2}; dark={3:P1} distinct-colors~{4}" -f $w, $hh, $Arg, ($dark / $total), $colors.Count)
   }
   "key" {
+    # Foreground is load-bearing (diagB1 2026-07-22): keybd_event lands on the
+    # OS-foreground window only. Claim + VERIFY, never assume.
+    [W3]::SetWindowPos($h, [IntPtr]::new(-1), 0, 0, 0, 0, 0x0001 -bor 0x0002 -bor 0x0040) | Out-Null
+    Start-Sleep -Milliseconds 200
+    [W3]::SetForegroundWindow($h) | Out-Null
+    Start-Sleep -Milliseconds 300
+    if ([W3]::GetForegroundWindow() -ne $h) { Write-Error "foreground NOT acquired for key drive"; exit 4 }
     $vk = if ($Arg -eq "esc") { 0x1B } else { 0x0D }
-    [W3]::keybd_event($vk, 0, 0, [UIntPtr]::Zero)
+    $scan = if ($Arg -eq "esc") { 0x01 } else { 0x1C }
+    [W3]::keybd_event($vk, $scan, 0, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds 80
-    [W3]::keybd_event($vk, 0, 2, [UIntPtr]::Zero)
-    Write-Output "key $Arg sent"
+    [W3]::keybd_event($vk, $scan, 2, [UIntPtr]::Zero)
+    Write-Output "key $Arg sent (foreground verified)"
+  }
+  "vn-clear" {
+    # SP-027 b5 (2026-07-22 forensics): on a FRESH slot the hub plays the cheshire
+    # hub_welcome fullscreen VN scene (15 beats; cheshireGuide.js:355), whose
+    # capture-phase keydown handler swallows EVERY key incl. ESC
+    # (cheshireVn.js:484-491 — WPF-shared payload, so WPF behaves identically).
+    # The ESC-exit cell must click the scene through first: first click completes
+    # the typewriter, second advances (cheshireVn.js:547) → 2 clicks/beat + margin.
+    # Clicks are real canvas clicks (b2 non-modal norm); stragglers after the scene
+    # just pop bubbles in game mode — harmless.
+    $clicks = if ($Arg) { [int]$Arg } else { 40 }
+    [W3]::SetWindowPos($h, [IntPtr]::new(-1), 0, 0, 0, 0, 0x0001 -bor 0x0002 -bor 0x0040) | Out-Null
+    Start-Sleep -Milliseconds 250
+    $cx = [int](($r.Left + $r.Right) / 2); $cy = [int](($r.Top + $r.Bottom) / 2)
+    [W3]::SetCursorPos($cx, $cy) | Out-Null
+    for ($c = 1; $c -le $clicks; $c++) {
+      [W3]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+      Start-Sleep -Milliseconds 50
+      [W3]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+      Start-Sleep -Milliseconds 650
+      if ($c % 10 -eq 0) { Write-Output "vn-clear $c/$clicks clicks" }
+    }
+    [W3]::SetWindowPos($h, [IntPtr]::new(-2), 0, 0, 0, 0, 0x0001 -bor 0x0002) | Out-Null
+    Write-Output "vn-clear complete ($clicks clicks — hub_welcome clicked through)"
   }
   "keyhold" {
     # SP-027 b5: ESC HELD (default 1500ms — the payload's 1.2s hold-to-exit threshold,
     # boot.js; SP-011 W16 shape). Real keybd_event, never a synthesized message.
+    # LOAD-BEARING (diagB1/diagB1v2 forensics 2026-07-22): (1) a real canvas CLICK is
+    # the only reliable foreground claim — SetForegroundWindow is foreground-locked
+    # while the owner uses the machine (SFW returned True but foreground stayed on the
+    # owner's window); (2) scancode 0x01 (scancode-0 keys never reached the page);
+    # (3) foreground VERIFIED immediately before keydown, loud exit 4 otherwise.
     $holdMs = if ($Arg) { [int]$Arg } else { 1500 }
-    [W3]::keybd_event(0x1B, 0, 0, [UIntPtr]::Zero)
+    $cx = [int](($r.Left + $r.Right) / 2); $cy = [int](($r.Top + $r.Bottom) / 2)
+    Click-Point $cx $cy
+    Start-Sleep -Milliseconds 300
+    [W3]::SetForegroundWindow($h) | Out-Null
+    Start-Sleep -Milliseconds 300
+    if ([W3]::GetForegroundWindow() -ne $h) { Write-Error "foreground NOT acquired for keyhold (owner input race?)"; exit 4 }
+    [W3]::keybd_event(0x1B, 0x01, 0, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds $holdMs
-    [W3]::keybd_event(0x1B, 0, 2, [UIntPtr]::Zero)
-    Write-Output "ESC held ${holdMs}ms (real keybd_event)"
+    [W3]::keybd_event(0x1B, 0x01, 2, [UIntPtr]::Zero)
+    Write-Output "ESC held ${holdMs}ms (real keybd_event, click-focus + foreground verified)"
   }
   "sweep" {
     # SP-026 gameplay sweep: N grid passes over the client area (bubbles pop on click).

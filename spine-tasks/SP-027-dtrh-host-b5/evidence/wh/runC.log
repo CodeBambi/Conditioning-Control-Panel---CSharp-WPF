@@ -1,0 +1,45 @@
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.0 DIP @ scale 1 @ screen 232,286
+dtrh: quick start — reusing slot 1 (picker skipped by design)
+dtrh-slots: live save is now slot 1
+dtrh: descending into slot 1
+dtrh: host window opening on slot 1
+dtrh: meta engine bound to slot 1
+dtrh-audio: 13 render endpoint(s): Browser (BEACN Studio) | Aux 2 / Hardware (BEACN Studio) | System (BEACN Studio) (default) | Link 4 Out (BEACN Studio) | Link 3 Out (BEACN Studio) | Chat (BEACN Studio) | Aux 1 / Hardware (BEACN Studio) | Mic Relay (Do Not Use) (BEACN Studio) | Game (BEACN Studio) | Link Out (BEACN Studio) | Headphones (BEACN Studio) | Link 2 Out (BEACN Studio) | Music (BEACN Studio)
+dtrh-audio: playback device up (requested default)
+dtrh: native effects up (SFX pool 8/drop, voice, vmem video, freeze)
+dtrh: WebView2 UserDataFolder set; autoplay-policy=no-user-gesture-required
+dtrh: navigating embedded surface (page probe.html)
+dtrh: fx-drive armed (HARNESS-ONLY): probe-missing-media@10
+dtrh: auto-close armed at 18s
+dtrh: AdapterCreated info='DetailedWebViewAdapterInfo { Type = WebView2, Engine = Blink, Version = 150.0.4078.83, IsSupported = True, IsInstalled = True, UnavailableReason = , SupportedScenarios = NativeControlHost }'
+dtrh: native ProcessFailed signal ATTACHED (W17 immediate route, WebView2 slot-25 subscription)
+dtrh-loopback: GET /dtrh/probe.html/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/bridge.js/… -> 200 (page:overlay)
+dtrh: NavigationCompleted success=True (surface embedded)
+dtrh-loopback: GET /favicon.ico/ -> 404
+dtrh page log: probe: bridge.js imported (product derivative, blob 13af3f4d + §3.1 diff); isHosted=true
+dtrh: {"type":"probe-p2h-native","note":"native window.chrome.webview.postMessage"}
+dtrh page log: probe: sent probe-p2h-native
+dtrh: {"type":"probe-p2h-ica","note":"invokeCSharpAction path"}
+dtrh page log: probe: sent probe-p2h-ica
+dtrh page log: probe: bridge.on(probe-h2p) registered; awaiting host send
+dtrh page log: probe: probe module complete
+dtrh-media: manifest — 0 image(s), 0 video(s), 0 skipped
+dtrh page log: probe: check3 host->page DELIVERED via bridge.on: {"type":"probe-h2p","via":"synthetic-dispatch"}
+dtrh: probe-img sent (0 served url(s) — loom + user media, HARNESS-ONLY)
+dtrh page log: probe: preBuffer REPLAY delivered on late registration: {"type":"probe-buffered","via":"pre-handler-send"}
+dtrh page log: probe: late handler registered for probe-buffered (after host send)
+dtrh: fx-drive probe-missing-media (HARNESS-ONLY missing-media injection, W19 class)
+dtrh page log: probe: probe-img rendered image (55-char url)
+dtrh-loopback: GET /umedia/images/… -> 403 (HARNESS blocked-route injection)
+dtrh-loopback: GET /umedia/images/… -> 403
+dtrh page log: probe: probe-img LOAD ERROR (image)
+dtrh: auto-close firing
+dtrh-fx: teardown complete
+dtrh: flow ended — shutting down the lifetime
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+[0722/101900.260:ERROR:ui\gfx\win\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412

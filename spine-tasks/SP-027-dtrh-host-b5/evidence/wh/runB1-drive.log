@@ -1,9 +1,23 @@
 
 data dir reset (backup at evidence/scratch/databackup)
-launched pid=30008
+launched pid=12924
 engine live observed: True
 GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
-captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T051051\lane-1\spine-tasks\SP-027-dtrh-host-b5\evidence\wh\runB1-live.png; dark=5,9% distinct-colors~407
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T051051\lane-1\spine-tasks\SP-027-dtrh-host-b5\evidence\wh\runB1-live.png; dark=4,1% distinct-colors~412
 GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
-ESC held 1500ms (real keybd_event)
-EXIT=
+vn-clear 10/40 clicks
+vn-clear 20/40 clicks
+vn-clear 30/40 clicks
+vn-clear 40/40 clicks
+vn-clear complete (40 clicks - hub_welcome clicked through)
+ESC-hold attempt 1/3
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+clicked screen (-1928,1510)
+ESC held 1500ms (real keybd_event, click-focus + foreground verified)
+attempt 1 exited=False
+ESC-hold attempt 2/3
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+clicked screen (-1928,1510)
+ESC held 1500ms (real keybd_event, click-focus + foreground verified)
+attempt 2 exited=True
+EXIT=0

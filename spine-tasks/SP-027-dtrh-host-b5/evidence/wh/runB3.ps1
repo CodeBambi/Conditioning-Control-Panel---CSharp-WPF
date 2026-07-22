@@ -22,7 +22,8 @@ for ($i = 0; $i -lt 14; $i++) {
 "engine live observed: $live" | Out-File $tx -Append
 pwsh -NoProfile -File "$ev\drive.ps1" -Action capture -Arg "$ev\runB3-live.png" *>&1 | Out-File $tx -Append
 
-$proc.WaitForExit(60000) | Out-Null
+$exited = $proc.WaitForExit(60000)
 $proc.Refresh()
+if (-not $exited) { "FAIL: no exit within 60s — killing orphan pid=$($proc.Id)" | Out-File $tx -Append; $proc.Kill($true); $proc.WaitForExit(10000) | Out-Null }
 "EXIT=$($proc.ExitCode)" | Out-File $tx -Append
-Write-Output "EXIT=$($proc.ExitCode) live=$live"
+Write-Output "EXIT=$($proc.ExitCode) live=$live exited=$exited"
