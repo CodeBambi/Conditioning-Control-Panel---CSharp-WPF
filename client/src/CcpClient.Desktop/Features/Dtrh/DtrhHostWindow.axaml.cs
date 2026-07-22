@@ -42,6 +42,13 @@ public partial class DtrhHostWindow : Window
     private DtrhMeta? _meta;
     private DtrhAssetStats? _assetStats;
     private DtrhLoom? _loom;
+    // SP-027 slice b5: the session watchdog (coordinator-owned — survives relaunch),
+    // the native ProcessFailed subscription (Windows embedded only — W17 immediate
+    // route), the 5s heartbeat watch, and the run-active gate for the 10s/20s limits.
+    private readonly DtrhWatchdog? _watchdog;
+    private DispatcherTimer? _watchTimer;
+    private DtrhProcessFailed.DtrhProcessFailedSignal? _processFailedSignal;
+    private bool _runActive;
 
     /// <summary>Boot-matrix facts (headed harness + diagnostics). Content-free.</summary>
     public bool EngineLive => _engineLive;
@@ -50,9 +57,15 @@ public partial class DtrhHostWindow : Window
 
     public string Surface { get; private set; } = "pending";
 
-    public DtrhHostWindow(ApplicationHost host, string page = "index.html", int? slot = null, string? fxDrive = null, bool m2Test = false)
+    /// <summary>Raised (UI thread) when the watchdog demands recovery: Relaunch-once or
+    /// Exhausted-honest-close. The coordinator owns the acting (window recreation).</summary>
+    public event Action<DtrhWatchdog.DtrhRecoveryOutcome>? RecoveryRequested;
+
+    public DtrhHostWindow(ApplicationHost host, string page = "index.html", int? slot = null, string? fxDrive = null, bool m2Test = false,
+        DtrhWatchdog? watchdog = null)
     {
         _host = host;
+        _watchdog = watchdog;
         _dtrh = host.Participants.OfType<DtrhParticipant>().Single();
         _page = page;
         _fxDrive = fxDrive;
@@ -76,10 +89,18 @@ public partial class DtrhHostWindow : Window
             InitNativeEffects();
             Begin();
             ScheduleFxDrive();
+            StartWatchTimer();
         };
         Closing += (_, _) =>
         {
             _closing.Cancel();
+            try { _watchTimer?.Stop(); } catch { /* best-effort */ }
+            _watchTimer = null;
+            // Detach BEFORE the adapter dies (detach on a zombie is tolerated anyway);
+            // MarkDead parks the watch without spending the relaunch.
+            try { _processFailedSignal?.Dispose(); } catch { /* best-effort */ }
+            _processFailedSignal = null;
+            _watchdog?.MarkDead();
             try { _meta?.FlushSave(); } catch { /* best-effort — teardown is idempotent */ }
             TeardownNativeEffects();
             TryCloseDialog();
@@ -369,7 +390,11 @@ public partial class DtrhHostWindow : Window
     {
         _web = new NativeWebView();
         _web.EnvironmentRequested += OnEnvironmentRequested;
-        _web.AdapterCreated += (_, _) => _host.LogDiagnostic($"dtrh: AdapterCreated info='{SafeAdapterInfo()}'");
+        _web.AdapterCreated += (_, _) =>
+        {
+            _host.LogDiagnostic($"dtrh: AdapterCreated info='{SafeAdapterInfo()}'");
+            AttachProcessFailedSignal();
+        };
         _web.AdapterDestroyed += (_, _) => _host.LogDiagnostic("dtrh: AdapterDestroyed");
         _web.WebMessageReceived += OnWebMessage;
         _web.NavigationCompleted += OnNavigationCompleted;
@@ -431,6 +456,9 @@ public partial class DtrhHostWindow : Window
         _dialog.Source = new Uri(url);
         SetStatus("dtrh: dialog surface shown (NativeWebDialog)");
         _host.LogDiagnostic($"dtrh: showing NativeWebDialog surface (page {_page})");
+        _host.LogDiagnostic(
+            "dtrh: native ProcessFailed signal UNAVAILABLE (unsupported-platform) on the WebKitGTK dialog path — "
+            + "heartbeat watchdog is the only net (named limit; W17-class detection lands after the black-but-beating window + threshold, never claimed fast)");
         _dialog.Show(this);
     }
 
@@ -504,6 +532,105 @@ public partial class DtrhHostWindow : Window
         _host.LogDiagnostic($"dtrh: probe-img sent ({sent} served url(s) — loom + user media, HARNESS-ONLY)");
     }
 
+    // ---------- b5 watchdog + native process-failure signal (SP-027) ----------
+
+    /// <summary>The 5s heartbeat watch (WPF :819-841). Ticks no-op until the page reports
+    /// ready (WPF IsReady guard :830) — a still-loading page can't false-trip.</summary>
+    private void StartWatchTimer()
+    {
+        if (_watchdog is null)
+        {
+            return;
+        }
+
+        _watchTimer = new DispatcherTimer { Interval = DtrhWatchdog.WatchInterval };
+        _watchTimer.Tick += (_, _) =>
+        {
+            var outcome = _watchdog.Tick(DateTimeOffset.UtcNow, _runActive);
+            if (outcome is not null)
+            {
+                HandleRecoveryOutcome(outcome);
+            }
+        };
+        _watchTimer.Start();
+    }
+
+    /// <summary>Subscribe the native ProcessFailed signal at AdapterCreated (consult trap:
+    /// the platform handle is useless before the adapter exists; re-subscribe happens
+    /// naturally — a relaunch recreates the window + adapter). The pointer chain is
+    /// verified (IWindowsWebView2PlatformHandle, Avalonia.Controls.WebView 12.0.1); where
+    /// the platform cannot deliver the signal the typed Unavailable is logged — the
+    /// heartbeat watchdog is the only net there, never a faked signal.</summary>
+    private void AttachProcessFailedSignal()
+    {
+        if (_watchdog is null)
+        {
+            return;
+        }
+
+        if (_web?.TryGetPlatformHandle() is Avalonia.Platform.IWindowsWebView2PlatformHandle wv2)
+        {
+            switch (DtrhProcessFailed.TryAttach(wv2.CoreWebView2, OnNativeProcessFailed))
+            {
+                case DtrhProcessFailed.AttachOutcome.Attached attached:
+                    _processFailedSignal = attached.Signal;
+                    _host.LogDiagnostic("dtrh: native ProcessFailed signal ATTACHED (W17 immediate route, WebView2 slot-25 subscription)");
+                    break;
+                case DtrhProcessFailed.AttachOutcome.Unavailable unavailable:
+                    _host.LogDiagnostic(
+                        $"dtrh: native ProcessFailed signal UNAVAILABLE ({unavailable.Code}) — {unavailable.Detail}; heartbeat watchdog is the only net");
+                    break;
+            }
+        }
+        else
+        {
+            _host.LogDiagnostic(
+                "dtrh: native ProcessFailed signal UNAVAILABLE (unsupported-platform) — the platform handle is not "
+                + "IWindowsWebView2PlatformHandle; heartbeat watchdog is the only net (named limit, never faked)");
+        }
+    }
+
+    /// <summary>Native ProcessFailed callback (arrives on the UI thread — COM apartment;
+    /// posted defensively anyway). WPF OnProcessFailed :850-852 parity.</summary>
+    private void OnNativeProcessFailed(int kind)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => OnNativeProcessFailed(kind));
+            return;
+        }
+
+        _host.LogDiagnostic($"dtrh: native ProcessFailed — {DtrhWatchdog.KindName(kind)} (immediate detection; AdapterDestroyed never fires — W17)");
+        if (_watchdog is null)
+        {
+            return;
+        }
+
+        var outcome = _watchdog.OnProcessFailed(kind);
+        if (outcome is null)
+        {
+            _host.LogDiagnostic("dtrh: ProcessFailed dropped by the recovery-episode latch / guards (same episode — never a double-relaunch)");
+            return;
+        }
+
+        HandleRecoveryOutcome(outcome);
+    }
+
+    private void HandleRecoveryOutcome(DtrhWatchdog.DtrhRecoveryOutcome outcome)
+    {
+        switch (outcome)
+        {
+            case DtrhWatchdog.DtrhRecoveryOutcome.Relaunch relaunch:
+                _host.LogDiagnostic($"dtrh: watchdog demands RELAUNCH ({relaunch.Reason}) — generation {relaunch.Generation}");
+                break;
+            case DtrhWatchdog.DtrhRecoveryOutcome.Exhausted exhausted:
+                _host.LogDiagnostic($"dtrh: watchdog demands EXHAUSTED close ({exhausted.Reason}) — never a restart loop");
+                break;
+        }
+
+        RecoveryRequested?.Invoke(outcome);
+    }
+
     // ---------- boot contract ----------
 
     private void OnWebMessage(object? sender, WebMessageReceivedEventArgs e)
@@ -558,6 +685,7 @@ public partial class DtrhHostWindow : Window
         {
             case DtrhProtocol.DtrhPageMessage.Heartbeat:
                 _heartbeats++;
+                _watchdog?.Heartbeat(DateTimeOffset.UtcNow);
                 if (_heartbeats % 15 == 1) _host.LogDiagnostic($"dtrh: heartbeat #{_heartbeats}");
                 return;
             case DtrhProtocol.DtrhPageMessage.Log log:
@@ -572,6 +700,7 @@ public partial class DtrhHostWindow : Window
                 return;
             case DtrhProtocol.DtrhPageMessage.Ready:
                 _host.LogDiagnostic("dtrh: ready received — flushing init+manifest");
+                _watchdog?.MarkLive(DateTimeOffset.UtcNow);
                 SendBootMessages();
                 return;
             case DtrhProtocol.DtrhPageMessage.Exit:
@@ -632,12 +761,14 @@ public partial class DtrhHostWindow : Window
                 // WPF order (:252/:258-259): stale-duck/freeze hygiene FIRST, then the
                 // run boundary — the SAME b3 router entry, now inside the real handler.
                 _router?.TryRunBoundaryHygiene(runStarted);
+                _runActive = true;
                 _meta?.OnRunStarted(runStarted.Difficulty, runStarted.Mode);
                 return;
             case DtrhProtocol.DtrhPageMessage.RunEnded runEnded:
                 // WPF order (:513): ApplyWorldFreeze(false) is the FIRST statement of
                 // OnRunEnded — a run ending mid-freeze never wedges native video/voice.
                 _router?.TryRunBoundaryHygiene(runEnded);
+                _runActive = false;
                 if (_meta is null)
                 {
                     _host.LogDiagnostic("dtrh: 'RunEnded' arrived before meta engine init — logged, not acted on");

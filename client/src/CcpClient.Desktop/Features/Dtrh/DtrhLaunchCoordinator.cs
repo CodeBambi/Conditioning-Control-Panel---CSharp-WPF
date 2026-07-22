@@ -20,6 +20,11 @@ public sealed class DtrhLaunchCoordinator
     private readonly string? _fxDrive;
     private readonly bool _m2Test;
     private readonly DtrhSaveSlots _slots;
+    // SP-027 slice b5: the session-scoped watchdog + relaunch-once state (WPF
+    // _relaunchedOnce parity — survives window recreation; NEVER a restart loop).
+    private readonly DtrhWatchdog _watchdog = new();
+    private int _currentSlot;
+    private DtrhHostWindow? _closingForRecovery;
 
     public DtrhLaunchCoordinator(ApplicationHost host, Window owner, string page = "index.html", string? fxDrive = null, bool m2Test = false)
     {
@@ -41,7 +46,8 @@ public sealed class DtrhLaunchCoordinator
     public event Action? HostOpened;
 
     /// <summary>Raised when the whole flow ends without a live host window: host window
-    /// closed, or picker cancelled (demo shutdown path).</summary>
+    /// closed FOR REAL, or picker cancelled (demo shutdown path). A close-for-recovery
+    /// (watchdog relaunch) does NOT end the flow (pre-approach consult CORRECTION 2).</summary>
     public event Action? FlowEnded;
 
     /// <summary>The hero-card path: picker first; DESCEND commits and boots; cancel backs
@@ -76,6 +82,38 @@ public sealed class DtrhLaunchCoordinator
         return DescendAndOpenAsync(slot);
     }
 
+    /// <summary>b5: the watchdog's typed recovery outcome (UI thread). Relaunch = tear
+    /// down + recreate the window once on the same slot (WPF DisposeAll+Launch :858-876
+    /// parity — the old CoreWebView2 is a zombie, re-navigation is undefined); Exhausted
+    /// = honest close, never a restart loop.</summary>
+    private void OnRecoveryRequested(DtrhWatchdog.DtrhRecoveryOutcome outcome)
+    {
+        switch (outcome)
+        {
+            case DtrhWatchdog.DtrhRecoveryOutcome.Relaunch relaunch:
+            {
+                var dead = HostWindow;
+                _host.LogDiagnostic(
+                    $"dtrh: recovery ({relaunch.Reason}) — relaunching ONCE (generation {relaunch.Generation}); slot {_currentSlot}");
+                if (dead is not null)
+                {
+                    _closingForRecovery = dead;
+                    dead.Close();
+                }
+
+                _ = DescendAndOpenAsync(_currentSlot);
+                break;
+            }
+            case DtrhWatchdog.DtrhRecoveryOutcome.Exhausted exhausted:
+            {
+                _host.LogDiagnostic(
+                    $"dtrh: recovery ({exhausted.Reason}) — relaunch already spent; honest close (WPF 'giving up' :864 parity)");
+                HostWindow?.Close();
+                break;
+            }
+        }
+    }
+
     private async Task DescendAndOpenAsync(int slot)
     {
         try
@@ -89,13 +127,23 @@ public sealed class DtrhLaunchCoordinator
             }
 
             _host.LogDiagnostic($"dtrh: descending into slot {slot}");
+            _currentSlot = slot;
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                var window = new DtrhHostWindow(_host, _page, slot, _fxDrive, _m2Test);
+                var window = new DtrhHostWindow(_host, _page, slot, _fxDrive, _m2Test, _watchdog);
                 HostWindow = window;
+                window.RecoveryRequested += OnRecoveryRequested;
                 window.Closed += (_, _) =>
                 {
                     HostWindow = null;
+                    if (ReferenceEquals(_closingForRecovery, window))
+                    {
+                        // Close-for-recovery: the relaunch below replaces this window;
+                        // the flow continues (FlowEnded is for real closes only).
+                        _closingForRecovery = null;
+                        return;
+                    }
+
                     FlowEnded?.Invoke();
                 };
                 window.Show(_owner);
