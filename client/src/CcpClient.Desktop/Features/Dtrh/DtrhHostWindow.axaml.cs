@@ -164,7 +164,7 @@ public partial class DtrhHostWindow : Window
         SendToPage(DtrhProtocol.BuildPayloadState("video", true));
         if (_videoWindow is null && _fx is not null)
         {
-            _videoWindow = new DtrhVideoWindow(_fx.Video);
+            _videoWindow = new DtrhVideoWindow(_fx.Video, _host.LogDiagnostic);
             _videoWindow.Closed += (_, _) => _videoWindow = null;
             _videoWindow.Show(this);
         }
@@ -207,8 +207,25 @@ public partial class DtrhHostWindow : Window
         {
             index++;
             var at = step.IndexOf('@');
-            var seconds = at >= 0 && double.TryParse(step[(at + 1)..], out var s) ? s : index * 4.0;
+            var seconds = at >= 0 && double.TryParse(step[(at + 1)..], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var s) ? s : index * 4.0;
             var json = FxDriveStepToJson(at >= 0 ? step[..at] : step);
+            var bare = at >= 0 ? step[..at] : step;
+            if (json is null && bare.StartsWith("video-file:", StringComparison.Ordinal))
+            {
+                // HARNESS-ONLY non-protocol step: pin one NAMED pool file (staged real
+                // media) through the same covering-video path — never a page message.
+                var fileName = bare["video-file:".Length..];
+                _ = Task.Delay(TimeSpan.FromSeconds(seconds), _closing.Token).ContinueWith(
+                    t =>
+                    {
+                        if (t.IsCanceled) return;
+                        _host.LogDiagnostic($"dtrh: fx-drive video-file '{fileName}' (HARNESS-ONLY, pool-resolved)");
+                        Dispatcher.UIThread.Post(() => _fx?.FireVideoFromPool(fileName));
+                    }, TaskScheduler.Default);
+                continue;
+            }
+
             if (json is null)
             {
                 _host.LogDiagnostic($"dtrh: fx-drive step '{step}' unknown — skipped (harness)");
@@ -244,7 +261,9 @@ public partial class DtrhHostWindow : Window
         var parts = rest.Split(':');
         var name = System.Text.Json.JsonSerializer.Serialize(parts[0]);
         var scale = parts.Length > 1 && double.TryParse(parts[1], out var s) ? s : 0.6;
-        return $"{{\"type\":\"sfx\",\"name\":{name},\"scale\":{scale}}}";
+        // Invariant culture: a decimal-comma session culture would emit 0,6 → malformed
+        // JSON (observed in run A; the SP-024 {0:N0} culture lesson's class).
+        return $"{{\"type\":\"sfx\",\"name\":{name},\"scale\":{scale.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}";
     }
 
     // ---------- Windows: embedded WebView2 ----------

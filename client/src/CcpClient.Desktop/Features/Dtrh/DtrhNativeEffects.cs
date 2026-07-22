@@ -29,6 +29,7 @@ public sealed class DtrhNativeEffects : IDisposable
     private bool _worldFrozen;
     private bool _vnSpeaking;
     private bool _tornDown;
+    private int _videoActive;
     private Timer? _videoCapTimer;
 
     public DtrhNativeEffects(
@@ -112,6 +113,9 @@ public sealed class DtrhNativeEffects : IDisposable
         player.PlaybackEnded += (_, _) =>
         {
             lock (_gate) _sfxPool.Remove(player);
+            // Backend-event completion (SP-017 discipline: completion claims come from
+            // backend-emitted events, never call returns).
+            _log($"dtrh-fx: sfx '{name}' completed (backend PlaybackEnded, pool {ActiveSfxVoices}/{_options.MaxSfxVoices})");
             try { player.Dispose(); } catch { /* best-effort */ }
         };
         try
@@ -181,6 +185,23 @@ public sealed class DtrhNativeEffects : IDisposable
         _log($"dtrh-fx: fire-payload {kind} (strength {Math.Clamp(strength ?? 60, 0, 100)}, durationMult {Math.Clamp(durationMult ?? 1.0, 0.1, 10.0):0.0} — accepted, non-consumed WPF parity)");
     }
 
+    /// <summary>HARNESS-ONLY (--dtrh-fx-drive video-file step): play ONE NAMED pool file
+    /// through the same covering-video path. The name resolves INSIDE the enumerated pool
+    /// (never an arbitrary path — no traversal); unknown name = logged no-op. Exists so
+    /// headed evidence can pin the staged real-media clip deterministically.</summary>
+    public void FireVideoFromPool(string fileName)
+    {
+        var match = EnumerateVideoPool()
+            .FirstOrDefault(f => string.Equals(Path.GetFileName(f), fileName, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+        {
+            _log($"dtrh-fx: video-file '{fileName}' not in the media pool — harness no-op");
+            return;
+        }
+
+        PlayVideoFile(match);
+    }
+
     /// <summary>video payload (EffectPayload.cs:139-159): a covering video from the media
     /// pool; chaos caps the tape at SEGMENT_SEC=15 then it ends. Empty pool = silent no-op
     /// (TriggerVideo silentIfEmpty parity).</summary>
@@ -193,15 +214,20 @@ public sealed class DtrhNativeEffects : IDisposable
             return;
         }
 
-        var pick = pool[Random.Shared.Next(pool.Count)];
-        if (!_video.TryPlay(pick))
+        PlayVideoFile(pool[Random.Shared.Next(pool.Count)]);
+    }
+
+    private void PlayVideoFile(string path)
+    {
+        if (!_video.TryPlay(path))
         {
-            _log($"dtrh-fx: video payload — backend refused {Path.GetFileName(pick)}");
+            _log($"dtrh-fx: video payload — backend refused {Path.GetFileName(path)}");
             return;
         }
 
+        Interlocked.Exchange(ref _videoActive, 1);
         VideoStarted?.Invoke(this, EventArgs.Empty);
-        _log($"dtrh-fx: video playing ({Path.GetFileName(pick)}, cap {_options.VideoSegmentCapSec:0}s)");
+        _log($"dtrh-fx: video playing ({Path.GetFileName(path)}, cap {_options.VideoSegmentCapSec:0}s)");
         _videoCapTimer?.Dispose();
         _videoCapTimer = new Timer(
             _ =>
@@ -337,7 +363,7 @@ public sealed class DtrhNativeEffects : IDisposable
             _log($"dtrh-fx: freeze {(on ? "on" : "off")} apply failed ({ex.GetType().Name})");
         }
 
-        _log($"dtrh-fx: world freeze {(on ? "ON — native video + voice paused" : "OFF — resumed")}");
+        _log($"dtrh-fx: world freeze {(on ? $"ON — native video + voice paused (video pos {_video.PositionSec:0.0}s, frames {_video.FrameCount})" : $"OFF — resumed (video pos {_video.PositionSec:0.0}s, frames {_video.FrameCount})")}");
     }
 
     private void PauseVoice()
@@ -370,12 +396,19 @@ public sealed class DtrhNativeEffects : IDisposable
     }
 
     /// <summary>Stop the covering video (segment cap, window close, teardown). Backend
-    /// Stop runs off the UI thread inside the backend (libvlc vmem deadlock class).</summary>
+    /// Stop runs off the UI thread inside the backend (libvlc vmem deadlock class). A
+    /// stopped video raises VideoEnded too (WPF parity: the page's payload-state off +
+    /// focus reclaim ride the video CLOSING, not only natural EndReached).</summary>
     public void StopVideo()
     {
         _videoCapTimer?.Dispose();
         _videoCapTimer = null;
         _video.Stop();
+        if (Interlocked.Exchange(ref _videoActive, 0) == 1)
+        {
+            _log("dtrh-fx: video stopped — payload-state off");
+            VideoEnded?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>Teardown (DisposeAll `:896` parity): NEVER leave a video or whisper wedged
@@ -426,12 +459,14 @@ public sealed class DtrhNativeEffects : IDisposable
     {
         _videoCapTimer?.Dispose();
         _videoCapTimer = null;
-        _log("dtrh-fx: video ended (backend EndReached)");
+        Interlocked.Exchange(ref _videoActive, 0);
+        _log($"dtrh-fx: video ended (backend EndReached, pos {_video.PositionSec:0.0}s, frames {_video.FrameCount})");
         VideoEnded?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnVideoError(object? sender, EventArgs e)
     {
+        Interlocked.Exchange(ref _videoActive, 0);
         _log("dtrh-fx: video backend error — closing the covering video");
         VideoEnded?.Invoke(this, EventArgs.Empty);
     }

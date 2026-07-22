@@ -11,9 +11,55 @@
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260721T231721.md` |
 | 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260721T233648.md` |
-| 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260722T000000.md` |
+| 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260721T234936.md` |
 
 ---
+
+## Step 4 — headed/WX evidence + divergence decision executed + board reconciliation
+
+### §3.2 divergence decision — DECIDED WITH EVIDENCE: in-page tint/freeze (platform-identical)
+
+**Decision:** tint and freeze VISUALS render IN-PAGE on both platforms (the §3 transport
++ the unchanged payload); the host never composites over the web surface. The only
+host-side freeze effect is the native audio/video PAUSE riding `freeze-state`.
+**Evidence:** (a) WPF itself deleted every native layered visual in the 2026-07 cutover
+(DtrhHostService.cs:472-477 — "no more native WPF layered windows over the game surface");
+tint = fx.js `setTint` (region/Lust-Bleed, engine/fx.js:240-241,540-544), VN portrait CSS
+tints (cheshireVn.js:84-96,134), init-carried mod tint (modContent.js:25); freeze visuals
+= page-rendered (chaosRun.js:1287-1297). (b) The greenfield serves the identical payload
+to both engines — in-page rendering is identical-by-construction; the Linux
+NativeWebDialog toplevel diverges on NOTHING visual. (c) Windows pixel evidence: the
+hub's pink-tinted tunnel renders (runA-host-live.png / runB-hub.png, dark 1.9%, ~170
+colors — the fx.js tint pipeline live).
+**Rejected alternative:** host-side layering (a native tint/freeze overlay composited over
+the web surface) — Windows-only shape per §3.2 (the Linux dialog is a separate toplevel),
+would invent a surface WPF itself deleted, and adds nothing the page doesn't render.
+**Consequences (named limits):** (1) the VN portrait tint + the in-run freeze pulse are
+page-internal and **b4-gated** — the Cheshire guide's `ensureInit()` needs the b4 `meta`
+message (`if (!m) return false`, cheshireGuide.js:82-84) and freeze bubbles need a run
+(request-run, b4) — recorded with exact mechanism cites, never faked in-slice; (2) on
+Linux the covering video window over the separate WebKitGTK toplevel is best-effort
+z-order — a session fact, never a compositing claim (pre-approach consult).
+
+### WH (Windows headed, DISPLAY3 owner convention — SetWindowPos + GetWindowRect-verified before EVERY capture; modal-drive rule honored; transcripts `evidence/wh/`)
+
+- **Run A (`runA.log`, EXIT=0):** fx-drive through the REAL parse+dispatch path.
+  - **SFX (backend-event-verified, SP-017 discipline):** `wave_clear`→chime1.mp3 (vol 0.64 = 0.80 master × 0.8 chain), `ripple_cast`→Pop2.mp3 (0.48), `Pop` (0.48) — each `playing` then `completed (backend PlaybackEnded, pool N→N-1/8)` — completion = backend event, never call-return.
+  - **Whisper (fire-payload audio):** payload `sub_*.mp3` pool pick → `whisper playing` → `whisper completed (backend PlaybackEnded)` ×2; strength/durationMult logged accepted-non-consumed (WPF parity).
+  - **Native video (REAL media `evidence-video-04.mp4`, 1920x1080 h264 29.1s, copied from `Z:\CCP Vids` into packet scratch + staged into the RUN-TIME overlay — product code never references Z:):** libvlc up (vmem, sw decode), `payload-state video on` + covering window, **`vmem frame luma≈149-151 (1280x725)` decoded-content proof from the backend**, `first frame presented`; pixel captures `runA-video-playing/frozen-a/frozen-b/video2-frozen.png` (real content, correct colors, dark ~4%, ~450 colors; frozen pair pixel-diff 0.91% vs 1.31%/2.13% cross-diffs).
+  - **Freeze (never wedged):** `freeze ON — video pos 4,7s` → 8s later `OFF — video pos 4,7s` (**position frozen**, decoder-reported; the vmem frame counter keeps counting during pause — libvlc re-displays the held frame, recorded). Resume → segment cap at 15.0s exact → `video stopped — payload-state off` + focus reclaimed (WPF :764-775 parity; the cap→payload-state-off gap found and fixed in-step).
+  - **Run-boundary hygiene:** `run-ended` → `run-boundary freeze/duck hygiene applied (message stays Deferred(b4))`.
+  - **Teardown unwedge:** second video + `freeze ON (pos 2,9s)` → auto-close mid-freeze → **`teardown mid-freeze — force-resumed video + voice (unwedge)`** → clean flow end, EXIT=0 (WPF :896 parity — never a wedged paused clip).
+- **Run B (`runB.log`, EXIT=0):** real canvas click on the Warren portal → **page-originated `sfx ui_click` (SP-011 W15 native-cue class)** → unresolved → logged silent no-op (greenfield content gap: the payload ships 8 sfx files; WPF's chaos library is WPF-tree content for a future content row — named limit). Portal first-click opened the intro verb-primer card (`runB-vn-a.png` — warren.js:316 openIntro, page-rendered, pixel-verified).
+- **Run C (`runC.log`, EXIT=0):** **VN mix gate on the real backend** (`vn-speaking on — SFX stand down`; the injected cue → `skipped — VN owns the mix`; `off — mix released`). **Pool bound:** 10× `Burst` (7.03s clip) at 0.5s spacing → pool 1/8→8/8 → **`pool full (8) — dropping 'Burst'` ×2 (drop-on-overflow, never queued)** → PlaybackEnded reclaim 8→4.
+
+### Forensics / surprise ledger (Windows)
+
+1. **SoundFlow 1.4.1 AssetDataProvider ctor is SYNC-OVER-ASYNC** (`GetResult` on an async metadata read): on a thread carrying a SynchronizationContext (the Avalonia UI thread) it DEADLOCKS THE DISPATCHER (first run-A: UI wedged at the first cue — dotnet-dump stack `Task.InternalWait` under `AvaloniaSynchronizationContext.Wait` inside `AssetDataProvider..ctor`; the spike's console host never saw it). Fixed at the seam: player construction marshaled off-context when `SynchronizationContext.Current` is present. **This is a product-defect class the SP-017 spike shape could not surface — recorded for the quips/sound row.**
+2. **fx-drive culture ×2:** the emitted JSON rendered `0,6` (decimal-comma session culture → JsonReaderException — the SP-024 `{0:N0}` lesson's class) and `@10.4` failed `double.TryParse` (steps silently fell to default spacing). Both switched to InvariantCulture with the failure mode cited.
+3. **vmem crop-rectangle class renders BLACK (named limit):** owner-pool videos whose h264 CROPS (coded width ≠ visible width: 3832/1916 vs 3840/1920) deliver luma-0 buffers through vmem AT EVERY target size (console AND product — verified with the backend luma diagnostic), while 16-aligned sources (1280x720, 1920x1080) deliver real content (luma 28/149-154). libvlc logs `Failed to create video converter` for the crop class. Also folded in: libvlc re-asks the format callback with jittering proposals (1920x1088→1090) — the output format FREEZES on the first proposal per stream (mid-stream realloc = freed-pin class). The crop-class presentation fix is the unified-video row's (hw-decode/presentation owner); decode+position+freeze evidence is unaffected.
+4. **Headed-harness diagnostics:** PowerShell scriptblocks invoked as Win32 enums write to callback-local scope (`$script:` needed) — earlier "no windows" reports were diagnostic-script artifacts, never app behavior (the SP-024 E-series class, different mechanism).
+5. **The 4K/1080p black frames were NOT a product-vs-console difference** — the devloop's "works" was frame-COUNT only; content verification (backend luma) is now part of the product's first-3-frames diagnostics.
 
 ## Step 3 — protocol upgrade Deferred → Handled
 

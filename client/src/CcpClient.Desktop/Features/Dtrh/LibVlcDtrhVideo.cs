@@ -43,6 +43,8 @@ public sealed class LibVlcDtrhVideo : IDtrhVideoBackend
     private long _frameCount;
     private double _positionSec;
     private int _playing;
+    private int _proposalsLogged;
+    private bool _formatFrozen;
 
     // Delegates as FIELDS (rooted): a collected delegate is a native crash on next frame.
     private MediaPlayer.LibVLCVideoFormatCb? _formatCb;
@@ -90,6 +92,8 @@ public sealed class LibVlcDtrhVideo : IDtrhVideoBackend
 
             Interlocked.Exchange(ref _frameCount, 0L);
             _positionSec = 0;
+            _proposalsLogged = 0;
+            _formatFrozen = false;
             _player.Media = media;
             Interlocked.Exchange(ref _playing, 1);
             var ok = _player.Play();
@@ -137,7 +141,7 @@ public sealed class LibVlcDtrhVideo : IDtrhVideoBackend
         try
         {
             Core.Initialize();
-            _vlc = new LibVLC("--no-video-title-show", "--avcodec-hw=none"); // V1: software decode
+            _vlc = new LibVLC("--no-video-title-show", "--avcodec-hw=none");
             _player = new MediaPlayer(_vlc);
             _formatCb = FormatCallback;
             _lockCb = LockFrame;
@@ -160,23 +164,55 @@ public sealed class LibVlcDtrhVideo : IDtrhVideoBackend
         }
     }
 
-    // Decoder-proposed dims; we request RV32 (= BGRA on little-endian) at the SAME dims.
+    // Decoder-proposed dims; we request RV32 (= BGRA on little-endian), CAPPED at 1280
+    // wide (aspect preserved): the any→RV32 converter at NATIVE 4K dims produces black
+    // frames on this box (run-A evidence: 3840x2178 requested → 91.5%-dark captures while
+    // the source frames measure luma 109-134; 1280x738 native rendered fine, and the
+    // SP-018 spike's forced-96x96 conversion is the proven envelope). The window's
+    // Stretch.Uniform rescales — pixels stay real decoded content.
+    private const uint MaxFrameWidth = 1280;
+
     private uint FormatCallback(ref IntPtr opaque, IntPtr chroma, ref uint width, ref uint height, ref uint pitches, ref uint lines)
     {
         var rv32 = System.Text.Encoding.ASCII.GetBytes("RV32");
         Marshal.Copy(rv32, 0, chroma, 4);
-        pitches = width * 4;
-        lines = height;
-        lock (_frameGate)
+        if (_proposalsLogged < 3)
         {
-            if (_frameWidth != width || _frameHeight != height || _frameBuffer is null)
+            _proposalsLogged++;
+            _log($"dtrh-video: vmem format proposal {width}x{height} (pitches {pitches}, lines {lines})");
+        }
+
+        if (!_formatFrozen)
+        {
+            // First proposal of the stream FREEZES the output format (run-A forensics:
+            // libvlc re-asks with jittering proposals — 1920x1088 → 1920x1090 — and a
+            // mid-stream buffer realloc frees the pin the vout still writes into →
+            // luma-0 black frames). One allocation per stream, pin rooted forever.
+            _formatFrozen = true;
+            if (width > MaxFrameWidth)
+            {
+                height = Math.Max(1, height * MaxFrameWidth / width);
+                width = MaxFrameWidth;
+            }
+
+            lock (_frameGate)
             {
                 _frameWidth = width;
                 _frameHeight = height;
-                _frameBuffer = new byte[pitches * lines];
-                if (_framePin.IsAllocated) _framePin.Free();
+                _frameBuffer = new byte[width * 4 * height];
+                // Never freed (process-lifetime rooted): a late native callback into a
+                // freed pin is a crash/black-frame class (pre-completion consult).
                 _framePin = GCHandle.Alloc(_frameBuffer, GCHandleType.Pinned);
             }
+        }
+
+        // Every callback (incl. re-asks) returns the SAME frozen format.
+        lock (_frameGate)
+        {
+            width = _frameWidth;
+            height = _frameHeight;
+            pitches = _frameWidth * 4;
+            lines = _frameHeight;
         }
 
         return 1;
@@ -202,6 +238,21 @@ public sealed class LibVlcDtrhVideo : IDtrhVideoBackend
             copy = (byte[])_frameBuffer.Clone();
             w = (int)_frameWidth;
             h = (int)_frameHeight;
+        }
+
+        // Decoded-content proof from the backend itself (first 3 frames): mean luma of
+        // the vmem buffer — a black-buffer defect is diagnosable without a capture.
+        if (Volatile.Read(ref _frameCount) < 3)
+        {
+            long sum = 0;
+            var samples = 0;
+            for (var i = 0; i + 2 < copy.Length; i += 401 * 4)
+            {
+                sum += (copy[i] + copy[i + 1] + copy[i + 2]) / 3;
+                samples++;
+            }
+
+            _log($"dtrh-video: vmem frame luma≈{(samples > 0 ? sum / samples : -1)} ({w}x{h})");
         }
 
         // Marshal the bitmap swap to the UI thread (pre-completion consult); the display

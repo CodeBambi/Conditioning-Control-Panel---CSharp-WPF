@@ -12,10 +12,13 @@ namespace CcpClient.Desktop.Features.Dtrh;
 public partial class DtrhVideoWindow : Window
 {
     private readonly IDtrhVideoBackend _video;
+    private readonly Action<string>? _log;
+    private bool _firstFrameLogged;
 
-    public DtrhVideoWindow(IDtrhVideoBackend video)
+    public DtrhVideoWindow(IDtrhVideoBackend video, Action<string>? log = null)
     {
         _video = video;
+        _log = log;
         InitializeComponent();
         _video.FramePresented += OnFramePresented;
         Closed += (_, _) => _video.FramePresented -= OnFramePresented;
@@ -33,6 +36,12 @@ public partial class DtrhVideoWindow : Window
         if (frame is not null && !ReferenceEquals(FrameImage.Source, frame))
         {
             FrameImage.Source = frame;
+            if (!_firstFrameLogged)
+            {
+                _firstFrameLogged = true;
+                // Frame-level presentation proof (vmem display callback reached the surface).
+                _log?.Invoke($"dtrh: video first frame presented ({frame.PixelSize.Width}x{frame.PixelSize.Height})");
+            }
         }
     }
 }

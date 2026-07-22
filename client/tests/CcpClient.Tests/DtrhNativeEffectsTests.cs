@@ -269,11 +269,12 @@ public sealed class DtrhNativeEffectsTests : IDisposable
         Assert.Equal(clip, Assert.Single(video.Played));
         Assert.Contains(_log, l => l.Contains("non-consumed"));
 
-        // SEGMENT_SEC parity: the cap stops the tape (EffectPayload.cs:148-153).
+        // SEGMENT_SEC parity: the cap stops the tape (EffectPayload.cs:148-153), and the
+        // stop raises VideoEnded (payload-state off rides the video CLOSING, WPF parity).
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
         while (video.StopCalls == 0 && DateTime.UtcNow < deadline) Thread.Sleep(20);
         Assert.Equal(1, video.StopCalls);
-        Assert.Equal(0, ended); // cap stops; VideoEnded rides the backend end event
+        Assert.Equal(1, ended);
     }
 
     [Fact]

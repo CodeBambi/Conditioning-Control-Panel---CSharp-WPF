@@ -1,0 +1,223 @@
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.0 DIP @ scale 1 @ screen 154,208
+dtrh: quick start — reusing slot 2 (picker skipped by design)
+dtrh-slots: live save is now slot 2
+dtrh: descending into slot 2
+dtrh: host window opening on slot 2
+dtrh-audio: 13 render endpoint(s): Browser (BEACN Studio) | Aux 2 / Hardware (BEACN Studio) | System (BEACN Studio) (default) | Link 4 Out (BEACN Studio) | Link 3 Out (BEACN Studio) | Chat (BEACN Studio) | Aux 1 / Hardware (BEACN Studio) | Mic Relay (Do Not Use) (BEACN Studio) | Game (BEACN Studio) | Link Out (BEACN Studio) | Headphones (BEACN Studio) | Link 2 Out (BEACN Studio) | Music (BEACN Studio)
+dtrh-audio: playback device up (requested default)
+dtrh: native effects up (SFX pool 8/drop, voice, vmem video, freeze)
+dtrh: WebView2 UserDataFolder set; autoplay-policy=no-user-gesture-required
+dtrh: navigating embedded surface (page index.html)
+dtrh: fx-drive armed (HARNESS-ONLY): sfx:wave_clear@4; sfx:ripple_cast@6; sfx:Pop@7; payload:audio@9; video-file:evidence-video-04.mp4@13; freeze:on@18; freeze:off@26; run-ended@28; payload:audio@30; video-file:evidence-video-04.mp4@34; freeze:on@37
+dtrh: auto-close armed at 42s
+dtrh: AdapterCreated info='DetailedWebViewAdapterInfo { Type = WebView2, Engine = Blink, Version = 150.0.4078.83, IsSupported = True, IsInstalled = True, UnavailableReason = , SupportedScenarios = NativeControlHost }'
+dtrh-loopback: GET /dtrh/index.html/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/boot.js/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/styles.css/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/modContent.js/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/bridge.js/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/hostMedia.js/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh: ready received — flushing init+manifest
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /favicon.ico/ -> 404
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh page log: boot: ready posted, waiting for init + manifest
+dtrh: NavigationCompleted success=True (surface embedded)
+dtrh: focus claimed at ready; document.hasFocus()=true
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 206 (page:payload)
+dtrh-loopback: GET /media/bubbles/… -> 200 (media)
+dtrh-loopback: GET /media/bubbles/… -> 200 (media)
+dtrh-loopback: GET /media/bubbles/… -> 206 (media)
+dtrh-loopback: GET /media/bubbles/… -> 206 (media)
+dtrh-loopback: GET /media/bubbles/… -> 200 (media)
+dtrh-loopback: GET /media/bubbles/… -> 200 (media)
+dtrh-loopback: GET /media/bubbles/… -> 200 (media)
+dtrh-loopback: GET /media/bubbles/… -> 200 (media)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh: 'MetaCommand' deferred to slice b4 (typed, not dropped)
+dtrh page log: reveal pending: variant_video (hub_open)
+dtrh: 'MetaCommand' deferred to slice b4 (typed, not dropped)
+dtrh page log: reveal pending: variant_htlink (hub_open)
+dtrh: 'MetaCommand' deferred to slice b4 (typed, not dropped)
+dtrh: 'MetaCommand' deferred to slice b4 (typed, not dropped)
+dtrh: 'MetaCommand' deferred to slice b4 (typed, not dropped)
+dtrh: 'MetaCommand' deferred to slice b4 (typed, not dropped)
+dtrh page log: engine live (game mode)
+dtrh: ENGINE LIVE
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh: heartbeat #1
+dtrh: fx-drive injecting 'sfx:wave_clear@4' (raw JSON through the real dispatch path)
+dtrh-fx: sfx 'wave_clear' playing (chime1.mp3, vol 0,64, pool 1/8)
+dtrh-fx: sfx 'wave_clear' completed (backend PlaybackEnded, pool 0/8)
+dtrh: fx-drive injecting 'sfx:ripple_cast@6' (raw JSON through the real dispatch path)
+dtrh-fx: sfx 'ripple_cast' playing (Pop2.mp3, vol 0,48, pool 1/8)
+dtrh-fx: sfx 'ripple_cast' completed (backend PlaybackEnded, pool 0/8)
+dtrh: fx-drive injecting 'sfx:Pop@7' (raw JSON through the real dispatch path)
+dtrh-fx: sfx 'Pop' playing (Pop.mp3, vol 0,48, pool 1/8)
+dtrh-fx: sfx 'Pop' completed (backend PlaybackEnded, pool 0/8)
+dtrh: fx-drive injecting 'payload:audio@9' (raw JSON through the real dispatch path)
+dtrh-fx: whisper playing (sub_dont_think_silly.mp3)
+dtrh-fx: fire-payload audio (strength 60, durationMult 1,0 — accepted, non-consumed WPF parity)
+dtrh-fx: whisper completed (backend PlaybackEnded)
+dtrh: fx-drive video-file 'evidence-video-04.mp4' (HARNESS-ONLY, pool-resolved)
+dtrh-video: libvlc up (vmem vout, software decode — V1/V2 disciplines)
+dtrh-video: vmem format proposal 1920x1088 (pitches 0, lines 0)
+dtrh: payload-state video on (covering window shown)
+dtrh-fx: video playing (evidence-video-04.mp4, cap 15s)
+dtrh-video: vmem format proposal 1920x1088 (pitches 0, lines 0)
+dtrh-video: vmem format proposal 1920x1090 (pitches 0, lines 0)
+dtrh-video: vmem frame luma˜149 (1280x725)
+dtrh: video first frame presented (1280x725)
+dtrh-video: vmem frame luma˜149 (1280x725)
+dtrh-video: vmem frame luma˜151 (1280x725)
+dtrh: fx-drive injecting 'freeze:on@18' (raw JSON through the real dispatch path)
+dtrh-fx: world freeze ON — native video + voice paused (video pos 4,7s, frames 288)
+dtrh: fx-drive injecting 'freeze:off@26' (raw JSON through the real dispatch path)
+dtrh-fx: world freeze OFF — resumed (video pos 4,7s, frames 395)
+dtrh: fx-drive injecting 'run-ended@28' (raw JSON through the real dispatch path)
+dtrh: run-boundary freeze/duck hygiene applied (message stays Deferred(b4))
+dtrh: 'RunEnded' deferred to slice b4 (typed, not dropped)
+dtrh-fx: video segment cap reached — stopping
+dtrh-fx: video stopped — payload-state off
+dtrh: payload-state video off (focus reclaimed)
+dtrh: fx-drive injecting 'payload:audio@30' (raw JSON through the real dispatch path)
+dtrh-fx: whisper playing (sub_good_girl.mp3)
+dtrh-fx: fire-payload audio (strength 60, durationMult 1,0 — accepted, non-consumed WPF parity)
+dtrh-fx: whisper completed (backend PlaybackEnded)
+dtrh: heartbeat #16
+dtrh: fx-drive video-file 'evidence-video-04.mp4' (HARNESS-ONLY, pool-resolved)
+dtrh: payload-state video on (covering window shown)
+dtrh-fx: video playing (evidence-video-04.mp4, cap 15s)
+dtrh-video: vmem format proposal 1920x1088 (pitches 0, lines 0)
+dtrh-video: vmem format proposal 1920x1088 (pitches 0, lines 0)
+dtrh-video: vmem format proposal 1920x1090 (pitches 0, lines 0)
+dtrh-video: vmem frame luma˜149 (1280x725)
+dtrh: video first frame presented (1280x725)
+dtrh-video: vmem frame luma˜149 (1280x725)
+dtrh-video: vmem frame luma˜151 (1280x725)
+dtrh: fx-drive injecting 'freeze:on@37' (raw JSON through the real dispatch path)
+dtrh-fx: world freeze ON — native video + voice paused (video pos 2,9s, frames 177)
+dtrh: auto-close firing
+dtrh-fx: teardown mid-freeze — force-resumed video + voice (unwedge)
+dtrh-fx: video stopped — payload-state off
+dtrh: payload-state video off (focus reclaimed)
+dtrh-fx: teardown complete
+dtrh: flow ended — shutting down the lifetime
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+[000001d510a9fe20] main filter error: Failed to create video converter
+[000001d5109f8e10] main vout display error: Failed to set on top
+[000001d510a9fbc0] main filter error: Failed to create video converter
+[000001d5109f8e10] main vout display error: Failed to set on top
+[h264 @ 000001d50e77cfc0] get_buffer() failed
+[h264 @ 000001d50e77cfc0] thread_get_buffer() failed
+[h264 @ 000001d50e77cfc0] decode_slice_header error
+[h264 @ 000001d50e77cfc0] no frame!
+[h264 @ 000001d50f843180] get_buffer() failed
+[h264 @ 000001d50f843180] thread_get_buffer() failed
+[h264 @ 000001d50f843180] decode_slice_header error
+[h264 @ 000001d50f843180] no frame!
+[000001d50fba8ce0] main filter error: Failed to create video converter
+[000001d50fa4e490] main vout display error: Failed to set on top
+[000001d50fba8290] main filter error: Failed to create video converter
+[000001d50fa4ec70] main vout display error: Failed to set on top
+[h264 @ 000001d510b6c800] get_buffer() failed
+[h264 @ 000001d510b6c800] thread_get_buffer() failed
+[h264 @ 000001d510b6c800] decode_slice_header error
+[h264 @ 000001d510b6c800] no frame!
+[0722/025838.588:ERROR:ui\gfx\win\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412

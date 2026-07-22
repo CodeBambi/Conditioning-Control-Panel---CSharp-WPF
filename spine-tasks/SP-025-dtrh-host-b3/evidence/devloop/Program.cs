@@ -31,7 +31,15 @@ player.SetVideoFormatCallbacks((ref IntPtr opaque, IntPtr chroma, ref uint width
 player.SetVideoCallbacks(
     (IntPtr opaque, IntPtr planes) => { Marshal.WriteIntPtr(planes, pin.AddrOfPinnedObject()); return pin.AddrOfPinnedObject(); },
     null!,
-    (IntPtr opaque, IntPtr picture) => { frames++; });
+    (IntPtr opaque, IntPtr picture) => {
+        frames++;
+        if (frames <= 3)
+        {
+            long sum = 0; var n = 0;
+            for (var i = 0; i + 2 < frameBuffer.Length; i += 401 * 4) { sum += (frameBuffer[i] + frameBuffer[i + 1] + frameBuffer[i + 2]) / 3; n++; }
+            Line($"frame {frames} luma={(n > 0 ? sum / n : -1)}");
+        }
+    });
 Line("vmem wired (spike shape)");
 
 for (var i = 1; i <= 5; i++)

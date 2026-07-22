@@ -46,6 +46,9 @@ public sealed class SoundFlowDtrhAudio : IDtrhAudioBackend
             // pointers — match by NAME against THIS snapshot (WPF FriendlyName
             // prefix-matching parity, AudioService.cs:219-296).
             _engine.UpdateAudioDevicesInfo();
+            // Session facts (RDP Sink class on WSLg — SP-017 A6 shape; device names are
+            // hardware endpoints, never user data).
+            _log($"dtrh-audio: {_engine.PlaybackDevices.Count()} render endpoint(s): {string.Join(" | ", _engine.PlaybackDevices.Select(d => d.IsDefault ? d.Name + " (default)" : d.Name))}");
             DeviceInfo? info = null;
             if (!string.IsNullOrEmpty(deviceName))
             {
@@ -86,9 +89,25 @@ public sealed class SoundFlowDtrhAudio : IDtrhAudioBackend
             throw new InvalidOperationException("SoundFlowDtrhAudio: TryInit must succeed before players are created.");
         }
 
-        var provider = new AssetDataProvider(_engine, path);
-        var player = new SoundPlayer(_engine, Format, provider) { Volume = volume };
-        _device.MasterMixer.AddComponent(player);
+        // SoundFlow 1.4.1's AssetDataProvider ctor is SYNC-OVER-ASYNC (GetResult on an
+        // async metadata read). On a thread carrying a SynchronizationContext (the
+        // Avalonia UI thread) its continuation can never run → dispatcher DEADLOCK
+        // (SP-025 run-A wedge; dump: Task.InternalWait under
+        // AvaloniaSynchronizationContext.Wait inside AssetDataProvider..ctor). The spike
+        // never saw it (console host = no sync context). Build players off-context.
+        if (System.Threading.SynchronizationContext.Current is not null)
+        {
+            return Task.Run(() => CreatePlayerCore(path, volume)).GetAwaiter().GetResult();
+        }
+
+        return CreatePlayerCore(path, volume);
+    }
+
+    private IDtrhAudioPlayer CreatePlayerCore(string path, float volume)
+    {
+        var provider = new AssetDataProvider(_engine!, path);
+        var player = new SoundPlayer(_engine!, Format, provider) { Volume = volume };
+        _device!.MasterMixer.AddComponent(player);
         return new SoundFlowPlayer(player, _device);
     }
 
