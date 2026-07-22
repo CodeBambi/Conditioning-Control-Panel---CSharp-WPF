@@ -11,6 +11,9 @@ namespace CcpClient.Desktop.Ai;
 /// </summary>
 public enum AiEndpointClass
 {
+    /// <summary>No endpoint was involved (e.g. no provider selected). Diagnostics only — never a destination.</summary>
+    Unspecified,
+
     /// <summary>Traffic stays on this machine (default Ollama http://localhost:11434/).</summary>
     Loopback,
 
@@ -175,4 +178,7 @@ public static class AiReplyCodes
 
     /// <summary>The model's output could not be validated against the strict envelope schema (contract §8 — zero repair).</summary>
     public const string MalformedOutput = "malformed-output";
+
+    /// <summary>The selected provider's endpoint class is not admitted by the admission policy (contract §6; rejection happens BEFORE any socket opens).</summary>
+    public const string EndpointNotAdmitted = "endpoint-not-admitted";
 }

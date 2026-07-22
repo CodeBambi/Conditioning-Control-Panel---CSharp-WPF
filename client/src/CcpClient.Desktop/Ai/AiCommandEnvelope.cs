@@ -213,10 +213,17 @@ public static class AiEnvelopeValidator
             if (root.ValueKind != JsonValueKind.Object)
                 return Reject("root-not-object");
 
+            // F1 (SP-019): System.Text.Json accepts duplicate object keys; TryGetProperty is
+            // last-wins while EnumerateObject sees all — a parser-differential hazard against
+            // the strict-schema intent (contract §8). Duplicates are REJECTED, the only
+            // contract-consistent answer.
+            var rootFields = new HashSet<string>(StringComparer.Ordinal);
             foreach (var prop in root.EnumerateObject())
             {
                 if (prop.Name is not ("reply" or "commands"))
                     return Reject("unknown-field");
+                if (!rootFields.Add(prop.Name))
+                    return Reject("duplicate-field");
             }
 
             string? reply = null;
@@ -284,10 +291,14 @@ public static class AiEnvelopeValidator
         if (el.ValueKind != JsonValueKind.Object)
             return (null, new AiCommandVerdict.MalformedData("command", "wrong-type"));
 
+        var commandFields = new HashSet<string>(StringComparer.Ordinal);
         foreach (var prop in el.EnumerateObject())
         {
             if (prop.Name is not ("command" or "data"))
                 return (null, new AiCommandVerdict.MalformedData(UnrecognizedField, "unknown-field"));
+            // F1: duplicate keys rejected; the name is schema-known here (unknown names trip above).
+            if (!commandFields.Add(prop.Name))
+                return (null, new AiCommandVerdict.MalformedData(prop.Name, "duplicate"));
         }
 
         if (!el.TryGetProperty("command", out var nameEl))
@@ -471,10 +482,14 @@ public static class AiEnvelopeValidator
 
     private static AiCommandVerdict? CheckFields(JsonElement data, params string[] allowed)
     {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var prop in data.EnumerateObject())
         {
             if (!allowed.Contains(prop.Name, StringComparer.Ordinal))
                 return new AiCommandVerdict.MalformedData(UnrecognizedField, "unknown-field");
+            // F1: duplicate keys rejected; the name is schema-known here (unknown names trip above).
+            if (!seen.Add(prop.Name))
+                return new AiCommandVerdict.MalformedData(prop.Name, "duplicate");
         }
         return null;
     }
