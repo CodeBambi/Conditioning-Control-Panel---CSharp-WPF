@@ -79,6 +79,17 @@
         "2.8.0",
         "2.10.0"
       ]
+    },
+    {
+      "id": "skill-stall-detector-probe",
+      "target": "skills/spine-orchestrate-waves/SKILL.md",
+      "anchor": "| `state_drift` | `spine batch retry <taskId>`; then follow `suggestedCommand` (`resume --attached --force` in **foreground** if diagnose requires) |\n\n---\n\n## Anti-patterns",
+      "replacement": "| `state_drift` | `spine batch retry <taskId>`; then follow `suggestedCommand` (`resume --attached --force` in **foreground** if diagnose requires) |\n\n---\n\n## Worker stall detection (CCP local amendment, SP-034 - dies on pi-spine reinstall; durable copy in spine-tasks/SP-034-stall-detector-probe/record.md)\n\n`lane.heartbeat worker_alive` watches PROCESS liveness only - a worker can sit at 0 CPU on a dead API call while heartbeats keep firing (k3 silent-wedge class, twice proven 2026-07-22: SP-027 run-1 84-min wedge; SP-029 replacement 25-min severe-latency crawl that SELF-RECOVERED). Before treating a long-silent lane as wedged, run the probe:\n\n```powershell\npwsh Tools/spine-worker-probe.ps1 -BatchId <batchId> [-Lane N]   # 2 x 15s tree-CPU-delta windows + file-write delta over the lane worktrees\n```\n\n| Probe verdict | Meaning | Action |\n|---|---|---|\n| `alive-progressing` | Writes during the probe, or tree CPU clearly active | Stand down; keep waiting |\n| `alive-crawling` | Tree CPU above ~0 but in/near the observed 0.03-0.16s/15s crawl band, OR CPU-zero with a sub-30-min write drought | Severe provider latency - STAND DOWN (SP-029 self-recovered from exactly this); re-probe later |\n| `wedged` | 0.00s tree CPU delta over BOTH windows AND newest-write age >= 30 min (incident-1 proven-dead rule) | T-10 candidate - see kill discipline below |\n\n**Kill discipline:** the probe NEVER kills on its own; it prints the `Stop-Process` command for the wedged class only. The kill decision stays with steering judgment: (1) salvage the lane dirty WIP first (commit marked UNVERIFIED provenance), (2) duplicate-worker sweep - resume spawns a replacement WITHOUT reaping the original (wave recovery rule), (3) budget/stall context check. Only then run the printed T-10 command.\n\n---\n\n## Anti-patterns",
+      "rationale": "SP-034 k3 silent-wedge stall-detector tooling row: wires the orchestrator probe (Tools/spine-worker-probe.ps1) into the wave outer loop - probe command + classification-to-action table + kill discipline (never auto-kills; salvage/duplicate-sweep/budget first). Thresholds from the two 2026-07-22 incidents only (0.00s CPU + 30-min write drought = wedged; 0.03-0.16s/15s = crawl, stand down). Byte-exact anchor to live tree. PROJECT-TREE-ONLY (SP-031): CCP-specific tooling text must not land in the shared engine tree skill copy.",
+      "testedVersions": [
+        "2.8.0",
+        "2.10.0"
+      ]
     }
   ]
 }

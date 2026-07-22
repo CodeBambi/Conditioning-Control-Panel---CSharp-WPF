@@ -1,6 +1,6 @@
 ## STATUS: SP-034 — Stall-detector probe tooling
-**Current Step:** Step 1 — incident evidence consolidation + probe design + pre-approach consult (IN PROGRESS)
-**Last Updated:** 2026-07-22 (step 1 in progress)
+**Current Step:** Step 3 — manifest patch + apply/verify + docs (IN PROGRESS)
+**Last Updated:** 2026-07-22 (step 2 complete: probe + 3 self-tests PASS; amendment authored, applied, verified exit 0, idempotent; review skipped nested_spawn_blocked)
 **Blockers:** none
 
 ### Step 1: evidence + design + pre-approach consult
@@ -9,13 +9,17 @@
 - [x] Design (classification state machine, windows, scoping, output contract, self-test shape)
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
+**Step 1 Status: COMPLETE** (review: skipped nested_spawn_blocked — engine reviews after .DONE)
+
 ### Step 2: probe script + self-test
-- [ ] Tools/spine-worker-probe.ps1 (classification, evidence numbers, T-10 template)
-- [ ] Self-test (live batch no false wedge; wedged simulation; crawling simulation)
-- [ ] Skill-template amendment authored (manifest patch entry)
+- [x] Tools/spine-worker-probe.ps1 (classification, evidence numbers, T-10 template)
+- [x] Self-test (live batch no false wedge; wedged simulation; crawling simulation)
+- [x] Skill-template amendment authored (manifest patch entry)
+
+**Step 2 Status: COMPLETE** (live: alive-progressing exit 0; wedged sim: wedged exit 2 + T-10; crawl sim: alive-crawling exit 1; review: skipped nested_spawn_blocked)
 
 ### Step 3: manifest patch + apply/verify + docs
-- [ ] Manifest entry applied + verified (idempotent, loud-on-drift)
+- [x] Manifest entry applied + verified (idempotent, loud-on-drift)
 - [ ] record.md complete (script reproduced)
 - [ ] Pre-completion solo consult
 - [ ] STATUS.md accurate
