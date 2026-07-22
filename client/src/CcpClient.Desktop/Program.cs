@@ -84,8 +84,16 @@ public static class Program
         ILogSink log = new DebugLogSink();
         InstallPanicHooks(log);
 
+        // SP-027 slice b5 HARNESS-ONLY failure injection (parsed EARLY — the blocked-route
+        // prefix threads into the composition root below; the kill flag rides into App):
+        // --dtrh-kill-renderers kills the profile-matched WebView2 children once the
+        // engine is live (and again on the relaunched instance → exhaustion);
+        // --dtrh-block-route <prefix> makes the loopback answer 403 for the prefix (W18).
+        var dtrhKillRenderers = args.Contains("--dtrh-kill-renderers", StringComparer.Ordinal);
+        var dtrhBlockRoute = ArgValue(args, "--dtrh-block-route");
+
         var trace = new StartupTrace();
-        var root = new CompositionRoot { LogSinkFactory = () => log };
+        var root = new CompositionRoot { LogSinkFactory = () => log, DtrhBlockedRoutePrefixHarness = dtrhBlockRoute };
         ApplicationHost? host = null;
         using var cts = new CancellationTokenSource();
 
@@ -149,7 +157,8 @@ public static class Program
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
             return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace, avatarAnimate,
-                dtrhDemo, dtrhPage, dtrhAutoClose, dtrhQuick, dtrhPickerTimeout, dtrhFxDrive, dtrhM2Test).StartWithClassicDesktopLifetime(args);
+                dtrhDemo, dtrhPage, dtrhAutoClose, dtrhQuick, dtrhPickerTimeout, dtrhFxDrive, dtrhM2Test,
+                dtrhKillRenderers).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -218,9 +227,10 @@ public static class Program
         bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
         bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
         int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0,
-        string? dtrhFxDrive = null, bool dtrhM2Test = false) => AppBuilder
+        string? dtrhFxDrive = null, bool dtrhM2Test = false, bool dtrhKillRenderers = false) => AppBuilder
         .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate,
-            dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds, dtrhFxDrive, dtrhM2Test))
+            dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds, dtrhFxDrive, dtrhM2Test,
+            dtrhKillRenderers))
         .UsePlatformDetect();
 
     private static string? ArgValue(string[] args, string flag)

@@ -45,6 +45,10 @@ public sealed class CompositionRoot
     /// <summary>Factory seam so tests can deliberately blank a registration (contract §4 test).</summary>
     public Func<ILogSink?> LogSinkFactory { get; init; } = () => new DebugLogSink();
 
+    /// <summary>SP-027 b5 HARNESS-ONLY: a loopback route prefix that answers 403
+    /// (blocked-route failure injection, W18 class). Null in product runs.</summary>
+    public string? DtrhBlockedRoutePrefixHarness { get; init; }
+
     /// <summary>
     /// Settings file location seam (persistence contract §4 rule 1). Production default is
     /// the per-user data path; tests substitute a temp path. The data-path authority itself
@@ -100,8 +104,11 @@ public sealed class CompositionRoot
             // SP-023 DTRH host slice b1: owns the §4 loopback origins + §3.3 inbox + bridge
             // token; the web surface itself is phase-4, selected by probed capability states.
             // SP-026 b4: the data directory threads through for the Loom store + user media.
+            // SP-027 b5: the HARNESS-ONLY blocked-route prefix threads through (Program
+            // wiring amendment — failure-injection evidence).
             new Features.Dtrh.DtrhParticipant(infra.OwnerFor("DtrhHost"), infra.Log,
-                Path.GetDirectoryName(SettingsPathFactory())!),
+                Path.GetDirectoryName(SettingsPathFactory())!,
+                DtrhBlockedRoutePrefixHarness is { Length: > 0 } blocked ? [blocked] : null),
         ];
     }
 

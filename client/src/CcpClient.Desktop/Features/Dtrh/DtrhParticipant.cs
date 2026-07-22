@@ -14,13 +14,16 @@ public sealed class DtrhParticipant : IBackgroundParticipant
 {
     private readonly ILogSink _log;
     private readonly Inbox _inbox = new();
+    private readonly IReadOnlyList<string>? _blockedRoutePrefixes;
     private LoopbackServer? _server;
     private int _started;
 
-    public DtrhParticipant(AsyncOperationOwner owner, ILogSink log, string? dataDirectory = null)
+    public DtrhParticipant(AsyncOperationOwner owner, ILogSink log, string? dataDirectory = null,
+        IReadOnlyList<string>? blockedRoutePrefixes = null)
     {
         Owner = owner;
         _log = log;
+        _blockedRoutePrefixes = blockedRoutePrefixes;
         // b4: the Loom store + user-media root live in the DTRH data directory (the same
         // folder the slot documents persist into — WPF UserDataPath parity).
         DataDirectory = dataDirectory
@@ -77,7 +80,8 @@ public sealed class DtrhParticipant : IBackgroundParticipant
         var generation = Owner.Begin();
         _ = generation; // the server is synchronous-bind + listener tasks owned by Dispose (below)
         _server = new LoopbackServer(PayloadRoot, OverlayRoot, MediaRoot, _inbox, BridgeToken, _log,
-            spiralsRoot: SpiralsRoot, userMediaRoot: UserMediaRoot);
+            spiralsRoot: SpiralsRoot, userMediaRoot: UserMediaRoot,
+            blockedRoutePrefixes: _blockedRoutePrefixes);
         _server.Start();
         return Task.CompletedTask;
     }

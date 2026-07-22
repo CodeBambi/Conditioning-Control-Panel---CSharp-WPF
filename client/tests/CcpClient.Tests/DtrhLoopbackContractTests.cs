@@ -272,4 +272,33 @@ public sealed class DtrhLoopbackContractTests : IDisposable
         Assert.DoesNotContain("bridge=", _log.All, StringComparison.Ordinal);
         Assert.DoesNotContain("wrong-token", _log.All, StringComparison.Ordinal);
     }
+
+    // ---------- SP-027 b5: HARNESS-ONLY blocked-route injection (W18 class) ----------
+
+    [Fact]
+    public async Task BlockedRoutePrefix_Answers403_WithCors_WhileOtherRoutesSurvive()
+    {
+        var blockedRoot = Path.Combine(_root, "blocked");
+        var payload = Path.Combine(blockedRoot, "payload");
+        var overlay = Path.Combine(blockedRoot, "overlay");
+        var media = Path.Combine(payload, "assets");
+        Directory.CreateDirectory(media);
+        Directory.CreateDirectory(overlay);
+        File.WriteAllText(Path.Combine(payload, "index.html"), "<html>payload</html>");
+        using var server = new LoopbackServer(payload, overlay, media, new Inbox(), Token, _log,
+            longPollTimeout: TimeSpan.FromMilliseconds(200),
+            blockedRoutePrefixes: ["/media/"]);
+        server.Start();
+
+        using var client = new HttpClient();
+        // The blocked media origin answers a typed 403 with CORS-on-errors (the W18
+        // diagnosable-failure shape — never a hang, never a silent drop).
+        var blocked = await client.GetAsync(server.MediaOrigin + "/media/note.json", TestContext.Current.CancellationToken);
+        Assert.Equal(System.Net.HttpStatusCode.Forbidden, blocked.StatusCode);
+        Assert.True(blocked.Headers.Contains("Access-Control-Allow-Origin"));
+        // Other routes on the SAME server are unaffected (page survives — W18).
+        var page = await client.GetAsync(server.PageOrigin + "/dtrh/index.html", TestContext.Current.CancellationToken);
+        Assert.Equal(System.Net.HttpStatusCode.OK, page.StatusCode);
+    }
 }
+

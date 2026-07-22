@@ -55,6 +55,9 @@ public partial class DtrhHostWindow : Window
     private DispatcherTimer? _exitTimer;
     private bool _recoveryClosing;
     private bool _profileRetryUsed;
+    // SP-027 b5 HARNESS-ONLY: --dtrh-kill-renderers arms the W17 renderer-kill injection
+    // at engine-live (and again on the relaunched instance → exhaustion evidence).
+    private readonly bool _killRenderers;
 
     /// <summary>Boot-matrix facts (headed harness + diagnostics). Content-free.</summary>
     public bool EngineLive => _engineLive;
@@ -68,10 +71,11 @@ public partial class DtrhHostWindow : Window
     public event Action<DtrhWatchdog.DtrhRecoveryOutcome>? RecoveryRequested;
 
     public DtrhHostWindow(ApplicationHost host, string page = "index.html", int? slot = null, string? fxDrive = null, bool m2Test = false,
-        DtrhWatchdog? watchdog = null)
+        DtrhWatchdog? watchdog = null, bool killRenderers = false)
     {
         _host = host;
         _watchdog = watchdog;
+        _killRenderers = killRenderers;
         _dtrh = host.Participants.OfType<DtrhParticipant>().Single();
         _page = page;
         _fxDrive = fxDrive;
@@ -358,6 +362,26 @@ public partial class DtrhHostWindow : Window
                 continue;
             }
 
+            if (json is null && bare == "probe-missing-media")
+            {
+                // SP-027 b5 HARNESS-ONLY missing-media injection (W19 class): point the
+                // probe at a media URL that does not exist — the server answers a typed
+                // 404 (CORS-on-errors), the probe logs the LOAD ERROR, the page survives.
+                _ = Task.Delay(TimeSpan.FromSeconds(seconds), _closing.Token).ContinueWith(
+                    t =>
+                    {
+                        if (t.IsCanceled) return;
+                        _host.LogDiagnostic("dtrh: fx-drive probe-missing-media (HARNESS-ONLY missing-media injection, W19 class)");
+                        Dispatcher.UIThread.Post(() => SendToPage(new
+                        {
+                            type = "probe-img",
+                            kind = "image",
+                            url = $"{_dtrh.Server.MediaOrigin}/umedia/images/__b5_missing__.png",
+                        }));
+                    }, TaskScheduler.Default);
+                continue;
+            }
+
             if (json is null)
             {
                 _host.LogDiagnostic($"dtrh: fx-drive step '{step}' unknown — skipped (harness)");
@@ -384,6 +408,10 @@ public partial class DtrhHostWindow : Window
         "payload:audio" => "{\"type\":\"fire-payload\",\"kind\":\"audio\",\"strength\":60,\"durationMult\":1.0}",
         "run-started" => "{\"type\":\"run-started\",\"difficulty\":\"Gentle\",\"mode\":\"dtrh-web\"}",
         "run-ended" => "{\"type\":\"run-ended\",\"score\":0,\"durationSec\":1,\"difficulty\":\"Gentle\"}",
+        // SP-027 b5: a page-exit message through the real dispatch path WITHOUT a real
+        // wind-down behind it — the bounded exit-done wait expires & the watchdog forces
+        // the close (the timeout cell of the exit matrix; the fast path is real ESC-hold).
+        "exit" => "{\"type\":\"exit\"}",
         // SP-026 b4: a REAL request-run through the real dispatch path (the gating message
         // for runs — freeze bubbles only exist in-run). 150s, drafts OFF (a legit setup
         // toggle — draft holds park the field up to 60s/run and eat the catch window);
@@ -694,6 +722,33 @@ public partial class DtrhHostWindow : Window
         HandleRecoveryOutcome(outcome);
     }
 
+    /// <summary>HARNESS-ONLY (--dtrh-kill-renderers; the W17 injection): kill every
+    /// msedgewebview2 child holding OUR profile — the exact SP-011 kill-renderer.ps1
+    /// shape — once the engine is live (first kill), and again on the RELAUNCHED
+    /// instance (second kill → the one relaunch is spent → typed exhaustion → honest
+    /// close). The watchdog/ProcessFailed detection + relaunch-once machine is the
+    /// product code under test; this flag only pulls the trigger.</summary>
+    private void ScheduleKillRenderersInjection()
+    {
+        if (!_killRenderers)
+        {
+            return;
+        }
+
+        var relaunched = _watchdog?.RelaunchSpent == true;
+        var delay = relaunched ? 8 : 12;
+        _host.LogDiagnostic(
+            $"dtrh: HARNESS kill-renderers armed at +{delay}s ({(relaunched ? "SECOND kill — exhaustion expected" : "first kill — relaunch-once expected")})");
+        _ = Task.Delay(TimeSpan.FromSeconds(delay), _closing.Token).ContinueWith(
+            t =>
+            {
+                if (t.IsCanceled) return;
+                _host.LogDiagnostic("dtrh: HARNESS kill-renderers FIRING (killing profile-matched msedgewebview2 children — W17 injection)");
+                var recovery = DtrhProfileLock.TryRecover(DtrhProfileLock.WebView2ProfileDir());
+                _host.LogDiagnostic($"dtrh: HARNESS kill-renderers outcome: {recovery}");
+            }, TaskScheduler.Default);
+    }
+
     private void HandleRecoveryOutcome(DtrhWatchdog.DtrhRecoveryOutcome outcome)
     {
         switch (outcome)
@@ -773,6 +828,7 @@ public partial class DtrhHostWindow : Window
                     _engineLive = true;
                     _host.LogDiagnostic("dtrh: ENGINE LIVE");
                     SetStatus("dtrh: ENGINE LIVE");
+                    ScheduleKillRenderersInjection();
                 }
 
                 return;

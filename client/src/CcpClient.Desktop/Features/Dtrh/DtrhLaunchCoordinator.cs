@@ -19,6 +19,7 @@ public sealed class DtrhLaunchCoordinator
     private readonly string _page;
     private readonly string? _fxDrive;
     private readonly bool _m2Test;
+    private readonly bool _killRenderers;
     private readonly DtrhSaveSlots _slots;
     // SP-027 slice b5: the session-scoped watchdog + relaunch-once state (WPF
     // _relaunchedOnce parity — survives window recreation; NEVER a restart loop).
@@ -26,13 +27,15 @@ public sealed class DtrhLaunchCoordinator
     private int _currentSlot;
     private DtrhHostWindow? _closingForRecovery;
 
-    public DtrhLaunchCoordinator(ApplicationHost host, Window owner, string page = "index.html", string? fxDrive = null, bool m2Test = false)
+    public DtrhLaunchCoordinator(ApplicationHost host, Window owner, string page = "index.html", string? fxDrive = null, bool m2Test = false,
+        bool killRenderers = false)
     {
         _host = host;
         _owner = owner;
         _page = page;
         _fxDrive = fxDrive;
         _m2Test = m2Test;
+        _killRenderers = killRenderers;
         _slots = host.Participants.OfType<DtrhSaveSlots>().Single();
     }
 
@@ -145,7 +148,7 @@ public sealed class DtrhLaunchCoordinator
             _currentSlot = slot;
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                var window = new DtrhHostWindow(_host, _page, slot, _fxDrive, _m2Test, _watchdog);
+                var window = new DtrhHostWindow(_host, _page, slot, _fxDrive, _m2Test, _watchdog, _killRenderers);
                 HostWindow = window;
                 window.RecoveryRequested += OnRecoveryRequested;
                 window.Closed += (_, _) =>

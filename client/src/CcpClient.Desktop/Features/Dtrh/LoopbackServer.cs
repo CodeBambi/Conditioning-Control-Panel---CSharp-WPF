@@ -72,7 +72,8 @@ public sealed class LoopbackServer : IDisposable
     public LoopbackServer(
         string payloadRoot, string overlayRoot, string mediaRoot,
         Inbox inbox, string bridgeToken, ILogSink log, TimeSpan? longPollTimeout = null,
-        string? spiralsRoot = null, string? userMediaRoot = null)
+        string? spiralsRoot = null, string? userMediaRoot = null,
+        IReadOnlyList<string>? blockedRoutePrefixes = null)
     {
         _payloadRoot = Path.GetFullPath(payloadRoot);
         _overlayRoot = Path.GetFullPath(overlayRoot);
@@ -83,7 +84,17 @@ public sealed class LoopbackServer : IDisposable
         _bridgeToken = bridgeToken;
         _log = log;
         _longPollTimeout = longPollTimeout ?? TimeSpan.FromSeconds(25);
+        // SP-027 b5 HARNESS-ONLY (failure injection, W18 class): route prefixes that
+        // answer 403 so the page/host typed-failure path is exercised on demand.
+        _blockedRoutePrefixes = blockedRoutePrefixes ?? [];
     }
+
+    private readonly IReadOnlyList<string> _blockedRoutePrefixes;
+
+    /// <summary>HARNESS-ONLY blocked-route injection (SP-027 b5): true when the path hits
+    /// a blocked prefix (both origins — the check runs before any file resolution).</summary>
+    private bool IsBlockedRoute(string path) =>
+        _blockedRoutePrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
     public void Start()
     {
@@ -158,6 +169,14 @@ public sealed class LoopbackServer : IDisposable
         if (req.HttpMethod != "GET")
         {
             await Refuse(ctx, 405, "refused: GET-only origin", path);
+            return;
+        }
+
+        if (IsBlockedRoute(path))
+        {
+            // SP-027 b5 HARNESS-ONLY blocked-route injection (W18 class).
+            _log.Log($"dtrh-loopback: GET {RouteClass(path)} -> 403 (HARNESS blocked-route injection)");
+            await Refuse(ctx, 403, "refused: blocked route (HARNESS-ONLY failure injection)", RouteClass(path));
             return;
         }
 
@@ -279,6 +298,14 @@ public sealed class LoopbackServer : IDisposable
         if (req.HttpMethod != "GET")
         {
             await Refuse(ctx, 405, "refused: GET-only origin", RouteClass(path), cors: true);
+            return;
+        }
+
+        if (IsBlockedRoute(path))
+        {
+            // SP-027 b5 HARNESS-ONLY blocked-route injection (W18 class; CORS-on-errors).
+            _log.Log($"dtrh-loopback: GET {RouteClass(path)} -> 403 (HARNESS blocked-route injection)");
+            await Refuse(ctx, 403, "refused: blocked route (HARNESS-ONLY failure injection)", RouteClass(path), cors: true);
             return;
         }
 
