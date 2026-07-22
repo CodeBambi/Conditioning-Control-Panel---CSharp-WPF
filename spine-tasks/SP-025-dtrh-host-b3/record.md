@@ -61,6 +61,22 @@ z-order — a session fact, never a compositing claim (pre-approach consult).
 4. **Headed-harness diagnostics:** PowerShell scriptblocks invoked as Win32 enums write to callback-local scope (`$script:` needed) — earlier "no windows" reports were diagnostic-script artifacts, never app behavior (the SP-024 E-series class, different mechanism).
 5. **The 4K/1080p black frames were NOT a product-vs-console difference** — the devloop's "works" was frame-COUNT only; content verification (backend luma) is now part of the product's first-3-frames diagnostics.
 
+### WX (WSL2 Ubuntu 26.04, WSLg X11-via-XWayland; `~/ccp-sp025` native ext4, never /mnt/e; NO input automation, NO timing/latency claims — WSLg jitter is the SP-017 named limit; Wayland never claimed §5)
+
+- **Contract testCommand on the synced tree:** sln Rebuild **0W/0E**; **313/313 + 29/29 green** (≥ the 292/27 b2 floor).
+- **Linux natives:** `libvlc5`/`libvlccore9` **3.0.23-1** (apt — the SP-018 pin, re-verified on the image); `libminiaudio.so` present in the build output's `runtimes/linux-x64/native/` (SoundFlow bundled natives flow, SP-010 layout confirmed on Linux).
+- **SFX mechanism evidence (Linux backend):** `dtrh-audio: 1 render endpoint(s): RDP Sink (default)` (SP-017 A6 single-device session fact — class fact, not a selection claim) → device up → `sfx 'wave_clear' playing` → **`completed (backend PlaybackEnded)`**; 2× overlapping `Burst` (pool 2/8) → both completed. Backend events on the REAL Linux backend; no timing/latency claims made.
+- **Whisper:** pool pick playing → `whisper completed (backend PlaybackEnded)`.
+- **Native video (same real media `evidence-video-04.mp4`):** libvlc up (vmem, sw decode), `payload-state video on`, **`vmem frame luma≈149-151 (1280x725)` on Linux**, `first frame presented`, **XGetImage `wx-video-playing.png` — real 1920x1080 content with correct colors on X11**. Transient `Failed to create video converter` ×2 mid-stream WITH content still delivered (recorded; format-jitter proposals 1920x1088→1090 handled by the freeze-on-first-proposal discipline).
+- **Freeze (session facts, no timing claims):** `freeze ON — video pos 3,7s` → `OFF — pos 3,7s` (position frozen on Linux; frames counter re-displays as on Windows).
+- **Teardown mid-freeze on Linux:** second `freeze ON (pos 6,7s)` → auto-close → **`teardown mid-freeze — force-resumed (unwedge)`** → dialog closing/AdapterDestroyed → flow end → **EXIT=0** (`wx-run.log`).
+- **§3.2 divergence decision EXECUTED on Linux:** `wx-dialog-tint.png` (XGetImage of the NativeWebDialog) — **the page-rendered pink-tinted tunnel inside the separate WebKitGTK toplevel**: tint is page-rendered on Linux exactly as on Windows; no host compositing exists or is needed. The covering video window is a separate X11 toplevel (best-effort z-order = session fact, never a compositing claim).
+- **Session fact (page-side):** `GStreamer element fakevideosink not found` — WebKitGTK's page-side media pipeline on this WSLg image (SP-011-class session fact; the NATIVE path is unaffected).
+
+### Budgets
+
+Product sln build ~15-60s Windows incremental / ~2-4min WSL cold; tests 33s + 11s Windows, 17s + 9s WSL; run A/B/C ~1min each; WX runs ~1.5min; rsync 2min; V3/crop devloop probes ~2min each. Forensics (SoundFlow deadlock dump, vmem crop class, culture ×2) ~1.5h total.
+
 ## Step 3 — protocol upgrade Deferred → Handled
 
 - **`DtrhProtocol.Classify`:** `VnSpeaking`/`Sfx`/`FirePayload`/`FreezeState` → `Handled`; **`Bark` re-labeled `Deferred("voice-arbitration (quips row)")`** (consult item 2 — arbitration is the quips/sound-arbitration row's subsystem; the voice CHANNEL landed in b3). b4/b5 deferrals unchanged.
