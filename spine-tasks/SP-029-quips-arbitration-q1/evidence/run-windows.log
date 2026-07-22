@@ -58,7 +58,7 @@ event: VoiceCompleted(gen=8)
 PASS: channels recover after panic (voice plays + completes)
 arb: sound: panic-reset — stopped 0 player(s), cleared 0 queued line(s), ducks force-released
 arb: sound: panic-reset — stopped 0 player(s), cleared 0 queued line(s), ducks force-released
-teardown: handles 340 -> 340 (delta 0), threads 16 -> 16 (delta 0)
+teardown: handles 334 -> 334 (delta 0), threads 16 -> 16 (delta 0)
 PASS: teardown leak counts bounded (SP-017 discipline)
 === SUMMARY ===
 PASS 28 / FAIL 0

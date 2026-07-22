@@ -275,7 +275,19 @@ public sealed class SoundArbitration : IDisposable
             WireVoiceEnded(player, gen);
         }
         StopDispose(old);
-        player.Play();
+        if (!TryStart(player, SoundChannel.Voice, out var startFailure))
+        {
+            return startFailure!;
+        }
+
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_voice, player))
+            {
+                // Panic/stop-replace landed during start — never leave a player arbitration no longer owns.
+                StopDispose(player);
+            }
+        }
         return new SoundOutcome.Started(SoundChannel.Voice, gen);
     }
 
@@ -332,6 +344,7 @@ public sealed class SoundArbitration : IDisposable
         IAudioPlayer? old;
         long gen;
         bool raiseBusy = false;
+        bool raiseBusyFalse = false;
         lock (_gate)
         {
             gen = ++_whisperGeneration;
@@ -345,7 +358,35 @@ public sealed class SoundArbitration : IDisposable
             }
         }
         StopDispose(old);
-        player.Play();
+        if (!TryStart(player, SoundChannel.Whisper, out var startFailure))
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_whisper, player))
+                {
+                    _whisper = null;
+                    if (_whisperBusy)
+                    {
+                        _whisperBusy = false;
+                        raiseBusyFalse = true;
+                    }
+                }
+            }
+            if (raiseBusyFalse)
+            {
+                WhisperBusyChanged?.Invoke(false);
+            }
+            return startFailure!;
+        }
+
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_whisper, player))
+            {
+                // Panic/stop-replace landed during start — never leave a player arbitration no longer owns.
+                StopDispose(player);
+            }
+        }
         if (raiseBusy)
         {
             WhisperBusyChanged?.Invoke(true);
@@ -402,7 +443,24 @@ public sealed class SoundArbitration : IDisposable
             _sfxPool.Add(player);
             player.PlaybackEnded += OnSfxEnded;
         }
-        player.Play();
+        if (!TryStart(player, SoundChannel.Sfx, out var startFailure))
+        {
+            lock (_gate)
+            {
+                _sfxPool.Remove(player);
+            }
+            StopDispose(player);
+            return startFailure!;
+        }
+
+        lock (_gate)
+        {
+            if (!_sfxPool.Contains(player))
+            {
+                // Panic landed during start — never leave a player arbitration no longer owns.
+                StopDispose(player);
+            }
+        }
         return new SoundOutcome.Started(SoundChannel.Sfx, 0);
     }
 
@@ -688,8 +746,34 @@ public sealed class SoundArbitration : IDisposable
             }
         }
 
+        if (player is null)
+        {
+            return;
+        }
+
         // VoiceCompleted(gen) fires at natural end via WireVoiceEnded.
-        player?.Play();
+        if (!TryStart(player, SoundChannel.Voice, out _))
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_voice, player))
+                {
+                    _voice = null;
+                }
+                ScheduleNextVoiceLocked();
+            }
+            StopDispose(player);
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_voice, player))
+            {
+                // Panic landed during the queued start — never leave an unowned player.
+                StopDispose(player);
+            }
+        }
     }
 
     private void CancelPacingTimerLocked()
@@ -767,6 +851,28 @@ public sealed class SoundArbitration : IDisposable
             _duckCount = 1;
             _log($"sound: duck restore failed ({ex.GetType().Name}: {ex.Message}) — state preserved, recoverable");
             ArmDuckWatchdogLocked();
+        }
+    }
+
+    /// <summary>
+    /// Play() with the panic-race guard (pre-completion consult finding 2026-07-22): a
+    /// PanicReset/Dispose landing between channel install and Play() leaves Play() running
+    /// on a disposed player — on a timer thread that is an unhandled threadpool exception.
+    /// Typed + logged, never wedged.
+    /// </summary>
+    private bool TryStart(IAudioPlayer player, SoundChannel channel, out SoundOutcome? failure)
+    {
+        try
+        {
+            player.Play();
+            failure = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _log($"sound: {channel} start failed ({ex.GetType().Name}: {ex.Message}) — raced teardown/panic or backend refusal");
+            failure = new SoundOutcome.Failed($"{ex.GetType().Name}: {ex.Message}");
+            return false;
         }
     }
 

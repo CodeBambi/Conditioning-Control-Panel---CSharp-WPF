@@ -420,6 +420,40 @@ public sealed class SoundArbitrationTests
         Assert.IsType<SoundOutcome.Started>(again);
     }
 
+    // ---------- panic/start race guard (pre-completion consult finding 2026-07-22) ----------
+
+    [Fact]
+    public void Play_ThrowsOnDisposedPlayer_TypedFailed_NeverUnhandled()
+    {
+        var (arb, backend, _, _) = Make();
+        Initialized(arb);
+        backend.PlayerHook = p => p.ThrowOnPlay = true; // simulates Play() on a player panic already disposed
+
+        var voice = arb.PlayVoice("v.mp3", 1f);
+        Assert.IsType<SoundOutcome.Failed>(voice); // typed, logged — never an unhandled throw
+        Assert.Contains(_log, l => l.Contains("start failed"));
+
+        var sfx = arb.PlaySfx("s.wav", 1f);
+        Assert.IsType<SoundOutcome.Failed>(sfx);
+        Assert.Equal(0, arb.ActiveSfxVoices); // pool membership rolled back — no phantom voice
+    }
+
+    [Fact]
+    public void Play_PanicRacesStart_NoWedgedPlayer_ChannelsClean()
+    {
+        var (arb, backend, _, _) = Make();
+        Initialized(arb);
+        // Compressed race: PanicReset lands DURING Play() (the real window is install→Play).
+        backend.PlayerHook = p => p.OnPlay = () => arb.PanicReset();
+
+        arb.PlayVoice("v.mp3", 1f);
+        Assert.All(backend.Players, p => Assert.True(p.Stopped && p.Disposed)); // ownership re-check caught the panic-taken player
+
+        arb.PlaySfx("s.wav", 1f);
+        Assert.All(backend.Players, p => Assert.True(p.Stopped && p.Disposed));
+        Assert.Equal(0, arb.ActiveSfxVoices);
+    }
+
     // ---------- fakes ----------
 
     private sealed class NeverPumpingSyncContext : SynchronizationContext
@@ -433,6 +467,7 @@ public sealed class SoundArbitrationTests
         public List<FakePlayer> Players { get; } = [];
         public string[] Devices { get; set; } = ["RDP Sink"];
         public string? RequestedDeviceName { get; private set; }
+        public Action<FakePlayer>? PlayerHook { get; set; }
 
         public IReadOnlyList<string> EnumerateDevices() => Devices;
 
@@ -446,6 +481,7 @@ public sealed class SoundArbitrationTests
         public IAudioPlayer CreatePlayer(string path, float volume)
         {
             var p = new FakePlayer(path, volume);
+            PlayerHook?.Invoke(p);
             Players.Add(p);
             return p;
         }
@@ -459,13 +495,23 @@ public sealed class SoundArbitrationTests
         public bool Playing { get; private set; }
         public bool Stopped { get; private set; }
         public bool Disposed { get; private set; }
+        public bool ThrowOnPlay { get; set; }
+        public Action? OnPlay { get; set; }
 
         public event EventHandler? PlaybackEnded;
         public AudioPlayerState State => Playing ? AudioPlayerState.Playing : AudioPlayerState.Stopped;
         public double PositionSec => 0;
         public float Volume { get; set; } = volume;
 
-        public void Play() => Playing = true;
+        public void Play()
+        {
+            OnPlay?.Invoke();
+            if (ThrowOnPlay)
+            {
+                throw new ObjectDisposedException("player");
+            }
+            Playing = true;
+        }
         public void Pause() { }
         public void Stop() { Playing = false; Stopped = true; }
         public void Dispose() => Disposed = true;
