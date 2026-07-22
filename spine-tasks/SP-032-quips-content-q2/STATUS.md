@@ -1,13 +1,13 @@
 ## STATUS: SP-032 — Quips/sound arbitration q2: bark content pipeline + host wiring
-**Current Step:** Step 1 — content-pipeline archaeology + design + pre-approach consult
-**Last Updated:** 2026-07-22 (authored)
+**Current Step:** Step 2 — pipeline implementation + disabled-phrase persistence (Step 1 outcomes complete; plan review pending)
+**Last Updated:** 2026-07-22 (Step 1 outcomes)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (rules engine, freshness/priority, payload assembly, mute, disabled-phrase persistence, pacing, rapid cues, stale-device UX)
-- [ ] Design (BarkPipeline over q1; disabled-phrase store on SP-005; pacing seam; DTRH bark upgrade; rapid-cue coexistence)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (rules engine, freshness/priority, payload assembly, mute, disabled-phrase persistence, pacing, rapid cues, stale-device UX)
+- [x] Design (BarkPipeline over q1; disabled-phrase store on SP-005; pacing seam; DTRH bark upgrade; rapid-cue coexistence)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: pipeline implementation + disabled-phrase persistence
 - [ ] BarkPipeline.cs + types (rules, variants, payload integrity, freshness/priority, mute degradation, pacing)
