@@ -1,13 +1,13 @@
 ## STATUS: SP-033 — AI companion slice c1: AI foundation
 **Current Step:** Step 1 — contract/archaeology consolidation + design + pre-approach consult
-**Last Updated:** 2026-07-22 (authored)
+**Last Updated:** 2026-07-22 (Step 1 in progress)
 **Blockers:** none
 
 ### Step 1: consolidation + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Mechanics inventory + WPF archaeology (provider model, operation classes, availability, secret seam, panic)
-- [ ] Design (AiOperationPipeline, provider seam, endpoint classification, F1 fix, ISecretStore impls, panic)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] Mechanics inventory + WPF archaeology (provider model, operation classes, availability, secret seam, panic)
+- [x] Design (AiOperationPipeline, provider seam, endpoint classification, F1 fix, ISecretStore impls, panic)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: pipeline + provider seam + F1 + endpoint classification
 - [ ] AiOperationPipeline.cs + types (owned operations, switch semantics, typed Unavailable, classification)
