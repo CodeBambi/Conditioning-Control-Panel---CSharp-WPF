@@ -1,6 +1,6 @@
 ## STATUS: SP-033 — AI companion slice c1: AI foundation
-**Current Step:** Step 4 — evidence consolidation + pre-completion consult
-**Last Updated:** 2026-07-22 (Step 3 complete: offline proof, secrets, diagnostics, panic, WSL2 gate green 466/466 + 29/29)
+**Current Step:** Step 5 — testing & verification
+**Last Updated:** 2026-07-22 (Step 4 complete: record.md consolidated, pre-completion consult PROCEED, gaps closed)
 **Blockers:** none
 
 ### Step 1: consolidation + design + pre-approach consult — COMPLETE
@@ -21,10 +21,10 @@
 - [x] Panic at pipeline level (typed Cancelled + bounded drain)
 - [x] WSL2 gate (contract green; probe facts)
 
-### Step 4: evidence consolidation + pre-completion consult
-- [ ] record.md complete
-- [ ] Pre-completion solo consult
-- [ ] STATUS.md accurate
+### Step 4: evidence consolidation + pre-completion consult — COMPLETE
+- [x] record.md complete
+- [x] Pre-completion solo consult
+- [x] STATUS.md accurate
 
 ### Step 5: verification
 - [ ] testCommand green (verify.mjs exit 0; 0W/0E; ≥446/29 floor)

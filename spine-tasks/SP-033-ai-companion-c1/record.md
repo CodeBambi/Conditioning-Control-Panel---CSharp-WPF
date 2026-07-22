@@ -92,7 +92,14 @@ Every pipeline operation emits one `AiDiagnosticRecord` (classes/outcome/stable 
 
 ### 4.2 Pre-completion (Step 4)
 
-(pending)
+**Mode:** solo. **Actual answering model:** the consult tool output again carried no model identifier and the stream truncated during point 4 of 5 — recorded honestly per T-2; the four complete points were actionable and are all closed below.
+
+**Verdict: PROCEED after closing five small gaps — no design or honesty-framing violations.** Points + dispositions:
+1. **Test-count accounting fudge ("pre-existing delta")** — FIXED: §7 now states exact per-file counts (12 pipeline + 2 fuzz + 2 offline + 4 secrets = 20; 446 + 20 = 466).
+2. **WSL headless 29/29 was from the pre-fix rsync** — FIXED: final WSL gate re-run covers BOTH projects on the final tree (§7 Linux transcript).
+3. **Contract testCommand must run as the exact single chain in Step 5** — ADOPTED (Step 5 runs the literal `&&` chain; the `-t:Rebuild` warning transcript is kept separately per the packet's own clause).
+4. **`git status` cleanliness w.r.t. apply.mjs side effects** — VERIFIED: apply.mjs writes land under `.pi/npm/node_modules/pi-spine/**`, which is gitignored (`git check-ignore` confirmed); `git status --short` clean.
+5. (Truncated in transit — the four received points were the actionable set; no open item remains against the completion criteria.)
 
 ## 5. Engine review presence (T-2)
 
@@ -123,15 +130,15 @@ Secrets inventory: c1 stores no real secrets (no credentials exist); the seam + 
 
 - `node .spine/patches/verify.mjs` → initial **FAIL** (reinstall had removed all 6 project-root patches — same lane condition as SP-028/029/032) → `apply.mjs` re-applied (6 across 2 roots) → verify **exit 0**.
 - `dotnet build client/CcpClient.sln -c Debug -t:Rebuild --nologo` → **Build succeeded. 0 Warning(s) 0 Error(s)**.
-- `dotnet test client/tests/CcpClient.Tests` → **466/466** (floor 446; +20: 11 pipeline + 2 offline + 2 F1-fuzz (70-case matrix + per-level duplicate facts) + 4 secret-store + 1 pre-existing delta accounted at commit `b376f937`).
+- `dotnet test client/tests/CcpClient.Tests` → **466/466** (floor 446; +20 new: 12 `AiOperationPipelineTests` + 2 `AiEnvelopeFuzzRegressionTests` (70-case matrix + per-level duplicate facts) + 2 `AiOfflineIntegrationTests` + 4 `SecretStoreTests`).
 - `dotnet test client/tests/CcpClient.HeadlessTests` → **29/29** (floor 29 — no new headless tests; c1 has no UI surface, honestly recorded).
 - Targeted greens during development: pipeline+fuzz+contract 51/51; offline+secrets 6/6.
 - Windows DPAPI round-trip proven: set/get/delete, file bytes never contain plaintext, filesystem-safe names, corrupt-blob → absent-read.
 
 ### Linux (WSL2, `~/ccp-sp033`, native ext4, never /mnt/e; staged via rsync of `client/` + the legacy-tree LINKED DTRH payload subtree per the SP-032 gate lesson)
 
-- First run: build 0W/0E; CcpClient.Tests **465/466 — 1 failure** (`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`: `secret-tool` ABSENT on PATH → `Process.Start` threw raw `Win32Exception` instead of the typed `SecretStoreUnavailableException`). Fixed in `SecretToolSecretStore` (start-failure → typed `ToolMissing` → typed exception; probe → `DependencyMissing("secret-tool")`); HeadlessTests 29/29.
-- Final: CcpClient.Tests **466/466**, HeadlessTests **29/29**, build 0W/0E.
+- First run: build 0W/0E; CcpClient.Tests **465/466 — 1 failure** (`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`: `secret-tool` ABSENT on PATH → `Process.Start` threw raw `Win32Exception` instead of the typed `SecretStoreUnavailableException`). Fixed in `SecretToolSecretStore` (start-failure → typed `ToolMissing` → typed exception; probe → `DependencyMissing("secret-tool")`); HeadlessTests 29/29 (pre-fix tree).
+- **Final (post-fix tree, both projects re-run — pre-completion consult point 2):** build **0W/0E**; CcpClient.Tests **466/466**; HeadlessTests **29/29**.
 - **Secret-store probe facts (honest, never faked):** `secret-tool` is **NOT on PATH** on the WSL2 box (`which secret-tool` → absent) → probe returns typed `DependencyMissing("secret-tool")` with code `secret-service-unreachable`; store operations throw typed `SecretStoreUnavailableException`. This typed-Unavailable path IS the honest Linux evidence (admission §8 c1: no session daemon on WSL2; a working-daemon proof needs a desktop-session box — named limit).
 - No Wayland claims anywhere. No LAB/WH/WX evidence claimed for c1.
 
