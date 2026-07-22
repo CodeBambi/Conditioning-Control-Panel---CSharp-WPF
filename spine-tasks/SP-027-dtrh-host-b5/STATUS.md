@@ -1,14 +1,14 @@
 ## STATUS: SP-027 — DTRH host slice b5: watchdog recovery, graceful exit, failure injection (FINAL)
 **Current Step:** Step 1 — watchdog/exit/recovery archaeology + design + pre-approach consult
-**Last Updated:** 2026-07-22 (authored)
+**Last Updated:** 2026-07-22 (Step 1 in progress)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (watchdog/ProcessFailed/relaunch-once/exit/profile-lock, `File.cs:line`)
-- [ ] Spike/manifest verification (W17 timeline, W21, SP-011 injections)
-- [ ] Design (detection stack, capability states, relaunch-once machine, exit flow, injection harness)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (watchdog/ProcessFailed/relaunch-once/exit/profile-lock, `File.cs:line`)
+- [x] Spike/manifest verification (W17 timeline, W21, SP-011 injections)
+- [x] Design (detection stack, capability states, relaunch-once machine, exit flow, injection harness)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: watchdog core
 - [ ] DtrhWatchdog.cs (heartbeat watch, native signal where available, relaunch-once)
