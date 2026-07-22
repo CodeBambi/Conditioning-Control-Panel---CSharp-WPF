@@ -108,6 +108,7 @@ Every pipeline operation emits one `AiDiagnosticRecord` (classes/outcome/stable 
 | Step 1 plan review (`spine_review_step --step 1 --type plan`) | **Engine review ABSENT (expected)** — nested reviewer spawn blocked inside pi worker session; `skipped: true`, `spawnFailed: false` (SP-195: engine runs reviews after `.DONE`). Artifact: `.reviews/1-20260722T141537.md` |
 | Step 2 plan review (`spine_review_step --step 2 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/2-20260722T143047.md` |
 | Step 3 plan review (`spine_review_step --step 3 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/3-20260722T144127.md` |
+| Step 4 plan review (`spine_review_step --step 4 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/4-20260722T144640.md` |
 
 ## 6. Redaction/log-site registry (SP-018 pattern, product-side form)
 
