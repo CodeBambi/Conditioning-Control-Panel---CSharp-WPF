@@ -37,7 +37,7 @@ Performed via the wpf-archaeologist agent plus direct gap-closing greps. Key fac
 
 ## 4. Engine-review presence (T-2)
 
-- (recorded per `spine_review_step` call below)
+- Step 1 `spine_review_step type=plan`: **SKIPPED in-worker by design (SP-195)** — tool returned `skipped: true`, `spawnFailed: false`, `reviewLevel: 2` echoed; artifact `.reviews/1-20260722T103145.md`. Engine runs reviews after `.DONE`.
 
 ## 5. Decisions + rejected alternatives
 
