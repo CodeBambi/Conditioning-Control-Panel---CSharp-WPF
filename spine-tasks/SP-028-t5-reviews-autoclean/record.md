@@ -304,6 +304,8 @@ adaptation explicitly (above). Actual answering model: not surfaced (same as abo
 - Step 1 plan review (`spine_review_step` type=plan): **engine-SKIPPED** (SP-195 — nested
   reviewer spawn blocked inside pi worker session; engine runs reviews post-.DONE).
   skipped:true, spawnFailed:false, artifact 1-20260722T093438.md.
+- Step 2 plan review (`spine_review_step` type=plan): **engine-SKIPPED** (SP-195).
+  skipped:true, spawnFailed:false, artifact 2-20260722T093923.md.
 
 ## Step 2 — manifest entry + apply/verify on the live install
 
@@ -339,4 +341,48 @@ packet text at land.
 
 ## Step 3 — fixture + historical proof
 
-PENDING
+**Fixture** (`evidence/fixture-t5.mjs`, transcript `evidence/fixture-t5-transcript.txt` —
+scratch only under `%TEMP%/sp028-fixture`, repo never touched): scratch lane repos carrying
+the repo's REAL `.gitignore` (blank line 179 load-bearing — the fixture asserts the git 2.49
+quirk reproduces before trusting the run), `.DONE` uncommitted + `.reviews/final-*.md`
+verdict artifact written after the worker's last commit (the exact T-5 lane shape), verdict
+journal stand-in OUTSIDE the lane. 7/7 assertions GREEN:
+
+- **Negative control (pristine 2.10.0, npm-packed + `npm install --omit=dev`):**
+  `commitLaneWorktree` commits `.DONE` and leaves `?? spine-tasks/SP-TEST/.reviews/`
+  in the post-commit porcelain — the exact DirtyWorktree residue, reproduced on demand.
+- **Patched (live install):** `.reviews/` deleted inside the call, commit succeeds,
+  post-commit porcelain CLEAN — finalization passes.
+- **Event order:** the verdict artifact existed right up to the finalization call
+  (`artifactExistedAtCall: true`); deletion happens only inside `commitLaneWorktree`,
+  which every caller invokes post-review — never before verdict recording.
+- **Journal durability:** the journal stand-in outside the lane is untouched in both runs.
+
+**Consumer census + no-regression argument (T-12 discipline, shape b′):** the patched
+function `commitLaneWorktree` has exactly 4 consumers, ALL post-review lane finalization:
+
+1. `engine-lanes/commit.mjs:68` (`commitLaneAndValidateWorktree`) — fresh finalization,
+   after `runCodeReviewPhase` + `runFinalReviewPhase` (verdicts journaled);
+   `matrix-run.mjs:488` reaches the same function after row merges.
+2. `resume.mjs:344` — after `reviewResult` (resume.mjs:330).
+3. `resume-multi-lanes.mjs:94` — after `reviewResult` (verified in source).
+4. `resume-multi-lanes.mjs:356` — after `reviewResult` (verified in source).
+
+No-regression: (a) lanes without `.reviews/` — `rmSync force:true` is a documented no-op
+(RL0/1 tasks, matrix lanes without reviews, retry fast-path re-inspection which needs no
+commit); (b) deletion timing is identical to the 15x-proven manual recovery; (c) every
+on-disk `.reviews/` reader (review-artifacts.mjs find* — journal-first, artifact-fallback)
+runs strictly before this point in the pipeline; nothing post-finalization reads
+`.reviews/` (`grep bin/ src/tasks/` zero hits); (d) tracked-`.reviews/` edge (SP-020 case)
+surfaces as staged deletions — commit proceeds, tree self-cleans; (e) resume-path crash
+between deletion and merge re-honors journal verdicts (source: "journal"), no artifact
+needed.
+
+**Proof boundary (honest):** this packet's in-lane proof = the fixture above + the
+17-occurrence historical derivation + the deterministic root-cause reproduction. The REAL
+proof is the NEXT Level-2 batch landing WITHOUT the manual recovery — recorded as the
+named post-land gate on board row T-5 (if that land T-5s, the patch is wrong and the row
+reopens). Note: SP-028's own finalization runs on the patched live install — if the batch
+engine hosting this very lane picks up the patched `lane-commit.mjs`, SP-028 itself may
+land without the manual recovery; that is corroboration, not the named gate (the named
+gate is the NEXT Level-2 batch, orchestrator-observed).

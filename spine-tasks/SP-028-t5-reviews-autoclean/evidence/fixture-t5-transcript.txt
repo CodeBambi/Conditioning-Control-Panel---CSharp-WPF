@@ -1,0 +1,29 @@
+warning: in the working copy of 'spine-tasks/SP-TEST/PROMPT.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'spine-tasks/SP-TEST/STATUS.md', LF will be replaced by CRLF the next time Git touches it
+
+=== pristine-lane (PRISTINE)
+pre-call porcelain: "?? spine-tasks/SP-TEST/.DONE\n?? spine-tasks/SP-TEST/.reviews/"
+verdict artifact existed at finalization call: true
+commitLaneWorktree -> {"ok":true,"committed":true}
+post-call porcelain: "?? spine-tasks/SP-TEST/.reviews/"
+.reviews/ deleted: false | journal stand-in intact: true
+warning: in the working copy of 'spine-tasks/SP-TEST/PROMPT.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'spine-tasks/SP-TEST/STATUS.md', LF will be replaced by CRLF the next time Git touches it
+
+=== patched-lane (PATCHED)
+pre-call porcelain: "?? spine-tasks/SP-TEST/.DONE\n?? spine-tasks/SP-TEST/.reviews/"
+verdict artifact existed at finalization call: true
+commitLaneWorktree -> {"ok":true,"committed":true}
+post-call porcelain: ""
+.reviews/ deleted: true | journal stand-in intact: true
+
+--- assertions
+PASS  negative control: pristine commits but leaves ?? .reviews/ residue (T-5 DirtyWorktree shape)
+PASS  negative control: pristine does NOT delete .reviews/
+PASS  patched: commitLaneWorktree ok + committed
+PASS  patched: post-commit porcelain CLEAN (finalization passes)
+PASS  event order: verdict artifact existed right up to the finalization call
+PASS  patched: .reviews/ deleted inside the finalization call (not earlier)
+PASS  verdicts journal-durable: journal stand-in outside the lane untouched
+
+FIXTURE GREEN

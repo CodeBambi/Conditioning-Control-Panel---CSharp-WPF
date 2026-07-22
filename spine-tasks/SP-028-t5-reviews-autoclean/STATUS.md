@@ -16,9 +16,9 @@
 - [x] Patched live engine file committed — DEVIATION RECORDED: `.pi/npm/` is gitignored (.gitignore:50); engine tree is NOT tracked. Durable committed copy = manifest entry (the SP-020 mechanism's purpose); live install patched + verify exit 0
 
 ### Step 3: fixture + historical proof
-- [ ] Fixture (patched passes / pristine fails / deletion after verdicts)
-- [ ] Consumer census + no-regression argument
-- [ ] Proof boundary recorded (named post-land gate)
+- [x] Fixture (patched passes / pristine fails / deletion after verdicts) — 7/7 GREEN, transcript in evidence/
+- [x] Consumer census + no-regression argument (4 consumers, all post-review finalization)
+- [x] Proof boundary recorded (named post-land gate = next Level-2 batch)
 
 ### Step 4: docs + board + pre-completion consult
 - [ ] README row
