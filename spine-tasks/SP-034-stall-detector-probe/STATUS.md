@@ -1,6 +1,6 @@
 ## STATUS: SP-034 — Stall-detector probe tooling
-**Current Step:** Step 4 — verification (IN PROGRESS)
-**Last Updated:** 2026-07-22 (step 3 complete: manifest applied/verified/idempotent; record.md complete with post-consult fixes; pre-completion consult recorded)
+**Current Step:** COMPLETE — all steps done, .DONE created
+**Last Updated:** 2026-07-22 (step 4 green: verify.mjs exit 0; build 0W/0E; 446/446 + 29/29 = exact floor, no drift; git diff --check clean; status = packet + manifest only)
 **Blockers:** none
 
 ### Step 1: evidence + design + pre-approach consult
@@ -27,6 +27,8 @@
 **Step 3 Status: COMPLETE** (pre-completion consult: 2 gaps adopted + fixed — per-pid clamp, multi-lane note; re-runs PASS; §6 regenerated)
 
 ### Step 4: verification
-- [ ] testCommand green (verify.mjs exit 0; 0W/0E; ≥446/29 floor, no drift)
-- [ ] git diff --check clean
-- [ ] git status shows File Scope only
+- [x] testCommand green (verify.mjs exit 0; 0W/0E; ≥446/29 floor, no drift)
+- [x] git diff --check clean
+- [x] git status shows File Scope only
+
+**Step 4 Status: COMPLETE** (446/446 + 29/29 exact floor; verify.mjs OK both roots; tree clean)
