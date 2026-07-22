@@ -310,6 +310,11 @@ adaptation explicitly (above). Actual answering model: not surfaced (same as abo
   skipped:true, spawnFailed:false, artifact 3-20260722T094304.md.
 - Step 4 plan review (`spine_review_step` type=plan): **engine-SKIPPED** (SP-195).
   skipped:true, spawnFailed:false, artifact 4-20260722T094924.md.
+- Step 5 plan review (`spine_review_step` type=plan): **engine-SKIPPED** (SP-195).
+  skipped:true, spawnFailed:false, artifact 5-20260722T095329.md.
+
+All 5 in-worker plan reviews engine-skipped (SP-195 pattern, same as SP-027); code + final
+reviews run on the engine post-.DONE.
 
 ## Step 2 — manifest entry + apply/verify on the live install
 
