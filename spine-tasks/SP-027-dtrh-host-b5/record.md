@@ -117,7 +117,7 @@ ESC forensics (4 diags + 3 failed B1 attempts) ≈ 50 min; headed matrix re-runs
 
 ### Plan review
 
-- (recorded after the actual spine_review_step call — never pre-recorded)
+Step 4: `spine_review_step --step 4 --type plan` CALLED 2026-07-22T08:42Z — **engine-skipped** (SP-195: nested reviewer spawn blocked inside worker; the batch engine runs reviews after `.DONE`; artifact `.reviews/4-20260722T084219.md`). T-2 heading format honored — presence/absence recorded per call (Steps 1–3 likewise engine-skipped).
 
 ### Pre-completion consult (Step 4 gate)
 
