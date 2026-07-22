@@ -1,5 +1,5 @@
 ## STATUS: SP-031 — T-5 anchor re-base (provenance-faithful fixture)
-**Current Step:** Step 3 — provenance-faithful fixture + regression proof
+**Current Step:** Step 4 — docs + pre-completion consult
 **Last Updated:** 2026-07-22 (forensics complete — packet premise FALSIFIED by primary evidence; corrected design)
 **Blockers:** none
 
@@ -13,10 +13,10 @@
 - [x] Manifest re-based (two-root; t5 comment/rationale corrected; dotnet +dotnet.exe)
 - [x] Live-tree migration executed (atomic single writes) + apply/verify exit 0 both roots + idempotence + loud-failure + missing-root proofs
 
-### Step 3: provenance-faithful fixture + regression proof
-- [ ] Fixture v2 (base-shaped taskFolder; negative control preserved; caller-shape regression pass)
-- [ ] Consumer census re-confirmed
-- [ ] Boundary re-recorded (named post-land gate re-pointed)
+### Step 3: provenance-faithful fixture + regression proof — COMPLETE (plan review: engine-skipped, SP-195)
+- [x] Fixture v2 GREEN 13/13, 5 cells (two-tree wave-1 repro; base-shaped cells w/ true semantics; negative control preserved; caller-shape regression pass)
+- [x] Consumer census re-confirmed (4 callers, both versions, all taskFolderInWorktree)
+- [x] Boundary re-recorded (named post-land gate re-pointed at next wave; this-wave ESM-cache caveat)
 
 ### Step 4: docs + pre-completion consult
 - [ ] README row

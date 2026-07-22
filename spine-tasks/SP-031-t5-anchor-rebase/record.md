@@ -187,3 +187,36 @@ The currently running wave-2 engine (pid from 12:20Z) holds the UNPATCHED global
 ESM cache — SP-031/SP-032 finalizations on THIS wave can still T-5 (manual playbook once more).
 Any resume-handoff re-spawning the engine after this timestamp loads the PATCHED module and
 finalizations stop self-dirtying mid-wave. The named post-land gate re-points at the NEXT wave.
+
+## Step 3 — provenance-faithful fixture v2 + regression proof
+
+`evidence/fixture-t5-v2.mjs` — **13/13 assertions GREEN across 5 cells** (scratch only, %TEMP%;
+repo and both live installs never written; the pristine module tree is a sibling copy inside the
+lane's gitignored node_modules for dep resolution, deleted after the run):
+
+| cell | shape | result |
+|---|---|---|
+| 1 pristine-negative-control | pristine module, real caller shape (taskFolder = lane task folder) | commits `.DONE`, leaves `?? .reviews/` — the T-5 DirtyWorktree signature (preserved from SP-028) |
+| 2 patched-real-caller-shape | patched module, same shape — the ONLY shape all 4 callers use in BOTH versions | `.reviews/` deleted inside the finalization call, post-commit porcelain CLEAN |
+| 3 two-tree-wave1-repro | patch present on tree A on disk; engine module loaded from tree B (pristine) | residue survives — **the actual wave-1 mechanism: applied ≠ loaded** |
+| 4 base-path-no-done | taskFolder = base-shaped packet path OUTSIDE the worktree, no base `.DONE` (wave-1's real base state) | early-return "`.DONE` is missing — worker did not finish cleanly", **NO commit** — the fingerprint wave-1's journal does NOT show (`lane.committed` fired) ⇒ the packet's base-path theory falsified; discharges the packet's base-shaped fixture requirement with its true semantics |
+| 5 base-path-planted-done | same with a planted base `.DONE` | commit proceeds, lane residue survives (rmSync no-ops on base/.reviews) — the theory was CONSISTENT with this shape; git history (base `.DONE` absent until the 12:06Z merge) is what falsifies it |
+
+The original SP-028 fixture's in-worktree taskFolder case still passes — it IS cell 2, the real
+caller shape (the census found no caller passing anything else, in either engine version).
+
+### Consumer census re-confirmed for the corrected expression
+
+Done in Step 1 (recorded above): all 4 callers pass `taskFolderInWorktree` in BOTH 2.8.0 and
+2.10.0 — no path arithmetic, no relative-path edge cases to enumerate; the packet's feared
+shapes (`taskFolder` inside `worktreePath`, `projectRoot` absent/eq, `path.relative` escaping)
+do not exist in the codebase.
+
+### Proof boundary re-recorded
+
+In-lane proof = fixture v2 cells 1–5 + apply/verify on both roots + idempotence/loud-failure.
+REAL proof = the NEXT Level-2 wave's finalizations skipping the manual `.reviews/` recovery —
+the named post-land gate re-points there (orchestrator acts at land, enabler 2). THIS wave's
+engine (12:20Z process) still holds the unpatched module: SP-031/SP-032 finalizations may T-5
+one final time (manual playbook), unless a resume re-spawns the engine after the Step-2 on-disk
+patch — expected either way, not a reopen. The tax claim stays parked until the gate fires green.
