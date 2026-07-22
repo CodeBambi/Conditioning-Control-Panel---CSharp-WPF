@@ -1,0 +1,111 @@
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x71.0 DIP @ scale 1 @ screen 16,45
+dtrh: quick start — reusing slot 1 (picker skipped by design)
+dtrh-slots: live save is now slot 1
+dtrh: descending into slot 1
+dtrh: host window opening on slot 1
+dtrh: meta engine bound to slot 1
+dtrh-audio: 1 render endpoint(s): RDP Sink (default)
+dtrh-audio: playback device up (requested default)
+dtrh: native effects up (SFX pool 8/drop, voice, vmem video, freeze)
+dtrh: showing NativeWebDialog surface (page probe.html)
+dtrh: GTK WebKit base dirs set
+dtrh: auto-close armed at 30s
+libEGL warning: DRI3 error: Could not get DRI3 device
+libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering
+dtrh(dialog): AdapterCreated
+dtrh-loopback: GET /dtrh/probe.html/… -> 200 (page:overlay)
+dtrh: NavigationCompleted success=True (surface dialog)
+dtrh-loopback: GET /dtrh/bridge.js/… -> 200 (page:overlay)
+dtrh page log: probe: bridge.js imported (product derivative, blob 13af3f4d + §3.1 diff); isHosted=true
+dtrh: {"type":"probe-p2h-ica","note":"invokeCSharpAction path"}
+dtrh page log: probe: sent probe-p2h-ica
+dtrh page log: probe: bridge.on(probe-h2p) registered; awaiting host send
+dtrh page log: probe: probe module complete
+dtrh-media: manifest — 2 image(s), 1 video(s), 0 skipped
+dtrh: probe-img sent (4 served url(s) — loom + user media, HARNESS-ONLY)
+dtrh-loopback: GET bridge:inbox -> 200 (2 message(s))
+dtrh page log: probe: check3 host->page DELIVERED via bridge.on: {"type":"probe-h2p","via":"inbox"}
+dtrh-loopback: GET bridge:inbox -> 200 (4 message(s))
+dtrh page log: probe: probe-img rendered image (56-char url)
+dtrh page log: probe: probe-img rendered image (58-char url)
+dtrh page log: probe: probe-img rendered image (58-char url)
+dtrh page log: probe: probe-img rendered video (58-char url)
+dtrh-loopback: GET /umedia/images/… -> 200 (umedia)
+dtrh-loopback: GET /umedia/images/… -> 200 (umedia)
+dtrh-loopback: GET /spirals/loom_evidence-loom-01.gif/… -> 200 (spirals)
+WebKit wasn't able to find a WebVTT encoder. Subtitles handling will be degraded unless gst-plugins-bad is installed.
+dtrh-loopback: GET /umedia/videos/… -> 200 (umedia)
+dtrh-loopback: GET /umedia/videos/… -> 206 (umedia)
+dtrh-loopback: GET /umedia/videos/… -> 206 (umedia)
+dtrh-loopback: GET /umedia/videos/… -> 206 (umedia)
+dtrh page log: probe: probe-img LOAD ERROR (video)
+dtrh page log: probe: preBuffer REPLAY delivered on late registration: {"type":"probe-buffered","via":"pre-handler-send"}
+dtrh page log: probe: late handler registered for probe-buffered (after host send)
+dtrh-loopback: GET bridge:inbox -> 200 (0 message(s))
+dtrh: auto-close firing
+dtrh-fx: teardown complete
+dtrh(dialog): closing
+dtrh(dialog): AdapterDestroyed
+dtrh: flow ended — shutting down the lifetime
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+===RUN3===
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x71.0 DIP @ scale 1 @ screen 16,45
+dtrh: quick start — reusing slot 1 (picker skipped by design)
+dtrh-slots: live save is now slot 1
+dtrh: descending into slot 1
+dtrh: host window opening on slot 1
+dtrh: meta engine bound to slot 1
+dtrh-audio: 1 render endpoint(s): RDP Sink (default)
+dtrh-audio: playback device up (requested default)
+dtrh: native effects up (SFX pool 8/drop, voice, vmem video, freeze)
+dtrh: showing NativeWebDialog surface (page probe.html)
+dtrh: GTK WebKit base dirs set
+dtrh: auto-close armed at 35s
+libEGL warning: DRI3 error: Could not get DRI3 device
+libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering
+dtrh(dialog): AdapterCreated
+dtrh-loopback: GET /dtrh/probe.html/… -> 200 (page:overlay)
+dtrh: NavigationCompleted success=True (surface dialog)
+dtrh-loopback: GET /dtrh/bridge.js/… -> 200 (page:overlay)
+dtrh page log: probe: bridge.js imported (product derivative, blob 13af3f4d + §3.1 diff); isHosted=true
+dtrh: {"type":"probe-p2h-ica","note":"invokeCSharpAction path"}
+dtrh page log: probe: sent probe-p2h-ica
+dtrh page log: probe: bridge.on(probe-h2p) registered; awaiting host send
+dtrh page log: probe: probe module complete
+dtrh-loopback: GET bridge:inbox -> 200 (2 message(s))
+dtrh page log: probe: check3 host->page DELIVERED via bridge.on: {"type":"probe-h2p","via":"inbox"}
+dtrh-loopback: GET bridge:inbox -> 200 (1 message(s))
+dtrh-media: manifest — 2 image(s), 1 video(s), 0 skipped
+dtrh page log: probe: probe-img rendered image (56-char url)
+dtrh: probe-img sent (4 served url(s) — loom + user media, HARNESS-ONLY)
+dtrh-loopback: GET bridge:inbox -> 200 (1 message(s))
+dtrh page log: probe: probe-img rendered image (58-char url)
+dtrh-loopback: GET bridge:inbox -> 200 (2 message(s))
+dtrh page log: probe: probe-img rendered image (58-char url)
+dtrh-loopback: GET /umedia/images/… -> 200 (umedia)
+dtrh-loopback: GET /umedia/images/… -> 200 (umedia)
+dtrh-loopback: GET /spirals/loom_evidence-loom-01.gif/… -> 200 (spirals)
+dtrh page log: probe: probe-img rendered video (58-char url)
+WebKit wasn't able to find a WebVTT encoder. Subtitles handling will be degraded unless gst-plugins-bad is installed.
+dtrh-loopback: GET /umedia/videos/… -> 200 (umedia)
+dtrh-loopback: GET /umedia/videos/… -> 206 (umedia)
+dtrh-loopback: GET /umedia/videos/… -> 206 (umedia)
+dtrh-loopback: GET /umedia/videos/… -> 206 (umedia)
+dtrh page log: probe: probe-img LOAD ERROR (video)
+dtrh page log: probe: preBuffer REPLAY delivered on late registration: {"type":"probe-buffered","via":"pre-handler-send"}
+dtrh page log: probe: late handler registered for probe-buffered (after host send)
+dtrh-loopback: GET bridge:inbox -> 200 (0 message(s))
+dtrh: auto-close firing
+dtrh-fx: teardown complete
+dtrh(dialog): closing
+dtrh(dialog): AdapterDestroyed
+dtrh: flow ended — shutting down the lifetime
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end

@@ -1,0 +1,14 @@
+
+user media staged into data dir assets (2 images + 1 video)
+launched pid=23556
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T020943\lane-1\spine-tasks\SP-026-dtrh-host-b4\evidence\wh\runC-hub.png; dark=7,1% distinct-colors~403
+freeze observed: True at poll-tick 117
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T020943\lane-1\spine-tasks\SP-026-dtrh-host-b4\evidence\wh\runC-freeze.png; dark=1,9% distinct-colors~496
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T020943\lane-1\spine-tasks\SP-026-dtrh-host-b4\evidence\wh\runC-freeze-b.png; dark=1,9% distinct-colors~293
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T020943\lane-1\spine-tasks\SP-026-dtrh-host-b4\evidence\wh\runC-after-run.png; dark=1,9% distinct-colors~402
+EXIT=0
+proofs copied

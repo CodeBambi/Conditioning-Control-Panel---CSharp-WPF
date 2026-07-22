@@ -340,6 +340,15 @@ public partial class DtrhHostWindow : Window
         "payload:audio" => "{\"type\":\"fire-payload\",\"kind\":\"audio\",\"strength\":60,\"durationMult\":1.0}",
         "run-started" => "{\"type\":\"run-started\",\"difficulty\":\"Gentle\",\"mode\":\"dtrh-web\"}",
         "run-ended" => "{\"type\":\"run-ended\",\"score\":0,\"durationSec\":1,\"difficulty\":\"Gentle\"}",
+        // SP-026 b4: a REAL request-run through the real dispatch path (the gating message
+        // for runs — freeze bubbles only exist in-run). 150s, drafts OFF (a legit setup
+        // toggle — draft holds park the field up to 60s/run and eat the catch window);
+        // effect share ramps with intensity (chaosRun.js:3178-3181), the deep chambers
+        // deal the freeze bubbles.
+        "request-run" => "{\"type\":\"request-run\",\"setup\":{\"difficulty\":\"Easy\",\"durationSec\":150,\"waveCount\":4,\"motion\":\"Mixed\",\"effectIntensity\":0.85,\"colorFlashes\":true,\"boonDraftEnabled\":false,\"allowCurses\":true,\"dartersEnabled\":true,\"key1\":\"Q\",\"key2\":\"E\",\"enabledVariants\":null}}",
+        // SP-026 b4: a deterministic full-field run-ended for the payout banking proof
+        // (the page's own run-ended is the gameplay path; this pins the math evidence).
+        "run-ended-full" => "{\"type\":\"run-ended\",\"score\":5200,\"durationSec\":180,\"elapsedSec\":172,\"difficulty\":\"Gentle\",\"difficultyMult\":1.0,\"sparkGainMult\":1.0,\"bestCombo\":11,\"defused\":7,\"trickleDrops\":3,\"dripFeedMaxed\":false,\"sessionStats\":{\"bubblesPopped\":57}}",
         _ when step.StartsWith("sfx:", StringComparison.Ordinal) => SfxDriveJson(step[4..]),
         _ => null,
     };
@@ -456,9 +465,43 @@ public partial class DtrhHostWindow : Window
                 // apartment-bound; from a pool thread the call silently never lands).
                 SendToPage(new { type = "probe-h2p", via = Surface == "embedded" ? "synthetic-dispatch" : "inbox" });
                 SendToPage(new { type = "probe-buffered", via = "pre-handler-send" });
+                SendProbeMedia();
             }
             catch (OperationCanceledException) { /* window closed mid-probe */ }
         });
+    }
+
+    /// <summary>SP-026 b4 HARNESS-ONLY: on the probe page, send every SERVED media URL
+    /// (Loom spirals + the user-media manifest) as probe-img messages so the probe renders
+    /// them in the same engine — the pixel-verifiable serve→display proof for media that
+    /// the pane-gated Loom rack can't reach deterministically in a scripted drive.
+    /// Presence+shape only in logs (the URLs are never logged).</summary>
+    private void SendProbeMedia()
+    {
+        var sent = 0;
+        if (_loom is not null)
+        {
+            foreach (var spiral in _loom.List())
+            {
+                SendToPage(new { type = "probe-img", kind = "image", url = $"{_dtrh.Server.MediaOrigin}/spirals/loom_{spiral.Slug}.gif" });
+                sent++;
+            }
+        }
+
+        var manifest = DtrhUserMedia.Build(_dtrh.UserMediaRoot, _dtrh.Server.MediaOrigin, _host.LogDiagnostic);
+        foreach (var image in manifest.Images.Take(2))
+        {
+            SendToPage(new { type = "probe-img", kind = "image", url = image.Url });
+            sent++;
+        }
+
+        foreach (var video in manifest.Videos.Take(1))
+        {
+            SendToPage(new { type = "probe-img", kind = "video", url = video.Url });
+            sent++;
+        }
+
+        _host.LogDiagnostic($"dtrh: probe-img sent ({sent} served url(s) — loom + user media, HARNESS-ONLY)");
     }
 
     // ---------- boot contract ----------

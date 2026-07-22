@@ -1,0 +1,17 @@
+{
+  "activeSlot": 1,
+  "difficulty": "Easy",
+  "durationSec": 180,
+  "waveCount": 5,
+  "motion": "Mixed",
+  "enabledVariants": null,
+  "effectIntensity": 0.85,
+  "colorFlashes": true,
+  "boonDraftEnabled": true,
+  "allowCurses": true,
+  "dartersEnabled": true,
+  "key1": "Q",
+  "key2": "E",
+  "schemaVersion": 1,
+  "migrationJournal": []
+}

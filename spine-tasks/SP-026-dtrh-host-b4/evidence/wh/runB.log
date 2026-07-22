@@ -1,0 +1,160 @@
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.0 DIP @ scale 1 @ screen 258,312
+dtrh: quick start — reusing slot 1 (picker skipped by design)
+dtrh-slots: live save is now slot 1
+dtrh: descending into slot 1
+dtrh: host window opening on slot 1
+dtrh: meta engine bound to slot 1
+dtrh-audio: 13 render endpoint(s): Browser (BEACN Studio) | Aux 2 / Hardware (BEACN Studio) | System (BEACN Studio) (default) | Link 4 Out (BEACN Studio) | Link 3 Out (BEACN Studio) | Chat (BEACN Studio) | Aux 1 / Hardware (BEACN Studio) | Mic Relay (Do Not Use) (BEACN Studio) | Game (BEACN Studio) | Link Out (BEACN Studio) | Headphones (BEACN Studio) | Link 2 Out (BEACN Studio) | Music (BEACN Studio)
+dtrh-audio: playback device up (requested default)
+dtrh: native effects up (SFX pool 8/drop, voice, vmem video, freeze)
+dtrh: WebView2 UserDataFolder set; autoplay-policy=no-user-gesture-required
+dtrh: navigating embedded surface (page index.html)
+dtrh: fx-drive armed (HARNESS-ONLY): loom-file:evidence-loom-01.gif@10; run-started@17; run-ended-full@21
+dtrh: auto-close armed at 45s
+dtrh: AdapterCreated info='DetailedWebViewAdapterInfo { Type = WebView2, Engine = Blink, Version = 150.0.4078.83, IsSupported = True, IsInstalled = True, UnavailableReason = , SupportedScenarios = NativeControlHost }'
+dtrh-loopback: GET /dtrh/index.html/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/boot.js/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/styles.css/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/modContent.js/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/bridge.js/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/hostMedia.js/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh: ready received — flushing init+manifest
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /favicon.ico/ -> 404
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-media: manifest — 2 image(s), 1 video(s), 0 skipped
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh: loom-list posted (0 spiral(s))
+dtrh page log: boot: ready posted, waiting for init + manifest
+dtrh: NavigationCompleted success=True (surface embedded)
+dtrh: focus claimed at ready; document.hasFocus()=true
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 206 (page:payload)
+dtrh-loopback: GET /umedia/images/… -> 200 (umedia)
+dtrh-loopback: GET /umedia/images/… -> 200 (umedia)
+dtrh-loopback: GET /umedia/images/… -> 200 (umedia)
+dtrh-loopback: GET /umedia/videos/… -> 206 (umedia)
+dtrh-loopback: GET /umedia/images/… -> 200 (umedia)
+dtrh-loopback: GET /umedia/images/… -> 200 (umedia)
+dtrh-loopback: GET /umedia/images/… -> 200 (umedia)
+dtrh-loopback: GET /umedia/images/… -> 200 (umedia)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh page log: cheshire: hub scene hub_welcome
+dtrh-fx: vn-speaking on — SFX stand down
+dtrh page log: reveal pending: variant_video (hub_open)
+dtrh page log: reveal pending: variant_htlink (hub_open)
+dtrh page log: engine live (game mode)
+dtrh: ENGINE LIVE
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 206 (page:payload)
+dtrh: heartbeat #1
+dtrh: fx-drive loom-file staged (2236341 bytes) — real loom-save through the real dispatch path (HARNESS-ONLY)
+dtrh-loom: saved spiral (2236341 bytes)
+dtrh: loom-list posted (1 spiral(s))
+dtrh-fx: sfx 'boon_pick' skipped — VN owns the mix
+dtrh: fx-drive injecting 'run-started@17' (raw JSON through the real dispatch path)
+dtrh-fx: vn-speaking off — mix released
+dtrh-meta: run started (diff=Gentle, mode=dtrh-web)
+dtrh: fx-drive injecting 'run-ended-full@21' (raw JSON through the real dispatch path)
+dtrh-meta: run complete — base 750 x 1,0 = 750 XP, 171 sparks
+dtrh page log: payout: base=750 final=750 sparks=171
+dtrh: heartbeat #16
+dtrh: auto-close firing
+dtrh-fx: teardown complete
+dtrh: flow ended — shutting down the lifetime
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+[0722/060057.337:ERROR:ui\gfx\win\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412

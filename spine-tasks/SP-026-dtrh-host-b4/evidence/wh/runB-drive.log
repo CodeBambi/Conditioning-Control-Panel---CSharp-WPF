@@ -1,0 +1,13 @@
+
+data dir reset (backup at scratch)
+loom GIF staged into run-time overlay
+user media staged into data dir assets (2 images + 1 video)
+launched pid=12724
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T020943\lane-1\spine-tasks\SP-026-dtrh-host-b4\evidence\wh\runB-cheshire-a.png; dark=7,7% distinct-colors~412
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T020943\lane-1\spine-tasks\SP-026-dtrh-host-b4\evidence\wh\runB-cheshire-b.png; dark=7,7% distinct-colors~409
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T020943\lane-1\spine-tasks\SP-026-dtrh-host-b4\evidence\wh\runB-after-banking.png; dark=7,2% distinct-colors~414
+EXIT=0
+proofs copied

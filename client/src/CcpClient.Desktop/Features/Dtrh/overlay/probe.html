@@ -46,6 +46,19 @@ if (bridge) {
     document.title = 'PROBE-DONE';
   });
   rec('bridge.on(probe-h2p) registered; awaiting host send');
+  // SP-026 b4: served-media display proof — the host sends probe-img messages carrying
+  // SERVED loopback URLs (Loom spirals / user media) and the probe renders them in the
+  // SAME engine that renders the game (pixel-verifiable serving evidence, harness-only).
+  bridge.on('probe-img', (m) => {
+    if (!m || !m.url) return;
+    const el = document.createElement(m.kind === 'video' ? 'video' : 'img');
+    el.src = m.url;
+    if (m.kind === 'video') { el.muted = true; el.autoplay = true; el.loop = true; }
+    el.style.cssText = 'max-width:30vw;max-height:30vh;margin:4px;border:2px solid #ff5fa2';
+    document.body.appendChild(el);
+    el.onerror = () => rec('probe-img LOAD ERROR (' + (m.kind || 'image') + ')');
+    rec('probe-img rendered ' + (m.kind || 'image') + ' (' + m.url.length + '-char url)');
+  });
   // preBuffer check: the host sends probe-buffered BEFORE this delayed registration;
   // the bridge must buffer it and replay on on() (ordering contract).
   setTimeout(() => {

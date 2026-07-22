@@ -1,0 +1,12 @@
+
+data dir reset (backup at scratch)
+loom GIF staged into run-time overlay
+user media staged into data dir assets (2 images + 1 video)
+launched pid=9808
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T020943\lane-1\spine-tasks\SP-026-dtrh-host-b4\evidence\wh\runA-host-live.png; dark=2,4% distinct-colors~405
+m2test done observed: True
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T020943\lane-1\spine-tasks\SP-026-dtrh-host-b4\evidence\wh\runA-after-m2test.png; dark=6,0% distinct-colors~418
+EXIT=0
+slot1 proof copied
