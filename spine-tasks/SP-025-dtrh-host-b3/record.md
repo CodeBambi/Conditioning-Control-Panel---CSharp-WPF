@@ -12,9 +12,16 @@
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260721T231721.md` |
 | 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260721T233648.md` |
 | 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260721T234936.md` |
-| 4 | plan | SKIPPED BY DESIGN (same) | `.reviews/4-20260722T000000.md` |
+| 4 | plan | SKIPPED BY DESIGN (same) | `.reviews/4-20260722T012948.md` |
+| 5 | plan | SKIPPED BY DESIGN (same) | `.reviews/5-20260722T000000.md` |
 
 ---
+
+## Step 5 — verification (final tree, post consult fixes)
+
+- **Windows:** `dotnet build client/CcpClient.sln -c Debug -t:Rebuild` **0W/0E** (warnings measured on Rebuild per the xUnit1051 lesson); CcpClient.Tests **313/313**; CcpClient.HeadlessTests **29/29** (floor 292/27 exceeded).
+- **WSL2 (`~/ccp-sp025`, re-synced final tree):** sln **0W/0E**; **313/313 + 29/29**.
+- `git diff --check` clean; `git status --short` = File Scope paths only (+ the packet-authorized `client/docs/port-lessons.md` doc edit, per the packet's Documentation Requirements "Check If Affected" clause — documented in record + STATUS + board row).
 
 ## Step 4 — headed/WX evidence + divergence decision executed + board reconciliation
 

@@ -1,6 +1,6 @@
 ## STATUS: SP-025 — DTRH host slice b3: native SFX/audio/video + freeze + rendered tint safety
-**Current Step:** Step 5 — Testing & Verification
-**Last Updated:** 2026-07-22 (Step 4 complete — runs A/B/C/D on DISPLAY3, WSL2 contract 313/313+29/29 0W/0E, divergence decided+executed, consult APPROVE w/ 2 fix-first items CLOSED, board row WIP)
+**Current Step:** complete (all 5 steps done; .DONE pending)
+**Last Updated:** 2026-07-22 (Step 5 green — Windows Rebuild 0W/0E 313/313+29/29, WSL2 0W/0E 313/313+29/29, diff-check clean, File-Scope-only status)
 **Blockers:** none
 
 ### Step 1: archaeology + admission + pre-approach consult
@@ -29,6 +29,6 @@
 - [x] STATUS.md accurate
 
 ### Step 5: verification
-- [ ] testCommand green 0W/0E both platforms (≥292/27 floor)
-- [ ] git diff --check clean
-- [ ] git status shows File Scope only
+- [x] testCommand green 0W/0E both platforms (≥292/27 floor)
+- [x] git diff --check clean
+- [x] git status shows File Scope only
