@@ -1,6 +1,6 @@
 ## STATUS: SP-034 — Stall-detector probe tooling
-**Current Step:** Step 3 — manifest patch + apply/verify + docs (IN PROGRESS)
-**Last Updated:** 2026-07-22 (step 2 complete: probe + 3 self-tests PASS; amendment authored, applied, verified exit 0, idempotent; review skipped nested_spawn_blocked)
+**Current Step:** Step 4 — verification (IN PROGRESS)
+**Last Updated:** 2026-07-22 (step 3 complete: manifest applied/verified/idempotent; record.md complete with post-consult fixes; pre-completion consult recorded)
 **Blockers:** none
 
 ### Step 1: evidence + design + pre-approach consult
@@ -20,9 +20,11 @@
 
 ### Step 3: manifest patch + apply/verify + docs
 - [x] Manifest entry applied + verified (idempotent, loud-on-drift)
-- [ ] record.md complete (script reproduced)
-- [ ] Pre-completion solo consult
-- [ ] STATUS.md accurate
+- [x] record.md complete (script reproduced)
+- [x] Pre-completion solo consult
+- [x] STATUS.md accurate
+
+**Step 3 Status: COMPLETE** (pre-completion consult: 2 gaps adopted + fixed — per-pid clamp, multi-lane note; re-runs PASS; §6 regenerated)
 
 ### Step 4: verification
 - [ ] testCommand green (verify.mjs exit 0; 0W/0E; ≥446/29 floor, no drift)
