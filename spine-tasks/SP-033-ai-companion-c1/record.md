@@ -96,11 +96,24 @@ Every pipeline operation emits one `AiDiagnosticRecord` (classes/outcome/stable 
 
 ## 5. Engine review presence (T-2)
 
-(pending — per-call record of engine-review presence/absence)
+| Call | Result |
+|------|--------|
+| Step 1 plan review (`spine_review_step --step 1 --type plan`) | **Engine review ABSENT (expected)** — nested reviewer spawn blocked inside pi worker session; `skipped: true`, `spawnFailed: false` (SP-195: engine runs reviews after `.DONE`). Artifact: `.reviews/1-20260722T141537.md` |
+| Step 2 plan review (`spine_review_step --step 2 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/2-20260722T143047.md` |
+| Step 3 plan review (`spine_review_step --step 3 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/3-*.md` |
 
 ## 6. Redaction/log-site registry (SP-018 pattern, product-side form)
 
-(pending — every new log/diagnostic site + what it carries)
+SP-018's redaction registry is a SPIKE-SCOPED instrument (`client/spikes/CcpSpike.AiProvider/Redact.cs` + a gitignored per-run secrets registry); no product-code central registry exists. c1's product-side form of the same discipline: **every new log/diagnostic site enumerated here, with what it can carry** — and the answer is always "stable codes/classes only, by construction":
+
+| Site | Carries | Content-freedom mechanism |
+|------|---------|---------------------------|
+| `AiOperationPipeline` → `IAiDiagnosticsSink.Emit` (one record per operation) | `AiDiagnosticRecord`: operation/endpoint CLASSES, typed outcome, stable code, generation, duration, counts | SP-016 schema (no free-text field exists); SP-016 structural property-set proof maintained + `Diagnostics_NeverCarryText_StableCodesOnly` |
+| `SecretToolSecretStore` | NO log site. secret-tool stderr is NEVER logged or surfaced raw — classified to the stable detail "secret service unreachable (no session daemon)" (stderr can carry session paths); secret values travel stdin-only (never argv) | code review + `LinuxProbe_TypedOutcome_NeverFaked` |
+| `WindowsDpapiSecretStore` | NO log site. Failures are typed (`SecretStoreUnavailableException` with a stable code) or absent-read (corrupt blob deleted, WPF precedent) | `SecretStoreUnavailableException` message is `secret-store: {stableCode}` by construction |
+| `AiOperationPipeline` diagnostics `StableCode` on fault | exception CLASS NAME only (contract §12 rule 1 — messages can embed user input) | `StableCodeOf` maps `Failed` → `Exception.GetType().Name` |
+
+Secrets inventory: c1 stores no real secrets (no credentials exist); the seam + tests use synthetic values only. Nothing secret was sent to any advisor/MCP.
 
 ## 7. Evidence transcripts
 

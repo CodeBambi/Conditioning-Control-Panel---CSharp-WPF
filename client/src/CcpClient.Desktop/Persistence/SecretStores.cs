@@ -189,6 +189,13 @@ public sealed class SecretToolSecretStore : ISecretStore
         {
             var result = await Run(
                 ["lookup", .. LookupArgsPrefix, "ccp-probe"], stdin: null, cancellationToken).ConfigureAwait(false);
+            if (result.ToolMissing)
+            {
+                return new CapabilityState.DependencyMissing("secret-tool", new CapabilityReason(
+                    CapabilityReasonCodes.SecretServiceUnreachable,
+                    "secret-tool (libsecret) not on PATH"));
+            }
+
             if (result.TimedOut)
             {
                 return new CapabilityState.Unavailable(new CapabilityReason(
@@ -215,13 +222,13 @@ public sealed class SecretToolSecretStore : ISecretStore
 
     private static void ThrowIfUnavailable(ToolResult result)
     {
-        if (result.TimedOut || result.StdErr.Length > 0)
+        if (result.TimedOut || result.ToolMissing || result.StdErr.Length > 0)
         {
             throw new SecretStoreUnavailableException(CapabilityReasonCodes.SecretServiceUnreachable);
         }
     }
 
-    private sealed record ToolResult(int ExitCode, string StdOut, string StdErr, bool TimedOut);
+    private sealed record ToolResult(int ExitCode, string StdOut, string StdErr, bool TimedOut, bool ToolMissing = false);
 
     private static async Task<ToolResult> Run(string[] args, string? stdin, CancellationToken cancellationToken)
     {
@@ -238,31 +245,44 @@ public sealed class SecretToolSecretStore : ISecretStore
             psi.ArgumentList.Add(arg);
         }
 
-        using var process = Process.Start(psi)!;
-        if (stdin is not null)
-        {
-            await process.StandardInput.WriteAsync(stdin).ConfigureAwait(false);
-            process.StandardInput.Close();
-        }
-
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        Process process;
         try
         {
-            await process.WaitForExitAsync(linked.Token).ConfigureAwait(false);
-            return new ToolResult(process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false), false);
+            process = Process.Start(psi)!;
         }
-        catch (OperationCanceledException)
+        catch (System.ComponentModel.Win32Exception)
         {
-            try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
-            if (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            // Tool absent from PATH — typed unavailability, never an unclassified fault.
+            return new ToolResult(-1, "", "", false, ToolMissing: true);
+        }
+
+        using (process)
+        {
+            if (stdin is not null)
             {
-                return new ToolResult(-1, "", "", true);
+                await process.StandardInput.WriteAsync(stdin).ConfigureAwait(false);
+                process.StandardInput.Close();
             }
 
-            throw;
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+            try
+            {
+                await process.WaitForExitAsync(linked.Token).ConfigureAwait(false);
+                return new ToolResult(process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false), false);
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+                if (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                {
+                    return new ToolResult(-1, "", "", true);
+                }
+
+                throw;
+            }
         }
     }
 
