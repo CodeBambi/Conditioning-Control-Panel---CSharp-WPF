@@ -1,7 +1,8 @@
 ## STATUS: SP-026 — DTRH host slice b4: progression/payout, Loom, user/mod media
-**Current Step:** Step 4 — headed/WX evidence + page-visual unlocks + board + pre-completion consult (IN PROGRESS)
-**Last Updated:** 2026-07-22 (Step 3 complete — 366/366 + 29/29, Rebuild 0W/0E; plan review SKIPPED BY DESIGN)
+**Current Step:** Step 5 — testing & verification (IN PROGRESS)
+**Last Updated:** 2026-07-22 (Step 4 complete — pre-completion consult APPROVE, fix-firsts applied, board row WIP)
 **Blockers:** none
+**File Scope amendment (SP-023 norm, 3 wiring files, mustNotChange untouched):** Program.cs + App.axaml.cs (--dtrh-m2test flag threading) + Lifecycle/CompositionRoot.cs (data-dir thread to DtrhParticipant — sole registration site).
 
 ### Step 1: archaeology + design + pre-approach consult — COMPLETE
 - [x] Update STATUS.md before starting work
@@ -21,12 +22,12 @@
 - [x] Unit tests (Loom lifecycle, traversal/MIME refusal, seed shape)
 
 ### Step 4: headed/WX evidence + page-visual unlocks + board + pre-completion consult
-- [ ] DISPLAY3 headed evidence (payout round-trip, Loom display, user media, page-visual unlocks; rect lines PERSISTED)
-- [ ] WSL2 gate (contract green, WX facts)
-- [ ] record.md complete
-- [ ] Pre-completion solo consult
-- [ ] Board row WIP with named limits
-- [ ] STATUS.md accurate
+- [x] DISPLAY3 headed evidence (payout round-trip, Loom display, user media, page-visual unlocks; rect lines PERSISTED)
+- [x] WSL2 gate (contract green, WX facts)
+- [x] record.md complete
+- [x] Pre-completion solo consult (APPROVE + fix-firsts applied: loom-rack named limit, 3-file amendment documented)
+- [x] Board row WIP with named limits
+- [x] STATUS.md accurate
 
 ### Step 5: verification
 - [ ] testCommand green 0W/0E both platforms (≥313/29 floor)
