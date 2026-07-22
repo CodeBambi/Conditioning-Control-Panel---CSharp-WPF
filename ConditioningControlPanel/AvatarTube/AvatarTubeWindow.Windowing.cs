@@ -1118,6 +1118,17 @@ namespace ConditioningControlPanel
         public bool IsDetached => !_isAttached;
 
         /// <summary>
+        /// The tube's HWND while ATTACHED, else <see cref="IntPtr.Zero"/>. Used by sibling windows that
+        /// share our native owner (the game hosts) to slot themselves ABOVE the attached pair instead of
+        /// directly above main - two windows owned by the same HWND have no defined order between them,
+        /// which is what let a game window and the tube interleave into a torn composite.
+        /// Plain-field reads only: this is called from the MAIN thread while the tube may live on its own
+        /// dispatcher thread, so it must never touch a DependencyProperty (use IsWindowVisible on the
+        /// handle instead of IsVisible).
+        /// </summary>
+        internal IntPtr AttachedHandleOrZero => _isAttached ? _tubeHandle : IntPtr.Zero;
+
+        /// <summary>
         /// Gets whether the avatar is currently visible on screen.
         /// Returns false if attached and main window is minimized or not visible.
         /// Returns true if detached (independent widget window).
