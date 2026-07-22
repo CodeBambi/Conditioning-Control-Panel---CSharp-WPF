@@ -143,4 +143,26 @@ Verdict: APPROVE all six design decisions as framed. Bindings (ALL adopted into 
 
 verify.mjs exit 0; build 0W/0E; CcpClient.Tests **446/446** (floor 412; +34 over floor: 29 Step-2 + 5 routing); HeadlessTests **29/29** (floor 29 — no new headless tests: service-core + dispatch-table slice, q1 precedent).
 
+- Step 3 plan review: `spine_review_step(step=3, type=plan)` → **SKIPPED by engine** (SP-195; `spawnFailed=false`, artifact `.reviews/3-20260722T133049.md`).
+
+## Budgets, surprises, durable-lesson candidates
+
+### Budgets
+
+- q1-surface changes: **1** (additive `SoundArbitration.VoiceActive`) — justified in Step 2 above.
+- New packages: **0**. New headless tests: **0** (service-core + dispatch-table slice, q1 precedent). Unit tests: **+34** over the 412 floor (29 pipeline/persistence + 5 routing).
+- Headed evidence: **not used** (the wave's headed lane did not arm — recorded honestly).
+
+### Surprises
+
+1. **Harness rotation alternation (harness-only fix):** the deterministic 2-variant pool alternates audio/text-only — the first harness run failed 2 checks because a text-only pick (typed NoAudioAsset) was treated as a hand-off failure. The PRODUCT semantics were correct (rotation + suppression VERIFIED); the harness now asserts the typed degradation as an evidence point and raises again. Lesson shape: evidence harnesses over rotation-bearing systems must be rotation-aware or use single-variant pools for ordering claims.
+2. **WSL gate payload linkage:** 4 pre-existing payload-asset tests failed on the first Linux run because the rsync missed the legacy-tree LINKED payload glob (`ConditioningControlPanel/Resources/web/dtrh/**`, csproj:49-53). Not an SP-032 defect — a WSL-gate staging gap (SP-029's rsync predated the DTRH payload linkage). The gate now stages that subtree; recorded for future packets' WSL gates.
+3. **verify.mjs reinstall drift (3rd occurrence on this lane):** the pi-spine reinstall removed all 6 patches again → apply.mjs → exit 0. Same lane condition as SP-028/SP-029; the T-5 anchor re-base (SP-031, this wave) addresses the class.
+
+### Durable-lesson candidates (for the orchestrator's land-time reconcile — enabler 2)
+
+- **port-lessons candidate 1:** WSL2 in-packet gates must stage the legacy-tree LINKED payload subtree (`ConditioningControlPanel/Resources/web/dtrh/**`) alongside `client/` — the DTRH payload is a csproj glob link, not a `client/` file (4-test failure class on a fresh Linux stage).
+- **port-lessons candidate 2:** evidence harnesses over rotation/recency systems: assert typed degradations as first-class outcomes (never treat a legal text-only pick as a failure), and prefer single-variant pools where the claim is ordering/pacing.
+- **task-board row note (quips/sound arbitration, q2):** bark content pipeline live on q1's arbitration (rules/variants/payload integrity/freshness/mute/pacing); disabled-phrase persistence on SP-005; rapid cues proven through arbitration (8/4 typed overflow, no starvation, backend-event-verified Windows; mechanism facts Linux); DTRH `bark` Deferred→Handled with presence+shape logging; contract 446/29 both platforms. Named limits carried: voice assets unported (typed NoAudioAsset/AudioResolveFailed surface); pool_ref empty (phrase-category row); narrator/self-echo/chat gates = seams (chat row); 50-min collapse + 1/25 pop = avatar-input row; app-wide store flush = future row (CompositionRoot out of scope).
+
 (pending)

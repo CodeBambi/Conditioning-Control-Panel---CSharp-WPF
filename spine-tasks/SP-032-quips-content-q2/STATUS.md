@@ -1,6 +1,6 @@
 ## STATUS: SP-032 — Quips/sound arbitration q2: bark content pipeline + host wiring
-**Current Step:** Step 3 — rapid cues + DTRH wiring + backend-event evidence (outcomes complete; plan review pending)
-**Last Updated:** 2026-07-22 (Step 3 outcomes)
+**Current Step:** Step 4 — evidence consolidation + pre-completion consult
+**Last Updated:** 2026-07-22 (Step 3 complete; plan review SKIPPED by engine, SP-195)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
@@ -21,9 +21,9 @@
 - [x] Headed evidence per DISPLAY3/rect/modal/orphan rules if the host is used (headed host evidence NOT used — bindings do not arm; recorded)
 
 ### Step 4: evidence consolidation + pre-completion consult
-- [ ] record.md complete
+- [x] record.md complete
 - [ ] Pre-completion solo consult
-- [ ] STATUS.md accurate
+- [x] STATUS.md accurate
 
 ### Step 5: verification
 - [ ] testCommand green (verify.mjs exit 0; 0W/0E; ≥412/29 floor)
