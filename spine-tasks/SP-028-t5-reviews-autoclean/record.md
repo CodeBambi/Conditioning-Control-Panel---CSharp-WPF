@@ -306,6 +306,8 @@ adaptation explicitly (above). Actual answering model: not surfaced (same as abo
   skipped:true, spawnFailed:false, artifact 1-20260722T093438.md.
 - Step 2 plan review (`spine_review_step` type=plan): **engine-SKIPPED** (SP-195).
   skipped:true, spawnFailed:false, artifact 2-20260722T093923.md.
+- Step 3 plan review (`spine_review_step` type=plan): **engine-SKIPPED** (SP-195).
+  skipped:true, spawnFailed:false, artifact 3-20260722T094304.md.
 
 ## Step 2 — manifest entry + apply/verify on the live install
 
@@ -385,4 +387,38 @@ named post-land gate on board row T-5 (if that land T-5s, the patch is wrong and
 reopens). Note: SP-028's own finalization runs on the patched live install — if the batch
 engine hosting this very lane picks up the patched `lane-commit.mjs`, SP-028 itself may
 land without the manual recovery; that is corroboration, not the named gate (the named
-gate is the NEXT Level-2 batch, orchestrator-observed).
+gate is the NEXT Level-2 batch, orchestrator-observed). **Module-cache correction
+(pre-completion consult, binding):** the batch engine process finalizing THIS lane started
+before Step 2 patched the file and holds the OLD `lane-commit.mjs` in ESM module cache —
+SP-028's own finalization is EXPECTED to T-5 one final time and need the playbook once
+more. That is not a patch failure and must not reopen the row; the named gate is the first
+Level-2 batch LAUNCHED AFTER the patch was applied.
+
+## Step 4 — docs + board reconciliation
+
+- `.spine/patches/README.md`: `t5-reviews-autoclean` row in the patch table; T-12 bullet
+  annotated (T-5 blast radius patched downstream, the helper quirk itself still excluded);
+  latent apply.mjs same-file-multi-patch clobber recorded as a mechanism note.
+- `client/docs/port-lessons.md`: T-5-closed entry (sharpened root cause, shape-b′ choice
+  + resume-path evidence, journal durability, proof boundary).
+- `client/docs/task-board.md` row T-5: `OPEN` → `CLOSED-by-patch` (NOT DONE — per packet
+  Do-NOT) with the NAMED POST-LAND GATE: first Level-2 batch after this land must skip
+  the manual recovery; a T-5 there reopens the row.
+
+## Step 4 — pre-completion solo consult (Fable 5 requested, solo)
+
+**Verdict: no blocking defect; ONE binding honesty correction (applied):** SP-028's own
+land will almost certainly STILL T-5 — the batch engine finalizing this lane started
+before Step 2 and holds the OLD `lane-commit.mjs` in ESM module cache. Record.md's
+"corroboration" sentence was overstated in the wrong direction; corrected (Step-3 proof
+boundary now names the expectation), and the board row's named gate now reads "first
+Level-2 batch LAUNCHED AFTER the patch was applied" with the SP-028-own-land carve-out —
+keeps the gate falsifiable and prevents a false reopen. Non-blocking confirmations:
+rmSync site/comment accurate (incl. the benign committed:false-clean side effect for
+.reviews/-only lanes); testedVersions functional evidence stronger than the SP-020
+byte-presence convention; CLOSED-by-patch wording correct with the launch-time clause;
+both deviations correctly recorded; proof boundary not overstated after the correction.
+Step-5 gates enumerated by the consult (contract testCommand, diff-check, status scope,
+final STATUS accuracy) — executed in Step 5 below.
+Requested route: solo Fable 5. Actual answering model: NOT surfaced in the consult tool
+response (recorded honestly per T-7; no model identity claim made).

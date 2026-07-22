@@ -34,7 +34,15 @@ Deliberately **not** patched locally:
   be honestly exercised in scratch. Upstream fix sketch: drop `--no-index` (or
   set-minus `git ls-files --cached`) and never suggest `git rm --cached` for
   paths present on the merge target (`diagnosis-merge-failure.mjs`
-  `buildGitignoredMergeRepairCommand`). See SP-020 record.md.
+  `buildGitignoredMergeRepairCommand`). See SP-020 record.md. **SP-028 sharpening:
+  the T-5 half of that helper's blast radius is now patched downstream
+  (`t5-reviews-autoclean` deletes `.reviews/` at `commitLaneWorktree` entry);
+  the underlying git 2.49 blank-line `check-ignore --no-index` quirk in
+  `filterGitignoredPaths` itself is STILL unpatched (T-12's exclusion stands).**
+- **Mechanism note (SP-028):** `apply.mjs` phase 2 writes each patch against the
+  ORIGINAL file content — two patches targeting the SAME file would clobber each
+  other (latent; all six current patches target distinct files). Re-base to
+  sequential re-read before authoring a same-file multi-patch.
 
 ## How — after ANY pi-spine install/update
 
