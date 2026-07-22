@@ -1,14 +1,14 @@
 ## STATUS: SP-028 — T-5 local anchor-patch (parallelism enabler 1)
-**Current Step:** Step 1 — T-5 call-chain archaeology + patch-shape design + pre-approach consult
-**Last Updated:** 2026-07-22 (authored)
+**Current Step:** Step 2 — manifest entry + apply/verify
+**Last Updated:** 2026-07-22 (Step 1 complete pending plan review)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Call-chain archaeology (live resolvePostLaneCommitPorcelain copy; .reviews/ write order; auto-commit non-sweep; review-scope precedent)
-- [ ] Historical derivation (all T-5 occurrences enumerated from journals)
-- [ ] Patch-shape design ((a) shared-check filter vs (b) finalization-only delete; anchor + replacement drafted)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] Call-chain archaeology (live resolvePostLaneCommitPorcelain copy; .reviews/ write order; auto-commit non-sweep; review-scope precedent)
+- [x] Historical derivation (all T-5 occurrences enumerated from journals)
+- [x] Patch-shape design ((a) shared-check filter vs (b) finalization-only delete; anchor + replacement drafted — adapted to (b′) commitLaneWorktree per consult + resume-path evidence)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: manifest entry + apply/verify
 - [ ] Manifest patch authored (anchor byte-exact, rationale, testedVersions)

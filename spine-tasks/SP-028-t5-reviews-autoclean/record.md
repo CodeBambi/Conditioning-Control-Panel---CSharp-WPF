@@ -1,0 +1,304 @@
+# SP-028 record — T-5 local anchor-patch: eliminate the .reviews/ DirtyWorktree land tax
+
+## Step 1 — call-chain archaeology (READ-ONLY, live pi-spine 2.10.0 tree)
+
+### Which `resolvePostLaneCommitPorcelain` copy is live
+
+TWO copies exist:
+
+- `src/batch/lane-dirty-check.mjs:433` — **LIVE**. Imported by `src/batch/engine-lanes/commit.mjs:9`
+  (`} from "../lane-dirty-check.mjs";`), which is the only caller of the function
+  (`grep -rn "resolvePostLaneCommitPorcelain" src/` → import + call at commit.mjs:117;
+  other importers of `lane-dirty-check.mjs`: contract-exec.mjs, diagnosis-merge-failure.mjs,
+  lane-commit.mjs — none import the dead copy).
+- `src/batch/lane-dirty-check-commit.mjs:310` — **DEAD**. `grep -rn "lane-dirty-check-commit" src/ bin/ test/`
+  outside its own file: zero hits (exit 1). Nothing imports it.
+
+### The T-5 event order (journal-proven, batch 20260722T051051 / SP-027)
+
+```
+08:44:03  lane.completed
+08:44:03  review.started  (code,  artifactPath=...lane-1/spine-tasks/SP-027-dtrh-host-b5/.reviews/5-....md)
+08:46:23  review.completed (code,  APPROVE)
+08:47:13  review.started  (final, artifactPath=.../.reviews/final-....md)
+08:48:26  review.completed (final, PASS)
+08:48:27  lane.committed (commitSha 0a1d8075)
+08:48:27  task.failed (classification DirtyWorktree, 39 ms later)
+```
+
+Pipeline code order (`src/batch/engine-lanes.mjs:335-405`): `lane.completed` →
+`runCodeReviewPhase` → `runFinalReviewPhase` → `commitLaneAndValidateWorktree`.
+Review artifacts are written into the LANE worktree task folder
+(`taskFolderInWorktree`, engine-lanes.mjs:128) by the review spawns
+(`review-step-run.mjs` / `review-shared.mjs` `buildReviewArtifactPath` →
+`<taskFolder>/.reviews/{step|final}-<ts>.md`). Verdicts are journaled
+(`review.completed`) before finalization runs.
+
+### Root cause — sharpened past the board row's "classification bug" framing
+
+`commitLaneAndValidateWorktree` (engine-lanes/commit.mjs) → `commitLaneWorktree`
+(lane-commit.mjs) → `filterGitignoredPaths` (git-helpers.mjs:14) runs
+`git check-ignore --no-index --stdin` over the dirty paths. `git status --porcelain`
+lists the untracked review dir WITH A TRAILING SLASH (`?? spine-tasks/SP-xxx/.reviews/`).
+
+**Empirical (this worktree, git 2.49.0.windows.1):**
+
+```
+$ printf 'spine-tasks/foo/\nclient/\nfoo/.reviews/\n' | git check-ignore -v --no-index --stdin
+.gitignore:179:	spine-tasks/foo/
+.gitignore:179:	client/
+.gitignore:179:	foo/.reviews/
+```
+
+`.gitignore:179` is a BLANK line (verified `awk NR==179`). git 2.49 `--no-index`
+false-positive-matches ANY trailing-slash directory input against the blank line
+(no pattern). File paths (`.reviews/x.md`) and non-trailing-slash dirs do NOT match.
+
+Consequence chain, 100% deterministic on every Level-2 batch:
+
+1. Review stage writes `.reviews/` into the lane AFTER the worker's last commit.
+2. Lane auto-commit: `filterGitignoredPaths` mis-classifies `?? .reviews/` as
+   gitignored → `skipped`; only `.DONE` (+ any other drift) is staged and committed.
+3. Post-commit `resolvePostLaneCommitPorcelain` re-runs `git status --porcelain`
+   (which does NOT apply the blank-line quirk — it is a check-ignore-`--no-index`
+   artifact only) → `?? .reviews/` still present → `filterOutOfScopeCoveragePorcelain`
+   keeps it (not a coverage path) → DirtyWorktree.
+
+**Proof across history:** every lane auto-commit `feat(SP-xxx): batch * worker completion`
+(12 inspected: SP-012…SP-027) contains `.DONE` and NEVER `.reviews/`:
+
+```
+0a1d8075 SP-027  .DONE only          451ac55e SP-022  .DONE only
+d0e4a1d9 SP-026  .DONE only          fd375b62 SP-019  .DONE only
+50b61312 SP-025  .DONE only          83923700 SP-018  .DONE only
+a842c639 SP-024  .DONE only          918ac262 SP-015  .DONE + 2 .pi/loops files
+49d3ae35 SP-023  .DONE + 1 .pi/loops 49085959 SP-014  .DONE only
+64d66d10 SP-013  .DONE + task-board  4243ccef SP-012  .DONE only
+```
+
+This is the SAME shared helper (`filterGitignoredPaths`, `check-ignore --no-index`)
+that SP-020's T-12 analysis flagged as unsafe to patch — the T-5 and T-12 rows are
+two symptoms of one git-quirk-sensitive call site.
+
+### Why the lane auto-commit does not sweep it
+
+`commitLaneWorktree` stages `stageCandidatePaths` = dirty paths minus
+`shouldSkipHookIgnorePath` (`.venv` only — `resolveWorktreeSetupIgnorePaths(config)`
+= defaults `[".venv"]` + config `[".venv"]`) minus `filterGitignoredPaths`-skipped.
+`.reviews/` is NOT hook-ignored and NOT in `.gitignore` (verified
+`git check-ignore` without `--no-index` → exit 1, no match); it falls to the
+`check-ignore --no-index` quirk above and is silently skipped. The
+`GitignoredDirtyWorktree` fail-closed branch only fires when `stageable.length === 0`;
+with `.DONE` stageable the commit proceeds and the mis-skip is invisible until the
+post-commit re-check classifies DirtyWorktree.
+
+### The review-scope precedent
+
+`src/batch/review-scope.mjs:22` already excludes `.reviews/` from review diff
+scoping (`if (normalized.includes("/.reviews/") || normalized.startsWith(".reviews/"))`)
+— the engine ALREADY treats `.reviews/` as engine-internal, never product content.
+
+## Step 1 — historical derivation (strictly-load-bearing admission evidence)
+
+Journal enumeration across `.spine/runtime/*/journal/events.jsonl`
+(main checkout — read-only; `task.failed` events with DirtyWorktree-family
+classification, prior `review.completed` verdict):
+
+| # | timestamp (UTC) | batch | task | classification | prior review |
+|---|---|---|---|---|---|
+| 1 | 2026-07-18T11:34 | 20260718T112944 | SP-001 | GitignoredDirtyWorktree | none (pre-T-2) |
+| 2 | 2026-07-19T00:40 | 20260718T235923 | SP-004 | GitignoredDirtyWorktree | none |
+| 3 | 2026-07-19T01:49 | 20260719T010403 | SP-005 | GitignoredDirtyWorktree | none |
+| 4 | 2026-07-19T02:50 | 20260719T021531 | SP-006 | GitignoredDirtyWorktree | none |
+| 5 | 2026-07-19T22:35 | 20260719T210942 | SP-011 | GitignoredDirtyWorktree (lane `.reviews/` + spike bin, per SP-017-style payload + gate history) | final PASS |
+| 6 | 2026-07-20T01:57 | 20260720T004519 | SP-012 | DirtyWorktree | final:PASS |
+| 7 | 2026-07-20T05:12 | 20260720T022627 | SP-013 | DirtyWorktree | final:PASS |
+| 8 | 2026-07-20T07:09 | 20260720T052700 | SP-014 | DirtyWorktree | final:PASS |
+| 9 | 2026-07-21T07:31 | 20260720T072956 | SP-015 | DirtyWorktree | final:PASS |
+| 10 | 2026-07-21T12:42 | 20260721T111026 | SP-018 | DirtyWorktree | final:PASS |
+| 11 | 2026-07-21T13:53 | 20260721T130248 | SP-019 | DirtyWorktree | final:PASS |
+| 12 | 2026-07-21T18:02 | 20260721T174051 | SP-022 | DirtyWorktree (on engine 2.10.0 — upstream SP-601 auto-clean does NOT cover `.reviews/`) | final:PASS |
+| 13 | 2026-07-21T20:07 | 20260721T181508 | SP-023 | DirtyWorktree | final:PASS |
+| 14 | 2026-07-21T22:40 | 20260721T202836 | SP-024 | DirtyWorktree | final:PASS |
+| 15 | 2026-07-22T01:50 | 20260721T225836 | SP-025 | DirtyWorktree | final:PASS |
+| 16 | 2026-07-22T04:55 | 20260722T020943 | SP-026 | DirtyWorktree | final:PASS |
+| 17 | 2026-07-22T08:48 | 20260722T051051 | SP-027 | DirtyWorktree | final:PASS |
+
+Gate-history numbering (task-board rows 94-110): SP-027 = "15th — deterministic".
+Reconciliation: gate history counts SP-011's `.reviews/` variant and skips the
+pre-T-2 bin/obj-only occurrences; SP-016/SP-017's terminal blocks were T-12
+(merge-time tracked-ignored scan), NOT T-5 (board row T-5 note). SP-020 landed via
+the human_base_diverged path (no T-5); SP-021 was a stub probe (aborted).
+**Every Level-2 batch since T-2 closure (SP-012 onward) T-5'd: 12 consecutive,
+every one `.reviews/` residue, every one recovered by the identical manual step**
+(journal-read verdicts → delete `.reviews/` → retry fast-path → manual orch ff →
+hand-written gate record). 15/15 gate-history occurrences total; the
+strictly-load-bearing rule is satisfied for the `.reviews/` site specifically by
+the 12 consecutive Level-2 occurrences plus SP-011's variant.
+
+## Step 1 — patch-shape design
+
+### Shape (a): teach the porcelain check to exclude `.reviews/`
+
+Patch `resolvePostLaneCommitPorcelain` or `filterGitignoredPaths`. REJECTED:
+
+- `filterGitignoredPaths` is the shared helper SP-020's T-12 analysis declared
+  unsafe to patch (feeds lane-commit classification AND the merge path
+  `tryAutoResolveOutOfScopeMergeConflict` → `git rm --cached` fallback, which
+  cannot be honestly exercised in scratch). Fixing the blank-line quirk there
+  changes semantics for every consumer — exactly the T-12 exclusion.
+- Filtering `.reviews/` in the post-commit check alone leaves the mis-skip in
+  lane-commit (harmless but two-sided), and leaves untracked debris in the lane
+  worktree forever.
+
+### Shape (b): delete `.reviews/` in `commitLaneAndValidateWorktree` before the lane commit — SUPERSEDED by (b′)
+
+Mirrors the 15×-proven manual recovery step in one contained function.
+Consumer census for the patched function:
+
+- `engine-lanes.mjs:385` — standard lane finalization, called ONLY after
+  `runCodeReviewPhase` + `runFinalReviewPhase` succeeded (verdicts journaled).
+- `matrix-run.mjs:488` — matrix lane finalization, after all rows merged.
+  No other callers (`grep -rn commitLaneAndValidateWorktree`).
+
+Deletion runs AFTER verdict recording, never before — both call sites are
+post-review. `fs.rmSync(..., {recursive:true, force:true})` is a no-op when
+`.reviews/` is absent (Review Level 0/1 tasks, matrix lanes without reviews).
+
+`.reviews/` on-disk consumer census (what deletion could affect):
+
+- Writers: `review-step-run.mjs` / `review-step.mjs` / `engine-lanes/review.mjs`
+  (review artifacts), `contract-exec.mjs:104` (contract-fail logs) — ALL run
+  BEFORE `commitLaneAndValidateWorktree` in the pipeline.
+- Readers: `review-artifacts.mjs` `findCompletedCodeReview` /
+  `findCompletedFinalReview` — journal-FIRST (an APPROVE/PASS `review.completed`
+  journal event short-circuits before any disk read); artifact reads are a
+  resume fallback. Called only by the review phases (engine-lanes/review.mjs,
+  review-step-run.mjs, review.mjs) — all pre-finalization. On a resume after a
+  crash between deletion and merge, the journal verdict is honored (source:
+  "journal"); no artifact needed.
+- Post-finalization: nothing in `bin/` or the merge path reads `.reviews/`
+  (`grep -rn "\.reviews" bin/ src/tasks/` → zero hits).
+- `.reviews/` was NEVER committed to any lane branch (12/12 auto-commit proof
+  above), so no land ever carried it — deletion loses nothing vs the status quo
+  of 15 manual recoveries.
+
+### Draft anchor + replacement (live 2.10.0 tree, tabs)
+
+Target: `.pi/npm/node_modules/pi-spine/src/batch/engine-lanes/commit.mjs`
+(fs/path NOT currently imported → two disjoint edit sites → TWO manifest patches
+on the same file; requires the apply.mjs phase-2 sequential-write fix below).
+
+Patch 1 `t5-reviews-autoclean-import` — anchor:
+```
+import { appendJournalEvent } from "../journal.mjs";
+import { commitLaneWorktree, gitPorcelain } from "../lane-commit.mjs";
+```
+replacement: same two lines preceded by
+```
+import fs from "node:fs";
+import path from "node:path";
+```
+
+Patch 2 `t5-reviews-autoclean` — anchor:
+```
+	const preCommitPorcelain = gitPorcelain(worktreePath);
+```
+replacement: the `fs.rmSync(path.join(taskFolder, ".reviews"), { recursive: true, force: true });`
+line with the `// ponytail:` rationale comment block, then the anchor line.
+
+### Required mechanism fix: apply.mjs phase-2 clobbers same-file multi-patch
+
+apply.mjs phase 1 stores ORIGINAL content per patch; phase 2 writes
+`content.replace(anchor, replacement)` — for two patches on the SAME file the
+second write would revert the first. All 5 existing patches target distinct
+files, so this never fired. Fix (in File Scope `.spine/patches/**`): phase 2
+re-reads the file at write time (`fs.readFileSync` then replace then write).
+All-or-nothing validation is unchanged (phase 1 still validates every anchor
+against the pre-write tree; the two new anchors are disjoint by construction).
+verify.mjs needs no change (it already re-reads per patch).
+
+### Rejected alternative placements
+
+- `commitLaneWorktree` (lane-commit.mjs — fs/path already imported, single
+  patch): REJECTED — 4 consumers (engine-lanes/commit.mjs, resume.mjs:344,
+  resume-multi-lanes.mjs:94+356); the resume paths are shared-helper surface
+  (T-12 lesson). `commitLaneAndValidateWorktree` has exactly 2 finalization-only
+  consumers.
+- Hoisted mid-file ESM import to keep one patch: REJECTED — legal but
+  non-idiomatic; the apply.mjs fix is 3 lines and benefits the mechanism.
+
+### Shape (b′) — ADAPTED after consult: delete `.reviews/` at the top of `commitLaneWorktree` — CHOSEN
+
+The pre-approach consult approved shape (b) at `commitLaneAndValidateWorktree` but flagged
+the resume paths as an open condition. Primary-source follow-up resolved it AGAINST the
+original site:
+
+- `resume.mjs:390` and `resume-multi-lanes.mjs:137` run their OWN post-commit dirty checks
+  (`filterPorcelain(gitPorcelain(wt))` after `commitLaneWorktree`) and emit DirtyWorktree
+  with `resumed:true` hardcoded; engine-lanes/commit.mjs emits no `resumed` flag.
+- Journal attribution: SP-013, SP-015, SP-027 (the LATEST), SP-001 failures carry
+  `resumed:true` — 4 of 17 occurrences fired on the RESUME path. Patching only
+  `commitLaneAndValidateWorktree` leaves the tax alive on the recovery path.
+- `commitLaneWorktree` (lane-commit.mjs) has exactly 4 consumers, ALL post-review lane
+  finalization: engine-lanes/commit.mjs:68, resume.mjs:344, resume-multi-lanes.mjs:94,:356
+  (both resume modules run review phases before the call). fs+path already imported.
+
+One anchor, one patch, no import patch, no apply.mjs change. T-12 exclusion inapplicable:
+that was `filterGitignoredPaths` classification semantics with an unexercisable merge-path
+consumer; here all 4 consumers are enumerated and deletion semantics are identical at each.
+Gut-check re-consult RATIFIED the move (verdict below).
+
+### Draft anchor + replacement (live 2.10.0 tree, tabs) — FINAL
+
+Target: `.pi/npm/node_modules/pi-spine/src/batch/lane-commit.mjs`, top of
+`commitLaneWorktree`. Anchor spans the insertion point (consult correction #1: the anchor
+must NOT survive as a contiguous substring of the replacement, else post-apply state =
+anchor×1 + replacement×1 and verify.mjs reports `drifted` forever):
+
+anchor:
+```
+	fileScopePaths = [],
+}) {
+	const identityRoot = projectRoot ?? worktreePath;
+```
+replacement: same first two lines, then the `// ponytail:` T-5 rationale comment block +
+`fs.rmSync(path.join(taskFolder, ".reviews"), { recursive: true, force: true });`, then the
+identityRoot line. The contiguous anchor is split by the insertion — tri-state invariant holds.
+
+### Tracked-`.reviews/` edge (consult correction #2 — verified)
+
+`git log --all -- "*/.reviews/*"`: SP-020's lane DID commit `.reviews/` files
+(worker step commit f7c6883b + auto-commit bf3d7eaf — possible because once the dir has a
+tracked file, porcelain lists new files individually WITHOUT the trailing slash, dodging the
+git quirk). With the patch, rmSync of tracked files surfaces as staged deletions in the
+finalization commit — commit proceeds, tree self-cleans, no failure. Recorded, accepted.
+
+### Mechanism note (moot after b′)
+
+apply.mjs phase-2 writes ORIGINAL content per patch — two patches on the SAME file would
+clobber (latent; all 5 existing patches target distinct files). Shape (b′) needs only one
+patch on one file, so the mechanism stays untouched. Recorded for the next multi-patch author.
+
+## Step 1 — pre-approach solo consult (Fable 5 requested, solo)
+
+**Consult 1 (pre-approach, solo):** verdict = shape (b) direction correct (contained
+deletion over shared-helper/porcelain-filter shapes); THREE binding corrections:
+(1) the draft insert-before anchors VIOLATE the manifest tri-state invariant (anchor ⊂
+replacement → post-apply verify reports drifted forever) — anchors must span the insertion
+point so the replacement SPLITS them; (2) worker step commits CAN track `.reviews/`
+(verify — done: SP-020 case above); (3) resume paths bypass `commitLaneAndValidateWorktree`
+— if they re-check porcelain, they still T-5 (resolved: they DO, and 4/17 occurrences
+incl. the latest fired there → adaptation b′).
+Requested route: solo Fable 5. Actual answering model: NOT surfaced in the consult tool
+response (recorded honestly per T-7; no model identity claim made).
+
+**Consult 2 (adaptation ratification, gut-check):** "RATIFY the move to
+`commitLaneWorktree`. It is the correct root-cause site — the single function where all
+four finalization paths converge... A patch that leaves the resume path T-5-able does not
+kill the tax — it just moves it to the recovery path." Recorded the PROMPT-target
+adaptation explicitly (above). Actual answering model: not surfaced (same as above).
+
+## Engine-review presence log (T-2 discipline)
+
+PENDING
