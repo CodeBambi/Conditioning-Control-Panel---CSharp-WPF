@@ -100,7 +100,7 @@ Every pipeline operation emits one `AiDiagnosticRecord` (classes/outcome/stable 
 |------|--------|
 | Step 1 plan review (`spine_review_step --step 1 --type plan`) | **Engine review ABSENT (expected)** — nested reviewer spawn blocked inside pi worker session; `skipped: true`, `spawnFailed: false` (SP-195: engine runs reviews after `.DONE`). Artifact: `.reviews/1-20260722T141537.md` |
 | Step 2 plan review (`spine_review_step --step 2 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/2-20260722T143047.md` |
-| Step 3 plan review (`spine_review_step --step 3 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/3-*.md` |
+| Step 3 plan review (`spine_review_step --step 3 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/3-20260722T144127.md` |
 
 ## 6. Redaction/log-site registry (SP-018 pattern, product-side form)
 
@@ -117,8 +117,36 @@ Secrets inventory: c1 stores no real secrets (no credentials exist); the seam + 
 
 ## 7. Evidence transcripts
 
-(pending)
+**Environment facts:** Windows 11 lane worktree (this box); WSL2 Ubuntu (`Linux WeeB 6.6.114.1-microsoft-standard-WSL2`), dotnet 10.0.110 both platforms; **no node in WSL** → verify.mjs runs on Windows only (SP-029/032 precedent — it verifies the lane's pi-spine INSTALL state, platform-independent). `ProtectedData` is **NOT inbox** on the plain net10.0 TFM (empirical: `Type.GetType("...ProtectedData, System.Security.Cryptography.ProtectedData")` → null in a scratch net10.0 project) → Windows DPAPI via crypt32 P/Invoke, zero new packages (csproj outside File Scope).
+
+### Windows (lane worktree)
+
+- `node .spine/patches/verify.mjs` → initial **FAIL** (reinstall had removed all 6 project-root patches — same lane condition as SP-028/029/032) → `apply.mjs` re-applied (6 across 2 roots) → verify **exit 0**.
+- `dotnet build client/CcpClient.sln -c Debug -t:Rebuild --nologo` → **Build succeeded. 0 Warning(s) 0 Error(s)**.
+- `dotnet test client/tests/CcpClient.Tests` → **466/466** (floor 446; +20: 11 pipeline + 2 offline + 2 F1-fuzz (70-case matrix + per-level duplicate facts) + 4 secret-store + 1 pre-existing delta accounted at commit `b376f937`).
+- `dotnet test client/tests/CcpClient.HeadlessTests` → **29/29** (floor 29 — no new headless tests; c1 has no UI surface, honestly recorded).
+- Targeted greens during development: pipeline+fuzz+contract 51/51; offline+secrets 6/6.
+- Windows DPAPI round-trip proven: set/get/delete, file bytes never contain plaintext, filesystem-safe names, corrupt-blob → absent-read.
+
+### Linux (WSL2, `~/ccp-sp033`, native ext4, never /mnt/e; staged via rsync of `client/` + the legacy-tree LINKED DTRH payload subtree per the SP-032 gate lesson)
+
+- First run: build 0W/0E; CcpClient.Tests **465/466 — 1 failure** (`SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked`: `secret-tool` ABSENT on PATH → `Process.Start` threw raw `Win32Exception` instead of the typed `SecretStoreUnavailableException`). Fixed in `SecretToolSecretStore` (start-failure → typed `ToolMissing` → typed exception; probe → `DependencyMissing("secret-tool")`); HeadlessTests 29/29.
+- Final: CcpClient.Tests **466/466**, HeadlessTests **29/29**, build 0W/0E.
+- **Secret-store probe facts (honest, never faked):** `secret-tool` is **NOT on PATH** on the WSL2 box (`which secret-tool` → absent) → probe returns typed `DependencyMissing("secret-tool")` with code `secret-service-unreachable`; store operations throw typed `SecretStoreUnavailableException`. This typed-Unavailable path IS the honest Linux evidence (admission §8 c1: no session daemon on WSL2; a working-daemon proof needs a desktop-session box — named limit).
+- No Wayland claims anywhere. No LAB/WH/WX evidence claimed for c1.
 
 ## 8. Budgets, surprises, durable-lesson candidates
 
-(pending)
+**Budget:** well inside the 4h packet budget (single session, no context-limit exits).
+
+**Surprises:**
+1. `ProtectedData` not inbox on plain net10.0 — forced the crypt32 P/Invoke shape (zero-dependency, WPF-equivalent CurrentUser scope). Verified empirically before committing to it.
+2. WSL2 first-run failure class: `Process.Start` on a missing binary throws platform `Win32Exception` — typed-failure channels must wrap process START, not just process EXIT. Fixed; test asserts the typed channel on both branches.
+3. Pre-approach consult caught a REAL panic hole: `AsyncOperationOwner.Cancel()` does not invalidate outcome application — an uncooperative provider's late reply after panic would have surfaced under an `IsCurrent` check. Fixed to `IsLive` + explicit token check; test `Panic_UncooperativeProvider_LateReplyDiscarded_AndPostPanicOpsCancel` covers it.
+4. verify.mjs reinstall drift: 4th occurrence on this lane (SP-028/029/032 + now) — apply.mjs → exit 0.
+
+**Durable-lesson candidates (for the orchestrator's port-lessons reconciliation — enabler 2: the worker does NOT edit port-lessons.md):**
+1. **Stale-application checks must be `IsLive`-shaped (generation AND not-cancelled), never `IsCurrent`-alone** — `Cancel()` invalidates the token but not the application check; any post-cancel point of application needs both. (Class: cancellation-correctness; found by pre-approach consult, would have been a live panic leak.)
+2. **Subprocess-based platform seams must type their START failures** — a missing binary faults at `Process.Start`, not at exit-code inspection; typed-unavailable channels must wrap both. (Class: cross-platform typed failures.)
+3. **WSL gate staging must include the legacy-tree LINKED payload subtree** (SP-032's lesson — re-confirmed necessary and sufficient this packet; `client/` + `ConditioningControlPanel/Resources/web/dtrh/`).
+4. **Plain-TFM net10.0 has no inbox `ProtectedData`** — crypt32 P/Invoke is the zero-package DPAPI path when the csproj is outside packet scope. (Class: platform API availability vs TFM assumptions.)
