@@ -1,0 +1,67 @@
+tones: E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T122014\lane-2\spine-tasks\SP-032-quips-content-q2\evidence\harness\bin\Debug\net10.0\tones
+baseline: handles=214 threads=8
+rules: bark: manifest loaded (3 rule(s))
+arb: sound: 13 render endpoint(s): Browser (BEACN Studio) | Aux 2 / Hardware (BEACN Studio) | System (BEACN Studio) | Link 4 Out (BEACN Studio) | Link 3 Out (BEACN Studio) | Chat (BEACN Studio) | Aux 1 / Hardware (BEACN Studio) | Mic Relay (Do Not Use) (BEACN Studio) | Game (BEACN Studio) | Link Out (BEACN Studio) | Headphones (BEACN Studio) | Link 2 Out (BEACN Studio) | Music (BEACN Studio)
+arb: sound: preferred device 'SP032 Bogus Device (never exists)' not in fresh enumeration — falling back to default (AudioService.cs:292-293 parity)
+arb: sound: playback device up (requested SP032 Bogus Device (never exists))
+PASS: stale device NAME → typed fallback to default → Ready (AudioService.cs:292-293 parity)
+session facts: 13 render endpoint(s): Browser (BEACN Studio) | Aux 2 / Hardware (BEACN Studio) | System (BEACN Studio) | Link 4 Out (BEACN Studio) | Link 3 Out (BEACN Studio) | Chat (BEACN Studio) | Aux 1 / Hardware (BEACN Studio) | Mic Relay (Do Not Use) (BEACN Studio) | Game (BEACN Studio) | Link Out (BEACN Studio) | Headphones (BEACN Studio) | Link 2 Out (BEACN Studio) | Music (BEACN Studio)
+pipeline: bark: rule 'harness_ordinary' surfaced (queued, depth 1)
+PASS: ordinary bark → Surfaced (voice handed to arbitration)
+PASS: payload integrity: text/audio/emotion/mood/line-id as ONE unit (never torn)
+event: VoiceCompleted(gen=1)
+PASS: bark voice completed via BACKEND EVENT (never call-return)
+pipeline: bark: rule 'harness_ordinary' surfaced text-only (NoAudioAsset)
+PASS: text-only variant picked by rotation → typed SurfacedTextOnly(NoAudioAsset) (never silent)
+pipeline: bark: rule 'harness_ordinary' surfaced (queued, depth 1)
+PASS: second audio bark → handed (queued or immediate per the pacing debt)
+event: VoiceCompleted(gen=2)
+PASS: second bark completed after the pacing debt (ordering fact, no timing claim)
+pipeline: bark: rule 'harness_ordinary' surfaced text-only (NoAudioAsset)
+pipeline: bark: rule 'harness_ordinary' surfaced (queued, depth 1)
+PASS: ordinary line started for the preempt setup
+pipeline: bark: rule 'harness_priority' surfaced (priority=True, voice started)
+PASS: priority bark (>= 100) → preempt (clear queue + play now, Speech.cs:319-360)
+event: VoiceCompleted(gen=4)
+PASS: priority line completed; the interrupted ordinary NEVER surfaced as completion (F2 generation filter)
+event: WhisperBusyChanged(True)
+PASS: whisper started
+PASS: WhisperBusy set at play
+pipeline: bark: rule 'harness_ordinary' gated (whisper-active)
+PASS: bark gated while whisper busy (typed whisper-active; guaranteed=false path)
+event: WhisperBusyChanged(False)
+PASS: WhisperBusy cleared ONLY by the real completion event (spike A5 shape)
+pipeline: bark: rule 'harness_ordinary' surfaced text-only (Muted)
+PASS: muted → SurfacedTextOnly(Muted) — typed
+PASS: muted bark STILL surfaced the payload (never silent — the text-only mode is surfaced)
+PASS: muted bark made NO voice call
+PASS: coexistence: voice started (2500ms)
+event: WhisperBusyChanged(True)
+PASS: coexistence: whisper started (1500ms)
+arb: sound: sfx pool full (8) — dropping cue (ChaosSfx.cs:91-107 parity)
+arb: sound: sfx pool full (8) — dropping cue (ChaosSfx.cs:91-107 parity)
+arb: sound: sfx pool full (8) — dropping cue (ChaosSfx.cs:91-107 parity)
+arb: sound: sfx pool full (8) — dropping cue (ChaosSfx.cs:91-107 parity)
+PASS: rapid cue burst under voice+whisper: 8 started / 4 typed PoolOverflow (actual 8/4) — never silent
+event: WhisperBusyChanged(False)
+PASS: coexistence: whisper completed naturally under the SFX burst (no starvation)
+event: VoiceCompleted(gen=5)
+PASS: coexistence: voice completed naturally under the SFX burst (no starvation)
+PASS: coexistence: SFX pool drained to 0 on real backend events
+pipeline: bark: phrase disabled (presence only — id withheld from logs by content-free rule)
+pipeline: bark: phrase disabled (presence only — id withheld from logs by content-free rule)
+pipeline: bark: rule 'harness_ordinary' gated (empty-pool)
+PASS: all variants disabled → typed empty-pool gate (WPF :1172-1180)
+PASS: disabled ids round-tripped through the SP-005 store (schema-versioned, atomic)
+event: WhisperBusyChanged(True)
+arb: sound: panic-reset — stopped 2 player(s), cleared 0 queued line(s), ducks force-released
+event: WhisperBusyChanged(False)
+PASS: panic reset: every channel stopped, busy cleared, pool empty (typed, logged)
+PASS: channels recover after panic (voice plays again)
+event: VoiceCompleted(gen=8)
+PASS: post-panic voice completed via backend event
+arb: sound: panic-reset — stopped 0 player(s), cleared 0 queued line(s), ducks force-released
+teardown: handles 214→214 (delta 0), threads 8→8 (delta 0)
+PASS: teardown bounded (handles/threads delta ≤ 5)
+
+RESULT: 29 PASS, 0 FAIL

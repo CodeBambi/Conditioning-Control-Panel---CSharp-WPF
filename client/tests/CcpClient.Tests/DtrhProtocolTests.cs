@@ -30,9 +30,9 @@ public class DtrhProtocolTests
         yield return ["{\"type\":\"sfx\",\"name\":\"wave_clear\",\"scale\":0.8}", typeof(DtrhProtocol.DtrhPageMessage.Sfx), null];
         yield return ["{\"type\":\"fire-payload\",\"kind\":\"video\",\"strength\":60,\"durationMult\":1.5}", typeof(DtrhProtocol.DtrhPageMessage.FirePayload), null];
         yield return ["{\"type\":\"freeze-state\",\"on\":true}", typeof(DtrhProtocol.DtrhPageMessage.FreezeState), null];
-        // SP-025: bark re-labeled (b2 said "b3") — arbitration is the quips/sound row's
-        // subsystem; the voice CHANNEL landed in b3 without it.
-        yield return ["{\"type\":\"bark\",\"event\":\"wave-cleared\",\"wave\":3}", typeof(DtrhProtocol.DtrhPageMessage.Bark), "voice-arbitration (quips row)"];
+        // SP-032 q2: bark upgraded Deferred → Handled (the quips/sound-arbitration row's
+        // content pipeline now owns it — routed in the host window through BarkPipeline).
+        yield return ["{\"type\":\"bark\",\"event\":\"wave-cleared\",\"wave\":3}", typeof(DtrhProtocol.DtrhPageMessage.Bark), null];
         yield return ["{\"type\":\"meta-command\",\"op\":\"add-gold\",\"amount\":50}", typeof(DtrhProtocol.DtrhPageMessage.MetaCommand), null];
         yield return ["{\"type\":\"request-run\",\"setup\":{\"difficulty\":\"Hard\"}}", typeof(DtrhProtocol.DtrhPageMessage.RequestRun), null];
         yield return ["{\"type\":\"run-started\",\"difficulty\":\"Gentle\",\"mode\":\"dtrh-web\"}", typeof(DtrhProtocol.DtrhPageMessage.RunStarted), null];

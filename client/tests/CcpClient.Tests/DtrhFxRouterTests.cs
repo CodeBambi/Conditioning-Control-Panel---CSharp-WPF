@@ -53,11 +53,12 @@ public sealed class DtrhFxRouterTests : IDisposable
     }
 
     [Fact]
-    public void Bark_Deferral_Unchanged_B4AndB5NowHandled()
+    public void Bark_NowHandled_B4AndB5AlsoHandled()
     {
-        var bark = Assert.IsType<DtrhProtocol.DtrhDispatchClass.Deferred>(
+        // SP-032 q2: the bark message upgraded Deferred → Handled (content pipeline on q1's
+        // arbitration owns it; routed in the host window).
+        Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
             DtrhProtocol.Classify(Parse("{\"type\":\"bark\",\"event\":\"wave-cleared\"}")));
-        Assert.Equal("voice-arbitration (quips row)", bark.Slice);
         // SP-026: the b4 messages upgraded Deferred → Handled (real meta/payout/loom effects).
         Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
             DtrhProtocol.Classify(Parse("{\"type\":\"run-started\",\"difficulty\":\"Gentle\"}")));

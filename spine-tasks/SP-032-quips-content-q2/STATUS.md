@@ -1,6 +1,6 @@
 ## STATUS: SP-032 — Quips/sound arbitration q2: bark content pipeline + host wiring
-**Current Step:** Step 3 — rapid cues + DTRH wiring + backend-event evidence (Step 2 outcomes complete; plan review pending)
-**Last Updated:** 2026-07-22 (Step 2 outcomes)
+**Current Step:** Step 3 — rapid cues + DTRH wiring + backend-event evidence (outcomes complete; plan review pending)
+**Last Updated:** 2026-07-22 (Step 3 outcomes)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
@@ -15,10 +15,10 @@
 - [x] Unit tests (payload integrity, ordering, mute, persistence round-trip+quarantine, pacing math, TryStart compliance)
 
 ### Step 3: rapid cues + DTRH wiring + backend-event evidence
-- [ ] Rapid click cues under voice/video (through-arbitration coexistence)
-- [ ] DTRH bark Deferred→Handled + dispatch seam (presence+shape logging; no b1–b5 regression)
-- [ ] WSL2 gate (contract green, mechanism facts)
-- [ ] Headed evidence per DISPLAY3/rect/modal/orphan rules if the host is used
+- [x] Rapid click cues under voice/video (through-arbitration coexistence)
+- [x] DTRH bark Deferred→Handled + dispatch seam (presence+shape logging; no b1–b5 regression)
+- [x] WSL2 gate (contract green, mechanism facts)
+- [x] Headed evidence per DISPLAY3/rect/modal/orphan rules if the host is used (headed host evidence NOT used — bindings do not arm; recorded)
 
 ### Step 4: evidence consolidation + pre-completion consult
 - [ ] record.md complete

@@ -189,11 +189,11 @@ public static class DtrhProtocol
         // DtrhNativeEffects, wired in the host window.
         DtrhPageMessage.VnSpeaking or DtrhPageMessage.Sfx or DtrhPageMessage.FirePayload
             or DtrhPageMessage.FreezeState => DtrhDispatchClass.Handled.Instance,
-        // Bark ARBITRATION (event → voiceline over CCP bark pools + cooldowns,
-        // DtrhHostService.cs:605-672 → BarkService) is a subsystem no slice owns; the
-        // quips/sound-arbitration board row owns it (SP-025 consult — b2's "b3 (voice)"
-        // mapping corrected: the voice CHANNEL landed in b3, arbitration did not).
-        DtrhPageMessage.Bark => new DtrhDispatchClass.Deferred("voice-arbitration (quips row)"),
+        // Bark arbitration (event → voiceline over CCP bark rules + gates,
+        // DtrhHostService.cs:618-650 → BarkService) — SP-032 slice q2 OWNS it: routed
+        // through Companion/BarkPipeline on q1's SoundArbitration (DtrhBarkRouting table),
+        // wired in the host window's dispatch. m2Test skips routing (WPF _testMode parity).
+        DtrhPageMessage.Bark => DtrhDispatchClass.Handled.Instance,
         // b4 (SP-026): progression/payout + Loom + media stats — REAL effects via
         // DtrhMeta / DtrhLoom, wired in the host window.
         DtrhPageMessage.MetaCommand or DtrhPageMessage.RequestRun or DtrhPageMessage.RunStarted
