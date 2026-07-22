@@ -1,18 +1,18 @@
 ## STATUS: SP-033 — AI companion slice c1: AI foundation
-**Current Step:** Step 1 — contract/archaeology consolidation + design + pre-approach consult
-**Last Updated:** 2026-07-22 (Step 1 in progress)
+**Current Step:** Step 3 — offline + secrets + diagnostics + panic + WSL gate
+**Last Updated:** 2026-07-22 (Step 2 complete: pipeline + seam + F1 + classification, 51 targeted tests green)
 **Blockers:** none
 
-### Step 1: consolidation + design + pre-approach consult
+### Step 1: consolidation + design + pre-approach consult — COMPLETE
 - [x] Update STATUS.md before starting work
 - [x] Mechanics inventory + WPF archaeology (provider model, operation classes, availability, secret seam, panic)
 - [x] Design (AiOperationPipeline, provider seam, endpoint classification, F1 fix, ISecretStore impls, panic)
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
-### Step 2: pipeline + provider seam + F1 + endpoint classification
-- [ ] AiOperationPipeline.cs + types (owned operations, switch semantics, typed Unavailable, classification)
-- [ ] F1 duplicate-key rejection in the real validator (+ regression)
-- [ ] Unit tests (switch/stale matrix, selection≠availability, classification pre-socket, F1+fuzz)
+### Step 2: pipeline + provider seam + F1 + endpoint classification — COMPLETE
+- [x] AiOperationPipeline.cs + types (owned operations, switch semantics, typed Unavailable, classification)
+- [x] F1 duplicate-key rejection in the real validator (+ regression)
+- [x] Unit tests (switch/stale matrix, selection≠availability, classification pre-socket, F1+fuzz)
 
 ### Step 3: offline + secrets + diagnostics + panic + WSL gate
 - [ ] Offline zero-network (send-attempt counter proof; loopback independence)

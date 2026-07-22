@@ -29,6 +29,15 @@ public static class CapabilityReasonCodes
 
     /// <summary>An animation asset exists but cannot decode on this target (SP-015 AvatarTube demonstrator).</summary>
     public const string AssetUndecodable = "asset-undecodable";
+
+    /// <summary>
+    /// No credentials exist for a provider and none are invented (SP-033; admission §2
+    /// rule 6 — the cloud provider's typed absence: inventory, never admission).
+    /// </summary>
+    public const string CredentialsAbsent = "credentials-absent";
+
+    /// <summary>No reachable platform secret service (SP-033; e.g. WSL2 without a session D-Bus daemon). Never a plaintext fallback.</summary>
+    public const string SecretServiceUnreachable = "secret-service-unreachable";
 }
 
 /// <summary>Structured reason: a stable code plus human diagnostic detail (contract §1).</summary>
