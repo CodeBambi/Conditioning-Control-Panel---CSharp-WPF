@@ -1,6 +1,6 @@
 ## STATUS: SP-032 — Quips/sound arbitration q2: bark content pipeline + host wiring
-**Current Step:** Step 4 — evidence consolidation + pre-completion consult
-**Last Updated:** 2026-07-22 (Step 3 complete; plan review SKIPPED by engine, SP-195)
+**Current Step:** Step 5 — verification (complete; .DONE next)
+**Last Updated:** 2026-07-22 (Step 4 complete; pre-completion consult APPROVE, 3 closure items closed)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
@@ -22,10 +22,10 @@
 
 ### Step 4: evidence consolidation + pre-completion consult
 - [x] record.md complete
-- [ ] Pre-completion solo consult
+- [x] Pre-completion solo consult
 - [x] STATUS.md accurate
 
 ### Step 5: verification
-- [ ] testCommand green (verify.mjs exit 0; 0W/0E; ≥412/29 floor)
-- [ ] git diff --check clean
-- [ ] git status shows File Scope only
+- [x] testCommand green (verify.mjs exit 0; 0W/0E on -t:Rebuild; 446/446 + 29/29 ≥ 412/29 floor)
+- [x] git diff --check clean
+- [x] git status shows File Scope only

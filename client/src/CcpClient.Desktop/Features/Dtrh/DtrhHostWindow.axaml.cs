@@ -981,7 +981,6 @@ public partial class DtrhHostWindow : Window
 
                 _router.Handle(message);
                 return;
-            // SP-026 slice b4: progression/payout + media stats route to the meta engine.
             // SP-032 q2: bark events route through the content pipeline on q1's arbitration
             // (DtrhBarkRouting = the WPF RouteBark table). Presence+shape logging ONLY —
             // event name + outcome shape, NEVER bark text (SP-016 content-free class).
@@ -1008,6 +1007,7 @@ public partial class DtrhHostWindow : Window
                     _ => barkOutcome.GetType().Name,
                 }}");
                 return;
+            // SP-026 slice b4: progression/payout + media stats route to the meta engine.
             case DtrhProtocol.DtrhPageMessage.MetaCommand metaCommand:
                 if (_meta is null)
                 {

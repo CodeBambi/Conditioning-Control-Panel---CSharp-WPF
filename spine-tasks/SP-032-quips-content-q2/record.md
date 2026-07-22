@@ -165,4 +165,14 @@ verify.mjs exit 0; build 0W/0E; CcpClient.Tests **446/446** (floor 412; +34 over
 - **port-lessons candidate 2:** evidence harnesses over rotation/recency systems: assert typed degradations as first-class outcomes (never treat a legal text-only pick as a failure), and prefer single-variant pools where the claim is ordering/pacing.
 - **task-board row note (quips/sound arbitration, q2):** bark content pipeline live on q1's arbitration (rules/variants/payload integrity/freshness/mute/pacing); disabled-phrase persistence on SP-005; rapid cues proven through arbitration (8/4 typed overflow, no starvation, backend-event-verified Windows; mechanism facts Linux); DTRH `bark` Deferred→Handled with presence+shape logging; contract 446/29 both platforms. Named limits carried: voice assets unported (typed NoAudioAsset/AudioResolveFailed surface); pool_ref empty (phrase-category row); narrator/self-echo/chat gates = seams (chat row); 50-min collapse + 1/25 pop = avatar-input row; app-wide store flush = future row (CompositionRoot out of scope).
 
-(pending)
+### Pre-completion (Step 4) — APPROVE with 3 closure items (all closed)
+
+Requested route: solo Fable 5. Actual answering model: NOT surfaced in the consult tool output (SP-028/SP-029 precedent — recorded as such).
+
+Verdict: APPROVE — the evidence is sound and the honesty framing is well handled; three items to close before .DONE, one substantive. Closure:
+
+1. **(Substantive, CLOSED on paper) UI-thread construction vs the off-sync-context lesson (port-lessons 2026-07-22):** the dump-proven hazard is the `AssetDataProvider` ctor (sync-over-async) ONLY; q1's `SoundFlowAudioBackend.CreatePlayer` wraps it in `OffSyncContext.Run` INTERNALLY (AudioSeams.cs:143-152 + the seam contract `Implementations MUST construct off-sync-context`), and engine/device construction (`MiniAudioEngine`, `InitializePlaybackDevice`, `Start`) on the UI thread matches the LANDED b3 precedent (`SoundFlowDtrhAudio` constructed at DtrhHostWindow.axaml.cs:289 on the same UI path, marshaling only `CreatePlayer`). `InitBarkPipeline` therefore does not violate the lesson; no `Task.Run` wrap needed. `TeardownBarkPipeline`'s `FlushAsync().Wait(2s)` on the UI thread: SP-005 machinery is `ConfigureAwait(false)` throughout (PersistenceStore.cs — `SaveImmediate` → `Save().ConfigureAwait(false)`) and the 2 s timeout bounds the damage; recorded, no change.
+2. **(CLOSED) Consult persisted:** this entry; the trailing `(pending)` marker removed.
+3. **(CLOSED) Closure sequence:** final `git status --short` re-check (File Scope only; harness bin/obj untracked) before .DONE; cosmetic fix applied — the orphaned SP-026 b4 comment moved back above its `MetaCommand` case (the bark case keeps its own comment).
+
+Non-blocking confirmations from the verdict: rotation-aware harness fix honestly recorded; WSL payload-staging failure correctly attributed (pre-existing linkage); 8/4 typed-overflow coexistence is real backend-event evidence; Linux claims mechanism-only; the single q1-surface change additive + justified; m2Test skip matches WPF `_testMode` parity (binding 5b).
