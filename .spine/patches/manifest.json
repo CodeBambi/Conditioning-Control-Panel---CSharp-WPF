@@ -2,18 +2,20 @@
   "schema": 1,
   "package": "pi-spine",
   "installRoot": ".pi/npm/node_modules/pi-spine",
+  "engineRoot": "C:\\Users\\Micha\\.pi\\agent\\npm\\node_modules\\pi-spine",
   "testedVersions": [
     "2.8.0",
     "2.10.0"
   ],
-  "note": "Anchor-based local patches. Re-apply after ANY pi-spine install/update: node .spine/patches/apply.mjs && node .spine/patches/verify.mjs",
+  "note": "Anchor-based local patches. Re-apply after ANY pi-spine install/update: node .spine/patches/apply.mjs && node .spine/patches/verify.mjs. TWO roots (SP-031): installRoot = the project tree pi sessions load (repo/lane .pi/npm); engineRoot = the global CLI install the batch engine actually EXECUTES (process-cmdline-proven: spine.mjs + spine-worker-runner.mjs run from there; CONTEXT.md PATH convention). Patches with engine:true must be present on BOTH; the rest are project-tree-only. A missing engineRoot dir fails loudly — update the path or reinstall pi-spine there.",
   "patches": [
     {
       "id": "fsync-r-plus-abort",
       "target": "src/batch/abort.mjs",
+      "engine": true,
       "anchor": "\tconst fd = fs.openSync(archivePath, \"r\");\n\ttry {\n\t\tfs.fsyncSync(fd);",
       "replacement": "\tconst fd = fs.openSync(archivePath, \"r+\"); // ponytail: Windows EPERMs fsync on read-only handles\n\ttry {\n\t\tfs.fsyncSync(fd);",
-      "rationale": "Windows EPERMs fsync on a read-only handle; abort archive write crashed (port-lessons 2026-07-18). Byte-exact to live tree.",
+      "rationale": "Windows EPERMs fsync on a read-only handle; abort archive write crashed (port-lessons 2026-07-18). Byte-exact to live tree. Engine-behavior patch: runs in the batch engine process (global CLI tree).",
       "testedVersions": [
         "2.8.0",
         "2.10.0"
@@ -22,9 +24,10 @@
     {
       "id": "fsync-r-plus-lifecycle-archive",
       "target": "src/batch/lifecycle-archive.mjs",
+      "engine": true,
       "anchor": "\tconst fd = fs.openSync(archivePath, \"r\");\n\ttry {\n\t\tfs.fsyncSync(fd);",
       "replacement": "\tconst fd = fs.openSync(archivePath, \"r+\"); // ponytail: Windows EPERMs fsync on read-only handles\n\ttry {\n\t\tfs.fsyncSync(fd);",
-      "rationale": "Same fsync root cause as abort.mjs (port-lessons 2026-07-18). Byte-exact to live tree.",
+      "rationale": "Same fsync root cause as abort.mjs (port-lessons 2026-07-18). Byte-exact to live tree. Engine-behavior patch: runs in the batch engine process (global CLI tree).",
       "testedVersions": [
         "2.8.0",
         "2.10.0"
@@ -33,9 +36,10 @@
     {
       "id": "dotnet-evidence-allowlist",
       "target": "src/batch/evidence-command.mjs",
+      "engine": true,
       "anchor": "export const ALLOWED_EVIDENCE_EXECUTABLES = new Set([\"npm\", \"node\", \"pnpm\", \"yarn\", \"npx\"]);",
-      "replacement": "export const ALLOWED_EVIDENCE_EXECUTABLES = new Set([\"npm\", \"node\", \"pnpm\", \"yarn\", \"npx\", \"dotnet\"]); // ponytail: CCP gate evidence runs dotnet build/test (T-1)",
-      "rationale": "Gate-evidence executable allowlist rejects this repo's dotnet testCommand (T-1 row; port-lessons line 16). LOST to a past reinstall — re-authored.",
+      "replacement": "export const ALLOWED_EVIDENCE_EXECUTABLES = new Set([\"npm\", \"node\", \"pnpm\", \"yarn\", \"npx\", \"dotnet\", \"dotnet.exe\"]); // ponytail: CCP gate evidence runs dotnet build/test (T-1)",
+      "rationale": "Gate-evidence executable allowlist rejects this repo's dotnet testCommand (T-1 row; port-lessons line 16). Canonical text unified 2026-07-22 (SP-031) with the proven global hand-variant (includes dotnet.exe — strictly wider allowlist; every CCP testCommand invokes `dotnet`). Engine-behavior patch: contract gates run in the batch engine process (global CLI tree).",
       "testedVersions": [
         "2.8.0",
         "2.10.0"
@@ -44,9 +48,10 @@
     {
       "id": "worker-tail-at-file",
       "target": "bin/spine-worker-runner.mjs",
+      "engine": true,
       "anchor": "\t});\n\tpiArgs.push(tailPrompt);\n\treturn piArgs;",
       "replacement": "\t});\n\t// ponytail: tails >16KB go to a temp @file — inline argv blew the Windows 32,767-char CreateProcess limit (SP-004 x3 silent worker deaths, T-1)\n\tif (tailPrompt.length > 16384) {\n\t\tconst tailPath = path.join(process.env.TEMP || process.env.TMP || \"/tmp\", `spine-worker-tail-${process.pid}.txt`);\n\t\tfs.writeFileSync(tailPath, tailPrompt, \"utf-8\");\n\t\tpiArgs.push(`@${tailPath}`);\n\t} else {\n\t\tpiArgs.push(tailPrompt);\n\t}\n\treturn piArgs;",
-      "rationale": "Worker tails >16KB written to %TEMP% and passed as @file; inline argv exceeded the Windows 32,767-char CreateProcess limit, killing SP-004's worker silently x3 (T-1 row; port-lessons 2026-07-19). LOST to a past reinstall — re-authored (fs/path already imported; no new imports).",
+      "rationale": "Worker tails >16KB written to %TEMP% and passed as @file; inline argv exceeded the Windows 32,767-char CreateProcess limit, killing SP-004's worker silently x3 (T-1 row; port-lessons 2026-07-19). LOST to a past reinstall — re-authored (fs/path already imported; no new imports). Engine-behavior patch: spine-worker-runner executes from the global CLI tree (process-cmdline-proven, SP-031); canonical text unified with the global tree 2026-07-22 (its hand-variant was an equivalent per-task-filename implementation — normalized to this text).",
       "testedVersions": [
         "2.8.0",
         "2.10.0"
@@ -57,7 +62,7 @@
       "target": "skills/create-spine-tasks/SKILL.md",
       "anchor": "**Rule of thumb:** More than **4** implementation steps → split. More than **8** file-scope paths → narrow or split.\n\n**Example (incident-driven):**",
       "replacement": "**Rule of thumb:** More than **4** implementation steps → split. More than **8** file-scope paths → narrow or split.\r\n\r\n**Headed-evidence sizing (CCP local amendment, T-11 — dies on pi-spine reinstall, durable copy in spine-tasks/CONTEXT.md §Execution policy):** headed-capture/evidence-matrix steps (real app launches, pixel capture, input automation) empirically exceed a single 2h worker-stall budget when bundled with evaluation/docs (SP-013 2h timeout; SP-015 2h AND 4h-even-with-`SPINE_WORKER_PI_TIMEOUT_MS=14400000`). Size every headed step to **<2h of worker budget** or **split capture vs evaluation/docs into separate steps/packets**; orchestrators set the env override at launch for headed packets by default. **Owner display convention (2026-07-21):** all headed harnesses position test/evidence windows on the owner's designated test surface — DISPLAY3 bounds `(-2576,1091) 2560×1440` (working area `(-2576,1091) 2560×1392`) — via SetWindowPos/Window.Position, verified by GetWindowRect before captures. Encode in every headed packet's amendments.",
-      "rationale": "T-11 local amendment: headed-evidence step sizing (<2h or split). Found empirically as a 4th undocumented local patch; its own text says it dies on reinstall. Byte-exact to live tree.",
+      "rationale": "T-11 local amendment: headed-evidence step sizing (<2h or split). Found empirically as a 4th undocumented local patch; its own text says it dies on reinstall. Byte-exact to live tree. PROJECT-TREE-ONLY (SP-031): pi sessions load skills from the project install; the engine tree's skill copy is shared by other repos' pi sessions — CCP-specific text must not land there.",
       "testedVersions": [
         "2.8.0",
         "2.10.0"
@@ -66,9 +71,10 @@
     {
       "id": "t5-reviews-autoclean",
       "target": "src/batch/lane-commit.mjs",
+      "engine": true,
       "anchor": "\tfileScopePaths = [],\n}) {\n\tconst identityRoot = projectRoot ?? worktreePath;",
-      "replacement": "\tfileScopePaths = [],\n}) {\n\t// ponytail: T-5 - engine review phases write .reviews/ into the lane task folder AFTER\n\t// the worker's last commit; git 2.49 check-ignore --no-index false-matches the\n\t// trailing-slash untracked dir against a blank .gitignore line, so filterGitignoredPaths\n\t// mis-skips it and the post-commit porcelain re-check fails DirtyWorktree (17 journal\n\t// occurrences, 12 consecutive Level-2 lands SP-012..SP-027, 4 on the resume paths this\n\t// function also serves). Verdicts are journal-durable (every land reads them from the\n\t// journal), so deleting here mirrors the 15x-proven manual recovery step. All 4 callers\n\t// are post-review lane finalization; verdict recording always precedes this delete.\n\tfs.rmSync(path.join(taskFolder, \".reviews\"), { recursive: true, force: true });\n\tconst identityRoot = projectRoot ?? worktreePath;",
-      "rationale": "T-5: engine-written .reviews/ self-dirties Level-2 lanes post-.DONE; git 2.49 check-ignore --no-index blank-line quirk mis-classifies the trailing-slash dir as gitignored so lane-commit skips it and the post-commit re-check fails DirtyWorktree (17 occurrences; playbook manual recovery 15x). Delete .reviews/ at the one convergence point (commitLaneWorktree, 4 post-review callers); verdicts are journal-durable. Anchor spans the insertion point (tri-state invariant). Byte-exact to live 2.10.0 tree; anchor verified byte-present in npm-packed 2.8.0.",
+      "replacement": "\tfileScopePaths = [],\n}) {\n\t// ponytail: T-5 - engine review phases write .reviews/ into the lane task folder AFTER\n\t// the worker's last commit; git 2.49 check-ignore --no-index false-matches the\n\t// trailing-slash untracked dir against a blank .gitignore line, so filterGitignoredPaths\n\t// mis-skips it and the post-commit porcelain re-check fails DirtyWorktree (18 journal\n\t// occurrences incl. wave 20260722T101444). Verdicts are journal-durable, so deleting here\n\t// mirrors the 15x-proven manual recovery. taskFolder IS the lane task folder at all 4\n\t// finalization callers (SP-031) — wave-1's gate failure was this patch sitting on the\n\t// repo-local install while the engine CLI loads the global install; keep BOTH roots patched.\n\tfs.rmSync(path.join(taskFolder, \".reviews\"), { recursive: true, force: true });\n\tconst identityRoot = projectRoot ?? worktreePath;",
+      "rationale": "T-5: engine-written .reviews/ self-dirties Level-2 lanes post-.DONE; git 2.49 check-ignore --no-index blank-line quirk mis-classifies the trailing-slash dir (SP-028). Delete .reviews/ at the one convergence point (commitLaneWorktree, 4 post-review callers, all passing taskFolderInWorktree in BOTH 2.8.0 and 2.10.0). SP-031 RE-BASE: the wave-1 live-gate failure was NOT the path expression — taskFolder is the lane path at every caller (journal-proven: lane.committed fired, so the .DONE check passed on the lane path) — it was applied≠loaded: the patch sat on the repo-local 2.10.0 tree while the batch engine executes from the global 2.8.0 CLI install (process-cmdline-proven). Anchor spans the insertion point (tri-state invariant); byte-present in npm-packed 2.8.0 and 2.10.0. Engine-behavior patch: finalization runs in the batch engine process (global CLI tree).",
       "testedVersions": [
         "2.8.0",
         "2.10.0"

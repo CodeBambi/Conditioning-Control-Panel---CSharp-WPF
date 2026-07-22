@@ -132,3 +132,58 @@ edge cases the packet asked to enumerate (`taskFolder` inside `worktreePath`, `p
 absent/eq `worktreePath`, `path.relative` escaping) are MOOT: no path arithmetic is needed —
 `taskFolder` already IS the lane task folder at every call site. (This census also closes the
 packet's "4 callers from SP-028 + edge cases" checkbox.)
+
+## Step 2 — manifest re-base (two-root) + live-tree migration + apply/verify
+
+### Manifest changes (`.spine/patches/manifest.json`)
+
+- New top-level `"engineRoot": "C:\Users\Micha\.pi\agent\npm\node_modules\pi-spine"` — the
+  GLOBAL CLI install the batch engine executes (process-cmdline-proven). `note` documents the
+  two-root model and the loud-fail remedy.
+- `"engine": true` on the 5 engine-behavior patches (fsync×2, dotnet, tail, t5); the t11 skill
+  amendment stays project-tree-only (CCP-specific text must not land on the globally shared skill).
+- dotnet canonical replacement gains `"dotnet.exe"` (unifies with the proven global hand-variant;
+  strictly wider allowlist).
+- t5 anchor UNCHANGED (byte-present in 2.8.0 and 2.10.0); replacement path expression UNCHANGED
+  (`path.join(taskFolder, ".reviews")` — proven correct); ponytail comment + rationale rewritten
+  to the real wave-1 root cause (applied≠loaded, wrong install tree).
+
+### apply.mjs / verify.mjs — multi-root
+
+Default mode processes `[installRoot (all patches), engineRoot (engine-flagged only)]`;
+`--root` keeps legacy single-root all-patches semantics for scratch cycles; missing root dir =
+loud FAIL naming the remedy; all-or-nothing validation across all roots before any write.
+
+### Live-tree migration transcript (atomic single write per file — consult condition)
+
+`evidence/migrate-trees.mjs` (kept in-packet) + one follow-up single write:
+
+1. repo `evidence-command.mjs`: dotnet line gains `"dotnet.exe"` (58B→72B)
+2. repo `lane-commit.mjs`: t5 comment block → corrected comment (702B→712B)
+3. global `abort.mjs`: fsync hand-variant → canonical (comment-only, 70B→125B)
+4. global `lifecycle-archive.mjs`: same (70B→125B)
+5. global `spine-worker-runner.mjs`: tail hand-variant block → canonical manifest text
+   (832B→434B; `import os` line 21 becomes unused — harmless, kept deliberately)
+6. global `evidence-command.mjs`: dotnet line gains the ponytail comment (script v1 missed that
+   the global hand line lacked the comment — caught by apply.mjs's all-or-nothing validation
+   refusing to write ANY file: the mechanism worked as designed)
+
+### Apply / verify / idempotence / loud-failure proofs
+
+- `node .spine/patches/apply.mjs` (from the lane): 7 writes — lane project tree 6/6 (pristine
+  after pi re-sync at worker start) + engine tree t5 (the 4 engine patches already canonical
+  post-migration). Exit 0.
+- Idempotence: immediate second run = 11/11 "already applied", 0 writes. Exit 0.
+- `node .spine/patches/verify.mjs`: project 2.10.0 6/6 + engine 2.8.0 5/5, exit 0.
+- Loud-failure (scratch drift copy, `%TEMP%`, `--root`): t5 replacement×2 → verify reports
+  `drifted`, exit 1; apply FAILs all-or-nothing — the revertable dotnet patch was NOT written
+  (anchor state asserted after the failed apply). Exit 1.
+- Missing-root: bogus `engineRoot` in a scratch manifest copy → both apply and verify FAIL
+  closed with the remedy in the message. Exit 1.
+
+### Mid-batch safety note (for the orchestrator)
+
+The currently running wave-2 engine (pid from 12:20Z) holds the UNPATCHED global module in its
+ESM cache — SP-031/SP-032 finalizations on THIS wave can still T-5 (manual playbook once more).
+Any resume-handoff re-spawning the engine after this timestamp loads the PATCHED module and
+finalizations stop self-dirtying mid-wave. The named post-land gate re-points at the NEXT wave.
