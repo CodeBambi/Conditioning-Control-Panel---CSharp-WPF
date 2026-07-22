@@ -1,6 +1,6 @@
 ## STATUS: SP-028 — T-5 local anchor-patch (parallelism enabler 1)
-**Current Step:** Step 2 — manifest entry + apply/verify
-**Last Updated:** 2026-07-22 (Step 1 complete pending plan review)
+**Current Step:** complete — all 5 steps done, .DONE next
+**Last Updated:** 2026-07-22 (Step 5 verification green)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
@@ -21,14 +21,14 @@
 - [x] Proof boundary recorded (named post-land gate = next Level-2 batch)
 
 ### Step 4: docs + board + pre-completion consult
-- [ ] README row
-- [ ] port-lessons entry
-- [ ] Board tooling row T-5 → CLOSED-by-patch + named post-land gate
-- [ ] record.md complete
-- [ ] Pre-completion solo consult
-- [ ] STATUS.md accurate
+- [x] README row
+- [x] port-lessons entry
+- [x] Board tooling row T-5 → CLOSED-by-patch + named post-land gate (launch-qualified per consult)
+- [x] record.md complete
+- [x] Pre-completion solo consult (verdict in record.md; module-cache correction applied)
+- [x] STATUS.md accurate
 
 ### Step 5: verification
-- [ ] testCommand green (verify.mjs exit 0; client 0W/0E; ≥391/29 floor, no drift)
-- [ ] git diff --check clean
-- [ ] git status shows File Scope only
+- [x] testCommand green (verify.mjs exit 0; client 0W/0E; 391/29 floor exact, zero drift)
+- [x] git diff --check clean
+- [x] git status shows File Scope only

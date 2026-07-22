@@ -308,6 +308,8 @@ adaptation explicitly (above). Actual answering model: not surfaced (same as abo
   skipped:true, spawnFailed:false, artifact 2-20260722T093923.md.
 - Step 3 plan review (`spine_review_step` type=plan): **engine-SKIPPED** (SP-195).
   skipped:true, spawnFailed:false, artifact 3-20260722T094304.md.
+- Step 4 plan review (`spine_review_step` type=plan): **engine-SKIPPED** (SP-195).
+  skipped:true, spawnFailed:false, artifact 4-20260722T094924.md.
 
 ## Step 2 — manifest entry + apply/verify on the live install
 
@@ -422,3 +424,25 @@ Step-5 gates enumerated by the consult (contract testCommand, diff-check, status
 final STATUS accuracy) — executed in Step 5 below.
 Requested route: solo Fable 5. Actual answering model: NOT surfaced in the consult tool
 response (recorded honestly per T-7; no model identity claim made).
+
+## Step 5 — verification
+
+- `node .spine/patches/verify.mjs` → exit 0, all 6 patches applied (live 2.10.0).
+- `dotnet build client/CcpClient.sln -c Debug --nologo` → 0W/0E.
+- `dotnet test CcpClient.Tests` → 391/391 passed, 0 failed.
+- `dotnet test CcpClient.HeadlessTests` → 29/29 passed, 0 failed.
+  Floor 391/29 met EXACTLY, zero drift (client tree untouched).
+- `git diff --check` → clean (exit 0).
+- `git status --short` → only File Scope paths (this task folder; docs/patches committed
+  at step boundaries). The `.pi/npm` engine edits are gitignored and correctly absent;
+  `%TEMP%` scratch never entered the repo.
+
+**Late observation (honesty):** this lane's own `.reviews/` directory (4 skip-artifacts
+from the SP-195-skipped plan reviews) was ABSENT at Step-5 time despite the artifactPaths
+returned by `spine_review_step` — something in the engine/runtime lifecycle removed it
+between the Step-4 review call and the verification run (cause not archaeologized;
+candidate: a lane-checkpoint sanitize hitting the same trailing-slash mis-classification).
+Consequence: the "SP-028's own land EXPECTED to T-5 one final time" note is an
+expectation, not a guarantee — if the residue is gone at finalization, the unpatched
+in-memory engine lands clean too. The named post-land gate (first Level-2 batch launched
+after the patch) is unaffected either way.
