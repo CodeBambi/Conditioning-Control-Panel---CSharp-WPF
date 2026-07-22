@@ -9,7 +9,7 @@
 
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
-| 1 | plan | (pending) | — |
+| 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260722T024313.md` |
 
 ---
 

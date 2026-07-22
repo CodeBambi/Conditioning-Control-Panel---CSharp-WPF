@@ -42,11 +42,10 @@ public sealed class DtrhFxRouter
         }
     }
 
-    /// <summary>Run-boundary freeze/duck hygiene riding the b4 deferral (pre-approach
-    /// consult item 4): run-started/run-ended STAY classified Deferred(b4), but the WPF
-    /// stale-freeze/stale-duck cleanup (run-started :252/:259, run-ended :513) is a b3
-    /// safety invariant — "wired" per the packet. Invoked BEFORE the typed-deferral log.
-    /// Returns true when the hygiene ran.</summary>
+    /// <summary>Run-boundary freeze/duck hygiene (WPF run-started :252/:259, run-ended
+    /// :513): the stale-freeze/stale-duck cleanup rides the run boundary. b3 invoked it
+    /// from the Deferred branch; b4's REAL run-started/run-ended handlers invoke it FIRST
+    /// (same entry, WPF order preserved). Returns true when the hygiene ran.</summary>
     public bool TryRunBoundaryHygiene(DtrhProtocol.DtrhPageMessage message)
     {
         if (message is not (DtrhProtocol.DtrhPageMessage.RunStarted or DtrhProtocol.DtrhPageMessage.RunEnded))

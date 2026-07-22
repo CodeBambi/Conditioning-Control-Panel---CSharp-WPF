@@ -6,9 +6,10 @@ namespace CcpClient.Tests;
 
 /// <summary>
 /// SP-025 slice b3: the protocol upgrade — every b3-owned message dispatches to the REAL
-/// effect seam (recording fakes, never the real backends); ordering + idempotency; the
-/// run-boundary hygiene rides run-started/run-ended while they STAY Deferred(b4); b4/b5
-/// deferrals unchanged.
+/// effect seam (recording fakes, never the real backends); ordering + idempotency; bark +
+/// b5 deferrals unchanged. SP-026 slice b4: the b4 messages are now Handled; the
+/// run-boundary hygiene rides the SAME router entry, invoked FIRST inside the real
+/// run-started/run-ended handlers (WPF :513/:259 order).
 /// </summary>
 public sealed class DtrhFxRouterTests : IDisposable
 {
@@ -52,15 +53,18 @@ public sealed class DtrhFxRouterTests : IDisposable
     }
 
     [Fact]
-    public void Bark_AndB4B5_Deferrals_Unchanged()
+    public void Bark_AndB5_Deferrals_Unchanged_B4NowHandled()
     {
         var bark = Assert.IsType<DtrhProtocol.DtrhDispatchClass.Deferred>(
             DtrhProtocol.Classify(Parse("{\"type\":\"bark\",\"event\":\"wave-cleared\"}")));
         Assert.Equal("voice-arbitration (quips row)", bark.Slice);
-        Assert.Equal("b4", Assert.IsType<DtrhProtocol.DtrhDispatchClass.Deferred>(
-            DtrhProtocol.Classify(Parse("{\"type\":\"run-started\",\"difficulty\":\"Gentle\"}"))).Slice);
-        Assert.Equal("b4", Assert.IsType<DtrhProtocol.DtrhDispatchClass.Deferred>(
-            DtrhProtocol.Classify(Parse("{\"type\":\"meta-command\",\"op\":\"add-gold\"}"))).Slice);
+        // SP-026: the b4 messages upgraded Deferred → Handled (real meta/payout/loom effects).
+        Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
+            DtrhProtocol.Classify(Parse("{\"type\":\"run-started\",\"difficulty\":\"Gentle\"}")));
+        Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
+            DtrhProtocol.Classify(Parse("{\"type\":\"meta-command\",\"op\":\"add-gold\"}")));
+        Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
+            DtrhProtocol.Classify(Parse("{\"type\":\"run-ended\",\"score\":1,\"durationSec\":1}")));
         Assert.Equal("b5", Assert.IsType<DtrhProtocol.DtrhDispatchClass.Deferred>(
             DtrhProtocol.Classify(Parse("{\"type\":\"pong\",\"t\":1}"))).Slice);
         Assert.Equal("b5", Assert.IsType<DtrhProtocol.DtrhDispatchClass.Deferred>(
@@ -96,7 +100,7 @@ public sealed class DtrhFxRouterTests : IDisposable
     }
 
     [Fact]
-    public void RunBoundaryHygiene_RidesTheDeferral()
+    public void RunBoundaryHygiene_RidesTheRealHandler()
     {
         var (router, fx, _, video) = Make();
         fx.SetVnSpeaking(true);
@@ -107,8 +111,9 @@ public sealed class DtrhFxRouterTests : IDisposable
         Assert.False(fx.WorldFrozen);
         Assert.False(fx.VnSpeaking);
         Assert.Equal([true, false], video.PauseCalls);
-        // …while the message itself stays Deferred(b4) (the dispatcher logs the deferral).
-        Assert.Equal("b4", Assert.IsType<DtrhProtocol.DtrhDispatchClass.Deferred>(DtrhProtocol.Classify(msg)).Slice);
+        // …and b4 (SP-026) the message itself is Handled — the SAME hygiene entry now
+        // runs FIRST inside the real run-started/run-ended handlers (WPF :513/:259 order).
+        Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(DtrhProtocol.Classify(msg));
 
         // run-ended rides too; unrelated messages never trigger the hygiene.
         fx.SetWorldFrozen(true);

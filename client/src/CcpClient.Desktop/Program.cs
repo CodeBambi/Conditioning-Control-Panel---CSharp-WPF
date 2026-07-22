@@ -140,12 +140,16 @@ public static class Program
         // page JSON through the real dispatch path (headed/WX native-effects evidence
         // without gameplay; runs are b4-gated).
         var dtrhFxDrive = ArgValue(args, "--dtrh-fx-drive");
+        // SP-026 slice b4: --dtrh-m2test — HARNESS-ONLY meta test mode (init m2Test:true +
+        // in-memory clone; the payload's m2test.js drives the full meta vocabulary +
+        // payout round-trip page-originated; the real save is never touched).
+        var dtrhM2Test = args.Contains("--dtrh-m2test", StringComparer.Ordinal);
 
         try
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
             return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace, avatarAnimate,
-                dtrhDemo, dtrhPage, dtrhAutoClose, dtrhQuick, dtrhPickerTimeout, dtrhFxDrive).StartWithClassicDesktopLifetime(args);
+                dtrhDemo, dtrhPage, dtrhAutoClose, dtrhQuick, dtrhPickerTimeout, dtrhFxDrive, dtrhM2Test).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -214,9 +218,9 @@ public static class Program
         bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
         bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
         int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0,
-        string? dtrhFxDrive = null) => AppBuilder
+        string? dtrhFxDrive = null, bool dtrhM2Test = false) => AppBuilder
         .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate,
-            dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds, dtrhFxDrive))
+            dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds, dtrhFxDrive, dtrhM2Test))
         .UsePlatformDetect();
 
     private static string? ArgValue(string[] args, string flag)

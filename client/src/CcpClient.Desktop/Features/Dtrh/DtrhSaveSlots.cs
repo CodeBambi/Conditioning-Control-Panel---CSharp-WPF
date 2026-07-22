@@ -11,11 +11,20 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// contract §6, SP-007 precedent). <see cref="CraftedItems"/> keeps the WPF key names
 /// verbatim ("ragdoll" / "porcelain" — ChaosMetaStore.cs:105-108) because the stitch-lock
 /// reads them.
+///
+/// b4 (SP-026): the FULL WPF ChaosMetaState progression surface (ChaosMetaState.cs —
+/// additive-only, neutral defaults :8-9) rides this document. NOT ported: SchemaVersion
+/// (the SP-005 store owns schema) and the retired ToyPockets/AccessoryPockets (WPF
+/// do-not-read, migration-zeroed, ChaosMetaState.cs:62-63). A b2-era file lacking these
+/// members loads clean — the initializers ARE the WPF defaults (ConsumableSlots=1 mirrors
+/// the ChaosMetaStore.cs:71 load clamp); the meta engine flags absent members once at
+/// bind, never silently.
 /// </summary>
 public sealed class DtrhSlotDocument
 {
     public const int CurrentSchemaVersion = 1;
 
+    // ---- b2 (picker/payout spine) ----
     public int Sparks { get; set; }
 
     public int Gold { get; set; }
@@ -25,6 +34,98 @@ public sealed class DtrhSlotDocument
     public long BestScore { get; set; }
 
     public Dictionary<string, int> CraftedItems { get; set; } = new();
+
+    // ---- b4: economy/unlocks (ChaosMetaState.cs:17-37,58-74) ----
+    public HashSet<string> PurchasedUpgrades { get; set; } = new();
+
+    public HashSet<string> PurchasedDials { get; set; } = new();
+
+    public HashSet<string> DisabledUpgrades { get; set; } = new();
+
+    public bool ExtremeUnlocked { get; set; }
+
+    public string? EquippedStartBoon { get; set; }
+
+    public HashSet<string> DiscoveredCodexIds { get; set; } = new();
+
+    public Dictionary<string, int> LifetimeBoonLevels { get; set; } = new();
+
+    public HashSet<string> ActiveLifetimeBoons { get; set; } = new();
+
+    public int ConsumableSlots { get; set; } = 1;
+
+    public HashSet<string> BenchPurchases { get; set; } = new();
+
+    public bool GiftGiven { get; set; }
+
+    // ---- b4: lessons/reveals/first-times (ChaosMetaState.cs:77-85,116) ----
+    public Dictionary<string, long> LessonProgress { get; set; } = new();
+
+    public HashSet<string> LessonsComplete { get; set; } = new();
+
+    public HashSet<string> PendingReveals { get; set; } = new();
+
+    public HashSet<string> SeenReveals { get; set; } = new();
+
+    public HashSet<string> FirstTimesAwarded { get; set; } = new();
+
+    public HashSet<string> BubbleHintsLearned { get; set; } = new();
+
+    // ---- b4: seen-once bools (ChaosMetaState.cs:40-53,88-109,151) ----
+    public bool SeenDefuseTutorial { get; set; }
+    public bool SeenBarkDefuseFirst { get; set; }
+    public bool SeenBarkDefuseNoFocus { get; set; }
+    public bool SeenBarkDefuseRelease { get; set; }
+    public bool SeenBarkClickDetonate { get; set; }
+    public bool SeenEcho { get; set; }
+    public bool SeenChaperone { get; set; }
+    public bool SeenTease { get; set; }
+    public bool SeenBound { get; set; }
+    public bool SeenBrittle { get; set; }
+    public bool SeenBraindrain { get; set; }
+    public bool SeenIntroGuide { get; set; }
+    public bool SeenDuoDemo { get; set; }
+    public bool SeenSkipDebut { get; set; }
+    public bool SeenGoldFirst { get; set; }
+    public bool SeenDollhouse { get; set; }
+    public bool SeenFirstSin { get; set; }
+    public bool SeenFocusTip { get; set; }
+    public bool SeenRippleTeach { get; set; }
+    public bool SeenHeatTeach { get; set; }
+    public bool SeenWarrenWelcome { get; set; }
+    public bool SeenFirstReturn { get; set; }
+    public bool SeenBoudoirIntro { get; set; }
+
+    // ---- b4: arc/rank/narrative (ChaosMetaState.cs:112-130) ----
+    public bool ForceScriptedRun { get; set; }
+
+    public int LastRankSeen { get; set; }
+
+    public int TutorialStage { get; set; }
+
+    public HashSet<string> SeenNarrativeLines { get; set; } = new();
+
+    public Dictionary<string, long> NarrativeCooldownEnds { get; set; } = new();
+
+    // ---- b4: crafting (ChaosMetaState.cs:137-155) ----
+    public Dictionary<string, int> Materials { get; set; } = new();
+
+    public HashSet<string> DiscoveredRecipes { get; set; } = new();
+
+    public string? PinnedBoon { get; set; }
+
+    public bool DenialArmed { get; set; }
+
+    public HashSet<string> PaperwallSketches { get; set; } = new();
+
+    // ---- b4: lifetime stats (ChaosMetaState.cs:158-166) ----
+    public int BestCombo { get; set; }
+
+    public long TotalDefused { get; set; }
+
+    public double TotalRunSeconds { get; set; }
+
+    public double TotalChannelSeconds { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, System.Text.Json.JsonElement>? ExtensionData { get; set; }
@@ -40,6 +141,36 @@ public sealed class DtrhSlotIndex
     public const int CurrentSchemaVersion = 1;
 
     public int ActiveSlot { get; set; } = 1;
+
+    // ---- b4 (SP-026): the saved Descent-tab choices (request-run persistence, WPF
+    // PersistRunSetup :421-444 writes AppSettings — app-global, shared across slots, so
+    // the INDEX document carries them; same File Scope constraint class as ActiveSlot).
+    // init's runSetup reads these (BuildRunSetup :447-478 raw values, NOT clamped run
+    // values); request-run clamps at deal time. Defaults = the WPF fallbacks. ----
+    public string Difficulty { get; set; } = "Easy";
+
+    public int DurationSec { get; set; } = 180;
+
+    public int WaveCount { get; set; } = 5;
+
+    public string Motion { get; set; } = "Mixed";
+
+    /// <summary>Enabled variant ids; null = all enabled (WPF ChaosEnabledVariants).</summary>
+    public List<string>? EnabledVariants { get; set; }
+
+    public double EffectIntensity { get; set; } = 0.85;
+
+    public bool ColorFlashes { get; set; } = true;
+
+    public bool BoonDraftEnabled { get; set; } = true;
+
+    public bool AllowCurses { get; set; } = true;
+
+    public bool DartersEnabled { get; set; } = true;
+
+    public string Key1 { get; set; } = "Q";
+
+    public string Key2 { get; set; } = "E";
 
     [JsonExtensionData]
     public Dictionary<string, System.Text.Json.JsonElement>? ExtensionData { get; set; }
@@ -88,6 +219,7 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
     private readonly string _dataDirectory;
     private readonly PersistenceStore<DtrhSlotIndex> _index;
     private readonly PersistenceStore<DtrhSlotDocument>[] _slots = new PersistenceStore<DtrhSlotDocument>[SlotCount];
+    private readonly PersistenceStore<DtrhAssetStatsDocument> _assetStats;
     private int _started;
 
     public DtrhSaveSlots(ParticipantInfrastructure infra, string dataDirectory)
@@ -101,6 +233,12 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
         {
             _slots[i] = NewSlotStore(i + 1);
         }
+
+        // b4 (SP-026): cumulative per-asset engagement (asset-stats) — app-global in WPF
+        // (dtrh_asset_stats.json, DtrhAssetStatsStore.cs:41), so it lives beside the index,
+        // not inside a slot. Same SP-005 machinery, its OWN named owner.
+        _assetStats = new PersistenceStore<DtrhAssetStatsDocument>(
+            infra.OwnerFor("DtrhAssetStats"), infra.Log, AssetStatsFilePath, DtrhAssetStatsDocument.CurrentSchemaVersion);
     }
 
     private PersistenceStore<DtrhSlotDocument> NewSlotStore(int slot) =>
@@ -115,6 +253,17 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
     public string SaveFolder => _dataDirectory;
 
     public string IndexFilePath => Path.Combine(_dataDirectory, "dtrh_slots.json");
+
+    /// <summary>Absolute path to the cumulative asset-engagement document (WPF:
+    /// dtrh_asset_stats.json, DtrhAssetStatsStore.cs:41).</summary>
+    public string AssetStatsFilePath => Path.Combine(_dataDirectory, "dtrh_asset_stats.json");
+
+    /// <summary>The app-global asset-engagement store (b4). Mutations via the
+    /// <see cref="DtrhAssetStats"/> wrapper (merge clamps + case-insensitive names).</summary>
+    public PersistenceStore<DtrhAssetStatsDocument> AssetStatsStore => _assetStats;
+
+    /// <summary>The index store (b4: request-run persists the Descent-tab choices here).</summary>
+    public PersistenceStore<DtrhSlotIndex> IndexStore => _index;
 
     /// <summary>Absolute path to a slot's save file (1-based).</summary>
     public string SlotFilePath(int slot) =>
@@ -144,6 +293,12 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
             await store.StartAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        await _assetStats.StartAsync(cancellationToken).ConfigureAwait(false);
+        if (_assetStats.LastLoadOutcome is { } statsOutcome && statsOutcome.IsDegraded)
+        {
+            _log.Log($"dtrh-slots: asset-stats document degraded ({statsOutcome.GetType().Name})");
+        }
+
         if (_index.LastLoadOutcome is { } indexOutcome && indexOutcome.IsDegraded)
         {
             _log.Log($"dtrh-slots: index document degraded ({indexOutcome.GetType().Name})");
@@ -171,6 +326,8 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
         {
             await store.StopAsync().ConfigureAwait(false);
         }
+
+        await _assetStats.StopAsync().ConfigureAwait(false);
     }
 
     /// <summary>Teardown flush for every store (SP-005 §11): enqueues final writes for
@@ -187,6 +344,8 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
         {
             await store.FlushAsync(boundedWait).ConfigureAwait(false);
         }
+
+        await _assetStats.FlushAsync(boundedWait).ConfigureAwait(false);
     }
 
     /// <summary>The store for a slot (1-3) — progression slices mutate through it.</summary>

@@ -35,6 +35,12 @@ public partial class DtrhHostWindow : Window
     private DtrhFxRouter? _router;
     private SoundFlowDtrhAudio? _audio;
     private DtrhVideoWindow? _videoWindow;
+    // SP-026 slice b4: the meta-progression engine (ops/payout/request-run/asset-stats)
+    // bound to the descended slot; test mode (--dtrh-m2test) clones in memory.
+    private readonly int _slot;
+    private readonly bool _m2Test;
+    private DtrhMeta? _meta;
+    private DtrhAssetStats? _assetStats;
 
     /// <summary>Boot-matrix facts (headed harness + diagnostics). Content-free.</summary>
     public bool EngineLive => _engineLive;
@@ -43,12 +49,14 @@ public partial class DtrhHostWindow : Window
 
     public string Surface { get; private set; } = "pending";
 
-    public DtrhHostWindow(ApplicationHost host, string page = "index.html", int? slot = null, string? fxDrive = null)
+    public DtrhHostWindow(ApplicationHost host, string page = "index.html", int? slot = null, string? fxDrive = null, bool m2Test = false)
     {
         _host = host;
         _dtrh = host.Participants.OfType<DtrhParticipant>().Single();
         _page = page;
         _fxDrive = fxDrive;
+        _slot = slot ?? host.Participants.OfType<DtrhSaveSlots>().Single().ActiveSlot;
+        _m2Test = m2Test;
         InitializeComponent();
         if (slot is not null)
         {
@@ -56,8 +64,14 @@ public partial class DtrhHostWindow : Window
             _host.LogDiagnostic($"dtrh: host window opening on slot {slot}");
         }
 
+        if (m2Test)
+        {
+            _host.LogDiagnostic("dtrh: M2 TEST MODE — meta engine clones in memory, the real save is never touched (HARNESS-ONLY)");
+        }
+
         Opened += (_, _) =>
         {
+            InitMetaEngine();
             InitNativeEffects();
             Begin();
             ScheduleFxDrive();
@@ -65,9 +79,28 @@ public partial class DtrhHostWindow : Window
         Closing += (_, _) =>
         {
             _closing.Cancel();
+            try { _meta?.FlushSave(); } catch { /* best-effort — teardown is idempotent */ }
             TeardownNativeEffects();
             TryCloseDialog();
         };
+    }
+
+    /// <summary>b4: bind the meta engine to the descended slot's store (the b2 slot
+    /// document rides SP-005 machinery — no parallel save file, no schema bump).
+    /// Broadcast = SendToPage (meta snapshots answer applied ops).</summary>
+    private void InitMetaEngine()
+    {
+        var slots = _host.Participants.OfType<DtrhSaveSlots>().Single();
+        _assetStats = new DtrhAssetStats(slots.AssetStatsStore, _host.LogDiagnostic);
+        _meta = new DtrhMeta(
+            slots.StoreFor(_slot),
+            slots.IndexStore,
+            _assetStats,
+            SendToPage,
+            _host.LogDiagnostic,
+            _m2Test,
+            slots.SlotFilePath(_slot));
+        _host.LogDiagnostic($"dtrh: meta engine bound to slot {_slot}{(_m2Test ? " (TEST clone)" : "")}");
     }
 
     private void Begin()
@@ -434,15 +467,6 @@ public partial class DtrhHostWindow : Window
     {
         if (DtrhProtocol.Classify(message) is DtrhProtocol.DtrhDispatchClass.Deferred deferred)
         {
-            // b3 run-boundary hygiene (pre-approach consult item 4): run-started/run-ended
-            // STAY Deferred(b4), but the stale-freeze/stale-duck cleanup (WPF run-started
-            // :252/:259, run-ended :513) is a b3 safety invariant — invoked BEFORE the
-            // typed-deferral log.
-            if (_router?.TryRunBoundaryHygiene(message) == true)
-            {
-                _host.LogDiagnostic("dtrh: run-boundary freeze/duck hygiene applied (message stays Deferred(b4))");
-            }
-
             _host.LogDiagnostic($"dtrh: '{message.GetType().Name}' deferred to slice {deferred.Slice} (typed, not dropped)");
             return;
         }
@@ -500,8 +524,63 @@ public partial class DtrhHostWindow : Window
 
                 _router.Handle(message);
                 return;
+            // SP-026 slice b4: progression/payout + media stats route to the meta engine.
+            case DtrhProtocol.DtrhPageMessage.MetaCommand metaCommand:
+                if (_meta is null)
+                {
+                    _host.LogDiagnostic("dtrh: 'MetaCommand' arrived before meta engine init — logged, not acted on");
+                    return;
+                }
+
+                _meta.HandleMetaCommand(metaCommand.Raw);
+                return;
+            case DtrhProtocol.DtrhPageMessage.RequestRun requestRun:
+                if (_meta is null)
+                {
+                    _host.LogDiagnostic("dtrh: 'RequestRun' arrived before meta engine init — logged, not acted on");
+                    return;
+                }
+
+                var runConfig = _meta.OnRequestRun(requestRun.Setup);
+                SendToPage(DtrhProtocol.BuildRunConfig(
+                    JsonSerializer.SerializeToElement(runConfig, PageJsonOptions)));
+                return;
+            case DtrhProtocol.DtrhPageMessage.RunStarted runStarted:
+                // WPF order (:252/:258-259): stale-duck/freeze hygiene FIRST, then the
+                // run boundary — the SAME b3 router entry, now inside the real handler.
+                _router?.TryRunBoundaryHygiene(runStarted);
+                _meta?.OnRunStarted(runStarted.Difficulty, runStarted.Mode);
+                return;
+            case DtrhProtocol.DtrhPageMessage.RunEnded runEnded:
+                // WPF order (:513): ApplyWorldFreeze(false) is the FIRST statement of
+                // OnRunEnded — a run ending mid-freeze never wedges native video/voice.
+                _router?.TryRunBoundaryHygiene(runEnded);
+                if (_meta is null)
+                {
+                    _host.LogDiagnostic("dtrh: 'RunEnded' arrived before meta engine init — logged, not acted on");
+                    return;
+                }
+
+                var payout = _meta.OnRunEnded(runEnded.Raw);
+                SendToPage(DtrhProtocol.BuildPayoutResult(payout));
+                return;
+            case DtrhProtocol.DtrhPageMessage.AssetStats assetStats:
+                _meta?.OnAssetStats(assetStats.Raw);
+                return;
+            case DtrhProtocol.DtrhPageMessage.LoomSave or DtrhProtocol.DtrhPageMessage.LoomDelete:
+                // Loom serving lands in Step 3 of this slice (DtrhLoom.cs) — typed + logged,
+                // never silently dropped.
+                _host.LogDiagnostic($"dtrh: '{message.GetType().Name}' — loom store not yet wired (Step 3); logged, not acted on");
+                return;
         }
     }
+
+    /// <summary>The serialize options for wrapping engine payloads into protocol messages
+    /// (camelCase — the payload's handlers read camelCase).</summary>
+    private static readonly JsonSerializerOptions PageJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
 
     /// <summary>
     /// The WPF boot contract (archaeology): init first, manifest second, in order, after
@@ -532,25 +611,30 @@ public partial class DtrhHostWindow : Window
             masterVolume: 80,
             modId: "builtin-sissyhypno",
             modContent: null,
-            runSetup: new DtrhProtocol.DtrhRunSetup(
-                Difficulty: "Easy",
-                DurationSec: 180,
-                WaveCount: 5,
-                Motion: "Mixed",
-                EnabledVariants: null,
-                EffectIntensity: 0.85,
-                ColorFlashes: true,
-                BoonDraftEnabled: true,
-                AllowCurses: true,
-                DartersEnabled: true,
-                Key1: "Q",
-                Key2: "E"),
-            m2Test: false));
+            runSetup: DtrhMeta.BuildRunSetupPayload(
+                _host.Participants.OfType<DtrhSaveSlots>().Single().IndexStore.Current),
+            m2Test: _m2Test));
+        // WPF boot order (DtrhHostService.cs:175-216): init → meta snapshot → manifest →
+        // loom-list (Step 3 wires it) → favorites. The meta snapshot seeds the page's
+        // Warren/Cheshire state (the b4-gated unlock: cheshireGuide.ensureInit needs it).
+        if (_meta is not null)
+        {
+            SendToPage(_meta.SnapshotMessage());
+        }
+
         SendToPage(DtrhProtocol.BuildManifest(
             images: [new DtrhProtocol.DtrhManifestEntry("bubble.png", $"{_dtrh.Server.MediaOrigin}/media/bubbles/bubble.png")],
             videos: [new DtrhProtocol.DtrhManifestEntry("spiral.webm", $"{_dtrh.Server.MediaOrigin}/media/bubbles/spiral.webm")],
             skipped: 0,
             truncated: false));
+        // Favorites seed (DtrhHostService.cs:215-216): posted only when the cumulative
+        // store ranks anything (WPF posts only when Count > 0).
+        var favorites = _meta?.FavoritesSeed();
+        if (favorites is { Count: > 0 })
+        {
+            SendToPage(DtrhProtocol.BuildFavorites(favorites));
+        }
+
         SetStatus("dtrh: init+manifest sent");
     }
 

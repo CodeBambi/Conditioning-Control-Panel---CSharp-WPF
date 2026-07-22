@@ -18,14 +18,16 @@ public sealed class DtrhLaunchCoordinator
     private readonly Window _owner;
     private readonly string _page;
     private readonly string? _fxDrive;
+    private readonly bool _m2Test;
     private readonly DtrhSaveSlots _slots;
 
-    public DtrhLaunchCoordinator(ApplicationHost host, Window owner, string page = "index.html", string? fxDrive = null)
+    public DtrhLaunchCoordinator(ApplicationHost host, Window owner, string page = "index.html", string? fxDrive = null, bool m2Test = false)
     {
         _host = host;
         _owner = owner;
         _page = page;
         _fxDrive = fxDrive;
+        _m2Test = m2Test;
         _slots = host.Participants.OfType<DtrhSaveSlots>().Single();
     }
 
@@ -89,7 +91,7 @@ public sealed class DtrhLaunchCoordinator
             _host.LogDiagnostic($"dtrh: descending into slot {slot}");
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                var window = new DtrhHostWindow(_host, _page, slot, _fxDrive);
+                var window = new DtrhHostWindow(_host, _page, slot, _fxDrive, _m2Test);
                 HostWindow = window;
                 window.Closed += (_, _) =>
                 {

@@ -33,13 +33,13 @@ public class DtrhProtocolTests
         // SP-025: bark re-labeled (b2 said "b3") — arbitration is the quips/sound row's
         // subsystem; the voice CHANNEL landed in b3 without it.
         yield return ["{\"type\":\"bark\",\"event\":\"wave-cleared\",\"wave\":3}", typeof(DtrhProtocol.DtrhPageMessage.Bark), "voice-arbitration (quips row)"];
-        yield return ["{\"type\":\"meta-command\",\"op\":\"add-gold\",\"amount\":50}", typeof(DtrhProtocol.DtrhPageMessage.MetaCommand), "b4"];
-        yield return ["{\"type\":\"request-run\",\"setup\":{\"difficulty\":\"Hard\"}}", typeof(DtrhProtocol.DtrhPageMessage.RequestRun), "b4"];
-        yield return ["{\"type\":\"run-started\",\"difficulty\":\"Gentle\",\"mode\":\"dtrh-web\"}", typeof(DtrhProtocol.DtrhPageMessage.RunStarted), "b4"];
-        yield return ["{\"type\":\"run-ended\",\"score\":1234.5,\"durationSec\":180,\"difficulty\":\"Gentle\",\"sessionStats\":{\"bubblesPopped\":42}}", typeof(DtrhProtocol.DtrhPageMessage.RunEnded), "b4"];
-        yield return ["{\"type\":\"asset-stats\",\"deltas\":{\"img1.png\":{\"watch\":3.5}}}", typeof(DtrhProtocol.DtrhPageMessage.AssetStats), "b4"];
-        yield return ["{\"type\":\"loom-save\",\"name\":\"dream\",\"gifBase64\":\"R0lG\",\"params\":{\"rings\":4},\"overwrite\":false}", typeof(DtrhProtocol.DtrhPageMessage.LoomSave), "b4"];
-        yield return ["{\"type\":\"loom-delete\",\"slug\":\"dream\"}", typeof(DtrhProtocol.DtrhPageMessage.LoomDelete), "b4"];
+        yield return ["{\"type\":\"meta-command\",\"op\":\"add-gold\",\"amount\":50}", typeof(DtrhProtocol.DtrhPageMessage.MetaCommand), null];
+        yield return ["{\"type\":\"request-run\",\"setup\":{\"difficulty\":\"Hard\"}}", typeof(DtrhProtocol.DtrhPageMessage.RequestRun), null];
+        yield return ["{\"type\":\"run-started\",\"difficulty\":\"Gentle\",\"mode\":\"dtrh-web\"}", typeof(DtrhProtocol.DtrhPageMessage.RunStarted), null];
+        yield return ["{\"type\":\"run-ended\",\"score\":1234.5,\"durationSec\":180,\"difficulty\":\"Gentle\",\"sessionStats\":{\"bubblesPopped\":42}}", typeof(DtrhProtocol.DtrhPageMessage.RunEnded), null];
+        yield return ["{\"type\":\"asset-stats\",\"deltas\":{\"img1.png\":{\"watch\":3.5}}}", typeof(DtrhProtocol.DtrhPageMessage.AssetStats), null];
+        yield return ["{\"type\":\"loom-save\",\"name\":\"dream\",\"gifBase64\":\"R0lG\",\"params\":{\"rings\":4},\"overwrite\":false}", typeof(DtrhProtocol.DtrhPageMessage.LoomSave), null];
+        yield return ["{\"type\":\"loom-delete\",\"slug\":\"dream\"}", typeof(DtrhProtocol.DtrhPageMessage.LoomDelete), null];
         yield return ["{\"type\":\"report-bug\"}", typeof(DtrhProtocol.DtrhPageMessage.ReportBug), "unassigned/host-ui"];
     }
 

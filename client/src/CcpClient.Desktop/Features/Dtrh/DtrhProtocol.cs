@@ -194,10 +194,11 @@ public static class DtrhProtocol
         // quips/sound-arbitration board row owns it (SP-025 consult — b2's "b3 (voice)"
         // mapping corrected: the voice CHANNEL landed in b3, arbitration did not).
         DtrhPageMessage.Bark => new DtrhDispatchClass.Deferred("voice-arbitration (quips row)"),
-        // b4: progression/payout + Loom + media stats.
+        // b4 (SP-026): progression/payout + Loom + media stats — REAL effects via
+        // DtrhMeta / DtrhLoom, wired in the host window.
         DtrhPageMessage.MetaCommand or DtrhPageMessage.RequestRun or DtrhPageMessage.RunStarted
             or DtrhPageMessage.RunEnded or DtrhPageMessage.AssetStats
-            or DtrhPageMessage.LoomSave or DtrhPageMessage.LoomDelete => new DtrhDispatchClass.Deferred("b4"),
+            or DtrhPageMessage.LoomSave or DtrhPageMessage.LoomDelete => DtrhDispatchClass.Handled.Instance,
         // b5: watchdog + bounded exit.
         DtrhPageMessage.ExitDone or DtrhPageMessage.Pong => new DtrhDispatchClass.Deferred("b5"),
         // No slice owns the hub's bug-report affordance yet (host UI, not protocol).
