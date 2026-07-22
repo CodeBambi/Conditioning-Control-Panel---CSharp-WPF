@@ -49,6 +49,12 @@ public partial class DtrhHostWindow : Window
     private DispatcherTimer? _watchTimer;
     private DtrhProcessFailed.DtrhProcessFailedSignal? _processFailedSignal;
     private bool _runActive;
+    // b5 graceful exit (window-scoped flow) + stale-profile retry latch (retry ONCE,
+    // never a crash loop).
+    private readonly DtrhExitFlow _exitFlow = new();
+    private DispatcherTimer? _exitTimer;
+    private bool _recoveryClosing;
+    private bool _profileRetryUsed;
 
     /// <summary>Boot-matrix facts (headed harness + diagnostics). Content-free.</summary>
     public bool EngineLive => _engineLive;
@@ -91,11 +97,28 @@ public partial class DtrhHostWindow : Window
             ScheduleFxDrive();
             StartWatchTimer();
         };
-        Closing += (_, _) =>
+        Closing += (_, e) =>
         {
+            // b5 graceful exit (WPF CloseActive :149-160): a LIVE page gets the wind-down
+            // request + bounded exit-done wait; everything else tears down now. Recovery
+            // closes skip the wind-down (the page is dead — WPF Recover :858 calls
+            // DisposeAll directly, no end-run).
+            if (!_recoveryClosing && !_exitFlow.Exiting && _watchdog?.IsLive == true
+                && _exitFlow.RequestClose(pageLive: true) == DtrhExitFlow.DtrhExitAction.RequestWindDown)
+            {
+                e.Cancel = true; // stay open until exit-done / the 1200ms force-close
+                _watchdog?.BeginExit();
+                _host.LogDiagnostic("dtrh: graceful exit — end-run posted to the page; bounded exit-done wait armed (1200ms, WPF :880)");
+                SendToPage(new { type = "end-run", reason = "host" });
+                ArmExitTimer();
+                return;
+            }
+
             _closing.Cancel();
             try { _watchTimer?.Stop(); } catch { /* best-effort */ }
             _watchTimer = null;
+            try { _exitTimer?.Stop(); } catch { /* best-effort */ }
+            _exitTimer = null;
             // Detach BEFORE the adapter dies (detach on a zombie is tolerated anyway);
             // MarkDead parks the watch without spending the relaunch.
             try { _processFailedSignal?.Dispose(); } catch { /* best-effort */ }
@@ -402,7 +425,38 @@ public partial class DtrhHostWindow : Window
         var url = _dtrh.PageUrl(_page);
         SetStatus("dtrh: navigating (embedded)");
         _host.LogDiagnostic($"dtrh: navigating embedded surface (page {_page})");
-        _web.Source = new Uri(url);
+        try
+        {
+            _web.Source = new Uri(url);
+        }
+        catch (Exception ex) when (DtrhProfileLock.IsStaleProfileLock(ex) && !_profileRetryUsed)
+        {
+            // b5: the 0x800700AA stale-profile-lock class (SP-023 surprise #7) — recover
+            // honestly (kill the stale children holding OUR profile) and retry ONCE.
+            _profileRetryUsed = true;
+            _host.LogDiagnostic($"dtrh: navigation threw the stale-profile-lock class (0x800700AA) — recovering (typed, never silent)");
+            LogProfileRecovery(DtrhProfileLock.TryRecover(DtrhProfileLock.WebView2ProfileDir()));
+            _web.Source = new Uri(url); // a second failure stands typed (never a crash loop)
+        }
+    }
+
+    private void LogProfileRecovery(DtrhProfileLock.DtrhProfileRecovery recovery)
+    {
+        switch (recovery)
+        {
+            case DtrhProfileLock.DtrhProfileRecovery.Recovered recovered:
+                _host.LogDiagnostic($"dtrh: stale-profile recovery — killed {recovered.KilledCount} stale msedgewebview2 child(ren) holding our profile");
+                break;
+            case DtrhProfileLock.DtrhProfileRecovery.NothingToKill:
+                _host.LogDiagnostic("dtrh: stale-profile recovery — no profile-matched children found (lock class without stale children; typed)");
+                break;
+            case DtrhProfileLock.DtrhProfileRecovery.Unsupported unsupported:
+                _host.LogDiagnostic($"dtrh: stale-profile recovery unavailable — {unsupported.Detail}");
+                break;
+            case DtrhProfileLock.DtrhProfileRecovery.Failed failed:
+                _host.LogDiagnostic($"dtrh: stale-profile recovery FAILED — {failed.Detail}");
+                break;
+        }
     }
 
     private string SafeAdapterInfo()
@@ -416,9 +470,7 @@ public partial class DtrhHostWindow : Window
         args.EnableDevTools = false;
         if (args is Avalonia.Platform.WindowsWebView2EnvironmentRequestedEventArgs wv2)
         {
-            var dataRoot = Path.Combine(
-                Path.GetDirectoryName(CompositionRoot.DefaultSettingsPath())!, "dtrh");
-            wv2.UserDataFolder = Path.Combine(dataRoot, "wv2-profile");
+            wv2.UserDataFolder = DtrhProfileLock.WebView2ProfileDir();
             // WPF parity (DtrhHostService.cs:119-120): the game's audio bed / drift voice
             // must start without a click; SP-011 W10 verified the flag end-to-end.
             wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
@@ -426,8 +478,7 @@ public partial class DtrhHostWindow : Window
         }
         else if (args is Avalonia.Platform.GtkWebViewEnvironmentRequestedEventArgs gtk)
         {
-            var dataRoot = Path.Combine(
-                Path.GetDirectoryName(CompositionRoot.DefaultSettingsPath())!, "dtrh");
+            var dataRoot = DtrhProfileLock.DtrhDataRoot();
             gtk.BaseDataDirectory = Path.Combine(dataRoot, "gtk-data");
             gtk.BaseCacheDirectory = Path.Combine(dataRoot, "gtk-cache");
             _host.LogDiagnostic("dtrh: GTK WebKit base dirs set");
@@ -530,6 +581,33 @@ public partial class DtrhHostWindow : Window
         }
 
         _host.LogDiagnostic($"dtrh: probe-img sent ({sent} served url(s) — loom + user media, HARNESS-ONLY)");
+    }
+
+    /// <summary>Recovery teardown (watchdog relaunch / exhaustion): skip the graceful
+    /// wind-down — the page is dead or wedged; WPF Recover :858-876 calls DisposeAll
+    /// directly.</summary>
+    public void CloseForRecovery()
+    {
+        _recoveryClosing = true;
+        Close();
+    }
+
+    /// <summary>The 1200ms bounded exit-done wait (WPF ArmExitWatchdog :877-882,
+    /// "watchdog-force after 1200ms"). One-shot; re-armed if the page re-sends exit.</summary>
+    private void ArmExitTimer()
+    {
+        try { _exitTimer?.Stop(); } catch { /* best-effort */ }
+        _exitTimer = new DispatcherTimer { Interval = DtrhWatchdog.ExitDoneWait };
+        _exitTimer.Tick += (_, _) =>
+        {
+            try { _exitTimer?.Stop(); } catch { /* best-effort */ }
+            if (_exitFlow.Timeout() == DtrhExitFlow.DtrhExitAction.ForceClose)
+            {
+                _host.LogDiagnostic("dtrh: exit-done wait elapsed (1200ms) — watchdog-FORCED close (page wedged mid-shutdown; WPF :881)");
+                Close();
+            }
+        };
+        _exitTimer.Start();
     }
 
     // ---------- b5 watchdog + native process-failure signal (SP-027) ----------
@@ -704,8 +782,29 @@ public partial class DtrhHostWindow : Window
                 SendBootMessages();
                 return;
             case DtrhProtocol.DtrhPageMessage.Exit:
-                _host.LogDiagnostic("dtrh: exit received — closing");
-                Close();
+                // b5 (WPF :312-314): the page winds itself down (boot.js:197-198 sends
+                // exit then exit-done back-to-back) — arm the bounded wait, never close
+                // before exit-done or the 1200ms force.
+                _host.LogDiagnostic("dtrh: exit received — page winding down; bounded exit-done wait armed (1200ms)");
+                _watchdog?.BeginExit();
+                if (_exitFlow.PageExit() == DtrhExitFlow.DtrhExitAction.ArmBoundedWait)
+                {
+                    ArmExitTimer();
+                }
+
+                return;
+            case DtrhProtocol.DtrhPageMessage.ExitDone:
+                // b5 (WPF :316): the page finished winding down — close now (fast path).
+                _host.LogDiagnostic("dtrh: exit-done received — closing (graceful fast path)");
+                if (_exitFlow.ExitDone() == DtrhExitFlow.DtrhExitAction.CloseNow && IsVisible)
+                {
+                    Close();
+                }
+
+                return;
+            case DtrhProtocol.DtrhPageMessage.Pong:
+                // b5 (WPF :318-320): pong counts as a heartbeat stamp.
+                _watchdog?.Heartbeat(DateTimeOffset.UtcNow);
                 return;
             case DtrhProtocol.DtrhPageMessage.FullscreenSet fullscreenSet:
                 WindowState = fullscreenSet.On ? WindowState.FullScreen : WindowState.Normal;

@@ -22,10 +22,10 @@ public class DtrhProtocolTests
         yield return ["{\"type\":\"log\",\"msg\":\"engine live (game mode)\"}", typeof(DtrhProtocol.DtrhPageMessage.Log), null];
         yield return ["{\"type\":\"heartbeat\",\"t\":1234.5}", typeof(DtrhProtocol.DtrhPageMessage.Heartbeat), null];
         yield return ["{\"type\":\"exit\"}", typeof(DtrhProtocol.DtrhPageMessage.Exit), null];
-        yield return ["{\"type\":\"exit-done\"}", typeof(DtrhProtocol.DtrhPageMessage.ExitDone), "b5"];
+        yield return ["{\"type\":\"exit-done\"}", typeof(DtrhProtocol.DtrhPageMessage.ExitDone), null];
         yield return ["{\"type\":\"fullscreen-set\",\"on\":true}", typeof(DtrhProtocol.DtrhPageMessage.FullscreenSet), null];
         yield return ["{\"type\":\"boot-error\",\"msg\":\"WebGL context creation failed\"}", typeof(DtrhProtocol.DtrhPageMessage.BootError), null];
-        yield return ["{\"type\":\"pong\",\"t\":7}", typeof(DtrhProtocol.DtrhPageMessage.Pong), "b5"];
+        yield return ["{\"type\":\"pong\",\"t\":7}", typeof(DtrhProtocol.DtrhPageMessage.Pong), null];
         yield return ["{\"type\":\"vn-speaking\",\"on\":true}", typeof(DtrhProtocol.DtrhPageMessage.VnSpeaking), null];
         yield return ["{\"type\":\"sfx\",\"name\":\"wave_clear\",\"scale\":0.8}", typeof(DtrhProtocol.DtrhPageMessage.Sfx), null];
         yield return ["{\"type\":\"fire-payload\",\"kind\":\"video\",\"strength\":60,\"durationMult\":1.5}", typeof(DtrhProtocol.DtrhPageMessage.FirePayload), null];

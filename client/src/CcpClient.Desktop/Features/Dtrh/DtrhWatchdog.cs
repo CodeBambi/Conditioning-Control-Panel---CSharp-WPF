@@ -56,6 +56,10 @@ public sealed class DtrhWatchdog
     private int _pendingGeneration;     // 0 = no recovery episode in flight
     private int _generationCounter;
 
+    /// <summary>Whether the page is live (ready reported, not since dead). The host
+    /// window's graceful-exit branch keys off this (WPF _host.IsReady :154).</summary>
+    public bool IsLive => _live;
+
     /// <summary>The recovery generation of the in-flight relaunch (0 = none). Diagnostics.</summary>
     public int PendingGeneration => _pendingGeneration;
 
@@ -142,5 +146,96 @@ public sealed class DtrhWatchdog
 
         _live = false;
         return new DtrhRecoveryOutcome.Exhausted(reason);
+    }
+}
+
+/// <summary>
+/// SP-027 slice b5: the graceful-exit flow (window-scoped — a relaunched window gets a
+/// fresh flow). WPF archaeology (DtrhHostService.cs): CloseActive :149-160 — if the page
+/// is ready and not already exiting: post end-run {reason:"host"} and arm the 1200ms
+/// exit watchdog; otherwise dispose now. Page-initiated exit :312-314 — the page is
+/// already winding down (boot.js:197-198 sends exit then exit-done back-to-back), so the
+/// host only arms the bounded wait; exit-done :316 closes now. One _exiting latch +
+/// one-shot close (consult CORRECTION 3): a late exit-done after the force-close, and a
+/// Close() re-entry while Closing is active, are no-ops.
+/// </summary>
+public sealed class DtrhExitFlow
+{
+    /// <summary>What the caller must do for one exit event.</summary>
+    public enum DtrhExitAction
+    {
+        /// <summary>Nothing — duplicate/late event (idempotence latch).</summary>
+        None,
+        /// <summary>Close now (no wind-down): page not live, or already exiting.</summary>
+        CloseNow,
+        /// <summary>Stay open: post end-run to the page and arm the bounded wait.</summary>
+        RequestWindDown,
+        /// <summary>Stay open: the page is already winding down — just arm the wait.</summary>
+        ArmBoundedWait,
+        /// <summary>The 1200ms wait elapsed without exit-done — force the close.</summary>
+        ForceClose,
+    }
+
+    private bool _closed;
+
+    /// <summary>The wind-down has been requested (WPF _exiting :36).</summary>
+    public bool Exiting { get; private set; }
+
+    /// <summary>Host/user close request (window X, auto-close, coordinator close).
+    /// pageLive = the watchdog's IsLive at close time.</summary>
+    public DtrhExitAction RequestClose(bool pageLive)
+    {
+        if (_closed)
+        {
+            return DtrhExitAction.None;
+        }
+
+        if (!pageLive || Exiting)
+        {
+            _closed = true;
+            return DtrhExitAction.CloseNow;
+        }
+
+        Exiting = true;
+        return DtrhExitAction.RequestWindDown;
+    }
+
+    /// <summary>Page-initiated exit (Esc held — boot.js:197). The page winds itself down;
+    /// exit-done follows within milliseconds on the fast path. CloseNow only when the
+    /// close already happened (never re-arm).</summary>
+    public DtrhExitAction PageExit()
+    {
+        if (_closed)
+        {
+            return DtrhExitAction.None;
+        }
+
+        Exiting = true;
+        return DtrhExitAction.ArmBoundedWait;
+    }
+
+    /// <summary>Page finished winding down (boot.js:123) — the fast path.</summary>
+    public DtrhExitAction ExitDone()
+    {
+        if (_closed)
+        {
+            return DtrhExitAction.None;
+        }
+
+        _closed = true;
+        return DtrhExitAction.CloseNow;
+    }
+
+    /// <summary>The bounded wait elapsed — the page wedged mid-shutdown; force the close
+    /// (WPF exit-watchdog tick :881).</summary>
+    public DtrhExitAction Timeout()
+    {
+        if (_closed)
+        {
+            return DtrhExitAction.None;
+        }
+
+        _closed = true;
+        return DtrhExitAction.ForceClose;
     }
 }

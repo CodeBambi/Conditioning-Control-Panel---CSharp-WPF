@@ -98,9 +98,15 @@ public sealed class DtrhLaunchCoordinator
                 if (dead is not null)
                 {
                     _closingForRecovery = dead;
-                    dead.Close();
+                    dead.CloseForRecovery();
                 }
 
+                // Relaunch-into-locked-profile is the deterministic 0x800700AA case
+                // (consult (b)2; SP-023 surprise #7): kill the stale children holding
+                // OUR profile BEFORE recreating the window, or the one relaunch burns
+                // on a lock panic. Typed outcome, logged — never silent.
+                var recovery = DtrhProfileLock.TryRecover(DtrhProfileLock.WebView2ProfileDir());
+                _host.LogDiagnostic($"dtrh: relaunch-path stale-profile recovery: {DescribeRecovery(recovery)}");
                 _ = DescendAndOpenAsync(_currentSlot);
                 break;
             }
@@ -108,11 +114,20 @@ public sealed class DtrhLaunchCoordinator
             {
                 _host.LogDiagnostic(
                     $"dtrh: recovery ({exhausted.Reason}) — relaunch already spent; honest close (WPF 'giving up' :864 parity)");
-                HostWindow?.Close();
+                HostWindow?.CloseForRecovery();
                 break;
             }
         }
     }
+
+    private static string DescribeRecovery(DtrhProfileLock.DtrhProfileRecovery recovery) => recovery switch
+    {
+        DtrhProfileLock.DtrhProfileRecovery.Recovered r => $"killed {r.KilledCount} stale child(ren)",
+        DtrhProfileLock.DtrhProfileRecovery.NothingToKill => "no stale children (profile free)",
+        DtrhProfileLock.DtrhProfileRecovery.Unsupported u => $"unavailable — {u.Detail}",
+        DtrhProfileLock.DtrhProfileRecovery.Failed f => $"FAILED — {f.Detail}",
+        _ => recovery.GetType().Name,
+    };
 
     private async Task DescendAndOpenAsync(int slot)
     {

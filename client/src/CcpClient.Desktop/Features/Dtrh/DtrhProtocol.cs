@@ -199,8 +199,9 @@ public static class DtrhProtocol
         DtrhPageMessage.MetaCommand or DtrhPageMessage.RequestRun or DtrhPageMessage.RunStarted
             or DtrhPageMessage.RunEnded or DtrhPageMessage.AssetStats
             or DtrhPageMessage.LoomSave or DtrhPageMessage.LoomDelete => DtrhDispatchClass.Handled.Instance,
-        // b5: watchdog + bounded exit.
-        DtrhPageMessage.ExitDone or DtrhPageMessage.Pong => new DtrhDispatchClass.Deferred("b5"),
+        // b5 (SP-027): bounded exit-done wait + pong heartbeat stamp — REAL handlers
+        // wired in the host window (exit flow) and the watchdog.
+        DtrhPageMessage.ExitDone or DtrhPageMessage.Pong => DtrhDispatchClass.Handled.Instance,
         // No slice owns the hub's bug-report affordance yet (host UI, not protocol).
         DtrhPageMessage.ReportBug => new DtrhDispatchClass.Deferred("unassigned/host-ui"),
         _ => new DtrhDispatchClass.Deferred("unassigned"),

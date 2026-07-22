@@ -53,7 +53,7 @@ public sealed class DtrhFxRouterTests : IDisposable
     }
 
     [Fact]
-    public void Bark_AndB5_Deferrals_Unchanged_B4NowHandled()
+    public void Bark_Deferral_Unchanged_B4AndB5NowHandled()
     {
         var bark = Assert.IsType<DtrhProtocol.DtrhDispatchClass.Deferred>(
             DtrhProtocol.Classify(Parse("{\"type\":\"bark\",\"event\":\"wave-cleared\"}")));
@@ -65,10 +65,11 @@ public sealed class DtrhFxRouterTests : IDisposable
             DtrhProtocol.Classify(Parse("{\"type\":\"meta-command\",\"op\":\"add-gold\"}")));
         Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
             DtrhProtocol.Classify(Parse("{\"type\":\"run-ended\",\"score\":1,\"durationSec\":1}")));
-        Assert.Equal("b5", Assert.IsType<DtrhProtocol.DtrhDispatchClass.Deferred>(
-            DtrhProtocol.Classify(Parse("{\"type\":\"pong\",\"t\":1}"))).Slice);
-        Assert.Equal("b5", Assert.IsType<DtrhProtocol.DtrhDispatchClass.Deferred>(
-            DtrhProtocol.Classify(Parse("{\"type\":\"exit-done\"}"))).Slice);
+        // SP-027: the b5 messages upgraded Deferred → Handled (exit flow + watchdog).
+        Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
+            DtrhProtocol.Classify(Parse("{\"type\":\"pong\",\"t\":1}")));
+        Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
+            DtrhProtocol.Classify(Parse("{\"type\":\"exit-done\"}")));
     }
 
     [Fact]
