@@ -1,6 +1,6 @@
 ## STATUS: SP-032 — Quips/sound arbitration q2: bark content pipeline + host wiring
-**Current Step:** Step 2 — pipeline implementation + disabled-phrase persistence (Step 1 outcomes complete; plan review pending)
-**Last Updated:** 2026-07-22 (Step 1 outcomes)
+**Current Step:** Step 3 — rapid cues + DTRH wiring + backend-event evidence (Step 2 outcomes complete; plan review pending)
+**Last Updated:** 2026-07-22 (Step 2 outcomes)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
@@ -10,9 +10,9 @@
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: pipeline implementation + disabled-phrase persistence
-- [ ] BarkPipeline.cs + types (rules, variants, payload integrity, freshness/priority, mute degradation, pacing)
-- [ ] Disabled-phrase store on SP-005 machinery
-- [ ] Unit tests (payload integrity, ordering, mute, persistence round-trip+quarantine, pacing math, TryStart compliance)
+- [x] BarkPipeline.cs + types (rules, variants, payload integrity, freshness/priority, mute degradation, pacing)
+- [x] Disabled-phrase store on SP-005 machinery
+- [x] Unit tests (payload integrity, ordering, mute, persistence round-trip+quarantine, pacing math, TryStart compliance)
 
 ### Step 3: rapid cues + DTRH wiring + backend-event evidence
 - [ ] Rapid click cues under voice/video (through-arbitration coexistence)
