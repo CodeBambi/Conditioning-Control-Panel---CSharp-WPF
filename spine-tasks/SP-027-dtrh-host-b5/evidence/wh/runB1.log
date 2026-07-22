@@ -1,0 +1,273 @@
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.0 DIP @ scale 1 @ screen 206,260
+dtrh: quick start — reusing slot 1 (picker skipped by design)
+dtrh-slots: live save is now slot 1
+dtrh: descending into slot 1
+dtrh: host window opening on slot 1
+dtrh: meta engine bound to slot 1
+dtrh-audio: 13 render endpoint(s): Browser (BEACN Studio) | Aux 2 / Hardware (BEACN Studio) | System (BEACN Studio) (default) | Link 4 Out (BEACN Studio) | Link 3 Out (BEACN Studio) | Chat (BEACN Studio) | Aux 1 / Hardware (BEACN Studio) | Mic Relay (Do Not Use) (BEACN Studio) | Game (BEACN Studio) | Link Out (BEACN Studio) | Headphones (BEACN Studio) | Link 2 Out (BEACN Studio) | Music (BEACN Studio)
+dtrh-audio: playback device up (requested default)
+dtrh: native effects up (SFX pool 8/drop, voice, vmem video, freeze)
+dtrh: WebView2 UserDataFolder set; autoplay-policy=no-user-gesture-required
+dtrh: navigating embedded surface (page index.html)
+dtrh: AdapterCreated info='DetailedWebViewAdapterInfo { Type = WebView2, Engine = Blink, Version = 150.0.4078.83, IsSupported = True, IsInstalled = True, UnavailableReason = , SupportedScenarios = NativeControlHost }'
+dtrh: native ProcessFailed signal ATTACHED (W17 immediate route, WebView2 slot-25 subscription)
+dtrh-loopback: GET /dtrh/index.html/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/boot.js/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/styles.css/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/modContent.js/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/bridge.js/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/hostMedia.js/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh: ready received — flushing init+manifest
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /favicon.ico/ -> 404
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-media: manifest — 0 image(s), 0 video(s), 0 skipped
+dtrh: loom-list posted (0 spiral(s))
+dtrh page log: boot: ready posted, waiting for init + manifest
+dtrh: NavigationCompleted success=True (surface embedded)
+dtrh: focus claimed at ready; document.hasFocus()=true
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 206 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh page log: cheshire: hub scene hub_welcome
+dtrh-fx: vn-speaking on — SFX stand down
+dtrh page log: reveal pending: variant_video (hub_open)
+dtrh page log: reveal pending: variant_htlink (hub_open)
+dtrh page log: engine live (game mode)
+dtrh: ENGINE LIVE
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/assets/… -> 206 (page:payload)
+dtrh: heartbeat #1
+dtrh: heartbeat #16
+dtrh: heartbeat #31
+dtrh: heartbeat #46
+dtrh: heartbeat #61
+dtrh: heartbeat #76
+dtrh: heartbeat #91
+dtrh: heartbeat #106
+dtrh: heartbeat #121
+dtrh: heartbeat #136
+dtrh: heartbeat #151
+dtrh: heartbeat #166
+dtrh: heartbeat #181
+dtrh: heartbeat #196
+dtrh: heartbeat #211
+dtrh: heartbeat #226
+dtrh: heartbeat #241
+dtrh: heartbeat #256
+dtrh: heartbeat #271
+dtrh: heartbeat #286
+dtrh: heartbeat #301
+dtrh: heartbeat #316
+dtrh: heartbeat #331
+dtrh: heartbeat #346
+dtrh: heartbeat #361
+dtrh: heartbeat #376
+dtrh: heartbeat #391
+dtrh: heartbeat #406
+dtrh: heartbeat #421
+dtrh: heartbeat #436
+dtrh: heartbeat #451
+dtrh: heartbeat #466
+dtrh: heartbeat #481
+dtrh: heartbeat #496
+dtrh: heartbeat #511
+dtrh: heartbeat #526
+dtrh: heartbeat #541
+dtrh: heartbeat #556
+dtrh: heartbeat #571
+dtrh: heartbeat #586
+dtrh: heartbeat #601
+dtrh: heartbeat #616
+dtrh: heartbeat #631
+dtrh: heartbeat #646
+dtrh: heartbeat #661
+dtrh: heartbeat #676
+dtrh: heartbeat #691
+dtrh: heartbeat #706
+dtrh: heartbeat #721
+dtrh: heartbeat #736
+dtrh: heartbeat #751
+dtrh: heartbeat #766
+dtrh: heartbeat #781
+dtrh: heartbeat #796
+dtrh: heartbeat #811
+dtrh: heartbeat #826
+dtrh: heartbeat #841
+dtrh: heartbeat #856
+dtrh: heartbeat #871
+dtrh: heartbeat #886
+dtrh: heartbeat #901
+dtrh: heartbeat #916
+dtrh: heartbeat #931
+dtrh: heartbeat #946
+dtrh: heartbeat #961
+dtrh: heartbeat #976
+dtrh: heartbeat #991
+dtrh: heartbeat #1006
+dtrh: heartbeat #1021
+dtrh: heartbeat #1036
+dtrh: heartbeat #1051
+dtrh: heartbeat #1066
+dtrh: heartbeat #1081
+dtrh: heartbeat #1096
+dtrh: heartbeat #1111
+dtrh: heartbeat #1126
+dtrh: heartbeat #1141
+dtrh: heartbeat #1156
+dtrh: heartbeat #1171
+dtrh: heartbeat #1186
+dtrh: heartbeat #1201
+dtrh: heartbeat #1216
+dtrh: heartbeat #1231
+dtrh: heartbeat #1246
+dtrh: heartbeat #1261
+dtrh: heartbeat #1276
+dtrh: heartbeat #1291
+dtrh: heartbeat #1306
+dtrh: heartbeat #1321
+dtrh: heartbeat #1336
+dtrh: heartbeat #1351
+dtrh: heartbeat #1366
+dtrh: heartbeat #1381
+dtrh: heartbeat #1396
+dtrh: heartbeat #1411
+dtrh: heartbeat #1426
+dtrh: heartbeat #1441
+dtrh: heartbeat #1456
+dtrh: heartbeat #1471
+dtrh: heartbeat #1486
+dtrh: heartbeat #1501
+dtrh: heartbeat #1516
+dtrh: heartbeat #1531
+dtrh: heartbeat #1546
+dtrh: heartbeat #1561
+dtrh: heartbeat #1576
+dtrh: heartbeat #1591
+dtrh: heartbeat #1606
+dtrh: heartbeat #1621
+dtrh: heartbeat #1636
+dtrh: heartbeat #1651
+dtrh: heartbeat #1666
+dtrh: heartbeat #1681
+dtrh: heartbeat #1696
+dtrh: heartbeat #1711
+dtrh: heartbeat #1726
+dtrh: heartbeat #1741
+dtrh: heartbeat #1756
+dtrh: heartbeat #1771
+dtrh: heartbeat #1786
+dtrh: heartbeat #1801
+dtrh: heartbeat #1816
+dtrh: heartbeat #1831
+dtrh: heartbeat #1846
+dtrh: heartbeat #1861
+dtrh: heartbeat #1876
+dtrh: heartbeat #1891
+dtrh: heartbeat #1906
+dtrh: heartbeat #1921
+dtrh: heartbeat #1936
+dtrh: heartbeat #1951
+dtrh: heartbeat #1966
+dtrh: heartbeat #1981
+dtrh: heartbeat #1996
+dtrh: heartbeat #2011
+dtrh: heartbeat #2026
+dtrh: heartbeat #2041
+dtrh: heartbeat #2056
+dtrh: heartbeat #2071
+dtrh: heartbeat #2086
+dtrh: heartbeat #2101
+dtrh: heartbeat #2116

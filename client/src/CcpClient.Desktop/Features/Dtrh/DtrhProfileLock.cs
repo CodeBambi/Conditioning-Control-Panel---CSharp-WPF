@@ -94,7 +94,7 @@ public static class DtrhProfileLock
             var escaped = userDataFolder.Replace("'", "''");
             var script = "$m='" + escaped + "';"
                 + "$p=Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Where-Object { $_.CommandLine -like \"*$m*\" };"
-                + "if (-not $p) { 'NONE' } else { $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop; $_.ProcessId } }";
+                + "if (-not $p) { 'NONE' } else { $p | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop; $_.ProcessId } catch {} } }";
             var encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
             using var ps = Process.Start(new ProcessStartInfo
             {

@@ -1,5 +1,5 @@
 ## STATUS: SP-027 — DTRH host slice b5: watchdog recovery, graceful exit, failure injection (FINAL)
-**Current Step:** Step 3 — graceful exit + stale-profile recovery
+**Current Step:** Step 4 — failure-injection evidence + consolidated limits + board + pre-completion consult
 **Last Updated:** 2026-07-22 (Step 1 in progress)
 **Blockers:** none
 
@@ -14,10 +14,10 @@
 - [x] DtrhWatchdog.cs (heartbeat watch, native signal where available, relaunch-once)
 - [x] Unit tests (silence timing, resume reset, once-then-exhaustion, no-live-session-fire)
 
-### Step 3: graceful exit + stale-profile recovery
-- [ ] Wind-down → bounded exit-done → force close; pong
-- [ ] 0x800700AA-class stale-profile-lock detection + recovery
-- [ ] Unit tests (fast path, timeout force, mid-freeze exit, lock classification)
+### Step 3: graceful exit + stale-profile recovery — COMPLETE (plan review: engine-skipped, T-2; 390/390 + 29/29)
+- [x] Wind-down → bounded exit-done → force close; pong
+- [x] 0x800700AA-class stale-profile-lock detection + recovery
+- [x] Unit tests (fast path, timeout force, mid-freeze exit, lock classification)
 
 ### Step 4: failure-injection evidence + consolidated limits + board + pre-completion consult
 - [ ] DISPLAY3 headed injection matrix (renderer-kill, blocked-route, missing-media, exit matrix; rect lines PERSISTED)

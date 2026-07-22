@@ -1,0 +1,12 @@
+
+data dir reset (backup at evidence/scratch/databackup)
+launched pid=24828
+engine live observed: True
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T051051\lane-1\spine-tasks\SP-027-dtrh-host-b5\evidence\wh\runA-live.png; dark=5,6% distinct-colors~401
+Write-Error: no window like 'Down the Rabbit Hole' on pid 24828 (titles: )
+relaunch-once observed: True
+relaunched engine live (second kill armed) observed: True
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T051051\lane-1\spine-tasks\SP-027-dtrh-host-b5\evidence\wh\runA-relaunched.png; dark=1,9% distinct-colors~172
+EXIT=0

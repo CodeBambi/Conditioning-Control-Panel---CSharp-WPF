@@ -1,0 +1,9 @@
+
+data dir reset (backup at evidence/scratch/databackup)
+launched pid=30008
+engine live observed: True
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+captured 1296x839 -> E:\Code\Conditioning-Control-Panel\.worktrees\spine-20260722T051051\lane-1\spine-tasks\SP-027-dtrh-host-b5\evidence\wh\runB1-live.png; dark=5,9% distinct-colors~407
+GetWindowRect: (-2576,1091)-(-1280,1930) [1296x839]
+ESC held 1500ms (real keybd_event)
+EXIT=
