@@ -1,0 +1,83 @@
+{
+  "mechanic": "verifycheckbox",
+  "_readme": "STAGING for the Wave-3 merge agent. VerifyCheckbox (brainstorm #3). Merge sharedPrompts into ALL FOUR banks/<niche>.json (shr_ prefix = identical id in every bank, one VO clip each via q_<id>). Then apply nicheOverrides per niche (the GRADING INVERSION: est/deep/cli answer flips to false for drone+circe). The visible checkbox CAPTION is NOT in the bank - it comes from the module STRINGS[niche] table in render/captcha/checkbox.js; prompt.text is the SPOKEN VO line only (niche-agnostic so one bambi-voiced clip serves all four). Recovery (shr_cap_check_rec) is authored here for a later wave: the engine hardcodes Recovery lines today and will not select a bank prompt in the Recovery band until that wiring lands - the module's Recovery render path is implemented and waiting.",
+  "sharedPrompts": [
+    {
+      "id": "shr_cap_check_cal",
+      "text": "Confirm you are human. Check the box to verify.",
+      "answer": true,
+      "heat": 0,
+      "tags": ["verify", "captcha", "curious"],
+      "flavors": ["Just confirm you are human."],
+      "weight": 1,
+      "mechanicHints": ["verifycheckbox"],
+      "requires": { "band": "calibration" }
+    },
+    {
+      "id": "shr_cap_check_est",
+      "text": "Press and hold the box until verification completes.",
+      "answer": true,
+      "heat": 2,
+      "tags": ["verify", "captcha", "compliance", "obedience", "surrender"],
+      "flavors": ["Press and hold to confirm."],
+      "weight": 1,
+      "mechanicHints": ["verifycheckbox"],
+      "requires": { "band": "establishing" }
+    },
+    {
+      "id": "shr_cap_check_deep",
+      "text": "Keep holding. Verification is still in progress.",
+      "answer": true,
+      "heat": 3,
+      "tags": ["verify", "captcha", "compliance", "surrender", "sinking", "dropping"],
+      "flavors": ["Keep holding, it is still working."],
+      "weight": 1,
+      "mechanicHints": ["verifycheckbox"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "shr_cap_check_cli",
+      "text": "Hold steady. Let it verify you completely.",
+      "answer": true,
+      "heat": 4,
+      "tags": ["verify", "captcha", "surrender", "blank", "obedience", "erasure"],
+      "flavors": ["Hold steady and let it finish."],
+      "weight": 1,
+      "mechanicHints": ["verifycheckbox"],
+      "requires": { "band": "climax", "minDepth": 0.8 }
+    },
+    {
+      "id": "shr_cap_check_rec",
+      "text": "Your verification is already on file. It is permanent.",
+      "answer": true,
+      "heat": 0,
+      "tags": ["verify", "captcha", "stillness", "surrender"],
+      "flavors": ["It is already on file."],
+      "weight": 1,
+      "mechanicHints": ["verifycheckbox"],
+      "requires": { "band": "recovery" }
+    }
+  ],
+  "nicheOverrides": {
+    "drone": {
+      "shr_cap_check_est": { "answer": false },
+      "shr_cap_check_deep": { "answer": false },
+      "shr_cap_check_cli": { "answer": false }
+    },
+    "circe": {
+      "shr_cap_check_est": { "answer": false },
+      "shr_cap_check_deep": { "answer": false },
+      "shr_cap_check_cli": { "answer": false }
+    }
+  },
+  "sfxWanted": [
+    { "id": "verify-hold", "why": "soft rising tone under the press-and-hold fill (module currently reuses existing 'sticker-drag' throttled per RAF tick); a dedicated cue would read cleaner. gain ~0.15, loop false, request-at-floor 0.5s then trim.", "usedBy": "render/captcha/checkbox.js frame() hold-tick" },
+    { "id": "verify-lock", "why": "the moment the check greens (hold completes / calibration click). Module reuses 'surface-bloom' today. gain ~0.45, loop false.", "usedBy": "acceptChecked()" },
+    { "id": "checkbox-tick", "why": "optional soft tick as the box first fills; low priority. gain ~0.2, loop false.", "usedBy": "beginPress()" }
+  ],
+  "voExtra": [
+    { "id": "cap_check_verdict_ok_cli", "text": "verified. you did not resist.", "why": "OPTIONAL spoken climax verdict stinger if a designer wants it; the module does NOT call audio.voice today (verdict is the chrome.stamp only). Would need an audio.voice() call site + manifest entry per CAPTCHA_HANDOFF.md 3.", "niche": "one bambi voice for all, per primer 1" },
+    { "id": "cap_check_verdict_refuse", "text": "unverified. noted.", "why": "OPTIONAL spoken refusal verdict; same wiring caveat. circe register would need its own cold variant if this is ever voiced per-niche." }
+  ],
+  "notes": "FOR WAVE-3 MERGE. 1) Grading inversion is the whole trick: bambi/sissy keep answer=true across cal/est/deep/cli (checking the affirmation = compliance). drone+circe FLIP est/deep/cli to answer=false via nicheOverrides (their caption states what CHECKING asserts, and that assertion is the REFUSAL, so NOT-checking+verify is compliance). Calibration stays answer=true for ALL FOUR (the item plays 100% straight to build trust; the inversion only bites from Establishing on). Recovery answer=true for all (pre-checked, permanent). 2) Committing true always costs the hold; false is one VERIFY/decline press away -> both answers, incl. refusal, always completable (invariant 1). 3) Tags: only heat>=2 votes axes (IntakeProfiler.MinHeat=2), so cal/rec are inert by design; est/deep/cli vote A2 Service (compliance/obedience/surrender) + A1 Blankness (sinking/dropping/blank/erasure) - meaningful in all four banks. 'verify'/'captcha' are inert markers (not in any axis/structural set). No disqualifying tags (trivia/colorpick/trick) used, so these records count. 4) cli is heat 4 (h5 fact respected: still requires band=climax); bump to 5 if you want it pooled only at peak. 5) VO text is niche-agnostic on purpose (one bambi clip per shr_ id via the ccp-trailer q_<id> pipeline); the verbatim guard in build_intake_manifest.py will assert generated v3 == these strings. 6) Module owns captions/labels/verdicts (STRINGS table) and the injected CSS ('ix-captcha-checkbox-css'); nothing here touches styles.css. 7) If Recovery-band bank consumption is wired later, shr_cap_check_rec is ready; until then it is dormant (engine hardcodes Recovery)."
+}
