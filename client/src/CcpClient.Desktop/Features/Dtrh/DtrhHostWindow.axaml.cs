@@ -1,8 +1,11 @@
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Companion;
 using CcpClient.Desktop.Lifecycle;
+using CcpClient.Desktop.Persistence;
 
 namespace CcpClient.Desktop.Features.Dtrh;
 
@@ -58,6 +61,13 @@ public partial class DtrhHostWindow : Window
     // SP-027 b5 HARNESS-ONLY: --dtrh-kill-renderers arms the W17 renderer-kill injection
     // at engine-live (and again on the relaunched instance → exhaustion evidence).
     private readonly bool _killRenderers;
+    // SP-032 q2: the bark content pipeline (event → rule → gate → payload → q1's
+    // arbitration). Window-scoped lifetime (constructed at Opened, flushed + torn down at
+    // Closing); SKIPPED entirely in m2 test mode (WPF RouteBark _testMode parity,
+    // DtrhHostService.cs:622 — no rotation/lifetime leakage into the live document).
+    private BarkPipeline? _bark;
+    private SoundArbitration? _barkArbitration;
+    private PersistenceStore<CompanionStateDocument>? _barkStore;
 
     /// <summary>Boot-matrix facts (headed harness + diagnostics). Content-free.</summary>
     public bool EngineLive => _engineLive;
@@ -97,6 +107,7 @@ public partial class DtrhHostWindow : Window
         {
             InitMetaEngine();
             InitNativeEffects();
+            InitBarkPipeline();
             Begin();
             ScheduleFxDrive();
             StartWatchTimer();
@@ -129,6 +140,7 @@ public partial class DtrhHostWindow : Window
             _processFailedSignal = null;
             _watchdog?.MarkDead();
             try { _meta?.FlushSave(); } catch { /* best-effort — teardown is idempotent */ }
+            TeardownBarkPipeline();
             TeardownNativeEffects();
             TryCloseDialog();
         };
@@ -152,6 +164,84 @@ public partial class DtrhHostWindow : Window
         // b4: the Loom store (<dataDir>/Spirals — DtrhLoomStore.cs:28 parity).
         _loom = new DtrhLoom(_dtrh.SpiralsRoot, _host.LogDiagnostic);
         _host.LogDiagnostic($"dtrh: meta engine bound to slot {_slot}{(_m2Test ? " (TEST clone)" : "")}");
+    }
+
+    // ---------- SP-032 q2 bark pipeline (bark message → q1 arbitration) ----------
+
+    /// <summary>
+    /// Construct the bark content pipeline host-locally (CompositionRoot.cs is outside this
+    /// slice's File Scope — the app-wide lift is a future row): q1's SoundArbitration over a
+    /// second SoundFlow engine (miniaudio devices coexist — SP-029 DTRH boundary), the
+    /// companion-state document on the SP-005 machinery (<DataDirectory>/companion.json),
+    /// and the compact built-in rule set. Voice assets do not ship in this slice (named
+    /// limit) — audio variants surface text-only with a typed reason until the voice-content
+    /// row. m2Test skips construction entirely (WPF _testMode early-return parity,
+    /// DtrhHostService.cs:622).
+    /// </summary>
+    private void InitBarkPipeline()
+    {
+        if (_m2Test)
+        {
+            _host.LogDiagnostic("dtrh: bark pipeline SKIPPED (m2 test mode — no routing, no persistence; WPF _testMode parity)");
+            return;
+        }
+
+        var backend = new SoundFlowAudioBackend(_host.LogDiagnostic);
+        _barkArbitration = new SoundArbitration(
+            backend,
+            new UnavailableDuckSink(), // q1 named limit: cross-app duck sink not admitted
+            new SystemSoundClock(),
+            new SoundArbitrationOptions(),
+            _host.LogDiagnostic);
+        var deviceOutcome = _barkArbitration.Initialize(null);
+        _host.LogDiagnostic($"dtrh: bark arbitration device init → {deviceOutcome.GetType().Name} (typed)");
+
+        _barkStore = new PersistenceStore<CompanionStateDocument>(
+            _host.Registry.OwnerFor("DtrhBarkCompanion"),
+            new LogSinkAdapter(_host),
+            System.IO.Path.Combine(_dtrh.DataDirectory, "companion.json"),
+            CompanionStateDocument.CurrentSchemaVersion);
+        _barkStore.StartAsync(System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+        if (_barkStore.LastLoadOutcome is not LoadOutcome.Loaded and not LoadOutcome.Missing)
+        {
+            // Typed Degraded (quarantine/newer-schema) — flagged defaults, never silent.
+            _host.LogDiagnostic($"dtrh: companion state load → {_barkStore.LastLoadOutcome?.GetType().Name} (typed Degraded — flagged defaults, original bytes preserved if quarantined)");
+        }
+
+        var rules = BarkRuleLoader.Parse(DefaultBarkRules.ManifestJson, _host.LogDiagnostic);
+        _bark = new BarkPipeline(
+            _barkArbitration,
+            _barkStore,
+            new DirectoryBarkAudioResolver(System.IO.Path.Combine(_dtrh.DataDirectory, "companion_audio")),
+            rules,
+            new BarkPipelineOptions(),
+            _host.LogDiagnostic);
+        _bark.BarkSurfaced += payload =>
+            // Presence+shape ONLY (SP-016 content-free class): rule id + suppression shape,
+            // NEVER the bark text. The surface itself (portrait/bubble) is a future UI row.
+            _host.LogDiagnostic($"dtrh: bark surfaced (rule '{payload.RuleId}', class {payload.Class}, audio {(payload.AudioPath is null ? "none" : "resolved")})");
+        _host.LogDiagnostic($"dtrh: bark pipeline up ({_bark.RuleCount} rule(s); voice assets = named limit)");
+    }
+
+    /// <summary>
+    /// Flush pending companion-state writes (consult binding 5: the host-local store is NOT
+    /// in CompositionRoot's preDrainFlush — the window close is its flush point), then panic
+    /// the bark arbitration and stop the store. Idempotent, best-effort.
+    /// </summary>
+    private void TeardownBarkPipeline()
+    {
+        try { _bark?.FlushAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
+        try { _barkArbitration?.Dispose(); } catch { /* best-effort */ }
+        try { _barkStore?.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
+        _bark = null;
+        _barkArbitration = null;
+        _barkStore = null;
+    }
+
+    /// <summary>Adapts the host's diagnostic log to the persistence contract's ILogSink.</summary>
+    private sealed class LogSinkAdapter(ApplicationHost host) : ILogSink
+    {
+        public void Log(string message) => host.LogDiagnostic(message);
     }
 
     private void Begin()
@@ -890,6 +980,32 @@ public partial class DtrhHostWindow : Window
                 }
 
                 _router.Handle(message);
+                return;
+            // SP-032 q2: bark events route through the content pipeline on q1's arbitration
+            // (DtrhBarkRouting = the WPF RouteBark table). Presence+shape logging ONLY —
+            // event name + outcome shape, NEVER bark text (SP-016 content-free class).
+            case DtrhProtocol.DtrhPageMessage.Bark bark:
+                if (_bark is null)
+                {
+                    _host.LogDiagnostic($"dtrh: bark '{bark.Event ?? "(none)"}' not routed (no pipeline — m2 test mode or init skipped; typed, not dropped)");
+                    return;
+                }
+
+                if (!DtrhBarkRouting.TryRoute(bark, out var barkTrigger, out var barkFills))
+                {
+                    _host.LogDiagnostic($"dtrh: unrouted bark event '{bark.Event ?? "(none)"}' (typed, WPF default-branch parity)");
+                    return;
+                }
+
+                var barkOutcome = _bark.Raise(barkTrigger, barkFills);
+                _host.LogDiagnostic($"dtrh: bark '{bark.Event}' → {barkOutcome switch
+                {
+                    BarkOutcome.Surfaced s => $"surfaced (rule '{s.Payload.RuleId}', priority={s.Priority}, depth {s.QueueDepth})",
+                    BarkOutcome.SurfacedTextOnly t => $"surfaced text-only (rule '{t.Payload.RuleId}', {t.Reason})",
+                    BarkOutcome.Gated g => $"gated (rule '{g.RuleId}', {g.Reason})",
+                    BarkOutcome.NoRule n => $"no rule ({n.Detail})",
+                    _ => barkOutcome.GetType().Name,
+                }}");
                 return;
             // SP-026 slice b4: progression/payout + media stats route to the meta engine.
             case DtrhProtocol.DtrhPageMessage.MetaCommand metaCommand:

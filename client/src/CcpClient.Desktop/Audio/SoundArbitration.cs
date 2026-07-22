@@ -169,6 +169,13 @@ public sealed class SoundArbitration : IDisposable
     /// <summary>Queued voice lines.</summary>
     public int QueuedVoiceCount { get { lock (_gate) { return _voiceQueue.Count; } } }
 
+    /// <summary>
+    /// A voice line is actively playing (SP-032 q2 addition — the anti-stale gate's
+    /// "speaking" state, WPF BarkService.cs:1358-1365; outcome-mapping: WPF's IsSpeaking is
+    /// bubble-visible and greenfield has no bubble, so voice-player-active is the analog).
+    /// </summary>
+    public bool VoiceActive { get { lock (_gate) { return _voice is not null; } } }
+
     /// <summary>Outstanding duck holds.</summary>
     public int DuckCount { get { lock (_gate) { return _duckCount; } } }
 
