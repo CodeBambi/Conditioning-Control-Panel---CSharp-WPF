@@ -144,3 +144,12 @@ Requested route: solo Fable 5. Actual answering model: NOT surfaced in the consu
 Advisor secondary notes (disposition): `OnPacingFire` constructs the player under the gate (blocks other channels for decoder-open ~ms; never deadlocks — CreatePlayer never calls back into arbitration) — accepted, latency-only, q2 may revisit if measured; `Initialize` zero-endpoints keeps `_initialized` with `AudioDisabledForSession=true` gating (matches WPF disabled-for-session semantics); engine/device construction off-sync-context not required (SP-025 dump implicated AssetDataProvider/player construction only — the binding is honored where proven).
 
 ## Engine-review presence log (T-2)
+- Step 4 plan review: `spine_review_step(step=4, type=plan)` → **SKIPPED by engine** (SP-195; `spawnFailed=false`, artifact `.reviews/4-20260722T114949.md`).
+
+## Step 4 — verification (final)
+
+- `node .spine/patches/verify.mjs` → **exit 0** (6/6 patches applied on pi-spine 2.10.0).
+- `dotnet build client/CcpClient.sln -c Debug -t:Rebuild` → **0W/0E** (all 4 projects recompiled).
+- `CcpClient.Tests` → **412/412** (floor 391; +21 new arbitration tests); `CcpClient.HeadlessTests` → **29/29** (floor 29). q1 ships no headless surface tests (service-core slice — recorded per File Scope).
+- `git diff --check` clean; `git status --short` = File Scope paths only.
+- Contract fields: `fileScopeMustChange` `client/src/CcpClient.Desktop/Audio/SoundArbitration.cs` ✓; `artifactsMustExist` `record.md` ✓; `fileScopeMustNotChange` untouched (ConditioningControlPanel/, client/CcpClient.sln, client/spikes/, .spine/, Features/Dtrh/, both hot docs — enabler 2 honored; board reconcile = orchestrator at land).
