@@ -88,6 +88,8 @@ The first Step-4 worker session **wedged at 0-CPU during run B1** (2026-07-22 ~0
 - **Run D — missing-media (W19 class) (`runD-drive.log` + `runD.log`, EXIT=0):** fx-drive probe-missing-media → the fetch **404s (typed, logged)** → page reports the typed load error and SURVIVES → EXIT=0.
 - All captures pixel-verified (dark% + distinct-colors recorded per capture; never a black surface outside the intentionally-unreachable post-kill window).
 
+- **Stale-profile-lock proof level (pre-completion consult CORRECTION 1 — recorded precisely):** HRESULT classification + kill-and-retry recovery are **unit-proven** (Step 3, `DtrhExitFlowTests`); the relaunch-path sweep **executed live** in run A and found the profile free ("no stale children"); **a live `0x800700AA` event was never reproduced headed** (the deterministic back-to-back-after-kill reproduction, SP-023 surprise #7, was not exercised — the packet's Step 4 matrix names renderer-kill/blocked-route/missing-media/exit, not a live lock). Typed and unit+path proven; NOT injection-level proven.
+
 ### WSL2 in-packet gate (`~/ccp-sp027` native ext4 via tar sync, never /mnt/e for the tree)
 
 - **Contract testCommand green on the synced tree:** sln build **0W/0E**; **391/391 unit + 29/29 headless** (≥ the 366/29 b4 floor).
@@ -115,8 +117,14 @@ ESC forensics (4 diags + 3 failed B1 attempts) ≈ 50 min; headed matrix re-runs
 
 ### Plan review
 
-Step 4: engine-skipped (T-2 heading; presence/absence recorded).
+- (recorded after the actual spine_review_step call — never pre-recorded)
 
 ### Pre-completion consult (Step 4 gate)
 
-- (verdict recorded below after the call)
+- **Mode:** solo (Fable 5 requested; council route broken — T-7). **Actual answering model not surfaced by the tool (recorded honestly, per the Step 1 precedent).**
+- **Verdict: PROCEED to done — evidence covers the completion criteria and honesty framings — with three corrections (all applied in this record + the board row before .DONE):**
+  - **CORRECTION 1 (stale-profile proof level):** never let "typed and proven" read as end-to-end — classification + recovery unit-proven, relaunch-path sweep executed live (no lock present), live `0x800700AA` reproduction NOT performed. Applied verbatim above + as a clause in the board row.
+  - **CORRECTION 2 (never pre-record review outcomes):** the Step-4 plan-review line was a prediction; replaced with the post-call record (see Plan review).
+  - **CORRECTION 3 (this placeholder + final status checks):** verdict recorded here in full; `git status --short` + `git diff --check` re-run AFTER the final commit.
+- **Minor (record-only):** the 378→390→391 walk is attributable (+12 `DtrhWatchdogTests`, +12 `DtrhExitFlowTests`, +1 `DtrhLoopbackContractTests`); wx2's APP-EXIT=143 is the harness's own SIGTERM — the Linux graceful-exit claim stays pinned to wx1 only.
+- **Endorsed as sound:** the W17 detection stack (black window unreachable when ProcessFailed lands; measurable only on the heartbeat path — the Linux 24s number is the right honest framing), relaunch-once with exhaustion, the exit triptych, the split of the dead `/media/` prefix into honest 403/404 cells, the VN capture-phase ESC finding (WPF parity — shared payload tree), and re-running every salvaged cell instead of trusting `038fe603`. Board row stays WIP — correct.
