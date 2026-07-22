@@ -78,7 +78,7 @@ New home `client/src/CcpClient.Desktop/Audio/`, contract-named `SoundArbitration
 
 ## Engine-review presence log (T-2)
 
-(to be filled per `spine_review_step` call)
+- Step 1 plan review: `spine_review_step(step=1, type=plan)` → **SKIPPED by engine** ("Nested reviewer spawn blocked inside pi worker session… the batch engine runs reviews after worker success (SP-195)"; `spawnFailed=false`, artifact `.reviews/1-20260722T103050.md`). Engine-run code+final reviews expected after `.DONE`.
 
 ## Consult log
 
