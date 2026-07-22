@@ -220,3 +220,71 @@ the named post-land gate re-points there (orchestrator acts at land, enabler 2).
 engine (12:20Z process) still holds the unpatched module: SP-031/SP-032 finalizations may T-5
 one final time (manual playbook), unless a resume re-spawns the engine after the Step-2 on-disk
 patch — expected either way, not a reopen. The tax claim stays parked until the gate fires green.
+
+## Step 4 — docs + pre-completion consult
+
+### `.spine/patches/README.md`
+
+t5 row added to the patch table; new **Two roots (SP-031)** section (project tree vs engine
+tree, the wave-1 applied≠loaded lesson, engine-flag semantics, missing-root fail-loud); re-base
+note appended to the T-12/mechanism bullets (canonicalization of the global hand-patches:
+dotnet +`dotnet.exe`, tail unified to manifest text, fsync comments — all behavior-preserving).
+
+### Pre-completion consult (solo; tool: `consult`; answering model not self-identified —
+configured advisor per `.pi/bpx-consult.json`)
+
+**Verdict: the fix is sound and correctly scoped.** Conditions given and discharged:
+
+1. **Global-tree stability is recorded EMPIRICALLY, not by pin-logic** — the global tree's
+   hand-patches date from 07-18/07-19 and survived four days of pi process starts (the tree is
+   demonstrably not being re-synced; `npm:pi-spine` in the global `settings.json` packages is
+   satisfied at 2.8.0). The durable risk is a DELIBERATE global pi-spine update wiping t5 —
+   covered by the README re-apply trigger + verify.mjs pre-launch, plus the T-1 npm
+   skip-subtlety (same-version reinstall does not re-extract; a true wipe requires removing
+   the dir).
+2. **NAMED LIMIT: verify proves the two KNOWN roots, not the loaded root.** If the launch
+   convention changes (a different `spine` on PATH → a third tree), applied≠loaded reappears
+   while verify stays green. **Recommendation to the orchestrator (land-time item):** the
+   re-pointed post-land gate's evidence should include a process-cmdline / `where spine` check
+   that the running engine resolves inside `engineRoot` — closes the class, not the instance.
+3. **In-lane apply now also touches the global tree** (this and future workers): post-land it
+   is an idempotent skip; two lanes racing would write identical bytes in a tiny window.
+4. **2.8.0-runs / 2.10.0-believed discrepancy: recorded, not fixed here.** The engine upgrade
+   stays an owner decision (T-1 row standing order); the manifest hedges both versions
+   (anchors byte-present and tested on 2.8.0 + 2.10.0).
+5. **Fixture count honesty:** the cell-4 journal pointer was a tautological assertion — removed
+   from the count. Fixture v2 = **12 falsifiable assertions, all GREEN**, + 1 named
+   journal-evidence pointer (re-run after the edit: GREEN).
+
+### Engine-review presence log (T-2 heading format)
+
+| step | spine_review_step call | result |
+|---|---|---|
+| 1 | plan, baseline a82775df~1 | **engine-skipped (SP-195)** — nested reviewer spawn blocked inside worker session; verdict null; engine reviews run after .DONE |
+| 2 | plan, baseline cdafc78b~1 | engine-skipped (SP-195), same |
+| 3 | plan, baseline 0f197288~1 | engine-skipped (SP-195), same |
+| 4 | (below, post-commit) | — |
+
+Code + final review: not spawned by the worker (SP-194/SP-195) — the batch engine runs them
+after `.DONE`.
+
+### Durable-lesson candidates (orchestrator harvests at land; enabler 2 — worker does NOT
+edit port-lessons.md or task-board.md)
+
+1. **applied ≠ loaded**: a patch mechanism must verify the install the process actually loads,
+   not the install nearest the repo. Two-tree fingerprint: process cmdlines (`Get-CimInstance
+   Win32_Process`), never the repo pin.
+2. **The engine version is whatever the `spine` CLI on PATH loads** — the owner believes
+   2.10.0 runs; the CLI proves 2.8.0 runs. Upgrade decision recorded on T-1's row, not here.
+3. **Fixture-provenance lesson, corrected**: SP-028's fixture was faithful to the real caller
+   shape — the flawed provenance was the INSTALL TREE, not taskFolder. "Mirror the real call"
+   means the real process, not just the real arguments. (The wave-1 port-lessons entry's
+   taskFolder theory is falsified by the `.DONE`-check + `lane.committed` event order —
+   orchestrator should correct it at land.)
+4. **A wrong root-cause theory can be fixture-consistent**: cell 5 shows the base-path theory
+   reproduces the exact wave-1 signature with one planted file. The discriminating evidence was
+   git HISTORY (base `.DONE` absent until the merge), not any fixture.
+5. **T-5 row CLOSE criteria for the orchestrator**: re-point the named post-land gate at the
+   next Level-2 wave + add the process-cmdline engine-root check (named limit 2); THIS wave's
+   finalizations may T-5 once more (running engine predates the on-disk patch — expected, not
+   a reopen).

@@ -1,5 +1,5 @@
 ## STATUS: SP-031 — T-5 anchor re-base (provenance-faithful fixture)
-**Current Step:** Step 4 — docs + pre-completion consult
+**Current Step:** Step 5 — testing & verification
 **Last Updated:** 2026-07-22 (forensics complete — packet premise FALSIFIED by primary evidence; corrected design)
 **Blockers:** none
 
@@ -18,11 +18,11 @@
 - [x] Consumer census re-confirmed (4 callers, both versions, all taskFolderInWorktree)
 - [x] Boundary re-recorded (named post-land gate re-pointed at next wave; this-wave ESM-cache caveat)
 
-### Step 4: docs + pre-completion consult
-- [ ] README row
-- [ ] record.md complete
-- [ ] Pre-completion solo consult
-- [ ] STATUS.md accurate
+### Step 4: docs + pre-completion consult — COMPLETE (plan review: engine-skipped, SP-195)
+- [x] README row (t5 + two-root section + re-base note)
+- [x] record.md complete (forensics, design, migration transcript, fixture v2, both consult verdicts, review-presence log, durable-lesson candidates)
+- [x] Pre-completion solo consult (sound; 5 conditions discharged incl. fixture count honesty fix)
+- [x] STATUS.md accurate
 
 ### Step 5: verification
 - [ ] testCommand green (verify.mjs exit 0; 0W/0E; ≥412/29 floor, no drift)

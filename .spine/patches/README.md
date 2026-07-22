@@ -19,6 +19,27 @@ re-apply and verify.
 | `dotnet-evidence-allowlist` | `src/batch/evidence-command.mjs` | add `dotnet` to `ALLOWED_EVIDENCE_EXECUTABLES` | this repo's gate-evidence testCommand is `dotnet build/test` (T-1) |
 | `worker-tail-at-file` | `bin/spine-worker-runner.mjs` | tails >16KB → `%TEMP%` file, passed as `@file` | inline argv exceeded the Windows 32,767-char CreateProcess limit — SP-004 worker died silently ×3 (port-lessons 2026-07-19) |
 | `skill-headed-evidence-sizing` | `skills/create-spine-tasks/SKILL.md` | re-insert the T-11 headed-evidence sizing amendment | task-authoring guidance; dies on reinstall (found empirically as an undocumented 4th patch) |
+| `t5-reviews-autoclean` | `src/batch/lane-commit.mjs` | delete `.reviews/` at `commitLaneWorktree` entry | engine review phases write `.reviews/` into the lane post-`.DONE`; git 2.49 `check-ignore --no-index` blank-line quirk mis-skips it → deterministic DirtyWorktree on every Level-2 land (T-5, 18 occurrences) |
+
+## Two roots (SP-031, 2026-07-22 — the wave-1 lesson)
+
+There are **two pi-spine installs** and they are NOT interchangeable:
+
+- **project tree** (`.pi/npm/node_modules/pi-spine`, repo + each lane worktree) — what pi
+  sessions load skills/tools from; pi re-syncs it to the `.pi/settings.json` pin on process
+  start (currently `npm:pi-spine@2.10.0`).
+- **engine tree** (`manifest.engineRoot`, the global CLI install the batch engine actually
+  EXECUTES — `spine.mjs` / `spine-worker-runner.mjs` run from there, process-cmdline-proven;
+  see `spine-tasks/CONTEXT.md` §Execution-policy PATH note).
+
+SP-028's t5 patch verified green on the project tree while the engine ran the global tree
+unpatched — wave `20260722T101444` T-5'd both lanes on first live use (**applied ≠ loaded**).
+Patches now carry `"engine": true` when their code runs in the engine process (fsync×2,
+dotnet, tail, t5); `apply.mjs`/`verify.mjs` process **both roots** by default (engine root
+gets engine-flagged patches only; `--root` keeps single-root scratch semantics; a missing
+engine root fails loudly with the remedy). The t11 skill amendment is project-tree-only —
+CCP-specific text must not land on the globally shared skill copy. verify.mjs exit 0 now
+means applied **==** loadable for engine-behavior patches.
 
 Deliberately **not** patched locally:
 
@@ -43,6 +64,14 @@ Deliberately **not** patched locally:
   ORIGINAL file content — two patches targeting the SAME file would clobber each
   other (latent; all six current patches target distinct files). Re-base to
   sequential re-read before authoring a same-file multi-patch.
+- **Re-base note (SP-031):** SP-028's t5 entry was re-based 2026-07-22 after its named
+  post-land gate FAILED on first live use (wave `20260722T101444`, both lanes). Root
+  cause was NOT the path expression (`taskFolder` is the lane task folder at all 4
+  finalization callers in both versions — journal-proven) but the patch sitting on the
+  wrong install tree; the fix is the two-root model above plus canonicalizing the
+  global tree's hand-patches (dotnet text now includes `dotnet.exe`; tail block unified
+  to the manifest text; fsync comments added — all behavior-preserving). Evidence:
+  `spine-tasks/SP-031-t5-anchor-rebase/record.md` + fixture v2 (5 cells, 13/13).
 
 ## How — after ANY pi-spine install/update
 

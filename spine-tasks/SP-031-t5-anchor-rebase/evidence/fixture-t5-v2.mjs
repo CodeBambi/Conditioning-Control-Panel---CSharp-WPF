@@ -155,8 +155,8 @@ const patchedModule = path.join(PATCHED_INSTALL, "src/batch/lane-commit.mjs");
 	console.log("\ncell4 base-path (no .DONE):", JSON.stringify({ ok: result.ok, failureClass: result.failureClass, error: result.error }));
 	assert("cell4 falsification fingerprint: early-return DirtyWorktree ('.DONE is missing'), NO commit (no lane.committed)",
 		result.ok === false && result.failureClass === "DirtyWorktree" && /\.DONE is missing/.test(result.error ?? "") && headBefore === headAfter);
-	assert("cell4 wave-1 showed the OPPOSITE order (lane.committed then post-commit DirtyWorktree) ⇒ taskFolder was the lane path",
-		true); // journal evidence, recorded in record.md — kept as a named assertion for the reader
+	// journal-evidence pointer (not counted): wave-1 showed the OPPOSITE order — lane.committed
+	// then post-commit DirtyWorktree — so its taskFolder was the lane path (record.md Step 1).
 	assert("cell4 lane residue untouched by the base-path rmSync", fs.existsSync(path.join(laneTaskFolder, ".reviews")));
 }
 
@@ -179,6 +179,6 @@ const patchedModule = path.join(PATCHED_INSTALL, "src/batch/lane-commit.mjs");
 	assert("cell5 lane .reviews/ still present (base-path delete no-ops on the lane)", fs.existsSync(path.join(laneTaskFolder, ".reviews")));
 }
 
-console.log(fail === 0 ? "\nFIXTURE v2 GREEN (5 cells)" : "\nFIXTURE v2 FAILED");
+console.log(fail === 0 ? "\nFIXTURE v2 GREEN (5 cells, 12 falsifiable assertions)" : "\nFIXTURE v2 FAILED");
 fs.rmSync(PRISTINE_SIBLING, { recursive: true, force: true });
 process.exit(fail);
