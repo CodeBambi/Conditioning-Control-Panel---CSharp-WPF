@@ -1,0 +1,64 @@
+tones: /home/mich/ccp-sp029/spine-tasks/SP-029-quips-arbitration-q1/evidence/harness/bin/Debug/net10.0/tones
+=== 1. device layer (real backend, F1 re-probe) ===
+session facts: 1 render endpoint(s): RDP Sink
+PASS: render endpoints enumerated (session facts)
+arb: sound: 1 render endpoint(s): RDP Sink
+arb: sound: preferred device 'SP029 Bogus Device (never exists)' not in fresh enumeration — falling back to default (AudioService.cs:292-293 parity)
+arb: sound: playback device up (requested SP029 Bogus Device (never exists))
+PASS: stale NAME -> typed fallback to default (WPF AudioService.cs:292-293)
+active endpoint: (default)
+=== 2. voice natural completion ===
+PASS: voice started (gen=1)
+event: VoiceCompleted(gen=1)
+PASS: voice natural completion surfaced as VoiceCompleted(gen=1) — backend PlaybackEnded, generation-filtered
+=== 3. voice stop-replace / generation ===
+PASS: stop-replace newest-wins (gen 2 -> 3)
+event: VoiceCompleted(gen=3)
+PASS: replacement line completes naturally
+PASS: interrupted gen 2 NEVER surfaced as completion (F2 generation filter; SP-017 A2)
+=== 4. whisper busy (real event, replaces WPF duration estimate) ===
+event: WhisperBusyChanged(True)
+PASS: whisper playing, busy set at play
+event: WhisperBusyChanged(False)
+PASS: whisper busy cleared ONLY by the real completion event (spike A5 shape)
+PASS: WhisperBusyChanged exactly [true, false]
+=== 5. SFX pool 8 + overflow ===
+arb: sound: sfx pool full (8) — dropping cue (ChaosSfx.cs:91-107 parity)
+PASS: 8/8 SFX overlap started (bounded pool 8, SP-025 decree)
+PASS: 9th cue DROPPED typed PoolOverflow, never queued (ChaosSfx.cs:91-107 parity)
+pool after burst: 8/8
+PASS: pool slots reclaimed by real PlaybackEnded events (8 -> 0)
+=== 6. off-sync-context construction (real SoundFlow, never-pumping context) ===
+PASS: PlayVoice from a never-pumping-sync-context thread completed — no deadlock (SP-025 regression, real backend)
+event: VoiceCompleted(gen=4)
+PASS: off-context-constructed player plays and completes (gen=4)
+=== 7. ducking (machinery on probe sink, under real playback) ===
+PASS: refcount 0->1->2 under real voice playback
+PASS: sink applied once at first holder's strength (WPF :774-778)
+PASS: overlapping release: count 2->1, NO restore (WPF :900-906)
+PASS: last release restores exactly once — Apply/Restore symmetric
+event: VoiceCompleted(gen=5)
+arb: sound: duck watchdog fired — force-unduck (AudioService.cs:845-853 parity)
+PASS: watchdog force-unduck on real clock (mechanism; WPF 5-min policy)
+PASS: stale handle release ignored after watchdog (WPF :892-898)
+arb: sound: force-unduck (3 hold(s) released)
+PASS: ForceUnduck panic release-all: 3 overlapping holders, exactly ONE restore (WPF :1024-1033)
+PASS: post-panic handle releases are stale no-ops
+=== 8. error -> typed outcome + panic cleanup ===
+event: WhisperBusyChanged(True)
+arb: sound: Voice player construction failed (FileNotFoundException: Could not find file '/home/mich/ccp-sp029/spine-tasks/SP-029-quips-arbitration-q1/evidence/harness/bin/Debug/net10.0/tones/does-not-exist.wav'.)
+PASS: missing file -> typed Failed, never silent (FileNotFoundException)
+pre-panic: sfx=8 queued=2 ducks=1 whisperBusy=True
+arb: sound: force-unduck (1 hold(s) released)
+arb: sound: panic-reset — stopped 10 player(s), cleared 2 queued line(s), ducks force-released
+event: WhisperBusyChanged(False)
+PASS: panic cleanup: every channel released, queue cleared, ducks force-released, busy cleared — no wedged state
+PASS: late backend events after panic are stale no-ops (generation bump; callback-race safe)
+event: VoiceCompleted(gen=8)
+PASS: channels recover after panic (voice plays + completes)
+arb: sound: panic-reset — stopped 0 player(s), cleared 0 queued line(s), ducks force-released
+arb: sound: panic-reset — stopped 0 player(s), cleared 0 queued line(s), ducks force-released
+teardown: handles 65 -> 65 (delta 0), threads 15 -> 15 (delta 0)
+PASS: teardown leak counts bounded (SP-017 discipline)
+=== SUMMARY ===
+PASS 28 / FAIL 0
