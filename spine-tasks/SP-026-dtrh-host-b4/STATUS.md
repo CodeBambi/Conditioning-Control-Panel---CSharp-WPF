@@ -1,14 +1,14 @@
 ## STATUS: SP-026 — DTRH host slice b4: progression/payout, Loom, user/mod media
-**Current Step:** Step 1 — meta/payout/Loom/media archaeology + design + pre-approach consult
-**Last Updated:** 2026-07-22 (authored)
+**Current Step:** Step 1 — meta/payout/Loom/media archaeology + design + pre-approach consult (IN PROGRESS)
+**Last Updated:** 2026-07-22 (work started)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (meta ops/meta state/payout/request-run/asset-stats/Loom/user-media, `File.cs:line`)
-- [ ] Payload verification (b4 message fields, m2test harness, cheshireGuide meta consumption)
-- [ ] Design (slot-doc progression mapping, Loom store decision, user-media folder contract, media-logging rule)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (meta ops/meta state/payout/request-run/asset-stats/Loom/user-media, `File.cs:line`)
+- [x] Payload verification (b4 message fields, m2test harness, cheshireGuide meta consumption)
+- [x] Design (slot-doc progression mapping, Loom store decision, user-media folder contract, media-logging rule)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: meta progression + payout on b2 slot machinery
 - [ ] Progression members on DtrhSlotDocument (no schema bump) + meta ops
