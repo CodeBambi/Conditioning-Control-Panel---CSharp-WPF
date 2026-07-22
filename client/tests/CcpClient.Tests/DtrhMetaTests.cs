@@ -526,7 +526,7 @@ public class DtrhMetaTests
         Assert.False(cfg.GetProperty("allowCurses").GetBoolean());
         Assert.False(cfg.GetProperty("dartersEnabled").GetBoolean());
         Assert.Equal(0.0, cfg.GetProperty("sinChance").GetDouble());
-        var variants = cfg.GetProperty("enabledVariants").EnumerateArray().Select(v => v.GetString()).ToArray();
+        var variants = cfg.GetProperty("enabledVariants").EnumerateArray().Select(v => v.GetString()!).ToArray();
         Assert.Equal(["flash", "subliminal"], variants); // treats only (ChaosHappyPath.cs:77-89)
     }
 
@@ -705,7 +705,7 @@ public class DtrhMetaTests
     }
 
     [Fact]
-    public void AbsentProgressionMembers_FlaggedOnce_NotSilent()
+    public async Task AbsentProgressionMembers_FlaggedOnce_NotSilent()
     {
         using var dir = new Harness.TempDir();
         // A b2-era slot file: only the b2 members inside the SP-005 envelope.
@@ -716,7 +716,7 @@ public class DtrhMetaTests
         var slots = new DtrhSaveSlots(
             new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), new HarnessSink(log)),
             dir.Root);
-        slots.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+        await slots.StartAsync(CancellationToken.None);
         var stats = new DtrhAssetStats(slots.AssetStatsStore, m => log.Add(m));
         var meta = new DtrhMeta(slots.StoreFor(1), slots.IndexStore, stats, _ => { }, m => log.Add(m),
             testMode: false, slots.SlotFilePath(1));
@@ -727,11 +727,11 @@ public class DtrhMetaTests
         Assert.Equal(2, doc.RunsCompleted);
         Assert.Equal(1, doc.ConsumableSlots); // the WPF load clamp outcome (ChaosMetaStore.cs:71)
         Assert.True(doc.CraftedItems.ContainsKey("ragdoll"));
-        slots.StopAsync().GetAwaiter().GetResult();
+        await slots.StopAsync();
     }
 
     [Fact]
-    public void UnknownMemberPreserve_SurvivesMetaMutationRoundTrip()
+    public async Task UnknownMemberPreserve_SurvivesMetaMutationRoundTrip()
     {
         using var dir = new Harness.TempDir();
         File.WriteAllText(Path.Combine(dir.Root, "dtrh_slot1.json"),
@@ -740,16 +740,16 @@ public class DtrhMetaTests
         var slots = new DtrhSaveSlots(
             new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), new HarnessSink([])),
             dir.Root);
-        slots.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+        await slots.StartAsync(CancellationToken.None);
         var stats = new DtrhAssetStats(slots.AssetStatsStore, _ => { });
         var meta = new DtrhMeta(slots.StoreFor(1), slots.IndexStore, stats, _ => { }, _ => { },
             testMode: false, slots.SlotFilePath(1));
         Assert.True(meta.HandleMetaCommand(Raw("{\"op\":\"add-gold\",\"amount\":5}")));
-        slots.StoreFor(1).SaveImmediate().GetAwaiter().GetResult();
+        await slots.StoreFor(1).SaveImmediate();
         var text = File.ReadAllText(Path.Combine(dir.Root, "dtrh_slot1.json"));
         Assert.Contains("futureB5Field", text); // unknown-member preserve honored (no schema bump)
         Assert.Contains("\"gold\": 5", text);
-        slots.StopAsync().GetAwaiter().GetResult();
+        await slots.StopAsync();
     }
 
     private sealed class HarnessSink(List<string> log) : ILogSink

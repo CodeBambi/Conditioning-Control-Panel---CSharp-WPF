@@ -1,6 +1,6 @@
 ## STATUS: SP-026 — DTRH host slice b4: progression/payout, Loom, user/mod media
-**Current Step:** Step 3 — Loom + user/mod media serving (IN PROGRESS)
-**Last Updated:** 2026-07-22 (Step 2 complete — 347/347 + 29/29 green; plan review SKIPPED BY DESIGN, SP-195)
+**Current Step:** Step 4 — headed/WX evidence + page-visual unlocks + board + pre-completion consult (IN PROGRESS)
+**Last Updated:** 2026-07-22 (Step 3 complete — 366/366 + 29/29, Rebuild 0W/0E; plan review SKIPPED BY DESIGN)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult — COMPLETE
@@ -15,10 +15,10 @@
 - [x] Payout + payout-result, run-started/ended upgrade, request-run, asset-stats
 - [x] Unit tests (op matrix, payout math, round-trips, tolerance, media-logging rule)
 
-### Step 3: Loom + user/mod media serving
-- [ ] DtrhLoom.cs (save/delete/list/result, GIF validation, §4 serving, seed-at-ready)
-- [ ] User/mod media serving inside §4
-- [ ] Unit tests (Loom lifecycle, traversal/MIME refusal, seed shape)
+### Step 3: Loom + user/mod media serving — COMPLETE
+- [x] DtrhLoom.cs (save/delete/list/result, GIF validation, §4 serving, seed-at-ready)
+- [x] User/mod media serving inside §4
+- [x] Unit tests (Loom lifecycle, traversal/MIME refusal, seed shape)
 
 ### Step 4: headed/WX evidence + page-visual unlocks + board + pre-completion consult
 - [ ] DISPLAY3 headed evidence (payout round-trip, Loom display, user media, page-visual unlocks; rect lines PERSISTED)

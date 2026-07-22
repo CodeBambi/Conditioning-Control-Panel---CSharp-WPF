@@ -41,6 +41,7 @@ public partial class DtrhHostWindow : Window
     private readonly bool _m2Test;
     private DtrhMeta? _meta;
     private DtrhAssetStats? _assetStats;
+    private DtrhLoom? _loom;
 
     /// <summary>Boot-matrix facts (headed harness + diagnostics). Content-free.</summary>
     public bool EngineLive => _engineLive;
@@ -100,6 +101,8 @@ public partial class DtrhHostWindow : Window
             _host.LogDiagnostic,
             _m2Test,
             slots.SlotFilePath(_slot));
+        // b4: the Loom store (<dataDir>/Spirals — DtrhLoomStore.cs:28 parity).
+        _loom = new DtrhLoom(_dtrh.SpiralsRoot, _host.LogDiagnostic);
         _host.LogDiagnostic($"dtrh: meta engine bound to slot {_slot}{(_m2Test ? " (TEST clone)" : "")}");
     }
 
@@ -158,8 +161,13 @@ public partial class DtrhHostWindow : Window
         {
             SfxRoots = [Path.Combine(PayloadAssets, "bubbles", "sfx"), Path.Combine(OverlayAssets, "bubbles", "sfx")],
             WhisperRoots = [Path.Combine(PayloadAssets, "bubbles", "voices"), Path.Combine(OverlayAssets, "bubbles", "voices")],
-            VideoRoots = [PayloadAssets, OverlayAssets],
-            MasterVolume = 80, // the init literal this window sends (b2); the settings seam is b4.
+            // b4: the user-media videos dir joins the native pool (WPF parity: native
+            // payloads play the user's pool; DtrhHostService EffectPayloadFactory).
+            VideoRoots = [PayloadAssets, OverlayAssets, DtrhUserMedia.VideosFolder(_dtrh.UserMediaRoot)],
+            // Media-logging rule (packet framing c): anything under the user-media root
+            // logs presence+shape ONLY — never a filename (SP-018 V5 class).
+            PresenceOnlyRoots = [_dtrh.UserMediaRoot],
+            MasterVolume = 80, // the init literal this window sends (b2); the settings seam is a named limit.
         }, _host.LogDiagnostic);
         _fx.VideoStarted += OnFxVideoStarted;
         _fx.VideoEnded += OnFxVideoEnded;
@@ -270,6 +278,38 @@ public partial class DtrhHostWindow : Window
                         if (t.IsCanceled) return;
                         _host.LogDiagnostic($"dtrh: fx-drive whisper-file '{fileName}' (HARNESS-ONLY, pool-resolved)");
                         Dispatcher.UIThread.Post(() => _fx?.PlayWhisperFromPool(fileName));
+                    }, TaskScheduler.Default);
+                continue;
+            }
+
+            if (json is null && bare.StartsWith("loom-file:", StringComparison.Ordinal))
+            {
+                // HARNESS-ONLY non-protocol step: read a staged GIF (overlay staging,
+                // product code never references Z:\) and send the REAL loom-save message
+                // with its base64 through the REAL parse+dispatch path (the video-file:/
+                // whisper-file: precedent). The GIF bytes + message shape are real; only
+                // the encoder-worker origin is harnessed (headed evidence can't drive the
+                // Loom pane's encoder deterministically).
+                var fileName = bare["loom-file:".Length..];
+                _ = Task.Delay(TimeSpan.FromSeconds(seconds), _closing.Token).ContinueWith(
+                    t =>
+                    {
+                        if (t.IsCanceled) return;
+                        try
+                        {
+                            var staged = Path.Combine(DtrhParticipant.OverlayRoot, "loom", fileName);
+                            var gifBytes = File.ReadAllBytes(staged);
+                            var loomName = Path.GetFileNameWithoutExtension(fileName);
+                            var loomJson = "{\"type\":\"loom-save\",\"name\":" + JsonSerializer.Serialize(loomName)
+                                + ",\"overwrite\":true,\"params\":{\"arms\":4,\"turns\":2,\"duty\":0.5,\"speed\":1,\"style\":\"classic\",\"direction\":1,\"colors\":[\"#ff5fa2\",\"#8a5cff\"]},\"gifBase64\":\""
+                                + Convert.ToBase64String(gifBytes) + "\"}";
+                            _host.LogDiagnostic($"dtrh: fx-drive loom-file staged ({gifBytes.Length} bytes) — real loom-save through the real dispatch path (HARNESS-ONLY)");
+                            Dispatcher.UIThread.Post(() => HandleWebMessageBody(loomJson));
+                        }
+                        catch (Exception ex)
+                        {
+                            _host.LogDiagnostic($"dtrh: fx-drive loom-file failed ({ex.GetType().Name}) — harness no-op");
+                        }
                     }, TaskScheduler.Default);
                 continue;
             }
@@ -567,11 +607,77 @@ public partial class DtrhHostWindow : Window
             case DtrhProtocol.DtrhPageMessage.AssetStats assetStats:
                 _meta?.OnAssetStats(assetStats.Raw);
                 return;
-            case DtrhProtocol.DtrhPageMessage.LoomSave or DtrhProtocol.DtrhPageMessage.LoomDelete:
-                // Loom serving lands in Step 3 of this slice (DtrhLoom.cs) — typed + logged,
-                // never silently dropped.
-                _host.LogDiagnostic($"dtrh: '{message.GetType().Name}' — loom store not yet wired (Step 3); logged, not acted on");
+            case DtrhProtocol.DtrhPageMessage.LoomSave loomSave:
+            {
+                if (_loom is null)
+                {
+                    _host.LogDiagnostic("dtrh: 'LoomSave' arrived before loom init — logged, not acted on");
+                    return;
+                }
+
+                // loom-save {name, gifBase64, params, overwrite} (loomStudio.js:84-91) →
+                // store validates + writes, page gets the verdict + a fresh list
+                // (DtrhHostService.cs:285-293).
+                string? gifBase64 = loomSave.Raw.TryGetProperty("gifBase64", out var b64) && b64.ValueKind == JsonValueKind.String
+                    ? b64.GetString()
+                    : null;
+                JsonElement? loomParams = loomSave.Raw.TryGetProperty("params", out var lp) && lp.ValueKind == JsonValueKind.Object
+                    ? lp.Clone()
+                    : null;
+                var saveResult = _loom.Save(loomSave.Name, gifBase64, loomParams, loomSave.Overwrite);
+                SendToPage(DtrhProtocol.BuildLoomResult("save", saveResult.Ok, saveResult.Slug, saveResult.Error));
+                if (saveResult.Ok) PostLoomList();
                 return;
+            }
+            case DtrhProtocol.DtrhPageMessage.LoomDelete loomDelete:
+            {
+                if (_loom is null)
+                {
+                    _host.LogDiagnostic("dtrh: 'LoomDelete' arrived before loom init — logged, not acted on");
+                    return;
+                }
+
+                var deleteResult = _loom.Delete(loomDelete.Slug);
+                SendToPage(DtrhProtocol.BuildLoomResult("delete", deleteResult.Ok, deleteResult.Slug, deleteResult.Error));
+                if (deleteResult.Ok) PostLoomList();
+                return;
+            }
+        }
+    }
+
+    /// <summary>PostLoomList (DtrhHostService.cs:327-343): the saved-spiral library —
+    /// {slug, url, params} per entry, served through the §4 media origin (the
+    /// ccp.spirals-class route; Step-1 decision). Params sidecars ride along so the pane
+    /// can re-edit a kept spiral; unparseable sidecars post null (WPF TryParseJson).</summary>
+    private void PostLoomList()
+    {
+        if (_loom is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var spirals = _loom.List().Select(s =>
+            {
+                JsonElement? parsed = null;
+                if (s.ParamsJson is { Length: > 0 } json)
+                {
+                    try { parsed = JsonDocument.Parse(json).RootElement.Clone(); }
+                    catch { /* unparseable sidecar → null params (WPF TryParseJson parity) */ }
+                }
+
+                return new DtrhProtocol.DtrhLoomSpiral(
+                    s.Slug,
+                    $"{_dtrh.Server.MediaOrigin}/spirals/loom_{s.Slug}.gif",
+                    parsed);
+            }).ToList();
+            SendToPage(DtrhProtocol.BuildLoomList(spirals));
+            _host.LogDiagnostic($"dtrh: loom-list posted ({spirals.Count} spiral(s))"); // presence+shape only
+        }
+        catch (Exception ex)
+        {
+            _host.LogDiagnostic($"dtrh: loom-list failed ({ex.GetType().Name})");
         }
     }
 
@@ -622,11 +728,19 @@ public partial class DtrhHostWindow : Window
             SendToPage(_meta.SnapshotMessage());
         }
 
+        // b4: the manifest is the REAL user-media enumeration (WPF DtrhAssetManifest
+        // parity; consult item 5 — the b2 hardcoded payload entries are dropped: WPF's
+        // manifest is user-pool-only, and shipped payload art must not read as user
+        // media). An empty user pool → an empty manifest → the page renders its shipped
+        // in-page art (fresh-WPF-install parity, hostMedia.hasUserMedia() false).
+        var manifest = DtrhUserMedia.Build(_dtrh.UserMediaRoot, _dtrh.Server.MediaOrigin, _host.LogDiagnostic);
         SendToPage(DtrhProtocol.BuildManifest(
-            images: [new DtrhProtocol.DtrhManifestEntry("bubble.png", $"{_dtrh.Server.MediaOrigin}/media/bubbles/bubble.png")],
-            videos: [new DtrhProtocol.DtrhManifestEntry("spiral.webm", $"{_dtrh.Server.MediaOrigin}/media/bubbles/spiral.webm")],
-            skipped: 0,
-            truncated: false));
+            images: manifest.Images,
+            videos: manifest.Videos,
+            skipped: manifest.Skipped,
+            truncated: manifest.Truncated));
+        // THE LOOM (DtrhHostService.cs:209): seed the page's saved-spiral pool at ready.
+        PostLoomList();
         // Favorites seed (DtrhHostService.cs:215-216): posted only when the cumulative
         // store ranks anything (WPF posts only when Count > 0).
         var favorites = _meta?.FavoritesSeed();

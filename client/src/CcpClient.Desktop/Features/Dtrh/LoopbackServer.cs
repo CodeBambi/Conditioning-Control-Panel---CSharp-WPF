@@ -34,9 +34,27 @@ public sealed class LoopbackServer : IDisposable
         [".webp"] = "image/webp",
     };
 
+    /// <summary>b4 user-media route table (/umedia/* only — the payload table stays
+    /// pinned): the payload's own media types plus the user-media extensions from WPF
+    /// DtrhAssetManifest (:19-20). Deny-by-default 415 unchanged.</summary>
+    private static readonly Dictionary<string, string> UserMime = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".gif"] = "image/gif",
+        [".png"] = "image/png",
+        [".webp"] = "image/webp",
+        [".webm"] = "video/webm",
+        [".mp3"] = "audio/mpeg",
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".mp4"] = "video/mp4",
+        [".m4v"] = "video/mp4",
+    };
+
     private readonly string _payloadRoot;   // output payload/dtrh (READ-ONLY at runtime)
     private readonly string _overlayRoot;   // output payload-overlay (product-owned)
     private readonly string _mediaRoot;     // output payload/dtrh/assets (READ-ONLY)
+    private readonly string _spiralsRoot;   // b4: the Loom store (<dataDir>/Spirals)
+    private readonly string _userMediaRoot; // b4: user media (<dataDir>/assets)
     private readonly Inbox _inbox;
     private readonly string _bridgeToken;
     private readonly TimeSpan _longPollTimeout;
@@ -53,11 +71,14 @@ public sealed class LoopbackServer : IDisposable
 
     public LoopbackServer(
         string payloadRoot, string overlayRoot, string mediaRoot,
-        Inbox inbox, string bridgeToken, ILogSink log, TimeSpan? longPollTimeout = null)
+        Inbox inbox, string bridgeToken, ILogSink log, TimeSpan? longPollTimeout = null,
+        string? spiralsRoot = null, string? userMediaRoot = null)
     {
         _payloadRoot = Path.GetFullPath(payloadRoot);
         _overlayRoot = Path.GetFullPath(overlayRoot);
         _mediaRoot = Path.GetFullPath(mediaRoot);
+        _spiralsRoot = Path.GetFullPath(spiralsRoot ?? Path.Combine(mediaRoot, ".no-spirals"));
+        _userMediaRoot = Path.GetFullPath(userMediaRoot ?? Path.Combine(mediaRoot, ".no-user-media"));
         _inbox = inbox;
         _bridgeToken = bridgeToken;
         _log = log;
@@ -263,6 +284,18 @@ public sealed class LoopbackServer : IDisposable
 
         if (!path.StartsWith("/media/", StringComparison.Ordinal))
         {
+            if (path.StartsWith("/spirals/", StringComparison.Ordinal))
+            {
+                await HandleSpirals(ctx, path);
+                return;
+            }
+
+            if (path.StartsWith("/umedia/", StringComparison.Ordinal))
+            {
+                await HandleUserMedia(ctx, path);
+                return;
+            }
+
             await Refuse(ctx, 404, "refused: no such route (only /media/* is exposed)", RouteClass(path), cors: true);
             return;
         }
@@ -281,6 +314,52 @@ public sealed class LoopbackServer : IDisposable
         }
 
         await ServeFile(ctx, file, "media", cors: true);
+    }
+
+    // ---------- b4: Loom spirals + user media (media origin, §4 discipline) ----------
+
+    /// <summary>/spirals/* → the Loom store (ccp.spirals-class serving, Step-1 decision:
+    /// the media origin carries user-content class; a third origin adds no security).
+    /// The pinned payload table already covers .gif — everything else 415s.</summary>
+    private async Task HandleSpirals(HttpListenerContext ctx, string path)
+    {
+        var rel = path["/spirals/".Length..];
+        if (!TryResolve(_spiralsRoot, rel, out var file))
+        {
+            await Refuse(ctx, 403, "refused: path traversal", RouteClass(path), cors: true);
+            return;
+        }
+
+        if (!File.Exists(file))
+        {
+            await Refuse(ctx, 404, "not found", RouteClass(path), cors: true);
+            return;
+        }
+
+        await ServeFile(ctx, file, "spirals", cors: true);
+    }
+
+    /// <summary>/umedia/* → the user-media folder contract (<dataDir>/assets; ccp.assets-class
+    /// serving). Route-scoped MIME table (the user-media extensions); CORS clean so the
+    /// page's WebGL texture upload stays untainted (WPF ccp.assets "Allow" parity,
+    /// DtrhHostService.cs:90). No-store N/A: these URLs carry NO credentials (loopback,
+    /// no query tokens — SP-018 V5's credentialed-URL case does not apply; recorded).</summary>
+    private async Task HandleUserMedia(HttpListenerContext ctx, string path)
+    {
+        var rel = path["/umedia/".Length..];
+        if (!TryResolve(_userMediaRoot, rel, out var file))
+        {
+            await Refuse(ctx, 403, "refused: path traversal", RouteClass(path), cors: true);
+            return;
+        }
+
+        if (!File.Exists(file))
+        {
+            await Refuse(ctx, 404, "not found", RouteClass(path), cors: true);
+            return;
+        }
+
+        await ServeFile(ctx, file, "umedia", cors: true, mime: UserMime);
     }
 
     // ---------- shared ----------
@@ -310,7 +389,8 @@ public sealed class LoopbackServer : IDisposable
         return true;
     }
 
-    private async Task ServeFile(HttpListenerContext ctx, string file, string source, bool cors)
+    private async Task ServeFile(HttpListenerContext ctx, string file, string source, bool cors,
+        Dictionary<string, string>? mime = null)
     {
         var req = ctx.Request;
         var res = ctx.Response;
@@ -337,7 +417,7 @@ public sealed class LoopbackServer : IDisposable
         }
 
         // MIME allowlist, deny-by-default (§4.4): unknown extension -> 415.
-        if (!Mime.TryGetValue(Path.GetExtension(file), out var contentType))
+        if (!(mime ?? Mime).TryGetValue(Path.GetExtension(file), out var contentType))
         {
             await Refuse(ctx, 415, "refused: extension outside the pinned allowlist", RouteClass(path), cors);
             return;

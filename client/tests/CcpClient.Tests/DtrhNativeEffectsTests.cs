@@ -316,6 +316,37 @@ public sealed class DtrhNativeEffectsTests : IDisposable
 
     // ---------- fakes ----------
 
+    // ---------- b4 media-logging gate (SP-026) ----------
+
+    [Fact]
+    public void MediaLogging_UserMediaRoot_PresenceShapeOnly_PayloadKeepsNames()
+    {
+        // Packet framing c (SP-018 V5 class): files under a PresenceOnlyRoots root log
+        // bytes + extension class, NEVER a filename; payload/staged files keep names.
+        var userDir = Path.Combine(_root, "usermedia", "videos");
+        Directory.CreateDirectory(userDir);
+        File.WriteAllBytes(Path.Combine(userDir, "secret-user-clip.mp4"), new byte[123]);
+        TouchVideo("payload-clip.mp4");
+        var audio = new FakeAudio();
+        var video = new FakeVideo();
+        var fx = new DtrhNativeEffects(audio, video, new DtrhNativeEffectsOptions
+        {
+            SfxRoots = [Path.Combine(_root, "sfx")],
+            VideoRoots = [Path.Combine(_root, "videos"), userDir],
+            WhisperRoots = [Path.Combine(_root, "voices")],
+            PresenceOnlyRoots = [Path.Combine(_root, "usermedia")],
+            MasterVolume = 80,
+        }, _log.Add);
+
+        fx.FireVideoFromPool("secret-user-clip.mp4");
+        Assert.Contains(_log, l => l.Contains("user pool (123 bytes, .mp4 class)"));
+        Assert.DoesNotContain(_log, l => l.Contains("secret-user-clip"));
+
+        fx.FireVideoFromPool("payload-clip.mp4");
+        Assert.Contains(_log, l => l.Contains("payload-clip.mp4")); // payload/staged scope keeps names
+        fx.Dispose();
+    }
+
     private sealed class FakeAudio : IDtrhAudioBackend
     {
         public List<FakePlayer> Players { get; } = [];

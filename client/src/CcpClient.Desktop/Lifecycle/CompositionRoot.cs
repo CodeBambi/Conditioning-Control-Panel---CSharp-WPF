@@ -99,7 +99,9 @@ public sealed class CompositionRoot
             new Features.Dtrh.DtrhSaveSlots(infra, Path.GetDirectoryName(SettingsPathFactory())!),
             // SP-023 DTRH host slice b1: owns the §4 loopback origins + §3.3 inbox + bridge
             // token; the web surface itself is phase-4, selected by probed capability states.
-            new Features.Dtrh.DtrhParticipant(infra.OwnerFor("DtrhHost"), infra.Log),
+            // SP-026 b4: the data directory threads through for the Loom store + user media.
+            new Features.Dtrh.DtrhParticipant(infra.OwnerFor("DtrhHost"), infra.Log,
+                Path.GetDirectoryName(SettingsPathFactory())!),
         ];
     }
 

@@ -17,10 +17,14 @@ public sealed class DtrhParticipant : IBackgroundParticipant
     private LoopbackServer? _server;
     private int _started;
 
-    public DtrhParticipant(AsyncOperationOwner owner, ILogSink log)
+    public DtrhParticipant(AsyncOperationOwner owner, ILogSink log, string? dataDirectory = null)
     {
         Owner = owner;
         _log = log;
+        // b4: the Loom store + user-media root live in the DTRH data directory (the same
+        // folder the slot documents persist into — WPF UserDataPath parity).
+        DataDirectory = dataDirectory
+            ?? Path.GetDirectoryName(CompositionRoot.DefaultSettingsPath())!;
         // §3.3: per-session unguessable token, generated at construction, never logged.
         BridgeToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16))
             .Replace('+', '-').Replace('/', '_').TrimEnd('=');
@@ -47,6 +51,16 @@ public sealed class DtrhParticipant : IBackgroundParticipant
 
     public static string MediaRoot => Path.Combine(PayloadRoot, "assets");
 
+    /// <summary>The DTRH data directory (slot documents + Loom store + user media).</summary>
+    public string DataDirectory { get; }
+
+    /// <summary>The Loom store folder (WPF: App.UserDataPath/Spirals, DtrhLoomStore.cs:28).</summary>
+    public string SpiralsRoot => Path.Combine(DataDirectory, "Spirals");
+
+    /// <summary>The user-media folder contract root (WPF App.EffectiveAssetsPath default
+    /// parity): <dataDir>/assets with images/ + videos/ subfolders.</summary>
+    public string UserMediaRoot => Path.Combine(DataDirectory, "assets");
+
     /// <summary>The URL the host navigates to; the bridge token rides in the query (§3.3).</summary>
     public string PageUrl(string page) =>
         $"{Server.PageOrigin}/dtrh/{page}?bridge={BridgeToken}";
@@ -62,7 +76,8 @@ public sealed class DtrhParticipant : IBackgroundParticipant
         Running = true;
         var generation = Owner.Begin();
         _ = generation; // the server is synchronous-bind + listener tasks owned by Dispose (below)
-        _server = new LoopbackServer(PayloadRoot, OverlayRoot, MediaRoot, _inbox, BridgeToken, _log);
+        _server = new LoopbackServer(PayloadRoot, OverlayRoot, MediaRoot, _inbox, BridgeToken, _log,
+            spiralsRoot: SpiralsRoot, userMediaRoot: UserMediaRoot);
         _server.Start();
         return Task.CompletedTask;
     }

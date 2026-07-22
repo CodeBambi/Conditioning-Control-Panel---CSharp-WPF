@@ -121,8 +121,7 @@ public sealed class DtrhNativeEffects : IDisposable
         try
         {
             player.Play();
-            // Filename logging is payload/overlay-scope only; b4 user-media = presence+shape (V5).
-            _log($"dtrh-fx: sfx '{name}' playing ({Path.GetFileName(path)}, vol {Volume(effectiveScale):0.00}, pool {ActiveSfxVoices}/{_options.MaxSfxVoices})");
+            _log($"dtrh-fx: sfx '{name}' playing ({DescribeMedia(path)}, vol {Volume(effectiveScale):0.00}, pool {ActiveSfxVoices}/{_options.MaxSfxVoices})");
         }
         catch (Exception ex)
         {
@@ -222,14 +221,13 @@ public sealed class DtrhNativeEffects : IDisposable
     {
         if (!_video.TryPlay(path))
         {
-            _log($"dtrh-fx: video payload — backend refused {Path.GetFileName(path)}");
+            _log($"dtrh-fx: video payload — backend refused {DescribeMedia(path)}");
             return;
         }
 
         Interlocked.Exchange(ref _videoActive, 1);
         VideoStarted?.Invoke(this, EventArgs.Empty);
-        // Filename logging is payload/overlay-scope only; b4 user-media = presence+shape (V5).
-        _log($"dtrh-fx: video playing ({Path.GetFileName(path)}, cap {_options.VideoSegmentCapSec:0}s)");
+        _log($"dtrh-fx: video playing ({DescribeMedia(path)}, cap {_options.VideoSegmentCapSec:0}s)");
         _videoCapTimer?.Dispose();
         _videoCapTimer = new Timer(
             _ =>
@@ -242,7 +240,26 @@ public sealed class DtrhNativeEffects : IDisposable
             Timeout.InfiniteTimeSpan);
     }
 
-    /// <summary>Enumerate the native video pool: *.mp4/*.webm under the media roots,
+    /// <summary>Media-description for logs (packet framing c, SP-018 V5 class): files
+    /// under a <see cref="DtrhNativeEffectsOptions.PresenceOnlyRoots"/> root log
+    /// presence+shape (bytes + extension class), NEVER a filename; everything else
+    /// (payload/staged scope, SP-025) keeps the bare filename.</summary>
+    private string DescribeMedia(string path)
+    {
+        foreach (var root in _options.PresenceOnlyRoots)
+        {
+            if (path.StartsWith(Path.GetFullPath(root) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                long bytes;
+                try { bytes = new FileInfo(path).Length; } catch { bytes = -1; }
+                return $"user pool ({bytes} bytes, {Path.GetExtension(path).ToLowerInvariant()} class)";
+            }
+        }
+
+        return Path.GetFileName(path);
+    }
+
+    /// <summary>Enumerate the native video pool: *.mp4/*.webm/*.m4v under the media roots,
     /// overlay-first by file name (the loopback §4 serving order mirrored host-side).</summary>
     private IReadOnlyList<string> EnumerateVideoPool()
     {
@@ -251,7 +268,7 @@ public sealed class DtrhNativeEffects : IDisposable
         foreach (var root in _options.VideoRoots)
         {
             if (!Directory.Exists(root)) continue;
-            foreach (var pattern in new[] { "*.mp4", "*.webm" })
+            foreach (var pattern in new[] { "*.mp4", "*.webm", "*.m4v" })
             {
                 foreach (var file in Directory.EnumerateFiles(root, pattern, SearchOption.AllDirectories))
                 {
@@ -339,7 +356,7 @@ public sealed class DtrhNativeEffects : IDisposable
         player.Play();
         // Filename logging is PAYLOAD/OVERLAY-scope only (shipped + harness-staged clips).
         // b4's user/mod media admission must gate these lines to presence+shape (SP-018 V5 class).
-        _log($"dtrh-fx: whisper playing ({Path.GetFileName(path)})");
+        _log($"dtrh-fx: whisper playing ({DescribeMedia(path)})");
     }
 
     // ============================ VN mix gate ============================
@@ -503,8 +520,14 @@ public sealed record DtrhNativeEffectsOptions
     /// <summary>SFX pool roots, overlay-first (payload assets/bubbles/sfx + overlay shadow).</summary>
     public required IReadOnlyList<string> SfxRoots { get; init; }
 
-    /// <summary>Video pool roots (media trees enumerated for *.mp4/*.webm).</summary>
+    /// <summary>Video pool roots (media trees enumerated for *.mp4/*.webm/*.m4v).</summary>
     public required IReadOnlyList<string> VideoRoots { get; init; }
+
+    /// <summary>b4 media-logging rule (packet framing c; SP-018 V5 class): any resolved
+    /// file under one of these roots logs PRESENCE+SHAPE ONLY (bytes + extension class) —
+    /// never a filename. The user-media root lives here; payload/overlay roots keep names
+    /// (SP-025's recorded payload/staged scope).</summary>
+    public IReadOnlyList<string> PresenceOnlyRoots { get; init; } = [];
 
     /// <summary>Whisper pool roots (payload assets/bubbles/voices + overlay shadow).</summary>
     public required IReadOnlyList<string> WhisperRoots { get; init; }
