@@ -1,13 +1,13 @@
 ## STATUS: SP-031 — T-5 anchor re-base (provenance-faithful fixture)
 **Current Step:** Step 1 — failure forensics + re-base design + pre-approach consult
-**Last Updated:** 2026-07-22 (authored)
+**Last Updated:** 2026-07-22 (forensics complete — packet premise FALSIFIED by primary evidence; corrected design)
 **Blockers:** none
 
 ### Step 1: forensics + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Call-site forensics (real worktreePath/projectRoot/taskFolder values; correct lane-task-folder expression + edge cases)
-- [ ] Design (new anchor/replacement; live-tree migration path; post-land gate re-point)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] Call-site forensics — **PIVOT FINDING:** taskFolder = LANE path at all 4 callers in BOTH engine versions (`.DONE`-check + `lane.committed` event order prove it live); the packet's base-path theory is falsified. REAL root cause: engine CLI runs from GLOBAL install `C:\Users\Micha\.pi\agent\npm\node_modules\pi-spine` (2.8.0, process-cmdline-proven on the live batch); SP-028 patched the repo-local 2.10.0 tree the engine never loads. Existing patch line is CORRECT.
+- [x] Design (keep path expression; add engineRoot to manifest + engine-flagged patches; normalize global hand-variants; dotnet replacement gains "dotnet.exe"; fixture v2 = two-tree provenance repro; post-land gate re-point)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: manifest re-base + migration + apply/verify
 - [ ] Manifest re-based
