@@ -11,9 +11,9 @@
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: manifest entry + apply/verify
-- [ ] Manifest patch authored (anchor byte-exact, rationale, testedVersions)
-- [ ] apply+verify green on live install; idempotence + loud-failure proofs
-- [ ] Patched live engine file committed
+- [x] Manifest patch authored (anchor byte-exact, rationale, testedVersions — 2.8.0 verified via npm-pack scratch, full apply+verify green on it)
+- [x] apply+verify green on live install; idempotence + loud-failure proofs
+- [x] Patched live engine file committed — DEVIATION RECORDED: `.pi/npm/` is gitignored (.gitignore:50); engine tree is NOT tracked. Durable committed copy = manifest entry (the SP-020 mechanism's purpose); live install patched + verify exit 0
 
 ### Step 3: fixture + historical proof
 - [ ] Fixture (patched passes / pristine fails / deletion after verdicts)

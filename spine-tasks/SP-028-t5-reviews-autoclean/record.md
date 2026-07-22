@@ -301,4 +301,42 @@ adaptation explicitly (above). Actual answering model: not surfaced (same as abo
 
 ## Engine-review presence log (T-2 discipline)
 
+- Step 1 plan review (`spine_review_step` type=plan): **engine-SKIPPED** (SP-195 — nested
+  reviewer spawn blocked inside pi worker session; engine runs reviews post-.DONE).
+  skipped:true, spawnFailed:false, artifact 1-20260722T093438.md.
+
+## Step 2 — manifest entry + apply/verify on the live install
+
+Manifest patch `t5-reviews-autoclean` authored (target `src/batch/lane-commit.mjs`,
+anchor spanning the insertion point, `testedVersions: [2.8.0, 2.10.0]`).
+
+**testedVersions honesty:** live install = 2.10.0 (anchor count exactly 1, LF-only file).
+2.8.0 verified via `npm pack pi-spine@2.8.0` in scratch (`%TEMP%/sp028-scratch`): anchor
+byte-present exactly once; the file differs elsewhere from 2.10.0 but the anchor region is
+identical — and the FULL apply+verify cycle ran green on the pristine 2.8.0 scratch
+install (functional evidence, stronger than byte-presence).
+
+**Live-install proofs (worktree `.pi`):**
+
+- `node .spine/patches/apply.mjs` → 6 applied (the worktree's `.pi` was a pristine copy —
+  the 5 pre-existing patches applied here for the first time too); `verify.mjs` → exit 0.
+- Idempotence: second apply → `0 applied, 6 already applied`; verify exit 0.
+- Loud-failure (pristine negative control): verify against the unpacked pristine 2.8.0
+  scratch install → all 6 `missing`, exit 1.
+- Loud-failure (drift): patched scratch copy, one byte flipped inside the patched region
+  (`force: true` → `force: false`) → verify reports
+  `drifted t5-reviews-autoclean: anchor×0 replacement×0` + FAIL exit; apply refuses
+  (`validation failed — NO files were modified (all-or-nothing)`).
+
+**PROMPT-premise deviation (honest):** the packet asserts "the engine tree is tracked" and
+checkboxes "Commit includes the patched live engine file". Empirically `.pi/npm/` is
+GITIGNORED (`.gitignore:50`, `git check-ignore -v` confirms) — the live engine tree is NOT
+tracked and cannot be committed (force-adding tracked-ignored content is exactly the T-12
+hazard class). The durable committed copy of the patch IS the manifest entry — that is the
+SP-020 mechanism's entire reason to exist. The live install is patched + verify-green;
+the manifest + this record are the committed artifacts. Orchestrator/owner may amend the
+packet text at land.
+
+## Step 3 — fixture + historical proof
+
 PENDING

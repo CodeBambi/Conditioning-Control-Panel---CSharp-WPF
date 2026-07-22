@@ -62,6 +62,17 @@
         "2.8.0",
         "2.10.0"
       ]
+    },
+    {
+      "id": "t5-reviews-autoclean",
+      "target": "src/batch/lane-commit.mjs",
+      "anchor": "\tfileScopePaths = [],\n}) {\n\tconst identityRoot = projectRoot ?? worktreePath;",
+      "replacement": "\tfileScopePaths = [],\n}) {\n\t// ponytail: T-5 - engine review phases write .reviews/ into the lane task folder AFTER\n\t// the worker's last commit; git 2.49 check-ignore --no-index false-matches the\n\t// trailing-slash untracked dir against a blank .gitignore line, so filterGitignoredPaths\n\t// mis-skips it and the post-commit porcelain re-check fails DirtyWorktree (17 journal\n\t// occurrences, 12 consecutive Level-2 lands SP-012..SP-027, 4 on the resume paths this\n\t// function also serves). Verdicts are journal-durable (every land reads them from the\n\t// journal), so deleting here mirrors the 15x-proven manual recovery step. All 4 callers\n\t// are post-review lane finalization; verdict recording always precedes this delete.\n\tfs.rmSync(path.join(taskFolder, \".reviews\"), { recursive: true, force: true });\n\tconst identityRoot = projectRoot ?? worktreePath;",
+      "rationale": "T-5: engine-written .reviews/ self-dirties Level-2 lanes post-.DONE; git 2.49 check-ignore --no-index blank-line quirk mis-classifies the trailing-slash dir as gitignored so lane-commit skips it and the post-commit re-check fails DirtyWorktree (17 occurrences; playbook manual recovery 15x). Delete .reviews/ at the one convergence point (commitLaneWorktree, 4 post-review callers); verdicts are journal-durable. Anchor spans the insertion point (tri-state invariant). Byte-exact to live 2.10.0 tree; anchor verified byte-present in npm-packed 2.8.0.",
+      "testedVersions": [
+        "2.8.0",
+        "2.10.0"
+      ]
     }
   ]
 }
