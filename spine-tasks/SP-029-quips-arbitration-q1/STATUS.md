@@ -1,13 +1,13 @@
 ## STATUS: SP-029 — Quips/sound arbitration q1: arbitration core
 **Current Step:** Step 1 — WPF arbitration archaeology + design + pre-approach consult
-**Last Updated:** 2026-07-22 (authored)
+**Last Updated:** 2026-07-22 (Step 1 in progress)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (BarkService queue/freshness/priority/panic; ducking refcount; device paths; rapid-cue demands recorded)
-- [ ] Design (SoundArbitration: channel ownership, queue+freshness, ducking, device re-probe, off-sync-context; q1/q2 boundary)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (BarkService queue/freshness/priority/panic; ducking refcount; device paths; rapid-cue demands recorded)
+- [x] Design (SoundArbitration: channel ownership, queue+freshness, ducking, device re-probe, off-sync-context; q1/q2 boundary)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: arbitration core implementation
 - [ ] SoundArbitration.cs + types (ownership state machine, queue, ducking, device layer)
