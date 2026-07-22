@@ -33,11 +33,13 @@ Performed via the wpf-archaeologist agent plus direct gap-closing greps. Key fac
 
 ### 3.2 Pre-completion (Step 3)
 
-- (pending)
+- mode=solo, answering model = solo-route advisor (Fable 5 per project configuration; model id not echoed by the tool). **VERDICT: "Sound — no honesty violations found. Two small corrections to apply before .DONE, both in §8."** (1) No untraced claims (Linux secret-service + escalation counter correctly marked greenfield-decision). (2) No silently-decided owner values; noted c6's none-admitted default is stricter than the contract §8 rule 6 WPF baseline — acknowledged in-text as deliberate. (3) No evidence-class overstatements, but two forward-looking evidence claims conditioned NOW: **c1 Linux secrets** — WSL2 has no Secret Service session daemon, so the honest Linux evidence is the typed-Unavailable probe path (working-daemon proof needs a desktop-session box, named limit, never faked); **c6 WH effect wiring** — greenfield effect backends don't exist yet, so the WH claim is conditioned to surfaces that exist by c6. (4) All eight acceptance items map; one structural note — c3 must distinguish "surface exists and is wired" from "seam reserved for a future surface" (community prompts/quiz templates don't exist in the greenfield client yet).
+- **Applied (all four):** c1 evidence cell conditioned (Linux secret Unavailable-on-WSL2); c6 WH claim conditioned + baseline-divergence clause added; c3 coverage-honesty sentence added. Verdict text + application recorded before .DONE per the checkpoint rule.
 
 ## 4. Engine-review presence (T-2)
 
 - Step 1 `spine_review_step type=plan`: **SKIPPED in-worker by design (SP-195)** — tool returned `skipped: true`, `spawnFailed: false`, `reviewLevel: 2` echoed; artifact `.reviews/1-20260722T103145.md`. Engine runs reviews after `.DONE`.
+- Step 2 `spine_review_step type=plan`: **SKIPPED in-worker by design (SP-195)** — same shape; artifact `.reviews/2-20260722T103608.md`.
 
 ## 5. Decisions + rejected alternatives
 

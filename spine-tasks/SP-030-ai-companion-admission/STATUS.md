@@ -13,10 +13,10 @@
 - [x] ai-companion-admission.md (§1–§9: evidence base, provider, moderation, memory, awareness, secrets/offline, panic, slice cut c1…cN, non-claims + owner-question ledger)
 - [x] Consistency pass (every acceptance item mapped; F1 assigned; honest evidence classes)
 
-### Step 3: review + pre-completion consult
-- [ ] record.md complete
-- [ ] Pre-completion solo consult + corrections
-- [ ] STATUS.md accurate
+### Step 3: review + pre-completion consult (COMPLETE)
+- [x] record.md complete
+- [x] Pre-completion solo consult + corrections
+- [x] STATUS.md accurate
 
 ### Step 4: verification
 - [ ] testCommand green (verify.mjs exit 0; 0W/0E; 391/29 exact, no drift)
