@@ -1,5 +1,5 @@
 ## STATUS: SP-031 — T-5 anchor re-base (provenance-faithful fixture)
-**Current Step:** Step 5 — testing & verification
+**Current Step:** DONE — all steps complete; contract green
 **Last Updated:** 2026-07-22 (forensics complete — packet premise FALSIFIED by primary evidence; corrected design)
 **Blockers:** none
 
@@ -24,7 +24,7 @@
 - [x] Pre-completion solo consult (sound; 5 conditions discharged incl. fixture count honesty fix)
 - [x] STATUS.md accurate
 
-### Step 5: verification
-- [ ] testCommand green (verify.mjs exit 0; 0W/0E; ≥412/29 floor, no drift)
-- [ ] git diff --check clean
-- [ ] git status shows File Scope only
+### Step 5: verification — COMPLETE
+- [x] testCommand green (verify.mjs exit 0 both roots; 0W/0E; 412/412 + 29/29 floor exact, no drift)
+- [x] git diff --check clean
+- [x] git status shows File Scope only (4 step commits, .spine/patches + SP-031 folder)

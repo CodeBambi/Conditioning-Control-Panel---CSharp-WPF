@@ -190,7 +190,7 @@ finalizations stop self-dirtying mid-wave. The named post-land gate re-points at
 
 ## Step 3 — provenance-faithful fixture v2 + regression proof
 
-`evidence/fixture-t5-v2.mjs` — **13/13 assertions GREEN across 5 cells** (scratch only, %TEMP%;
+`evidence/fixture-t5-v2.mjs` — **12 falsifiable assertions GREEN across 5 cells** (+1 named journal-evidence pointer, uncounted — Step-4 consult honesty fix) (scratch only, %TEMP%;
 repo and both live installs never written; the pristine module tree is a sibling copy inside the
 lane's gitignored node_modules for dep resolution, deleted after the run):
 
@@ -263,7 +263,7 @@ configured advisor per `.pi/bpx-consult.json`)
 | 1 | plan, baseline a82775df~1 | **engine-skipped (SP-195)** — nested reviewer spawn blocked inside worker session; verdict null; engine reviews run after .DONE |
 | 2 | plan, baseline cdafc78b~1 | engine-skipped (SP-195), same |
 | 3 | plan, baseline 0f197288~1 | engine-skipped (SP-195), same |
-| 4 | (below, post-commit) | — |
+| 4 | plan, baseline ec154561~1 | engine-skipped (SP-195), same |
 
 Code + final review: not spawned by the worker (SP-194/SP-195) — the batch engine runs them
 after `.DONE`.
@@ -288,3 +288,31 @@ edit port-lessons.md or task-board.md)
    next Level-2 wave + add the process-cmdline engine-root check (named limit 2); THIS wave's
    finalizations may T-5 once more (running engine predates the on-disk patch — expected, not
    a reopen).
+
+## Step 5 — verification
+
+- `node .spine/patches/verify.mjs` — exit 0 (project 2.10.0 6/6 + engine 2.8.0 5/5)
+- `dotnet build client/CcpClient.sln -c Debug --nologo` — Build succeeded, **0W/0E**
+- `dotnet test client/tests/CcpClient.Tests` — **412/412** (floor 412, exact)
+- `dotnet test client/tests/CcpClient.HeadlessTests` — **29/29** (floor 29, exact)
+- Client tree untouched (no product drift — this is a headless tooling packet)
+- `git diff --check` — clean
+- Scope audit: all 4 step commits touch only `.spine/patches/**` and
+  `spine-tasks/SP-031-t5-anchor-rebase/**`; `fileScopeMustChange`
+  (`.spine/patches/manifest.json`) satisfied; all `fileScopeMustNotChange` paths untouched;
+  working tree clean at .DONE.
+
+## Completion summary
+
+- Manifest re-based to the two-root model; live trees migrated (repo 2.10.0 + global 2.8.0
+  engine tree, which now carries t5 for the first time); apply/verify exit 0 on both roots,
+  idempotent, loud-on-drift and loud-on-missing-root.
+- Fixture v2 proves the REAL provenance (two-tree applied-ne-loaded repro) with the pristine
+  negative control preserved, the packet's base-shaped cells discharged with their true
+  semantics, and no caller regressions (census: 4 callers, both versions, one shape).
+- Named post-land gate re-pointed at the next Level-2 wave (recorded for the orchestrator —
+  enabler 2; board/port-lessons untouched by the worker), WITH the named limit: verify proves
+  the two KNOWN roots — the gate should add a process-cmdline engine-root check.
+- Both solo consults persisted (pre-approach + pre-completion); actual answering model not
+  self-identified by the tool (configured advisor per .pi/bpx-consult.json); contract green at
+  the 412/29 floor with zero drift.
