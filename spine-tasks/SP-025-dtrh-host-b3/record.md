@@ -12,6 +12,7 @@
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260721T231721.md` |
 | 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260721T233648.md` |
 | 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260721T234936.md` |
+| 4 | plan | SKIPPED BY DESIGN (same) | `.reviews/4-20260722T000000.md` |
 
 ---
 
@@ -72,6 +73,16 @@ z-order — a session fact, never a compositing claim (pre-approach consult).
 - **Teardown mid-freeze on Linux:** second `freeze ON (pos 6,7s)` → auto-close → **`teardown mid-freeze — force-resumed (unwedge)`** → dialog closing/AdapterDestroyed → flow end → **EXIT=0** (`wx-run.log`).
 - **§3.2 divergence decision EXECUTED on Linux:** `wx-dialog-tint.png` (XGetImage of the NativeWebDialog) — **the page-rendered pink-tinted tunnel inside the separate WebKitGTK toplevel**: tint is page-rendered on Linux exactly as on Windows; no host compositing exists or is needed. The covering video window is a separate X11 toplevel (best-effort z-order = session fact, never a compositing claim).
 - **Session fact (page-side):** `GStreamer element fakevideosink not found` — WebKitGTK's page-side media pipeline on this WSLg image (SP-011-class session fact; the NATIVE path is unaffected).
+
+#### Pre-completion consult (Step 4)
+
+**Mode:** solo (council route broken — T-7). **Requested:** Fable 5. **Actual answering model:** NOT surfaced by the consult tool response (recorded honestly, same discipline as SP-022/023/024).
+
+**Verdict: APPROVE with two fix-first items (BOTH CLOSED before .DONE), rest approved.**
+1. **Fix-first A — the voice half of freeze had no headed instance** (run-A whispers completed before freeze:on). CLOSED with **run D (`evidence/wh/runD.log`, EXIT=0):** staged long whisper (`sub_evidence.mp3`, 18.9s, payload barks clip staged into the RUN-TIME overlay) spanning the freeze → `freeze ON — voice pos 3,0s` → `OFF — voice pos 3,0s` (**voice position frozen on the real backend**) → `whisper completed (backend PlaybackEnded)` AFTER resume (never wedged). The freeze log lines now carry voice position too.
+2. **Fix-first B — filename logging is a b4 landmine** (payload/staged names today; user/mod media in b4 → sensitive-logging V5 class). CLOSED: comments at all three log sites (sfx/whisper/video) naming the b4 gate + this sentence. Recorded for b4: filename logging is payload/overlay-scope only; b4's user-media admission MUST gate these lines to presence+shape.
+- Advisor-confirmed: freeze-by-position is the right signal (frame counter re-displays during pause — kept in record + board text); both defect fixes are the slice's strongest content (landed in `client/docs/port-lessons.md` per the packet's Check-If-Affected clause — 2 entries, 2026-07-22); named limits honestly scoped; fx-drive stays compiled in (flag-gated, real parse path, b4/b5 reuse).
+- Process reminders folded in: board row edit before .DONE (below); actual-model line (above); Step 5 final-tree Rebuild warnings + diff-check + File-Scope audit; File Scope amendment named in the board row text (SP-023 norm).
 
 ### Budgets
 

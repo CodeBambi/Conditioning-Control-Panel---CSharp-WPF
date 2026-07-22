@@ -121,6 +121,7 @@ public sealed class DtrhNativeEffects : IDisposable
         try
         {
             player.Play();
+            // Filename logging is payload/overlay-scope only; b4 user-media = presence+shape (V5).
             _log($"dtrh-fx: sfx '{name}' playing ({Path.GetFileName(path)}, vol {Volume(effectiveScale):0.00}, pool {ActiveSfxVoices}/{_options.MaxSfxVoices})");
         }
         catch (Exception ex)
@@ -227,6 +228,7 @@ public sealed class DtrhNativeEffects : IDisposable
 
         Interlocked.Exchange(ref _videoActive, 1);
         VideoStarted?.Invoke(this, EventArgs.Empty);
+        // Filename logging is payload/overlay-scope only; b4 user-media = presence+shape (V5).
         _log($"dtrh-fx: video playing ({Path.GetFileName(path)}, cap {_options.VideoSegmentCapSec:0}s)");
         _videoCapTimer?.Dispose();
         _videoCapTimer = new Timer(
@@ -291,6 +293,22 @@ public sealed class DtrhNativeEffects : IDisposable
         return byName.Values.ToList();
     }
 
+    /// <summary>HARNESS-ONLY (--dtrh-fx-drive whisper-file step): play ONE NAMED pool
+    /// whisper (e.g. a staged long clip) through the same voice channel — pool-resolved,
+    /// never an arbitrary path.</summary>
+    public void PlayWhisperFromPool(string fileName)
+    {
+        var match = EnumerateWhisperPool()
+            .FirstOrDefault(f => string.Equals(Path.GetFileName(f), fileName, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+        {
+            _log($"dtrh-fx: whisper-file '{fileName}' not in the voice pool — harness no-op");
+            return;
+        }
+
+        PlayWhisper(match);
+    }
+
     /// <summary>Voice channel: exclusive, stop-replace newest-wins, generation token (F2 —
     /// a stale player's PlaybackEnded must never clear the live whisper; SoundFlow does not
     /// fire end-on-stop but the token keeps the rule backend-independent).</summary>
@@ -319,6 +337,8 @@ public sealed class DtrhNativeEffects : IDisposable
         };
         _voice = player;
         player.Play();
+        // Filename logging is PAYLOAD/OVERLAY-scope only (shipped + harness-staged clips).
+        // b4's user/mod media admission must gate these lines to presence+shape (SP-018 V5 class).
         _log($"dtrh-fx: whisper playing ({Path.GetFileName(path)})");
     }
 
@@ -363,7 +383,7 @@ public sealed class DtrhNativeEffects : IDisposable
             _log($"dtrh-fx: freeze {(on ? "on" : "off")} apply failed ({ex.GetType().Name})");
         }
 
-        _log($"dtrh-fx: world freeze {(on ? $"ON — native video + voice paused (video pos {_video.PositionSec:0.0}s, frames {_video.FrameCount})" : $"OFF — resumed (video pos {_video.PositionSec:0.0}s, frames {_video.FrameCount})")}");
+        _log($"dtrh-fx: world freeze {(on ? $"ON — native video + voice paused (video pos {_video.PositionSec:0.0}s, voice pos {(_voice?.PositionSec ?? -1):0.0}s, frames {_video.FrameCount})" : $"OFF — resumed (video pos {_video.PositionSec:0.0}s, voice pos {(_voice?.PositionSec ?? -1):0.0}s, frames {_video.FrameCount})")}");
     }
 
     private void PauseVoice()

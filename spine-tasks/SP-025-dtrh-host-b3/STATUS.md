@@ -1,6 +1,6 @@
 ## STATUS: SP-025 — DTRH host slice b3: native SFX/audio/video + freeze + rendered tint safety
-**Current Step:** Step 4 — headed/WX evidence + divergence executed + board + pre-completion consult
-**Last Updated:** 2026-07-22 (Step 3 complete — 313/313 + 29/29, Rebuild 0W/0E; File Scope amendment: Program.cs + App.axaml.cs --dtrh-fx-drive wiring, SP-023 norm)
+**Current Step:** Step 5 — Testing & Verification
+**Last Updated:** 2026-07-22 (Step 4 complete — runs A/B/C/D on DISPLAY3, WSL2 contract 313/313+29/29 0W/0E, divergence decided+executed, consult APPROVE w/ 2 fix-first items CLOSED, board row WIP)
 **Blockers:** none
 
 ### Step 1: archaeology + admission + pre-approach consult
@@ -21,12 +21,12 @@
 - [x] Unit tests (dispatch, ordering, idempotency, Deferred remains for b4/b5)
 
 ### Step 4: headed/WX evidence + divergence executed + board + pre-completion consult
-- [ ] DISPLAY3 headed evidence (SFX events, freeze/tint pixels, real media playback, teardown)
-- [ ] WSL2 gate (contract green, WX facts, divergence decision executed on Linux)
-- [ ] record.md complete
-- [ ] Pre-completion solo consult
-- [ ] Board row WIP with named limits
-- [ ] STATUS.md accurate
+- [x] DISPLAY3 headed evidence (SFX events, freeze/tint pixels, real media playback, teardown)
+- [x] WSL2 gate (contract green, WX facts, divergence decision executed on Linux)
+- [x] record.md complete
+- [x] Pre-completion solo consult
+- [x] Board row WIP with named limits
+- [x] STATUS.md accurate
 
 ### Step 5: verification
 - [ ] testCommand green 0W/0E both platforms (≥292/27 floor)

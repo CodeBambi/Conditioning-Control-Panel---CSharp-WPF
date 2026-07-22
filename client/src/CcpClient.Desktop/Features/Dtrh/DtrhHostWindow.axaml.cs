@@ -226,6 +226,21 @@ public partial class DtrhHostWindow : Window
                 continue;
             }
 
+            if (json is null && bare.StartsWith("whisper-file:", StringComparison.Ordinal))
+            {
+                // HARNESS-ONLY non-protocol step: pin one NAMED pool whisper (staged long
+                // clip for freeze evidence) through the same voice channel.
+                var fileName = bare["whisper-file:".Length..];
+                _ = Task.Delay(TimeSpan.FromSeconds(seconds), _closing.Token).ContinueWith(
+                    t =>
+                    {
+                        if (t.IsCanceled) return;
+                        _host.LogDiagnostic($"dtrh: fx-drive whisper-file '{fileName}' (HARNESS-ONLY, pool-resolved)");
+                        Dispatcher.UIThread.Post(() => _fx?.PlayWhisperFromPool(fileName));
+                    }, TaskScheduler.Default);
+                continue;
+            }
+
             if (json is null)
             {
                 _host.LogDiagnostic($"dtrh: fx-drive step '{step}' unknown — skipped (harness)");
