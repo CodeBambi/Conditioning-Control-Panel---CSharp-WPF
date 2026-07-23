@@ -32,8 +32,10 @@ public sealed class SubliminalLayer : BaseLayer
         (0, -4), (0, 4), (-4, 0), (4, 0)
     };
 
+    /// <summary>The WPF card's font (CreateTextBlock parity). Only ever the ACTUAL draw face for
+    /// text Arial can render - see <see cref="Item.Face"/> and bug #615.</summary>
     private static readonly SKTypeface BoldArial =
-        SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold);
+        SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold) ?? SKTypeface.Default;
 
     /// <summary>One screen's card geometry in virtual-desktop device px.</summary>
     public readonly struct Placement
@@ -53,6 +55,12 @@ public sealed class SubliminalLayer : BaseLayer
     private sealed class Item
     {
         public string Text = "";
+        /// <summary>Bug #615: the typeface that can actually DRAW this card's text. Arial for
+        /// Latin (unchanged appearance), a system fallback family for anything Arial lacks -
+        /// CJK, Cyrillic, emoji. Resolved once at queue time and reused for BOTH the measure and
+        /// the draw; measuring in one font and drawing in another would mis-centre the card and
+        /// hand the awareness OCR the wrong skip rect.</summary>
+        public SKTypeface Face = BoldArial;
         public SKColor Bg, TextColor, Border;
         public bool BgTransparent;
         public double TargetOpacity;
@@ -105,6 +113,8 @@ public sealed class SubliminalLayer : BaseLayer
         var item = new Item
         {
             Text = text,
+            // Bug #615: pick the draw face BEFORE measuring (memoised per phrase inside).
+            Face = GlyphFallback.Resolve(text, BoldArial, SKFontStyle.Bold),
             Bg = bg,
             TextColor = textColor,
             Border = border,
@@ -119,6 +129,7 @@ public sealed class SubliminalLayer : BaseLayer
 
         lock (_sync)
         {
+            _textPaint.Typeface = item.Face;   // measure with the face we will draw with (#615)
             for (int i = 0; i < placements.Count; i++)
             {
                 item.Placements[i] = placements[i];
@@ -209,11 +220,18 @@ public sealed class SubliminalLayer : BaseLayer
                     canvas.DrawRect(p.BoundsPx, _bgPaint);
                 }
 
+                // #615: same face the card was measured with - metrics AND glyphs must agree.
+                _textPaint.Typeface = item.Face;
                 _textPaint.TextSize = FontDip * p.Scale;
                 var fm = _textPaint.FontMetrics;
                 var cx = p.BoundsPx.MidX;
                 var baseline = p.BoundsPx.MidY - (fm.Ascent + fm.Descent) / 2f;
 
+                // #615 caveat: a COLOUR emoji glyph (Segoe UI Emoji) paints its own colours and
+                // ignores the paint colour, so these 8 border copies come out as full-colour
+                // duplicates at +-3-4 DIP rather than an outline. At 120 DIP that reads as a
+                // slight thickening behind the glyph, so it is left as-is for parity; monochrome
+                // text (everything else, including CJK) outlines exactly as before.
                 _textPaint.Color = item.Border.WithAlpha(alpha);
                 foreach (var (ox, oy) in Offsets)
                     canvas.DrawText(item.Text, cx + ox * p.Scale, baseline + oy * p.Scale, _textPaint);

@@ -135,6 +135,21 @@ const HOVERSWAP_MECHANICS = new Set([Mechanic.YesNo, Mechanic.MC4]);
  *  excluded). Mirrors BottomlessNo's WRONG_TRANSFORM_STEERS note. */
 const POSITION_STEERS = new Set([Steer.Magnet, Steer.Flee, Steer.Exile, Steer.DriftResolve]);
 
+/** Coarse-pointer (touch / pen) probe. DOM/matchMedia-aware, so — like
+ *  hoverSwapMuted — it lives OUTSIDE the pure eligibility predicates and is
+ *  evaluated lazily and defensively (never throws at import). The ONE matchMedia
+ *  '(pointer: coarse)' site for the whole module: it gates every cursor-centric
+ *  steer (Magnet, HoverSwap, MouseHijack) off on touch and flips Flee into its
+ *  tap-point adaptation. Optional `win` arg mirrors hoverSwapMuted (roll-site
+ *  callers pass null -> global window; installers pass S.win). */
+function isCoarsePointer(win) {
+  try {
+    const w = win || (typeof window !== 'undefined' ? window : null);
+    if (w && w.matchMedia && w.matchMedia('(pointer: coarse)').matches) return true;
+  } catch (_e) {}
+  return false;
+}
+
 /** Is the pointer gag muted for this user? DOM/prefs-aware, so it lives OUTSIDE the
  *  pure eligibility predicate. Two ways out, and both mean NO SWAP AT ALL rather than
  *  an instant teleport: an instant exchange is strictly worse for a reduced-motion
@@ -147,6 +162,9 @@ function hoverSwapMuted(win) {
     if (w && w.matchMedia && w.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
   } catch (_e) {}
   try { if (getPrefs().sparkles === false) return true; } catch (_e) {}
+  // Touch has no hover: the pointerenter-driven swap can never fire, so a coarse
+  // pointer is muted the same as reduced-motion (no swap at all, never a teleport).
+  if (isCoarsePointer(win)) return true;
   return false;
 }
 
@@ -345,7 +363,11 @@ function installSteering(ctx, factoryCaps, factoryMedia) {
   // MouseHijack: a THIRD self-rolled steer, but LINGER-triggered (armed silently now;
   // it rolls its ~40% "we MIGHT" only after ~9s of un-committed dwell — see installer).
   // Mutually exclusive with the two self-rolled gates; RM is gated inside the installer.
-  const mouseHijack = !bottomless && !hoverSwap && isMouseHijackEligible(beatCtx, plan);
+  // Coarse pointer is filtered HERE (mirroring hoverSwapMuted's roll-site gate) so the
+  // linger timer never even arms on touch — there is no cursor to hide/hijack. The
+  // installer keeps a belt-and-braces coarse early-return too.
+  const mouseHijack = !bottomless && !hoverSwap && !isCoarsePointer(null)
+    && isMouseHijackEligible(beatCtx, plan);
 
   if (!plan.active && !bottomless && !hoverSwap && !mouseHijack) return NOOP_HANDLE; // Calibration/Recovery/valve-0 -> play it straight
 
@@ -830,6 +852,108 @@ function mountOccludeCover(S, target, o) {
 }
 
 /* ----------------------------------------------------------------------------
+ * Flee — TAP-POINT adaptation for coarse pointers (touch).
+ *
+ * Desktop Flee slides the wrong option away from a HOVERING cursor. Touch has no
+ * hover: the first the option hears of the finger is the tap itself, and a
+ * mouse-style flee would let the wrong answer commit on first contact. So on a
+ * coarse pointer the option DODGES out from under the finger on pointerdown — a
+ * quick transform transition — and the tap that triggered it is swallowed before
+ * its click can commit.
+ *
+ * INVARIANT #1 (friction, NOT lockout) is kept two independent ways:
+ *   (a) dodges are hard-capped (FLEE_TAP_DODGES) with the distance shrinking each
+ *       time, so a determined tapper commits on the (cap+1)th tap ALL BY ITSELF —
+ *       no escape hatch required; and
+ *   (b) every dodge still feeds the shared EscapeGuard exactly like the mouse
+ *       path's pointerdown bump, so onFrictionRelease -> forceComplete can also
+ *       re-form + commit it. Whichever lands first wins.
+ * Synthetic forceComplete clicks (!isTrusted, clientX/Y === 0) ALWAYS pass — the
+ * file-wide un-vetoable hatch convention. The dodge is transform-only (restored by
+ * the shared tf cleanup) and every listener is registered through S.addListener,
+ * so release() leaves no residue. The option is clamped fully onscreen each dodge
+ * (never parked out of reach).
+ * -------------------------------------------------------------------------- */
+const FLEE_TAP_DODGES = 3;          // dodges before the option gives up and commits
+const FLEE_TAP_SWALLOW_MS = 260;    // a click this soon after a dodge IS the dodged tap
+function fleeTapPoint(S) {
+  const base = lerp(40, 110, S.s);              // first dodge distance (shrinks after)
+  const pad = 8;
+  const dodges = new Map();                     // index -> dodges spent
+  const lastDodgeAt = new Map();                // index -> perf time of last dodge
+  const nowMs = () => (S.win.performance && S.win.performance.now)
+    ? S.win.performance.now() : Date.now();
+  let disarmed = false;
+
+  // Guard trip (a determined refusal beat the escape threshold): glide every wrong
+  // option home and stop dodging, so the forced commit lands on an honest layout.
+  const disarm = () => {
+    if (disarmed) return;
+    disarmed = true;
+    for (const o of S.wrong) {
+      try {
+        const st = S.tf(o.el);
+        o.el.style.transition = 'transform .2s cubic-bezier(.2,.8,.2,1)';
+        st.tx = 0; st.ty = 0; S.applyTf(o.el);
+      } catch (_e) {}
+    }
+  };
+  S.guard.onFrictionRelease(disarm);
+
+  // Move `o` away from the tap point (px,py), shrinking with each dodge, clamped so
+  // its untranslated slot + new transform stays fully onscreen (always reachable).
+  const dodge = (o, px, py) => {
+    const n = dodges.get(o.index) || 0;
+    if (n >= FLEE_TAP_DODGES) return false;     // capped -> let this tap commit
+    dodges.set(o.index, n + 1);
+    const dist = base * (1 - n / FLEE_TAP_DODGES);   // progressive shrink -> convergence
+    const st = S.tf(o.el);
+    const r = o.el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const ax = cx - px, ay = cy - py;
+    const mag = Math.hypot(ax, ay) || 1;
+    let tx = st.tx + (ax / mag) * dist;
+    let ty = st.ty + (ay / mag) * dist;
+    const homeLeft = r.left - st.tx, homeTop = r.top - st.ty;   // untranslated slot
+    const maxTx = (S.win.innerWidth - r.width - pad) - homeLeft;
+    const maxTy = (S.win.innerHeight - r.height - pad) - homeTop;
+    tx = Math.max(pad - homeLeft, Math.min(maxTx, tx));
+    ty = Math.max(pad - homeTop, Math.min(maxTy, ty));
+    o.el.style.transition = 'transform .16s cubic-bezier(.2,.8,.2,1)';
+    st.tx = tx; st.ty = ty;
+    S.applyTf(o.el);
+    return true;
+  };
+
+  for (const o of S.wrong) {
+    S.snapStyle(o.el, ['transition']);
+    const onDown = (e) => {
+      if (disarmed || S.guard.isTripped()) return;
+      if (!e || (!e.isTrusted && e.clientX === 0 && e.clientY === 0)) return; // forceComplete -> pass
+      if (dodge(o, e.clientX, e.clientY)) {
+        lastDodgeAt.set(o.index, nowMs());
+        S.guard.bump(o.index, 0);              // each dodged attempt feeds the escape guard
+      } else {
+        lastDodgeAt.delete(o.index);           // capped -> ensure the committing click passes
+      }
+    };
+    // Swallow ONLY the click produced by a just-dodged tap; a post-cap committing
+    // tap (no recent dodge) sails through untouched.
+    const onClick = (e) => {
+      if (!e.isTrusted && e.clientX === 0 && e.clientY === 0) return;         // forceComplete -> pass
+      if (disarmed || S.guard.isTripped()) return;
+      const t = lastDodgeAt.get(o.index);
+      if (t != null && (nowMs() - t) < FLEE_TAP_SWALLOW_MS) {
+        lastDodgeAt.delete(o.index);
+        e.preventDefault(); e.stopImmediatePropagation();
+      }
+    };
+    S.addListener(o.el, 'pointerdown', onDown);
+    S.addListener(o.el, 'click', onClick, true);
+  }
+}
+
+/* ----------------------------------------------------------------------------
  * STEER INSTALLERS. Each receives sharedCtx and wires DOM behavior + cleanup.
  * Convention: correct-favoring steers help the correct option; obstructive
  * steers hinder wrong options but always route effort into the guard.
@@ -839,6 +963,9 @@ const INSTALLERS = {
   /* correct option drifts toward the cursor (bias, not blocker) */
   [Steer.Magnet](S) {
     if (!S.correct.length) return;
+    // Cursor-attraction needs a hovering pointer; touch has none, so the pull would
+    // never fire. Bail like any other inert steer (its cleanup is a no-op).
+    if (isCoarsePointer(S.win)) return;
     S.wireCursor();
     const pull = lerp(0.02, 0.14, S.s);
     const maxPull = lerp(10, 40, S.s);
@@ -864,6 +991,10 @@ const INSTALLERS = {
   /* wrong option slides away from the cursor — bounded + self-relaxing */
   [Steer.Flee](S) {
     if (!S.wrong.length) return;
+    // COARSE POINTER: there is no hovering cursor to slide away from, so switch to
+    // tap-point flee (dodge out from under the finger on pointerdown). The desktop
+    // mouse path below is left byte-identical.
+    if (isCoarsePointer(S.win)) { fleeTapPoint(S); return; }
     S.wireCursor();
     const radius = lerp(90, 190, S.s);
     const push = lerp(20, 90, S.s);
@@ -1707,9 +1838,12 @@ const INSTALLERS = {
     if (!correct || !correct.el) return;
 
     // RM: involuntary cursor motion is the worst reduced-motion offender -> disabled entirely.
+    // Coarse pointer: no hoverable cursor to hide or steer, so it is meaningless too.
+    // (The roll site already gates coarse out so the linger never arms; this is the
+    // belt-and-braces second gate, mirroring HoverSwap's defensive installer check.)
     let reduce = false;
     try { reduce = !!(S.win.matchMedia && S.win.matchMedia('(prefers-reduced-motion:reduce)').matches); } catch (_e) {}
-    if (reduce) return;
+    if (reduce || isCoarsePointer(S.win)) return;
 
     const win = S.win, doc = S.doc;
     const stageRoot = (S.ctx && S.ctx.root) || doc.body;

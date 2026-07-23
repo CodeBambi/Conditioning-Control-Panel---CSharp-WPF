@@ -2600,7 +2600,17 @@ namespace ConditioningControlPanel.Services
                 while (_windowPool.Count > 0)
                 {
                     var pooled = _windowPool.Pop();
-                    if (!pooled.IsLoaded) continue;   // drop any window that got closed externally
+                    if (!pooled.IsLoaded)
+                    {
+                        // Unloaded shell (display-topology change, external teardown). Dropping the
+                        // reference is NOT enough: a constructed Window stays registered in
+                        // Application.Windows until Close(), so its hwnd would survive for the whole
+                        // process lifetime. Close it explicitly - a leaked USER object per pool
+                        // eviction is exactly the kind of drip that ends a 4h session with
+                        // CreateWindowEx failing (#627).
+                        try { pooled.Close(); } catch { }
+                        continue;
+                    }
                     if (match == null && (int)pooled.Width == width && (int)pooled.Height == height)
                         match = pooled;
                     else

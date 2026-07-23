@@ -63,8 +63,14 @@ public sealed class BubbleLayer : BaseLayer
     private readonly SKPaint _stroke = new() { IsAntialias = true, Style = SKPaintStyle.Stroke };
     private readonly SKPaint _glow = new() { IsAntialias = true };
     private readonly SKPaint _text = new() { IsAntialias = true, TextAlign = SKTextAlign.Center };
+    // Primary label face. NOT necessarily the face we draw with: bug #615 - Skia does no font
+    // fallback, and the variant labels are pointedly non-Latin (the clover/heart emoji, the
+    // sparkle/cross dingbats), so anything Segoe UI lacks is routed through GlyphFallback per
+    // item. The verb-hint pills are hard-coded English (ChaosBubbleHints), so those take the
+    // helper's ASCII fast path and keep drawing in Segoe UI exactly as before.
     private static readonly SKTypeface _bold = SKTypeface.FromFamilyName("Segoe UI", SKFontStyle.Bold)
-        ?? SKTypeface.FromFamilyName(null, SKFontStyle.Bold);
+        ?? SKTypeface.FromFamilyName(null, SKFontStyle.Bold)
+        ?? SKTypeface.Default;
 
     // Shield dash effect cache, keyed on quantized DPI scale (the only input) - a handful of
     // entries max (one per monitor scale). Disposed on Clear; rebuilt lazily.
@@ -265,7 +271,7 @@ public sealed class BubbleLayer : BaseLayer
             // ---- Label / emoji glyph ----
             if (!string.IsNullOrEmpty(item.Label))
             {
-                _text.Typeface = _bold;
+                _text.Typeface = item.LabelFace(_bold);   // #615
                 _text.TextSize = item.LabelFontDip * s;
                 // Soft shadow (BlurRadius 6 -> sigma 2) then the white glyph.
                 _text.Color = SKColors.Black.WithAlpha((byte)(0.8f * item.Opacity * 255f));
@@ -336,7 +342,9 @@ public sealed class BubbleLayer : BaseLayer
     private void DrawHint(SKCanvas canvas, BubbleItem item, float cx, float cy, float s)
     {
         float alpha = item.HintOpacity * item.Opacity;
-        _text.Typeface = _bold;
+        // #615: measure AND draw with the same resolved face, or the pill would be sized for one
+        // font and filled with another. English hints hit the ASCII fast path (still Segoe UI).
+        _text.Typeface = item.HintFace(_bold);
         _text.TextSize = 12.5f * s;
         float tw = _text.MeasureText(item.HintText);
         float padX = 8f * s, padY = 3f * s;
@@ -428,6 +436,20 @@ public sealed class BubbleLayer : BaseLayer
         internal float LabelBlurCacheSigma = -1f;
         internal SKMaskFilter? HintBlurCache;
         internal float HintBlurCacheSigma = -1f;
+
+        // Bug #615: resolved draw faces for Label / HintText. Both strings are fixed at spawn, so
+        // this resolves once per bubble and then costs a null check per frame - GlyphFallback
+        // itself is memoised globally too, but it takes a lock, and this runs per bubble per
+        // frame on the 31Hz tick. Never disposed here: the face is either the shared _bold or a
+        // globally cached fallback, both app-lifetime (same never-freed invariant as the sprites).
+        private SKTypeface? _labelFace;
+        private SKTypeface? _hintFace;
+
+        internal SKTypeface LabelFace(SKTypeface primary)
+            => _labelFace ??= GlyphFallback.Resolve(Label, primary, SKFontStyle.Bold);
+
+        internal SKTypeface HintFace(SKTypeface primary)
+            => _hintFace ??= GlyphFallback.Resolve(HintText, primary, SKFontStyle.Bold);
 
         internal void ReleaseEffectCaches()
         {

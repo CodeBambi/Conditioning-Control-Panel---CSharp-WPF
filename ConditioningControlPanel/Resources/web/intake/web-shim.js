@@ -20,19 +20,52 @@
 
 import { PROTOCOL, defaultBootConfig, DEFAULT_CAPS, NICHES, Niche } from './core/contracts.js';
 
-const webview = (typeof window !== 'undefined') && window.chrome && window.chrome.webview;
-export const isHosted = !!webview;
+/* ----------------------------------------------------------------------------
+ * TRANSPORT DETECTION — first match wins: WebView2 (desktop Lab) -> RN WebView
+ * (mobile host) -> standalone (plain browser). Both hosted worlds set
+ * isHosted === true, so every hosted-mode path (init handshake, result flow,
+ * save buttons, heartbeat) is transport-agnostic. PROTOCOL 1 is identical on the
+ * wire; only the byte-level carrier differs — WebView2 posts a structured-clone
+ * OBJECT, react-native-webview's postMessage is STRING-only so we JSON round-trip.
+ * -------------------------------------------------------------------------- */
+const win = (typeof window !== 'undefined') ? window : null;
+const webview = win && win.chrome && win.chrome.webview;
+// react-native-webview injects window.ReactNativeWebView.postMessage (string only)
+// onto the page. Host->page frames arrive by the RN side injecting a call to the
+// window.__ccpRnPush global installed below.
+const rnwv = (!webview && win && win.ReactNativeWebView &&
+              typeof win.ReactNativeWebView.postMessage === 'function')
+             ? win.ReactNativeWebView : null;
+
+export const isHosted = !!(webview || rnwv);
 
 const handlers = new Map();  // type -> fn
 const preBuffer = [];        // host messages that arrived before their handler
 
+/** Demux one host->page message OBJECT into its handler (or pre-buffer it). The
+ *  SINGLE dispatch path shared by both hosted transports, so the handler-Map +
+ *  pre-buffer semantics are byte-identical whichever carrier delivered the frame. */
+function dispatchHostMessage(m) {
+  if (!m || typeof m.type !== 'string') return;
+  const h = handlers.get(m.type);
+  if (h) h(m); else preBuffer.push(m);
+}
+
 if (webview) {
-  webview.addEventListener('message', (e) => {
-    const m = e.data;
-    if (!m || typeof m.type !== 'string') return;
-    const h = handlers.get(m.type);
-    if (h) h(m); else preBuffer.push(m);
-  });
+  // WebView2 host->page (UNCHANGED): structured-clone objects arrive on `message`.
+  webview.addEventListener('message', (e) => dispatchHostMessage(e.data));
+} else if (rnwv) {
+  // RN host->page: the RN side calls window.__ccpRnPush(jsonString). Install it
+  // SYNCHRONOUSLY at module evaluation so it already exists before RN can inject,
+  // and route it through the SAME dispatch/pre-buffer path WebView2 uses.
+  try {
+    win.__ccpRnPush = function (json) {
+      let m;
+      try { m = JSON.parse(json); } catch (_e) { return; }
+      if (!m || typeof m.type !== 'string') return;
+      dispatchHostMessage(m);
+    };
+  } catch (_e) { /* frozen window: never throw at import */ }
 }
 
 /** Register a handler; replays any buffered messages of that type in order. */
@@ -45,12 +78,15 @@ export function on(type, fn) {
 
 /** Post a message to the host (no-op when standalone). */
 export function send(msg) {
-  try { webview && webview.postMessage(msg); } catch (_e) { /* host gone */ }
+  try {
+    if (webview) webview.postMessage(msg);                 // WebView2: structured clone
+    else if (rnwv) rnwv.postMessage(JSON.stringify(msg));  // RN: STRING only
+  } catch (_e) { /* host gone */ }
 }
 
 export function log(msg) {
   const s = String(msg).slice(0, 400);
-  if (webview) send({ type: 'log', msg: s });
+  if (isHosted) send({ type: 'log', msg: s });
   else if (typeof console !== 'undefined') console.log('[intake]', s);
 }
 

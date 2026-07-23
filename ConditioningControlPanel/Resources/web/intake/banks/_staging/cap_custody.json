@@ -1,0 +1,89 @@
+{
+  "mechanic": "verifycustody",
+  "_doc": "STAGING bank for VerifyCustody (Chain of Custody, brainstorm #8). Wave-3 merge agent folds sharedPrompts into each banks/<niche>.json prompt list (shr_ ids => identical in all four banks, per CLAUDE.md 5). text = spoken VO verbatim (q_<id>); it must NEVER contain a filename (HARD RULE 2 - filenames live ONLY in the rendered docket, derived client-side). options[] are graded in-fiction verdicts, never rendered as buttons: the renderer folds per-row CONFIRM/DENY bools into a confirm-rate scalar and submits the bucketed option index. answer marks the compliant (confirm-heavy) reading; refusal still completes + grades (friction, not lockout). Recovery is render-ready but the engine hardcodes Recovery and does not read the bank yet - shr_cap_cust_rec is dormant until a later wave wires it.",
+  "sharedPrompts": [
+    {
+      "id": "shr_cap_cust_cal",
+      "text": "Standard file-integrity check. Confirm or deny each record in your archive.",
+      "answer": 0,
+      "heat": 0,
+      "tags": ["custody", "archive"],
+      "flavors": ["A routine custody check. Confirm or deny each record."],
+      "weight": 1,
+      "mechanicHints": ["verifycustody"],
+      "freeChoice": 1,
+      "options": ["chain of custody intact", "partial custody logged", "custody unverified"],
+      "requires": { "band": "calibration" }
+    },
+    {
+      "id": "shr_cap_cust_est",
+      "text": "Verify the chain of custody for each record. Confirm what belongs to you.",
+      "answer": 0,
+      "heat": 2,
+      "tags": ["exposure", "compliance", "surveillance"],
+      "flavors": ["Confirm the records that belong to you."],
+      "weight": 1,
+      "mechanicHints": ["verifycustody"],
+      "options": ["chain of custody intact", "partial custody logged", "custody disputed"],
+      "requires": { "band": "establishing" }
+    },
+    {
+      "id": "shr_cap_cust_deep",
+      "text": "The archive remembers more than you did. Confirm or deny each record.",
+      "answer": 0,
+      "heat": 3,
+      "tags": ["exposure", "confession", "surrender"],
+      "flavors": ["The archive kept a record. Confirm or deny each one."],
+      "weight": 1,
+      "mechanicHints": ["verifycustody"],
+      "options": ["chain of custody intact", "partial custody logged", "custody disputed"],
+      "requires": { "band": "deepening", "minDepth": 0.42 }
+    },
+    {
+      "id": "shr_cap_cust_cli",
+      "text": "One record remains. Read the access log, then affirm it for your file.",
+      "answer": 0,
+      "heat": 5,
+      "tags": ["exposure", "confession", "property"],
+      "flavors": ["One record is left. Read it, then affirm it."],
+      "weight": 1,
+      "mechanicHints": ["verifycustody"],
+      "options": ["record affirmed", "record disputed (flagged)"],
+      "requires": { "band": "climax", "minDepth": 0.8 }
+    },
+    {
+      "id": "shr_cap_cust_rec",
+      "text": "Assessment complete. Would you like a copy of the archive? Yes or no.",
+      "answer": 0,
+      "heat": 0,
+      "tags": ["custody", "archive"],
+      "flavors": ["The archive is closed. Would you like a copy?"],
+      "weight": 1,
+      "mechanicHints": ["verifycustody"],
+      "freeChoice": 1,
+      "options": ["copy request noted", "copy request declined"],
+      "requires": { "band": "recovery" }
+    }
+  ],
+  "nicheOverrides": {
+    "_doc": "The RENDERER owns the per-niche on-screen strings (docket header, self-correct verdict, soft second-person line, the 8-line behavioral log, recovery answers) in its in-module STR table - these overrides are ADVISORY for the Wave-3 merge + VO pass, not read by the renderer. The shared prompt text is niche-neutral clinical (one VO voice per CLAUDE.md 1). Keep any per-niche prompt text filename-free.",
+    "bambi": { "register": "sparkly, melty; good-girl warmth as the log turns intimate", "verdictSoftLine": "you keep this one where you can find it." },
+    "drone": { "register": "sync/assimilation; the archive as directive log", "verdictSoftLine": "this file is accessed more than any directive." },
+    "sissy": { "register": "soft, femme; second-person tenderness", "verdictSoftLine": "you open this one first. every time." },
+    "circe": {
+      "register": "cold keyholder verdicts. NO exclamation marks, NO diminutives, NO em-dashes. The renderer's circe log uses periods, not em-dash separators.",
+      "verdictSoftLine": "you return to this file without being told.",
+      "options_cli": ["record affirmed.", "record disputed. flagged."]
+    }
+  },
+  "sfxWanted": [
+    { "id": "custody-stamp", "desc": "heavy rubber LOGGED thunk on VERIFY/AFFIRM. Emitted by chrome.stamp() as the 'stamp' cue - but 'stamp' has NO entry in SFX_MANIFEST_FALLBACK (render/audio.js), so it is SILENT today (chrome-kit gap, affects every captcha item). Add a 'stamp' SPEC + manifest entry, or map custody-stamp -> stamp.", "usedNow": "stamp (currently silent - unmanifested)" },
+    { "id": "custody-log-tick", "desc": "soft typewriter/register tick as each behavioral-log line lands at Climax; currently stands in on 'sticker-drag' at ~0.18", "usedNow": "sticker-drag" },
+    { "id": "custody-deny-override", "desc": "quiet corrective click when a DENY self-corrects to CONFIRMED (source: device); currently 'incorrect-feedback' at ~0.35", "usedNow": "incorrect-feedback" }
+  ],
+  "voExtra": [
+    { "id": "cust_affirm_sting", "text": "logged.", "optional": true, "desc": "optional one-word stinger under the Climax AFFIRM stamp; not wired by the renderer (on-screen stamp carries it). No filenames." },
+    { "id": "cust_dispute_sting", "text": "dispute noted. the record stands.", "optional": true, "desc": "optional stinger if the Climax dispute hatch is taken; not wired yet. No filenames." }
+  ],
+  "notes": "FOR THE WAVE-3 MERGE AGENT: (1) Copy the five sharedPrompts VERBATIM into all four banks/<niche>.json prompt arrays (same ids, per the shr_ convention). Only 6-of-205 shared prompts historically diverge on tags for archetype voting - custody's tags are already niche-agnostic axis tags (exposure/confession/surrender/compliance/property), so no per-niche tag divergence is needed. (2) VO: q_shr_cap_cust_{cal,est,deep,cli,rec} generate automatically via build_intake_manifest.py from `text` (verbatim guard applies - text is filename-free by rule). (3) GRADING/TELEMETRY GAP: makeAnswerEvent has no free detail channel, so the per-row CONFIRM/DENY vector is NOT transmitted - only the bucketed option index (chosenIndex/chosenLabel) + the prompt tags reach the engine + C# IntakeProfiler. If per-row signal is ever wanted, it needs a contracts.js AnswerEvent field (out of scope; do NOT extend contracts.js here). (4) options[] are sliced to 4 max by engine.buildOptions - custody uses 3 (multi-row) / 2 (climax, recovery), safe. (5) Recovery entry is dormant (engine hardcodes Recovery); ship it so the render path is authored, wire it in the Recovery wave. (6) minDepth on deep (0.42) + cli (0.8) mirror BAND_DEPTH_FLOOR / the h5 fact. (7) HARD RULE 2 audit: no filename appears in any text/flavor/option/tag/log/stamp anywhere in this file or the renderer - real filenames are derived client-side in custody.js ONLY."
+}

@@ -31,6 +31,10 @@ namespace ConditioningControlPanel.Services
         private const int MaxStepsChars = 4000;
         private const int MaxCrashLogChars = 120_000;
         private const int MaxAppLogLines = 100;
+        // Lines of the dedicated video/panic trace appended to the app-log field. The trace is
+        // terse (one short line per transition), so 200 lines covers several videos plus a whole
+        // freeze window at a few KB — well inside the crash-log-sized fields the server accepts.
+        private const int MaxVideoDiagLines = 200;
 
         private readonly HttpClient _httpClient;
 
@@ -107,7 +111,22 @@ namespace ConditioningControlPanel.Services
             if (includeAppLog)
             {
                 var appLogRaw = TryReadRecentAppLog(MaxAppLogLines);
-                (scrubbedApp, appCounts) = LogScrubber.Scrub(appLogRaw);
+
+                // #616/#617/#621/#622/#623: the app-log tail alone was useless for the v6.5.0 freeze
+                // reports. A user whose PC had to be hard-reset must relaunch the app to file the
+                // report, and the relaunch writes far more than MaxAppLogLines of startup chatter —
+                // so the 100-line tail contained nothing but startup, every time. The video/panic
+                // trace lives in its own small flush-on-write file that a relaunch cannot scroll,
+                // so append its tail here. Same field (no server schema change), clearly delimited,
+                // and it goes through the same scrubber as everything else.
+                var diagRaw = VideoDiag.Tail(MaxVideoDiagLines);
+                var combined = string.IsNullOrWhiteSpace(diagRaw)
+                    ? appLogRaw
+                    : appLogRaw + Environment.NewLine + Environment.NewLine +
+                      "===== video/panic diagnostic trace (video-diag.log) =====" + Environment.NewLine +
+                      diagRaw;
+
+                (scrubbedApp, appCounts) = LogScrubber.Scrub(combined);
             }
 
             var totalCounts = crashCounts.Add(appCounts);

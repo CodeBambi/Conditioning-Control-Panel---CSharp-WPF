@@ -317,14 +317,22 @@ namespace ConditioningControlPanel
 
         private const int WM_DPICHANGED = 0x02E0;
         private DispatcherTimer? _dpiQuiesceTimer;
+        private bool _dpiFloatWasRunning;
 
         /// <summary>
         /// Window procedure hook. Only handles WM_DPICHANGED: when a drag crosses onto a
         /// monitor with a different scale factor, PerMonitorV2 WPF resizes this layered
         /// window, and that resize runs a SYNCHRONOUS CompleteRender that deadlocks when
         /// the shared AllowsTransparency render thread is busy (the documented hang in
-        /// OnFirstContentRendered — #477). Quiesce the 60fps float/breath transform writes
-        /// for the transition so the blocking present can complete, then resume.
+        /// OnFirstContentRendered — #477).
+        ///
+        /// The blocking present can only complete if NOTHING is writing to this surface, and
+        /// TWO independent drivers do: the 60fps float/breath transform, and the Circe emote
+        /// crossfade (~1Hz idle rotation plus its opacity clocks). The original mitigation
+        /// quiesced only the former — emote mode landed on this surface afterwards and kept
+        /// compositing straight through the transition, which is how an attached tube dragged
+        /// between mixed-DPI monitors could still wedge (Hang 1002, no crash.log, last log
+        /// line an [EMOTE] xfade). Quiesce both for the transition, then resume.
         /// </summary>
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
@@ -332,21 +340,28 @@ namespace ConditioningControlPanel
             {
                 try
                 {
+                    // NB: the quiesce must NOT be conditional on the float timer running — the emote
+                    // crossfade deadlocks this surface just as happily with the float transform idle.
                     if (_floatTimer?.IsEnabled == true)
                     {
                         _floatTimer.Stop();
-                        if (_dpiQuiesceTimer == null)
-                        {
-                            _dpiQuiesceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
-                            _dpiQuiesceTimer.Tick += (s, e) =>
-                            {
-                                _dpiQuiesceTimer?.Stop();
-                                try { _floatTimer?.Start(); } catch { /* window tearing down */ }
-                            };
-                        }
-                        _dpiQuiesceTimer.Stop(); // restart the debounce on rapid re-crossings
-                        _dpiQuiesceTimer.Start();
+                        _dpiFloatWasRunning = true;   // sticky across rapid re-crossings; cleared on resume
                     }
+                    QuiesceEmotesForDpi();
+
+                    if (_dpiQuiesceTimer == null)
+                    {
+                        _dpiQuiesceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+                        _dpiQuiesceTimer.Tick += (s, e) =>
+                        {
+                            _dpiQuiesceTimer?.Stop();
+                            try { if (_dpiFloatWasRunning) { _dpiFloatWasRunning = false; _floatTimer?.Start(); } }
+                            catch { /* window tearing down */ }
+                            try { ResumeEmotesAfterDpi(); } catch { /* window tearing down */ }
+                        };
+                    }
+                    _dpiQuiesceTimer.Stop(); // restart the debounce on rapid re-crossings
+                    _dpiQuiesceTimer.Start();
                 }
                 catch { /* never let a hook throw */ }
             }
@@ -1101,6 +1116,17 @@ namespace ConditioningControlPanel
         /// Gets whether the avatar tube is currently detached (floating independently)
         /// </summary>
         public bool IsDetached => !_isAttached;
+
+        /// <summary>
+        /// The tube's HWND while ATTACHED, else <see cref="IntPtr.Zero"/>. Used by sibling windows that
+        /// share our native owner (the game hosts) to slot themselves ABOVE the attached pair instead of
+        /// directly above main - two windows owned by the same HWND have no defined order between them,
+        /// which is what let a game window and the tube interleave into a torn composite.
+        /// Plain-field reads only: this is called from the MAIN thread while the tube may live on its own
+        /// dispatcher thread, so it must never touch a DependencyProperty (use IsWindowVisible on the
+        /// handle instead of IsVisible).
+        /// </summary>
+        internal IntPtr AttachedHandleOrZero => _isAttached ? _tubeHandle : IntPtr.Zero;
 
         /// <summary>
         /// Gets whether the avatar is currently visible on screen.

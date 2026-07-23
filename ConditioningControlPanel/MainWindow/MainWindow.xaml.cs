@@ -748,23 +748,37 @@ namespace ConditioningControlPanel
                 var panicKey = settings.PanicKey;
                 if (key.ToString() == panicKey)
                 {
+                    // #616/#617/#621/#622/#623 — "I pressed the panic key and nothing happened".
+                    // Three things can be true and we could not tell them apart:
+                    //   (a) the WH_KEYBOARD_LL callback never ran (this line missing) — either the
+                    //       UI thread that owns the hook was wedged, or Windows had already dropped
+                    //       our hook for exceeding LowLevelHooksTimeout during an earlier stall;
+                    //   (b) the callback ran but the dispatcher never drained the BeginInvoke below
+                    //       ("received"/"queued" present, "handling" missing) — a wedged UI thread;
+                    //   (c) the handler ran and the teardown itself hung ("handling" but no "handled").
+                    // Note this callback executes ON THE UI THREAD (LL hooks are delivered to the
+                    // installing thread's message loop), so the stall column on this very line is
+                    // itself evidence.
+                    VideoDiag.Log("PANIC", $"panic key '{key}' RECEIVED by the global hook - queueing handler");
                     Dispatcher.BeginInvoke(() => HandlePanicKeyPress());
+                    VideoDiag.Log("PANIC", "handler queued on the dispatcher");
                 }
             }
         }
 
         private void HandlePanicKeyPress()
         {
+            VideoDiag.Log("PANIC", $"handling panic press (engineRunning={_isRunning}, uiStall={VideoDiag.UiStallMs}ms)");
             // A live Rabbit Hole descent owns the panic key: the chaos key hook pauses the
             // run (and a second press surfaces it). Without this hand-off a mid-run panic
             // fell into the "not running" branch below — where a second press EXITS the app.
-            if (App.Chaos?.IsDescending == true) return;
+            if (App.Chaos?.IsDescending == true) { VideoDiag.Log("PANIC", "handed off to the Rabbit Hole descent (chaos owns the key)"); return; }
 
             // The web DtRH game (its own WebView2 window) owns Esc while it's up: the page
             // runs a pause → exit-fullscreen → close ladder. Swallow the panic double-tap so
             // those presses can't fall into the "not running" branch and exit the whole app.
             // Reactivates on its own once the game window closes (IsActive flips false).
-            if (Services.Chaos.DtrhHostService.IsActive) return;
+            if (Services.Chaos.DtrhHostService.IsActive) { VideoDiag.Log("PANIC", "handed off to the DtRH web game window"); return; }
 
             // Let the companion say a calm, persona-neutral safety line (highest priority,
             // bypasses the bark gate). Fired before the stop flow so it's not suppressed.
@@ -882,6 +896,10 @@ namespace ConditioningControlPanel
                 _browser?.Dispose();
                 Application.Current.Shutdown();
             }
+
+            // Panic action COMPLETED. Its absence after a "handling panic press" line is the proof
+            // that the panic teardown itself hung rather than the keystroke being lost (#616-#623).
+            VideoDiag.Log("PANIC", $"panic press handled (press #{_panicPressCount})");
         }
 
         /// <summary>
@@ -2409,15 +2427,28 @@ namespace ConditioningControlPanel
             // Fix maximized window extending behind taskbar (buttons cut off)
             if (msg == WM_GETMINMAXINFO)
             {
-                var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(lParam);
-
-                // Get the monitor this window is on
+                // Get the monitor this window is on. Screen enumeration can transiently fail
+                // (see CLAUDE.md Known Issues #5) - if we can't resolve a monitor, leave the
+                // struct untouched and `handled` false so Windows applies its own defaults.
                 var monitor = System.Windows.Forms.Screen.FromHandle(hwnd);
+                if (monitor == null) return IntPtr.Zero;
+
+                var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(lParam);
                 var workingArea = monitor.WorkingArea;
+                var bounds = monitor.Bounds;
+
+                // Bug #620: ptMaxPosition is in coordinates RELATIVE TO THE TARGET MONITOR'S
+                // ORIGIN, not virtual-desktop coordinates. Assigning workingArea.Left/Top raw
+                // only happens to work on the primary monitor (origin 0,0); on a secondary
+                // monitor at e.g. x=1920 it pushed the maximized window a further 1920px away
+                // and the window vanished off-screen (alive in the taskbar, blank preview).
+                // Subtracting the monitor's own bounds origin yields the correct offset - which
+                // is normally (0,0), or non-zero only where the taskbar is docked left/top.
+                // Do NOT "simplify" this back to raw working-area coordinates.
+                mmi.ptMaxPosition.X = workingArea.Left - bounds.Left;
+                mmi.ptMaxPosition.Y = workingArea.Top - bounds.Top;
 
                 // Constrain maximized size to working area (excludes taskbar)
-                mmi.ptMaxPosition.X = workingArea.Left;
-                mmi.ptMaxPosition.Y = workingArea.Top;
                 mmi.ptMaxSize.X = workingArea.Width;
                 mmi.ptMaxSize.Y = workingArea.Height;
 

@@ -132,6 +132,8 @@ internal sealed class ChaosWebViewHost : IDisposable
         if (!_opts.InputEnabled)
             _window.SourceInitialized += (_, _) => ApplyPassiveExStyles(_window);
         _window.Show();
+        _countedActive = true;
+        System.Threading.Interlocked.Increment(ref _activeHostCount);
         if (_opts.OwnedByMainWindow) AttachMainWindowGlue();
         if (_opts.InputEnabled) { try { _window.Activate(); } catch { } }
 
@@ -310,8 +312,19 @@ internal sealed class ChaosWebViewHost : IDisposable
             // minimize, slot ourselves directly above main each time we take it — without
             // activating, so re-gluing never steals focus from whatever the user is doing.
             if (owned && _glueOwnerHandle != IntPtr.Zero)
-                SetWindowPos(hwnd, _glueOwnerHandle, 0, 0, 0, 0,
+            {
+                // ...but "directly above main" is not high enough. An ATTACHED avatar tube is owned by
+                // main too, so it is our SIBLING, and Win32 defines no order between two windows sharing
+                // an owner — inserting directly above main drops us UNDER a tube already sitting there,
+                // which is how the tube and this page interleaved into a torn half-and-half composite.
+                // An attached tube is conceptually part of the main window (that is what "attached"
+                // means), so it rides at main's level and we go above the pair, not between them.
+                var insertAfter = _glueOwnerHandle;
+                var tube = App.AvatarWindow?.AttachedHandleOrZero ?? IntPtr.Zero;
+                if (tube != IntPtr.Zero && IsWindowVisible(tube)) insertAfter = tube;
+                SetWindowPos(hwnd, insertAfter, 0, 0, 0, 0,
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
         }
         catch (Exception ex) { App.Logger?.Debug("{Tag}.ApplyNativeOwner: {E}", _opts.LogTag, ex.Message); }
     }
@@ -540,8 +553,16 @@ internal sealed class ChaosWebViewHost : IDisposable
         try { DetachMainWindowGlue(); } catch { }
         try { _web?.Dispose(); } catch { }
         try { _window?.Close(); } catch { }
+        if (_countedActive) { _countedActive = false; System.Threading.Interlocked.Decrement(ref _activeHostCount); }
         _web = null; _window = null; IsReady = false; _pending.Clear();
     }
+
+    // How many game hosts (Bureau / Graded Intake / DtRH) currently have a window up. The ATTACHED
+    // avatar tube consults this before its focus-stealing raise: an attached tube rides at main's
+    // level by definition, so it must not lift itself over a game page the user is working in.
+    private static int _activeHostCount;
+    private bool _countedActive;
+    internal static bool AnyHostActive => System.Threading.Volatile.Read(ref _activeHostCount) > 0;
 
     // Passive backdrops absorb clicks (no WS_EX_TRANSPARENT) but never steal focus / show in Alt-Tab.
     private static void ApplyPassiveExStyles(Window w)

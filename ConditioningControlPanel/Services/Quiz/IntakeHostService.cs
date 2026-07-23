@@ -402,6 +402,32 @@ namespace ConditioningControlPanel.Services.Quiz
                     App.Logger?.Information("IntakeHostService: drafted session '{Name}' -> {Path}",
                         session.Name, path);
 
+                    // TELL THE RUNNING APP, NOT JUST THE DISK. BUG #614: writing the file was
+                    // the whole fix once, but SessionManager.LoadAllSessions() runs exactly
+                    // once per launch (MainWindow.InitializeSessionManager), so a session
+                    // dropped into CustomSessions after startup stayed invisible in the
+                    // Sessions tab until the app was restarted. The user's reasonable reading
+                    // of that was "the intake never made a session".
+                    //
+                    // This is a SEPARATE try/catch on purpose. The file is already on disk and
+                    // is the run's artifact; a UI-refresh failure (no MainWindow yet, torn-down
+                    // window, PresetsTab not realised) must never be allowed to escalate into
+                    // the "draft failed" path below and tell the user they lost the run. It is
+                    // also why the session-drafted reply is not sent from in here.
+                    try
+                    {
+                        var main = App.MainWindowRef;
+                        if (main != null) main.RegisterExternallySavedSession(session, path);
+                        else App.Logger?.Debug(
+                            "IntakeHostService: no MainWindow to register the drafted session with; "
+                            + "it will appear in the Sessions tab on next launch.");
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex,
+                            "IntakeHostService: drafted session saved but the Sessions list refresh failed");
+                    }
+
                     // The app's standard in-app toast surface (MainWindow's NotificationHost).
                     // It queues internally when the host isn't attached yet, so this is safe
                     // even if the intake window somehow outlives the main window's layout.
@@ -720,8 +746,11 @@ namespace ConditioningControlPanel.Services.Quiz
 
                 return new
                 {
-                    gifs = Sample(gifs, rng, 10).Select(ToUrl).ToArray(),
-                    images = Sample(stills, rng, 10).Select(ToUrl).ToArray(),
+                    // 18 samples (was 10): the captcha grid items want 15-20 mounted
+                    // assets so tiles don't repeat within a 3x3; gifs/stills split is
+                    // unchanged. Host-side only (PROTOCOL 1 + web-shim.js untouched).
+                    gifs = Sample(gifs, rng, 18).Select(ToUrl).ToArray(),
+                    images = Sample(stills, rng, 18).Select(ToUrl).ToArray(),
                     bubbleSprite,
                     subliminals,
                 };

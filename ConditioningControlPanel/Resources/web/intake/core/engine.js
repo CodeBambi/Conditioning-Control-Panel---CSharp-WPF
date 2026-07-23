@@ -390,6 +390,7 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   let lapCount = 0;                       // endless laps completed
   let recoveryIdx = 0;                    // recovery step built so far
   let recoveryStart = 0;                  // depth at recovery entry
+  let recoverySubPlan = null;             // step -> {recId,mechanic} captcha payoff substitution (built at recovery entry)
   let aborting = false;
   let lastBeat = null;
   let lastPrimarySteer = Steer.None;
@@ -1205,6 +1206,46 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     return { id: `b${beatSeq}-${band}-interlude`, band, depth, mechanic: Mechanic.Interlude, prompt, options: [], steerRoll: { primary: Steer.None, secondary: [], intensity: 0 }, rewardPlan, timeoutMs: 0, meta };
   }
 
+  /* CAPTCHA RECOVERY PAYOFF PLAN — decides, once at Recovery entry, which (if any)
+   * of the four walk-down beats swap their hardcoded CheckIn for a captcha family's
+   * `*_rec` bank prompt. Without this the staged `shr_cap_*_rec` payoffs are dead
+   * code (pickMechanic forces CheckIn in Recovery and the walk-down never reads the
+   * bank). Families are ranked by MOST-RECENTLY-USED in the run (trajectory order is
+   * deterministic under the seeded rng — no Math.random), capped at 2, and pinned to
+   * the two MIDDLE beats (steps 1 & 2); the entry beat (0) and the final depth-0
+   * surfacing beat (3) always stay CheckIn. A family is only chosen if its `*_rec`
+   * prompt is actually present in the bank with a live Verify* mechanicHint. */
+  const CAPTCHA_REC_RE = /^shr_cap_([a-z]+)_(cal|est|deep|cli|rec)$/;
+  function buildRecoverySubPlan() {
+    recoverySubPlan = null;
+    try {
+      const lastIdx = new Map();               // family token -> last position seen in the descent
+      const traj = (result && Array.isArray(result.trajectory)) ? result.trajectory : [];
+      for (let i = 0; i < traj.length; i++) {
+        const id = traj[i] && traj[i].promptId;
+        const m = id && CAPTCHA_REC_RE.exec(id);
+        if (m) lastIdx.set(m[1], i);
+      }
+      if (!lastIdx.size) return;
+      const fams = Array.from(lastIdx.keys()).sort((a, b) => lastIdx.get(b) - lastIdx.get(a)); // most-recent first
+      const chosen = [];
+      for (const fam of fams) {
+        if (chosen.length >= 2) break;
+        const recId = `shr_cap_${fam}_rec`;
+        const src = byId.get(recId);
+        if (!src || src.heat !== 0) continue;  // must exist and honor the heat-0 recovery invariant
+        const hint = Array.isArray(src.mechanicHints) ? src.mechanicHints.find((h) => MECHANICS.includes(h)) : null;
+        if (!hint || hint.indexOf('verify') !== 0) continue;
+        chosen.push({ recId, mechanic: hint });
+      }
+      if (!chosen.length) return;
+      const plan = {};
+      const steps = [1, 2];                    // middle two beats only; 0 (entry) + 3 (surfacing) stay CheckIn
+      chosen.forEach((c, i) => { plan[steps[i]] = c; });
+      recoverySubPlan = plan;
+    } catch (_e) { recoverySubPlan = null; }    // any failure -> no substitution, all beats stay CheckIn
+  }
+
   function buildRecoveryBeat() {
     const step = recoveryIdx; // 0-based
     const depth = clamp01(recoveryStart * (1 - (step + 1) / RECOVERY_BEATS)); // monotonic 1->0, ends 0
@@ -1212,8 +1253,31 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     state.band = Band.Recovery;
     state.velocity = Math.max(0, state.velocity * 0.5); // settle
 
-    const line = RECOVERY_LINES[Math.min(step, RECOVERY_LINES.length - 1)];
-    const prompt = { id: `recovery-${step}`, text: line, answer: 1, heat: 0, tags: [], flavors: [], weight: 1, mechanicHints: [Mechanic.CheckIn] };
+    // CAPTCHA RECOVERY PAYOFF: if this step is scheduled for a family's `*_rec` prompt
+    // (see buildRecoverySubPlan), route it through the captcha dispatcher instead of
+    // CheckIn — same depth walk, Steer.None, heat 0, non-skippable (invariant #3);
+    // only the mechanic + card body change. ANY failure (prompt gone, buildOptions
+    // throws) falls straight through to the hardcoded CheckIn beat below, so Recovery
+    // can never blank (mirrors beats.js's dispatch-fallback philosophy).
+    const sub = recoverySubPlan && recoverySubPlan[step];
+    let prompt = null, mechanic = Mechanic.CheckIn, options = [];
+    if (sub) {
+      try {
+        const src = byId.get(sub.recId);
+        if (src && src.heat === 0) {
+          const built = buildOptions(sub.mechanic, src);
+          prompt = Object.assign({}, src);
+          mechanic = sub.mechanic;
+          options = Array.isArray(built) ? built : [];
+        }
+      } catch (_e) { prompt = null; /* fall through to CheckIn */ }
+    }
+    if (!prompt) {
+      const line = RECOVERY_LINES[Math.min(step, RECOVERY_LINES.length - 1)];
+      prompt = { id: `recovery-${step}`, text: line, answer: 1, heat: 0, tags: [], flavors: [], weight: 1, mechanicHints: [Mechanic.CheckIn] };
+      mechanic = Mechanic.CheckIn;
+      options = [];
+    }
     const rewardPlan = planFor(Band.Recovery, depth, prompt) || fallbackPlan(Band.Recovery, depth, prompt);
 
     // Recovery beats ALWAYS carry an interviewer aside (the debrief voice).
@@ -1222,7 +1286,7 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
 
     recoveryIdx += 1; beatSeq += 1; totalBeatsBuilt += 1;
     trackPeak(depth, Band.Recovery);
-    return { id: `b${beatSeq}-recovery`, band: Band.Recovery, depth, mechanic: Mechanic.CheckIn, prompt, options: [], steerRoll: { primary: Steer.None, secondary: [], intensity: 0 }, rewardPlan, timeoutMs: 0, meta };
+    return { id: `b${beatSeq}-recovery`, band: Band.Recovery, depth, mechanic, prompt, options, steerRoll: { primary: Steer.None, secondary: [], intensity: 0 }, rewardPlan, timeoutMs: 0, meta };
   }
 
   function trackPeak(depth, band) {
@@ -1312,6 +1376,7 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     phase = 'recovery';
     recoveryIdx = 0;
     recoveryStart = state.depth; // walk down from wherever we are (near peak, or wherever abort caught us)
+    buildRecoverySubPlan();      // decide captcha `*_rec` payoff substitutions before the first walk-down beat
     return stepRecovery();
   }
 
