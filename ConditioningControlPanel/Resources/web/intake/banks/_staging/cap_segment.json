@@ -1,0 +1,121 @@
+{
+  "mechanic": "verifysegment",
+  "_doc": "Staging bank for VerifySegment ('Segmentation striptease', brainstorm #7). Wave-merge agent splices sharedPrompts[] into each of banks/{bambi,drone,sissy,circe}.json prompts[] (shr_ ids identical across all four). Grading is BINARY via `answer` (the compliant bucket index); segment.js owns the reveal-ledger -> option-index mapping and never displays these labels as buttons. See notes.",
+  "sharedPrompts": [
+    {
+      "id": "shr_cap_segment_cal",
+      "text": "Select each segment to verify the image.",
+      "answer": 3,
+      "heat": 0,
+      "tags": ["compliance", "curious"],
+      "flavors": ["Verify you are human: select each segment to bring the image into focus."],
+      "weight": 1.8,
+      "mechanicHints": ["verifysegment"],
+      "options": [
+        "no segments revealed",
+        "partial reveal logged",
+        "image resolved, within tolerance",
+        "full reveal designated"
+      ],
+      "requires": { "band": "calibration" }
+    },
+    {
+      "id": "shr_cap_segment_est",
+      "text": "Select each segment to verify the image.",
+      "answer": 2,
+      "heat": 2,
+      "tags": ["compliance", "curious", "exposure"],
+      "flavors": ["Select each segment to verify the image. The interval is limited."],
+      "weight": 1.8,
+      "mechanicHints": ["verifysegment"],
+      "options": [
+        "no segments revealed",
+        "partial reveal logged",
+        "image resolved, within tolerance",
+        "full reveal designated"
+      ],
+      "requires": { "band": "establishing" }
+    },
+    {
+      "id": "shr_cap_segment_deep",
+      "text": "Continue the segmentation. Your previous selection has been restored.",
+      "answer": 3,
+      "heat": 3,
+      "tags": ["surrender", "sinking", "exposure"],
+      "flavors": ["Resuming previous segmentation. Continue selecting segments."],
+      "weight": 1.8,
+      "mechanicHints": ["verifysegment"],
+      "options": [
+        "no segments revealed",
+        "partial reveal logged",
+        "image resolved, within tolerance",
+        "full reveal designated"
+      ],
+      "requires": { "band": "deepening", "minDepth": 0.42 }
+    },
+    {
+      "id": "shr_cap_segment_cli",
+      "text": "Select all squares. All of them.",
+      "answer": 3,
+      "heat": 5,
+      "tags": ["surrender", "arousal", "exposure", "trance"],
+      "flavors": ["Select all squares. All of them. Take your time."],
+      "weight": 1.8,
+      "mechanicHints": ["verifysegment"],
+      "options": [
+        "no segments revealed",
+        "partial reveal logged",
+        "image resolved, within tolerance",
+        "full reveal designated"
+      ],
+      "requires": { "band": "climax", "minDepth": 0.8 }
+    },
+    {
+      "id": "shr_cap_segment_rec",
+      "text": "Verification on file. Mark the segmentation complete.",
+      "answer": 2,
+      "heat": 0,
+      "tags": ["stillness", "calm"],
+      "flavors": ["Segmentation complete. Confirm when ready."],
+      "weight": 1.8,
+      "mechanicHints": ["verifysegment"],
+      "options": [
+        "left unmarked",
+        "segmentation acknowledged",
+        "segmentation complete",
+        "sealed"
+      ],
+      "requires": { "band": "recovery" }
+    }
+  ],
+  "nicheOverrides": {
+    "drone": {
+      "shr_cap_segment_cal": { "flavors": ["Verify unit status: select each segment to resolve the image."] },
+      "shr_cap_segment_deep": { "flavors": ["Resuming previous segmentation. Continue to full resolution."] }
+    },
+    "circe": {
+      "shr_cap_segment_est": {
+        "text": "Select each segment to verify the image. The interval is limited.",
+        "flavors": ["Select each segment to verify the image. The interval is limited."]
+      },
+      "shr_cap_segment_deep": {
+        "text": "Continue the segmentation. Your previous selection has been restored.",
+        "flavors": ["Resuming previous segmentation. Continue."]
+      },
+      "shr_cap_segment_cli": {
+        "flavors": ["Select all squares. All of them. There is no rush."]
+      },
+      "shr_cap_segment_rec": {
+        "text": "Verification on file. Mark the segmentation complete.",
+        "flavors": ["Segmentation complete. Confirm when ready."]
+      }
+    }
+  },
+  "sfxWanted": [
+    { "id": "segment-flood", "variants": 1, "gain": -13.0, "desc": "the Climax flood-clear reward: a soft, rising wash/whoosh (~0.7s) as all 16 blurred squares resolve to the full image at once. Fires ALONGSIDE the registered 'captcha-verify-ok' so the payoff is audible even before this asset is authored (missing manifest entry = silent, never an error). Add to SFX_MANIFEST_FALLBACK in render/audio.js on authoring." }
+  ],
+  "voExtra": [
+    { "id": "cap_segment_deny", "desc": "OPTIONAL, currently unwired. Deadpan stinger for the Establishing 40% denial-of-completion stamp ('interval elapsed. remainder withheld.'). segment.js uses chrome.stamp (text-only) today; wiring needs an audio.voice() call site in segment.js plus a manifest entry. Ships silent-safe if omitted." }
+  ],
+  "notes": "MERGE: append the 5 sharedPrompts into every banks/<niche>.json prompts[]; ids are identical across all four (shr_ shared-baseline block, like shr_h0_* / shr_cap_grid_*). weight 2.5 across the ladder. DO NOT reorder options: segment.js maps its reveal ledger to a fixed option index — 0 refusal / 1 partial / 2 substantial-or-interval / 3 full-reveal — and the per-band `answer` names which bucket reads as compliant (cal=3 straight full completion, est=2 the ~40% interval the SYSTEM cuts at, deep=3 near-full after the saved squares resume, climax=3 select-all, recovery=2 marked-complete). The reveal BITMASK and reveal ORDER (face/body/spiral-first) have NO AnswerEvent channel (makeAnswerEvent exposes only chosenIndex/value/pickHeat), so those telemetry dimensions are folded into the option index alone — do NOT extend contracts.js to carry them. CROSS-BEAT SAVED STATE: Deepening resumes Establishing's cleared squares from a module-level ledger in segment.js (per page load, reset defensively when a fresh Calibration/Establishing beat opens or qIndex regresses) — no bank/host plumbing needed. Recovery entry (shr_cap_segment_rec) is FORWARD-LOOKING: the engine currently hardcodes Recovery lines and does not read the bank in Recovery (primer §5); ship it dormant — segment.js already handles band==='recovery' (clear image + a 'segmentation complete' checkbox that re-blurs on check) if the wiring later invokes it. _rec is heat 0 and carries mechanicHints:['verifysegment'] per the recovery-must-be-verify* rule. VO rides q_<id> automatically (text = spoken line verbatim) — run build_intake_manifest.py after merge; cal/est share the printed card instruction but have distinct ids so they get distinct heat-directed clips. BASE IMAGE: Calibration uses a generated mundane authored colour-field (straight, light 6px blur, fully completable); Establishing/Deepening/Climax use ONE static user image at 40px blur (preferred from ctx.media.images so nothing animates; a gif is one distinct animation if that is all that is present); empty ctx.media falls back to an authored colour field, still playable. No host media bump needed (one image per beat). All niche-flavoured verdict/UI strings (refusal label, denial/deep/climax/recovery verdicts, resume note, recovery checkbox caption) live in segment.js STRINGS keyed by niche (bambi/drone/sissy/circe), circe register respected (no exclamations/diminutives/em-dashes)."
+}

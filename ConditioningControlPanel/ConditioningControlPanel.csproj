@@ -348,7 +348,7 @@
          must live on disk in the output. Remove from the default None glob first so a no-copy
          None item can never suppress the Content copy for new extensions (woff2/json/etc). -->
     <None Remove="Resources\web\**\*" />
-    <Content Include="Resources\web\**\*" Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md">
+    <Content Include="Resources\web\**\*" Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md;Resources\web\**\BUILD_PLAN.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -421,7 +421,7 @@
   <Target Name="CopyContentAfterPublish" AfterTargets="Publish">
     <ItemGroup>
       <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" />
-      <WebFiles Include="$(ProjectDir)Resources\web\**\*" Exclude="$(ProjectDir)Resources\web\**\CLAUDE.md;$(ProjectDir)Resources\web\**\CAPTCHA_*.md" />
+      <WebFiles Include="$(ProjectDir)Resources\web\**\*" Exclude="$(ProjectDir)Resources\web\**\CLAUDE.md;$(ProjectDir)Resources\web\**\CAPTCHA_*.md;$(ProjectDir)Resources\web\**\BUILD_PLAN.md" />
       <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
       <AwarenessPresetFiles Include="$(ProjectDir)Resources\AwarenessPresets\**\*" />
       <DeeperDemoFiles Include="$(ProjectDir)Resources\DeeperDemos\**\*" />

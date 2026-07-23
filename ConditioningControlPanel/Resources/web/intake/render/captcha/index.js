@@ -87,15 +87,21 @@ import { chrome } from './chrome.js';
 
 export { chrome };
 
-/* Which module owns which mechanic. The five NEXT-TIER placeholder mechanics
- * (verifyregen/segment/rotate/gaze/recall) are intentionally ABSENT — canRender
- * returns false for them, so beats.js falls back until their modules ship. */
+/* Which module owns which mechanic. All ten fake-captcha families now ship: the
+ * five Wave-2 items (grid/checkbox/transcribe/custody/stillness) plus the five
+ * next-tier items (regen/segment/rotate/gaze/recall). Any mechanic with no live
+ * module still degrades safely — canRender returns false and beats.js falls back. */
 const MECHANIC_MODULE = Object.freeze({
   verifygrid:       './grid.js',
   verifycheckbox:   './checkbox.js',
   verifytranscribe: './transcribe.js',
   verifycustody:    './custody.js',
   verifystillness:  './stillness.js',
+  verifyregen:      './regen.js',
+  verifysegment:    './segment.js',
+  verifyrotate:     './rotate.js',
+  verifygaze:       './gaze.js',
+  verifyrecall:     './recall.js',
 });
 
 /* mechanic -> live module (or null if it failed / hasn't resolved yet). */
