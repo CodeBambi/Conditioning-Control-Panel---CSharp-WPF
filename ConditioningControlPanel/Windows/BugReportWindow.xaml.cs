@@ -19,14 +19,19 @@ namespace ConditioningControlPanel
     {
         private readonly BugReportService _service;
         private readonly DispatcherTimer _enableTimer;
+        private readonly BugReportService.ReportKind _kind;
         private bool _submitted;
         private bool _submitting;
 
-        public BugReportWindow()
+        public BugReportWindow(BugReportService.ReportKind kind = BugReportService.ReportKind.Bug)
         {
             InitializeComponent();
 
+            _kind = kind;
             _service = App.BugReport ?? new BugReportService();
+
+            if (_kind == BugReportService.ReportKind.Suggestion)
+                ApplySuggestionMode();
 
             _enableTimer = new DispatcherTimer
             {
@@ -42,6 +47,25 @@ namespace ConditioningControlPanel
             };
 
             Loaded += OnLoaded;
+        }
+
+        /// <summary>
+        /// Re-skin the shared report dialog as a lightweight suggestion form: swap
+        /// the wording and hide the defect-only fields (repro steps, activity-log
+        /// opt-in, scrubber counts). Everything else — metadata block, preview,
+        /// transport — is identical to a bug report.
+        /// </summary>
+        private void ApplySuggestionMode()
+        {
+            Title = Loc.Get("suggestion_title");
+            TxtHeaderTitle.Text = Loc.Get("suggestion_title");
+            TxtPrivacyNotice.Text = Loc.Get("suggestion_privacy_notice");
+            LblDescription.Text = Loc.Get("suggestion_description_label");
+
+            LblSteps.Visibility = Visibility.Collapsed;
+            TxtSteps.Visibility = Visibility.Collapsed;
+            ChkIncludeAppLog.Visibility = Visibility.Collapsed;
+            TxtScrubberCounts.Visibility = Visibility.Collapsed;
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e)
@@ -60,7 +84,8 @@ namespace ConditioningControlPanel
                 var draft = _service.CreateDraft(
                     TxtDescription.Text,
                     TxtSteps.Text,
-                    ChkIncludeAppLog.IsChecked == true);
+                    ChkIncludeAppLog.IsChecked == true,
+                    _kind);
 
                 // Metadata summary line
                 var m = draft.Metadata;
@@ -101,18 +126,22 @@ namespace ConditioningControlPanel
                 var draft = _service.CreateDraft(
                     TxtDescription.Text,
                     TxtSteps.Text,
-                    ChkIncludeAppLog.IsChecked == true);
+                    ChkIncludeAppLog.IsChecked == true,
+                    _kind);
 
                 var result = await _service.SubmitAsync(draft).ConfigureAwait(true);
                 _submitted = true;
+
+                bool isSuggestion = _kind == BugReportService.ReportKind.Suggestion;
+                string caption = Loc.Get(isSuggestion ? "suggestion_title" : "bug_report_title");
 
                 switch (result.Outcome)
                 {
                     case BugReportService.SubmitOutcome.Success:
                         MessageBox.Show(
                             this,
-                            Loc.GetF("bug_report_success_toast", result.Token ?? "(no token)"),
-                            Loc.Get("bug_report_title"),
+                            Loc.GetF(isSuggestion ? "suggestion_success_toast" : "bug_report_success_toast", result.Token ?? "(no token)"),
+                            caption,
                             MessageBoxButton.OK,
                             MessageBoxImage.Information);
                         Close();
@@ -122,7 +151,7 @@ namespace ConditioningControlPanel
                         MessageBox.Show(
                             this,
                             Loc.GetF("bug_report_saved_pending_toast", result.Token ?? ""),
-                            Loc.Get("bug_report_title"),
+                            caption,
                             MessageBoxButton.OK,
                             MessageBoxImage.Information);
                         Close();
@@ -134,7 +163,7 @@ namespace ConditioningControlPanel
                         MessageBox.Show(
                             this,
                             Loc.Get("bug_report_error_toast") + "\n\n" + (result.ErrorMessage ?? ""),
-                            Loc.Get("bug_report_title"),
+                            caption,
                             MessageBoxButton.OK,
                             MessageBoxImage.Warning);
                         // Allow retry
@@ -152,7 +181,7 @@ namespace ConditioningControlPanel
                 MessageBox.Show(
                     this,
                     Loc.Get("bug_report_error_toast") + "\n\n" + ex.Message,
-                    Loc.Get("bug_report_title"),
+                    Loc.Get(_kind == BugReportService.ReportKind.Suggestion ? "suggestion_title" : "bug_report_title"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
                 _submitted = false;

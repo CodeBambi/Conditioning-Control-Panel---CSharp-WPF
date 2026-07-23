@@ -38,10 +38,10 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,6">
-            <TextBlock Text="{loc:Str bug_report_title}"
+            <TextBlock x:Name="TxtHeaderTitle" Text="{loc:Str bug_report_title}"
                        Foreground="{DynamicResource PinkBrush}"
                        FontSize="20" FontWeight="Bold"/>
-            <TextBlock Text="{loc:Str bug_report_privacy_notice}"
+            <TextBlock x:Name="TxtPrivacyNotice" Text="{loc:Str bug_report_privacy_notice}"
                        Foreground="#9898B0" FontSize="11" TextWrapping="Wrap"
                        Margin="0,6,0,0"/>
         </StackPanel>
@@ -49,12 +49,12 @@
         <!-- Scrollable form body -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,8,0,8">
             <StackPanel>
-                <TextBlock Text="{loc:Str bug_report_description_label}" Style="{StaticResource FormLabel}"/>
+                <TextBlock x:Name="LblDescription" Text="{loc:Str bug_report_description_label}" Style="{StaticResource FormLabel}"/>
                 <TextBox x:Name="TxtDescription" Style="{StaticResource FormBox}"
                          Height="80" MaxLength="4000"
                          TextChanged="OnFieldChanged"/>
 
-                <TextBlock Text="{loc:Str bug_report_steps_label}" Style="{StaticResource FormLabel}"/>
+                <TextBlock x:Name="LblSteps" Text="{loc:Str bug_report_steps_label}" Style="{StaticResource FormLabel}"/>
                 <TextBox x:Name="TxtSteps" Style="{StaticResource FormBox}"
                          Height="70" MaxLength="4000"
                          TextChanged="OnFieldChanged"/>
