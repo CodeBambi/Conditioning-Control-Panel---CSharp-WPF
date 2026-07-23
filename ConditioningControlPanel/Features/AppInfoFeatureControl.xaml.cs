@@ -64,5 +64,26 @@ namespace ConditioningControlPanel.Features
                     MessageBoxImage.Error);
             }
         }
+
+        private void BtnSuggestion_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dialog = new BugReportWindow(BugReportService.ReportKind.Suggestion)
+                {
+                    Owner = Window.GetWindow(this) ?? Application.Current.MainWindow
+                };
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "AppInfo: failed to open suggestion window");
+                MessageBox.Show(
+                    "Failed to open suggestion form.\n\n" + ex.Message,
+                    "Suggestion",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
     }
 }

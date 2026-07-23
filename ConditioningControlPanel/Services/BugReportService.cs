@@ -69,6 +69,17 @@ namespace ConditioningControlPanel.Services
 
         public enum SubmitOutcome { Success, SavedPending, ValidationFailed, NetworkError }
 
+        /// <summary>
+        /// What the user is filing. Both kinds ride the exact same transport,
+        /// endpoint, and signing — a Suggestion is just tagged in the description
+        /// text (see the marker below) and skips crash/app-log collection.
+        /// </summary>
+        public enum ReportKind { Bug, Suggestion }
+
+        // Prepended to the description for suggestions so they're obvious in the
+        // shared tracker (no server change — they still arrive as "bug" reports).
+        private const string SuggestionMarker = "[SUGGESTION] ";
+
         public class SubmitResult
         {
             public SubmitOutcome Outcome { get; set; }
@@ -82,7 +93,7 @@ namespace ConditioningControlPanel.Services
         /// Forbidden fields (machine name, user name, hostname, Discord/Patreon
         /// identity, IP, timezone, full locale) are never populated.
         /// </summary>
-        public BugReportDraft CreateDraft(string description, string steps, bool includeAppLog)
+        public BugReportDraft CreateDraft(string description, string steps, bool includeAppLog, ReportKind kind = ReportKind.Bug)
         {
             var metadata = new BugMetadata
             {
@@ -93,18 +104,22 @@ namespace ConditioningControlPanel.Services
                 ActiveModId = ResolveActiveModId(),
             };
 
-            // Pull crash log if present.
-            var crashLogRaw = TryReadCrashLog();
-            var (scrubbedCrash, crashCounts) = LogScrubber.Scrub(crashLogRaw);
+            bool isSuggestion = kind == ReportKind.Suggestion;
+
+            // Pull crash log if present. Suggestions are feature ideas, not defects —
+            // crash/app logs are noise, so skip collecting them entirely.
+            var (scrubbedCrash, crashCounts) = isSuggestion
+                ? (string.Empty, ScrubberCounts.Empty)
+                : LogScrubber.Scrub(TryReadCrashLog());
             if (scrubbedCrash.Length > MaxCrashLogChars)
             {
                 scrubbedCrash = scrubbedCrash.Substring(scrubbedCrash.Length - MaxCrashLogChars);
             }
 
-            // Pull recent app log (last N lines) only if the user opted in.
+            // Pull recent app log (last N lines) only if the user opted in (bug reports only).
             var scrubbedApp = string.Empty;
             var appCounts = ScrubberCounts.Empty;
-            if (includeAppLog)
+            if (includeAppLog && !isSuggestion)
             {
                 var appLogRaw = TryReadRecentAppLog(MaxAppLogLines);
                 (scrubbedApp, appCounts) = LogScrubber.Scrub(appLogRaw);
@@ -112,14 +127,20 @@ namespace ConditioningControlPanel.Services
 
             var totalCounts = crashCounts.Add(appCounts);
 
+            // Tag suggestions in the description text itself so they stand out in the
+            // shared tracker. Marker is added before truncation so the cap still holds.
+            var desc = description ?? string.Empty;
+            if (isSuggestion)
+                desc = SuggestionMarker + desc;
+
             return new BugReportDraft
             {
                 Metadata = metadata,
-                Description = Truncate(description ?? string.Empty, MaxDescriptionChars),
-                Steps = Truncate(steps ?? string.Empty, MaxStepsChars),
+                Description = Truncate(desc, MaxDescriptionChars),
+                Steps = isSuggestion ? string.Empty : Truncate(steps ?? string.Empty, MaxStepsChars),
                 ScrubbedCrashLog = scrubbedCrash,
                 ScrubbedAppLog = scrubbedApp,
-                IncludeAppLog = includeAppLog,
+                IncludeAppLog = includeAppLog && !isSuggestion,
                 Counts = totalCounts,
             };
         }
