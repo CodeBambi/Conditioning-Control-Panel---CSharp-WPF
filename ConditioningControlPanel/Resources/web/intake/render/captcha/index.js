@@ -67,6 +67,10 @@
  *                                    option elements (optional; captcha chrome may skip it)
  *   @property {(id:string, intensity?:number, opts?:Object)=>void} sfx  guarded SFX seam
  *                                    (audio.sfx / 'intake-sfx' CustomEvent). Hold no audio handle.
+ *   @property {(id:string, opts?:Object)=>void} voice  guarded arbitrary-VO seam for verdict
+ *                                    stingers (cap_*.json voExtra). Routes an explicit vo id
+ *                                    through beats.js's audio handle; fails soft on a missing
+ *                                    manifest entry. ctx.speakPrompt() still speaks q_<promptId>.
  *   @property {(fn:()=>void)=>void} onCleanup  register teardown (run on commit/teardown)
  *   @property {Object} chrome        the shared chrome kit (identical to helpers.chrome)
  *

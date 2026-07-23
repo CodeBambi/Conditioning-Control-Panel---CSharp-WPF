@@ -1262,6 +1262,14 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
             installSteering(steerOptions) { installSteering(steerOptions); },
             speakPrompt() { speakPrompt(beat); },
             sfx(id, intensity, opts) { return sfx(id, intensity, opts); },
+            // Arbitrary-VO seam for captcha verdict stingers (cap_*.json voExtra):
+            // routes an explicit vo id through the SAME audio handle beats.js already
+            // holds, so the item modules stay handle-free (identical to ctx.sfx). Fails
+            // soft on a missing manifest entry, exactly like speakPrompt's q_<id>.
+            voice(id, opts) {
+              try { if (audio && typeof audio.voice === 'function') return audio.voice(id, opts); } catch (_e) {}
+              return null;
+            },
             onCleanup(fn) { if (typeof fn === 'function') cleanups.push(fn); },
             chrome: _captchaLayer.chrome,
           };
