@@ -42,6 +42,20 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnOpenAssetsFolder_Click(sender, e);
         }
+        private void BtnMediaLog_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new ConditioningControlPanel.MediaHistoryWindow();
+                var owner = Window.GetWindow(this);
+                if (owner != null && owner.IsLoaded) win.Owner = owner;
+                win.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open Media Log window");
+            }
+        }
         private void BtnPackActivate_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

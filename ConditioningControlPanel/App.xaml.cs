@@ -286,6 +286,7 @@ namespace ConditioningControlPanel
         public static VideoService Video { get; private set; } = null!;
         public static AudioService Audio { get; private set; } = null!;
         public static SessionLogService SessionLog { get; private set; } = null!;
+        public static MediaHistoryService MediaHistory { get; private set; } = null!;
         public static ProgressionService Progression { get; private set; } = null!;
         public static SubliminalService Subliminal { get; private set; } = null!;
         public static Services.Compositor.CompositorEngine? Compositor { get; private set; }
@@ -1380,6 +1381,10 @@ namespace ConditioningControlPanel
 
             // Session media log - must be after Flash and Video so it can subscribe to their events.
             SessionLog = new SessionLogService();
+
+            // App-lifetime media recap (Assets tab -> "Media Log"). Also subscribes to Flash/Video,
+            // so likewise must come after both are constructed.
+            MediaHistory = new MediaHistoryService();
 
             splash?.SetProgress(0.6, "Initializing effects...");
             Progression = new ProgressionService();
@@ -3236,6 +3241,7 @@ Application State:
             KeywordHighlight?.Dispose();
 
             SessionLog?.Dispose();
+            MediaHistory?.Dispose(); // before Flash/Video so it unsubscribes cleanly + flushes final entries
             Flash?.Dispose();
             // Dispose the enhancement bridge BEFORE the VideoService it subscribes to,
             // so it unsubscribes (VideoStarted/VideoEnded/time-source) and tears down its
