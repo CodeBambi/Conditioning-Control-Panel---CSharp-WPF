@@ -339,8 +339,16 @@ only, and breath tags cost 1–2 s each.
   and VO counts. Treat §1/§4 of that doc as history, not as a map.
 - **Play-test is the standing open gate** — every round since 7b ends "play-test pending".
 - **OPEN OWNER QUESTION (still unresolved)**: is Recovery (lv5) a sanctuary or full-intensity? Today it is
-  a sanctuary, which makes three things unreachable dead code: OccludeGif's lv5 branch, MouseHijack, and
-  GifBurst's opacity-1.00 rung.
+  a sanctuary, which makes OccludeGif's lv5 branch and GifBurst's opacity-1.00 rung unreachable dead code.
+- **MouseHijack is LIVE (not dead code).** It gates to Deepening(§3)/Climax(§4) — the owner's "round 3
+  onward" with the Recovery sanctuary excluded — for MC4/YesNo/Mono/Destruct beats. As of 2026-07-24 it is
+  **timer-triggered, not idle-triggered**: ~2s after the prompt line finishes presenting (steering reads
+  `ctx.lineRevealMs` = beats.js `computeOptionsHold()`, the options-hold reveal) it rolls once at ~2%
+  (`MOUSEHIJACK_CHANCE`). The old ~9s idle-dwell arm (`MOUSEHIJACK_LINGER_MS`) is **removed** — in normal
+  fast play the idle timer never tripped, so the effect essentially never fired. The effect itself is
+  unchanged (virtual pink dot, 0.25→0.90 gain ramp, 150ms-dwell auto-commit via `forceComplete`, >2500px
+  fight / Escape abort, reduced-motion + coarse-pointer disable). Note: "round 3 onward" *could* be read to
+  include Recovery(§5); it is deliberately excluded as the sanctuary band — owner may revisit.
 - Deferred / known limits: user-facing niche + endless + steer pickers (host sends fixed values); real
   effect-cap wiring (`caps` ship at 1.0); fullscreen is primary-monitor only; `GifBurst` has no hydra
   (concurrent rolls are skipped, not queued); the classic quiz (`QuizService`/`QuizWindow`) and its Past

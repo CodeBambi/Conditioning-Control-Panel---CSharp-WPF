@@ -515,7 +515,7 @@ export const Steer = Object.freeze({
   MeltAway:    'melt-away',     // wrong option melts/falls on press — veto'd, no commit
   BottomlessNo:'bottomless-no', // refusal/wrong press peels a decoy 'card' off a stack; N (6-10) fall free, then it commits
   HoverSwap:   'hover-swap',    // hovering the WRONG option makes a two-option pair trade places N (4-6) times, nudging the cursor onto correct
-  MouseHijack: 'mouse-hijack',  // after lingering (lv3+), the real cursor is hidden and a VIRTUAL cursor is dragged toward the CORRECT option with a ramping pull until it auto-commits; fightable at first, aborts on Escape / hard fight
+  MouseHijack: 'mouse-hijack',  // ~2s after the prompt line finishes (Deepening/Climax, ~2% roll), the real cursor is hidden and a VIRTUAL cursor is dragged toward the CORRECT option with a ramping pull until it auto-commits; fightable at first, aborts on Escape / hard fight
 });
 export const STEERS = Object.freeze(Object.values(Steer));
 
