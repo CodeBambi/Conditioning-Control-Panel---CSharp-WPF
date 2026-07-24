@@ -20,81 +20,66 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.5.0";
+        public const string AppVersion = "6.5.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.5.0 - Questioning... the narrative? 🤭🩷
+        public const string CurrentPatchNotes = @"v6.5.1 - Questioning... the narrative? 🤭🩷
 
-The Graded Intake leaves the Lab. It is out of beta, it has its own door, and
-every supporter tier can walk through it. Underneath, a long run of fixes to
-video, flashes, overlays and the companion.
+A follow-up to 6.5.0: lighter on memory, fewer freezes, no more screens you cannot get out of. Plus a pile of the things you asked for.
+
+🩹 FIXES
+- Bubble Count no longer leaves a fullscreen result screen stuck on top with no way out. (#633)
+- Lock cards you could not type into, after a monitor change or a Remote Desktop reconnect, are fixed. (#618)
+- A lock card queued while another one is up now waits its turn instead of being thrown away. (#676)
+- Maximizing the main window on a second monitor no longer sends it off-screen. (#620)
+- Closing a game window with the X now shuts it down cleanly instead of reopening it.
+- Subliminals show Chinese, Japanese, Korean and emoji again instead of blank boxes. (#615)
+- Fixed a startup crash when corner GIF overlays were switched on. (#625)
+- Sessions written by the Graded Intake appear right away, each with its own name. (#614)
+- Blink trainer: animated .webp images animate instead of freezing on their first frame.
+- Blink trainer overlay can no longer be buried underneath a strict-mode video. (#630)
+- Companion: the bubble-pop egg no longer freezes the screen during a takeover. (#628)
+- Companion stays out of the way while you are inside a game, the Intake, the Loom or the Bureau.
+- Dragging between monitors with different scaling no longer hangs with the companion attached.
+
+🧠 LIGHTER ON MEMORY
+- Awareness screen reading no longer leaks memory on every scan. (#634)
+- The local AI caps what it keeps in mind and hands the model back when the app closes. (#631, #629)
+- New deep tracing for the rare video that turns into a black frozen screen, so a bug report finally captures it. (#616, #617, #621, #622, #623)
 
 ✨ THE GRADED INTAKE
-- A guided intake interview, now front and centre instead of buried in the Lab.
-  Available to all supporters.
-- It asks you questions. It listens to how you answer, not just what you answer,
-  and it keeps adjusting as it goes. Every question is voiced.
-- When you are done it writes you a session built from your own answers and
-  saves it straight to your Sessions, ready to run.
-- The closing assessment now reflects how you actually answered. Previously it
-  had a favourite verdict and gave it to almost everyone.
-- From your second visit onward you can open your file and read back your past
-  visits: what you were graded, what you were given, what you kept.
-- Fullscreen, from the pause menu or F11, and it remembers.
-- The intake window now minimises on its own instead of collapsing with the main
-  window, and the control panel steps out of your way while you are in there.
+- Sometimes it wants you to prove you are human first. Four different checks, with proper pictures.
+- Those checks no longer bunch up several in a row.
+- Deeper in, it stops playing fair: cards turn upside down, answers wander off, the screen glitches between questions.
+- The wrong-answer sound is gentler down there, and sometimes you get the nice one anyway.
+- Your cursor may occasionally decide for itself which answer you meant.
 
-[DISCLAIMER: your answers WILL be recorded. By proceeding you accept that your
-answers will be used to enhance and deepen your conditioning experience]
+🐰 DOWN THE RABBIT HOLE
+- Save up to 5 named run setups per save slot. (#650)
+- Optional slow spiral pinned to the middle of the tunnel, off by default. (#647)
+- Type a duration instead of dragging the slider, for Hourglass owners. (#648)
+- New ""surprise me"" chip rolls a random difficulty and length. (#652)
+- White rabbits show up about 15% more often.
 
-🔬 THE LAB
-- Something is being prepared in the space the quizzes left behind. It is not
-  ready to be looked at yet.
-- Pop Quiz is unchanged and stays where it is.
-
-🎬 VIDEO
-- Web videos you start yourself are no longer cut off halfway through by
-  Takeover, AI effects or mandatory videos. The app only ever noticed videos it
-  opened itself, so anything you browsed to and pressed play on was invisible to
-  it and everything else talked straight over the top.
-- Fixed Takeover stalling after a web video, web videos arriving back to back,
-  and mandatory videos going quiet afterwards.
-- Fixed clips ending a few seconds in on sites that swap sources mid-video, such
-  as ad breaks and quality switches.
-- A video that turns into a white screen partway through now heals itself. The
-  recovery only ran at the start of a clip, so an output that vanished mid-play
-  stayed broken until you intervened. (#600)
-- Videos that do not match your screen shape now fill the frame with a blurred
-  backdrop of themselves instead of sitting in black bars.
-- Removed the separate ""Strict Videos"" toggle from Takeover. A second, private
-  idea of ""strict"" meant Takeover could impose unskippable videos even with
-  mandatory videos set to skippable. Strictness now follows the global setting
-  like every other video.
-
-⚡ FLASHES & OVERLAYS
-- The simultaneous-images slider works above 10 again. The newer render modes
-  were still applying the old ceiling of 10 that only the classic mode needs.
-  (#601)
-- Popped dashboard trigger bubbles now flash for your Flash Duration instead of
-  lingering for three or four seconds. (#593)
-- Deeper enhancement bands are visible over the mandatory video again. They were
-  being pinned underneath it by the rule that stops ordinary overlays burying a
-  video, even though a Deeper band is the video's own effect.
-
-💗 COMPANION
-- The avatar tube no longer floats alone on top of unrelated windows while the
-  main window stays buried behind them. The pair is now held together by the
-  window manager itself rather than by a stack of manual raises, so they cannot
-  drift apart.
-
-🧩 MODS
-- New ""Show BambiCloud"" option for mods that hide the button, so you can reach
-  the site without leaving your mod. (#596)
-- Sharing a mod now explains what actually happens to it, and there is a Get
-  Mods button that opens the catalogue.
+🎁 YOU ASKED FOR IT
+- Your mod's voiced mantras can loop quietly in the background, with their own volume and spacing. (#653)
+- A global camera hotkey, Ctrl+Alt+K by default. (#674)
+- Ramps can ease instead of climbing straight: ease in, ease out, S-curve, exponential. (#660)
+- Layered audio: several loops running together, mixed into one output. (#659)
+- Audio-only sessions, for the voice without the visuals. (#668)
+- Send the spiral and the pink filter to different monitors. (#639)
+- The spiral overlay can pick a random spiral from your library each time it starts. (#641)
+- Awareness reactions can roll a random cooldown inside a range. (#640)
+- A detached companion remembers where you put it and how big you made it. (#669)
+- Leaderboard shows your rank, highlights your row, and can jump straight to you. (#664)
+- Lock cards stop repeating the same phrase back to back. (#673)
+- Choose the color of the pink filter tint. (#643)
+- Wallpaper takeover moved into Takeover, with a folder picker so you choose the source. (#672)
+- New Media Log on the Assets tab: your last 500 flashes and videos, with thumbnails and open-in-folder.
+- New Suggestion button, for sending ideas the same quick way you file a bug.
 
 Season: Jelly July";
 
