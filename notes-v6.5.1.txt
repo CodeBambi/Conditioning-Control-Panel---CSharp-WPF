@@ -1,4 +1,4 @@
-v6.5.1 - Questioning... the narrative? 🤭🩷
+v6.5.1 - Questioning... the narrative? 🤭💗
 
 A follow-up to 6.5.0: lighter on memory, fewer freezes, no more screens you cannot get out of. Plus a pile of the things you asked for.
 

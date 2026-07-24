@@ -26,7 +26,7 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.5.1 - Questioning... the narrative? 🤭🩷
+        public const string CurrentPatchNotes = @"v6.5.1 - Questioning... the narrative? 🤭💗
 
 A follow-up to 6.5.0: lighter on memory, fewer freezes, no more screens you cannot get out of. Plus a pile of the things you asked for.
 
