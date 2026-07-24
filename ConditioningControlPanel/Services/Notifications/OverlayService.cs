@@ -1015,10 +1015,9 @@ public class OverlayService : IDisposable
         }
         try
         {
-            var settings = App.Settings?.Current;
-            var screens = settings?.DualMonitorEnabled == true
-                ? App.GetAllScreensCached()
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+            // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+            var screens = App.ResolveScreens(
+                App.Settings?.Current?.PinkFilterTargetMonitor ?? App.MonitorTargetFollowGlobal);
 
             foreach (var screen in screens)
             {
@@ -1072,10 +1071,9 @@ public class OverlayService : IDisposable
         try
         {
             var settings = App.Settings.Current;
-            
-            var screens = settings.DualMonitorEnabled 
-                ? App.GetAllScreensCached() 
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+            // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+            var screens = App.ResolveScreens(settings.PinkFilterTargetMonitor);
 
             foreach (var screen in screens)
             {
@@ -1272,9 +1270,8 @@ public class OverlayService : IDisposable
         {
             var settings = App.Settings.Current;
 
-            var screens = settings.DualMonitorEnabled
-                ? App.GetAllScreensCached()
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+            // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+            var screens = App.ResolveScreens(settings.SpiralTargetMonitor);
 
             // For GIFs, load frames once and share across all screens
             if (_isGifSpiral)
@@ -1334,9 +1331,8 @@ public class OverlayService : IDisposable
     private void CreateSpiralVideoWindows()
     {
         var settings = App.Settings.Current;
-        var screens = settings.DualMonitorEnabled
-            ? App.GetAllScreensCached()
-            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+        // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+        var screens = App.ResolveScreens(settings.SpiralTargetMonitor);
 
         foreach (var screen in screens)
         {

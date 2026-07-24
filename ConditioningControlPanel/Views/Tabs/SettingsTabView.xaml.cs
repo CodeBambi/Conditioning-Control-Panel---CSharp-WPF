@@ -32,6 +32,19 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnAudioOutputRefresh_Click(sender, e);
         }
+        // Suggestion #659 — open the Audio Layers config window (self-contained, no MainWindow dep).
+        private void BtnAudioLayers_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new LayeredAudioWindow { Owner = Window.GetWindow(this) };
+                win.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Settings: Audio Layers window launch failed");
+            }
+        }
         private void BtnClearStartupVideo_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

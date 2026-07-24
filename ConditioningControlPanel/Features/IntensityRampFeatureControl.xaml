@@ -52,6 +52,23 @@
             </StackPanel>
         </Border>
 
+        <!-- Ramp curve -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10"
+                ToolTip="{loc:Str tooltip_ramp_curve}">
+            <StackPanel>
+                <TextBlock Text="{loc:Str label_ramp_curve}" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <ComboBox x:Name="CmbRampCurve" SelectionChanged="CmbRampCurve_Changed" Foreground="Black">
+                    <ComboBoxItem Content="{loc:Str ramp_curve_linear}" Tag="Linear" Foreground="Black"/>
+                    <ComboBoxItem Content="{loc:Str ramp_curve_ease_in}" Tag="EaseIn" Foreground="Black"/>
+                    <ComboBoxItem Content="{loc:Str ramp_curve_ease_out}" Tag="EaseOut" Foreground="Black"/>
+                    <ComboBoxItem Content="{loc:Str ramp_curve_scurve}" Tag="SCurve" Foreground="Black"/>
+                    <ComboBoxItem Content="{loc:Str ramp_curve_exponential}" Tag="Exponential" Foreground="Black"/>
+                </ComboBox>
+            </StackPanel>
+        </Border>
+
         <!-- End at ramp -->
         <Border Background="{DynamicResource SurfaceBgBrush}"
                 BorderBrush="{DynamicResource GlassBorderBrush}"

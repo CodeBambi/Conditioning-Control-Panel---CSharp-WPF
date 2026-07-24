@@ -70,6 +70,31 @@
                 </Grid>
             </Border>
 
+            <!-- Display monitor picker (#639): per-effect screen target -->
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="16,14"
+                    Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str setting_effect_monitor}"
+                               Foreground="White"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,6"/>
+                    <ComboBox x:Name="CmbMonitor"
+                              Style="{DynamicResource DarkComboBoxStyle}"
+                              DropDownOpened="CmbMonitor_DropDownOpened"
+                              SelectionChanged="CmbMonitor_Changed"/>
+                    <TextBlock Text="{loc:Str tooltip_effect_monitor}"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="10"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
             <!-- Opacity slider -->
             <Border Background="{DynamicResource SurfaceBgBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}"

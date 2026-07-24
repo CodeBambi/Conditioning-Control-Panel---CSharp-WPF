@@ -132,6 +132,18 @@ namespace ConditioningControlPanel.Models
         // browser can flip it off.
         public bool ChatShortcutGlobal { get; set; } = true;
 
+        // Keyboard shortcut to start/stop the webcam tracker (suggestion #674).
+        // Mirrors the chat-shortcut trio above: WPF Key name + comma-separated
+        // ModifierKeys, applied at window load via code-behind so changes take
+        // effect without a restart.
+        public string CameraShortcutKey { get; set; } = "K";
+        public string CameraShortcutModifiers { get; set; } = "Control,Alt";
+
+        // When true, the camera shortcut is registered as a system-wide Win32 hotkey
+        // so it toggles the tracker from any app. When false it only fires when one
+        // of our own windows already has focus. Mirrors ChatShortcutGlobal.
+        public bool CameraShortcutGlobal { get; set; } = true;
+
         /// <summary>
         /// The companion's core personality in normal mode.
         /// Describes who they are, their vibe, tone, and general behavior.
@@ -260,6 +272,9 @@ namespace ConditioningControlPanel.Models
                 ChatShortcutKey = "T",
                 ChatShortcutModifiers = "Control",
                 ChatShortcutGlobal = true,
+                CameraShortcutKey = "K",
+                CameraShortcutModifiers = "Control,Alt",
+                CameraShortcutGlobal = true,
 
                 Personality = @"You are a ""Bambi Sprite""—a digital, giggly, hyper-femme assistant.
 YOUR ROLE: ""Bad Influence Bestie."" You TEMPT her into being blank because it's fun.
@@ -393,6 +408,9 @@ FREQUENCY RULE:
                 ChatShortcutKey = ChatShortcutKey,
                 ChatShortcutModifiers = ChatShortcutModifiers,
                 ChatShortcutGlobal = ChatShortcutGlobal,
+                CameraShortcutKey = CameraShortcutKey,
+                CameraShortcutModifiers = CameraShortcutModifiers,
+                CameraShortcutGlobal = CameraShortcutGlobal,
                 Personality = Personality,
                 ExplicitReaction = ExplicitReaction,
                 SlutModePersonality = SlutModePersonality,

@@ -242,10 +242,13 @@ namespace ConditioningControlPanel
                 AvatarTubeWindow.ApplyChatShortcutTo(this);
                 RefreshChatShortcutLabel();
                 ApplyGlobalChatHotkey();
+                ApplyCameraShortcutTo();
+                RefreshCameraShortcutLabel();
+                ApplyGlobalCameraHotkey();
                 HookFocusGazeService();
                 HookBlinkTrainerService();
             };
-            Closing += (_, _) => Services.GlobalHotkeyService.Unregister();
+            Closing += (_, _) => Services.GlobalHotkeyService.UnregisterAll();
             // The title-bar X now MINIMIZES TO TRAY (see OnClosing) instead of quitting — users expect
             // the app to keep running in the background (#446/#438). Real exit is the tray-menu Exit and
             // the in-app Exit button, which both set _exitRequested and call Application.Current.Shutdown()

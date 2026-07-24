@@ -845,6 +845,10 @@ namespace ConditioningControlPanel.Services
 
                     _isDucked = true;
 
+                    // Our layered-audio mixer is in-process, so the session-based ducker above
+                    // (which skips our own PID) can't touch it — duck it cooperatively instead. (#659)
+                    try { App.LayeredAudio?.ApplyDuck(_duckAmount); } catch { }
+
                     // Watchdog: force-unduck if ducking exceeds max duration.
                     // Catches leaked ref counts from cancelled Task.Delay callbacks,
                     // missing Unduck on audio failure, etc.
@@ -974,6 +978,7 @@ namespace ConditioningControlPanel.Services
 
                     _originalVolumes.Clear();
                     _isDucked = false;
+                    try { App.LayeredAudio?.ReleaseDuck(); } catch { } // restore layered-audio gain (#659)
                     _duckWatchdog?.Dispose();
                     _duckWatchdog = null;
                     _duckRescanTimer?.Dispose();

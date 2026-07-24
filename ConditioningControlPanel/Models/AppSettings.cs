@@ -1559,6 +1559,32 @@ namespace ConditioningControlPanel.Models
             set { _dualMonitorEnabled = value; OnPropertyChanged(); }
         }
 
+        // ---- Per-effect monitor targeting (suggestion #639) ----------------
+        // Overrides the global DualMonitorEnabled screen selection for a single
+        // effect. Sentinels: -1 = follow DualMonitorEnabled (default, backward
+        // compatible), -2 = all monitors, 0..N = that specific monitor index
+        // (into Screen.AllScreens). An index beyond the current monitor count is
+        // NOT clamped here — it falls back to -1 behavior at resolve time (via
+        // App.ResolveScreens) so a temporarily-unplugged monitor's target survives
+        // a reconnect. See App.ResolveScreens for the resolution semantics.
+        private int _spiralTargetMonitor = -1;
+        /// <summary>Monitor target for the Spiral overlay. -1 = follow DualMonitorEnabled,
+        /// -2 = all monitors, 0..N = specific monitor index. See <see cref="DualMonitorEnabled"/>.</summary>
+        public int SpiralTargetMonitor
+        {
+            get => _spiralTargetMonitor;
+            set { _spiralTargetMonitor = value; OnPropertyChanged(); }
+        }
+
+        private int _pinkFilterTargetMonitor = -1;
+        /// <summary>Monitor target for the Pink filter tint. -1 = follow DualMonitorEnabled,
+        /// -2 = all monitors, 0..N = specific monitor index. See <see cref="DualMonitorEnabled"/>.</summary>
+        public int PinkFilterTargetMonitor
+        {
+            get => _pinkFilterTargetMonitor;
+            set { _pinkFilterTargetMonitor = value; OnPropertyChanged(); }
+        }
+
         private bool _fillAllMonitorsWithVideo;
         /// <summary>
         /// On 3+ monitors, give every secondary screen its own video decoder. Each LibVLC
@@ -2155,6 +2181,16 @@ namespace ConditioningControlPanel.Models
             set { _endSessionOnRampComplete = value; OnPropertyChanged(); }
         }
 
+        // Easing curve applied to the ramp's progress (suggestion #660). Stored by
+        // ordinal like the other enum settings here; missing = Linear = unchanged
+        // legacy behaviour. Applied to both ramp systems — see Helpers/RampCurves.cs.
+        private RampCurve _rampCurve = RampCurve.Linear;
+        public RampCurve RampCurve
+        {
+            get => _rampCurve;
+            set { _rampCurve = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Spiral Overlay (Unlocks Lv.10)
@@ -2207,6 +2243,45 @@ namespace ConditioningControlPanel.Models
         {
             get => _cornerGifOverlays;
             set { _cornerGifOverlays = value ?? new(); OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region Audio Layers (suggestion #659) + Audio-Only sessions (#668)
+
+        // User-maintained list of looping audio tracks mixed together through ONE output device
+        // by Services.Audio.LayeredAudioService. Independent of any single feature.
+        private List<AudioLayerTrack> _audioLayers = new();
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<AudioLayerTrack> AudioLayers
+        {
+            get => _audioLayers;
+            set { _audioLayers = value ?? new(); OnPropertyChanged(); }
+        }
+
+        // Master on/off for the layered audio player (also auto-started for audio-only sessions).
+        private bool _audioLayersEnabled = false;
+        public bool AudioLayersEnabled
+        {
+            get => _audioLayersEnabled;
+            set { _audioLayersEnabled = value; OnPropertyChanged(); }
+        }
+
+        // Overall volume for the layered mix (0-100), multiplied with the app master volume.
+        private int _audioLayersMasterVolume = 70;
+        public int AudioLayersMasterVolume
+        {
+            get => _audioLayersMasterVolume;
+            set { _audioLayersMasterVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        // #668 Audio-Only Hypno: when a session starts with this on, visual features
+        // (flash/spiral/video/etc.) are suppressed and the layered audio player runs instead.
+        private bool _audioOnlySession = false;
+        public bool AudioOnlySession
+        {
+            get => _audioOnlySession;
+            set { _audioOnlySession = value; OnPropertyChanged(); }
         }
 
         #endregion
@@ -4696,6 +4771,33 @@ namespace ConditioningControlPanel.Models
         {
             get => _mantraDroneVolume;
             set { _mantraDroneVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        // ── Mantra Chant (ambient looped voiced mantras — see MantraChantService) ──
+
+        private bool _mantraChantEnabled = false;
+        /// <summary>
+        /// When on, the active mod's VOICED mantra clips loop back-to-back as ambient audio. No-ops
+        /// for mods that ship no voiced mantras. Distinct from the Mantra Lab drone/reps above.
+        /// </summary>
+        public bool MantraChantEnabled
+        {
+            get => _mantraChantEnabled;
+            set { _mantraChantEnabled = value; OnPropertyChanged(); }
+        }
+
+        private double _mantraChantVolume = 50;
+        public double MantraChantVolume
+        {
+            get => _mantraChantVolume;
+            set { _mantraChantVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        private int _mantraChantGapSeconds = 5;
+        public int MantraChantGapSeconds
+        {
+            get => _mantraChantGapSeconds;
+            set { _mantraChantGapSeconds = Math.Clamp(value, 0, 60); OnPropertyChanged(); }
         }
 
         #endregion

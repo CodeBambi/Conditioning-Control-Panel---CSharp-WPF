@@ -928,6 +928,11 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         public int BrainDrainEndMinute { get; set; } = -1; // -1 = session duration
         public int BrainDrainStartIntensity { get; set; } = 5; // Starting intensity
         public int BrainDrainEndIntensity { get; set; } = 5; // Ending intensity (for ramping)
+
+        // Optional per-session easing curve for ALL of this session's ramps (suggestion #660).
+        // Nullable so old preset JSON that lacks the field stays null and falls back to the
+        // global AppSettings.RampCurve; a preset only overrides the global when it sets this.
+        public RampCurve? RampCurve { get; set; }
     }
 
     public enum CornerPosition

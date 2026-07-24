@@ -1368,6 +1368,14 @@
                                     BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
                                     VerticalAlignment="Center"/>
                         </Grid>
+
+                        <!-- Audio Layers (#659) — looping background tracks mixed through one device -->
+                        <Button x:Name="BtnAudioLayers" Content="{loc:Str btn_audio_layers}"
+                                Click="BtnAudioLayers_Click"
+                                ToolTip="{loc:Str tooltip_audio_layers}"
+                                Margin="0,8,0,0" HorizontalAlignment="Left"
+                                Background="#33FF69B4" Foreground="White" FontSize="10" Padding="10,4"
+                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"/>
                         </StackPanel>
                         <!-- /Advanced audio options -->
                     </StackPanel>

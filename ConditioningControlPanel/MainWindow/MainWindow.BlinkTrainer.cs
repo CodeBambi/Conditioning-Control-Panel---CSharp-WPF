@@ -285,6 +285,17 @@ namespace ConditioningControlPanel
         }
 
         internal async void BtnBlinkTrainerStartStopTracker_Click(object sender, RoutedEventArgs e)
+            => await ToggleWebcamTrackingAsync();
+
+        /// <summary>
+        /// Shared webcam start/stop used by the Blink-Trainer / Deeper Start-Stop
+        /// buttons and the global camera hotkey (suggestion #674). When the tracker
+        /// is off and consent is stale this surfaces the same WebcamConsentDialog the
+        /// buttons use rather than silently starting the camera. Pass
+        /// <paramref name="announce"/> = true to pop a brief toast on toggle — used
+        /// by the hotkey path, which has no button label to update.
+        /// </summary>
+        internal async Task ToggleWebcamTrackingAsync(bool announce = false)
         {
             var svc = App.Webcam;
             if (svc == null) return;
@@ -293,6 +304,9 @@ namespace ConditioningControlPanel
             {
                 svc.Stop();
                 RefreshBlinkTrainerTrackerButton();
+                if (announce)
+                    App.Notifications?.Show(Loc.Get("camera_shortcut_toast_stopped"),
+                        NotificationType.Info, TimeSpan.FromSeconds(2));
                 return;
             }
 
@@ -304,8 +318,39 @@ namespace ConditioningControlPanel
             }
 
             EnsureWebcamDebugSubscribed();
-            await StartWebcamOffUiThreadAsync(svc);
+            var started = await StartWebcamOffUiThreadAsync(svc);
             RefreshBlinkTrainerTrackerButton();
+            if (announce && started)
+                App.Notifications?.Show(Loc.Get("camera_shortcut_toast_started"),
+                    NotificationType.Info, TimeSpan.FromSeconds(2));
+        }
+
+        /// <summary>
+        /// Global camera-hotkey action. No-op when the webcam service is unavailable;
+        /// otherwise toggles the tracker via the shared <see cref="ToggleWebcamTrackingAsync"/>
+        /// (which honours the consent gate). Restores/activates the main window first
+        /// when a start would need to surface the consent dialog, so the modal isn't
+        /// lost behind a minimized owner.
+        /// </summary>
+        private void ToggleWebcamFromHotkey()
+        {
+            var svc = App.Webcam;
+            if (svc == null) return;
+
+            // A start that still needs consent shows a modal owned by this window —
+            // make sure the window is visible so the dialog can't hide behind the tray.
+            if (!svc.IsRunning && !WebcamTrackingService.IsConsentCurrent())
+            {
+                try
+                {
+                    if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                    Show();
+                    Activate();
+                }
+                catch (Exception ex) { App.Logger?.Warning(ex, "ToggleWebcamFromHotkey: window restore failed"); }
+            }
+
+            _ = ToggleWebcamTrackingAsync(announce: true);
         }
 
         // Keeps the BT tracker toggle in sync with WebcamTrackingService.IsRunning.

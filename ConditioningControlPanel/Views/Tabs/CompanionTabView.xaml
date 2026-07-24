@@ -86,18 +86,32 @@
                                         <TextBlock x:Name="TxtActiveCompanionName" x:FieldModifier="internal" Text="{loc:Str label_bambi_sprite}" Foreground="White" FontSize="31" FontWeight="Bold"/>
                                         <TextBlock x:Name="TxtActiveCompanionLevel" x:FieldModifier="internal" Text="{loc:Str label_level_1}" Foreground="#888" FontSize="26" VerticalAlignment="Bottom" Margin="0,0,0,2"/>
                                     </StackPanel>
-                                    <Button x:Name="BtnChatShortcut" Grid.Column="1"
-                                            Click="BtnChatShortcut_Click"
-                                            ToolTip="{loc:Str tooltip_change_chat_shortcut}"
-                                            Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
-                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                            Padding="10,4" FontSize="12" Cursor="Hand" VerticalAlignment="Top">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Image Width="15" Height="15" Margin="0,0,6,0"
-                                                   Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
-                                            <TextBlock x:Name="TxtChatShortcutLabel" x:FieldModifier="internal" Text="Ctrl+T" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
-                                        </StackPanel>
-                                    </Button>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                                        <Button x:Name="BtnChatShortcut"
+                                                Click="BtnChatShortcut_Click"
+                                                ToolTip="{loc:Str tooltip_change_chat_shortcut}"
+                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
+                                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                                Padding="10,4" FontSize="12" Cursor="Hand" VerticalAlignment="Top">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Width="15" Height="15" Margin="0,0,6,0"
+                                                       Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
+                                                <TextBlock x:Name="TxtChatShortcutLabel" x:FieldModifier="internal" Text="Ctrl+T" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="BtnCameraShortcut" Margin="8,0,0,0"
+                                                Click="BtnCameraShortcut_Click"
+                                                ToolTip="{loc:Str tooltip_change_camera_shortcut}"
+                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
+                                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                                Padding="10,4" FontSize="12" Cursor="Hand" VerticalAlignment="Top">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Width="15" Height="15" Margin="0,0,6,0"
+                                                       Source="{Binding Source='📷', Converter={StaticResource EmojiToImageSource}}"/>
+                                                <TextBlock x:Name="TxtCameraShortcutLabel" x:FieldModifier="internal" Text="Ctrl+Alt+K" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
                                 </Grid>
                                 <TextBlock x:Name="TxtActiveCompanionDesc" x:FieldModifier="internal" Text="{loc:Str label_gains_bonus_xp_based_on_pink_filter_intensity}" Foreground="{DynamicResource TextDimBrush}" FontSize="16" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 <Grid Margin="0,10,0,0">

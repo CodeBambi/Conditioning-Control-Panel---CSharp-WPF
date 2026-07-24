@@ -157,43 +157,55 @@ namespace ConditioningControlPanel
 
             var settings = App.Settings.Current;
 
+            // #668 Audio-Only Hypno: when armed, suppress the visual features (flash/spiral/
+            // video and the visual mini-games) for this session and run the layered audio bed
+            // instead. Deterministic and minimal — no attention-check logic, just gated starts.
+            bool audioOnly = settings.AudioOnlySession;
+
             // Track session count and start skill tree service
             settings.TotalSessions++;
             App.SkillTree?.Start();
             App.SkillTree?.TrackTimeOfDayUsage(); // For secret skill unlocks
 
-            App.Flash.Start();
-            
-            if (settings.MandatoryVideosEnabled)
+            if (!audioOnly)
+                App.Flash.Start();
+
+            if (!audioOnly && settings.MandatoryVideosEnabled)
                 App.Video.Start();
-            
-            if (settings.SubliminalEnabled)
+
+            if (!audioOnly && settings.SubliminalEnabled)
                 App.Subliminal.Start();
-            
+
             // Always start overlay service (handles spiral and pink filter)
-            // This allows toggling overlays on/off while engine is running
-            App.Overlay.Start();
+            // This allows toggling overlays on/off while engine is running.
+            // Skipped for audio-only sessions (spiral/pink are visual).
+            if (!audioOnly)
+                App.Overlay.Start();
+
+            // Audio-only bed: play the layered tracks regardless of the standalone master toggle.
+            if (audioOnly)
+                App.LayeredAudio?.Start(ignoreMasterToggle: true);
 
             // Start bubble service
-            if (settings.BubblesEnabled)
+            if (!audioOnly && settings.BubblesEnabled)
             {
                 App.Bubbles.Start();
             }
 
             // Start lock card service
-            if (settings.LockCardEnabled)
+            if (!audioOnly && settings.LockCardEnabled)
             {
                 App.LockCard.Start();
             }
 
             // Start bubble count game service
-            if (settings.BubbleCountEnabled)
+            if (!audioOnly && settings.BubbleCountEnabled)
             {
                 App.BubbleCount.Start();
             }
 
             // Start bouncing text service
-            if (settings.BouncingTextEnabled)
+            if (!audioOnly && settings.BouncingTextEnabled)
             {
                 App.BouncingText.Start();
             }
@@ -204,7 +216,7 @@ namespace ConditioningControlPanel
             }
 
             // Start mind wipe service
-            if (settings.MindWipeEnabled)
+            if (!audioOnly && settings.MindWipeEnabled)
             {
                 App.MindWipe.Start(settings.MindWipeFrequency, settings.MindWipeVolume / 100.0);
 
@@ -216,7 +228,7 @@ namespace ConditioningControlPanel
             }
 
             // Start brain drain service (still gated internally by Brain Drain rework flag)
-            if (settings.BrainDrainEnabled)
+            if (!audioOnly && settings.BrainDrainEnabled)
             {
                 App.BrainDrain.Start();
             }
@@ -229,13 +241,13 @@ namespace ConditioningControlPanel
             }
 
             // Start pop quiz if enabled
-            if (settings.PopQuizEnabled)
+            if (!audioOnly && settings.PopQuizEnabled)
             {
                 App.PopQuiz?.Start();
             }
 
             // Start pop quiz service
-            if (settings.PopQuizEnabled)
+            if (!audioOnly && settings.PopQuizEnabled)
             {
                 App.PopQuiz?.Start();
             }
@@ -319,6 +331,10 @@ namespace ConditioningControlPanel
             App.MindWipe.Stop();
             App.BrainDrain.Stop();
             App.PopQuiz?.Stop();
+            // #668: an audio-only session force-started the layered bed. Stop it on session end,
+            // unless the user also has the standalone Audio Layers master on (then it keeps playing).
+            if (App.Settings?.Current?.AudioLayersEnabled != true)
+                App.LayeredAudio?.Stop();
             // Only stop autonomy if it was started by the session engine (i.e., user didn't enable it independently).
             // If the user has autonomy enabled in settings, let it keep running after session ends.
             var s = App.Settings?.Current;
@@ -454,8 +470,13 @@ namespace ConditioningControlPanel
             // Calculate progress (0.0 to 1.0)
             var progress = Math.Min(elapsed / duration, 1.0);
 
-            // Calculate current multiplier based on progress (linear interpolation from 1.0 to max)
-            var currentMult = 1.0 + (multiplier - 1.0) * progress;
+            // Shape the progress by the selected easing curve (#660). Linear leaves it
+            // untouched; the completion check below still uses the raw linear progress so
+            // the ramp ends at its configured duration regardless of curve.
+            var easedProgress = ConditioningControlPanel.Helpers.RampCurves.ApplyCurve(progress, settings.RampCurve);
+
+            // Calculate current multiplier based on eased progress (1.0 -> max)
+            var currentMult = 1.0 + (multiplier - 1.0) * easedProgress;
 
             // Update linked sliders and settings
             Dispatcher.Invoke(() =>

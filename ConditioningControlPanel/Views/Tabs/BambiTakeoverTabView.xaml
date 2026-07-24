@@ -283,6 +283,44 @@
 
                             <Border Height="1" Background="#2E2E48" Margin="0,10"/>
 
+                            <!-- Mantra Chant (suggestion #653): loops this mod's VOICED mantras as ambient audio.
+                                 Self-contained here (no Takeover twin), so the handlers live in this tab's code-behind. -->
+                            <Grid Margin="0,2" ToolTip="{loc:Str tooltip_mantra_chant}">
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str label_mantra_chant}" FontSize="12" Foreground="#CCC"/>
+                                    <TextBlock x:Name="TxtMantraChantHint" Text="{loc:Str desc_mantra_chant}" FontSize="10" Foreground="#888"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ChkMantraChant" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkMantraChant_Changed" Unchecked="ChkMantraChant_Changed"/>
+                            </Grid>
+                            <Grid Margin="0,8,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_mantra_chant_volume}" FontSize="11" Foreground="#AAA" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <Slider x:Name="SldMantraChantVolume" Grid.Column="1" Width="160" VerticalAlignment="Center"
+                                        Minimum="0" Maximum="100" SmallChange="5" LargeChange="20" TickFrequency="10"
+                                        ValueChanged="SldMantraChantVolume_Changed"/>
+                                <TextBlock x:Name="TxtMantraChantVolume" Grid.Column="2" VerticalAlignment="Center" Margin="8,0,0,0"
+                                           FontSize="11" FontWeight="Bold" Foreground="#C9A0FF" MinWidth="42" TextAlignment="Right" Text="—"/>
+                            </Grid>
+                            <Grid Margin="0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_mantra_chant_gap}" FontSize="11" Foreground="#AAA" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <Slider x:Name="SldMantraChantGap" Grid.Column="1" Width="160" VerticalAlignment="Center"
+                                        Minimum="0" Maximum="60" SmallChange="1" LargeChange="5" TickFrequency="5"
+                                        ValueChanged="SldMantraChantGap_Changed"/>
+                                <TextBlock x:Name="TxtMantraChantGap" Grid.Column="2" VerticalAlignment="Center" Margin="8,0,0,0"
+                                           FontSize="11" FontWeight="Bold" Foreground="#C9A0FF" MinWidth="42" TextAlignment="Right" Text="—"/>
+                            </Grid>
+
+                            <Border Height="1" Background="#2E2E48" Margin="0,10"/>
+
                             <!-- Pointer: the mic controls moved to the She's Listening exclusive -->
                             <Border Background="#22FF69B4" CornerRadius="6" Padding="12,10">
                                 <StackPanel Orientation="Horizontal">

@@ -36,6 +36,23 @@ namespace ConditioningControlPanel.Services
             return set != null && set.Mantras.Any(m => m.Enabled && !string.IsNullOrWhiteSpace(m.Phrase));
         }
 
+        /// <summary>
+        /// True when the active mod has at least one enabled mantra whose <c>promptAudio</c> actually
+        /// resolves to a file on disk. The Mantra Chant loop keys off this so a text-only set leaves
+        /// the feature dark rather than looping silence.
+        /// </summary>
+        public bool HasVoicedMantras()
+        {
+            var set = ActiveSet();
+            if (set == null) return false;
+            foreach (var m in set.Mantras)
+            {
+                if (m.Enabled && !string.IsNullOrWhiteSpace(m.Phrase) && ResolveAudio(m.PromptAudio) != null)
+                    return true;
+            }
+            return false;
+        }
+
         /// <summary>Pick an enabled mantra with no-repeat rotation. Null when none are available.</summary>
         public MantraEntry? NextMantra()
         {

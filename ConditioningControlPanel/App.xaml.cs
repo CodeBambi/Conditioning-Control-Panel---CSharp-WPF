@@ -311,6 +311,8 @@ namespace ConditioningControlPanel
         public static ScreenShakeService ScreenShake { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
         public static CornerGifService CornerGif { get; private set; } = null!;
+        // Suggestion #659 — layered looping audio mixer (single output device).
+        public static Services.Audio.LayeredAudioService LayeredAudio { get; private set; } = null!;
         public static Services.Chaos.ChaosModeService Chaos { get; private set; } = null!;
         public static LockCardService LockCard { get; private set; } = null!;
         public static PopQuizService PopQuiz { get; private set; } = null!;
@@ -372,6 +374,7 @@ namespace ConditioningControlPanel
         public static LockdownService Lockdown { get; private set; } = null!;
         public static MantraService Mantra { get; private set; } = null!;
         public static MantraVoiceService MantraVoice { get; private set; } = null!;
+        public static MantraChantService MantraChant { get; private set; } = null!;
         public static ModService Mods { get; private set; } = null!;
         public static BugReportService BugReport { get; private set; } = null!;
         public static WallpaperService? Wallpaper { get; private set; }
@@ -827,6 +830,9 @@ namespace ConditioningControlPanel
 
                 // Stop mantra lab audio
                 Mantra?.Dispose();
+
+                // Stop the ambient mantra chant loop
+                MantraChant?.Stop();
 
                 // Stop autonomy mode
                 Autonomy?.Stop();
@@ -1419,6 +1425,9 @@ namespace ConditioningControlPanel
                 try { CornerGif?.RefreshOverlays(); }
                 catch (Exception ex) { Logger?.Error(ex, "Deferred CornerGif.RefreshOverlays failed"); }
             }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            // Suggestion #659 — layered audio mixer. Inert until Start() (used by the Audio
+            // Layers window and by #668 audio-only sessions), so constructing it is free.
+            LayeredAudio = new Services.Audio.LayeredAudioService();
             Services.Chaos.ChaosMeta.Init();   // load persistent Chaos meta-progression before the run service
             Chaos = new Services.Chaos.ChaosModeService();
             InteractionQueue = new InteractionQueueService();
@@ -1631,6 +1640,11 @@ namespace ConditioningControlPanel
 
             // Spoken Mantras (Takeover voice mechanic) — loads per-mod mantras.json on demand.
             MantraVoice = new MantraVoiceService();
+
+            // Mantra Chant — loops the active mod's voiced mantras as ambient audio (opt-in).
+            // Resume from settings; Start() no-ops gracefully if this mod has nothing voiced.
+            MantraChant = new MantraChantService();
+            if (Settings?.Current?.MantraChantEnabled == true) MantraChant.Start();
 
             // Initialize wallpaper override service
             Wallpaper = new WallpaperService();
@@ -3249,6 +3263,7 @@ Application State:
             // Video first would leave those subscriptions dangling against a dead player.
             VideoEnhanceBridge?.Dispose();
             Video?.Dispose();
+            LayeredAudio?.Dispose(); // suggestion #659 — release the single WaveOut before other audio teardown
             Subliminal?.Dispose();
             Overlay?.Dispose();
             Compositor?.Dispose(); // after effect services so their layers deactivate first
@@ -3290,6 +3305,7 @@ Application State:
             ActivityTracker?.Dispose();
             Haptics?.Dispose();
             AudioSync?.Dispose();
+            MantraChant?.Dispose();
             Audio?.Dispose();
             // Deeper singletons (reverse init order). The bridge holds the
             // browser/host pair; discovery owns a CTS + WebView2 nav handler;

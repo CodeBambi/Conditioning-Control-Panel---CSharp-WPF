@@ -601,7 +601,7 @@ namespace ConditioningControlPanel
             // or other foreground app.
             if (s?.ChatShortcutGlobal == false)
             {
-                Services.GlobalHotkeyService.Unregister();
+                Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.ChatHotkeyId);
                 return;
             }
 
@@ -619,7 +619,7 @@ namespace ConditioningControlPanel
             }
             if (mods == ModifierKeys.None) mods = ModifierKeys.Control;
 
-            Services.GlobalHotkeyService.Register(this, mods, key, () =>
+            Services.GlobalHotkeyService.Register(Services.GlobalHotkeyService.ChatHotkeyId, this, mods, key, () =>
             {
                 // Marshal to UI thread — Win32 hotkeys arrive on the message-pump thread
                 // (which is the dispatcher in WPF, but the helper API doesn't enforce it).
@@ -671,6 +671,177 @@ namespace ConditioningControlPanel
                     CompanionTab.TxtChatShortcutLabel.Text = AvatarTubeWindow.FormatChatShortcut();
             }
             catch { /* Tab not yet realized, fine */ }
+        }
+
+        // ---------------------------------------------------------------------
+        // Camera start/stop shortcut (suggestion #674). Mirrors the chat shortcut
+        // above: a system-wide Win32 hotkey plus an in-window KeyBinding fallback.
+        // The in-window binding lives on MainWindow only (that's where the toggle
+        // command handler is) so it fires whenever the main window has focus.
+        // ---------------------------------------------------------------------
+
+        /// <summary>Routed command bound to the camera-shortcut KeyBinding.</summary>
+        public static readonly RoutedUICommand ToggleCameraCommand =
+            new RoutedUICommand("Toggle Camera Tracking", "ToggleCamera", typeof(MainWindow));
+
+        private bool _cameraCommandBound;
+
+        /// <summary>
+        /// Rebuilds the in-window camera-shortcut KeyBinding from the user's setting.
+        /// Ensures the backing CommandBinding is wired once. Mirrors
+        /// <see cref="AvatarTubeWindow.ApplyChatShortcutTo"/> but for this window only.
+        /// </summary>
+        private void ApplyCameraShortcutTo()
+        {
+            // Wire the command handler exactly once.
+            if (!_cameraCommandBound)
+            {
+                CommandBindings.Add(new CommandBinding(ToggleCameraCommand, (_, e) =>
+                {
+                    ToggleWebcamFromHotkey();
+                    e.Handled = true;
+                }));
+                _cameraCommandBound = true;
+            }
+
+            var s = App.Settings?.Current?.CompanionPrompt;
+            var keyName = string.IsNullOrWhiteSpace(s?.CameraShortcutKey) ? "K" : s!.CameraShortcutKey;
+            var modsName = s?.CameraShortcutModifiers ?? "Control,Alt";
+
+            if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.K;
+            var mods = ParseModifiers(modsName, ModifierKeys.Control | ModifierKeys.Alt);
+
+            // Remove any existing camera-shortcut bindings so repeated calls don't stack.
+            for (int i = InputBindings.Count - 1; i >= 0; i--)
+            {
+                if (InputBindings[i] is KeyBinding kb && kb.Command == ToggleCameraCommand)
+                    InputBindings.RemoveAt(i);
+            }
+
+            // KeyGesture rejects a handful of unusual combos; fall back to Ctrl+Alt+K
+            // rather than throwing out of the load/settings-change path.
+            try
+            {
+                InputBindings.Add(new KeyBinding(ToggleCameraCommand, key, mods));
+            }
+            catch (NotSupportedException)
+            {
+                App.Logger?.Warning("ApplyCameraShortcutTo: rejected combo {Mods}+{Key}, falling back to Ctrl+Alt+K", mods, key);
+                try
+                {
+                    InputBindings.Add(new KeyBinding(ToggleCameraCommand, Key.K, ModifierKeys.Control | ModifierKeys.Alt));
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// Reads the saved camera-shortcut combo and registers it as a system-wide
+        /// hotkey. Honours the per-shortcut Global toggle; falls back silently to the
+        /// in-window KeyBinding when off or when the OS rejects the combo. Mirrors
+        /// <see cref="ApplyGlobalChatHotkey"/>.
+        /// </summary>
+        private void ApplyGlobalCameraHotkey()
+        {
+            var s = App.Settings?.Current?.CompanionPrompt;
+
+            if (s?.CameraShortcutGlobal == false)
+            {
+                Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.CameraHotkeyId);
+                return;
+            }
+
+            var keyName = string.IsNullOrWhiteSpace(s?.CameraShortcutKey) ? "K" : s!.CameraShortcutKey;
+            var modsName = s?.CameraShortcutModifiers ?? "Control,Alt";
+
+            if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.K;
+            var mods = ParseModifiers(modsName, ModifierKeys.Control | ModifierKeys.Alt);
+
+            Services.GlobalHotkeyService.Register(Services.GlobalHotkeyService.CameraHotkeyId, this, mods, key, () =>
+            {
+                // Win32 hotkeys arrive on the message-pump thread — marshal to the UI thread.
+                Dispatcher.BeginInvoke(new Action(ToggleWebcamFromHotkey));
+            });
+        }
+
+        /// <summary>Shared modifier-string parser for the shortcut combos.</summary>
+        private static ModifierKeys ParseModifiers(string? modsName, ModifierKeys fallback)
+        {
+            var mods = ModifierKeys.None;
+            if (!string.IsNullOrWhiteSpace(modsName))
+            {
+                foreach (var part in modsName.Split(new[] { ',', '+', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (Enum.TryParse<ModifierKeys>(part, ignoreCase: true, out var mk)) mods |= mk;
+                }
+            }
+            return mods == ModifierKeys.None ? fallback : mods;
+        }
+
+        /// <summary>"Ctrl+Alt+K" — for the camera-shortcut pill label.</summary>
+        private static string FormatCameraShortcut()
+        {
+            var s = App.Settings?.Current?.CompanionPrompt;
+            var keyName = string.IsNullOrWhiteSpace(s?.CameraShortcutKey) ? "K" : s!.CameraShortcutKey;
+            var modsName = s?.CameraShortcutModifiers ?? "Control,Alt";
+
+            if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.K;
+            var mods = ParseModifiers(modsName, ModifierKeys.Control | ModifierKeys.Alt);
+
+            var parts = new List<string>();
+            if ((mods & ModifierKeys.Control) != 0) parts.Add("Ctrl");
+            if ((mods & ModifierKeys.Alt) != 0) parts.Add("Alt");
+            if ((mods & ModifierKeys.Shift) != 0) parts.Add("Shift");
+            if ((mods & ModifierKeys.Windows) != 0) parts.Add("Win");
+            parts.Add(key.ToString());
+            return string.Join("+", parts);
+        }
+
+        /// <summary>Updates the hero pill text to match the saved camera shortcut.</summary>
+        public void RefreshCameraShortcutLabel()
+        {
+            try
+            {
+                if (CompanionTab.TxtCameraShortcutLabel != null)
+                    CompanionTab.TxtCameraShortcutLabel.Text = FormatCameraShortcut();
+            }
+            catch { /* Tab not yet realized, fine */ }
+        }
+
+        /// <summary>
+        /// Click on the Companion-tab camera-shortcut pill — opens the same capture
+        /// dialog the chat shortcut uses, saves the new combo, then re-applies both the
+        /// in-window binding and the system-wide hotkey without a restart.
+        /// </summary>
+        internal void BtnCameraShortcut_Click(object sender, RoutedEventArgs e)
+        {
+            var settings = App.Settings?.Current?.CompanionPrompt;
+            if (settings == null) return;
+
+            var dlg = new ChatShortcutCaptureDialog
+            {
+                Owner = this,
+                GlobalHotkey = settings.CameraShortcutGlobal,
+            };
+            var ok = dlg.ShowDialog();
+            if (ok != true) return;
+
+            if (dlg.ResetToDefault)
+            {
+                settings.CameraShortcutKey = "K";
+                settings.CameraShortcutModifiers = "Control,Alt";
+            }
+            else
+            {
+                settings.CameraShortcutKey = dlg.CapturedKey.ToString();
+                settings.CameraShortcutModifiers = AvatarTubeWindow.SerializeModifiers(dlg.CapturedModifiers);
+            }
+            settings.CameraShortcutGlobal = dlg.GlobalHotkey;
+            App.Settings?.Save();
+
+            ApplyCameraShortcutTo();
+            ApplyGlobalCameraHotkey();
+            RefreshCameraShortcutLabel();
         }
 
         private void Window_DragOver(object sender, DragEventArgs e)
