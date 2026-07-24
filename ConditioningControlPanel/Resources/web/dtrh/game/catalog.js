@@ -540,6 +540,9 @@ export function metaView(meta) {
     rankName: RANKS.name(rankIndex),
     extremeUnlocked: !!m.extremeUnlocked,
     giftGiven: !!m.giftGiven,
+    // #650 saved run presets: [{ name, setup }] blobs (bridge-owned). warren.js
+    // re-validates ownership before it applies one; here it's just the raw list.
+    runPresets: Array.isArray(m.runPresets) ? m.runPresets : [],
     equippedStartBoon: m.equippedStartBoon || null,
     // grab-in-the-tube: consumable (active-toy) HUD slots held per fall; starts at 1,
     // the dollhouse sews more with Sparks up to MAX_CONSUMABLE_SLOTS.

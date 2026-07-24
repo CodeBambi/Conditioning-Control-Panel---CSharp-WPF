@@ -211,6 +211,8 @@ namespace ConditioningControlPanel
             BambiTakeoverTab.ChkAutonomyPinkFilter.IsChecked = s.AutonomyCanTriggerPinkFilter;
             BambiTakeoverTab.ChkAutonomyBouncingText.IsChecked = s.AutonomyCanTriggerBouncingText;
             BambiTakeoverTab.ChkAutonomyBubbleCount.IsChecked = s.AutonomyCanTriggerBubbleCount;
+            BambiTakeoverTab.ChkAutonomyWallpaper.IsChecked = s.AutonomyCanTriggerWallpaper;
+            RefreshWallpaperFolderLabel();
             BambiTakeoverTab.ChkAutonomyVoice.IsChecked = s.AutonomyCanTriggerVoiceCommand && s.MicConsentGiven;
             BambiTakeoverTab.ChkAutonomyResumeOnStartup.IsChecked = s.AutonomyResumeOnStartup;
             BambiTakeoverTab.ChkShowTakeoverCountdown.IsChecked = s.ShowTakeoverCountdownBar;

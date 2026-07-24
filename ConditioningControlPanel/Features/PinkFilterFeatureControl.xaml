@@ -39,6 +39,46 @@
                     <TextBlock Text="{loc:Str tooltip_filter_opacity_5_50}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
                                TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Str setting_filter_color}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock Text="{loc:Str tooltip_pink_filter_color}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border x:Name="ColorSwatch" Width="30" Height="30" CornerRadius="6"
+                                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                    Background="#FF69B4" Margin="0,0,8,0"/>
+                            <Button x:Name="BtnChooseColor" Content="{loc:Str btn_choose_color}"
+                                    Style="{StaticResource SmallPinkButton}" Click="BtnChooseColor_Click"/>
+                            <Button x:Name="BtnResetColor" Content="{loc:Str btn_reset}"
+                                    Style="{StaticResource SmallPinkButton}" Click="BtnResetColor_Click"
+                                    Margin="6,0,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Display monitor picker (#639): per-effect screen target -->
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,10,0,0">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str setting_effect_monitor}" Foreground="White"
+                               FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                    <ComboBox x:Name="CmbMonitor"
+                              Style="{DynamicResource DarkComboBoxStyle}"
+                              DropDownOpened="CmbMonitor_DropDownOpened"
+                              SelectionChanged="CmbMonitor_Changed"/>
+                    <TextBlock Text="{loc:Str tooltip_effect_monitor}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
         </StackPanel>

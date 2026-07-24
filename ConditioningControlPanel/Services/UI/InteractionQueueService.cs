@@ -94,7 +94,7 @@ public class InteractionQueueService
                 {
                     if (item.Type == type)
                     {
-                        App.Logger?.Debug("InteractionQueue: {Type} already queued, skipping duplicate", type);
+                        App.Logger?.Information("InteractionQueue: {Type} already has a pending item queued - suppressing duplicate; this later trigger is dropped (queue caps this type at one pending)", type);
                         return false;
                     }
                 }
@@ -186,7 +186,15 @@ public class InteractionQueueService
     /// DispatcherHelper.RunOnUI runs inline when already on the UI thread, which would execute
     /// a fullscreen trigger (video/lock card) inside the lock and re-entrantly inside Close().
     /// </summary>
-    private static void DispatchTrigger(Action trigger)
+    private static void DispatchTrigger(Action trigger) => TriggerScheduler(trigger);
+
+    /// <summary>Test seam: how a dequeued queued trigger is scheduled. Defaults to the
+    /// Dispatcher-marshalled path (<see cref="DefaultDispatchTrigger"/>). Overridable so headless
+    /// tests can run the dequeued replay synchronously without a WPF Application/Dispatcher (with no
+    /// dispatcher the default path silently no-ops, which would hide the queue-replay behavior).</summary>
+    internal static Action<Action> TriggerScheduler = DefaultDispatchTrigger;
+
+    private static void DefaultDispatchTrigger(Action trigger)
     {
         try
         {

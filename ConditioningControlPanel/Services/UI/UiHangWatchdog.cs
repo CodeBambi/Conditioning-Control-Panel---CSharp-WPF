@@ -42,6 +42,30 @@ public static class UiHangWatchdog
     private static bool _hangLogged;
     private static Thread? _thread;
 
+    // ── USER/GDI resource sampler (bug #627) ───────────────────────────────
+    // CreateWindowEx failing with "Not enough memory resources are available to process
+    // this command" after a long session is the signature of USER-object / desktop-heap
+    // exhaustion, NOT managed memory. The failing call site is always an innocent victim
+    // (whatever tried to make the next window), so a post-mortem stack tells us nothing
+    // about WHICH subsystem leaked. Sampling the three counters that actually matter every
+    // few minutes turns the next long-session report into a straight read: whichever line
+    // climbs monotonically over 4h is the leak.
+    private const int SAMPLE_EVERY_BEATS = 60;          // 60 × 2s ≈ every 2 minutes
+    private const uint GR_GDIOBJECTS = 0;
+    private const uint GR_USEROBJECTS = 1;
+    private const uint USER_GDI_WARN = 6000;            // per-process default quota is 10,000
+    private const uint USER_GDI_CRITICAL = 9000;
+    private static int _beatsSinceSample;
+    private static uint _firstUser, _firstGdi;
+    private static int _firstHandles, _firstThreads;
+    // Memory baselines (bytes). #634 "RAM grew to 100%": a RAM leak is invisible in the
+    // USER/GDI/handle counters, so sample private bytes, working set and the managed heap too
+    // — whichever climbs monotonically over a long session names the leak (native vs managed).
+    private static long _firstPriv, _firstWs, _firstGcHeap;
+    private const double MB = 1024.0 * 1024.0;
+    private static bool _baselineTaken;
+    private static bool _resourceAlarmed;
+
     public static void Start(Dispatcher dispatcher)
     {
         if (_thread != null) return;
@@ -70,6 +94,12 @@ public static class UiHangWatchdog
                     Volatile.Write(ref _lastBeatTick, Environment.TickCount64);
                     Volatile.Write(ref _firstBeatSeen, 1);
                 });
+
+                if (++_beatsSinceSample >= SAMPLE_EVERY_BEATS)
+                {
+                    _beatsSinceSample = 0;
+                    SampleResources();
+                }
 
                 bool started = Volatile.Read(ref _firstBeatSeen) == 1;
                 long threshold = started ? HANG_THRESHOLD_MS : STARTUP_HANG_THRESHOLD_MS;
@@ -104,6 +134,103 @@ public static class UiHangWatchdog
             catch { }
         }
     }
+
+    /// <summary>
+    /// Log one line of USER objects / GDI objects / kernel handles / thread count / private
+    /// bytes / working set / managed heap, with the delta from the first sample of the session.
+    /// Cheap (a handful of counter reads, no allocation beyond the log line) and never throws.
+    /// Runs on the watchdog thread — deliberately does
+    /// NOT touch the dispatcher or any WPF object, so it keeps sampling even while the UI is
+    /// wedged (a resource-starved app hangs before it crashes).
+    /// </summary>
+    private static void SampleResources()
+    {
+        try
+        {
+            IntPtr self = GetCurrentProcess();       // pseudo-handle: nothing to close
+            uint user = GetGuiResources(self, GR_USEROBJECTS);
+            uint gdi = GetGuiResources(self, GR_GDIOBJECTS);
+
+            int handles = 0, threads = 0;
+            long priv = 0, ws = 0;
+            long gcHeap = GC.GetTotalMemory(false);   // managed heap; never throws
+            try
+            {
+                using var p = Process.GetCurrentProcess();
+                handles = p.HandleCount;
+                threads = p.Threads.Count;
+                priv = p.PrivateMemorySize64;         // total committed (native + managed)
+                ws = p.WorkingSet64;                  // resident set — what the OS calls "RAM in use"
+            }
+            catch { }
+
+            if (!_baselineTaken)
+            {
+                _baselineTaken = true;
+                _firstUser = user; _firstGdi = gdi;
+                _firstHandles = handles; _firstThreads = threads;
+                _firstPriv = priv; _firstWs = ws; _firstGcHeap = gcHeap;
+                App.Logger?.Information(
+                    "[RES] baseline user={User} gdi={Gdi} handles={Handles} threads={Threads} privMB={PrivMB:F0} wsMB={WsMB:F0} gcMB={GcMB:F1}",
+                    user, gdi, handles, threads, priv / MB, ws / MB, gcHeap / MB);
+                return;
+            }
+
+            App.Logger?.Information(FormatResLine(
+                user, gdi, handles, threads, priv, ws, gcHeap,
+                _firstUser, _firstGdi, _firstHandles, _firstThreads,
+                _firstPriv, _firstWs, _firstGcHeap));
+
+            uint worst = Math.Max(user, gdi);
+            if (worst >= USER_GDI_CRITICAL)
+            {
+                // Past this point CreateWindowEx starts failing app-wide (and, once the desktop
+                // heap goes with it, in Explorer too — see bug #627).
+                App.Logger?.Error(
+                    "[RES] CRITICAL: {Kind} objects at {Count} (per-process quota is 10000) - window creation is about to start failing",
+                    user >= gdi ? "USER" : "GDI", worst);
+            }
+            else if (worst >= USER_GDI_WARN && !_resourceAlarmed)
+            {
+                _resourceAlarmed = true;
+                App.Logger?.Warning(
+                    "[RES] {Kind} objects crossed {Threshold} ({Count}) - a handle leak is in progress",
+                    user >= gdi ? "USER" : "GDI", USER_GDI_WARN, worst);
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Render the delta [RES] line: current USER/GDI/handle/thread counts and MB-scaled private
+    /// bytes / working set / managed heap, each with the signed delta from the session's first
+    /// sample. privMB/wsMB use F0, gcMB uses F1 (mirrors the Serilog template rendered to the log
+    /// file). Invariant-culture so the grep-able text is deterministic. Extracted for headless
+    /// regression tests — a monotonic climb in these deltas is how a #634-class leak is spotted.
+    /// </summary>
+    internal static string FormatResLine(
+        uint user, uint gdi, int handles, int threads, long priv, long ws, long gcHeap,
+        uint firstUser, uint firstGdi, int firstHandles, int firstThreads,
+        long firstPriv, long firstWs, long firstGcHeap)
+    {
+        var c = System.Globalization.CultureInfo.InvariantCulture;
+        return string.Format(c,
+            "[RES] user={0} (+{1}) gdi={2} (+{3}) handles={4} (+{5}) threads={6} (+{7}) " +
+            "privMB={8:F0} (+{9:F0}) wsMB={10:F0} (+{11:F0}) gcMB={12:F1} (+{13:F1})",
+            user, (long)user - firstUser,
+            gdi, (long)gdi - firstGdi,
+            handles, handles - firstHandles,
+            threads, threads - firstThreads,
+            priv / MB, (priv - firstPriv) / MB,
+            ws / MB, (ws - firstWs) / MB,
+            gcHeap / MB, (gcHeap - firstGcHeap) / MB);
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetGuiResources(IntPtr hProcess, uint uiFlags);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
 
     private static void WriteDump(long silenceMs)
     {

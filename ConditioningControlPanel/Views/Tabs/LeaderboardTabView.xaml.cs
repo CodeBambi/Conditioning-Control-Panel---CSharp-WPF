@@ -30,6 +30,12 @@ namespace ConditioningControlPanel.Views.Tabs
                 mw.BtnRefreshLeaderboard_Click(sender, e);
         }
 
+        private void BtnJumpToMe_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnJumpToMe_Click(sender, e);
+        }
+
         private void BtnViewSeasonRecap_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

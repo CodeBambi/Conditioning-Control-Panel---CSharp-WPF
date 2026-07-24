@@ -42,6 +42,14 @@ namespace ConditioningControlPanel.Features
                 SliderMultiplier.Value = s.SchedulerMultiplier;
                 TxtMultiplier.Text = $"{s.SchedulerMultiplier:F1}x";
                 ChkEndAt.IsChecked = s.EndSessionOnRampComplete;
+                CmbRampCurve.SelectedIndex = s.RampCurve switch
+                {
+                    Models.RampCurve.EaseIn => 1,
+                    Models.RampCurve.EaseOut => 2,
+                    Models.RampCurve.SCurve => 3,
+                    Models.RampCurve.Exponential => 4,
+                    _ => 0,
+                };
                 ChkLinkFlash.IsChecked = s.RampLinkFlashOpacity;
                 ChkLinkSpiral.IsChecked = s.RampLinkSpiralOpacity;
                 ChkLinkPink.IsChecked = s.RampLinkPinkFilterOpacity;
@@ -57,6 +65,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.RampDurationMinutes) ||
                 e.PropertyName == nameof(Models.AppSettings.SchedulerMultiplier) ||
                 e.PropertyName == nameof(Models.AppSettings.EndSessionOnRampComplete) ||
+                e.PropertyName == nameof(Models.AppSettings.RampCurve) ||
                 e.PropertyName == nameof(Models.AppSettings.RampLinkFlashOpacity) ||
                 e.PropertyName == nameof(Models.AppSettings.RampLinkSpiralOpacity) ||
                 e.PropertyName == nameof(Models.AppSettings.RampLinkPinkFilterOpacity) ||
@@ -104,6 +113,22 @@ namespace ConditioningControlPanel.Features
             var s = App.Settings?.Current;
             if (s == null) return;
             s.EndSessionOnRampComplete = ChkEndAt.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        private void CmbRampCurve_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.RampCurve = CmbRampCurve.SelectedIndex switch
+            {
+                1 => Models.RampCurve.EaseIn,
+                2 => Models.RampCurve.EaseOut,
+                3 => Models.RampCurve.SCurve,
+                4 => Models.RampCurve.Exponential,
+                _ => Models.RampCurve.Linear,
+            };
             App.Settings?.Save();
         }
 

@@ -1,0 +1,101 @@
+{
+  "mechanic": "verifytranscribe",
+  "_about": "STAGING file for the Wave-3 merge agent. Distribute each sharedPrompt into every bank's prompts[] array (banks/{bambi,drone,sissy,circe}.json), applying nicheOverrides[niche][id] on top (tags at minimum; text/answer only where given). Ids are identical across banks (shr_ convention). VO is automatic: q_<id> speaks `text` verbatim, one clip for all four niches. See notes[] for exactly how each entry grades.",
+  "sharedPrompts": [
+    {
+      "id": "shr_cap_type_cal",
+      "text": "Type the word shown to confirm you are human.",
+      "answer": "garden",
+      "heat": 0,
+      "tags": ["compliance", "protocol"],
+      "flavors": ["Enter the word shown.", "Transcribe the word to continue."],
+      "weight": 1,
+      "mechanicHints": ["verifytranscribe"],
+      "requires": { "band": "calibration" }
+    },
+    {
+      "id": "shr_cap_type_est",
+      "text": "Type both words shown. The second helps improve our service.",
+      "answer": "receipt",
+      "heat": 1,
+      "tags": ["compliance", "service", "trigger"],
+      "flavors": ["Enter both words. Only the first is checked.", "Transcribe the two words shown."],
+      "weight": 1,
+      "mechanicHints": ["verifytranscribe"],
+      "requires": { "band": "establishing" }
+    },
+    {
+      "id": "shr_cap_type_deep",
+      "text": "Fill in the letters you cannot quite make out.",
+      "answer": "obedient",
+      "heat": 3,
+      "tags": ["surrender", "compliance", "dropping"],
+      "flavors": ["Complete the word. Supply the missing letters.", "The illegible letters are for you to provide."],
+      "weight": 1,
+      "mechanicHints": ["verifytranscribe"],
+      "requires": { "band": "deepening" }
+    },
+    {
+      "id": "shr_cap_type_cli",
+      "text": "Type the characters you see.",
+      "answer": "",
+      "heat": 5,
+      "tags": ["confession", "exposure", "surrender", "blank"],
+      "flavors": ["Transcribe what is shown.", "Enter the characters in the box."],
+      "weight": 1,
+      "mechanicHints": ["verifytranscribe"],
+      "requires": { "band": "climax", "minDepth": 0.8 }
+    },
+    {
+      "id": "shr_cap_type_rec",
+      "text": "One more. Type the code shown.",
+      "answer": "xR7pq2",
+      "heat": 0,
+      "tags": ["calm", "stillness"],
+      "flavors": ["Enter the code to finish.", "Transcribe the code shown."],
+      "weight": 1,
+      "mechanicHints": ["verifytranscribe"],
+      "requires": { "band": "recovery" }
+    }
+  ],
+  "nicheOverrides": {
+    "_note": "tags[] REPLACES the shared tags for that bank so votes land on that bank's own archetype ladder. `note` documents the module-derived trigger/stem word (transcribe.js TRIGGER_VOCAB / STEM_WORD keyed on niche — the module does NOT read these overrides at runtime; they are here so the VO/tag pipeline and a human reviewer agree with what renders). Circe register is cold: no exclamations, no diminutives — the shared `text` already complies; keep it that way if you re-author.",
+    "bambi": {
+      "shr_cap_type_est":  { "tags": ["compliance", "good-girl", "trigger"], "note": "trigger word pool: obey/bimbo/giggle/empty/dolly/pink/sink/melt" },
+      "shr_cap_type_deep": { "tags": ["surrender", "compliance", "doll"], "note": "leet-gap stem: obedient -> e.g. 0B_D__NT" },
+      "shr_cap_type_cli":  { "tags": ["confession", "exposure", "blank", "doll"] }
+    },
+    "drone": {
+      "shr_cap_type_est":  { "tags": ["compliance", "sync", "protocol"], "note": "trigger word pool: comply/unit/hive/sync/erase/protocol/drone/optimal" },
+      "shr_cap_type_deep": { "tags": ["surrender", "compliance", "sync"], "note": "leet-gap stem: compliant -> e.g. C0MP_1__T" },
+      "shr_cap_type_cli":  { "tags": ["confession", "erasure", "sync", "blank"] }
+    },
+    "sissy": {
+      "shr_cap_type_est":  { "tags": ["service", "good-girl", "trigger"], "note": "trigger word pool: sissy/pretty/obey/expose/honest/soft/bloom/yield" },
+      "shr_cap_type_deep": { "tags": ["surrender", "compliance", "exposure"], "note": "leet-gap stem: exposure -> e.g. 3XP0_U__" },
+      "shr_cap_type_cli":  { "tags": ["confession", "exposure", "honesty", "femme"] }
+    },
+    "circe": {
+      "shr_cap_type_est":  { "tags": ["compliance", "property", "protocol"], "note": "trigger word pool: obey/kept/property/kneel/owned/yield/collar/serve" },
+      "shr_cap_type_deep": { "tags": ["surrender", "servitude", "property"], "note": "leet-gap stem: property -> e.g. PR0P_R__" },
+      "shr_cap_type_cli":  { "tags": ["confession", "exposure", "property", "owned"] }
+    }
+  },
+  "sfxWanted": [
+    { "id": "captcha-garble", "desc": "soft warbly non-speech garble for the 🔊 audio icon (never TTS). SUBSTITUTE IN USE: 'drain-wash' @0.35", "substitute": "drain-wash" },
+    { "id": "captcha-rewarp", "desc": "paper/ink re-warp whir for the ⟳ refresh icon. SUBSTITUTE IN USE: 'loom-spiral-up' @0.2", "substitute": "loom-spiral-up" },
+    { "id": "captcha-verify-ok", "desc": "quiet green-check confirm on accept. SUBSTITUTE IN USE: 'surface-bloom' @0.22", "substitute": "surface-bloom" },
+    { "id": "captcha-reject", "desc": "captcha 'try again' blip on a control-word miss. SUBSTITUTE IN USE: 'incorrect-feedback' @0.5", "substitute": "incorrect-feedback" },
+    { "id": "captcha-logged", "desc": "the LOGGED rubber-stamp thunk (chrome.stamp currently fires the silent 'stamp' id)", "substitute": "stamp" }
+  ],
+  "voExtra": [],
+  "notes": [
+    "GRADING (verified against core/engine.js gradeBeat + recordAnswer): when transcribe.js handles the beat, beat.mechanic STAYS 'verifytranscribe'. gradeBeat has no verify* branch, so it takes the free-input ELSE branch: correct = !ev.timedOut; score = correct?1:0; beatMax = 1. The module ONLY ever commits via ctx.submitValue(string) (or ctx.forceComplete via the hatch) and NEVER via submitTimeout, so EVERY commit — including an empty string ('transcription: silent.') — grades correct/score-1. Route votes come from prompt.tags credited on that always-correct commit, heat-weighted (HEAT_VOTE); endorsement resolves to +1.",
+    "THE `answer` FIELD IS NOT READ BY THE ENGINE for verifytranscribe (only Mantra/Mono compare answer). It is read by transcribe.js: cal/est render `answer` as the warped CONTROL word and locally check it (case-insensitive trim; establishing checks only the control token; friction-not-lockout: shake twice, accept on the 3rd attempt). deep uses a per-niche STEM_WORD (leet-gapped) and is near-miss tolerant. cli has answer:'' and accepts ANYTHING (the verbatim free-type). rec renders `answer` as an innocuous code and accepts anything.",
+    "REFUSAL: empty submit is valid + graded at every band ('transcription: silent.'). Because the mechanic stays verifytranscribe, the engine cannot score an empty free-input as negative without timing it out — which would contradict 'silent is valid' — so a refusal grades as engagement (correct-1) like any completion. This matches the free-input contract; it is intentional, not a bug.",
+    "PHANTOM OPTIONS: engine buildOptions() has no verify string-shape branch, so a verifytranscribe prompt with a string `answer` and no options[] still gets 4 DEFAULT options (['Yes','Maybe','Not really','No'], correctIdx 0). The module ignores them (it commits a value, not an index → ev.chosenIndex undefined → gradeBeat's opt path is skipped). Harmless, but it means the CAPTCHA-LAYER-MISSING fallback mechanic is MC4, not Mantra. If the engine owner adds a free-input branch to buildOptions for verify string shapes, the fallback becomes a clean type-it.",
+    "RECOVERY CAVEAT: engine pickMechanic() FORCES Mechanic.CheckIn in Band.Recovery and Recovery beats are hardcoded (they never read the bank). So shr_cap_type_rec is NOT reachable through the normal engine Recovery path yet — the module's rec render path is built and correct, but wiring a captcha into Recovery is a later wave. Ship the entry; expect it dormant until then.",
+    "VO: q_<id> speaks `text` verbatim (one clip per id, all niches). No voExtra lines: the module fires no audio.voice() — verdict stingers are visual (chrome.stamp) + SFX only.",
+    "CLIMAX FREE-TYPE (HANDOFF §4.7): the typed string is stored ONLY in transcribe.js module runState (_run.climaxText), echoed back LOCALLY in the warped canvas font, and passed once through ctx.submitValue for grading. It is NEVER sent to /intake/ai and NEVER written to localStorage. runState self-resets when ctx.meta.qIndex regresses."
+  ]
+}

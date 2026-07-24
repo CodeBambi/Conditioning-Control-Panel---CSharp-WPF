@@ -258,6 +258,7 @@ export function createPanel(hud) {
     ['runBoonDraft', 'mantra drafts between loops'],
     ['runAllowCurses', 'sins on the table'],
     ['runDarters', 'white rabbits'],
+    ['runPinnedSpiral', 'pin a spiral to the tunnel centre'],
   ];
   for (const [key, label] of moods) {
     const row = document.createElement('button');

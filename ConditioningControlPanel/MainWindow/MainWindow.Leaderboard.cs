@@ -97,6 +97,79 @@ namespace ConditioningControlPanel
             await RefreshLeaderboardAsync();
         }
 
+        /// <summary>
+        /// "Jump to me": scroll to and select the local user's own row in the loaded slice.
+        /// Falls back to a status message when the user isn't in the currently loaded page.
+        /// </summary>
+        internal void BtnJumpToMe_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var list = LeaderboardTab.LstLeaderboard;
+                if (list?.ItemsSource == null) return;
+
+                var myId = App.UnifiedUserId;
+                Services.LeaderboardEntry? me = null;
+                if (!string.IsNullOrEmpty(myId))
+                {
+                    me = list.ItemsSource.OfType<Services.LeaderboardEntry>()
+                        .FirstOrDefault(x => !string.IsNullOrEmpty(x.UnifiedId) && x.UnifiedId == myId);
+                }
+
+                if (me == null)
+                {
+                    // Not in the loaded slice (or not signed in) - graceful fallback.
+                    if (LeaderboardTab.TxtLeaderboardStatus != null)
+                        LeaderboardTab.TxtLeaderboardStatus.Text = Loc.Get("label_youre_not_on_this_page");
+                    return;
+                }
+
+                list.SelectedItem = me;
+                list.ScrollIntoView(me);
+                // Move focus to the container so the selection highlight reads clearly.
+                if (list.ItemContainerGenerator.ContainerFromItem(me) is ListViewItem container)
+                    container.Focus();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Jump-to-me failed");
+            }
+        }
+
+        /// <summary>
+        /// Populate the "Your rank: #N" badge from the local user's entry in the loaded slice.
+        /// Hidden when the user isn't present in the current payload.
+        /// </summary>
+        private void UpdateYourRankDisplay(IEnumerable<Services.LeaderboardEntry>? entries)
+        {
+            try
+            {
+                var txt = LeaderboardTab.TxtYourRank;
+                if (txt == null) return;
+
+                var myId = App.UnifiedUserId;
+                Services.LeaderboardEntry? me = null;
+                if (!string.IsNullOrEmpty(myId) && entries != null)
+                {
+                    me = entries.FirstOrDefault(x => !string.IsNullOrEmpty(x.UnifiedId) && x.UnifiedId == myId);
+                }
+
+                if (me != null)
+                {
+                    txt.Text = Loc.GetF("label_your_rank_0", me.Rank);
+                    txt.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    txt.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to update your-rank display");
+            }
+        }
+
         internal async void BtnLeaderboardMode_Click(object sender, RoutedEventArgs e)
         {
             if (sender is System.Windows.Controls.Button btn && btn.Tag is string mode && mode != _leaderboardMode)
@@ -179,6 +252,14 @@ namespace ConditioningControlPanel
             ogTrigger.Setters.Add(new Setter(BorderBrushProperty, new SolidColorBrush(Color.FromArgb(0x50, 0xFF, 0xD7, 0x00))));
             ogTrigger.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(0, 0, 0, 2)));
             itemStyle.Triggers.Add(ogTrigger);
+
+            // The local user's own row gets a subtle pink tint (added after OG so it wins).
+            var pinkAccent = (Color)ColorConverter.ConvertFromString("#FF69B4");
+            var meTrigger = new DataTrigger { Binding = new System.Windows.Data.Binding("IsCurrentUser"), Value = true };
+            meTrigger.Setters.Add(new Setter(BackgroundProperty, new SolidColorBrush(Color.FromArgb(0x30, pinkAccent.R, pinkAccent.G, pinkAccent.B))));
+            meTrigger.Setters.Add(new Setter(BorderBrushProperty, new SolidColorBrush(Color.FromArgb(0x70, pinkAccent.R, pinkAccent.G, pinkAccent.B))));
+            meTrigger.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(3, 0, 0, 0)));
+            itemStyle.Triggers.Add(meTrigger);
 
             var hoverTrigger = new Trigger { Property = IsMouseOverProperty, Value = true };
             hoverTrigger.Setters.Add(new Setter(BackgroundProperty, hoverBrush));
@@ -386,6 +467,7 @@ namespace ConditioningControlPanel
                 sorted[i].Rank = i + 1;
 
             LeaderboardTab.LstLeaderboard.ItemsSource = sorted;
+            UpdateYourRankDisplay(sorted);
         }
 
         /// <summary>

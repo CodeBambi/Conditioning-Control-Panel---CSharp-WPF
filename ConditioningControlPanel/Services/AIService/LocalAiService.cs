@@ -143,9 +143,7 @@ namespace ConditioningControlPanel.Services.AIService
             {
                 if (App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled == false) return;
                 var dialogue = _messages
-                    .Where(m => m.Role == "user" || m.Role == "assistant")
-                    .Where(m => !string.IsNullOrEmpty(m.Content)
-                                && !m.Content!.Contains("[CONTEXT BLOCK — NOT DIALOGUE]"))
+                    .Where(IsDialogueTurn)
                     .Select(m => new PersistedTurn { Role = m.Role, Content = m.Content ?? string.Empty })
                     .ToList();
 
@@ -167,6 +165,62 @@ namespace ConditioningControlPanel.Services.AIService
         }
 
         /// <summary>
+        /// Identifies a genuine user/assistant dialogue turn — the exact set of messages
+        /// <see cref="PersistHistory"/> writes to disk. Excludes the system prompt and the
+        /// enrichment "[CONTEXT BLOCK — NOT DIALOGUE]" preamble (a user-role message that is
+        /// context, not conversation). Shared so in-memory trimming and disk persistence
+        /// count pairs identically.
+        /// </summary>
+        internal static bool IsDialogueTurn(ChatMessage m) =>
+            (m.Role == "user" || m.Role == "assistant")
+            && !string.IsNullOrEmpty(m.Content)
+            && !m.Content!.Contains("[CONTEXT BLOCK — NOT DIALOGUE]");
+
+        /// <summary>
+        /// Bounds the in-memory <c>_messages</c> list to the same window
+        /// <see cref="PersistHistory"/> writes to disk: the system message and any
+        /// non-dialogue preamble (the enrichment context block) are always kept, plus only
+        /// the most recent <see cref="MaxPersistedPairs"/> user/assistant pairs. Without this
+        /// the list grows every turn and the whole list is posted to Ollama each request
+        /// (see BuildResponse's <c>outgoing = _messages</c>), so the prompt/KV-cache balloons
+        /// until Ollama exhausts system RAM (#631). Dialogue is identified via
+        /// <see cref="IsDialogueTurn"/> so memory and disk stay consistent.
+        /// </summary>
+        private void TrimDialogueHistory() => TrimDialogueHistory(_messages, MaxPersistedPairs);
+
+        /// <summary>
+        /// Pure, testable core of the in-memory history cap (#631). Operates on an arbitrary
+        /// message list so it can be exercised headlessly. Keeps the system message and any
+        /// non-dialogue preamble (the enrichment context block) in place regardless of
+        /// position, and retains only the most recent <paramref name="maxPairs"/>
+        /// user/assistant pairs. Behavior is identical to the instance call
+        /// <c>TrimDialogueHistory()</c> which passes <c>_messages</c> and
+        /// <see cref="MaxPersistedPairs"/>.
+        /// </summary>
+        internal static void TrimDialogueHistory(List<ChatMessage> messages, int maxPairs)
+        {
+            int maxMessages = maxPairs * 2;
+
+            // Collect indices of dialogue turns in order. Non-dialogue entries (system +
+            // enrichment) are skipped so they're always preserved regardless of position.
+            var dialogueIndices = new List<int>();
+            for (int i = 0; i < messages.Count; i++)
+            {
+                if (IsDialogueTurn(messages[i])) dialogueIndices.Add(i);
+            }
+            if (dialogueIndices.Count <= maxMessages) return;
+
+            // Drop the oldest dialogue turns from the front, keeping the most recent
+            // maxMessages. Remove by descending index so earlier indices stay valid, and so
+            // the tail (the just-appended turn the error paths RemoveAt) is never touched.
+            int dropCount = dialogueIndices.Count - maxMessages;
+            for (int k = dropCount - 1; k >= 0; k--)
+            {
+                messages.RemoveAt(dialogueIndices[k]);
+            }
+        }
+
+        /// <summary>
         /// Clears in-memory and on-disk chat history. Useful for a "reset memory"
         /// button (not yet exposed in the UI).
         /// </summary>
@@ -182,7 +236,7 @@ namespace ConditioningControlPanel.Services.AIService
         /// Tells Ollama to load the configured model into memory so the first real
         /// chat doesn't pay the cold-start cost (~30-60s for 8B-class models on CPU,
         /// less on GPU). Sends an empty <c>/api/generate</c> request — Ollama treats
-        /// this as a "load" hint without generating tokens. <c>keep_alive=30m</c> asks
+        /// this as a "load" hint without generating tokens. <c>keep_alive=10m</c> asks
         /// the model to stay resident longer than the default 5 minutes.
         /// Best-effort and silent on failure (Ollama may not be running yet).
         /// </summary>
@@ -200,7 +254,7 @@ namespace ConditioningControlPanel.Services.AIService
                 var payload = JsonSerializer.Serialize(new
                 {
                     model = model,
-                    keep_alive = "30m"
+                    keep_alive = "10m"
                 });
 
                 using var req = new HttpRequestMessage(HttpMethod.Post, "api/generate")
@@ -486,6 +540,10 @@ namespace ConditioningControlPanel.Services.AIService
                 if (isUser)
                 {
                     _messages.Add(new ChatMessage("user", userInput));
+                    // Bound memory (and thus the prompt sent to Ollama) to the same window we
+                    // persist to disk. Trims from the front, so the just-appended user turn the
+                    // error paths below RemoveAt stays the last element. (#631)
+                    TrimDialogueHistory();
                     outgoing = _messages;
                 }
                 else
@@ -801,11 +859,48 @@ namespace ConditioningControlPanel.Services.AIService
 
         public void Dispose()
         {
+            // Best-effort synchronous unload so the model doesn't sit in VRAM/RAM for the
+            // full keep_alive window after the app exits (#629). Ollama frees the model when
+            // it receives keep_alive=0. Bounded to ~2s so shutdown never hangs when Ollama
+            // isn't running / reachable. Sent BEFORE _http is disposed.
+            var model = GetConfiguredModel();
+            if (!string.IsNullOrWhiteSpace(model))
+            {
+                try
+                {
+                    var payload = BuildUnloadPayload(model);
+                    using var req = new HttpRequestMessage(HttpMethod.Post, "api/generate")
+                    {
+                        Content = new StringContent(payload, Encoding.UTF8, "application/json")
+                    };
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    using var resp = _http.Send(req, cts.Token);
+                    App.Logger?.Information("LocalAiService: sent model unload (keep_alive=0) for {Model} on dispose", model);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Information("LocalAiService: model unload on dispose skipped ({Error})", ex.Message);
+                }
+            }
+
             _aiSemaphore.Dispose();
             _http.Dispose();
         }
 
-        private sealed class ChatMessage
+        /// <summary>
+        /// Builds the JSON body of the best-effort model-unload request sent on
+        /// <see cref="Dispose"/> (#629): <c>{"model": ..., "keep_alive": 0}</c>. Ollama
+        /// evicts the model from VRAM/RAM immediately when it receives keep_alive=0.
+        /// Extracted so the payload shape can be asserted headlessly.
+        /// </summary>
+        internal static string BuildUnloadPayload(string model) =>
+            JsonSerializer.Serialize(new
+            {
+                model = model,
+                keep_alive = 0
+            });
+
+        internal sealed class ChatMessage
         {
             public string Role { get; set; }
             public string? Content { get; set; }

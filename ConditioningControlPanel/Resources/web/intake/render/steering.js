@@ -135,6 +135,21 @@ const HOVERSWAP_MECHANICS = new Set([Mechanic.YesNo, Mechanic.MC4]);
  *  excluded). Mirrors BottomlessNo's WRONG_TRANSFORM_STEERS note. */
 const POSITION_STEERS = new Set([Steer.Magnet, Steer.Flee, Steer.Exile, Steer.DriftResolve]);
 
+/** Coarse-pointer (touch / pen) probe. DOM/matchMedia-aware, so — like
+ *  hoverSwapMuted — it lives OUTSIDE the pure eligibility predicates and is
+ *  evaluated lazily and defensively (never throws at import). The ONE matchMedia
+ *  '(pointer: coarse)' site for the whole module: it gates every cursor-centric
+ *  steer (Magnet, HoverSwap, MouseHijack) off on touch and flips Flee into its
+ *  tap-point adaptation. Optional `win` arg mirrors hoverSwapMuted (roll-site
+ *  callers pass null -> global window; installers pass S.win). */
+function isCoarsePointer(win) {
+  try {
+    const w = win || (typeof window !== 'undefined' ? window : null);
+    if (w && w.matchMedia && w.matchMedia('(pointer: coarse)').matches) return true;
+  } catch (_e) {}
+  return false;
+}
+
 /** Is the pointer gag muted for this user? DOM/prefs-aware, so it lives OUTSIDE the
  *  pure eligibility predicate. Two ways out, and both mean NO SWAP AT ALL rather than
  *  an instant teleport: an instant exchange is strictly worse for a reduced-motion
@@ -147,6 +162,9 @@ function hoverSwapMuted(win) {
     if (w && w.matchMedia && w.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
   } catch (_e) {}
   try { if (getPrefs().sparkles === false) return true; } catch (_e) {}
+  // Touch has no hover: the pointerenter-driven swap can never fire, so a coarse
+  // pointer is muted the same as reduced-motion (no swap at all, never a teleport).
+  if (isCoarsePointer(win)) return true;
   return false;
 }
 
@@ -180,8 +198,10 @@ export function isHoverSwapEligible(ctx, plan) {
 
 /* ----------------------------------------------------------------------------
  * MouseHijack (owner-directed) — a THIRD self-rolled steer (like BottomlessNo /
- * HoverSwap, NOT in the engine's STEER_POOL) — but LINGER-triggered, not rolled on
- * mount. If the user sits on an eligible beat too long without committing, the real
+ * HoverSwap, NOT in the engine's STEER_POOL) — TIMER-triggered (NOT idle/linger, and
+ * not rolled on mount). ~2s AFTER the prompt LINE has finished presenting itself (the
+ * beat hands us that duration via ctx.lineRevealMs — the options-hold reveal, sized to
+ * the deep-band typewriter + VO room), it rolls ONCE (~2%). On a win the real
  * cursor is HIDDEN (cursor:none on the stage root + a leak-proof !important rule) and
  * a VIRTUAL cursor glyph is rendered at the pointer. Each real pointermove folds 1:1
  * into the virtual position; every frame the virtual position is ALSO blended toward
@@ -191,8 +211,8 @@ export function isHoverSwapEligible(ctx, plan) {
  * the correct answer through the real force-commit path (ctx.forceComplete). Friction,
  * NOT lockout (invariant #1): Escape or a hard fight (cumulative opposing movement >
  * ~2500px) ABORTS — real cursor restored, NO commit, beat continues; a guard trip also
- * tears it down. Eligible bands are Deepening/Climax only (Recovery never coerces —
- * engine contract; the owner said "lv3 onward" but Recovery is contract-gated). Any
+ * tears it down. Eligible bands are Deepening(§3)/Climax(§4) only — the owner's "round
+ * 3 onward", with Recovery(§5) held out as the sanctuary band (never coerces). Any
  * discrete mechanic with a known correct option (MC4/YesNo/Mono/Destruct). It is
  * mutually exclusive with BottomlessNo/HoverSwap and yields to every engine refusal
  * gate AND to the position-channel steers (they MOVE options; the hijack moves the
@@ -202,9 +222,10 @@ export function isHoverSwapEligible(ctx, plan) {
  * offender). The decision helpers below are PURE (headless-testable); all DOM lives
  * in the installer.
  * -------------------------------------------------------------------------- */
-const MOUSEHIJACK_CHANCE = 0.40;                 // "we MIGHT" — rolled ONCE when the linger fires
-const MOUSEHIJACK_LINGER_MS = 9000;              // silent arm; engage only after this un-committed dwell
-const MOUSEHIJACK_BANDS = new Set([Band.Deepening, Band.Climax]); // Recovery never coerces -> excluded
+const MOUSEHIJACK_CHANCE = 0.02;                 // "we MIGHT" — rolled ONCE when the arm timer fires
+const MOUSEHIJACK_ARM_AFTER_LINE_MS = 2000;      // arm this long AFTER the prompt line finishes presenting (see ctx.lineRevealMs)
+const MOUSEHIJACK_ARM_FALLBACK_MS = 3500;        // if the beat didn't hand us a line-reveal duration, arm this long after mount
+const MOUSEHIJACK_BANDS = new Set([Band.Deepening, Band.Climax]); // "round 3 onward" = Deepening(§3)/Climax(§4); Recovery(§5) is the sanctuary -> excluded
 const MOUSEHIJACK_MECHANICS = new Set([Mechanic.MC4, Mechanic.YesNo, Mechanic.Mono, Mechanic.Destruct]);
 const HIJACK_GAIN_START = 0.25, HIJACK_GAIN_END = 0.90; // per-frame blend toward correct: fightable -> overwhelming
 const HIJACK_RAMP_MS = 5000;                     // ramp duration (4-6s) from start gain to end gain
@@ -225,7 +246,7 @@ export function hijackGain(elapsedMs, rampMs = HIJACK_RAMP_MS) {
 export function isMouseHijackEligible(ctx, plan) {
   if (!ctx) return false;
   if (masterOf(ctx.caps) <= 0) return false;                    // user disabled steering strength
-  if (!MOUSEHIJACK_BANDS.has(ctx.band)) return false;           // Deepening/Climax only (Recovery gated out)
+  if (!MOUSEHIJACK_BANDS.has(ctx.band)) return false;           // round 3 onward: Deepening/Climax only (Recovery sanctuary gated out)
   if (!MOUSEHIJACK_MECHANICS.has(ctx.mechanic)) return false;   // discrete mechanic w/ a known correct
   const opts = Array.isArray(ctx.options) ? ctx.options : [];
   if (!opts.some((o) => o && o.el && o.isCorrect)) return false; // needs a correct option to steer onto
@@ -337,15 +358,20 @@ function installSteering(ctx, factoryCaps, factoryMedia) {
   // Mutually exclusive with BottomlessNo — both are self-rolled gates and the invariant
   // is exactly ONE refusal gate per beat, so it yields when BottomlessNo already rolled.
   // Muted users are filtered HERE rather than inside the installer so a muted beat is
-  // still free to arm the linger-triggered MouseHijack below (which does its own RM
+  // still free to arm the timer-triggered MouseHijack below (which does its own RM
   // gate) instead of being silently spent on a gag that will never run.
   const hoverSwap = !bottomless && !hoverSwapMuted(null)
     && isHoverSwapEligible(beatCtx, plan) && Math.random() < HOVERSWAP_CHANCE;
 
-  // MouseHijack: a THIRD self-rolled steer, but LINGER-triggered (armed silently now;
-  // it rolls its ~40% "we MIGHT" only after ~9s of un-committed dwell — see installer).
-  // Mutually exclusive with the two self-rolled gates; RM is gated inside the installer.
-  const mouseHijack = !bottomless && !hoverSwap && isMouseHijackEligible(beatCtx, plan);
+  // MouseHijack: a THIRD self-rolled steer, but TIMER-triggered (armed silently now;
+  // it rolls its ~2% "we MIGHT" ~2s AFTER the prompt line finishes presenting — see
+  // installer + ctx.lineRevealMs). Mutually exclusive with the two self-rolled gates;
+  // RM is gated inside the installer. Coarse pointer is filtered HERE (mirroring
+  // hoverSwapMuted's roll-site gate) so the arm timer never even starts on touch —
+  // there is no cursor to hide/hijack. The installer keeps a belt-and-braces coarse
+  // early-return too.
+  const mouseHijack = !bottomless && !hoverSwap && !isCoarsePointer(null)
+    && isMouseHijackEligible(beatCtx, plan);
 
   if (!plan.active && !bottomless && !hoverSwap && !mouseHijack) return NOOP_HANDLE; // Calibration/Recovery/valve-0 -> play it straight
 
@@ -489,7 +515,7 @@ function installSteering(ctx, factoryCaps, factoryMedia) {
     try { INSTALLERS[Steer.HoverSwap](sharedCtx); } catch (_e) {}
   }
 
-  /* ---- self-rolled MouseHijack (linger-triggered; not in the engine's plan) --- */
+  /* ---- self-rolled MouseHijack (timer-triggered; not in the engine's plan) --- */
   if (mouseHijack && plan.steers.indexOf(Steer.MouseHijack) === -1) {
     try { INSTALLERS[Steer.MouseHijack](sharedCtx); } catch (_e) {}
   }
@@ -830,6 +856,108 @@ function mountOccludeCover(S, target, o) {
 }
 
 /* ----------------------------------------------------------------------------
+ * Flee — TAP-POINT adaptation for coarse pointers (touch).
+ *
+ * Desktop Flee slides the wrong option away from a HOVERING cursor. Touch has no
+ * hover: the first the option hears of the finger is the tap itself, and a
+ * mouse-style flee would let the wrong answer commit on first contact. So on a
+ * coarse pointer the option DODGES out from under the finger on pointerdown — a
+ * quick transform transition — and the tap that triggered it is swallowed before
+ * its click can commit.
+ *
+ * INVARIANT #1 (friction, NOT lockout) is kept two independent ways:
+ *   (a) dodges are hard-capped (FLEE_TAP_DODGES) with the distance shrinking each
+ *       time, so a determined tapper commits on the (cap+1)th tap ALL BY ITSELF —
+ *       no escape hatch required; and
+ *   (b) every dodge still feeds the shared EscapeGuard exactly like the mouse
+ *       path's pointerdown bump, so onFrictionRelease -> forceComplete can also
+ *       re-form + commit it. Whichever lands first wins.
+ * Synthetic forceComplete clicks (!isTrusted, clientX/Y === 0) ALWAYS pass — the
+ * file-wide un-vetoable hatch convention. The dodge is transform-only (restored by
+ * the shared tf cleanup) and every listener is registered through S.addListener,
+ * so release() leaves no residue. The option is clamped fully onscreen each dodge
+ * (never parked out of reach).
+ * -------------------------------------------------------------------------- */
+const FLEE_TAP_DODGES = 3;          // dodges before the option gives up and commits
+const FLEE_TAP_SWALLOW_MS = 260;    // a click this soon after a dodge IS the dodged tap
+function fleeTapPoint(S) {
+  const base = lerp(40, 110, S.s);              // first dodge distance (shrinks after)
+  const pad = 8;
+  const dodges = new Map();                     // index -> dodges spent
+  const lastDodgeAt = new Map();                // index -> perf time of last dodge
+  const nowMs = () => (S.win.performance && S.win.performance.now)
+    ? S.win.performance.now() : Date.now();
+  let disarmed = false;
+
+  // Guard trip (a determined refusal beat the escape threshold): glide every wrong
+  // option home and stop dodging, so the forced commit lands on an honest layout.
+  const disarm = () => {
+    if (disarmed) return;
+    disarmed = true;
+    for (const o of S.wrong) {
+      try {
+        const st = S.tf(o.el);
+        o.el.style.transition = 'transform .2s cubic-bezier(.2,.8,.2,1)';
+        st.tx = 0; st.ty = 0; S.applyTf(o.el);
+      } catch (_e) {}
+    }
+  };
+  S.guard.onFrictionRelease(disarm);
+
+  // Move `o` away from the tap point (px,py), shrinking with each dodge, clamped so
+  // its untranslated slot + new transform stays fully onscreen (always reachable).
+  const dodge = (o, px, py) => {
+    const n = dodges.get(o.index) || 0;
+    if (n >= FLEE_TAP_DODGES) return false;     // capped -> let this tap commit
+    dodges.set(o.index, n + 1);
+    const dist = base * (1 - n / FLEE_TAP_DODGES);   // progressive shrink -> convergence
+    const st = S.tf(o.el);
+    const r = o.el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const ax = cx - px, ay = cy - py;
+    const mag = Math.hypot(ax, ay) || 1;
+    let tx = st.tx + (ax / mag) * dist;
+    let ty = st.ty + (ay / mag) * dist;
+    const homeLeft = r.left - st.tx, homeTop = r.top - st.ty;   // untranslated slot
+    const maxTx = (S.win.innerWidth - r.width - pad) - homeLeft;
+    const maxTy = (S.win.innerHeight - r.height - pad) - homeTop;
+    tx = Math.max(pad - homeLeft, Math.min(maxTx, tx));
+    ty = Math.max(pad - homeTop, Math.min(maxTy, ty));
+    o.el.style.transition = 'transform .16s cubic-bezier(.2,.8,.2,1)';
+    st.tx = tx; st.ty = ty;
+    S.applyTf(o.el);
+    return true;
+  };
+
+  for (const o of S.wrong) {
+    S.snapStyle(o.el, ['transition']);
+    const onDown = (e) => {
+      if (disarmed || S.guard.isTripped()) return;
+      if (!e || (!e.isTrusted && e.clientX === 0 && e.clientY === 0)) return; // forceComplete -> pass
+      if (dodge(o, e.clientX, e.clientY)) {
+        lastDodgeAt.set(o.index, nowMs());
+        S.guard.bump(o.index, 0);              // each dodged attempt feeds the escape guard
+      } else {
+        lastDodgeAt.delete(o.index);           // capped -> ensure the committing click passes
+      }
+    };
+    // Swallow ONLY the click produced by a just-dodged tap; a post-cap committing
+    // tap (no recent dodge) sails through untouched.
+    const onClick = (e) => {
+      if (!e.isTrusted && e.clientX === 0 && e.clientY === 0) return;         // forceComplete -> pass
+      if (disarmed || S.guard.isTripped()) return;
+      const t = lastDodgeAt.get(o.index);
+      if (t != null && (nowMs() - t) < FLEE_TAP_SWALLOW_MS) {
+        lastDodgeAt.delete(o.index);
+        e.preventDefault(); e.stopImmediatePropagation();
+      }
+    };
+    S.addListener(o.el, 'pointerdown', onDown);
+    S.addListener(o.el, 'click', onClick, true);
+  }
+}
+
+/* ----------------------------------------------------------------------------
  * STEER INSTALLERS. Each receives sharedCtx and wires DOM behavior + cleanup.
  * Convention: correct-favoring steers help the correct option; obstructive
  * steers hinder wrong options but always route effort into the guard.
@@ -839,6 +967,9 @@ const INSTALLERS = {
   /* correct option drifts toward the cursor (bias, not blocker) */
   [Steer.Magnet](S) {
     if (!S.correct.length) return;
+    // Cursor-attraction needs a hovering pointer; touch has none, so the pull would
+    // never fire. Bail like any other inert steer (its cleanup is a no-op).
+    if (isCoarsePointer(S.win)) return;
     S.wireCursor();
     const pull = lerp(0.02, 0.14, S.s);
     const maxPull = lerp(10, 40, S.s);
@@ -864,6 +995,10 @@ const INSTALLERS = {
   /* wrong option slides away from the cursor — bounded + self-relaxing */
   [Steer.Flee](S) {
     if (!S.wrong.length) return;
+    // COARSE POINTER: there is no hovering cursor to slide away from, so switch to
+    // tap-point flee (dodge out from under the finger on pointerdown). The desktop
+    // mouse path below is left byte-identical.
+    if (isCoarsePointer(S.win)) { fleeTapPoint(S); return; }
     S.wireCursor();
     const radius = lerp(90, 190, S.s);
     const push = lerp(20, 90, S.s);
@@ -1707,9 +1842,12 @@ const INSTALLERS = {
     if (!correct || !correct.el) return;
 
     // RM: involuntary cursor motion is the worst reduced-motion offender -> disabled entirely.
+    // Coarse pointer: no hoverable cursor to hide or steer, so it is meaningless too.
+    // (The roll site already gates coarse out so the arm timer never starts; this is
+    // the belt-and-braces second gate, mirroring HoverSwap's defensive installer check.)
     let reduce = false;
     try { reduce = !!(S.win.matchMedia && S.win.matchMedia('(prefers-reduced-motion:reduce)').matches); } catch (_e) {}
-    if (reduce) return;
+    if (reduce || isCoarsePointer(S.win)) return;
 
     const win = S.win, doc = S.doc;
     const stageRoot = (S.ctx && S.ctx.root) || doc.body;
@@ -1808,6 +1946,18 @@ const INSTALLERS = {
         if (disarmed) return;
         // jumpscare freeze or a torn-down beat -> bail + restore.
         if (doc.body && doc.body.classList && doc.body.classList.contains('ix-freeze')) { disarm(); return; }
+        // FIRE-TIME set-piece re-check. attemptEngage read isSetPieceLive ONCE at arm/
+        // engage time, but the auto-commit below fires SECONDS later (after the gain
+        // ramp + 150ms dwell). If a set-piece goes live in that gap — e.g. a wrong
+        // press opens the "are you sure?" FREEZE GATE lockout egg, or the corrupted-
+        // question / upside-down-card / glitch-transition eggs claim the beat — the
+        // hijack must ABORT (restore cursor, NO commit) so its force-commit can't tear
+        // the beat down and cut the egg's ~15-20s watch-it-play-out short. The ix-freeze
+        // class check above only catches the freeze gate + jumpscare; the other eggs do
+        // NOT set that class, so we consult the shared isSetPieceLive predicate here.
+        try {
+          if (S.ctx && typeof S.ctx.isSetPieceLive === 'function' && S.ctx.isSetPieceLive()) { disarm(); return; }
+        } catch (_e) {}
         const g = hijackGain(nowMs() - engageT);
         const c = S.centerOf(correct.el);
         vx += (c.x - vx) * g;
@@ -1834,10 +1984,30 @@ const INSTALLERS = {
       S.addCleanup(() => { if (tick) S.removeTicker(tick); });
     };
 
-    // Silent arm: after the linger dwell, roll ONCE (~40%). Skip while mid-drag on a veil/sticker
-    // or during the jumpscare freeze; re-check a few times, then give up (one engagement max).
+    // Silent arm: ~2s AFTER the prompt line has finished presenting, roll ONCE (~2%).
+    // "Line ended" = the beat's options-hold reveal (ctx.lineRevealMs — sized to the
+    // deep-band typewriter + the beat of silence + VO room in beats.js/computeOptionsHold).
+    // Measured from install; the typewriter/VO start synchronously a few statements
+    // before install, so install+lineRevealMs ≈ the line-end moment. If the beat didn't
+    // supply a reveal duration (defensive), fall back to a fixed post-mount delay.
+    // Skip while mid-drag on a veil/sticker or during the jumpscare freeze; re-check a
+    // few times, then give up (one engagement max).
     const attemptEngage = () => {
       if (rolled || engaged || disarmed) return;
+      // YIELD to a live set-piece. Corruption (the prompt/option TEXT VIBRATE + ZOOM
+      // "egg" — glitch jitter / melt scaleY), the freeze gate and the jumpscare each
+      // claim a beat via beats.js gateUsedThisBeat (one set-piece per beat, §4); the
+      // corrupt-question egg also flags corruptLive while its 2.6s/9s animation plays.
+      // The hijack is itself a self-rolled steer that force-commits, so — exactly like
+      // it yields to REFUSAL_GATE_STEERS / POSITION_STEERS at eligibility — it stands
+      // down here rather than force-completing the beat and cutting the egg short. One
+      // engagement max, so we consume the roll (rolled=true) and never engage this beat.
+      try {
+        if (S.ctx && typeof S.ctx.isSetPieceLive === 'function' && S.ctx.isSetPieceLive()) {
+          rolled = true;
+          return;
+        }
+      } catch (_e) {}
       const frozen = !!(doc.body && doc.body.classList && doc.body.classList.contains('ix-freeze'));
       if (pointerHeld || frozen) {
         if (++tries <= HIJACK_MAX_RETRIES) {
@@ -1849,7 +2019,11 @@ const INSTALLERS = {
       rolled = true;                              // the "we MIGHT" roll happens exactly once
       if (Math.random() < MOUSEHIJACK_CHANCE) engage();
     };
-    const armT = win.setTimeout(attemptEngage, MOUSEHIJACK_LINGER_MS);
+    const lineMs = (S.ctx && typeof S.ctx.lineRevealMs === 'number' && S.ctx.lineRevealMs > 0)
+      ? S.ctx.lineRevealMs
+      : 0;
+    const armDelay = lineMs > 0 ? (lineMs + MOUSEHIJACK_ARM_AFTER_LINE_MS) : MOUSEHIJACK_ARM_FALLBACK_MS;
+    const armT = win.setTimeout(attemptEngage, armDelay);
     S.addCleanup(() => win.clearTimeout(armT));
   },
 };

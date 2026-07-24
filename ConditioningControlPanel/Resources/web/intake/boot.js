@@ -1414,7 +1414,23 @@ function deriveSessionName(result) {
     ? (result.totalScore / maxScore) * 100
     : clamp01((result && result.peakDepth) || 0) * 100;
   const prefix = pct <= 25 ? 'Gentle' : pct <= 50 ? 'Guided' : pct <= 75 ? 'Intense' : 'Extreme';
-  return `${prefix} ${SESSION_NOUNS[niche] || 'Conditioning'}`;
+  let name = `${prefix} ${SESSION_NOUNS[niche] || 'Conditioning'}`;
+  // BUG #614 mirror: C# now appends the revealed primary archetype (title-cased, " - "
+  // separated) so two runs at the same tier stop sharing a name. Kept in step here so the
+  // guess the certificate shows before the `session-drafted` reply lands is not obviously
+  // wrong; the reply still overwrites it, and this stays `derived: true`.
+  const route = (result && result.route) || {};
+  const archetype = String(route.primaryArchetypeId || '').trim();
+  if (archetype) {
+    const routeName = prettyId(archetype)
+      .split(/\s+/).filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+    if (routeName && name.toLowerCase().indexOf(routeName.toLowerCase()) < 0) {
+      name = `${name} - ${routeName}`;
+    }
+  }
+  return name;
 }
 
 /** Assemble the recap extras for stats.record(). Pure read — no side effects. */

@@ -1743,6 +1743,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // Four Chambers wall dressing: the chamber sets how plastered the tube wall
     // is (I bare -> IV almost wall-to-wall). Scales with the descent.
     if (ctx && ctx.wall) ctx.wall.setRegion(regionIndex);
+    // #647: freshen the pinned centre spiral so it varies chamber to chamber.
+    try { payloadFx?.refreshPinnedSpiral(); } catch (e) { /* ignore */ }
     // Four Chambers voiceover: the drift chain draws this chamber's region-tagged
     // lines (universal backbone still plays underneath). Escalates I->IV.
     // THE BIOMES: biome-tagged lines join in only while their place is up.
@@ -3838,6 +3840,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         state = 'running';
         // Descent is live: wake the drift whisper + special tube moods (the hub kept them idle).
         try { ctx.setRunActive && ctx.setRunActive(true); } catch (e) { /* ignore */ }
+        // #647: the OPTIONAL centre spiral rides the whole fall (no-op when the toggle is off).
+        try { payloadFx?.showPinnedSpiral(); } catch (e) { /* ignore */ }
         bridge.send({ type: 'run-started', difficulty: cfg.difficulty, mode: 'dtrh-web' });
         // Fresh descent: dress the opening chamber. applyRegionSky covers the
         // wall plaster, drift voice AND the chamber's visual grade (Region I's
@@ -3870,6 +3874,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     setRegionCycle(false); setBiomeCycle(false);   // The Bottomless Fall: disarm cycling so the next (normal) run clamps to Court
     // Surfaced: hush the drift whisper + calm the tube for the recap/hub idle.
     try { ctx.setRunActive && ctx.setRunActive(false); } catch (e) { /* ignore */ }
+    try { payloadFx?.hidePinnedSpiral(); } catch (e) { /* ignore */ }   // #647: fade the centre spiral out with the surfacing
     if (ctx && ctx.wall) ctx.wall.setRegion(0); // bare the wall for the recap/warren
     if (ctx && ctx.drift) { ctx.drift.setRegion(0); if (ctx.drift.setBiome) ctx.drift.setBiome(null); } // recap/warren: universal voice only
     if (bMech) bMech.reset();   // THE BIOMES: exit the mechanic (restores dim/beams/mirrors/speed)
@@ -3986,6 +3991,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.setLoadout([]);
     hudUi.setClock(false);
     try { payloadFx?.cancelHeavy(); } catch (e) { /* ignore */ }   // kill any lingering video card before the hub
+    try { payloadFx?.hidePinnedSpiral(); } catch (e) { /* ignore */ }   // #647: never leave the centre spiral in the hub
     try { ctx.boonPick && ctx.boonPick.reset && ctx.boonPick.reset(); } catch (e) { /* ignore */ }   // a draft aborted mid-pick must not strand its card row in the hub
     field.clearAll();
     clearAmbient();

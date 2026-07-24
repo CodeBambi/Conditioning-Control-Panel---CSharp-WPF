@@ -182,6 +182,14 @@ public class OverlayService : IDisposable
     private TimeSpan _gifFrameDelay = TimeSpan.FromMilliseconds(50);
     private DispatcherTimer? _gifFrameTimer;
 
+    // Spiral randomizer (#641): when SpiralRandomize is on, GetSpiralPath picks a random spiral
+    // from the pool at overlay/session START (never per-tick — the decoded-frame cache above is
+    // keyed by path and a mid-run re-decode causes a ~1s hitch). _lastRandomSpiralPath backs the
+    // no-repeat guard so we don't draw the same spiral twice in a row when >1 is available.
+    private static readonly string[] SpiralExtensions = { ".gif", ".png", ".jpg", ".jpeg", ".webp" };
+    private readonly Random _spiralRandom = new();
+    private string? _lastRandomSpiralPath;
+
     public bool IsRunning => _isRunning;
 
     /// <summary>
@@ -264,13 +272,65 @@ public class OverlayService : IDisposable
             private string GetSpiralPath()
             {
                 var settings = App.Settings.Current;
-                
-                if (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
+
+                var configured = (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
+                    ? settings.SpiralPath
+                    : null;
+
+                // Randomizer (#641): pick a fresh spiral from the pool at start only. The pool is the
+                // folder of the configured spiral if one is set, else the user Spirals library folder
+                // (the same %LOCALAPPDATA%\ConditioningControlPanel\Spirals the Spiral card populates).
+                // Falls back to the configured/default single spiral when the pool has <2 entries.
+                if (settings.SpiralRandomize)
                 {
-                    return settings.SpiralPath;
+                    var randomized = PickRandomSpiral(configured);
+                    if (randomized != null) return randomized;
                 }
-                
+
+                if (configured != null) return configured;
+
                 return ModResourceResolver.ResolveUri("spiral.gif");
+            }
+
+            /// <summary>
+            /// Build the spiral pool and return a random member (different from the last pick when
+            /// possible). Returns null when no pool exists so the caller falls back to the single
+            /// configured/default spiral. Called only at overlay/session start (never per-tick).
+            /// </summary>
+            private string? PickRandomSpiral(string? configured)
+            {
+                try
+                {
+                    // Pool directory: folder of the configured spiral, else the user Spirals library.
+                    var poolDir = !string.IsNullOrEmpty(configured)
+                        ? Path.GetDirectoryName(configured)
+                        : Path.Combine(App.UserDataPath, "Spirals");
+
+                    if (string.IsNullOrEmpty(poolDir) || !Directory.Exists(poolDir))
+                        return null;
+
+                    var pool = Directory.GetFiles(poolDir)
+                        .Where(f => SpiralExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                        .ToList();
+
+                    if (pool.Count == 0) return null;
+                    if (pool.Count == 1) return pool[0];
+
+                    // No-repeat guard (mirrors WallpaperService.Shuffle): avoid the previous pick.
+                    string pick;
+                    do
+                    {
+                        pick = pool[_spiralRandom.Next(pool.Count)];
+                    } while (pick == _lastRandomSpiralPath);
+
+                    _lastRandomSpiralPath = pick;
+                    return pick;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "[Overlay] Failed to pick random spiral");
+                    return null;
+                }
             }
     public void Start()
     {
@@ -587,7 +647,27 @@ public class OverlayService : IDisposable
 
     private static (byte R, byte G, byte B) GetFilterRgb()
     {
+        // A user-picked color (suggestion #643) wins over the mod/default retint.
+        // Empty setting defers to the active mod's filter color, then hot pink.
+        var custom = App.Settings?.Current?.PinkFilterColor;
+        if (TryParseHexColor(custom, out var rgb))
+            return rgb;
         return App.Mods?.GetFilterColorRgb() ?? (255, 105, 180);
+    }
+
+    /// <summary>Parses a "#RRGGBB" (or "RRGGBB") string. Returns false for null/empty/malformed.</summary>
+    private static bool TryParseHexColor(string? hex, out (byte R, byte G, byte B) rgb)
+    {
+        rgb = (255, 105, 180);
+        if (string.IsNullOrWhiteSpace(hex)) return false;
+        hex = hex.Trim().TrimStart('#');
+        if (hex.Length != 6) return false;
+        try
+        {
+            rgb = (Convert.ToByte(hex[..2], 16), Convert.ToByte(hex[2..4], 16), Convert.ToByte(hex[4..6], 16));
+            return true;
+        }
+        catch { return false; }
     }
 
     /// <summary>
@@ -901,6 +981,20 @@ public class OverlayService : IDisposable
         _lastAppliedPinkOpacity = -1;
     }
 
+    /// <summary>
+    /// Re-push the filter color to a live tint. The compositor layer is dirty-gated
+    /// (#550) and the 500ms settings-sync only re-applies on an opacity change, so a
+    /// color-only change (the color picker) needs an explicit re-apply. No-op when the
+    /// tint isn't showing — the next Show reads the fresh color from GetFilterRgb().
+    /// </summary>
+    public void RefreshFilterColor()
+    {
+        if (!PinkShowing) return;
+        // Preserve whoever owns the opacity right now (a ramp, else the saved setting).
+        var opacity = _rampPinkOpacity ?? (App.Settings?.Current?.PinkFilterOpacity ?? 0) / 100.0;
+        ApplyPinkOpacityDirect(opacity);
+    }
+
     private void ApplySpiralOpacityDirect(double opacity)
     {
         var scaled = opacity * 0.1; // 90% reduction, matching CreateSpiralGifWindow / UpdateSpiralOpacity
@@ -921,10 +1015,9 @@ public class OverlayService : IDisposable
         }
         try
         {
-            var settings = App.Settings?.Current;
-            var screens = settings?.DualMonitorEnabled == true
-                ? App.GetAllScreensCached()
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+            // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+            var screens = App.ResolveScreens(
+                App.Settings?.Current?.PinkFilterTargetMonitor ?? App.MonitorTargetFollowGlobal);
 
             foreach (var screen in screens)
             {
@@ -978,10 +1071,9 @@ public class OverlayService : IDisposable
         try
         {
             var settings = App.Settings.Current;
-            
-            var screens = settings.DualMonitorEnabled 
-                ? App.GetAllScreensCached() 
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+            // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+            var screens = App.ResolveScreens(settings.PinkFilterTargetMonitor);
 
             foreach (var screen in screens)
             {
@@ -1178,9 +1270,8 @@ public class OverlayService : IDisposable
         {
             var settings = App.Settings.Current;
 
-            var screens = settings.DualMonitorEnabled
-                ? App.GetAllScreensCached()
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+            // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+            var screens = App.ResolveScreens(settings.SpiralTargetMonitor);
 
             // For GIFs, load frames once and share across all screens
             if (_isGifSpiral)
@@ -1240,9 +1331,8 @@ public class OverlayService : IDisposable
     private void CreateSpiralVideoWindows()
     {
         var settings = App.Settings.Current;
-        var screens = settings.DualMonitorEnabled
-            ? App.GetAllScreensCached()
-            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+        // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+        var screens = App.ResolveScreens(settings.SpiralTargetMonitor);
 
         foreach (var screen in screens)
         {

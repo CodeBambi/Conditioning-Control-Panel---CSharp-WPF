@@ -528,7 +528,8 @@ export function buildDarter(intensity, { atX = null, atY = null, sweeper = false
 
 /** Per-spawn-tick darter roll (C# RollDarter): density climbs with intensity. */
 export function rollDarter(intensity, rateMult = 1.0) {
-  const chance = (0.0125 + clamp(intensity, 0, 1) * 0.03) * Math.max(0, rateMult);
+  // Rabbit spawn rate +15% (x1.15 on both the base and the intensity ramp).
+  const chance = (0.014375 + clamp(intensity, 0, 1) * 0.0345) * Math.max(0, rateMult);
   if (Math.random() >= chance) return null;
   return buildDarter(intensity);
 }

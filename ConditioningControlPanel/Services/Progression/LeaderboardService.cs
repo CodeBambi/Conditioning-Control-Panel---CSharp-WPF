@@ -420,6 +420,13 @@ public class LeaderboardEntry
     public bool IsSeason0Og { get; set; }
 
     /// <summary>
+    /// True when this entry belongs to the local signed-in user (matched by unified id).
+    /// Used to highlight and "jump to" the user's own row on the leaderboard.
+    /// </summary>
+    public bool IsCurrentUser => !string.IsNullOrEmpty(UnifiedId)
+        && string.Equals(UnifiedId, App.UnifiedUserId, StringComparison.Ordinal);
+
+    /// <summary>
     /// Display name with OG star prefix if applicable
     /// </summary>
     public string DisplayNameWithFlair => DisplayName;

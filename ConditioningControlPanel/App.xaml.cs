@@ -286,6 +286,7 @@ namespace ConditioningControlPanel
         public static VideoService Video { get; private set; } = null!;
         public static AudioService Audio { get; private set; } = null!;
         public static SessionLogService SessionLog { get; private set; } = null!;
+        public static MediaHistoryService MediaHistory { get; private set; } = null!;
         public static ProgressionService Progression { get; private set; } = null!;
         public static SubliminalService Subliminal { get; private set; } = null!;
         public static Services.Compositor.CompositorEngine? Compositor { get; private set; }
@@ -310,6 +311,8 @@ namespace ConditioningControlPanel
         public static ScreenShakeService ScreenShake { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
         public static CornerGifService CornerGif { get; private set; } = null!;
+        // Suggestion #659 — layered looping audio mixer (single output device).
+        public static Services.Audio.LayeredAudioService LayeredAudio { get; private set; } = null!;
         public static Services.Chaos.ChaosModeService Chaos { get; private set; } = null!;
         public static LockCardService LockCard { get; private set; } = null!;
         public static PopQuizService PopQuiz { get; private set; } = null!;
@@ -371,6 +374,7 @@ namespace ConditioningControlPanel
         public static LockdownService Lockdown { get; private set; } = null!;
         public static MantraService Mantra { get; private set; } = null!;
         public static MantraVoiceService MantraVoice { get; private set; } = null!;
+        public static MantraChantService MantraChant { get; private set; } = null!;
         public static ModService Mods { get; private set; } = null!;
         public static BugReportService BugReport { get; private set; } = null!;
         public static WallpaperService? Wallpaper { get; private set; }
@@ -827,6 +831,9 @@ namespace ConditioningControlPanel
                 // Stop mantra lab audio
                 Mantra?.Dispose();
 
+                // Stop the ambient mantra chant loop
+                MantraChant?.Stop();
+
                 // Stop autonomy mode
                 Autonomy?.Stop();
 
@@ -1178,6 +1185,13 @@ namespace ConditioningControlPanel
             // to the logs folder when the dispatcher stops responding for 10s.
             Services.UiHangWatchdog.Start(Dispatcher);
 
+            // Flush-on-write trace for the mandatory-video show/heal path and the panic key
+            // (#616/#617/#621/#622/#623). Separate from the Serilog rolling file on purpose: the
+            // relaunch a user needs in order to FILE the report scrolls the freeze window out of
+            // the 100-line app-log tail, and a hard power reset can roll a buffered write back.
+            // Its own file + WriteThrough per line survives both. See VideoDiag.
+            Services.VideoDiag.Start(Dispatcher);
+
             splash?.SetProgress(0.1, "Initializing...");
 
             // Global exception handlers to catch and log crashes instead of hard crashing
@@ -1374,6 +1388,10 @@ namespace ConditioningControlPanel
             // Session media log - must be after Flash and Video so it can subscribe to their events.
             SessionLog = new SessionLogService();
 
+            // App-lifetime media recap (Assets tab -> "Media Log"). Also subscribes to Flash/Video,
+            // so likewise must come after both are constructed.
+            MediaHistory = new MediaHistoryService();
+
             splash?.SetProgress(0.6, "Initializing effects...");
             Progression = new ProgressionService();
             ActivityTracker = new ActivityTracker();
@@ -1396,9 +1414,20 @@ namespace ConditioningControlPanel
             ScreenShake = new ScreenShakeService();
             Bubbles = new BubbleService();
             // Standalone corner-GIF overlays (Spiral card): restore any persisted overlays.
-            // RefreshOverlays marshals onto the dispatcher, so this queues until startup settles.
+            // Bug #625: RefreshOverlays only marshals when called OFF the UI thread - here we
+            // ARE the UI thread, so it used to run synchronously and Show() a transparent
+            // topmost window before MainWindow existed (reported startup crash after enabling
+            // a corner GIF). Explicitly defer to ApplicationIdle so the restore happens once
+            // startup has settled, and swallow+log any failure so it can never kill launch.
             CornerGif = new CornerGifService();
-            CornerGif.RefreshOverlays();
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { CornerGif?.RefreshOverlays(); }
+                catch (Exception ex) { Logger?.Error(ex, "Deferred CornerGif.RefreshOverlays failed"); }
+            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            // Suggestion #659 — layered audio mixer. Inert until Start() (used by the Audio
+            // Layers window and by #668 audio-only sessions), so constructing it is free.
+            LayeredAudio = new Services.Audio.LayeredAudioService();
             Services.Chaos.ChaosMeta.Init();   // load persistent Chaos meta-progression before the run service
             Chaos = new Services.Chaos.ChaosModeService();
             InteractionQueue = new InteractionQueueService();
@@ -1611,6 +1640,11 @@ namespace ConditioningControlPanel
 
             // Spoken Mantras (Takeover voice mechanic) — loads per-mod mantras.json on demand.
             MantraVoice = new MantraVoiceService();
+
+            // Mantra Chant — loops the active mod's voiced mantras as ambient audio (opt-in).
+            // Resume from settings; Start() no-ops gracefully if this mod has nothing voiced.
+            MantraChant = new MantraChantService();
+            if (Settings?.Current?.MantraChantEnabled == true) MantraChant.Start();
 
             // Initialize wallpaper override service
             Wallpaper = new WallpaperService();
@@ -3221,6 +3255,7 @@ Application State:
             KeywordHighlight?.Dispose();
 
             SessionLog?.Dispose();
+            MediaHistory?.Dispose(); // before Flash/Video so it unsubscribes cleanly + flushes final entries
             Flash?.Dispose();
             // Dispose the enhancement bridge BEFORE the VideoService it subscribes to,
             // so it unsubscribes (VideoStarted/VideoEnded/time-source) and tears down its
@@ -3228,6 +3263,7 @@ Application State:
             // Video first would leave those subscriptions dangling against a dead player.
             VideoEnhanceBridge?.Dispose();
             Video?.Dispose();
+            LayeredAudio?.Dispose(); // suggestion #659 — release the single WaveOut before other audio teardown
             Subliminal?.Dispose();
             Overlay?.Dispose();
             Compositor?.Dispose(); // after effect services so their layers deactivate first
@@ -3269,6 +3305,7 @@ Application State:
             ActivityTracker?.Dispose();
             Haptics?.Dispose();
             AudioSync?.Dispose();
+            MantraChant?.Dispose();
             Audio?.Dispose();
             // Deeper singletons (reverse init order). The bridge holds the
             // browser/host pair; discovery owns a CTS + WebView2 nav handler;

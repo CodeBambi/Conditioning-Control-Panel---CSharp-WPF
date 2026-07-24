@@ -39,8 +39,11 @@
                         Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
                         Click="BtnGetPacks_Click" ToolTip="{loc:Str tooltip_get_packs}"/>
                 <Button x:Name="BtnOpenAssetsFolder" Content="{loc:Str btn_open_folder}"
-                        Style="{StaticResource OutlineButton}" Padding="12,6"
+                        Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
                         Click="BtnOpenAssetsFolder_Click" ToolTip="{loc:Str tooltip_open_assets_folder_in_explorer}"/>
+                <Button x:Name="BtnMediaLog" Content="{loc:Str btn_media_log}"
+                        Style="{StaticResource OutlineButton}" Padding="12,6"
+                        Click="BtnMediaLog_Click" ToolTip="{loc:Str tooltip_media_log}"/>
             </StackPanel>
         </Grid>
     

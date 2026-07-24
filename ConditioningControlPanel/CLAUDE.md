@@ -73,7 +73,7 @@ Follow `../RELEASE_WORKFLOW.md` - covers all version locations, build steps, and
 - **OverlayService.cs** - Screen overlays (BrainDrain blur, edge effects, etc.)
 - **BubbleService.cs** - Floating bubble popping minigame
 - **BubbleCountService.cs** - Bubble counting video minigame (Level 50+)
-- **SessionEngine.cs** - AI-powered session management with OpenRouter integration
+- **SessionEngine.cs** - Deterministic session runtime (1-second timer that coordinates feature start/end times and ramps from a Session's settings). NOT AI-powered and makes no network/OpenRouter calls - see `docs/primers/SESSION_PRESET_PRIMER.md`
 - **ProgressionService.cs** - XP and leveling system
 - **AchievementService.cs** - Achievement tracking and unlocks
 - **UpdateService.cs** - Auto-update via GitHub Releases API + Inno Setup silent installer

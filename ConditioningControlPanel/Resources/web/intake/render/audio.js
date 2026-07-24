@@ -342,9 +342,21 @@ export function errorBlipSpec() {
  * AudioBuffer[] cache; every voice routes through the SAME shared limiter.
  *
  * The manifest may be fetched lazily (sfx_manifest.json) OR fall back to this
- * inline table — the two MUST stay in sync (14 ids). Files are <id>-<n>.mp3.
- * The manifest `gain` balances harsh (glitch) vs soft (melt) at author time;
- * the shared limiter still brick-walls the sum. `loop` marks seamless loops.
+ * inline table — the two stay in sync as gen_intake_sfx.py authors the files.
+ * Files are <id>-<n>.mp3. The manifest `gain` balances harsh (glitch) vs soft
+ * (melt) at author time; the shared limiter still brick-walls the sum. `loop`
+ * marks seamless loops.
+ *
+ * MISSING FILES ARE SILENT-SAFE: playSfx() looks the id up here (sfxEntry), then
+ * tries to fetch <id>-<n>.mp3; a 404 leaves the id un-decoded and playSfx returns
+ * null (no throw, no console noise). So an id may be REGISTERED here before its
+ * audio exists — the cue simply stays silent until the mp3 lands, then goes live
+ * with no code change. That is how the captcha family below is wired ahead of its
+ * assets: `stamp` + `chime` are fired TODAY by the shared chrome kit
+ * (render/captcha/chrome.js: stamp() -> 'stamp'; spinner.resolve(ok) -> 'chime')
+ * and are silent purely because they were unregistered; the remaining ids are the
+ * per-item `sfxWanted` cues named in banks/_staging/cap_*.json, registered here so
+ * the renderers can switch off their current substitutes the moment the files ship.
  * -------------------------------------------------------------------------- */
 export const SFX_MANIFEST_FALLBACK = Object.freeze({
   'card-melt':          { variants: 2, gain: 0.5,  loop: false },
@@ -361,6 +373,25 @@ export const SFX_MANIFEST_FALLBACK = Object.freeze({
   'briefing-open':      { variants: 1, gain: 0.5,  loop: false },
   'pressure-heartbeat': { variants: 2, gain: 0.5,  loop: true  },
   'incorrect-feedback': { variants: 2, gain: 0.15, loop: false },
+  // ---- CAPTCHA CHROME (fired today by render/captcha/chrome.js; silent until authored) ----
+  'stamp':              { variants: 1, gain: 0.45, loop: false }, // chrome.stamp() LOGGED/verdict thunk (chrome-wide)
+  'chime':              { variants: 1, gain: 0.4,  loop: false }, // chrome.spinner.resolve(true) green-check confirm
+  // ---- CAPTCHA per-item wanted cues (banks/_staging/cap_*.json sfxWanted; forward-registered, no files yet) ----
+  'grid-tile-flicker':  { variants: 2, gain: 0.2,  loop: false }, // cap_grid: tile flicks to a user asset and back
+  'grid-verify-stamp':  { variants: 1, gain: 0.45, loop: false }, // cap_grid: VeriTru verdict stamp
+  'grid-settle':        { variants: 1, gain: 0.2,  loop: false }, // cap_grid: frozen climax/recovery tile settle
+  'verify-hold':        { variants: 1, gain: 0.15, loop: false }, // cap_checkbox: rising tone under press-and-hold fill
+  'verify-lock':        { variants: 1, gain: 0.45, loop: false }, // cap_checkbox: the check greens / hold completes
+  'checkbox-tick':      { variants: 1, gain: 0.2,  loop: false }, // cap_checkbox: soft tick as the box first fills
+  'captcha-garble':     { variants: 1, gain: 0.4,  loop: false }, // cap_transcribe: warbly non-speech audio-icon garble
+  'captcha-rewarp':     { variants: 1, gain: 0.15, loop: false }, // cap_transcribe: paper/ink re-warp whir (refresh)
+  'captcha-verify-ok':  { variants: 1, gain: 0.45, loop: false }, // cap_transcribe: quiet green-check confirm on accept
+  'captcha-reject':     { variants: 2, gain: 0.15, loop: false }, // cap_transcribe: control-word miss "try again" blip
+  'captcha-logged':     { variants: 1, gain: 0.45, loop: false }, // cap_transcribe: LOGGED rubber-stamp thunk
+  'verify-tick':        { variants: 2, gain: 0.1,  loop: false }, // cap_regen: ~1/s progress heartbeat during a regen clear
+  // ---- CAPTCHA per-item wanted cues (banks/_staging/cap_regen.json sfxWanted; forward-registered) ----
+  'regen-swarm':        { variants: 2, gain: 0.3,  loop: false }, // cap_regen: climax auto-spawn onset swell
+  'regen-loop':         { variants: 1, gain: 0.32, loop: false }, // cap_regen: "end of library reached. looping." seam click
 });
 
 /** The sfx manifest URL (resolved against this module; page-relative fallback). */

@@ -872,6 +872,10 @@ namespace ConditioningControlPanel
             CompanionTab.ChkAwarenessMode.IsChecked = settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
             CompanionTab.SliderAwarenessCooldown.Value = settings.AwarenessReactionCooldownSeconds;
             CompanionTab.TxtAwarenessCooldown.Text = $"{settings.AwarenessReactionCooldownSeconds}s";
+            CompanionTab.SliderAwarenessCooldownMax.Value = settings.AwarenessCooldownMaxSeconds;
+            CompanionTab.TxtAwarenessCooldownMax.Text = settings.AwarenessCooldownMaxSeconds <= 0
+                ? Loc.Get("label_cooldown_off")
+                : $"{settings.AwarenessCooldownMaxSeconds}s";
 
             // Show/hide awareness settings panel based on enabled state
             var awarenessEnabled = awarenessAvailable && settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
@@ -1187,6 +1191,17 @@ namespace ConditioningControlPanel
             var value = (int)CompanionTab.SliderAwarenessCooldown.Value;
             CompanionTab.TxtAwarenessCooldown.Text = $"{value}s";
             App.Settings.Current.AwarenessReactionCooldownSeconds = value;
+            App.Settings.Save();
+        }
+
+        internal void SliderAwarenessCooldownMax_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || CompanionTab.TxtAwarenessCooldownMax == null) return;
+
+            // 0 (or below the base cooldown) = randomization off; the fixed base cooldown is used.
+            var value = (int)CompanionTab.SliderAwarenessCooldownMax.Value;
+            CompanionTab.TxtAwarenessCooldownMax.Text = value <= 0 ? Loc.Get("label_cooldown_off") : $"{value}s";
+            App.Settings.Current.AwarenessCooldownMaxSeconds = value;
             App.Settings.Save();
         }
 

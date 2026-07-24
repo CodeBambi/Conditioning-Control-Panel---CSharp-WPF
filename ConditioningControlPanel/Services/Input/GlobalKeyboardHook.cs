@@ -56,10 +56,24 @@ public class GlobalKeyboardHook : IDisposable
         if (_hookId != IntPtr.Zero) return;
         _hookId = SetHook(_proc);
         if (_hookId == IntPtr.Zero)
+        {
             App.Logger?.Error("Global keyboard hook failed to install (win32 error {Code})",
                 Marshal.GetLastWin32Error());
+            VideoDiag.Log("PANIC", $"global keyboard hook FAILED to install (win32 {Marshal.GetLastWin32Error()}) - the panic key cannot work");
+        }
         else
+        {
             App.Logger?.Debug("Global keyboard hook started");
+            // #616/#617/#621/#622/#623 context: this is a WH_KEYBOARD_LL hook, which Windows
+            // delivers to the message loop of the INSTALLING thread — the WPF UI thread. Two
+            // consequences the reports depend on: (1) while the UI thread is wedged the panic key
+            // is physically undeliverable, and (2) Windows silently un-registers a low-level hook
+            // whose callback exceeds LowLevelHooksTimeout (default 300ms), and nothing here ever
+            // reinstalls it — so a single long stall can kill the panic key for the rest of the
+            // session even after the app recovers. Recorded so a report's trace shows exactly when
+            // the hook existed.
+            VideoDiag.Log("PANIC", "global keyboard hook installed (WH_KEYBOARD_LL, delivered on the UI thread)");
+        }
     }
 
     public void Stop()
@@ -73,6 +87,7 @@ public class GlobalKeyboardHook : IDisposable
         UnhookWindowsHookEx(_hookId);
         _hookId = IntPtr.Zero;
         App.Logger?.Debug("Global keyboard hook stopped");
+        VideoDiag.Log("PANIC", "global keyboard hook uninstalled");
     }
 
     private IntPtr SetHook(LowLevelKeyboardProc proc)

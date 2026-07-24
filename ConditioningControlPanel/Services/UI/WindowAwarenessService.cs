@@ -80,6 +80,12 @@ namespace ConditioningControlPanel.Services
         private DateTime _lastActivityChange = DateTime.Now;
         private DateTime _lastReactionTime = DateTime.MinValue;
         private DateTime _lastStillOnTime = DateTime.MinValue;
+        // Randomized-cooldown targets (#640): when AwarenessCooldownMaxSeconds > base, each reaction
+        // rolls a fresh cooldown in [base, max] which is then enforced until the next reaction. 0 =
+        // not yet rolled, so CanReact falls back to the fixed base cooldown (backward compatible).
+        private int _nextReactionCooldownSeconds;
+        private int _nextStillOnCooldownSeconds;
+        private readonly Random _cooldownRandom = new();
         private bool _isRunning;
         private bool _isDisposed;
 
@@ -375,7 +381,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool CanReact()
         {
-            var cooldownSeconds = App.Settings?.Current?.AwarenessReactionCooldownSeconds ?? 90;
+            // Use the randomized target rolled at the last reaction when set, else the fixed base.
+            var cooldownSeconds = _nextReactionCooldownSeconds > 0
+                ? _nextReactionCooldownSeconds
+                : (App.Settings?.Current?.AwarenessReactionCooldownSeconds ?? 90);
             return (DateTime.Now - _lastReactionTime).TotalSeconds >= cooldownSeconds;
         }
 
@@ -384,8 +393,26 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool CanStillOnReact()
         {
-            var cooldownSeconds = App.Settings?.Current?.AwarenessReactionCooldownSeconds ?? 90;
+            var cooldownSeconds = _nextStillOnCooldownSeconds > 0
+                ? _nextStillOnCooldownSeconds
+                : (App.Settings?.Current?.AwarenessReactionCooldownSeconds ?? 90);
             return (DateTime.Now - _lastStillOnTime).TotalSeconds >= cooldownSeconds;
+        }
+
+        /// <summary>
+        /// Roll the cooldown to enforce until the next reaction: a random value in [base, max]
+        /// when AwarenessCooldownMaxSeconds is set above the base cooldown, else the fixed base.
+        /// </summary>
+        private int RollCooldownSeconds()
+        {
+            var s = App.Settings?.Current;
+            var baseSeconds = s?.AwarenessReactionCooldownSeconds ?? 90;
+            var maxSeconds = s?.AwarenessCooldownMaxSeconds ?? 0;
+            if (maxSeconds > baseSeconds)
+            {
+                return _cooldownRandom.Next(baseSeconds, maxSeconds + 1);
+            }
+            return baseSeconds;
         }
 
         /// <summary>
@@ -394,6 +421,7 @@ namespace ConditioningControlPanel.Services
         public void MarkReaction()
         {
             _lastReactionTime = DateTime.Now;
+            _nextReactionCooldownSeconds = RollCooldownSeconds();
         }
 
         /// <summary>
@@ -402,6 +430,7 @@ namespace ConditioningControlPanel.Services
         public void MarkStillOnReaction()
         {
             _lastStillOnTime = DateTime.Now;
+            _nextStillOnCooldownSeconds = RollCooldownSeconds();
         }
 
         // Still-on milestone tracking: 1 min, 5 min, 10 min

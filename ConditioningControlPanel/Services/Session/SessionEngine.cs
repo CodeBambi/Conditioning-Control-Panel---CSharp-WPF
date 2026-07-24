@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Helpers;
 using XamlAnimatedGif;
 
 namespace ConditioningControlPanel.Services
@@ -521,8 +522,10 @@ namespace ConditioningControlPanel.Services
         {
             if (_currentSession == null) return;
             var settings = _currentSession.Settings;
-            var progress = elapsedMinutes / totalMinutes;
-            
+            // Easing curve (#660): per-session override if the preset sets one, else the global setting.
+            var curve = settings.RampCurve ?? App.Settings.Current.RampCurve;
+            var progress = RampCurves.ApplyCurve(elapsedMinutes / totalMinutes, curve);
+
             // Flash opacity ramp
             if (settings.FlashEnabled && settings.FlashOpacity != settings.FlashOpacityEnd)
             {
@@ -554,7 +557,7 @@ namespace ConditioningControlPanel.Services
             {
                 var pinkDuration = totalMinutes - _randomizedPinkStartMinute;
                 var pinkProgress = (elapsedMinutes - _randomizedPinkStartMinute) / pinkDuration;
-                pinkProgress = Math.Clamp(pinkProgress, 0, 1);
+                pinkProgress = RampCurves.ApplyCurve(pinkProgress, curve);
                 _currentPinkOpacity = Lerp(settings.PinkFilterStartOpacity, settings.PinkFilterEndOpacity, pinkProgress);
                 App.Overlay?.SetSustainedOverlayOpacity("pink_filter", _currentPinkOpacity / 100.0);
             }
@@ -564,7 +567,7 @@ namespace ConditioningControlPanel.Services
             {
                 var spiralDuration = totalMinutes - _randomizedSpiralStartMinute;
                 var spiralProgress = (elapsedMinutes - _randomizedSpiralStartMinute) / spiralDuration;
-                spiralProgress = Math.Clamp(spiralProgress, 0, 1);
+                spiralProgress = RampCurves.ApplyCurve(spiralProgress, curve);
                 _currentSpiralOpacity = Lerp(settings.SpiralOpacity, settings.SpiralOpacityEnd, spiralProgress);
                 App.Overlay?.SetSustainedOverlayOpacity("spiral", _currentSpiralOpacity / 100.0);
             }

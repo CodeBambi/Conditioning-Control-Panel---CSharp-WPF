@@ -587,6 +587,12 @@ public class BubbleService : IDisposable
     // 4s, a 10% one-shot roll sends the companion gliding over to narrate + pop it. Skipped while a
     // fullscreen video is up (we'd be popping an invisible bubble), and rate-limited by a 60s cooldown.
 
+    /// <summary>#628: the avatar bubble-pop egg must never claim a fullscreen-takeover payload. Popping a
+    /// "video"/"htlink" bubble opens a fullscreen LibVLC/browser window mid-choreography, which wedges the
+    /// render thread. Every other (benign) ambient payload is fair game. Null/empty ids are claimable.</summary>
+    internal static bool IsEggClaimableEffect(string effectKindId)
+        => effectKindId is not ("video" or "htlink");
+
     /// <summary>Per-frame scan: latch the 10% roll on any ambient effect bubble crossing 4s, and if it
     /// hits, hand the bubble to the companion. One egg at a time; the loop runs on the UI thread.</summary>
     private void TryTriggerAvatarBubbleEgg()
@@ -606,6 +612,9 @@ public class BubbleService : IDisposable
         {
             var b = _bubbles[i];
             if (b.RolledForEgg || !b.IsAmbientEffectBubble || b.AgeMs <= AVATAR_EGG_AGE_MS) continue;
+            // Never claim fullscreen-takeover payloads (#628): popping a "video"/"htlink" bubble opens a
+            // fullscreen LibVLC/browser window mid-choreography, hanging the render thread.
+            if (!IsEggClaimableEffect(b.EffectKindId)) continue;
             b.RolledForEgg = true;                                      // one-shot latch at the 4s crossing
             if (_random.Next(100) < AVATAR_EGG_CHANCE_PCT)
             {

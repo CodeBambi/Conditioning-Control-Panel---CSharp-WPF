@@ -58,6 +58,17 @@ import { startMenuMusic, stopMenuMusic } from './menuMusic.js';
 import { setBandDepth, resetCorruption, isDeepBand } from './corruption.js';
 import * as fullscreen from './fullscreen.js';
 
+/* window.__ccpPause(on) exists as a harmless no-op from import time, so a native
+ * host (react-native-webview) that calls it before installPause() has wired the
+ * real hook simply does nothing. installPause() overwrites it with the live hook
+ * and restores this stub on dispose(). Guarded so a DOM-less import never touches
+ * window (import-safety: a throw here is a silent infinite loader). */
+try {
+  if (typeof window !== 'undefined' && typeof window.__ccpPause !== 'function') {
+    window.__ccpPause = function () {};
+  }
+} catch (_e) { /* never fatal at import */ }
+
 /**
  * THE QUIT BUTTON FALLS OFF. From band 3 onward (Deepening / Climax / Recovery
  * — the same set ui/corruption.js rots the palette over), a CONFIRMED quit has
@@ -318,6 +329,7 @@ export function installPause(ctx = {}) {
   let hbKeepalive = 0;
   let lastFocus = null;
   let confirmQuit = false;
+  let pausedByHost = false;      // this pause was opened by window.__ccpPause(true)
   const gateWaiters = [];
 
   /* ---- band plumbing -----------------------------------------------------
@@ -556,6 +568,7 @@ export function installPause(ctx = {}) {
   function close() {
     if (!open_ || destroyed) return;
     open_ = false;
+    pausedByHost = false;     // any close ends host ownership of this pause
     root.hidden = true;
     try { if (root.parentNode) root.parentNode.removeChild(root); } catch (_e) {}
     btn.classList.remove('is-hidden');
@@ -595,6 +608,40 @@ export function installPause(ctx = {}) {
     const waiters = gateWaiters.splice(0, gateWaiters.length);
     for (const r of waiters) { try { r(); } catch (_e) {} }
     try { shim.log('pause: resumed'); } catch (_e) {}
+  }
+
+  /* ---- HOST PAUSE HOOK (RN / app-lifecycle) ------------------------------
+   * window.__ccpPause(true|false) lets a native host (react-native-webview)
+   * freeze the run when the app BACKGROUNDS and thaw it on RETURN, reusing the
+   * exact manual-pause machinery (open/close: same clock freeze, overlay, layer
+   * freeze, heartbeat keepalive) so a host freeze is indistinguishable from a
+   * user one — WITHOUT clobbering a pause the user opened themselves.
+   *
+   *   __ccpPause(true)  -> freeze if not already paused; tag it host-initiated.
+   *                        Idempotent. open() self-guards the jumpscare freeze,
+   *                        so we only claim ownership if the pause actually took.
+   *   __ccpPause(false) -> resume ONLY if WE initiated this pause AND the user has
+   *                        not picked the menu up meanwhile (Options open or a
+   *                        Quit ceremony armed). A pause the USER opened before
+   *                        backgrounding is NEVER auto-resumed.
+   *
+   * It touches neither the Escape probe/opener nor the quit-generation ceremony:
+   * it only calls the same open()/close() the Pause button and Esc already do. */
+  const menuEngaged = () => optionsBusy || confirmQuit || quitting || !!genNode || quitReleased;
+
+  function hostPause(on) {
+    if (destroyed) return;
+    if (on) {
+      if (open_ || quitting) return;     // already paused (user or host) / leaving -> idempotent
+      pausedByHost = true;
+      open();                            // open() refuses during the jumpscare freeze
+      if (!open_) pausedByHost = false;  // ...if it refused, we never owned it
+    } else {
+      if (!pausedByHost) return;         // user-owned pause, or not paused -> host resume is a no-op
+      pausedByHost = false;
+      if (open_ && menuEngaged()) return;// user took the menu over -> keep it open (now user-owned)
+      if (open_) close();
+    }
   }
 
   /* ---- Options (owned by another module; degrade if it is not there) ------ */
@@ -939,11 +986,14 @@ export function installPause(ctx = {}) {
     const waiters = gateWaiters.splice(0, gateWaiters.length);
     for (const r of waiters) { try { r(); } catch (_e) {} }
     if (active === handle) { active = null; try { delete win.__intakePauseHandle; } catch (_e) { win.__intakePauseHandle = null; } }
+    // Hand window.__ccpPause back to a harmless no-op (only if it is still ours).
+    try { if (win.__ccpPause === hostPause) win.__ccpPause = function () {}; } catch (_e) {}
   }
 
   const handle = { dispose, isPaused: () => open_, open, close, gate, setBand, button: btn };
   active = handle;
   try { win.__intakePauseHandle = handle; } catch (_e) {}
+  try { win.__ccpPause = hostPause; } catch (_e) {}
   return handle;
 }
 

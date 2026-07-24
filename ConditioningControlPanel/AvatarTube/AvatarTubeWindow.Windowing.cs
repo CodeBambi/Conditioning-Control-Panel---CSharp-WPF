@@ -60,6 +60,8 @@ namespace ConditioningControlPanel
         private const double MinScale = 0.5;   // 50% - can shrink twice from 100%
         private const double MaxScale = 1.5;   // 150% - can grow twice from 100%
         private const double ScaleStep = 0.25; // 25% per step
+        // Set while restoring saved placement (#669) so ApplyScale/drag don't re-persist mid-restore.
+        private bool _restoringPlacement = false;
 
         // Fullscreen detection
         private DispatcherTimer? _fullscreenCheckTimer;
@@ -152,10 +154,23 @@ namespace ConditioningControlPanel
             _fullscreenCheckTimer.Start();
         }
 
+        // While a fullscreen game host (DTRH / Graded Intake / Loom / Bureau) owns the screen, an
+        // ATTACHED tube rides at main's z-level inside main's owner group; ANY self-show/raise
+        // leapfrogs the host sibling and floats the tube over the game (its native-owned upper-left
+        // position). Every attached self-raise path below consults this and stands down until the
+        // host closes (mirrors the chat-focus guard in .ChatInput.cs). Detached tubes are
+        // intentionally topmost widgets and stay exempt.
+        private bool SuppressSelfRaiseForGameHost => !IsDetached && ChaosWebViewHost.AnyHostActive;
+
         private void FullscreenCheckTimer_Tick(object? sender, EventArgs e)
         {
             try
             {
+                // A game host owns the screen: the attached tube is already tucked away with the
+                // minimized main window, and its own hide/restore dance here is the confirmed cause
+                // of the tube popping over the game. Do nothing until the host closes.
+                if (SuppressSelfRaiseForGameHost) return;
+
                 bool isOtherAppFullscreen = IsOtherAppFullscreen();
 
                 // When DETACHED, avatar should stay visible as a widget overlay
@@ -317,14 +332,22 @@ namespace ConditioningControlPanel
 
         private const int WM_DPICHANGED = 0x02E0;
         private DispatcherTimer? _dpiQuiesceTimer;
+        private bool _dpiFloatWasRunning;
 
         /// <summary>
         /// Window procedure hook. Only handles WM_DPICHANGED: when a drag crosses onto a
         /// monitor with a different scale factor, PerMonitorV2 WPF resizes this layered
         /// window, and that resize runs a SYNCHRONOUS CompleteRender that deadlocks when
         /// the shared AllowsTransparency render thread is busy (the documented hang in
-        /// OnFirstContentRendered — #477). Quiesce the 60fps float/breath transform writes
-        /// for the transition so the blocking present can complete, then resume.
+        /// OnFirstContentRendered — #477).
+        ///
+        /// The blocking present can only complete if NOTHING is writing to this surface, and
+        /// TWO independent drivers do: the 60fps float/breath transform, and the Circe emote
+        /// crossfade (~1Hz idle rotation plus its opacity clocks). The original mitigation
+        /// quiesced only the former — emote mode landed on this surface afterwards and kept
+        /// compositing straight through the transition, which is how an attached tube dragged
+        /// between mixed-DPI monitors could still wedge (Hang 1002, no crash.log, last log
+        /// line an [EMOTE] xfade). Quiesce both for the transition, then resume.
         /// </summary>
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
@@ -332,21 +355,28 @@ namespace ConditioningControlPanel
             {
                 try
                 {
+                    // NB: the quiesce must NOT be conditional on the float timer running — the emote
+                    // crossfade deadlocks this surface just as happily with the float transform idle.
                     if (_floatTimer?.IsEnabled == true)
                     {
                         _floatTimer.Stop();
-                        if (_dpiQuiesceTimer == null)
-                        {
-                            _dpiQuiesceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
-                            _dpiQuiesceTimer.Tick += (s, e) =>
-                            {
-                                _dpiQuiesceTimer?.Stop();
-                                try { _floatTimer?.Start(); } catch { /* window tearing down */ }
-                            };
-                        }
-                        _dpiQuiesceTimer.Stop(); // restart the debounce on rapid re-crossings
-                        _dpiQuiesceTimer.Start();
+                        _dpiFloatWasRunning = true;   // sticky across rapid re-crossings; cleared on resume
                     }
+                    QuiesceEmotesForDpi();
+
+                    if (_dpiQuiesceTimer == null)
+                    {
+                        _dpiQuiesceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+                        _dpiQuiesceTimer.Tick += (s, e) =>
+                        {
+                            _dpiQuiesceTimer?.Stop();
+                            try { if (_dpiFloatWasRunning) { _dpiFloatWasRunning = false; _floatTimer?.Start(); } }
+                            catch { /* window tearing down */ }
+                            try { ResumeEmotesAfterDpi(); } catch { /* window tearing down */ }
+                        };
+                    }
+                    _dpiQuiesceTimer.Stop(); // restart the debounce on rapid re-crossings
+                    _dpiQuiesceTimer.Start();
                 }
                 catch { /* never let a hook throw */ }
             }
@@ -614,7 +644,8 @@ namespace ConditioningControlPanel
                         case WindowState.Normal:
                         case WindowState.Maximized:
                             ResumeAvatarGif();
-                            if (parentVisible && App.Settings?.Current?.AvatarEnabled == true)
+                            if (parentVisible && App.Settings?.Current?.AvatarEnabled == true
+                                && !SuppressSelfRaiseForGameHost)
                             {
                                 Show();
                                 if (_isAttached) UpdatePosition();
@@ -641,8 +672,11 @@ namespace ConditioningControlPanel
                         && App.Settings?.Current?.AvatarEnabled == true)
                     {
                         ResumeAvatarGif();
-                        Show();
-                        if (_isAttached) UpdatePosition();
+                        if (!SuppressSelfRaiseForGameHost)
+                        {
+                            Show();
+                            if (_isAttached) UpdatePosition();
+                        }
                         // When detached, WPF Topmost property handles it
                     }
                     else
@@ -668,8 +702,10 @@ namespace ConditioningControlPanel
         {
             if (_parentWindow == null) return;
 
-            // Don't do any z-order work when pop quiz is open
+            // Don't do any z-order work when pop quiz is open, or while a game host owns the
+            // screen (raising the attached tube would float it over DTRH/Intake).
             if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
+            if (SuppressSelfRaiseForGameHost) return;
 
             try
             {
@@ -719,6 +755,10 @@ namespace ConditioningControlPanel
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(ShowTube)); return; }
             try
             {
+                // Never raise an attached tube while a game host owns the screen (it would float
+                // over DTRH/Intake); the game-end restore path re-shows it once the host is gone.
+                if (SuppressSelfRaiseForGameHost) return;
+
                 // Manual/explicit show (checkbox toggle, tray "Wake Bambi Up", session events)
                 // is a deliberate user/system request to make the avatar visible, so clear the
                 // fullscreen-hidden flag. Otherwise IsAvatarVisibleOnScreen and the fullscreen
@@ -1103,6 +1143,17 @@ namespace ConditioningControlPanel
         public bool IsDetached => !_isAttached;
 
         /// <summary>
+        /// The tube's HWND while ATTACHED, else <see cref="IntPtr.Zero"/>. Used by sibling windows that
+        /// share our native owner (the game hosts) to slot themselves ABOVE the attached pair instead of
+        /// directly above main - two windows owned by the same HWND have no defined order between them,
+        /// which is what let a game window and the tube interleave into a torn composite.
+        /// Plain-field reads only: this is called from the MAIN thread while the tube may live on its own
+        /// dispatcher thread, so it must never touch a DependencyProperty (use IsWindowVisible on the
+        /// handle instead of IsVisible).
+        /// </summary>
+        internal IntPtr AttachedHandleOrZero => _isAttached ? _tubeHandle : IntPtr.Zero;
+
+        /// <summary>
         /// Gets whether the avatar is currently visible on screen.
         /// Returns false if attached and main window is minimized or not visible.
         /// Returns true if detached (independent widget window).
@@ -1199,6 +1250,13 @@ namespace ConditioningControlPanel
 
             App.Logger?.Information("Avatar tube detached - now floating independently");
             if (!silent) Giggle("I'm free! Ctrl+scroll to resize!");
+
+            // Remember the detached state so the companion comes back floating next launch (#669).
+            if (!_restoringPlacement)
+            {
+                try { if (App.Settings?.Current != null) { App.Settings.Current.AvatarTubeDetached = true; App.Settings.Save(); } }
+                catch (Exception ex) { App.Logger?.Debug("Avatar tube: persist detached flag failed ({Error})", ex.Message); }
+            }
         }
 
         /// <summary>
@@ -1269,6 +1327,13 @@ namespace ConditioningControlPanel
 
             App.Logger?.Information("Avatar tube attached - anchored to main window");
             if (!silent) Giggle("Back home~");
+
+            // Persist the attached state so we don't auto-detach next launch (#669).
+            if (!_restoringPlacement)
+            {
+                try { if (App.Settings?.Current != null) { App.Settings.Current.AvatarTubeDetached = false; App.Settings.Save(); } }
+                catch (Exception ex) { App.Logger?.Debug("Avatar tube: persist attached flag failed ({Error})", ex.Message); }
+            }
         }
 
         /// <summary>
@@ -1352,6 +1417,11 @@ namespace ConditioningControlPanel
                 ContentViewbox.Height = newHeight;
                 // Window follows via the ContentViewbox.SizeChanged handler wired in OnLoaded
                 // (auto-sizing is off after first paint — see OnFirstContentRendered).
+
+                // Persist the user's chosen scale (#669). Scale only changes via detached-mode
+                // gestures (Ctrl+scroll / menu / arrow keys), so this rides those; guarded so a
+                // restore doesn't re-save. Debounced Save coalesces the discrete per-step writes.
+                PersistTubePlacement();
             }
             catch (Exception ex)
             {
@@ -1484,6 +1554,32 @@ namespace ConditioningControlPanel
             {
                 _isDragging = false;
                 ReleaseMouseCapture();
+                // Remember where the user parked the detached companion (#669). Debounced Save
+                // coalesces the write, so persisting on drag-end (not per move tick) is plenty.
+                PersistTubePlacement();
+            }
+        }
+
+        /// <summary>
+        /// Save the detached companion's current Left/Top + scale so it returns to the same spot
+        /// next launch (#669). No-ops while attached (position is parent-anchored, not user-owned)
+        /// and while a restore is in flight (so the restore doesn't immediately re-save itself).
+        /// </summary>
+        private void PersistTubePlacement()
+        {
+            if (_isAttached || _restoringPlacement) return;
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null) return;
+                s.AvatarTubeLeft = Left;
+                s.AvatarTubeTop = Top;
+                s.AvatarTubeScale = _currentScale;
+                App.Settings?.Save();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Avatar tube: persist placement failed ({Error})", ex.Message);
             }
         }
 
@@ -1543,6 +1639,66 @@ namespace ConditioningControlPanel
             catch
             {
                 // Ignore errors - position clamping is best-effort
+            }
+        }
+
+        /// <summary>
+        /// Restore the saved companion placement on startup (#669): if it was detached at last exit,
+        /// re-detach silently and reapply the saved scale + Left/Top, clamped onto a currently-connected
+        /// monitor so a since-disconnected screen can't strand it off-view. No-op when it was attached
+        /// (the default) so existing users see no change until they move/detach it themselves.
+        /// </summary>
+        public void RestoreSavedPlacement()
+        {
+            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(RestoreSavedPlacement)); return; }
+
+            var s = App.Settings?.Current;
+            if (s == null || !s.AvatarTubeDetached) return; // attached is the default — nothing to restore
+
+            _restoringPlacement = true;
+            try
+            {
+                // Float it free first (silent — no "I'm free!" giggle on a cold boot).
+                Detach(silent: true);
+
+                // Reapply the saved scale before positioning so the clamp uses the real footprint.
+                if (!double.IsNaN(s.AvatarTubeScale) && s.AvatarTubeScale > 0)
+                {
+                    _currentScale = Math.Clamp(s.AvatarTubeScale, MinScale, MaxScale);
+                    ApplyScale();
+                    UpdateLayout(); // so ActualWidth/Height reflect the restored scale for the clamp
+                }
+
+                // Reapply the saved position, then clamp onto a live monitor. Guard AllScreens (it can
+                // be empty during certain system states) and wrap in try-catch for the mixed-DPI
+                // PointToScreen/coordinate hazards this window is prone to (#477).
+                if (!double.IsNaN(s.AvatarTubeLeft) && !double.IsNaN(s.AvatarTubeTop))
+                {
+                    try
+                    {
+                        if (System.Windows.Forms.Screen.AllScreens.Length > 0)
+                        {
+                            Left = s.AvatarTubeLeft;
+                            Top = s.AvatarTubeTop;
+                            ClampAvatarPosition(); // keep at least half of it on a connected screen
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Avatar tube: restore position failed ({Error})", ex.Message);
+                    }
+                }
+
+                EnsureVisibleWhenDetached();
+                App.Logger?.Information("Avatar tube: restored detached placement (scale {Scale:0.00})", _currentScale);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Avatar tube: RestoreSavedPlacement failed ({Error})", ex.Message);
+            }
+            finally
+            {
+                _restoringPlacement = false;
             }
         }
     }

@@ -67,6 +67,52 @@ import { noteMedia } from '../core/mediaLog.js';
 import { tintColorOptions } from './optionTint.js';
 
 /* ----------------------------------------------------------------------------
+ * CAPTCHA item family (Verify* mechanics) — lazy, guarded layer load.
+ *   The fake-captcha renderers live in ./captcha/index.js. We import the layer
+ *   ONCE, at the first createBeats() init, guarded so a TOTAL failure of the
+ *   captcha layer degrades every Verify* beat to plain rendering (never a blank
+ *   card) — the same loadOptional philosophy boot.js uses for the render stack.
+ *   Because the import is async, a Verify* beat that arrives before the layer
+ *   resolves simply falls back for that one beat. Nothing here runs at import
+ *   time (module-scope declarations only; the dynamic import fires from
+ *   loadCaptchaLayer(), called inside createBeats()).
+ * -------------------------------------------------------------------------- */
+/** Every Verify* Mechanic id (derived from the enum so all families stay covered). */
+const CAPTCHA_MECHS = new Set(
+  MECHANICS.filter((m) => typeof m === 'string' && m.indexOf('verify') === 0),
+);
+let _captchaLayer = null;        // resolved ./captcha/index.js namespace, or null on failure
+let _captchaTried = false;
+function ixCaptchaLog(msg) {
+  try {
+    if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('intake-log', { detail: { msg: 'ib/captcha: ' + msg } }));
+    }
+  } catch (_e) {}
+}
+function loadCaptchaLayer() {
+  if (_captchaTried) return;
+  _captchaTried = true;
+  try {
+    import('./captcha/index.js')
+      .then((m) => { _captchaLayer = m || null; })
+      .catch((e) => { _captchaLayer = null; ixCaptchaLog('layer load failed: ' + (e && e.message)); });
+  } catch (e) { _captchaLayer = null; ixCaptchaLog('layer import threw: ' + (e && e.message)); }
+}
+/** The base Mechanic a Verify* beat degrades to, by the prompt's answer shape —
+ *  mirrors selectMechanic()'s own fallback ladder so the beat renders + grades
+ *  identically to a native beat of that shape. */
+function fallbackMechanicFor(beat) {
+  const opts = beat && Array.isArray(beat.options) ? beat.options : [];
+  if (opts.length >= 2) return Mechanic.MC4;
+  const ans = beat && beat.prompt ? beat.prompt.answer : undefined;
+  if (typeof ans === 'number') return Mechanic.CheckIn;
+  if (typeof ans === 'string') return Mechanic.Mantra;
+  if (typeof ans === 'boolean') return Mechanic.YesNo;
+  return Mechanic.Mono;
+}
+
+/* ----------------------------------------------------------------------------
  * PURE helpers (no DOM) — unit-tested headless. Exported for the smoke test.
  * -------------------------------------------------------------------------- */
 
@@ -296,6 +342,103 @@ const CORRUPT_GIF_FRAME_MS = 75;
 const CORRUPT_SCRAMBLE = '#@%&*!/|<>_=+$?~^';
 
 /* ----------------------------------------------------------------------------
+ * UPSIDE-DOWN CARD easter egg (Lv3 onward) — OWNER TUNING BLOCK.
+ *   From Deepening on, a qualifying question card has a small per-beat chance
+ *   of being rotated a full 180deg: the answer BUTTONS end up on TOP and the
+ *   prompt TEXT reads upside down. The player reads the inverted line and
+ *   clicks the inverted buttons to answer. Disorienting but FULLY USABLE —
+ *   the options are never touched and grading is entirely unchanged (invariant
+ *   #1: friction, not lockout). A short spin sells the flip; the card stays
+ *   flipped for the whole beat and is rebuilt straight next render, so the
+ *   rotation never leaks forward (stage.innerHTML='' each beat).
+ *   MUTUALLY EXCLUSIVE with the jumpscare, the freeze gate and the corrupted
+ *   question: firing sets gateUsedThisBeat, so at most one set-piece per beat,
+ *   and raises flipLive so the timer-triggered MouseHijack stands down
+ *   (isSetPieceLive) instead of auto-solving the inverted card.
+ * -------------------------------------------------------------------------- */
+/** Bands eligible for the flip. "Lv3 onward" = Deepening + Climax + Recovery,
+ *  the literal reading (and consistent with the recent bubble/audio changes).
+ *  Recovery (lv5) could be dropped to keep it a sanctuary as the MouseHijack
+ *  does — one edit here, no other code cares. */
+const FLIP_BANDS = [Band.Deepening, Band.Climax, Band.Recovery];
+/** Per-qualifying-beat chance the whole card flips 180deg. */
+const FLIP_CHANCE = 0.05;
+
+/* ----------------------------------------------------------------------------
+ * DRIFTING WRONG OPTION easter egg (Lv3 onward) — OWNER TUNING BLOCK.
+ *   From Deepening on, a qualifying option beat has a small per-beat chance that
+ *   ONE of its WRONG options slowly slides fully off-frame — laterally (left/
+ *   right) or vertically (up/down), direction chosen at random — as if the answer
+ *   were trying to escape. Pure cosmetic flourish, NOT a set-piece: it never
+ *   blocks input, never freezes the scene, never claims the beat (it does NOT set
+ *   gateUsedThisBeat) and never raises isSetPieceLive, so a normal beat (steers,
+ *   MouseHijack, reward) keeps running underneath it. It only ARMS when no real
+ *   set-piece already owns the beat, and it always targets a WRONG option, so
+ *   grading is unaffected and the drifting option stays fully clickable on its way
+ *   out (catch it quick and you simply commit that wrong answer — the joke). The
+ *   wrapper is unwound on answer / teardown so no transformed DOM ever leaks
+ *   forward (and stage.innerHTML='' next render is a second guarantee).
+ * -------------------------------------------------------------------------- */
+/** Bands eligible for the drift — "Lv3 onward" = Deepening + Climax + Recovery,
+ *  the same set the deep-band audio gaslighting (DEEP_CUE_BANDS) uses. Recovery
+ *  (lv5) could be dropped to keep it a sanctuary as the MouseHijack does — one
+ *  edit here, no other code cares. */
+const DRIFT_BANDS = [Band.Deepening, Band.Climax, Band.Recovery];
+/** Per-qualifying-beat chance ONE wrong option drifts away (~3%). */
+const DRIFT_CHANCE = 0.03;
+/** Drift duration range (ms) — slow enough to notice and react (a few seconds). */
+const DRIFT_MIN_MS = 3200;
+const DRIFT_MAX_MS = 6000;
+
+/* ----------------------------------------------------------------------------
+ * MID-RUN GLITCH TRANSITION — OWNER TUNING BLOCK.
+ *   A single, brief "the system stutters" moment: once during a run (and only in
+ *   roughly one run out of two) the whole card + a full-screen overlay judder into
+ *   one of three distinct glitch styles for ~700-1100ms, then cleanly restore. It
+ *   is pure ATMOSPHERE — options are never touched, the beat never resolves through
+ *   it and grading is entirely unchanged (invariant #1: friction, not lockout).
+ *
+ *   TWO independent gates, mirroring the jumpscare's run/beat split:
+ *     - RUN gate (GLITCH_TRANSITION_RUN_CHANCE): decided ONCE at run start
+ *       (transitionRunPicked in createBeats). ~50% of runs are eligible; the rest
+ *       never see it. NOT re-rolled per beat.
+ *     - BEAT gate: within an eligible run, each mid-descent question beat rolls a
+ *       small hazard (GLITCH_TRANSITION_BEAT_CHANCE) and the FIRST hit fires the one
+ *       transition, then a run latch (transitionFired) closes it for good. A late-
+ *       Climax FORCE (GLITCH_TRANSITION_FORCE_Q) guarantees an eligible run always
+ *       gets exactly one even if the hazard whiffs the whole window.
+ *
+ *   Eligible bands are the MIDDLE of the descent only — never Calibration/
+ *   Establishing (the opening reads a glitch as a bug) and never Recovery (the
+ *   surfacing sanctuary). So it lands somewhere mid-run, not on the first or final
+ *   beat. MUTUALLY EXCLUSIVE with every other set-piece: it yields if one already
+ *   owns the beat (gateUsedThisBeat/gateFrozen/eventOpen), and while running it
+ *   claims the beat (gateUsedThisBeat) and raises transitionLive so the timer-
+ *   triggered MouseHijack and other steers stand down (isSetPieceLive).
+ * -------------------------------------------------------------------------- */
+/** Run-level odds this run is eligible for a glitch transition (decided ONCE at
+ *  run start). ~1 run in 2. */
+const GLITCH_TRANSITION_RUN_CHANCE = 0.5;
+/** Bands eligible for the transition — the MIDDLE of the descent (never the
+ *  opening two bands, never the Recovery walk-down). */
+const GLITCH_TRANSITION_BANDS = [Band.Deepening, Band.Climax];
+/** Per-qualifying-beat hazard that an eligible run fires its one transition here.
+ *  Across the ~35 mid-descent beats this fires with near-certainty long before the
+ *  FORCE tail; the tail is a belt-and-suspenders guarantee, not the usual path. */
+const GLITCH_TRANSITION_BEAT_CHANCE = 0.12;
+/** Late-Climax graded index (beat.meta.qIndex, 1-based) at/after which an eligible
+ *  run that somehow hasn't fired yet FORCES the transition on the next free beat, so
+ *  "eligible run => exactly one" is a guarantee, not a coin that can miss the window.
+ *  Climax opens ~q65 (sum of BASE_BEATS before it); this sits in its back half. */
+const GLITCH_TRANSITION_FORCE_Q = 74;
+/** The three distinct glitch styles (a variation is picked at random when it fires):
+ *    rgbsplit — RGB channel-split / chromatic-aberration tear (colour ghosts + jitter)
+ *    vhsroll  — horizontal-scanline / VHS vertical-roll displacement judder
+ *    datamosh — block-shuffle / horizontal slice-scramble flash
+ *  Each maps to an .ixgt-<name> overlay class + an .ixgt-<name>-card card class. */
+const GLITCH_TRANSITION_VARIANTS = ['rgbsplit', 'vhsroll', 'datamosh'];
+
+/* ----------------------------------------------------------------------------
  * OPTIONS HOLD — the answer buttons are not offered the instant the card mounts.
  * The prompt gets to finish presenting itself first: the deep-band typewriter
  * (~18ms/char) and the spoken VO both need room, and answering over the top of
@@ -331,6 +474,38 @@ function ensureCorruptStyles() {
   document.head.appendChild(s);
 }
 
+/** Inject the upside-down-card visuals lazily (only the first time a beat flips). */
+const IXFL_STYLE_ID = 'ib-flip-style';
+function ensureFlipStyles() {
+  if (typeof document === 'undefined' || document.getElementById(IXFL_STYLE_ID)) return;
+  const s = document.createElement('style');
+  s.id = IXFL_STYLE_ID;
+  s.textContent = IXFL_CSS;
+  document.head.appendChild(s);
+}
+
+/** Inject the drifting-wrong-option visuals lazily (only the first time a beat
+ *  drifts one). */
+const IXDR_STYLE_ID = 'ib-drift-style';
+function ensureDriftStyles() {
+  if (typeof document === 'undefined' || document.getElementById(IXDR_STYLE_ID)) return;
+  const s = document.createElement('style');
+  s.id = IXDR_STYLE_ID;
+  s.textContent = IXDR_CSS;
+  document.head.appendChild(s);
+}
+
+/** Inject the mid-run glitch-transition visuals lazily (only the first time a run
+ *  actually fires one). */
+const IXGT_STYLE_ID = 'ib-glitch-transition-style';
+function ensureTransitionStyles() {
+  if (typeof document === 'undefined' || document.getElementById(IXGT_STYLE_ID)) return;
+  const s = document.createElement('style');
+  s.id = IXGT_STYLE_ID;
+  s.textContent = IXGT_CSS;
+  document.head.appendChild(s);
+}
+
 /** Inject the event's scoped styles + the freeze rule (only when it first fires). */
 const IXEV_STYLE_ID = 'ib-event-style';
 function ensureEventStyles() {
@@ -357,6 +532,26 @@ const FREEZE_GATE_CHANCE = 0.03;          // roll on each qualifying wrong press
  *  Calibration/Establishing are never interrupted — the mechanic reads as a bug
  *  that early — and Recovery is the walk-down, which never coerces. */
 const FREEZE_GATE_BANDS = [Band.Deepening, Band.Climax];
+
+/* ----------------------------------------------------------------------------
+ * DEEP-BAND ANSWER-CUE GASLIGHTING (Lv3+ = Deepening/Climax/Recovery).
+ *   The negative cue is ducked, wrong answers sometimes reward, and distortion
+ *   set-pieces sometimes reward — so feedback stops meaning what it says.
+ *   Lv1/Lv2 (Calibration/Establishing) are never touched: correct -> chime,
+ *   wrong -> full-volume buzzer, always.
+ * -------------------------------------------------------------------------- */
+/** Bands at/after Deepening ("Lv3 onward"). Mirrors FREEZE_GATE_BANDS style. */
+const DEEP_CUE_BANDS = [Band.Deepening, Band.Climax, Band.Recovery];
+/** Lv3+ multiplier on the wrong/incorrect cue's gain (deep bands duck it). 0..1.
+ *  0.45 ≈ -7 dB off the 0.15 manifest gain. TUNABLE: owner may retune 0.4-0.5. */
+const DEEP_WRONG_CUE_MULT = 0.45;
+/** Lv3+ chance a distortion set-piece (card melt / corruption glitch|melt) also
+ *  fires a GOOD chime — a positive stinger over a bad event.
+ *  TUNABLE: rate unspecified by owner — starting at 0.30, tune on play-test. */
+const DISTORT_GOOD_CHIME_RATE = 0.30;
+/** Lv3+ chance a WRONG answer plays the GOOD chime INSTEAD of the wrong cue
+ *  (a false-positive reward). ~10%. TUNABLE: owner-approved default. */
+const WRONG_GOOD_CHIME_RATE = 0.10;
 const FREEZE_GATE_MS = 20000;             // stall window before we auto-pick
 const FREEZE_SUB_FALLBACK = 'Are you sure, sweetie?'; // no manifest/clip text
 const FREEZE_NICHES = ['bambi', 'sissy', 'drone', 'circe'];
@@ -487,6 +682,9 @@ function fadeLayerOutRemove(node, outMs, removeMs) {
 export function createBeats({ root, effects, audio, steering, reward, caps, background, theme, media, niche, micEnabled } = {}) {
   const stage = root;
   caps = caps || {};
+  // Kick the guarded, one-time captcha-layer import (Verify* mechanics). Safe to
+  // call repeatedly (latched); degrades to plain rendering if it never resolves.
+  loadCaptchaLayer();
   // Host's MicConsentGiven. Undefined (standalone/harness) => allowed, since there
   // the browser's permission prompt is the only gate that exists.
   const micAllowed = micEnabled !== false;
@@ -497,6 +695,14 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
   // wrong press rolls it once (GLITCH_RUN_CHANCE). null = unrolled; true = this run
   // may fire the event, false = it never can. Run-scoped (visible to render() below).
   let glitchRunEligible = null;
+
+  // NEW RUN: decide ONCE (at run start) whether this run gets a mid-run glitch
+  // transition — roughly 1 run in 2. An ineligible run NEVER shows it; an eligible
+  // run shows EXACTLY one, mid-descent (see maybeArmGlitchTransition below). The
+  // latch closes after the single fire. Both are run-scoped closure state, visible
+  // to render() below, re-decided every createBeats() (= per run).
+  const transitionRunPicked = Math.random() < GLITCH_TRANSITION_RUN_CHANCE;
+  let transitionFired = false;
 
   // Active bank niche for the freeze-gate VO id contract (sure_<niche>_NN). The
   // niche is validated by the shim before boot; fall back to bambi if a caller
@@ -511,6 +717,28 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
       if (audio && typeof audio.sfx === 'function') return audio.sfx(id, intensity, opts);
     } catch (_e) {}
     return null;
+  }
+
+  // Deep-band gaslighting helpers (Lv3+). goodChime fires the REAL CCP reward
+  // chime (chime1-3.mp3) as a bare positive stinger — reused for false-positive
+  // rewards and over distortion set-pieces. The manifest id 'chime' is a silent
+  // placeholder, so we go through audio.chime (the mp3 path), never sfx('chime').
+  function goodChime(depth) {
+    try {
+      if (audio && typeof audio.chime === 'function') {
+        audio.chime({ fire: true, kind: 'chime', intensity: clamp01(depth == null ? 0.6 : depth), streak: 0 });
+      }
+    } catch (_e) {}
+  }
+  // Lv3+ only: sometimes drop a positive stinger over a distortion set-piece.
+  // Takes `beat` explicitly (self-gates to the deep bands) so it is safe to call
+  // from any render closure.
+  function maybeGoodChimeOnDistortion(beat) {
+    try {
+      if (!beat || DEEP_CUE_BANDS.indexOf(beat.band) < 0) return;   // Lv3 onward only
+      if (Math.random() >= DISTORT_GOOD_CHIME_RATE) return;
+      goodChime(beat.depth);
+    } catch (_e) {}
   }
 
   // Guarded VOICEOVER seam: speak a beat's directed prompt VO (additive; audio may
@@ -581,6 +809,8 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
       let gateFrozen = false;          // the freeze gate currently holds the scene frozen
       let gateUsedThisBeat = false;    // jumpscare OR freeze gate OR corruption fired this beat (mutual excl.)
       let corruptLive = false;         // a CORRUPTED QUESTION set-piece owns this beat
+      let flipLive = false;            // the UPSIDE-DOWN CARD egg owns this beat (rotated 180)
+      let transitionLive = false;      // the MID-RUN GLITCH TRANSITION owns this beat (brief judder)
       const freezeSubs = [];           // (frozen:bool)=>void — ring/heartbeat pause hooks
       function notifyFreeze(v) {
         gateFrozen = !!v;
@@ -714,7 +944,19 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         if (index != null) {
           let d = 1;
           try { d = scoreDelta(beat, { chosenIndex: index, value }); } catch (_e) { d = 1; }
-          if (d <= 0) sfx('incorrect-feedback');
+          if (d <= 0) {
+            // Deep-band gaslighting (Lv3+): ~10% of wrong answers play the GOOD
+            // chime INSTEAD of the buzzer (a false-positive reward); otherwise the
+            // wrong cue is DUCKED. Lv1/2 always get the full-volume wrong cue.
+            // The wrong answer is still recorded as wrong (tryCommit below) — only
+            // the sound lies.
+            const deep = DEEP_CUE_BANDS.indexOf(beat.band) >= 0;
+            if (deep && Math.random() < WRONG_GOOD_CHIME_RATE) {
+              goodChime(beat.depth);                 // false-positive: REPLACES the wrong cue
+            } else {
+              sfx('incorrect-feedback', deep ? DEEP_WRONG_CUE_MULT : 1);
+            }
+          }
         }
         tryCommit(index, { value });
       }
@@ -1134,6 +1376,29 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           depth: beat.depth,
           roll: beat.steerRoll || { primary: 'none', secondary: [], intensity: 0 },
           caps,
+          // "The line has finished presenting" duration (ms from mount), for the
+          // timer-triggered MouseHijack. This is the options-hold reveal — sized to the
+          // deep-band typewriter + a beat of silence (computeOptionsHold), which is the
+          // canonical "prompt done presenting itself" moment. steering arms the hijack
+          // MOUSEHIJACK_ARM_AFTER_LINE_MS after it. 0/undefined -> steering uses a fallback.
+          lineRevealMs: (typeof optionsHoldMs === 'number' ? optionsHoldMs : 0),
+          // "A set-piece already owns this beat" probe for the timer-triggered
+          // MouseHijack. Corruption (the vibrate/zoom "egg"), the freeze gate and the
+          // jumpscare are mutually exclusive per beat via gateUsedThisBeat (§4); the
+          // corrupt-question egg additionally raises corruptLive while its 2.6s glitch /
+          // 9s melt animation is playing. maybeArmCorruption() rolls SYNCHRONOUSLY at
+          // render (after installSteering, but well before the hijack's arm delay of
+          // lineRevealMs + ~2s elapses), so this callback — read when the hijack's arm
+          // timer fires — reliably reports a live egg. The hijack (a self-rolled steer
+          // that force-commits) reads this and STANDS DOWN so its auto-commit can't tear
+          // the beat down and cut the egg's watch-it-play-out animation short.
+          // The UPSIDE-DOWN CARD egg raises flipLive (and gateUsedThisBeat) for the
+          // whole beat too, so the hijack yields on a flipped card and the player
+          // answers the inverted buttons himself instead of it being auto-solved.
+          // The MID-RUN GLITCH TRANSITION raises transitionLive while its ~700-1100ms
+          // judder plays, so the hijack/steers stand down instead of auto-committing
+          // mid-stutter and cutting the effect short.
+          isSetPieceLive: () => (corruptLive || gateFrozen || gateUsedThisBeat || flipLive || transitionLive),
           escapeEffort: ESCAPE_EFFORT,
           escapeMs: ESCAPE_MS,
           onCommit: (fn) => {
@@ -1149,6 +1414,88 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           markProgress: () => { steeredFlag = true; noteEffort(); armWatchdog(); },
         };
         try { steerHandle = steering.installSteering(ctx); } catch (_e) { steerHandle = null; }
+      }
+
+      // ---- CAPTCHA item family (Verify* mechanics) dispatch ---------------
+      // Verify* beats route to the captcha layer FIRST; a live item module owns
+      // the whole card body + the answer commit and we return early (the Promise
+      // resolves when the widget commits through the ctx.submit*/forceComplete
+      // helpers below). If the layer is missing/failed/not-implemented (canRender
+      // false or render() returns false), we REMAP beat.mechanic to the base
+      // mechanic for this prompt's answer shape, so selectMechanic() + the switch
+      // below render a native, completable, gradable beat (MC4/YesNo/CheckIn/
+      // Mantra/Mono). The engine holds this SAME beat object, so the remap also
+      // reaches gradeBeat — the fallback grades identically to a native beat and
+      // invariant #1 (friction, not lockout) is preserved. Placed before the
+      // `mech` resolution so the remap flows through selectMechanic naturally.
+      if (CAPTCHA_MECHS.has(beat.mechanic)) {
+        let captchaHandled = false;
+        if (_captchaLayer && typeof _captchaLayer.canRender === 'function'
+            && _captchaLayer.canRender(beat.mechanic)) {
+          // ctx: everything a captcha item renderer needs to build its widget and
+          // land exactly one answer. Commit helpers route through the SAME finalize/
+          // tryCommit path native mechanics use, so reward/streak/background/grading
+          // are identical. See the render contract in render/captcha/index.js.
+          const capOptions = (Array.isArray(beat.options) ? beat.options : []).map((o, i) => ({
+            index: typeof o.index === 'number' ? o.index : i,
+            label: o.label != null ? o.label : String(o.index != null ? o.index : i),
+            isCorrect: !!o.isCorrect,
+            score: typeof o.score === 'number' ? o.score : (o.isCorrect ? 1 : 0),
+          }));
+          const capCtx = {
+            beat,
+            prompt: beat.prompt || {},
+            options: capOptions,
+            mechanic: beat.mechanic,
+            band: beat.band,
+            depth: beat.depth,
+            meta: beat.meta,
+            timeoutMs: beat.timeoutMs || 0,
+            steerRoll: beat.steerRoll,
+            caps,
+            theme,
+            media,
+            niche: gateNiche,
+            reduced,
+            reducedMotion: reduced,
+            root: stage,
+            submitIndex(index, opts) {
+              if (opts && opts.steered) steeredFlag = true;
+              if (index != null) lastAttemptIndex = index;
+              finalize(index, undefined, false);
+            },
+            submitValue(value, opts) {
+              if (opts && opts.steered) steeredFlag = true;
+              if (value !== undefined) lastAttemptValue = value;
+              finalize(undefined, value, false);
+            },
+            submitTimeout() { finalize(lastAttemptIndex, lastAttemptValue, true); },
+            forceComplete(index) {
+              steeredFlag = true;
+              if (index != null) lastAttemptIndex = index;
+              tryCommit(index, { force: true });
+            },
+            installSteering(steerOptions) { installSteering(steerOptions); },
+            speakPrompt() { speakPrompt(beat); },
+            sfx(id, intensity, opts) { return sfx(id, intensity, opts); },
+            // Arbitrary-VO seam for captcha verdict stingers (cap_*.json voExtra):
+            // routes an explicit vo id through the SAME audio handle beats.js already
+            // holds, so the item modules stay handle-free (identical to ctx.sfx). Fails
+            // soft on a missing manifest entry, exactly like speakPrompt's q_<id>.
+            voice(id, opts) {
+              try { if (audio && typeof audio.voice === 'function') return audio.voice(id, opts); } catch (_e) {}
+              return null;
+            },
+            onCleanup(fn) { if (typeof fn === 'function') cleanups.push(fn); },
+            chrome: _captchaLayer.chrome,
+          };
+          const capHelpers = { chrome: _captchaLayer.chrome, Mechanic, Band, clamp01, makeAnswerEvent };
+          try {
+            captchaHandled = _captchaLayer.render(beat.mechanic, capCtx, capHelpers) === true;
+          } catch (_e) { captchaHandled = false; }
+        }
+        if (captchaHandled) return;                 // the captcha widget owns this beat
+        beat.mechanic = fallbackMechanicFor(beat);  // else degrade to the native base mechanic
       }
 
       // ---- build the card scaffold ---------------------------------------
@@ -1345,6 +1692,33 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         mountEl = zoom;
       }
 
+      // ---- UPSIDE-DOWN CARD easter egg (Lv3 onward) ------------------------
+      // A small per-beat chance (FLIP_CHANCE) that the WHOLE card is rotated a
+      // full 180deg: the answer buttons land on TOP and the prompt reads upside
+      // down. Pure visual — options stay fully clickable and grading is UNCHANGED
+      // (invariant #1: friction, not lockout). Rides its OWN outermost wrapper
+      // (one transform per wrapper — the tilt/zoom pattern) so the card's
+      // entry/exit + tilt/sway/zoom transforms compose untouched; a short spin
+      // (IXFL_CSS) lands it at 180 and animation-fill pins it there for the beat.
+      // MUTUAL EXCLUSION: only fires if no other set-piece already owns the beat,
+      // and claims it (gateUsedThisBeat) so the jumpscare / freeze gate /
+      // corruption all stand down; flipLive makes the MouseHijack yield too.
+      // No cleanup needed — the wrapper is torn down with the card every render
+      // (stage.innerHTML=''), so the rotation never leaks into the next beat.
+      const flipEligible = FLIP_BANDS.indexOf(beat.band) >= 0
+        && mech !== Mechanic.Interlude
+        && mech !== Mechanic.BubblePop;
+      if (flipEligible
+          && !gateUsedThisBeat && !gateFrozen && !eventOpen && !committed
+          && Math.random() < FLIP_CHANCE) {
+        gateUsedThisBeat = true;   // one set-piece per beat: lock the others out
+        flipLive = true;           // isSetPieceLive -> MouseHijack yields on a flipped beat
+        ensureFlipStyles();
+        const flip = el('div', 'ixfl-flip' + (reduced ? ' ixfl-reduced' : ''));
+        flip.appendChild(mountEl);
+        mountEl = flip;
+      }
+
       if (stage) stage.appendChild(mountEl);
 
       // ---- 1-in-45 melt-on-card-click -> SKIP to next beat (standard cards) ----
@@ -1387,6 +1761,7 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           card.classList.remove('ib-enter-crisp', 'ib-enter-melt', 'ib-enter-sink', 'ib-enter-dawn');
           card.classList.add('ib-cardmelt-anim');
           sfx('card-melt'); // gooey melt-on-click cue (no reform: fires once, at start)
+          maybeGoodChimeOnDistortion(beat);   // Lv3+: sometimes a positive stinger over the melt
           const meltMs = reduced ? 200 : 700;
           const holdMs = reduced ? 80 : 250;
           meltVoice(meltMs + holdMs);   // the VOICE sags and dissolves with the card
@@ -1433,6 +1808,195 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
        * options, never resolves the beat, never throws. */
       maybeArmCorruption();
 
+      /* ---- MID-RUN GLITCH TRANSITION (Deepening / Climax, once per eligible run)
+       * Rolled AFTER maybeArmCorruption so if corruption (or the flip egg / a gate)
+       * already claimed this beat, the transition yields and tries a later beat.
+       * See the GLITCH_TRANSITION_* tuning block. Never touches options, never
+       * resolves the beat, never throws. */
+      maybeArmGlitchTransition();
+
+      /* ---- DRIFTING WRONG OPTION (Deepening / Climax / Recovery) ----------
+       * Rolled AFTER the set-pieces so it yields if one already claimed the beat.
+       * A cosmetic flourish ONLY: it targets a WRONG option, stays clickable in
+       * flight, does NOT claim the beat (no gateUsedThisBeat) and does NOT raise
+       * isSetPieceLive (steers / MouseHijack keep running under it). See the
+       * DRIFT_* tuning block. Never touches grading, never resolves the beat. */
+      maybeArmDrift();
+
+      // Decide whether THIS beat fires the run's one glitch transition. Run-gated
+      // (transitionRunPicked, ~50% of runs) + latched (transitionFired) so an
+      // eligible run shows exactly one, mid-descent; ineligible runs never fire.
+      function maybeArmGlitchTransition() {
+        try {
+          if (!transitionRunPicked || transitionFired) return;   // run gate + once-per-run latch
+          if (mech === Mechanic.Interlude || mech === Mechanic.BubblePop) return;
+          if (GLITCH_TRANSITION_BANDS.indexOf(beat.band) < 0) return;   // Deepening/Climax only
+          // MUTUAL EXCLUSION: yield if another set-piece already owns this beat.
+          if (gateUsedThisBeat || gateFrozen || eventOpen || committed) return;
+          const qNo = (beat && beat.meta && beat.meta.qIndex) || 0;
+          // per-beat hazard, with a late-Climax FORCE so an eligible run can't whiff
+          // the whole window (the guarantee for "eligible => exactly one").
+          const forced = beat.band === Band.Climax && qNo >= GLITCH_TRANSITION_FORCE_Q;
+          if (!forced && Math.random() >= GLITCH_TRANSITION_BEAT_CHANCE) return;
+          transitionFired = true;      // run latch: at most one per run
+          gateUsedThisBeat = true;     // beat mutual exclusion: lock the other set-pieces out
+          transitionLive = true;       // isSetPieceLive -> MouseHijack/steers stand down
+          // fire a beat after the card is up so it reads as a mid-beat stutter, not
+          // a mount glitch. Registers with cleanups[] so a mid-beat teardown is safe.
+          const delay = reduced ? 140 : 320;
+          let armT = setTimeout(() => {
+            armT = 0;
+            if (committed) { transitionLive = false; return; }
+            try { startGlitchTransition(); } catch (_e) { transitionLive = false; }
+          }, delay);
+          cleanups.push(() => { if (armT) { clearTimeout(armT); armT = 0; } });
+        } catch (_e) { transitionLive = false; }
+      }
+
+      // Decide whether THIS beat drifts one wrong option off-frame. Cosmetic:
+      // yields to any live/used set-piece but never claims the beat itself, and
+      // only ever targets a WRONG option so grading is untouched.
+      function maybeArmDrift() {
+        try {
+          if (reduced) return;                                   // a slow drift can't be shown
+          if (mech === Mechanic.Interlude || mech === Mechanic.BubblePop) return;
+          if (DRIFT_BANDS.indexOf(beat.band) < 0) return;        // Deepening/Climax/Recovery only
+          // YIELD to any live/used set-piece — but do NOT claim the beat: the drift
+          // is a flourish, not a set-piece, so it never sets gateUsedThisBeat and
+          // never raises isSetPieceLive (steers/MouseHijack keep running under it).
+          if (gateUsedThisBeat || gateFrozen || eventOpen || committed) return;
+          // Discrete option beats only, and only a WRONG option ever drifts, so the
+          // correct answer is always reachable in place. gateOptions is the same
+          // {index,el,isCorrect,score} set the freeze gate reads (populated by
+          // installSteering during the renderer). Mono / no-wrong-option beats find
+          // no target and simply never drift.
+          const wrongs = (gateOptions || []).filter((o) => o && o.el && !o.isCorrect);
+          if (!wrongs.length) return;
+          if (Math.random() >= DRIFT_CHANCE) return;
+          startOptionDrift(wrongs[(Math.random() * wrongs.length) | 0].el);
+        } catch (_e) {}
+      }
+
+      /* Wrap the chosen wrong-option button and, once the options have actually
+       * been offered (post options-hold + a short beat), slide it fully off-frame
+       * over a few seconds in a random direction (left/right/up/down). The button
+       * never loses pointer-events, so it stays catchable mid-flight (catching it
+       * just commits that wrong answer through the normal attempt() path). The
+       * drift transform rides its OWN wrapper (one transform per wrapper — the
+       * tilt/zoom/flip pattern), so any steer transform on the button itself
+       * composes untouched. Everything is registered in cleanups[] so an answer /
+       * beat teardown unwinds the wrapper and leaves no transformed DOM behind. */
+      function startOptionDrift(btn) {
+        if (!btn) return;
+        ensureDriftStyles();
+        let wrap;
+        try {
+          if (!btn.parentNode) return;
+          // display:grid wrapper keeps the button stretched to its old grid cell,
+          // so wrapping it in place causes no reflow pop.
+          wrap = el('span', 'ib-driftwrap');
+          btn.parentNode.insertBefore(wrap, btn);
+          wrap.appendChild(btn);
+        } catch (_e) { return; }
+
+        let armT = 0;
+        let cleaned = false;
+        function undrift() {
+          if (cleaned) return;
+          cleaned = true;
+          if (armT) { try { clearTimeout(armT); } catch (_e) {} armT = 0; }
+          // unwrap: put the button back where it was and drop the wrapper (with its
+          // transform) so nothing transformed leaks into the card exit / next beat.
+          try {
+            if (wrap && wrap.parentNode && btn) {
+              wrap.parentNode.insertBefore(btn, wrap);
+              wrap.remove();
+            }
+          } catch (_e) {}
+        }
+        cleanups.push(undrift);
+
+        // sit still for a moment after the options land, THEN start creeping away.
+        const startDelay = (typeof optionsHoldMs === 'number' ? optionsHoldMs : 0)
+          + 500 + Math.random() * 700;
+        const durMs = DRIFT_MIN_MS + Math.random() * (DRIFT_MAX_MS - DRIFT_MIN_MS);
+        armT = setTimeout(() => {
+          armT = 0;
+          if (cleaned || committed) return;
+          const W = (typeof window !== 'undefined' && window.innerWidth) || 1280;
+          const H = (typeof window !== 'undefined' && window.innerHeight) || 720;
+          let r;
+          try { r = wrap.getBoundingClientRect(); }
+          catch (_e) { r = { left: 0, top: 0, right: 200, bottom: 60 }; }
+          const M = 120;   // extra px so it clears the frame completely
+          const dir = (Math.random() * 4) | 0;   // 0 left / 1 right / 2 up / 3 down
+          let tx = 0, ty = 0;
+          switch (dir) {
+            case 0:  tx = -(r.right + M); break;        // slide left, fully out
+            case 1:  tx = (W - r.left) + M; break;      // slide right
+            case 2:  ty = -(r.bottom + M); break;       // slide up
+            default: ty = (H - r.top) + M; break;       // slide down
+          }
+          try {
+            wrap.style.setProperty('--ib-drift-ms', Math.round(durMs) + 'ms');
+            wrap.classList.add('ib-drifting');
+          } catch (_e) {}
+          // apply the off-frame transform on a later frame so the transition runs
+          // from the identity transform instead of jumping there instantly.
+          const go = () => {
+            if (cleaned || committed) return;
+            try { wrap.style.transform = 'translate(' + tx.toFixed(0) + 'px,' + ty.toFixed(0) + 'px)'; } catch (_e) {}
+          };
+          if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(go));
+          else go();
+        }, startDelay);
+      }
+
+      /* The brief glitch itself: pick one of three DISTINCT styles at random, mount
+       * a full-screen overlay on <body> + add a card-level distortion class, run for
+       * ~700-1100ms (a short static flash under reduced motion), then cleanly restore
+       * — no lingering DOM or style leaks. The overlay is pointer-events:none so it
+       * never blocks input; the beat stays fully answerable throughout. */
+      function startGlitchTransition() {
+        ensureTransitionStyles();
+        const variant = GLITCH_TRANSITION_VARIANTS[(Math.random() * GLITCH_TRANSITION_VARIANTS.length) | 0]
+          || 'rgbsplit';
+        const durMs = reduced ? 380 : (700 + ((Math.random() * 400) | 0));   // ~700-1100ms
+        // full-screen overlay layer on <body> (outlives no beat: torn down here + on
+        // teardown; stage.innerHTML='' can't reach a <body> child, hence the cleanup).
+        const overlay = el('div', 'ixgt-overlay ixgt-' + variant + (reduced ? ' ixgt-reduced' : ''));
+        try { overlay.style.setProperty('--ixgt-ms', durMs + 'ms'); } catch (_e) {}
+        // per-variant children: datamosh needs shuffled colour slices; vhsroll a
+        // rolling displacement band. rgbsplit is driven entirely by the overlay + card.
+        if (variant === 'datamosh') {
+          for (let i = 0; i < 6; i++) {
+            const slice = el('div', 'ixgt-slice');
+            try { slice.style.setProperty('--ixgt-i', String(i)); } catch (_e) {}
+            overlay.appendChild(slice);
+          }
+        } else if (variant === 'vhsroll') {
+          overlay.appendChild(el('div', 'ixgt-rollband'));
+        }
+        // card-level distortion (composes on the card element itself, inside any
+        // tilt/sway/zoom/flip wrapper — one class, torn down on cleanup).
+        const cardCls = 'ixgt-' + variant + '-card';
+        try { if (card) { card.classList.add('ixgt-card', cardCls); } } catch (_e) {}
+        try { if (typeof document !== 'undefined') document.body.appendChild(overlay); } catch (_e) {}
+        // audio: the app's real glitch stab (synth fallback) — guarded, additive.
+        try { if (audio && typeof audio.glitch === 'function') audio.glitch(); } catch (_e) {}
+
+        let cleaned = false;
+        function restore() {
+          if (cleaned) return;
+          cleaned = true;
+          transitionLive = false;
+          try { overlay.remove(); } catch (_e) {}
+          try { if (card) { card.classList.remove('ixgt-card', cardCls); } } catch (_e) {}
+        }
+        let endT = setTimeout(restore, durMs + 60);
+        cleanups.push(() => { if (endT) { clearTimeout(endT); endT = 0; } restore(); });
+      }
+
       function maybeArmCorruption() {
         try {
           if (mech === Mechanic.Interlude || mech === Mechanic.BubblePop) return;
@@ -1453,6 +2017,7 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
             if (committed || gateFrozen || eventOpen) { corruptLive = false; return; }
             try { if (glitch) startCorruptGlitch(); else startCorruptMelt(); }
             catch (_e) { corruptLive = false; }
+            maybeGoodChimeOnDistortion(beat);   // Lv3+: sometimes a positive stinger over the corruption
           }, revealMs);
           cleanups.push(() => { if (armT) { clearTimeout(armT); armT = 0; } });
         } catch (_e) { corruptLive = false; }
@@ -2054,14 +2619,14 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
       // the last shard commits via attempt() — mid-flight pops land too (the
       // beat is live the moment bubbles spawn).
       //
-      // SPLIT CHAIN: an answer bubble does NOT end the beat when popped. Its
-      // burst begets 2-3 smaller bubbles that scatter out of the wreck, and
-      // those can beget again (up to 3 generations deep) — but a per-beat POP
-      // BUDGET (SPLIT_TOTAL, rolled 4-8) decides the family's TOTAL cost up
-      // front, so clearing one option is always 4-8 pops no matter how the
-      // player works it. Only the LAST pop of the family advances the beat
-      // (live count must hit 0), so the answer event fires exactly once. The
-      // float-away riser and the storm decoys are exempt (see canSplit).
+      // SPLIT CHAIN: from Deepening (lv3) on, popping an answer bubble MAY
+      // (33% per pop) beget 2 smaller bubbles that scatter out of the wreck,
+      // and those can re-roll the same 33% up to 3 generations deep. On
+      // Calibration/Establishing (lv1-2) bubbles never split — the correct
+      // pop commits immediately. A split answer bubble does NOT end the beat:
+      // only the LAST pop of the family advances it (live count must hit 0),
+      // so the answer event fires exactly once. The float-away riser and the
+      // storm decoys are exempt (see canSplit).
       // At climax / depth >= .75 a POP STORM of hypnotic-word decoys
       // joins the field (sparkle + tiny nudge, no commit). Every pop bursts
       // into a chain of mini theme-word bubbles; the committed answer's chain
@@ -2170,7 +2735,7 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         let lastPopAt = 0;
         const CHAIN_IDLE_MS = 3500;
         const chainBusy = () => splitLive > 0 && (now() - lastPopAt) < CHAIN_IDLE_MS;
-        const exitBudget = (8000 + Math.random() * 3000) / 1.5;   // nominal top-exit ~5.3-7.3s
+        const exitBudget = (8000 + Math.random() * 3000) / 1.8;   // nominal top-exit ~4.5-6.1s
         const escapeAt = (beat.timeoutMs && beat.timeoutMs > 0)
           ? beat.timeoutMs : 12000 + Math.random() * 4000;
         let escaping = false;
@@ -2388,21 +2953,16 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
           }
         }
 
-        // ---- SPLIT CHAIN (POP BUDGET) --------------------------------------
-        // Popping an ANSWER bubble does not end the beat: the burst BEGETS
-        // smaller bubbles that scatter out of the wreck, and those can beget
-        // again — but the family carries a BUDGET, so the TOTAL number of pops
-        // needed to clear it is decided up front and is ALWAYS 4-8.
-        //   A full binary chain (1 -> 2 -> 4 -> 8) cost 15 pops and read as a
-        // chore, so the depth is no longer what bounds the work: SPLIT_TOTAL
-        // does. The family is born owing (SPLIT_TOTAL - 1) unborn bubbles;
-        // every split spends 2 (or 3, to land odd totals exactly) out of that
-        // purse and stops splitting when the purse is empty. Whatever order the
-        // player pops in, the family costs EXACTLY SPLIT_TOTAL pops:
-        //   4 = 1 + 3          5 = 1 + 2 + 2        6 = 1 + 3 + 2
-        //   7 = 1 + 2 + 2 + 2  8 = 1 + 3 + 2 + 2
-        // so the nested "it splits again!" feel survives (up to 3 generations
-        // deep on the long plans) at a fraction of the clicks.
+        // ---- SPLIT CHAIN (OCCASIONAL, LEVEL-GATED) -------------------------
+        // Popping an ANSWER bubble does not necessarily end the beat. LEVEL
+        // GATE: on Calibration/Establishing (lv1-2) bubbles NEVER split — the
+        // correct pop commits and advances at once. From Deepening (lv3) on,
+        // every eligible pop rolls a single 33% chance to beget 2 smaller
+        // bubbles that scatter out of the wreck; each child re-rolls the same
+        // 33%, capped at 3 generations so a chain can't run away. There is no
+        // up-front budget — splitting is an occasional surprise, not a forced
+        // tree, so most pops resolve immediately and the rare split still gives
+        // the nested "it splits again!" feel.
         //   Only the LAST pop of the family advances the beat: the live counter
         // must hit 0 before attempt() fires, so the answer event fires once.
         //   Exempt: the float-away riser (it owns the "waiting IS choosing"
@@ -2410,9 +2970,6 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         // once) and the storm decoys (they already re-form forever — splitting
         // them WOULD be unbounded).
         const SPLIT_GENS = 3;                        // hard depth cap (belt+braces)
-        // Per-beat variety: 4..8 pops. Rolled once per beat so consecutive
-        // beats don't feel machined, never outside [4, 8].
-        const SPLIT_TOTAL = 4 + Math.floor(Math.random() * 5);
         const SPLIT_SHRINK = [0.72, 0.76, 0.82];     // size factor, per generation
         // Touch/pen floor: no generation ever goes under this, so the last
         // shards stay a comfortable target even in a small window (a gen-3
@@ -2421,14 +2978,20 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
         // confetti.
         const SPLIT_MIN_PX = 54;
         const famOf = (b) => b.root || b;
-        // How many children THIS pop begets: 0 once the family's purse is spent
-        // (or at the depth cap). An odd purse spends 3 first so the plan lands
-        // on its exact total; after that it is always 2 at a time.
+        // LEVEL GATE: no splitting on Calibration/Establishing (lv1-2). From
+        // Deepening (lv3) on, every eligible pop rolls ONE 33% split (begets 2),
+        // and each child re-rolls the same odds up to SPLIT_GENS deep. No
+        // up-front budget — splitting is occasional, not a forced 4-8 tree.
+        const SPLIT_BANDS = [Band.Deepening, Band.Climax, Band.Recovery];
+        const splitLevelOK = SPLIT_BANDS.indexOf(beat.band) >= 0;
+        const SPLIT_ROLL = 1 / 3;                    // 33% per eligible pop
+        // How many children THIS pop begets: 0 unless the level gate is open and
+        // the 33% roll fires; 2 when it does. `fam` is unused now but kept for
+        // the call-site signature.
         function splitCount(fam, gen) {
-          if (gen >= SPLIT_GENS) return 0;
-          if (fam.budget == null) fam.budget = SPLIT_TOTAL - 1;
-          if (fam.budget < 2) return 0;
-          return (fam.budget % 2 === 1) ? 3 : 2;
+          if (!splitLevelOK) return 0;               // lv1/lv2: never split
+          if (gen >= SPLIT_GENS) return 0;           // cap accidental deep chains
+          return (Math.random() < SPLIT_ROLL) ? 2 : 0;
         }
         const canSplit = (b) => !!b.opt
           && !(opts.length > 1 && b.opt.index === floatOpt.index);
@@ -2536,12 +3099,10 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
             const fam = famOf(b);
             fam.live = Math.max(0, (fam.live || 1) - 1);
             if (gen >= 1) splitLive = Math.max(0, splitLive - 1);
-            // Reserve the children NOW (synchronously), not inside the deferred
-            // spawn: a second pop landing inside those 90ms must see the purse
-            // already debited, or the family's total would drift off plan.
+            // Roll the split NOW (synchronously), not inside the deferred spawn,
+            // so a second pop landing inside those 90ms sees a consistent state.
             const kids = canSplit(b) ? splitCount(fam, gen) : 0;
             if (kids > 0) {
-              fam.budget -= kids;
               // A SPLITTING pop advances NOTHING. The burst is the same droplet
               // spray (thinner each generation) and the gen-0 pop still throws
               // its mini-word chain; deeper gens get a sparkle instead, so the
@@ -2697,14 +3258,15 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
                 // rise 150-210 px/s (viewport-scaled), tuned so the full top-exit
                 // lands ~5.3-7.3s in on a 1080p-ish viewport; sway +-30-50px scaled
                 //
-                // 50% FASTER than the original 8-11s tuning: at the old speed the
-                // riser read as stalled rather than serene — long enough that the
-                // player stopped believing it was moving and started hunting for a
-                // click. Everything downstream of the exit time is derived from
-                // exitBudget, so the two move together (see exitBudget above).
+                // Riser speed: another 20% SLOWER (now /1.8, clamp [180,252]) on top
+                // of the earlier 25% cut off the /3.0 sprint — the float should read
+                // as a serene drift, not a hurry. The speed CLAMP is the real
+                // limiter, scaled in lockstep with targetSec. Everything downstream
+                // of the exit time is derived from exitBudget, so the two move
+                // together (see exitBudget above). Nominal exit ~4.5-6.1s.
                 const travel = v.h + b.size * 1.3;    // spawn-below -> fully above
-                const targetSec = (8 + Math.random() * 3) / 1.5;
-                b.riseSpd = Math.max(150, Math.min(210, travel / targetSec)) * bscale;
+                const targetSec = (8 + Math.random() * 3) / 1.8;
+                b.riseSpd = Math.max(180, Math.min(252, travel / targetSec)) * bscale;
                 b.riseAmp = (30 + Math.random() * 20) * bscale;
                 b.risePer = 2.6 + Math.random() * 1.4;   // sway period (s)
                 setPos(b);
@@ -3910,5 +4472,173 @@ const IXCR_CSS = `
   .ixcr-gifwrap { animation: ib-fadein .3s linear both; }
   .ixcr-melt { transition: opacity var(--ixcr-melt-ms, 1400ms) linear; }
   .ixcr-melt.ixcr-melt-go { opacity: 0; filter: none; transform: none; }
+}
+`;
+
+/* ----------------------------------------------------------------------------
+ * UPSIDE-DOWN CARD egg styles (injected lazily by ensureFlipStyles the first
+ * time a beat flips). ONE transform on its OWN outermost wrapper (.ixfl-flip) —
+ * the card, its options and every grading hook are untouched, so a flipped beat
+ * stays fully answerable; only the pixels are inverted. A short spin lands it at
+ * 180deg and animation-fill (both) PINS it there for the whole beat. Reduced
+ * motion skips the spin but KEEPS the static 180 turn (the egg IS the rotation).
+ * (No stray backtick may ever appear inside this template literal.)
+ * -------------------------------------------------------------------------- */
+const IXFL_CSS = `
+.ixfl-flip {
+  transform-origin: 50% 50%;
+  transform: rotate(180deg);
+  animation: ixfl-spin .72s cubic-bezier(.5,.05,.4,1) both;
+  will-change: transform;
+}
+@keyframes ixfl-spin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(180deg); }
+}
+/* reduced motion: snap straight to the inverted state, no spin */
+.ixfl-flip.ixfl-reduced { animation: none; transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .ixfl-flip { animation: none; transform: rotate(180deg); }
+}
+`;
+
+/* ----------------------------------------------------------------------------
+ * DRIFTING WRONG OPTION styles (injected lazily by ensureDriftStyles the first
+ * time a beat drifts one). The target option button is moved into an .ib-driftwrap
+ * span so the drift transform rides its OWN wrapper (one transform per wrapper —
+ * the tilt/zoom/flip pattern), leaving any steer transform on the button itself
+ * free to compose. display:grid keeps the button stretched to its old grid cell
+ * so wrapping causes no reflow. The long transition drives the slide once the
+ * off-frame transform is set inline. pointer-events stay ON (catchable in flight);
+ * reduced motion neuters the transition (the JS also skips arming it there).
+ * -------------------------------------------------------------------------- */
+const IXDR_CSS = `
+.ib-driftwrap { display: grid; will-change: transform; }
+.ib-driftwrap.ib-drifting { transition: transform var(--ib-drift-ms, 4200ms) cubic-bezier(.33,.02,.62,1); }
+@media (prefers-reduced-motion: reduce) {
+  .ib-driftwrap.ib-drifting { transition: none; }
+}
+`;
+
+/* ----------------------------------------------------------------------------
+ * MID-RUN GLITCH TRANSITION styles (injected lazily by ensureTransitionStyles the
+ * first time a run fires one). A brief "the system stutters" moment in THREE
+ * distinct styles, each = a full-screen .ixgt-overlay layer (pointer-events:none,
+ * so it never blocks input) + an .ixgt-<variant>-card class on the card itself.
+ * Everything self-terminates via animation-fill: both and is torn down in JS, so
+ * nothing lingers. Reduced motion collapses every style to one soft opacity blip.
+ * (No stray backtick may ever appear inside this template literal.)
+ * -------------------------------------------------------------------------- */
+const IXGT_CSS = `
+.ixgt-overlay {
+  position: fixed; inset: 0; z-index: 999999; pointer-events: none;
+  overflow: hidden; will-change: opacity, transform, filter;
+}
+.ixgt-card { will-change: transform, filter, clip-path; }
+
+/* ---- VARIATION A: RGB channel-split / chromatic-aberration tear ----------- */
+.ixgt-rgbsplit::before, .ixgt-rgbsplit::after {
+  content: ''; position: absolute; inset: 0; mix-blend-mode: screen;
+}
+.ixgt-rgbsplit::before { background: rgba(255,0,90,.12); animation: ixgt-rgb-a var(--ixgt-ms, 900ms) steps(6, end) both; }
+.ixgt-rgbsplit::after  { background: rgba(0,220,255,.12); animation: ixgt-rgb-b var(--ixgt-ms, 900ms) steps(6, end) both; }
+@keyframes ixgt-rgb-a {
+  0% { transform: translateX(0); opacity: 0; }
+  15% { transform: translateX(-16px); opacity: 1; }
+  40% { transform: translateX(11px); }
+  65% { transform: translateX(-8px); }
+  85% { transform: translateX(5px); opacity: 1; }
+  100% { transform: translateX(0); opacity: 0; }
+}
+@keyframes ixgt-rgb-b {
+  0% { transform: translateX(0); opacity: 0; }
+  15% { transform: translateX(16px); opacity: 1; }
+  40% { transform: translateX(-11px); }
+  65% { transform: translateX(8px); }
+  85% { transform: translateX(-5px); opacity: 1; }
+  100% { transform: translateX(0); opacity: 0; }
+}
+.ixgt-rgbsplit-card { animation: ixgt-rgb-card var(--ixgt-ms, 900ms) steps(8, end) both !important; }
+@keyframes ixgt-rgb-card {
+  0% { transform: translateX(0); filter: none; }
+  12% { transform: translateX(-7px); filter: drop-shadow(7px 0 0 rgba(255,0,90,.75)) drop-shadow(-7px 0 0 rgba(0,220,255,.75)); }
+  30% { transform: translateX(6px); filter: drop-shadow(-9px 0 0 rgba(255,0,90,.7)) drop-shadow(9px 0 0 rgba(0,220,255,.7)); }
+  50% { transform: translateX(-4px); filter: drop-shadow(5px 0 0 rgba(255,0,90,.6)) drop-shadow(-5px 0 0 rgba(0,220,255,.6)); }
+  72% { transform: translateX(3px); filter: drop-shadow(-3px 0 0 rgba(255,0,90,.5)) drop-shadow(3px 0 0 rgba(0,220,255,.5)); }
+  100% { transform: translateX(0); filter: none; }
+}
+
+/* ---- VARIATION B: horizontal-scanline / VHS vertical-roll judder ---------- */
+.ixgt-vhsroll {
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px);
+  animation: ixgt-vhs-flicker var(--ixgt-ms, 900ms) steps(2, end) both;
+}
+.ixgt-vhsroll .ixgt-rollband {
+  position: absolute; left: 0; right: 0; height: 22%;
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,.12) 40%, rgba(0,0,0,.26) 62%, transparent);
+  animation: ixgt-vhs-roll var(--ixgt-ms, 900ms) linear both;
+}
+@keyframes ixgt-vhs-flicker { 0%, 100% { opacity: .45; } 50% { opacity: .95; } }
+@keyframes ixgt-vhs-roll { 0% { transform: translateY(-40%); } 100% { transform: translateY(140%); } }
+.ixgt-vhsroll-card { animation: ixgt-vhs-card var(--ixgt-ms, 900ms) steps(12, end) both !important; }
+@keyframes ixgt-vhs-card {
+  0% { transform: translateY(0); filter: none; }
+  12% { transform: translateY(-9px); filter: saturate(.55) brightness(1.25); }
+  24% { transform: translateY(7px); filter: saturate(1.5) brightness(.82); }
+  40% { transform: translateY(-6px); filter: saturate(.7) brightness(1.15); }
+  58% { transform: translateY(5px); filter: saturate(1.3) brightness(.9); }
+  78% { transform: translateY(-3px); filter: saturate(.9) brightness(1.06); }
+  100% { transform: translateY(0); filter: none; }
+}
+
+/* ---- VARIATION C: datamosh block-shuffle / horizontal slice-scramble ------ */
+.ixgt-datamosh { mix-blend-mode: screen; }
+.ixgt-datamosh .ixgt-slice {
+  position: absolute; left: 0; right: 0; height: 16.7%;
+  top: calc(var(--ixgt-i, 0) * 16.7%);
+  animation: ixgt-mosh-slice var(--ixgt-ms, 900ms) steps(4, end) both;
+  animation-delay: calc(var(--ixgt-i, 0) * -40ms);
+}
+.ixgt-datamosh .ixgt-slice:nth-child(odd)  { background: rgba(255,0,120,.16); }
+.ixgt-datamosh .ixgt-slice:nth-child(even) { background: rgba(0,255,170,.16); }
+@keyframes ixgt-mosh-slice {
+  0% { transform: translateX(0); opacity: 0; }
+  20% { transform: translateX(-26px); opacity: 1; }
+  45% { transform: translateX(32px); }
+  70% { transform: translateX(-18px); }
+  100% { transform: translateX(0); opacity: 0; }
+}
+.ixgt-datamosh-card { animation: ixgt-mosh-card var(--ixgt-ms, 900ms) steps(1, end) both !important; }
+@keyframes ixgt-mosh-card {
+  0% { transform: translateX(0); clip-path: inset(0 0 0 0); }
+  12% { transform: translateX(-20px); clip-path: inset(0 0 66% 0); }
+  24% { transform: translateX(24px); clip-path: inset(28% 0 40% 0); }
+  36% { transform: translateX(-13px); clip-path: inset(54% 0 12% 0); }
+  48% { transform: translateX(17px); clip-path: inset(12% 0 58% 0); }
+  62% { transform: translateX(-9px); clip-path: inset(40% 0 30% 0); }
+  78% { transform: translateX(6px); clip-path: inset(70% 0 4% 0); }
+  100% { transform: translateX(0); clip-path: inset(0 0 0 0); }
+}
+
+/* explicit reduced-motion class + the media query: collapse EVERY style to a
+ * single soft opacity blip (no transforms, filters, clips, rolls or slices). */
+@keyframes ixgt-soft { 0% { opacity: 0; } 40% { opacity: 1; } 100% { opacity: 0; } }
+.ixgt-overlay.ixgt-reduced {
+  background: rgba(180,180,220,.06) !important; mix-blend-mode: normal !important;
+  animation: ixgt-soft var(--ixgt-ms, 380ms) ease both !important;
+}
+.ixgt-overlay.ixgt-reduced::before, .ixgt-overlay.ixgt-reduced::after,
+.ixgt-overlay.ixgt-reduced .ixgt-slice, .ixgt-overlay.ixgt-reduced .ixgt-rollband { display: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .ixgt-overlay {
+    background: rgba(180,180,220,.06) !important; mix-blend-mode: normal !important;
+    animation: ixgt-soft var(--ixgt-ms, 380ms) ease both !important;
+  }
+  .ixgt-overlay::before, .ixgt-overlay::after,
+  .ixgt-slice, .ixgt-rollband { display: none !important; }
+  .ixgt-card {
+    animation: ixgt-soft var(--ixgt-ms, 380ms) ease both !important;
+    clip-path: none !important; filter: none !important;
+  }
 }
 `;

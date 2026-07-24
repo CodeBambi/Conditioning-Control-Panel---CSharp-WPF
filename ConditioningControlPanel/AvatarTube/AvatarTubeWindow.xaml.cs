@@ -601,6 +601,10 @@ namespace ConditioningControlPanel
                                 : EffAvatarDetachedOffsetX();
                             var initRight = initUseAttached ? 125 - initDx : 425 - initDx;
                             SpeechBubble.Margin = new Thickness(0, 0, initRight, 550);
+
+                            // Restore a saved detached placement (#669) after the initial attached layout
+                            // and native-owner seeding have settled, so Detach/position land cleanly.
+                            RestoreSavedPlacement();
                         }), System.Windows.Threading.DispatcherPriority.Loaded);
 
             // Start fullscreen detection timer
