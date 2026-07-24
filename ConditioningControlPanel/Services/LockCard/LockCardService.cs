@@ -25,6 +25,14 @@ namespace ConditioningControlPanel.Services
         private bool _isDisposed;
         private DateTime _lastShown = DateTime.MinValue;
 
+        // Per-session no-repeat rotation (mirrors BarkService's _recentlySpoken idiom, but in-memory
+        // only — lock-card rotation deliberately does NOT persist to disk). Avoids replaying any of
+        // the last few phrases so a pure random draw can't repeat the same phrase back-to-back.
+        private readonly Queue<string> _recentPhrases = new();
+        private readonly HashSet<string> _recentPhrasesSet = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>How many distinct just-shown phrases to avoid replaying.</summary>
+        private const int RecentPhrasesMemory = 3;
+
         public bool IsRunning => _isRunning;
 
         /// <summary>
@@ -216,8 +224,9 @@ namespace ConditioningControlPanel.Services
                             queue: false);
                     }
 
-                    // Pick a random phrase (or use custom one if AI provided it)
-                    var phrase = customPhrase ?? enabledPhrases[_random.Next(enabledPhrases.Count)];
+                    // Pick a random phrase (or use custom one if AI provided it). The custom (AI-supplied)
+                    // path bypasses rotation entirely — it isn't a draw from the enabled pool.
+                    var phrase = customPhrase ?? PickPhrase(enabledPhrases);
                     var repeats = customRepeats >= 0 ? customRepeats : settings.LockCardRepeats;
                     var strict = customStrict || settings.LockCardStrict;
                     var voice = settings.LockCardVoiceMode;
@@ -240,6 +249,36 @@ namespace ConditioningControlPanel.Services
                     App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
                 }
             });
+        }
+
+        /// <summary>
+        /// Pick a phrase at random while avoiding the last few shown, so the same phrase can't
+        /// repeat back-to-back. Filters the enabled pool against the recent set (rather than
+        /// re-rolling in a loop); if that empties the pool — or only one phrase is enabled — we
+        /// skip rotation and draw from the full list so we can never loop forever or go silent.
+        /// </summary>
+        private string PickPhrase(List<string> enabledPhrases)
+        {
+            var candidates = enabledPhrases;
+            if (enabledPhrases.Count > 1)
+            {
+                var fresh = enabledPhrases.Where(p => !_recentPhrasesSet.Contains(p)).ToList();
+                if (fresh.Count > 0) candidates = fresh;
+            }
+
+            var phrase = candidates[_random.Next(candidates.Count)];
+
+            // Remember it, then trim the window to at most (pool - 1) so there's always at least one
+            // fresh candidate next time, capped at RecentPhrasesMemory. Skip tracking a lone phrase.
+            if (enabledPhrases.Count > 1 && _recentPhrasesSet.Add(phrase))
+            {
+                _recentPhrases.Enqueue(phrase);
+                int cap = Math.Min(enabledPhrases.Count - 1, RecentPhrasesMemory);
+                while (_recentPhrases.Count > cap)
+                    _recentPhrasesSet.Remove(_recentPhrases.Dequeue());
+            }
+
+            return phrase;
         }
 
         /// <summary>
