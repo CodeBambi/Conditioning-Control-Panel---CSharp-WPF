@@ -144,6 +144,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkAutonomyBehavior_Changed(sender, e);
         }
+        private void BtnWallpaperFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnWallpaperFolder_Click(sender, e);
+        }
         private void ChkAutonomyEnabled_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

@@ -310,7 +310,48 @@ namespace ConditioningControlPanel
             App.Settings.Current.AutonomyCanTriggerPinkFilter = BambiTakeoverTab.ChkAutonomyPinkFilter.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerBouncingText = BambiTakeoverTab.ChkAutonomyBouncingText.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerBubbleCount = BambiTakeoverTab.ChkAutonomyBubbleCount.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerWallpaper = BambiTakeoverTab.ChkAutonomyWallpaper.IsChecked ?? false;
             App.Settings.Save();
+        }
+
+        /// <summary>
+        /// Pick the folder the wallpaper takeover pulls desktop wallpapers from.
+        /// Empty setting falls back to the assets/wallpapers folder (see WallpaperService).
+        /// </summary>
+        internal void BtnWallpaperFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            using var dlg = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = "Pick the folder she pulls desktop wallpapers from",
+                ShowNewFolderButton = true,
+                UseDescriptionForTitle = true
+            };
+
+            var current = s.WallpaperSourceFolder;
+            dlg.SelectedPath = !string.IsNullOrWhiteSpace(current) && System.IO.Directory.Exists(current)
+                ? current
+                : System.IO.Path.Combine(App.EffectiveAssetsPath, "wallpapers");
+
+            if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            if (string.IsNullOrWhiteSpace(dlg.SelectedPath)) return;
+
+            s.WallpaperSourceFolder = dlg.SelectedPath;
+            App.Settings?.Save();
+            RefreshWallpaperFolderLabel();
+        }
+
+        /// <summary>Reflect the chosen wallpaper source folder (or the default) under the picker button.</summary>
+        internal void RefreshWallpaperFolderLabel()
+        {
+            var lbl = BambiTakeoverTab?.TxtWallpaperFolder;
+            if (lbl == null) return;
+            var folder = App.Settings?.Current?.WallpaperSourceFolder;
+            lbl.Text = string.IsNullOrWhiteSpace(folder)
+                ? Loc.Get("label_wallpaper_folder_default")
+                : folder;
         }
 
         internal void SliderAutonomyAnnounce_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
