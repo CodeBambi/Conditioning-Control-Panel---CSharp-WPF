@@ -118,10 +118,32 @@ const THROW_SPEED = 55;        // u/s a thrown card (Sticky Fingers capstone) ro
 const THROW_IMPACT_AT = 50;    // units ahead of the camera where the throw resolves
 const SWIRL_RAMP_SEC = 300;    // seconds of run time to reach full hypnotic twirl on wall cards
 const SWIRL_MAX_RATE = 0.34;   // rad/s peak swirl (~18s per revolution - dreamy, not dizzying)
-const SPOTLIGHT_DIST = 2.8;    // units ahead of the camera it hovers (close = big)
-const SPOTLIGHT_GAP = 130;     // depth units before the next feature is allowed
+const SPOTLIGHT_DIST = 2.8;    // units ahead of the camera it hovers (close = big) - also the 1-video formation distance
+const SPOTLIGHT_GAP = 130;     // depth units before the next FORMATION may start (cooldown after the whole wall clears)
 const SPOTLIGHT_FADE_S = 1.6;  // audio fade in the clip's final seconds
 const SPOTLIGHT_FADE_V = 0.8;  // seconds of visual fade-out at the end
+
+// Formation: instead of a lone spotlight, up to MAX_LIVE_VIDEOS user videos are
+// co-present ahead of the POV, arranged on a slowly-orbiting ring. Exactly one
+// member is "live" (full audio + a mist glow) at a time; focus hands off every
+// LIVE_SWAP_SEC. A single member collapses to radius 0 / dist SPOTLIGHT_DIST /
+// scale 1, so a solo video feels IDENTICAL to the old single spotlight.
+const FORMATION_DIST = 4.4;       // ring-plane distance for a 2+ video formation (single stays at SPOTLIGHT_DIST)
+const ORBIT_RATE = 0.15;          // rad/s the whole ring rotates POSITIONALLY (slow, ~42s/rev) while count >= 2
+const LIVE_SWAP_SEC = 8;          // seconds between random live-member (audio+mist) handoffs
+const FORMATION_JOIN_GAP = 10;    // min camera-depth between successive joins so members flow in one at a time
+
+// Ring layout tables, keyed by member count. Angles are degrees measured off the
+// camera basis: 0deg = right, 90 = up. Chosen so each count reads as a balanced
+// cluster (2 = side-by-side, 3 = triangle apex-up, 4 = diamond/pinwheel).
+const FORM_ANGLES = { 1: [0], 2: [0, 180], 3: [90, 210, 330], 4: [45, 135, 225, 315] };
+const FORM_RADIUS = { 1: 0, 2: 1.7, 3: 1.95, 4: 2.1 };  // ring radius (u) - grows with the count so cards don't overlap
+const FORM_SCALE  = { 1: 1, 2: 0.78, 3: 0.7, 4: 0.62 };  // per-card group scale - a fuller ring shrinks each to fit the POV
+const _formClamp = (n) => Math.max(1, Math.min(4, n | 0));
+const baseAngles = (n) => FORM_ANGLES[_formClamp(n)];     // degrees, one per member index
+const ringRadius = (n) => FORM_RADIUS[_formClamp(n)];
+const formScale  = (n) => FORM_SCALE[_formClamp(n)];
+const formDist   = (n) => (n <= 1 ? SPOTLIGHT_DIST : FORMATION_DIST);
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[(Math.random() * arr.length) | 0];
@@ -453,13 +475,22 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   let liveVideos = 0;
   let liveVeils = 0;
   let paused = false;         // ESC pause (scene stops calling update too)
-  let spotlight = null;       // the promoted video card, if any
+  // Formation state. `spotlight` is kept as a mirror of formation[0] (updated by
+  // reflowFormation whenever the array changes) so every legacy `if (spotlight)`
+  // guard keeps meaning "a video stage is active".
+  const formation = [];       // the video cards co-present on the ring, in join order
+  let spotlight = null;       // ALWAYS formation[0] || null (see reflowFormation)
+  let liveRec = null;         // the ONE formation member with audio + mist right now
+  let orbitAngle = 0;         // shared ring rotation (rad), advanced only while count >= 2
+  let liveSwapT = 0;          // seconds until the next random live-member handoff
+  let nextJoinOkAt = 0;       // camera depth gate: members flow into the formation one at a time
   let grabbed = null;         // an image/gif card the player is holding in front of the POV
-  let nextSpotlightOkAt = 60; // camera depth before the next feature may start
+  let nextSpotlightOkAt = 60; // camera depth before the next FORMATION may start (after the wall clears)
   let autoSpotlightOk = true; // Wave 2: the game turns approach-promotion off mid-run
   let pickupTimeScale = 1;    // Wave 2: pickups follow the game's freeze/slow-mo clock
   let throwOnRelease = null;  // Wave 2 (Sticky Fingers capstone): release hurls the card
   const _dir = new THREE.Vector3(), _target = new THREE.Vector3();
+  const _right = new THREE.Vector3(), _up = new THREE.Vector3(); // camera basis for the ring slot math
   const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
   const detached = new Set(); // junction-mouth cards: pixels-only, off the conveyor
 
@@ -1345,6 +1376,10 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     live.splice(i, 1);
     if (rec.videoEl) liveVideos = Math.max(0, liveVideos - 1);
     if (rec.kind === 'veil') liveVeils = Math.max(0, liveVeils - 1);
+    // formation glow: the mist plane is a group child that borrows the shared
+    // glowTex (never disposed here) but owns its own material - free it.
+    if (rec.mistMesh) { try { rec.group.remove(rec.mistMesh); } catch (e) { /* ignore */ } rec.mistMesh = null; }
+    if (rec.mistMat) { try { rec.mistMat.dispose(); } catch (e) { /* ignore */ } rec.mistMat = null; }
     scene.remove(rec.group);
     try { rec.dispose(); } catch (e) { /* ignore */ }
   }
@@ -1352,24 +1387,41 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   let spawning = 0;    // in-flight async spawns (media acquire)
   let camDepthNow = 0; // latest camera depth, read by late-landing async spawns
 
-  // ---- spotlight ---------------------------------------------------------------
-  // Promote an approaching user video card to the stage: seek a random ~30s
-  // cutout, ride ahead of the POV at full volume, suppress new cards until done.
-  function promoteSpotlight(rec, camera) {
-    if (grabbed) releaseGrab(true); // a video taking the stage lets any held card go (never a throw)
-    spotlight = rec;
+  // ---- formation ---------------------------------------------------------------
+  // The video stage is a ring of up to MAX_LIVE_VIDEOS members orbiting ahead of
+  // the POV; approaching user videos are pulled in automatically. `spotlight`
+  // mirrors formation[0] so every legacy guard keeps reading "stage active".
+  function reflowFormation() { spotlight = formation[0] || null; }
+
+  // Hand the audio + mist focus to a random member DIFFERENT from the current
+  // one (or the sole member at count 1), and reset the swap clock. Called on
+  // join, on the LIVE_SWAP_SEC tick, and whenever the live member leaves.
+  function pickLive() {
+    if (formation.length === 0) { liveRec = null; return; }
+    if (formation.length === 1) { liveRec = formation[0]; liveSwapT = LIVE_SWAP_SEC; return; }
+    let pool = formation.filter((r) => r !== liveRec);
+    if (pool.length === 0) pool = formation;
+    liveRec = pool[(Math.random() * pool.length) | 0];
+    liveSwapT = LIVE_SWAP_SEC;
+  }
+
+  // Pull an approaching user video into the formation: seek a random ~30s cutout,
+  // ride it on the ring, and make it the live (audible + glowing) member so a new
+  // arrival takes focus. spotDist is seeded from where the card was picked up so
+  // the per-frame follow eases it in rather than snapping.
+  function joinFormation(rec, camera) {
+    if (grabbed && formation.length === 0) releaseGrab(true); // the first video taking the stage lets a held card go (never a throw)
+    formation.push(rec);
+    reflowFormation();
     rec.isSpotlight = true;
     const clipLen = Math.max(10, Math.min(30, S.spotSeconds || 30));
     rec.clipLeft = clipLen;
     rec.fade = 1;
-    // Follow model: the card sits EXACTLY spotDist ahead of the camera along
-    // its forward axis every frame (so it can never end up behind the POV, no
-    // matter how hard the fall accelerates); spotDist eases from where the
-    // card was picked up to SPOTLIGHT_DIST, and a lateral offset decays to 0.
     camera.getWorldDirection(_dir);
     rec.spotDist = Math.max(3, _target.subVectors(rec.group.position, camera.position).dot(_dir));
-    _target.copy(camera.position).addScaledVector(_dir, rec.spotDist);
-    rec.spotLat = new THREE.Vector3().subVectors(rec.group.position, _target);
+    liveRec = rec;              // newest arrival takes focus...
+    liveSwapT = LIVE_SWAP_SEC;  // ...and resets the swap timer
+    nextJoinOkAt = camDepthNow + FORMATION_JOIN_GAP; // space the next join out
     const el = rec.videoEl;
     const seek = () => {
       const dur = el.duration;
@@ -1383,13 +1435,59 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     if (p && p.catch) p.catch(() => { el.muted = true; const q = el.play(); if (q && q.catch) q.catch(() => {}); });
   }
 
-  function endSpotlight(index) {
+  // A member's clip ended (or bailed out): drop it from the ring and despawn it.
+  // If it held focus, hand off immediately. The SPOTLIGHT_GAP cooldown applies
+  // only once the WHOLE wall has cleared (not between members).
+  function leaveFormation(rec, index) {
+    const fi = formation.indexOf(rec);
+    if (fi >= 0) formation.splice(fi, 1);
+    const wasLive = liveRec === rec;
     removeCard(index);
-    spotlight = null;
-    nextSpotlightOkAt = camDepthNow + SPOTLIGHT_GAP;
-    // spawning was suppressed; restart the ring buffer just ahead of the camera
-    nextCardDepth = Math.max(nextCardDepth, camDepthNow + 24);
-    nextVeilDepth = Math.max(nextVeilDepth, camDepthNow + 40);
+    reflowFormation();
+    if (wasLive) { liveRec = null; pickLive(); } // repoint focus to a surviving member
+    if (formation.length === 0) {
+      spotlight = null;
+      nextSpotlightOkAt = camDepthNow + SPOTLIGHT_GAP;
+      // spawning was suppressed while the ring was full; restart the buffer just
+      // ahead of the camera so nothing dumps in a catch-up burst
+      nextCardDepth = Math.max(nextCardDepth, camDepthNow + 24);
+      nextVeilDepth = Math.max(nextVeilDepth, camDepthNow + 40);
+    }
+  }
+
+  // The mist: a soft additive radial glow behind the LIVE member. Built lazily as
+  // a group child (so it billboards with the card) borrowing the shared glowTex;
+  // opacity eases toward live/not-live (the ~0.4s ease IS the audio crossfade's
+  // visual twin) with a gentle breathing pulse so it reads as drifting mist.
+  function ensureMist(rec) {
+    if (rec.mistMesh) return;
+    const mat = new THREE.MeshBasicMaterial({
+      map: glowTex, color: new THREE.Color(0xff69b4), // app pink
+      transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(unitPlane, mat);
+    mesh.position.z = -0.06;   // sit behind the content plane
+    mesh.renderOrder = -1;
+    rec.mistMat = mat;
+    rec.mistMesh = mesh;
+    rec.mistOp = 0;
+    rec.mistPhase = Math.random() * 6.283;
+    rec.group.add(mesh);
+  }
+  function updateMist(rec, isLive, dt, t) {
+    ensureMist(rec);
+    rec.mistOp += ((isLive ? 1 : 0) - rec.mistOp) * Math.min(1, dt * 2.5); // ~0.4s ease
+    const op = rec.mistOp * 0.8;
+    rec.mistMesh.visible = op > 0.01;
+    rec.mistMat.opacity = op;
+    // breathe: a slow scale pulse keeps the halo from reading as a flat disc.
+    const pulse = 1 + 0.06 * Math.sin(t * 1.6 + rec.mistPhase);
+    const content = rec.group.children[2]; // dressCard order: glow, frame, content
+    const cw = content ? content.scale.x : CARD_W;
+    const ch = content ? content.scale.y : CARD_W;
+    const s = 1.9 * pulse;                 // a bit larger than the card
+    rec.mistMesh.scale.set(cw * s, Math.max(cw, ch) * s, 1);
   }
 
   function setCardFade(rec, op) {
@@ -1646,7 +1744,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     const rec = buildVideoCard(camDepthNow + 12, url, { withAudio: true, release });
     if (!rec) return false;
     addCard(rec);
-    promoteSpotlight(rec, camera);
+    joinFormation(rec, camera);
     if (secs) rec.clipLeft = Math.max(6, Math.min(60, secs));
     return true;
   }
@@ -1664,6 +1762,15 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   // ---- per-frame update -------------------------------------------------------
   function update(camera, camDepth, dt, t, heat = 1, runTime = 999) {
     camDepthNow = camDepth;
+    // Formation cadence: advance the shared orbit only while the ring has 2+
+    // members (a lone card sits still, centered), and tick the live-swap clock
+    // to hand audio+mist focus to a random other member every LIVE_SWAP_SEC.
+    // Both freeze while paused or the tab is hidden.
+    if (!paused && !document.hidden && formation.length >= 2) {
+      orbitAngle = (orbitAngle + ORBIT_RATE * dt) % (Math.PI * 2);
+      liveSwapT -= dt;
+      if (liveSwapT <= 0) pickLive(); // pickLive re-arms liveSwapT
+    }
     surfMeltE += (surfMeltT - surfMeltE) * Math.min(1, dt * 1.5);
     const surfing = surfMeltE > 0.004;
     if (surfing) surfWasOn = true;
@@ -1688,10 +1795,12 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     // too, so the conveyor restarts with content in hand)
     pumpPrefetch();
     // spawn ahead (budgeted; async media acquires land within a frame or two).
-    // The whole conveyor holds its breath while a spotlight plays - or while
-    // parked (ESC pause, hidden tab, or the Warren hub idling in game mode: no
-    // new video cards behind the menu).
-    if (!spotlight && !paused) {
+    // The conveyor keeps feeding until the formation is FULL - otherwise no new
+    // videos would ever approach to join a partial ring. It holds its breath only
+    // when the ring is full, or while parked (ESC pause, hidden tab, or the Warren
+    // hub idling in game mode: no new video cards behind the menu).
+    const formationFull = formation.length >= MAX_LIVE_VIDEOS;
+    if (!formationFull && !paused) {
       // Progression gap: wide (sparse) at heat 0, tightening to CARD_GAP deep.
       const gap = CARD_GAP_FAR + (CARD_GAP - CARD_GAP_FAR) * Math.min(1, Math.max(0, heat));
       // Hold the conveyor at the top of the run: keep nextCardDepth pinned just
@@ -1710,7 +1819,9 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         spawning += 1;
         Promise.resolve(spawnCardAt(d)).then((rec) => {
           spawning -= 1;
-          if (rec && d > camDepthNow - DESPAWN_BEHIND && !spotlight) addCard(rec);
+          // re-check at resolve time: a card that finished decoding after the ring
+          // filled is discarded, but one that lands while the ring has room joins.
+          if (rec && d > camDepthNow - DESPAWN_BEHIND && formation.length < MAX_LIVE_VIDEOS) addCard(rec);
           else if (rec) { try { rec.dispose(); } catch (e) { /* ignore */ } }
         }).catch(() => { spawning -= 1; });
       }
@@ -1758,30 +1869,54 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         if (rec.texAcc >= iv) { rec.texAcc = 0; rec.vtex.needsUpdate = true; }
       }
 
-      // the spotlight rides with the POV instead of scrolling past
+      // a formation member rides its ring slot ahead of the POV instead of
+      // scrolling past. The slot is base-angle(count,index) + the shared orbit
+      // (2+ only), on a ring of ringRadius(count) at formDist(count); a lone
+      // member collapses to radius 0 / dist SPOTLIGHT_DIST / scale 1 - identical
+      // to the old single spotlight.
       if (rec.isSpotlight) {
+        const fi = formation.indexOf(rec);
+        const n = formation.length || 1;
+        const angs = baseAngles(n);
+        const aDeg = angs[fi >= 0 ? fi % angs.length : 0];
+        const a = aDeg * (Math.PI / 180) + (n >= 2 ? orbitAngle : 0);
+        const R = ringRadius(n);
+        // camera basis: forward / right / up
         camera.getWorldDirection(_dir);
-        rec.spotDist += (SPOTLIGHT_DIST - rec.spotDist) * Math.min(1, dt * 1.8);
-        rec.spotLat.multiplyScalar(Math.exp(-dt * 2.2));
-        rec.group.position.copy(camera.position)
+        _right.set(1, 0, 0).applyQuaternion(camera.quaternion);
+        _up.set(0, 1, 0).applyQuaternion(camera.quaternion);
+        rec.spotDist += (formDist(n) - rec.spotDist) * Math.min(1, dt * 1.8);
+        _target.copy(camera.position)
           .addScaledVector(_dir, rec.spotDist)
-          .add(rec.spotLat);
-        rec.group.quaternion.copy(camera.quaternion);
+          .addScaledVector(_right, Math.cos(a) * R)
+          .addScaledVector(_up, Math.sin(a) * R);
+        // firm frame-rate-independent lerp: eases in from pickup AND re-flows
+        // smoothly when the count changes, while still tracking a fast fall.
+        rec.group.position.lerp(_target, Math.min(1, dt * 10));
+        rec.group.quaternion.copy(camera.quaternion); // billboard: stay upright/readable
+        // ease the per-count group scale (x/y to formScale, z back to 1)
+        const sc = formScale(n), gk = Math.min(1, dt * 6), gs = rec.group.scale;
+        gs.x += (sc - gs.x) * gk; gs.y += (sc - gs.y) * gk; gs.z += (1 - gs.z) * gk;
         rec.depth = camDepth; // pinned: never crosses the despawn line
 
         if (!paused && !document.hidden && rec.videoEl && !rec.videoEl.paused) rec.clipLeft -= dt;
-        // full stage volume, fading over the clip's last seconds
+        // Exactly ONE member is audible: the live one gets full 'video' level
+        // (fading over its clip's last seconds); every other member eases to 0.
+        // The per-member ease is the audio half of the ~0.4s focus crossfade.
+        const isLive = rec === liveRec;
         const fadeOut = Math.max(0, Math.min(1, rec.clipLeft / SPOTLIGHT_FADE_S));
-        const want = isMuted() || paused ? 0 : getLevel('video') * fadeOut;
+        const want = (isMuted() || paused || !isLive) ? 0 : getLevel('video') * fadeOut;
         rec.vol += (want - rec.vol) * Math.min(1, dt * 3);
         setVideoVolume(rec, rec.vol);
+        // mist glow: the visual half of the crossfade (lit only for the live one)
+        updateMist(rec, isLive, dt, t);
         // keep-alive: distance rules don't apply on stage
         if (kickVideos && !paused && !document.hidden && rec.videoEl && rec.videoEl.paused) {
           const p = rec.videoEl.play(); if (p && p.catch) p.catch(() => {});
         }
         // stuck-stage bailout: a video that won't play (dead decoder, bad file)
-        // must never hold the conveyor hostage - clipLeft only ticks while
-        // playing, so 6s of stage silence force-ends the feature instead.
+        // must never hold a formation slot hostage - clipLeft only ticks while
+        // playing, so 6s of member silence force-ends it instead.
         if (!paused && !document.hidden && rec.videoEl && rec.videoEl.paused) {
           rec.spotStall = (rec.spotStall || 0) + dt;
           if (rec.spotStall > 6) rec.clipLeft = 0;
@@ -1789,7 +1924,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         if (rec.clipLeft <= 0) {
           rec.fade -= dt / SPOTLIGHT_FADE_V;
           setCardFade(rec, Math.max(0, rec.fade));
-          if (rec.fade <= 0) { endSpotlight(i); continue; }
+          if (rec.fade <= 0) { leaveFormation(rec, i); continue; }
         }
         continue;
       }
@@ -1922,13 +2057,19 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         if (onCardApproach) { try { onCardApproach(rec); } catch (e) { /* ignore */ } }
       }
 
-      // a user video card takes the stage when the camera reaches it - but only
-      // one that actually rendered (visible = loadeddata fired). Promoting a
+      // a user video card joins the formation when the camera reaches it - but
+      // only one that actually rendered (visible = loadeddata fired). Joining a
       // never-loaded video used to freeze the WHOLE conveyor: an invisible
-      // stage whose clipLeft never counts down (it only ticks while playing)
+      // member whose clipLeft never counts down (it only ticks while playing)
       // suppresses every card spawn until the run ends.
-      if (rec.spotlightable && autoSpotlightOk && !paused && rec.group.visible && !spotlight && camDepth >= rec.depth - 16 && camDepth >= nextSpotlightOkAt) {
-        promoteSpotlight(rec, camera);
+      // Gates: the ring must have room (< MAX_LIVE_VIDEOS); joins are spaced by
+      // nextJoinOkAt so members flow in one at a time; and the SPOTLIGHT_GAP
+      // cooldown (nextSpotlightOkAt) applies only to the FIRST member of a ring.
+      if (rec.spotlightable && autoSpotlightOk && !paused && rec.group.visible
+          && formation.length < MAX_LIVE_VIDEOS
+          && camDepth >= rec.depth - 16 && camDepth >= nextJoinOkAt
+          && (formation.length > 0 || camDepth >= nextSpotlightOkAt)) {
+        joinFormation(rec, camera);
         continue;
       }
 
@@ -2057,15 +2198,18 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   // leaving the prefetch pool + junction-owned detached cards intact.
   function clearLive() {
     for (let i = live.length - 1; i >= 0; i--) removeCard(i);
+    formation.length = 0; liveRec = null; orbitAngle = 0;
     spotlight = null;
     if (grabbed) { grabbed.isGrabbed = false; grabbed = null; }
   }
 
   function reset(camDepth) {
     for (let i = live.length - 1; i >= 0; i--) removeCard(i);
+    formation.length = 0; liveRec = null; orbitAngle = 0;
     spotlight = null;
     grabbed = null;
     nextSpotlightOkAt = camDepth + 60;
+    nextJoinOkAt = camDepth;
     nextCardDepth = camDepth + 30;
     nextVeilDepth = camDepth + 70;
     camDepthNow = camDepth;
@@ -2085,6 +2229,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   function dispose() {
     window.removeEventListener('pointermove', onCursorMove);
     for (let i = live.length - 1; i >= 0; i--) removeCard(i);
+    formation.length = 0; liveRec = null; spotlight = null;
     for (const item of ready) { try { item.dispose(); } catch (e) { /* ignore */ } }
     ready.length = 0;
     unitPlane.dispose();
@@ -2134,14 +2279,16 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     liveKinds: () => live.map((r) => r.kind),
     liveVideoCount: () => liveVideos,
     prefetchCount: () => ready.length,
-    spotlightActive: () => !!spotlight,
-    // Cut the current spotlight short: drop its countdown so the normal
-    // clipLeft<=0 path fades it out (audio + visual) and gates the next one.
-    skipSpotlight: () => { if (spotlight) { spotlight.clipLeft = 0; return true; } return false; },
-    spotlightInfo: () => spotlight ? {
-      clipLeft: spotlight.clipLeft, fade: spotlight.fade, dist: spotlight.spotDist,
-      paused: spotlight.videoEl.paused, muted: spotlight.videoEl.muted,
-      ready: spotlight.videoEl.readyState, t: spotlight.videoEl.currentTime,
+    spotlightActive: () => formation.length > 0,
+    // Cut the LIVE member's clip short: drop its countdown so the normal
+    // clipLeft<=0 path fades it out (audio + visual); the whole-wall cooldown
+    // only kicks in once the ring is fully empty.
+    skipSpotlight: () => { if (liveRec) { liveRec.clipLeft = 0; return true; } return false; },
+    spotlightInfo: () => liveRec ? {
+      clipLeft: liveRec.clipLeft, fade: liveRec.fade, dist: liveRec.spotDist,
+      paused: liveRec.videoEl.paused, muted: liveRec.videoEl.muted,
+      ready: liveRec.videoEl.readyState, t: liveRec.videoEl.currentTime,
+      members: formation.length,
     } : null,
   };
 }
