@@ -61,9 +61,6 @@
  * NOWHERE (VerifyCustody's exclusive).
  * ==========================================================================*/
 
-/* The printed reCAPTCHA target. Constant across bands — that is the whole joke. */
-const TARGET_INSTR = 'Select all images with a fire hydrant';
-
 /* ----------------------------------------------------------------------------
  * TUNABLES (top-of-file, clearly named). GIF_SPAWN_* is the owner's "% chance to
  * spawn, not always": the probability that a REGENERATED / AUTO-SPAWNED tile is a
@@ -85,7 +82,25 @@ const ENDURE_HI = 8;            // clicks-past-futility for the full-endorse buc
  * mundaneTileSrc(kind, slot) seam (slot 1..9) so tiles pick up the real PNG art
  * the moment assets/captcha/ lands, with the canvas placeholder until then. */
 const MUNDANE_KINDS = ['hydrant', 'bus', 'crosswalk', 'stapler'];
-const NON_HYDRANT = ['bus', 'crosswalk', 'stapler'];
+
+/* ----------------------------------------------------------------------------
+ * TARGET CATEGORY — varies per render (was hard-fixed to "fire hydrant"). ONE
+ * source of truth: the chosen key drives (a) the header instruction, (b) which
+ * tiles seed as the target (the answer key), and (c) the negative-link text, so a
+ * varied category can never desync from the art or the grading. Keys are exactly
+ * the chrome.mundaneTileSrc kinds (MUNDANE_KINDS).
+ * -------------------------------------------------------------------------- */
+const CATEGORIES = Object.freeze({
+  hydrant:   { instr: 'a fire hydrant', plural: 'fire hydrants' },
+  bus:       { instr: 'a bus',          plural: 'buses' },
+  crosswalk: { instr: 'a crosswalk',    plural: 'crosswalks' },
+  stapler:   { instr: 'a stapler',      plural: 'staplers' },
+});
+function pickCategory() { return MUNDANE_KINDS[(Math.random() * MUNDANE_KINDS.length) | 0]; }
+function instrFor(catKey) {
+  const c = CATEGORIES[catKey] || CATEGORIES.hydrant;
+  return 'Select all images with ' + c.instr;
+}
 
 /* ----------------------------------------------------------------------------
  * NICHE STRING TABLE — all niche-flavored VERDICT/UI strings live HERE (bank text
@@ -94,7 +109,7 @@ const NON_HYDRANT = ['bus', 'crosswalk', 'stapler'];
  * -------------------------------------------------------------------------- */
 const STRINGS = Object.freeze({
   bambi: {
-    refuse: 'no hydrants here',
+    refuse: (p) => 'no ' + p + ' here',
     stop: 'stop looking',
     footnote: '*new images will continue to appear',
     refuseVerdict: 'no items reported. noted.',
@@ -107,7 +122,7 @@ const STRINGS = Object.freeze({
     remain: (n) => n + ' items remain. continue.',
   },
   drone: {
-    refuse: 'no units to report',
+    refuse: (p) => 'no ' + p + ' to report',
     stop: 'cease scan',
     footnote: '*new targets will continue to appear',
     refuseVerdict: 'null selection logged.',
@@ -120,7 +135,7 @@ const STRINGS = Object.freeze({
     remain: (n) => n + ' targets remain. continue.',
   },
   sissy: {
-    refuse: 'no hydrants, promise',
+    refuse: (p) => 'no ' + p + ', promise',
     stop: 'stop looking',
     footnote: '*new images will continue to appear',
     refuseVerdict: 'nothing reported. noted.',
@@ -133,7 +148,7 @@ const STRINGS = Object.freeze({
     remain: (n) => n + ' items remain. keep going.',
   },
   circe: {
-    refuse: 'no hydrants reported',
+    refuse: (p) => 'no ' + p + ' reported',
     stop: 'stop looking',
     footnote: '*new images will continue to appear',
     refuseVerdict: 'refusal recorded. it counts.',
@@ -252,6 +267,10 @@ export function render(ctx, helpers) {
     const reduced = !!ctx.reduced;
     const shape = BAND_SHAPE[band] || BAND_SHAPE.calibration;
     const mode = shape.mode;                    // 'normal' | 'regen' | 'recovery'
+    // ONE source of truth for the varied target category (header + tile art + refuse link).
+    const targetKey = pickCategory();
+    const catPlural = (CATEGORIES[targetKey] || CATEGORIES.hydrant).plural;
+    const others = MUNDANE_KINDS.filter((k) => k !== targetKey);
 
     // media pool — user gifs preferred, images as fallback. Distinct list.
     const gifs = (ctx.media && Array.isArray(ctx.media.gifs)) ? ctx.media.gifs : [];
@@ -263,13 +282,13 @@ export function render(ctx, helpers) {
 
     // ---- build the card OFF the live stage; only attach on success ----------
     const built = chrome.frame({
-      instruction: TARGET_INSTR,
+      instruction: instrFor(targetKey),
       band: ctx.band,
       // the footnote is deep+ only — normal bands stay pristine.
       sub: (mode === 'regen') ? S.footnote : undefined,
       // normal / recovery: a plain graded refusal control. regen: the honest
       // "stop looking" exit (which commits the derived bucket, not always refusal).
-      hatch: (mode === 'regen') ? S.stop : S.refuse,
+      hatch: (mode === 'regen') ? S.stop : S.refuse(catPlural),   // refuse link is category-synced
       verifyLabel: 'VERIFY',
     });
     if (!built || !built.root || !built.body) return false;
@@ -298,7 +317,6 @@ export function render(ctx, helpers) {
     let spawnCursor = 0;        // index into the user pool (for the loop callback)
     let poolLooped = false;
     let stopShown = false;
-    let verifyAttempts = 0;
     let autoTimer = null;
     let swarmAnnounced = false;
 
@@ -508,21 +526,21 @@ export function render(ctx, helpers) {
     // NORMAL (lv1-2): a straight captcha via chrome's own setImage + select().
     function seedNormalGrid() {
       const order = shuffleIdx(9);
-      const hydrantSlots = new Set(order.slice(0, 3));
+      const targetSlots = new Set(order.slice(0, 3));
       for (let i = 0; i < 9; i++) {
-        const kind = hydrantSlots.has(i) ? 'hydrant' : NON_HYDRANT[i % NON_HYDRANT.length];
+        const kind = targetSlots.has(i) ? targetKey : others[i % others.length];
         const src = mundaneSrc(kind, i + 1);
         if (src) { try { tiles[i].setImage(src); } catch (_e) {} }
-        meta[i].kind = hydrantSlots.has(i) ? 'target' : 'mundane';
+        meta[i].kind = targetSlots.has(i) ? 'target' : 'mundane';
         meta[i].filled = true;
       }
     }
     // REGEN / RECOVERY: node-owned tiles so slots can clear + refill.
     function seedInitial() {
       if (mode === 'recovery') {
-        // a single hydrant in one slot; the rest stay empty.
+        // a single target tile in one slot; the rest stay empty.
         const slot = (Math.random() * 9) | 0;
-        const src = mundaneSrc('hydrant', 1);
+        const src = mundaneSrc(targetKey, 1);
         putNode(slot, src ? makeImgNode(src) : makeBlankNode());
         meta[slot].kind = 'target';
         return;
@@ -530,12 +548,12 @@ export function render(ctx, helpers) {
       // deepening / climax START honest: a full mundane grid. The rot arrives only
       // through the gated regeneration (and, at climax, the auto-spawn timer).
       const order = shuffleIdx(9);
-      const hydrantSlots = new Set(order.slice(0, 3));
+      const targetSlots = new Set(order.slice(0, 3));
       for (let i = 0; i < 9; i++) {
-        const kind = hydrantSlots.has(i) ? 'hydrant' : NON_HYDRANT[i % NON_HYDRANT.length];
+        const kind = targetSlots.has(i) ? targetKey : others[i % others.length];
         const src = mundaneSrc(kind, i + 1);
         putNode(i, src ? makeImgNode(src) : makeBlankNode());
-        meta[i].kind = hydrantSlots.has(i) ? 'target' : 'mundane';
+        meta[i].kind = targetSlots.has(i) ? 'target' : 'mundane';
       }
     }
 
@@ -639,22 +657,19 @@ export function render(ctx, helpers) {
       }, 620));
     }
 
-    /* -- VERIFY: friction, not lockout. 3rd attempt accepts. ---------------- */
+    /* -- VERIFY: friction, not lockout. Always commits on the FIRST press. ---
+     * In EVERY mode, VERIFY straight-commits the derived grade. Previously the
+     * regen bands (deepening/climax) required the grid to be EMPTIED first
+     * (countFilled()===0) and otherwise nagged "N items remain. continue.",
+     * accepting only on the 3rd press. But the refill mechanic (replaceChance
+     * 0.82/1.00) keeps the grid full, so it never empties — which read as the
+     * captcha refusing to submit after the user selected the target tiles. The
+     * gaslighting now lives purely in the click/regeneration loop (which still
+     * runs); VERIFY is the always-open honest exit, and deriveBucket already
+     * grades how far the user pushed into the loop. No fixed-count gate. */
     function onVerify() {
       if (done) return;
-      // Normal captcha: VERIFY straight-commits the selection (deadpan, no nag).
-      if (mode === 'normal') { commit(deriveBucket()); return; }
-      const remaining = countFilled();
-      if (remaining === 0) { commit(deriveBucket()); return; }   // honest completion
-      verifyAttempts++;
-      if (verifyAttempts >= 3) { commit(deriveBucket()); return; }
-      // graded nag — the grid still will not empty, but nothing is locked.
-      try {
-        const st = chrome.stamp(clicks === 0 ? S.refuseVerdict : S.remain(remaining), 'logged');
-        if (st) built.body.appendChild(st);
-        push(setTimeout(() => { try { if (st && st.parentNode) st.parentNode.removeChild(st); } catch (_e) {} }, 1400));
-      } catch (_e) {}
-      try { ctx.sfx('captcha-reject', 0.4); } catch (_e) {}
+      commit(deriveBucket());
     }
 
     // ---- wire tiles + controls ---------------------------------------------

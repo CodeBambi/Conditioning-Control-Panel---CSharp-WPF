@@ -256,6 +256,30 @@ const STEER_POOL = Object.freeze({
 
 const OPTION_MECHANICS = new Set([Mechanic.MC4, Mechanic.YesNo, Mechanic.BubblePop, Mechanic.Mono, Mechanic.Funnel, Mechanic.Destruct]);
 
+/* CAPTCHA SPACING (anti-clump) — see buildDescentBeat / eligible / buildRecoverySubPlan.
+ * Verify* fake-captcha beats are driven ENTIRELY by weighted prompt selection (the
+ * banks weight `shr_cap_*` prompts ~1.8-2.5); weight alone lets them cluster — a deep
+ * run fired ~3 captchas back-to-back. These two STRUCTURAL rules de-clump them
+ * deterministically (they run on the seeded rng, never Math.random), independent of
+ * weight tuning:
+ *   - CAPTCHA_MAX_PER_BAND: at most this many captcha beats per descent band, and
+ *   - CAPTCHA_MIN_GAP: at least this many NON-captcha beats between any two captchas
+ *     (measured run-globally, so the gap holds across a band boundary too).
+ * When a captcha would break either rule it is SUPPRESSED from selection for that beat
+ * (captcha prompts are filtered out of the eligible() pool), so the weighted draw lands
+ * on an ordinary question — the existing base-mechanic path, never a blank card. */
+const CAPTCHA_MAX_PER_BAND = 2;
+const CAPTCHA_MIN_GAP = 2;
+/** True iff a prompt is a fake-captcha item (carries any Verify* mechanicHint). */
+function isCaptchaPrompt(p) {
+  return !!(p && Array.isArray(p.mechanicHints)
+    && p.mechanicHints.some((h) => typeof h === 'string' && h.indexOf('verify') === 0));
+}
+/** True iff a resolved mechanic id is a Verify* fake-captcha mechanic. */
+function isCaptchaMechanic(m) {
+  return typeof m === 'string' && m.indexOf('verify') === 0;
+}
+
 const RECOVERY_LINES = Object.freeze([
   'Take a slow breath in, and let it go. Notice the surface you are resting on.',
   'Wiggle your fingers and your toes. You are coming back up, gently.',
@@ -411,6 +435,9 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   const lineMem = {};                     // band -> last-two interviewer line indices (no-repeat)
   const interludesInBand = {};            // band -> interludes inserted so far this band (reset per endless lap)
   let bubbleServedInBand = false;         // bubble guarantee: >=1 BubblePop per descent band
+  let captchasInBand = 0;                 // Verify* captcha beats emitted in the current band (CAPTCHA_MAX_PER_BAND)
+  let beatsSinceCaptcha = 1e9;            // non-captcha beats since the last captcha, run-global (CAPTCHA_MIN_GAP); huge => first is free
+  let suppressCaptcha = false;            // when set, eligible() filters captcha prompts out of the draw (anti-clump gate)
   let colorBeatsServed = 0;               // colour beats served (drives the slot schedule)
   let lastColorBeat = -99;                // beat index of the last colour beat (COLOR_MIN_GAP)
   let trickServed = 0;                    // trick questions served this run (TRICK_MAX_PER_RUN)
@@ -550,6 +577,7 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
       if (ladderPromptIds.has(p.id)) continue;  // ladder-owned prompts arrive only via the ladder
       if (p.trick) continue;                    // trick questions arrive only via selectTrickPrompt()
       if (colorIds.has(p.id)) continue;         // colour questions arrive only via selectColorPrompt()
+      if (suppressCaptcha && isCaptchaPrompt(p)) continue; // anti-clump: gap/cap gate closed this beat -> no Verify* draw
       const heat = typeof p.heat === 'number' ? p.heat : 0;
       if (mode === 'strict') { if (heat < win[0] - 0.001 || heat > win[1] + 0.001) continue; }
       else if (mode === 'wide') { if (heat > win[1] + 1.5) continue; } // softer prompts ok, rough hot ceiling
@@ -1135,7 +1163,17 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     state.band = band;
 
     const plain = isPlainSlot(band);
+    // ANTI-CLUMP CAPTCHA GATE: decide, BEFORE the weighted draw, whether a Verify*
+    // captcha may be selected this beat. Closed if the gap rule (>=CAPTCHA_MIN_GAP
+    // non-captcha beats since the last captcha) OR the per-band cap
+    // (CAPTCHA_MAX_PER_BAND) forbids it. When closed, eligible() filters every captcha
+    // prompt out of the pool, so the weighted draw lands on an ordinary question (the
+    // existing base-mechanic path) — never a blank beat. Reset immediately after the
+    // draw so the flag can never leak to any other selection path.
+    const captchaAllowed = beatsSinceCaptcha >= CAPTCHA_MIN_GAP && captchasInBand < CAPTCHA_MAX_PER_BAND;
+    suppressCaptcha = !captchaAllowed;
     const src = selectPrompt(band, plain);
+    suppressCaptcha = false;
     lastBeatWasTrick = !!src.trick;
     let mechanic = pickMechanic(src, band);
     // SPIRAL HOLD: a BubblePop beat mounts an unconditional fullscreen loom
@@ -1152,6 +1190,12 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
       mechanic = Mechanic.BubblePop;
     }
     if (mechanic === Mechanic.BubblePop) bubbleServedInBand = true;
+    // ANTI-CLUMP BOOKKEEPING (uses the FINAL mechanic — so a captcha prompt the
+    // spiralHold / bubble-guarantee overrides above turned into MC4/BubblePop counts
+    // as the NON-captcha beat it actually renders as): a Verify* beat resets the gap
+    // and consumes one of the band's captcha budget; anything else widens the gap.
+    if (isCaptchaMechanic(mechanic)) { captchasInBand += 1; beatsSinceCaptcha = 0; }
+    else beatsSinceCaptcha += 1;
     const options = buildOptions(mechanic, src);
     // A plain beat is served UNSTEERED. Note this also clears lastPrimarySteer,
     // so the steer that follows it is free to repeat the one before — which is
@@ -1201,6 +1245,7 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
     // NOT beatsInBand, NOT qIndex — a valley, not a question (band never shrinks).
     beatSeq += 1; totalBeatsBuilt += 1;
     lastBeatTimed = false;
+    beatsSinceCaptcha += 1;   // an interlude valley is a non-captcha beat: it widens the anti-clump gap
     const meta = makeMeta(band, beatsInBand, planned, rollInterviewerLine(band));
     trackPeak(depth, band);
     return { id: `b${beatSeq}-${band}-interlude`, band, depth, mechanic: Mechanic.Interlude, prompt, options: [], steerRoll: { primary: Steer.None, secondary: [], intensity: 0 }, rewardPlan, timeoutMs: 0, meta };
@@ -1239,9 +1284,16 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
         chosen.push({ recId, mechanic: hint });
       }
       if (!chosen.length) return;
+      // ANTI-CLUMP: the walk-down is only RECOVERY_BEATS (4) beats, with step 0 (entry)
+      // and step 3 (the depth-0 surfacing beat) reserved for CheckIn. Two payoffs would
+      // therefore have to sit adjacent at steps 1 & 2 (gap 0) — and a captcha on Climax's
+      // tail followed by those two was exactly the observed back-to-back clump. To honor
+      // the run-wide ">=CAPTCHA_MIN_GAP non-captcha beats between captchas" rule, Recovery
+      // now carries at MOST ONE captcha payoff, pinned to step 2 (the LATER middle beat):
+      // steps 0 & 1 are guaranteed CheckIn ahead of it, so the gap holds even when the
+      // final Climax beat was itself a captcha, and step 3 stays CheckIn after it.
       const plan = {};
-      const steps = [1, 2];                    // middle two beats only; 0 (entry) + 3 (surfacing) stay CheckIn
-      chosen.forEach((c, i) => { plan[steps[i]] = c; });
+      plan[2] = chosen[0];                     // the single most-recently-used family's `*_rec` payoff
       recoverySubPlan = plan;
     } catch (_e) { recoverySubPlan = null; }    // any failure -> no substitution, all beats stay CheckIn
   }
@@ -1278,6 +1330,11 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
       mechanic = Mechanic.CheckIn;
       options = [];
     }
+    // ANTI-CLUMP BOOKKEEPING (recovery): keep the run-global gap counter honest across
+    // the descent->recovery boundary. A recovery captcha payoff resets the gap and
+    // counts toward the (recovery) band cap; a plain CheckIn walk-down beat widens it.
+    if (isCaptchaMechanic(mechanic)) { captchasInBand += 1; beatsSinceCaptcha = 0; }
+    else beatsSinceCaptcha += 1;
     const rewardPlan = planFor(Band.Recovery, depth, prompt) || fallbackPlan(Band.Recovery, depth, prompt);
 
     // Recovery beats ALWAYS carry an interviewer aside (the debrief voice).
@@ -1340,6 +1397,7 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
       descentIdx += 1;
       beatsInBand = 0;
       bubbleServedInBand = false;
+      captchasInBand = 0;   // per-band captcha cap resets each band (and each endless lap); the gap counter stays run-global
       if (descentIdx >= DESCENT_BANDS.length) {
         if (endless && !aborting) {
           lapCount += 1;
@@ -1375,6 +1433,7 @@ export function createEngine({ bank, reward, ai, config, stats } = {}) {
   function enterRecovery() {
     phase = 'recovery';
     recoveryIdx = 0;
+    captchasInBand = 0;          // Recovery is its own band for the per-band captcha cap
     recoveryStart = state.depth; // walk down from wherever we are (near peak, or wherever abort caught us)
     buildRecoverySubPlan();      // decide captcha `*_rec` payoff substitutions before the first walk-down beat
     return stepRecovery();

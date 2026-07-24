@@ -244,7 +244,22 @@ export function gridShell(n, cols) {
       setImage(src) {
         if (src == null) return;
         if (!img) { img = el('img', 'ixcap-tileimg'); img.alt = ''; img.draggable = false; wrap.insertBefore(img, tick); }
-        try { img.src = String(src); } catch (_e) {}
+        const s = String(src);
+        // Belt-and-braces: if a REAL (non-data:) mundane asset fails to load (a genuinely
+        // missing PNG or a stale negative cache), degrade to the generated placeholder
+        // instead of leaving a bare gray tile. Kind/seed are parsed back out of the
+        // filename; anything else (user gif URLs, data: URIs) leaves the tile as-is.
+        try {
+          img.onerror = () => {
+            try {
+              img.onerror = null;                                  // one-shot; never loop on the fallback
+              const m = /mundane_([a-z]+)_(\d+)\.png/i.exec(s);
+              const ph = m ? placeholderTile(m[1], parseInt(m[2], 10)) : '';
+              if (ph) img.src = ph;
+            } catch (_e) {}
+          };
+        } catch (_e) {}
+        try { img.src = s; } catch (_e) {}
         return img;
       },
       setPlaceholder(kind, seed) {
@@ -313,8 +328,10 @@ export function placeholderTile(kind, seed) {
     ctx.fillStyle = 'rgba(70,64,54,0.32)';
     ctx.font = '9px sans-serif';
     ctx.fillText(k, 5, 114);
-    // JPEG artifacting: export as low-quality jpeg for the mushy look
-    return cv.toDataURL('image/jpeg', 0.4);
+    // JPEG artifacting: export as low-quality jpeg for the mushy look. If a given
+    // WebView2 build refuses jpeg encoding, fall back to png so the tile is never blank.
+    try { return cv.toDataURL('image/jpeg', 0.4); }
+    catch (_e) { try { return cv.toDataURL(); } catch (_e2) { return ''; } }
   } catch (e) {
     ilog('placeholderTile failed: ' + (e && e.message));
     return '';
@@ -396,8 +413,18 @@ export function mundaneTileSrc(kind, i) {
   const idx = (typeof i === 'number' && i >= 0) ? (i | 0) : 1;
   const file = 'mundane_' + String(kind) + '_' + idx + '.png';
   probeManifest();                                        // fire-and-forget (cached)
-  if (_manifest && _manifest.has && _manifest.has(file)) return ASSET_BASE + file;
-  return placeholderTile(kind, idx);                      // generated fallback
+  // OPTIMISTIC by design: the mundane tile PNGs ship with the app (glob-included under
+  // the web tree, so they are always on disk behind the ccp.game vhost). Return the real
+  // path UNLESS the async manifest probe has RESOLVED and told us otherwise. Previously
+  // this only returned the real path once the probe resolved, so the FIRST captcha beat —
+  // which renders synchronously before the fetch settles, while `_manifest` is still null —
+  // fell back to placeholderTile() for every tile (and, if toDataURL yields nothing, to a
+  // bare gray tile). Now a still-pending probe serves real art immediately; the placeholder
+  // is used only when the manifest is confirmed absent or the specific file is confirmed
+  // missing. A genuine 404 degrades via the <img> onerror in gridShell's setImage.
+  if (_manifest === false) return placeholderTile(kind, idx);                             // manifest confirmed absent
+  if (_manifest && _manifest.has && !_manifest.has(file)) return placeholderTile(kind, idx); // file confirmed missing
+  return ASSET_BASE + file;                               // real art (confirmed, or optimistic pre-probe)
 }
 
 /* ----------------------------------------------------------------------------

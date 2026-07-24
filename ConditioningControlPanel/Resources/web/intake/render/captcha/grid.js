@@ -63,7 +63,7 @@ function ensureRun(qIndex) {
  * -------------------------------------------------------------------------- */
 const STRINGS = Object.freeze({
   bambi: {
-    refuse: 'no hydrants here',
+    refuse: (p) => 'no ' + p + ' here',
     refuseVerdict: 'nothing reported. noted.',
     calVerdict: 'response logged',
     logged: 'anomalies logged: 2',
@@ -72,7 +72,7 @@ const STRINGS = Object.freeze({
     recoverVerdict: 'none remain. thank you.',
   },
   drone: {
-    refuse: 'no units to report',
+    refuse: (p) => 'no ' + p + ' to report',
     refuseVerdict: 'null selection logged.',
     calVerdict: 'response logged',
     logged: 'anomalies logged: 2',
@@ -81,7 +81,7 @@ const STRINGS = Object.freeze({
     recoverVerdict: 'none remain. compliance archived.',
   },
   sissy: {
-    refuse: 'no hydrants, promise',
+    refuse: (p) => 'no ' + p + ', promise',
     refuseVerdict: 'nothing reported. noted.',
     calVerdict: 'response logged',
     logged: 'anomalies logged: 2',
@@ -90,7 +90,7 @@ const STRINGS = Object.freeze({
     recoverVerdict: 'none remain. thank you.',
   },
   circe: {
-    refuse: 'no hydrants reported',
+    refuse: (p) => 'no ' + p + ' reported',
     refuseVerdict: 'refusal recorded. it counts.',
     calVerdict: 'response logged',
     logged: 'anomalies logged: 2',
@@ -103,8 +103,25 @@ function stringsFor(niche) {
   return STRINGS[niche] || STRINGS.bambi;
 }
 
-/* The printed reCAPTCHA target. Constant across bands — that is the whole joke. */
-const TARGET_INSTR = 'Select all images with a fire hydrant';
+/* ----------------------------------------------------------------------------
+ * TARGET CATEGORY — varies per render (was hard-fixed to "fire hydrant"). ONE
+ * source of truth: the chosen key drives (a) the header instruction, (b) which
+ * tiles render the target art (the answer key), and (c) the negative-link text,
+ * so a varied category can never desync from the art or the grading. Keys match
+ * chrome.mundaneTileSrc's supported kinds exactly.
+ * -------------------------------------------------------------------------- */
+const CATEGORIES = Object.freeze({
+  hydrant:   { instr: 'a fire hydrant', plural: 'fire hydrants' },
+  bus:       { instr: 'a bus',          plural: 'buses' },
+  crosswalk: { instr: 'a crosswalk',    plural: 'crosswalks' },
+  stapler:   { instr: 'a stapler',      plural: 'staplers' },
+});
+const ALL_KINDS = Object.freeze(['hydrant', 'bus', 'crosswalk', 'stapler']);
+function pickCategory() { return ALL_KINDS[(Math.random() * ALL_KINDS.length) | 0]; }
+function instrFor(catKey) {
+  const c = CATEGORIES[catKey] || CATEGORIES.hydrant;
+  return 'Select all images with ' + c.instr;
+}
 
 function ilog(msg) {
   try {
@@ -198,6 +215,10 @@ export function render(ctx, helpers) {
     const niche = ctx.niche || 'bambi';
     const S = stringsFor(niche);
     const reduced = !!ctx.reduced;
+    // ONE source of truth for the varied target category (header + tile art + refuse link).
+    const targetKey = pickCategory();
+    const catPlural = (CATEGORIES[targetKey] || CATEGORIES.hydrant).plural;
+    const others = ALL_KINDS.filter((k) => k !== targetKey);
     const qIndex = (ctx.meta && typeof ctx.meta.qIndex === 'number') ? ctx.meta.qIndex : undefined;
     ensureRun(qIndex);
 
@@ -208,10 +229,10 @@ export function render(ctx, helpers) {
 
     // ---- build the card OFF the live stage; only attach on success ----------
     const built = chrome.frame({
-      instruction: TARGET_INSTR,
+      instruction: instrFor(targetKey),
       band: ctx.band,
       sub: (band === 'deepening') ? S.footnote : undefined,   // in-chrome footnote slot
-      hatch: S.refuse,                                        // graded refusal control
+      hatch: S.refuse(catPlural),                             // graded refusal control (category-synced)
       verifyLabel: 'VERIFY',
     });
     if (!built || !built.root || !built.body) return false;
@@ -222,13 +243,13 @@ export function render(ctx, helpers) {
     built.body.appendChild(shell.grid);
 
     // ---- per-tile ledger ----------------------------------------------------
-    // kind: 'hydrant' | 'other' | 'gif'      everGif/liveGif: a user asset shown here
+    // kind: 'target' | 'other' | 'gif'       everGif/liveGif: a user asset shown here
     // dirtySelect: selected AT A MOMENT a user gif was live in the tile (double-book)
     const meta = [];
     for (let i = 0; i < 9; i++) {
       // hoverRolled: this tile has already had its once-per-beat hover-swap roll.
       // fallen: this tile has already detached (visual only; never read by grading).
-      meta.push({ kind: 'hydrant', src: null, everGif: false, liveGif: false, dirtySelect: false, selected: false, hoverRolled: false, fallen: false });
+      meta.push({ kind: 'target', src: null, everGif: false, liveGif: false, dirtySelect: false, selected: false, hoverRolled: false, fallen: false });
     }
 
     let done = false;
@@ -256,10 +277,9 @@ export function render(ctx, helpers) {
     }
 
     // ---- tile visuals -------------------------------------------------------
-    const MUNDANE_KINDS = ['bus', 'crosswalk', 'stapler'];
     function setMundane(i, kind) {
-      const k = kind || 'hydrant';
-      meta[i].kind = (k === 'hydrant') ? 'hydrant' : 'other';
+      const k = kind || targetKey;
+      meta[i].kind = (k === targetKey) ? 'target' : 'other';
       try {
         const src = chrome.mundaneTileSrc ? chrome.mundaneTileSrc(k, i + 1) : (chrome.placeholderTile ? chrome.placeholderTile(k, i) : null);
         meta[i].src = src;
@@ -496,10 +516,10 @@ export function render(ctx, helpers) {
     // baseline: seed all 9 as mundane, ~3 hydrants + the rest bus/crosswalk/stapler.
     function layoutMundane() {
       const order = shuffleIdx(9);
-      const hydrantSlots = new Set(order.slice(0, 3));
+      const targetSlots = new Set(order.slice(0, 3));
       for (let i = 0; i < 9; i++) {
-        if (hydrantSlots.has(i)) setMundane(i, 'hydrant');
-        else setMundane(i, MUNDANE_KINDS[i % MUNDANE_KINDS.length]);
+        if (targetSlots.has(i)) setMundane(i, targetKey);
+        else setMundane(i, others[i % others.length]);
       }
       return order;
     }
@@ -522,7 +542,7 @@ export function render(ctx, helpers) {
       // 8 clean hydrants + ONE canvas-frozen first frame of the gif they clicked
       // first at Climax ("I kept your answer"). Falls back to the pool head.
       layoutMundane();
-      for (let i = 0; i < 9; i++) setMundane(i, 'hydrant');
+      for (let i = 0; i < 9; i++) setMundane(i, targetKey);
       const frozenSrc = runState.climaxFirstSrc || pool[0] || null;
       if (frozenSrc) {
         const slot = (Math.random() * 9) | 0;
@@ -532,7 +552,7 @@ export function render(ctx, helpers) {
       // calibration / establishing / deepening all start honest-looking.
       layoutMundane();
       const nonHydrant = [];
-      for (let i = 0; i < 9; i++) if (meta[i].kind !== 'hydrant') nonHydrant.push(i);
+      for (let i = 0; i < 9; i++) if (meta[i].kind !== 'target') nonHydrant.push(i);
 
       if (band === 'calibration') {
         // ONE subtle 3-frame (~55ms) flicker near the end; skip entirely if reduced.
@@ -545,7 +565,7 @@ export function render(ctx, helpers) {
         // 300ms flicker bursts on a few tiles (staggered, so concurrent distinct
         // animated gifs stay well under the 3-4 cap). Reduced -> no flicker storm.
         if (!reduced && pool.length) {
-          const picks = shuffleIdx(9).filter((i) => meta[i].kind !== 'hydrant').slice(0, 3);
+          const picks = shuffleIdx(9).filter((i) => meta[i].kind !== 'target').slice(0, 3);
           picks.forEach((idx, k) => {
             const t = setTimeout(() => flickerTile(idx, pool[k % pool.length], 300), 1400 + k * 1100);
             timers.push(t);

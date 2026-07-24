@@ -195,6 +195,23 @@ const DECAY = 0.30;        // each early release shortens the REMAINING hold ~30
 const FLOOR_MS = 600;      // requiredMs never decays below this
 const THIRD_ATTEMPT = 3;   // the third release always accepts (friction, not lockout)
 
+/* Lv3+ SUCCESS-VERDICT GLITCH POOL — on a successful "verified human" solve the
+ * verdict stamp (S.ok: HUMAN/UNIT/CANDIDATE/PROPERTY) may glitch into one of
+ * these per niche (raw Math.random pick, the current verdict word excluded so the
+ * morph is always visible). Circe stays clinical: no diminutives, no exclamations
+ * (CLAUDE.md §1). Casing is cosmetic — the stamp CSS uppercases. */
+const MOD_WORDS = {
+  bambi: ['BIMBO', 'BAMBI', 'DOLL'],
+  drone: ['UNIT', 'DRONE'],
+  sissy: ['SISSY', 'PRINCESS', 'CANDIDATE'],
+  circe: ['PROPERTY', 'LOCKED', 'OWNED'],
+};
+/* Which stages may glitch: Deepening/Climax/Recovery = "Lv3 onward". Recovery is
+ * listed for consistency but is a no-op here — the rec stage commits without a
+ * verdict stamp — so the effective firing bands are Deepening + Climax. Delete
+ * `rec` to formally exclude the sanctuary band. */
+const GLITCH_STAGES = { deep: 1, cli: 1, rec: 1 };
+
 const EFFECT_MAX_OP = 0.40;     // fullscreen effect opacity at a completed hold
 const EFFECT_MIN_OP = 0.01;     // effect opacity at rest / hold start
 const EFFECT_REDUCED_OP = 0.12; // static tint under reduced motion (<= 0.15, no anim)
@@ -433,6 +450,54 @@ export function render(ctx, helpers) {
       try { if (typeof ctx.submitValue === 'function') ctx.submitValue(!!value, { steered: !!steered }); } catch (e) { ilog('submit failed: ' + (e && e.message)); }
     }
 
+    /* Lv3+ SUCCESS FLOURISH — the "verified human" verdict glitches into a niche
+     * mod word. Fires ONLY on a successful solve (caller gates on `ok`), only
+     * Deepening/Climax/Recovery (GLITCH_STAGES = "Lv3 onward"), 50% raw roll
+     * (Math.random — matches the captcha layer's RNG, CLAUDE.md §10.10). Purely
+     * cosmetic: it mutates the stamp text only; the pass/fail value and advancement
+     * (commit -> ctx.submitValue) are untouched. Returns true if it launched so the
+     * caller can lengthen the read-hold before commit. */
+    function glitchVerdict(stampEl) {
+      try {
+        if (!stampEl || !GLITCH_STAGES[stage]) return false;
+        if (Math.random() >= 0.5) return false;                 // 50% miss -> plain verdict
+        const from = String(S.ok || 'HUMAN').toUpperCase();
+        const pool = (MOD_WORDS[niche] || MOD_WORDS.bambi).filter((w) => w.toUpperCase() !== from);
+        if (!pool.length) return false;
+        const word = pool[(Math.random() * pool.length) | 0];
+        if (reduced) {
+          // reduced motion: no scramble — a quiet cross-fade to the settled word.
+          try {
+            stampEl.style.transition = 'opacity .18s linear';
+            stampEl.style.opacity = '0.15';
+            T(() => { try { stampEl.textContent = word; stampEl.style.opacity = '0.9'; } catch (_e) {} }, 190);
+          } catch (_e) {}
+          return true;
+        }
+        // datamosh scramble from the human word, settling on the mod word (~760ms).
+        const GLYPHS = '#@%&/\\|<>×§¤★80XZ▓▒░';
+        const DUR = 760;
+        const clock = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+        const start = clock();
+        try { stampEl.style.textShadow = '2px 0 rgba(255,43,208,.75), -2px 0 rgba(32,232,255,.6)'; } catch (_e) {}
+        const tick = () => {
+          const p = Math.min(1, (clock() - start) / DUR);
+          if (p >= 1) {
+            try { stampEl.textContent = word; stampEl.style.textShadow = ''; } catch (_e) {}
+            return;
+          }
+          let out = '';
+          for (let i = 0; i < word.length; i++) {
+            out += (Math.random() < p * 0.9) ? word[i] : GLYPHS[(Math.random() * GLYPHS.length) | 0];
+          }
+          try { stampEl.textContent = out; } catch (_e) {}
+          T(tick, 58);   // tracked timer -> cleared by clearAll on commit/cleanup
+        };
+        tick();
+        return true;
+      } catch (_e) { return false; }
+    }
+
     /* Run the "Verifying…" interstitial then commit. ok drives the green check /
      * grey dash + the stamp tone. Grading is the engine's job — this is chrome. */
     function runVerify(value, ok, steered) {
@@ -453,11 +518,17 @@ export function render(ctx, helpers) {
       T(() => {
         try { if (sp && sp.resolve) sp.resolve(ok); } catch (_e) {}
         if (cycleTimer) { try { clearInterval(cycleTimer); } catch (_e) {} cycleTimer = 0; }
+        let holdMs = 520;
         try {
           const st = chrome.stamp(ok ? S.ok : S.refuse, ok ? 'ok' : 'logged');
-          if (st) body.appendChild(st);
+          if (st) {
+            body.appendChild(st);
+            // Lv3+ success flourish: the verdict may glitch "human" -> a mod word.
+            // Only on success; commit(value) below is unchanged either way.
+            if (ok && glitchVerdict(st)) holdMs = 1120;   // let the scramble finish
+          }
         } catch (_e) {}
-        T(() => commit(value, steered), 520);
+        T(() => commit(value, steered), holdMs);
       }, cfg.verifyMs || 800);
     }
 

@@ -1,0 +1,370 @@
+{
+  "hydrant": [
+    {
+      "file": "mundane_hydrant_1.png",
+      "source": "https://www.flickr.com/photos/117189642@N04/13375457873",
+      "image_url": "https://live.staticflickr.com/7269/13375457873_8cef87d3b1_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "wyncliffe",
+      "provider": "flickr",
+      "title": "Red fire hydrant"
+    },
+    {
+      "file": "mundane_hydrant_2.png",
+      "source": "https://www.flickr.com/photos/56544547@N00/396307237",
+      "image_url": "https://live.staticflickr.com/178/396307237_d42fd32d55_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "athrasher",
+      "provider": "flickr",
+      "title": "Fire Hydrant"
+    },
+    {
+      "file": "mundane_hydrant_3.png",
+      "source": "https://www.flickr.com/photos/35034347371@N01/278132",
+      "image_url": "https://live.staticflickr.com/1/278132_531c7aef67.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "roland",
+      "provider": "flickr",
+      "title": "New Fire Hydrants in Arbutus Walk"
+    },
+    {
+      "file": "mundane_hydrant_4.png",
+      "source": "https://commons.wikimedia.org/w/index.php?curid=17958188",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/e6/Monument_to_fire_Hydrant_in_Kursk.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "Radioaktive",
+      "provider": "wikimedia",
+      "title": "Monument to fire Hydrant in Kursk"
+    },
+    {
+      "file": "mundane_hydrant_5.png",
+      "source": "https://www.flickr.com/photos/35034347371@N01/278133",
+      "image_url": "https://live.staticflickr.com/1/278133_98c2b4f3ea.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "roland",
+      "provider": "flickr",
+      "title": "New Fire Hydrants in Arbutus Walk"
+    },
+    {
+      "file": "mundane_hydrant_6.png",
+      "source": "https://www.flickr.com/photos/35034347371@N01/278131",
+      "image_url": "https://live.staticflickr.com/1/278131_0c0c66fc71.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "roland",
+      "provider": "flickr",
+      "title": "New Fire Hydrants in Arbutus Walk"
+    },
+    {
+      "file": "mundane_hydrant_7.png",
+      "source": "https://www.flickr.com/photos/140641142@N05/30951578800",
+      "image_url": "https://live.staticflickr.com/5646/30951578800_93a98dd472_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "dankeck",
+      "provider": "flickr",
+      "title": "Open fire hydrant"
+    },
+    {
+      "file": "mundane_hydrant_8.png",
+      "source": "https://www.flickr.com/photos/140641142@N05/30951575650",
+      "image_url": "https://live.staticflickr.com/5588/30951575650_ded0c5aca4_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "dankeck",
+      "provider": "flickr",
+      "title": "Open fire hydrant"
+    },
+    {
+      "file": "mundane_hydrant_9.png",
+      "source": "https://www.flickr.com/photos/140641142@N05/29126353001",
+      "image_url": "https://live.staticflickr.com/8216/29126353001_5b74642ab8_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "dankeck",
+      "provider": "flickr",
+      "title": "Fire hydrant with knit cap"
+    }
+  ],
+  "bus": [
+    {
+      "file": "mundane_bus_1.png",
+      "source": "https://www.flickr.com/photos/125733295@N07/49567815041",
+      "image_url": "https://live.staticflickr.com/65535/49567815041_13c6573cae_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "jonriley1979@att.net",
+      "provider": "flickr",
+      "title": "Culver City Bus 7153_3 Olympic & Ave. Of The Stars 21-Feb-2020"
+    },
+    {
+      "file": "mundane_bus_2.png",
+      "source": "https://commons.wikimedia.org/w/index.php?curid=162807815",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/7/71/MTC_EAL-5901_head_at_NTPC_Banqiao_City_Bus_Station_20250326.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "Js913007",
+      "provider": "wikimedia",
+      "title": "MTC EAL-5901 head at NTPC Banqiao City Bus Station 20250326"
+    },
+    {
+      "file": "mundane_bus_3.png",
+      "source": "https://www.flickr.com/photos/125733295@N07/40584157573",
+      "image_url": "https://live.staticflickr.com/7907/40584157573_0fc76d53ba_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "jonriley1979@att.net",
+      "provider": "flickr",
+      "title": "LACMTA 3985_111 LAX City Bus Center (1) 5-Apr-2019"
+    },
+    {
+      "file": "mundane_bus_4.png",
+      "source": "https://www.flickr.com/photos/125733295@N07/47497436912",
+      "image_url": "https://live.staticflickr.com/7925/47497436912_204bb7d524_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "jonriley1979@att.net",
+      "provider": "flickr",
+      "title": "LACMTA 4026_232 LAX City Bus Center 5-Apr-2019"
+    },
+    {
+      "file": "mundane_bus_5.png",
+      "source": "https://www.flickr.com/photos/125733295@N07/33673574668",
+      "image_url": "https://live.staticflickr.com/7824/33673574668_e2f35f69f0_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "jonriley1979@att.net",
+      "provider": "flickr",
+      "title": "LACMTA 5776_232 LAX City Bus Center (1) 5-Apr-2019"
+    },
+    {
+      "file": "mundane_bus_6.png",
+      "source": "https://www.flickr.com/photos/125733295@N07/46707771665",
+      "image_url": "https://live.staticflickr.com/65535/46707771665_3a4bb3df34_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "jonriley1979@att.net",
+      "provider": "flickr",
+      "title": "LACMTA 5776_232 LAX City Bus Center 5-Apr-2019"
+    },
+    {
+      "file": "mundane_bus_7.png",
+      "source": "https://www.flickr.com/photos/125733295@N07/47497436352",
+      "image_url": "https://live.staticflickr.com/7842/47497436352_28c0a44383_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "jonriley1979@att.net",
+      "provider": "flickr",
+      "title": "LACMTA 3985_111 LAX City Bus Center 5-Apr-2019"
+    },
+    {
+      "file": "mundane_bus_8.png",
+      "source": "https://www.flickr.com/photos/125733295@N07/47497437842",
+      "image_url": "https://live.staticflickr.com/7893/47497437842_cefa8ec5a6_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "jonriley1979@att.net",
+      "provider": "flickr",
+      "title": "LACMTA 5776_232 LAX City Bus Center 5-Apr-2019"
+    },
+    {
+      "file": "mundane_bus_9.png",
+      "source": "https://www.flickr.com/photos/125733295@N07/46898979654",
+      "image_url": "https://live.staticflickr.com/65535/46898979654_567aed0cac_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "jonriley1979@att.net",
+      "provider": "flickr",
+      "title": "LACMTA 4181_232 LAX City Bus Center 9-Apr-2019"
+    }
+  ],
+  "crosswalk": [
+    {
+      "file": "mundane_crosswalk_1.png",
+      "source": "https://www.flickr.com/photos/137643065@N06/23698506663",
+      "image_url": "https://live.staticflickr.com/1460/23698506663_f00a650c60_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "pixellaphoto",
+      "provider": "flickr",
+      "title": "crossroad-zebra-crossing-crosswalk"
+    },
+    {
+      "file": "mundane_crosswalk_2.png",
+      "source": "https://www.flickr.com/photos/89918055@N05/52086660358",
+      "image_url": "https://live.staticflickr.com/65535/52086660358_aab9aa0476_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "JOHN K THORNE",
+      "provider": "flickr",
+      "title": "The new Zebra Crossing"
+    },
+    {
+      "file": "mundane_crosswalk_3.png",
+      "source": "https://commons.wikimedia.org/w/index.php?curid=58823454",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/3/32/Abbey_Road_zebra_crossing%2C_24-11-2015.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "Peter Heeling",
+      "provider": "wikimedia",
+      "title": "File:Abbey Road zebra crossing, 24-11-2015.jpg"
+    },
+    {
+      "file": "mundane_crosswalk_4.png",
+      "source": "https://www.flickr.com/photos/136264958@N03/47958416298",
+      "image_url": "https://live.staticflickr.com/65535/47958416298_02094e0881_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "SouthendBC",
+      "provider": "flickr",
+      "title": "SBC road safety officer, Peter Swanwick, teaches youngsters how to use a zebra crossing safely"
+    },
+    {
+      "file": "mundane_crosswalk_5.png",
+      "source": "https://www.flickr.com/photos/108268744@N02/55246342950",
+      "image_url": "https://live.staticflickr.com/65535/55246342950_1d9556b563_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "BAKOU67",
+      "provider": "flickr",
+      "title": "Zebra crossing"
+    },
+    {
+      "file": "mundane_crosswalk_6.png",
+      "source": "https://www.rawpixel.com/image/6042390/photo-image-public-domain-person-free",
+      "image_url": "https://images.rawpixel.com/editor_1024/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvbHIvZmw3MTc2MDg5MjA0LWltYWdlLWt5YmVleHUwLmpwZw.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": null,
+      "provider": "rawpixel",
+      "title": "Pedestrians zebra crossing"
+    },
+    {
+      "file": "mundane_crosswalk_7.png",
+      "source": "https://www.rawpixel.com/image/6033692/photo-image-public-domain-person-free",
+      "image_url": "https://images.rawpixel.com/editor_1024/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvbHIvZnJwZW9wbGVfcmFpbnlfYnVzeV9qYXBhbi1pbWFnZS1reWJkMGM2di5qcGc.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": null,
+      "provider": "rawpixel",
+      "title": "Pedestrians zebra crossing"
+    },
+    {
+      "file": "mundane_crosswalk_8.png",
+      "source": "https://www.rawpixel.com/image/5920076/photo-image-public-domain-free-city",
+      "image_url": "https://images.rawpixel.com/editor_1024/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDIyLTA1L3NrMTcxNS1pbWFnZS1rd3Z4OWptdS5qcGc.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": null,
+      "provider": "rawpixel",
+      "title": "Zebra crossing england cars photo"
+    },
+    {
+      "file": "mundane_crosswalk_9.png",
+      "source": "https://www.rawpixel.com/image/6038718/photo-image-public-domain-white-free",
+      "image_url": "https://images.rawpixel.com/editor_1024/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvbHIvZnJjcm9zc2luZ19zdHJlZXRfemVicmFfY2l0eS1pbWFnZS1reWJkdzRvbi5qcGc.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": null,
+      "provider": "rawpixel",
+      "title": "People crossing zebra cross"
+    }
+  ],
+  "stapler": [
+    {
+      "file": "mundane_stapler_1.png",
+      "source": "https://www.rawpixel.com/image/6031877/stapler-image-free-public-domain-cc0-photo",
+      "image_url": "https://images.rawpixel.com/editor_1024/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvbHIvZnJzdGFwbGVyX3JlZF9zdG9ja19waG90b2dyYXBoeS1pbWFnZS1reWJjcDdmNC5qcGc.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": null,
+      "provider": "rawpixel",
+      "title": "Stapler image"
+    },
+    {
+      "file": "mundane_stapler_2.png",
+      "source": "https://commons.wikimedia.org/w/index.php?curid=146779355",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/5/5c/Staplerblack.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "DifrancoBarnes",
+      "provider": "wikimedia",
+      "title": "Staplerblack"
+    },
+    {
+      "file": "mundane_stapler_3.png",
+      "source": "https://commons.wikimedia.org/w/index.php?curid=146779701",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/c/c0/Black_Stapler_2024.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "DifrancoBarnes",
+      "provider": "wikimedia",
+      "title": "Black Stapler 2024"
+    },
+    {
+      "file": "mundane_stapler_4.png",
+      "source": "https://www.rawpixel.com/image/5963138/free-public-domain-cc0-photo",
+      "image_url": "https://images.rawpixel.com/editor_1024/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvbHIvcHgxMDYxNDM2LWltYWdlLWt3eXJkY2t1LmpwZw.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": null,
+      "provider": "rawpixel",
+      "title": null
+    },
+    {
+      "file": "mundane_stapler_5.png",
+      "source": "https://www.flickr.com/photos/140641142@N05/35383181632",
+      "image_url": "https://live.staticflickr.com/4206/35383181632_508a8f036a_b.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "dankeck",
+      "provider": "flickr",
+      "title": "Property of Ohio State University"
+    },
+    {
+      "file": "mundane_stapler_6.png",
+      "source": "https://www.flickr.com/photos/191236883@N05/50676474508",
+      "image_url": "https://live.staticflickr.com/65535/50676474508_52a0525026_b.jpg",
+      "license": "pdm",
+      "license_version": "1.0",
+      "creator": "jordynmaeda",
+      "provider": "flickr",
+      "title": "Stapler"
+    },
+    {
+      "file": "mundane_stapler_7.png",
+      "source": "https://wordpress.org/photos/photo/2761dcbf26/",
+      "image_url": "https://pd.w.org/2022/01/2761dcbf2675be71.42053744-2048x1536.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "Darryl",
+      "provider": "wordpress",
+      "title": "I believe you have my stapler"
+    },
+    {
+      "file": "mundane_stapler_8.png",
+      "source": "https://commons.wikimedia.org/w/index.php?curid=36196336",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/3/3b/Stapler_001.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "Ocdp",
+      "provider": "wikimedia",
+      "title": "Stapler 001"
+    },
+    {
+      "file": "mundane_stapler_9.png",
+      "source": "https://commons.wikimedia.org/w/index.php?curid=95407039",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/5/5e/Imej_Dawai_Kokot_atau_Ubat_Stapler_03.jpg",
+      "license": "cc0",
+      "license_version": "1.0",
+      "creator": "Wiki Farazi",
+      "provider": "wikimedia",
+      "title": "Imej Dawai Kokot atau Ubat Stapler 03"
+    }
+  ]
+}
