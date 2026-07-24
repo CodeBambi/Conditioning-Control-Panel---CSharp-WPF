@@ -587,7 +587,27 @@ public class OverlayService : IDisposable
 
     private static (byte R, byte G, byte B) GetFilterRgb()
     {
+        // A user-picked color (suggestion #643) wins over the mod/default retint.
+        // Empty setting defers to the active mod's filter color, then hot pink.
+        var custom = App.Settings?.Current?.PinkFilterColor;
+        if (TryParseHexColor(custom, out var rgb))
+            return rgb;
         return App.Mods?.GetFilterColorRgb() ?? (255, 105, 180);
+    }
+
+    /// <summary>Parses a "#RRGGBB" (or "RRGGBB") string. Returns false for null/empty/malformed.</summary>
+    private static bool TryParseHexColor(string? hex, out (byte R, byte G, byte B) rgb)
+    {
+        rgb = (255, 105, 180);
+        if (string.IsNullOrWhiteSpace(hex)) return false;
+        hex = hex.Trim().TrimStart('#');
+        if (hex.Length != 6) return false;
+        try
+        {
+            rgb = (Convert.ToByte(hex[..2], 16), Convert.ToByte(hex[2..4], 16), Convert.ToByte(hex[4..6], 16));
+            return true;
+        }
+        catch { return false; }
     }
 
     /// <summary>
@@ -899,6 +919,20 @@ public class OverlayService : IDisposable
                 brush.Color = System.Windows.Media.Color.FromArgb(a, fr, fg, fb);
         // Force the next post-ramp settings-sync to re-apply from settings.
         _lastAppliedPinkOpacity = -1;
+    }
+
+    /// <summary>
+    /// Re-push the filter color to a live tint. The compositor layer is dirty-gated
+    /// (#550) and the 500ms settings-sync only re-applies on an opacity change, so a
+    /// color-only change (the color picker) needs an explicit re-apply. No-op when the
+    /// tint isn't showing — the next Show reads the fresh color from GetFilterRgb().
+    /// </summary>
+    public void RefreshFilterColor()
+    {
+        if (!PinkShowing) return;
+        // Preserve whoever owns the opacity right now (a ramp, else the saved setting).
+        var opacity = _rampPinkOpacity ?? (App.Settings?.Current?.PinkFilterOpacity ?? 0) / 100.0;
+        ApplyPinkOpacityDirect(opacity);
     }
 
     private void ApplySpiralOpacityDirect(double opacity)

@@ -2857,6 +2857,15 @@ namespace ConditioningControlPanel.Models
             set { _pinkFilterLinkRamp = value; OnPropertyChanged(); }
         }
 
+        // User-picked tint color as "#RRGGBB". Empty = use the default (mod/hot-pink)
+        // color, preserving creator-mod retints until the user explicitly overrides.
+        private string _pinkFilterColor = "";
+        public string PinkFilterColor
+        {
+            get => _pinkFilterColor;
+            set { _pinkFilterColor = value ?? ""; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Attention Game
