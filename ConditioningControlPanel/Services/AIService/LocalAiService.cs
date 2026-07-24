@@ -171,7 +171,7 @@ namespace ConditioningControlPanel.Services.AIService
         /// context, not conversation). Shared so in-memory trimming and disk persistence
         /// count pairs identically.
         /// </summary>
-        private static bool IsDialogueTurn(ChatMessage m) =>
+        internal static bool IsDialogueTurn(ChatMessage m) =>
             (m.Role == "user" || m.Role == "assistant")
             && !string.IsNullOrEmpty(m.Content)
             && !m.Content!.Contains("[CONTEXT BLOCK — NOT DIALOGUE]");
@@ -186,16 +186,27 @@ namespace ConditioningControlPanel.Services.AIService
         /// until Ollama exhausts system RAM (#631). Dialogue is identified via
         /// <see cref="IsDialogueTurn"/> so memory and disk stay consistent.
         /// </summary>
-        private void TrimDialogueHistory()
+        private void TrimDialogueHistory() => TrimDialogueHistory(_messages, MaxPersistedPairs);
+
+        /// <summary>
+        /// Pure, testable core of the in-memory history cap (#631). Operates on an arbitrary
+        /// message list so it can be exercised headlessly. Keeps the system message and any
+        /// non-dialogue preamble (the enrichment context block) in place regardless of
+        /// position, and retains only the most recent <paramref name="maxPairs"/>
+        /// user/assistant pairs. Behavior is identical to the instance call
+        /// <c>TrimDialogueHistory()</c> which passes <c>_messages</c> and
+        /// <see cref="MaxPersistedPairs"/>.
+        /// </summary>
+        internal static void TrimDialogueHistory(List<ChatMessage> messages, int maxPairs)
         {
-            int maxMessages = MaxPersistedPairs * 2;
+            int maxMessages = maxPairs * 2;
 
             // Collect indices of dialogue turns in order. Non-dialogue entries (system +
             // enrichment) are skipped so they're always preserved regardless of position.
             var dialogueIndices = new List<int>();
-            for (int i = 0; i < _messages.Count; i++)
+            for (int i = 0; i < messages.Count; i++)
             {
-                if (IsDialogueTurn(_messages[i])) dialogueIndices.Add(i);
+                if (IsDialogueTurn(messages[i])) dialogueIndices.Add(i);
             }
             if (dialogueIndices.Count <= maxMessages) return;
 
@@ -205,7 +216,7 @@ namespace ConditioningControlPanel.Services.AIService
             int dropCount = dialogueIndices.Count - maxMessages;
             for (int k = dropCount - 1; k >= 0; k--)
             {
-                _messages.RemoveAt(dialogueIndices[k]);
+                messages.RemoveAt(dialogueIndices[k]);
             }
         }
 
@@ -857,11 +868,7 @@ namespace ConditioningControlPanel.Services.AIService
             {
                 try
                 {
-                    var payload = JsonSerializer.Serialize(new
-                    {
-                        model = model,
-                        keep_alive = 0
-                    });
+                    var payload = BuildUnloadPayload(model);
                     using var req = new HttpRequestMessage(HttpMethod.Post, "api/generate")
                     {
                         Content = new StringContent(payload, Encoding.UTF8, "application/json")
@@ -880,7 +887,20 @@ namespace ConditioningControlPanel.Services.AIService
             _http.Dispose();
         }
 
-        private sealed class ChatMessage
+        /// <summary>
+        /// Builds the JSON body of the best-effort model-unload request sent on
+        /// <see cref="Dispose"/> (#629): <c>{"model": ..., "keep_alive": 0}</c>. Ollama
+        /// evicts the model from VRAM/RAM immediately when it receives keep_alive=0.
+        /// Extracted so the payload shape can be asserted headlessly.
+        /// </summary>
+        internal static string BuildUnloadPayload(string model) =>
+            JsonSerializer.Serialize(new
+            {
+                model = model,
+                keep_alive = 0
+            });
+
+        internal sealed class ChatMessage
         {
             public string Role { get; set; }
             public string? Content { get; set; }
