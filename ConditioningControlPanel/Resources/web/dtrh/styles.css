@@ -2749,6 +2749,9 @@ img.rh-fx-spiralspin {
 .wr-seg.is-on { background: rgba(232,67,147,0.35); border-color: #e84393; color: #fff; }
 .wr-seg.is-locked { opacity: 0.45; cursor: default; }
 .wr-seg--ghost { border-color: rgba(255,255,255,0.2); font-weight: 500; opacity: 0.8; }
+/* 🎲 "surprise me": a dashed accent chip that rolls the whole portal setup */
+.wr-seg--roll { border-style: dashed; border-color: rgba(193,120,255,0.6); color: #e6d4ff; }
+.wr-seg--roll:hover { background: rgba(193,120,255,0.22); border-color: #c178ff; color: #fff; }
 .wr-waves-n { min-width: 34px; text-align: center; font-weight: 800; font-size: 1rem; }
 .wr-check { padding: 7px 4px; cursor: pointer; font-size: 0.85rem; opacity: 0.75; user-select: none; }
 .wr-check.is-on { opacity: 1; color: #ffd6ea; }
@@ -2757,6 +2760,14 @@ img.rh-fx-spiralspin {
 .wr-dial { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 6px; }
 .wr-dial-range { width: 240px; accent-color: #e84393; cursor: pointer; pointer-events: auto; }
 .wr-dial-val { min-width: 64px; text-align: left; font-weight: 800; font-size: 0.9rem; color: #ffd6ea; text-shadow: 0 1px 4px rgba(0,0,0,0.7); }
+/* The Hourglass: typed length readout — matches the portal chips, editable in place */
+.wr-dial-input {
+  pointer-events: auto; width: 74px; padding: 5px 10px; border-radius: 999px;
+  border: 1px solid rgba(232,67,147,0.4); background: rgba(24,21,46,0.88);
+  color: #ffd6ea; font-weight: 800; font-size: 0.85rem; text-align: center;
+  font-family: inherit; text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+}
+.wr-dial-input:focus { outline: none; border-color: #e84393; background: rgba(232,67,147,0.22); color: #fff; }
 .wr-select {
   background: #221f40; color: #fff; border: 1px solid rgba(232,67,147,0.5);
   border-radius: 8px; padding: 5px 10px; font-size: 0.85rem;

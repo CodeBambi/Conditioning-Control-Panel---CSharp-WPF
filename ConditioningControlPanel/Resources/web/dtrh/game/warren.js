@@ -113,6 +113,22 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     if (m >= 60) { const h = Math.floor(m / 60), mm = m % 60; return mm ? `${h}h ${mm}m` : `${h}h`; }
     return sec ? `${m}m ${sec}s` : `${m} min`;
   };
+  // The Hourglass' typed readout: forgiving parse -> seconds (or null if it's junk).
+  // Accepts "mm:ss", h/m/s tokens (incl. our own fmtDur output like "1h 5m" / "2m 30s"),
+  // or a plain number read as minutes. Clamping is the caller's job.
+  const parseDurInput = (raw) => {
+    if (raw == null) return null;
+    const str = String(raw).trim().toLowerCase();
+    if (!str) return null;
+    if (str.includes(':')) {                 // mm:ss
+      const parts = str.split(':');
+      return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+    }
+    const h = /(\d+)\s*h/.exec(str), m = /(\d+)\s*m/.exec(str), sec = /(\d+)\s*s/.exec(str);
+    if (h || m || sec) return (h ? +h[1] * 3600 : 0) + (m ? +m[1] * 60 : 0) + (sec ? +sec[1] : 0);
+    const n = parseFloat(str);               // bare number -> minutes
+    return isFinite(n) ? Math.round(n * 60) : null;
+  };
   const setup = {
     difficulty: (runSetup && runSetup.difficulty) || 'Easy',
     durationSec: (runSetup && runSetup.durationSec) || 960,
@@ -532,6 +548,34 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     if (modal) root.appendChild(modal);
   }
 
+  // 🎲 Random ("surprise me"): roll the whole portal setup at once. Only ever lands on
+  // choices the player is actually allowed to pick — gated difficulties and endless/custom
+  // length stay out unless owned — then re-renders so the chips show what came up. It never
+  // starts the descent; the player still clicks the hole themselves (safer UX).
+  const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  function rollSetup() {
+    const v = view();
+    // difficulty: any pill unlocked right now (Extreme only once its gate is earned)
+    const diffs = DIFF_PILLS.filter((d) =>
+      (!d.revealGate || reveals.isUnlocked(d.revealGate, v)) &&
+      (!d.extremeGate || v.extremeUnlocked));
+    if (diffs.length) setup.difficulty = pickOne(diffs).id;
+    // length: a preset by default; a free custom length / endless only when owned
+    const lenRolls = CHAMBER_TOTALS.map((secs) => () => { setup.endless = false; setup.durationSec = secs; });
+    if (ownsCustomDur()) lenRolls.push(() => {
+      setup.endless = false;
+      const steps = Math.floor((DUR_MAX - DUR_MIN) / 30);   // snap to the slider's 30s step
+      setup.durationSec = DUR_MIN + 30 * Math.floor(Math.random() * (steps + 1));
+    });
+    if (ownsEndless()) lenRolls.push(() => { setup.endless = true; });
+    pickOne(lenRolls)();
+    lengthTouched = true;
+    // biome is rouletted by the engine; motion/variants live in ⚙ options (not portal chips),
+    // so we leave them be — a roll only touches what the player can see reflected here.
+    sfx('ui_deepen', 0.5);
+    refreshChrome(view());
+  }
+
   function refreshChrome(v) {
     if (!chrome) return;
     // currency chips
@@ -603,22 +647,42 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
         slider.min = String(DUR_MIN); slider.max = String(DUR_MAX); slider.step = '30';
         slider.value = String(Math.max(DUR_MIN, Math.min(DUR_MAX, setup.durationSec | 0)));
         dialRow.appendChild(slider);
-        const lbl = el('wr-dial-val', dialRow, fmtDur(setup.durationSec));
-        slider.addEventListener('input', () => {
-          const val = Math.max(DUR_MIN, Math.min(DUR_MAX, parseInt(slider.value, 10) || DUR_MIN));
+        // An editable readout: type "mm:ss" or a plain minute count to set any length by hand.
+        const durInput = document.createElement('input');
+        durInput.type = 'text';
+        durInput.className = 'wr-dial-input';
+        durInput.value = fmtDur(setup.durationSec);
+        durInput.setAttribute('aria-label', 'fall length — type mm:ss or minutes');
+        dialRow.appendChild(durInput);
+        // Commit a chosen length from either control, keeping the slider, readout and
+        // preset chips in step without a full rebuild (keeps the drag smooth).
+        const setDur = (val, src) => {
+          val = Math.max(DUR_MIN, Math.min(DUR_MAX, Math.round(val) || DUR_MIN));
           setup.durationSec = val;
           lengthTouched = true;
-          lbl.textContent = fmtDur(val);
-          // live-sync the preset chips' highlight without a full rebuild (keeps the drag smooth)
+          if (src !== 'slider') slider.value = String(val);
+          if (src !== 'input') durInput.value = fmtDur(val);
           lenRow.querySelectorAll('.wr-seg--small').forEach((c) => {
             c.classList.toggle('is-on', c.textContent === `${val / 60} min`);
           });
+        };
+        slider.addEventListener('input', () => setDur(parseInt(slider.value, 10) || DUR_MIN, 'slider'));
+        // Parse on commit (Enter / blur); a junk value snaps the readout back to the current length.
+        durInput.addEventListener('change', () => {
+          const parsed = parseDurInput(durInput.value);
+          setDur(parsed == null ? setup.durationSec : parsed, 'input');
         });
-        tip(dialRow, 'the hourglass: set any fall from 2 minutes to 2 hours. the four chambers just stretch to fit.');
+        durInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); durInput.blur(); } });
+        tip(dialRow, 'the hourglass: set any fall from 2 minutes to 2 hours — drag it or type "mm:ss" / a minute count. the four chambers just stretch to fit.');
       }
       tip(lenRow, endlessOn
         ? 'endless: no clock, no bottom. hold ESC to wake when you\'ve had enough.'
         : 'four chambers, always in order. each runs about a quarter of the descent and ends in a boon.');
+      // 🎲 let her pick: rolls difficulty + length in one tap (only ever landing on choices
+      // you're allowed), shows what came up in the chips — but never drops you in on its own.
+      const rollRow = el('wr-pills wr-pills--center', chrome.fall);
+      const rollChip = btn('wr-seg wr-seg--roll', '🎲 surprise me', () => rollSetup(), rollRow);
+      tip(rollChip, 'let her choose: rolls your difficulty and length for you. nothing falls until you click the hole yourself.');
     }
 
     // hint
