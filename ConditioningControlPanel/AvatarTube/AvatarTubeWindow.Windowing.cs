@@ -60,6 +60,8 @@ namespace ConditioningControlPanel
         private const double MinScale = 0.5;   // 50% - can shrink twice from 100%
         private const double MaxScale = 1.5;   // 150% - can grow twice from 100%
         private const double ScaleStep = 0.25; // 25% per step
+        // Set while restoring saved placement (#669) so ApplyScale/drag don't re-persist mid-restore.
+        private bool _restoringPlacement = false;
 
         // Fullscreen detection
         private DispatcherTimer? _fullscreenCheckTimer;
@@ -1225,6 +1227,13 @@ namespace ConditioningControlPanel
 
             App.Logger?.Information("Avatar tube detached - now floating independently");
             if (!silent) Giggle("I'm free! Ctrl+scroll to resize!");
+
+            // Remember the detached state so the companion comes back floating next launch (#669).
+            if (!_restoringPlacement)
+            {
+                try { if (App.Settings?.Current != null) { App.Settings.Current.AvatarTubeDetached = true; App.Settings.Save(); } }
+                catch (Exception ex) { App.Logger?.Debug("Avatar tube: persist detached flag failed ({Error})", ex.Message); }
+            }
         }
 
         /// <summary>
@@ -1295,6 +1304,13 @@ namespace ConditioningControlPanel
 
             App.Logger?.Information("Avatar tube attached - anchored to main window");
             if (!silent) Giggle("Back home~");
+
+            // Persist the attached state so we don't auto-detach next launch (#669).
+            if (!_restoringPlacement)
+            {
+                try { if (App.Settings?.Current != null) { App.Settings.Current.AvatarTubeDetached = false; App.Settings.Save(); } }
+                catch (Exception ex) { App.Logger?.Debug("Avatar tube: persist attached flag failed ({Error})", ex.Message); }
+            }
         }
 
         /// <summary>
@@ -1378,6 +1394,11 @@ namespace ConditioningControlPanel
                 ContentViewbox.Height = newHeight;
                 // Window follows via the ContentViewbox.SizeChanged handler wired in OnLoaded
                 // (auto-sizing is off after first paint — see OnFirstContentRendered).
+
+                // Persist the user's chosen scale (#669). Scale only changes via detached-mode
+                // gestures (Ctrl+scroll / menu / arrow keys), so this rides those; guarded so a
+                // restore doesn't re-save. Debounced Save coalesces the discrete per-step writes.
+                PersistTubePlacement();
             }
             catch (Exception ex)
             {
@@ -1510,6 +1531,32 @@ namespace ConditioningControlPanel
             {
                 _isDragging = false;
                 ReleaseMouseCapture();
+                // Remember where the user parked the detached companion (#669). Debounced Save
+                // coalesces the write, so persisting on drag-end (not per move tick) is plenty.
+                PersistTubePlacement();
+            }
+        }
+
+        /// <summary>
+        /// Save the detached companion's current Left/Top + scale so it returns to the same spot
+        /// next launch (#669). No-ops while attached (position is parent-anchored, not user-owned)
+        /// and while a restore is in flight (so the restore doesn't immediately re-save itself).
+        /// </summary>
+        private void PersistTubePlacement()
+        {
+            if (_isAttached || _restoringPlacement) return;
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null) return;
+                s.AvatarTubeLeft = Left;
+                s.AvatarTubeTop = Top;
+                s.AvatarTubeScale = _currentScale;
+                App.Settings?.Save();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Avatar tube: persist placement failed ({Error})", ex.Message);
             }
         }
 
@@ -1569,6 +1616,66 @@ namespace ConditioningControlPanel
             catch
             {
                 // Ignore errors - position clamping is best-effort
+            }
+        }
+
+        /// <summary>
+        /// Restore the saved companion placement on startup (#669): if it was detached at last exit,
+        /// re-detach silently and reapply the saved scale + Left/Top, clamped onto a currently-connected
+        /// monitor so a since-disconnected screen can't strand it off-view. No-op when it was attached
+        /// (the default) so existing users see no change until they move/detach it themselves.
+        /// </summary>
+        public void RestoreSavedPlacement()
+        {
+            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(RestoreSavedPlacement)); return; }
+
+            var s = App.Settings?.Current;
+            if (s == null || !s.AvatarTubeDetached) return; // attached is the default — nothing to restore
+
+            _restoringPlacement = true;
+            try
+            {
+                // Float it free first (silent — no "I'm free!" giggle on a cold boot).
+                Detach(silent: true);
+
+                // Reapply the saved scale before positioning so the clamp uses the real footprint.
+                if (!double.IsNaN(s.AvatarTubeScale) && s.AvatarTubeScale > 0)
+                {
+                    _currentScale = Math.Clamp(s.AvatarTubeScale, MinScale, MaxScale);
+                    ApplyScale();
+                    UpdateLayout(); // so ActualWidth/Height reflect the restored scale for the clamp
+                }
+
+                // Reapply the saved position, then clamp onto a live monitor. Guard AllScreens (it can
+                // be empty during certain system states) and wrap in try-catch for the mixed-DPI
+                // PointToScreen/coordinate hazards this window is prone to (#477).
+                if (!double.IsNaN(s.AvatarTubeLeft) && !double.IsNaN(s.AvatarTubeTop))
+                {
+                    try
+                    {
+                        if (System.Windows.Forms.Screen.AllScreens.Length > 0)
+                        {
+                            Left = s.AvatarTubeLeft;
+                            Top = s.AvatarTubeTop;
+                            ClampAvatarPosition(); // keep at least half of it on a connected screen
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Avatar tube: restore position failed ({Error})", ex.Message);
+                    }
+                }
+
+                EnsureVisibleWhenDetached();
+                App.Logger?.Information("Avatar tube: restored detached placement (scale {Scale:0.00})", _currentScale);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Avatar tube: RestoreSavedPlacement failed ({Error})", ex.Message);
+            }
+            finally
+            {
+                _restoringPlacement = false;
             }
         }
     }

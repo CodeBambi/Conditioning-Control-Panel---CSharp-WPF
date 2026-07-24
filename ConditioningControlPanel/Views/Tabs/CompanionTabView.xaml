@@ -585,6 +585,14 @@
                                     <Slider x:Name="SliderAwarenessCooldown" x:FieldModifier="internal" Style="{StaticResource PinkSlider}"
                                             Minimum="10" Maximum="300" Value="90" Margin="0,6,0,8"
                                             ValueChanged="SliderAwarenessCooldown_ValueChanged"/>
+                                    <Grid>
+                                        <TextBlock Text="{loc:Str label_reaction_cooldown_max}" Foreground="White" FontSize="13"/>
+                                        <TextBlock x:Name="TxtAwarenessCooldownMax" x:FieldModifier="internal" Text="{loc:Str label_cooldown_off}" Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Right" FontSize="13" FontWeight="Bold"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderAwarenessCooldownMax" x:FieldModifier="internal" Style="{StaticResource PinkSlider}"
+                                            Minimum="0" Maximum="300" Value="0" Margin="0,6,0,4"
+                                            ValueChanged="SliderAwarenessCooldownMax_ValueChanged"/>
+                                    <TextBlock Text="{loc:Str tooltip_reaction_cooldown_max}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                     <Border Background="#2A1A1A" CornerRadius="6" Padding="8" BorderBrush="#FF6B6B" BorderThickness="1">
                                         <StackPanel>
                                             <Grid>

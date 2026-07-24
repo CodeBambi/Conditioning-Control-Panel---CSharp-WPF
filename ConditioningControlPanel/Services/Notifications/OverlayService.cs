@@ -182,6 +182,14 @@ public class OverlayService : IDisposable
     private TimeSpan _gifFrameDelay = TimeSpan.FromMilliseconds(50);
     private DispatcherTimer? _gifFrameTimer;
 
+    // Spiral randomizer (#641): when SpiralRandomize is on, GetSpiralPath picks a random spiral
+    // from the pool at overlay/session START (never per-tick — the decoded-frame cache above is
+    // keyed by path and a mid-run re-decode causes a ~1s hitch). _lastRandomSpiralPath backs the
+    // no-repeat guard so we don't draw the same spiral twice in a row when >1 is available.
+    private static readonly string[] SpiralExtensions = { ".gif", ".png", ".jpg", ".jpeg", ".webp" };
+    private readonly Random _spiralRandom = new();
+    private string? _lastRandomSpiralPath;
+
     public bool IsRunning => _isRunning;
 
     /// <summary>
@@ -264,13 +272,65 @@ public class OverlayService : IDisposable
             private string GetSpiralPath()
             {
                 var settings = App.Settings.Current;
-                
-                if (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
+
+                var configured = (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
+                    ? settings.SpiralPath
+                    : null;
+
+                // Randomizer (#641): pick a fresh spiral from the pool at start only. The pool is the
+                // folder of the configured spiral if one is set, else the user Spirals library folder
+                // (the same %LOCALAPPDATA%\ConditioningControlPanel\Spirals the Spiral card populates).
+                // Falls back to the configured/default single spiral when the pool has <2 entries.
+                if (settings.SpiralRandomize)
                 {
-                    return settings.SpiralPath;
+                    var randomized = PickRandomSpiral(configured);
+                    if (randomized != null) return randomized;
                 }
-                
+
+                if (configured != null) return configured;
+
                 return ModResourceResolver.ResolveUri("spiral.gif");
+            }
+
+            /// <summary>
+            /// Build the spiral pool and return a random member (different from the last pick when
+            /// possible). Returns null when no pool exists so the caller falls back to the single
+            /// configured/default spiral. Called only at overlay/session start (never per-tick).
+            /// </summary>
+            private string? PickRandomSpiral(string? configured)
+            {
+                try
+                {
+                    // Pool directory: folder of the configured spiral, else the user Spirals library.
+                    var poolDir = !string.IsNullOrEmpty(configured)
+                        ? Path.GetDirectoryName(configured)
+                        : Path.Combine(App.UserDataPath, "Spirals");
+
+                    if (string.IsNullOrEmpty(poolDir) || !Directory.Exists(poolDir))
+                        return null;
+
+                    var pool = Directory.GetFiles(poolDir)
+                        .Where(f => SpiralExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                        .ToList();
+
+                    if (pool.Count == 0) return null;
+                    if (pool.Count == 1) return pool[0];
+
+                    // No-repeat guard (mirrors WallpaperService.Shuffle): avoid the previous pick.
+                    string pick;
+                    do
+                    {
+                        pick = pool[_spiralRandom.Next(pool.Count)];
+                    } while (pick == _lastRandomSpiralPath);
+
+                    _lastRandomSpiralPath = pick;
+                    return pick;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "[Overlay] Failed to pick random spiral");
+                    return null;
+                }
             }
     public void Start()
     {

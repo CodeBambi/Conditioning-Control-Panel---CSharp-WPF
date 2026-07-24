@@ -197,6 +197,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.SliderAwarenessCooldown_ValueChanged(sender, e);
         }
+        private void SliderAwarenessCooldownMax_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.SliderAwarenessCooldownMax_ValueChanged(sender, e);
+        }
         private void SliderBubbleDuration_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

@@ -2173,6 +2173,18 @@ namespace ConditioningControlPanel.Models
             set { _spiralPath = value ?? ""; OnPropertyChanged(); }
         }
 
+        private bool _spiralRandomize = false;
+        /// <summary>
+        /// When enabled, each spiral overlay/session picks a random spiral from the pool
+        /// (the folder of SpiralPath if set, else assets/spirals) at start. Falls back to
+        /// the single spiral when the pool has fewer than two entries.
+        /// </summary>
+        public bool SpiralRandomize
+        {
+            get => _spiralRandomize;
+            set { _spiralRandomize = value; OnPropertyChanged(); }
+        }
+
         private int _spiralOpacity = 10; // 0-50%
         public int SpiralOpacity
         {
@@ -3057,6 +3069,41 @@ namespace ConditioningControlPanel.Models
             set { _bubbleDurationSeconds = Math.Clamp(value, 1.0, 10.0); OnPropertyChanged(); }
         }
 
+        // Persisted avatar-tube (companion window) placement (#669). Restored on startup so a
+        // detached, dragged, or rescaled companion comes back where the user left it. Left/Top use
+        // NaN as the "unset" sentinel (no saved position yet -> fall back to the default anchor).
+        private bool _avatarTubeDetached = false;
+        /// <summary>Whether the companion window was detached from the main window at last exit.</summary>
+        public bool AvatarTubeDetached
+        {
+            get => _avatarTubeDetached;
+            set { _avatarTubeDetached = value; OnPropertyChanged(); }
+        }
+
+        private double _avatarTubeLeft = double.NaN;
+        /// <summary>Saved detached companion X position (NaN = unset).</summary>
+        public double AvatarTubeLeft
+        {
+            get => _avatarTubeLeft;
+            set { _avatarTubeLeft = value; OnPropertyChanged(); }
+        }
+
+        private double _avatarTubeTop = double.NaN;
+        /// <summary>Saved detached companion Y position (NaN = unset).</summary>
+        public double AvatarTubeTop
+        {
+            get => _avatarTubeTop;
+            set { _avatarTubeTop = value; OnPropertyChanged(); }
+        }
+
+        private double _avatarTubeScale = 1.0;
+        /// <summary>Saved companion scale (Ctrl+scroll zoom). Default 1.0.</summary>
+        public double AvatarTubeScale
+        {
+            get => _avatarTubeScale;
+            set { _avatarTubeScale = value; OnPropertyChanged(); }
+        }
+
         // ============================================================
         // AWARENESS MODE (Window Tracking) - Opt-in feature
         // ============================================================
@@ -3091,6 +3138,19 @@ namespace ConditioningControlPanel.Models
         {
             get => _awarenessReactionCooldownSeconds;
             set { _awarenessReactionCooldownSeconds = Math.Clamp(value, 10, 600); OnPropertyChanged(); }
+        }
+
+        private int _awarenessCooldownMaxSeconds = 0;
+        /// <summary>
+        /// Upper bound (seconds) for a randomized reaction cooldown. When set above
+        /// AwarenessReactionCooldownSeconds, each reaction rolls a random cooldown in
+        /// [base, max]; 0 (default) disables randomization so the fixed cooldown is used
+        /// unchanged. Clamped to the same 10-600 range as the base cooldown (plus 0).
+        /// </summary>
+        public int AwarenessCooldownMaxSeconds
+        {
+            get => _awarenessCooldownMaxSeconds;
+            set { _awarenessCooldownMaxSeconds = value <= 0 ? 0 : Math.Clamp(value, 10, 600); OnPropertyChanged(); }
         }
 
         private Dictionary<string, bool> _companionSectionOpen = new();

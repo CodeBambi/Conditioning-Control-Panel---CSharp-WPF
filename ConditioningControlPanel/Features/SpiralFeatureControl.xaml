@@ -38,6 +38,38 @@
                 </Grid>
             </Border>
 
+            <!-- Randomize toggle (#641): pick a random spiral from the library each start -->
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="16,12"
+                    Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str setting_spiral_randomize}"
+                                   Foreground="White"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_spiral_randomize}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1"
+                              x:Name="ChkRandomize"
+                              Style="{StaticResource ToggleStyle}"
+                              VerticalAlignment="Center"
+                              Checked="ChkRandomize_Changed"
+                              Unchecked="ChkRandomize_Changed"/>
+                </Grid>
+            </Border>
+
             <!-- Opacity slider -->
             <Border Background="{DynamicResource SurfaceBgBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}"

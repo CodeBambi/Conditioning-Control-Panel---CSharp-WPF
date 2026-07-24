@@ -59,6 +59,7 @@ namespace ConditioningControlPanel.Features
             try
             {
                 ChkEnable.IsChecked = s.SpiralEnabled;
+                ChkRandomize.IsChecked = s.SpiralRandomize;
                 SliderOpacity.Value = s.SpiralOpacity;
                 TxtOpacity.Text = $"{s.SpiralOpacity}%";
             }
@@ -72,7 +73,8 @@ namespace ConditioningControlPanel.Features
         {
             // Reflect external writes (Ramp, presets, session engine) back into our UI.
             if (e.PropertyName == nameof(Models.AppSettings.SpiralEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.SpiralOpacity))
+                e.PropertyName == nameof(Models.AppSettings.SpiralOpacity) ||
+                e.PropertyName == nameof(Models.AppSettings.SpiralRandomize))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -102,6 +104,18 @@ namespace ConditioningControlPanel.Features
             {
                 App.Logger?.Warning(ex, "Spiral toggle: RefreshOverlays failed");
             }
+        }
+
+        private void ChkRandomize_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            // Takes effect on the next spiral overlay/session start (never mid-run — the decoded
+            // frame cache is keyed by path, so re-picking live would cause a hitch).
+            s.SpiralRandomize = ChkRandomize.IsChecked ?? false;
+            App.Settings?.Save();
         }
 
         private void SliderOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
