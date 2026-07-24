@@ -77,7 +77,7 @@ import { tintColorOptions } from './optionTint.js';
  *   time (module-scope declarations only; the dynamic import fires from
  *   loadCaptchaLayer(), called inside createBeats()).
  * -------------------------------------------------------------------------- */
-/** Every Verify* Mechanic id (derived from the enum so all ten stay covered). */
+/** Every Verify* Mechanic id (derived from the enum so all families stay covered). */
 const CAPTCHA_MECHS = new Set(
   MECHANICS.filter((m) => typeof m === 'string' && m.indexOf('verify') === 0),
 );

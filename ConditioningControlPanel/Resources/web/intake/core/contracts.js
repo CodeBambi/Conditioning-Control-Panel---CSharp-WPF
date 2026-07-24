@@ -304,13 +304,7 @@ export const Mechanic = Object.freeze({
   VerifyGrid:       'verifygrid',       // reCAPTCHA tile grid -> bitmask (index list + count)
   VerifyCheckbox:   'verifycheckbox',   // "I am not a robot" checkbox -> bool + hold telemetry
   VerifyTranscribe: 'verifytranscribe', // distorted-text transcription -> verbatim string
-  VerifyCustody:    'verifycustody',    // chain-of-custody docket -> bool per row (metadata detonation)
-  VerifyStillness:  'verifystillness',  // Turnstile passive-scan hold -> bool + interference count
-  VerifyRegen:      'verifyregen',      // next-tier PLACEHOLDER: regenerating "select until none remain" grid
-  VerifySegment:    'verifysegment',    // next-tier PLACEHOLDER: 4x4 unblur segmentation reveal
-  VerifyRotate:     'verifyrotate',     // next-tier PLACEHOLDER: rotate-to-upright (FunCaptcha) dwell
-  VerifyGaze:       'verifygaze',       // next-tier PLACEHOLDER: fake camera-free gaze calibration
-  VerifyRecall:     'verifyrecall',     // next-tier PLACEHOLDER: Recovery recognition-audit old/new grid
+  VerifyRegen:      'verifyregen',      // regenerating "select until none remain" grid
 });
 export const MECHANICS = Object.freeze(Object.values(Mechanic));
 

@@ -127,6 +127,60 @@ function shuffleIdx(n) {
   return a;
 }
 
+/* ----------------------------------------------------------------------------
+ * OUR OWN injected CSS literal (id 'ix-captcha-grid-css'), following the
+ * IXCAP_CSS precedent: injected once, keyed by id, prefixed 'ixcap-grid-'. It
+ * owns ONLY the two grid-specific set-pieces (the click-plays-big lightbox and
+ * the falling-tile socket) — chrome.js's IXCAP_CSS is never edited here. Nothing
+ * touches the DOM at import: this is a plain string + a guarded function.
+ * -------------------------------------------------------------------------- */
+const GRID_STYLE_ID = 'ix-captcha-grid-css';
+const GRID_CSS = `
+/* CLICK-PLAYS-BIG lightbox — a near-fullscreen play of a clicked gif tile that
+ * then flies back into its (now selected) cell. Parents to <body>, torn down on
+ * settle/commit. Sits above everything so a click anywhere dismisses it. */
+.ixcap-grid-lightbox { position: fixed; inset: 0; z-index: 2147483000; }
+.ixcap-grid-lightbox-back {
+  position: absolute; inset: 0; background: rgba(6,6,12,.82);
+  opacity: 0; transition: opacity .28s ease;
+}
+.ixcap-grid-lightbox.ixcap-lb-in .ixcap-grid-lightbox-back { opacity: 1; }
+.ixcap-grid-lightbox-img {
+  position: fixed; overflow: hidden; border-radius: 8px;
+  box-shadow: 0 20px 80px rgba(0,0,0,.6); background: #0a0a12;
+  cursor: pointer; will-change: left, top, width, height;
+}
+.ixcap-grid-lightbox-img img {
+  width: 100%; height: 100%; object-fit: contain; display: block;
+  -webkit-user-drag: none; user-drag: none; pointer-events: none;
+}
+/* FALLING TILE — the detached tile flies off-viewport; its old cell shows an
+ * empty dark socket (tick hidden even if the fallen tile stays graded/selected). */
+.ixcap-grid-fall {
+  position: fixed; overflow: hidden; border-radius: 2px;
+  z-index: 2147482000; pointer-events: none;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5); will-change: transform, opacity;
+}
+.ixcap-grid-fall > img, .ixcap-grid-fall > canvas {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.ixcap-tile.ixcap-grid-empty { background: #14141f; }
+.ixcap-tile.ixcap-grid-empty .ixcap-tick { display: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .ixcap-grid-lightbox-back { transition: none; }
+}
+`;
+function ensureGridCss() {
+  try {
+    if (typeof document === 'undefined' || !document.createElement) return;
+    if (!document.getElementById || document.getElementById(GRID_STYLE_ID)) return;
+    const s = document.createElement('style');
+    s.id = GRID_STYLE_ID;
+    s.textContent = GRID_CSS;
+    (document.head || document.documentElement).appendChild(s);
+  } catch (_e) {}
+}
+
 /**
  * @param {import('./index.js').CaptchaCtx} ctx
  * @param {import('./index.js').CaptchaHelpers} helpers
@@ -138,6 +192,7 @@ export function render(ctx, helpers) {
     if (!ctx || !ctx.root) return false;
     const chrome = (helpers && helpers.chrome) || ctx.chrome;
     if (!chrome || typeof chrome.frame !== 'function' || typeof chrome.gridShell !== 'function') return false;
+    ensureGridCss();   // inject our own set-piece CSS once (guarded; safe if re-run)
 
     const band = String(ctx.band || '').toLowerCase();
     const niche = ctx.niche || 'bambi';
@@ -171,13 +226,34 @@ export function render(ctx, helpers) {
     // dirtySelect: selected AT A MOMENT a user gif was live in the tile (double-book)
     const meta = [];
     for (let i = 0; i < 9; i++) {
-      meta.push({ kind: 'hydrant', src: null, everGif: false, liveGif: false, dirtySelect: false, selected: false });
+      // hoverRolled: this tile has already had its once-per-beat hover-swap roll.
+      // fallen: this tile has already detached (visual only; never read by grading).
+      meta.push({ kind: 'hydrant', src: null, everGif: false, liveGif: false, dirtySelect: false, selected: false, hoverRolled: false, fallen: false });
     }
 
     let done = false;
     const timers = [];
     function clearTimers() { for (const t of timers) { try { clearTimeout(t); } catch (_e) {} } timers.length = 0; }
     if (typeof ctx.onCleanup === 'function') ctx.onCleanup(clearTimers);
+
+    // Body-parented set-piece layers (lightbox / falling flier) live OUTSIDE the
+    // per-render stage wipe, so they need their own teardown. Each pushes a
+    // disposer; runDisposers fires on commit AND on any mid-beat teardown.
+    const disposers = [];
+    function runDisposers() { while (disposers.length) { const d = disposers.pop(); try { d(); } catch (_e) {} } }
+    if (typeof ctx.onCleanup === 'function') ctx.onCleanup(runDisposers);
+
+    // Concurrency cap for the mobile-OOM rule (handoff §4.4): at most 4 DISTINCT
+    // animated user gifs live at once. A src already live shares its decode (free);
+    // a NEW distinct src is only allowed while under the cap. Only the new
+    // hover-swap path consults this — the band layouts stay bounded by design.
+    function canAddLiveGif(url) {
+      if (!url) return false;
+      const s = new Set();
+      for (let i = 0; i < 9; i++) if (meta[i].liveGif && meta[i].src) s.add(meta[i].src);
+      if (s.has(url)) return true;
+      return s.size < 4;
+    }
 
     // ---- tile visuals -------------------------------------------------------
     const MUNDANE_KINDS = ['bus', 'crosswalk', 'stapler'];
@@ -252,6 +328,168 @@ export function render(ctx, helpers) {
         if (!done && prevSrc) { try { tiles[i].setImage(prevSrc); } catch (_e) {} }
       }, holdMs);
       timers.push(t);
+    }
+
+    // ---- SET-PIECE #2: CLICK-PLAYS-BIG then STICKS --------------------------
+    // Clicking a tile that currently shows an ANIMATED gif plays it ~1s at almost
+    // fullscreen (a <body>-parented lightbox with a dimmed backdrop), then flies
+    // back into its cell, which is already SELECTED (the caller selected it first,
+    // so grading sees a normal dirtySelect of a gif tile). NEVER blocks a commit:
+    // clicking through the backdrop, Escape, the 1s auto-timer, or forceComplete
+    // (via onCleanup->runDisposers) all settle/tear it down. Skipped under reduced.
+    let lightboxActive = false;
+    function playLightbox(idx, url) {
+      try {
+        if (reduced || done || lightboxActive || !url) return false;
+        if (typeof document === 'undefined' || !document.body) return false;
+        const cell = tiles[idx] && tiles[idx].el;
+        if (!cell) return false;
+        lightboxActive = true;
+        const r0 = cell.getBoundingClientRect();
+        const vw = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth : 1200;
+        const vh = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 800;
+
+        const layer = document.createElement('div');
+        layer.className = 'ixcap-grid-lightbox';
+        const back = document.createElement('div');
+        back.className = 'ixcap-grid-lightbox-back';
+        const wrap = document.createElement('div');
+        wrap.className = 'ixcap-grid-lightbox-img';
+        const im = document.createElement('img');
+        im.alt = ''; im.draggable = false;
+        try { im.src = String(url); } catch (_e) {}
+        wrap.appendChild(im);
+        layer.appendChild(back);
+        layer.appendChild(wrap);
+
+        // start at the tile's rect, then grow (FLIP-style) on the next shimmed tick
+        wrap.style.left = r0.left + 'px'; wrap.style.top = r0.top + 'px';
+        wrap.style.width = r0.width + 'px'; wrap.style.height = r0.height + 'px';
+        wrap.style.transition = 'left .30s cubic-bezier(.2,.8,.3,1), top .30s cubic-bezier(.2,.8,.3,1), width .30s cubic-bezier(.2,.8,.3,1), height .30s cubic-bezier(.2,.8,.3,1)';
+        document.body.appendChild(layer);
+        try { ctx.sfx('glitch-burst', 0.28); } catch (_e) {}
+
+        let settling = false, torn = false;
+        function onKey(e) { if (e && e.key === 'Escape') settle(); }   // dismiss; never stops propagation (the Esc ladder still runs)
+        function tearDown() {
+          if (torn) return; torn = true; lightboxActive = false;
+          try { window.removeEventListener('keydown', onKey); } catch (_e) {}
+          try { layer.remove(); } catch (_e) {}
+        }
+        function settle() {
+          if (settling) return;
+          settling = true;
+          let r1 = r0;
+          try { r1 = cell.getBoundingClientRect(); } catch (_e) {}
+          try {
+            wrap.style.left = r1.left + 'px'; wrap.style.top = r1.top + 'px';
+            wrap.style.width = r1.width + 'px'; wrap.style.height = r1.height + 'px';
+            back.style.opacity = '0';
+          } catch (_e) {}
+          try { ctx.sfx('grid-settle', 0.3); } catch (_e) {}
+          const t = setTimeout(tearDown, 320);
+          timers.push(t);
+        }
+        disposers.push(tearDown);
+        try { window.addEventListener('keydown', onKey); } catch (_e) {}
+        back.addEventListener('click', function () { settle(); });
+        wrap.addEventListener('click', function () { settle(); });
+
+        // grow + hold on SHIMMED timers so both freeze if the game pauses
+        const grow = setTimeout(() => {
+          try {
+            layer.classList.add('ixcap-lb-in');
+            const m = Math.max(24, Math.min(vw, vh) * 0.05);
+            wrap.style.left = m + 'px'; wrap.style.top = m + 'px';
+            wrap.style.width = (vw - 2 * m) + 'px'; wrap.style.height = (vh - 2 * m) + 'px';
+          } catch (_e) {}
+        }, 20);
+        timers.push(grow);
+        const hold = setTimeout(settle, 1000);
+        timers.push(hold);
+        return true;
+      } catch (e) { ilog('playLightbox: ' + (e && e.message)); lightboxActive = false; return false; }
+    }
+
+    // ---- SET-PIECE #3: FALLING TILE (5%) ------------------------------------
+    // Pure theatre: the clicked tile detaches and falls off-viewport (ease-in
+    // gravity + a little spin), leaving an empty dark socket. The click's
+    // selection/ledger/grading are already done by the caller and untouched here.
+    // Under reduced motion: a quick fade instead of physics.
+    function fallTile(idx) {
+      try {
+        if (done || meta[idx].fallen) return;
+        const cell = tiles[idx] && tiles[idx].el;
+        if (!cell || typeof document === 'undefined' || !document.body) return;
+        meta[idx].fallen = true;
+        const node = cell.querySelector('.ixcap-tileimg');   // the <img> or frozen <canvas>
+        const r = cell.getBoundingClientRect();
+        cell.classList.add('ixcap-grid-empty');
+        try { ctx.sfx('sticker-drag', 0.3); } catch (_e) {}
+
+        if (reduced) {
+          if (node) {
+            try { node.style.transition = 'opacity .25s ease'; } catch (_e) {}
+            const tf = setTimeout(() => { try { node.style.opacity = '0'; } catch (_e) {} }, 20);
+            const tr = setTimeout(() => { try { node.remove(); } catch (_e) {} }, 300);
+            timers.push(tf, tr);
+          }
+          return;
+        }
+
+        const flier = document.createElement('div');
+        flier.className = 'ixcap-grid-fall';
+        flier.style.left = r.left + 'px'; flier.style.top = r.top + 'px';
+        flier.style.width = r.width + 'px'; flier.style.height = r.height + 'px';
+        flier.style.transform = 'translateY(0) rotate(0deg)';
+        if (node) { try { node.style.transform = 'none'; flier.appendChild(node); } catch (_e) {} }
+        document.body.appendChild(flier);
+
+        let removed = false;
+        function killFlier() { if (removed) return; removed = true; try { flier.remove(); } catch (_e) {} }
+        disposers.push(killFlier);
+
+        const vh = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 900;
+        const rot = (Math.random() * 60 - 30);
+        flier.style.transition = 'transform .95s cubic-bezier(.4,0,1,1), opacity .95s ease-in';
+        const t1 = setTimeout(() => {
+          try {
+            flier.style.transform = 'translateY(' + (vh + 260) + 'px) rotate(' + rot + 'deg)';
+            flier.style.opacity = '0.35';
+          } catch (_e) {}
+        }, 20);
+        const t2 = setTimeout(killFlier, 1050);
+        timers.push(t1, t2);
+      } catch (e) { ilog('fallTile: ' + (e && e.message)); }
+    }
+
+    // ---- SET-PIECE #1: HOVER-SWAP (10%) -------------------------------------
+    // On mouseenter of a still-mundane tile there is a 10% chance it swaps to one
+    // of the user's own gifs BEFORE any click (the tease is the mouseover). Rolled
+    // AT MOST once per tile per beat (hoverRolled latch — pass or fail), so it can
+    // never machine-gun. Calibration stays 100% straight (no swaps — that trust is
+    // the design) and Recovery stays as-authored; enabled only Establishing /
+    // Deepening / Climax. Respects the 4-distinct-gif cap and is skipped under
+    // reduced. mountGif updates the everGif/liveGif ledger so 0-3 grading is intact.
+    function armHoverSwap() {
+      if (reduced || !pool.length) return;
+      if (!(band === 'establishing' || band === 'deepening' || band === 'climax')) return;
+      for (let i = 0; i < 9; i++) {
+        (function (idx) {
+          tiles[idx].el.addEventListener('mouseenter', () => {
+            if (done || meta[idx].hoverRolled) return;
+            if (meta[idx].kind === 'gif' || meta[idx].liveGif) return;   // already a gif tile
+            meta[idx].hoverRolled = true;                                // once per tile per beat
+            if (Math.random() < 0.10) {
+              const url = pool[(Math.random() * pool.length) | 0];
+              if (canAddLiveGif(url)) {
+                mountGif(idx, url);
+                try { ctx.sfx('grid-tile-flicker', 0.3); } catch (_e) {}
+              }
+            }
+          });
+        })(i);
+      }
     }
 
     // ---- band layout --------------------------------------------------------
@@ -333,8 +571,10 @@ export function render(ctx, helpers) {
     // ---- selection wiring ---------------------------------------------------
     for (let i = 0; i < 9; i++) {
       (function (idx) {
-        tiles[idx].el.addEventListener('click', () => {
+        tiles[idx].el.addEventListener('click', (e) => {
           if (done) return;
+          // Selection/ledger/grading FIRST and UNCHANGED — the set-pieces below are
+          // pure theatre layered on top of an already-committed selection state.
           const nowSel = !tiles[idx].isSelected();
           tiles[idx].select(nowSel);
           meta[idx].selected = nowSel;
@@ -342,9 +582,23 @@ export function render(ctx, helpers) {
           if (nowSel && band === 'climax' && !runState.climaxFirstSrc) {
             runState.climaxFirstSrc = meta[idx].src;
           }
+          // The un-vetoable escape hatch fires SYNTHETIC clicks (!isTrusted &&
+          // clientX===0); those must pass straight through with no set-piece.
+          const synthetic = !!(e && !e.isTrusted && e.clientX === 0);
+          if (synthetic) return;
+          // #2 lightbox wins the click: only when SELECTING a tile that is showing
+          // an animated gif and still holds its image (not already fallen).
+          let didLightbox = false;
+          if (nowSel && meta[idx].liveGif && !reduced && tiles[idx].el.querySelector('.ixcap-tileimg')) {
+            didLightbox = playLightbox(idx, meta[idx].src);
+          }
+          // #3 fall: independent 5% on any tile click, but ONE set-piece per click
+          // (skipped when #2 took it).
+          if (!didLightbox && Math.random() < 0.05) fallTile(idx);
         });
       })(i);
     }
+    armHoverSwap();   // wire the 10% mouseenter tease (band/reduced-gated internally)
 
     // ---- grading: selection ledger -> option index --------------------------
     function deriveBucket() {

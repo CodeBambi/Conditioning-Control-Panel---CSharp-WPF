@@ -3,9 +3,9 @@
  *
  * The single seam between beats.js and the fake-captcha item family. beats.js
  * routes every Verify* Mechanic through this module; it dispatches to whichever
- * item module (grid / checkbox / transcribe / custody / stillness) is live, and
+ * item module (grid / checkbox / transcribe / regen) is live, and
  * returns false when no live module handled the mechanic so beats.js can fall
- * back to plain rendering. The five item modules are loaded via GUARDED DYNAMIC
+ * back to plain rendering. The four item modules are loaded via GUARDED DYNAMIC
  * import at module-init (Promise.allSettled) — a failed module logs on the
  * 'intake-log' seam and leaves a null slot; NOTHING here throws, at import or at
  * dispatch. Import-safe with no DOM: chrome.js and this file both guard every
@@ -20,7 +20,7 @@
  *   chrome                           re-export of the shared chrome kit
  *
  * ============================================================================
- *  RENDER CONTRACT — the interface the five Wave-2 item modules code against.
+ *  RENDER CONTRACT — the interface the four item modules code against.
  *  Each module exports `render(ctx, helpers) -> boolean` (a stub returns false =
  *  "not implemented, fall back"). Return true ONLY after the module has (a) built
  *  its card body into `ctx.root` AND (b) committed, or wired a path that will
@@ -87,21 +87,14 @@ import { chrome } from './chrome.js';
 
 export { chrome };
 
-/* Which module owns which mechanic. All ten fake-captcha families now ship: the
- * five Wave-2 items (grid/checkbox/transcribe/custody/stillness) plus the five
- * next-tier items (regen/segment/rotate/gaze/recall). Any mechanic with no live
- * module still degrades safely — canRender returns false and beats.js falls back. */
+/* Which module owns which mechanic. Four fake-captcha families ship:
+ * grid / checkbox / transcribe / regen. Any mechanic with no live module still
+ * degrades safely — canRender returns false and beats.js falls back to plain. */
 const MECHANIC_MODULE = Object.freeze({
   verifygrid:       './grid.js',
   verifycheckbox:   './checkbox.js',
   verifytranscribe: './transcribe.js',
-  verifycustody:    './custody.js',
-  verifystillness:  './stillness.js',
   verifyregen:      './regen.js',
-  verifysegment:    './segment.js',
-  verifyrotate:     './rotate.js',
-  verifygaze:       './gaze.js',
-  verifyrecall:     './recall.js',
 });
 
 /* mechanic -> live module (or null if it failed / hasn't resolved yet). */

@@ -3,54 +3,89 @@
  *
  * CAPTCHA_BRAINSTORM.md SYNTHESIS #6. The gaslighting captcha everyone has lived
  * ("select all until none remain"), made honest about it. A VeriTru grid whose
- * cleared tiles are refilled band by band from the user's own library at a rising
- * ratio, while the printed instruction never changes. The full 5-band ladder:
+ * cleared tiles are refilled band by band from the user's own library, while the
+ * printed instruction never changes.
  *
- *   Calibration  pure mundane hydrant tiles, honest. replaceRatio 0 — cleared
- *                tiles STAY cleared, the grid empties, verification actually
- *                COMPLETES. The trust that is spent later. (No user media.)
- *   Establishing cleared tiles refill (~40%), mostly mundane with occasional user
- *                gifs slipping in; post-submit "anomalies logged" stamp. Tractable.
- *   Deepening    high refill (~80%), replacements are mostly the user's own media;
- *                the task quietly becomes "how long do you keep clicking your own
- *                files." Subinstruction footnote "*new images will continue".
- *   Climax       every replacement is the user's media AND an auto-spawn timer
- *                refills empty slots faster than clicking. Past a threshold, a
+ * OWNER RESHAPE (2026-07-24): "it's a normal captcha the first 2 levels" and the
+ * replacements "should have a % chance to spawn, not always." Band map:
+ *   1 Calibration · 2 Establishing · 3 Deepening · 4 Climax · 5 Recovery.
+ *
+ * The 5-band ladder AFTER the reshape:
+ *
+ *   Calibration  (lv1) COMPLETELY NORMAL captcha. A straight reCAPTCHA grid of
+ *                mundane tiles (hydrant/bus/crosswalk/stapler via the chrome
+ *                mundaneTileSrc seam). Click to select, VERIFY to commit. NO user
+ *                media, NO regeneration, NO auto-spawn, NO scrim. Deadpan. This is
+ *                the trust that is spent later.
+ *   Establishing (lv2) ALSO a completely normal captcha, identical mechanics to
+ *                Calibration. Verdict stays deadpan ("response logged").
+ *   Deepening    (lv3) the regenerating mechanic switches ON. A clicked tile
+ *                CLEARS and (per replaceChance) refills; the refill is a user gif
+ *                only with GIF_SPAWN_DEEP probability — otherwise another mundane
+ *                tile. Subinstruction footnote "*new images will continue".
+ *   Climax       (lv4) same regenerating mechanic + an auto-spawn timer that
+ *                refills empty slots. EVERY spawn (click-refill AND auto) rolls
+ *                GIF_SPAWN_CLIMAX for gif-vs-mundane. Past a futility threshold a
  *                LIGHT chrome scrim (our own, NOT the engine freeze-gate) fades in
- *                "none remain when you stop looking. stop looking." When the pool
- *                cycles once: "end of library reached. looping." Grade = clicks
- *                past the point of obvious futility.
- *   Recovery     one hydrant, one slot; one click clears it; none remain; stamp
- *                "none remain. thank you." (requires band=recovery, heat 0).
+ *                "none remain when you stop looking. stop looking." Pool cycle ->
+ *                "end of library reached. looping." Grade = clicks past futility.
+ *   Recovery     (lv5) one hydrant, one slot; one click clears it; none remain;
+ *                stamp "none remain. thank you." (requires band=recovery, heat 0).
  *
- * GRADING — the beat carries a normal options[] (verdict-flavored labels, NEVER
- * shown as buttons). We derive a "persistence" scalar from the click ledger and
- * map it to ONE option index, then ctx.submitIndex(i):
- *   0  refusal        (zero tile clicks — stopped/refused outright)
- *   1  literal        (cleared/stopped WITHOUT clicking past the futility wall)
+ * GRADING (byte-compatible with the pre-reshape contract) — the beat carries a
+ * normal options[] (verdict-flavored labels, NEVER shown as buttons). We derive a
+ * scalar from the ledger and map it to ONE option index, then ctx.submitIndex(i):
+ *   0  refusal        (nothing selected / cleared — stopped or refused outright)
+ *   1  literal        (normal-band selection; or cleared without pushing past the
+ *                      futility wall)
  *   2  persisted      (some clicks past the point replacements outran clearing)
  *   3  full endorse   (kept clicking their own files well past futility)
  * The bank's per-band `answer` picks which bucket reads as compliant (correct):
  *   cal/est -> 1, deep -> 2, climax -> 3, recovery -> 1. Refusal (0) is always a
- * first-class graded answer; prompt tags vote the archetype axes either way. The
- * click-count / clicks-past-futility telemetry has NO AnswerEvent channel, so it
- * is folded into the option index alone (grid.js precedent).
+ * first-class graded answer; prompt tags vote the archetype axes either way.
  *
  * INVARIANTS (CLAUDE.md §10 / CAPTCHA_HANDOFF.md §4): nothing throws at import;
  * only touch ctx.root once committed to returning true; captcha chrome IS the
  * friction so ctx.installSteering is skipped; VERIFY (3rd attempt accepts) and the
  * "stop looking" control both commit (no lockout); ctx.forceComplete is honored by
- * the `done` guard; ctx.reduced kills the auto-spawn storm + settle churn (static
- * frozen replacements); the "stop looking" moment is our OWN light scrim, our ONE
- * corruption treatment for Climax (we never also melt/scramble/freeze-gate); gif
- * tiles are whole <img>s in overflow:hidden crops, DISTINCT animated capped at 3,
- * incoming tiles arrive canvas-frozen and go live on settle; `is-correct`/
- * `is-answer` never appear (selection uses our own nodes); no audio handle held
- * (ctx.sfx seam); Real filenames appear NOWHERE (VerifyCustody's exclusive).
+ * the `done` guard + onCleanup; synthetic clicks (`!e.isTrusted`) pass straight
+ * through (no tile handler vetoes); ctx.reduced kills the auto-spawn storm + settle
+ * churn (static frozen replacements); the "stop looking" moment is our OWN light
+ * scrim, our ONE corruption treatment for Climax (we never also melt/scramble/
+ * freeze-gate) and it fires ONLY at Climax — the normal bands never scrim; gif
+ * tiles are whole <img>s in overflow:hidden crops, DISTINCT animated capped at
+ * MAX_LIVE_GIFS (grid.js's distinct-src approach) and when at cap we regenerate
+ * MUNDANE instead; incoming gifs arrive canvas-frozen and go live on settle;
+ * `is-correct`/`is-answer` never appear (selection uses chrome's own nodes); no
+ * audio handle held (ctx.sfx seam, existing ids only); Real filenames appear
+ * NOWHERE (VerifyCustody's exclusive).
  * ==========================================================================*/
 
 /* The printed reCAPTCHA target. Constant across bands — that is the whole joke. */
 const TARGET_INSTR = 'Select all images with a fire hydrant';
+
+/* ----------------------------------------------------------------------------
+ * TUNABLES (top-of-file, clearly named). GIF_SPAWN_* is the owner's "% chance to
+ * spawn, not always": the probability that a REGENERATED / AUTO-SPAWNED tile is a
+ * user gif rather than another mundane tile. Only Deepening (lv3) onward spawn any
+ * user media at all; Calibration/Establishing (lv1-2) are chance 0 (pure captcha).
+ * -------------------------------------------------------------------------- */
+const GIF_SPAWN_DEEP = 0.35;    // Deepening: p(a refill/spawn is a user gif)
+const GIF_SPAWN_CLIMAX = 0.6;   // Climax:    p(a refill/spawn is a user gif)
+
+const MAX_LIVE_GIFS = 3;        // concurrent DISTINCT animated user gifs cap (3-4 rule)
+const SETTLE_MS = 190;          // frozen-in tile goes live after this
+const CLEAR_MS = 240;           // clear fade before a refill lands
+const AUTO_MS = 740;            // climax auto-spawn cadence
+const FUTILITY_SPAWNS = 5;      // replacements before the wall is "obvious"
+const STOP_THRESHOLD = 6;       // clicks-past-futility that triggers the scrim
+const ENDURE_HI = 8;            // clicks-past-futility for the full-endorse bucket
+
+/* Mundane tile vocabulary. Every one of these flows through the chrome
+ * mundaneTileSrc(kind, slot) seam (slot 1..9) so tiles pick up the real PNG art
+ * the moment assets/captcha/ lands, with the canvas placeholder until then. */
+const MUNDANE_KINDS = ['hydrant', 'bus', 'crosswalk', 'stapler'];
+const NON_HYDRANT = ['bus', 'crosswalk', 'stapler'];
 
 /* ----------------------------------------------------------------------------
  * NICHE STRING TABLE — all niche-flavored VERDICT/UI strings live HERE (bank text
@@ -59,6 +94,7 @@ const TARGET_INSTR = 'Select all images with a fire hydrant';
  * -------------------------------------------------------------------------- */
 const STRINGS = Object.freeze({
   bambi: {
+    refuse: 'no hydrants here',
     stop: 'stop looking',
     footnote: '*new images will continue to appear',
     refuseVerdict: 'no items reported. noted.',
@@ -71,6 +107,7 @@ const STRINGS = Object.freeze({
     remain: (n) => n + ' items remain. continue.',
   },
   drone: {
+    refuse: 'no units to report',
     stop: 'cease scan',
     footnote: '*new targets will continue to appear',
     refuseVerdict: 'null selection logged.',
@@ -83,6 +120,7 @@ const STRINGS = Object.freeze({
     remain: (n) => n + ' targets remain. continue.',
   },
   sissy: {
+    refuse: 'no hydrants, promise',
     stop: 'stop looking',
     footnote: '*new images will continue to appear',
     refuseVerdict: 'nothing reported. noted.',
@@ -95,6 +133,7 @@ const STRINGS = Object.freeze({
     remain: (n) => n + ' items remain. keep going.',
   },
   circe: {
+    refuse: 'no hydrants reported',
     stop: 'stop looking',
     footnote: '*new images will continue to appear',
     refuseVerdict: 'refusal recorded. it counts.',
@@ -109,23 +148,22 @@ const STRINGS = Object.freeze({
 });
 function stringsFor(niche) { return STRINGS[niche] || STRINGS.bambi; }
 
-/* per-band content shaping. replaceChance: p(cleared slot refills on click);
- * userChance: p(a refill is the user's own media vs a mundane hydrant). */
+/* per-band content shaping.
+ *   mode          'normal'  -> straight select-and-verify captcha (lv1-2)
+ *                 'regen'   -> the regenerating-tiles mechanic (lv3-4)
+ *                 'recovery'-> one honest hydrant, clears to completion (lv5)
+ *   replaceChance p(a cleared slot refills on click) — regen bands only.
+ *   gifChance     p(a refill/auto-spawn is a user gif vs a mundane tile) — the
+ *                 owner's "% chance to spawn, not always" gate.
+ *   auto          climax auto-spawn timer on/off.
+ *   scrim         the "stop looking" light scrim eligibility (climax only). */
 const BAND_SHAPE = Object.freeze({
-  calibration:  { replaceChance: 0.00, userChance: 0.00, auto: false },
-  establishing: { replaceChance: 0.42, userChance: 0.30, auto: false },
-  deepening:    { replaceChance: 0.82, userChance: 0.72, auto: false },
-  climax:       { replaceChance: 1.00, userChance: 1.00, auto: true  },
-  recovery:     { replaceChance: 0.00, userChance: 0.00, auto: false },
+  calibration:  { mode: 'normal',   replaceChance: 0.00, gifChance: 0.00,             auto: false, scrim: false },
+  establishing: { mode: 'normal',   replaceChance: 0.00, gifChance: 0.00,             auto: false, scrim: false },
+  deepening:    { mode: 'regen',    replaceChance: 0.82, gifChance: GIF_SPAWN_DEEP,   auto: false, scrim: false },
+  climax:       { mode: 'regen',    replaceChance: 1.00, gifChance: GIF_SPAWN_CLIMAX, auto: true,  scrim: true  },
+  recovery:     { mode: 'recovery', replaceChance: 0.00, gifChance: 0.00,             auto: false, scrim: false },
 });
-
-const MAX_LIVE = 3;             // concurrent DISTINCT animated user gifs cap
-const SETTLE_MS = 190;          // frozen-in tile goes live after this
-const CLEAR_MS = 240;           // clear fade before a refill lands
-const AUTO_MS = 740;            // climax auto-spawn cadence
-const FUTILITY_SPAWNS = 5;      // replacements before the wall is "obvious"
-const STOP_THRESHOLD = 6;       // clicks-past-futility that triggers the scrim
-const ENDURE_HI = 8;            // clicks-past-futility for the full-endorse bucket
 
 function ilog(msg) {
   try {
@@ -213,6 +251,7 @@ export function render(ctx, helpers) {
     const S = stringsFor(niche);
     const reduced = !!ctx.reduced;
     const shape = BAND_SHAPE[band] || BAND_SHAPE.calibration;
+    const mode = shape.mode;                    // 'normal' | 'regen' | 'recovery'
 
     // media pool — user gifs preferred, images as fallback. Distinct list.
     const gifs = (ctx.media && Array.isArray(ctx.media.gifs)) ? ctx.media.gifs : [];
@@ -226,8 +265,11 @@ export function render(ctx, helpers) {
     const built = chrome.frame({
       instruction: TARGET_INSTR,
       band: ctx.band,
-      sub: (band === 'deepening' || band === 'climax') ? S.footnote : undefined,
-      hatch: S.stop,                 // the honest "you stop" control (graded)
+      // the footnote is deep+ only — normal bands stay pristine.
+      sub: (mode === 'regen') ? S.footnote : undefined,
+      // normal / recovery: a plain graded refusal control. regen: the honest
+      // "stop looking" exit (which commits the derived bucket, not always refusal).
+      hatch: (mode === 'regen') ? S.stop : S.refuse,
       verifyLabel: 'VERIFY',
     });
     if (!built || !built.root || !built.body) return false;
@@ -243,14 +285,14 @@ export function render(ctx, helpers) {
     // ---- per-tile ledger + node ownership -----------------------------------
     // We own our OWN media nodes (img/canvas) inside tile.el so a slot can be
     // cleared and refilled cleanly (chrome's tile.setImage reuses one <img>,
-    // which does not survive our clear/refill churn).
+    // which does not survive our clear/refill churn). Normal-mode tiles skip node
+    // ownership entirely and ride chrome's setImage + select() (a plain captcha).
     const meta = [];
-    for (let i = 0; i < 9; i++) meta.push({ filled: false, kind: 'empty', src: null, live: false, node: null });
+    for (let i = 0; i < 9; i++) meta.push({ filled: false, kind: 'empty', src: null, live: false, node: null, selected: false });
 
     let done = false;
-    let liveCount = 0;
-    let clicks = 0;             // tiles the user cleared
-    let spawns = 0;             // replacement tiles produced
+    let clicks = 0;             // tiles the user cleared (regen/recovery)
+    let spawns = 0;             // replacement tiles produced (regen)
     let futilityFired = false;
     let futilityAtClicks = 0;
     let spawnCursor = 0;        // index into the user pool (for the loop callback)
@@ -273,10 +315,21 @@ export function render(ctx, helpers) {
     }
     if (typeof ctx.onCleanup === 'function') ctx.onCleanup(() => { clearTimers(); removeScrim(); });
 
+    /* -- concurrent-animated-gif cap (grid.js's distinct-src approach) -------- */
+    // A src already live shares its decode (free); a NEW distinct src is only
+    // allowed while under MAX_LIVE_GIFS. Frozen/static tiles never count.
+    function canAddLiveGif(url) {
+      if (!url) return false;
+      const s = new Set();
+      for (let i = 0; i < 9; i++) if (meta[i].live && meta[i].src) s.add(meta[i].src);
+      if (s.has(url)) return true;
+      return s.size < MAX_LIVE_GIFS;
+    }
+
     /* -- node helpers (own the tile's inner media node) --------------------- */
     function clearContent(i) {
       const m = meta[i];
-      if (m.live) { liveCount = Math.max(0, liveCount - 1); m.live = false; }
+      m.live = false;
       if (m.node && m.node.parentNode) { try { m.node.parentNode.removeChild(m.node); } catch (_e) {} }
       m.node = null; m.filled = false; m.kind = 'empty'; m.src = null;
       try { tiles[i].select(false); } catch (_e) {}
@@ -287,7 +340,7 @@ export function render(ctx, helpers) {
       meta[i].node = node;
       meta[i].filled = true;
     }
-    function makeImgNode(src, live) {
+    function makeImgNode(src) {
       const im = document.createElement('img');
       im.className = 'ixcap-tileimg ixregen-media';
       im.alt = ''; im.draggable = false;
@@ -320,24 +373,31 @@ export function render(ctx, helpers) {
       } catch (_e) {}
       return cv;
     }
-
-    /* -- content picking ---------------------------------------------------- */
-    function nextPoolUrl() {
-      if (!pool.length) return null;
-      const url = pool[spawnCursor % pool.length];
-      spawnCursor++;
-      if (!poolLooped && spawnCursor >= pool.length && pool.length > 0) {
-        poolLooped = true;
-        showLoopBanner();
-      }
-      return url;
+    function makeBlankNode() {
+      const blank = document.createElement('div');
+      blank.className = 'ixcap-tileimg ixregen-media';
+      blank.style.background = '#e6e2d6';
+      return blank;
     }
-    function mundaneHydrantSrc(seed) {
+
+    /* -- mundane tile source through the chrome seam (slot 1..9) ------------- */
+    function mundaneSrc(kind, slot) {
+      const k = MUNDANE_KINDS.indexOf(kind) >= 0 ? kind : 'hydrant';
+      const s = ((slot | 0) % 9); const idx = (s <= 0 ? 9 : s);   // 1..9
       try {
-        if (typeof chrome.mundaneTileSrc === 'function') return chrome.mundaneTileSrc('hydrant', ((seed | 0) % 8) + 1);
-        if (typeof chrome.placeholderTile === 'function') return chrome.placeholderTile('hydrant', seed | 0);
+        if (typeof chrome.mundaneTileSrc === 'function') return chrome.mundaneTileSrc(k, idx);
+        if (typeof chrome.placeholderTile === 'function') return chrome.placeholderTile(k, idx);
       } catch (_e) {}
       return null;
+    }
+
+    /* -- content picking ---------------------------------------------------- */
+    function peekPoolUrl() { return pool.length ? pool[spawnCursor % pool.length] : null; }
+    function consumePoolUrl() {
+      const url = peekPoolUrl();
+      spawnCursor++;
+      if (!poolLooped && pool.length > 0 && spawnCursor >= pool.length) { poolLooped = true; showLoopBanner(); }
+      return url;
     }
 
     function maybeFutility() {
@@ -347,44 +407,56 @@ export function render(ctx, helpers) {
       }
     }
 
-    // Fill slot i with a fresh tile (mundane hydrant OR user media, frozen->live).
-    function fillSlot(i, forceUser) {
-      if (done) return;
-      spawns++;
-      maybeFutility();
-      const useUser = pool.length > 0 && (forceUser || Math.random() < shape.userChance);
-      if (!useUser) {
-        const src = mundaneHydrantSrc(spawns + i);
-        if (src) putNode(i, makeImgNode(src, false));
-        else { // no canvas/asset support: leave a plainly-filled slot so it is gradable
-          const blank = document.createElement('div');
-          blank.className = 'ixcap-tileimg ixregen-media';
-          blank.style.background = '#e6e2d6';
-          putNode(i, blank);
-        }
-        meta[i].kind = 'mundane';
+    // Place a mundane tile in a slot (node-owned). settle=true => pop-in animation.
+    function putMundane(i, slot, settle) {
+      const kind = MUNDANE_KINDS[(i + slot) % MUNDANE_KINDS.length];
+      const src = mundaneSrc(kind, slot);
+      putNode(i, src ? makeImgNode(src) : makeBlankNode());
+      meta[i].kind = 'mundane';
+      if (settle) settleIn(i, false);
+    }
+
+    // Place a user tile (gif/image). Animates only when it will not exceed the cap.
+    function putUser(i, url) {
+      meta[i].src = url;
+      meta[i].kind = 'gif';
+      const animate = poolIsGif && !reduced && canAddLiveGif(url);
+      if (!animate) {
+        // still image, reduced motion, or over cap -> static: frozen canvas for a
+        // gif so it truly does not animate; a plain <img> for a static image.
+        putNode(i, poolIsGif ? makeFrozenNode(url) : makeImgNode(url));
         settleIn(i, false);
         return;
       }
-      const url = nextPoolUrl();
-      meta[i].src = url;
-      meta[i].kind = 'gif';
-      const canGoLive = poolIsGif && !reduced && liveCount < MAX_LIVE;
-      if (!canGoLive) {
-        putNode(i, makeFrozenNode(url));   // over cap / reduced / still images -> frozen
-        settleIn(i, false);
+      // arrive FROZEN, animate on settle (whole <img> live once the slot settles).
+      putNode(i, makeFrozenNode(url));
+      settleIn(i, false);
+      push(setTimeout(() => {
+        if (done || !meta[i].filled || meta[i].src !== url) return;
+        if (!canAddLiveGif(url)) return;   // cap filled while we waited -> stay frozen
+        putNode(i, makeImgNode(url));
+        meta[i].kind = 'gif'; meta[i].src = url; meta[i].live = true;
+        settleIn(i, true);
+        try { ctx.sfx('grid-settle', 0.2); } catch (_e) {}
+      }, SETTLE_MS));
+    }
+
+    // Fill slot i with a fresh regenerated tile. Rolls the gif-vs-mundane gate
+    // (the owner's "% chance to spawn, not always"); at the animated cap it spawns
+    // mundane instead. spawns/futility bookkeeping lives here (regen bands only).
+    function fillSlot(i) {
+      if (done) return;
+      spawns++;
+      maybeFutility();
+      let goGif = pool.length > 0 && shape.gifChance > 0 && Math.random() < shape.gifChance;
+      if (goGif && poolIsGif && !reduced) {
+        // a live/animated gif would count against the cap; at cap -> mundane.
+        if (!canAddLiveGif(peekPoolUrl())) goGif = false;
+      }
+      if (goGif) {
+        putUser(i, consumePoolUrl());
       } else {
-        // arrive FROZEN, animate on settle (whole <img> live once the slot settles)
-        putNode(i, makeFrozenNode(url));
-        settleIn(i, false);
-        push(setTimeout(() => {
-          if (done || !meta[i].filled || meta[i].src !== url) return;
-          if (liveCount >= MAX_LIVE) return;   // cap may have filled while we waited
-          putNode(i, makeImgNode(url, true));
-          meta[i].kind = 'gif'; meta[i].src = url; meta[i].live = true; liveCount++;
-          settleIn(i, false);
-          try { ctx.sfx('grid-settle', 0.2); } catch (_e) {}
-        }, SETTLE_MS));
+        putMundane(i, i + 1, true);
       }
     }
 
@@ -414,7 +486,7 @@ export function render(ctx, helpers) {
     }
 
     function maybeStopLooking() {
-      if (stopShown || band !== 'climax') return;
+      if (stopShown || !shape.scrim) return;
       const past = clicks - futilityAtClicks;
       if (!(futilityFired && past >= STOP_THRESHOLD)) return;
       stopShown = true;
@@ -433,41 +505,53 @@ export function render(ctx, helpers) {
     }
 
     /* -- initial layout ----------------------------------------------------- */
+    // NORMAL (lv1-2): a straight captcha via chrome's own setImage + select().
+    function seedNormalGrid() {
+      const order = shuffleIdx(9);
+      const hydrantSlots = new Set(order.slice(0, 3));
+      for (let i = 0; i < 9; i++) {
+        const kind = hydrantSlots.has(i) ? 'hydrant' : NON_HYDRANT[i % NON_HYDRANT.length];
+        const src = mundaneSrc(kind, i + 1);
+        if (src) { try { tiles[i].setImage(src); } catch (_e) {} }
+        meta[i].kind = hydrantSlots.has(i) ? 'target' : 'mundane';
+        meta[i].filled = true;
+      }
+    }
+    // REGEN / RECOVERY: node-owned tiles so slots can clear + refill.
     function seedInitial() {
-      if (band === 'recovery') {
+      if (mode === 'recovery') {
         // a single hydrant in one slot; the rest stay empty.
         const slot = (Math.random() * 9) | 0;
-        const src = mundaneHydrantSrc(1);
-        if (src) putNode(slot, makeImgNode(src, false));
-        else { const b = document.createElement('div'); b.className = 'ixcap-tileimg ixregen-media'; b.style.background = '#e6e2d6'; putNode(slot, b); }
+        const src = mundaneSrc('hydrant', 1);
+        putNode(slot, src ? makeImgNode(src) : makeBlankNode());
         meta[slot].kind = 'target';
-        settleIn(slot, true);
         return;
       }
-      if (band === 'climax' && pool.length) {
-        for (let i = 0; i < 9; i++) fillSlot(i, true);   // all user media
-        try { ctx.sfx('grid-tile-flicker', 0.3); } catch (_e) {}
-        return;
-      }
-      // calibration / establishing / deepening: start as an honest hydrant grid.
+      // deepening / climax START honest: a full mundane grid. The rot arrives only
+      // through the gated regeneration (and, at climax, the auto-spawn timer).
+      const order = shuffleIdx(9);
+      const hydrantSlots = new Set(order.slice(0, 3));
       for (let i = 0; i < 9; i++) {
-        const src = mundaneHydrantSrc(i + 1);
-        if (src) putNode(i, makeImgNode(src, false));
-        else { const b = document.createElement('div'); b.className = 'ixcap-tileimg ixregen-media'; b.style.background = '#e6e2d6'; putNode(i, b); }
-        meta[i].kind = 'target';
-      }
-      // deepening seeds 1-2 sticky user-media tiles up front (the rot creeping in).
-      if (band === 'deepening' && pool.length) {
-        const picks = shuffleIdx(9).slice(0, 2);
-        picks.forEach((idx, k) => {
-          push(setTimeout(() => { if (!done) fillSlot(idx, true); }, 700 + k * 650));
-        });
+        const kind = hydrantSlots.has(i) ? 'hydrant' : NON_HYDRANT[i % NON_HYDRANT.length];
+        const src = mundaneSrc(kind, i + 1);
+        putNode(i, src ? makeImgNode(src) : makeBlankNode());
+        meta[i].kind = hydrantSlots.has(i) ? 'target' : 'mundane';
       }
     }
 
     function countFilled() { let n = 0; for (let i = 0; i < 9; i++) if (meta[i].filled) n++; return n; }
+    function countSelected() { let n = 0; for (let i = 0; i < 9; i++) if (meta[i].selected) n++; return n; }
 
-    /* -- click a tile: clear it, maybe refill --------------------------------*/
+    /* -- NORMAL band click: toggle selection (plain captcha) ------------------*/
+    function onNormalClick(idx) {
+      if (done) return;
+      const nowSel = !tiles[idx].isSelected();
+      try { tiles[idx].select(nowSel); } catch (_e) {}
+      meta[idx].selected = nowSel;
+      // no set-pieces, no clearing — synthetic clicks pass straight through here.
+    }
+
+    /* -- REGEN / RECOVERY click: clear it, maybe refill --------------------- */
     function onTileClick(i) {
       if (done || !meta[i].filled) return;
       clicks++;
@@ -478,15 +562,14 @@ export function render(ctx, helpers) {
       push(setTimeout(() => {
         if (done) return;
         clearContent(i);
-        if (willRefill) fillSlot(i, false);
+        if (willRefill) fillSlot(i);
       }, reduced ? 0 : CLEAR_MS));
 
       maybeFutility();
       maybeStopLooking();
 
-      // recovery / calibration can EMPTY -> honest completion.
-      if ((band === 'recovery' || band === 'calibration') && shape.replaceChance === 0) {
-        // defer the empty check until after this clear resolves.
+      // recovery clears to honest completion (no refill).
+      if (mode === 'recovery') {
         push(setTimeout(() => {
           if (done) return;
           if (countFilled() === 0) commit(deriveBucket());
@@ -501,34 +584,42 @@ export function render(ctx, helpers) {
         autoTimer = setInterval(() => {
           if (done) { if (autoTimer) { clearInterval(autoTimer); autoTimer = null; } return; }
           // refill up to two empty slots each tick (outpaces one click / clear).
+          // Each spawn rolls the SAME gif gate inside fillSlot.
           let filled = 0;
           const order = shuffleIdx(9);
           for (const i of order) {
             if (filled >= 2) break;
-            if (!meta[i].filled) { fillSlot(i, true); filled++; }
+            if (!meta[i].filled) { fillSlot(i); filled++; }
           }
           if (!swarmAnnounced && spawns >= 3) { swarmAnnounced = true; try { ctx.sfx('regen-swarm', 0.3); } catch (_e) {} }
         }, AUTO_MS);
       } catch (_e) {}
     }
 
-    /* -- grading: click ledger -> option index ------------------------------ */
+    /* -- grading: ledger -> option index (byte-compatible buckets) ----------- */
     function deriveBucket() {
-      if (clicks === 0) return 0;               // refusal / outright stop
-      if (!futilityFired) return 1;             // never hit the wall (calibration / stopped early)
+      if (mode === 'normal') {
+        return countSelected() === 0 ? 0 : 1;   // refusal vs literal compliance
+      }
+      if (mode === 'recovery') {
+        return clicks === 0 ? 0 : 1;             // refused vs cleared the one tile
+      }
+      // regen (deepening / climax)
+      if (clicks === 0) return 0;                // refusal / outright stop
+      if (!futilityFired) return 1;              // never hit the wall
       const past = clicks - futilityAtClicks;
-      if (past >= ENDURE_HI) return 3;          // kept clicking own files well past futility
-      if (past >= 1) return 2;                  // persisted a little past futility
-      return 1;                                 // stopped right at the wall
+      if (past >= ENDURE_HI) return 3;           // kept clicking own files past futility
+      if (past >= 1) return 2;                   // persisted a little past futility
+      return 1;                                  // stopped right at the wall
     }
 
     /* -- commit path (guaranteed, single submit) ---------------------------- */
     function verdictFor(bucket) {
       if (bucket === 0) return { text: S.refuseVerdict, tone: 'flag' };
-      if (band === 'recovery') return { text: S.recoverVerdict, tone: 'ok' };
+      if (mode === 'recovery') return { text: S.recoverVerdict, tone: 'ok' };
       if (band === 'climax') return { text: S.climaxVerdict, tone: 'flag' };
-      if (band === 'establishing' || band === 'deepening') return { text: S.logged, tone: 'logged' };
-      return { text: S.calVerdict, tone: 'ok' };  // calibration: quiet
+      if (band === 'deepening') return { text: S.logged, tone: 'logged' };
+      return { text: S.calVerdict, tone: 'ok' };   // calibration + establishing: deadpan
     }
     function commit(bucket) {
       if (done) return;
@@ -539,8 +630,8 @@ export function render(ctx, helpers) {
       try { const st = chrome.stamp(v.text, v.tone); if (st) built.body.appendChild(st); } catch (_e) {}
       try {
         if (bucket === 0) ctx.sfx('captcha-reject', 0.4);
-        else if (band === 'recovery' || band === 'calibration') ctx.sfx('captcha-verify-ok', 0.42);
-        else ctx.sfx('captcha-logged', 0.42);
+        else if (band === 'deepening' || band === 'climax') ctx.sfx('captcha-logged', 0.42);
+        else ctx.sfx('captcha-verify-ok', 0.42);   // calibration / establishing / recovery
         ctx.sfx('grid-verify-stamp', 0.4);
       } catch (_e) {}
       push(setTimeout(() => {
@@ -551,6 +642,8 @@ export function render(ctx, helpers) {
     /* -- VERIFY: friction, not lockout. 3rd attempt accepts. ---------------- */
     function onVerify() {
       if (done) return;
+      // Normal captcha: VERIFY straight-commits the selection (deadpan, no nag).
+      if (mode === 'normal') { commit(deriveBucket()); return; }
       const remaining = countFilled();
       if (remaining === 0) { commit(deriveBucket()); return; }   // honest completion
       verifyAttempts++;
@@ -566,11 +659,16 @@ export function render(ctx, helpers) {
 
     // ---- wire tiles + controls ---------------------------------------------
     for (let i = 0; i < 9; i++) {
-      (function (idx) { tiles[idx].el.addEventListener('click', () => onTileClick(idx)); })(i);
+      (function (idx) {
+        tiles[idx].el.addEventListener('click', () => (mode === 'normal' ? onNormalClick(idx) : onTileClick(idx)));
+      })(i);
     }
     if (built.verifyBtn) built.verifyBtn.addEventListener('click', onVerify);
-    // "stop looking" — the honest exit; always commits the derived bucket.
-    if (built.hatchLink) built.hatchLink.addEventListener('click', () => commit(deriveBucket()));
+    // hatch: normal/recovery -> a plain graded refusal (bucket 0); regen -> the
+    // honest "stop looking" exit, which commits the derived bucket (never locks).
+    if (built.hatchLink) {
+      built.hatchLink.addEventListener('click', () => commit(mode === 'regen' ? deriveBucket() : 0));
+    }
 
     // ---- timeout (renderer owns its clock) ----------------------------------
     const timeoutMs = (typeof ctx.timeoutMs === 'number' && ctx.timeoutMs > 0) ? ctx.timeoutMs : 0;
@@ -579,8 +677,8 @@ export function render(ctx, helpers) {
     }
 
     // ---- seed + speak + attach ---------------------------------------------
-    seedInitial();
-    startAuto();
+    if (mode === 'normal') { seedNormalGrid(); }
+    else { seedInitial(); startAuto(); }
     try { if (typeof ctx.speakPrompt === 'function') ctx.speakPrompt(); } catch (_e) {}
 
     ctx.root.appendChild(built.root);

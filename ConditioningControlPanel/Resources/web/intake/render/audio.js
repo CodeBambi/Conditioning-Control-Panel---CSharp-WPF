@@ -388,17 +388,10 @@ export const SFX_MANIFEST_FALLBACK = Object.freeze({
   'captcha-verify-ok':  { variants: 1, gain: 0.45, loop: false }, // cap_transcribe: quiet green-check confirm on accept
   'captcha-reject':     { variants: 2, gain: 0.15, loop: false }, // cap_transcribe: control-word miss "try again" blip
   'captcha-logged':     { variants: 1, gain: 0.45, loop: false }, // cap_transcribe: LOGGED rubber-stamp thunk
-  'custody-stamp':      { variants: 1, gain: 0.5,  loop: false }, // cap_custody: heavy LOGGED thunk on VERIFY/AFFIRM
-  'custody-log-tick':   { variants: 2, gain: 0.15, loop: false }, // cap_custody: typewriter tick per behavioral-log line
-  'custody-deny-override': { variants: 1, gain: 0.15, loop: false }, // cap_custody: corrective click on DENY self-correct
-  'verify-tick':        { variants: 2, gain: 0.1,  loop: false }, // cap_stillness: ~1/s Turnstile progress heartbeat
-  'verify-rewind':      { variants: 2, gain: 0.15, loop: false }, // cap_stillness: reversing blip on "recalibrating"
-  'verify-resolve':     { variants: 1, gain: 0.35, loop: false }, // cap_stillness: settle chime on green-check completion
-  // ---- WAVE-5 CAPTCHA per-item wanted cues (banks/_staging/cap_{regen,segment,gaze}.json sfxWanted; forward-registered) ----
+  'verify-tick':        { variants: 2, gain: 0.1,  loop: false }, // cap_regen: ~1/s progress heartbeat during a regen clear
+  // ---- CAPTCHA per-item wanted cues (banks/_staging/cap_regen.json sfxWanted; forward-registered) ----
   'regen-swarm':        { variants: 2, gain: 0.3,  loop: false }, // cap_regen: climax auto-spawn onset swell
   'regen-loop':         { variants: 1, gain: 0.32, loop: false }, // cap_regen: "end of library reached. looping." seam click
-  'segment-flood':      { variants: 1, gain: 0.35, loop: false }, // cap_segment: climax flood-clear wash
-  'gaze-lock':          { variants: 2, gain: 0.3,  loop: false }, // cap_gaze: region-B target-lock click
 });
 
 /** The sfx manifest URL (resolved against this module; page-relative fallback). */

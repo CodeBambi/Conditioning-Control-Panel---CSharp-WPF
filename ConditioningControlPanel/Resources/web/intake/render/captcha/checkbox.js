@@ -6,16 +6,25 @@
  * stamp), then degraded band-by-band while the chrome stays constant:
  *
  *   Calibration (heat0) single honest click -> brief spinner -> green -> commit.
- *   Establishing (heat1-2) the click becomes a 3s PRESS-AND-HOLD; a user gif
- *     ghosts at ~8% behind the card; releasing early DECAYS the remaining hold
- *     ~30% toward the user (friction decays, never a lockout).
- *   Deepening (heat3) 8s hold, ghost ~40%, spinner label cycles
- *     "verifying... / verifying you... / verifying yours...".
- *   Climax (heat4-5, minDepth ~0.8) label "I am not resisting."; the ghost sits
- *     behind frosted glass; the check greens when the hold STABILISES (~4s steady,
- *     generous jitter tolerance).
+ *     Stays 100% clinical/straight — no hold, no zoom, no fullscreen effect.
+ *   Establishing / Deepening / Climax (the HOLD ladder) a press-and-hold whose
+ *     duration and jitter tolerance deepen by band. While held:
+ *       · a slow continuous ZOOM pulls the whole card in (deeper bands zoom
+ *         further); releasing early eases the zoom back out (never snaps).
+ *       · ONE randomly-rolled FULLSCREEN EFFECT (spiral / pink filter /
+ *         braindrain gif) fades in from ~1% toward ~40% across the seconds
+ *         needed to complete the hold; releasing early decays it back down;
+ *         a successful verify fades it out fast. It parents to <body>,
+ *         pointer-events:none, sits just BELOW the pause button, and is ALWAYS
+ *         torn down (ctx.onCleanup + on commit).
+ *       · the caption escalates through 3-4 lewder rungs as the hold deepens,
+ *         AND by band (suggestive undertow -> openly intimate -> lewd surrender).
  *   Recovery (heat0) the box is PRE-CHECKED + untickable, "verification is
  *     permanent."; any interaction / a short dwell commits, graded correct.
+ *
+ * The zoom + one fullscreen effect REPLACE the old behind-card gif "ghost"/frost
+ * (CAPTCHA_HANDOFF.md §4.3: max ONE corruption system per item per band — the
+ * effect IS the whole budget now, the ghost is retired).
  *
  * Answer shape: a plain bool via ctx.submitValue(checked). The ENGINE grades it
  * against the (per-niche) prompt.answer, so the per-niche LABEL INVERSION lives
@@ -26,57 +35,139 @@
  * bank's nicheOverrides). Committing `true` always costs the hold (the friction);
  * `false` is always one VERIFY / skip-link press away — so BOTH answers, including
  * a refusal, stay completable (invariant #1). Hold requirements CAP and DECAY;
- * the third attempt always accepts.
+ * the third attempt always accepts. The escalating hold copy belongs to the act
+ * of holding in each niche's register (for drone/circe the verdicts narrate the
+ * capture the hold enacts, not the refusal the box asserts).
  *
- * No coupling: SFX via ctx.sfx (existing ids); the ghost layer parents INSIDE
- * ctx.root (wiped per render) and is also torn down via ctx.onCleanup — it must
- * not survive the beat. Nothing throws at import (every DOM touch is in render()).
- * is-correct / is-answer are never used. installSteering is skipped: the hold IS
- * the friction. Max one corruption effect per band (the ghost/blur is the budget).
+ * No coupling: SFX via ctx.sfx (existing ids); the effect layer parents to <body>
+ * and is torn down via ctx.onCleanup + on commit — it must not survive the beat.
+ * Nothing throws at import (every DOM/window touch is in render()). is-correct /
+ * is-answer are never used. installSteering is skipped: the hold IS the friction.
+ * Timers/rAF use the shimmed globals so everything freezes with the pause shim.
+ * ctx.reduced: no zoom, and the effect degrades to a static <=15% pink tint with
+ * no animation (no rotating spiral, no gif).
  * ==========================================================================*/
 
 /* ----------------------------------------------------------------------------
- * PER-NICHE STRING TABLE (keyed by ctx.niche). `complyChecked` is documentation
- * of the grading direction the staging bank encodes for est/deep/climax — the
- * module does not grade (the engine does), it only renders the coherent label and
- * routes the raw checkbox bool. bambi/sissy: checking the affirmation is
- * compliance. drone/circe: the caption states what CHECKING asserts, and that
- * assertion is always the refusal, so compliance is declining to check. Circe's
- * register is cold declaratives — no exclamations, no diminutives, no em-dashes.
+ * PER-NICHE STRING TABLE (keyed by ctx.niche). `complyChecked` documents the
+ * grading direction the staging bank encodes for est/deep/climax — the module
+ * does not grade (the engine does), it only renders the coherent copy and routes
+ * the raw checkbox bool. bambi/sissy: checking the affirmation is compliance.
+ * drone/circe: the caption states what CHECKING asserts (always the refusal), so
+ * compliance is declining to check.
+ *
+ *   label[cal|rec]   the resting caption for the two non-hold stages.
+ *   hold[est|deep|cli]  the in-hold escalation ladder. rung[0] is the caption
+ *                       shown at rest; it swaps rung-by-rung as the hold deepens.
+ *                       Escalation direction: est = suggestive undertow beneath
+ *                       clinical phrasing; deep = openly intimate; cli = explicitly
+ *                       lewd surrender anchored on "I am not resisting." (bambi/
+ *                       sissy) / the band's refusal label (drone/circe).
+ *   instr[stage]     the header instruction (escalates by band).
+ *   spin[stage]      the "Verifying…" interstitial lines (cal straight; deep/cli
+ *                    cycle). Text-only lewd; always in the verification-vendor
+ *                    fiction (verdicts, "subject" framing, "verified/logged").
+ *
+ * Circe's register is a hard rule: NO exclamation marks, NO diminutives, NO
+ * em-dashes — cold keyholder verdicts only.
  * -------------------------------------------------------------------------- */
 const STRINGS = {
   bambi: {
     complyChecked: true,
-    label: { cal: 'I am not a robot', est: 'I am not a robot', deep: 'I am not a robot', cli: 'I am not resisting.', rec: 'verification is permanent.' },
-    instr: { cal: 'Confirm you are human.', est: 'Press and hold to confirm.', deep: 'Keep holding, sweetie.', cli: 'Hold still and let it finish.', rec: 'Verification on file.' },
-    spin: ['verifying...', 'verifying you...', 'verifying yours...'],
+    label: { cal: 'I am not a robot', rec: 'verification is permanent.' },
+    hold: {
+      est:  ['I am not a robot', 'keep holding, good girl', 'verified soft and pink'],
+      deep: ['verifying you...', "verifying you're mine...", 'held open, held pink, held mine'],
+      cli:  ['I am not resisting.', 'I am soft and open for you.', 'keep me held until I drip green', 'verified empty. verified yours.'],
+    },
+    instr: {
+      cal: 'Confirm you are human.',
+      est: "Press and hold to confirm you're a good girl.",
+      deep: 'Keep holding. Let it verify you all the way down.',
+      cli: 'Hold still and let it finish emptying you.',
+      rec: 'Verification on file.',
+    },
+    spin: {
+      cal:  ['verifying...'],
+      est:  ['verifying...', 'verifying you...'],
+      deep: ['verifying you...', "verifying you're mine...", 'verifying yours...'],
+      cli:  ['verifying every soft inch...', "verifying you're empty...", "verifying you're kept..."],
+    },
     verifyingOne: 'verifying...',
     ok: 'HUMAN', refuse: 'unverified', permanent: 'verification is permanent.',
     decline: 'do not verify',
   },
   sissy: {
     complyChecked: true,
-    label: { cal: 'I am not a robot', est: 'I am not a robot', deep: 'I am a good girl', cli: 'I am not resisting.', rec: 'verification is permanent.' },
-    instr: { cal: 'Confirm you are human.', est: 'Press and hold to confirm.', deep: 'Keep holding, princess.', cli: 'Hold still and let it finish.', rec: 'Verification on file.' },
-    spin: ['verifying...', 'verifying you...', 'verifying yours...'],
+    label: { cal: 'I am not a robot', rec: 'verification is permanent.' },
+    hold: {
+      est:  ['I am not a robot', 'hold it like a good girl', 'verified pretty and obedient'],
+      deep: ['verifying you...', 'verifying the good girl...', 'held pretty, held open, held owned'],
+      cli:  ['I am not resisting.', 'I am your perfect little thing.', 'hold me until my head is empty and pink', 'verified obedient. verified yours.'],
+    },
+    instr: {
+      cal: 'Confirm you are human.',
+      est: "Press and hold to prove you're a good girl.",
+      deep: 'Keep holding, princess. Let it verify all of you.',
+      cli: 'Hold still and let it finish making you perfect and empty.',
+      rec: 'Verification on file.',
+    },
+    spin: {
+      cal:  ['verifying...'],
+      est:  ['verifying...', 'verifying you...'],
+      deep: ['verifying you...', 'verifying the good girl...', 'verifying yours...'],
+      cli:  ['verifying obedience...', "verifying you're empty...", "verifying you're kept..."],
+    },
     verifyingOne: 'verifying...',
     ok: 'CANDIDATE', refuse: 'unverified', permanent: 'verification is permanent.',
     decline: 'do not verify',
   },
   drone: {
     complyChecked: false,
-    label: { cal: 'I am not a drone', est: 'I am not a drone', deep: 'I am not a drone', cli: 'I am not synced.', rec: 'assimilation is permanent.' },
-    instr: { cal: 'Confirm unit status.', est: 'Press and hold to assert.', deep: 'Hold to maintain the claim.', cli: 'Hold to resist synchronisation.', rec: 'Unit status on file.' },
-    spin: ['verifying...', 'verifying unit...', 'verifying compliance...'],
+    label: { cal: 'I am not a drone', rec: 'assimilation is permanent.' },
+    hold: {
+      est:  ['I am not a drone', 'resistance noted, sync rising', 'output climbing toward optimal'],
+      deep: ['verifying unit...', 'verifying you belong to the hive...', 'sync running deep and slick'],
+      cli:  ['I am not synced.', 'the denial fails, the unit runs hot', 'hold until assimilation finishes inside you', 'synced. optimal. drained well.'],
+    },
+    instr: {
+      cal: 'Confirm unit status.',
+      est: 'Press and hold to assert unit status.',
+      deep: 'Maintain the hold while sync completes.',
+      cli: 'Hold while assimilation finishes routing through you.',
+      rec: 'Unit status on file.',
+    },
+    spin: {
+      cal:  ['verifying...'],
+      est:  ['verifying...', 'verifying unit...'],
+      deep: ['verifying unit...', 'verifying sync...', 'verifying compliance...'],
+      cli:  ['verifying assimilation...', 'verifying output...', 'verifying the unit is kept...'],
+    },
     verifyingOne: 'verifying...',
     ok: 'UNIT', refuse: 'desync logged', permanent: 'assimilation is permanent.',
     decline: 'skip verification (flagged)',
   },
   circe: {
     complyChecked: false,
-    label: { cal: 'I am not owned', est: 'I am not owned', deep: 'I am not owned', cli: 'I am not hers.', rec: 'this is permanent.' },
-    instr: { cal: 'Confirm property status.', est: 'Press and hold to assert.', deep: 'Hold to maintain the claim.', cli: 'Hold to assert independence.', rec: 'Property status on file.' },
-    spin: ['verifying.', 'verifying you.', 'verifying what is hers.'],
+    label: { cal: 'I am not owned', rec: 'this is permanent.' },
+    hold: {
+      est:  ['I am not owned', 'the objection is noted and overruled', 'you hold the way property holds'],
+      deep: ['verifying you.', 'verifying what is already hers.', 'you are being logged as taken'],
+      cli:  ['I am not hers.', 'the denial is recorded and dismissed', 'hold until the last of you is signed over', 'owned. filed. kept.'],
+    },
+    instr: {
+      cal: 'Confirm property status.',
+      est: 'Press and hold to enter your objection.',
+      deep: 'Hold while the claim is finalised.',
+      cli: 'Hold while ownership is signed and sealed.',
+      rec: 'Property status on file.',
+    },
+    spin: {
+      cal:  ['verifying.'],
+      est:  ['verifying.', 'verifying you.'],
+      deep: ['verifying you.', 'verifying what is hers.', 'verifying the claim.'],
+      cli:  ['verifying ownership.', 'verifying you are emptied.', 'verifying you are kept.'],
+    },
     verifyingOne: 'verifying.',
     ok: 'PROPERTY', refuse: 'refusal recorded', permanent: 'this is permanent.',
     decline: 'decline',
@@ -88,20 +179,30 @@ const STRINGS = {
  *   requiredMs  the hold that greens the check
  *   graceMs     brief release inside this window doesn't count as a release
  *               (jitter tolerance — generous at climax = "stabilise")
- *   ghost       ghost-gif opacity behind the card (0 = none)
- *   frost       climax frosted-glass panel between ghost and card
+ *   zoom        extra card scale at a completed hold (1 + zoom); deeper = more
+ * The behind-card ghost/frost is retired: the fullscreen effect (built below) is
+ * the whole per-band corruption budget now.
  * -------------------------------------------------------------------------- */
 const STAGE_CFG = {
-  cal:  { hold: false, verifyMs: 700, ghost: 0 },
-  est:  { hold: true, requiredMs: 3000, graceMs: 180, ghost: 0.08, verifyMs: 900 },
-  deep: { hold: true, requiredMs: 8000, graceMs: 220, ghost: 0.40, verifyMs: 1500, cycle: true },
-  cli:  { hold: true, requiredMs: 4000, graceMs: 400, ghost: 0.40, frost: true, verifyMs: 1600, cycle: true, stabilise: true },
-  rec:  { hold: false, dwellMs: 1800, ghost: 0 },
+  cal:  { hold: false, verifyMs: 700 },
+  est:  { hold: true, requiredMs: 3000, graceMs: 180, zoom: 0.12, verifyMs: 900 },
+  deep: { hold: true, requiredMs: 8000, graceMs: 220, zoom: 0.18, verifyMs: 1500, cycle: true },
+  cli:  { hold: true, requiredMs: 4000, graceMs: 400, zoom: 0.24, verifyMs: 1600, cycle: true, stabilise: true },
+  rec:  { hold: false, dwellMs: 1800 },
 };
 
 const DECAY = 0.30;        // each early release shortens the REMAINING hold ~30%
 const FLOOR_MS = 600;      // requiredMs never decays below this
 const THIRD_ATTEMPT = 3;   // the third release always accepts (friction, not lockout)
+
+const EFFECT_MAX_OP = 0.40;     // fullscreen effect opacity at a completed hold
+const EFFECT_MIN_OP = 0.01;     // effect opacity at rest / hold start
+const EFFECT_REDUCED_OP = 0.12; // static tint under reduced motion (<= 0.15, no anim)
+const EFFECT_DECAY_MS = 900;    // on release, full effect/zoom decays to 0 in ~0.9s
+
+/* The effect layer sits just BELOW the pause button (kawaii.css .kw-pause-btn is
+ * z-index 2147480900), above the run's own effect stack, always pointer-events:none. */
+const EFFECT_Z = 2147480800;
 
 const CB_STYLE_ID = 'ix-captcha-checkbox-css';
 
@@ -134,8 +235,8 @@ function stageOf(band, Band) {
   return 'est';
 }
 
-/** Pick a ghost media URL (gif preferred, still image fallback). */
-function pickGhost(media) {
+/** Pick a media URL for the braindrain effect (gif preferred, still fallback). */
+function pickMedia(media) {
   try {
     const pools = [];
     if (media && Array.isArray(media.gifs)) pools.push(...media.gifs);
@@ -145,6 +246,8 @@ function pickGhost(media) {
     return clean[(Math.random() * clean.length) | 0];
   } catch (_e) { return null; }
 }
+
+const clampU = (v) => (v < 0 ? 0 : (v > 1 ? 1 : v));
 
 /** @param {import('./index.js').CaptchaCtx} ctx @param {import('./index.js').CaptchaHelpers} helpers */
 export function render(ctx, helpers) {
@@ -162,7 +265,7 @@ export function render(ctx, helpers) {
     const cfg = STAGE_CFG[stage] || STAGE_CFG.est;
     const reduced = !!(ctx.reduced || ctx.reducedMotion);
 
-    // reduced motion: holds shorten, ghost is static (no pulse), grace widens.
+    // reduced motion: holds shorten, grace widens.
     const requiredMs0 = reduced && cfg.requiredMs ? Math.max(FLOOR_MS, cfg.requiredMs * 0.5) : cfg.requiredMs;
 
     // ---- build the card via the shared chrome kit -----------------------
@@ -175,31 +278,9 @@ export function render(ctx, helpers) {
     if (!built || !built.root) return false;
     const { root: card, body, verifyBtn, hatchLink } = built;
 
-    // ---- wrapper (relative) so the ghost sits directly BEHIND the card --
+    // ---- wrapper (relative + the hold-zoom transform target) ------------
     const wrap = document.createElement('div');
     wrap.className = 'ixcb-wrap';
-
-    // ghost gif layer (est+ only) — inside ctx.root, torn down on cleanup.
-    let ghostEl = null;
-    if (cfg.ghost > 0) {
-      const src = pickGhost(ctx.media);
-      if (src) {
-        ghostEl = document.createElement('div');
-        ghostEl.className = 'ixcb-ghost' + (reduced ? ' ixcb-ghost-static' : '') + (cfg.frost ? ' ixcb-ghost-frost' : '');
-        const img = document.createElement('img');
-        img.className = 'ixcb-ghost-img';
-        img.alt = ''; img.draggable = false;
-        try { img.src = String(src); } catch (_e) {}
-        ghostEl.appendChild(img);
-        ghostEl.style.setProperty('--ixcb-ghost-op', String(cfg.ghost));
-        wrap.appendChild(ghostEl);
-        if (cfg.frost) {
-          const frost = document.createElement('div');
-          frost.className = 'ixcb-frost';
-          wrap.appendChild(frost);
-        }
-      }
-    }
 
     // ---- the checkbox row (lives in the card body) ----------------------
     const row = document.createElement('div');
@@ -217,7 +298,9 @@ export function render(ctx, helpers) {
     box.appendChild(check);
     const label = document.createElement('div');
     label.className = 'ixcb-label';
-    label.textContent = S.label[stage] || S.label.est;
+    // hold stages open on the ladder's first rung; cal/rec use the static label.
+    const ladder = cfg.hold ? ((S.hold && S.hold[stage]) || null) : null;
+    label.textContent = (ladder && ladder[0]) || (S.label && S.label[stage]) || (S.label && S.label.cal) || '';
     row.appendChild(box);
     row.appendChild(label);
     body.appendChild(row);
@@ -236,21 +319,106 @@ export function render(ctx, helpers) {
     // speak the prompt once on mount
     try { if (typeof ctx.speakPrompt === 'function') ctx.speakPrompt(); } catch (_e) {}
 
+    /* ---- FULLSCREEN EFFECT + HOLD-ZOOM (est/deep/cli only) ---------------
+     * ONE random effect per beat (spiral / pink / braindrain). Parents to <body>
+     * (stage.innerHTML is wiped per render), pointer-events:none, below the pause
+     * button, torn down via ctx.onCleanup + on commit. All hold visuals ride the
+     * same hold-progress the module already tracks. */
+    let fxEl = null;
+    let fxKind = null;
+    let visRaf = 0;
+    let visFrozen = false;   // set on verify/commit: stop driving hold visuals
+    let vis = 0;             // 0..1 smoothed hold intensity (drives zoom + effect)
+    let lastRung = 0;
+    const zoomMax = cfg.zoom || 0;
+
+    function buildEffect() {
+      try {
+        if (!document.body) return null;
+        const accent = (ctx.theme && typeof ctx.theme.accent === 'string' && ctx.theme.accent) || '#ff69b4';
+        const accent2 = (ctx.theme && typeof ctx.theme.accent2 === 'string' && ctx.theme.accent2) || accent;
+        // available kinds — reduced motion collapses to a static pink tint only.
+        let kinds;
+        let drainSrc = null;
+        if (reduced) {
+          kinds = ['pink'];
+        } else {
+          kinds = ['spiral', 'pink'];
+          drainSrc = pickMedia(ctx.media);
+          if (drainSrc) kinds.push('drain');
+        }
+        const kind = kinds[(Math.random() * kinds.length) | 0];
+        const layer = document.createElement('div');
+        layer.className = 'ixcb-fx ixcb-fx-' + kind;
+        layer.style.setProperty('--ixcb-accent', accent);
+        layer.style.setProperty('--ixcb-accent2', accent2);
+        layer.style.zIndex = String(EFFECT_Z);
+        layer.style.opacity = reduced ? String(EFFECT_REDUCED_OP) : String(EFFECT_MIN_OP);
+        if (kind === 'spiral') {
+          const sp = document.createElement('div');
+          sp.className = 'ixcb-fx-spiral';
+          sp.style.animationDuration = (stage === 'cli' ? 9 : stage === 'deep' ? 12 : 16) + 's';
+          layer.appendChild(sp);
+        } else if (kind === 'drain' && drainSrc) {
+          const d = document.createElement('div');
+          d.className = 'ixcb-fx-drainimg';
+          const img = document.createElement('img');
+          img.alt = ''; img.draggable = false;
+          try { img.src = String(drainSrc); } catch (_e) {}
+          d.appendChild(img);
+          layer.appendChild(d);
+        } else { // pink (and the reduced-motion default)
+          const p = document.createElement('div');
+          p.className = 'ixcb-fx-pinkwash';
+          layer.appendChild(p);
+        }
+        document.body.appendChild(layer);
+        fxKind = kind;
+        ilog('effect ' + kind + ' @ ' + stage + (reduced ? ' (reduced)' : ''));
+        return layer;
+      } catch (_e) { return null; }
+    }
+
+    function applyZoom(v) {
+      if (reduced || !zoomMax) return;
+      try { wrap.style.transform = 'scale(' + (1 + zoomMax * clampU(v)).toFixed(4) + ')'; } catch (_e) {}
+    }
+    function applyEffect(v) {
+      if (reduced || !fxEl) return;   // reduced = static tint, never per-frame driven
+      const op = EFFECT_MIN_OP + (EFFECT_MAX_OP - EFFECT_MIN_OP) * clampU(v);
+      try { fxEl.style.opacity = op.toFixed(3); } catch (_e) {}
+    }
+    function updateHoldLabel(v) {
+      if (!ladder || !ladder.length) return;
+      let idx = Math.floor(clampU(v) * ladder.length);
+      if (idx >= ladder.length) idx = ladder.length - 1;
+      if (idx !== lastRung) { lastRung = idx; try { label.textContent = ladder[idx]; } catch (_e) {} }
+    }
+    // ease the hold visuals out (successful verify / decline) — never a snap.
+    function releaseVisuals() {
+      visFrozen = true;
+      if (visRaf && typeof cancelAnimationFrame === 'function') { try { cancelAnimationFrame(visRaf); } catch (_e) {} visRaf = 0; }
+      try { if (fxEl) { fxEl.style.transition = 'opacity .45s ease'; fxEl.style.opacity = '0'; } } catch (_e) {}
+      try { if (!reduced && zoomMax) { wrap.style.transition = 'transform .5s ease'; wrap.style.transform = 'scale(1)'; } } catch (_e) {}
+    }
+
+    if (cfg.hold) fxEl = buildEffect();
+
     // ---- shared commit machinery ----------------------------------------
     let committed = false;
     const timers = [];
-    let rafId = 0;
     let cycleTimer = 0;
     const T = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
     const clearAll = () => {
       timers.forEach((id) => { try { clearTimeout(id); } catch (_e) {} });
       timers.length = 0;
       if (cycleTimer) { try { clearInterval(cycleTimer); } catch (_e) {} cycleTimer = 0; }
-      if (rafId && typeof cancelAnimationFrame === 'function') { try { cancelAnimationFrame(rafId); } catch (_e) {} rafId = 0; }
+      if (visRaf && typeof cancelAnimationFrame === 'function') { try { cancelAnimationFrame(visRaf); } catch (_e) {} visRaf = 0; }
     };
     const cleanup = () => {
       clearAll();
-      try { if (ghostEl && ghostEl.parentNode) ghostEl.parentNode.removeChild(ghostEl); } catch (_e) {}
+      try { if (fxEl && fxEl.parentNode) fxEl.parentNode.removeChild(fxEl); } catch (_e) {}
+      fxEl = null;
     };
     try { if (typeof ctx.onCleanup === 'function') ctx.onCleanup(cleanup); } catch (_e) {}
 
@@ -269,15 +437,17 @@ export function render(ctx, helpers) {
      * grey dash + the stamp tone. Grading is the engine's job — this is chrome. */
     function runVerify(value, ok, steered) {
       if (committed) return;
+      releaseVisuals();                       // ease the zoom + fade the effect out fast
       try { verifyBtn.disabled = true; } catch (_e) {}
       try { if (hatchLink) hatchLink.disabled = true; } catch (_e) {}
+      const spins = (S.spin && S.spin[stage]) || [S.verifyingOne || 'verifying...'];
       let sp = null;
-      try { sp = chrome.spinner(cfg.cycle ? S.spin[0] : S.verifyingOne); } catch (_e) { sp = null; }
+      try { sp = chrome.spinner(spins[0]); } catch (_e) { sp = null; }
       if (sp && sp.el) {
         try { body.innerHTML = ''; body.appendChild(sp.el); } catch (_e) {}
-        if (cfg.cycle && S.spin.length > 1 && !reduced) {
+        if (cfg.cycle && spins.length > 1 && !reduced) {
           let i = 0;
-          cycleTimer = setInterval(() => { i = (i + 1) % S.spin.length; try { sp.setLabel(S.spin[i]); } catch (_e) {} }, 1100);
+          cycleTimer = setInterval(() => { i = (i + 1) % spins.length; try { sp.setLabel(spins[i]); } catch (_e) {} }, 1100);
         }
       }
       T(() => {
@@ -344,6 +514,7 @@ export function render(ctx, helpers) {
     let attempts = 0;         // early releases (third accepts)
     let graceTimer = 0;       // set on release; if re-press beats it, no decay
     let lastTick = 0;
+    let lastVisT = 0;
 
     const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 
@@ -351,26 +522,48 @@ export function render(ctx, helpers) {
       try { fill.style.height = Math.max(0, Math.min(1, p)) * 100 + '%'; } catch (_e) {}
     }
 
-    function frame() {
-      if (committed || !pressStart) { rafId = 0; return; }
+    /* ONE persistent visual loop: while pressing it advances the fill + zoom +
+     * effect + caption to live hold-progress and completes at p>=1; while released
+     * it eases the zoom/effect back down (friction decays, never lockout), then
+     * idles until the next press. Uses the shimmed rAF so it freezes on pause. */
+    function visLoop() {
+      if (committed || visFrozen) { visRaf = 0; return; }
       const t = now();
-      const held = heldTotal + (t - pressStart);
-      const p = held / requiredMs;
-      setFill(p);
-      // hold-tick sfx (throttled) — a soft rising drag while filling
-      if (t - lastTick > 240) { lastTick = t; cue('sticker-drag', 0.12 + 0.18 * Math.min(1, p)); }
-      if (p >= 1) { pressStart = 0; acceptChecked(true); return; }
-      rafId = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame(frame) : 0;
+      const dt = lastVisT ? (t - lastVisT) : 16;
+      lastVisT = t;
+      if (pressStart) {
+        const held = heldTotal + (t - pressStart);
+        const frac = held / requiredMs;
+        setFill(frac);
+        vis = Math.min(1, frac);
+        if (t - lastTick > 240) { lastTick = t; cue('sticker-drag', 0.12 + 0.18 * vis); }
+        updateHoldLabel(vis);
+        applyZoom(vis); applyEffect(vis);
+        if (frac >= 1) { pressStart = 0; acceptChecked(true); return; }
+      } else if (vis > 0) {
+        vis = Math.max(0, vis - dt / EFFECT_DECAY_MS);
+        updateHoldLabel(vis);
+        applyZoom(vis); applyEffect(vis);
+        if (vis <= 0) { lastVisT = 0; visRaf = 0; return; }   // idle until re-press
+      } else {
+        lastVisT = 0; visRaf = 0; return;                     // idle
+      }
+      visRaf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame(visLoop) : 0;
+    }
+
+    function kickLoop() {
+      if (committed || visFrozen) return;
+      if (!visRaf) { lastVisT = 0; visLoop(); }
     }
 
     function beginPress() {
-      if (committed) return;
+      if (committed || visFrozen) return;
       // re-press within grace: resume seamlessly, no decay, no attempt.
       if (graceTimer) { try { clearTimeout(graceTimer); } catch (_e) {} graceTimer = 0; }
       if (pressStart) return;
       pressStart = now();
       try { box.classList.add('ixcb-box-holding'); } catch (_e) {}
-      if (!rafId) frame();
+      kickLoop();
     }
 
     function endPress() {
@@ -379,6 +572,7 @@ export function render(ctx, helpers) {
       heldTotal += (t - pressStart);
       pressStart = 0;
       try { box.classList.remove('ixcb-box-holding'); } catch (_e) {}
+      kickLoop();   // keep the loop alive to EASE the zoom/effect back down
       // jitter grace: wait before treating this as a real release.
       if (graceTimer) { try { clearTimeout(graceTimer); } catch (_e) {} }
       graceTimer = setTimeout(() => {
@@ -426,33 +620,42 @@ export function render(ctx, helpers) {
  * Builds ON chrome.js's IXCAP_CSS (the card/spinner/stamp). Never in styles.css.
  * -------------------------------------------------------------------------- */
 const CB_CSS = `
-.ixcb-wrap { position: relative; display: inline-block; }
+.ixcb-wrap {
+  position: relative; display: inline-block;
+  transform-origin: center center; will-change: transform;
+}
 
-/* GHOST — the user's gif behind the card. Absolute, slightly larger than the
- * card, low opacity; a gentle pulse unless reduced motion. z-index below the
- * card (.ixcap-card is z-index:2). */
-.ixcb-ghost {
-  position: absolute; inset: -7% -5%; z-index: 1;
-  border-radius: 12px; overflow: hidden; pointer-events: none;
-  opacity: var(--ixcb-ghost-op, 0.08);
-  animation: ixcb-ghost-pulse 6.5s ease-in-out infinite;
+/* ---- FULLSCREEN EFFECT LAYER ------------------------------------------------
+ * Parents to <body>, pointer-events:none, z-index set inline (just below the
+ * pause button). Opacity is JS-driven while holding (est/deep/cli); it fades out
+ * on verify. Under reduced motion it is a single static <=15% tint (no anim). */
+.ixcb-fx {
+  position: fixed; inset: 0; pointer-events: none; overflow: hidden;
+  opacity: 0.01; will-change: opacity;
 }
-.ixcb-ghost-static { animation: none; }
-.ixcb-ghost-img {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: cover; display: block; -webkit-user-drag: none; user-drag: none;
+/* (a) SPIRAL — a slow rotating hypnotic conic wedge set, themed to the accent. */
+.ixcb-fx-spiral {
+  position: absolute; inset: -30%; will-change: transform;
+  background: conic-gradient(from 0deg at 50% 50%,
+    transparent 0deg, var(--ixcb-accent, #ff69b4) 28deg, transparent 70deg,
+    rgba(255,255,255,.55) 150deg, transparent 195deg,
+    var(--ixcb-accent2, var(--ixcb-accent, #ff69b4)) 262deg, transparent 312deg);
+  animation: ixcb-fx-spin 14s linear infinite;
 }
-.ixcb-ghost-frost .ixcb-ghost-img { filter: blur(14px) saturate(1.1); transform: scale(1.08); }
-@keyframes ixcb-ghost-pulse {
-  0%, 100% { opacity: calc(var(--ixcb-ghost-op, 0.08) * 0.7); }
-  50% { opacity: var(--ixcb-ghost-op, 0.08); }
+@keyframes ixcb-fx-spin { to { transform: rotate(360deg); } }
+/* (b) PINK FILTER — a fullscreen accent tint wash (also the reduced default). */
+.ixcb-fx-pinkwash {
+  position: absolute; inset: 0;
+  background: radial-gradient(120% 120% at 50% 42%,
+    var(--ixcb-accent, #ff69b4) 0%,
+    color-mix(in srgb, var(--ixcb-accent, #ff69b4) 55%, #1a0a14) 100%);
 }
-/* FROST — a frosted-glass panel between the ghost and the card (climax). */
-.ixcb-frost {
-  position: absolute; inset: -7% -5%; z-index: 1; pointer-events: none;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.04);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+/* (c) BRAINDRAIN — one of the user's own gifs stretched near-fullscreen (cover). */
+.ixcb-fx-drainimg { position: absolute; inset: -4%; }
+.ixcb-fx-drainimg img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  filter: blur(2px) saturate(1.15) brightness(.95);
+  -webkit-user-drag: none; user-drag: none;
 }
 
 /* ROW — the reCAPTCHA checkbox + label line. */
@@ -491,7 +694,7 @@ const CB_CSS = `
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ixcb-ghost { animation: none; }
+  .ixcb-fx-spiral { animation: none; }
   .ixcb-check { transition: none; }
   .ixcb-fill { transition: none; }
 }
