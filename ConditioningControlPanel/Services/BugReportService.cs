@@ -39,13 +39,13 @@ namespace ConditioningControlPanel.Services
         // [WATCHDOG] history out of every report because a relaunch writes far more startup
         // chatter than MaxAppLogLines. Scan a much wider tail and keep only the marker lines so
         // the resource/hang timeline survives even when the plain tail is all startup noise.
-        private const int MaxDiagScanLines = 2000;
-        private const int MaxDiagMatches = 40;      // most-recent matches kept
-        private const int MaxDiagSectionChars = 16_000; // GitHub issue-body budget guard
+        internal const int MaxDiagScanLines = 2000;
+        internal const int MaxDiagMatches = 40;      // most-recent matches kept
+        internal const int MaxDiagSectionChars = 16_000; // GitHub issue-body budget guard
         // Grep-friendly markers written to the rolling app log. [RES]/[WATCHDOG] come from
         // UiHangWatchdog and are the ones that actually appear today; the video markers are
         // kept defensively (VideoDiag writes its own file, already appended in full above).
-        private static readonly string[] DiagMarkers =
+        internal static readonly string[] DiagMarkers =
             { "[RES]", "[WATCHDOG]", "[BLUR]", "[VIDEO]", "[VideoDiag]" };
 
         private readonly HttpClient _httpClient;
@@ -474,34 +474,55 @@ namespace ConditioningControlPanel.Services
             {
                 var raw = TryReadRecentAppLog(MaxDiagScanLines);
                 if (string.IsNullOrEmpty(raw)) return string.Empty;
-
-                var matches = new List<string>();
-                foreach (var rawLine in raw.Split('\n'))
-                {
-                    var line = rawLine.TrimEnd('\r');
-                    for (int i = 0; i < DiagMarkers.Length; i++)
-                    {
-                        if (line.Contains(DiagMarkers[i], StringComparison.Ordinal))
-                        {
-                            matches.Add(line);
-                            break;
-                        }
-                    }
-                }
-                if (matches.Count == 0) return string.Empty;
-
-                int start = Math.Max(0, matches.Count - MaxDiagMatches);
-                var section = string.Join(Environment.NewLine, matches.GetRange(start, matches.Count - start));
-                // Cap the section so it can't blow the GitHub issue-body budget; keep the newest.
-                if (section.Length > MaxDiagSectionChars)
-                    section = section.Substring(section.Length - MaxDiagSectionChars);
-                return section;
+                return BuildSampledDiagnostics(raw.Split('\n'));
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("[BugReport] sampled diagnostics read failed: {Msg}", ex.Message);
                 return string.Empty;
             }
+        }
+
+        /// <summary>
+        /// Pure core of <see cref="CollectSampledDiagnostics"/>: given the app-log lines (most recent
+        /// last), scan the last <see cref="MaxDiagScanLines"/> of them, keep only lines containing a
+        /// <see cref="DiagMarkers"/> marker, retain the <see cref="MaxDiagMatches"/> most-recent
+        /// matches in chronological order, and cap the joined section at <see cref="MaxDiagSectionChars"/>
+        /// (keeping the newest bytes). Returns an empty string when nothing matches. Never throws.
+        /// Extracted so the sampling contract can be unit-tested headlessly; the production reader
+        /// (<see cref="CollectSampledDiagnostics"/>) delegates here after loading the wide tail.
+        /// </summary>
+        internal static string BuildSampledDiagnostics(IEnumerable<string> lines)
+        {
+            if (lines == null) return string.Empty;
+            var all = lines as IReadOnlyList<string> ?? new List<string>(lines);
+            if (all.Count == 0) return string.Empty;
+
+            // Scan only the last MaxDiagScanLines lines (mirrors the wide-tail read, which already
+            // bounds the input in production — a no-op there, load-bearing for callers that pass more).
+            int scanStart = Math.Max(0, all.Count - MaxDiagScanLines);
+
+            var matches = new List<string>();
+            for (int idx = scanStart; idx < all.Count; idx++)
+            {
+                var line = (all[idx] ?? string.Empty).TrimEnd('\r');
+                for (int i = 0; i < DiagMarkers.Length; i++)
+                {
+                    if (line.Contains(DiagMarkers[i], StringComparison.Ordinal))
+                    {
+                        matches.Add(line);
+                        break;
+                    }
+                }
+            }
+            if (matches.Count == 0) return string.Empty;
+
+            int start = Math.Max(0, matches.Count - MaxDiagMatches);
+            var section = string.Join(Environment.NewLine, matches.GetRange(start, matches.Count - start));
+            // Cap the section so it can't blow the GitHub issue-body budget; keep the newest.
+            if (section.Length > MaxDiagSectionChars)
+                section = section.Substring(section.Length - MaxDiagSectionChars);
+            return section;
         }
 
         /// <summary>

@@ -176,15 +176,10 @@ public static class UiHangWatchdog
                 return;
             }
 
-            App.Logger?.Information(
-                "[RES] user={User} (+{DUser}) gdi={Gdi} (+{DGdi}) handles={Handles} (+{DHandles}) threads={Threads} (+{DThreads}) privMB={PrivMB:F0} (+{DPrivMB:F0}) wsMB={WsMB:F0} (+{DWsMB:F0}) gcMB={GcMB:F1} (+{DGcMB:F1})",
-                user, (long)user - _firstUser,
-                gdi, (long)gdi - _firstGdi,
-                handles, handles - _firstHandles,
-                threads, threads - _firstThreads,
-                priv / MB, (priv - _firstPriv) / MB,
-                ws / MB, (ws - _firstWs) / MB,
-                gcHeap / MB, (gcHeap - _firstGcHeap) / MB);
+            App.Logger?.Information(FormatResLine(
+                user, gdi, handles, threads, priv, ws, gcHeap,
+                _firstUser, _firstGdi, _firstHandles, _firstThreads,
+                _firstPriv, _firstWs, _firstGcHeap));
 
             uint worst = Math.Max(user, gdi);
             if (worst >= USER_GDI_CRITICAL)
@@ -204,6 +199,31 @@ public static class UiHangWatchdog
             }
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Render the delta [RES] line: current USER/GDI/handle/thread counts and MB-scaled private
+    /// bytes / working set / managed heap, each with the signed delta from the session's first
+    /// sample. privMB/wsMB use F0, gcMB uses F1 (mirrors the Serilog template rendered to the log
+    /// file). Invariant-culture so the grep-able text is deterministic. Extracted for headless
+    /// regression tests — a monotonic climb in these deltas is how a #634-class leak is spotted.
+    /// </summary>
+    internal static string FormatResLine(
+        uint user, uint gdi, int handles, int threads, long priv, long ws, long gcHeap,
+        uint firstUser, uint firstGdi, int firstHandles, int firstThreads,
+        long firstPriv, long firstWs, long firstGcHeap)
+    {
+        var c = System.Globalization.CultureInfo.InvariantCulture;
+        return string.Format(c,
+            "[RES] user={0} (+{1}) gdi={2} (+{3}) handles={4} (+{5}) threads={6} (+{7}) " +
+            "privMB={8:F0} (+{9:F0}) wsMB={10:F0} (+{11:F0}) gcMB={12:F1} (+{13:F1})",
+            user, (long)user - firstUser,
+            gdi, (long)gdi - firstGdi,
+            handles, handles - firstHandles,
+            threads, threads - firstThreads,
+            priv / MB, (priv - firstPriv) / MB,
+            ws / MB, (ws - firstWs) / MB,
+            gcHeap / MB, (gcHeap - firstGcHeap) / MB);
     }
 
     [DllImport("user32.dll", SetLastError = true)]
