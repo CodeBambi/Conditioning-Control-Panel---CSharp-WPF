@@ -9,7 +9,8 @@ namespace ConditioningControlPanel.Services
 {
     /// <summary>
     /// Temporarily overrides the Windows desktop wallpaper with random images
-    /// from the user's assets/wallpapers folder. Restores the original on deactivate/dispose.
+    /// from the user's chosen wallpapers folder (settings.WallpaperSourceFolder, or the
+    /// default assets/wallpapers folder). Restores the original on deactivate/dispose.
     /// </summary>
     public class WallpaperService : IDisposable
     {
@@ -61,8 +62,12 @@ namespace ConditioningControlPanel.Services
                     SystemParametersInfo(SPI_GETDESKWALLPAPER, sb.Capacity, sb, 0);
                     _originalWallpaperPath = sb.ToString();
 
-                    // Scan wallpapers folder
-                    var wallpapersDir = Path.Combine(App.EffectiveAssetsPath, "wallpapers");
+                    // Scan wallpapers folder — user-chosen folder if set, else the default
+                    // assets/wallpapers folder under the effective assets path.
+                    var custom = App.Settings?.Current?.WallpaperSourceFolder;
+                    var wallpapersDir = !string.IsNullOrWhiteSpace(custom) && Directory.Exists(custom)
+                        ? custom
+                        : Path.Combine(App.EffectiveAssetsPath, "wallpapers");
                     if (!Directory.Exists(wallpapersDir))
                     {
                         App.Logger?.Warning("[Wallpaper] Wallpapers directory not found: {Dir}", wallpapersDir);

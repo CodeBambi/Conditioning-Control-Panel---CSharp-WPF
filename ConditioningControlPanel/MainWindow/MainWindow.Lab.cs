@@ -398,44 +398,6 @@ namespace ConditioningControlPanel
             App.PopQuiz?.TestPopQuiz();
         }
 
-        // ============ WALLPAPER OVERRIDE HANDLERS ============
-
-        internal void ChkWallpaperEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (App.Settings?.Current == null || App.Wallpaper == null) return;
-
-            var enabled = LabTab.ChkWallpaperEnabled.IsChecked == true;
-            if (enabled)
-            {
-                if (!App.Wallpaper.Activate())
-                {
-                    // No images found — uncheck and notify
-                    LabTab.ChkWallpaperEnabled.IsChecked = false;
-                    App.Settings.Current.WallpaperEnabled = false;
-                    MessageBox.Show(Loc.Get("msg_no_wallpaper_images"), "Wallpaper Override",
-                        MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
-                LabTab.TxtCurrentWallpaper.Text = App.Wallpaper.CurrentFilename;
-                LabTab.TxtCurrentWallpaper.Visibility = Visibility.Visible;
-                LabTab.BtnShuffleWallpaper.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                App.Wallpaper.Deactivate();
-                LabTab.TxtCurrentWallpaper.Visibility = Visibility.Collapsed;
-                LabTab.BtnShuffleWallpaper.Visibility = Visibility.Collapsed;
-            }
-            App.Settings.Current.WallpaperEnabled = enabled;
-        }
-
-        internal void BtnShuffleWallpaper_Click(object sender, RoutedEventArgs e)
-        {
-            if (App.Wallpaper == null) return;
-            App.Wallpaper.Shuffle();
-            LabTab.TxtCurrentWallpaper.Text = App.Wallpaper.CurrentFilename;
-        }
-
         private void OnLockdownActivated()
         {
             Dispatcher.BeginInvoke(() =>

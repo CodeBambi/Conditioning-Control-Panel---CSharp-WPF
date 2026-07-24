@@ -62,11 +62,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnQuickStartChaos_Click(sender, e);
         }
-        private void BtnShuffleWallpaper_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnShuffleWallpaper_Click(sender, e);
-        }
         private void BtnStartChaos_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -143,11 +138,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkRestrictGazeToCalScreen_Changed(sender, e);
-        }
-        private void ChkWallpaperEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkWallpaperEnabled_Changed(sender, e);
         }
         private void ChkWebcamDebugCursor_Changed(object sender, RoutedEventArgs e)
         {

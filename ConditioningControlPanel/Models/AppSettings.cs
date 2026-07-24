@@ -4052,6 +4052,18 @@ namespace ConditioningControlPanel.Models
             set { _wallpaperEnabled = value; OnPropertyChanged(); }
         }
 
+        private string _wallpaperSourceFolder = "";
+        /// <summary>
+        /// Folder the wallpaper takeover pulls images from. Empty = default to the
+        /// assets/wallpapers folder under EffectiveAssetsPath.
+        /// </summary>
+        [JsonProperty]
+        public string WallpaperSourceFolder
+        {
+            get => _wallpaperSourceFolder;
+            set { _wallpaperSourceFolder = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Patreon Integration

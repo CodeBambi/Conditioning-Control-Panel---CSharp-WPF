@@ -242,7 +242,24 @@
                                     <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_lock_cards}"><TextBlock x:Name="TxtAutoLockCards" x:FieldModifier="internal" Text="{loc:Str label_lock_cards}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyLockCard" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                     <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_bouncing_text}"><TextBlock x:Name="TxtAutoBouncing" x:FieldModifier="internal" Text="{loc:Str label_bouncing}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyBouncingText" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                     <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_mind_wipe}"><TextBlock x:Name="TxtAutoMindwipe" x:FieldModifier="internal" Text="{loc:Str label_mindwipe}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyMindWipe" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_wallpaper}"><TextBlock Text="{loc:Str label_autonomy_wallpaper}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyWallpaper" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                 </StackPanel>
+                            </Grid>
+                            <!-- Wallpaper source folder — where she pulls desktop wallpapers from (blank = assets/wallpapers) -->
+                            <Grid Margin="0,10,0,0" ToolTip="{loc:Str tooltip_wallpaper_folder}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" x:Name="BtnWallpaperFolder" x:FieldModifier="internal" Content="{loc:Str btn_choose_wallpaper_folder}"
+                                        Cursor="Hand" Background="{DynamicResource SecondaryBrush}" Foreground="White" FontSize="11"
+                                        BorderThickness="0" Padding="10,5" VerticalAlignment="Center" Click="BtnWallpaperFolder_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                                    </Button.Resources>
+                                </Button>
+                                <TextBlock Grid.Column="1" x:Name="TxtWallpaperFolder" x:FieldModifier="internal" Foreground="#B0B0C8" FontSize="11"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="10,0,0,0"/>
                             </Grid>
                         </StackPanel>
                         </Border>

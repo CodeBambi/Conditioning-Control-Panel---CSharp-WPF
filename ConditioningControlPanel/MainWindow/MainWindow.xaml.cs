@@ -2107,10 +2107,6 @@ namespace ConditioningControlPanel
             // Load past quizzes list
             RefreshPastQuizzes();
 
-            // Initialize wallpaper override from settings
-            if (LabTab.ChkWallpaperEnabled != null && App.Settings.Current.WallpaperEnabled)
-                LabTab.ChkWallpaperEnabled.IsChecked = true;
-
             // Initialize pop quiz UI from settings
             if (GradedIntakeTab.ChkPopQuizEnabled != null)
                 GradedIntakeTab.ChkPopQuizEnabled.IsChecked = App.Settings.Current.PopQuizEnabled;
