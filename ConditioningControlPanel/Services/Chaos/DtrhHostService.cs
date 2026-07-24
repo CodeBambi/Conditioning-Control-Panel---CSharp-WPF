@@ -36,6 +36,7 @@ internal static class DtrhHostService
     private static bool _runActive;
     private static bool _minimizedMainWindow;   // we tucked the main window to the tray for this session
     private static bool _relaunchedOnce;
+    private static bool _disposing;   // reentrancy guard: _host.Dispose() closes the window -> Closed -> DisposeAll
     private static bool _testMode;
     private static bool _videoHooked;
     private static bool _vnSpeaking;   // a VN tutorial beat owns the mix: skip native stingers/barks
@@ -128,6 +129,10 @@ internal static class DtrhHostService
                 OnProcessFailed = OnProcessFailed,
             });
             _host.Show();
+            // Windowed game: the user closes it via the title-bar X. Tear down cleanly so the
+            // heartbeat watchdog can't misread the resulting heartbeat silence as a mid-run crash
+            // and relaunch the window (mirrors IntakeHostService / BureauHostService).
+            if (_host.Window != null) _host.Window.Closed += (_, _) => DisposeAll();
             HookVideoEvents(true);
             StartHeartbeatWatch();
             Haptics.DtrhHapticDirector.OnLaunch(testMode);
@@ -950,6 +955,10 @@ internal static class DtrhHostService
 
     private static void DisposeAll()
     {
+        if (_disposing) return;   // _host.Dispose() closes the window, re-raising Closed -> here
+        _disposing = true;
+        try
+        {
         CancelExitWatchdog();
         StopHeartbeatWatch();
         HookVideoEvents(false);
@@ -978,6 +987,8 @@ internal static class DtrhHostService
             try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch { }
         }
         App.Logger?.Information("DtrhHostService: closed");
+        }
+        finally { _disposing = false; }
     }
 
     /// <summary>

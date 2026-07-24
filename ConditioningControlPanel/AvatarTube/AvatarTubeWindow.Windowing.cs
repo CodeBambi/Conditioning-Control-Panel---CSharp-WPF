@@ -154,10 +154,23 @@ namespace ConditioningControlPanel
             _fullscreenCheckTimer.Start();
         }
 
+        // While a fullscreen game host (DTRH / Graded Intake / Loom / Bureau) owns the screen, an
+        // ATTACHED tube rides at main's z-level inside main's owner group; ANY self-show/raise
+        // leapfrogs the host sibling and floats the tube over the game (its native-owned upper-left
+        // position). Every attached self-raise path below consults this and stands down until the
+        // host closes (mirrors the chat-focus guard in .ChatInput.cs). Detached tubes are
+        // intentionally topmost widgets and stay exempt.
+        private bool SuppressSelfRaiseForGameHost => !IsDetached && ChaosWebViewHost.AnyHostActive;
+
         private void FullscreenCheckTimer_Tick(object? sender, EventArgs e)
         {
             try
             {
+                // A game host owns the screen: the attached tube is already tucked away with the
+                // minimized main window, and its own hide/restore dance here is the confirmed cause
+                // of the tube popping over the game. Do nothing until the host closes.
+                if (SuppressSelfRaiseForGameHost) return;
+
                 bool isOtherAppFullscreen = IsOtherAppFullscreen();
 
                 // When DETACHED, avatar should stay visible as a widget overlay
@@ -631,7 +644,8 @@ namespace ConditioningControlPanel
                         case WindowState.Normal:
                         case WindowState.Maximized:
                             ResumeAvatarGif();
-                            if (parentVisible && App.Settings?.Current?.AvatarEnabled == true)
+                            if (parentVisible && App.Settings?.Current?.AvatarEnabled == true
+                                && !SuppressSelfRaiseForGameHost)
                             {
                                 Show();
                                 if (_isAttached) UpdatePosition();
@@ -658,8 +672,11 @@ namespace ConditioningControlPanel
                         && App.Settings?.Current?.AvatarEnabled == true)
                     {
                         ResumeAvatarGif();
-                        Show();
-                        if (_isAttached) UpdatePosition();
+                        if (!SuppressSelfRaiseForGameHost)
+                        {
+                            Show();
+                            if (_isAttached) UpdatePosition();
+                        }
                         // When detached, WPF Topmost property handles it
                     }
                     else
@@ -685,8 +702,10 @@ namespace ConditioningControlPanel
         {
             if (_parentWindow == null) return;
 
-            // Don't do any z-order work when pop quiz is open
+            // Don't do any z-order work when pop quiz is open, or while a game host owns the
+            // screen (raising the attached tube would float it over DTRH/Intake).
             if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
+            if (SuppressSelfRaiseForGameHost) return;
 
             try
             {
@@ -736,6 +755,10 @@ namespace ConditioningControlPanel
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(ShowTube)); return; }
             try
             {
+                // Never raise an attached tube while a game host owns the screen (it would float
+                // over DTRH/Intake); the game-end restore path re-shows it once the host is gone.
+                if (SuppressSelfRaiseForGameHost) return;
+
                 // Manual/explicit show (checkbox toggle, tray "Wake Bambi Up", session events)
                 // is a deliberate user/system request to make the avatar visible, so clear the
                 // fullscreen-hidden flag. Otherwise IsAvatarVisibleOnScreen and the fullscreen
