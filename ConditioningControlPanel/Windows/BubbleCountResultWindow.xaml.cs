@@ -23,7 +23,13 @@ namespace ConditioningControlPanel
         
         private int _attemptsRemaining = 3;
         private bool _isCompleted = false;
-        
+
+        // #633: hard inactivity watchdog (primary only). If an idle user is stranded on the
+        // fullscreen/topmost result window (strict mode has no Esc), auto-complete after
+        // this timeout. Reset on every keystroke/text change so an active typist is never cut off.
+        private System.Windows.Threading.DispatcherTimer? _watchdogTimer;
+        private static readonly TimeSpan WatchdogTimeout = TimeSpan.FromSeconds(120);
+
         // Multi-monitor support
         private static List<BubbleCountResultWindow> _allWindows = new();
         private static string _sharedInput = "";
@@ -76,10 +82,14 @@ namespace ConditioningControlPanel
             };
             
             // Focus input on primary
-            Loaded += (s, e) => 
+            Loaded += (s, e) =>
             {
                 WindowState = WindowState.Maximized;
-                if (_isPrimary) TxtAnswer.Focus();
+                if (_isPrimary)
+                {
+                    TxtAnswer.Focus();
+                    StartWatchdog();
+                }
             };
             
             // Key handlers
@@ -133,7 +143,10 @@ namespace ConditioningControlPanel
         private void OnTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
             if (!_isPrimary) return;
-            
+
+            // Active typist: keep the inactivity watchdog from firing.
+            ResetWatchdog();
+
             _sharedInput = TxtAnswer.Text;
             
             // Sync to all windows
@@ -145,6 +158,10 @@ namespace ConditioningControlPanel
 
         private void OnInputKeyDown(object sender, KeyEventArgs e)
         {
+            // Any keystroke counts as activity (covers keys that don't change the text,
+            // e.g. Enter/backspace on an empty field).
+            if (_isPrimary) ResetWatchdog();
+
             if (e.Key == Key.Enter && _isPrimary)
             {
                 CheckAnswer();
@@ -184,6 +201,7 @@ namespace ConditioningControlPanel
                 App.Progression?.AddXP(xp, XPSource.BubbleCount);
                 ShowFeedbackOnAll($"🎉 CORRECT! +{xp} XP 🎉", Color.FromRgb(50, 205, 50));
                 DisableInputOnAll();
+                StopWatchdog(); // terminal success: no more input expected
                 
                 // Track achievement - correct answer
                 App.Achievements?.TrackBubbleCountResult(true);
@@ -279,11 +297,13 @@ namespace ConditioningControlPanel
         private void ShowMercyCard()
         {
             _isCompleted = true;
-            
+            StopWatchdog();
+
             // Hide all result windows
             foreach (var window in _allWindows)
             {
                 window._isCompleted = true;
+                window.StopWatchdog();
                 window.Hide();
             }
             
@@ -341,26 +361,68 @@ namespace ConditioningControlPanel
 
         private void CompleteAll(bool success)
         {
+            StopWatchdog();
             foreach (var window in _allWindows.ToArray())
             {
                 window._isCompleted = true;
+                window.StopWatchdog();
                 try { window.Close(); } catch { }
             }
             _allWindows.Clear();
-            
+
             _onComplete?.Invoke(success);
         }
 
         protected override void OnClosed(EventArgs e)
         {
+            StopWatchdog();
             _allWindows.Remove(this);
-            
+
             if (!_isCompleted && _isPrimary)
             {
                 _onComplete?.Invoke(false);
             }
             base.OnClosed(e);
         }
+
+        #region Inactivity watchdog (#633)
+
+        /// <summary>
+        /// Start the primary window's inactivity watchdog. Fires <see cref="WatchdogTimeout"/>
+        /// after the last activity, auto-completing so an idle user is never stranded on the
+        /// fullscreen/topmost result window (strict mode offers no Esc).
+        /// </summary>
+        private void StartWatchdog()
+        {
+            if (!_isPrimary) return;
+            _watchdogTimer?.Stop();
+            _watchdogTimer = new System.Windows.Threading.DispatcherTimer { Interval = WatchdogTimeout };
+            _watchdogTimer.Tick += (s, e) =>
+            {
+                _watchdogTimer?.Stop();
+                if (_isCompleted) return;
+                App.Logger?.Warning("BubbleCountResultWindow: Inactivity watchdog fired after {Seconds}s - auto-completing to prevent lockout",
+                    WatchdogTimeout.TotalSeconds);
+                CompleteAll(false);
+            };
+            _watchdogTimer.Start();
+        }
+
+        /// <summary>Reset the inactivity countdown on user activity (keystroke / text change).</summary>
+        private void ResetWatchdog()
+        {
+            if (_watchdogTimer == null) return;
+            _watchdogTimer.Stop();
+            _watchdogTimer.Start();
+        }
+
+        private void StopWatchdog()
+        {
+            _watchdogTimer?.Stop();
+            _watchdogTimer = null;
+        }
+
+        #endregion
 
         #region Win32
         

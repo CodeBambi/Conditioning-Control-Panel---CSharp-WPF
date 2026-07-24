@@ -35,6 +35,18 @@ namespace ConditioningControlPanel.Services
         // terse (one short line per transition), so 200 lines covers several videos plus a whole
         // freeze window at a few KB — well inside the crash-log-sized fields the server accepts.
         private const int MaxVideoDiagLines = 200;
+        // Diagnostic-line rescue (#634 + freeze reports). The last-N tail scrolls the [RES]/
+        // [WATCHDOG] history out of every report because a relaunch writes far more startup
+        // chatter than MaxAppLogLines. Scan a much wider tail and keep only the marker lines so
+        // the resource/hang timeline survives even when the plain tail is all startup noise.
+        private const int MaxDiagScanLines = 2000;
+        private const int MaxDiagMatches = 40;      // most-recent matches kept
+        private const int MaxDiagSectionChars = 16_000; // GitHub issue-body budget guard
+        // Grep-friendly markers written to the rolling app log. [RES]/[WATCHDOG] come from
+        // UiHangWatchdog and are the ones that actually appear today; the video markers are
+        // kept defensively (VideoDiag writes its own file, already appended in full above).
+        private static readonly string[] DiagMarkers =
+            { "[RES]", "[WATCHDOG]", "[BLUR]", "[VIDEO]", "[VideoDiag]" };
 
         private readonly HttpClient _httpClient;
 
@@ -140,6 +152,15 @@ namespace ConditioningControlPanel.Services
                     : appLogRaw + Environment.NewLine + Environment.NewLine +
                       "===== video/panic diagnostic trace (video-diag.log) =====" + Environment.NewLine +
                       diagRaw;
+
+                // #634 + freeze reports: rescue the [RES]/[WATCHDOG] resource+hang timeline from a
+                // much wider window of the rolling app log so it survives even when the 100-line
+                // tail above is all startup chatter. Appended to the same field before scrubbing,
+                // so it goes through the same PII scrubber as everything else below.
+                var diagSampled = CollectSampledDiagnostics();
+                if (!string.IsNullOrWhiteSpace(diagSampled))
+                    combined = combined + Environment.NewLine + Environment.NewLine +
+                        "## Diagnostics (sampled)" + Environment.NewLine + diagSampled;
 
                 (scrubbedApp, appCounts) = LogScrubber.Scrub(combined);
             }
@@ -437,6 +458,50 @@ namespace ConditioningControlPanel.Services
             if (dropped > 0)
                 App.Logger?.Debug("[BugReport] dropped {Count} crash entries from other app versions", dropped);
             return kept.ToString();
+        }
+
+        /// <summary>
+        /// Scan a wide tail of the rolling app log (MaxDiagScanLines) and keep only the
+        /// diagnostic-critical marker lines (see <see cref="DiagMarkers"/>), returning up to
+        /// MaxDiagMatches most-recent matches. This survives the startup chatter that scrolls the
+        /// plain last-N tail (#634 RAM-growth lines, [WATCHDOG] hang timeline). Not scrubbed here —
+        /// the caller appends the result to the app-log field so it runs through the shared
+        /// LogScrubber with everything else. Never throws.
+        /// </summary>
+        private static string CollectSampledDiagnostics()
+        {
+            try
+            {
+                var raw = TryReadRecentAppLog(MaxDiagScanLines);
+                if (string.IsNullOrEmpty(raw)) return string.Empty;
+
+                var matches = new List<string>();
+                foreach (var rawLine in raw.Split('\n'))
+                {
+                    var line = rawLine.TrimEnd('\r');
+                    for (int i = 0; i < DiagMarkers.Length; i++)
+                    {
+                        if (line.Contains(DiagMarkers[i], StringComparison.Ordinal))
+                        {
+                            matches.Add(line);
+                            break;
+                        }
+                    }
+                }
+                if (matches.Count == 0) return string.Empty;
+
+                int start = Math.Max(0, matches.Count - MaxDiagMatches);
+                var section = string.Join(Environment.NewLine, matches.GetRange(start, matches.Count - start));
+                // Cap the section so it can't blow the GitHub issue-body budget; keep the newest.
+                if (section.Length > MaxDiagSectionChars)
+                    section = section.Substring(section.Length - MaxDiagSectionChars);
+                return section;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[BugReport] sampled diagnostics read failed: {Msg}", ex.Message);
+                return string.Empty;
+            }
         }
 
         /// <summary>

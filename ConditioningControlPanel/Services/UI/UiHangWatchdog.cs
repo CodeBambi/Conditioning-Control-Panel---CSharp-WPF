@@ -58,6 +58,11 @@ public static class UiHangWatchdog
     private static int _beatsSinceSample;
     private static uint _firstUser, _firstGdi;
     private static int _firstHandles, _firstThreads;
+    // Memory baselines (bytes). #634 "RAM grew to 100%": a RAM leak is invisible in the
+    // USER/GDI/handle counters, so sample private bytes, working set and the managed heap too
+    // — whichever climbs monotonically over a long session names the leak (native vs managed).
+    private static long _firstPriv, _firstWs, _firstGcHeap;
+    private const double MB = 1024.0 * 1024.0;
     private static bool _baselineTaken;
     private static bool _resourceAlarmed;
 
@@ -131,9 +136,10 @@ public static class UiHangWatchdog
     }
 
     /// <summary>
-    /// Log one line of USER objects / GDI objects / kernel handles / thread count, with the
-    /// delta from the first sample of the session. Cheap (four counter reads, no allocation
-    /// beyond the log line) and never throws. Runs on the watchdog thread — deliberately does
+    /// Log one line of USER objects / GDI objects / kernel handles / thread count / private
+    /// bytes / working set / managed heap, with the delta from the first sample of the session.
+    /// Cheap (a handful of counter reads, no allocation beyond the log line) and never throws.
+    /// Runs on the watchdog thread — deliberately does
     /// NOT touch the dispatcher or any WPF object, so it keeps sampling even while the UI is
     /// wedged (a resource-starved app hangs before it crashes).
     /// </summary>
@@ -146,11 +152,15 @@ public static class UiHangWatchdog
             uint gdi = GetGuiResources(self, GR_GDIOBJECTS);
 
             int handles = 0, threads = 0;
+            long priv = 0, ws = 0;
+            long gcHeap = GC.GetTotalMemory(false);   // managed heap; never throws
             try
             {
                 using var p = Process.GetCurrentProcess();
                 handles = p.HandleCount;
                 threads = p.Threads.Count;
+                priv = p.PrivateMemorySize64;         // total committed (native + managed)
+                ws = p.WorkingSet64;                  // resident set — what the OS calls "RAM in use"
             }
             catch { }
 
@@ -159,18 +169,22 @@ public static class UiHangWatchdog
                 _baselineTaken = true;
                 _firstUser = user; _firstGdi = gdi;
                 _firstHandles = handles; _firstThreads = threads;
+                _firstPriv = priv; _firstWs = ws; _firstGcHeap = gcHeap;
                 App.Logger?.Information(
-                    "[RES] baseline user={User} gdi={Gdi} handles={Handles} threads={Threads}",
-                    user, gdi, handles, threads);
+                    "[RES] baseline user={User} gdi={Gdi} handles={Handles} threads={Threads} privMB={PrivMB:F0} wsMB={WsMB:F0} gcMB={GcMB:F1}",
+                    user, gdi, handles, threads, priv / MB, ws / MB, gcHeap / MB);
                 return;
             }
 
             App.Logger?.Information(
-                "[RES] user={User} (+{DUser}) gdi={Gdi} (+{DGdi}) handles={Handles} (+{DHandles}) threads={Threads} (+{DThreads})",
+                "[RES] user={User} (+{DUser}) gdi={Gdi} (+{DGdi}) handles={Handles} (+{DHandles}) threads={Threads} (+{DThreads}) privMB={PrivMB:F0} (+{DPrivMB:F0}) wsMB={WsMB:F0} (+{DWsMB:F0}) gcMB={GcMB:F1} (+{DGcMB:F1})",
                 user, (long)user - _firstUser,
                 gdi, (long)gdi - _firstGdi,
                 handles, handles - _firstHandles,
-                threads, threads - _firstThreads);
+                threads, threads - _firstThreads,
+                priv / MB, (priv - _firstPriv) / MB,
+                ws / MB, (ws - _firstWs) / MB,
+                gcHeap / MB, (gcHeap - _firstGcHeap) / MB);
 
             uint worst = Math.Max(user, gdi);
             if (worst >= USER_GDI_CRITICAL)

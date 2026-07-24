@@ -338,7 +338,7 @@ Categories and how to react:
 
 IMPORTANT: Trust the Category field. Don't guess based on app name alone.",
 
-                OutputRules = @"STRICT OUTPUT RULES:
+                OutputRules = @"STRICT FORMATTING RULES:
 - NO LABELS OR TAGS. Never output brackets like [AUDIO], [VIDEO], [CATEGORY], etc.
 - Never output mode indicators like '[NORMAL MODE]' or '[SLUT MODE]'.
 - Just respond naturally as yourself, no formatting or labels.

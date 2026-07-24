@@ -606,6 +606,9 @@ public class BubbleService : IDisposable
         {
             var b = _bubbles[i];
             if (b.RolledForEgg || !b.IsAmbientEffectBubble || b.AgeMs <= AVATAR_EGG_AGE_MS) continue;
+            // Never claim fullscreen-takeover payloads (#628): popping a "video"/"htlink" bubble opens a
+            // fullscreen LibVLC/browser window mid-choreography, hanging the render thread.
+            if (b.EffectKindId is "video" or "htlink") continue;
             b.RolledForEgg = true;                                      // one-shot latch at the 4s crossing
             if (_random.Next(100) < AVATAR_EGG_CHANCE_PCT)
             {

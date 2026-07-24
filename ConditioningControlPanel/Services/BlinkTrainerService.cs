@@ -199,6 +199,11 @@ public class BlinkTrainerService : IDisposable
 
         foreach (var ov in _overlays)
         {
+            if (ov.ZOrderTimer != null)
+            {
+                try { ov.ZOrderTimer.Stop(); } catch { }
+                ov.ZOrderTimer = null;
+            }
             try { TeardownHostChildren(ov.Host); } catch { }
             try { ov.Window.Close(); } catch { }
         }
@@ -680,6 +685,10 @@ public class BlinkTrainerService : IDisposable
             };
 
             var targetScreen = screen;
+            // Owns the periodic z-order re-assert; assigned to the returned
+            // OverlayInstance below and torn down in Cleanup. Only started once
+            // the hwnd is valid (in SourceInitialized).
+            DispatcherTimer? zOrderTimer = null;
             window.SourceInitialized += (_, _) =>
             {
                 try
@@ -692,6 +701,23 @@ public class BlinkTrainerService : IDisposable
                         targetScreen.Bounds.Left, targetScreen.Bounds.Top,
                         targetScreen.Bounds.Width, targetScreen.Bounds.Height,
                         SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+                    // Re-assert HWND_TOPMOST on a low-frequency timer so
+                    // mandatory-video windows (which re-assert on their own
+                    // timer) can't permanently occlude this overlay (bug #630).
+                    var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+                    timer.Tick += (_, _) =>
+                    {
+                        try
+                        {
+                            if (!IsWindow(hwnd)) return;
+                            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        }
+                        catch { }
+                    };
+                    zOrderTimer = timer;
+                    timer.Start();
                 }
                 catch (Exception ex)
                 {
@@ -700,7 +726,9 @@ public class BlinkTrainerService : IDisposable
             };
 
             window.Show();
-            return new OverlayInstance(window, host);
+            // SourceInitialized fires synchronously during Show() on this
+            // thread, so zOrderTimer is assigned by the time we get here.
+            return new OverlayInstance(window, host) { ZOrderTimer = zOrderTimer };
         }
         catch (Exception ex)
         {
@@ -711,7 +739,15 @@ public class BlinkTrainerService : IDisposable
 
     public void Dispose() => Stop();
 
-    private sealed record OverlayInstance(Window Window, Grid Host);
+    private sealed record OverlayInstance(Window Window, Grid Host)
+    {
+        // Low-frequency z-order re-assert timer. Mandatory video windows
+        // (VideoService) re-assert HWND_TOPMOST on their own timer and would
+        // otherwise permanently sit above this overlay after our one-shot
+        // SourceInitialized assert (bug #630). Started in SourceInitialized
+        // once the hwnd is valid; stopped/released in Cleanup.
+        public DispatcherTimer? ZOrderTimer { get; set; }
+    }
 
     /// <summary>Cap on how many tiles we'll lay out (keeps GIF/CPU cost sane on extreme aspects).</summary>
     private const int MaxTiles = 6;
@@ -725,6 +761,8 @@ public class BlinkTrainerService : IDisposable
     private static readonly IntPtr HWND_TOPMOST = new(-1);
     private const uint SWP_SHOWWINDOW = 0x0040;
     private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
 
     [DllImport("user32.dll")]
     private static extern int GetWindowLong(IntPtr hwnd, int index);
@@ -734,4 +772,7 @@ public class BlinkTrainerService : IDisposable
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hWnd);
 }

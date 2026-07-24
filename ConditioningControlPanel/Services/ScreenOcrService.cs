@@ -212,7 +212,9 @@ namespace ConditioningControlPanel.Services
                 bitmap.Save(ms, ImageFormat.Bmp);
                 ms.Position = 0;
 
-                var rasStream = ms.AsRandomAccessStream();
+                // Dispose the random-access stream deterministically (WinRT/COM RCW that
+                // otherwise pins the full BMP buffer until finalization — bug #634).
+                using var rasStream = ms.AsRandomAccessStream();
                 var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(rasStream);
                 var softwareBitmap = await decoder.GetSoftwareBitmapAsync(
                     BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
@@ -248,6 +250,8 @@ namespace ConditioningControlPanel.Services
                 finally
                 {
                     softwareBitmap.Dispose();
+                    // BitmapDecoder has no IClosable/IDisposable in this projection; with
+                    // rasStream disposed above it no longer pins the BMP buffer (bug #634).
                 }
             }
             catch (Exception ex)

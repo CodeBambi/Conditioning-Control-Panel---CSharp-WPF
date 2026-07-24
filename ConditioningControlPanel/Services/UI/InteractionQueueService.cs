@@ -94,7 +94,7 @@ public class InteractionQueueService
                 {
                     if (item.Type == type)
                     {
-                        App.Logger?.Debug("InteractionQueue: {Type} already queued, skipping duplicate", type);
+                        App.Logger?.Information("InteractionQueue: {Type} already has a pending item queued - suppressing duplicate; this later trigger is dropped (queue caps this type at one pending)", type);
                         return false;
                     }
                 }

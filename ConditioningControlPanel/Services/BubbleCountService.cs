@@ -569,6 +569,10 @@ public class BubbleCountService : IDisposable
         _retryCount = 0;
         CloseMessageWindows();
         BubbleCountWindow.ForceCloseAll();
+        // #633: ForceCleanup previously omitted the result window, leaving it orphaned
+        // fullscreen/topmost with no escape (strict mode has no Esc). Close it too, matching
+        // the manual paths (panic key, stop-all, remote) which close both windows.
+        BubbleCountResultWindow.ForceCloseAll();
         App.Bubbles?.Resume();
     }
 
