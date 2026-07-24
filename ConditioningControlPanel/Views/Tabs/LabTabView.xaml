@@ -168,8 +168,8 @@
                          own Exclusives page (Views/Tabs/GradedIntakeTabView.xaml) and every control
                          moved there verbatim. Deliberately vague — the game is not announced yet, so
                          no name, no mechanics, no screenshots. BtnStartBureau below is the real entry
-                         point and is currently visible; set Visibility="Collapsed" on it to shut the
-                         doors again without disturbing the placeholder. -->
+                         point and is currently COLLAPSED (the doors are shut); clear its Visibility
+                         to open them again without disturbing the placeholder. -->
                     <Border Style="{StaticResource LabCard}">
                         <StackPanel>
                             <Grid Margin="0,0,0,6">
@@ -220,9 +220,12 @@
                                 </Canvas>
                             </Viewbox>
 
-                            <!-- The real entry point, sitting under the placeholder. Collapse this
-                                 again to shut the door without touching anything else. -->
+                            <!-- The real entry point, sitting under the placeholder. COLLAPSED as of
+                                 v6.5.1: the Bureau is not ready to be shown yet, so the Lab shows only
+                                 the "SOON" placeholder above. Drop the Visibility below to re-open the
+                                 door; nothing else needs to change. -->
                             <Button x:Name="BtnStartBureau" x:FieldModifier="internal" Content="🔍 Inspection Bureau" Cursor="Hand"
+                                    Visibility="Collapsed"
                                     Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="12"
                                     BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="12,8" HorizontalAlignment="Left"
                                     ToolTip="Clock in at the Beta Inspection Bureau - stamp dossiers, earn commendations, help train the censor (Beta)."
