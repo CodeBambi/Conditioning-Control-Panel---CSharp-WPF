@@ -38,7 +38,7 @@ import { MATERIALS, MAT_BY_ID, RECIPES, matchGrid, gridCost, recipeCost, recipeC
 import * as reveals from './reveals.js';
 import { createLoomStudio } from './loomStudio.js';
 import { BUBBLE_SKINS, getBubbleSkin, setBubbleSkin } from './variants.js';
-import { S, updateSetting, descentSetup, UNLOCK_LADDER, RANK_NAMES,
+import { S, updateSetting, descentSetup, UNLOCK_LADDER, RANK_NAMES, MOTIONS,
   WORD_PACKS, getWordPack, setWordPack } from '../engine/settings.js';
 import { getLevel } from '../engine/audioLevels.js';
 import { isMuted } from '../shared/audioMute.js';
@@ -576,6 +576,64 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     refreshChrome(view());
   }
 
+  // ---- run presets (#650): save/load/delete a named portal setup -------------
+  // Persist via the chaos_meta bridge (save-preset/delete-preset) so presets ride
+  // the save slot, not localStorage. A preset is the full buildSetup() blob; on LOAD
+  // we re-validate every gated choice against what the player currently owns so a
+  // preset can never smuggle endless / a custom length / Extreme into a run they
+  // haven't unlocked (PersistRunSetup + FromSettings clamp again C#-side regardless).
+  const MAX_PRESETS = 5;
+  function savePreset(name) {
+    const nm = String(name || '').trim().slice(0, 40);
+    if (!nm) return;
+    cmd('save-preset', { name: nm, setup: buildSetup() });
+    sfx('ui_deepen', 0.45);
+  }
+  function deletePreset(name) {
+    const nm = String(name || '').trim();
+    if (!nm) return;
+    cmd('delete-preset', { name: nm });
+    sfx('ui_click', 0.3);
+  }
+  function loadPreset(p) {
+    const su = p && p.setup;
+    if (!su || typeof su !== 'object') return;
+    const v = view();
+    // difficulty: keep it only if the pill is actually available right now
+    // (its reveal earned, and Extreme only once its gate is open); else Easy.
+    const diff = typeof su.difficulty === 'string' ? su.difficulty : setup.difficulty;
+    const diffOk = DIFF_PILLS.some((d) => d.id === diff
+      && (!d.revealGate || reveals.isUnlocked(d.revealGate, v))
+      && (!d.extremeGate || v.extremeUnlocked));
+    setup.difficulty = diffOk ? diff : 'Easy';
+    // endless only for owners; custom length only for the Hourglass, else a
+    // non-preset length snaps back to the default (mirrors the init clamp).
+    setup.endless = !!su.endless && ownsEndless();
+    let dur = (su.durationSec | 0) || 960;
+    if (ownsCustomDur()) dur = Math.max(DUR_MIN, Math.min(DUR_MAX, dur));
+    else if (!CHAMBER_TOTALS.includes(dur)) dur = 960;
+    setup.durationSec = dur;
+    if (typeof su.key1 === 'string') setup.key1 = su.key1;
+    if (typeof su.key2 === 'string') setup.key2 = su.key2;
+    lengthTouched = true;
+    // ⚙ descent options (settings.js run* keys)
+    if (typeof su.motion === 'string' && MOTIONS.includes(su.motion)) updateSetting('runMotion', su.motion);
+    if (typeof su.effectIntensity === 'number' && isFinite(su.effectIntensity))
+      updateSetting('runEffectIntensity', Math.min(1.5, Math.max(0.2, su.effectIntensity)));
+    if (typeof su.colorFlashes === 'boolean') updateSetting('runColorFlashes', su.colorFlashes);
+    if (typeof su.boonDraftEnabled === 'boolean') updateSetting('runBoonDraft', su.boonDraftEnabled);
+    if (typeof su.allowCurses === 'boolean') updateSetting('runAllowCurses', su.allowCurses);
+    if (typeof su.dartersEnabled === 'boolean') updateSetting('runDarters', su.dartersEnabled);
+    // enabledVariants (null = all on) -> runVariantsOff (the switched-OFF list)
+    if (su.enabledVariants === null) updateSetting('runVariantsOff', []);
+    else if (Array.isArray(su.enabledVariants)) {
+      const on = new Set(su.enabledVariants);
+      updateSetting('runVariantsOff', POOL_VARIANTS.filter((x) => !on.has(x.id)).map((x) => x.id));
+    }
+    sfx('ui_deepen', 0.5);
+    refreshChrome(view());
+  }
+
   function refreshChrome(v) {
     if (!chrome) return;
     // currency chips
@@ -683,6 +741,41 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       const rollRow = el('wr-pills wr-pills--center', chrome.fall);
       const rollChip = btn('wr-seg wr-seg--roll', '🎲 surprise me', () => rollSetup(), rollRow);
       tip(rollChip, 'let her choose: rolls your difficulty and length for you. nothing falls until you click the hole yourself.');
+
+      // #650 Run presets: reload a saved setup, or keep the current one under a name.
+      const presets = Array.isArray(v.runPresets) ? v.runPresets : [];
+      const presetRow = el('wr-pills wr-pills--center wr-presets', chrome.fall);
+      for (const p of presets) {
+        if (!p || typeof p.name !== 'string') continue;
+        const chip = btn('wr-seg wr-seg--small wr-preset', p.name, () => loadPreset(p), presetRow);
+        tip(chip, `load "${p.name}" — its difficulty, length and options (owned modes only).`);
+        const x = document.createElement('span');
+        x.className = 'wr-preset-x';
+        x.textContent = '✕';
+        x.title = `delete "${p.name}"`;
+        x.addEventListener('click', (e) => { e.stopPropagation(); deletePreset(p.name); });
+        chip.appendChild(x);
+      }
+      if (presets.length < MAX_PRESETS) {
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'wr-dial-input wr-preset-name';
+        nameInput.maxLength = 40;
+        nameInput.placeholder = 'name a preset';
+        nameInput.setAttribute('aria-label', 'name this run setup to save it as a preset');
+        presetRow.appendChild(nameInput);
+        const saveBtn = btn('wr-seg wr-seg--small wr-seg--save', '💾 save', () => {
+          const nm = nameInput.value.trim();
+          if (!nm) { nameInput.focus(); return; }
+          savePreset(nm);
+        }, presetRow);
+        nameInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
+        });
+      }
+      tip(presetRow, presets.length
+        ? 'run presets: click one to reload it, ✕ to delete. loading only ever applies what you own.'
+        : 'run presets: save this difficulty + length + options under a name and reload it any time.');
     }
 
     // hint

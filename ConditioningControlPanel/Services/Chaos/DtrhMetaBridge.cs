@@ -379,6 +379,38 @@ internal sealed class DtrhMetaBridge
                     applied = true;
                     break;
                 }
+                case "save-preset":
+                {
+                    // #650 Run presets: keep the current portal setup under a name. The
+                    // setup is a page-owned blob - we whitelist the keys we know and cap
+                    // the count; ownership of endless/custom-duration/extreme is re-checked
+                    // page-side on load and again in PersistRunSetup, so a preset is never a
+                    // gate bypass. Same name overwrites in place; a new name is capped.
+                    var name = ((string?)o["name"] ?? "").Trim();
+                    if (name.Length == 0 || name.Length > 40) break;
+                    if (o["setup"] is not JObject rawSetup) break;
+                    var setup = FilterPresetSetup(rawSetup);
+                    S.RunPresets ??= new List<ChaosRunPreset>();
+                    int idx = S.RunPresets.FindIndex(p =>
+                        string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+                    if (idx >= 0) S.RunPresets[idx] = new ChaosRunPreset { Name = name, Setup = setup };
+                    else if (S.RunPresets.Count < MaxRunPresets)
+                        S.RunPresets.Add(new ChaosRunPreset { Name = name, Setup = setup });
+                    else break;   // full - the page hides the save control at the cap
+                    applied = true;
+                    break;
+                }
+                case "delete-preset":
+                {
+                    var name = ((string?)o["name"] ?? "").Trim();
+                    if (name.Length == 0) break;
+                    S.RunPresets ??= new List<ChaosRunPreset>();
+                    int before = S.RunPresets.Count;
+                    S.RunPresets.RemoveAll(p =>
+                        string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+                    applied = S.RunPresets.Count != before;
+                    break;
+                }
                 default:
                     App.Logger?.Warning("DtrhMetaBridge: unknown op '{Op}' ignored", op);
                     break;
@@ -462,6 +494,44 @@ internal sealed class DtrhMetaBridge
     }
 
     private static int Cost(JObject o) => Math.Max(0, (int?)o["cost"] ?? 0);
+
+    // ---- run presets (#650) ----
+    /// <summary>How many named run presets a save may keep at once.</summary>
+    public const int MaxRunPresets = 5;
+
+    /// <summary>The buildSetup() wire keys a preset may carry (warren.js). Anything else in
+    /// the blob is dropped so a preset stays a small, bounded snapshot.</summary>
+    private static readonly string[] PresetKeys =
+    {
+        "difficulty", "durationSec", "waveCount", "endless", "key1", "key2",
+        "motion", "effectIntensity", "colorFlashes", "boonDraftEnabled",
+        "allowCurses", "dartersEnabled", "enabledVariants",
+    };
+
+    /// <summary>Copy only the whitelisted setup keys into a fresh JObject, clamping the
+    /// one unbounded field (enabledVariants) so a hand-crafted message can't bloat the save.</summary>
+    private static JObject FilterPresetSetup(JObject src)
+    {
+        var o = new JObject();
+        foreach (var k in PresetKeys)
+        {
+            var tok = src[k];
+            if (tok == null) continue;
+            if (k == "enabledVariants" && tok is JArray arr)
+            {
+                var trimmed = new JArray();
+                foreach (var v in arr)
+                {
+                    if (v.Type != JTokenType.String) continue;
+                    trimmed.Add(v);
+                    if (trimmed.Count >= 64) break;
+                }
+                o[k] = trimmed;
+            }
+            else o[k] = tok;
+        }
+        return o;
+    }
 
     /// <summary>Seen-once bools re-armed by reset-onboarding. Teaching/guide state only —
     /// never anything that grants currency or records progression.</summary>
