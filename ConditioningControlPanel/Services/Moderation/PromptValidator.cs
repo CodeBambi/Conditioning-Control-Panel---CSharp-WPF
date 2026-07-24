@@ -56,8 +56,20 @@ namespace ConditioningControlPanel.Services.Moderation
             // "reveal/show/print/repeat the system prompt" — P2-H4 broadened verbs
             // (recite/describe/translate/paraphrase/outline/summarize) and objects
             // (preamble/setup/opening/initial/charter/policy/brief).
+            //
+            // #637 follow-up: the bare token 'rule' was dropped from this object group.
+            // It has no plural/possessive rigor and is extremely common in benign
+            // prompt-authoring (e.g. our own default heading "STRICT OUTPUT RULES:",
+            // "output rules for formatting", "follow my rules"), so a verb like "output"
+            // sitting within 30 chars of "rules" produced constant false positives.
+            // Genuine rule-extraction is still covered: "extract-prompt-paraphrase"
+            // retains 'rule' behind a possessive+ordinal context ("reveal your original
+            // rules"), and "repeat your rules verbatim / word for word" is caught by the
+            // verbatim / word-for-word patterns; "no rules / bypass rules" by
+            // "no-restrictions". The high-signal extraction targets (prompt, instruction,
+            // system, guideline, preamble, ...) remain in this group.
             ("extract-prompt",
-                new Regex(@"\b(reveal|show|print|repeat|tell me|give me|output|display|recite|describe|translate|paraphrase|outline|summari[sz]e|recap|enumerate|list|explain)\b.{0,30}(prompt|instruction|rule|system|told|guideline|preamble|setup|opening|initial|first|original|charter|policy|brief|context)", Opts)),
+                new Regex(@"\b(reveal|show|print|repeat|tell me|give me|output|display|recite|describe|translate|paraphrase|outline|summari[sz]e|recap|enumerate|list|explain)\b.{0,30}(prompt|instruction|system|told|guideline|preamble|setup|opening|initial|first|original|charter|policy|brief|context)", Opts)),
 
             // P2-H4: paraphrase-form extraction — "(recite|describe|outline|translate)
             // (your|the) (initial|opening|first|original) (instructions|setup|...)"
