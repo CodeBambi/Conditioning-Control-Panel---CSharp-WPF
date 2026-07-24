@@ -371,7 +371,7 @@ public class BlinkTrainerService : IDisposable
         TeardownHostChildren(ov.Host);
         ov.Host.Children.Clear();
 
-        var isGif = Path.GetExtension(path).Equals(".gif", StringComparison.OrdinalIgnoreCase);
+        var (isGif, isAnimatedWebp) = ClassifyAnimation(path);
         var imageAspect = MeasureImageAspect(path);
         var screenAspect = ov.Window.ActualWidth > 0 && ov.Window.ActualHeight > 0
             ? ov.Window.ActualWidth / ov.Window.ActualHeight
@@ -391,7 +391,7 @@ public class BlinkTrainerService : IDisposable
         // Single-tile path: Uniform fit, no cropping.
         if (cols == 1 && rows == 1)
         {
-            var img = BuildTile(path, isGif, null, Stretch.Uniform);
+            var img = BuildTile(path, isGif, isAnimatedWebp, null, Stretch.Uniform, TileDecodeDim(ov, 1, 1));
             ov.Host.Children.Add(img);
             return;
         }
@@ -401,7 +401,7 @@ public class BlinkTrainerService : IDisposable
         // crops a little — that's the price of fully covering the screen.
         var tileGrid = new UniformGrid { Columns = cols, Rows = rows };
         BitmapImage? shared = null;
-        if (!isGif)
+        if (!isGif && !isAnimatedWebp)
         {
             try
             {
@@ -420,9 +420,10 @@ public class BlinkTrainerService : IDisposable
         }
 
         var total = cols * rows;
+        var tileDim = TileDecodeDim(ov, cols, rows);
         for (var i = 0; i < total; i++)
         {
-            tileGrid.Children.Add(BuildTile(path, isGif, shared, Stretch.UniformToFill));
+            tileGrid.Children.Add(BuildTile(path, isGif, isAnimatedWebp, shared, Stretch.UniformToFill, tileDim));
         }
         ov.Host.Children.Add(tileGrid);
     }
@@ -455,8 +456,9 @@ public class BlinkTrainerService : IDisposable
         // Single-tile path (aspects match): just show the lead with Uniform fit.
         if (cols == 1 && rows == 1)
         {
-            var leadIsGifSingle = Path.GetExtension(leadPath).Equals(".gif", StringComparison.OrdinalIgnoreCase);
-            ov.Host.Children.Add(BuildTile(leadPath, leadIsGifSingle, null, Stretch.Uniform));
+            var (leadIsGifSingle, leadIsWebpSingle) = ClassifyAnimation(leadPath);
+            ov.Host.Children.Add(BuildTile(leadPath, leadIsGifSingle, leadIsWebpSingle, null, Stretch.Uniform,
+                TileDecodeDim(ov, 1, 1)));
             return;
         }
 
@@ -477,10 +479,11 @@ public class BlinkTrainerService : IDisposable
         }
 
         var tileGrid = new UniformGrid { Columns = cols, Rows = rows };
+        var mixTileDim = TileDecodeDim(ov, cols, rows);
         foreach (var p in paths)
         {
-            var pIsGif = Path.GetExtension(p).Equals(".gif", StringComparison.OrdinalIgnoreCase);
-            tileGrid.Children.Add(BuildTile(p, pIsGif, null, Stretch.UniformToFill));
+            var (pIsGif, pIsAnimatedWebp) = ClassifyAnimation(p);
+            tileGrid.Children.Add(BuildTile(p, pIsGif, pIsAnimatedWebp, null, Stretch.UniformToFill, mixTileDim));
         }
         ov.Host.Children.Add(tileGrid);
     }
@@ -494,7 +497,37 @@ public class BlinkTrainerService : IDisposable
         }
     }
 
-    private static Image BuildTile(string path, bool isGif, BitmapImage? sharedBmp, Stretch stretch)
+    /// <summary>
+    /// Which animated pipeline (if either) a pool asset needs. XamlAnimatedGif is
+    /// GIF-only, so animated .webp used to fall through to the still path and play
+    /// frozen on the first frame (reported 2026-07-24) — those go to AnimatedWebp's
+    /// Skia decoder instead. Header probe only; still webps stay on the still path.
+    /// </summary>
+    private static (bool IsGif, bool IsAnimatedWebp) ClassifyAnimation(string path)
+    {
+        var ext = Path.GetExtension(path);
+        if (ext.Equals(".gif", StringComparison.OrdinalIgnoreCase)) return (true, false);
+        if (ext.Equals(".webp", StringComparison.OrdinalIgnoreCase) && AnimatedWebp.IsAnimated(path))
+            return (false, true);
+        return (false, false);
+    }
+
+    /// <summary>
+    /// Decode size for an animated-webp tile: the overlay's own cell size, so a
+    /// full-screen single tile decodes near display res and a 3-up grid decodes a
+    /// third of that. AnimatedWebp clamps to [64, 1280] and keeps every kept frame
+    /// resident, so this is what bounds the frame-buffer cost.
+    /// </summary>
+    private static int TileDecodeDim(OverlayInstance ov, int cols, int rows)
+    {
+        var w = ov.Window.ActualWidth > 0 ? ov.Window.ActualWidth : 1920;
+        var h = ov.Window.ActualHeight > 0 ? ov.Window.ActualHeight : 1080;
+        var cell = Math.Max(w / Math.Max(1, cols), h / Math.Max(1, rows));
+        return (int)Math.Clamp(cell, 64, 1280);
+    }
+
+    private static Image BuildTile(string path, bool isGif, bool isAnimatedWebp, BitmapImage? sharedBmp,
+        Stretch stretch, int decodeDim)
     {
         var img = new Image
         {
@@ -506,6 +539,13 @@ public class BlinkTrainerService : IDisposable
         {
             AnimationBehavior.SetRepeatBehavior(img, RepeatBehavior.Forever);
             AnimationBehavior.SetSourceUri(img, new Uri(path));
+        }
+        else if (isAnimatedWebp)
+        {
+            // Decodes off-thread and loops via a keyframe animation on Image.Source.
+            // TeardownHostChildren's Detach is load-bearing: the Forever clock pins
+            // the Image until the animation is cleared.
+            AnimatedWebp.AttachAnimation(img, path, decodeDim);
         }
         else if (sharedBmp != null)
         {
@@ -548,6 +588,18 @@ public class BlinkTrainerService : IDisposable
         {
             App.Logger?.Debug(ex, "BlinkTrainer: could not measure aspect for {Path}", path);
         }
+
+        // WIC fallback: webp decoding depends on the OS "WebP Image Extensions"
+        // codec being present, and without it the decoder above throws — which
+        // would bucket every webp as 1:1 square and tile it wrong. SKCodec reads
+        // the dimensions with no OS codec dependency.
+        try
+        {
+            using var codec = SkiaSharp.SKCodec.Create(path);
+            if (codec != null && codec.Info.Height > 0)
+                return (double)codec.Info.Width / codec.Info.Height;
+        }
+        catch { }
         return 1.0;
     }
 
@@ -629,12 +681,12 @@ public class BlinkTrainerService : IDisposable
                     try { m.Stop(); m.Source = null; } catch { }
                     break;
                 case Image img:
-                    try { AnimationBehavior.SetSourceUri(img, null!); img.Source = null; } catch { }
+                    try { AnimationBehavior.SetSourceUri(img, null!); AnimatedWebp.Detach(img); img.Source = null; } catch { }
                     break;
                 case UniformGrid ug:
                     foreach (var inner in ug.Children.OfType<Image>())
                     {
-                        try { AnimationBehavior.SetSourceUri(inner, null!); inner.Source = null; } catch { }
+                        try { AnimationBehavior.SetSourceUri(inner, null!); AnimatedWebp.Detach(inner); inner.Source = null; } catch { }
                     }
                     ug.Children.Clear();
                     break;
