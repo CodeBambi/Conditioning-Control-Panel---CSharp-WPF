@@ -107,6 +107,33 @@ namespace ConditioningControlPanel.Services
             ShowLockCard();
         }
 
+        /// <summary>Decision for what to do when <see cref="ShowLockCard"/> finds a lock card already
+        /// visible (#676). Pure so the defer-and-replay policy — including the one-re-defer cap that stops
+        /// a close/hide race from bouncing forever — is unit-testable without any WPF windows.</summary>
+        internal enum BlockedCardAction
+        {
+            /// <summary>No card open; show this one now.</summary>
+            Proceed,
+            /// <summary>A card is open; enqueue this request to replay after it closes.</summary>
+            Defer,
+            /// <summary>We are the dequeued replay and a card is STILL open: give up (one re-defer max)
+            /// and release the interaction slot so the queue keeps moving.</summary>
+            DropAfterReDefer,
+            /// <summary>A card is open but there is no interaction queue to defer to; drop.</summary>
+            DropNoQueue
+        }
+
+        /// <summary>#676: AI cards can arrive faster than the user types one out. Rather than silently
+        /// dropping a request that lands while a card is open, defer-and-replay it through the interaction
+        /// queue — but cap at a single re-defer so a rare close/hide race can't loop.</summary>
+        internal static BlockedCardAction ResolveBlockedCardAction(bool cardAlreadyOpen, bool isDeferredReplay, bool hasInteractionQueue)
+        {
+            if (!cardAlreadyOpen) return BlockedCardAction.Proceed;
+            if (isDeferredReplay) return BlockedCardAction.DropAfterReDefer; // one re-defer cap
+            if (hasInteractionQueue) return BlockedCardAction.Defer;
+            return BlockedCardAction.DropNoQueue;
+        }
+
         public void ShowLockCard(string? customPhrase = null, int customRepeats = -1, bool customStrict = false, bool isTest = false, bool isDeferredReplay = false)
         {
             DispatcherHelper.RunOnUISync(() =>
@@ -115,42 +142,37 @@ namespace ConditioningControlPanel.Services
                 // Gate on the visible set (IsAnyOpen), NOT Application.Current.Windows: since 6.2.10 the
                 // window is keep-alive pooled (dismiss => Hide(), not Close()), so a hidden pooled instance
                 // lingers in Application.Current.Windows forever and would block every card after the first.
-                if (LockCardWindow.IsAnyOpen())
+                var blockedAction = ResolveBlockedCardAction(LockCardWindow.IsAnyOpen(), isDeferredReplay, App.InteractionQueue != null);
+                if (blockedAction != BlockedCardAction.Proceed)
                 {
                     // Short, log-safe snippet of the requested phrase for diagnostics.
                     var phraseSnippet = string.IsNullOrEmpty(customPhrase)
                         ? "(default/random)"
                         : (customPhrase.Length > 40 ? customPhrase.Substring(0, 40) + "..." : customPhrase);
 
-                    // A lock card is already visible. Rather than silently dropping this request
-                    // (the AI can emit cards faster than the user types one out, so later cards
-                    // used to vanish), defer-and-replay: enqueue it on the interaction queue so it
-                    // shows after the current card closes. The queue suppresses duplicate pending
-                    // LockCard items, so at most one card is ever pending.
-                    if (isDeferredReplay)
+                    switch (blockedAction)
                     {
-                        // Anti-loop guard: we already deferred once and are the dequeued replay,
-                        // yet a card is STILL open (rare close/hide race). Do NOT re-enqueue — the
-                        // queue's Complete()/dequeue cycle already set us as the active LockCard, so
-                        // re-enqueuing would hold the slot with nothing on screen until the 5-min
-                        // stuck backstop, and could bounce indefinitely. Give up after this single
-                        // re-defer and release the slot so the queue keeps moving.
-                        App.Logger?.Warning("LockCardService: Deferred lock card still blocked on replay (a card is open). Dropping after one re-defer. Phrase: {Phrase}", phraseSnippet);
-                        App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
-                        return;
-                    }
+                        case BlockedCardAction.DropAfterReDefer:
+                            // We already deferred once and are the dequeued replay, yet a card is STILL
+                            // open. Do NOT re-enqueue — the queue's Complete()/dequeue cycle already set us
+                            // as the active LockCard, so re-enqueuing would hold the slot with nothing on
+                            // screen until the 5-min stuck backstop, and could bounce indefinitely. Give up
+                            // after this single re-defer and release the slot so the queue keeps moving.
+                            App.Logger?.Warning("LockCardService: Deferred lock card still blocked on replay (a card is open). Dropping after one re-defer. Phrase: {Phrase}", phraseSnippet);
+                            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
+                            break;
 
-                    if (App.InteractionQueue != null)
-                    {
-                        App.Logger?.Warning("LockCardService: A lock card is already open. Deferring this one to the interaction queue. Phrase: {Phrase}", phraseSnippet);
-                        App.InteractionQueue.TryStart(
-                            InteractionQueueService.InteractionType.LockCard,
-                            () => ShowLockCard(customPhrase, customRepeats, customStrict, isTest, isDeferredReplay: true),
-                            queue: true);
-                    }
-                    else
-                    {
-                        App.Logger?.Warning("LockCardService: A lock card is already open and no interaction queue is available to defer to. Dropping. Phrase: {Phrase}", phraseSnippet);
+                        case BlockedCardAction.Defer:
+                            App.Logger?.Warning("LockCardService: A lock card is already open. Deferring this one to the interaction queue. Phrase: {Phrase}", phraseSnippet);
+                            App.InteractionQueue?.TryStart(
+                                InteractionQueueService.InteractionType.LockCard,
+                                () => ShowLockCard(customPhrase, customRepeats, customStrict, isTest, isDeferredReplay: true),
+                                queue: true);
+                            break;
+
+                        case BlockedCardAction.DropNoQueue:
+                            App.Logger?.Warning("LockCardService: A lock card is already open and no interaction queue is available to defer to. Dropping. Phrase: {Phrase}", phraseSnippet);
+                            break;
                     }
                     return;
                 }
