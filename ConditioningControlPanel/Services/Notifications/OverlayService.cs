@@ -1495,7 +1495,13 @@ public class OverlayService : IDisposable
 
                 var maxFrames = (int)Math.Min(Math.Min(frameCount, 120),
                     Math.Max(8, maxCacheBytes / Math.Max(1, bytesPerFrame)));
-                var step = frameCount > maxFrames ? frameCount / maxFrames : 1;
+                // Ceiling, not integer division: floor-step keeps frames 0..maxFrames-1 and
+                // silently drops the tail for any GIF with maxFrames <= frameCount < 2*maxFrames,
+                // breaking the loop point (#683 family). Ceiling subsamples the whole clip evenly;
+                // scaling the delay by the stride preserves the wall-clock loop duration.
+                var step = Math.Max(1, (int)Math.Ceiling(frameCount / (double)maxFrames));
+                if (step > 1)
+                    delay = TimeSpan.FromMilliseconds(frameDelayMs * step);
                 if (maxFrames < Math.Min(frameCount, 120))
                     App.Logger?.Warning("Spiral: frame cache capped at {Frames} frames ({W}x{H}) to stay under {MB} MB — a smaller spiral GIF will loop smoother",
                         maxFrames, frameW, frameH, maxCacheBytes / (1024 * 1024));
