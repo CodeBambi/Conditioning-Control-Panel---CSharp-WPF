@@ -116,7 +116,12 @@ namespace ConditioningControlPanel.Services
         // Fire only after a long, unambiguous stall — this targets the multi-minute lockouts, never a
         // UI thread that's merely busy for a beat. The legitimate ~4s teardown pump-wait keeps the
         // heartbeat ticking (it pumps Background-priority work), so it won't trip this.
-        private const int WedgeStallMs = 22000;
+        // #687: 22s was too patient to be a rescue. UiHangWatchdog already declares a hang at 15s and
+        // both freeze reporters had task-killed the process by ~26s, so the off-thread rescue was
+        // racing a user with Task Manager open and losing. 8s of ZERO Normal-priority dispatcher
+        // callbacks is already pathological (the pump-wait keeps beating), so the rescue now engages
+        // while the user is still watching the frozen frame rather than after they gave up.
+        private const int WedgeStallMs = 8000;
 
         // Watch-time crediting for stats/quests (#447). _lastWatchPositionMs tracks the current video's
         // latest playback position (LibVLC TimeChanged); _creditedWatchSeconds is a watermark of what's
@@ -2158,6 +2163,47 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Byte size of one BGRA frame of the given geometry, or 0 if the geometry is absurd
+        /// (overflow / zero side). A bogus format callback must make the blit SKIP the frame, never
+        /// allocate or copy on a garbage length. Pure — unit-tested.
+        /// </summary>
+        internal static int StagingBytesFor(uint w, uint h)
+        {
+            if (w == 0 || h == 0) return 0;
+            if (w > 65535 || h > 65535) return 0; // no real decoded frame is this big; keeps the product in range
+            long bytes = (long)w * h * 4;
+            if (bytes > int.MaxValue) return 0;
+            return (int)bytes;
+        }
+
+        /// <summary>
+        /// Geometry of the small snapshot that feeds the blurred fill: the frame divided down, floored
+        /// at 8px a side so a tiny clip can't degenerate to a 0-wide bitmap. Pure — unit-tested.
+        /// </summary>
+        internal static (int W, int H) ComputeSnapshotDims((uint W, uint H) buffer, int divisor)
+        {
+            int d = Math.Max(1, divisor);
+            int sw = Math.Max(8, (int)buffer.W / d);
+            int sh = Math.Max(8, (int)buffer.H / d);
+            return (sw, sh);
+        }
+
+        /// <summary>
+        /// Whether this frame index should refresh the blurred fill's snapshot. The fill sits behind a
+        /// radius-48 Gaussian, so it does not need per-frame freshness. Pure — unit-tested.
+        /// </summary>
+        internal static bool IsSnapshotFrame(int frameIndex, int everyN)
+            => everyN <= 1 || (frameIndex % everyN) == 0;
+
+        /// <summary>
+        /// Whether a bitmap rebuild posted with <paramref name="postedGeneration"/> is still the newest
+        /// one (#687: three format callbacks landed within 15ms and an older rebuild ran last, pinning
+        /// the bitmap at a size that no longer matched the buffer). Pure — unit-tested.
+        /// </summary>
+        internal static bool IsRebuildCurrent(int postedGeneration, int currentGeneration)
+            => postedGeneration == currentGeneration;
+
+        /// <summary>
         /// Liveness watchdog for the blurred-background (memory-render) path: if the surface has
         /// produced no frame within the grace window, the decode never started — skip to the next
         /// video rather than sit on a black screen. Cheaper counterpart to StartVoutWatchdog, which
@@ -2199,8 +2245,11 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private sealed class BlurVmemSurface : IDisposable
         {
-            [DllImport("kernel32.dll", EntryPoint = "RtlMoveMemory")]
-            private static extern void CopyMemory(IntPtr dest, IntPtr src, uint count);
+            // Snapshot cadence + scale for the blurred fill (see RefreshBackgroundSnapshot). Every 6th
+            // frame is ~5 refreshes/sec at 30fps — invisible behind a radius-48 Gaussian, and 1/8 scale
+            // means the render thread uploads 1/64th of the pixels it used to.
+            private const int BgSnapshotEveryNFrames = 6;
+            private const int BgSnapshotDivisor = 8;
 
             private readonly double _screenAspect;
             private readonly object _bufferLock = new();
@@ -2219,6 +2268,26 @@ namespace ConditioningControlPanel.Services
             private volatile bool _hasRendered;
             private bool _hooked;
             private bool _disposed;
+
+            // #687: managed staging copy of the newest decoded frame. The UI thread copies the native
+            // buffer into this UNDER _bufferLock and then RELEASES the lock before it goes anywhere
+            // near WriteableBitmap.Lock() — see OnRendering for why holding both deadlocked three
+            // threads. Grown on demand (never shrunk) so the steady state allocates nothing.
+            private byte[] _staging = Array.Empty<byte>();
+
+            // #687: the blurred fill gets its own tiny, frozen snapshot instead of pointing at the live
+            // per-frame bitmap. _snapBuf is the reusable downsample scratch; the frozen BitmapSource
+            // handed to the brush is swapped whole, so the render thread never blocks the UI thread on
+            // the background layer at all. UI thread only.
+            private byte[] _snapBuf = Array.Empty<byte>();
+            private int _snapW;
+            private int _snapH;
+            private int _frameCounter;
+            private bool _needsBlur;
+
+            // #687: stamped by every FormatCallback (under _bufferLock, so it is paired with _w/_h).
+            // A rebuild posted to the dispatcher applies only if its stamp is still the newest.
+            private int _formatGeneration;
 
             // Delegates handed to native LibVLC — kept in fields so the GC can't collect them
             // while libvlc still holds the pointers (the callbacks fire for the whole playback).
@@ -2320,6 +2389,7 @@ namespace ConditioningControlPanel.Services
                 pitches = bw * 4;
                 lines = bh;
 
+                int gen;
                 lock (_bufferLock)
                 {
                     if (_frameBuffer != IntPtr.Zero)
@@ -2330,6 +2400,7 @@ namespace ConditioningControlPanel.Services
                     _w = bw;
                     _h = bh;
                     _bufferValid = true;
+                    gen = ++_formatGeneration; // stamped with the geometry it belongs to
                 }
 
                 // Bars appear when the video aspect differs from the screen aspect. Only then do we
@@ -2340,32 +2411,68 @@ namespace ConditioningControlPanel.Services
 
                 App.Logger?.Information("VideoService: blurred-background format cb — video {VW}x{VH}, buffer {BW}x{BH}, blurFill={Blur}",
                     vw, vh, bw, bh, needsBlur);
-                // Runs on a LibVLC decoder thread while holding _bufferLock (see below) — enqueue only.
-                // blurFill=true means a fullscreen Gaussian BlurEffect is now composited every frame
-                // on top of a per-frame UI-thread bitmap copy; that combination is the top suspect
-                // for the 6.5.0 freezes (#616-#623), so the trace must record when it is armed.
+                // Runs on a LibVLC decoder thread — enqueue only, never touch the disk or the UI here.
+                // blurFill=true arms the fullscreen Gaussian; in 6.5.0 it ran every frame over the LIVE
+                // per-frame bitmap and that was the freeze (#616-#623/#632/#636/#687). It now runs over
+                // a small frozen snapshot instead, but the trace still records when it is armed.
                 VideoDiag.Log("BLUR", $"format cb - video {vw}x{vh}, buffer {bw}x{bh}, blurFill={needsBlur}");
 
                 var disp = Application.Current?.Dispatcher;
                 if (disp != null && !disp.HasShutdownStarted)
-                    disp.BeginInvoke(new Action(() => RebuildBitmap(bw, bh, needsBlur)));
+                    disp.BeginInvoke(new Action(() => RebuildBitmap(gen, bw, bh, needsBlur)));
 
                 return 1; // one plane (RV32)
             }
 
             private void CleanupCallback(ref IntPtr opaque) { /* buffer is freed in Dispose */ }
 
-            private void RebuildBitmap(uint bw, uint bh, bool needsBlur)
+            /// <summary>
+            /// (Re)build the foreground bitmap for a format generation. Runs on the UI thread, posted
+            /// from a decoder thread.
+            ///
+            /// #687: this used to carry no generation. A mid-stream resolution change fired THREE format
+            /// callbacks within 15ms (368x640 -> 368x642) and the posted rebuilds are not guaranteed to
+            /// run in the order they were queued, so an older one could land last — leaving _bitmap at a
+            /// size that no longer matched _w/_h. The dimension guard in OnRendering then rejected every
+            /// single frame for the rest of the clip: a permanently black background with a healthy
+            /// decoder behind it. The stamp is re-checked INSIDE _bufferLock so the swap is atomic with
+            /// respect to a format callback that lands while this rebuild is mid-flight.
+            /// </summary>
+            private void RebuildBitmap(int gen, uint bw, uint bh, bool needsBlur)
             {
                 if (_disposed) return;
                 try
                 {
+                    if (!IsRebuildCurrent(gen, Volatile.Read(ref _formatGeneration)))
+                    {
+                        VideoDiag.Log("BLUR", $"stale bitmap rebuild dropped ({bw}x{bh}, gen {gen} superseded)");
+                        return;
+                    }
+
                     var bmp = new WriteableBitmap((int)bw, (int)bh, 96, 96, PixelFormats.Bgr32, null);
-                    lock (_bufferLock) { _bitmap = bmp; }
+                    bool applied;
+                    lock (_bufferLock)
+                    {
+                        applied = IsRebuildCurrent(gen, _formatGeneration);
+                        if (applied) _bitmap = bmp;
+                    }
+                    if (!applied)
+                    {
+                        VideoDiag.Log("BLUR", $"stale bitmap rebuild dropped at swap ({bw}x{bh}, gen {gen} superseded)");
+                        return;
+                    }
+
                     _foreground.Source = bmp;
-                    _bgBrush.ImageSource = needsBlur ? bmp : null;
+                    _needsBlur = needsBlur;
                     _background.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
                     _scrim.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+
+                    // The fill is fed by RefreshBackgroundSnapshot, NOT by this bitmap (#687). Drop the
+                    // old snapshot so the next frame rebuilds it at the new geometry immediately.
+                    _snapW = 0;
+                    _snapH = 0;
+                    _frameCounter = 0;
+                    if (!needsBlur) _bgBrush.ImageSource = null;
                 }
                 catch (Exception ex)
                 {
@@ -2410,11 +2517,35 @@ namespace ConditioningControlPanel.Services
                 _hooked = false;
             }
 
+            /// <summary>
+            /// Per-frame blit, UI thread. Two strictly separated phases — the separation IS the fix for
+            /// the #632/#636/#687 freeze cluster:
+            ///
+            ///   1. Under _bufferLock: copy the native frame into a managed staging array, capturing
+            ///      _w/_h in the same critical section so the blit below can't mix pixels from one
+            ///      geometry with dimensions from another. Nothing here can block on another thread.
+            ///   2. Lock RELEASED: WriteableBitmap.Lock / copy / AddDirtyRect / Unlock.
+            ///
+            /// The old code did step 2 while still holding _bufferLock, and that was a three-thread
+            /// deadlock: bmp.Lock() waits on the WPF render thread; the render thread was slow because
+            /// it was rasterising a fullscreen Gaussian over this very bitmap; and the LibVLC decoder
+            /// thread was parked on _bufferLock inside LockCallback/FormatCallback. With the decoder
+            /// parked in a native callback, player.Stop() could never return, which is what wedged
+            /// CloseAll and leaked a quarantined instance. A previous hang dump caught the render thread
+            /// in CWGXBitmapLockState::LockRead — the exact signature. One extra memcpy per frame buys
+            /// the guarantee that a stalled render thread can only ever cost frames, never the decoder.
+            /// </summary>
             private void OnRendering(object? sender, EventArgs e)
             {
                 if (!_bufferValid || !_frameReady) return;
                 _frameReady = false;
 
+                WriteableBitmap? bmp = null;
+                byte[]? staging = null;
+                uint w = 0, h = 0;
+                int bytes = 0;
+
+                // ---- Phase 1: native -> managed, under the lock, no blocking calls. ----
                 bool got = false;
                 try
                 {
@@ -2422,24 +2553,51 @@ namespace ConditioningControlPanel.Services
                     if (!got) return;
                     if (!_bufferValid || _frameBuffer == IntPtr.Zero) return;
 
-                    var bmp = _bitmap;
+                    var current = _bitmap;
+                    // Dimensions are read HERE, paired with the pixels, so a format callback landing
+                    // between the two phases can't make the blit below write a stale size.
+                    w = _w;
+                    h = _h;
                     // Bitmap not built yet, or its dims don't match the current buffer (a mid-stream
                     // resolution change between FormatCallback and RebuildBitmap): skip this frame.
-                    if (bmp == null || bmp.PixelWidth != (int)_w || bmp.PixelHeight != (int)_h) return;
+                    if (current == null || current.PixelWidth != (int)w || current.PixelHeight != (int)h) return;
 
-                    // #616/#617/#621/#622/#623: bmp.Lock() blocks the UI THREAD until the WPF render
-                    // thread releases the back buffer, and it runs inside CompositionTarget.Rendering
-                    // with a fullscreen Gaussian BlurEffect queued behind it. A render thread that
-                    // falls behind therefore stalls the dispatcher — the exact signature the previous
-                    // hang dump showed (render thread parked in CWGXBitmapLockState::LockRead). Time
-                    // it with a tick delta (no allocation on the per-frame path) and log ONLY when a
-                    // single blit crosses a human-visible stall, plus the very first frame.
+                    bytes = StagingBytesFor(w, h);
+                    if (bytes == 0) return; // absurd geometry from a bogus format callback
+
+                    if (_staging.Length < bytes)
+                    {
+                        _staging = new byte[bytes];
+                        VideoDiag.Log("BLUR", $"staging buffer grown to {bytes / 1024}KB for {w}x{h}");
+                    }
+                    Marshal.Copy(_frameBuffer, _staging, 0, bytes);
+                    staging = _staging;
+                    bmp = current;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("BlurVmemSurface: frame snapshot error: {Error}", ex.Message);
+                    return;
+                }
+                finally
+                {
+                    if (got) Monitor.Exit(_bufferLock);
+                }
+
+                if (bmp == null || staging == null) return;
+
+                // ---- Phase 2: managed -> bitmap, lock released. bmp.Lock() can still wait on the
+                // render thread, but it now blocks only this UI frame; the decoder runs on. Time it
+                // with a tick delta (no allocation on the per-frame path) and log ONLY when a single
+                // blit crosses a human-visible stall, plus the very first frame. ----
+                try
+                {
                     long lockStart = Environment.TickCount64;
                     bmp.Lock();
                     try
                     {
-                        CopyMemory(bmp.BackBuffer, _frameBuffer, _w * _h * 4);
-                        bmp.AddDirtyRect(new Int32Rect(0, 0, (int)_w, (int)_h));
+                        Marshal.Copy(staging, 0, bmp.BackBuffer, bytes);
+                        bmp.AddDirtyRect(new Int32Rect(0, 0, (int)w, (int)h));
                     }
                     finally
                     {
@@ -2449,16 +2607,109 @@ namespace ConditioningControlPanel.Services
                     if (blitMs >= 250)
                         VideoDiag.Log("BLUR", $"UI-thread frame blit took {blitMs}ms (WriteableBitmap.Lock contended with the render thread)");
                     if (!_hasRendered)
-                        VideoDiag.Log("BLUR", $"first frame blitted ({_w}x{_h})");
+                        VideoDiag.Log("BLUR", $"first frame blitted ({w}x{h})");
                     _hasRendered = true;
+
+                    RefreshBackgroundSnapshot(staging, w, h);
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Debug("BlurVmemSurface: frame copy error: {Error}", ex.Message);
                 }
-                finally
+            }
+
+            /// <summary>
+            /// Feed the blurred fill from a small, frozen snapshot of the frame instead of the live
+            /// bitmap (#687). Before this, _bgBrush.ImageSource WAS the per-frame WriteableBitmap, so
+            /// every frame the render thread had to upscale it to the full screen and run a radius-48
+            /// Gaussian over it while holding that bitmap's read lock — on a wide monitor with a
+            /// vertical clip it fell behind, and the UI thread's next bmp.Lock() inherited the stall.
+            /// A 1/8-scale source refreshed every Nth frame is 1/64th of the pixels at 1/6th of the
+            /// rate, and because the snapshot is a frozen BitmapSource that is swapped whole, the
+            /// render thread never blocks the UI thread on the background layer at all. The output is
+            /// behind a heavy blur, so neither the scale nor the cadence is visible.
+            /// UI thread only.
+            /// </summary>
+            private void RefreshBackgroundSnapshot(byte[] src, uint w, uint h)
+            {
+                if (!_needsBlur) return;
+
+                int frame = _frameCounter;
+                _frameCounter = (frame + 1) & 0x3FFFFFFF; // stays positive forever
+                if (!IsSnapshotFrame(frame, BgSnapshotEveryNFrames)) return;
+
+                try
                 {
-                    if (got) Monitor.Exit(_bufferLock);
+                    var (sw, sh) = ComputeSnapshotDims((w, h), BgSnapshotDivisor);
+                    int need = sw * sh * 4;
+                    if (_snapBuf.Length < need)
+                    {
+                        _snapBuf = new byte[need];
+                        VideoDiag.Log("BLUR", $"blur-fill snapshot source is {sw}x{sh} (1/{BgSnapshotDivisor} of {w}x{h}, every {BgSnapshotEveryNFrames} frames)");
+                    }
+                    else if (sw != _snapW || sh != _snapH)
+                    {
+                        VideoDiag.Log("BLUR", $"blur-fill snapshot resized to {sw}x{sh} (from {w}x{h})");
+                    }
+                    _snapW = sw;
+                    _snapH = sh;
+
+                    BoxDownsample(src, (int)w, (int)h, _snapBuf, sw, sh);
+
+                    var snap = BitmapSource.Create(sw, sh, 96, 96, PixelFormats.Bgr32, null, _snapBuf, sw * 4);
+                    snap.Freeze(); // frozen => the render thread reads it without ever locking us out
+                    _bgBrush.ImageSource = snap;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("BlurVmemSurface: blur-fill snapshot failed: {Error}", ex.Message);
+                }
+            }
+
+            /// <summary>
+            /// Average each source block down to one destination BGRA pixel. Box filter, allocation
+            /// free, capped at 4x4 taps per output pixel so the cost stays flat no matter how big the
+            /// block is — which is all the quality a radius-48 blur can possibly show.
+            /// </summary>
+            private static void BoxDownsample(byte[] src, int sw, int sh, byte[] dst, int dw, int dh)
+            {
+                if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
+                int srcStride = sw * 4;
+
+                for (int dy = 0; dy < dh; dy++)
+                {
+                    int y0 = dy * sh / dh;
+                    int y1 = Math.Max(y0 + 1, (dy + 1) * sh / dh);
+                    int stepY = Math.Max(1, (y1 - y0) / 4);
+                    int dRow = dy * dw * 4;
+
+                    for (int dx = 0; dx < dw; dx++)
+                    {
+                        int x0 = dx * sw / dw;
+                        int x1 = Math.Max(x0 + 1, (dx + 1) * sw / dw);
+                        int stepX = Math.Max(1, (x1 - x0) / 4);
+
+                        int b = 0, g = 0, r = 0, n = 0;
+                        for (int y = y0; y < y1; y += stepY)
+                        {
+                            int row = y * srcStride;
+                            for (int x = x0; x < x1; x += stepX)
+                            {
+                                int i = row + x * 4;
+                                b += src[i];
+                                g += src[i + 1];
+                                r += src[i + 2];
+                                n++;
+                            }
+                        }
+                        if (n == 0) n = 1;
+
+                        int o = dRow + dx * 4;
+                        dst[o] = (byte)(b / n);
+                        dst[o + 1] = (byte)(g / n);
+                        dst[o + 2] = (byte)(r / n);
+                        dst[o + 3] = 255;
+                    }
                 }
             }
 
