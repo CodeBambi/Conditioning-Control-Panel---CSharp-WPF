@@ -831,8 +831,9 @@ namespace ConditioningControlPanel
                 // Stop mantra lab audio
                 Mantra?.Dispose();
 
-                // Stop the ambient mantra chant loop
-                MantraChant?.Stop();
+                // Stop the ambient mantra chant loop — and clear its persisted flag, so panic ENDS
+                // the chant instead of pausing it until the next launch (#685).
+                MantraChant?.StopAndDisarm();
 
                 // Stop autonomy mode
                 Autonomy?.Stop();
@@ -1642,9 +1643,19 @@ namespace ConditioningControlPanel
             MantraVoice = new MantraVoiceService();
 
             // Mantra Chant — loops the active mod's voiced mantras as ambient audio (opt-in).
-            // Resume from settings; Start() no-ops gracefully if this mod has nothing voiced.
+            // #685: it must NOT auto-start here. OnStartup runs long before MainWindow exists, so a
+            // persisted MantraChantEnabled began looping her voice with no UI on screen to stop it —
+            // and panic only paused it, so it came back every launch. The chant now starts OFF on
+            // every launch and only ever runs from the Takeover tab toggle the user can see. Same
+            // "clear the stale enabled flag" rule Takeover itself uses (see the AutonomyResumeOnStartup
+            // block in InitializePatreonAndSyncAsync) so the checkbox matches reality on a fresh start.
             MantraChant = new MantraChantService();
-            if (Settings?.Current?.MantraChantEnabled == true) MantraChant.Start();
+            if (Settings?.Current != null && Settings.Current.MantraChantEnabled)
+            {
+                Settings.Current.MantraChantEnabled = false;
+                Settings.Save();
+                Logger?.Information("Mantra Chant left OFF on startup (it never auto-resumes — #685)");
+            }
 
             // Initialize wallpaper override service
             Wallpaper = new WallpaperService();

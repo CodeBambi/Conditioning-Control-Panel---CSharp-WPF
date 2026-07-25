@@ -12,6 +12,10 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             InitializeComponent();
             Loaded += (_, _) => LoadMantraChant();
+            // Tabs are shown/hidden rather than rebuilt, so Loaded fires once. Re-read on every show
+            // or the toggle lies after something else disarms the chant behind our back — panic clears
+            // MantraChantEnabled (#685) and the checkbox would still read ON.
+            IsVisibleChanged += (_, _) => { if (IsVisible) LoadMantraChant(); };
         }
 
         // ── Mantra Chant (suggestion #653) ────────────────────────────────────────
