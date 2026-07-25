@@ -406,19 +406,30 @@ namespace ConditioningControlPanel.Services.Speech
                 var utterances = new List<float[]>();
                 var ambient = new List<float>(SampleRate * 3); // up to ~3s of room tone
                 var cur = new List<float>();
-                double noiseFloor = 0.01;     // adaptive room-tone estimate
+                double noiseFloor = 0.01;     // adaptive room-tone estimate; re-seeded from real room tone below
                 int trailingSilenceMs = 0;
                 bool inSpeech = false;
                 var captureLock = new object();
                 var doneTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
                 const double MinUttMs = 250, MaxUttMs = 2500, EndSilenceMs = 480;
+                // Mirrors the live path's pre-roll window (PreRollBuffer's default): any onset gate can only
+                // flip AFTER speech has begun, so the unvoiced /h/ of "hey" is always behind it.
+                const double MaxPreRollMs = 800;
+                // Room tone measured before any gating, so the onset gate scales off THIS mic's floor rather
+                // than a hardcoded guess (a hot mic idles well above 0.01, a quiet one well below).
+                const double FloorSeedMs = 300;
                 int MsToSamples(double ms) => (int)(SampleRate * ms / 1000.0);
+                int seedTargetSamples = MsToSamples(FloorSeedMs);
+                int seedSamples = 0; double seedMinRms = double.MaxValue; bool floorSeeded = false;
+                var preRoll = new PreRollBuffer(SampleRate, MaxPreRollMs / 1000.0);
+                int preRollSamples = 0;       // pre-roll drained into the CURRENT utterance
+                int onsets = 0, rejected = 0; // capture-stage diagnostics for the failure log
 
                 WaveInEvent? mic = null;
-                // Same rumble filter as the live wake path, so the utterances we sweep against are the
-                // audio the decoder will actually see (calibrating on raw audio picks a threshold for a
-                // pipeline the user never runs).
+                // Same rumble filter (and, above, the same pre-roll) as the live wake path, so the utterances
+                // we sweep against are the audio the decoder will actually see (calibrating on raw or
+                // onset-clipped audio picks a threshold for a pipeline the user never runs).
                 var hpfCal = (App.Settings?.Current?.SpeechNoiseSuppression ?? true) ? new HighPassFilter(SampleRate) : null;
                 try
                 {
@@ -447,35 +458,73 @@ namespace ConditioningControlPanel.Services.Speech
                             lock (captureLock)
                             {
                                 if (doneTcs.Task.IsCompleted) return;
-                                // Track a slow noise floor from quiet frames; gate scales off it so it
-                                // adapts to mic gain. Onset must clearly exceed room tone.
-                                if (!inSpeech) noiseFloor = Math.Min(noiseFloor * 1.02 + 1e-5, Math.Max(noiseFloor, rms));
-                                if (rms < noiseFloor * 1.5) noiseFloor = 0.9 * noiseFloor + 0.1 * rms;
-                                double onsetGate = Math.Clamp(noiseFloor * 4.0, 0.02, 0.08);
-                                double endGate = onsetGate * 0.6;
 
-                                if (!inSpeech)
+                                if (!floorSeeded)
                                 {
-                                    // Collect room tone for the false-wake guard, but ONLY clearly-quiet
-                                    // frames (below the end gate) so a near-onset word fragment never bleeds
-                                    // into the ambient and makes it spuriously "fire" during the sweep.
-                                    if (rms < endGate && ambient.Count < SampleRate * 2) ambient.AddRange(buf);
-                                    if (rms >= onsetGate) { inSpeech = true; trailingSilenceMs = 0; cur.Clear(); cur.AddRange(buf); }
+                                    // Seed the floor from the first ~300ms of REAL room tone, taking the
+                                    // quietest frame so a user who starts talking early can't inflate it.
+                                    // These frames aren't dropped — they go to the pre-roll and are drained
+                                    // back in on the first onset.
+                                    seedMinRms = Math.Min(seedMinRms, rms);
+                                    seedSamples += n;
+                                    preRoll.Push(buf);
+                                    if (seedSamples >= seedTargetSamples)
+                                    {
+                                        noiseFloor = Math.Clamp(seedMinRms, 0.0005, 0.05);
+                                        floorSeeded = true;
+                                        App.Logger?.Information("SherpaWakeService: calibration floor seeded from room tone (floor={Floor:0.0000}, onsetGate={Gate:0.0000})",
+                                            noiseFloor, Math.Clamp(noiseFloor * 4.0, 0.006, 0.08));
+                                    }
                                 }
                                 else
                                 {
-                                    cur.AddRange(buf);
-                                    trailingSilenceMs = rms < endGate ? trailingSilenceMs + (int)bufMs : 0;
-                                    double uttMs = 1000.0 * cur.Count / SampleRate;
-                                    if (trailingSilenceMs >= EndSilenceMs || uttMs >= MaxUttMs)
+                                    // Track a slow noise floor from quiet frames; gate scales off it so it
+                                    // adapts to mic gain. Onset must clearly exceed room tone. The floor is
+                                    // allowed down to 0.006 so a quiet mic isn't held to a gate several times
+                                    // stricter than the tunable mantra path (SpeechLoudnessThreshold: 0.004+).
+                                    if (!inSpeech) noiseFloor = Math.Min(noiseFloor * 1.02 + 1e-5, Math.Max(noiseFloor, rms));
+                                    if (rms < noiseFloor * 1.5) noiseFloor = 0.9 * noiseFloor + 0.1 * rms;
+                                    double onsetGate = Math.Clamp(noiseFloor * 4.0, 0.006, 0.08);
+                                    double endGate = onsetGate * 0.6;
+
+                                    if (!inSpeech)
                                     {
-                                        if (uttMs - trailingSilenceMs >= MinUttMs && uttMs <= MaxUttMs + 200)
+                                        // Collect room tone for the false-wake guard, but ONLY clearly-quiet
+                                        // frames (below the end gate) so a near-onset word fragment never bleeds
+                                        // into the ambient and makes it spuriously "fire" during the sweep.
+                                        if (rms < endGate && ambient.Count < SampleRate * 2) ambient.AddRange(buf);
+                                        if (rms >= onsetGate)
                                         {
-                                            utterances.Add(cur.ToArray());
-                                            progress?.Report(new CalibrationProgress { Phase = "listen", Captured = utterances.Count, Target = target, Level = rms });
+                                            // Drain the pre-roll ahead of this chunk, exactly as the live path
+                                            // does: the gate only opens AFTER the onset, so without this every
+                                            // captured say loses its unvoiced /h/ and the KWS token sequence
+                                            // can't match at ANY swept threshold.
+                                            inSpeech = true; trailingSilenceMs = 0; onsets++;
+                                            cur.Clear(); preRollSamples = 0;
+                                            foreach (var held in preRoll.Drain()) { cur.AddRange(held); preRollSamples += held.Length; }
+                                            cur.AddRange(buf);
                                         }
-                                        inSpeech = false; cur.Clear(); trailingSilenceMs = 0;
-                                        if (utterances.Count >= target) doneTcs.TrySetResult(true);
+                                        else preRoll.Push(buf); // held by reference — buf is a fresh array per callback
+                                    }
+                                    else
+                                    {
+                                        cur.AddRange(buf);
+                                        trailingSilenceMs = rms < endGate ? trailingSilenceMs + (int)bufMs : 0;
+                                        // Length limits measure the SPOKEN part only; the pre-roll rides along
+                                        // inside cur but must not eat into the utterance budget.
+                                        double uttMs = 1000.0 * cur.Count / SampleRate;
+                                        double spokenMs = uttMs - 1000.0 * preRollSamples / SampleRate;
+                                        if (trailingSilenceMs >= EndSilenceMs || spokenMs >= MaxUttMs)
+                                        {
+                                            if (spokenMs - trailingSilenceMs >= MinUttMs && uttMs <= MaxUttMs + MaxPreRollMs + 200)
+                                            {
+                                                utterances.Add(cur.ToArray());
+                                                progress?.Report(new CalibrationProgress { Phase = "listen", Captured = utterances.Count, Target = target, Level = rms });
+                                            }
+                                            else rejected++;
+                                            inSpeech = false; cur.Clear(); preRollSamples = 0; trailingSilenceMs = 0;
+                                            if (utterances.Count >= target) doneTcs.TrySetResult(true);
+                                        }
                                     }
                                 }
                             }
@@ -503,7 +552,14 @@ namespace ConditioningControlPanel.Services.Speech
                 if (ct.IsCancellationRequested)
                     return new CalibrationResult { Message = "Calibration cancelled." };
                 if (utterances.Count < 2)
+                {
+                    double floorNow; int ambMs;
+                    lock (captureLock) { floorNow = noiseFloor; ambMs = ambient.Count * 1000 / SampleRate; }
+                    App.Logger?.Information(
+                        "SherpaWakeService: calibration FAILED at capture — kept {Utt}/{Target} says (onsets={Onsets}, rejectedByLength={Rejected}, floor={Floor:0.0000}, onsetGate={Gate:0.0000}, ambientMs={Amb})",
+                        utterances.Count, target, onsets, rejected, floorNow, Math.Clamp(floorNow * 4.0, 0.006, 0.08), ambMs);
                     return new CalibrationResult { Message = $"Only heard {utterances.Count} clear say(s). Try again — say “Hey Bambi” clearly, with a pause between each." };
+                }
 
                 progress?.Report(new CalibrationProgress { Phase = "analyze", Captured = utterances.Count, Target = target });
 
@@ -531,12 +587,12 @@ namespace ConditioningControlPanel.Services.Speech
                     }
                 }, ct).ConfigureAwait(false);
 
-                if (App.Settings?.Current?.SpeechWakeDiagnostics == true)
-                {
-                    var tbl = string.Join("  ", candidates.Select((t, k) => $"{t:0.00}:{caughtAt[k]}/{n}{(ambientAt[k] ? "!amb" : "")}"));
-                    App.Logger?.Information("SherpaWakeService: calibration sweep utts={Utt} ambientMs={Amb} needed={Need} | {Table}",
-                        n, ambientUsable ? ambientArr.Length * 1000 / SampleRate : 0, needed, tbl);
-                }
+                // Logged unconditionally: this only runs during an explicit, user-initiated calibration, and
+                // the old SpeechWakeDiagnostics gate (which has no UI, so it is effectively always off) left
+                // a failed run with nothing to diagnose.
+                var tbl = string.Join("  ", candidates.Select((t, k) => $"{t:0.00}:{caughtAt[k]}/{n}{(ambientAt[k] ? "!amb" : "")}"));
+                App.Logger?.Information("SherpaWakeService: calibration sweep utts={Utt} ambientMs={Amb} needed={Need} | {Table}",
+                    n, ambientUsable ? ambientArr.Length * 1000 / SampleRate : 0, needed, tbl);
 
                 // Recall-first selection (the user's complaint is MISSES, not false wakes):
                 //  1) strictest threshold that catches >= needed AND keeps the room tone silent — ideal.
@@ -559,7 +615,12 @@ namespace ConditioningControlPanel.Services.Speech
                 int caught = caughtAt[pick];
 
                 if (caught < 2)
+                {
+                    App.Logger?.Information(
+                        "SherpaWakeService: calibration FAILED at sweep — best {Caught}/{N} at {Chosen:0.00} (needed {Need}, ambientMs={Amb}); threshold left at {Cur:0.000}",
+                        caught, n, chosen, needed, ambientUsable ? ambientArr.Length * 1000 / SampleRate : 0, WakeThreshold());
                     return new CalibrationResult { Message = $"Only caught {caught}/{n} clearly — didn't change anything. Try again: say “Hey Bambi” a bit louder, with a clear pause between each." };
+                }
 
                 string msg = caught >= needed && !ambientRisk
                     ? $"Calibrated to your voice — caught {caught}/{n} at sensitivity {chosen:0.00}."
