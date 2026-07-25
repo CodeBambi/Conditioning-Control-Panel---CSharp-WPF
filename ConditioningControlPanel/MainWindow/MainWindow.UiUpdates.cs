@@ -919,11 +919,36 @@ namespace ConditioningControlPanel
             ApplySettingsLive();
         }
 
-        internal void BtnTestAudio_Click(object sender, RoutedEventArgs e)
+        // Guards against a second click while the diagnostic is still running — the probe
+        // reassigns the shared test player, so two concurrent runs would race it.
+        private bool _testingAudio;
+
+        internal async void BtnTestAudio_Click(object sender, RoutedEventArgs e)
         {
-            var result = App.Audio?.TestAudioPlayback() ?? "Audio service not initialized";
-            App.Logger?.Information("[AudioDiag] Test requested:\n{Result}", result);
-            System.Windows.MessageBox.Show(result, "Audio Diagnostics", MessageBoxButton.OK, MessageBoxImage.Information);
+            if (_testingAudio) return;
+            _testingAudio = true;
+            try
+            {
+                var audio = App.Audio;
+                // Off the UI thread: the probe opens WaveOut devices, which blocks for many
+                // seconds (or forever) when the audio endpoint is wedged (#686).
+                var result = audio == null
+                    ? "Audio service not initialized"
+                    : await Task.Run(() => audio.TestAudioPlayback());
+
+                App.Logger?.Information("[AudioDiag] Test requested:\n{Result}", result);
+                System.Windows.MessageBox.Show(result, "Audio Diagnostics", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[AudioDiag] Test failed");
+                System.Windows.MessageBox.Show($"Audio diagnostics failed: {ex.Message}", "Audio Diagnostics",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            finally
+            {
+                _testingAudio = false;
+            }
         }
 
         // Set during PopulateAudioOutputDevices to suppress the SelectionChanged save while
