@@ -1054,7 +1054,7 @@ namespace ConditioningControlPanel
                         foreach (var h in hwnds) _droppedHwnds.Add(h);
                     }
                     App.Logger?.Warning(
-                        "LockCardWindow: UI thread unresponsive for {Ms}ms with {N} lock card(s) covering the screen - force-dropping the topmost cover",
+                        "[WATCHDOG] LockCardWindow: UI thread unresponsive for {Ms}ms with {N} lock card(s) covering the screen - force-dropping the topmost cover",
                         stalled, hwnds.Length);
                     // Sacrificial thread: if any user32 call unexpectedly blocks on the hung owner
                     // thread, the watchdog itself must stay alive to reach the fail-fast rung.
@@ -1067,7 +1067,7 @@ namespace ConditioningControlPanel
                 else if (stalled >= WATCHDOG_FAILFAST_MS && _watchdogOpenCount > 0)
                 {
                     App.Logger?.Fatal(
-                        "LockCardWindow: UI thread still wedged {Ms}ms after the emergency drop - terminating so the screen is freed",
+                        "[WATCHDOG] LockCardWindow: UI thread still wedged {Ms}ms after the emergency drop - terminating so the screen is freed",
                         stalled);
                     System.Threading.Thread.Sleep(500);   // let the file sink write the line above
                     Environment.FailFast(
@@ -1095,7 +1095,7 @@ namespace ConditioningControlPanel
                 }
                 catch { }
             }
-            App.Logger?.Information("LockCardWindow: emergency drop applied to {N} window(s)", hwnds.Length);
+            App.Logger?.Information("[WATCHDOG] LockCardWindow: emergency drop applied to {N} window(s)", hwnds.Length);
         }
 
         // Runs on the dispatcher once it recovers from a wedge that triggered an emergency drop.
@@ -1116,7 +1116,7 @@ namespace ConditioningControlPanel
                 var windows = new List<LockCardWindow>(_allWindows);
                 _allWindows.Clear();
                 App.Logger?.Warning(
-                    "LockCardWindow: UI thread recovered after emergency drop - closing {N} dropped card(s) (not poolable: SLWA broke their layered rendering)",
+                    "[WATCHDOG] LockCardWindow: UI thread recovered after emergency drop - closing {N} dropped card(s) (not poolable: SLWA broke their layered rendering)",
                     windows.Count);
                 foreach (var w in windows)
                 {

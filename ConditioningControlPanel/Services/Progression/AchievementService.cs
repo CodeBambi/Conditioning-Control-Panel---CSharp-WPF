@@ -744,15 +744,26 @@ public class AchievementService : IDisposable
 
         if (SuppressPopups) return true;
 
-        // Fire event to show popup
+        // Fire event to show popup. Fire-and-forget (BeginInvoke, #684): the unlock itself is already
+        // persisted above and nothing here reads back a result, so a background-thread unlock must never
+        // block behind the UI thread - a wedged dispatcher used to hang the caller forever via Invoke.
+        // The inner try-catch preserves the old swallow-and-log contract for handler exceptions, which
+        // a synchronous Invoke used to marshal back to the catch below.
         try
         {
-            DispatcherHelper.RunOnUISync(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
-                App.Logger?.Debug("Firing AchievementUnlocked event for: {Name}", achievement.Name);
-                AchievementUnlocked?.Invoke(this, achievement);
-                _ = App.Haptics?.AchievementPatternAsync();
-                _ = App.Haptics?.AchievementPatternAsync();
+                try
+                {
+                    App.Logger?.Debug("Firing AchievementUnlocked event for: {Name}", achievement.Name);
+                    AchievementUnlocked?.Invoke(this, achievement);
+                    _ = App.Haptics?.AchievementPatternAsync();
+                    _ = App.Haptics?.AchievementPatternAsync();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Failed to fire achievement event");
+                }
             });
         }
         catch (Exception ex)
