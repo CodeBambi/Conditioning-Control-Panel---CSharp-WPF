@@ -2477,5 +2477,18 @@
   "chat_cooldown_active": "Чат на паузе: осталось {0}с",
 
   "community_prompt_warning_title": "Community prompt advisory",
-  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns.",
+
+  "webcam_monitor_label": "Монитор трекинга:",
+  "webcam_monitor_tooltip": "Монитор, на который нацелен трекинг с веб-камеры. Калибровка, быстрая рекалибровка и тест трекера открываются здесь, и оверлеи, реагирующие на взгляд (например, тренажёр моргания), тоже появляются здесь. По умолчанию - основной монитор.",
+  "tooltip_dashboard": "Панель — основные элементы управления, настройки и статистика одним взглядом.",
+  "tooltip_presets_sessions": "Пресеты и сессии — сохраняйте, загружайте и делитесь полными конфигурациями и расписанными сессиями.",
+  "tooltip_daily_weekly_quests": "Ежедневные и еженедельные задания — повторяющиеся цели, дающие опыт и награды.",
+  "tooltip_enhancement_tree": "Дерево улучшений — тратьте очки на постоянные улучшения.",
+  "tooltip_assets_packs": "Ассеты и паки — управляйте изображениями, видео и звуком, устанавливайте паки контента.",
+  "tooltip_companion_settings": "Настройки компаньона — характер, голос и поведение аватара.",
+  "tooltip_lab": "Лаборатория — экспериментальные функции в тестировании. Возможны шероховатости.",
+  "tooltip_patreon_exclusives": "Эксклюзив — функции и контент только для подписчиков.",
+  "tooltip_how_to_use": "Как пользоваться — краткое руководство для начала.",
+  "label_local_ai_consent_pull_model": "Загрузить модель ИИ."
 }

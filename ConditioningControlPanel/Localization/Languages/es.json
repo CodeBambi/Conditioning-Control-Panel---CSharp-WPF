@@ -2488,5 +2488,18 @@ Se desbloquea en el Nivel 75.",
   "chat_cooldown_active": "Pausa del chat: quedan {0}s",
 
   "community_prompt_warning_title": "Community prompt advisory",
-  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns.",
+
+  "webcam_monitor_label": "Monitor de seguimiento:",
+  "webcam_monitor_tooltip": "El monitor al que apunta el seguimiento por webcam. La calibración, la recalibración rápida y la prueba del rastreador se abren aquí, y las superposiciones que reaccionan a la mirada, como el Entrenador de Parpadeo, también aparecen aquí. Por defecto, el monitor principal.",
+  "tooltip_dashboard": "Panel — controles principales, ajustes y tus estadísticas de un vistazo.",
+  "tooltip_presets_sessions": "Presets y sesiones — guarda, carga y comparte configuraciones completas y planes de sesión con temporizador.",
+  "tooltip_daily_weekly_quests": "Misiones diarias y semanales — objetivos recurrentes que dan XP y recompensas.",
+  "tooltip_enhancement_tree": "Árbol de mejoras — gasta puntos para desbloquear mejoras permanentes.",
+  "tooltip_assets_packs": "Recursos y packs — gestiona tus imágenes, vídeos y audio, e instala packs de contenido.",
+  "tooltip_companion_settings": "Ajustes de la compañera — personalidad, voz y cómo se comporta tu avatar.",
+  "tooltip_lab": "El Laboratorio — funciones experimentales en pruebas. Puede haber fallos.",
+  "tooltip_patreon_exclusives": "Exclusivos — funciones y contenido solo para mecenas.",
+  "tooltip_how_to_use": "Cómo usar — una guía rápida para empezar.",
+  "label_local_ai_consent_pull_model": "Descargar el modelo de IA."
 }

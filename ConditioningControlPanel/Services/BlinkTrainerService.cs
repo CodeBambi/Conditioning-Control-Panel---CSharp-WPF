@@ -105,9 +105,11 @@ public class BlinkTrainerService : IDisposable
                 return false;
             }
 
-            // Gaze-reactive spawn: the user has to be looking at the overlay
-            // for blink detection to work, so pin to the calibrated screen
-            // when calibration is loaded. No-op without calibration.
+            // Overlay placement. Blink DETECTION itself is monitor-independent
+            // (it reads the camera, not the screen) — it is the gaze targeting
+            // that needs a calibrated screen, so the overlay is pinned to one
+            // screen. Order: explicit Monitor-dropdown pick, else the monitor
+            // the calibration was recorded on, else the normal spread.
             var screens = GazeContentScreenPolicy.ResolveGazeReactiveScreens(settings);
 
             var opacity = Math.Clamp(settings.BlinkTrainerOpacity, 1, 100) / 100.0;

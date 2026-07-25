@@ -2496,5 +2496,18 @@ Wird bei Level 75 freigeschaltet.",
   "chat_cooldown_active": "Chat-Sperre: noch {0}s",
 
   "community_prompt_warning_title": "Community prompt advisory",
-  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns.",
+
+  "webcam_monitor_label": "Tracking-Monitor:",
+  "webcam_monitor_tooltip": "Der Monitor, auf den das Webcam-Tracking zielt. Kalibrierung, Schnell-Rekalibrierung und Tracker-Test öffnen sich hier, und blickabhängige Overlays wie der Blinzel-Trainer erscheinen ebenfalls hier. Standard ist der primäre Bildschirm.",
+  "tooltip_dashboard": "Dashboard — Hauptsteuerung, Einstellungen und deine Statistiken auf einen Blick.",
+  "tooltip_presets_sessions": "Vorlagen & Sessions — vollständige Konfigurationen und zeitgesteuerte Session-Pläne speichern, laden und teilen.",
+  "tooltip_daily_weekly_quests": "Tägliche & wöchentliche Aufgaben — wiederkehrende Ziele, die XP und Belohnungen bringen.",
+  "tooltip_enhancement_tree": "Verbesserungsbaum — Punkte ausgeben, um dauerhafte Upgrades freizuschalten.",
+  "tooltip_assets_packs": "Dateien & Packs — Bilder, Videos und Audio verwalten und Content-Packs installieren.",
+  "tooltip_companion_settings": "Begleiter-Einstellungen — Persönlichkeit, Stimme und Verhalten deines Avatars.",
+  "tooltip_lab": "Das Labor — experimentelle Funktionen im Test. Ecken und Kanten sind normal.",
+  "tooltip_patreon_exclusives": "Exklusiv — Funktionen und Inhalte nur für Unterstützer.",
+  "tooltip_how_to_use": "Anleitung — Kurzeinstieg für den Start.",
+  "label_local_ai_consent_pull_model": "Das KI-Modell herunterladen."
 }

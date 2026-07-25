@@ -2496,5 +2496,18 @@ Se débloque au Niveau 75.",
   "chat_cooldown_active": "Suspension du chat : {0}s restantes",
 
   "community_prompt_warning_title": "Community prompt advisory",
-  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns.",
+
+  "webcam_monitor_label": "Écran de suivi :",
+  "webcam_monitor_tooltip": "L'écran ciblé par le suivi webcam. L'étalonnage, la recalibration rapide et le test du traqueur s'ouvrent ici, et les superpositions réactives au regard comme l'Entraîneur de clignement y apparaissent aussi. Par défaut : l'écran principal.",
+  "tooltip_dashboard": "Tableau de bord — commandes principales, paramètres et vos statistiques en un coup d'œil.",
+  "tooltip_presets_sessions": "Préréglages et sessions — enregistrez, chargez et partagez des configurations complètes et des plans de session minutés.",
+  "tooltip_daily_weekly_quests": "Quêtes quotidiennes et hebdomadaires — objectifs récurrents qui rapportent de l'XP et des récompenses.",
+  "tooltip_enhancement_tree": "Arbre d'améliorations — dépensez des points pour débloquer des améliorations permanentes.",
+  "tooltip_assets_packs": "Ressources et packs — gérez vos images, vidéos et audio, et installez des packs de contenu.",
+  "tooltip_companion_settings": "Paramètres du compagnon — personnalité, voix et comportement de votre avatar.",
+  "tooltip_lab": "Le Labo — fonctionnalités expérimentales en test. Attendez-vous à des imperfections.",
+  "tooltip_patreon_exclusives": "Exclusifs — fonctionnalités et contenus réservés aux soutiens.",
+  "tooltip_how_to_use": "Comment ça marche — guide rapide pour démarrer.",
+  "label_local_ai_consent_pull_model": "Télécharger le modèle d'IA."
 }

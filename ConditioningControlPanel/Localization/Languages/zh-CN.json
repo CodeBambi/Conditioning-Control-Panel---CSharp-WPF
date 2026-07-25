@@ -137,8 +137,8 @@
   "deeper_player_eye_tracking_first_time": "首次设置需要：\n\n前往Deeper标签页→摄像头设置卡片（页面顶部）。在那里授予摄像头同意并运行校准——两者免费。完成后就可以从此按钮直接开始跟踪",
   "deeper_player_eye_tracking_confirm_start": "现在开始眼动追踪？\n\n你的摄像头将打开，让增强的眨眼/注视/脸部丢失规则在媒体播放时触发。可随时用此按钮停止",
   "deeper_player_eye_tracking_start_failed_fmt": "无法启动眼动追踪：{0}",
-  "webcam_monitor_label": "显示器：",
-  "webcam_monitor_tooltip": "选择校准/快速重新校准/跟踪测试窗口打开的显示器。仅影响全屏提示出现位置——摄像头和跟踪功能不变。默认为系统主显示器",
+  "webcam_monitor_label": "跟踪显示器：",
+  "webcam_monitor_tooltip": "网络摄像头跟踪所针对的显示器。校准、快速重新校准和跟踪测试会在此显示器打开，眨眼训练器等注视响应叠加层也会显示在这里。默认为系统主显示器。",
   "webcam_monitor_primary": "主显示器",
   "webcam_monitor_item_fmt": "显示器 {0}：{1}（{2}×{3}）",
   "deeper_editor_unsaved_marker": "未保存的更改",
@@ -3256,5 +3256,16 @@
   "policy_warning_ok": "知道了",
   "chat_cooldown_active": "聊天暂停：剩余 {0} 秒",
   "community_prompt_warning_title": "Community prompt advisory",
-  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns.",
+
+  "tooltip_dashboard": "仪表盘 — 主要控制、设置和一目了然的统计数据。",
+  "tooltip_presets_sessions": "预设与会话 — 保存、加载和分享完整配置及定时会话方案。",
+  "tooltip_daily_weekly_quests": "每日与每周任务 — 可反复完成、奖励经验值和奖品的目标。",
+  "tooltip_enhancement_tree": "增强树 — 消耗点数解锁永久升级。",
+  "tooltip_assets_packs": "资源与内容包 — 管理图片、视频和音频，并安装内容包。",
+  "tooltip_companion_settings": "伙伴设置 — 性格、语音以及虚拟形象的行为方式。",
+  "tooltip_lab": "实验室 — 仍在测试中的实验性功能，可能不够稳定。",
+  "tooltip_patreon_exclusives": "专属 — 仅限支持者的功能和内容。",
+  "tooltip_how_to_use": "使用方法 — 快速上手指南。",
+  "label_local_ai_consent_pull_model": "下载 AI 模型。"
 }

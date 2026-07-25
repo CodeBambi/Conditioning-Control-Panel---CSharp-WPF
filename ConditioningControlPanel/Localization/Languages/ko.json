@@ -2495,5 +2495,18 @@
   "chat_cooldown_active": "채팅 일시 중지: {0}초 남음",
 
   "community_prompt_warning_title": "Community prompt advisory",
-  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns.",
+
+  "webcam_monitor_label": "트래킹 모니터:",
+  "webcam_monitor_tooltip": "웹캠 트래킹이 사용할 모니터입니다. 보정, 빠른 재보정, 트래커 테스트가 여기서 열리고 깜빡임 트레이너 같은 시선 반응 오버레이도 여기에 표시됩니다. 기본값은 시스템 주 모니터입니다.",
+  "tooltip_dashboard": "대시보드 — 주요 조작, 설정, 한눈에 보는 통계.",
+  "tooltip_presets_sessions": "프리셋 및 세션 — 전체 설정과 시간제 세션 계획을 저장, 불러오기, 공유합니다.",
+  "tooltip_daily_weekly_quests": "일일 및 주간 퀵스트 — XP와 보상을 주는 반복 목표.",
+  "tooltip_enhancement_tree": "강화 트리 — 포인트를 사용해 영구 업그레이드를 해금합니다.",
+  "tooltip_assets_packs": "에셋 및 팩 — 이미지, 동영상, 오디오를 관리하고 콘텐츠 팩을 설치합니다.",
+  "tooltip_companion_settings": "컴패니언 설정 — 성격, 음성, 아바타 행동 방식.",
+  "tooltip_lab": "연구소 — 아직 테스트 중인 실험적 기능. 다소 불안정할 수 있습니다.",
+  "tooltip_patreon_exclusives": "독점 — 후원자 전용 기능과 콘텐츠.",
+  "tooltip_how_to_use": "사용법 — 시작을 위한 간단 안내.",
+  "label_local_ai_consent_pull_model": "AI 모델을 다운로드합니다."
 }

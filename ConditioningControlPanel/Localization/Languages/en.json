@@ -236,8 +236,8 @@
   "deeper_player_eye_tracking_first_time": "First-time setup needed:\n\nGo to the Deeper tab → Webcam Setup card (top of the page). Grant camera consent and run the calibration there — both are free. Once that's done you'll be able to start tracking from this button directly.",
   "deeper_player_eye_tracking_confirm_start": "Start eye tracking now?\n\nYour webcam will turn on so the enhancement's blink/gaze/face-lost rules can fire while the media plays. You can stop anytime with this button.",
   "deeper_player_eye_tracking_start_failed_fmt": "Could not start eye tracking: {0}",
-  "webcam_monitor_label": "Monitor:",
-  "webcam_monitor_tooltip": "Pick which monitor the calibration / Quick Recal / Tracker Test windows open on. Only affects where those fullscreen prompts appear — your camera and tracking still work the same. Defaults to the system primary.",
+  "webcam_monitor_label": "Tracking monitor:",
+  "webcam_monitor_tooltip": "Which monitor webcam tracking targets. Calibration, Quick Recal and Tracker Test open here, and gaze-reactive overlays like the Blink Trainer appear here too. Defaults to the system primary.",
   "webcam_monitor_primary": "Primary monitor",
   "webcam_monitor_item_fmt": "Monitor {0}: {1} ({2}×{3})",
   "deeper_editor_unsaved_marker": "Unsaved changes",
@@ -3562,5 +3562,16 @@ Unlocks at Level 75.",
   "chat_cooldown_active": "Chat cooldown: {0}s remaining",
 
   "community_prompt_warning_title": "Community prompt advisory",
-  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns.",
+
+  "tooltip_dashboard": "Dashboard — main controls, settings and your at-a-glance stats.",
+  "tooltip_presets_sessions": "Presets & Sessions — save, load and share full configurations and timed session plans.",
+  "tooltip_daily_weekly_quests": "Daily & weekly quests — recurring goals that pay out XP and rewards.",
+  "tooltip_enhancement_tree": "Enhancement tree — spend points to unlock permanent upgrades.",
+  "tooltip_assets_packs": "Assets & packs — manage your images, videos and audio, and install content packs.",
+  "tooltip_companion_settings": "Companion settings — personality, voice and how your avatar behaves.",
+  "tooltip_lab": "The Lab — experimental features still in testing. Expect rough edges.",
+  "tooltip_patreon_exclusives": "Premium — supporter-only features and content.",
+  "tooltip_how_to_use": "How to use — a quick guide to getting started.",
+  "label_local_ai_consent_pull_model": "Download the AI model."
 }
