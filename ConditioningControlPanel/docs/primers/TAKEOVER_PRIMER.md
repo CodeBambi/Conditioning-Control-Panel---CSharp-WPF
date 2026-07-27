@@ -220,7 +220,7 @@ Settings changes re-arm live via `RefreshRandomTimer()` / `RefreshIdleTimer()` /
 | BouncingText | `App.BouncingText.Start(bypassLevelCheck:true)`, auto-stop 30 s | |
 | BubbleCount | `App.BubbleCount.TriggerGame(forceTest:true)` | Auto path is dead; reachable via `count_once` voice command. |
 | WebVideo | `TriggerWebVideoFullscreen` → `App.BrowserMedia.BeginTakeover(...Autonomy)` + `MainWindow.NavigateToUrlInBrowser(url, autoPlayFullscreen:true)` | Picks from `AvatarTubeWindow.KnownVideoLinks`, dedupes via `_shownWebVideos`. Lifecycle owned by `BrowserMediaService`. |
-| WallpaperShuffle | `App.Wallpaper.Activate()/Shuffle()`, auto-deactivate 30 s unless user enabled it | |
+| WallpaperShuffle | `TriggerWallpaperChange()` — `App.Wallpaper.Shuffle()` (activates on its own when idle), auto-deactivate after `WallpaperPulseSeconds` unless `WallpaperEnabled` ("Keep the wallpaper") | Revert timer is a CTS that each new change **replaces**, never stacks (#694). `Activate()` refuses to run when the current wallpaper can't be captured, so the desktop stays restorable (#692). |
 | SpokenMantra | `TriggerSpokenMantra()` (§4d) | |
 | BrainDrainPulse | `PulseBrainDrain` | **Dead auto-path** (removed from candidates); "deeper" voice command uses `App.BrainDrain.Start` instead. |
 
@@ -333,6 +333,8 @@ mic, the app won't surprise-open it.
 | `AutonomyCanTriggerFlash/Video/Subliminal/Bubbles/Comment/MindWipe/LockCard/PinkFilter/BouncingText/Wallpaper` | 3583-3716 | mixed | Per-effect enable for the auto-scheduler. |
 | `AutonomyCanTriggerBrainDrain/Spiral/BubbleCount` | 3613 / 3663 / 3693 | true | **Dead for the auto path** (not read by `SelectAction`, §9.4). |
 | `AutonomyCanTriggerWebVideo` | 3704 | false | Fullscreen HypnoTube web video. |
+| `WallpaperEnabled` / `WallpaperPulseSeconds` / `WallpaperSourceFolder` | ~4191 | false / 30 (10–600) / "" | "Keep the wallpaper" + pulse length + source folder, all in the behaviors expander. `WallpaperEnabled` had **no writer** between 451e9701 and the #694 fix, so every change was an unconditional 30 s pulse. |
+| `WallpaperOriginalPath` | ~4215 | "" | Not user-facing: the wallpaper captured before overriding, so a crashed session self-heals next launch (#692). |
 | `TakeoverVideosStrict` | 3727 | false | **RETIRED** — no longer read; kept only for deserialization (§9.3). |
 | `AutonomyAnnouncementChance` | 3737 | 50 (0–100) | Announce-before-acting chance; 0 also suppresses the HUD banner. |
 | `AutonomyResumeOnStartup` | 3751 | **false** | Opt-in auto-arm on launch (§2c). |

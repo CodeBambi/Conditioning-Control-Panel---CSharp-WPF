@@ -133,6 +133,25 @@ namespace ConditioningControlPanel.Services
         private bool _videoPlaying;
         private bool _triggerInProgress; // Guards the 800ms freeze delay window in TriggerVideo
         private bool _strictActive;
+        // True across the strict retry GAP: from the moment a strict run's attention check fails
+        // until the replacement video is actually on screen. ShowMessage deliberately clears
+        // _videoPlaying for the ~2s "TRY AGAIN" window (the strict Closing veto reads that field and
+        // would otherwise refuse to let the message windows replace the video), which made
+        // IsStrictActive report false for the whole gap — precisely the moment a frustrated user
+        // shouts "stop the video", and the voice guards would have waved it through.
+        //
+        // Scoped to the retry gap ON PURPOSE rather than mirroring _strictActive everywhere: that
+        // keeps the `_videoPlaying &&` conjunct in IsStrictActive protecting every other path, so a
+        // stuck value here can't wedge the user out of their own stop controls for longer than one
+        // message window. Cleared by every real end-of-run path (Stop / ForceCleanup / Cleanup), by
+        // the start of any new video, and by the retry callback's own finally.
+        private bool _strictRetryPending;
+        // Bumped whenever a queued attention-fail retry becomes stale. The retry fires from a bare
+        // Task.Delay continuation that nothing can cancel, so instead of cancelling it we let it run
+        // and have it discover it is obsolete: it captures this value when scheduled and bails if it
+        // no longer matches. Without this, panic during the message window announced "we're stopping,
+        // you're safe" and then started another mandatory video ~2s later.
+        private int _retryGeneration;
         // True while THIS video holds an audio-duck ref (App.Audio.Duck is ref-counted). Balanced
         // 1:1 with the Duck in PlayVideo by an Unduck in CloseAll — every teardown path (natural end,
         // attention retry / troll "watch again" loop, engine Stop, ForceCleanup) runs through CloseAll,
@@ -319,8 +338,12 @@ namespace ConditioningControlPanel.Services
         /// bypass the main Stop button's lockdown guard (e.g. the avatar's quick menu)
         /// must respect this — stopping the engine mid-strict-video both defeats the
         /// lock and races the LibVLC teardown (#479).
+        ///
+        /// "Actively playing" includes the attention-fail retry gap: no video is on screen for
+        /// those ~2 seconds, but the strict run has not ended and must not be escapable through
+        /// it. See <see cref="_strictRetryPending"/>.
         /// </summary>
-        public bool IsStrictActive => _videoPlaying && _strictActive;
+        public bool IsStrictActive => (_videoPlaying && _strictActive) || _strictRetryPending;
 
         /// <summary>
         /// Whether any video windows still exist. Stays true through teardown after
@@ -743,6 +766,46 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Route the primary player to the user's chosen audio endpoint and log ONE line saying
+        /// where its audio actually ended up. Runs once per video, off the LibVLC event thread,
+        /// after Playing has fired.
+        /// </summary>
+        /// <remarks>
+        /// LibVLC has no audio output (and therefore no device list, and no routing to read back)
+        /// until playback is live, so the old construction-time ApplyPreferredDevice call always
+        /// validated against an empty list and applied nothing - every mandatory video played to
+        /// the Windows default endpoint while the NAudio paths honoured the setting. Users whose
+        /// default endpoint is an HDMI monitor / dead / virtual device got silent video and
+        /// audible everything-else, every time (#707/#708).
+        ///
+        /// The probe line is the diagnostic half: pre-fix a silent video left no trace at all
+        /// ("LibVLC audio: Volume=99, Mute=false" is logged before any aout exists and only
+        /// reports what was requested), so wrong-endpoint and an adummy fallback - LibVLC quietly
+        /// picking the null output when mmdevice/directsound/waveout all fail to bind - looked
+        /// identical in a bug report. Tagged [VIDEO] so BugReportService rescues it.
+        /// </remarks>
+        private void RouteAndProbeAudio(LibVLCSharp.Shared.MediaPlayer player, string label)
+        {
+            try
+            {
+                // Same staleness guards the vout watchdog uses: never touch a player that
+                // teardown has already taken ownership of, or one from a previous video.
+                if (_isCleaningUp || !_videoPlaying) return;
+                if (!ReferenceEquals(player, _primaryMediaPlayer)) return;
+
+                bool applied = App.Audio?.ApplyPreferredDevice(player) ?? false;
+                var routing = App.Audio?.DescribeLibVlcAudioRouting(player) ?? "audio service unavailable";
+                App.Logger?.Information("[VIDEO] aout live for {File}: deviceApplied={Applied} {Routing}",
+                    label, applied, routing);
+                VideoDiag.Log("AOUT", $"{label} deviceApplied={applied} {routing}");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoService: audio route/probe failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Apply current volume settings to all playing videos.
         /// </summary>
         private void UpdatePlayingVideosVolume()
@@ -853,6 +916,7 @@ namespace ConditioningControlPanel.Services
             // deferred ~1s to a background task.
             _videoPlaying = false;
             _strictActive = false;
+            CancelPendingRetry();
             try
             {
                 CloseAll(synchronous: false);
@@ -1213,6 +1277,7 @@ namespace ConditioningControlPanel.Services
             _videoPlaying = false;
             _triggerInProgress = false;
             _strictActive = false;
+            CancelPendingRetry();
             CloseAll(synchronous);
             App.Audio?.ForceUnduck();
             _penalties = 0;
@@ -1249,6 +1314,7 @@ namespace ConditioningControlPanel.Services
             {
                 _videoPlaying = true;
                 _strictActive = false;
+                CancelPendingRetry();
 
                 var allScreens = App.GetAllScreensCached().ToList();
                 if (allScreens.Count == 0) return;
@@ -1323,7 +1389,9 @@ namespace ConditioningControlPanel.Services
             {
                 _mediaPlayers.Add(mediaPlayer);
             }
-            if (withAudio) App.Audio?.ApplyPreferredDevice(mediaPlayer);
+            // The user's chosen output device is applied from the Playing handler further down,
+            // never here: LibVLC has no audio output until playback starts, so a construction-time
+            // call enumerates nothing and no-ops (#707/#708). See RouteAndProbeAudio.
 
             if (withAudio)
             {
@@ -1424,6 +1492,23 @@ namespace ConditioningControlPanel.Services
             // skip it when audio is deactivated (effective volume 0), else the async Play()
             // lets the video blip at 100% before the volume set below lands (see file path).
             if (!withAudio || GetEffectiveVolume() <= 0) media.AddOption(":no-audio");
+
+            // Subscribed BEFORE Play(): a fast start raises Playing inside Play() itself, and this
+            // handler owns everything that needs a live aout - the volume re-apply (the set after
+            // Play() no-ops while no audio output exists) and the output-device routing.
+            if (withAudio)
+            {
+                int audioRouted = 0; // Playing can fire again after a seek/restart - route once
+                mediaPlayer.Playing += (s, e) =>
+                {
+                    try { mediaPlayer.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: URL volume apply on Playing failed"); }
+
+                    if (System.Threading.Interlocked.Exchange(ref audioRouted, 1) == 0)
+                        Task.Run(() => RouteAndProbeAudio(mediaPlayer, url.Length > 60 ? url.Substring(0, 60) + "..." : url));
+                };
+            }
+
             mediaPlayer.Play(media);
 
             if (withAudio)
@@ -1543,6 +1628,10 @@ namespace ConditioningControlPanel.Services
 
             _videoPlaying = true;
             _strictActive = strict;
+            // A video is on screen again, so whatever gap we were covering is over. Cleared HERE,
+            // after the two flags above are already set, so a reader on another thread never sees a
+            // moment where neither the gap flag nor (_videoPlaying && _strictActive) is true.
+            CancelPendingRetry();
             _retryPath = path;
             _startTime = DateTime.Now;
             _hits = _total = 0;
@@ -1816,7 +1905,11 @@ namespace ConditioningControlPanel.Services
                 {
                     _mediaPlayers.Add(mediaPlayer);
                 }
-                if (withAudio) App.Audio?.ApplyPreferredDevice(mediaPlayer);
+                // NOTE: the user's chosen output device is applied from the Playing handler below,
+                // NOT here. LibVLC has no audio output until playback starts, so a call at
+                // construction time enumerated an empty device list, matched nothing and silently
+                // no-op'd — every mandatory video went to the Windows default endpoint while the
+                // NAudio paths honoured the setting (#707/#708). See RouteAndProbeAudio.
 
             // Only the primary player handles events (to avoid duplicate triggers)
             if (withAudio)
@@ -2030,18 +2123,11 @@ namespace ConditioningControlPanel.Services
             // the Volume=0 set below no-ops until the aout exists and the video would start at
             // 100% for a beat before the Playing handler cuts it — the audible blip a
             // "deactivated audio" user hears. :no-audio never decodes audio, so nothing blips.
+            // Same reasoning covers a muted player (dive master-mute or a zeroed slider): it has to
+            // start SILENT, and killing audio at the media level is the only way to beat the aout.
+            // Trade-off: un-muting mid-video won't restore sound - fine for the mandatory dive
+            // video, and any later playback opens a fresh Media that re-evaluates this.
             if (!withAudio || GetEffectiveVolume() <= 0)
-            {
-                media.AddOption(":no-audio");
-            }
-            // Muted (dive master-mute or a zeroed slider) must start SILENT. Setting
-            // Volume=0 after Play() can't win the race: LibVLC creates the aout a beat
-            // later and the first frames play at full volume, so the video's audio
-            // "fades in for a sec" even while muted (the Playing handler below only lands
-            // afterward). Kill the audio output at the media level so it never starts.
-            // Trade-off: un-muting mid-video won't restore sound - fine for the mandatory
-            // dive video, and any later playback opens a fresh Media that re-evaluates this.
-            else if (GetEffectiveVolume() == 0)
             {
                 media.AddOption(":no-audio");
             }
@@ -2055,6 +2141,29 @@ namespace ConditioningControlPanel.Services
                 media.AddOption(":avcodec-hw=none");
             }
 
+            // Everything that needs a live aout hangs off Playing, and the handler is subscribed
+            // BEFORE Play(): a fast start can raise Playing inside the Play() call itself, and a
+            // handler attached afterwards misses the event entirely - stranding both the volume
+            // re-apply and the output-device routing below.
+            if (withAudio)
+            {
+                int audioRouted = 0; // Playing can fire again after a seek/restart - route once
+                mediaPlayer.Playing += (s, e) =>
+                {
+                    // Play() is async: LibVLC hasn't created the audio output yet when it returns,
+                    // so the Volume set after Play() silently no-ops (libvlc_audio_set_volume fails
+                    // with no aout) and the video starts at 100% regardless of the slider. Only
+                    // this re-apply lands the Video Volume slider (matches
+                    // DualMonitorVideoService/MiniPlayerWindow).
+                    try { mediaPlayer!.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: volume apply on Playing failed"); }
+
+                    // Anything heavier than a property set goes off the LibVLC event thread.
+                    if (System.Threading.Interlocked.Exchange(ref audioRouted, 1) == 0)
+                        Task.Run(() => RouteAndProbeAudio(mediaPlayer!, Path.GetFileName(path)));
+                };
+            }
+
             // Play the media
             mediaPlayer.Play(media);
 
@@ -2066,17 +2175,11 @@ namespace ConditioningControlPanel.Services
             {
                 mediaPlayer.Mute = false;
                 mediaPlayer.Volume = GetEffectiveVolume();
-                // Play() is async: LibVLC hasn't created the audio output yet, so the
-                // Volume set above silently no-ops (libvlc_audio_set_volume fails with no
-                // aout) and the video starts at 100% regardless of the slider. Re-apply
-                // once playback actually begins and the aout exists - only then does the
-                // Video Volume slider land (matches DualMonitorVideoService/MiniPlayerWindow).
-                mediaPlayer.Playing += (s, e) =>
-                {
-                    try { mediaPlayer.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
-                    catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: volume apply on Playing failed"); }
-                };
-                App.Logger?.Information("LibVLC audio: Volume={Vol}, Mute={Mute}",
+                // REQUESTED values only. No aout exists this early, so this line says nothing about
+                // audibility - it read "Volume=99, Mute=false" on both #707 and #708, which were
+                // dead silent. RouteAndProbeAudio logs the RESOLVED routing once the aout is live;
+                // that is the line to read when a report says "video plays but has no sound".
+                App.Logger?.Information("LibVLC audio requested: Volume={Vol}, Mute={Mute} (pre-aout - see the [VIDEO] aout line for what actually happened)",
                     mediaPlayer.Volume, mediaPlayer.Mute);
 
                 // Arm the vout watchdog on the primary player: if no video output exists within the
@@ -3292,22 +3395,75 @@ namespace ConditioningControlPanel.Services
                 if (_penalties >= 3 && settings.MercySystemEnabled)
                     ShowMessage(App.Mods?.GetAttentionCheckMercyMessage() ?? "BAMBI GETS MERCY", 2500, Cleanup);
                 else
-                    ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😜" : (App.Mods?.GetAttentionCheckFailMessage() ?? "DUMB BAMBI!\nTRY AGAIN"), 2000, () =>
+                {
+                    // Snapshot the strict flag NOW, while the run is still live, and keep the run
+                    // marked strict across the message window.
+                    //
+                    // The retry fires from a bare Task.Delay continuation inside ShowMessage that
+                    // Stop() has no way to cancel, and Stop() clears _strictActive. Reading the
+                    // FIELD from inside that callback therefore let a stop landing during the ~2s
+                    // message window silently downgrade the replacement video to non-strict: Esc
+                    // dismissed it, panic worked, Alt+F4 worked. The vout self-heal retry further
+                    // down this file (~:3856) has the identical "_videoPlaying = false, close, then
+                    // replay" shape and is immune for exactly this reason — it re-passes its
+                    // captured `strict` PARAMETER instead of re-reading the field. Same trick here.
+                    var strictForRetry = _strictActive;
+                    _strictRetryPending = strictForRetry;
+                    var retryGen = _retryGeneration;
+
+                    Action replay = () =>
                     {
-                        // ShowMessage already set _videoPlaying = false and called CloseAll()
-                        // Reset attention tracking for retry
-                        _hits = 0;
-                        _spawnTimes.Clear();
-                        // Extend the stuck detection timeout to prevent InteractionQueue from
-                        // auto-completing Video during the retry gap, which would let queued
-                        // interactions (e.g. BubbleCount) start while the retry video plays.
-                        App.InteractionQueue?.ExtendTimeout(300, InteractionQueueService.InteractionType.Video);
-                        // Pick a fresh video for the retry — replaying the same video makes
-                        // attention checks easier to game (memorize the timing) and was a
-                        // user-reported inconsistency vs. BubbleCount which always picks new.
-                        var retryVideo = GetNextVideo();
-                        PlayVideo(string.IsNullOrEmpty(retryVideo) ? _retryPath! : retryVideo, _strictActive);
-                    });
+                        try
+                        {
+                            // Did anything end or replace this run while the message was up? Panic is
+                            // the case that matters: it reaches Stop(), which tears the run down and
+                            // speaks "we're stopping, you're safe" - and then this callback, which no
+                            // one can cancel, used to start another mandatory video ~2s later and make
+                            // a liar of it. The delay still elapses; the retry just no longer acts.
+                            if (_retryGeneration != retryGen)
+                                return;
+
+                            // ShowMessage already set _videoPlaying = false and called CloseAll()
+                            // Reset attention tracking for retry
+                            _hits = 0;
+                            _spawnTimes.Clear();
+                            // Extend the stuck detection timeout to prevent InteractionQueue from
+                            // auto-completing Video during the retry gap, which would let queued
+                            // interactions (e.g. BubbleCount) start while the retry video plays.
+                            App.InteractionQueue?.ExtendTimeout(300, InteractionQueueService.InteractionType.Video);
+                            // Pick a fresh video for the retry — replaying the same video makes
+                            // attention checks easier to game (memorize the timing) and was a
+                            // user-reported inconsistency vs. BubbleCount which always picks new.
+                            var retryVideo = GetNextVideo();
+                            PlayVideo(string.IsNullOrEmpty(retryVideo) ? _retryPath! : retryVideo, strictForRetry);
+                        }
+                        finally
+                        {
+                            // The gap is over either way. PlayVideo already clears this on its
+                            // success path; this covers the paths that never reach that line (it
+                            // early-returns when another video grabbed the slot, or something in
+                            // here threw). A gap flag that leaked true would lock the user out of
+                            // their own stop controls indefinitely, which is far worse than the
+                            // hole it closes.
+                            _strictRetryPending = false;
+                        }
+                    };
+
+                    try
+                    {
+                        ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😜" : (App.Mods?.GetAttentionCheckFailMessage() ?? "DUMB BAMBI!\nTRY AGAIN"), 2000, replay);
+                    }
+                    catch
+                    {
+                        // ShowMessage itself blew up (window creation on a machine mid screen
+                        // reconfiguration, say), so the callback that would have cleared the gap
+                        // flag never gets scheduled. Clear it before letting the exception carry on
+                        // as it always has - leaving it set would strand the user locked out with no
+                        // video on screen and nothing left running to end the run.
+                        _strictRetryPending = false;
+                        throw;
+                    }
+                }
                 return;
             }
 
@@ -3319,6 +3475,17 @@ namespace ConditioningControlPanel.Services
                 _lastWatchPositionMs = _duration * 1000.0;
 
             Cleanup();
+        }
+
+        /// <summary>
+        /// Marks any attention-fail retry that is still sitting in a Task.Delay as obsolete, and ends
+        /// the strict gap. Called from every path that ends or replaces a run - the teardowns (Stop,
+        /// ForceCleanup, Cleanup) and the start of any new video (PlayVideo, PlayUrl).
+        /// </summary>
+        private void CancelPendingRetry()
+        {
+            _strictRetryPending = false;
+            _retryGeneration++;
         }
 
         private void ShowMessage(string text, int ms, Action then)
@@ -4312,6 +4479,7 @@ namespace ConditioningControlPanel.Services
             // duck ref exactly once (#526). No Unduck here — a second call would decrement a duck ref
             // that another consumer (subliminal/session) may legitimately hold.
             _strictActive = false;
+            CancelPendingRetry();
             _penalties = 0;
 
             // Resume bubbles now that video is done

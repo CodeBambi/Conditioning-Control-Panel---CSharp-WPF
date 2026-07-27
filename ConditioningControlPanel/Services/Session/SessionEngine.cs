@@ -1389,16 +1389,18 @@ namespace ConditioningControlPanel.Services
                     Stretch = System.Windows.Media.Stretch.Uniform
                 };
 
-                // Set the animated GIF source using XamlAnimatedGif
-                AnimationBehavior.SetSourceUri(imageElement, gifUri);
-                AnimationBehavior.SetRepeatBehavior(imageElement, System.Windows.Media.Animation.RepeatBehavior.Forever);
-
-                // Catch GIF rendering errors gracefully instead of letting them crash the app
+                // Catch GIF rendering errors gracefully instead of letting them crash the app.
+                // Must be attached BEFORE SetSourceUri: that starts an async load, so a fault
+                // raised in the gap would have no subscriber.
                 AnimationBehavior.AddErrorHandler(imageElement, (s, e) =>
                 {
                     App.Logger?.Warning("Corner GIF animation error ({Kind}): {Error}",
                         e.Kind, e.Exception?.Message);
                 });
+
+                // Set the animated GIF source using XamlAnimatedGif
+                AnimationBehavior.SetRepeatBehavior(imageElement, System.Windows.Media.Animation.RepeatBehavior.Forever);
+                AnimationBehavior.SetSourceUri(imageElement, gifUri);
 
                 _cornerGifImage = imageElement;
                 _cornerGifWindow.Content = imageElement;

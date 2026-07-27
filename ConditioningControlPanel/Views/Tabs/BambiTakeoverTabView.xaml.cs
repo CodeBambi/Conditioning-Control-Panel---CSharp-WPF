@@ -153,6 +153,16 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnWallpaperFolder_Click(sender, e);
         }
+        private void ChkWallpaperKeep_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkWallpaperKeep_Changed(sender, e);
+        }
+        private void SliderWallpaperDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.SliderWallpaperDuration_Changed(sender, e);
+        }
         private void ChkAutonomyEnabled_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

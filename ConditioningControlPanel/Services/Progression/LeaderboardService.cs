@@ -13,6 +13,13 @@ namespace ConditioningControlPanel.Services;
 public class LeaderboardService : IDisposable
 {
     private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
+
+    /// <summary>
+    /// How many rows a refresh fetches. The v3 endpoint takes no offset/cursor, so this is the
+    /// whole board the client ever sees — anyone ranked below it can only be located through the
+    /// server-provided <see cref="YourRank"/>, never by scanning <see cref="Entries"/> (#693).
+    /// </summary>
+    public const int FetchLimit = 200;
     private readonly HttpClient _httpClient;
     private readonly DispatcherTimer _refreshTimer;
     private bool _disposed;
@@ -92,7 +99,7 @@ public class LeaderboardService : IDisposable
             // Use V3 leaderboard — "all-time" mode uses a permanent sorted set
             var season = mode == "all-time" ? "all-time" : DateTime.UtcNow.ToString("yyyy-MM");
             var unifiedId = App.UnifiedUserId;
-            var url = $"{ProxyBaseUrl}/v3/leaderboard?season={season}&limit=200";
+            var url = $"{ProxyBaseUrl}/v3/leaderboard?season={season}&limit={FetchLimit}";
             if (!string.IsNullOrEmpty(unifiedId))
                 url += $"&unified_id={Uri.EscapeDataString(unifiedId)}";
             var response = await _httpClient.GetAsync(url);

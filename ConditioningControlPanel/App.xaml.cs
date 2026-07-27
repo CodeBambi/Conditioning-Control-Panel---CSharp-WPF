@@ -1420,11 +1420,13 @@ namespace ConditioningControlPanel
             // topmost window before MainWindow existed (reported startup crash after enabling
             // a corner GIF). Explicitly defer to ApplicationIdle so the restore happens once
             // startup has settled, and swallow+log any failure so it can never kill launch.
+            // #709: the restore goes through RestoreOnStartup (not RefreshOverlays) so a launch
+            // that dies mid-restore disables the slots instead of replaying the wedge forever.
             CornerGif = new CornerGifService();
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                try { CornerGif?.RefreshOverlays(); }
-                catch (Exception ex) { Logger?.Error(ex, "Deferred CornerGif.RefreshOverlays failed"); }
+                try { CornerGif?.RestoreOnStartup(); }
+                catch (Exception ex) { Logger?.Error(ex, "Deferred CornerGif.RestoreOnStartup failed"); }
             }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             // Suggestion #659 — layered audio mixer. Inert until Start() (used by the Audio
             // Layers window and by #668 audio-only sessions), so constructing it is free.
@@ -3280,6 +3282,10 @@ Application State:
             Compositor?.Dispose(); // after effect services so their layers deactivate first
             ScreenShake?.Dispose();
             try { Chaos?.ForceShutdown(); } catch { }
+            // Standalone corner-GIF overlays are unowned topmost windows (#709) - close them here
+            // as well as from MainWindow.Closing, since a Shutdown() that bypasses the main
+            // window's close path would otherwise leave them alive.
+            try { CornerGif?.StopAll(); } catch { }
             Bubbles?.Dispose();
             LockCard?.Dispose();
             PopQuiz?.Dispose();

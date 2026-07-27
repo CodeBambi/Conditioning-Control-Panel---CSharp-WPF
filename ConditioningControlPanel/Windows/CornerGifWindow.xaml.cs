@@ -21,9 +21,12 @@ namespace ConditioningControlPanel
         private static readonly Color SelectedAccent = Color.FromRgb(0xFF, 0x69, 0xB4);
         private static readonly Color IdleAccent = Color.FromRgb(0x33, 0x33, 0x3A);
 
-        // Slider drags recreate the overlay windows on every tick; debounce so a drag
+        // Slider drags recreate an overlay window on every tick; debounce so a drag
         // doesn't thrash Close/Show (the recreate is the safe path, but still not free).
         private readonly DispatcherTimer _applyDebounce;
+
+        // Slot awaiting the debounced apply: null = nothing pending, -1 = rebuild everything.
+        private int? _pendingSlot;
 
         public CornerGifWindow()
         {
@@ -33,14 +36,18 @@ namespace ConditioningControlPanel
             _applyDebounce.Tick += (_, _) =>
             {
                 _applyDebounce.Stop();
-                ApplyLive();
+                var slot = _pendingSlot ?? -1;
+                _pendingSlot = null;
+                ApplyLive(slot);
             };
 
             EnsureSlots();
             BuildSlots();
         }
 
-        /// <summary>Pads the persisted list to <see cref="SlotCount"/> entries with sensible defaults.</summary>
+        /// <summary>Pads the persisted list to <see cref="SlotCount"/> entries with sensible defaults,
+        /// and trims anything beyond them - the UI only ever edits the first <see cref="SlotCount"/>,
+        /// so extra entries in a hand-edited settings file would be invisible overlays.</summary>
         private static List<CornerGifOverlaySetting> EnsureSlots()
         {
             var s = App.Settings?.Current;
@@ -53,6 +60,7 @@ namespace ConditioningControlPanel
                     Position = list.Count == 0 ? CornerPosition.BottomLeft : CornerPosition.BottomRight
                 });
             }
+            if (list.Count > SlotCount) list.RemoveRange(SlotCount, list.Count - SlotCount);
             if (s != null) s.CornerGifOverlays = list;
             return list;
         }
@@ -132,7 +140,7 @@ namespace ConditioningControlPanel
                 {
                     setting.GifPath = dlg.FileName;
                     pickBtn.Content = PickerLabel(setting.GifPath);
-                    ApplyLive();
+                    ApplyLive(index);
                 }
             };
             body.Children.Add(pickBtn);
@@ -172,7 +180,9 @@ namespace ConditioningControlPanel
                     setting.Position = pos;
                     foreach (var kv in cornerButtons)
                         kv.Value.BorderBrush = new SolidColorBrush(kv.Key == pos ? SelectedAccent : IdleAccent);
-                    ApplyLive();
+                    // Full rebuild: moving one slot into (or out of) another slot's corner changes
+                    // the other slot's same-corner nudge too.
+                    ApplyLiveAll();
                 };
                 cornerButtons[pos] = b;
                 cornerPanel.Children.Add(b);
@@ -198,7 +208,7 @@ namespace ConditioningControlPanel
             {
                 setting.Size = (int)e.NewValue;
                 sizeValue.Text = $"{setting.Size}px";
-                ApplyLiveDebounced();
+                ApplyLiveDebounced(index);
             };
             body.Children.Add(sizeSlider);
 
@@ -217,7 +227,7 @@ namespace ConditioningControlPanel
             {
                 setting.Opacity = (int)e.NewValue;
                 opacityValue.Text = $"{setting.Opacity}%";
-                ApplyLiveDebounced();
+                ApplyLiveDebounced(index);
             };
             body.Children.Add(opacitySlider);
 
@@ -232,7 +242,7 @@ namespace ConditioningControlPanel
                 setting.Enabled = on;
                 body.IsEnabled = on;
                 body.Opacity = on ? 1.0 : 0.45;
-                ApplyLive();
+                ApplyLiveAll(); // enabling/disabling a slot shifts the other slot's same-corner nudge
             }
 
             card.Child = root;
@@ -273,16 +283,30 @@ namespace ConditioningControlPanel
                 ? "📁 Choose GIF…  (uses selected spiral)"
                 : $"📁 {Path.GetFileName(path)}";
 
-        private void ApplyLiveDebounced()
+        private void ApplyLiveDebounced(int index)
         {
+            // Two different slots dragged inside one debounce window would drop the first slot's
+            // pending rebuild, so widen to a full refresh in that case.
+            _pendingSlot = _pendingSlot == null || _pendingSlot == index ? index : -1;
             _applyDebounce.Stop();
             _applyDebounce.Start();
         }
 
-        private void ApplyLive()
+        private void ApplyLiveAll()
+        {
+            _applyDebounce.Stop();
+            _pendingSlot = null;
+            ApplyLive(-1);
+        }
+
+        /// <summary>Persists and re-applies. <paramref name="index"/> &gt;= 0 rebuilds only that
+        /// slot's overlay window - the other slot's hwnd (and its running animation) is left alone,
+        /// which is what keeps a slider drag from re-realizing every layered window per tick.</summary>
+        private void ApplyLive(int index = -1)
         {
             App.Settings?.Save();
-            App.CornerGif?.RefreshOverlays();
+            if (index >= 0) App.CornerGif?.RefreshSlot(index);
+            else App.CornerGif?.RefreshOverlays();
         }
 
         private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();

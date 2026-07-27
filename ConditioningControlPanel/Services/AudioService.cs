@@ -161,9 +161,17 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Apply the user's preferred output device to a LibVLC <see cref="LibVLCSharp.Shared.MediaPlayer"/>.
         /// LibVLC's mmdevice aout backend accepts the same MMDevice ID strings we use here.
-        /// Safe to call before or after media is set; LibVLC re-applies on next playback.
+        /// Returns true only when the device was actually applied.
         /// </summary>
         /// <remarks>
+        /// MUST be called once the player is LIVE (from its Playing handler, or otherwise after
+        /// Play() has started) — never at MediaPlayer-construction time. LibVLC does not create
+        /// an audio output until playback begins, and <c>AudioOutputDeviceEnum</c> is empty until
+        /// one exists, so a pre-Play call validated against an empty list, applied nothing and
+        /// left playback on the Windows default endpoint while every NAudio path honoured the
+        /// user's choice — "video plays, video has no sound, everything else is audible"
+        /// (#707/#708). Idempotent: safe to call again if Playing fires more than once.
+        ///
         /// Validates the stored device against the player's enumerated outputs before
         /// applying. LibVLC's SetOutputDevice silently routes audio to nowhere when the
         /// ID no longer matches a present endpoint (USB headset unplugged, default
@@ -171,15 +179,23 @@ namespace ConditioningControlPanel.Services
         /// mute video playback while everything else (NAudio paths) auto-fall-back to
         /// the default device — symptom matching #270/#251/#244/#243 cluster.
         /// </remarks>
-        public void ApplyPreferredDevice(LibVLCSharp.Shared.MediaPlayer player)
+        public bool ApplyPreferredDevice(LibVLCSharp.Shared.MediaPlayer player)
         {
-            if (player == null) return;
+            if (player == null) return false;
             try
             {
                 var deviceId = App.Settings?.Current?.AudioOutputDeviceId;
-                if (string.IsNullOrEmpty(deviceId)) return;
+                if (string.IsNullOrEmpty(deviceId)) return false;
+
+                // Already routed there — nothing to do (and no aout restart to provoke).
+                try
+                {
+                    if (string.Equals(player.OutputDevice, deviceId, StringComparison.Ordinal)) return true;
+                }
+                catch { /* OutputDevice is advisory — fall through and apply as usual */ }
 
                 bool deviceFound = false;
+                int enumerated = 0;
                 try
                 {
                     var available = player.AudioOutputDeviceEnum;
@@ -187,6 +203,7 @@ namespace ConditioningControlPanel.Services
                     {
                         foreach (var d in available)
                         {
+                            enumerated++;
                             if (string.Equals(d.DeviceIdentifier, deviceId, StringComparison.Ordinal))
                             {
                                 deviceFound = true;
@@ -197,24 +214,55 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception enumEx)
                 {
-                    // If enumeration itself fails we can't validate — fall through and
-                    // apply blindly rather than blocking audio entirely.
-                    App.Logger?.Debug("ApplyPreferredDevice(MediaPlayer): enumeration failed: {Error}", enumEx.Message);
-                    deviceFound = true;
+                    // Enumeration failed, so the saved ID CANNOT be validated. Applying it blind is
+                    // exactly the "routes audio to nowhere" case the remarks above warn about, and
+                    // silence is worse than playing out of the default endpoint — bail out instead.
+                    App.Logger?.Debug("ApplyPreferredDevice(MediaPlayer): enumeration failed, leaving the system default in place: {Error}", enumEx.Message);
+                    return false;
                 }
 
                 if (!deviceFound)
                 {
-                    App.Logger?.Warning("ApplyPreferredDevice(MediaPlayer): saved device {Id} not present in LibVLC outputs — using system default. Reselect in Settings → Audio if you want this routed elsewhere.", deviceId);
-                    return;
+                    App.Logger?.Warning("ApplyPreferredDevice(MediaPlayer): saved device {Id} not present in LibVLC outputs ({Count} enumerated) — using system default. Reselect in Settings → Audio if you want this routed elsewhere.", deviceId, enumerated);
+                    return false;
                 }
 
                 player.SetOutputDevice(deviceId);
+                return true;
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("ApplyPreferredDevice(MediaPlayer): {Error}", ex.Message);
+                return false;
             }
+        }
+
+        /// <summary>
+        /// One concise line describing where a LIVE LibVLC player's audio is actually going.
+        /// Meaningless before the Playing event: with no aout every field reads as "requested"
+        /// rather than "resolved", which is why the old post-Play "Volume=99, Mute=false" line
+        /// proved nothing about audibility.
+        /// </summary>
+        /// <remarks>
+        /// Exists to separate the two silent-video causes that look identical from the outside
+        /// (#707/#708): a wrong endpoint (resolved= an ID that isn't the user's speakers) versus
+        /// LibVLC falling back to the adummy output because mmdevice/directsound/waveout all
+        /// failed to bind (resolved=(none) with outputs=0 while a track is selected).
+        /// </remarks>
+        public string DescribeLibVlcAudioRouting(LibVLCSharp.Shared.MediaPlayer player)
+        {
+            if (player == null) return "player=(null)";
+
+            string wanted = "(system default)", resolved = "(unavailable)";
+            string outputs = "?", track = "?", vol = "?", mute = "?";
+            try { var id = App.Settings?.Current?.AudioOutputDeviceId; if (!string.IsNullOrEmpty(id)) wanted = id; } catch { }
+            try { resolved = player.OutputDevice ?? "(none)"; } catch { }
+            try { outputs = (player.AudioOutputDeviceEnum?.Count() ?? 0).ToString(); } catch { }
+            try { track = player.AudioTrack + "/" + player.AudioTrackCount; } catch { }
+            try { vol = player.Volume.ToString(); } catch { }
+            try { mute = player.Mute.ToString(); } catch { }
+
+            return $"wanted={wanted} resolved={resolved} outputs={outputs} track={track} vol={vol} mute={mute}";
         }
 
         /// <summary>
