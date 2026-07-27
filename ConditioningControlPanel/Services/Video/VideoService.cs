@@ -133,6 +133,25 @@ namespace ConditioningControlPanel.Services
         private bool _videoPlaying;
         private bool _triggerInProgress; // Guards the 800ms freeze delay window in TriggerVideo
         private bool _strictActive;
+        // True across the strict retry GAP: from the moment a strict run's attention check fails
+        // until the replacement video is actually on screen. ShowMessage deliberately clears
+        // _videoPlaying for the ~2s "TRY AGAIN" window (the strict Closing veto reads that field and
+        // would otherwise refuse to let the message windows replace the video), which made
+        // IsStrictActive report false for the whole gap — precisely the moment a frustrated user
+        // shouts "stop the video", and the voice guards would have waved it through.
+        //
+        // Scoped to the retry gap ON PURPOSE rather than mirroring _strictActive everywhere: that
+        // keeps the `_videoPlaying &&` conjunct in IsStrictActive protecting every other path, so a
+        // stuck value here can't wedge the user out of their own stop controls for longer than one
+        // message window. Cleared by every real end-of-run path (Stop / ForceCleanup / Cleanup), by
+        // the start of any new video, and by the retry callback's own finally.
+        private bool _strictRetryPending;
+        // Bumped whenever a queued attention-fail retry becomes stale. The retry fires from a bare
+        // Task.Delay continuation that nothing can cancel, so instead of cancelling it we let it run
+        // and have it discover it is obsolete: it captures this value when scheduled and bails if it
+        // no longer matches. Without this, panic during the message window announced "we're stopping,
+        // you're safe" and then started another mandatory video ~2s later.
+        private int _retryGeneration;
         // True while THIS video holds an audio-duck ref (App.Audio.Duck is ref-counted). Balanced
         // 1:1 with the Duck in PlayVideo by an Unduck in CloseAll — every teardown path (natural end,
         // attention retry / troll "watch again" loop, engine Stop, ForceCleanup) runs through CloseAll,
@@ -319,8 +338,12 @@ namespace ConditioningControlPanel.Services
         /// bypass the main Stop button's lockdown guard (e.g. the avatar's quick menu)
         /// must respect this — stopping the engine mid-strict-video both defeats the
         /// lock and races the LibVLC teardown (#479).
+        ///
+        /// "Actively playing" includes the attention-fail retry gap: no video is on screen for
+        /// those ~2 seconds, but the strict run has not ended and must not be escapable through
+        /// it. See <see cref="_strictRetryPending"/>.
         /// </summary>
-        public bool IsStrictActive => _videoPlaying && _strictActive;
+        public bool IsStrictActive => (_videoPlaying && _strictActive) || _strictRetryPending;
 
         /// <summary>
         /// Whether any video windows still exist. Stays true through teardown after
@@ -893,6 +916,7 @@ namespace ConditioningControlPanel.Services
             // deferred ~1s to a background task.
             _videoPlaying = false;
             _strictActive = false;
+            CancelPendingRetry();
             try
             {
                 CloseAll(synchronous: false);
@@ -1253,6 +1277,7 @@ namespace ConditioningControlPanel.Services
             _videoPlaying = false;
             _triggerInProgress = false;
             _strictActive = false;
+            CancelPendingRetry();
             CloseAll(synchronous);
             App.Audio?.ForceUnduck();
             _penalties = 0;
@@ -1289,6 +1314,7 @@ namespace ConditioningControlPanel.Services
             {
                 _videoPlaying = true;
                 _strictActive = false;
+                CancelPendingRetry();
 
                 var allScreens = App.GetAllScreensCached().ToList();
                 if (allScreens.Count == 0) return;
@@ -1602,6 +1628,10 @@ namespace ConditioningControlPanel.Services
 
             _videoPlaying = true;
             _strictActive = strict;
+            // A video is on screen again, so whatever gap we were covering is over. Cleared HERE,
+            // after the two flags above are already set, so a reader on another thread never sees a
+            // moment where neither the gap flag nor (_videoPlaying && _strictActive) is true.
+            CancelPendingRetry();
             _retryPath = path;
             _startTime = DateTime.Now;
             _hits = _total = 0;
@@ -3365,22 +3395,75 @@ namespace ConditioningControlPanel.Services
                 if (_penalties >= 3 && settings.MercySystemEnabled)
                     ShowMessage(App.Mods?.GetAttentionCheckMercyMessage() ?? "BAMBI GETS MERCY", 2500, Cleanup);
                 else
-                    ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😜" : (App.Mods?.GetAttentionCheckFailMessage() ?? "DUMB BAMBI!\nTRY AGAIN"), 2000, () =>
+                {
+                    // Snapshot the strict flag NOW, while the run is still live, and keep the run
+                    // marked strict across the message window.
+                    //
+                    // The retry fires from a bare Task.Delay continuation inside ShowMessage that
+                    // Stop() has no way to cancel, and Stop() clears _strictActive. Reading the
+                    // FIELD from inside that callback therefore let a stop landing during the ~2s
+                    // message window silently downgrade the replacement video to non-strict: Esc
+                    // dismissed it, panic worked, Alt+F4 worked. The vout self-heal retry further
+                    // down this file (~:3856) has the identical "_videoPlaying = false, close, then
+                    // replay" shape and is immune for exactly this reason — it re-passes its
+                    // captured `strict` PARAMETER instead of re-reading the field. Same trick here.
+                    var strictForRetry = _strictActive;
+                    _strictRetryPending = strictForRetry;
+                    var retryGen = _retryGeneration;
+
+                    Action replay = () =>
                     {
-                        // ShowMessage already set _videoPlaying = false and called CloseAll()
-                        // Reset attention tracking for retry
-                        _hits = 0;
-                        _spawnTimes.Clear();
-                        // Extend the stuck detection timeout to prevent InteractionQueue from
-                        // auto-completing Video during the retry gap, which would let queued
-                        // interactions (e.g. BubbleCount) start while the retry video plays.
-                        App.InteractionQueue?.ExtendTimeout(300, InteractionQueueService.InteractionType.Video);
-                        // Pick a fresh video for the retry — replaying the same video makes
-                        // attention checks easier to game (memorize the timing) and was a
-                        // user-reported inconsistency vs. BubbleCount which always picks new.
-                        var retryVideo = GetNextVideo();
-                        PlayVideo(string.IsNullOrEmpty(retryVideo) ? _retryPath! : retryVideo, _strictActive);
-                    });
+                        try
+                        {
+                            // Did anything end or replace this run while the message was up? Panic is
+                            // the case that matters: it reaches Stop(), which tears the run down and
+                            // speaks "we're stopping, you're safe" - and then this callback, which no
+                            // one can cancel, used to start another mandatory video ~2s later and make
+                            // a liar of it. The delay still elapses; the retry just no longer acts.
+                            if (_retryGeneration != retryGen)
+                                return;
+
+                            // ShowMessage already set _videoPlaying = false and called CloseAll()
+                            // Reset attention tracking for retry
+                            _hits = 0;
+                            _spawnTimes.Clear();
+                            // Extend the stuck detection timeout to prevent InteractionQueue from
+                            // auto-completing Video during the retry gap, which would let queued
+                            // interactions (e.g. BubbleCount) start while the retry video plays.
+                            App.InteractionQueue?.ExtendTimeout(300, InteractionQueueService.InteractionType.Video);
+                            // Pick a fresh video for the retry — replaying the same video makes
+                            // attention checks easier to game (memorize the timing) and was a
+                            // user-reported inconsistency vs. BubbleCount which always picks new.
+                            var retryVideo = GetNextVideo();
+                            PlayVideo(string.IsNullOrEmpty(retryVideo) ? _retryPath! : retryVideo, strictForRetry);
+                        }
+                        finally
+                        {
+                            // The gap is over either way. PlayVideo already clears this on its
+                            // success path; this covers the paths that never reach that line (it
+                            // early-returns when another video grabbed the slot, or something in
+                            // here threw). A gap flag that leaked true would lock the user out of
+                            // their own stop controls indefinitely, which is far worse than the
+                            // hole it closes.
+                            _strictRetryPending = false;
+                        }
+                    };
+
+                    try
+                    {
+                        ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😜" : (App.Mods?.GetAttentionCheckFailMessage() ?? "DUMB BAMBI!\nTRY AGAIN"), 2000, replay);
+                    }
+                    catch
+                    {
+                        // ShowMessage itself blew up (window creation on a machine mid screen
+                        // reconfiguration, say), so the callback that would have cleared the gap
+                        // flag never gets scheduled. Clear it before letting the exception carry on
+                        // as it always has - leaving it set would strand the user locked out with no
+                        // video on screen and nothing left running to end the run.
+                        _strictRetryPending = false;
+                        throw;
+                    }
+                }
                 return;
             }
 
@@ -3392,6 +3475,17 @@ namespace ConditioningControlPanel.Services
                 _lastWatchPositionMs = _duration * 1000.0;
 
             Cleanup();
+        }
+
+        /// <summary>
+        /// Marks any attention-fail retry that is still sitting in a Task.Delay as obsolete, and ends
+        /// the strict gap. Called from every path that ends or replaces a run - the teardowns (Stop,
+        /// ForceCleanup, Cleanup) and the start of any new video (PlayVideo, PlayUrl).
+        /// </summary>
+        private void CancelPendingRetry()
+        {
+            _strictRetryPending = false;
+            _retryGeneration++;
         }
 
         private void ShowMessage(string text, int ms, Action then)
@@ -4385,6 +4479,7 @@ namespace ConditioningControlPanel.Services
             // duck ref exactly once (#526). No Unduck here — a second call would decrement a duck ref
             // that another consumer (subliminal/session) may legitimately hold.
             _strictActive = false;
+            CancelPendingRetry();
             _penalties = 0;
 
             // Resume bubbles now that video is done
