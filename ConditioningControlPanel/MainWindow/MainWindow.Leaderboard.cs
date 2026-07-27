@@ -99,7 +99,9 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// "Jump to me": scroll to and select the local user's own row in the loaded slice.
-        /// Falls back to a status message when the user isn't in the currently loaded page.
+        /// When the user isn't in it, reports their server-side rank instead — there is no
+        /// second page to send them to, so the old "not on this page" wording promised a
+        /// picker that was never built (#693).
         /// </summary>
         internal void BtnJumpToMe_Click(object sender, RoutedEventArgs e)
         {
@@ -118,9 +120,8 @@ namespace ConditioningControlPanel
 
                 if (me == null)
                 {
-                    // Not in the loaded slice (or not signed in) - graceful fallback.
                     if (LeaderboardTab.TxtLeaderboardStatus != null)
-                        LeaderboardTab.TxtLeaderboardStatus.Text = Loc.Get("label_youre_not_on_this_page");
+                        LeaderboardTab.TxtLeaderboardStatus.Text = OutsideBoardMessage();
                     return;
                 }
 
@@ -137,8 +138,24 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Populate the "Your rank: #N" badge from the local user's entry in the loaded slice.
-        /// Hidden when the user isn't present in the current payload.
+        /// Status line for a player who isn't in the fetched slice. Prefers the server's own
+        /// rank (valid at any position); only when that's missing do we admit we don't know.
+        /// </summary>
+        private static string OutsideBoardMessage()
+        {
+            var rank = App.Leaderboard?.YourRank;
+            if (rank is not > 0) return Loc.Get("label_your_rank_unavailable");
+
+            var total = App.Leaderboard?.YourTotal;
+            return total is > 0
+                ? Loc.GetF("label_rank_outside_board_3", rank.Value, total.Value, Services.LeaderboardService.FetchLimit)
+                : Loc.GetF("label_rank_outside_board_2", rank.Value, Services.LeaderboardService.FetchLimit);
+        }
+
+        /// <summary>
+        /// Populate the "Your rank: #N" badge. The server rank wins over the row's own Rank:
+        /// the loaded entries are re-numbered by display position after every client-side sort,
+        /// so the row value is a slice offset, not a standing (#693).
         /// </summary>
         private void UpdateYourRankDisplay(IEnumerable<Services.LeaderboardEntry>? entries)
         {
@@ -154,9 +171,15 @@ namespace ConditioningControlPanel
                     me = entries.FirstOrDefault(x => !string.IsNullOrEmpty(x.UnifiedId) && x.UnifiedId == myId);
                 }
 
-                if (me != null)
+                var serverRank = App.Leaderboard?.YourRank;
+                var rank = serverRank is > 0 ? serverRank.Value : me?.Rank ?? 0;
+
+                if (rank > 0)
                 {
-                    txt.Text = Loc.GetF("label_your_rank_0", me.Rank);
+                    var total = App.Leaderboard?.YourTotal;
+                    txt.Text = total is > 0
+                        ? Loc.GetF("label_your_rank_0_of_1", rank, total.Value)
+                        : Loc.GetF("label_your_rank_0", rank);
                     txt.Visibility = Visibility.Visible;
                 }
                 else
