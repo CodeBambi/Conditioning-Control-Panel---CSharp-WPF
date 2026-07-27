@@ -108,7 +108,15 @@ namespace ConditioningControlPanel
             try
             {
                 var list = LeaderboardTab.LstLeaderboard;
-                if (list?.ItemsSource == null) return;
+                if (list?.ItemsSource == null)
+                {
+                    // No slice loaded yet (offline, or the fetch failed). Don't be a dead button:
+                    // the cached server rank is still worth reporting, and if even that's missing
+                    // OutsideBoardMessage() says so out loud instead of silently doing nothing.
+                    if (LeaderboardTab.TxtLeaderboardStatus != null)
+                        LeaderboardTab.TxtLeaderboardStatus.Text = OutsideBoardMessage();
+                    return;
+                }
 
                 var myId = App.UnifiedUserId;
                 Services.LeaderboardEntry? me = null;
@@ -138,8 +146,12 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Status line for a player who isn't in the fetched slice. Prefers the server's own
-        /// rank (valid at any position); only when that's missing do we admit we don't know.
+        /// Status line for a player whose row we couldn't point at. "Couldn't find the row" is NOT
+        /// the same as "isn't on the board": the row scan and the pink IsCurrentUser highlight both
+        /// key off UnifiedId, so a server row that ships a null/blank unified_id for the local user
+        /// sends us here while that row sits on screen, highlighted. Announcing "outside the top
+        /// 200" then contradicts what the user is looking at. So only a rank past FetchLimit earns
+        /// the outside-the-board wording; an in-range rank just states the standing.
         /// </summary>
         private static string OutsideBoardMessage()
         {
@@ -147,32 +159,37 @@ namespace ConditioningControlPanel
             if (rank is not > 0) return Loc.Get("label_your_rank_unavailable");
 
             var total = App.Leaderboard?.YourTotal;
+
+            if (rank.Value <= Services.LeaderboardService.FetchLimit)
+            {
+                return total is > 0
+                    ? Loc.GetF("label_your_rank_0_of_1", rank.Value, total.Value)
+                    : Loc.GetF("label_your_rank_0", rank.Value);
+            }
+
             return total is > 0
                 ? Loc.GetF("label_rank_outside_board_3", rank.Value, total.Value, Services.LeaderboardService.FetchLimit)
                 : Loc.GetF("label_rank_outside_board_2", rank.Value, Services.LeaderboardService.FetchLimit);
         }
 
         /// <summary>
-        /// Populate the "Your rank: #N" badge. The server rank wins over the row's own Rank:
-        /// the loaded entries are re-numbered by display position after every client-side sort,
-        /// so the row value is a slice offset, not a standing (#693).
+        /// Populate the "Your rank: #N" badge. The server rank is the ONLY acceptable source, and
+        /// there is deliberately no fallback to the row's own Rank: ApplyLeaderboardSort re-numbers
+        /// every loaded entry by display position, so a row's Rank is a slice offset rather than a
+        /// standing. Falling back to it is what produced ccp-bugs #693, where the players sitting at
+        /// global rank 5 and rank 205 were both told they were `#5`. A wrong-but-plausible number is
+        /// worse than none - the user has no way to tell it's wrong - so when the server omits
+        /// your_rank we collapse the badge and show nothing at all.
         /// </summary>
-        private void UpdateYourRankDisplay(IEnumerable<Services.LeaderboardEntry>? entries)
+        private void UpdateYourRankDisplay()
         {
             try
             {
                 var txt = LeaderboardTab.TxtYourRank;
                 if (txt == null) return;
 
-                var myId = App.UnifiedUserId;
-                Services.LeaderboardEntry? me = null;
-                if (!string.IsNullOrEmpty(myId) && entries != null)
-                {
-                    me = entries.FirstOrDefault(x => !string.IsNullOrEmpty(x.UnifiedId) && x.UnifiedId == myId);
-                }
-
                 var serverRank = App.Leaderboard?.YourRank;
-                var rank = serverRank is > 0 ? serverRank.Value : me?.Rank ?? 0;
+                var rank = serverRank is > 0 ? serverRank.Value : 0;
 
                 if (rank > 0)
                 {
@@ -490,7 +507,7 @@ namespace ConditioningControlPanel
                 sorted[i].Rank = i + 1;
 
             LeaderboardTab.LstLeaderboard.ItemsSource = sorted;
-            UpdateYourRankDisplay(sorted);
+            UpdateYourRankDisplay();
         }
 
         /// <summary>
