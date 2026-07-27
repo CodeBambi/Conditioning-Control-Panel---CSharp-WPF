@@ -146,6 +146,12 @@ namespace ConditioningControlPanel.Services
         // message window. Cleared by every real end-of-run path (Stop / ForceCleanup / Cleanup), by
         // the start of any new video, and by the retry callback's own finally.
         private bool _strictRetryPending;
+        // Bumped whenever a queued attention-fail retry becomes stale. The retry fires from a bare
+        // Task.Delay continuation that nothing can cancel, so instead of cancelling it we let it run
+        // and have it discover it is obsolete: it captures this value when scheduled and bails if it
+        // no longer matches. Without this, panic during the message window announced "we're stopping,
+        // you're safe" and then started another mandatory video ~2s later.
+        private int _retryGeneration;
         // True while THIS video holds an audio-duck ref (App.Audio.Duck is ref-counted). Balanced
         // 1:1 with the Duck in PlayVideo by an Unduck in CloseAll — every teardown path (natural end,
         // attention retry / troll "watch again" loop, engine Stop, ForceCleanup) runs through CloseAll,
@@ -910,7 +916,7 @@ namespace ConditioningControlPanel.Services
             // deferred ~1s to a background task.
             _videoPlaying = false;
             _strictActive = false;
-            _strictRetryPending = false;
+            CancelPendingRetry();
             try
             {
                 CloseAll(synchronous: false);
@@ -1271,7 +1277,7 @@ namespace ConditioningControlPanel.Services
             _videoPlaying = false;
             _triggerInProgress = false;
             _strictActive = false;
-            _strictRetryPending = false;
+            CancelPendingRetry();
             CloseAll(synchronous);
             App.Audio?.ForceUnduck();
             _penalties = 0;
@@ -1308,7 +1314,7 @@ namespace ConditioningControlPanel.Services
             {
                 _videoPlaying = true;
                 _strictActive = false;
-                _strictRetryPending = false;
+                CancelPendingRetry();
 
                 var allScreens = App.GetAllScreensCached().ToList();
                 if (allScreens.Count == 0) return;
@@ -1625,7 +1631,7 @@ namespace ConditioningControlPanel.Services
             // A video is on screen again, so whatever gap we were covering is over. Cleared HERE,
             // after the two flags above are already set, so a reader on another thread never sees a
             // moment where neither the gap flag nor (_videoPlaying && _strictActive) is true.
-            _strictRetryPending = false;
+            CancelPendingRetry();
             _retryPath = path;
             _startTime = DateTime.Now;
             _hits = _total = 0;
@@ -3403,11 +3409,20 @@ namespace ConditioningControlPanel.Services
                     // captured `strict` PARAMETER instead of re-reading the field. Same trick here.
                     var strictForRetry = _strictActive;
                     _strictRetryPending = strictForRetry;
+                    var retryGen = _retryGeneration;
 
                     Action replay = () =>
                     {
                         try
                         {
+                            // Did anything end or replace this run while the message was up? Panic is
+                            // the case that matters: it reaches Stop(), which tears the run down and
+                            // speaks "we're stopping, you're safe" - and then this callback, which no
+                            // one can cancel, used to start another mandatory video ~2s later and make
+                            // a liar of it. The delay still elapses; the retry just no longer acts.
+                            if (_retryGeneration != retryGen)
+                                return;
+
                             // ShowMessage already set _videoPlaying = false and called CloseAll()
                             // Reset attention tracking for retry
                             _hits = 0;
@@ -3460,6 +3475,17 @@ namespace ConditioningControlPanel.Services
                 _lastWatchPositionMs = _duration * 1000.0;
 
             Cleanup();
+        }
+
+        /// <summary>
+        /// Marks any attention-fail retry that is still sitting in a Task.Delay as obsolete, and ends
+        /// the strict gap. Called from every path that ends or replaces a run - the teardowns (Stop,
+        /// ForceCleanup, Cleanup) and the start of any new video (PlayVideo, PlayUrl).
+        /// </summary>
+        private void CancelPendingRetry()
+        {
+            _strictRetryPending = false;
+            _retryGeneration++;
         }
 
         private void ShowMessage(string text, int ms, Action then)
@@ -4453,7 +4479,7 @@ namespace ConditioningControlPanel.Services
             // duck ref exactly once (#526). No Unduck here — a second call would decrement a duck ref
             // that another consumer (subliminal/session) may legitimately hold.
             _strictActive = false;
-            _strictRetryPending = false;
+            CancelPendingRetry();
             _penalties = 0;
 
             // Resume bubbles now that video is done
