@@ -614,6 +614,12 @@ namespace ConditioningControlPanel.Services
                 // MainWindow owns that sync because the controls are wired manually, not data-bound.
                 // (KillAllAudio is NOT used here — it's a panic-grade teardown that also stops Autonomy
                 // and the overlays, i.e. it would kill the very voice loop that heard "mute".)
+                //
+                // There is deliberately NO `Blocked = StopLocked` here - do not add one to match
+                // video_off / video_pause / pause. Those are guarded because they end or suspend a
+                // strict run; muting doesn't. The video plays through to the end either way, so the
+                // lock the user asked for still holds. Silencing is not escaping, and letting someone
+                // kill the sound (housemate walked in, headphones died) costs the run nothing.
                 Execute = () => App.MainWindowRef?.ApplyVoiceMute(true),
                 TerseAck = true,
                 NoChain = true,
