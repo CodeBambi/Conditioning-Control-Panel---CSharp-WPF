@@ -105,15 +105,21 @@ namespace ConditioningControlPanel.Services
                         return false;
                     }
 
-                    // Pick and set a random wallpaper
+                    // Pick a random wallpaper. Breadcrumb goes down BEFORE the desktop changes:
+                    // between SetWallpaper and the persist there is a window where the user's
+                    // wallpaper is already gone but nothing on disk remembers it, and a kill in
+                    // there strands them permanently (#692). Write first, undo if the set fails.
                     var image = _imagePool[_random.Next(_imagePool.Count)];
-                    if (!SetWallpaper(image)) return false;
+                    PersistOriginal(original);
+                    if (!SetWallpaper(image))
+                    {
+                        PersistOriginal(null);
+                        return false;
+                    }
 
                     _originalWallpaperPath = original;
                     _currentImagePath = image;
                     _isActive = true;
-                    // Remember the original on disk too, so a crash mid-session self-heals next launch.
-                    PersistOriginal(original);
                     App.Logger?.Information("[Wallpaper] Activated with {File} (pool: {Count} images)", Path.GetFileName(image), _imagePool.Count);
                     return true;
                 }
@@ -252,7 +258,12 @@ namespace ConditioningControlPanel.Services
                 if (s.WallpaperOriginalPath == value) return;
 
                 s.WallpaperOriginalPath = value;
-                App.Settings?.Save();
+                // SaveImmediate, NOT Save(): the debounced path waits 500ms for quiet, and a kill
+                // inside that window leaves no breadcrumb at all — the next launch then captures
+                // OUR wallpaper as "the original" and the user's is stranded for good. That is #692
+                // again, just through a narrower door. This writes maybe twice a session; the
+                // debounce buys nothing here and costs the whole self-heal.
+                App.Settings?.SaveImmediate();
             }
             catch (Exception ex)
             {
