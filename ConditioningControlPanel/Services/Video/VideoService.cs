@@ -743,6 +743,46 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Route the primary player to the user's chosen audio endpoint and log ONE line saying
+        /// where its audio actually ended up. Runs once per video, off the LibVLC event thread,
+        /// after Playing has fired.
+        /// </summary>
+        /// <remarks>
+        /// LibVLC has no audio output (and therefore no device list, and no routing to read back)
+        /// until playback is live, so the old construction-time ApplyPreferredDevice call always
+        /// validated against an empty list and applied nothing - every mandatory video played to
+        /// the Windows default endpoint while the NAudio paths honoured the setting. Users whose
+        /// default endpoint is an HDMI monitor / dead / virtual device got silent video and
+        /// audible everything-else, every time (#707/#708).
+        ///
+        /// The probe line is the diagnostic half: pre-fix a silent video left no trace at all
+        /// ("LibVLC audio: Volume=99, Mute=false" is logged before any aout exists and only
+        /// reports what was requested), so wrong-endpoint and an adummy fallback - LibVLC quietly
+        /// picking the null output when mmdevice/directsound/waveout all fail to bind - looked
+        /// identical in a bug report. Tagged [VIDEO] so BugReportService rescues it.
+        /// </remarks>
+        private void RouteAndProbeAudio(LibVLCSharp.Shared.MediaPlayer player, string label)
+        {
+            try
+            {
+                // Same staleness guards the vout watchdog uses: never touch a player that
+                // teardown has already taken ownership of, or one from a previous video.
+                if (_isCleaningUp || !_videoPlaying) return;
+                if (!ReferenceEquals(player, _primaryMediaPlayer)) return;
+
+                bool applied = App.Audio?.ApplyPreferredDevice(player) ?? false;
+                var routing = App.Audio?.DescribeLibVlcAudioRouting(player) ?? "audio service unavailable";
+                App.Logger?.Information("[VIDEO] aout live for {File}: deviceApplied={Applied} {Routing}",
+                    label, applied, routing);
+                VideoDiag.Log("AOUT", $"{label} deviceApplied={applied} {routing}");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoService: audio route/probe failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Apply current volume settings to all playing videos.
         /// </summary>
         private void UpdatePlayingVideosVolume()
@@ -1323,7 +1363,9 @@ namespace ConditioningControlPanel.Services
             {
                 _mediaPlayers.Add(mediaPlayer);
             }
-            if (withAudio) App.Audio?.ApplyPreferredDevice(mediaPlayer);
+            // The user's chosen output device is applied from the Playing handler further down,
+            // never here: LibVLC has no audio output until playback starts, so a construction-time
+            // call enumerates nothing and no-ops (#707/#708). See RouteAndProbeAudio.
 
             if (withAudio)
             {
@@ -1424,6 +1466,23 @@ namespace ConditioningControlPanel.Services
             // skip it when audio is deactivated (effective volume 0), else the async Play()
             // lets the video blip at 100% before the volume set below lands (see file path).
             if (!withAudio || GetEffectiveVolume() <= 0) media.AddOption(":no-audio");
+
+            // Subscribed BEFORE Play(): a fast start raises Playing inside Play() itself, and this
+            // handler owns everything that needs a live aout - the volume re-apply (the set after
+            // Play() no-ops while no audio output exists) and the output-device routing.
+            if (withAudio)
+            {
+                int audioRouted = 0; // Playing can fire again after a seek/restart - route once
+                mediaPlayer.Playing += (s, e) =>
+                {
+                    try { mediaPlayer.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: URL volume apply on Playing failed"); }
+
+                    if (System.Threading.Interlocked.Exchange(ref audioRouted, 1) == 0)
+                        Task.Run(() => RouteAndProbeAudio(mediaPlayer, url.Length > 60 ? url.Substring(0, 60) + "..." : url));
+                };
+            }
+
             mediaPlayer.Play(media);
 
             if (withAudio)
@@ -1816,7 +1875,11 @@ namespace ConditioningControlPanel.Services
                 {
                     _mediaPlayers.Add(mediaPlayer);
                 }
-                if (withAudio) App.Audio?.ApplyPreferredDevice(mediaPlayer);
+                // NOTE: the user's chosen output device is applied from the Playing handler below,
+                // NOT here. LibVLC has no audio output until playback starts, so a call at
+                // construction time enumerated an empty device list, matched nothing and silently
+                // no-op'd — every mandatory video went to the Windows default endpoint while the
+                // NAudio paths honoured the setting (#707/#708). See RouteAndProbeAudio.
 
             // Only the primary player handles events (to avoid duplicate triggers)
             if (withAudio)
@@ -2030,18 +2093,11 @@ namespace ConditioningControlPanel.Services
             // the Volume=0 set below no-ops until the aout exists and the video would start at
             // 100% for a beat before the Playing handler cuts it — the audible blip a
             // "deactivated audio" user hears. :no-audio never decodes audio, so nothing blips.
+            // Same reasoning covers a muted player (dive master-mute or a zeroed slider): it has to
+            // start SILENT, and killing audio at the media level is the only way to beat the aout.
+            // Trade-off: un-muting mid-video won't restore sound - fine for the mandatory dive
+            // video, and any later playback opens a fresh Media that re-evaluates this.
             if (!withAudio || GetEffectiveVolume() <= 0)
-            {
-                media.AddOption(":no-audio");
-            }
-            // Muted (dive master-mute or a zeroed slider) must start SILENT. Setting
-            // Volume=0 after Play() can't win the race: LibVLC creates the aout a beat
-            // later and the first frames play at full volume, so the video's audio
-            // "fades in for a sec" even while muted (the Playing handler below only lands
-            // afterward). Kill the audio output at the media level so it never starts.
-            // Trade-off: un-muting mid-video won't restore sound - fine for the mandatory
-            // dive video, and any later playback opens a fresh Media that re-evaluates this.
-            else if (GetEffectiveVolume() == 0)
             {
                 media.AddOption(":no-audio");
             }
@@ -2055,6 +2111,29 @@ namespace ConditioningControlPanel.Services
                 media.AddOption(":avcodec-hw=none");
             }
 
+            // Everything that needs a live aout hangs off Playing, and the handler is subscribed
+            // BEFORE Play(): a fast start can raise Playing inside the Play() call itself, and a
+            // handler attached afterwards misses the event entirely - stranding both the volume
+            // re-apply and the output-device routing below.
+            if (withAudio)
+            {
+                int audioRouted = 0; // Playing can fire again after a seek/restart - route once
+                mediaPlayer.Playing += (s, e) =>
+                {
+                    // Play() is async: LibVLC hasn't created the audio output yet when it returns,
+                    // so the Volume set after Play() silently no-ops (libvlc_audio_set_volume fails
+                    // with no aout) and the video starts at 100% regardless of the slider. Only
+                    // this re-apply lands the Video Volume slider (matches
+                    // DualMonitorVideoService/MiniPlayerWindow).
+                    try { mediaPlayer!.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: volume apply on Playing failed"); }
+
+                    // Anything heavier than a property set goes off the LibVLC event thread.
+                    if (System.Threading.Interlocked.Exchange(ref audioRouted, 1) == 0)
+                        Task.Run(() => RouteAndProbeAudio(mediaPlayer!, Path.GetFileName(path)));
+                };
+            }
+
             // Play the media
             mediaPlayer.Play(media);
 
@@ -2066,17 +2145,11 @@ namespace ConditioningControlPanel.Services
             {
                 mediaPlayer.Mute = false;
                 mediaPlayer.Volume = GetEffectiveVolume();
-                // Play() is async: LibVLC hasn't created the audio output yet, so the
-                // Volume set above silently no-ops (libvlc_audio_set_volume fails with no
-                // aout) and the video starts at 100% regardless of the slider. Re-apply
-                // once playback actually begins and the aout exists - only then does the
-                // Video Volume slider land (matches DualMonitorVideoService/MiniPlayerWindow).
-                mediaPlayer.Playing += (s, e) =>
-                {
-                    try { mediaPlayer.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
-                    catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: volume apply on Playing failed"); }
-                };
-                App.Logger?.Information("LibVLC audio: Volume={Vol}, Mute={Mute}",
+                // REQUESTED values only. No aout exists this early, so this line says nothing about
+                // audibility - it read "Volume=99, Mute=false" on both #707 and #708, which were
+                // dead silent. RouteAndProbeAudio logs the RESOLVED routing once the aout is live;
+                // that is the line to read when a report says "video plays but has no sound".
+                App.Logger?.Information("LibVLC audio requested: Volume={Vol}, Mute={Mute} (pre-aout - see the [VIDEO] aout line for what actually happened)",
                     mediaPlayer.Volume, mediaPlayer.Mute);
 
                 // Arm the vout watchdog on the primary player: if no video output exists within the

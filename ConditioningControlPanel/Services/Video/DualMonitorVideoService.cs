@@ -39,6 +39,7 @@ namespace ConditioningControlPanel.Services
         private bool _isPlaying;
         private bool _disposed;
         private Task? _playerDisposeTask;
+        private int _audioRouted;  // 0 until this playback's output device has been applied (see OnPlaying)
 
         // Events
         public event EventHandler? PlaybackStarted;
@@ -78,6 +79,7 @@ namespace ConditioningControlPanel.Services
             {
                 _videoWidth = width;
                 _videoHeight = height;
+                _audioRouted = 0;   // fresh playback, fresh device application
 
                 // Initialize LibVLC
                 InitializeLibVLC();
@@ -98,7 +100,9 @@ namespace ConditioningControlPanel.Services
 
                 // Create media player with memory rendering
                 _mediaPlayer = new VlcMediaPlayer(_libVLC);
-                App.Audio?.ApplyPreferredDevice(_mediaPlayer);
+                // The user's output device is applied from OnPlaying, not here: LibVLC has no
+                // audio output until playback starts, so a construction-time call enumerates an
+                // empty device list and silently no-ops (#707/#708).
                 _mediaPlayer.SetVideoCallbacks(LockCallback, null, DisplayCallback);
                 _mediaPlayer.SetVideoFormat("RV32", _videoWidth, _videoHeight, _videoWidth * 4);
 
@@ -561,6 +565,32 @@ namespace ConditioningControlPanel.Services
 
         private void OnPlaying(object? sender, EventArgs e)
         {
+            // The aout exists now, so the user's chosen endpoint can finally be applied and the
+            // resolved routing read back. Off the LibVLC event thread (this fires on one), once
+            // per playback, and guarded on the player still being ours.
+            var player = _mediaPlayer;
+            if (player != null && Interlocked.Exchange(ref _audioRouted, 1) == 0)
+            {
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        // Stop() nulls _mediaPlayer before it detaches/disposes, so this identity
+                        // check is the staleness guard. (_isPlaying isn't usable here: it's set
+                        // after Play() returns and Playing can beat it.)
+                        if (!ReferenceEquals(player, _mediaPlayer)) return;
+                        bool applied = App.Audio?.ApplyPreferredDevice(player) ?? false;
+                        var routing = App.Audio?.DescribeLibVlcAudioRouting(player) ?? "audio service unavailable";
+                        App.Logger?.Information("[VIDEO] DualMonitorVideo aout live: deviceApplied={Applied} {Routing}",
+                            applied, routing);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("DualMonitorVideo: audio route/probe failed: {Error}", ex.Message);
+                    }
+                });
+            }
+
             Application.Current?.Dispatcher?.BeginInvoke(() =>
             {
                 PlaybackStarted?.Invoke(this, EventArgs.Empty);
