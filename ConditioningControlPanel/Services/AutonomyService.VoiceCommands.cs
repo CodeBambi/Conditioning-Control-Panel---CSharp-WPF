@@ -188,6 +188,17 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "video_off",
                 Aliases = OffAliases("video", "the video", "no more videos", "stop playing"),
+                // Strict lock / lockdown: the whole point is that the video can't be dismissed, and
+                // VideoService.Stop() is a privileged teardown that clears _strictActive before the
+                // window's Closing veto can see it — so the refusal has to live here (#706). Panic
+                // stays unguarded: it routes to the same teardown and is the intended way out.
+                Blocked = () => App.Video?.IsStrictActive == true || App.Lockdown?.IsActive == true,
+                BlockedConfirm = new()
+                {
+                    ["bambi"] = "nuh-uh~ you locked yourself in, silly! keep watching~",
+                    ["sissy"] = "no, good girl. you asked to be locked in — eyes on the screen.",
+                    ["circe"] = "you locked it yourself. the video stays.",
+                },
                 Execute = () => App.Video?.Stop(),
                 VoiceRuleId = "voicecmd_video_off",
                 Confirm = new()
@@ -201,6 +212,14 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "video_pause",
                 Aliases = new[] { "pause the video", "pause video", "pause this video", "pause the clip", "hold the video" },
+                // Pausing indefinitely neuters a strict video just as thoroughly as stopping it (#706).
+                Blocked = () => App.Video?.IsStrictActive == true || App.Lockdown?.IsActive == true,
+                BlockedConfirm = new()
+                {
+                    ["bambi"] = "hehe, no pausing this one~ keep those eyes open!",
+                    ["sissy"] = "not this one, good girl. it plays through.",
+                    ["circe"] = "no. it plays through.",
+                },
                 Execute = () => App.Video?.PausePrimary(),
                 TerseAck = true,
                 NoChain = true,
