@@ -348,7 +348,7 @@ namespace ConditioningControlPanel
             BuildThemeSection();
             BuildIdentitySection();
             BuildImageSlotsSection("achievements", "Achievements", "Custom badge images for the built-in achievements shown in the Trophy Case. Use square PNGs (128x128 recommended). Achievement display names are changed via Text Replacements, not here.", AchievementSlots);
-            BuildImageSlotsSection("features", "Features", "Icons for the feature tiles in the main control panel tabs (Flashes, Videos, Overlays, etc). Use square PNGs with transparent backgrounds. Feature display names are changed via Text Replacements.", FeatureSlots);
+            BuildImageSlotsSection("features", "Features", "Icons for the feature tiles in the main control panel tabs (Flashes, Videos, Overlays, etc). Use square PNGs with transparent backgrounds. Feature display names are changed via Text Replacements, not here.", FeatureSlots);
             BuildImageSlotsSection("skills", "Skills", "Icons for the nodes in the skill/enhancement tree. Each icon represents a specific unlockable skill. Use square PNGs. Skill display names are changed via Text Replacements.", SkillSlots);
             BuildAvatarsSection();
             BuildImageSlotsSection("uiassets", "UI Assets", "Miscellaneous UI images: Bubble is the floating orb in the pop minigame, Tube is the glass container around the avatar, Spiral GIF is the hypnotic overlay animation, and Logo replaces the app logo.", UiAssetSlots);
@@ -1642,7 +1642,7 @@ namespace ConditioningControlPanel
             panel.Child = stack;
 
             stack.Children.Add(CreateSectionHeader("Text Replacements"));
-            stack.Children.Add(CreateSectionDescription("Find-and-replace pairs applied globally across the entire UI -- button labels, achievement names, quest descriptions, companion speech, tab headers, and more. Longer match strings are applied first to prevent partial replacements. This is the most powerful theming tool for completely re-skinning the app's vocabulary."));
+            stack.Children.Add(CreateSectionDescription("Find-and-replace pairs applied across most of the UI - dashboard feature tiles and their popup titles, section headers, button labels, achievement and skill names, quest descriptions, companion speech, tab headers, and more. Matching runs against the app's original English wording and is case-sensitive, so \"Flash Images\" matches but \"flash images\" does not. Longer match strings are applied first to prevent partial replacements. Coverage is broad but not total - a few screens still show the stock wording. This is the most powerful theming tool for re-skinning the app's vocabulary."));
 
             _replacementsPanel = new StackPanel();
             stack.Children.Add(_replacementsPanel);

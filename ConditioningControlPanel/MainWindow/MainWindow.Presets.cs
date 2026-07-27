@@ -885,64 +885,67 @@ namespace ConditioningControlPanel
             catch { }
         }
 
+        // Popup titles go through ModAwareLabel so a mod that renames a feature retitles
+        // the window too — otherwise a "Flash Images" → "Drone Pulses" replacement would
+        // rename the tile and the in-popup section header but leave the title bar behind.
         internal void CardFlash_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.FlashFeatureControl(),
-                Localization.Loc.Get("section_flash_images"),
+                ModAwareLabel("⚡ Flash Images", "section_flash_images"),
                 SettingsTab.CardFlash.Icon);
 
         internal void CardVisuals_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.VisualsFeatureControl(),
-                Localization.Loc.Get("section_visuals"),
+                ModAwareLabel("👁 Visuals", "section_visuals"),
                 glyph: "👁");
 
         internal void CardVideo_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.VideoFeatureControl(),
-                Localization.Loc.Get("section_mandatory_video"),
+                ModAwareLabel("🎬 Mandatory Video", "section_mandatory_video"),
                 SettingsTab.CardVideo.Icon);
 
         internal void CardSubliminal_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.SubliminalFeatureControl(),
-                Localization.Loc.Get("section_subliminals_2"),
+                ModAwareLabel("💭 Subliminals", "section_subliminals_2"),
                 SettingsTab.CardSubliminal.Icon);
 
         internal void CardSpiral_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.SpiralFeatureControl(),
-                Localization.Loc.Get("label_spiral_overlay"),
+                ModAwareLabel("🌀 Spiral Overlay", "label_spiral_overlay"),
                 SettingsTab.CardSpiral.Icon);
 
         internal void CardPinkFilter_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.PinkFilterFeatureControl(),
-                Localization.Loc.Get("label_pink_filter"),
+                ModAwareLabel("💗 Pink Filter", "label_pink_filter"),
                 SettingsTab.CardPinkFilter.Icon);
 
         internal void CardBubblePop_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.BubblePopFeatureControl(),
-                Localization.Loc.Get("label_bubble_pop"),
+                ModAwareLabel("🫧 Bubble Pop", "label_bubble_pop"),
                 SettingsTab.CardBubblePop.Icon);
 
         internal void CardLockCard_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.LockCardFeatureControl(),
-                Localization.Loc.Get("label_lock_card"),
+                ModAwareLabel("📐 Lock Card", "label_lock_card"),
                 SettingsTab.CardLockCard.Icon);
 
         internal void CardBubbleCount_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.BubbleCountFeatureControl(),
-                Localization.Loc.Get("label_bubble_count"),
+                ModAwareLabel("🫧 Bubble Count", "label_bubble_count"),
                 SettingsTab.CardBubbleCount.Icon);
 
         internal void CardBouncingText_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.BouncingTextFeatureControl(),
-                Localization.Loc.Get("label_bouncing_text"),
+                ModAwareLabel("📺 Bouncing Text", "label_bouncing_text"),
                 SettingsTab.CardBouncingText.Icon);
 
         internal void CardMindWipe_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.MindWipeFeatureControl(),
-                Localization.Loc.Get("label_mind_wipe"),
+                ModAwareLabel("🧠 Mind Wipe", "label_mind_wipe"),
                 SettingsTab.CardMindWipe.Icon);
 
         internal void CardSystem_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.SystemFeatureControl(),
-                Localization.Loc.Get("section_system"),
+                ModAwareLabel("⚙ System", "section_system"),
                 glyph: "⚙");
 
         internal void VelvetBtnWebcam_Click(object sender, RoutedEventArgs e)

@@ -310,13 +310,17 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
     
+            <!-- The Title="" literals below are English design-time fallbacks only.
+                 At runtime MainWindow.ApplyModFeatureNames() overwrites every card
+                 title with the localized (and mod-text-replaced) name. -->
+
             <!-- Row 1: Dashboard features -->
             <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
                                   Title="Flash Images"
                                   Icon="pack://application:,,,/Resources/features/flash.png"
                                   HelpSectionId="FlashImages"
                                   Click="CardFlash_Click"/>
-            <features:FeatureCard Grid.Row="0" Grid.Column="1" x:Name="CardVisuals"
+            <features:FeatureCard Grid.Row="0" Grid.Column="1" x:Name="CardVisuals" x:FieldModifier="internal"
                                   Title="Visuals"
                                   Glyph="👁"
                                   HelpSectionId="Visuals"
@@ -381,7 +385,7 @@
                                   Icon="pack://application:,,,/Resources/features/bouncing_text.png"
                                   HelpSectionId="BouncingText"
                                   Click="CardBouncingText_Click"/>
-            <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardSystem"
+            <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardSystem" x:FieldModifier="internal"
                                   Title="System"
                                   Glyph="⚙"
                                   HelpSectionId="System"

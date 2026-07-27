@@ -106,8 +106,27 @@ namespace ConditioningControlPanel
         private void ApplyModFeatureNames()
         {
             // If a mod is active, use mod-aware text; otherwise use localized text
-            string ML(string englishText, string locKey) => App.Mods?.MakeModAware(englishText) is string modText && modText != englishText
-                ? modText : Loc.Get(locKey);
+            string ML(string englishText, string locKey) => ModAwareLabel(englishText, locKey);
+
+            // Dashboard cards draw their own icon, so their captions must not carry the
+            // leading emoji the shared section keys use — strip it off.
+            string MLCard(string englishText, string locKey) => StripLeadingGlyph(ML(englishText, locKey));
+
+            // Velvet mosaic dashboard cards — the XAML Title="" literals are plain English
+            // design-time fallbacks, so this is the only place they get localized OR
+            // mod-renamed. Keys are the same ones the matching popup titles use.
+            if (SettingsTab.CardFlash != null) SettingsTab.CardFlash.Title = MLCard("Flash Images", "section_flash_images");
+            if (SettingsTab.CardVisuals != null) SettingsTab.CardVisuals.Title = MLCard("Visuals", "section_visuals");
+            if (SettingsTab.CardVideo != null) SettingsTab.CardVideo.Title = MLCard("Mandatory Video", "section_mandatory_video");
+            if (SettingsTab.CardSubliminal != null) SettingsTab.CardSubliminal.Title = MLCard("Subliminals", "section_subliminals_2");
+            if (SettingsTab.CardSpiral != null) SettingsTab.CardSpiral.Title = MLCard("Spiral Overlay", "label_spiral_overlay");
+            if (SettingsTab.CardLockCard != null) SettingsTab.CardLockCard.Title = MLCard("Lock Card", "label_lock_card");
+            if (SettingsTab.CardPinkFilter != null) SettingsTab.CardPinkFilter.Title = MLCard("Pink Filter", "label_pink_filter");
+            if (SettingsTab.CardMindWipe != null) SettingsTab.CardMindWipe.Title = MLCard("Mind Wipe", "label_mind_wipe");
+            if (SettingsTab.CardBubblePop != null) SettingsTab.CardBubblePop.Title = MLCard("Bubble Pop", "label_bubble_pop");
+            if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.Title = MLCard("Bouncing Text", "label_bouncing_text");
+            if (SettingsTab.CardSystem != null) SettingsTab.CardSystem.Title = MLCard("System", "section_system");
+            if (SettingsTab.CardBubbleCount != null) SettingsTab.CardBubbleCount.Title = MLCard("Bubble Count", "label_bubble_count");
 
             // Main section headers
             if (SettingsTab.TxtFeatureFlash != null) SettingsTab.TxtFeatureFlash.Text = ML("⚡ Flash Images", "section_flash_images");
@@ -179,6 +198,31 @@ namespace ConditioningControlPanel
 
             // Show/hide the Bimbo Journal sub-tab based on the active mod.
             ApplyBimboJournalModVisibility();
+        }
+
+        /// <summary>
+        /// Resolves a hardcoded English UI label: if the active mod's text replacements
+        /// change it, the mod wording wins; otherwise fall back to the localized string.
+        /// Shared by ApplyModFeatureNames and the dashboard feature popups so a mod that
+        /// renames e.g. "Flash Images" retitles the tile, the popup, and the section header.
+        /// </summary>
+        internal static string ModAwareLabel(string englishText, string locKey) =>
+            App.Mods?.MakeModAware(englishText) is string modText && modText != englishText
+                ? modText : Loc.Get(locKey);
+
+        /// <summary>
+        /// Drops a leading emoji/symbol prefix (e.g. "⚡ Flash Images" → "Flash Images").
+        /// The shared section loc keys all carry one, but the dashboard cards render an
+        /// icon of their own and would double up.
+        /// </summary>
+        private static string StripLeadingGlyph(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            var i = 0;
+            while (i < text.Length && !char.IsLetterOrDigit(text, i))
+                i += char.IsSurrogatePair(text, i) ? 2 : 1;
+            // All-symbol string (or nothing to strip) — leave it untouched.
+            return i > 0 && i < text.Length ? text.Substring(i) : text;
         }
 
         /// <summary>
