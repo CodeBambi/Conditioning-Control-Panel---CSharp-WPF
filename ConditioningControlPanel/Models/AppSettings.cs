@@ -4186,14 +4186,44 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        #region Lab — Wallpaper Override
+        #region Takeover — Wallpaper Override
 
         private bool _wallpaperEnabled = false;
+        /// <summary>
+        /// Keep her wallpaper changes on the desktop instead of reverting after
+        /// <see cref="WallpaperPulseSeconds"/>. Still restored when the app closes. (#694)
+        /// </summary>
         [JsonProperty]
         public bool WallpaperEnabled
         {
             get => _wallpaperEnabled;
             set { _wallpaperEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _wallpaperPulseSeconds = 30;
+        /// <summary>
+        /// How long a Takeover wallpaper change sticks around before the original comes back.
+        /// Ignored while <see cref="WallpaperEnabled"/> is on.
+        /// </summary>
+        [JsonProperty]
+        public int WallpaperPulseSeconds
+        {
+            get => _wallpaperPulseSeconds;
+            set { _wallpaperPulseSeconds = Math.Clamp(value, 10, 600); OnPropertyChanged(); }
+        }
+
+        private string _wallpaperOriginalPath = "";
+        /// <summary>
+        /// The desktop wallpaper WallpaperService captured before overriding it. Written on
+        /// activate and cleared on a successful restore, so a session that dies without
+        /// restoring (crash / task-kill) can put it back on the next launch (#692).
+        /// Not user-facing.
+        /// </summary>
+        [JsonProperty]
+        public string WallpaperOriginalPath
+        {
+            get => _wallpaperOriginalPath;
+            set { _wallpaperOriginalPath = value ?? ""; OnPropertyChanged(); }
         }
 
         private string _wallpaperSourceFolder = "";

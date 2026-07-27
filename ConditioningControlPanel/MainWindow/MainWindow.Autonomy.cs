@@ -343,15 +343,77 @@ namespace ConditioningControlPanel
             RefreshWallpaperFolderLabel();
         }
 
-        /// <summary>Reflect the chosen wallpaper source folder (or the default) under the picker button.</summary>
+        /// <summary>
+        /// Restore the whole wallpaper block from settings: the chosen source folder (or the
+        /// default) under the picker button, plus the "keep it" toggle and pulse-duration bar.
+        /// This is the wallpaper block's load hook - called from LoadSettingsIntoUI.
+        /// </summary>
         internal void RefreshWallpaperFolderLabel()
         {
-            var lbl = BambiTakeoverTab?.TxtWallpaperFolder;
-            if (lbl == null) return;
-            var folder = App.Settings?.Current?.WallpaperSourceFolder;
-            lbl.Text = string.IsNullOrWhiteSpace(folder)
-                ? Loc.Get("label_wallpaper_folder_default")
-                : folder;
+            var tab = BambiTakeoverTab;
+            var s = App.Settings?.Current;
+            if (tab == null || s == null) return;
+
+            if (tab.TxtWallpaperFolder != null)
+            {
+                tab.TxtWallpaperFolder.Text = string.IsNullOrWhiteSpace(s.WallpaperSourceFolder)
+                    ? Loc.Get("label_wallpaper_folder_default")
+                    : s.WallpaperSourceFolder;
+            }
+
+            if (tab.ChkWallpaperKeep != null)
+                tab.ChkWallpaperKeep.IsChecked = s.WallpaperEnabled;
+            if (tab.SliderWallpaperDuration != null)
+            {
+                // Clamp before assigning, like the other Takeover bars (#485): a saved value outside
+                // the bar's range would silently snap and then write the snapped number back.
+                s.WallpaperPulseSeconds = Math.Clamp(s.WallpaperPulseSeconds,
+                    (int)tab.SliderWallpaperDuration.Minimum, (int)tab.SliderWallpaperDuration.Maximum);
+                tab.SliderWallpaperDuration.Value = s.WallpaperPulseSeconds;
+            }
+            // The Slider_Changed handler bails while _isLoading, so set the label explicitly.
+            if (tab.TxtWallpaperDuration != null)
+                tab.TxtWallpaperDuration.Text = $"{s.WallpaperPulseSeconds}s";
+            RefreshWallpaperDurationVisibility();
+        }
+
+        /// <summary>The pulse duration is meaningless while "keep it" is on - hide it rather than lie.</summary>
+        private void RefreshWallpaperDurationVisibility()
+        {
+            var panel = BambiTakeoverTab?.PanelWallpaperDuration;
+            if (panel == null) return;
+            panel.Visibility = App.Settings?.Current?.WallpaperEnabled == true
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        }
+
+        /// <summary>
+        /// "Keep the wallpaper": her changes stay on the desktop instead of reverting after a few
+        /// seconds (#694). Turning it back off puts the original wallpaper back right away, so the
+        /// toggle doubles as the manual undo.
+        /// </summary>
+        internal void ChkWallpaperKeep_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            s.WallpaperEnabled = BambiTakeoverTab.ChkWallpaperKeep.IsChecked ?? false;
+            App.Settings?.Save();
+            RefreshWallpaperDurationVisibility();
+
+            if (!s.WallpaperEnabled && App.Wallpaper?.IsActive == true)
+                App.Wallpaper?.Deactivate();
+        }
+
+        /// <summary>How long a wallpaper change sticks before the original comes back.</summary>
+        internal void SliderWallpaperDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || BambiTakeoverTab.TxtWallpaperDuration == null) return;
+            var seconds = (int)e.NewValue;
+            BambiTakeoverTab.TxtWallpaperDuration.Text = $"{seconds}s";
+            App.Settings.Current.WallpaperPulseSeconds = seconds;
+            App.Settings.Save();
         }
 
         internal void SliderAutonomyAnnounce_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -101,6 +102,8 @@ namespace ConditioningControlPanel.Services
         private bool _pinkFilterPulseActive = false;
         private bool _bubblesPulseActive = false;
         private bool _bouncingTextPulseActive = false;
+        /// <summary>Pending "put the wallpaper back" timer. Replaced, never stacked (#694).</summary>
+        private CancellationTokenSource? _wallpaperPulseCts;
         /// <summary>
         /// True while web media is playing in the embedded browser. Now delegates to
         /// <see cref="Services.Browser.BrowserMediaService"/>, which tracks USER-started playback
@@ -585,6 +588,15 @@ namespace ConditioningControlPanel.Services
                 App.BouncingText?.Stop();
             }
             _bouncingTextPulseActive = false;
+
+            // Put the desktop wallpaper back — unless the user explicitly asked her changes to
+            // stay, in which case stopping Takeover shouldn't yank it out from under them.
+            CancelWallpaperRevert();
+            if (!settings.WallpaperEnabled && App.Wallpaper?.IsActive == true)
+            {
+                App.Logger?.Information("AutonomyService: Restoring desktop wallpaper");
+                App.Wallpaper?.Deactivate();
+            }
 
             // Refresh overlays to apply restored settings
             App.Overlay?.RefreshOverlays();
@@ -1317,34 +1329,7 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case AutonomyActionType.WallpaperShuffle:
-                            if (App.Wallpaper != null)
-                            {
-                                if (App.Wallpaper.IsActive)
-                                {
-                                    // Already active — just shuffle
-                                    App.Wallpaper.Shuffle();
-                                }
-                                else
-                                {
-                                    // Pulse: activate, wait 30s, deactivate (unless user toggled it on manually)
-                                    App.Wallpaper.Activate();
-                                    var userEnabled = App.Settings?.Current?.WallpaperEnabled == true;
-                                    if (!userEnabled)
-                                    {
-                                        _ = Task.Delay(30000).ContinueWith(_ =>
-                                        {
-                                            try
-                                            {
-                                                if (Application.Current?.Dispatcher == null) return;
-                                                // Only deactivate if user hasn't manually enabled it since
-                                                if (App.Settings?.Current?.WallpaperEnabled != true)
-                                                    App.Wallpaper?.Deactivate();
-                                            }
-                                            catch { }
-                                        });
-                                    }
-                                }
-                            }
+                            TriggerWallpaperChange();
                             break;
                     }
 
@@ -1361,6 +1346,55 @@ namespace ConditioningControlPanel.Services
                     IsActionInProgress = false;
                 }
             });
+        }
+
+        /// <summary>
+        /// Swap the desktop wallpaper for one of hers. Shuffle() activates by itself when the
+        /// service is idle, so there's no check-then-act race with a concurrent pulse.
+        /// Unless the user asked for changes to stick (WallpaperEnabled), the original comes back
+        /// after WallpaperPulseSeconds — and each new change REPLACES the pending revert instead
+        /// of stacking a second one, which used to cut a later change short (#694).
+        /// </summary>
+        private void TriggerWallpaperChange()
+        {
+            if (App.Wallpaper == null) return;
+
+            // Nothing changed (no images, or the desktop wasn't safely capturable) — nothing to revert.
+            if (!App.Wallpaper.Shuffle()) return;
+
+            CancelWallpaperRevert();
+
+            if (App.Settings?.Current?.WallpaperEnabled == true)
+            {
+                App.Logger?.Debug("Autonomy: Wallpaper change left in place (user asked for it to stay)");
+                return;
+            }
+
+            var seconds = App.Settings?.Current?.WallpaperPulseSeconds ?? 30;
+            var cts = new CancellationTokenSource();
+            _wallpaperPulseCts = cts;
+
+            _ = Task.Delay(TimeSpan.FromSeconds(seconds), cts.Token).ContinueWith(t =>
+            {
+                if (t.IsCanceled) return;
+                try
+                {
+                    if (Application.Current?.Dispatcher == null) return;
+                    // Skip if the user flipped "keep it" on while the pulse was running.
+                    if (App.Settings?.Current?.WallpaperEnabled != true)
+                        App.Wallpaper?.Deactivate();
+                }
+                catch { }
+            }, TaskScheduler.Default);
+        }
+
+        /// <summary>Drop any pending wallpaper revert without touching the current wallpaper.</summary>
+        private void CancelWallpaperRevert()
+        {
+            var pending = Interlocked.Exchange(ref _wallpaperPulseCts, null);
+            if (pending == null) return;
+            try { pending.Cancel(); } catch { }
+            pending.Dispose();
         }
 
         /// <summary>

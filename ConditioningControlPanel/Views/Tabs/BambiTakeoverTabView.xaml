@@ -261,6 +261,20 @@
                                 <TextBlock Grid.Column="1" x:Name="TxtWallpaperFolder" x:FieldModifier="internal" Foreground="#B0B0C8" FontSize="11"
                                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="10,0,0,0"/>
                             </Grid>
+                            <!-- Wallpaper persistence — every change used to snap back after a hardcoded
+                                 30s, so you barely ever saw it behind your windows (#694). Keep it, or
+                                 pick how long the pulse lasts. -->
+                            <Grid Margin="0,10,0,0" ToolTip="{loc:Str tooltip_wallpaper_keep}">
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str label_wallpaper_keep}" FontSize="12" Foreground="#CCC"/>
+                                    <TextBlock Text="{loc:Str desc_wallpaper_keep}" FontSize="10" Foreground="#888"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ChkWallpaperKeep" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkWallpaperKeep_Changed" Unchecked="ChkWallpaperKeep_Changed"/>
+                            </Grid>
+                            <StackPanel x:Name="PanelWallpaperDuration" x:FieldModifier="internal" Margin="0,8,0,0" ToolTip="{loc:Str tooltip_wallpaper_duration}">
+                                <Grid><TextBlock Text="{loc:Str label_wallpaper_duration}" Foreground="#AAA" FontSize="12"/><TextBlock x:Name="TxtWallpaperDuration" x:FieldModifier="internal" Text="30s" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
+                                <Slider x:Name="SliderWallpaperDuration" x:FieldModifier="internal" Minimum="10" Maximum="600" Value="30" Height="22" ValueChanged="SliderWallpaperDuration_Changed"/>
+                            </StackPanel>
                         </StackPanel>
                         </Border>
                     </Expander>
