@@ -20,66 +20,36 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.5.1";
+        public const string AppVersion = "6.5.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.5.1 - Questioning... the narrative? 🤭💗
+        public const string CurrentPatchNotes = @"v6.5.2 - Questioning... the narrative? 🤭💗
 
-A follow-up to 6.5.0: lighter on memory, fewer freezes, no more screens you cannot get out of. Plus a pile of the things you asked for.
+A stability pass on top of 6.5.1. Locks that are meant to hold now hold, panic actually stops things, and your desktop comes back the way you left it.
 
 🩹 FIXES
-- Bubble Count no longer leaves a fullscreen result screen stuck on top with no way out. (#633)
-- Lock cards you could not type into, after a monitor change or a Remote Desktop reconnect, are fixed. (#618)
-- A lock card queued while another one is up now waits its turn instead of being thrown away. (#676)
-- Maximizing the main window on a second monitor no longer sends it off-screen. (#620)
-- Closing a game window with the X now shuts it down cleanly instead of reopening it.
-- Subliminals show Chinese, Japanese, Korean and emoji again instead of blank boxes. (#615)
-- Fixed a startup crash when corner GIF overlays were switched on. (#625)
-- Sessions written by the Graded Intake appear right away, each with its own name. (#614)
-- Blink trainer: animated .webp images animate instead of freezing on their first frame.
-- Blink trainer overlay can no longer be buried underneath a strict-mode video. (#630)
-- Companion: the bubble-pop egg no longer freezes the screen during a takeover. (#628)
-- Companion stays out of the way while you are inside a game, the Intake, the Loom or the Bureau.
-- Dragging between monitors with different scaling no longer hangs with the companion attached.
+- Your wallpaper is no longer cleared for good when a wallpaper change gets interrupted. (#692)
+- ""Keep the wallpaper"" and the pulse length are back in Takeover, so a change can stay if you want it to. (#694)
+- Mandatory video plays through the audio device you picked instead of the Windows default. (#707, #708)
+- Corner GIF overlays no longer wedge the app on startup, and a crash while restoring them can no longer follow you through a reinstall. (#709)
+- Voice commands can no longer talk their way out of a strict locked video. (#706)
+- Panic during a mandatory video now ends the run instead of quietly queueing the next one.
+- Failing an attention check no longer hands you an escapable video on the retry.
+- Dashboard cards follow your mod's text replacements. (#713)
+- Leaderboard: ""Jump to me"" stopped pointing at a page that never existed, and your rank no longer contradicts the board it is printed on. (#693)
+- The freeze behind the blurred video background is fixed. (#632, #636, #687)
+- A stuck audio duck no longer leaves the machine silenced, and Test Audio cannot hang. (#686)
+- Mantra chant respects mute, disarms on panic, and no longer resumes by itself. (#685)
+- Wake word calibration finally hears the ""hey"". (#682)
+- Flash and spiral GIFs sample across the whole file instead of truncating, so long GIFs keep their ending. (#683)
+- The Monitor dropdown wins over the calibration pin in the blink trainer. (#681)
+- Lock card evidence and achievement unlocks can no longer hang. (#677, #684)
 
-🧠 LIGHTER ON MEMORY
-- Awareness screen reading no longer leaks memory on every scan. (#634)
-- The local AI caps what it keeps in mind and hands the model back when the app closes. (#631, #629)
-- New deep tracing for the rare video that turns into a black frozen screen, so a bug report finally captures it. (#616, #617, #621, #622, #623)
-
-✨ THE GRADED INTAKE
-- Sometimes it wants you to prove you are human first. Four different checks, with proper pictures.
-- Those checks no longer bunch up several in a row.
-- Deeper in, it stops playing fair: cards turn upside down, answers wander off, the screen glitches between questions.
-- The wrong-answer sound is gentler down there, and sometimes you get the nice one anyway.
-- Your cursor may occasionally decide for itself which answer you meant.
-
-🐰 DOWN THE RABBIT HOLE
-- Save up to 5 named run setups per save slot. (#650)
-- Optional slow spiral pinned to the middle of the tunnel, off by default. (#647)
-- Type a duration instead of dragging the slider, for Hourglass owners. (#648)
-- New ""surprise me"" chip rolls a random difficulty and length. (#652)
-- White rabbits show up about 15% more often.
-
-🎁 YOU ASKED FOR IT
-- Your mod's voiced mantras can loop quietly in the background, with their own volume and spacing. (#653)
-- A global camera hotkey, Ctrl+Alt+K by default. (#674)
-- Ramps can ease instead of climbing straight: ease in, ease out, S-curve, exponential. (#660)
-- Layered audio: several loops running together, mixed into one output. (#659)
-- Audio-only sessions, for the voice without the visuals. (#668)
-- Send the spiral and the pink filter to different monitors. (#639)
-- The spiral overlay can pick a random spiral from your library each time it starts. (#641)
-- Awareness reactions can roll a random cooldown inside a range. (#640)
-- A detached companion remembers where you put it and how big you made it. (#669)
-- Leaderboard shows your rank, highlights your row, and can jump straight to you. (#664)
-- Lock cards stop repeating the same phrase back to back. (#673)
-- Choose the color of the pink filter tint. (#643)
-- Wallpaper takeover moved into Takeover, with a folder picker so you choose the source. (#672)
-- New Media Log on the Assets tab: your last 500 flashes and videos, with thumbnails and open-in-folder.
-- New Suggestion button, for sending ideas the same quick way you file a bug.
+🌍 LOCALIZATION
+- 10 missing keys, plus new keys for the wallpaper toggle and the leaderboard rank line. (#678)
 
 Season: Jelly July";
 
