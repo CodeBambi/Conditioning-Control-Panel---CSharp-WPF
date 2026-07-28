@@ -271,16 +271,16 @@ public sealed class BubbleLayer : BaseLayer
             // ---- Label / emoji glyph ----
             if (!string.IsNullOrEmpty(item.Label))
             {
-                _text.Typeface = item.LabelFace(_bold);   // #615
+                var runs = item.LabelRuns(_bold);   // #615/#717
                 _text.TextSize = item.LabelFontDip * s;
                 // Soft shadow (BlurRadius 6 -> sigma 2) then the white glyph.
                 _text.Color = SKColors.Black.WithAlpha((byte)(0.8f * item.Opacity * 255f));
                 _text.MaskFilter = GetCachedBlur(ref item.LabelBlurCache, ref item.LabelBlurCacheSigma, 2f * s);
                 float baseline = cy + _text.TextSize * 0.35f;
-                canvas.DrawText(item.Label, cx, baseline, _text);
+                GlyphFallback.DrawCentered(canvas, runs, cx, baseline, _text);
                 _text.MaskFilter = null;
                 _text.Color = SKColors.White.WithAlpha(ga);
-                canvas.DrawText(item.Label, cx, baseline, _text);
+                GlyphFallback.DrawCentered(canvas, runs, cx, baseline, _text);
             }
 
             // ---- Fuse ring (live): 3-phase colour, shrinking radius ----
@@ -342,11 +342,13 @@ public sealed class BubbleLayer : BaseLayer
     private void DrawHint(SKCanvas canvas, BubbleItem item, float cx, float cy, float s)
     {
         float alpha = item.HintOpacity * item.Opacity;
-        // #615: measure AND draw with the same resolved face, or the pill would be sized for one
-        // font and filled with another. English hints hit the ASCII fast path (still Segoe UI).
-        _text.Typeface = item.HintFace(_bold);
+        // #615/#717: measure AND draw with the same resolved runs, or the pill would be sized for
+        // one font and filled with another. English hints hit the ASCII fast path (a single Segoe
+        // UI run, measured and drawn exactly as before).
+        var runs = item.HintRuns(_bold);
         _text.TextSize = 12.5f * s;
-        float tw = _text.MeasureText(item.HintText);
+        var runWidths = runs.Length > 1 ? new float[runs.Length] : null;
+        float tw = GlyphFallback.Measure(runs, _text, runWidths, out _, out _);
         float padX = 8f * s, padY = 3f * s;
         float th = _text.TextSize;
         float py = cy + item.HintYOffDip * s;
@@ -356,10 +358,10 @@ public sealed class BubbleLayer : BaseLayer
         _text.Color = SKColors.Black.WithAlpha((byte)(0.9f * alpha * 255f));
         _text.MaskFilter = GetCachedBlur(ref item.HintBlurCache, ref item.HintBlurCacheSigma, 1.7f * s);
         float baseline = py + th * 0.35f;
-        canvas.DrawText(item.HintText, cx, baseline, _text);
+        GlyphFallback.DrawCentered(canvas, runs, cx, baseline, _text, runWidths, tw);
         _text.MaskFilter = null;
         _text.Color = new SKColor(0xFF, 0xE2, 0xF2, (byte)(alpha * 255f));
-        canvas.DrawText(item.HintText, cx, baseline, _text);
+        GlyphFallback.DrawCentered(canvas, runs, cx, baseline, _text, runWidths, tw);
     }
 
     /// <summary>Uniform (letterbox) fit of an image into a square dest - matches Stretch.Uniform.</summary>
@@ -437,19 +439,21 @@ public sealed class BubbleLayer : BaseLayer
         internal SKMaskFilter? HintBlurCache;
         internal float HintBlurCacheSigma = -1f;
 
-        // Bug #615: resolved draw faces for Label / HintText. Both strings are fixed at spawn, so
-        // this resolves once per bubble and then costs a null check per frame - GlyphFallback
-        // itself is memoised globally too, but it takes a lock, and this runs per bubble per
-        // frame on the 31Hz tick. Never disposed here: the face is either the shared _bold or a
-        // globally cached fallback, both app-lifetime (same never-freed invariant as the sprites).
-        private SKTypeface? _labelFace;
-        private SKTypeface? _hintFace;
+        // Bugs #615 / #717: resolved draw runs for Label / HintText - one run per face, since no
+        // single installed face need cover a whole string (a CJK phrase with a dingbat in it does
+        // not). Both strings are fixed at spawn, so this resolves once per bubble and then costs a
+        // null check per frame - GlyphFallback itself is memoised globally too, but it takes a
+        // lock, and this runs per bubble per frame on the 31Hz tick. Never disposed here: the
+        // faces are either the shared _bold or globally cached fallbacks, both app-lifetime (same
+        // never-freed invariant as the sprites).
+        private GlyphFallback.TextRun[]? _labelRuns;
+        private GlyphFallback.TextRun[]? _hintRuns;
 
-        internal SKTypeface LabelFace(SKTypeface primary)
-            => _labelFace ??= GlyphFallback.Resolve(Label, primary, SKFontStyle.Bold);
+        internal GlyphFallback.TextRun[] LabelRuns(SKTypeface primary)
+            => _labelRuns ??= GlyphFallback.Split(Label, primary, SKFontStyle.Bold);
 
-        internal SKTypeface HintFace(SKTypeface primary)
-            => _hintFace ??= GlyphFallback.Resolve(HintText, primary, SKFontStyle.Bold);
+        internal GlyphFallback.TextRun[] HintRuns(SKTypeface primary)
+            => _hintRuns ??= GlyphFallback.Split(HintText, primary, SKFontStyle.Bold);
 
         internal void ReleaseEffectCaches()
         {

@@ -33,7 +33,7 @@ public sealed class SubliminalLayer : BaseLayer
     };
 
     /// <summary>The WPF card's font (CreateTextBlock parity). Only ever the ACTUAL draw face for
-    /// text Arial can render - see <see cref="Item.Face"/> and bug #615.</summary>
+    /// text Arial can render - see <see cref="Item.Runs"/> and bugs #615 / #717.</summary>
     private static readonly SKTypeface BoldArial =
         SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold) ?? SKTypeface.Default;
 
@@ -55,20 +55,28 @@ public sealed class SubliminalLayer : BaseLayer
     private sealed class Item
     {
         public string Text = "";
-        /// <summary>Bug #615: the typeface that can actually DRAW this card's text. Arial for
-        /// Latin (unchanged appearance), a system fallback family for anything Arial lacks -
-        /// CJK, Cyrillic, emoji. Resolved once at queue time and reused for BOTH the measure and
-        /// the draw; measuring in one font and drawing in another would mis-centre the card and
-        /// hand the awareness OCR the wrong skip rect.</summary>
-        public SKTypeface Face = BoldArial;
+        /// <summary>Bugs #615 / #717: the text split into runs, each with the typeface that can
+        /// actually DRAW it. Arial for Latin (unchanged appearance), a system fallback family for
+        /// anything Arial lacks - CJK, Cyrillic, emoji - and a SEPARATE run per script, because a
+        /// phrase like "♤雌畜人妖♤" has no single face that covers all of it. Resolved once at
+        /// queue time and reused for BOTH the measure and the draw; measuring in one font and
+        /// drawing in another would mis-centre the card and hand the awareness OCR the wrong
+        /// skip rect.</summary>
+        public GlyphFallback.TextRun[] Runs = Array.Empty<GlyphFallback.TextRun>();
         public SKColor Bg, TextColor, Border;
         public bool BgTransparent;
         public double TargetOpacity;
         public TimeSpan Total, Remaining;
         public Placement[] Placements = Array.Empty<Placement>();
-        // Measured text extents per placement (device px), for the OCR skip rects.
+        // Measured text extents per placement (device px), for the OCR skip rects and centring.
         public float[] TextWidthPx = Array.Empty<float>();
         public float[] TextHeightPx = Array.Empty<float>();
+        /// <summary>Per-placement, per-run advance widths (device px) so the render tick never
+        /// measures. Jagged: [placement][run].</summary>
+        public float[][] RunWidthsPx = Array.Empty<float[]>();
+        /// <summary>Per-placement baseline offset from the card's vertical centre (device px),
+        /// derived from the metrics of every face in the line, not just the first.</summary>
+        public float[] BaselineOffsetPx = Array.Empty<float>();
 
         /// <summary>0..1 fade envelope: 50ms ramp up, hold, 50ms ramp down (WPF storyboard parity).</summary>
         public double Envelope()
@@ -110,11 +118,14 @@ public sealed class SubliminalLayer : BaseLayer
     {
         if (string.IsNullOrWhiteSpace(text) || placements.Count == 0) return;
 
+        var runs = GlyphFallback.Split(text, BoldArial, SKFontStyle.Bold);
+        if (runs.Length == 0) return;
+
         var item = new Item
         {
             Text = text,
-            // Bug #615: pick the draw face BEFORE measuring (memoised per phrase inside).
-            Face = GlyphFallback.Resolve(text, BoldArial, SKFontStyle.Bold),
+            // #615/#717: split into draw faces BEFORE measuring (memoised per phrase inside).
+            Runs = runs,
             Bg = bg,
             TextColor = textColor,
             Border = border,
@@ -123,20 +134,27 @@ public sealed class SubliminalLayer : BaseLayer
             Total = TimeSpan.FromMilliseconds(holdMs + 2 * FadeMs),
             Placements = new Placement[placements.Count],
             TextWidthPx = new float[placements.Count],
-            TextHeightPx = new float[placements.Count]
+            TextHeightPx = new float[placements.Count],
+            RunWidthsPx = new float[placements.Count][],
+            BaselineOffsetPx = new float[placements.Count]
         };
         item.Remaining = item.Total;
 
         lock (_sync)
         {
-            _textPaint.Typeface = item.Face;   // measure with the face we will draw with (#615)
             for (int i = 0; i < placements.Count; i++)
             {
                 item.Placements[i] = placements[i];
                 _textPaint.TextSize = FontDip * placements[i].Scale;
-                var fm = _textPaint.FontMetrics;
-                item.TextWidthPx[i] = _textPaint.MeasureText(text);
-                item.TextHeightPx[i] = fm.Descent - fm.Ascent;
+                // #615/#717: measure with the faces we will draw with, and take the vertical
+                // extents across ALL of them (a CJK fallback face is not metric-compatible with
+                // Arial, so centring on Arial's metrics alone would sit the card off-centre).
+                var widths = new float[runs.Length];
+                item.RunWidthsPx[i] = widths;
+                item.TextWidthPx[i] = GlyphFallback.Measure(runs, _textPaint, widths,
+                    out var ascent, out var descent);
+                item.TextHeightPx[i] = descent - ascent;
+                item.BaselineOffsetPx[i] = -(ascent + descent) / 2f;
             }
             _items.Add(item);
         }
@@ -220,12 +238,13 @@ public sealed class SubliminalLayer : BaseLayer
                     canvas.DrawRect(p.BoundsPx, _bgPaint);
                 }
 
-                // #615: same face the card was measured with - metrics AND glyphs must agree.
-                _textPaint.Typeface = item.Face;
+                // #615/#717: the same faces and advances the card was measured with - metrics AND
+                // glyphs must agree, or the line mis-centres and the OCR skip rect is wrong.
                 _textPaint.TextSize = FontDip * p.Scale;
-                var fm = _textPaint.FontMetrics;
                 var cx = p.BoundsPx.MidX;
-                var baseline = p.BoundsPx.MidY - (fm.Ascent + fm.Descent) / 2f;
+                var baseline = p.BoundsPx.MidY + item.BaselineOffsetPx[i];
+                var widths = item.RunWidthsPx[i];
+                var total = item.TextWidthPx[i];
 
                 // #615 caveat: a COLOUR emoji glyph (Segoe UI Emoji) paints its own colours and
                 // ignores the paint colour, so these 8 border copies come out as full-colour
@@ -234,10 +253,11 @@ public sealed class SubliminalLayer : BaseLayer
                 // text (everything else, including CJK) outlines exactly as before.
                 _textPaint.Color = item.Border.WithAlpha(alpha);
                 foreach (var (ox, oy) in Offsets)
-                    canvas.DrawText(item.Text, cx + ox * p.Scale, baseline + oy * p.Scale, _textPaint);
+                    GlyphFallback.DrawCentered(canvas, item.Runs, cx + ox * p.Scale,
+                        baseline + oy * p.Scale, _textPaint, widths, total);
 
                 _textPaint.Color = item.TextColor.WithAlpha(alpha);
-                canvas.DrawText(item.Text, cx, baseline, _textPaint);
+                GlyphFallback.DrawCentered(canvas, item.Runs, cx, baseline, _textPaint, widths, total);
             }
         }
     }
