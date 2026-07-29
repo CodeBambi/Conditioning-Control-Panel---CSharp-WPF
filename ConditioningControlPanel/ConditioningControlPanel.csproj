@@ -206,6 +206,13 @@
     <Resource Include="Resources\february_drone.png" />
     <Resource Include="Resources\logo.png" />
     <Resource Include="Resources\logo2.png" />
+    <!-- Weekly Intake Pass card art, one per niche (see Services\Quiz\IntakeNiche.cs).
+         These must stay listed explicitly: there is no Resources\**\*.png glob, and a missing
+         entry makes the pack:// URI fail at RUNTIME while the build still succeeds. -->
+    <Resource Include="Resources\intake\pass_card_bambi.png" />
+    <Resource Include="Resources\intake\pass_card_sissy.png" />
+    <Resource Include="Resources\intake\pass_card_drone.png" />
+    <Resource Include="Resources\intake\pass_card_circe.png" />
     <Resource Include="Resources\bubble.png" />
     <Resource Include="Resources\speechbubble1.png" />
     <Resource Include="Resources\speechbubble2.png" />

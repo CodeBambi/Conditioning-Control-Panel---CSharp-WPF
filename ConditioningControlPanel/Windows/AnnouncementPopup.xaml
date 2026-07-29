@@ -20,9 +20,55 @@
             <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
         </Border.Effect>
 
+        <!--
+            Two column shapes share this window.
+
+            Column 0 is the CARD ART RAIL, used only by local callers that hand in an ImageSource
+            (the weekly intake nudge). It is Collapsed by default, and a Collapsed child in an
+            Auto column measures to zero width - so for every server announcement this Grid is
+            byte-for-byte the single-column layout it has always been. Server announcements keep
+            using the stacked ImageContainer inside the StackPanel instead; do not merge the two.
+        -->
         <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Card art rail (local ImageSource only) -->
+            <Border x:Name="CardArtPanel" Grid.Column="0" Visibility="Collapsed"
+                    Width="210" CornerRadius="10,0,0,10" ClipToBounds="True">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0.3,1">
+                        <GradientStop Color="#3C2159" Offset="0"/>
+                        <GradientStop Color="#252542" Offset="0.55"/>
+                        <GradientStop Color="#1A1A2E" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Grid>
+                    <!-- Square (1:1) source, shown whole. Uniform, never UniformToFill: the art is
+                         a card face, and cropping its edges to fill a taller rail would eat the
+                         framing that makes it read as a card. -->
+                    <!-- MaxHeight is a measure guard, not styling: SizeToContent=Height measures
+                         this cell with infinite height, so an unconstrained Uniform Image would
+                         ask for its natural 1024px and shove the window straight to MaxHeight. -->
+                    <Image x:Name="CardArtImage" Stretch="Uniform"
+                           Margin="18" MaxHeight="240"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           RenderTransformOrigin="0.5,0.5">
+                        <Image.Effect>
+                            <DropShadowEffect Color="#FF69B4" BlurRadius="26" ShadowDepth="0" Opacity="0.55"/>
+                        </Image.Effect>
+                    </Image>
+
+                    <!-- Hairline seam so the rail reads as part of the card, not a pasted panel -->
+                    <Rectangle Width="1" HorizontalAlignment="Right" Fill="#55FF69B4"/>
+                </Grid>
+            </Border>
+
             <!-- Close Button -->
             <Button Content="✕"
+                    Grid.Column="1"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Width="28" Height="28" Margin="0,8,12,0"
                     Background="Transparent" Foreground="#888888"
@@ -40,8 +86,8 @@
                 </Button.Style>
             </Button>
 
-            <StackPanel Margin="20">
-                <!-- Optional Image -->
+            <StackPanel Grid.Column="1" Margin="20" VerticalAlignment="Center">
+                <!-- Optional Image (server announcements: downloaded from image_url) -->
                 <Border x:Name="ImageContainer" Visibility="Collapsed"
                         CornerRadius="8" ClipToBounds="True" Margin="0,0,0,14"
                         MaxHeight="200" HorizontalAlignment="Center">
@@ -61,73 +107,81 @@
                            LineHeight="22"
                            Margin="0,0,0,16"/>
 
-                <!-- Download Button (only visible when link_url is set) -->
-                <Button x:Name="BtnDownload" Content="▶ Download Mod" Click="BtnDownload_Click"
-                        HorizontalAlignment="Center"
-                        Width="180" Height="38"
-                        Cursor="Hand"
-                        FontSize="14" FontWeight="Bold"
-                        Visibility="Collapsed"
-                        Margin="0,0,0,8">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
-                            <Setter Property="Foreground" Value="White"/>
-                            <Setter Property="BorderThickness" Value="0"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="border" Background="{TemplateBinding Background}"
-                                                CornerRadius="18" Padding="16,6">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
-                                            </Trigger>
-                                            <Trigger Property="IsPressed" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                <!--
+                    Button rail. Vertical by default, which is exactly how the two buttons stacked
+                    before this wrapper existed (both are HorizontalAlignment=Center, so a
+                    stretch-wide vertical StackPanel changes nothing). Card layout flips it to
+                    Horizontal in code so the CTA and the dismiss sit side by side under the copy.
+                -->
+                <StackPanel x:Name="ButtonRow">
+                    <!-- Action / Download button (visible when link_url or an onAction is supplied) -->
+                    <Button x:Name="BtnDownload" Content="▶ Download Mod" Click="BtnDownload_Click"
+                            HorizontalAlignment="Center"
+                            Width="180" Height="38"
+                            Cursor="Hand"
+                            FontSize="14" FontWeight="Bold"
+                            Visibility="Collapsed"
+                            Margin="0,0,0,8">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                    CornerRadius="18" Padding="16,6">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
 
-                <!-- Got it Button -->
-                <Button x:Name="BtnDismiss" Content="Got it!" Click="BtnDismiss_Click"
-                        HorizontalAlignment="Center"
-                        Width="120" Height="36"
-                        Cursor="Hand"
-                        FontSize="14" FontWeight="SemiBold">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
-                            <Setter Property="Foreground" Value="White"/>
-                            <Setter Property="BorderThickness" Value="0"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="border" Background="{TemplateBinding Background}"
-                                                CornerRadius="18" Padding="16,6">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
-                                            </Trigger>
-                                            <Trigger Property="IsPressed" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                    <!-- Got it Button -->
+                    <Button x:Name="BtnDismiss" Content="Got it!" Click="BtnDismiss_Click"
+                            HorizontalAlignment="Center"
+                            Width="120" Height="36"
+                            Cursor="Hand"
+                            FontSize="14" FontWeight="SemiBold">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                    CornerRadius="18" Padding="16,6">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
             </StackPanel>
         </Grid>
     </Border>

@@ -343,17 +343,203 @@
                                   HelpSectionId="SpiralOverlay"
                                   Click="CardSpiral_Click"/>
     
-            <!-- Center logo (2x2) spanning rows 1-2, cols 1-2 -->
+            <!-- Center logo (2x2) spanning rows 1-2, cols 1-2.
+                 Doubles as the weekly Graded Intake pass card: when a free account has an
+                 unspent run waiting, MainWindow.RefreshIntakePassTile() flips this tile on its
+                 Y axis and leaves the PASS face showing until the run is used or the week rolls.
+                 The tile is NOT a cutscene - the card face is a standing affordance, so someone
+                 who was on another tab when the week rolled still finds it here. -->
             <Border x:Name="LogoBrandFrame" x:FieldModifier="internal"
                     Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Grid.ColumnSpan="2"
                     Background="#01000000" Margin="6"
                     Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                     ToolTip="{loc:Str tooltip_click_me_rapidly}">
-                <Border CornerRadius="12" ClipToBounds="True">
-                    <Image x:Name="ImgLogo" x:FieldModifier="internal" Stretch="Uniform"
-                           HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                </Border>
+
+                <!-- Flip host. The spin transform lives HERE and not on ImgLogo on purpose:
+                     ImgLogo_MouseLeftButtonDown owns ImgLogo.RenderTransform (it casts it to a
+                     ScaleTransform, replaces it when the cast fails, and re-runs an AutoReverse
+                     click pulse on ScaleX/ScaleY). A flip sharing that transform would get
+                     snapped back to 1.0 by the pulse mid-animation. Separate host, separate
+                     transform, no fight. -->
+                <Grid x:Name="LogoFlipHost" x:FieldModifier="internal" RenderTransformOrigin="0.5,0.5">
+                    <Grid.RenderTransform>
+                        <TransformGroup>
+                            <!-- ScaleX 1 -> 0 -> 1 is the standard WPF fake for a Y-axis turn;
+                                 there is no PlaneProjection/Viewport3D anywhere in this app and
+                                 this tile is not the place to introduce one. The SkewTransform
+                                 only sells depth - it is cosmetic and always ends back at 0. -->
+                            <ScaleTransform x:Name="LogoFlipScale" ScaleX="1" ScaleY="1"/>
+                            <SkewTransform x:Name="LogoFlipSkew" AngleX="0" AngleY="0"/>
+                        </TransformGroup>
+                    </Grid.RenderTransform>
+
+                    <!-- FACE A: the wordmark. Default face; the only face premium users and
+                         spent-week users ever see, byte-for-byte what shipped before. -->
+                    <Border x:Name="LogoFaceLogo" x:FieldModifier="internal" CornerRadius="12" ClipToBounds="True">
+                        <Image x:Name="ImgLogo" x:FieldModifier="internal" Stretch="Uniform"
+                               HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Border>
+
+                    <!-- FACE B: the weekly pass card. Collapsed by default so nothing about the
+                         Dashboard changes until RefreshIntakePassTile() decides otherwise.
+                         Visual register deliberately matches Features/FeatureCard.xaml (elevated
+                         surface, 1px glass border, 12px radius, pink drop glow) so it reads as a
+                         sibling of the tiles around it rather than a popup that got stuck.
+
+                         Every piece of copy on this face is state-dependent (available / signed
+                         out / spent) and is written by MainWindow.ApplyIntakePassFaceState(); the
+                         {loc:Str} values below are the available-state defaults, so the card
+                         still reads correctly if it is ever shown before the first paint. -->
+                    <Border x:Name="IntakePassFace" x:FieldModifier="internal"
+                            Visibility="Collapsed"
+                            Background="{DynamicResource ElevatedSurfaceBrush}"
+                            BorderBrush="{DynamicResource GlassBorderBrush}"
+                            BorderThickness="1" CornerRadius="12" ClipToBounds="True"
+                            Cursor="Hand"
+                            MouseLeftButtonDown="IntakePassFace_MouseLeftButtonDown"
+                            ToolTip="{loc:Str tooltip_intake_pass_card}">
+                        <Border.Effect>
+                            <DropShadowEffect Color="{DynamicResource PinkColor}"
+                                              BlurRadius="18" ShadowDepth="0" Opacity="0.55"/>
+                        </Border.Effect>
+                        <Grid>
+                            <!-- LAYER 0: the per-niche card art (Resources/intake/pass_card_*.png,
+                                 1024x1024). Painted as an ImageBrush BACKGROUND rather than as an
+                                 Image child because Border.ClipToBounds clips to the rectangle and
+                                 ignores CornerRadius - a background brush is the only fill that
+                                 actually follows the rounded corners. UniformToFill crops the
+                                 square evenly into the tile instead of letterboxing it, and the
+                                 art's dark, uncluttered lower third is where the CTA lands.
+                                 Collapsed until IntakeNiche.PassCardImage() returns a bitmap; when
+                                 it returns null every art layer stays hidden and the vector block
+                                 below carries the card on its own. -->
+                            <Border x:Name="IntakePassArt" x:FieldModifier="internal"
+                                    CornerRadius="11" Visibility="Collapsed">
+                                <Border.Background>
+                                    <!-- x:Name only, no x:FieldModifier - the generated field is
+                                         already internal, and that is the pattern LogoFlipScale /
+                                         LogoFlipSkew above are proven on. -->
+                                    <ImageBrush x:Name="IntakePassArtBrush"
+                                                Stretch="UniformToFill"
+                                                AlignmentX="Center" AlignmentY="Center"/>
+                                </Border.Background>
+                            </Border>
+
+                            <!-- LAYER 1: ticket sheen. Vector only, and kept OVER the art on
+                                 purpose - at 22% alpha it tints the top of the card the same pink
+                                 as its neighbours whether or not the PNG resolved, so the tile
+                                 belongs to the mosaic in both modes. -->
+                            <Border CornerRadius="11">
+                                <Border.Background>
+                                    <RadialGradientBrush Center="0.5,0.12" GradientOrigin="0.5,0.05"
+                                                         RadiusX="0.95" RadiusY="0.85">
+                                        <GradientStop Color="#38FF69B4" Offset="0"/>
+                                        <GradientStop Color="#00FF69B4" Offset="1"/>
+                                    </RadialGradientBrush>
+                                </Border.Background>
+                            </Border>
+
+                            <!-- LAYER 2: legibility scrim. Only shown with art under it - without
+                                 art the card is already a flat dark surface and the scrim would
+                                 just be a smudge. Dark at the top (headline) and heavier at the
+                                 bottom (CTA), transparent through the middle so the ticket itself
+                                 is never veiled. -->
+                            <Border x:Name="IntakePassScrim" x:FieldModifier="internal"
+                                    CornerRadius="11" Visibility="Collapsed" IsHitTestVisible="False">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#B31A1A2E" Offset="0"/>
+                                        <GradientStop Color="#001A1A2E" Offset="0.28"/>
+                                        <GradientStop Color="#001A1A2E" Offset="0.56"/>
+                                        <GradientStop Color="#CC12121F" Offset="0.82"/>
+                                        <GradientStop Color="#F20D0D18" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+
+                            <!-- Headline. Always visible - it is the only thing naming the feature
+                                 in art mode, and it sits on the art's dark top strip. -->
+                            <TextBlock x:Name="IntakePassHeadline" x:FieldModifier="internal"
+                                       Text="{loc:Str intake_pass_card_headline}"
+                                       VerticalAlignment="Top" HorizontalAlignment="Center"
+                                       Margin="14,9,14,0"
+                                       Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="13" FontWeight="Bold"
+                                       TextAlignment="Center" TextWrapping="Wrap"/>
+
+                            <!-- Vector block: the pre-art card body. Collapsed whenever art is
+                                 showing (it would sit straight on top of the ticket); shown when
+                                 PassCardImage() returned null, which is the documented fallback. -->
+                            <StackPanel x:Name="IntakePassVectorBody" x:FieldModifier="internal"
+                                        VerticalAlignment="Center" HorizontalAlignment="Center"
+                                        Margin="14,26,14,34">
+                                <!-- WPF cannot draw COLR/CPAL color-emoji fonts, so every emoji in
+                                     this app is an Image routed through EmojiToImageSource. -->
+                                <Image Width="26" Height="26" HorizontalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
+
+                                <Border Height="1" Margin="24,9"
+                                        Background="{DynamicResource GlassBorderBrush}"/>
+
+                                <TextBlock x:Name="IntakePassBody" x:FieldModifier="internal"
+                                           Text="{loc:Str intake_pass_card_body}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" LineHeight="15"
+                                           TextAlignment="Center" TextWrapping="Wrap"/>
+
+                                <TextBlock Text="{loc:Str intake_pass_card_footnote}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="9" Opacity="0.75"
+                                           TextAlignment="Center" TextWrapping="Wrap"
+                                           Margin="0,7,0,0"/>
+                            </StackPanel>
+
+                            <!-- Bottom bar: the pulsing call to action plus the "(?)" explainer.
+                                 The breath animation is driven from MainWindow (BeginAnimation on
+                                 IntakePassCtaScale / the TextBlock's Opacity) - a Storyboard would
+                                 silently no-op across this UserControl's namescope. Only the text
+                                 scales; the "(?)" is deliberately left still so it stays an easy
+                                 18px target.
+
+                                 A Grid, not a horizontal StackPanel: a StackPanel hands its child
+                                 infinite width, so a long translation of the CTA would refuse to
+                                 wrap and get clipped off BOTH edges of the card. The 26px spacer
+                                 column mirrors the "(?)" (18px button + 8px gutter) so the text
+                                 still lands optically centred. -->
+                            <Grid VerticalAlignment="Bottom" Margin="10,0,10,11">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="26"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="26"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock x:Name="IntakePassCta" x:FieldModifier="internal"
+                                           Grid.Column="1"
+                                           Text="{loc:Str intake_pass_card_cta}"
+                                           Foreground="White" FontSize="12" FontWeight="Bold"
+                                           VerticalAlignment="Center"
+                                           TextAlignment="Center" TextWrapping="Wrap"
+                                           RenderTransformOrigin="0.5,0.5">
+                                    <TextBlock.RenderTransform>
+                                        <ScaleTransform x:Name="IntakePassCtaScale" ScaleX="1" ScaleY="1"/>
+                                    </TextBlock.RenderTransform>
+                                </TextBlock>
+
+                                <!-- Same interactive popover the feature tiles use; MainWindow
+                                     attaches the content (Controls.HelpPopover.Attach). A Button
+                                     marks MouseLeftButtonDown handled, so clicking the "?" cannot
+                                     also launch the intake or poke the logo easter egg. -->
+                                <Button x:Name="BtnIntakePassHelp" x:FieldModifier="internal"
+                                        Grid.Column="2"
+                                        Style="{DynamicResource HelpButtonStyle}"
+                                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                                        Margin="8,0,0,0"/>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </Grid>
             </Border>
     
             <features:FeatureCard Grid.Row="1" Grid.Column="3" x:Name="CardLockCard" x:FieldModifier="internal"
@@ -812,6 +998,16 @@
                                 <CheckBox x:Name="ChkUnifiedOverlay" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
                                           Checked="ChkUnifiedOverlay_Changed" Unchecked="ChkUnifiedOverlay_Changed"/>
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="Unified overlay renderer" Margin="6,0,0,0"/>
+                            </StackPanel>
+
+                            <!-- Weekly intake pass reminder. Row 5 column 1 was the one free cell in
+                                 this grid, so no RowDefinition change was needed. Read at launch by
+                                 MainWindow.Marquee.cs:CheckIntakePassNudge; no Changed handler because
+                                 nothing needs to happen until the next launch. -->
+                            <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
+                                        ToolTip="{loc:Str tooltip_intake_nudge_enabled}">
+                                <CheckBox x:Name="ChkIntakeNudge" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_intake_nudge_enabled}" Margin="6,0,0,0"/>
                             </StackPanel>
                         </Grid>
     

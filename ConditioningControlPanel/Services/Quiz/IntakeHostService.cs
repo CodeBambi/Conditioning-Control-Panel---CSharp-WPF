@@ -57,6 +57,7 @@ namespace ConditioningControlPanel.Services.Quiz
         private static bool _testMode;
         private static bool _disposing;   // reentrancy guard (Dispose closes the window -> Closed -> DisposeAll)
         private static bool _recoveryWindowed;   // this relaunch is a recovery: ignore the remembered fullscreen
+        private static bool _duckPreference = true;            // did the caller want main ducked? survives a recovery relaunch
         private static bool _duckedMainWindow;                 // WE minimized main at launch, so WE owe a restore
         private static WindowState _mainStateBeforeDuck = WindowState.Normal;
 
@@ -66,14 +67,18 @@ namespace ConditioningControlPanel.Services.Quiz
         /// The Lab entry point can check this to route to the classic quiz instead.</summary>
         public static bool BootFailedThisSession { get; private set; }
 
-        /// <summary>Launch the intake window (idempotent). A running instance is just re-focused.</summary>
-        public static void Launch(bool testMode = false)
+        /// <summary>Launch the intake window (idempotent). A running instance is just re-focused.
+        /// <paramref name="duckMainWindow"/> is opt-out for the onboarding case: see
+        /// <see cref="DuckMainWindow"/> for why minimizing the control panel is normally right
+        /// and why it is wrong on someone's very first run.</summary>
+        public static void Launch(bool testMode = false, bool duckMainWindow = true)
         {
             if (_host != null) { _host.FocusWeb(); return; }
             try
             {
                 _exiting = false;
                 _testMode = testMode;
+                _duckPreference = duckMainWindow;
 
                 var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
                 var mappings = new List<(string, string, CoreWebView2HostResourceAccessKind)>
@@ -116,7 +121,7 @@ namespace ConditioningControlPanel.Services.Quiz
                 // IsActive resets and the heartbeat watchdog can't relaunch a window the user shut.
                 if (_host.Window != null) _host.Window.Closed += (_, _) => DisposeAll();
                 StartHeartbeatWatch();
-                DuckMainWindow();
+                if (duckMainWindow) DuckMainWindow();
                 App.Logger?.Information("IntakeHostService: launched{T}", testMode ? " (test)" : "");
             }
             catch (Exception ex)
@@ -381,6 +386,17 @@ namespace ConditioningControlPanel.Services.Quiz
                 }
                 catch (Exception ex) { App.Logger?.Debug("IntakeHostService: XP grant failed: {E}", ex.Message); }
 
+                // SPEND THE WEEKLY PASS - here, and nowhere else. Deliberately NOT at launch:
+                // the run is only over once a quiz-result has actually arrived, so a crash, a
+                // WebView2 process failure or the "are you sure? -> Yes" abort all cost nothing.
+                // A no-op for patrons, who never took a pass to get in.
+                //
+                // Outside the session-draft try below on purpose: the intake WAS completed even
+                // if drafting the session then fails, and the user should not be charged twice
+                // for our own error.
+                try { App.IntakePass?.ConsumeForCompletedIntake(); }
+                catch (Exception ex) { App.Logger?.Debug("IntakeHostService: pass consume failed: {E}", ex.Message); }
+
                 try
                 {
                     // AUTO-SAVE, NO DIALOG. This used to put the drafted session behind a modal
@@ -428,15 +444,39 @@ namespace ConditioningControlPanel.Services.Quiz
                             "IntakeHostService: drafted session saved but the Sessions list refresh failed");
                     }
 
+                    // HALF A PUNCH. Completing the intake queues the stamp; the hole only lands
+                    // once this session has actually been run (IntakePunchCardService). Queued
+                    // against the session id so nothing but the session this run produced can
+                    // redeem it.
+                    try { App.IntakePunchCard?.NotifyIntakeCompleted(session.Id); }
+                    catch (Exception ex) { App.Logger?.Debug("IntakeHostService: punch queue failed: {E}", ex.Message); }
+
                     // The app's standard in-app toast surface (MainWindow's NotificationHost).
                     // It queues internally when the host isn't attached yet, so this is safe
                     // even if the intake window somehow outlives the main window's layout.
+                    //
+                    // The action used to be "Show folder", which answered a question nobody was
+                    // asking: the run's whole point is the session it drafted, and the next step
+                    // is to RUN it, not to look at it on disk. RevealSessionInLibrary re-selects
+                    // by id (the toast can outlive the selection) and BtnStartSession_Click keeps
+                    // the normal confirmation, so nothing starts an hour-long session by surprise.
+                    var sessionId = session.Id;
                     App.Notifications?.Show(
-                        $"Session drafted: \"{session.Name}\" saved to your Sessions.",
+                        $"Session drafted: \"{session.Name}\" - run it to stamp your punch card.",
                         NotificationType.Success,
-                        TimeSpan.FromSeconds(8),
-                        "Show folder",
-                        () => { try { fileService.OpenCustomSessionsFolder(); } catch { } });
+                        TimeSpan.FromSeconds(12),
+                        "Run it now",
+                        () =>
+                        {
+                            try
+                            {
+                                var mw = App.MainWindowRef;
+                                if (mw == null) return;
+                                if (mw.RevealSessionInLibrary(sessionId))
+                                    mw.BtnStartSession_Click(mw, new RoutedEventArgs());
+                            }
+                            catch (Exception ex) { App.Logger?.Debug("IntakeHostService: run-it-now failed: {E}", ex.Message); }
+                        });
 
                     // TELL THE PAGE. quiz-result used to be one-way, so the certificate could
                     // only ever say "Session drafting..." and then sit there forever - the run's
@@ -660,36 +700,9 @@ namespace ConditioningControlPanel.Services.Quiz
         /// (which has no drone value and collapses every non-sissy mod to BambiSleep — that mapping
         /// served drone-mode users the whole bambi prompt bank). Built-in ids win; third-party mods
         /// declare theirs via a manifest tag. Defaults to bambi. A dedicated picker is a Phase-3 UX
-        /// concern.</summary>
-        private static string DesiredNiche()
-        {
-            try
-            {
-                var modId = App.Mods?.ActiveModId;
-                if (modId == BuiltInMods.DronificationId) return "drone";
-                if (modId == BuiltInMods.SissyHypnoId) return "sissy";
-                if (modId == BuiltInMods.LockedId) return "circe";
-
-                // Third-party .ccpmod: honor a bambi/drone/sissy/circe manifest tag if it declares
-                // one. Locked's own tags ("locked"/"chastity") read as circe too.
-                var tags = App.Mods?.ActiveMod?.Manifest?.Tags;
-                if (tags != null)
-                {
-                    foreach (var tag in tags)
-                    {
-                        if (string.Equals(tag, "drone", StringComparison.OrdinalIgnoreCase)) return "drone";
-                        if (string.Equals(tag, "sissy", StringComparison.OrdinalIgnoreCase)) return "sissy";
-                        if (string.Equals(tag, "circe", StringComparison.OrdinalIgnoreCase)) return "circe";
-                        if (string.Equals(tag, "locked", StringComparison.OrdinalIgnoreCase)) return "circe";
-                        if (string.Equals(tag, "chastity", StringComparison.OrdinalIgnoreCase)) return "circe";
-                    }
-                }
-
-                // No mod signal at all — fall back to the legacy content mode.
-                return App.Settings?.Current?.ContentMode == ContentMode.SissyHypno ? "sissy" : "bambi";
-            }
-            catch { return "bambi"; }
-        }
+        /// concern. The mapping itself now lives in <see cref="IntakeNiche"/> so the weekly pass
+        /// card and its nudge popup show art for the same niche this picks a prompt bank for.</summary>
+        private static string DesiredNiche() => IntakeNiche.Current();
 
         /// <summary>Patreon access token for the /intake/ai bearer gate (same source every other
         /// AI feature uses). Empty string when unavailable — the page degrades to its local stub.</summary>
@@ -1015,7 +1028,9 @@ namespace ConditioningControlPanel.Services.Quiz
                     // or died; if the relaunch does the same, a titled window still has a close
                     // button and the remembered preference is untouched for the next real launch.
                     _recoveryWindowed = true;
-                    Launch(wasTest);
+                    // Carry the original duck choice through: a first-ever run that crashes and
+                    // relaunches must not suddenly minimize the control panel out from under it.
+                    Launch(wasTest, _duckPreference);
                 }
             });
         }

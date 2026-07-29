@@ -1279,6 +1279,64 @@ namespace ConditioningControlPanel
             return Models.Session.GetAllSessions().FirstOrDefault(s => s.Id == sessionId);
         }
 
+        /// <summary>
+        /// Bring a session up in the Sessions tab: switch to it, make the session the selected
+        /// one, and scroll its card into view. Returns false when the session is not known.
+        ///
+        /// Exists because <see cref="SelectSession"/> is private and the Graded Intake needs a
+        /// safe way to hand the user to the session it just drafted. Re-selecting by id here
+        /// rather than trusting the selection left behind by <see cref="OnSessionAdded"/> is the
+        /// whole point: the toast that calls this can sit on screen for eight seconds, and if the
+        /// user clicks another session card in the meantime, acting on the stale selection would
+        /// hand them - or start - the wrong session entirely.
+        /// </summary>
+        internal bool RevealSessionInLibrary(string sessionId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId)) return false;
+
+            if (!Dispatcher.CheckAccess())
+                return Dispatcher.Invoke(() => RevealSessionInLibrary(sessionId));
+
+            try
+            {
+                var session = GetSessionById(sessionId);
+                if (session == null)
+                {
+                    App.Logger?.Debug("RevealSessionInLibrary: no session with id {Id}", sessionId);
+                    return false;
+                }
+
+                ShowTab("presets");
+                SelectSession(session);
+
+                // Scroll the matching card into view. Cards carry their session id in Tag; a
+                // miss here is cosmetic only, so it never fails the call.
+                try
+                {
+                    var panel = PresetsTab?.CustomSessionsPanel;
+                    if (panel != null)
+                    {
+                        foreach (var child in panel.Children)
+                        {
+                            if (child is Border card && (card.Tag as string) == sessionId)
+                            {
+                                card.BringIntoView();
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex) { App.Logger?.Debug("RevealSessionInLibrary: BringIntoView: {E}", ex.Message); }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RevealSessionInLibrary failed for {Id}", sessionId);
+                return false;
+            }
+        }
+
         internal void SessionDropZone_Drop(object sender, DragEventArgs e)
         {
             // Mark handled to prevent Window_Drop from also importing the session

@@ -1213,6 +1213,12 @@ namespace ConditioningControlPanel
 
                 App.Logger?.Information("Session {Name} completed, awarded {XP} XP", e.Session.Name, e.XPEarned);
 
+                // Intake punch card: a session that reached its natural end has unambiguously
+                // been used, so it redeems its pending stamp regardless of the halfway threshold.
+                // A no-op unless this session was drafted by a Graded Intake.
+                try { App.IntakePunchCard?.NotifySessionCompleted(e.Session); }
+                catch (Exception ex) { App.Logger?.Debug("Punch card completion hook: {E}", ex.Message); }
+
                 // Sync progress to cloud after session (fire and forget)
                 if (App.ProfileSync?.IsSyncEnabled == true)
                 {
@@ -1310,6 +1316,12 @@ namespace ConditioningControlPanel
                 {
                     var remaining = e.Remaining;
                     var session = _sessionEngine.CurrentSession;
+
+                    // Intake punch card: half a drafted session is enough to prove it was used
+                    // rather than started and abandoned. Called every tick and safe to be -
+                    // redeeming removes the pending draft, so a hole can only land once.
+                    try { App.IntakePunchCard?.NotifySessionProgress(session, e.ProgressPercent); }
+                    catch (Exception ex) { App.Logger?.Debug("Punch card progress hook: {E}", ex.Message); }
 
                     // Update session button with remaining time
                     PresetsTab.BtnStartSession.Content = Loc.GetF("btn_stop_session_0_1", $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}");

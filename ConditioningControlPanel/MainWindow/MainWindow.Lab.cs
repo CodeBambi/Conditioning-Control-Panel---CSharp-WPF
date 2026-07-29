@@ -110,12 +110,23 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                // Tier-1 gate. GradedIntakeGate already covers the launch zone for free
-                // users; this is the belt-and-braces check behind it, matching how the
-                // other Exclusives short-circuit their own entry points.
-                if (App.Patreon?.HasPremiumAccess != true)
+                // Tier-1 gate, now pass-aware. Patrons are unchanged; a free account gets one
+                // run a week (IntakePassService). GradedIntakeGate already paints the matching
+                // state over the launch zone - this is the belt-and-braces check behind it,
+                // matching how the other Exclusives short-circuit their own entry points.
+                var pass = App.IntakePass;
+                if (pass == null || !pass.CanStartIntake)
                 {
-                    ShowAppInfoPopup();
+                    if (pass?.State == Services.IntakePassState.NeedsLogin)
+                    {
+                        MessageBox.Show(Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"), "Login Required",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        // Free and already ran this week - the upsell is the honest answer.
+                        ShowAppInfoPopup();
+                    }
                     return;
                 }
 
@@ -126,7 +137,11 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                Services.Quiz.IntakeHostService.Launch();
+                // First-ever run: don't duck the control panel. The intake normally minimizes
+                // MainWindow to get it out of the way, which is right for a returning user and
+                // reads as "the app just crashed" for someone opening it for the first time.
+                var firstEver = App.IntakePunchCard?.HasEverCompletedIntake == false;
+                Services.Quiz.IntakeHostService.Launch(duckMainWindow: !firstEver);
             }
             catch (Exception ex)
             {
@@ -246,19 +261,145 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>True once <see cref="Services.IntakePassService.PassStateChanged"/> has been
+        /// wired up. The service is created in App.OnStartup, but MainWindow's own constructor and
+        /// the tab-navigation path both run refreshes that can beat any fixed hook-up point, so the
+        /// subscription is attached lazily from the refresh itself and this flag stops it stacking
+        /// duplicate handlers. Never unsubscribed on purpose: both the publisher (an App singleton)
+        /// and the subscriber (MainWindow) live for the whole process, so there is no leak to
+        /// collect - only a handler that would have to be re-attached for nothing.</summary>
+        private bool _intakePassHooked;
+
         /// <summary>
-        /// Paints the Graded Intake page's t1 gate. Mirrors the Blink Trainer treatment:
-        /// the overlay provides the visual, IsEnabled stops keyboard tab-through behind it.
-        /// Pop Quiz sits outside the gated Border and stays reachable for everyone.
+        /// Paints the Graded Intake page's gate. Four states, not two, since the weekly free pass
+        /// landed - see <see cref="Services.IntakePassState"/>:
+        ///
+        /// * <b>Premium</b> - no gate, no banner. Patrons never learn the pass exists.
+        /// * <b>Available</b> - also NO gate: the user may genuinely run it, so nothing is dimmed.
+        ///   The in-content banner announces the pass instead.
+        /// * <b>Spent</b> - gate with the "next one in N days" copy and the retakes upsell.
+        /// * <b>NeedsLogin</b> - gate asking them to sign in, because the pass is per-account.
+        ///
+        /// Mirrors the Blink Trainer treatment for the closed states: the overlay provides the
+        /// visual, IsEnabled stops keyboard tab-through behind it. Pop Quiz sits outside the gated
+        /// Border and stays reachable for everyone.
+        ///
+        /// Runs on every Exclusives navigation and on every Patreon refresh, and can therefore fire
+        /// before the tab's template has realised, so every element is null-checked and the whole
+        /// body is defensive: a gate that throws takes the tab switch down with it.
         /// </summary>
         internal void RefreshGradedIntakeGate()
         {
             if (GradedIntakeTab == null) return;
-            var premium = App.Patreon?.HasPremiumAccess == true;
-            if (GradedIntakeTab.GradedIntakeGate != null)
-                GradedIntakeTab.GradedIntakeGate.Visibility = premium ? Visibility.Collapsed : Visibility.Visible;
-            if (GradedIntakeTab.GradedIntakeGatedContent != null)
-                GradedIntakeTab.GradedIntakeGatedContent.IsEnabled = premium;
+
+            // Cheap and idempotent; done here rather than at startup so it survives whichever
+            // refresh happens to be first (see _intakePassHooked).
+            EnsureIntakePassHooked();
+
+            try
+            {
+                // Fall back to the pre-pass behaviour if the service somehow never came up:
+                // premium keeps its unlocked page, and everyone else gets the closed door.
+                // "Spent" rather than "NeedsLogin" for the fallback deliberately - it matches
+                // IntakePassService's own fail-closed default, so a broken service never shows
+                // a signed-in user a sign-in prompt they can't act on.
+                var state = App.IntakePass?.State
+                            ?? (App.Patreon?.HasPremiumAccess == true
+                                ? Services.IntakePassState.Premium
+                                : Services.IntakePassState.Spent);
+
+                var open = state == Services.IntakePassState.Premium
+                           || state == Services.IntakePassState.Available;
+
+                if (GradedIntakeTab.GradedIntakeGate != null)
+                    GradedIntakeTab.GradedIntakeGate.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+                if (GradedIntakeTab.GradedIntakeGatedContent != null)
+                    GradedIntakeTab.GradedIntakeGatedContent.IsEnabled = open;
+                if (GradedIntakeTab.GradedIntakePassBanner != null)
+                    GradedIntakeTab.GradedIntakePassBanner.Visibility =
+                        state == Services.IntakePassState.Available ? Visibility.Visible : Visibility.Collapsed;
+
+                // Gate copy. Only written for the two closed states: repainting it while the gate
+                // is collapsed would be wasted work, and leaving the last closed state's strings in
+                // place is invisible by definition.
+                if (state == Services.IntakePassState.NeedsLogin)
+                {
+                    SetGradedIntakeGateCopy(
+                        Loc.Get("intake_gate_login_headline"),
+                        Loc.Get("intake_gate_login_body"),
+                        Loc.Get("intake_gate_login_cta"));
+                }
+                else if (state == Services.IntakePassState.Spent)
+                {
+                    // Two keys rather than one with a {0}: DaysUntilNextPass floors at 1, and
+                    // "unlocks in 1 days" is the sort of thing that gets screenshotted. Languages
+                    // with richer plural rules can still diverge further in their own files.
+                    var days = Services.IntakePassService.DaysUntilNextPass;
+                    var body = days == 1
+                        ? Loc.Get("intake_gate_spent_body_one_day")
+                        : Loc.GetF("intake_gate_spent_body", days);
+
+                    SetGradedIntakeGateCopy(
+                        Loc.Get("intake_gate_spent_headline"),
+                        body,
+                        Loc.Get("intake_gate_spent_cta"));
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("RefreshGradedIntakeGate failed: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>Writes the shared gate card's three text slots. Split out only so the two
+        /// closed states above read as data rather than as three near-identical null checks each.</summary>
+        private void SetGradedIntakeGateCopy(string headline, string body, string cta)
+        {
+            if (GradedIntakeTab == null) return;
+            if (GradedIntakeTab.TxtGradedIntakeGateHeadline != null)
+                GradedIntakeTab.TxtGradedIntakeGateHeadline.Text = headline;
+            if (GradedIntakeTab.TxtGradedIntakeGateBody != null)
+                GradedIntakeTab.TxtGradedIntakeGateBody.Text = body;
+            if (GradedIntakeTab.BtnGradedIntakeGateUnlock != null)
+                GradedIntakeTab.BtnGradedIntakeGateUnlock.Content = cta;
+        }
+
+        /// <summary>
+        /// Attaches the pass-state listener once, so the gate repaints the moment a run consumes
+        /// the week's pass. Without it the page keeps showing the "your pass is ready" banner until
+        /// the user navigates away and back, which reads as the intake not having counted.
+        /// No-ops (and stays un-hooked, so a later refresh retries) while App.IntakePass is null.
+        /// </summary>
+        private void EnsureIntakePassHooked()
+        {
+            var pass = App.IntakePass;
+            if (_intakePassHooked || pass == null) return;
+            _intakePassHooked = true;
+            pass.PassStateChanged += OnIntakePassStateChanged;
+        }
+
+        /// <summary>
+        /// The pass is consumed from the intake's result path, which may or may not be on the UI
+        /// thread depending on how the WebView2 message landed, so bounce through the dispatcher
+        /// and bail if the app is already tearing down (see the Known Issues note about event
+        /// handlers firing against closed windows).
+        /// </summary>
+        private void OnIntakePassStateChanged(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (Application.Current?.Dispatcher == null) return;
+                if (Dispatcher.HasShutdownStarted) return;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try { RefreshGradedIntakeGate(); }
+                    catch (Exception ex) { App.Logger?.Debug("OnIntakePassStateChanged repaint: {E}", ex.Message); }
+                }));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("OnIntakePassStateChanged: {E}", ex.Message);
+            }
         }
 
         private void RefreshPastQuizzes()

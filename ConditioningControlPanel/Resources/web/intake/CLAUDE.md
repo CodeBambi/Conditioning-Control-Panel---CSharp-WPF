@@ -23,7 +23,8 @@ and drafts a real CCP Session from what it learned. It is a **decoupled web core
 plain ESM, no build step) hosted in **WebView2** via the shared `ChaosWebViewHost`, exactly like DTRH —
 so it is portable to a gated web/phone app later. It is fully self-contained: DOM/canvas/WebAudio own
 every effect, with **zero** coupling to `App.Flash` / `App.Bubbles` / the WPF overlay stack. It lives in
-**Exclusives** (its own tab, t1-gated), not the Lab. Placeholder product name; rename is one constant
+**Exclusives** (its own tab), not the Lab. Since the weekly-pass rework it is t1 for *unlimited* runs but
+open to free accounts **once a week** — it doubles as the app's onboarding (§6 Gating). Placeholder product name; rename is one constant
 (`PRODUCT_NAME`, `core/contracts.js:44`).
 
 ---
@@ -233,8 +234,9 @@ Prompt entry: `id`, `text`, `answer` (index | bool | verbatim string | slider nu
 `Services/Quiz/IntakeHostService.cs` — mirrors `DtrhHostService`. Reuses **`ChaosWebViewHost`** (shared
 with DTRH, Loom and the Bureau — edits there hit four features).
 
-- **Launch**: `GradedIntakeTabView` → `MainWindow.Lab.cs:BtnStartIntake_Click` → gates
-  (`IsActive` → `HasPremiumAccess` → `App.Ai.IsAvailable`) → `Launch()`.
+- **Launch**: `GradedIntakeTabView` (or the Dashboard pass card) → `MainWindow.Lab.cs:BtnStartIntake_Click`
+  → gates (`IsActive` → `App.IntakePass.CanStartIntake` → `App.Ai.IsAvailable`) → `Launch()`.
+  `Launch(duckMainWindow:)` is opted OUT for a user's first-ever run.
 - **Window**: start URL `https://ccp.game/intake/index.html`; vhosts `ccp.game` → `Resources/web` (Deny)
   and `ccp.assets` → `App.EffectiveAssetsPath` (Allow); user data folder `browser_data_intake`;
   `--autoplay-policy=no-user-gesture-required` for the bed.
@@ -263,9 +265,22 @@ with DTRH, Loom and the Bureau — edits there hit four features).
   (`ApplyWindowMode` hardcodes 0,0 + `PrimaryScreen`; shared with DTRH). Launch plain-minimises MainWindow
   (auto-duck) and restores it from the single `DisposeAll` funnel. MainWindow minimise no longer collapses
   the game: `WM_SHOWWINDOW`/`SW_PARENTCLOSING` is vetoed *before* the hide, with `SW_SHOWNA` repair.
-- **Gating**: `HasPremiumAccess` (t1 / whitelist / cached / SubscribeStar), enforced in **three** places —
-  `BtnStartIntake_Click`, `RefreshGradedIntakeGate()`, and the premium-rail lock. **Pop Quiz sits
-  deliberately outside the gate.** `ChipGradedIntake` navigates rather than toggles, so it has no status dot.
+- **Gating**: **`App.IntakePass.State`** (`Services/Progression/IntakePassService.cs`), NOT raw
+  `HasPremiumAccess`. Four states — `Premium` (unlimited, unchanged) · `NeedsLogin` (the pass is
+  per-account) · `Available` (free, one unspent run this week) · `Spent`. Authority is an **ISO week key**
+  (`AppSettings.IntakePassSpentWeek`, Monday 00:00 local), not a 7-day delta, so the weekly beat is the
+  same for everyone; a spend stamped in the future is read as a rolled-back clock and keeps the door shut.
+  **The pass is spent on COMPLETION only** (`IntakeHostService.OnQuizResult`), never at launch, so a crash
+  or an abort costs nothing. Enforced/painted in **four** places — `BtnStartIntake_Click`,
+  `RefreshGradedIntakeGate()` (4-state copy swap), `SubBadgeGradedIntake` in
+  `RefreshExclusivesSubmenuLocks()`, and the Dashboard pass card. The premium-rail lock still keys off
+  `HasPremiumAccess` **on purpose** — the rail is a patron amenity as a whole; the free entry point is the
+  Dashboard card. **Pop Quiz sits deliberately outside the gate.** `ChipGradedIntake` navigates rather than
+  toggles, so it has no status dot.
+- **Punch card**: completing an intake queues *half* a stamp against the drafted session's id
+  (`IntakePunchCardService.NotifyIntakeCompleted`); the hole lands only once that session is actually run
+  (≥50 % elapsed or a natural finish). Eight holes, first one free. See the service's class remarks —
+  notably that the completion prize is deliberately NOT granted client-side.
 
 ---
 

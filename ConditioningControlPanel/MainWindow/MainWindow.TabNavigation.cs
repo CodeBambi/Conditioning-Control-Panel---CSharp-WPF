@@ -160,6 +160,11 @@ namespace ConditioningControlPanel
                     AnimateTabIn(SettingsTab);
                     BtnSettings.Style = activeStyle;
                     RefreshPremiumRail(); // recompute chip dots (incl. Voice) from live state on every show
+                    // Weekly intake pass: paint the centre tile, and play the once-a-week flip
+                    // ceremony if this week's reveal hasn't run yet. Must be AFTER the tab is made
+                    // visible - the spin is skipped for an off-screen tile so a background login
+                    // callback can't burn the reveal on a control nobody is looking at.
+                    RefreshIntakePassTile();
                     break;
 
                 case "presets":

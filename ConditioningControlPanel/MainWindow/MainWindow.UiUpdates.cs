@@ -1397,6 +1397,548 @@ namespace ConditioningControlPanel
             }
         }
 
+        #region Weekly Intake Pass tile (Dashboard centre)
+
+        // ------------------------------------------------------------------------------------
+        // The Dashboard's centre logo tile doubles as the weekly Graded Intake pass card.
+        //
+        // Shape of the thing:
+        //   * PATRONS NEVER SEE THE CARD. The pass is the free tier's consolation prize; showing
+        //     it to someone who already has unlimited runs advertises a limit they do not have.
+        //     Premium is the one state that keeps the plain wordmark, and it is checked first.
+        //   * Everyone else - signed out, pass waiting, pass spent - gets the card, with the copy
+        //     and the art rewritten per state by ApplyIntakePassFaceState(). It is a standing
+        //     affordance, not a cutscene: it stays put until the run is consumed or the week
+        //     rolls over, so nobody misses it by being on another tab.
+        //   * ONLY the "pass waiting" state spins. The first time we paint an available card in a
+        //     given week the tile turns ~3.5 times on its Y axis first; every later visit finds it
+        //     already face-up. A signed-out or spent card is simply there - a flourish for a card
+        //     that cannot be spent is a lie told with animation.
+        //
+        // The spin is the standard WPF fake - ScaleX 1 -> 0, swap the visible face at the zero
+        // crossing, 0 -> 1 - chained through DoubleAnimation.Completed. Deliberately NOT a
+        // Storyboard: Storyboard.SetTargetName silently no-ops across the SettingsTabView
+        // namescope (see MainWindow.Animations.cs and the note in KeywordHighlightService), so
+        // every animation here is started straight on the transform via BeginAnimation. The CTA
+        // breath at the bottom of the card follows the same rule.
+        // ------------------------------------------------------------------------------------
+
+        /// <summary>Per-half-turn durations, front to back. Seven half-turns = 3.5 full turns, and
+        /// the widening intervals are the deceleration: the plate is losing momentum as it settles
+        /// onto the card face. Each entry is split across the two ScaleX ramps of its half-turn.</summary>
+        private static readonly int[] IntakePassHalfTurnMs = { 120, 135, 155, 185, 230, 300, 430 };
+
+        /// <summary>Skew (degrees) applied at the thin point of each half-turn. Purely cosmetic
+        /// fake perspective - it always animates back to 0 and is torn down with the spin.</summary>
+        private const double IntakePassSkewDeg = 6.0;
+
+        /// <summary>Monotonic spin token. Every chained Completed callback re-checks it, so a tab
+        /// switch (or a state change) mid-spin can bump the token and be certain the stale tail of
+        /// the old chain will not repaint a superseded face or leave the tile half-scaled.</summary>
+        private int _intakePassSpinGen;
+
+        /// <summary>True between the first ramp and the settle. Keeps a repeat
+        /// <see cref="RefreshIntakePassTile"/> from restarting a spin that is already running.</summary>
+        private bool _intakePassSpinning;
+
+        /// <summary>One-shot latches for the subscriptions below (this method is called on
+        /// every Dashboard entry, so it has to be safe to hammer).</summary>
+        private bool _intakePassLoadedHooked;
+        private bool _intakePassStateHooked;
+        private bool _intakePassVisibilityHooked;
+        private bool _intakePassHelpAttached;
+
+        /// <summary>One breath of the CTA. Slow enough to read as breathing rather than blinking;
+        /// the scale amplitude is small because the text sits in a fixed-width bottom bar and a
+        /// bigger swing would visibly shove the "(?)" around at the edges of the glyph run.</summary>
+        private static readonly TimeSpan IntakePassCtaBreath = TimeSpan.FromMilliseconds(1150);
+
+        /// <summary>Should the CTA be breathing right now? Set by
+        /// <see cref="ApplyIntakePassFaceState"/> (true only for an actually-spendable pass) and
+        /// consumed by <see cref="SetIntakePassFace"/>, which is the single choke point for "is
+        /// the card on screen" - so the pulse can never outlive the face it belongs to.</summary>
+        private bool _intakePassCtaShouldPulse;
+
+        /// <summary>True while the CTA animations are attached, so teardown is idempotent.</summary>
+        private bool _intakePassCtaPulsing;
+
+        /// <summary>
+        /// Decides what the centre tile shows - logo or weekly pass card - and whether the
+        /// reveal spin plays. Safe to call repeatedly and from any point in the lifecycle;
+        /// call it on every entry to the Dashboard tab.
+        /// </summary>
+        internal void RefreshIntakePassTile()
+        {
+            try
+            {
+                if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted)
+                    return;
+
+                var tab = SettingsTab;
+                if (tab?.IntakePassFace == null || tab.LogoFaceLogo == null
+                    || tab.LogoFlipScale == null || tab.LogoFlipSkew == null)
+                    return;
+
+                // The ceremony can be requested before the tab is realised (startup lands on the
+                // Dashboard before its visual tree exists). Park the request on Loaded rather than
+                // animating into a null render target.
+                if (!tab.IsLoaded)
+                {
+                    if (!_intakePassLoadedHooked)
+                    {
+                        _intakePassLoadedHooked = true;
+                        tab.Loaded += (_, _) => RefreshIntakePassTile();
+                    }
+                    return;
+                }
+
+                var pass = App.IntakePass;
+
+                // Repaint when the door changes underneath us: a login lands the card without a
+                // tab bounce, and completing a run takes it away again. Marshalled, because
+                // PassStateChanged can be raised from a background validation.
+                if (!_intakePassStateHooked && pass != null)
+                {
+                    _intakePassStateHooked = true;
+                    pass.PassStateChanged += (_, _) =>
+                    {
+                        var d = Application.Current?.Dispatcher;
+                        if (d == null || d.HasShutdownStarted) return;
+                        d.BeginInvoke(new Action(RefreshIntakePassTile));
+                    };
+                }
+
+                // Leaving the Dashboard has to kill the CTA breath. It repeats forever, and a
+                // forever animation left running on a collapsed tile burns a composition slot for
+                // the rest of the session with nothing on screen to show for it. Coming back is
+                // just another refresh (which is idempotent), and this also catches the window
+                // being minimised, where IsVisible goes false without a tab change.
+                if (!_intakePassVisibilityHooked)
+                {
+                    _intakePassVisibilityHooked = true;
+                    tab.IsVisibleChanged += (_, args) =>
+                    {
+                        if (args.NewValue is bool visible && !visible)
+                        {
+                            StopIntakePassCtaPulse();
+                            return;
+                        }
+                        RefreshIntakePassTile();
+                    };
+                }
+
+                EnsureIntakePassHelpPopover();
+
+                // ONLY AN AVAILABLE PASS GETS THE CARD. Three different reasons converge here:
+                //
+                //  - Premium: patrons have the feature outright, so a "weekly pass" tile would
+                //    invent a limit they do not have.
+                //  - Spent: the owner's design is that the door shuts once the pass is used. The
+                //    countdown still lives on the Graded Intake tab's gate copy, which is where a
+                //    user goes when they actually want another run.
+                //  - NeedsLogin: signed-out is the DEFAULT state of a fresh install.
+                //
+                // The last two are not cosmetic. The card sits inside LogoBrandFrame and marks
+                // MouseLeftButtonDown handled, so while it is up the rapid-click logo easter egg
+                // (and its achievement) cannot fire. Showing the card in Spent/NeedsLogin would
+                // have taken that away permanently from every signed-out user and from everyone
+                // else for most of the week - a regression in an existing feature, paid to display
+                // a countdown that is already shown elsewhere.
+                var state = pass?.State ?? IntakePassState.Premium;
+                if (pass == null || state != IntakePassState.Available)
+                {
+                    CancelIntakePassSpin();
+                    SetIntakePassFace(showCard: false);   // also stops the CTA breath
+                    return;
+                }
+
+                ApplyIntakePassFaceState(state);
+
+                // Only spend the ceremony when the tile is actually on screen. Without this, a
+                // background refresh (login callback while the user is three tabs away) would burn
+                // the week's spin on an invisible control and the reveal would never be seen.
+                var onScreen = tab.Visibility == Visibility.Visible && tab.IsVisible;
+
+                // The spin belongs to a pass that can actually be spent - see the region header.
+                if (state == IntakePassState.Available && pass.ShouldPlayCeremony && onScreen)
+                {
+                    if (_intakePassSpinning) return;   // already mid-reveal; don't restart it
+                    StartIntakePassSpin();
+                    return;
+                }
+
+                // Already revealed this week, or a state that never spins: the card is simply
+                // there, face-up, no animation.
+                if (_intakePassSpinning) return;
+                SetIntakePassFace(showCard: true);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("RefreshIntakePassTile: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>Swaps which of the two stacked faces is visible, and gates the CTA breath on
+        /// the result. The flip transform is not touched here, so this is safe to call at a zero
+        /// crossing.</summary>
+        private void SetIntakePassFace(bool showCard)
+        {
+            var tab = SettingsTab;
+            if (tab?.IntakePassFace == null || tab.LogoFaceLogo == null) return;
+
+            tab.IntakePassFace.Visibility = showCard ? Visibility.Visible : Visibility.Collapsed;
+            tab.LogoFaceLogo.Visibility = showCard ? Visibility.Collapsed : Visibility.Visible;
+
+            // Every route that hides the card comes through here, so this is the one place that
+            // has to remember to stop a forever-repeating animation.
+            if (showCard && _intakePassCtaShouldPulse) StartIntakePassCtaPulse();
+            else StopIntakePassCtaPulse();
+        }
+
+        /// <summary>
+        /// Paints the card for one of the three non-premium states: art, copy, tooltip, and
+        /// whether the CTA is allowed to breathe. Premium never reaches here - the caller has
+        /// already put the wordmark back.
+        /// </summary>
+        private void ApplyIntakePassFaceState(IntakePassState state)
+        {
+            var tab = SettingsTab;
+            if (tab?.IntakePassFace == null) return;
+
+            // Art first, because whether it resolved decides the whole layout. IntakeNiche is the
+            // single source of truth for the mod -> niche mapping (the nudge popup reads the same
+            // one), and it is documented to return null when the resource is missing - a mod can
+            // ship a broken override. Null means: hide every art layer and let the vector block
+            // carry the card, exactly as it did before there was art.
+            ImageSource? art = null;
+            try { art = Services.Quiz.IntakeNiche.PassCardImage(); }
+            catch (Exception ex) { App.Logger?.Debug("Intake pass art: {E}", ex.Message); }
+
+            var hasArt = art != null;
+
+            if (tab.IntakePassArtBrush != null) tab.IntakePassArtBrush.ImageSource = art;
+            if (tab.IntakePassArt != null)
+            {
+                tab.IntakePassArt.Visibility = hasArt ? Visibility.Visible : Visibility.Collapsed;
+                // A spent week reads as a used ticket: the art stays so the tile keeps its
+                // identity, drained of its glow so it plainly is not an invitation.
+                tab.IntakePassArt.Opacity = state == IntakePassState.Spent ? 0.45 : 1.0;
+            }
+            if (tab.IntakePassScrim != null)
+                tab.IntakePassScrim.Visibility = hasArt ? Visibility.Visible : Visibility.Collapsed;
+
+            // The paragraph block only has room when there is no art beneath it; over the ticket
+            // it would sit straight on the artwork's busy middle.
+            if (tab.IntakePassVectorBody != null)
+                tab.IntakePassVectorBody.Visibility = hasArt ? Visibility.Collapsed : Visibility.Visible;
+
+            string headline, body, cta, tip;
+            switch (state)
+            {
+                // Signed out. The pass is per-account, so there is nothing to claim yet - the copy
+                // must invite a login WITHOUT implying a run is already sitting there waiting.
+                case IntakePassState.NeedsLogin:
+                    headline = Loc.Get("intake_pass_card_headline");
+                    body = Loc.Get("intake_pass_card_body_needs_login");
+                    cta = Loc.Get("intake_pass_card_cta_needs_login");
+                    tip = Loc.Get("tooltip_intake_pass_card_needs_login");
+                    break;
+
+                // Already ran it. Say so, and say when it comes back - "come back later" with no
+                // date is the kind of copy that gets filed as a bug.
+                case IntakePassState.Spent:
+                {
+                    var days = IntakePassService.DaysUntilNextPass;
+                    headline = Loc.Get("intake_pass_card_headline_spent");
+                    body = Loc.GetF("intake_pass_card_body_spent", days);
+                    cta = days <= 1
+                        ? Loc.Get("intake_pass_card_cta_spent_tomorrow")
+                        : Loc.GetF("intake_pass_card_cta_spent", days);
+                    tip = Loc.GetF("tooltip_intake_pass_card_spent", days);
+                    break;
+                }
+
+                default:
+                    headline = Loc.Get("intake_pass_card_headline");
+                    body = Loc.Get("intake_pass_card_body");
+                    cta = Loc.Get("intake_pass_card_cta");
+                    tip = Loc.Get("tooltip_intake_pass_card");
+                    break;
+            }
+
+            if (tab.IntakePassHeadline != null) tab.IntakePassHeadline.Text = headline;
+            if (tab.IntakePassBody != null) tab.IntakePassBody.Text = body;
+            if (tab.IntakePassCta != null)
+            {
+                tab.IntakePassCta.Text = cta;
+                // A spent CTA is a status line, not a button - drop it to the muted register so it
+                // does not read as something to press.
+                tab.IntakePassCta.Foreground = state == IntakePassState.Spent
+                    ? (TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gainsboro)
+                    : Brushes.White;
+            }
+            tab.IntakePassFace.ToolTip = tip;
+
+            // Only a spendable pass breathes. SetIntakePassFace applies this the moment the face
+            // is next shown or hidden, and is called immediately after us on every path.
+            _intakePassCtaShouldPulse = state == IntakePassState.Available;
+        }
+
+        /// <summary>
+        /// Starts the CTA's continuous breath - a small synchronised scale + opacity swell that
+        /// makes the bottom line read as "press me" without the cost of a second animated tile.
+        /// Idempotent; started only via <see cref="SetIntakePassFace"/> so it cannot outlive the
+        /// card. Storyboards are not an option here (SetTargetName no-ops across the
+        /// SettingsTabView namescope), so both animations go straight onto their targets.
+        /// </summary>
+        private void StartIntakePassCtaPulse()
+        {
+            var tab = SettingsTab;
+            if (tab?.IntakePassCta == null || tab.IntakePassCtaScale == null) return;
+            if (_intakePassCtaPulsing) return;   // already breathing; restarting only resets phase
+
+            var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+
+            var swell = new DoubleAnimation(1.0, 1.05, IntakePassCtaBreath)
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = ease
+            };
+            var glow = new DoubleAnimation(0.65, 1.0, IntakePassCtaBreath)
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = ease
+            };
+
+            tab.IntakePassCtaScale.BeginAnimation(ScaleTransform.ScaleXProperty, swell);
+            tab.IntakePassCtaScale.BeginAnimation(ScaleTransform.ScaleYProperty, swell);
+            tab.IntakePassCta.BeginAnimation(UIElement.OpacityProperty, glow);
+
+            _intakePassCtaPulsing = true;
+        }
+
+        /// <summary>Tears the breath off the CTA and restores its resting values. A held animation
+        /// pins the render target, so the base values are only re-set after
+        /// BeginAnimation(prop, null) - same rule as the flip's teardown.</summary>
+        private void StopIntakePassCtaPulse()
+        {
+            _intakePassCtaPulsing = false;
+
+            var tab = SettingsTab;
+            if (tab?.IntakePassCta == null || tab.IntakePassCtaScale == null) return;
+
+            tab.IntakePassCtaScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            tab.IntakePassCtaScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            tab.IntakePassCta.BeginAnimation(UIElement.OpacityProperty, null);
+
+            tab.IntakePassCtaScale.ScaleX = 1;
+            tab.IntakePassCtaScale.ScaleY = 1;
+            tab.IntakePassCta.Opacity = 1;
+        }
+
+        /// <summary>
+        /// Wires the card's "(?)" to the same interactive help popover the feature tiles use
+        /// (<see cref="Controls.HelpPopover"/>) rather than inventing a second explainer surface -
+        /// hover to peek, click to pin, click away to dismiss, one open at a time app-wide.
+        ///
+        /// The content is built here instead of being added to
+        /// <see cref="Services.HelpContentService"/> because the pass card is not a dashboard
+        /// feature section: it has no FeatureCard, no HelpSectionId and no tutorial clip, and the
+        /// service's dictionary is keyed by exactly those.
+        ///
+        /// One-shot. HelpPopover caches its rendered card on first open, so a language switch mid
+        /// session will not repaint an explainer that has already been opened - it is correct
+        /// again on the next launch. Re-attaching on every refresh would close a pinned card out
+        /// from under the user, which is the worse trade.
+        /// </summary>
+        private void EnsureIntakePassHelpPopover()
+        {
+            if (_intakePassHelpAttached) return;
+
+            var btn = SettingsTab?.BtnIntakePassHelp;
+            if (btn == null) return;
+
+            _intakePassHelpAttached = true;
+            try
+            {
+                btn.ToolTip = null;   // popover and ToolTip must never double-render
+                Controls.HelpPopover.Attach(btn, BuildIntakePassHelpContent());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Intake pass help popover: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>What the Weekly Intake Pass actually is, in the shape
+        /// <see cref="HelpTooltipBuilder"/> renders: header, "What It Does", tips, "How It
+        /// Works".</summary>
+        private static HelpContent BuildIntakePassHelpContent() => new()
+        {
+            SectionId = "IntakePass",
+            // The header icon is drawn by a plain TextBlock, which cannot render COLR/CPAL colour
+            // emoji - a BMP dingbat is the only glyph that survives.
+            Icon = "★",
+            Title = Loc.Get("help_intake_pass_title"),
+            WhatItDoes = Loc.Get("help_intake_pass_what"),
+            Tips = new List<string>
+            {
+                Loc.Get("help_intake_pass_tip_free"),
+                Loc.Get("help_intake_pass_tip_patron"),
+                Loc.Get("help_intake_pass_tip_punch"),
+            },
+            HowItWorks = Loc.Get("help_intake_pass_how"),
+        };
+
+        /// <summary>Kills any in-flight spin and snaps the tile's transform back to rest. Called
+        /// before every state change so the tile can never be left frozen mid-turn (a held
+        /// animation also pins the render target, which is why the base values are re-set only
+        /// after BeginAnimation(prop, null)).</summary>
+        private void CancelIntakePassSpin()
+        {
+            var tab = SettingsTab;
+            if (tab?.LogoFlipScale == null || tab.LogoFlipSkew == null) return;
+
+            _intakePassSpinGen++;      // orphans every pending Completed callback
+            _intakePassSpinning = false;
+
+            tab.LogoFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            tab.LogoFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, null);
+            tab.LogoFlipScale.ScaleX = 1;
+            tab.LogoFlipSkew.AngleY = 0;
+        }
+
+        /// <summary>Begins the once-a-week reveal spin, starting on the logo face and landing on
+        /// the card.</summary>
+        private void StartIntakePassSpin()
+        {
+            CancelIntakePassSpin();               // clean slate + fresh generation token
+            var gen = _intakePassSpinGen;
+            _intakePassSpinning = true;
+
+            SetIntakePassFace(showCard: false);   // seven half-turns from here lands on the card
+
+            // Latched up front rather than on the final frame. The card face persists either way,
+            // so the only thing this flag protects is the flourish - and latching late means a
+            // crash, a tab switch, or a window close mid-spin re-arms the ceremony and it replays
+            // on every single Dashboard visit until it happens to finish. Once is the intent.
+            try { App.IntakePass?.MarkCeremonyPlayed(); } catch { }
+
+            App.Logger?.Debug("Intake pass tile: playing weekly reveal spin");
+            RunIntakePassSpinPhase(gen, 0);
+        }
+
+        /// <summary>
+        /// One ScaleX ramp of the spin, chained to the next from its Completed handler.
+        /// Even phases close the plate (1 -> 0), odd phases open it (0 -> 1); the visible face is
+        /// swapped at the zero crossing between them, which is the whole trick.
+        /// </summary>
+        private void RunIntakePassSpinPhase(int gen, int phase)
+        {
+            // Superseded, shutting down, or the tab got torn out from under us.
+            if (gen != _intakePassSpinGen) return;
+            if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
+
+            var tab = SettingsTab;
+            if (tab?.LogoFlipScale == null || tab.LogoFlipSkew == null) { _intakePassSpinning = false; return; }
+
+            var halfTurn = phase / 2;
+            var closing = (phase % 2) == 0;
+
+            if (halfTurn >= IntakePassHalfTurnMs.Length)
+            {
+                FinishIntakePassSpin(gen);
+                return;
+            }
+
+            var ms = Math.Max(1, IntakePassHalfTurnMs[halfTurn] / 2);
+            var duration = TimeSpan.FromMilliseconds(ms);
+
+            var scaleAnim = new DoubleAnimation(closing ? 1.0 : 0.0, closing ? 0.0 : 1.0, duration);
+            var skewAnim = closing
+                ? new DoubleAnimation(0.0, IntakePassSkewDeg, duration)
+                : new DoubleAnimation(-IntakePassSkewDeg, 0.0, duration);
+
+            // Ease only the last two half-turns. Easing every ramp reads as a stutter (each ramp
+            // slows into its own end); confining it to the tail turns the whole chain into one
+            // long deceleration, which is what "a spinning plate settling" actually looks like.
+            if (halfTurn >= IntakePassHalfTurnMs.Length - 2)
+            {
+                var ease = new CubicEase { EasingMode = closing ? EasingMode.EaseIn : EasingMode.EaseOut };
+                scaleAnim.EasingFunction = ease;
+                skewAnim.EasingFunction = ease;
+            }
+
+            scaleAnim.Completed += (_, _) =>
+            {
+                if (gen != _intakePassSpinGen) return;
+                if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
+
+                // At the zero crossing the plate is edge-on and one pixel wide - the only frame
+                // where a face swap is invisible. Half-turn 0 flips logo -> card, 1 flips back,
+                // and so on; the odd half-turn count means we land on the card.
+                if (closing) SetIntakePassFace(showCard: (halfTurn % 2) == 0);
+
+                RunIntakePassSpinPhase(gen, phase + 1);
+            };
+
+            tab.LogoFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnim);
+            tab.LogoFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, skewAnim);
+        }
+
+        /// <summary>Settles the tile: tears the animations off the transform (a held animation
+        /// keeps the render target pinned), snaps the base values, and locks the card face in.</summary>
+        private void FinishIntakePassSpin(int gen)
+        {
+            if (gen != _intakePassSpinGen) return;
+
+            var tab = SettingsTab;
+            if (tab?.LogoFlipScale != null && tab.LogoFlipSkew != null)
+            {
+                tab.LogoFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                tab.LogoFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, null);
+                tab.LogoFlipScale.ScaleX = 1;
+                tab.LogoFlipSkew.AngleY = 0;
+            }
+
+            _intakePassSpinning = false;
+            SetIntakePassFace(showCard: true);
+        }
+
+        /// <summary>
+        /// Click on the revealed pass card. Forwards straight to the Exclusives launch path, which
+        /// already owns every gate (pass state, login, AI availability, first-run windowing) - the
+        /// card must not grow a second opinion about who gets in.
+        /// </summary>
+        internal void IntakePassFace_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // The card sits inside LogoBrandFrame, whose own handler is the rapid-click easter
+            // egg / achievement counter. Stop the bubble so launching an intake doesn't also
+            // register as a logo poke.
+            e.Handled = true;
+
+            // Clicks on the "(?)" belong to the help popover. ButtonBase already marks
+            // MouseLeftButtonDown handled so this should be unreachable, but the same guard exists
+            // in FeatureCard.OnClick for the same reason: the cost of being wrong here is
+            // launching an intake because someone asked what one is.
+            if (e.OriginalSource is DependencyObject src && SettingsTab?.BtnIntakePassHelp != null
+                && IsVisualDescendant(src, SettingsTab.BtnIntakePassHelp))
+                return;
+
+            try
+            {
+                BtnStartIntake_Click(this, new RoutedEventArgs());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Intake pass tile: launch from Dashboard card failed");
+            }
+        }
+
+        #endregion
+
 
 
 
