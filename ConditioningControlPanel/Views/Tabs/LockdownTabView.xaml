@@ -56,7 +56,8 @@
                                         <DropShadowEffect x:Name="LockdownImageGlow" x:FieldModifier="internal" Color="#FF1493" BlurRadius="14" ShadowDepth="0" Opacity="0.7"/>
                                     </Border.Effect>
                                     <!-- Lockdown pulse managed in code-behind (StartLockdownPulse/StopLockdownPulse) -->
-                                    <Image Source="pack://application:,,,/Resources/lockdown_icon.png" Stretch="Uniform"
+                                    <Image x:Name="ImgLockdownFeature" x:FieldModifier="internal"
+                                           Source="pack://application:,,,/Resources/lockdown_icon.png" Stretch="Uniform"
                                            RenderOptions.BitmapScalingMode="HighQuality"/>
                                 </Border>
     

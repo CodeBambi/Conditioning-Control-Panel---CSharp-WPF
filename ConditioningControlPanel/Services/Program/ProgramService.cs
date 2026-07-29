@@ -557,9 +557,16 @@ public class ProgramService : IDisposable
     }
 
     /// <summary>
-    /// Complete a ritual task. Self-attested; when the task borrows a roadmap step and that step is
-    /// the user's active one, the photo also lands in the existing diary. Ritual photos never leave
-    /// the machine - they are not uploaded, not synced and never rendered onto a share card.
+    /// Complete a ritual task. Self-attested; the photo is always filed to the local diary folder and
+    /// its path recorded on the day so the program can read its own days back. Ritual photos never
+    /// leave the machine - they are not uploaded, not synced and never rendered onto a share card.
+    ///
+    /// The roadmap track is only advanced when the borrowed step is the user's live one. Filing and
+    /// advancing are deliberately separate: a program day must not move a track the user did not
+    /// choose to work, but the photo still has to land somewhere the program's own ledger can find it.
+    /// Before that split, a ritual photo for any non-active step was dropped without even a log line -
+    /// which silently broke Presentation's day-1/day-14 diptych for every user whose roadmap sat
+    /// elsewhere, i.e. nearly all of them.
     /// </summary>
     public bool SubmitRitualTask(string taskId, string? photoPath = null, string? note = null)
     {
@@ -574,17 +581,40 @@ public class ProgramService : IDisposable
         var record = TodayRecord;
         if (record == null || record.CompletedTaskIds.Contains(task.Id)) return false;
 
-        if (!string.IsNullOrWhiteSpace(task.RoadmapStepId) && !string.IsNullOrWhiteSpace(photoPath))
+        if (!string.IsNullOrWhiteSpace(photoPath))
         {
             try
             {
-                if (App.Roadmap?.IsStepActive(task.RoadmapStepId) == true)
-                    App.Roadmap.SubmitPhoto(task.RoadmapStepId, photoPath!, note);
+                var roadmap = App.Roadmap;
+                var stepId = task.RoadmapStepId;
+                string? filed = null;
+
+                if (roadmap != null && !string.IsNullOrWhiteSpace(stepId) && roadmap.IsStepActive(stepId))
+                {
+                    // The borrowed step is the user's live one, so let the roadmap own the whole
+                    // submission: it copies the photo, keeps the note and advances the track. Read the
+                    // saved path back rather than copying a second time - these are camera photos.
+                    roadmap.SubmitPhoto(stepId!, photoPath!, note);
+                    filed = roadmap.GetStepProgress(stepId!)?.PhotoPath;
+                }
+                else if (roadmap != null)
+                {
+                    // Either the task borrows no step, or it borrows one the user is not standing on.
+                    // File it anyway, prefixed by program and task so program photos stay distinct in
+                    // the diary folder, and leave the roadmap untouched.
+                    var name = $"{enrollment.ProgramId}_{task.Id}";
+                    filed = roadmap.SavePhotoToDiary(name, photoPath!);
+                }
+
+                // ??= because an enrollment saved before this field existed deserialises without it,
+                // and a null dictionary here would throw on the one path that completes a day.
+                if (!string.IsNullOrWhiteSpace(filed))
+                    (record.RitualPhotos ??= new Dictionary<string, string>())[task.Id] = filed!;
             }
             catch (Exception ex)
             {
-                // The program day must not hinge on the roadmap accepting the photo.
-                App.Logger?.Warning(ex, "Program ritual task '{Task}' could not file its roadmap photo", task.Id);
+                // The program day must not hinge on the photo being filed.
+                App.Logger?.Warning(ex, "Program ritual task '{Task}' could not file its photo", task.Id);
             }
         }
 

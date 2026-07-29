@@ -5302,6 +5302,28 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Training Programs
+
+        /// <summary>
+        /// Set the first time the user clicks the Programs tab button. Until then the tab button
+        /// pulses once on startup to draw the eye to it, the same one-shot treatment the Deeper tab
+        /// got when it shipped (see <see cref="HasSeenDeeperTab"/>). Never cleared: the pulse is an
+        /// announcement, so a user who has already found the tab must not be nagged again.
+        /// </summary>
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenProgramsTab { get; set; }
+
+        /// <summary>
+        /// Set when the one-time "what Training Programs are" explainer has been shown. Kept
+        /// separate from <see cref="HasSeenProgramsTab"/> on purpose: the pulse is spent the moment
+        /// the tab is clicked, but the explainer has to survive that same click so it can open on
+        /// top of the tab the user just landed on.
+        /// </summary>
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenProgramsIntro { get; set; }
+
+        #endregion
+
         #region Deeper
 
         private bool _enableDeeper = true;

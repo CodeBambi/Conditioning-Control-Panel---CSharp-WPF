@@ -799,6 +799,9 @@ namespace ConditioningControlPanel
             if (e.OriginalSource is not Features.FeatureCard card) return;
             var s = App.Settings?.Current;
             if (s == null) return;
+            // A Training Program owns the day's feature mix - see MainWindow.ProgramLock.cs.
+            // Derived from live engine state on every click, so there is nothing to un-stick.
+            if (RefuseIfProgramFeatureLocked($"card:{card.Title}")) return;
             var running = App.IsEngineRunning;
             try
             {
@@ -858,7 +861,10 @@ namespace ConditioningControlPanel
             popup.Closed += (_, __) =>
             {
                 if (_activeFeaturePopup == popup)
+                {
                     _activeFeaturePopup = null;
+                    _activeFeaturePopupContent = null;
+                }
                 // The popup has ShowInTaskbar=False, so when it closes WPF may activate
                 // whatever window happens to be behind us instead of returning focus
                 // to MainWindow. Explicitly bring MainWindow forward.
@@ -871,7 +877,15 @@ namespace ConditioningControlPanel
                 catch { /* window may be shutting down */ }
             };
             _activeFeaturePopup = popup;
+            // Tracked so RefreshProgramFeatureLock can re-derive the lock onto a popup that is
+            // already open when a program session starts or ends (MainWindow.ProgramLock.cs).
+            _activeFeaturePopupContent = content;
             popup.Show(); // Non-modal so bubbles and other interactions keep working
+
+            // A Training Program owns the day's feature mix: grey the master enable toggle and
+            // say why. Applied AFTER Show so the content has been through Initialized and
+            // FindName resolves. Both directions are handled, so nothing latches.
+            ApplyProgramLockToFeaturePopup(content);
 
             // Bark hook: identify the feature by control type (locale-independent), e.g.
             // FlashFeatureControl -> "Flash". Gated/chanced in the rules so it isn't spammy.
@@ -1319,6 +1333,11 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                // Program feature lock heartbeat. Re-derives once a second and repaints only on
+                // a change, so the toggles cannot stay locked (or stay open) through any
+                // out-of-order or dropped session event. force:false = skip redundant repaints.
+                RefreshProgramFeatureLock(force: false);
+
                 if (_sessionEngine?.CurrentSession != null)
                 {
                     var remaining = e.Remaining;
@@ -1393,6 +1412,9 @@ namespace ConditioningControlPanel
                 // announce it. Both no-op unless this is the program's own session.
                 UpdateProgramSessionRow();
                 AnnounceProgramSessionStarted();
+                // ... and lock the user's feature toggles: the program prescribes the day's
+                // mix. No-ops for preset / remote sessions. See MainWindow.ProgramLock.cs.
+                RefreshProgramFeatureLock();
             });
         }
 
@@ -1428,6 +1450,12 @@ namespace ConditioningControlPanel
                 // day's slot is only marked done later in this same StopSession call).
                 UpdateProgramSessionRow();
                 AnnounceProgramSessionEnded(wasProgramSession);
+                // Hand the feature toggles back. Deliberately NOT conditional on
+                // wasProgramSession: the refresh RE-DERIVES the lock from live engine state,
+                // so calling it unconditionally is what guarantees the toggles come back on
+                // every exit path (completion, STOP, abort, withdraw) even if this handler
+                // fires out of order or twice.
+                RefreshProgramFeatureLock();
             });
         }
 

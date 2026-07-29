@@ -238,6 +238,19 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void PremiumChip_Click(PremiumFeature feature)
         {
+            // A Training Program session owns the day's feature mix (MainWindow.ProgramLock.cs).
+            // Takeover / Awareness / Haptics are part of that mix, so the rail cannot flip them
+            // mid-session. Deliberately NOT gated: Voice (the mic is a privacy control - the user
+            // must always be able to disarm it) and Graded Intake (navigation, not a toggle).
+            switch (feature)
+            {
+                case PremiumFeature.Takeover:
+                case PremiumFeature.Awareness:
+                case PremiumFeature.Haptics:
+                    if (RefuseIfProgramFeatureLocked($"chip:{feature}")) return;
+                    break;
+            }
+
             switch (feature)
             {
                 case PremiumFeature.Takeover:
