@@ -221,44 +221,27 @@
   "tooltip_your_rank_percentile_popular_girl_skill": "내 랭크 백분위 (인기녀 스킬)",
   "label_top_0": "상위 0%",
   "label_login_with_discord_or_patreon_to_track_your_x": "Discord 또는 Patreon으로 로그인하면 XP를 추적할 수 있어요!",
-  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "활성화 시 이미지를 클릭하면 사라져요.
-비활성화 시 이미지를 클릭할 수 없어요.",
-  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "히드라 모드: 이미지를 클릭하면 사라지는 대신
-두 개가 더 나타나요.
-점점 어려워지는 도전이에요!",
+  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "활성화 시 이미지를 클릭하면 사라져요.\r\n비활성화 시 이미지를 클릭할 수 없어요.",
+  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "히드라 모드: 이미지를 클릭하면 사라지는 대신\r\n두 개가 더 나타나요.\r\n점점 어려워지는 도전이에요!",
   "setting_hydra": "🐙히드라",
-  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "연결됨: 히드라 생성 이미지가 부모 플래시 타이머를 공유하고
-타이머가 끝나면 사라져요.
-연결 해제: 각 히드라 생성 이미지가 자체
-타이머를 받아 더 혼란스러워져요!",
+  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "연결됨: 히드라 생성 이미지가 부모 플래시 타이머를 공유하고\r\n타이머가 끝나면 사라져요.\r\n연결 해제: 각 히드라 생성 이미지가 자체\r\n타이머를 받아 더 혼란스러워져요!",
   "setting_linked": "🔗연결됨",
-  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "플래시 이미지의 핑크 반짝임 효과를 전환해요.
-골든 럭키 빛은 항상 표시돼요.",
+  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "플래시 이미지의 핑크 반짝임 효과를 전환해요.\r\n골든 럭키 빛은 항상 표시돼요.",
   "setting_glow": "✨빛남",
-  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "시간당 플래시 이벤트 횟수.
-값이 높을수록 더 자주 번쩍여요.",
+  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "시간당 플래시 이벤트 횟수.\r\n값이 높을수록 더 자주 번쩍여요.",
   "setting_per_hour": "시간당",
-  "tooltip_number_of_images_shown_per_flash_event_multip": "플래시 이벤트당 표시되는 이미지 수.
-여러 이미지가 동시에 나타나요.",
+  "tooltip_number_of_images_shown_per_flash_event_multip": "플래시 이벤트당 표시되는 이미지 수.\r\n여러 이미지가 동시에 나타나요.",
   "setting_images": "이미지",
-  "tooltip_maximum_images_displayed_at_once_limits_scree": "한 번에 표시되는 최대 이미지 수.
-히드라 모드에서 화면 혼잡을 제한해요.",
+  "tooltip_maximum_images_displayed_at_once_limits_scree": "한 번에 표시되는 최대 이미지 수.\r\n히드라 모드에서 화면 혼잡을 제한해요.",
   "section_visuals": "👁 비주얼",
-  "tooltip_scale_of_flash_images_100_original_size_200_d": "플래시 이미지 크기.
-100% = 원본 크기, 200% = 2배 크기.",
+  "tooltip_scale_of_flash_images_100_original_size_200_d": "플래시 이미지 크기.\r\n100% = 원본 크기, 200% = 2배 크기.",
   "setting_size": "크기",
-  "tooltip_transparency_of_flash_images_lower_more_see_t": "플래시 이미지 투명도.
-낮을수록 투명, 100% = 완전 불투명.",
-  "tooltip_fade_in_out_animation_speed_0_instant_appear": "페이드 인/아웃 애니메이션 속도.
-0% = 즉시 나타남/사라짐.
-100% = 부드러운 페이드.",
+  "tooltip_transparency_of_flash_images_lower_more_see_t": "플래시 이미지 투명도.\r\n낮을수록 투명, 100% = 완전 불투명.",
+  "tooltip_fade_in_out_animation_speed_0_instant_appear": "페이드 인/아웃 애니메이션 속도.\r\n0% = 즉시 나타남/사라짐.\r\n100% = 부드러운 페이드.",
   "setting_fade": "페이드",
-  "tooltip_how_long_images_stay_on_screen_only_used_when": "이미지가 화면에 머무는 시간.
-오디오 비활성화 시에만 사용돼요.",
+  "tooltip_how_long_images_stay_on_screen_only_used_when": "이미지가 화면에 머무는 시간.\r\n오디오 비활성화 시에만 사용돼요.",
   "setting_5s": "5초",
-  "tooltip_when_enabled_flash_duration_matches_audio_len": "활성화 시 플래시 지속 시간이 오디오 길이와 같아져요.
-수동 지속 시간 슬라이더를 사용하려면 비활성화하세요.
-시간당 60회 이상에서는 자동으로 오디오가 꺼져요.",
+  "tooltip_when_enabled_flash_duration_matches_audio_len": "활성화 시 플래시 지속 시간이 오디오 길이와 같아져요.\r\n수동 지속 시간 슬라이더를 사용하려면 비활성화하세요.\r\n시간당 60회 이상에서는 자동으로 오디오가 꺼져요.",
   "label_link_to_audio_trigger": "📊 오디오 트리거에 연결",
   "label_max_30_h": "⚠ 최대 30/시간",
   "tooltip_click_me_rapidly": "빠르게 클릭해 봐요! 💗",
@@ -287,8 +270,7 @@
   "tooltip_enable_disable_subliminal_messages": "서브리미널 메시지 활성화/비활성화",
   "tooltip_messages_shown_per_minute": "분당 표시되는 메시지 수",
   "label_per_min": "분당",
-  "tooltip_display_duration_in_frames_lower_faster_flash": "프레임 단위 표시 시간.
-낮을수록 빠르게 번쩍이고, 읽기 어려워요.",
+  "tooltip_display_duration_in_frames_lower_faster_flash": "프레임 단위 표시 시간.\r\n낮을수록 빠르게 번쩍이고, 읽기 어려워요.",
   "label_frames": "프레임",
   "tooltip_text_visibility_lower_more_subtle": "텍스트 가시성. 낮을수록 은은해요.",
   "tooltip_play_whispered_audio_when_subliminal_messages": "서브리미널 메시지가 나타날 때 속삭임 오디오를 재생해요.",
@@ -307,12 +289,9 @@
   "setting_auto_run": "자동 실행",
   "tooltip_start_minimized_to_system_tray": "시스템 트레이로 최소화하여 시작",
   "setting_start_hidden": "숨겨서 시작",
-  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ 위험: 패닉 키를 완전히 비활성화해요!
-긴급 정지를 할 수 없게 돼요.
-매우 주의해서 사용하세요.",
+  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ 위험: 패닉 키를 완전히 비활성화해요!\r\n긴급 정지를 할 수 없게 돼요.\r\n매우 주의해서 사용하세요.",
   "setting_no_panic": "⚠ 패닉 없음",
-  "tooltip_disable_all_network_features_updates_ai_leade": "모든 네트워크 기능 비활성화 (업데이트, AI, 리더보드).
-앱이 완전히 오프라인으로 작동해요.",
+  "tooltip_disable_all_network_features_updates_ai_leade": "모든 네트워크 기능 비활성화 (업데이트, AI, 리더보드).\r\n앱이 완전히 오프라인으로 작동해요.",
   "setting_offline_mode": "오프라인 모드",
   "tooltip_select_a_specific_video_to_play_on_startup_wh": "시작 시 재생할 특정 영상 선택 (실행 시 영상 활성화 시)",
   "label_startup_video": "시작 영상:",
@@ -320,8 +299,7 @@
   "tooltip_browse_for_startup_video": "시작 영상 찾아보기",
   "tooltip_clear_selection_use_random": "선택 지우기 (랜덤 사용)",
   "label_use_borderless_windowed_for_overlays": "💡 오버레이를 위해 보더리스 창 모드를 사용하세요",
-  "tooltip_exclusive_fullscreen_games_block_overlays_use": "전체 화면 전용 게임은 오버레이를 차단해요.
-대신 보더리스 창 모드를 사용하세요.",
+  "tooltip_exclusive_fullscreen_games_block_overlays_use": "전체 화면 전용 게임은 오버레이를 차단해요.\r\n대신 보더리스 창 모드를 사용하세요.",
   "btn_escape": "🔑 탈출",
   "tooltip_click_to_change_panic_key": "클릭하면 패닉 키를 변경해요",
   "section_browser": "🌐 브라우저",
@@ -426,12 +404,9 @@
   "btn_save_2": "💾 저장",
   "btn_delete_2": "🗑 삭제",
   "btn_start_session": "▶ 세션 시작",
-  "tooltip_features_that_unlock_as_you_level_up_keep_con": "레벨업하면서 잠금 해제되는 기능이에요.
-계속 컨디셔닝하면서 XP를 벌고 새 기능을 잠금 해제하세요!",
+  "tooltip_features_that_unlock_as_you_level_up_keep_con": "레벨업하면서 잠금 해제되는 기능이에요.\r\n계속 컨디셔닝하면서 XP를 벌고 새 기능을 잠금 해제하세요!",
   "section_unlockables": "🎁 잠금 해제 항목",
-  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "최면 소용돌이 애니메이션 오버레이.
-모든 화면을 커스터마이즈 가능한 불투명도로 덮어요.
-레벨 10에서 잠금 해제.",
+  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "최면 소용돌이 애니메이션 오버레이.\r\n모든 화면을 커스터마이즈 가능한 불투명도로 덮어요.\r\n레벨 10에서 잠금 해제.",
   "label_spiral_overlay": "🌀 소용돌이 오버레이",
   "label_lvl_10": "🔒 레벨 10",
   "label_reach_level_10_to_unlock": "레벨 10에 도달하면 잠금 해제",
@@ -450,17 +425,13 @@
   "tooltip_spiral_opacity_5_50": "소용돌이 불투명도 (5% - 50%)",
   "tooltip_choose_a_spiral_gif_animation": "소용돌이 GIF 애니메이션 선택",
   "label_if_you_have_display_problems_try_setting_your": "⚠ 화면 문제가 있으면 모니터 DPI 스케일링을 권장 설정으로 맞춰보세요",
-  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "모든 화면에 핑크색 틴트 오버레이.
-은은하게 또는 강하게, 선택은 자유!
-레벨 10에서 잠금 해제.",
+  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "모든 화면에 핑크색 틴트 오버레이.\r\n은은하게 또는 강하게, 선택은 자유!\r\n레벨 10에서 잠금 해제.",
   "label_pink_filter": "💗 핑크 필터",
   "tooltip_enable_disable_pink_tint_overlay": "핑크 틴트 오버레이 활성화/비활성화",
   "tooltip_apply_pink_color_filter_to_all_monitors": "모든 모니터에 핑크 컬러 필터 적용",
   "tooltip_pink_filter_intensity": "핑크 필터 강도",
   "tooltip_filter_opacity_5_50": "필터 불투명도 (5% - 50%)",
-  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "떠다니는 버블을 터뜨려 XP를 벌어요!
-주기적으로 나타나는 재밌는 미니게임.
-레벨 20에서 잠금 해제.",
+  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "떠다니는 버블을 터뜨려 XP를 벌어요!\r\n주기적으로 나타나는 재밌는 미니게임.\r\n레벨 20에서 잠금 해제.",
   "label_bubble_pop": "🫧 버블 팝",
   "label_lvl_20": "🔒 레벨 20",
   "label_reach_level_20_to_unlock": "레벨 20에 도달하면 잠금 해제",
@@ -471,9 +442,7 @@
   "setting_volume": "볼륨",
   "tooltip_volume_of_bubble_pop_sounds": "버블 팝 사운드 볼륨",
   "tooltip_bubble_pop_sound_volume": "버블 팝 사운드 볼륨",
-  "tooltip_screen_lock_that_requires_typing_phrases_rein": "문구 입력이 필요한 화면 잠금.
-반복을 통해 컨디셔닝을 강화해요.
-레벨 35에서 잠금 해제.",
+  "tooltip_screen_lock_that_requires_typing_phrases_rein": "문구 입력이 필요한 화면 잠금.\r\n반복을 통해 컨디셔닝을 강화해요.\r\n레벨 35에서 잠금 해제.",
   "label_lock_card": "📐 잠금 카드",
   "label_lvl_35": "🔒 레벨 35",
   "label_reach_level_35_to_unlock": "레벨 35에 도달하면 잠금 해제",
@@ -491,9 +460,7 @@
   "btn_manage_phrases": "📝 문구 관리",
   "tooltip_edit_phrases_that_must_be_typed": "입력해야 할 문구 편집",
   "tooltip_customize_lock_card_colors": "잠금 카드 색상 커스터마이즈",
-  "tooltip_count_the_bubbles_challenge_memory_and_attent": "버블 세기 도전!
-보너스 XP를 위한 기억력과 주의력 테스트.
-레벨 50에서 잠금 해제.",
+  "tooltip_count_the_bubbles_challenge_memory_and_attent": "버블 세기 도전!\r\n보너스 XP를 위한 기억력과 주의력 테스트.\r\n레벨 50에서 잠금 해제.",
   "label_bubble_count": "🫧 버블 카운트",
   "label_lvl_50": "🔒 레벨 50",
   "label_reach_level_50_to_unlock": "레벨 50에 도달하면 잠금 해제",
@@ -507,10 +474,7 @@
   "tooltip_prevent_closing_until_correctly_answered": "정확하게 맞출 때까지 닫을 수 없게 해요",
   "btn_test_now": "🎮 지금 테스트",
   "tooltip_trigger_a_bubble_count_challenge_now": "지금 버블 카운트 도전을 시작해요",
-  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "DVD 화면 보호기 스타일의 바운싱 텍스트!
-커스터마이즈 가능한 문구가 화면을 가로질러 튕겨요.
-바운스당 +25 XP (최대 150 XP/분).
-레벨 60에서 잠금 해제.",
+  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "DVD 화면 보호기 스타일의 바운싱 텍스트!\r\n커스터마이즈 가능한 문구가 화면을 가로질러 튕겨요.\r\n바운스당 +25 XP (최대 150 XP/분).\r\n레벨 60에서 잠금 해제.",
   "label_bouncing_text": "📺 바운싱 텍스트",
   "label_lvl_60": "🔒 레벨 60",
   "label_reach_level_60_to_unlock": "레벨 60에 도달하면 잠금 해제",
@@ -529,9 +493,7 @@
   "section_brain_drain": "💧 브레인 드레인",
   "section_rework": "🔧 리워크",
   "section_up_for_rework_this_feature_is_temporarily_dis": "리워크 예정 - 성능 최적화 중이라 이 기능은 일시적으로 비활성화되어 있어요. 추후 업데이트를 확인해 주세요!",
-  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "랜덤 마인드 와이프 오디오 효과!
-세션 중 빈도가 점점 증가해요.
-레벨 75에서 잠금 해제.",
+  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "랜덤 마인드 와이프 오디오 효과!\r\n세션 중 빈도가 점점 증가해요.\r\n레벨 75에서 잠금 해제.",
   "label_mind_wipe": "🧠 마인드 와이프",
   "label_lvl_75": "🔒 레벨 75",
   "label_reach_level_75_to_unlock": "레벨 75에 도달하면 잠금 해제",

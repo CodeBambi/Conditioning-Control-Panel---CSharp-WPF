@@ -221,44 +221,27 @@
   "tooltip_your_rank_percentile_popular_girl_skill": "Dein Rang-Perzentil (Popular Girl Fähigkeit)",
   "label_top_0": "Top 0%",
   "label_login_with_discord_or_patreon_to_track_your_x": "Melde dich mit Discord oder Patreon an, um deine XP zu verfolgen!",
-  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "Wenn aktiviert, wird ein Bild durch Klicken geschlossen.
-Wenn deaktiviert, sind Bilder klickdurchlässig.",
-  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "Hydra-Modus: Beim Klicken eines Bildes
-erscheinen zwei neue statt es zu schließen.
-Erzeugt eine eskalierende Herausforderung!",
+  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "Wenn aktiviert, wird ein Bild durch Klicken geschlossen.\r\nWenn deaktiviert, sind Bilder klickdurchlässig.",
+  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "Hydra-Modus: Beim Klicken eines Bildes\r\nerscheinen zwei neue statt es zu schließen.\r\nErzeugt eine eskalierende Herausforderung!",
   "setting_hydra": "🐙Hydra",
-  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "Verknüpft: Hydra-Ableger teilen den Timer des Eltern-Flashs
-und verschwinden, wenn er endet.
-Unverknüpft: Jeder Hydra-Ableger bekommt seinen
-eigenen vollen Timer für mehr Chaos!",
+  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "Verknüpft: Hydra-Ableger teilen den Timer des Eltern-Flashs\r\nund verschwinden, wenn er endet.\r\nUnverknüpft: Jeder Hydra-Ableger bekommt seinen\r\neigenen vollen Timer für mehr Chaos!",
   "setting_linked": "🔗Verknüpft",
-  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "Schalte den rosa Glitzer-Leuchteffekt auf Flash-Bildern um.
-Goldenes Glücks-Leuchten wird immer angezeigt.",
+  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "Schalte den rosa Glitzer-Leuchteffekt auf Flash-Bildern um.\r\nGoldenes Glücks-Leuchten wird immer angezeigt.",
   "setting_glow": "✨Leuchten",
-  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "Wie viele Flash-Ereignisse pro Stunde auftreten.
-Höhere Werte = häufigere Flashes.",
+  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "Wie viele Flash-Ereignisse pro Stunde auftreten.\r\nHöhere Werte = häufigere Flashes.",
   "setting_per_hour": "Pro Stunde",
-  "tooltip_number_of_images_shown_per_flash_event_multip": "Anzahl der Bilder pro Flash-Ereignis.
-Mehrere Bilder erscheinen gleichzeitig.",
+  "tooltip_number_of_images_shown_per_flash_event_multip": "Anzahl der Bilder pro Flash-Ereignis.\r\nMehrere Bilder erscheinen gleichzeitig.",
   "setting_images": "Bilder",
-  "tooltip_maximum_images_displayed_at_once_limits_scree": "Maximale Anzahl gleichzeitig angezeigter Bilder.
-Begrenzt Bildschirmüberflutung im Hydra-Modus.",
+  "tooltip_maximum_images_displayed_at_once_limits_scree": "Maximale Anzahl gleichzeitig angezeigter Bilder.\r\nBegrenzt Bildschirmüberflutung im Hydra-Modus.",
   "section_visuals": "👁 Visuelles",
-  "tooltip_scale_of_flash_images_100_original_size_200_d": "Größe der Flash-Bilder.
-100% = Originalgröße, 200% = doppelte Größe.",
+  "tooltip_scale_of_flash_images_100_original_size_200_d": "Größe der Flash-Bilder.\r\n100% = Originalgröße, 200% = doppelte Größe.",
   "setting_size": "Größe",
-  "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparenz der Flash-Bilder.
-Niedriger = durchsichtiger, 100% = vollständig solide.",
-  "tooltip_fade_in_out_animation_speed_0_instant_appear": "Ein-/Ausblende-Geschwindigkeit.
-0% = sofortiges Erscheinen/Verschwinden.
-100% = langsames weiches Einblenden.",
+  "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparenz der Flash-Bilder.\r\nNiedriger = durchsichtiger, 100% = vollständig solide.",
+  "tooltip_fade_in_out_animation_speed_0_instant_appear": "Ein-/Ausblende-Geschwindigkeit.\r\n0% = sofortiges Erscheinen/Verschwinden.\r\n100% = langsames weiches Einblenden.",
   "setting_fade": "Einblenden",
-  "tooltip_how_long_images_stay_on_screen_only_used_when": "Wie lange Bilder auf dem Bildschirm bleiben.
-Wird nur verwendet, wenn Audio deaktiviert ist.",
+  "tooltip_how_long_images_stay_on_screen_only_used_when": "Wie lange Bilder auf dem Bildschirm bleiben.\r\nWird nur verwendet, wenn Audio deaktiviert ist.",
   "setting_5s": "5s",
-  "tooltip_when_enabled_flash_duration_matches_audio_len": "Wenn aktiviert, passt sich die Flash-Dauer an die Audio-Länge an.
-Deaktiviere für manuelle Dauer-Einstellung.
-Audio wird automatisch über 60 Flashes/Stunde deaktiviert.",
+  "tooltip_when_enabled_flash_duration_matches_audio_len": "Wenn aktiviert, passt sich die Flash-Dauer an die Audio-Länge an.\r\nDeaktiviere für manuelle Dauer-Einstellung.\r\nAudio wird automatisch über 60 Flashes/Stunde deaktiviert.",
   "label_link_to_audio_trigger": "📊 An Audio-Trigger koppeln",
   "label_max_30_h": "⚠ Max 30/h",
   "tooltip_click_me_rapidly": "Klick mich schnell! 💗",
@@ -287,8 +270,7 @@ Audio wird automatisch über 60 Flashes/Stunde deaktiviert.",
   "tooltip_enable_disable_subliminal_messages": "Subliminale Nachrichten ein-/ausschalten",
   "tooltip_messages_shown_per_minute": "Angezeigte Nachrichten pro Minute",
   "label_per_min": "Pro Min",
-  "tooltip_display_duration_in_frames_lower_faster_flash": "Anzeigedauer in Frames.
-Niedriger = schnellerer Blitz, schwerer zu lesen.",
+  "tooltip_display_duration_in_frames_lower_faster_flash": "Anzeigedauer in Frames.\r\nNiedriger = schnellerer Blitz, schwerer zu lesen.",
   "label_frames": "Frames",
   "tooltip_text_visibility_lower_more_subtle": "Text-Sichtbarkeit. Niedriger = subtiler.",
   "tooltip_play_whispered_audio_when_subliminal_messages": "Geflüstertes Audio abspielen, wenn subliminale Nachrichten erscheinen.",
@@ -307,12 +289,9 @@ Niedriger = schnellerer Blitz, schwerer zu lesen.",
   "setting_auto_run": "Auto Start",
   "tooltip_start_minimized_to_system_tray": "Minimiert im System-Tray starten",
   "setting_start_hidden": "Versteckt starten",
-  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ GEFAHR: Deaktiviert die Panik-Taste vollständig!
-Du kannst dann nicht mehr Notfall-stoppen.
-Mit äußerster Vorsicht verwenden.",
+  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ GEFAHR: Deaktiviert die Panik-Taste vollständig!\r\nDu kannst dann nicht mehr Notfall-stoppen.\r\nMit äußerster Vorsicht verwenden.",
   "setting_no_panic": "⚠ Keine Panik",
-  "tooltip_disable_all_network_features_updates_ai_leade": "Alle Netzwerkfunktionen deaktivieren (Updates, KI, Bestenliste).
-App läuft komplett offline ohne externe Verbindungen.",
+  "tooltip_disable_all_network_features_updates_ai_leade": "Alle Netzwerkfunktionen deaktivieren (Updates, KI, Bestenliste).\r\nApp läuft komplett offline ohne externe Verbindungen.",
   "setting_offline_mode": "Offline-Modus",
   "tooltip_select_a_specific_video_to_play_on_startup_wh": "Wähle ein bestimmtes Video für den Start (wenn Vid Start aktiviert ist)",
   "label_startup_video": "Startvideo:",
@@ -320,8 +299,7 @@ App läuft komplett offline ohne externe Verbindungen.",
   "tooltip_browse_for_startup_video": "Startvideo durchsuchen",
   "tooltip_clear_selection_use_random": "Auswahl löschen (zufällig verwenden)",
   "label_use_borderless_windowed_for_overlays": "💡 Nutze randlosen Fenstermodus für Overlays",
-  "tooltip_exclusive_fullscreen_games_block_overlays_use": "Exklusive Vollbildspiele blockieren Overlays.
-Nutze stattdessen den randlosen Fenstermodus.",
+  "tooltip_exclusive_fullscreen_games_block_overlays_use": "Exklusive Vollbildspiele blockieren Overlays.\r\nNutze stattdessen den randlosen Fenstermodus.",
   "btn_escape": "🔑 Flucht",
   "tooltip_click_to_change_panic_key": "Klicke, um die Panik-Taste zu ändern",
   "section_browser": "🌐 Browser",
@@ -427,12 +405,9 @@ Nutze stattdessen den randlosen Fenstermodus.",
   "btn_save_2": "💾 Speichern",
   "btn_delete_2": "🗑 Löschen",
   "btn_start_session": "▶ Sitzung starten",
-  "tooltip_features_that_unlock_as_you_level_up_keep_con": "Funktionen, die mit steigendem Level freigeschaltet werden.
-Konditioniere weiter, um XP zu verdienen und neue Funktionen freizuschalten!",
+  "tooltip_features_that_unlock_as_you_level_up_keep_con": "Funktionen, die mit steigendem Level freigeschaltet werden.\r\nKonditioniere weiter, um XP zu verdienen und neue Funktionen freizuschalten!",
   "section_unlockables": "🎁 Freischaltbares",
-  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "Hypnotisches Spiral-Animations-Overlay.
-Bedeckt alle Bildschirme mit anpassbarer Deckkraft.
-Wird bei Level 10 freigeschaltet.",
+  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "Hypnotisches Spiral-Animations-Overlay.\r\nBedeckt alle Bildschirme mit anpassbarer Deckkraft.\r\nWird bei Level 10 freigeschaltet.",
   "label_spiral_overlay": "🌀 Spiral-Overlay",
   "label_lvl_10": "🔒 Lvl 10",
   "label_reach_level_10_to_unlock": "Erreiche Level 10 zum Freischalten",
@@ -451,17 +426,13 @@ Wird bei Level 10 freigeschaltet.",
   "tooltip_spiral_opacity_5_50": "Spiral-Deckkraft (5% - 50%)",
   "tooltip_choose_a_spiral_gif_animation": "Wähle eine Spiral-GIF-Animation",
   "label_if_you_have_display_problems_try_setting_your": "⚠ Bei Anzeigeproblemen versuche, die DPI-Skalierung deines Monitors auf die empfohlenen Einstellungen zu setzen",
-  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "Rosa Farbton-Overlay für alle Bildschirme.
-Dezent oder intensiv, du entscheidest!
-Wird bei Level 10 freigeschaltet.",
+  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "Rosa Farbton-Overlay für alle Bildschirme.\r\nDezent oder intensiv, du entscheidest!\r\nWird bei Level 10 freigeschaltet.",
   "label_pink_filter": "💗 Rosa-Filter",
   "tooltip_enable_disable_pink_tint_overlay": "Rosa-Farbton-Overlay ein-/ausschalten",
   "tooltip_apply_pink_color_filter_to_all_monitors": "Rosa-Farbfilter auf alle Monitore anwenden",
   "tooltip_pink_filter_intensity": "Rosa-Filter-Intensität",
   "tooltip_filter_opacity_5_50": "Filter-Deckkraft (5% - 50%)",
-  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "Platze schwebende Blasen, um XP zu verdienen!
-Lustiges Mini-Spiel, das regelmäßig erscheint.
-Wird bei Level 20 freigeschaltet.",
+  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "Platze schwebende Blasen, um XP zu verdienen!\r\nLustiges Mini-Spiel, das regelmäßig erscheint.\r\nWird bei Level 20 freigeschaltet.",
   "label_bubble_pop": "🫧 Blasen platzen",
   "label_lvl_20": "🔒 Lvl 20",
   "label_reach_level_20_to_unlock": "Erreiche Level 20 zum Freischalten",
@@ -472,9 +443,7 @@ Wird bei Level 20 freigeschaltet.",
   "setting_volume": "Lautstärke",
   "tooltip_volume_of_bubble_pop_sounds": "Lautstärke der Blasen-Platz-Geräusche",
   "tooltip_bubble_pop_sound_volume": "Blasen-Platz-Geräusch-Lautstärke",
-  "tooltip_screen_lock_that_requires_typing_phrases_rein": "Bildschirmsperre, die das Eintippen von Phrasen erfordert.
-Verstärkt Konditionierung durch Wiederholung.
-Wird bei Level 35 freigeschaltet.",
+  "tooltip_screen_lock_that_requires_typing_phrases_rein": "Bildschirmsperre, die das Eintippen von Phrasen erfordert.\r\nVerstärkt Konditionierung durch Wiederholung.\r\nWird bei Level 35 freigeschaltet.",
   "label_lock_card": "📐 Sperrkarte",
   "label_lvl_35": "🔒 Lvl 35",
   "label_reach_level_35_to_unlock": "Erreiche Level 35 zum Freischalten",
@@ -492,9 +461,7 @@ Wird bei Level 35 freigeschaltet.",
   "btn_manage_phrases": "📝 Phrasen verwalten",
   "tooltip_edit_phrases_that_must_be_typed": "Phrasen bearbeiten, die eingetippt werden müssen",
   "tooltip_customize_lock_card_colors": "Sperrkarten-Farben anpassen",
-  "tooltip_count_the_bubbles_challenge_memory_and_attent": "Blasen-Zähl-Herausforderung!
-Gedächtnis- und Aufmerksamkeitstest für Bonus-XP.
-Wird bei Level 50 freigeschaltet.",
+  "tooltip_count_the_bubbles_challenge_memory_and_attent": "Blasen-Zähl-Herausforderung!\r\nGedächtnis- und Aufmerksamkeitstest für Bonus-XP.\r\nWird bei Level 50 freigeschaltet.",
   "label_bubble_count": "🫧 Blasen zählen",
   "label_lvl_50": "🔒 Lvl 50",
   "label_reach_level_50_to_unlock": "Erreiche Level 50 zum Freischalten",
@@ -508,10 +475,7 @@ Wird bei Level 50 freigeschaltet.",
   "tooltip_prevent_closing_until_correctly_answered": "Schließen verhindern, bis richtig geantwortet wurde",
   "btn_test_now": "🎮 Jetzt testen",
   "tooltip_trigger_a_bubble_count_challenge_now": "Jetzt eine Blasen-Zähl-Herausforderung auslösen",
-  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "DVD-Bildschirmschoner-artiger hüpfender Text!
-Anpassbare Phrasen hüpfen über den Bildschirm.
-+25 XP pro Abprall (max 150 XP/Min).
-Wird bei Level 60 freigeschaltet.",
+  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "DVD-Bildschirmschoner-artiger hüpfender Text!\r\nAnpassbare Phrasen hüpfen über den Bildschirm.\r\n+25 XP pro Abprall (max 150 XP/Min).\r\nWird bei Level 60 freigeschaltet.",
   "label_bouncing_text": "📺 Hüpfender Text",
   "label_lvl_60": "🔒 Lvl 60",
   "label_reach_level_60_to_unlock": "Erreiche Level 60 zum Freischalten",
@@ -530,9 +494,7 @@ Wird bei Level 60 freigeschaltet.",
   "section_brain_drain": "💧 Brain Drain",
   "section_rework": "🔧 ÜBERARBEITUNG",
   "section_up_for_rework_this_feature_is_temporarily_dis": "WIRD ÜBERARBEITET - Diese Funktion ist vorübergehend deaktiviert, während wir die Leistung optimieren. Schau bei einem zukünftigen Update wieder vorbei!",
-  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "Zufällige Mind-Wipe-Audio-Effekte!
-Eskaliert in der Häufigkeit während Sitzungen.
-Wird bei Level 75 freigeschaltet.",
+  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "Zufällige Mind-Wipe-Audio-Effekte!\r\nEskaliert in der Häufigkeit während Sitzungen.\r\nWird bei Level 75 freigeschaltet.",
   "label_mind_wipe": "🧠 Mind Wipe",
   "label_lvl_75": "🔒 Lvl 75",
   "label_reach_level_75_to_unlock": "Erreiche Level 75 zum Freischalten",
