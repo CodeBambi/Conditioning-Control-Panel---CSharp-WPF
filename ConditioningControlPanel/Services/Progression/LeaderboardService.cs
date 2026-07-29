@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Newtonsoft.Json;
 
@@ -443,7 +444,248 @@ public class LeaderboardEntry
     /// Uses the total earnable achievement count from the Achievement model
     /// (parked/IsHidden achievements are excluded from the denominator).
     /// </summary>
-    public string AchievementsDisplay => $"{AchievementsCount} / {System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsHidden)}";
+    public string AchievementsDisplay => $"{AchievementsCount} / {AchievementsTotal}";
+
+    // ------------------------------------------------------------------
+    // Roster-UI display helpers (leaderboard redesign).
+    //
+    // Everything below is computed on the client and is deliberately
+    // [JsonIgnore]'d so it can never leak back into the wire contract. The
+    // fetch path in LeaderboardService is untouched by any of it.
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Denominator for the achievements column / progress bar. Mirrors
+    /// <see cref="AchievementsDisplay"/> so the bar and the text can't disagree.
+    /// </summary>
+    [JsonIgnore]
+    public int AchievementsTotal => System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsHidden);
+
+    /// <summary>
+    /// Discriminator for the roster's heterogeneous ItemsSource: real rows are
+    /// not tier bands. Lets a single ItemContainerStyle tell the two apart
+    /// without the DataTrigger throwing a binding error on the other type.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsBand => false;
+
+    /// <summary>
+    /// Set by the tab when the All-Time board is showing. All-Time re-points the
+    /// Level and XP columns at the cumulative fields, because the seasonal
+    /// <see cref="Level"/>/<see cref="Xp"/> are meaningless after a season reset.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsAllTimeView { get; set; }
+
+    /// <summary>Value shown in the Level column for the active board.</summary>
+    [JsonIgnore]
+    public int LevelColumnValue => IsAllTimeView ? HighestLevelEver : Level;
+
+    /// <summary>
+    /// Caption for <see cref="LevelColumnValue"/>. On the All-Time board the number is
+    /// <see cref="HighestLevelEver"/>, not a current standing, so calling it "Level" next to
+    /// an XP-ordered rank makes the board look mis-sorted. Display-only; mirrors the legend
+    /// header swap in LeaderboardTabView.ApplyModeLabels().
+    /// </summary>
+    [JsonIgnore]
+    public string LevelLabel => Localization.Loc.Get(IsAllTimeView ? "lb_col_peak" : "label_level");
+
+    /// <summary>Value shown in the XP column for the active board.</summary>
+    [JsonIgnore]
+    public string XpColumnDisplay => IsAllTimeView ? TotalXpEarnedDisplay : XpDisplay;
+
+    /// <summary>Raw XP for the active board (used for the "gap to next" line).</summary>
+    [JsonIgnore]
+    public long XpColumnValue => IsAllTimeView ? TotalXpEarned : Xp;
+
+    /// <summary>
+    /// Patron tier to badge with. The server ships tier 0 for some legacy
+    /// patrons, and the old badge column treated that as tier 1 — keep that.
+    /// </summary>
+    [JsonIgnore]
+    public int EffectivePatreonTier => PatreonTier > 0 ? PatreonTier : (IsPatreon ? 1 : 0);
+
+    [JsonIgnore]
+    public bool ShowPatreonChip => EffectivePatreonTier > 0;
+
+    /// <summary>Roman numeral suffix on the patron chip, so the chip text stays localizable.</summary>
+    [JsonIgnore]
+    public string PatreonTierRoman => EffectivePatreonTier switch { 3 => "III", 2 => "II", 1 => "I", _ => "" };
+
+    /// <summary>Seasons-completed chip — All-Time board only (replaces the old Seasons column).</summary>
+    [JsonIgnore]
+    public bool ShowSeasonsChip => IsAllTimeView && SeasonsCompleted > 0;
+
+    [JsonIgnore]
+    public string SeasonsChipText => SeasonsCompleted.ToString();
+
+    /// <summary>True when the row has nothing to put in the chip strip.</summary>
+    [JsonIgnore]
+    public bool HasNoBadges => !IsSeason0Og && !ShowPatreonChip && !HasDiscord && !ShowSeasonsChip;
+
+    /// <summary>1-2 uppercase initials for the generated avatar.</summary>
+    [JsonIgnore]
+    public string Initials => BuildInitials(DisplayName);
+
+    private Brush? _avatarBrush;
+
+    /// <summary>
+    /// Deterministic two-stop gradient for the initials avatar. The leaderboard
+    /// payload carries no avatar URL (only /user/lookup does, and 200 lookups per
+    /// refresh is not acceptable), so the circle is generated from a stable hash
+    /// of the display name: the same subject always gets the same colours.
+    /// </summary>
+    [JsonIgnore]
+    public Brush AvatarBrush => _avatarBrush ??= BuildAvatarBrush(DisplayName);
+
+    /// <summary>
+    /// Rank held at the previous snapshot, or null when the snapshot service has
+    /// nothing for this subject (a normal case — it stores the top 500 only).
+    /// Materialised eagerly by the tab BEFORE the snapshot is re-recorded; it is
+    /// never looked up lazily from a binding, because a virtualized row realises
+    /// after the re-record and would then always read a zero delta.
+    /// </summary>
+    [JsonIgnore]
+    public int? PreviousRank { get; private set; }
+
+    /// <summary>"up" | "down" | "same" | "new" | "none". Drives the arrow's colour.</summary>
+    [JsonIgnore]
+    public string DeltaState { get; private set; } = "none";
+
+    /// <summary>Pre-rendered arrow text ("▲2", "▼1", "–", or the NEW chip label).</summary>
+    [JsonIgnore]
+    public string DeltaText { get; private set; } = "–";
+
+    /// <summary>
+    /// Bake the rank delta into the row. <paramref name="known"/> is false when we
+    /// had no unified id to look up at all, which renders as a muted dash rather
+    /// than falsely claiming the subject is new to the board.
+    /// </summary>
+    public void ApplyRankDelta(int? previousRank, bool known)
+    {
+        PreviousRank = previousRank;
+
+        if (!known)
+        {
+            DeltaState = "none";
+            DeltaText = "–";
+            return;
+        }
+
+        if (previousRank is not > 0)
+        {
+            DeltaState = "new";
+            DeltaText = SafeLoc("lb_delta_new", "NEW");
+            return;
+        }
+
+        var moved = previousRank.Value - Rank;
+        if (moved > 0) { DeltaState = "up"; DeltaText = "▲" + moved; }
+        else if (moved < 0) { DeltaState = "down"; DeltaText = "▼" + (-moved); }
+        else { DeltaState = "same"; DeltaText = "–"; }
+    }
+
+    private static string SafeLoc(string key, string fallback)
+    {
+        try
+        {
+            var s = ConditioningControlPanel.Localization.Loc.Get(key);
+            return string.IsNullOrEmpty(s) || s == key ? fallback : s;
+        }
+        catch { return fallback; }
+    }
+
+    /// <summary>1-2 uppercase initials from a display name. "?" when there's nothing usable.</summary>
+    public static string BuildInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+
+        var parts = name.Split(new[] { ' ', '_', '-', '.', '|' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+        {
+            var a = FirstLetterOrDigit(parts[0]);
+            var b = FirstLetterOrDigit(parts[1]);
+            if (a != '\0' && b != '\0') return string.Concat(char.ToUpperInvariant(a), char.ToUpperInvariant(b));
+        }
+
+        var trimmed = name.Trim();
+        var chars = new List<char>(2);
+        foreach (var c in trimmed)
+        {
+            if (!char.IsLetterOrDigit(c)) continue;
+            chars.Add(char.ToUpperInvariant(c));
+            if (chars.Count == 2) break;
+        }
+        return chars.Count > 0 ? new string(chars.ToArray()) : "?";
+    }
+
+    private static char FirstLetterOrDigit(string s)
+    {
+        foreach (var c in s) if (char.IsLetterOrDigit(c)) return c;
+        return '\0';
+    }
+
+    /// <summary>
+    /// Frozen two-stop gradient derived from a stable hash of the name. Hues are
+    /// clamped to 200-345 deg (blue - indigo - violet - magenta - pink) so the
+    /// generated avatars stay inside the app's palette instead of turning the
+    /// roster into a rainbow.
+    /// </summary>
+    public static Brush BuildAvatarBrush(string? name)
+    {
+        var hash = StableHash(name ?? "");
+        var hue = 200.0 + (hash % 146);              // 200 .. 345
+        var hue2 = hue - 14.0; if (hue2 < 195.0) hue2 += 150.0;
+
+        var top = FromHsl(hue, 0.70, 0.70);
+        var bottom = FromHsl(hue2, 0.52, 0.40);
+
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new System.Windows.Point(0.15, 0),
+            EndPoint = new System.Windows.Point(0.85, 1)
+        };
+        brush.GradientStops.Add(new GradientStop(top, 0));
+        brush.GradientStops.Add(new GradientStop(bottom, 1));
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>FNV-1a over the lower-cased name — stable across runs and machines.</summary>
+    private static uint StableHash(string s)
+    {
+        unchecked
+        {
+            uint h = 2166136261;
+            foreach (var c in s)
+            {
+                h ^= char.ToLowerInvariant(c);
+                h *= 16777619;
+            }
+            return h;
+        }
+    }
+
+    private static Color FromHsl(double h, double s, double l)
+    {
+        h = ((h % 360) + 360) % 360;
+        var c = (1 - Math.Abs(2 * l - 1)) * s;
+        var x = c * (1 - Math.Abs((h / 60.0) % 2 - 1));
+        var m = l - c / 2;
+
+        double r, g, b;
+        if (h < 60) { r = c; g = x; b = 0; }
+        else if (h < 120) { r = x; g = c; b = 0; }
+        else if (h < 180) { r = 0; g = c; b = x; }
+        else if (h < 240) { r = 0; g = x; b = c; }
+        else if (h < 300) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+
+        return Color.FromRgb(
+            (byte)Math.Round(Math.Clamp((r + m) * 255, 0, 255)),
+            (byte)Math.Round(Math.Clamp((g + m) * 255, 0, 255)),
+            (byte)Math.Round(Math.Clamp((b + m) * 255, 0, 255)));
+    }
 }
 
 /// <summary>
