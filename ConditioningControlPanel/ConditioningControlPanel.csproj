@@ -317,6 +317,11 @@
   <ItemGroup>
     <!-- Feature images - embedded as Resource for pack:// URIs to work -->
     <Resource Include="Resources\features\*.png" />
+
+    <!-- Training Programs art: day mood plates and program sigils.
+         SINGLE LEVEL on purpose - a Resources\programs\<sub>\ folder would compile fine and then
+         fail at runtime with a broken pack:// URI, because nothing here globs recursively. -->
+    <Resource Include="Resources\programs\*.png" />
   </ItemGroup>
 
   <ItemGroup>

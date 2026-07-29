@@ -40,7 +40,7 @@ namespace ConditioningControlPanel.Views.Tabs
         public double CardOpacity { get; set; } = 1.0;
     }
 
-    /// <summary>One square on the whole-program day strip.</summary>
+    /// <summary>One node on the whole-program reward track.</summary>
     public class ProgramDayPip
     {
         public int DayIndex { get; set; }
@@ -53,6 +53,23 @@ namespace ConditioningControlPanel.Views.Tabs
         public Brush LabelBrush { get; set; } = Brushes.Gray;
         public double PipOpacity { get; set; } = 1.0;
         public FontWeight LabelWeight { get; set; } = FontWeights.Normal;
+
+        /// <summary>Node diameter. Today is the largest, done days middle, future days smallest.</summary>
+        public double NodeSize { get; set; } = 30;
+        public double LabelSize { get; set; } = 11;
+
+        /// <summary>
+        /// Today's node only. Read once by the template's DataTrigger to start the breathing-glow
+        /// storyboard - the carrier never changes after build, so the trigger can never re-fire.
+        /// </summary>
+        public bool IsCurrent { get; set; }
+        public Brush GlowBrush { get; set; } = Brushes.Transparent;
+        public Visibility GlowVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>Milestone treatment: boss crown / reward gift under the node.</summary>
+        public string RewardGlyph { get; set; } = "";
+        public Visibility RewardVisibility { get; set; } = Visibility.Collapsed;
+        public string RewardTip { get; set; } = "";
     }
 
     /// <summary>One task row inside today's panel.</summary>
@@ -64,8 +81,46 @@ namespace ConditioningControlPanel.Views.Tabs
         public string StatusGlyph { get; set; } = "";
         public Brush StatusBrush { get; set; } = Brushes.Gray;
 
+        /// <summary>
+        /// The app's own product icon for whatever this task is verified by (Resources/features/*).
+        /// Resolved in code-behind like every other value here, so the template never touches the
+        /// runtime. Deliberately full-colour: this is the same iconography the Dashboard shows
+        /// under every mod. Null for tasks with no feature behind them - rituals, ambient work -
+        /// in which case <see cref="IconVisibility"/> collapses it and the status glyph carries the
+        /// row on its own.
+        /// </summary>
+        public ImageSource? Icon { get; set; }
+        public Visibility IconVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>Inverse of <see cref="IconVisibility"/>: the glyph carries the icon slot alone.</summary>
+        public Visibility GlyphVisibility { get; set; } = Visibility.Visible;
+
         public string ProgressText { get; set; } = "";
-        public Visibility ProgressVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>Counted tasks (TargetValue > 1) show the mini progress bar; others collapse it.</summary>
+        public Visibility BarVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>
+        /// Star widths for the mini bar's filled/remaining columns. Pre-computed GridLengths like
+        /// every other value here - the template binds ColumnDefinition.Width straight to them.
+        /// </summary>
+        public GridLength ProgressStar { get; set; } = new GridLength(0, GridUnitType.Star);
+        public GridLength RemainderStar { get; set; } = new GridLength(1, GridUnitType.Star);
+
+        /// <summary>Mini bar fill - the program accent, resolved in code.</summary>
+        public Brush AccentBrush { get; set; } = Brushes.Gray;
+
+        /// <summary>Accent when the task is done, the plain glass border otherwise.</summary>
+        public Brush CardBorderBrush { get; set; } = Brushes.Transparent;
+
+        /// <summary>The ✓ chip in the card's top-right corner.</summary>
+        public Visibility DoneChipVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>
+        /// True only on the rebuild immediately after the task flipped to complete (the code-behind
+        /// diffs against a seen-incomplete set), so the template's pop storyboard fires exactly once.
+        /// </summary>
+        public bool JustCompleted { get; set; }
 
         public string BadgeText { get; set; } = "";
         public Visibility BadgeVisibility { get; set; } = Visibility.Collapsed;

@@ -55,5 +55,19 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnProgramDismissGraduated_Click(sender, e);
         }
+
+        /// <summary>
+        /// Keeps the session bar's clip a rounded rect at its live size. Border.ClipToBounds clips
+        /// to the layout RECTANGLE, not the corner radius, so without this the sweeping sheen would
+        /// poke square corners past the bar's rounded ends. Pure view concern, so it lives here.
+        /// </summary>
+        private void SessionBarHost_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Border host && host.ActualWidth > 0 && host.ActualHeight > 0)
+            {
+                host.Clip = new System.Windows.Media.RectangleGeometry(
+                    new Rect(0, 0, host.ActualWidth, host.ActualHeight), 8, 8);
+            }
+        }
     }
 }

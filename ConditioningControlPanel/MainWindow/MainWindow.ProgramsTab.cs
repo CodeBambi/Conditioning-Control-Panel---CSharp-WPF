@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Program;
 using ConditioningControlPanel.Views.Tabs;
@@ -100,6 +101,113 @@ namespace ConditioningControlPanel
 
         private static bool ProgramHasPremium => App.Patreon?.HasPremiumAccess == true;
 
+        /// <summary>
+        /// Horizontal accent wash for the rail's completed segment. Derived from the program accent
+        /// rather than a theme colour so it can never clash with a mod, and gradient-only so the
+        /// rail has depth without a decorative image strip behind it.
+        /// </summary>
+        private static Brush ProgramRailFillBrush(Brush accent)
+        {
+            try
+            {
+                if (accent is SolidColorBrush solid)
+                {
+                    var color = solid.Color;
+                    var faded = Color.FromArgb((byte)(color.A * 0.40), color.R, color.G, color.B);
+                    var gradient = new LinearGradientBrush(faded, color, 0);
+                    gradient.Freeze();
+                    return gradient;
+                }
+            }
+            catch { /* a gradient failing must never break the rail */ }
+
+            return accent;
+        }
+
+        /// <summary>
+        /// Frozen radial glow derived from the program accent - the sigil halo, the breathing node
+        /// halo and the hero band's ambient wash all come from here so they can never clash with a
+        /// mod. Alpha and centre vary per use; the brush is frozen, so building one per refresh is
+        /// free.
+        /// </summary>
+        private static Brush ProgramRadialGlowBrush(Brush accent, byte alpha,
+                                                    double centerX = 0.5, double centerY = 0.5,
+                                                    double radius = 0.75)
+        {
+            try
+            {
+                if (accent is SolidColorBrush solid)
+                {
+                    var c = solid.Color;
+                    var brush = new RadialGradientBrush(
+                        Color.FromArgb(alpha, c.R, c.G, c.B),
+                        Color.FromArgb(0, c.R, c.G, c.B))
+                    {
+                        Center = new Point(centerX, centerY),
+                        GradientOrigin = new Point(centerX, centerY),
+                        RadiusX = radius,
+                        RadiusY = radius
+                    };
+                    brush.Freeze();
+                    return brush;
+                }
+            }
+            catch { /* a glow failing must never break the tab */ }
+
+            return Brushes.Transparent;
+        }
+
+        /// <summary>
+        /// Points a tinted-art Rectangle at an image.
+        ///
+        /// The art ships as white RGB with the luminance in the ALPHA channel, so the Rectangle is
+        /// filled with the program accent and the image is used as its OPACITY MASK: bright source
+        /// becomes full accent, dark source becomes fully transparent. The alternative - a
+        /// translucent accent laid over opaque greyscale - lifts the blacks to half-accent and gives
+        /// the washed-out "failed tint" look. Do not swap it back.
+        ///
+        /// The declared XAML brush is reused when it is still writable; if WPF ever hands one back
+        /// frozen, a fresh frozen brush is swapped in instead, so this can never throw at paint time.
+        /// </summary>
+        private static void ApplyProgramArtMask(System.Windows.Shapes.Rectangle target,
+                                                ImageBrush declared, ImageSource image,
+                                                Stretch stretch = Stretch.Uniform)
+        {
+            if (!declared.IsFrozen && ReferenceEquals(target.OpacityMask, declared))
+            {
+                declared.ImageSource = image;
+                declared.Stretch = stretch;
+                return;
+            }
+
+            var fresh = new ImageBrush(image) { Stretch = stretch };
+            fresh.Freeze();
+            target.OpacityMask = fresh;
+        }
+
+        /// <summary>
+        /// The app's own feature icon for a task, keyed off the signal that verifies it.
+        /// Rituals and anything without a mapped verifier return null and the row keeps its glyph
+        /// alone. These stay FULL-COLOUR: it is the same product iconography the Dashboard shows
+        /// under every mod, so a tinted copy here would read as a different, lesser set.
+        /// </summary>
+        private static string? ProgramTaskIconPath(ProgramTask task)
+        {
+            if (task.Kind != ProgramTaskKind.AutoVerified || task.Verifier == null) return null;
+
+            return task.Verifier switch
+            {
+                Models.QuestCategory.Bubbles => "features/Bubble_pop.png",
+                Models.QuestCategory.LockCard => "features/Phrase_Lock.png",
+                Models.QuestCategory.Video => "features/mandatory_videos.png",
+                Models.QuestCategory.BubbleCount => "features/Bubble_count.png",
+                Models.QuestCategory.PinkFilter => "features/Pink_filter.png",
+                Models.QuestCategory.Flash => "features/flash.png",
+                Models.QuestCategory.Spiral => "features/spiral_overlay.png",
+                _ => null
+            };
+        }
+
         // -----------------------------------------------------------------------------------
         // Refresh
         // -----------------------------------------------------------------------------------
@@ -112,6 +220,12 @@ namespace ConditioningControlPanel
 
                 var tab = ProgramsTab;
                 if (tab == null) return;
+
+                EnsureProgramsFxHooked(tab);
+
+                // Remember whether the run view was already on screen: the entrance animation
+                // plays on its first reveal only, never on the once-a-second event refreshes.
+                var runWasVisible = tab.ProgramsRunPanel.Visibility == Visibility.Visible;
 
                 tab.ProgramsBrowsePanel.Visibility = Visibility.Collapsed;
                 tab.ProgramsRunPanel.Visibility = Visibility.Collapsed;
@@ -145,6 +259,7 @@ namespace ConditioningControlPanel
                         default:
                             BuildProgramRunPanel(program, enrollment);
                             tab.ProgramsRunPanel.Visibility = Visibility.Visible;
+                            if (!runWasVisible && tab.IsVisible) StartProgramRunEntrance(tab);
                             break;
                     }
                 }
@@ -242,7 +357,28 @@ namespace ConditioningControlPanel
             var accent = ProgramAccentBrush(program.AccentColor);
             var chapter = svc?.TodayChapter;
 
+            // Identity slot. The sigil is the accent masked by white-RGB/alpha art, so it can only
+            // ever be the program's own colour; with no art at all the original 4px bar comes back
+            // and the header is plainer, never broken.
             tab.RunAccentBar.Background = accent;
+
+            var sigil = Services.Program.ProgramArt.Sigil(program);
+            if (sigil != null)
+            {
+                ApplyProgramArtMask(tab.RunSigil, tab.RunSigilMask, sigil);
+                tab.RunSigil.Fill = accent;
+                tab.RunSigilGlow.Fill = ProgramRadialGlowBrush(accent, 150);
+                tab.RunSigilHost.Visibility = Visibility.Visible;
+                tab.RunSigilGlow.Visibility = Visibility.Visible;
+                tab.RunAccentBar.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                tab.RunSigilHost.Visibility = Visibility.Collapsed;
+                tab.RunSigilGlow.Visibility = Visibility.Collapsed;
+                tab.RunAccentBar.Visibility = Visibility.Visible;
+            }
+
             tab.TxtRunProgramTitle.Text = program.Title;
             tab.TxtRunChapterName.Text = chapter?.Name ?? program.Subtitle;
             tab.TxtRunChapterName.Foreground = accent;
@@ -260,9 +396,25 @@ namespace ConditioningControlPanel
                 tab.RunAttemptBadge.Visibility = Visibility.Collapsed;
             }
 
-            tab.TxtRunDaysOff.Text = enrollment.DaysOffRemaining > 0
-                ? Loc.GetF("programs_days_off_left", enrollment.DaysOffRemaining)
-                : Loc.Get("programs_days_off_none");
+            // Season stats. Plain numbers on purpose - the captions are localised, the values are
+            // digits, so nothing here goes stale on a language change.
+            tab.TxtRunStatDone.Text = $"{enrollment.CompletedDayCount} / {program.LengthDays}";
+            tab.TxtRunStatPerfect.Text = enrollment.PerfectDayCount.ToString();
+            tab.TxtRunStatDaysOff.Text = enrollment.DaysOffRemaining.ToString();
+
+            // Chapter reward chip at the end of the track - the season's carrot. Authored text,
+            // trimmed with an ellipsis in XAML, full text on the tooltip.
+            var chapterReward = chapter?.RewardDescription;
+            if (!string.IsNullOrWhiteSpace(chapterReward))
+            {
+                tab.TxtRunChapterReward.Text = chapterReward;
+                tab.RunChapterRewardChip.ToolTip = chapterReward;
+                tab.RunChapterRewardChip.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                tab.RunChapterRewardChip.Visibility = Visibility.Collapsed;
+            }
 
             var paused = enrollment.State == ProgramEnrollmentState.Paused;
             tab.RunPausedNote.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
@@ -282,34 +434,63 @@ namespace ConditioningControlPanel
 
             var pips = new List<ProgramDayPip>(Math.Max(0, program.LengthDays));
 
+            // One snapshot of the day objects: GetDay walks AllDays per call, and milestone
+            // dressing needs a lookup per node.
+            var daysByIndex = program.AllDays.ToDictionary(d => d.DayIndex);
+            var glowBrush = ProgramRadialGlowBrush(accent, 170);
+
             for (int i = 1; i <= program.LengthDays; i++)
             {
                 var record = enrollment.GetRecord(i);
+                var day = daysByIndex.GetValueOrDefault(i);
                 var pip = new ProgramDayPip { DayIndex = i, Label = i.ToString() };
 
+                // Milestone days (boss / an authored reward) read bigger and carry a glyph under
+                // the node - the reward-track treatment that makes the rail worth looking at.
+                var isMilestone = day != null && (day.IsBoss || !string.IsNullOrWhiteSpace(day.RewardDescription));
+                if (isMilestone)
+                {
+                    pip.RewardGlyph = day!.IsBoss ? "👑" : "🎁";
+                    pip.RewardVisibility = Visibility.Visible;
+                    pip.RewardTip = !string.IsNullOrWhiteSpace(day.RewardDescription)
+                        ? day.RewardDescription!
+                        : Loc.Get("programs_boss_badge");
+                }
+
+                string tip;
                 if (i == enrollment.CurrentDay)
                 {
                     pip.Fill = Brushes.Transparent;
                     pip.Stroke = accent;
-                    pip.PipBorderThickness = new Thickness(2);
+                    pip.PipBorderThickness = new Thickness(2.5);
                     pip.LabelBrush = accent;
                     pip.LabelWeight = FontWeights.Bold;
-                    pip.Tip = Loc.GetF("programs_pip_today", i);
+                    pip.NodeSize = 42;
+                    pip.LabelSize = 15;
+                    pip.IsCurrent = true;
+                    pip.GlowBrush = glowBrush;
+                    pip.GlowVisibility = Visibility.Visible;
+                    tip = Loc.GetF("programs_pip_today", i);
                 }
                 else if (record?.DayCompleted == true)
                 {
                     pip.Fill = accent;
                     pip.Stroke = accent;
+                    pip.Label = "✓";
                     pip.LabelBrush = lightBrush;
-                    pip.LabelWeight = FontWeights.SemiBold;
-                    pip.Tip = Loc.GetF("programs_pip_done", i);
+                    pip.LabelWeight = FontWeights.Bold;
+                    pip.NodeSize = 32;
+                    pip.LabelSize = 13;
+                    tip = Loc.GetF("programs_pip_done", i);
                 }
                 else if (record?.Missed == true)
                 {
                     pip.Fill = Brushes.Transparent;
                     pip.Stroke = dangerBrush;
+                    pip.Label = "✕";
                     pip.LabelBrush = dangerBrush;
-                    pip.Tip = Loc.GetF("programs_pip_missed", i);
+                    pip.NodeSize = 32;
+                    tip = Loc.GetF("programs_pip_missed", i);
                 }
                 else
                 {
@@ -317,13 +498,46 @@ namespace ConditioningControlPanel
                     pip.Stroke = borderBrush;
                     pip.LabelBrush = mutedBrush;
                     pip.PipOpacity = 0.65;
-                    pip.Tip = Loc.GetF("programs_pip_locked", i);
+                    tip = Loc.GetF("programs_pip_locked", i);
                 }
+
+                if (isMilestone) pip.NodeSize += 6;
+
+                // The day's title on every tooltip: hovering the track reads as a table of
+                // contents, which is most of what a reward track is for.
+                pip.Tip = day != null && !string.IsNullOrWhiteSpace(day.Title) ? $"{tip} · {day.Title}" : tip;
 
                 pips.Add(pip);
             }
 
-            ProgramsTab.ProgramDayStrip.ItemsSource = pips;
+            var tab = ProgramsTab;
+            tab.ProgramDayStrip.ItemsSource = pips;
+
+            // A short program stays a rail of a sensible length; only a long one earns the full
+            // width of the panel. Stretching seven nodes across 1700px is the huddle problem in
+            // reverse. This drives the capped star COLUMN, not the rail: setting MaxWidth on a
+            // left-aligned rail does nothing, because the rail then sizes to its own content.
+            if (program.LengthDays <= 14)
+            {
+                tab.RailWidthColumn.MaxWidth = 840;
+                tab.RailSpacerColumn.Width = new GridLength(1, GridUnitType.Star);
+            }
+            else
+            {
+                tab.RailWidthColumn.MaxWidth = double.PositiveInfinity;
+                tab.RailSpacerColumn.Width = new GridLength(0);
+            }
+
+            // The UniformGrid centres node i in cell i, so node i's centre sits at (i - 0.5)/N of
+            // the rail. Sizing the done segment in those same star units lands the track's fill
+            // exactly under today's node at any program length.
+            var totalDays = Math.Max(1, program.LengthDays);
+            var doneUnits = Math.Clamp(enrollment.CurrentDay, 0, totalDays) - 0.5;
+            if (doneUnits < 0) doneUnits = 0;
+
+            tab.RailDoneColumn.Width = new GridLength(doneUnits, GridUnitType.Star);
+            tab.RailRestColumn.Width = new GridLength(Math.Max(0.0001, totalDays - doneUnits), GridUnitType.Star);
+            tab.RailProgressFill.Background = ProgramRailFillBrush(accent);
         }
 
         private void BuildProgramTodayPanel(ProgramDefinition program, ProgramEnrollment enrollment, Brush accent)
@@ -351,9 +565,53 @@ namespace ConditioningControlPanel
             tab.TodayBossBadge.Visibility = day.IsBoss ? Visibility.Visible : Visibility.Collapsed;
             tab.TodayReturnBadge.Visibility = record.IsReturnDay ? Visibility.Visible : Visibility.Collapsed;
 
+            // Hero band. The wide art is keyed on the day's session-template archetype, so four
+            // heroes dress every program length; it is cropped by UniformToFill and faded into the
+            // panel by the host's gradient OpacityMask. Missing art zeroes the column - a star
+            // column would keep reserving empty space - and the copy takes the whole band.
+            var hero = Services.Program.ProgramArt.DayHero(program, day);
+            if (hero != null)
+            {
+                ApplyProgramArtMask(tab.RunHeroPlate, tab.RunHeroMask, hero, Stretch.UniformToFill);
+                tab.RunHeroPlate.Fill = accent;
+                tab.RunHeroHost.Visibility = Visibility.Visible;
+                tab.HeroArtColumn.Width = new GridLength(2, GridUnitType.Star);
+            }
+            else
+            {
+                tab.RunHeroHost.Visibility = Visibility.Collapsed;
+                tab.HeroArtColumn.Width = new GridLength(0);
+            }
+
+            // Ambient accent wash behind the whole band - present with or without art, so the
+            // panel never reverts to a flat sheet of surface colour.
+            tab.TodayHeroGlow.Fill = ProgramRadialGlowBrush(accent, 70, 0.78, 0.2, 0.9);
+
             tab.TxtTodayTitle.Text = day.Title;
             tab.TxtTodayBlurb.Text = day.Blurb;
+
+            // Today's reward chip (boss days mostly - authored per day).
+            if (!string.IsNullOrWhiteSpace(day.RewardDescription))
+            {
+                tab.TxtTodayReward.Text = day.RewardDescription;
+                tab.TodayRewardChip.ToolTip = day.RewardDescription;
+                tab.TodayRewardChip.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                tab.TodayRewardChip.Visibility = Visibility.Collapsed;
+            }
+
             tab.TodayCompleteBanner.Visibility = record.DayCompleted ? Visibility.Visible : Visibility.Collapsed;
+
+            // Pop the banner once per day, the moment the day flips to done. The field remembers
+            // the popped day even when the tab is hidden, so backgrounded completions don't replay
+            // the pop on the next visit - they just show the banner already settled.
+            if (record.DayCompleted && _programDayCompletePopped != enrollment.CurrentDay)
+            {
+                _programDayCompletePopped = enrollment.CurrentDay;
+                if (tab.IsVisible) PopProgramScale(tab.TodayCompleteBannerScale);
+            }
 
             // --- Session slot ---
             // Glyph / button / progress strip all live in UpdateProgramSessionRow so the
@@ -386,6 +644,7 @@ namespace ConditioningControlPanel
             // --- Tasks ---
             var items = new List<ProgramTaskItem>();
             var hasRitual = false;
+            var glassBrush = ProgramThemeBrush("GlassBorderBrush", Brushes.Gray);
 
             foreach (var task in day.Tasks)
             {
@@ -401,15 +660,48 @@ namespace ConditioningControlPanel
                     StatusGlyph = complete ? "✓" : "○",
                     StatusBrush = complete ? accent : mutedBrush,
                     TextBrush = complete ? mutedBrush : lightBrush,
-                    RowOpacity = blocked ? 0.5 : 1.0
+                    RowOpacity = blocked ? 0.5 : 1.0,
+                    AccentBrush = accent,
+                    CardBorderBrush = complete ? accent : glassBrush,
+                    DoneChipVisibility = complete ? Visibility.Visible : Visibility.Collapsed
                 };
 
-                if (!complete && task.Kind == ProgramTaskKind.AutoVerified && task.TargetValue > 1)
+                // One-shot completion pop: JustCompleted is set only when this exact task was seen
+                // incomplete on a previous build of this same day. The very first paint of an
+                // already-done day therefore renders settled, not celebrating.
+                var seenKey = $"{enrollment.CurrentDay}:{task.Id}";
+                if (complete)
+                {
+                    if (_programTasksSeenIncomplete.Remove(seenKey)) item.JustCompleted = true;
+                }
+                else
+                {
+                    _programTasksSeenIncomplete.Add(seenKey);
+                }
+
+                // Resolved here, not in a binding: the carriers hold finished values only.
+                var iconPath = ProgramTaskIconPath(task);
+                if (iconPath != null)
+                {
+                    var icon = Services.ModResourceResolver.ResolveImage(iconPath);
+                    if (icon != null)
+                    {
+                        item.Icon = icon;
+                        item.IconVisibility = Visibility.Visible;
+                        item.GlyphVisibility = Visibility.Collapsed;
+                    }
+                }
+
+                // Counted tasks get the mini bar, full and accent even when done ("20 / 20" reads
+                // as a claimed quest, an empty slot reads as a bug).
+                if (task.Kind == ProgramTaskKind.AutoVerified && task.TargetValue > 1)
                 {
                     record.TaskProgress.TryGetValue(task.Id, out var current);
-                    item.ProgressText = Loc.GetF("programs_task_progress",
-                        Math.Min(current, task.TargetValue), task.TargetValue);
-                    item.ProgressVisibility = Visibility.Visible;
+                    var shown = complete ? task.TargetValue : Math.Min(current, task.TargetValue);
+                    item.ProgressText = Loc.GetF("programs_task_progress", shown, task.TargetValue);
+                    item.ProgressStar = new GridLength(Math.Max(0, shown), GridUnitType.Star);
+                    item.RemainderStar = new GridLength(Math.Max(0.0001, task.TargetValue - shown), GridUnitType.Star);
+                    item.BarVisibility = Visibility.Visible;
                 }
 
                 if (blocked)
@@ -484,6 +776,8 @@ namespace ConditioningControlPanel
                 if (svc == null || enrollment == null || record == null)
                 {
                     tab.TodaySessionProgressRow.Visibility = Visibility.Collapsed;
+                    tab.TxtTodaySessionProgress.Visibility = Visibility.Collapsed;
+                    StopProgramSessionSheen();
                     return;
                 }
 
@@ -510,8 +804,16 @@ namespace ConditioningControlPanel
                     tab.TxtTodaySessionProgress.Text = engine.IsPaused
                         ? Loc.GetF("programs_session_progress_paused", clock)
                         : clock;
+                    tab.TxtTodaySessionProgress.Foreground = accent;
+                    tab.TxtTodaySessionProgress.Visibility = Visibility.Visible;
 
                     tab.TodaySessionProgressRow.Visibility = Visibility.Visible;
+
+                    // The sheen sweep runs only while the bar is actually on screen. Tick-driven
+                    // on purpose: on the first visible tick the bar may not be measured yet, and
+                    // the next 1s tick simply retries.
+                    if (tab.IsVisible && !engine.IsPaused) EnsureProgramSessionSheen(tab);
+                    else StopProgramSessionSheen();
 
                     tab.TxtTodaySessionGlyph.Text = "◉";
                     tab.TxtTodaySessionGlyph.Foreground = accent;
@@ -527,8 +829,10 @@ namespace ConditioningControlPanel
 
                 // Nothing of ours in flight - hide the strip and fall back to the slot states.
                 tab.TodaySessionProgressRow.Visibility = Visibility.Collapsed;
+                tab.TxtTodaySessionProgress.Visibility = Visibility.Collapsed;
                 tab.TodaySessionProgressBar.Value = 0;
                 tab.BtnStartTodaySession.ToolTip = null;
+                StopProgramSessionSheen();
 
                 if (record.SessionCompleted)
                 {
@@ -559,6 +863,187 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "UpdateProgramSessionRow failed");
             }
+        }
+
+        // -----------------------------------------------------------------------------------
+        // Run-view FX
+        //
+        // Everything here is opacity / translate / scale on plain named elements - no bitmap
+        // effects, no per-frame CPU raster. The only continuous loop owned by this code is the
+        // session-bar sheen, and it is explicitly stopped whenever the tab is hidden or nothing
+        // of ours is running (the breathing today-node glow lives in a DataTemplate storyboard
+        // and dies with its item container on every rebuild). All of it is decoration: every
+        // method may fail without consequence, so everything is wrapped and logged at Warning.
+        // -----------------------------------------------------------------------------------
+
+        /// <summary>One-shot guard for the tab visibility hook (the tab outlives every refresh).</summary>
+        private bool _programsFxHooked;
+
+        /// <summary>True while the session-bar sheen loop is running.</summary>
+        private bool _programSheenActive;
+
+        /// <summary>Day index whose day-complete banner pop has already played (or been skipped).</summary>
+        private int _programDayCompletePopped = -1;
+
+        /// <summary>
+        /// "{dayIndex}:{taskId}" for every task that has been BUILT incomplete. A task found
+        /// complete while its key is in here has just flipped, which is the only moment the task
+        /// card's pop storyboard is allowed to fire.
+        /// </summary>
+        private readonly HashSet<string> _programTasksSeenIncomplete = new();
+
+        private void EnsureProgramsFxHooked(ProgramsTabView tab)
+        {
+            if (_programsFxHooked) return;
+            tab.IsVisibleChanged += OnProgramsTabVisibleChanged;
+            _programsFxHooked = true;
+        }
+
+        /// <summary>
+        /// The FX lifecycle rides the tab's own visibility (ShowTab collapses every other tab), so
+        /// no TabNavigation wiring is needed: hidden stops the sheen loop, visible replays the
+        /// entrance and re-arms the sheen via the session row repaint.
+        /// </summary>
+        private void OnProgramsTabVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            try
+            {
+                var tab = ProgramsTab;
+                if (tab == null) return;
+
+                if (!tab.IsVisible)
+                {
+                    StopProgramSessionSheen();
+                    return;
+                }
+
+                if (tab.ProgramsRunPanel.Visibility == Visibility.Visible) StartProgramRunEntrance(tab);
+
+                // Re-evaluate the sheen after layout has produced a real bar width - straight away
+                // the host still measures 0 and the start would be skipped.
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher != null && !dispatcher.HasShutdownStarted)
+                {
+                    dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,
+                        new Action(UpdateProgramSessionRow));
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Programs tab FX visibility hook failed");
+            }
+        }
+
+        /// <summary>
+        /// Entrance for the run view: header and hero band fade/slide in with a slight stagger and
+        /// the rail's done-segment grows into today's node. Plays on tab entry and on the run
+        /// view's first reveal - never on the once-a-second refreshes (see RefreshProgramsUI).
+        /// </summary>
+        private void StartProgramRunEntrance(ProgramsTabView tab)
+        {
+            try
+            {
+                AnimateProgramPanelIn(tab.RunHeaderPanel, 0);
+                AnimateProgramPanelIn(tab.TodayPanel, 90);
+
+                var grow = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(550))
+                {
+                    BeginTime = TimeSpan.FromMilliseconds(150),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                };
+                tab.RailFillScale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Program run entrance failed");
+            }
+        }
+
+        /// <summary>Fade + 14px slide-up on a panel. On any failure the panel is left fully shown.</summary>
+        private static void AnimateProgramPanelIn(FrameworkElement panel, int delayMs)
+        {
+            try
+            {
+                var slideTransform = new System.Windows.Media.TranslateTransform(0, 14);
+                panel.RenderTransform = slideTransform;
+
+                var fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300))
+                {
+                    BeginTime = TimeSpan.FromMilliseconds(delayMs),
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                panel.BeginAnimation(UIElement.OpacityProperty, fade);
+
+                var slide = new DoubleAnimation(14, 0, TimeSpan.FromMilliseconds(340))
+                {
+                    BeginTime = TimeSpan.FromMilliseconds(delayMs),
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                slideTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slide);
+            }
+            catch
+            {
+                // Decoration only - make sure the panel is visible and move on.
+                try { panel.Opacity = 1; panel.RenderTransform = null; } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Starts the sheen sweeping the live session bar. Skipped (and retried by the next engine
+        /// tick) until the bar has a real width, because the sweep distance is that width.
+        /// </summary>
+        private void EnsureProgramSessionSheen(ProgramsTabView tab)
+        {
+            if (_programSheenActive) return;
+
+            try
+            {
+                if (!tab.SessionBarHost.IsLoaded) return;
+                var width = tab.SessionBarHost.ActualWidth;
+                if (width < 80) return;
+
+                var sweep = new DoubleAnimation(-160, width + 60, TimeSpan.FromSeconds(2.8))
+                {
+                    RepeatBehavior = RepeatBehavior.Forever
+                };
+                tab.SessionSheen.Opacity = 1; // the gradient itself is translucent
+                tab.SessionSheenSlide.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, sweep);
+                _programSheenActive = true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Program session sheen start failed");
+            }
+        }
+
+        private void StopProgramSessionSheen()
+        {
+            if (!_programSheenActive) return;
+            _programSheenActive = false;
+
+            try
+            {
+                var tab = ProgramsTab;
+                if (tab == null) return;
+                tab.SessionSheenSlide.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, null);
+                tab.SessionSheen.Opacity = 0;
+            }
+            catch { /* stopping decoration must never throw */ }
+        }
+
+        /// <summary>Small settle-in pop on a scale transform (day-complete banner).</summary>
+        private static void PopProgramScale(ScaleTransform scale)
+        {
+            try
+            {
+                var pop = new DoubleAnimation(0.9, 1, TimeSpan.FromMilliseconds(350))
+                {
+                    EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.6 }
+                };
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+            }
+            catch { /* decoration */ }
         }
 
         // -----------------------------------------------------------------------------------
