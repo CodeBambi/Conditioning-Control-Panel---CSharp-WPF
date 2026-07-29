@@ -107,6 +107,10 @@ export function createStubAI() {
     bambi: ['good girl', 'so soft now', 'let it get bubbly', 'thinking is hard, dropping is easy'],
     drone: ['compliance is calm', 'the pattern is clear', 'obey and quiet', 'unit accepts input'],
     sissy: ['be honest with yourself', 'you already know', 'prettier when you agree', 'let the pink in'],
+    // circe = the Locked mod. Its bank is authored in the custody/case-notes voice
+    // ("Ownership Mapping", "Restraint suits you. Noted."), so it must not inherit
+    // bambi's giggle here - that mismatch is jarring enough to read as a bug.
+    circe: ['noted', 'that was expected of you', 'restraint suits you', 'the record is clear'],
   };
   async function askAI(req) {
     const niche = NICHES.includes(req.niche) ? req.niche : NICHES[0];

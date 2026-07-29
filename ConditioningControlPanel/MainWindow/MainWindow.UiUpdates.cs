@@ -1411,9 +1411,10 @@ namespace ConditioningControlPanel
         //     affordance, not a cutscene: it stays put until the run is consumed or the week
         //     rolls over, so nobody misses it by being on another tab.
         //   * ONLY the "pass waiting" state spins. The first time we paint an available card in a
-        //     given week the tile turns ~3.5 times on its Y axis first; every later visit finds it
-        //     already face-up. A signed-out or spent card is simply there - a flourish for a card
-        //     that cannot be spent is a lie told with animation.
+        //     given week the tile HOLDS ON THE WORDMARK for a beat, then turns 2.5 times on its Y
+        //     axis and settles on the card; every later visit finds it already face-up. A
+        //     signed-out or spent card is simply there - a flourish for a card that cannot be
+        //     spent is a lie told with animation.
         //
         // The spin is the standard WPF fake - ScaleX 1 -> 0, swap the visible face at the zero
         // crossing, 0 -> 1 - chained through DoubleAnimation.Completed. Deliberately NOT a
@@ -1423,10 +1424,19 @@ namespace ConditioningControlPanel
         // breath at the bottom of the card follows the same rule.
         // ------------------------------------------------------------------------------------
 
-        /// <summary>Per-half-turn durations, front to back. Seven half-turns = 3.5 full turns, and
-        /// the widening intervals are the deceleration: the plate is losing momentum as it settles
-        /// onto the card face. Each entry is split across the two ScaleX ramps of its half-turn.</summary>
-        private static readonly int[] IntakePassHalfTurnMs = { 120, 135, 155, 185, 230, 300, 430 };
+        /// <summary>How long the wordmark sits still before the tile turns. The flip only reads as
+        /// "the logo became something" if you were given time to see the logo first - starting on
+        /// the same frame the tile paints just looks like the card was always there.</summary>
+        private const int IntakePassDwellMs = 2200;
+
+        /// <summary>Per-half-turn durations, front to back. Four quick turns and one long one:
+        /// the plate spins at roughly constant speed, then drops all its momentum into a single
+        /// slow half-turn that settles onto the card. Each entry is split across the two ScaleX
+        /// ramps of its half-turn.
+        ///
+        /// The COUNT MUST STAY ODD. Each half-turn swaps the visible face at its zero crossing
+        /// starting from the logo, so an even count would land back on the wordmark.</summary>
+        private static readonly int[] IntakePassHalfTurnMs = { 105, 115, 130, 150, 560 };
 
         /// <summary>Skew (degrees) applied at the thin point of each half-turn. Purely cosmetic
         /// fake perspective - it always animates back to 0 and is torn down with the spin.</summary>
@@ -1448,10 +1458,12 @@ namespace ConditioningControlPanel
         private bool _intakePassVisibilityHooked;
         private bool _intakePassHelpAttached;
 
-        /// <summary>One breath of the CTA. Slow enough to read as breathing rather than blinking;
-        /// the scale amplitude is small because the text sits in a fixed-width bottom bar and a
-        /// bigger swing would visibly shove the "(?)" around at the edges of the glyph run.</summary>
-        private static readonly TimeSpan IntakePassCtaBreath = TimeSpan.FromMilliseconds(1150);
+        /// <summary>Half a breath of the CTA - it auto-reverses, so a full in-and-out is twice
+        /// this. Paced off a slow human breath rather than a UI blink: at the old 1150ms the swell
+        /// was travelling roughly a third of a pixel per rendered frame, which is small enough
+        /// that glyph rasterisation quantises it into a few visible steps instead of a glide.
+        /// The scale amplitude stays small because the swell is meant to be felt, not read.</summary>
+        private static readonly TimeSpan IntakePassCtaBreath = TimeSpan.FromMilliseconds(1900);
 
         /// <summary>Should the CTA be breathing right now? Set by
         /// <see cref="ApplyIntakePassFaceState"/> (true only for an actually-spendable pass) and
@@ -1521,6 +1533,13 @@ namespace ConditioningControlPanel
                         if (args.NewValue is bool visible && !visible)
                         {
                             StopIntakePassCtaPulse();
+
+                            // Kill a reveal nobody is watching. Animations keep running on a
+                            // collapsed element, so without this the tile would turn - and spend
+                            // the week's ceremony - off screen. Cancelling during the opening
+                            // dwell leaves the week unlatched (see StartIntakePassSpin), so the
+                            // reveal is owed again on the next visit rather than lost.
+                            CancelIntakePassSpin();
                             return;
                         }
                         RefreshIntakePassTile();
@@ -1712,8 +1731,17 @@ namespace ConditioningControlPanel
                 EasingFunction = ease
             };
 
-            tab.IntakePassCtaScale.BeginAnimation(ScaleTransform.ScaleXProperty, swell);
-            tab.IntakePassCtaScale.BeginAnimation(ScaleTransform.ScaleYProperty, swell);
+            // ONE clock driving both axes, not two BeginAnimation calls off the same timeline.
+            // BeginAnimation mints a fresh clock per property, so ScaleX and ScaleY started their
+            // forever-loops on different ticks and drifted apart - which does not read as "the
+            // text is a bit wide", it reads as the glyphs shearing, i.e. exactly the dropped-frame
+            // stutter this had. A shared clock cannot drift from itself.
+            var swellClock = swell.CreateClock();
+            tab.IntakePassCtaScale.ApplyAnimationClock(ScaleTransform.ScaleXProperty, swellClock);
+            tab.IntakePassCtaScale.ApplyAnimationClock(ScaleTransform.ScaleYProperty, swellClock);
+
+            // Opacity gets its own clock. It is a composition-level property on a different object,
+            // so it has nothing to stay pixel-locked to and drift here is invisible.
             tab.IntakePassCta.BeginAnimation(UIElement.OpacityProperty, glow);
 
             _intakePassCtaPulsing = true;
@@ -1729,8 +1757,11 @@ namespace ConditioningControlPanel
             var tab = SettingsTab;
             if (tab?.IntakePassCta == null || tab.IntakePassCtaScale == null) return;
 
-            tab.IntakePassCtaScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-            tab.IntakePassCtaScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            // ApplyAnimationClock(_, null) to match how the scale was attached - the clock-based
+            // and BeginAnimation-based paths are not documented to be interchangeable, and a
+            // half-detached forever-animation would keep the base values below from sticking.
+            tab.IntakePassCtaScale.ApplyAnimationClock(ScaleTransform.ScaleXProperty, null);
+            tab.IntakePassCtaScale.ApplyAnimationClock(ScaleTransform.ScaleYProperty, null);
             tab.IntakePassCta.BeginAnimation(UIElement.OpacityProperty, null);
 
             tab.IntakePassCtaScale.ScaleX = 1;
@@ -1818,16 +1849,42 @@ namespace ConditioningControlPanel
             var gen = _intakePassSpinGen;
             _intakePassSpinning = true;
 
-            SetIntakePassFace(showCard: false);   // seven half-turns from here lands on the card
+            SetIntakePassFace(showCard: false);   // five half-turns from here lands on the card
 
-            // Latched up front rather than on the final frame. The card face persists either way,
-            // so the only thing this flag protects is the flourish - and latching late means a
-            // crash, a tab switch, or a window close mid-spin re-arms the ceremony and it replays
-            // on every single Dashboard visit until it happens to finish. Once is the intent.
-            try { App.IntakePass?.MarkCeremonyPlayed(); } catch { }
+            var tab = SettingsTab;
+            if (tab?.LogoFlipScale == null) { _intakePassSpinning = false; return; }
 
             App.Logger?.Debug("Intake pass tile: playing weekly reveal spin");
-            RunIntakePassSpinPhase(gen, 0);
+
+            // Hold on the wordmark before anything moves. Two reasons, and the second is the one
+            // that was actually biting: startup lands on the Dashboard while services are still
+            // initialising, so a spin begun on the tile's first painted frame competes with that
+            // storm for the UI thread and the user just finds the card already face-up. Waiting
+            // puts the whole flip safely past it.
+            //
+            // A 1 -> 1 no-op animation rather than a DispatcherTimer, so the dwell is torn off by
+            // exactly the same BeginAnimation(prop, null) that CancelIntakePassSpin already runs.
+            // A timer would need its own teardown path and could outlive the spin it belongs to.
+            var dwell = new DoubleAnimation(1.0, 1.0, TimeSpan.FromMilliseconds(IntakePassDwellMs));
+            dwell.Completed += (_, _) =>
+            {
+                if (gen != _intakePassSpinGen) return;
+                if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
+
+                // Latch the week HERE - the instant the plate actually starts turning, not when
+                // the dwell was armed. The two ends of this are both wrong:
+                //   * latching at the end of the spin lets a crash or a tab switch mid-turn re-arm
+                //     the ceremony, and it then replays on every Dashboard visit until one run
+                //     happens to finish;
+                //   * latching before the dwell spends the week on a tile the user may never have
+                //     looked at - they get a wordmark, wander off, and the flourish is gone.
+                // Latching on the first moving frame gives up the flourish only once something
+                // was actually shown, and still cannot loop.
+                try { App.IntakePass?.MarkCeremonyPlayed(); } catch { }
+
+                RunIntakePassSpinPhase(gen, 0);
+            };
+            tab.LogoFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, dwell);
         }
 
         /// <summary>
@@ -1861,10 +1918,12 @@ namespace ConditioningControlPanel
                 ? new DoubleAnimation(0.0, IntakePassSkewDeg, duration)
                 : new DoubleAnimation(-IntakePassSkewDeg, 0.0, duration);
 
-            // Ease only the last two half-turns. Easing every ramp reads as a stutter (each ramp
-            // slows into its own end); confining it to the tail turns the whole chain into one
-            // long deceleration, which is what "a spinning plate settling" actually looks like.
-            if (halfTurn >= IntakePassHalfTurnMs.Length - 2)
+            // Ease ONLY the final, slow half-turn. The easing is not "slow down" - it approximates
+            // the cos() an actual rotation would trace, and at 105ms a quick turn is over before
+            // the eye can resolve that shape, so easing those just reads as each ramp stalling
+            // into its own end. The deceleration comes from the widening durations; this is only
+            // here to keep the one long turn from looking like a linear stretch.
+            if (halfTurn >= IntakePassHalfTurnMs.Length - 1)
             {
                 var ease = new CubicEase { EasingMode = closing ? EasingMode.EaseIn : EasingMode.EaseOut };
                 scaleAnim.EasingFunction = ease;
