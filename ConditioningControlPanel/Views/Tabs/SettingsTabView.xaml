@@ -85,27 +85,151 @@
         <!-- features. Greyed with a lock (doubles as an ad) when the      -->
         <!-- user is not a logged-in patron.                               -->
         <!-- ============================================================ -->
+        <!-- VerticalAlignment=Top so the card hugs the chips instead of leaving a
+             dead pocket at the foot: the rail's content is now short enough to fit
+             the row whether or not the Programs "Today" card is on screen above it. -->
         <Border x:Name="PremiumRail" x:FieldModifier="internal" Grid.Column="0" Grid.Row="1" Margin="5,5,0,5"
+                VerticalAlignment="Top"
                 Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
                 BorderThickness="1" CornerRadius="12">
             <Border.Resources>
+                <!-- ============================================================ -->
+                <!-- CHIP ART. The feature image is the chip's own Background, not  -->
+                <!-- a child Image: a Border paints its Background inside the       -->
+                <!-- CornerRadius for free (a child Image would need ClipToBounds), -->
+                <!-- and only an ImageBrush can frame the source.                   -->
+                <!--                                                                -->
+                <!-- Every Viewbox below is deliberate. These files were drawn as    -->
+                <!-- wide marquee art with the feature NAME burned into the pixels,  -->
+                <!-- so shown whole they put a second, illegible word behind our     -->
+                <!-- caption. The Viewbox frames the illustration and leaves the     -->
+                <!-- wordmark outside the chip. Each rect is cut to roughly the      -->
+                <!-- chip's own aspect (~1.7:1 for a chip, ~1.1:1 for the two taller -->
+                <!-- launcher cards) so UniformToFill has almost nothing left to     -->
+                <!-- crop and cannot decapitate the subject.                         -->
+                <!--                                                                -->
+                <!-- DecodePixelWidth caps the decode: these are 0.5 MB neon PNGs    -->
+                <!-- and the rail only ever shows them ~170px wide (design canvas is -->
+                <!-- 1489 wide, the root Viewbox scales up to ~2.6x on a 4K window). -->
+                <!-- It is set against the FULL source, so the tighter the Viewbox   -->
+                <!-- crop the larger it has to be.                                   -->
+                <!-- ============================================================ -->
+                <ImageBrush x:Key="ArtTakeover" Stretch="UniformToFill" Viewbox="0,0.06,1,0.54">
+                    <ImageBrush.ImageSource>
+                        <BitmapImage UriSource="pack://application:,,,/Resources/features/takeover.png" DecodePixelWidth="384"/>
+                    </ImageBrush.ImageSource>
+                </ImageBrush>
+                <ImageBrush x:Key="ArtAwareness" Stretch="UniformToFill" Viewbox="0.02,0.05,0.40,0.43">
+                    <ImageBrush.ImageSource>
+                        <BitmapImage UriSource="pack://application:,,,/Resources/features/awareness.png" DecodePixelWidth="512"/>
+                    </ImageBrush.ImageSource>
+                </ImageBrush>
+                <ImageBrush x:Key="ArtHaptics" Stretch="UniformToFill" Viewbox="0,0.07,1,0.61">
+                    <ImageBrush.ImageSource>
+                        <BitmapImage UriSource="pack://application:,,,/Resources/features/vibe.png" DecodePixelWidth="384"/>
+                    </ImageBrush.ImageSource>
+                </ImageBrush>
+                <ImageBrush x:Key="ArtIntake" Stretch="UniformToFill" Viewbox="0.22,0.04,0.62,0.66">
+                    <ImageBrush.ImageSource>
+                        <BitmapImage UriSource="pack://application:,,,/Resources/features/lab_quiz_hero.png" DecodePixelWidth="512"/>
+                    </ImageBrush.ImageSource>
+                </ImageBrush>
+                <ImageBrush x:Key="ArtRemote" Stretch="UniformToFill" Viewbox="0.60,0.03,0.35,0.62">
+                    <ImageBrush.ImageSource>
+                        <BitmapImage UriSource="pack://application:,,,/Resources/features/remote_control.png" DecodePixelWidth="768"/>
+                    </ImageBrush.ImageSource>
+                </ImageBrush>
+                <ImageBrush x:Key="ArtBlink" Stretch="UniformToFill" Viewbox="0.05,0.06,0.44,0.72">
+                    <ImageBrush.ImageSource>
+                        <BitmapImage UriSource="pack://application:,,,/Resources/features/blink_trainer.png" DecodePixelWidth="512"/>
+                    </ImageBrush.ImageSource>
+                </ImageBrush>
+                <!-- lockdown_icon is a 4.45:1 banner: padlock left, "LOCKDOWN MODE"
+                     right, empty smoke between. Only the padlock is framed, which is
+                     a quarter of the width - hence the much larger decode. -->
+                <ImageBrush x:Key="ArtLockdown" Stretch="UniformToFill" Viewbox="0.08,0,0.25,1">
+                    <ImageBrush.ImageSource>
+                        <BitmapImage UriSource="pack://application:,,,/Resources/lockdown_icon.png" DecodePixelWidth="1024"/>
+                    </ImageBrush.ImageSource>
+                </ImageBrush>
+                <!-- She's Listening has no feature art (there is no mic PNG in
+                     Resources/features), so this chip carries a gradient instead and
+                     keeps the emoji glyph centred over it. -->
+                <LinearGradientBrush x:Key="ArtVoice" StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#FF3A1B4D" Offset="0"/>
+                    <GradientStop Color="#FF6E2856" Offset="1"/>
+                </LinearGradientBrush>
+
+                <!-- Legibility scrim. The art is bright neon on near-black, so a text
+                     shadow alone would not survive it; the caption sits in the dark
+                     band at the foot of the chip instead. -->
+                <LinearGradientBrush x:Key="ChipScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#00000000" Offset="0.28"/>
+                    <GradientStop Color="#73000000" Offset="0.62"/>
+                    <GradientStop Color="#DE000000" Offset="1"/>
+                </LinearGradientBrush>
+                <!-- The Lockdown / Blink cards carry live controls over their whole
+                     face, not just a caption at the foot, so they darken throughout. -->
+                <LinearGradientBrush x:Key="CardScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#59000000" Offset="0"/>
+                    <GradientStop Color="#B8000000" Offset="0.42"/>
+                    <GradientStop Color="#E6000000" Offset="1"/>
+                </LinearGradientBrush>
+
+                <Style x:Key="ChipCaption" TargetType="TextBlock">
+                    <Setter Property="FontSize" Value="9"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="TextAlignment" Value="Center"/>
+                    <Setter Property="TextWrapping" Value="Wrap"/>
+                    <Setter Property="VerticalAlignment" Value="Bottom"/>
+                    <Setter Property="Margin" Value="2,0,2,3"/>
+                </Style>
+                <!-- Status dot moved to the top-right corner: the caption now owns the
+                     bottom of the chip. Fill is repainted by RefreshPremiumRail. -->
+                <Style x:Key="ChipDot" TargetType="Ellipse">
+                    <Setter Property="Width" Value="8"/>
+                    <Setter Property="Height" Value="8"/>
+                    <Setter Property="HorizontalAlignment" Value="Right"/>
+                    <Setter Property="VerticalAlignment" Value="Top"/>
+                    <Setter Property="Margin" Value="0,3,3,0"/>
+                    <Setter Property="Fill" Value="#555555"/>
+                    <Setter Property="Stroke" Value="#1A1A2E"/>
+                    <Setter Property="StrokeThickness" Value="1"/>
+                </Style>
+
                 <Style x:Key="PremiumChipStyle" TargetType="Button">
                     <Setter Property="Cursor" Value="Hand"/>
-                    <Setter Property="Margin" Value="0,0,0,5"/>
-                    <Setter Property="Height" Value="46"/>
+                    <Setter Property="Margin" Value="0,0,0,4"/>
+                    <Setter Property="Height" Value="42"/>
                     <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="cb" Background="{TemplateBinding Background}"
                                         BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
-                                        CornerRadius="9" Padding="2,3">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        CornerRadius="9" RenderOptions.BitmapScalingMode="HighQuality">
+                                    <!-- CornerRadius 8 = the chip's 9 minus the 1px border, so the
+                                         overlays follow the inner curve instead of squaring it off. -->
+                                    <Grid>
+                                        <Border CornerRadius="8" IsHitTestVisible="False"
+                                                Background="{StaticResource ChipScrimBrush}"/>
+                                        <!-- Hover/press wash. It is a separate layer rather than a
+                                             Background swap because the Background is now the art. -->
+                                        <Border x:Name="tint" CornerRadius="8" Opacity="0" IsHitTestVisible="False"
+                                                Background="{DynamicResource TransparentPinkBrush}"/>
+                                        <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                                    </Grid>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
                                         <Setter TargetName="cb" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                        <Setter TargetName="cb" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+                                        <Setter TargetName="tint" Property="Opacity" Value="1"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="cb" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                        <Setter TargetName="tint" Property="Opacity" Value="1"/>
+                                        <Setter TargetName="cb" Property="Opacity" Value="0.82"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
@@ -137,163 +261,132 @@
                 </Style>
             </Border.Resources>
             <Grid>
+                <!-- The rail is a plain stack in a fixed-height row, so anything past the
+                     fold used to be cut off by WPF's layout clip with no scrollbar and no
+                     other tell - that is how the Programs "Today" card (row 0, Auto) made
+                     the last chip vanish outright. The ScrollViewer is the safety net: if
+                     the rail ever outgrows the row again it scrolls instead of silently
+                     eating a feature. It shows no chrome while everything fits. -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel x:Name="PremiumRailContent" x:FieldModifier="internal" Margin="4,6,4,6">
                     <TextBlock Text="PREMIUM" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
                                TextAlignment="Center" Margin="0,0,0,6"/>
                     <Button x:Name="ChipTakeover" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            Background="{StaticResource ArtTakeover}"
                             Click="ChipTakeover_Click" ToolTip="Takeover — the companion triggers effects on her own">
-                        <StackPanel>
-                            <Grid Width="24" Height="24" HorizontalAlignment="Center">
-                                <Border CornerRadius="6" ClipToBounds="True">
-                                    <Image Source="pack://application:,,,/Resources/features/takeover.png"
-                                           Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Border>
-                                <Ellipse x:Name="DotTakeover" x:FieldModifier="internal" Width="8" Height="8"
-                                         HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="#555555"
-                                         Stroke="#1A1A2E" StrokeThickness="1"/>
-                            </Grid>
-                            <TextBlock Text="Takeover" FontSize="9" Foreground="White" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                        </StackPanel>
+                        <Grid>
+                            <Ellipse x:Name="DotTakeover" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
+                            <TextBlock Text="Takeover" Style="{StaticResource ChipCaption}"/>
+                        </Grid>
                     </Button>
                     <Button x:Name="ChipAwareness" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            Background="{StaticResource ArtAwareness}"
                             Click="ChipAwareness_Click" ToolTip="Awareness — reacts to what's on your screen">
-                        <StackPanel>
-                            <Grid Width="24" Height="24" HorizontalAlignment="Center">
-                                <Border CornerRadius="6" ClipToBounds="True">
-                                    <Image Source="pack://application:,,,/Resources/features/awareness.png"
-                                           Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Border>
-                                <Ellipse x:Name="DotAwareness" x:FieldModifier="internal" Width="8" Height="8"
-                                         HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="#555555"
-                                         Stroke="#1A1A2E" StrokeThickness="1"/>
-                            </Grid>
-                            <TextBlock Text="Awareness" FontSize="9" Foreground="White" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                        </StackPanel>
+                        <Grid>
+                            <Ellipse x:Name="DotAwareness" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
+                            <TextBlock Text="Awareness" Style="{StaticResource ChipCaption}"/>
+                        </Grid>
                     </Button>
                     <Button x:Name="ChipHaptics" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            Background="{StaticResource ArtHaptics}"
                             Click="ChipHaptics_Click" ToolTip="Haptics — connect a toy">
-                        <StackPanel>
-                            <Grid Width="24" Height="24" HorizontalAlignment="Center">
-                                <Border CornerRadius="6" ClipToBounds="True">
-                                    <Image Source="pack://application:,,,/Resources/features/vibe.png"
-                                           Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Border>
-                                <Ellipse x:Name="DotHaptics" x:FieldModifier="internal" Width="8" Height="8"
-                                         HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="#555555"
-                                         Stroke="#1A1A2E" StrokeThickness="1"/>
-                            </Grid>
-                            <TextBlock Text="Haptics" FontSize="9" Foreground="White" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                        </StackPanel>
+                        <Grid>
+                            <Ellipse x:Name="DotHaptics" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
+                            <TextBlock Text="Haptics" Style="{StaticResource ChipCaption}"/>
+                        </Grid>
                     </Button>
                     <!-- Graded Intake — a navigation shortcut, not a toggle: the intake runs in its
                          own window and is started from its page, so this chip just opens that page
                          (hence no state dot). -->
                     <Button x:Name="ChipGradedIntake" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            Background="{StaticResource ArtIntake}"
                             Click="ChipGradedIntake_Click" ToolTip="Graded Intake — open the intake page">
-                        <StackPanel>
-                            <Grid Width="24" Height="24" HorizontalAlignment="Center">
-                                <Border CornerRadius="6" ClipToBounds="True">
-                                    <Image Source="pack://application:,,,/Resources/features/lab_quiz_hero.png"
-                                           Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Border>
-                            </Grid>
-                            <TextBlock Text="Intake" FontSize="9" Foreground="White" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                        </StackPanel>
+                        <Grid>
+                            <TextBlock Text="Intake" Style="{StaticResource ChipCaption}"/>
+                        </Grid>
                     </Button>
                     <Button x:Name="ChipVoice" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            Background="{StaticResource ArtVoice}"
                             Click="ChipVoice_Click" ToolTip="She's Listening — turn on voice control (&quot;Hey Bambi&quot;) and the mic">
-                        <StackPanel>
-                            <Grid Width="24" Height="24" HorizontalAlignment="Center">
-                                <Border CornerRadius="6" ClipToBounds="True" Background="#2A1A3A">
-                                    <Image Source="{Binding Source='🎙️', Converter={StaticResource EmojiToImageSource}}"
-                                           Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <Ellipse x:Name="DotVoice" x:FieldModifier="internal" Width="8" Height="8"
-                                         HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="#555555"
-                                         Stroke="#1A1A2E" StrokeThickness="1"/>
-                            </Grid>
-                            <TextBlock Text="Voice" FontSize="9" Foreground="White" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                        </StackPanel>
+                        <Grid>
+                            <!-- No art file for this one - the glyph stays centred, lifted clear
+                                 of the caption band at the foot of the chip. -->
+                            <Image Source="{Binding Source='🎙️', Converter={StaticResource EmojiToImageSource}}"
+                                   Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <Ellipse x:Name="DotVoice" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
+                            <TextBlock Text="Voice" Style="{StaticResource ChipCaption}"/>
+                        </Grid>
                     </Button>
-                    <!-- Lockdown — launcher with +/- duration and a live countdown. Bigger card:
-                         full-size 24px image on top, then the timer +/- and Lock-in button below. -->
-                    <Border Margin="0,0,0,5" Background="{DynamicResource AccentTintedBgBrush}"
-                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9" Padding="2,5"
+                    <!-- Lockdown — launcher with +/- duration and a live countdown. Same
+                         full-bleed art as the chips, but the caption and controls sit over it
+                         instead of below a centred icon, which is what the icon block used to
+                         cost this card in height. -->
+                    <Border Margin="0,0,0,4" Background="{StaticResource ArtLockdown}"
+                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9"
+                            RenderOptions.BitmapScalingMode="HighQuality"
                             ToolTip="Lockdown — locks you in for the set time (panic key disabled)">
-                        <StackPanel>
-                            <Grid Width="24" Height="24" HorizontalAlignment="Center">
-                                <Border CornerRadius="6" ClipToBounds="True">
-                                    <Image Source="pack://application:,,,/Resources/lockdown_icon.png"
-                                           Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Border>
-                            </Grid>
-                            <TextBlock Text="Lockdown" FontSize="9" Foreground="White" TextAlignment="Center" Margin="0,2,0,0"/>
-                            <Grid x:Name="LockdownSetRow" x:FieldModifier="internal" Margin="0,3,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" x:Name="BtnLockdownMinus" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
-                                        Content="−" FontSize="13" Width="18" Height="18" Click="BtnLockdownMinus_Click"/>
-                                <TextBlock Grid.Column="1" x:Name="TxtLockdownMins" x:FieldModifier="internal" Text="15m" FontSize="10"
-                                           Foreground="White" VerticalAlignment="Center" TextAlignment="Center"/>
-                                <Button Grid.Column="2" x:Name="BtnLockdownPlus" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
-                                        Content="＋" FontSize="11" Width="18" Height="18" Click="BtnLockdownPlus_Click"/>
-                            </Grid>
-                            <Button x:Name="BtnLockdownGo" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
-                                    Content="Lock in" FontSize="9" Height="16" Margin="0,3,0,0" Click="BtnLockdownGo_Click"/>
-                            <TextBlock x:Name="TxtLockdownCountdown" x:FieldModifier="internal" Visibility="Collapsed"
-                                       FontSize="12" FontWeight="Bold" Foreground="#FF6B6B" TextAlignment="Center" Margin="0,2,0,0"/>
-                        </StackPanel>
+                        <Grid>
+                            <Border CornerRadius="8" IsHitTestVisible="False" Background="{StaticResource CardScrimBrush}"/>
+                            <StackPanel Margin="3,2,3,4">
+                                <TextBlock Text="Lockdown" Style="{StaticResource ChipCaption}" VerticalAlignment="Top" Margin="0,0,0,0"/>
+                                <Grid x:Name="LockdownSetRow" x:FieldModifier="internal" Margin="0,3,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" x:Name="BtnLockdownMinus" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
+                                            Content="−" FontSize="13" Width="18" Height="18" Click="BtnLockdownMinus_Click"/>
+                                    <TextBlock Grid.Column="1" x:Name="TxtLockdownMins" x:FieldModifier="internal" Text="15m" FontSize="10"
+                                               Foreground="White" VerticalAlignment="Center" TextAlignment="Center"/>
+                                    <Button Grid.Column="2" x:Name="BtnLockdownPlus" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
+                                            Content="＋" FontSize="11" Width="18" Height="18" Click="BtnLockdownPlus_Click"/>
+                                </Grid>
+                                <Button x:Name="BtnLockdownGo" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
+                                        Content="Lock in" FontSize="9" Height="16" Margin="0,3,0,0" Click="BtnLockdownGo_Click"/>
+                                <TextBlock x:Name="TxtLockdownCountdown" x:FieldModifier="internal" Visibility="Collapsed"
+                                           FontSize="12" FontWeight="Bold" Foreground="#FF6B6B" TextAlignment="Center" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
-                    <!-- Blink Trainer — launcher with +/- duration and countdown. Bigger card:
-                         full-size 24px image on top, then the timer +/- and Start button below. -->
-                    <Border Margin="0,0,0,5" Background="{DynamicResource AccentTintedBgBrush}"
-                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9" Padding="2,5"
+                    <!-- Blink Trainer — launcher with +/- duration and countdown. Same
+                         full-bleed treatment as Lockdown. -->
+                    <Border Margin="0,0,0,4" Background="{StaticResource ArtBlink}"
+                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9"
+                            RenderOptions.BitmapScalingMode="HighQuality"
                             ToolTip="Blink Trainer — webcam blink-gated visuals">
-                        <StackPanel>
-                            <Grid Width="24" Height="24" HorizontalAlignment="Center">
-                                <Border CornerRadius="6" ClipToBounds="True">
-                                    <Image Source="pack://application:,,,/Resources/features/blink_trainer.png"
-                                           Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Border>
-                            </Grid>
-                            <TextBlock Text="Blink" FontSize="9" Foreground="White" TextAlignment="Center" Margin="0,2,0,0"/>
-                            <Grid x:Name="BlinkSetRow" x:FieldModifier="internal" Margin="0,2,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" x:Name="BtnBlinkMinus" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
-                                        Content="−" FontSize="13" Width="18" Height="18" Click="BtnBlinkMinus_Click"/>
-                                <TextBlock Grid.Column="1" x:Name="TxtBlinkMins" x:FieldModifier="internal" Text="10m" FontSize="10"
-                                           Foreground="White" VerticalAlignment="Center" TextAlignment="Center"/>
-                                <Button Grid.Column="2" x:Name="BtnBlinkPlus" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
-                                        Content="＋" FontSize="11" Width="18" Height="18" Click="BtnBlinkPlus_Click"/>
-                            </Grid>
-                            <Button x:Name="BtnBlinkGo" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
-                                    Content="Start" FontSize="9" Height="16" Margin="0,3,0,0" Click="BtnBlinkGo_Click"/>
-                            <TextBlock x:Name="TxtBlinkCountdown" x:FieldModifier="internal" Visibility="Collapsed"
-                                       FontSize="12" FontWeight="Bold" Foreground="#7FD8FF" TextAlignment="Center" Margin="0,2,0,0"/>
-                        </StackPanel>
+                        <Grid>
+                            <Border CornerRadius="8" IsHitTestVisible="False" Background="{StaticResource CardScrimBrush}"/>
+                            <StackPanel Margin="3,2,3,4">
+                                <TextBlock Text="Blink" Style="{StaticResource ChipCaption}" VerticalAlignment="Top" Margin="0,0,0,0"/>
+                                <Grid x:Name="BlinkSetRow" x:FieldModifier="internal" Margin="0,3,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" x:Name="BtnBlinkMinus" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
+                                            Content="−" FontSize="13" Width="18" Height="18" Click="BtnBlinkMinus_Click"/>
+                                    <TextBlock Grid.Column="1" x:Name="TxtBlinkMins" x:FieldModifier="internal" Text="10m" FontSize="10"
+                                               Foreground="White" VerticalAlignment="Center" TextAlignment="Center"/>
+                                    <Button Grid.Column="2" x:Name="BtnBlinkPlus" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
+                                            Content="＋" FontSize="11" Width="18" Height="18" Click="BtnBlinkPlus_Click"/>
+                                </Grid>
+                                <Button x:Name="BtnBlinkGo" x:FieldModifier="internal" Style="{StaticResource RailMiniBtn}"
+                                        Content="Start" FontSize="9" Height="16" Margin="0,3,0,0" Click="BtnBlinkGo_Click"/>
+                                <TextBlock x:Name="TxtBlinkCountdown" x:FieldModifier="internal" Visibility="Collapsed"
+                                           FontSize="12" FontWeight="Bold" Foreground="#7FD8FF" TextAlignment="Center" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
                     <!-- Remote — opens a flyout to compose + start a remote session -->
                     <Button x:Name="ChipRemote" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            Background="{StaticResource ArtRemote}"
                             Click="ChipRemote_Click" ToolTip="Remote Control — let someone drive your session">
-                        <StackPanel>
-                            <Grid Width="24" Height="24" HorizontalAlignment="Center">
-                                <Border CornerRadius="6" ClipToBounds="True">
-                                    <Image Source="pack://application:,,,/Resources/features/remote_control.png"
-                                           Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Border>
-                                <Ellipse x:Name="DotRemote" x:FieldModifier="internal" Width="8" Height="8"
-                                         HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="#555555"
-                                         Stroke="#1A1A2E" StrokeThickness="1"/>
-                            </Grid>
-                            <TextBlock Text="Remote" FontSize="9" Foreground="White" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                        </StackPanel>
+                        <Grid>
+                            <Ellipse x:Name="DotRemote" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
+                            <TextBlock Text="Remote" Style="{StaticResource ChipCaption}"/>
+                        </Grid>
                     </Button>
                     <!-- VerticalOffset lifts the flyout up: ChipRemote is the last rail item and
                          sits low on screen, so a top-aligned flyout otherwise clips the bottom
@@ -341,6 +434,7 @@
                         </Border>
                     </Popup>
                 </StackPanel>
+                </ScrollViewer>
                 <!-- Patron lock overlay (also serves as the ad) -->
                 <Border x:Name="PremiumRailLock" x:FieldModifier="internal" Visibility="Collapsed"
                         Background="#B31A1A2E" CornerRadius="12" Cursor="Hand"
