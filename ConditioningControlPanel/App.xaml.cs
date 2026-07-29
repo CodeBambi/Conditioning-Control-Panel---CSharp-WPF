@@ -325,6 +325,10 @@ namespace ConditioningControlPanel
         public static BarkService? Bark { get; private set; }
         public static QuestDefinitionService QuestDefinitions { get; private set; } = null!;
         public static QuestService Quests { get; private set; } = null!;
+        /// <summary>Weekly free-tier pass for the Graded Intake (see IntakePassService).</summary>
+        public static IntakePassService IntakePass { get; private set; } = null!;
+        /// <summary>Eight-hole intake punch card (see IntakePunchCardService).</summary>
+        public static IntakePunchCardService IntakePunchCard { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
         public static IAiService Ai { get; private set; } = null!;
         public static IAiCommandService Commands { get; private set; } = null!;
@@ -1458,7 +1462,15 @@ namespace ConditioningControlPanel
                 // When server definitions change, re-check quests (regenerates if definition was removed)
                 Quests?.CheckAndGenerateQuests();
             };
+            // Intake onboarding. Both are cheap and synchronous (the pass reads AppSettings; the
+            // punch card loads one small json), and both must exist before MainWindow paints the
+            // Exclusives gate or the Dashboard tile. Neither may touch App.Notifications from its
+            // constructor - that service is not built until later in OnStartup.
+            IntakePass = new IntakePassService();
+            IntakePunchCard = new IntakePunchCardService();
             Roadmap = new RoadmapService();
+            // Needs Settings, Progression and Quests (all above); reads Patreon lazily, so it is
+            // safe here even though Patreon is not constructed until later in OnStartup.
             SkillTree = new SkillTreeService();
             Tutorial = new TutorialService();
 
@@ -1506,6 +1518,11 @@ namespace ConditioningControlPanel
             WindowAwareness = new WindowAwarenessService();
             Patreon = new PatreonService();
             SubscribeStar = new SubscribeStarService();
+            // The weekly intake pass is a free-tier amenity, so its state depends on entitlement -
+            // which only resolves once the async validation below returns. Hook both providers now
+            // that they exist so the pass re-evaluates (and every listener repaints) the moment the
+            // answer lands, instead of leaving a patron looking free until something else refreshes.
+            IntakePass?.AttachEntitlementSources();
             ProfileSync = new ProfileSyncService();
             Leaderboard = new LeaderboardService();
             Haptics = new HapticService(Settings.Current.Haptics);
@@ -3317,6 +3334,8 @@ Application State:
             SkillTree?.Dispose();
             QuestDefinitions?.Dispose();
             Quests?.Dispose();
+            IntakePunchCard?.Dispose();
+            IntakePass?.Dispose();
             Companion?.Dispose();
             CommunityPrompts?.Dispose();
             ActivityTracker?.Dispose();

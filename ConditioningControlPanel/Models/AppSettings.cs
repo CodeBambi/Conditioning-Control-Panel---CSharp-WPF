@@ -2811,6 +2811,68 @@ namespace ConditioningControlPanel.Models
             set { _intakeFullscreen = value; OnPropertyChanged(); }
         }
 
+        // ---- Weekly Intake Pass (free-tier onboarding) ----------------------------
+        // The Graded Intake is a premium Exclusive, but free users get ONE run a week so
+        // the app has a front door: the intake drafts a session, and that session is the
+        // first real thing a new user experiences. Premium is unchanged - unlimited runs,
+        // none of this state is ever read for a patron.
+
+        private string _intakePassSpentWeek = "";
+        /// <summary>ISO week key ("2026-W31") of the week whose free pass has been SPENT.
+        /// This - not a timestamp comparison - is the authority on whether the door is open:
+        /// weeks are the unit the feature is sold in, so storing the week directly means a
+        /// clock that drifts by hours can never half-open a pass. Empty = never spent.
+        /// Written only on a COMPLETED intake (a quiz-result arrived), never on launch, so a
+        /// crash or an abort cannot burn someone's week.</summary>
+        public string IntakePassSpentWeek
+        {
+            get => _intakePassSpentWeek;
+            set { _intakePassSpentWeek = value ?? ""; OnPropertyChanged(); }
+        }
+
+        /// <summary>UTC instant the pass above was spent. Not used for gating (the week key
+        /// is), purely so a rolled-back clock is detectable: a spend stamped in the future
+        /// means the machine's clock moved, and the pass service refuses to re-open on that
+        /// evidence alone. Null = never spent.</summary>
+        private DateTime? _intakePassSpentUtc = null;
+        public DateTime? IntakePassSpentUtc
+        {
+            get => _intakePassSpentUtc;
+            set { _intakePassSpentUtc = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>ISO week whose dashboard flip ceremony has already played. The logo spins
+        /// into the pass card ONCE per week, not on every return to the Dashboard - a flourish
+        /// that replays on each tab switch stops reading as an event and starts reading as a
+        /// glitch. The card itself stays put regardless; this only gates the animation.</summary>
+        private string _intakePassCeremonyWeek = "";
+        public string IntakePassCeremonyWeek
+        {
+            get => _intakePassCeremonyWeek;
+            set { _intakePassCeremonyWeek = value ?? ""; OnPropertyChanged(); }
+        }
+
+        /// <summary>ISO week the weekly nudge popup was dismissed for. Deliberately NOT the
+        /// shared <see cref="DismissedAnnouncementId"/>: that slot belongs to server-triggered
+        /// announcements, and a recurring local nudge writing into it would silently eat the
+        /// next real announcement.</summary>
+        private string _intakeNudgeDismissedWeek = "";
+        public string IntakeNudgeDismissedWeek
+        {
+            get => _intakeNudgeDismissedWeek;
+            set { _intakeNudgeDismissedWeek = value ?? ""; OnPropertyChanged(); }
+        }
+
+        /// <summary>Show the once-a-week "your intake pass is ready" popup. On by default -
+        /// it is the feature's re-engagement hook - but a weekly popup with no off switch is
+        /// a bug report waiting to happen, so it has one.</summary>
+        private bool _intakeNudgeEnabled = true;
+        public bool IntakeNudgeEnabled
+        {
+            get => _intakeNudgeEnabled;
+            set { _intakeNudgeEnabled = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Pop Quiz (Session reinforcement questions)

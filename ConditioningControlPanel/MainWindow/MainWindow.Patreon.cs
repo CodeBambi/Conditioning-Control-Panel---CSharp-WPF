@@ -147,7 +147,16 @@ namespace ConditioningControlPanel
             if (SubBadgeLockdown != null) SubBadgeLockdown.Visibility = badgeVis;
             if (SubBadgeBlinkTrainer != null) SubBadgeBlinkTrainer.Visibility = badgeVis;
             if (SubBadgeSheListening != null) SubBadgeSheListening.Visibility = badgeVis;
-            if (SubBadgeGradedIntake != null) SubBadgeGradedIntake.Visibility = badgeVis;
+
+            // The Graded Intake is the one Exclusive a free account can legitimately open: it
+            // hands out one run a week (IntakePassService). Showing the padlock while that pass
+            // is sitting unspent would call the door locked at the exact moment it is open, so
+            // this badge follows the pass rather than the subscription. Once the pass is spent
+            // the lock comes back, which is then true again until Monday.
+            if (SubBadgeGradedIntake != null)
+                SubBadgeGradedIntake.Visibility = (hasPremium || App.IntakePass?.IsPassAvailable == true)
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
         }
 
         /// <summary>
@@ -252,6 +261,31 @@ namespace ConditioningControlPanel
             RefreshPremiumGate(LockdownTab.LockdownGate);
             if (SheListeningTab != null) RefreshPremiumGate(SheListeningTab.SheListeningGate);
             if (GradedIntakeTab != null) RefreshGradedIntakeGate();
+
+            // Weekly intake pass. It is a FREE-TIER amenity - patrons have the feature outright and
+            // must never see pass UI - so every surface that paints off IntakePassService has to be
+            // re-evaluated on this path, not just at startup. This method is the single choke point
+            // that both TierChanged handlers (Patreon and SubscribeStar) and every login/logout path
+            // (ClearAccountData, the link flows, OpenUnifiedLoginDialog's completion) already run
+            // through, so hanging the pass refresh here covers the arrival of premium AND its
+            // removal - including the free-user logout, where the tier never changes and no
+            // TierChanged event is raised at all.
+            //
+            // These are the existing entry points, called rather than reimplemented:
+            //   RefreshIntakePassTile()        - Dashboard centre tile (MainWindow.UiUpdates.cs)
+            //   RefreshExclusivesSubmenuLocks() - the SubBadgeGradedIntake padlock above
+            // RefreshGradedIntakeGate() is already covered by the line above.
+            try
+            {
+                RefreshIntakePassTile();
+                RefreshExclusivesSubmenuLocks();
+                // Anything else listening to the door (and the two lazily-attached handlers, if a
+                // refresh has not run yet to install them) gets its own repaint. Idempotent, and
+                // both current listeners marshal + no-op when nothing actually changed.
+                App.IntakePass?.RaiseChanged();
+            }
+            catch (Exception ex) { App.Logger?.Debug("UpdatePatreonUI: intake pass refresh failed: {E}", ex.Message); }
+
             RefreshBecomeASubjectCta();
             // Blink Trainer uses its own gate refresh (also re-resolves stage
             // mode + status state since premium loss/gain flips the resolver
@@ -857,6 +891,15 @@ namespace ConditioningControlPanel
             {
                 App.Patreon.TierChanged += OnPatreonTierChanged;
             }
+
+            // SubscribeStar is the third login provider and it OR's into the canonical premium gate
+            // (PatreonService.HasPremiumAccess), but its own init was never actually called from
+            // here despite MainWindow.SubscribeStar.cs saying it should be. Consequence:
+            // App.SubscribeStar.TierChanged had no subscriber at all, so a SubscribeStar patron's
+            // subscription resolving mid-session refreshed nothing - the premium UI (and the intake
+            // pass with it) stayed on whatever it painted at startup. One line, and it is the hook
+            // that file was written to receive.
+            InitializeSubscribeStarTab();
 
             // Initialize companion settings
             CompanionTab.ChkAvatarEnabledCompanion.IsChecked = settings.AvatarEnabled;

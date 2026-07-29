@@ -405,6 +405,14 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ImgLogo_MouseLeftButtonDown(sender, e);
         }
+        // Weekly intake pass card face (the flipped-over centre logo tile). Sits INSIDE
+        // LogoBrandFrame, so the click would otherwise bubble on into the logo's click-pulse
+        // easter egg; MainWindow's handler marks the event Handled to stop that.
+        private void IntakePassFace_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.IntakePassFace_MouseLeftButtonDown(sender, e);
+        }
         private void SliderAudioSyncIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

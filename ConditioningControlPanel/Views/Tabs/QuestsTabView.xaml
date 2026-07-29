@@ -324,6 +324,60 @@
                             </StackPanel>
                         </Border>
     
+                        <!-- Intake Punch Card
+                             Eight holes, two rows of four, earned by the Graded Intake. Deliberately
+                             wearing the same DarkerBg/10/15,12 shell as the streak calendar below it:
+                             both are "here is your long-running progress" strips and they should read
+                             as one family, not two competing widgets.
+
+                             The holes themselves are drawn in code-behind (MainWindow.RefreshPunchCard)
+                             rather than bound. This tab has no ViewModel and the repo has no
+                             bool-to-brush converter, so the DataTrigger idiom used on the leaderboard
+                             would mean inventing both before a single circle appeared on screen. The
+                             streak calendar directly below already paints itself from code on the same
+                             refresh pass - matching it is the smaller, more honest change. -->
+                        <Border x:Name="PunchCardPanel" x:FieldModifier="internal"
+                                Background="{DynamicResource DarkerBgBrush}" CornerRadius="10" Padding="15,12" Margin="0,20,0,0">
+                            <StackPanel>
+                                <!-- Header: ticket + title on the left, "3 of 8" on the right, mirroring
+                                     the streak calendar's title/count header. -->
+                                <Grid Margin="0,0,0,10">
+                                    <StackPanel Orientation="Horizontal">
+                                        <!-- WPF can't render colour-emoji fonts here, so every emoji on this
+                                             tab goes through EmojiToImageSource as an Image. -->
+                                        <Image Width="18" Height="18" VerticalAlignment="Center"
+                                               Source="{Binding Source='🎟', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str label_intake_punch_card}" Foreground="White"
+                                                   FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtPunchCardProgress" x:FieldModifier="internal" Text=""
+                                               Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <!-- The eight holes, filled row-major by RefreshPunchCard. Rows/Columns are
+                                     pinned rather than left to wrap so the card keeps the same footprint at
+                                     one hole and at eight - a strip that grows as you fill it loses the
+                                     "look how much is left" read that makes a punch card work. -->
+                                <UniformGrid x:Name="PunchCardHoles" x:FieldModifier="internal" Rows="2" Columns="4"
+                                             HorizontalAlignment="Center" Margin="0,2,0,0"/>
+
+                                <!-- Status line. Does double duty: the half-stamp nudge ("run the session
+                                     you drafted"), which is the whole point of the Pending state, and the
+                                     card-full note. Hidden the rest of the time so the panel stays quiet
+                                     while there is nothing to act on. -->
+                                <TextBlock x:Name="TxtPunchCardStatus" x:FieldModifier="internal" Text="" Visibility="Collapsed"
+                                           Foreground="#FFD700" FontSize="12" FontWeight="SemiBold"
+                                           TextAlignment="Center" TextWrapping="Wrap" Margin="0,10,0,0"/>
+
+                                <!-- The rules, one sentence. Never names the prize - it is still TBD, and a
+                                     promise made here is a promise we would have to keep. -->
+                                <TextBlock x:Name="TxtPunchCardRules" x:FieldModifier="internal" Text=""
+                                           Foreground="#888888" FontSize="11"
+                                           TextAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Quest Streak Calendar -->
                         <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="10" Padding="15,12" Margin="0,20,0,0">
                             <StackPanel>

@@ -90,6 +90,7 @@ namespace ConditioningControlPanel
             if (SettingsTab.ChkAutoPerformance != null) SettingsTab.ChkAutoPerformance.IsChecked = s.AutoPerformanceMode;
             if (SettingsTab.ChkVideoHwDecode != null) SettingsTab.ChkVideoHwDecode.IsChecked = s.VideoForceHardwareDecoding;
             if (SettingsTab.ChkUnifiedOverlay != null) SettingsTab.ChkUnifiedOverlay.IsChecked = s.UnifiedOverlayHost;
+            if (SettingsTab.ChkIntakeNudge != null) SettingsTab.ChkIntakeNudge.IsChecked = s.IntakeNudgeEnabled;
             RemoteControlTab.ChkStopEffectsOnRemoteDisconnect.IsChecked = s.StopEffectsOnRemoteDisconnect;
             if (RemoteControlTab.ChkRemoteShareAvatar != null) RemoteControlTab.ChkRemoteShareAvatar.IsChecked = s.RemoteShareAvatar;
 
@@ -510,6 +511,9 @@ namespace ConditioningControlPanel
             if (SettingsTab.ChkAutoPerformance != null) s.AutoPerformanceMode = SettingsTab.ChkAutoPerformance.IsChecked ?? true;
             if (SettingsTab.ChkVideoHwDecode != null) s.VideoForceHardwareDecoding = SettingsTab.ChkVideoHwDecode.IsChecked ?? false;
             if (SettingsTab.ChkUnifiedOverlay != null) s.UnifiedOverlayHost = SettingsTab.ChkUnifiedOverlay.IsChecked ?? true;
+            // Weekly intake pass nudge. Defaults ON (it is the feature's re-engagement hook), but a
+            // recurring popup with no off switch is a bug report waiting to happen.
+            if (SettingsTab.ChkIntakeNudge != null) s.IntakeNudgeEnabled = SettingsTab.ChkIntakeNudge.IsChecked ?? true;
 
             // Deeper
             if (SettingsTab.ChkEnableDeeper != null) s.EnableDeeper = SettingsTab.ChkEnableDeeper.IsChecked ?? true;

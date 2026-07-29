@@ -278,6 +278,196 @@ namespace ConditioningControlPanel
 
             // Refresh streak calendar
             RefreshStreakCalendar();
+
+            // Refresh the intake punch card. Riding the tail of RefreshQuestUI is deliberate: this
+            // method is already called from every trigger the card cares about (the quest service
+            // event, the tab switch, both rerolls, quest completion and login), so the card gets all
+            // five repaint paths without a single new subscription to leak or unhook.
+            RefreshPunchCard();
+        }
+
+        /// <summary>
+        /// Repaints the eight-hole intake punch card (see <see cref="IntakePunchCardService"/>).
+        ///
+        /// <para>Drawn from code rather than bound, for the same reason <see cref="RefreshStreakCalendar"/>
+        /// is: this tab has no ViewModel and the repo has no bool-to-brush converter, so the
+        /// Style/DataTrigger idiom used on the leaderboard would need both invented before it drew a
+        /// single circle. Eight throwaway shapes on an already-throttled refresh pass is the cheaper
+        /// trade.</para>
+        ///
+        /// <para>Must tolerate running before the tab is realised - RefreshQuestUI can fire from the
+        /// quest service during startup - hence the null guard, and must never throw: a decorative
+        /// strip is not worth taking the whole quests tab down for.</para>
+        /// </summary>
+        private void RefreshPunchCard()
+        {
+            var holes = QuestsTab?.PunchCardHoles;
+            if (holes == null) return;
+
+            try
+            {
+                var card = App.IntakePunchCard;
+                if (card == null)
+                {
+                    // Service not up yet (or disposed during shutdown). Hide rather than show an
+                    // empty card, which would read as "you have earned nothing" instead of "not
+                    // loaded" - and the first hole is supposed to be free.
+                    if (QuestsTab?.PunchCardPanel != null)
+                        QuestsTab.PunchCardPanel.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                if (QuestsTab?.PunchCardPanel != null)
+                    QuestsTab.PunchCardPanel.Visibility = Visibility.Visible;
+
+                // Accent rather than a literal pink: mods retint the app, and a punch card stuck at
+                // #FF69B4 would be the only element on the tab that ignored the theme.
+                Color accent;
+                try { accent = (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"); }
+                catch { accent = Color.FromRgb(0xFF, 0x69, 0xB4); }
+
+                holes.Children.Clear();
+                for (int i = 0; i < IntakePunchCardService.TotalHoles; i++)
+                    holes.Children.Add(BuildPunchHole(card.HoleAt(i), accent));
+
+                if (QuestsTab?.TxtPunchCardProgress != null)
+                {
+                    QuestsTab.TxtPunchCardProgress.Text =
+                        Loc.GetF("label_punch_card_x_of_y", card.PunchedCount, IntakePunchCardService.TotalHoles);
+                }
+
+                // Status line: the half-stamp nudge is the reason this panel exists at all, so it
+                // gets the loudest treatment short of a banner. Card-full swaps to the "complete"
+                // green used elsewhere on this tab (the quest complete overlay, the banner).
+                var status = QuestsTab?.TxtPunchCardStatus;
+                if (status != null)
+                {
+                    if (card.IsComplete)
+                    {
+                        status.Text = Loc.Get("label_punch_card_full");
+                        status.Foreground = new SolidColorBrush(Color.FromRgb(0x00, 0xE6, 0x76));
+                        status.Visibility = Visibility.Visible;
+                    }
+                    else if (card.HasPendingStamp)
+                    {
+                        status.Text = Loc.GetF("label_punch_card_pending_hint", IntakePunchCardService.SessionCreditPercent);
+                        status.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00));
+                        status.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        status.Visibility = Visibility.Collapsed;
+                    }
+                }
+
+                // The rules only need saying while there are holes left to earn; on a full card the
+                // sentence would still be dangling "a reward waits at eight" at someone standing on
+                // eight.
+                var rules = QuestsTab?.TxtPunchCardRules;
+                if (rules != null)
+                {
+                    rules.Text = card.IsComplete ? string.Empty : Loc.Get("label_punch_card_rules");
+                    rules.Visibility = card.IsComplete ? Visibility.Collapsed : Visibility.Visible;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("RefreshPunchCard: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Builds one hole, boxed into a fixed 46x46 cell so all eight sit on the same grid no matter
+        /// which state they are in.
+        ///
+        /// <para>The concentric-ring "stamp" is lifted from the season recap card's identity mark
+        /// (Controls/SeasonRecapCard.xaml) - it already reads as <i>stamped</i> in this app's visual
+        /// language - with that file's privately-scoped Recap* brushes swapped for the live accent.</para>
+        /// </summary>
+        /// <param name="state">How the service says this hole should read.</param>
+        /// <param name="accent">Current mod accent colour, resolved once by the caller rather than
+        /// eight times here.</param>
+        private static FrameworkElement BuildPunchHole(PunchHoleView state, Color accent)
+        {
+            var accentBrush = new SolidColorBrush(accent);
+
+            // Explicit Center on both axes: an Ellipse with a fixed size inside a Grid defaults to
+            // Stretch, which WPF then treats as centred - true, but only by accident, and it stops
+            // being true the moment someone drops the Width.
+            static System.Windows.Shapes.Ellipse Circle(double size, Brush? fill, Brush? stroke, double thickness)
+                => new System.Windows.Shapes.Ellipse
+                {
+                    Width = size,
+                    Height = size,
+                    Fill = fill,
+                    Stroke = stroke,
+                    StrokeThickness = thickness,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+            var cell = new Grid { Width = 46, Height = 46, Margin = new Thickness(4) };
+
+            switch (state)
+            {
+                case PunchHoleView.Punched:
+                {
+                    // Filled, ringed and glowing. The disc fill is the accent at low alpha rather
+                    // than a second palette entry so it follows the mod colour for free.
+                    var disc = Circle(40, new SolidColorBrush(Color.FromArgb(0x3A, accent.R, accent.G, accent.B)), accentBrush, 2);
+                    disc.Effect = new DropShadowEffect { Color = accent, BlurRadius = 14, ShadowDepth = 0, Opacity = 0.85 };
+                    cell.Children.Add(disc);
+                    cell.Children.Add(Circle(24, null, accentBrush, 1.5));
+                    cell.Children.Add(Circle(10, accentBrush, null, 0));
+                    cell.ToolTip = Loc.Get("tooltip_punch_card_hole_punched");
+                    break;
+                }
+
+                case PunchHoleView.Pending:
+                {
+                    // "Nearly there", not "done": the ring is already the accent colour so it clearly
+                    // belongs with the punched holes, but it is dashed and hollow-cored - a stamp that
+                    // landed at half pressure. This is the hole doing the re-engagement work, and the
+                    // status line under the grid appears alongside it to say what to do about it.
+                    var ring = Circle(40, new SolidColorBrush(Color.FromArgb(0x18, accent.R, accent.G, accent.B)), accentBrush, 2);
+                    ring.StrokeDashArray = new DoubleCollection { 3, 2.5 };
+                    ring.Effect = new DropShadowEffect { Color = accent, BlurRadius = 10, ShadowDepth = 0, Opacity = 0.5 };
+                    cell.Children.Add(ring);
+                    cell.Children.Add(Circle(24, null, new SolidColorBrush(Color.FromArgb(0x88, accent.R, accent.G, accent.B)), 1.5));
+                    cell.ToolTip = Loc.Get("tooltip_punch_card_hole_pending");
+
+                    // Breathing pulse, same shape as the one RefreshStreakCalendar puts on fixable
+                    // days. Animated in code instead of via an inline Storyboard because the element
+                    // itself is built in code and has no resource dictionary to hang one off. A
+                    // Forever repeat is fine here: the cell is discarded and rebuilt on the next
+                    // refresh, so the clocks cannot accumulate.
+                    var pulse = new DoubleAnimation
+                    {
+                        From = 1.0,
+                        To = 0.45,
+                        Duration = TimeSpan.FromMilliseconds(900),
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
+                    };
+                    cell.BeginAnimation(UIElement.OpacityProperty, pulse);
+                    break;
+                }
+
+                default:
+                {
+                    // Hollow and dim. TryFindResource rather than an indexer lookup - this runs on a
+                    // path that has promised never to throw, and a missing theme key should cost a
+                    // washed-out circle, not the tab.
+                    var panelBrush = Application.Current?.TryFindResource("PanelBgBrush") as Brush;
+                    cell.Children.Add(Circle(40, panelBrush ?? Brushes.Transparent,
+                        new SolidColorBrush(Color.FromRgb(0x3D, 0x3D, 0x60)), 1.5));
+                    cell.ToolTip = Loc.Get("tooltip_punch_card_hole_empty");
+                    break;
+                }
+            }
+
+            return cell;
         }
 
         private void RefreshStreakCalendar()

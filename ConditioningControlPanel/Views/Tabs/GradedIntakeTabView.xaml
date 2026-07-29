@@ -71,6 +71,31 @@
                             Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
                             BorderThickness="1" CornerRadius="10" Padding="20,18" MinHeight="150">
                         <StackPanel>
+                            <!-- Weekly-pass banner (IntakePassState.Available only). Deliberately
+                                 INSIDE the gated content rather than being another overlay: in this
+                                 state the user may actually run the intake, so nothing should be
+                                 dimmed, blocked or hit-tested away. It reads as a grant ("here is
+                                 your run") rather than a cap ("you only get one"), because the
+                                 upsell for retakes is already carried by the Spent gate below. -->
+                            <Border x:Name="GradedIntakePassBanner" x:FieldModifier="internal" Visibility="Collapsed"
+                                    Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="14,11" Margin="0,0,0,14">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Top" Margin="0,1,12,0"
+                                           Source="{Binding Source='🎟️', Converter={StaticResource EmojiToImageSource}}"/>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{loc:Str intake_pass_banner_headline}" Foreground="{DynamicResource PinkBrush}"
+                                                   FontWeight="Bold" FontSize="12.5" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{loc:Str intake_pass_banner_body}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11.5" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
                             <TextBlock Text="Begin a run" Foreground="White" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,4"/>
                             <TextBlock Text="Each intake runs in its own window. Answer honestly - the pacing of your answers counts as much as the answers themselves."
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,14"/>
@@ -121,21 +146,74 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Translucent gating overlay (free users) -->
+                    <!-- Gating overlay. Structure copied verbatim from BlinkTrainerGate (scrim +
+                         gradient-bordered card) so every locked Exclusive in the app reads as the
+                         same object; this one used to be hand-rolled hex and literal English.
+
+                         ONE gate, three states, text swapped from RefreshGradedIntakeGate rather
+                         than three sibling Borders: the Spent copy has to interpolate a live day
+                         count anyway, so code-behind owns the strings regardless, and duplicating
+                         the ~30 lines of card chrome per state is how gates drift apart visually.
+                         (Premium is the fourth state and simply never shows this.)
+
+                         CornerRadius on the scrim - the only deviation from Blink Trainer - matches
+                         GradedIntakeGatedContent's rounded card underneath, which Blink's gate does
+                         not have to contend with. -->
                     <Border x:Name="GradedIntakeGate" x:FieldModifier="internal" Visibility="Collapsed"
-                            Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
-                            CornerRadius="10" IsHitTestVisible="True">
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="Premium feature" FontSize="22"
-                                       FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Support to unlock the Graded Intake." FontSize="14"
-                                       Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                            <Button Click="BtnGI_GateUnlock_Click" Padding="20,8" Background="#FF69B4"
-                                    Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
-                                <helpers:EmojiTextBlock Text="🔓 Unlock with Patreon"/>
-                            </Button>
-                        </StackPanel>
+                            Background="#CC0A0A14" CornerRadius="10" IsHitTestVisible="True">
+                        <Border CornerRadius="16"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderThickness="2"
+                                MaxWidth="480"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Padding="36,32">
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                    <GradientStop Color="{DynamicResource NeonPurpleColor}" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.Effect>
+                                <DropShadowEffect Color="{DynamicResource PinkColor}"
+                                                  BlurRadius="40" ShadowDepth="0" Opacity="0.4"/>
+                            </Border.Effect>
+
+                            <StackPanel HorizontalAlignment="Center">
+                                <Image Width="44" Height="44"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,12"
+                                       Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
+                                <!-- The three text values below are placeholders for the designer and
+                                     for the (impossible) case of the gate being shown before a refresh:
+                                     RefreshGradedIntakeGate rewrites all three every time it runs, and
+                                     it runs before the gate is ever made visible. NeedsLogin copy is
+                                     used as the default because it is the only variant with no runtime
+                                     substitution in it. -->
+                                <TextBlock x:Name="TxtGradedIntakeGateHeadline" x:FieldModifier="internal"
+                                           Text="{loc:Str intake_gate_login_headline}"
+                                           Foreground="White"
+                                           FontSize="22" FontWeight="Bold"
+                                           TextAlignment="Center" TextWrapping="Wrap"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,0,0,8"/>
+                                <TextBlock x:Name="TxtGradedIntakeGateBody" x:FieldModifier="internal"
+                                           Text="{loc:Str intake_gate_login_body}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="13"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap"
+                                           MaxWidth="340"
+                                           Margin="0,0,0,24"/>
+                                <Button x:Name="BtnGradedIntakeGateUnlock" x:FieldModifier="internal"
+                                        Content="{loc:Str intake_gate_login_cta}"
+                                        Padding="32,12"
+                                        FontSize="14" FontWeight="Bold"
+                                        Style="{StaticResource SmallPinkButton}"
+                                        HorizontalAlignment="Center"
+                                        Click="BtnGI_GateUnlock_Click"/>
+                            </StackPanel>
+                        </Border>
                     </Border>
                 </Grid>
 
