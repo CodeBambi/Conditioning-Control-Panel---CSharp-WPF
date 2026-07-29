@@ -1406,11 +1406,15 @@ namespace ConditioningControlPanel
         //   * PATRONS NEVER SEE THE CARD. The pass is the free tier's consolation prize; showing
         //     it to someone who already has unlimited runs advertises a limit they do not have.
         //     Premium is the one state that keeps the plain wordmark, and it is checked first.
-        //   * Everyone else - signed out, pass waiting, pass spent - gets the card, with the copy
-        //     and the art rewritten per state by ApplyIntakePassFaceState(). It is a standing
-        //     affordance, not a cutscene: it stays put until the run is consumed or the week
-        //     rolls over, so nobody misses it by being on another tab.
-        //   * ONLY the "pass waiting" state turns, and it turns FOREVER: hold the wordmark 8s,
+        //   * ONLY "pass waiting" (Available) shows the card at all. Signed-out and spent both
+        //     keep the wordmark - see the long note in RefreshIntakePassTile for why that is a
+        //     correctness rule and not a style choice. ApplyIntakePassFaceState still carries
+        //     NeedsLogin and Spent branches; they are unreachable today and kept only so the
+        //     product decision can be reversed by relaxing one condition rather than rewriting
+        //     the copy. Do not "clean them up" without changing that condition first.
+        //   * The card art is PER-NICHE and the niche comes from the active mod, so the tile
+        //     re-resolves it on ModChanged as well as on the state changes.
+        //   * The "pass waiting" state turns, and it turns FOREVER: hold the wordmark 8s,
         //     turn 2.5 times, hold the card 8s, turn back, repeat for as long as the Dashboard is
         //     on screen. The tile is a two-sided plate rather than a one-shot reveal, so a pass
         //     cannot be missed by having looked away at the wrong moment. A signed-out or spent
@@ -1463,6 +1467,7 @@ namespace ConditioningControlPanel
         private bool _intakePassLoadedHooked;
         private bool _intakePassStateHooked;
         private bool _intakePassVisibilityHooked;
+        private bool _intakePassModHooked;
         private bool _intakePassHelpAttached;
 
         /// <summary>Half a breath of the CTA - it auto-reverses, so a full in-and-out is twice
@@ -1520,6 +1525,43 @@ namespace ConditioningControlPanel
                 {
                     _intakePassStateHooked = true;
                     pass.PassStateChanged += (_, _) =>
+                    {
+                        var d = Application.Current?.Dispatcher;
+                        if (d == null || d.HasShutdownStarted) return;
+                        d.BeginInvoke(new Action(RefreshIntakePassTile));
+                    };
+                }
+
+                // Repaint when the ACTIVE MOD changes. The card art is per-niche and the niche is
+                // derived from the mod (IntakeNiche.Current), so a mod switch invalidates whatever
+                // is currently painted - and nothing else re-runs this: the mod picker is in the
+                // top bar and the Manage Mods dialog is modal, so a user already sitting on the
+                // Dashboard gets no tab change, no Loaded, no visibility change, and no pass-state
+                // change. That was the whole bug (switch to Drone, keep the old niche's ticket).
+                //
+                // ModChanged is the app's authoritative mod signal - the same one the avatar
+                // (AvatarTubeWindow), the theme/feature images (MainWindow.xaml.cs) and the window
+                // chrome (App.xaml.cs) already ride - so this cannot drift away from them the way a
+                // second hook off ApplyActiveModChange would (that method is only on MainWindow's
+                // own two paths and misses any other caller of ModService.ActivateMod).
+                //
+                // Marshalled with the shutdown guard because ActivateMod has no thread affinity.
+                // ModService clears the resource cache BEFORE raising this, so the re-resolve below
+                // is guaranteed to see the new mod's art.
+                //
+                // This does NOT disturb the flip loop: a re-entrant refresh repaints the face via
+                // ApplyIntakePassFaceState and then bails at the _intakePassLoopRunning check
+                // without touching the transform or the spin generation, so the turn in progress
+                // keeps its rhythm. The swap is deliberately IMMEDIATE rather than deferred to the
+                // next zero crossing - a mod switch already hard-cuts the logo, the theme, the
+                // feature images and the skill tree in the same frame, so one more instant repaint
+                // is what the user expects; whereas art that stayed wrong for up to 8s would be
+                // indistinguishable from the bug this fixes. When the wordmark face is up the swap
+                // is invisible anyway (the card is Collapsed).
+                if (!_intakePassModHooked && App.Mods != null)
+                {
+                    _intakePassModHooked = true;
+                    App.Mods.ModChanged += (_, _) =>
                     {
                         var d = Application.Current?.Dispatcher;
                         if (d == null || d.HasShutdownStarted) return;

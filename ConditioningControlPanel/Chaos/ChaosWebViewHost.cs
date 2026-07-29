@@ -319,6 +319,14 @@ internal sealed class ChaosWebViewHost : IDisposable
                 // which is how the tube and this page interleaved into a torn half-and-half composite.
                 // An attached tube is conceptually part of the main window (that is what "attached"
                 // means), so it rides at main's level and we go above the pair, not between them.
+                //
+                // Ask the tube to drop to main's level FIRST. Slotting after the tube is not enough on
+                // its own: if the tube is carrying WS_EX_TOPMOST (a Topmost pulse on main propagates to
+                // its owned windows), inserting a non-topmost window "after" a topmost one only puts us
+                // at the top of the NON-topmost band — still under the tube, which is how the tube ended
+                // up floating over the Graded Intake window. SinkToMainZOrder self-marshals to the avatar
+                // thread (never block main on it), so it lands right after our own insert below and wins.
+                try { App.AvatarWindow?.SinkToMainZOrder(); } catch { }
                 var insertAfter = _glueOwnerHandle;
                 var tube = App.AvatarWindow?.AttachedHandleOrZero ?? IntPtr.Zero;
                 if (tube != IntPtr.Zero && IsWindowVisible(tube)) insertAfter = tube;

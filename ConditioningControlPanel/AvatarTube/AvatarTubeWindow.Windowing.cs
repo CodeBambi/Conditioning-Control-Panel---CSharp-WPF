@@ -141,6 +141,14 @@ namespace ConditioningControlPanel
         [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
 
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+        private const uint GW_HWNDPREV = 3;   // the window directly ABOVE hWnd in the z-order
+
         /// <summary>
         /// Start monitoring for fullscreen applications
         /// </summary>
@@ -162,14 +170,77 @@ namespace ConditioningControlPanel
         // intentionally topmost widgets and stay exempt.
         private bool SuppressSelfRaiseForGameHost => !IsDetached && ChaosWebViewHost.AnyHostActive;
 
+        /// <summary>
+        /// Drop the ATTACHED tube to the bottom of MainWindow's owner group — directly above main,
+        /// and therefore BELOW every game-host window glued over it (DTRH / Graded Intake / Loom /
+        /// Bureau).
+        ///
+        /// This is the ACTIVE half of <see cref="SuppressSelfRaiseForGameHost"/>, which is purely
+        /// passive: it stops the tube RAISING itself, but it cannot undo a raise that already
+        /// happened, and plenty of them are not self-raises at all — the window manager re-showing
+        /// the owned tube when main comes back from the intake's duck, a click that activates the
+        /// tube, or a stale WS_EX_TOPMOST left over from an <c>App.ForceWindowToFront</c>-style
+        /// Topmost pulse propagating through main to its owned windows. A tube that is already
+        /// above the host stays there forever, which is
+        /// exactly the "tube floats over Graded Intake" report.
+        ///
+        /// Passing main's OWN handle as hWndInsertAfter asks for "directly behind main", which the
+        /// window manager clamps to "directly above main" because an owned window may never sit
+        /// below its owner. That is the same trick
+        /// <see cref="ChaosWebViewHost"/>.ApplyNativeOwner uses to slot a host above the pair, run
+        /// in the opposite direction — so the tube can never end up buried under main. Ordering
+        /// against a non-topmost window also clears WS_EX_TOPMOST, which is a repair rather than a
+        /// loss: an attached tube is never meant to be topmost (<see cref="Attach"/> sets
+        /// Topmost=false) and <see cref="Detach"/> puts the band back itself.
+        ///
+        /// Nothing has to be restored when the host closes: this only reorders inside the band the
+        /// tube already belongs to, and main's next raise carries its owned tube back up with it.
+        ///
+        /// Callable from ANY thread — it self-marshals to the avatar dispatcher. Doing the
+        /// SetWindowPos on the tube's OWN thread matters: cross-thread SetWindowPos sends
+        /// WM_WINDOWPOSCHANGING synchronously and would let a busy avatar thread block main (the
+        /// app's historic mixed-DPI / render-deadlock cluster).
+        /// </summary>
+        internal void SinkToMainZOrder()
+        {
+            if (!Dispatcher.CheckAccess()) { RunOnAvatar(SinkToMainZOrder); return; }
+            try
+            {
+                // A DETACHED tube is a deliberate free-floating topmost widget — never sink it.
+                if (!_isAttached) return;
+                var tube = _tubeHandle;
+                var main = _parentHandle;
+                if (tube == IntPtr.Zero || main == IntPtr.Zero) return;
+                // Hidden (ducked with main, or hidden for a fullscreen app) can't float over
+                // anything, and reordering it would only churn frames 2x/second for nothing.
+                if (!IsWindowVisible(tube)) return;
+                // An ATTACHED tube is never meant to carry WS_EX_TOPMOST (Attach sets Topmost=false;
+                // only Detach puts the band back). Finding it set means a Topmost pulse on main
+                // propagated into its owner group and never propagated back out, which parks the
+                // tube above the entire non-topmost band - the host included - no matter where it
+                // sits relative to main. Always repair that, never trust the cheap check below for it.
+                bool strayTopmost = (GetWindowLong(tube, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+                // Otherwise: already sitting directly above main? Then nothing is between us and
+                // main, so nothing we could be floating over — leave the z-order (and this layered
+                // window's WM_WINDOWPOSCHANGING path) completely alone. This is what keeps the 500ms
+                // tick idle in the steady state instead of poking the tube twice a second.
+                if (!strayTopmost && GetWindow(main, GW_HWNDPREV) == tube) return;
+                SetWindowPos(tube, main, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            catch { /* window may be tearing down */ }
+        }
+
         private void FullscreenCheckTimer_Tick(object? sender, EventArgs e)
         {
             try
             {
                 // A game host owns the screen: the attached tube is already tucked away with the
                 // minimized main window, and its own hide/restore dance here is the confirmed cause
-                // of the tube popping over the game. Do nothing until the host closes.
-                if (SuppressSelfRaiseForGameHost) return;
+                // of the tube popping over the game. Do nothing until the host closes — except push
+                // the tube back down to main's level, which is the only tick that runs while a host
+                // is up and so is the safety net for every raise nobody told us about (the window
+                // manager's own owner-group re-show, a click on the tube, a Topmost pulse).
+                if (SuppressSelfRaiseForGameHost) { SinkToMainZOrder(); return; }
 
                 bool isOtherAppFullscreen = IsOtherAppFullscreen();
 
@@ -644,12 +715,22 @@ namespace ConditioningControlPanel
                         case WindowState.Normal:
                         case WindowState.Maximized:
                             ResumeAvatarGif();
-                            if (parentVisible && App.Settings?.Current?.AvatarEnabled == true
-                                && !SuppressSelfRaiseForGameHost)
+                            if (parentVisible && App.Settings?.Current?.AvatarEnabled == true)
                             {
-                                Show();
-                                if (_isAttached) UpdatePosition();
-                                // When detached, WPF Topmost property handles it
+                                if (!SuppressSelfRaiseForGameHost)
+                                {
+                                    Show();
+                                    if (_isAttached) UpdatePosition();
+                                    // When detached, WPF Topmost property handles it
+                                }
+                                else
+                                {
+                                    // Main just came back from the intake's duck. The window manager
+                                    // re-shows the windows IT hid with the owner, behind WPF's back
+                                    // and in an order nothing guarantees — so the tube can surface
+                                    // above the host here even though we never asked it to.
+                                    SinkToMainZOrder();
+                                }
                             }
                             break;
                     }
@@ -677,6 +758,7 @@ namespace ConditioningControlPanel
                             Show();
                             if (_isAttached) UpdatePosition();
                         }
+                        else SinkToMainZOrder();   // main became visible again under a live host
                         // When detached, WPF Topmost property handles it
                     }
                     else
@@ -705,7 +787,11 @@ namespace ConditioningControlPanel
             // Don't do any z-order work when pop quiz is open, or while a game host owns the
             // screen (raising the attached tube would float it over DTRH/Intake).
             if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-            if (SuppressSelfRaiseForGameHost) return;
+            // Activating main raises its whole owned GROUP, and Win32 defines no order between two
+            // windows that share an owner — so the tube can come up alongside (or over) the host
+            // without any raise of our own. Push it back to main's level instead of just standing
+            // down. SinkToMainZOrder self-marshals; this handler runs on the PARENT thread.
+            if (SuppressSelfRaiseForGameHost) { SinkToMainZOrder(); return; }
 
             try
             {
@@ -757,7 +843,9 @@ namespace ConditioningControlPanel
             {
                 // Never raise an attached tube while a game host owns the screen (it would float
                 // over DTRH/Intake); the game-end restore path re-shows it once the host is gone.
-                if (SuppressSelfRaiseForGameHost) return;
+                // Take the opportunity to push it back down: whatever asked for this show (a bark,
+                // a tray restore, a session event) usually follows something that reordered us.
+                if (SuppressSelfRaiseForGameHost) { SinkToMainZOrder(); return; }
 
                 // Manual/explicit show (checkbox toggle, tray "Wake Bambi Up", session events)
                 // is a deliberate user/system request to make the avatar visible, so clear the
