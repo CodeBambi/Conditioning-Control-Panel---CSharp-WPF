@@ -1,100 +1,90 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Net.Http;
-using System.Runtime.InteropServices;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
-using System.Windows.Media.Effects;
-using System.Windows.Media.Imaging;
-using System.Windows.Threading;
-using Rectangle = System.Windows.Shapes.Rectangle;
-using NAudio.Wave;
 using ConditioningControlPanel.Localization;
-using ConditioningControlPanel.Models;
-using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Views.Tabs;
 
 namespace ConditioningControlPanel
 {
-    // Leaderboard tab: rankings display and refresh.
+    // Leaderboard tab: ranked roster, tier bands, podium, sticky "you" bar.
     public partial class MainWindow
     {
         #region Leaderboard
 
-        internal async void LeaderboardColumnHeader_Click(object sender, RoutedEventArgs e)
-        {
-            // Ignore during window initialization
-            if (_isLoading || LeaderboardTab.TxtLeaderboardStatus == null || App.Leaderboard == null) return;
+        /// <summary>
+        /// The board in canonical rank order. <see cref="Services.LeaderboardEntry.Rank"/> is
+        /// assigned here once per refresh and is NEVER re-assigned by an alternate sort — a
+        /// row's Rank has to keep meaning "standing", or the tier bands and the delta arrows
+        /// start lying (that class of mistake is what produced ccp-bugs #693).
+        /// </summary>
+        private List<Services.LeaderboardEntry> _leaderboardRanked = new();
 
-            if (e.OriginalSource is GridViewColumnHeader header && header.Content is string headerText)
-            {
-                // Map header text to sort field
-                // In all-time mode, level column is hidden so skip level sort
-                var levelSort = _leaderboardMode == "all-time" ? "xp" : "level";
-                string? sortField = headerText switch
-                {
-                    "Rank" => levelSort,
-                    "Level" => levelSort,
-                    "XP" => "xp",
-                    "Patreon" => "is_patreon",
-                    "Name" => null, // Client-side sort
-                    "Online" => null, // Client-side sort
-                    "Achievements" => null, // Client-side sort
-                    _ => null
-                };
+        /// <summary>Display sort: rank | name | level | xp | achievements | streak.</summary>
+        private string _leaderboardSortKey = "rank";
 
-                if (sortField != null)
-                {
-                    // Fetch fresh data then sort client-side (server always returns XP order)
-                    await RefreshLeaderboardAsync(sortField);
-                    ApplyLeaderboardSort(sortField);
-                }
-                else if (headerText == "Name")
-                {
-                    // Client-side alphabetical sort
-                    LeaderboardTab.TxtLeaderboardStatus.Text = Loc.Get("label_sorting_by_name");
-                    var sorted = App.Leaderboard.Entries.OrderBy(x => x.DisplayName).ToList();
-                    LeaderboardTab.LstLeaderboard.ItemsSource = sorted;
-                    LeaderboardTab.TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users_sorted_by_name", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
-                }
-                else if (headerText == "Online")
-                {
-                    // Client-side: online first, then by level descending
-                    LeaderboardTab.TxtLeaderboardStatus.Text = Loc.Get("label_sorting_by_online_status");
-                    var sorted = App.Leaderboard.Entries
-                        .OrderByDescending(x => x.IsOnline)
-                        .ThenByDescending(x => x.Level)
-                        .ToList();
-                    LeaderboardTab.LstLeaderboard.ItemsSource = sorted;
-                    LeaderboardTab.TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users_online_first", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
-                }
-                else if (headerText == "Achievements")
-                {
-                    // Client-side: by achievement count descending
-                    LeaderboardTab.TxtLeaderboardStatus.Text = Loc.Get("label_sorting_by_achievements");
-                    var sorted = App.Leaderboard.Entries
-                        .OrderByDescending(x => x.AchievementsCount)
-                        .ToList();
-                    LeaderboardTab.LstLeaderboard.ItemsSource = sorted;
-                    LeaderboardTab.TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users_sorted_by_achievements", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
-                }
-            }
-        }
+        /// <summary>Client-side roster filter: all | online | patrons | og.</summary>
+        private string _leaderboardFilter = "all";
+
+        /// <summary>Client-side roster search over display names.</summary>
+        private string _leaderboardSearch = "";
+
+        /// <summary>
+        /// The local player's previous rank, captured BEFORE the snapshot is re-recorded.
+        /// See <see cref="RankLeaderboardEntries"/> for why the ordering matters.
+        /// </summary>
+        private int? _youPreviousRank;
+        private bool _youPreviousRankKnown;
+
+        /// <summary>Number of achievements that count toward the roster's "X / Y" column.</summary>
+        private static int EarnableAchievementCount =>
+            Models.Achievement.All.Values.Count(a => !a.IsHidden);
+
+        // ------------------------------------------------------------------
+        // Toolbar handlers
+        // ------------------------------------------------------------------
 
         internal async void BtnRefreshLeaderboard_Click(object sender, RoutedEventArgs e)
         {
             await RefreshLeaderboardAsync();
+        }
+
+        /// <summary>
+        /// Column-legend sorting. This replaces the old GridViewColumnHeader.Click handler,
+        /// which mapped English header strings to server sort fields and re-fetched the board
+        /// on every click. Sorting is now purely client-side: the v3 endpoint always returns
+        /// the same XP-ordered slice regardless of sort_by, so the round trip bought nothing.
+        /// </summary>
+        internal void LeaderboardSortHeader_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading || App.Leaderboard == null) return;
+            if (sender is not System.Windows.Controls.Button btn || btn.Tag is not string key) return;
+
+            _leaderboardSortKey = key;
+            RebuildLeaderboardView();
+        }
+
+        internal void LeaderboardSearch_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (sender is not System.Windows.Controls.TextBox box) return;
+
+            _leaderboardSearch = box.Text ?? "";
+            RebuildLeaderboardView();
+        }
+
+        internal void LeaderboardFilter_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (sender is not System.Windows.Controls.Primitives.ToggleButton chip || chip.Tag is not string tag) return;
+
+            _leaderboardFilter = tag;
+            RebuildLeaderboardView();
         }
 
         /// <summary>
@@ -107,13 +97,13 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var list = LeaderboardTab.LstLeaderboard;
+                var list = LeaderboardTab?.LstLeaderboard;
                 if (list?.ItemsSource == null)
                 {
                     // No slice loaded yet (offline, or the fetch failed). Don't be a dead button:
                     // the cached server rank is still worth reporting, and if even that's missing
                     // OutsideBoardMessage() says so out loud instead of silently doing nothing.
-                    if (LeaderboardTab.TxtLeaderboardStatus != null)
+                    if (LeaderboardTab?.TxtLeaderboardStatus != null)
                         LeaderboardTab.TxtLeaderboardStatus.Text = OutsideBoardMessage();
                     return;
                 }
@@ -128,7 +118,7 @@ namespace ConditioningControlPanel
 
                 if (me == null)
                 {
-                    if (LeaderboardTab.TxtLeaderboardStatus != null)
+                    if (LeaderboardTab?.TxtLeaderboardStatus != null)
                         LeaderboardTab.TxtLeaderboardStatus.Text = OutsideBoardMessage();
                     return;
                 }
@@ -174,18 +164,17 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Populate the "Your rank: #N" badge. The server rank is the ONLY acceptable source, and
-        /// there is deliberately no fallback to the row's own Rank: ApplyLeaderboardSort re-numbers
-        /// every loaded entry by display position, so a row's Rank is a slice offset rather than a
-        /// standing. Falling back to it is what produced ccp-bugs #693, where the players sitting at
-        /// global rank 5 and rank 205 were both told they were `#5`. A wrong-but-plausible number is
-        /// worse than none - the user has no way to tell it's wrong - so when the server omits
-        /// your_rank we collapse the badge and show nothing at all.
+        /// there is deliberately no fallback to the row's own Rank: a row's Rank is a slice offset
+        /// rather than a standing. Falling back to it is what produced ccp-bugs #693, where the
+        /// players sitting at global rank 5 and rank 205 were both told they were `#5`. A
+        /// wrong-but-plausible number is worse than none - the user has no way to tell it's wrong -
+        /// so when the server omits your_rank we collapse the badge and show nothing at all.
         /// </summary>
         private void UpdateYourRankDisplay()
         {
             try
             {
-                var txt = LeaderboardTab.TxtYourRank;
+                var txt = LeaderboardTab?.TxtYourRank;
                 if (txt == null) return;
 
                 var serverRank = App.Leaderboard?.YourRank;
@@ -216,9 +205,10 @@ namespace ConditioningControlPanel
             {
                 _leaderboardMode = mode;
                 UpdateLeaderboardModeButtons();
-                // All-time defaults to XP ranking, monthly defaults to level
-                var defaultSort = mode == "all-time" ? "xp" : "level";
-                await RefreshLeaderboardAsync(defaultSort);
+                // Both boards open in canonical rank order (which is XP order on the server's
+                // sorted set) so the podium and the tier bands line up with the ranks.
+                _leaderboardSortKey = "rank";
+                await RefreshLeaderboardAsync();
             }
         }
 
@@ -226,7 +216,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (LeaderboardTab.BtnLeaderboardMonthly == null || LeaderboardTab.BtnLeaderboardAllTime == null) return;
+                if (LeaderboardTab?.BtnLeaderboardMonthly == null || LeaderboardTab.BtnLeaderboardAllTime == null) return;
 
                 var isAllTime = _leaderboardMode == "all-time";
                 var gold = (Color)ColorConverter.ConvertFromString("#FFD700");
@@ -254,7 +244,10 @@ namespace ConditioningControlPanel
                 if (allTimeBorder != null)
                     allTimeBorder.BorderBrush = new SolidColorBrush(isAllTime ? gold : pink);
 
-                // Apply accent theme to rows, headers, and hover colors
+                // The header's season block owns the countdown; tell it which board we're on.
+                LeaderboardTab.SetLeaderboardMode(isAllTime);
+
+                // Apply accent theme to rows and the sticky "you" bar
                 ApplyLeaderboardTheme(isAllTime ? gold : pink);
             }
             catch (Exception ex)
@@ -263,41 +256,40 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Re-tint the roster for the active board. Monthly runs on the mod accent, All-Time on
+        /// gold. This used to also rebuild a GridViewColumnHeader style; the GridView is gone, so
+        /// the only container left to theme is the roster's ListViewItem.
+        /// </summary>
         private void ApplyLeaderboardTheme(Color accent)
         {
-            if (LeaderboardTab.LstLeaderboard == null) return;
+            if (LeaderboardTab?.LstLeaderboard == null) return;
 
             var accentBrush = new SolidColorBrush(accent);
-            var hoverBrush = new SolidColorBrush(Color.FromArgb(0x40, accent.R, accent.G, accent.B));
-            var selectedBrush = new SolidColorBrush(Color.FromArgb(0x50, accent.R, accent.G, accent.B));
-            var headerBgColor = Application.Current.Resources["AccentTintedBg"] is Color tbg ? tbg : (Color)ColorConverter.ConvertFromString("#352545");
-            var headerHoverBgColor = Application.Current.Resources["AccentTintedBgHover"] is Color thbg ? thbg : (Color)ColorConverter.ConvertFromString("#452555");
-            var headerHoverBg = new SolidColorBrush(headerHoverBgColor);
-            var headerBg = new SolidColorBrush(headerBgColor);
+            var tint20 = new SolidColorBrush(Color.FromArgb(0x20, accent.R, accent.G, accent.B));
+            var tint40 = new SolidColorBrush(Color.FromArgb(0x40, accent.R, accent.G, accent.B));
+            var hoverBrush = new SolidColorBrush(Color.FromArgb(0x22, accent.R, accent.G, accent.B));
+            var selectedBrush = new SolidColorBrush(Color.FromArgb(0x3C, accent.R, accent.G, accent.B));
 
-            // Rebuild ItemContainerStyle with the new accent color
             var itemStyle = new Style(typeof(ListViewItem));
             itemStyle.Setters.Add(new Setter(ForegroundProperty, accentBrush));
             itemStyle.Setters.Add(new Setter(BackgroundProperty, Brushes.Transparent));
-            itemStyle.Setters.Add(new Setter(PaddingProperty, new Thickness(8)));
-            itemStyle.Setters.Add(new Setter(MarginProperty, new Thickness(0, 2, 0, 0)));
-            itemStyle.Setters.Add(new Setter(FontSizeProperty, 18.0));
-            itemStyle.Setters.Add(new Setter(FontWeightProperty, FontWeights.ExtraBold));
-            itemStyle.Setters.Add(new Setter(FontFamilyProperty, new FontFamily("Segoe Print")));
+            itemStyle.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(0)));
+            itemStyle.Setters.Add(new Setter(PaddingProperty, new Thickness(0)));
+            itemStyle.Setters.Add(new Setter(MarginProperty, new Thickness(0)));
+            itemStyle.Setters.Add(new Setter(FontSizeProperty, 13.0));
+            itemStyle.Setters.Add(new Setter(FontFamilyProperty, new FontFamily("Segoe UI")));
             itemStyle.Setters.Add(new Setter(HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
 
             // OG gold-tinted row (always gold regardless of mode)
             var ogTrigger = new DataTrigger { Binding = new System.Windows.Data.Binding("IsSeason0Og"), Value = true };
-            ogTrigger.Setters.Add(new Setter(BackgroundProperty, new SolidColorBrush(Color.FromArgb(0x25, 0xFF, 0xD7, 0x00))));
-            ogTrigger.Setters.Add(new Setter(BorderBrushProperty, new SolidColorBrush(Color.FromArgb(0x50, 0xFF, 0xD7, 0x00))));
-            ogTrigger.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(0, 0, 0, 2)));
+            ogTrigger.Setters.Add(new Setter(BackgroundProperty, new SolidColorBrush(Color.FromArgb(0x18, 0xFF, 0xD7, 0x00))));
             itemStyle.Triggers.Add(ogTrigger);
 
-            // The local user's own row gets a subtle pink tint (added after OG so it wins).
-            var pinkAccent = (Color)ColorConverter.ConvertFromString("#FF69B4");
+            // The local user's own row gets an accent tint + left rule (added after OG so it wins).
             var meTrigger = new DataTrigger { Binding = new System.Windows.Data.Binding("IsCurrentUser"), Value = true };
-            meTrigger.Setters.Add(new Setter(BackgroundProperty, new SolidColorBrush(Color.FromArgb(0x30, pinkAccent.R, pinkAccent.G, pinkAccent.B))));
-            meTrigger.Setters.Add(new Setter(BorderBrushProperty, new SolidColorBrush(Color.FromArgb(0x70, pinkAccent.R, pinkAccent.G, pinkAccent.B))));
+            meTrigger.Setters.Add(new Setter(BackgroundProperty, tint20));
+            meTrigger.Setters.Add(new Setter(BorderBrushProperty, accentBrush));
             meTrigger.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(3, 0, 0, 0)));
             itemStyle.Triggers.Add(meTrigger);
 
@@ -309,53 +301,21 @@ namespace ConditioningControlPanel
             selectedTrigger.Setters.Add(new Setter(BackgroundProperty, selectedBrush));
             itemStyle.Triggers.Add(selectedTrigger);
 
+            // Tier bands are inert separators. Added LAST so they beat hover/selection.
+            var bandTrigger = new DataTrigger { Binding = new System.Windows.Data.Binding("IsBand"), Value = true };
+            bandTrigger.Setters.Add(new Setter(BackgroundProperty, Brushes.Transparent));
+            bandTrigger.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(0)));
+            bandTrigger.Setters.Add(new Setter(FocusableProperty, false));
+            bandTrigger.Setters.Add(new Setter(IsHitTestVisibleProperty, false));
+            itemStyle.Triggers.Add(bandTrigger);
+
             LeaderboardTab.LstLeaderboard.ItemContainerStyle = itemStyle;
 
-            // Rebuild header style in ListView.Resources
-            var headerStyle = new Style(typeof(GridViewColumnHeader));
-            headerStyle.Setters.Add(new Setter(BackgroundProperty, headerBg));
-            headerStyle.Setters.Add(new Setter(ForegroundProperty, accentBrush));
-            headerStyle.Setters.Add(new Setter(FontWeightProperty, FontWeights.ExtraBold));
-            headerStyle.Setters.Add(new Setter(FontSizeProperty, 18.0));
-            headerStyle.Setters.Add(new Setter(FontFamilyProperty, new FontFamily("Segoe Print")));
-            headerStyle.Setters.Add(new Setter(PaddingProperty, new Thickness(12, 10, 12, 10)));
-            headerStyle.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(0, 0, 1, 2)));
-            headerStyle.Setters.Add(new Setter(BorderBrushProperty, accentBrush));
-            headerStyle.Setters.Add(new Setter(CursorProperty, Cursors.Hand));
-
-            var headerHoverTrigger = new Trigger { Property = IsMouseOverProperty, Value = true };
-            headerHoverTrigger.Setters.Add(new Setter(BackgroundProperty, headerHoverBg));
-            headerStyle.Triggers.Add(headerHoverTrigger);
-
-            LeaderboardTab.LstLeaderboard.Resources[typeof(GridViewColumnHeader)] = headerStyle;
-        }
-
-        private void UpdateSeasonsColumn()
-        {
-            try
+            // Sticky "you" bar follows the same accent.
+            if (LeaderboardTab.YouBar != null)
             {
-                var gridView = LeaderboardTab.LstLeaderboard?.View as GridView;
-                if (gridView == null || gridView.Columns.Count == 0) return;
-
-                var isAllTime = _leaderboardMode == "all-time";
-
-                var seasonsCol = gridView.Columns.FirstOrDefault(c => c.Header?.ToString() == "Seasons");
-                if (seasonsCol != null)
-                {
-                    seasonsCol.Width = isAllTime ? 80 : 0;
-                }
-
-                // Hide level column in all-time mode (inconsistent after season resets)
-                var levelHeader = Loc.Get("label_level");
-                var levelCol = gridView.Columns.FirstOrDefault(c => c.Header?.ToString() == levelHeader);
-                if (levelCol != null)
-                {
-                    levelCol.Width = isAllTime ? 0 : 100;
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "Error updating Seasons column");
+                LeaderboardTab.YouBar.Background = tint20;
+                LeaderboardTab.YouBar.BorderBrush = tint40;
             }
         }
 
@@ -384,7 +344,7 @@ namespace ConditioningControlPanel
         internal void LstLeaderboard_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             // Get the double-clicked item
-            if (LeaderboardTab.LstLeaderboard?.SelectedItem is Services.LeaderboardEntry entry && !string.IsNullOrEmpty(entry.DisplayName))
+            if (LeaderboardTab?.LstLeaderboard?.SelectedItem is Services.LeaderboardEntry entry && !string.IsNullOrEmpty(entry.DisplayName))
             {
                 App.Logger?.Information("Leaderboard double-click: Opening profile for {DisplayName}", entry.DisplayName);
 
@@ -400,9 +360,13 @@ namespace ConditioningControlPanel
             }
         }
 
+        // ------------------------------------------------------------------
+        // Refresh
+        // ------------------------------------------------------------------
+
         private async Task RefreshLeaderboardAsync(string? sortBy = null)
         {
-            if (App.Leaderboard == null || LeaderboardTab.TxtLeaderboardStatus == null || LeaderboardTab.BtnRefreshLeaderboard == null) return;
+            if (App.Leaderboard == null || LeaderboardTab?.TxtLeaderboardStatus == null || LeaderboardTab.BtnRefreshLeaderboard == null) return;
 
             LeaderboardTab.TxtLeaderboardStatus.Text = Loc.Get("label_syncing");
             LeaderboardTab.BtnRefreshLeaderboard.IsEnabled = false;
@@ -410,18 +374,19 @@ namespace ConditioningControlPanel
             try
             {
                 // Sync local stats to cloud first so leaderboard shows latest data
-                var syncEnabled = App.ProfileSync?.IsSyncEnabled == true;
+                var profileSync = App.ProfileSync;
+                var syncEnabled = profileSync?.IsSyncEnabled == true;
                 App.Logger?.Information("Leaderboard refresh: IsSyncEnabled={SyncEnabled}, ProfileSync={HasProfileSync}, Patreon={HasPatreon}, Authenticated={IsAuth}",
                     syncEnabled,
-                    App.ProfileSync != null,
+                    profileSync != null,
                     App.Patreon != null,
                     App.Patreon?.IsAuthenticated);
 
-                if (syncEnabled)
+                if (syncEnabled && profileSync != null)
                 {
                     App.Logger?.Information("Syncing profile before leaderboard refresh...");
                     App.Achievements?.Save(); // Save any pending achievements first
-                    await App.ProfileSync.SyncProfileAsync();
+                    await profileSync.SyncProfileAsync();
                     App.Logger?.Information("Profile sync completed");
                 }
 
@@ -430,30 +395,18 @@ namespace ConditioningControlPanel
 
                 if (success)
                 {
-                    // Apply client-side sort (server always returns XP order from sorted set)
-                    ApplyLeaderboardSort(sortBy ?? App.Leaderboard.CurrentSortBy);
-                    LeaderboardTab.TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
+                    // Assign canonical ranks + bake rank deltas, then render.
+                    RankLeaderboardEntries();
+                    ApplyLeaderboardSort(sortBy ?? "rank");
 
-                    // Update season flavour text based on mode
-                    if (_leaderboardMode == "all-time")
-                    {
-                        LeaderboardTab.TxtLeaderboardSeason.Text = Loc.Get("label_all_time_legends_never_die");
-                        if (LeaderboardTab.TxtLeaderboardSubtitle != null)
-                            LeaderboardTab.TxtLeaderboardSubtitle.Text = Loc.Get("label_cumulative_xp_across_all_seasons");
-                    }
-                    else
-                    {
-                        var seasonTitle = App.QuestDefinitions?.SeasonTitle;
-                        if (!string.IsNullOrEmpty(seasonTitle))
-                            LeaderboardTab.TxtLeaderboardSeason.Text = Loc.GetF("label_0_prove_your_devotion", seasonTitle);
-                        if (LeaderboardTab.TxtLeaderboardSubtitle != null)
-                            LeaderboardTab.TxtLeaderboardSubtitle.Text = Loc.Get("label_resets_monthly_your_rank_is_everything");
-                    }
+                    LeaderboardTab.TxtLeaderboardStatus.Text =
+                        Loc.GetF("lb_online_and_total", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
 
-                    // Show/hide Trophy Case columns based on skill unlock
+                    // Season name + countdown are derived locally by the tab.
+                    LeaderboardTab.SetLeaderboardMode(_leaderboardMode == "all-time");
+
+                    // Show/hide Trophy Case stats based on skill unlock
                     UpdateTrophyCaseColumns();
-                    // Show/hide Seasons column based on mode
-                    UpdateSeasonsColumn();
 
                     // Bark hook: react to the user's standing when the board loads.
                     try { App.Bark?.NotifyLeaderboardViewed(App.Leaderboard.YourRank ?? 0, App.Leaderboard.TotalUsers); } catch { }
@@ -474,75 +427,420 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void ApplyLeaderboardSort(string sortBy)
+        /// <summary>
+        /// Assign the canonical rank to every fetched entry and bake in the rank delta.
+        ///
+        /// Order matters and is load-bearing: <see cref="LeaderboardRankSnapshotService.RecordIfDue"/>
+        /// updates the in-memory cache as well as disk, so every GetPreviousRank issued after it
+        /// returns the value we just wrote and every arrow renders "no change". So we (1) rank,
+        /// (2) READ every previous rank eagerly into the row, (3) only then re-record. Nothing
+        /// looks the previous rank up lazily from a binding — a virtualized row realises on
+        /// scroll, i.e. long after step 3.
+        /// </summary>
+        private void RankLeaderboardEntries()
         {
-            if (App.Leaderboard?.Entries == null || LeaderboardTab.LstLeaderboard == null) return;
+            if (App.Leaderboard?.Entries == null) { _leaderboardRanked = new List<Services.LeaderboardEntry>(); return; }
 
-            List<Services.LeaderboardEntry> sorted;
+            var isAllTime = _leaderboardMode == "all-time";
 
-            if (_leaderboardMode == "all-time")
+            // Rank by the same key the server's sorted set uses, so a row's Rank agrees with
+            // the server-provided YourRank instead of drifting from it.
+            var ordered = isAllTime
+                ? App.Leaderboard.Entries.OrderByDescending(x => x.TotalXpEarned).ThenByDescending(x => x.HighestLevelEver).ToList()
+                : App.Leaderboard.Entries.OrderByDescending(x => x.Xp).ThenByDescending(x => x.Level).ToList();
+
+            for (int i = 0; i < ordered.Count; i++)
             {
-                // In all-time mode, default sort by total XP earned; "level" sorts by highest_level_ever
-                sorted = sortBy switch
-                {
-                    "level" => App.Leaderboard.Entries.OrderByDescending(x => x.HighestLevelEver).ThenByDescending(x => x.TotalXpEarned).ToList(),
-                    "xp" => App.Leaderboard.Entries.OrderByDescending(x => x.TotalXpEarned).ToList(),
-                    "is_patreon" => App.Leaderboard.Entries.OrderByDescending(x => x.PatreonTier).ThenByDescending(x => x.TotalXpEarned).ToList(),
-                    _ => App.Leaderboard.Entries.OrderByDescending(x => x.TotalXpEarned).ToList()
-                };
-            }
-            else
-            {
-                sorted = sortBy switch
-                {
-                    "level" => App.Leaderboard.Entries.OrderByDescending(x => x.Level).ThenByDescending(x => x.Xp).ToList(),
-                    "xp" => App.Leaderboard.Entries.OrderByDescending(x => x.Xp).ToList(),
-                    "is_patreon" => App.Leaderboard.Entries.OrderByDescending(x => x.PatreonTier).ThenByDescending(x => x.Level).ToList(),
-                    _ => App.Leaderboard.Entries.OrderByDescending(x => x.Xp).ToList()
-                };
+                ordered[i].Rank = i + 1;
+                ordered[i].IsAllTimeView = isAllTime;
             }
 
-            // Re-number ranks
-            for (int i = 0; i < sorted.Count; i++)
-                sorted[i].Rank = i + 1;
+            // (2) READ - eager, before anything writes a new snapshot.
+            var myId = App.UnifiedUserId;
+            _youPreviousRankKnown = false;
+            _youPreviousRank = null;
 
-            LeaderboardTab.LstLeaderboard.ItemsSource = sorted;
-            UpdateYourRankDisplay();
+            foreach (var entry in ordered)
+            {
+                if (string.IsNullOrEmpty(entry.UnifiedId))
+                {
+                    // Nothing to key a snapshot on — a muted dash, not a false "NEW".
+                    entry.ApplyRankDelta(null, known: false);
+                    continue;
+                }
+
+                int? previous = null;
+                try { previous = LeaderboardRankSnapshotService.GetPreviousRank(_leaderboardMode, entry.UnifiedId); }
+                catch (Exception ex) { App.Logger?.Debug(ex, "Rank snapshot lookup failed"); }
+
+                // A null previous rank is the normal case, not an error: the snapshot keeps only
+                // the top 500 and drops anything without a unified id.
+                entry.ApplyRankDelta(previous, known: true);
+            }
+
+            if (!string.IsNullOrEmpty(myId))
+            {
+                _youPreviousRankKnown = true;
+                try { _youPreviousRank = LeaderboardRankSnapshotService.GetPreviousRank(_leaderboardMode, myId); }
+                catch { _youPreviousRankKnown = false; }
+            }
+
+            // (3) WRITE - only now.
+            try { LeaderboardRankSnapshotService.RecordIfDue(_leaderboardMode, ordered); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Failed to record leaderboard rank snapshot"); }
+
+            _leaderboardRanked = ordered;
         }
 
         /// <summary>
-        /// Show or hide Trophy Case columns based on whether the skill is unlocked
+        /// Change the display sort and re-render. Note this no longer re-numbers ranks — see
+        /// <see cref="_leaderboardRanked"/>.
+        /// </summary>
+        private void ApplyLeaderboardSort(string sortBy)
+        {
+            _leaderboardSortKey = string.IsNullOrEmpty(sortBy) ? "rank" : sortBy;
+            RebuildLeaderboardView();
+        }
+
+        // ------------------------------------------------------------------
+        // Rendering
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Apply filter + search + sort, build the podium, inject tier bands and push the
+        /// heterogeneous ItemsSource at the roster.
+        /// </summary>
+        private void RebuildLeaderboardView()
+        {
+            var tab = LeaderboardTab;
+            if (tab?.LstLeaderboard == null) return;
+
+            try
+            {
+                IEnumerable<Services.LeaderboardEntry> query = _leaderboardRanked;
+
+                switch (_leaderboardFilter)
+                {
+                    case "online": query = query.Where(x => x.IsOnline); break;
+                    case "patrons": query = query.Where(x => x.EffectivePatreonTier > 0); break;
+                    case "og": query = query.Where(x => x.IsSeason0Og); break;
+                }
+
+                var search = _leaderboardSearch.Trim();
+                if (search.Length > 0)
+                {
+                    query = query.Where(x => (x.DisplayName ?? "").IndexOf(search, StringComparison.CurrentCultureIgnoreCase) >= 0);
+                }
+
+                var view = _leaderboardSortKey switch
+                {
+                    "name" => query.OrderBy(x => x.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToList(),
+                    "level" => query.OrderByDescending(x => x.LevelColumnValue).ThenBy(x => x.Rank).ToList(),
+                    "achievements" => query.OrderByDescending(x => x.AchievementsCount).ThenBy(x => x.Rank).ToList(),
+                    "streak" => query.OrderByDescending(x => x.HighestStreak).ThenBy(x => x.Rank).ToList(),
+                    _ => query.OrderBy(x => x.Rank).ToList(),
+                };
+
+                // Podium + tier bands only make sense on the untouched, rank-ordered board.
+                var isCanonical = _leaderboardFilter == "all"
+                                  && search.Length == 0
+                                  && (_leaderboardSortKey is "rank" or "xp");
+
+                var showPodium = isCanonical && view.Count >= 3;
+
+                if (tab.PodiumHost != null)
+                {
+                    if (showPodium)
+                    {
+                        // Silver, gold, bronze — #1 sits in the middle.
+                        tab.PodiumHost.ItemsSource = new List<Services.LeaderboardEntry> { view[1], view[0], view[2] };
+                        tab.PodiumHost.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        tab.PodiumHost.ItemsSource = null;
+                        tab.PodiumHost.Visibility = Visibility.Collapsed;
+                    }
+                }
+
+                var display = new List<object>(view.Count + 8);
+                var lastBand = -1;
+
+                for (int i = showPodium ? 3 : 0; i < view.Count; i++)
+                {
+                    var entry = view[i];
+
+                    if (isCanonical)
+                    {
+                        var band = TierIndexForRank(entry.Rank);
+                        // Band 0 (ranks 1-3) never gets a divider — the podium is the divider.
+                        if (band != lastBand)
+                        {
+                            if (band > 0) display.Add(BuildTierBand(band));
+                            lastBand = band;
+                        }
+                    }
+
+                    display.Add(entry);
+                }
+
+                tab.LstLeaderboard.ItemsSource = display;
+
+                if (tab.TxtLeaderboardEmpty != null)
+                {
+                    tab.TxtLeaderboardEmpty.Visibility = view.Count == 0 && _leaderboardRanked.Count > 0
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+                }
+
+                UpdateYourRankDisplay();
+                UpdateYouBar();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to rebuild leaderboard view");
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Tier bands
+        // ------------------------------------------------------------------
+
+        /// <summary>0 = 1-3, 1 = 4-10, 2 = 11-25, 3 = 26-50, 4 = 51-100, 5 = 101-200, 6 = 201+.</summary>
+        private static int TierIndexForRank(int rank)
+        {
+            if (rank <= 3) return 0;
+            if (rank <= 10) return 1;
+            if (rank <= 25) return 2;
+            if (rank <= 50) return 3;
+            if (rank <= 100) return 4;
+            if (rank <= 200) return 5;
+            return 6;
+        }
+
+        private static readonly string[] TierNameKeys =
+        {
+            "lb_tier_dissolved", "lb_tier_hollowed", "lb_tier_spiralbound",
+            "lb_tier_sunken", "lb_tier_pliant", "lb_tier_drifting", "lb_tier_blinking"
+        };
+
+        private static readonly string[] TierSubKeys =
+        {
+            "lb_tier_dissolved_sub", "lb_tier_hollowed_sub", "lb_tier_spiralbound_sub",
+            "lb_tier_sunken_sub", "lb_tier_pliant_sub", "lb_tier_drifting_sub", "lb_tier_blinking_sub"
+        };
+
+        private static readonly int[] TierLowerBounds = { 1, 4, 11, 26, 51, 101, 201 };
+        private static readonly int[] TierUpperBounds = { 3, 10, 25, 50, 100, 200, 0 };
+
+        private static LeaderboardTierBand BuildTierBand(int index)
+        {
+            index = Math.Clamp(index, 0, TierNameKeys.Length - 1);
+
+            var name = Loc.Get(TierNameKeys[index]);
+            var range = TierUpperBounds[index] > 0
+                ? Loc.GetF("lb_tier_range", TierLowerBounds[index], TierUpperBounds[index])
+                : Loc.GetF("lb_tier_range_open", TierLowerBounds[index]);
+
+            return new LeaderboardTierBand
+            {
+                HeaderText = $"{name}   ·   {range}",
+                Subtitle = Loc.Get(TierSubKeys[index])
+            };
+        }
+
+        // ------------------------------------------------------------------
+        // Sticky "you" bar
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Fill the always-visible "you" bar. It has to work for a player at rank #684 who is
+        /// nowhere in the fetched top-200 slice, so the rank number comes from
+        /// <see cref="LeaderboardService.YourRank"/> and never from a row's own Rank.
+        /// </summary>
+        private void UpdateYouBar()
+        {
+            var tab = LeaderboardTab;
+            if (tab?.YouBar == null) return;
+
+            try
+            {
+                var serverRank = App.Leaderboard?.YourRank;
+                var rank = serverRank is > 0 ? serverRank.Value : 0;
+                var name = App.UserDisplayName;
+
+                if (rank <= 0 && string.IsNullOrWhiteSpace(name))
+                {
+                    tab.YouBar.Visibility = Visibility.Collapsed;
+                    return;
+                }
+                tab.YouBar.Visibility = Visibility.Visible;
+
+                // Am I inside the fetched slice?
+                var myId = App.UnifiedUserId;
+                Services.LeaderboardEntry? me = null;
+                int myIndex = -1;
+                if (!string.IsNullOrEmpty(myId))
+                {
+                    for (int i = 0; i < _leaderboardRanked.Count; i++)
+                    {
+                        if (_leaderboardRanked[i].UnifiedId == myId) { me = _leaderboardRanked[i]; myIndex = i; break; }
+                    }
+                }
+
+                // --- rank + delta ---
+                if (tab.TxtYouRankNumber != null)
+                    tab.TxtYouRankNumber.Text = rank > 0 ? rank.ToString() : "–";
+
+                if (tab.TxtYouDelta != null)
+                {
+                    if (!_youPreviousRankKnown || rank <= 0)
+                    {
+                        tab.TxtYouDelta.Text = "–";
+                        tab.TxtYouDelta.Foreground = (Brush)FindResource("TextDimBrush");
+                    }
+                    else if (_youPreviousRank is not > 0)
+                    {
+                        tab.TxtYouDelta.Text = Loc.Get("lb_delta_new");
+                        tab.TxtYouDelta.Foreground = (Brush)FindResource("PinkSoftBrush");
+                    }
+                    else
+                    {
+                        var moved = _youPreviousRank.Value - rank;
+                        if (moved > 0)
+                        {
+                            tab.TxtYouDelta.Text = "▲" + moved;
+                            tab.TxtYouDelta.Foreground = (Brush)FindResource("SuccessGreenBrush");
+                        }
+                        else if (moved < 0)
+                        {
+                            tab.TxtYouDelta.Text = "▼" + (-moved);
+                            tab.TxtYouDelta.Foreground = (Brush)FindResource("DangerBrush");
+                        }
+                        else
+                        {
+                            tab.TxtYouDelta.Text = "–";
+                            tab.TxtYouDelta.Foreground = (Brush)FindResource("TextDimBrush");
+                        }
+                    }
+                }
+
+                // --- identity ---
+                if (tab.TxtYouName != null) tab.TxtYouName.Text = name ?? "";
+                if (tab.TxtYouInitials != null) tab.TxtYouInitials.Text = Services.LeaderboardEntry.BuildInitials(name);
+                if (tab.EllYouAvatar != null) tab.EllYouAvatar.Fill = Services.LeaderboardEntry.BuildAvatarBrush(name);
+
+                // --- level / xp ---
+                var isAllTime = _leaderboardMode == "all-time";
+                if (tab.TxtYouLevel != null)
+                {
+                    // Outside the fetched slice we have to source the level locally. The All-Time
+                    // board's level column is highest_level_ever (headed "Peak"), so falling back to
+                    // the current level there prints a smaller number under a header promising the
+                    // opposite. AppSettings tracks the same value: ProgressionService raises it on
+                    // level-up and ProfileSyncService overwrites it from the server, which is
+                    // authoritative - so it survives the season resets that make PlayerLevel drop.
+                    var localLevel = isAllTime
+                        ? (App.Settings?.Current?.HighestLevelEver ?? 0)
+                        : (App.Settings?.Current?.PlayerLevel ?? 0);
+                    var level = me?.LevelColumnValue ?? localLevel;
+                    tab.TxtYouLevel.Text = level > 0 ? level.ToString() : "–";
+                }
+
+                if (tab.TxtYouXp != null)
+                {
+                    if (me != null) tab.TxtYouXp.Text = me.XpColumnDisplay;
+                    else if (!isAllTime && App.Settings?.Current != null && App.Progression != null)
+                    {
+                        // Outside the slice: the board's "xp" is total accumulated XP, which is
+                        // exactly what GetTotalXP reconstructs from the local level + progress.
+                        var total = App.Progression.GetTotalXP(App.Settings.Current.PlayerLevel, App.Settings.Current.PlayerXP);
+                        tab.TxtYouXp.Text = FormatCompact(total);
+                    }
+                    else tab.TxtYouXp.Text = "–";
+                }
+
+                // --- achievements ---
+                var earned = me?.AchievementsCount ?? (App.Achievements?.GetUnlockedCount() ?? 0);
+                var earnable = Math.Max(1, EarnableAchievementCount);
+                if (tab.TxtYouAchievements != null) tab.TxtYouAchievements.Text = $"{earned} / {earnable}";
+                if (tab.BarYouAchievements != null)
+                {
+                    tab.BarYouAchievements.Maximum = earnable;
+                    tab.BarYouAchievements.Value = Math.Min(earned, earnable);
+                }
+
+                // --- gap line ---
+                if (tab.TxtYouGap != null)
+                {
+                    string? gap = null;
+                    if (me != null)
+                    {
+                        if (me.Rank <= 1 || myIndex <= 0)
+                        {
+                            gap = Loc.Get("lb_gap_leader");
+                        }
+                        else
+                        {
+                            var above = _leaderboardRanked[myIndex - 1];
+                            var diff = above.XpColumnValue - me.XpColumnValue;
+                            gap = diff > 0
+                                ? Loc.GetF("lb_gap_to_next", diff.ToString("N0"), above.DisplayName, above.Rank)
+                                : Loc.Get("lb_gap_unknown");
+                        }
+                    }
+
+                    tab.TxtYouGap.Text = gap ?? "";
+                    tab.TxtYouGap.Visibility = string.IsNullOrEmpty(gap) ? Visibility.Collapsed : Visibility.Visible;
+                }
+
+                // --- top N% ---
+                if (tab.TxtYouPercent != null)
+                {
+                    var pct = App.Leaderboard?.GetPlayerPercentile() ?? 0;
+                    if (pct > 0)
+                    {
+                        tab.TxtYouPercent.Text = Loc.GetF("lb_top_percent", pct);
+                        tab.TxtYouPercent.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        tab.TxtYouPercent.Visibility = Visibility.Collapsed;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to update leaderboard 'you' bar");
+            }
+        }
+
+        private static string FormatCompact(double value)
+        {
+            if (value >= 1_000_000) return $"{value / 1_000_000.0:F1}M";
+            if (value >= 1_000) return $"{value / 1_000.0:F1}k";
+            return ((int)value).ToString();
+        }
+
+        /// <summary>
+        /// Show or hide the Trophy Case stats (Streak column + Best Session tooltip line) based
+        /// on whether the viewer has unlocked the skill. Name kept: MainWindow.Enhancements.cs
+        /// calls this the moment the skill is purchased.
         /// </summary>
         private void UpdateTrophyCaseColumns()
         {
             try
             {
+                if (LeaderboardTab == null) return;
+
                 var hasTrophyCase = App.SkillTree?.HasSkill("trophy_case") == true;
-                var gridView = LeaderboardTab.LstLeaderboard.View as GridView;
+                LeaderboardTab.ShowTrophyStats = hasTrophyCase;
 
-                if (gridView != null && gridView.Columns.Count > 0)
-                {
-                    // Find the trophy case columns by name
-                    var longestSessionCol = gridView.Columns.FirstOrDefault(c => c.Header?.ToString() == "Best Session");
-                    var highestStreakCol = gridView.Columns.FirstOrDefault(c => c.Header?.ToString() == "Best Streak");
-
-                    // Set width to 0 to hide, restore to original width to show
-                    if (longestSessionCol != null)
-                    {
-                        longestSessionCol.Width = hasTrophyCase ? 110 : 0;
-                    }
-
-                    if (highestStreakCol != null)
-                    {
-                        highestStreakCol.Width = hasTrophyCase ? 100 : 0;
-                    }
-
-                    App.Logger?.Debug("Trophy Case columns visibility updated: {Visible}", hasTrophyCase);
-                }
+                App.Logger?.Debug("Trophy Case stats visibility updated: {Visible}", hasTrophyCase);
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Error updating Trophy Case columns");
+                App.Logger?.Error(ex, "Error updating Trophy Case stats");
             }
         }
 
