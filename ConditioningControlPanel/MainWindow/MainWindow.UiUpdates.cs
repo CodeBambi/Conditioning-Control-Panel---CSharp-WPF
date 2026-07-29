@@ -1410,11 +1410,12 @@ namespace ConditioningControlPanel
         //     and the art rewritten per state by ApplyIntakePassFaceState(). It is a standing
         //     affordance, not a cutscene: it stays put until the run is consumed or the week
         //     rolls over, so nobody misses it by being on another tab.
-        //   * ONLY the "pass waiting" state spins. The first time we paint an available card in a
-        //     given week the tile HOLDS ON THE WORDMARK for a beat, then turns 2.5 times on its Y
-        //     axis and settles on the card; every later visit finds it already face-up. A
-        //     signed-out or spent card is simply there - a flourish for a card that cannot be
-        //     spent is a lie told with animation.
+        //   * ONLY the "pass waiting" state turns, and it turns FOREVER: hold the wordmark 8s,
+        //     turn 2.5 times, hold the card 8s, turn back, repeat for as long as the Dashboard is
+        //     on screen. The tile is a two-sided plate rather than a one-shot reveal, so a pass
+        //     cannot be missed by having looked away at the wrong moment. A signed-out or spent
+        //     card never turns - a flourish for a card that cannot be spent is a lie told with
+        //     animation.
         //
         // The spin is the standard WPF fake - ScaleX 1 -> 0, swap the visible face at the zero
         // crossing, 0 -> 1 - chained through DoubleAnimation.Completed. Deliberately NOT a
@@ -1424,10 +1425,11 @@ namespace ConditioningControlPanel
         // breath at the bottom of the card follows the same rule.
         // ------------------------------------------------------------------------------------
 
-        /// <summary>How long the wordmark sits still before the tile turns. The flip only reads as
-        /// "the logo became something" if you were given time to see the logo first - starting on
-        /// the same frame the tile paints just looks like the card was always there.</summary>
-        private const int IntakePassDwellMs = 2200;
+        /// <summary>How long each face is held before the tile turns to the other one. Long
+        /// enough that each side is a thing you looked at rather than a thing that flickered
+        /// past, and long enough that the CTA at the bottom gets a couple of full breaths in
+        /// while the card is up.</summary>
+        private const int IntakePassFaceHoldMs = 8000;
 
         /// <summary>Per-half-turn durations, front to back. Four quick turns and one long one:
         /// the plate spins at roughly constant speed, then drops all its momentum into a single
@@ -1447,9 +1449,14 @@ namespace ConditioningControlPanel
         /// the old chain will not repaint a superseded face or leave the tile half-scaled.</summary>
         private int _intakePassSpinGen;
 
-        /// <summary>True between the first ramp and the settle. Keeps a repeat
-        /// <see cref="RefreshIntakePassTile"/> from restarting a spin that is already running.</summary>
-        private bool _intakePassSpinning;
+        /// <summary>True while the alternation is live (holding a face or mid-turn). Keeps a
+        /// repeat <see cref="RefreshIntakePassTile"/> from stacking a second loop on the first -
+        /// two loops on one transform would fight over ScaleX and the tile would judder.</summary>
+        private bool _intakePassLoopRunning;
+
+        /// <summary>Which face is up right now. The turn toggles from whatever is showing rather
+        /// than assuming it started on the wordmark, so the same code drives both directions.</summary>
+        private bool _intakePassShowingCard;
 
         /// <summary>One-shot latches for the subscriptions below (this method is called on
         /// every Dashboard entry, so it has to be safe to hammer).</summary>
@@ -1573,23 +1580,22 @@ namespace ConditioningControlPanel
 
                 ApplyIntakePassFaceState(state);
 
-                // Only spend the ceremony when the tile is actually on screen. Without this, a
-                // background refresh (login callback while the user is three tabs away) would burn
-                // the week's spin on an invisible control and the reveal would never be seen.
+                // Only alternate while the tile is actually on screen. A background refresh (a
+                // login callback landing while the user is three tabs away) must not leave a
+                // forever-loop turning an invisible control.
                 var onScreen = tab.Visibility == Visibility.Visible && tab.IsVisible;
 
-                // The spin belongs to a pass that can actually be spent - see the region header.
-                if (state == IntakePassState.Available && pass.ShouldPlayCeremony && onScreen)
+                if (_intakePassLoopRunning) return;   // already alternating; don't restart it
+
+                if (!onScreen)
                 {
-                    if (_intakePassSpinning) return;   // already mid-reveal; don't restart it
-                    StartIntakePassSpin();
+                    // Off screen: park on the card so returning to the tab never catches it
+                    // mid-wordmark, and start the loop from the top on the way back in.
+                    SetIntakePassFace(showCard: true);
                     return;
                 }
 
-                // Already revealed this week, or a state that never spins: the card is simply
-                // there, face-up, no animation.
-                if (_intakePassSpinning) return;
-                SetIntakePassFace(showCard: true);
+                StartIntakePassFlipLoop();
             }
             catch (Exception ex)
             {
@@ -1607,6 +1613,7 @@ namespace ConditioningControlPanel
 
             tab.IntakePassFace.Visibility = showCard ? Visibility.Visible : Visibility.Collapsed;
             tab.LogoFaceLogo.Visibility = showCard ? Visibility.Collapsed : Visibility.Visible;
+            _intakePassShowingCard = showCard;   // the turn toggles off this, so it must stay honest
 
             // Every route that hides the card comes through here, so this is the one place that
             // has to remember to stop a forever-repeating animation.
@@ -1833,7 +1840,7 @@ namespace ConditioningControlPanel
             if (tab?.LogoFlipScale == null || tab.LogoFlipSkew == null) return;
 
             _intakePassSpinGen++;      // orphans every pending Completed callback
-            _intakePassSpinning = false;
+            _intakePassLoopRunning = false;
 
             tab.LogoFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
             tab.LogoFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, null);
@@ -1841,50 +1848,55 @@ namespace ConditioningControlPanel
             tab.LogoFlipSkew.AngleY = 0;
         }
 
-        /// <summary>Begins the once-a-week reveal spin, starting on the logo face and landing on
-        /// the card.</summary>
-        private void StartIntakePassSpin()
+        /// <summary>Starts the perpetual alternation, opening on the wordmark. Idempotent via
+        /// <see cref="_intakePassLoopRunning"/> - the caller checks it before getting here.</summary>
+        private void StartIntakePassFlipLoop()
         {
             CancelIntakePassSpin();               // clean slate + fresh generation token
             var gen = _intakePassSpinGen;
-            _intakePassSpinning = true;
-
-            SetIntakePassFace(showCard: false);   // five half-turns from here lands on the card
+            _intakePassLoopRunning = true;
 
             var tab = SettingsTab;
-            if (tab?.LogoFlipScale == null) { _intakePassSpinning = false; return; }
+            if (tab?.LogoFlipScale == null) { _intakePassLoopRunning = false; return; }
 
-            App.Logger?.Debug("Intake pass tile: playing weekly reveal spin");
+            // Open on the wordmark. The first turn is then the one that introduces the card, which
+            // is the same beat the tile used to spend its once-a-week reveal on.
+            SetIntakePassFace(showCard: false);
 
-            // Hold on the wordmark before anything moves. Two reasons, and the second is the one
-            // that was actually biting: startup lands on the Dashboard while services are still
-            // initialising, so a spin begun on the tile's first painted frame competes with that
-            // storm for the UI thread and the user just finds the card already face-up. Waiting
-            // puts the whole flip safely past it.
-            //
-            // A 1 -> 1 no-op animation rather than a DispatcherTimer, so the dwell is torn off by
-            // exactly the same BeginAnimation(prop, null) that CancelIntakePassSpin already runs.
-            // A timer would need its own teardown path and could outlive the spin it belongs to.
-            var dwell = new DoubleAnimation(1.0, 1.0, TimeSpan.FromMilliseconds(IntakePassDwellMs));
-            dwell.Completed += (_, _) =>
+            App.Logger?.Debug("Intake pass tile: starting flip loop");
+            HoldIntakePassFace(gen);
+        }
+
+        /// <summary>
+        /// Holds whichever face is currently up, then turns to the other one. Together with
+        /// <see cref="FinishIntakePassSpin"/> - which calls straight back into this - it forms the
+        /// loop: hold, turn, hold, turn.
+        /// </summary>
+        /// <remarks>
+        /// The hold is a 1 -> 1 no-op animation rather than a DispatcherTimer, so it is torn off by
+        /// exactly the same BeginAnimation(prop, null) that <see cref="CancelIntakePassSpin"/>
+        /// already runs on that property. A timer would need a second teardown path and could
+        /// outlive the loop it belongs to - and this loop never ends on its own, so a leaked timer
+        /// would keep firing at a dead tile for the rest of the session.
+        ///
+        /// This recurses through animation callbacks, not the stack, so the depth stays flat.
+        /// </remarks>
+        private void HoldIntakePassFace(int gen)
+        {
+            if (gen != _intakePassSpinGen) return;
+            if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
+
+            var tab = SettingsTab;
+            if (tab?.LogoFlipScale == null) { _intakePassLoopRunning = false; return; }
+
+            var hold = new DoubleAnimation(1.0, 1.0, TimeSpan.FromMilliseconds(IntakePassFaceHoldMs));
+            hold.Completed += (_, _) =>
             {
                 if (gen != _intakePassSpinGen) return;
                 if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
-
-                // Latch the week HERE - the instant the plate actually starts turning, not when
-                // the dwell was armed. The two ends of this are both wrong:
-                //   * latching at the end of the spin lets a crash or a tab switch mid-turn re-arm
-                //     the ceremony, and it then replays on every Dashboard visit until one run
-                //     happens to finish;
-                //   * latching before the dwell spends the week on a tile the user may never have
-                //     looked at - they get a wordmark, wander off, and the flourish is gone.
-                // Latching on the first moving frame gives up the flourish only once something
-                // was actually shown, and still cannot loop.
-                try { App.IntakePass?.MarkCeremonyPlayed(); } catch { }
-
                 RunIntakePassSpinPhase(gen, 0);
             };
-            tab.LogoFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, dwell);
+            tab.LogoFlipScale.BeginAnimation(ScaleTransform.ScaleXProperty, hold);
         }
 
         /// <summary>
@@ -1899,7 +1911,7 @@ namespace ConditioningControlPanel
             if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
 
             var tab = SettingsTab;
-            if (tab?.LogoFlipScale == null || tab.LogoFlipSkew == null) { _intakePassSpinning = false; return; }
+            if (tab?.LogoFlipScale == null || tab.LogoFlipSkew == null) { _intakePassLoopRunning = false; return; }
 
             var halfTurn = phase / 2;
             var closing = (phase % 2) == 0;
@@ -1936,9 +1948,11 @@ namespace ConditioningControlPanel
                 if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted) return;
 
                 // At the zero crossing the plate is edge-on and one pixel wide - the only frame
-                // where a face swap is invisible. Half-turn 0 flips logo -> card, 1 flips back,
-                // and so on; the odd half-turn count means we land on the card.
-                if (closing) SetIntakePassFace(showCard: (halfTurn % 2) == 0);
+                // where a face swap is invisible. Toggling from whatever is currently up (rather
+                // than deriving it from halfTurn) is what lets the same chain drive both
+                // directions; the odd half-turn count is what guarantees it lands on the opposite
+                // face from the one it started on.
+                if (closing) SetIntakePassFace(showCard: !_intakePassShowingCard);
 
                 RunIntakePassSpinPhase(gen, phase + 1);
             };
@@ -1947,8 +1961,11 @@ namespace ConditioningControlPanel
             tab.LogoFlipSkew.BeginAnimation(SkewTransform.AngleYProperty, skewAnim);
         }
 
-        /// <summary>Settles the tile: tears the animations off the transform (a held animation
-        /// keeps the render target pinned), snaps the base values, and locks the card face in.</summary>
+        /// <summary>Settles one turn: tears the animations off the transform (a held animation
+        /// keeps the render target pinned) and snaps the base values, then hands straight back to
+        /// <see cref="HoldIntakePassFace"/> to sit on the face it just landed on. The face itself
+        /// is NOT set here - the last zero crossing already chose it, and overriding that would
+        /// pin the loop to one side.</summary>
         private void FinishIntakePassSpin(int gen)
         {
             if (gen != _intakePassSpinGen) return;
@@ -1962,8 +1979,7 @@ namespace ConditioningControlPanel
                 tab.LogoFlipSkew.AngleY = 0;
             }
 
-            _intakePassSpinning = false;
-            SetIntakePassFace(showCard: true);
+            HoldIntakePassFace(gen);
         }
 
         /// <summary>
