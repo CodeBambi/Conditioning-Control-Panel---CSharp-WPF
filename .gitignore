@@ -167,3 +167,9 @@ ConditioningControlPanel/tools/*
 
 # Redistributables (re-downloadable from Microsoft; do not bloat the repo)
 redist/
+
+# Marketing pipeline (/x-drafts) - ENTIRELY local, never publish.
+# origin is a PUBLIC repo. archive-index.json embeds the Windows username in ~75 paths and
+# describes explicit screenshots; topics.json describes unannounced features. Media is large
+# and some of it is suggestive. Nothing in here belongs on GitHub.
+marketing/

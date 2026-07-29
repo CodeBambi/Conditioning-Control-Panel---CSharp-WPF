@@ -51,6 +51,11 @@ namespace ConditioningControlPanel
             ShowTab("quests");
         }
 
+        private void BtnPrograms_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("programs");
+        }
+
         private void BtnEnhancements_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("enhancements");
@@ -133,6 +138,7 @@ namespace ConditioningControlPanel
             }
             if (SheListeningTab != null) SheListeningTab.Visibility = Visibility.Collapsed;
             if (GradedIntakeTab != null) GradedIntakeTab.Visibility = Visibility.Collapsed;
+            if (ProgramsTab != null) ProgramsTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive. activeStyle is the primary-nav-only v6 variant —
             // quest sub-tabs and roadmap tracks use TabButtonActive directly (see lines further down).
@@ -141,6 +147,7 @@ namespace ConditioningControlPanel
             BtnSettings.Style = inactiveStyle;
             BtnPresets.Style = inactiveStyle;
             BtnQuests.Style = inactiveStyle;
+            if (BtnPrograms != null) BtnPrograms.Style = inactiveStyle;
             BtnEnhancements.Style = inactiveStyle;
             if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeper") as Style;
             if (BtnAvailableSubjects != null) BtnAvailableSubjects.Style = FindResource("TabButtonNeon") as Style;
@@ -193,6 +200,13 @@ namespace ConditioningControlPanel
                     BtnQuests.Style = activeStyle;
                     StartSeasonTitleShimmer();
                     RefreshQuestUI();
+                    break;
+
+                case "programs":
+                    ProgramsTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(ProgramsTab);
+                    BtnPrograms.Style = activeStyle;
+                    RefreshProgramsUI();
                     break;
 
                 case "enhancements":

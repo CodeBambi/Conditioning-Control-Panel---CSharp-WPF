@@ -805,6 +805,10 @@ public class QuestService : IDisposable
     {
         if (amount <= 0) return;
 
+        // Training Programs observe the same signals as quests, from the same choke point, so the two
+        // can never disagree about what the user actually did. One tracking pass, not two.
+        try { App.Programs?.TrackVerifier(category, amount); } catch { /* a program must never break quests */ }
+
         // Check daily quest
         var dailyDef = GetCurrentDailyDefinition();
         if (dailyDef != null && dailyDef.Category == category && Progress.DailyQuest?.IsCompleted == false)

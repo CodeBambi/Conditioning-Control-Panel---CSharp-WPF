@@ -543,5 +543,18 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnCatalogue_Click(sender, e);
         }
+
+        // Training Programs "Today" card (row 0). Loaded is the card's own first-paint hook so
+        // the dashboard can show it without the user visiting the Programs tab first.
+        private void ProgramTodayCard_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ProgramTodayCard_Loaded(sender, e);
+        }
+        private void ProgramTodayCard_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ProgramTodayCard_Click(sender, e);
+        }
     }
 }

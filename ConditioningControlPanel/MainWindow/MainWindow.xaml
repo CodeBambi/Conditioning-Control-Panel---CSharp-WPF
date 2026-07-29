@@ -338,6 +338,15 @@
                             <TextBlock Text="{loc:Str tab_quests}" FontSize="11"/>
                         </StackPanel>
                     </Button>
+                    <!-- Training Programs — multi-day arcs (Programs tab, v6.6) -->
+                    <Button x:Name="BtnPrograms" Tag="Programs" Style="{StaticResource TabButton}"
+                            Margin="3,0" Click="BtnPrograms_Click" ToolTip="{loc:Str tooltip_programs}">
+                        <StackPanel Orientation="Horizontal">
+                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='📅', Converter={StaticResource EmojiToImageSource}}"/>
+                            <TextBlock Text="{loc:Str tab_programs}" FontSize="11"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="BtnEnhancements" Tag="Enhancements" Style="{StaticResource TabButton}"
                             Margin="3,0" Click="BtnEnhancements_Click" ToolTip="{loc:Str tooltip_enhancement_tree}">
                         <StackPanel Orientation="Horizontal">
@@ -1126,6 +1135,12 @@
         <!-- Graded Intake Tab — banded-descent intake Exclusive. Graduated out of the Lab;
              the controls moved here verbatim (see GradedIntakeTabView.xaml). -->
         <views:GradedIntakeTabView x:Name="GradedIntakeTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+
+
+        <!-- Training Programs Tab — multi-day arcs (enrollment ceremony, day clock, ledger).
+             Browse / run / lapsed / graduated are four panels inside one view, switched from
+             MainWindow.ProgramsTab.cs. -->
+        <views:ProgramsTabView x:Name="ProgramsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
 

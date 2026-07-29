@@ -1179,7 +1179,14 @@ namespace ConditioningControlPanel
                 _sessionEngine.SessionStarted += OnSessionStarted;
                 _sessionEngine.SessionStopped += OnSessionStopped;
             }
-            
+
+            // The engine is MainWindow-owned and created lazily, so the observers can't subscribe
+            // at their own start. Both attaches detach any previous engine first — re-attaching is
+            // safe, and doing it here means a program session started from the Sessions list is
+            // still observed. (This site used to forget both.)
+            App.Bark?.AttachSessionEngine(_sessionEngine);
+            App.Programs?.AttachSessionEngine(_sessionEngine);
+
             try
             {
                 // Start the engine if not already running
