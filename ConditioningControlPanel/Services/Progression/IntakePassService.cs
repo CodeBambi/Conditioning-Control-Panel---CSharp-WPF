@@ -146,37 +146,11 @@ public class IntakePassService : IDisposable
         }
     }
 
-    /// <summary>Should the Dashboard play the flip ceremony? Only when a pass is actually
-    /// waiting AND this week's spin has not already run. The card stays on the Dashboard
-    /// either way - this gates the animation, not the affordance, so someone who was on
-    /// another tab when the week rolled has not missed anything.</summary>
-    public bool ShouldPlayCeremony
-    {
-        get
-        {
-            if (!IsPassAvailable) return false;
-            var seen = App.Settings?.Current?.IntakePassCeremonyWeek ?? "";
-            return !string.Equals(seen, CurrentWeekKey(), StringComparison.Ordinal);
-        }
-    }
+    // There is deliberately no "has the reveal played this week" state any more. The Dashboard
+    // tile now alternates between the wordmark and the card for as long as a spendable pass is
+    // sitting there, so there is no one-shot flourish left to spend, miss, or remember.
 
     // ============================ transitions ============================
-
-    /// <summary>Remember that this week's spin has played, so returning to the Dashboard does
-    /// not replay it.</summary>
-    public void MarkCeremonyPlayed()
-    {
-        try
-        {
-            var settings = App.Settings?.Current;
-            if (settings == null) return;
-            var week = CurrentWeekKey();
-            if (string.Equals(settings.IntakePassCeremonyWeek, week, StringComparison.Ordinal)) return;
-            settings.IntakePassCeremonyWeek = week;
-            App.Settings?.Save();
-        }
-        catch (Exception ex) { App.Logger?.Debug("IntakePassService.MarkCeremonyPlayed: {E}", ex.Message); }
-    }
 
     /// <summary>
     /// Spend this week's pass. Called ONLY from the completed-intake path (a quiz-result

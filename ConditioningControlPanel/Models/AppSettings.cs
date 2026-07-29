@@ -2841,16 +2841,10 @@ namespace ConditioningControlPanel.Models
             set { _intakePassSpentUtc = value; OnPropertyChanged(); }
         }
 
-        /// <summary>ISO week whose dashboard flip ceremony has already played. The logo spins
-        /// into the pass card ONCE per week, not on every return to the Dashboard - a flourish
-        /// that replays on each tab switch stops reading as an event and starts reading as a
-        /// glitch. The card itself stays put regardless; this only gates the animation.</summary>
-        private string _intakePassCeremonyWeek = "";
-        public string IntakePassCeremonyWeek
-        {
-            get => _intakePassCeremonyWeek;
-            set { _intakePassCeremonyWeek = value ?? ""; OnPropertyChanged(); }
-        }
+        // IntakePassCeremonyWeek was removed when the Dashboard tile stopped being a once-a-week
+        // reveal and became a plate that alternates for as long as a pass is waiting. Existing
+        // settings.json files may still carry the key; Newtonsoft ignores unknown properties on
+        // load, so it simply falls away the next time settings are saved.
 
         /// <summary>ISO week the weekly nudge popup was dismissed for. Deliberately NOT the
         /// shared <see cref="DismissedAnnouncementId"/>: that slot belongs to server-triggered
