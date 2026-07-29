@@ -1248,8 +1248,40 @@ namespace ConditioningControlPanel
             });
         }
 
+        /// <summary>
+        /// Deadline until which one session-summary modal is swallowed. Set by Withdraw, which ends
+        /// today's session on purpose and has already told the user so in its own confirm.
+        ///
+        /// A DEADLINE rather than a bool because the summary is driven by SessionLogReady, and if
+        /// that event never arrived a sticky flag would silently eat the NEXT session's summary
+        /// instead. Nothing is lost by suppressing it: the log is still written and still readable
+        /// from the session history window.
+        /// </summary>
+        private DateTime _suppressSessionSummaryUntil = DateTime.MinValue;
+
+        /// <summary>
+        /// Swallow the next session summary if one arrives shortly. Called before a stop the user
+        /// has already explicitly confirmed, so the app does not editorialise on top of it.
+        /// </summary>
+        internal void SuppressNextSessionSummary(string reason)
+        {
+            _suppressSessionSummaryUntil = DateTime.UtcNow.AddSeconds(20);
+            App.Logger?.Information("Session summary suppressed for the next stop ({Reason})", reason);
+        }
+
         private void OnSessionLogReady(object? sender, SessionLogReadyEventArgs e)
         {
+            // Withdraw is specified to be unweighted and without commentary. A modal headlined
+            // "Session Ended Early" immediately after the user confirmed "the run ends here, and
+            // today's session stops with it" is commentary, and reads as a rebuke for using the
+            // way out. Consumed one-shot so only that stop is quiet.
+            if (DateTime.UtcNow < _suppressSessionSummaryUntil)
+            {
+                _suppressSessionSummaryUntil = DateTime.MinValue;
+                App.Logger?.Information("Session summary skipped (deliberate stop)");
+                return;
+            }
+
             var log = e.Log;
             Dispatcher.BeginInvoke(() => ShowSessionSummaryWhenClear(log, attempt: 0));
         }
@@ -1379,6 +1411,9 @@ namespace ConditioningControlPanel
         private void OnSessionStarted(object? sender, EventArgs e)
         {
             App.IsSessionRunning = true;
+            // Safety net for the one-shot above: a new session always gets its own summary, even if
+            // a suppression was armed and its stop somehow never produced a log.
+            _suppressSessionSummaryUntil = DateTime.MinValue;
             Dispatcher.Invoke(() =>
             {
                 PresetsTab.BtnStartSession.Content = Loc.Get("btn_stop_session_2");

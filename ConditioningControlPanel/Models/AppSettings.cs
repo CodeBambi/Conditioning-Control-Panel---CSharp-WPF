@@ -4669,6 +4669,53 @@ namespace ConditioningControlPanel.Models
             set { _keywordSessionMultiplier = Math.Clamp(value, 1.0, 3.0); OnPropertyChanged(); }
         }
 
+        private AwarenessAppScope _keywordTriggerAppScope = AwarenessAppScope.Everywhere;
+        /// <summary>
+        /// Which applications triggers may fire in, judged by the foreground window's process.
+        /// Defaults to <see cref="AwarenessAppScope.Everywhere"/>, i.e. the behaviour that shipped
+        /// before this setting existed - turning app scoping on is an opt-in.
+        /// </summary>
+        [JsonProperty]
+        public AwarenessAppScope KeywordTriggerAppScope
+        {
+            get => _keywordTriggerAppScope;
+            set { _keywordTriggerAppScope = value; OnPropertyChanged(); }
+        }
+
+        private List<string> _keywordTriggerApps = new();
+        /// <summary>
+        /// The process names <see cref="KeywordTriggerAppScope"/> refers to - one list, read as a
+        /// block list or an allow list depending on the mode, so there is never a second stale list
+        /// sitting behind the one in use.
+        ///
+        /// Entries are process names, matched case-insensitively with an optional ".exe" that is
+        /// stripped before comparing ("chrome", "Chrome", "chrome.exe" are the same entry). Empty
+        /// while the mode is Everywhere.
+        /// </summary>
+        [JsonProperty]
+        public List<string> KeywordTriggerApps
+        {
+            get => _keywordTriggerApps;
+            set { _keywordTriggerApps = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private bool _keywordTriggerIgnoreOwnFocus = false;
+        /// <summary>
+        /// Suppress every source while a Control Panel window itself holds focus - so typing a
+        /// keyword INTO the trigger editor, or into the companion's chat box, does not fire it.
+        ///
+        /// Distinct from <see cref="AwarenessIgnoreOwnUi"/>, which drops OCR hits that land inside
+        /// our own window RECTANGLES. That one cannot see the keyboard path at all; this one is
+        /// about who has focus and applies to every source. Default off: someone typing to their
+        /// companion may well want the reaction, so this is offered rather than assumed.
+        /// </summary>
+        [JsonProperty]
+        public bool KeywordTriggerIgnoreOwnFocus
+        {
+            get => _keywordTriggerIgnoreOwnFocus;
+            set { _keywordTriggerIgnoreOwnFocus = value; OnPropertyChanged(); }
+        }
+
         private bool _screenOcrEnabled = false;
         public bool ScreenOcrEnabled
         {

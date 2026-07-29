@@ -265,6 +265,17 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null || !settings.KeywordTriggersEnabled) return;
 
+            // App scope, checked before the buffer rather than before the match. Dropping the
+            // keystrokes is the point: if it only refused to FIRE, a keyword typed into a blocked
+            // app would still be sitting in the rolling buffer, ready to go off the moment focus
+            // moved somewhere allowed. Clearing also means a word half-typed either side of an app
+            // switch cannot be stitched into a match that was never typed anywhere.
+            if (!IsForegroundAppAllowed("Keyboard"))
+            {
+                if (_buffer.Length > 0) _buffer.Clear();
+                return;
+            }
+
             // Check buffer timeout — reset if too much time has passed
             var now = DateTime.Now;
             var timeoutMs = settings.KeywordBufferTimeoutMs;
@@ -495,6 +506,304 @@ namespace ConditioningControlPanel.Services
 
         #endregion
 
+        #region Foreground app scope
+
+        // Triggers used to fire wherever the user happened to be: the master enable was the only
+        // control, so an armed keyword was equally live in a browser, a game and a work call. This
+        // region is the scope gate - it answers "may a trigger fire in whatever is focused right
+        // now" for all three sources, from one place, so keyboard / OCR / clipboard cannot drift
+        // apart. See AwarenessAppScope for the modes.
+        //
+        // Cost matters here: this is consulted on EVERY keystroke. Two guards keep it near-free.
+        // The default configuration (Everywhere, own-focus allowed) returns before touching Win32
+        // at all, and once scoping is on, the answer is cached per foreground window handle, so the
+        // process lookup happens on app switches rather than on keypresses.
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+        /// <summary>Foreground window the cached verdict below belongs to.</summary>
+        private IntPtr _fgHwnd = IntPtr.Zero;
+        private string _fgProcess = "";
+        private bool _fgIsOwn;
+        /// <summary>False when the last resolve failed - cached too, so a window we cannot name is not re-probed per keystroke.</summary>
+        private bool _fgKnown;
+        private DateTime _fgResolvedAt = DateTime.MinValue;
+
+        /// <summary>
+        /// Short TTL on top of the handle check. Handles are recycled, so a stale entry could
+        /// otherwise outlive the window it described and answer for a different app entirely.
+        /// </summary>
+        private const int ForegroundCacheMs = 1500;
+
+        private static string? _ownProcessName;
+
+        /// <summary>Our own process name, resolved once. Used to recognise our own windows by pid.</summary>
+        private static string OwnProcessName
+        {
+            get
+            {
+                if (_ownProcessName != null) return _ownProcessName;
+                try
+                {
+                    using var self = System.Diagnostics.Process.GetCurrentProcess();
+                    _ownProcessName = self.ProcessName ?? "";
+                }
+                catch { _ownProcessName = ""; }
+                return _ownProcessName;
+            }
+        }
+
+        private const int SeenAppsCapacity = 8;
+        private readonly LinkedList<string> _seenApps = new();
+        private readonly object _seenAppsLock = new();
+
+        /// <summary>
+        /// Distinct process names recently seen in the foreground, newest first, excluding our own.
+        ///
+        /// Exists because a block list is unusable if you cannot find out what to type: nobody knows
+        /// offhand that Teams is "ms-teams" or that Discord's window belongs to "Discord". The
+        /// Awareness tab offers these as one-click additions. Collected only while the service is
+        /// running and never persisted - this is a convenience, not a history of what you use.
+        /// </summary>
+        public IReadOnlyList<string> GetRecentForegroundApps()
+        {
+            lock (_seenAppsLock) return _seenApps.ToArray();
+        }
+
+        private void RememberSeenApp(string processName)
+        {
+            if (string.IsNullOrWhiteSpace(processName)) return;
+            lock (_seenAppsLock)
+            {
+                var existing = _seenApps.FirstOrDefault(a => string.Equals(a, processName, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    _seenApps.Remove(existing);
+                    _seenApps.AddFirst(existing);
+                    return;
+                }
+                _seenApps.AddFirst(processName);
+                while (_seenApps.Count > SeenAppsCapacity) _seenApps.RemoveLast();
+            }
+        }
+
+        /// <summary>
+        /// Names the process owning the foreground window. False when it cannot be named at all -
+        /// callers decide what that means, because the safe direction differs per mode.
+        /// </summary>
+        private bool TryResolveForegroundApp(out string processName, out bool isOwnProcess)
+        {
+            var hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero)
+            {
+                // No foreground window at all (lock screen, secure desktop, a moment mid-switch).
+                processName = "";
+                isOwnProcess = false;
+                return false;
+            }
+
+            if (hwnd == _fgHwnd && (DateTime.UtcNow - _fgResolvedAt).TotalMilliseconds < ForegroundCacheMs)
+            {
+                processName = _fgProcess;
+                isOwnProcess = _fgIsOwn;
+                return _fgKnown;
+            }
+
+            var name = "";
+            var own = false;
+            var known = false;
+
+            try
+            {
+                GetWindowThreadProcessId(hwnd, out var pid);
+                if (pid != 0)
+                {
+                    if (pid == (uint)Environment.ProcessId)
+                    {
+                        // Covers every window we own in one comparison - main window, avatar tube,
+                        // overlays, compositor hosts - without enumerating any of them.
+                        own = true;
+                        name = OwnProcessName;
+                    }
+                    else
+                    {
+                        using var proc = System.Diagnostics.Process.GetProcessById((int)pid);
+                        name = proc.ProcessName ?? "";
+                    }
+                    known = !string.IsNullOrEmpty(name);
+                }
+            }
+            catch
+            {
+                // Exited between the two calls, or Windows refused to describe it. Cached as
+                // unknown below so we do not retry it on every keystroke.
+                known = false;
+            }
+
+            _fgHwnd = hwnd;
+            _fgProcess = name;
+            _fgIsOwn = own;
+            _fgKnown = known;
+            _fgResolvedAt = DateTime.UtcNow;
+
+            if (known && !own) RememberSeenApp(name);
+
+            processName = name;
+            isOwnProcess = own;
+            return known;
+        }
+
+        /// <summary>
+        /// Whether a list entry names this process. Case-insensitive, whitespace-tolerant, and a
+        /// trailing ".exe" is stripped - users type "chrome.exe" as readily as "chrome" and both
+        /// have to mean the same thing or the list silently fails to match.
+        /// </summary>
+        public static bool MatchesAppList(IEnumerable<string>? list, string processName)
+        {
+            if (list == null || string.IsNullOrWhiteSpace(processName)) return false;
+
+            foreach (var raw in list)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var entry = raw.Trim();
+                if (entry.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                    entry = entry.Substring(0, entry.Length - 4);
+                if (entry.Length == 0) continue;
+                if (string.Equals(entry, processName, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Splits the comma / semicolon / newline separated text the Awareness tab collects into a
+        /// clean list of process names, de-duplicated and with any ".exe" dropped.
+        /// </summary>
+        public static List<string> ParseAppList(string? text)
+        {
+            var result = new List<string>();
+            if (string.IsNullOrWhiteSpace(text)) return result;
+
+            foreach (var part in text.Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var entry = part.Trim();
+                if (entry.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                    entry = entry.Substring(0, entry.Length - 4);
+                if (entry.Length == 0) continue;
+                if (result.Any(e => string.Equals(e, entry, StringComparison.OrdinalIgnoreCase))) continue;
+                result.Add(entry);
+            }
+
+            return result;
+        }
+
+        private DateTime _lastSampleAt = DateTime.MinValue;
+
+        /// <summary>
+        /// Notes which app is in front even when scoping is off, so the Awareness tab has something
+        /// to offer as one-click list entries.
+        ///
+        /// Found by play-test: without this the chips are empty at the exact moment they are needed.
+        /// The ring only ever filled from inside the gate, and the gate returns early when the mode
+        /// is Everywhere - so a user who switched to "Only in these apps" saw no suggestions, while
+        /// that mode with an empty list mutes every trigger. Feature off, and no hint how to fix it.
+        ///
+        /// Throttled to one cheap Win32 call every couple of seconds so the per-keystroke fast path
+        /// stays a fast path regardless of how quickly someone types. Nothing is persisted.
+        /// </summary>
+        private void SampleForegroundAppOccasionally()
+        {
+            if ((DateTime.UtcNow - _lastSampleAt).TotalSeconds < 2) return;
+            _lastSampleAt = DateTime.UtcNow;
+            try { TryResolveForegroundApp(out _, out _); } catch { /* sampling is best-effort */ }
+        }
+
+        private string _lastSuppressLog = "";
+        private DateTime _lastSuppressLogAt = DateTime.MinValue;
+
+        /// <summary>
+        /// Logs a suppression, but only once per distinct reason per half-minute. The keyboard path
+        /// asks this question per keystroke, so an unthrottled line here would bury the log.
+        /// </summary>
+        private void LogSuppressed(string source, string reason)
+        {
+            var key = source + "|" + reason;
+            var now = DateTime.UtcNow;
+            if (key == _lastSuppressLog && (now - _lastSuppressLogAt).TotalSeconds < 30) return;
+
+            _lastSuppressLog = key;
+            _lastSuppressLogAt = now;
+            App.Logger?.Debug("KeywordTriggerService: {Source} suppressed - {Reason}", source, reason);
+        }
+
+        /// <summary>
+        /// The gate. True when a trigger is allowed to fire in whatever currently has focus.
+        ///
+        /// Never consulted by <see cref="FireDemoTrigger"/>: the tutorial's demo fire is the app
+        /// showing you its own feature with its own window focused, and gating it would make the
+        /// tutorial silently do nothing for anyone who had scoping switched on.
+        /// </summary>
+        private bool IsForegroundAppAllowed(string source)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return true;
+
+            var scope = settings.KeywordTriggerAppScope;
+            var ignoreOwnFocus = settings.KeywordTriggerIgnoreOwnFocus;
+
+            // The default configuration polices nothing, so it must cost nothing beyond a throttled
+            // sample - which is what lets the Awareness tab suggest real app names later.
+            if (scope == AwarenessAppScope.Everywhere && !ignoreOwnFocus)
+            {
+                SampleForegroundAppOccasionally();
+                return true;
+            }
+
+            if (!TryResolveForegroundApp(out var process, out var isOwn))
+            {
+                // An allow list promises triggers fire ONLY somewhere named. A window that will not
+                // name itself is not somewhere named, so it fails closed. A block list makes the
+                // opposite promise - only the listed apps are off limits - so it fails open.
+                var allowUnknown = scope != AwarenessAppScope.OnlyListed;
+                if (!allowUnknown) LogSuppressed(source, "foreground window could not be identified");
+                return allowUnknown;
+            }
+
+            if (isOwn && ignoreOwnFocus)
+            {
+                LogSuppressed(source, "Control Panel itself has focus");
+                return false;
+            }
+
+            switch (scope)
+            {
+                case AwarenessAppScope.ExceptListed:
+                    if (MatchesAppList(settings.KeywordTriggerApps, process))
+                    {
+                        LogSuppressed(source, $"'{process}' is on the block list");
+                        return false;
+                    }
+                    return true;
+
+                case AwarenessAppScope.OnlyListed:
+                    if (!MatchesAppList(settings.KeywordTriggerApps, process))
+                    {
+                        LogSuppressed(source, $"'{process}' is not on the allow list");
+                        return false;
+                    }
+                    return true;
+
+                default:
+                    return true;
+            }
+        }
+
+        #endregion
+
         /// <summary>
         /// Returns the user's keyword triggers ordered so that installed preset
         /// clones (id prefix <c>preset:</c>) are checked BEFORE custom triggers.
@@ -556,6 +865,20 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
+            // App scope, checked FIRST - ahead of the token diagnostic below on purpose. That
+            // diagnostic writes the scanned words to the log at Information level, and the whole
+            // point of excluding an app is that its contents are none of our business: logging them
+            // and then declining to act on them would be the wrong half of the promise. Dropping
+            // the entire scan is right rather than filtering word by word, because a blocked app is
+            // usually the thing filling the screen. The position guards are cleared so no streak
+            // survives the gap and nothing fires the instant focus returns.
+            if (!IsForegroundAppAllowed("OCR"))
+            {
+                _ocrSeenCounts.Clear();
+                _highlightedOcrKeys.Clear();
+                return;
+            }
+
             // Diagnostic: log the raw OCR tokens per scan so we can see exactly what
             // Windows OCR returned (tokenization + casing). Helps debug issues like
             // "GOOD BOY doesn't match" where OCR may merge all-caps into one token.
@@ -580,6 +903,17 @@ namespace ConditioningControlPanel.Services
 
             var triggers = settings.KeywordTriggers;
             if (triggers == null || triggers.Count == 0) return;
+
+            // App scope. The scan is whole-screen, but the app the user is actually IN is the one
+            // the gate is about, and dropping the whole scan is right: a blocked app is usually the
+            // thing filling the screen, so per-word filtering would mostly be filtering it anyway.
+            // The position guards are cleared so nothing carries a stale streak across the gap.
+            if (!IsForegroundAppAllowed("OCR"))
+            {
+                _ocrSeenCounts.Clear();
+                _highlightedOcrKeys.Clear();
+                return;
+            }
 
             // Global cooldown: enforce a hard minimum gap between ANY trigger fire
             // regardless of source (OCR, keyboard, text). Without this, OCR alone
@@ -765,6 +1099,10 @@ namespace ConditioningControlPanel.Services
 
             var triggers = settings.KeywordTriggers;
             if (triggers == null || triggers.Count == 0) return;
+
+            // App scope. Clipboard-style text arrives with no position data, so the foreground app
+            // is the only context there is to judge it by.
+            if (!IsForegroundAppAllowed("Text")) return;
 
             var now = DateTime.Now;
             if ((now - _lastGlobalTriggerTime).TotalSeconds < settings.KeywordGlobalCooldownSeconds)
