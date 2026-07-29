@@ -109,6 +109,15 @@ public class Achievement
             ImageName = "PlatinumPuppet.png",
             Category = AchievementCategory.Progression
         },
+        ["first_week_graduate"] = new Achievement
+        {
+            Id = "first_week_graduate",
+            Name = "First Week",
+            Requirement = "Finish the seven-day First Week program",
+            FlavorText = "Seven days, and you came back every single one. That's not a habit anymore, that's a shape.",
+            ImageName = "daily_maintenance.png",
+            Category = AchievementCategory.Progression
+        },
 
         // ========== TIME & SESSIONS ==========
         ["rose_tinted_reality"] = new Achievement

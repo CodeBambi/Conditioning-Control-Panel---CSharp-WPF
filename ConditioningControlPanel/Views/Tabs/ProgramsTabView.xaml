@@ -1,0 +1,441 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Tabs.ProgramsTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d"
+             d:DesignHeight="450" d:DesignWidth="800">
+    <Grid>
+        <Border Style="{StaticResource SectionPanel}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="15">
+
+                    <!-- ================= Header ================= -->
+                    <StackPanel Margin="0,0,0,14">
+                        <StackPanel Orientation="Horizontal">
+                            <Image Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='📅', Converter={StaticResource EmojiToImageSource}}"/>
+                            <TextBlock Text="{loc:Str programs_browse_header}"
+                                       Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Text="{loc:Str programs_browse_sub}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" MaxWidth="720"
+                                   HorizontalAlignment="Left"/>
+                    </StackPanel>
+
+                    <!-- ================================================================= -->
+                    <!-- BROWSE: nothing enrolled. One card per program in App.Programs.Library -->
+                    <!-- ================================================================= -->
+                    <StackPanel x:Name="ProgramsBrowsePanel" x:FieldModifier="internal" Visibility="Collapsed">
+
+                        <TextBlock x:Name="TxtProgramsBrowseEmpty" x:FieldModifier="internal"
+                                   Text="{loc:Str programs_browse_empty}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="13" Margin="2,10,0,0" Visibility="Collapsed"/>
+
+                        <ItemsControl x:Name="ProgramLibraryList" x:FieldModifier="internal">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,12" Padding="18,16" CornerRadius="12"
+                                            Opacity="{Binding CardOpacity}"
+                                            Background="{DynamicResource ElevatedSurfaceBrush}"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Accent bar + icon -->
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,14,0">
+                                                <Border Width="4" CornerRadius="2" Margin="0,2,12,2"
+                                                        Background="{Binding AccentBrush}"/>
+                                                <helpers:EmojiTextBlock Text="{Binding Icon}" FontSize="26"
+                                                                        VerticalAlignment="Center"/>
+                                            </StackPanel>
+
+                                            <!-- Copy -->
+                                            <StackPanel Grid.Column="1">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextLightBrush}"
+                                                               FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                    <Border CornerRadius="9999" Padding="8,2" Margin="10,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Background="{Binding TierBackground}">
+                                                        <TextBlock Text="{Binding TierLabel}" Foreground="{Binding TierBrush}"
+                                                                   FontSize="10" FontWeight="Bold"/>
+                                                    </Border>
+                                                    <Border CornerRadius="9999" Padding="8,2" Margin="6,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Background="{DynamicResource SurfaceBgBrush}"
+                                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                                        <TextBlock Text="{Binding LengthLabel}"
+                                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                                   FontSize="10" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource TextMutedBrush}"
+                                                           FontSize="12" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Pitch}" Foreground="{DynamicResource TextLightBrush}"
+                                                           FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap" LineHeight="18"/>
+                                                <TextBlock Text="{Binding ReasonText}" Visibility="{Binding ReasonVisibility}"
+                                                           Foreground="{DynamicResource TextMutedBrush}"
+                                                           FontSize="11" FontStyle="Italic" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                            </StackPanel>
+
+                                            <!-- Enroll / locked -->
+                                            <Button Grid.Column="2" VerticalAlignment="Center" Margin="16,0,0,0"
+                                                    MinWidth="130"
+                                                    Content="{Binding ActionText}"
+                                                    Tag="{Binding ProgramId}"
+                                                    IsEnabled="{Binding IsActionEnabled}"
+                                                    Style="{StaticResource PinkButton}"
+                                                    Click="BtnProgramEnroll_Click"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- ================================================================= -->
+                    <!-- RUN: an active or paused enrollment                                -->
+                    <!-- ================================================================= -->
+                    <StackPanel x:Name="ProgramsRunPanel" x:FieldModifier="internal" Visibility="Collapsed">
+
+                        <!-- Run header: chapter, day counter, attempt, days off -->
+                        <Border Padding="18,16" CornerRadius="12" Margin="0,0,0,12"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Border x:Name="RunAccentBar" x:FieldModifier="internal" Grid.Column="0"
+                                        Width="4" CornerRadius="2" Margin="0,2,14,2"
+                                        Background="{DynamicResource PinkBrush}"/>
+
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock x:Name="TxtRunProgramTitle" x:FieldModifier="internal"
+                                               Foreground="{DynamicResource TextLightBrush}"
+                                               FontSize="17" FontWeight="Bold" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                        <TextBlock x:Name="TxtRunChapterName" x:FieldModifier="internal"
+                                                   Foreground="{DynamicResource PinkBrush}"
+                                                   FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock Text="  ·  " Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtRunDayCounter" x:FieldModifier="internal"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="12" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <Border x:Name="RunStrictBadge" x:FieldModifier="internal"
+                                                CornerRadius="9999" Padding="8,2" Margin="0,0,6,4"
+                                                Background="{DynamicResource SurfaceBgBrush}"
+                                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                                Visibility="Collapsed">
+                                            <TextBlock Text="{loc:Str programs_strict_badge}"
+                                                       Foreground="{DynamicResource PinkBrush}"
+                                                       FontSize="10" FontWeight="Bold"/>
+                                        </Border>
+                                        <Border x:Name="RunAttemptBadge" x:FieldModifier="internal"
+                                                CornerRadius="9999" Padding="8,2" Margin="0,0,6,4"
+                                                Background="{DynamicResource SurfaceBgBrush}"
+                                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                                Visibility="Collapsed">
+                                            <TextBlock x:Name="TxtRunAttempt" x:FieldModifier="internal"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="10" FontWeight="SemiBold"/>
+                                        </Border>
+                                        <Border CornerRadius="9999" Padding="8,2" Margin="0,0,6,4"
+                                                Background="{DynamicResource SurfaceBgBrush}"
+                                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                            <TextBlock x:Name="TxtRunDaysOff" x:FieldModifier="internal"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="10" FontWeight="SemiBold"/>
+                                        </Border>
+                                    </WrapPanel>
+                                </StackPanel>
+
+                                <!-- Pause / Resume + Withdraw. Withdraw is always here, always plain. -->
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                                    <Button x:Name="BtnProgramPauseResume" x:FieldModifier="internal"
+                                            Style="{StaticResource SecondaryButton}" MinWidth="90"
+                                            Margin="0,0,8,0" Click="BtnProgramPauseResume_Click"/>
+                                    <Button x:Name="BtnProgramWithdraw" x:FieldModifier="internal"
+                                            Content="{loc:Str btn_program_withdraw}"
+                                            Style="{StaticResource SecondaryButton}" MinWidth="90"
+                                            Click="BtnProgramWithdraw_Click"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Paused note -->
+                        <Border x:Name="RunPausedNote" x:FieldModifier="internal" Visibility="Collapsed"
+                                Padding="14,10" CornerRadius="10" Margin="0,0,0,12"
+                                Background="{DynamicResource SurfaceBgBrush}"
+                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                            <TextBlock Text="{loc:Str programs_paused_note}"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" TextWrapping="Wrap"/>
+                        </Border>
+
+                        <!-- Whole-program day strip -->
+                        <Border Padding="18,14" CornerRadius="12" Margin="0,0,0,12"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str programs_strip_header}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                <ItemsControl x:Name="ProgramDayStrip" x:FieldModifier="internal">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Width="28" Height="28" CornerRadius="7" Margin="0,0,6,6"
+                                                    Background="{Binding Fill}"
+                                                    BorderBrush="{Binding Stroke}"
+                                                    BorderThickness="{Binding PipBorderThickness}"
+                                                    Opacity="{Binding PipOpacity}"
+                                                    ToolTip="{Binding Tip}">
+                                                <TextBlock Text="{Binding Label}" Foreground="{Binding LabelBrush}"
+                                                           FontWeight="{Binding LabelWeight}" FontSize="11"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ============ Today ============ -->
+                        <Border x:Name="TodayPanel" x:FieldModifier="internal"
+                                Padding="20,18" CornerRadius="12"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Text="{loc:Str programs_today_header}"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <Border x:Name="TodayBossBadge" x:FieldModifier="internal" Visibility="Collapsed"
+                                            CornerRadius="9999" Padding="8,2" Margin="10,0,0,0"
+                                            Background="{DynamicResource TransparentPinkBrush}"
+                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                        <TextBlock Text="{loc:Str programs_boss_badge}"
+                                                   Foreground="{DynamicResource PinkBrush}"
+                                                   FontSize="10" FontWeight="Bold"/>
+                                    </Border>
+                                    <Border x:Name="TodayReturnBadge" x:FieldModifier="internal" Visibility="Collapsed"
+                                            CornerRadius="9999" Padding="8,2" Margin="6,0,0,0"
+                                            Background="{DynamicResource SurfaceBgBrush}"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                        <TextBlock Text="{loc:Str programs_return_badge}"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="10" FontWeight="Bold"/>
+                                    </Border>
+                                </StackPanel>
+
+                                <TextBlock x:Name="TxtTodayTitle" x:FieldModifier="internal"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           FontSize="18" FontWeight="Bold" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="TxtTodayBlurb" x:FieldModifier="internal"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="12" TextWrapping="Wrap" LineHeight="19" Margin="0,6,0,0"/>
+
+                                <!-- Day-complete banner -->
+                                <Border x:Name="TodayCompleteBanner" x:FieldModifier="internal" Visibility="Collapsed"
+                                        Padding="12,8" CornerRadius="8" Margin="0,12,0,0"
+                                        Background="{DynamicResource TransparentPinkBrush}">
+                                    <TextBlock Text="{loc:Str programs_day_complete}"
+                                               Foreground="{DynamicResource PinkBrush}"
+                                               FontSize="12" FontWeight="Bold"/>
+                                </Border>
+
+                                <!-- Session row -->
+                                <Border Padding="14,12" CornerRadius="10" Margin="0,14,0,0"
+                                        Background="{DynamicResource SurfaceBgBrush}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock x:Name="TxtTodaySessionGlyph" x:FieldModifier="internal"
+                                                   Grid.Column="0" Text="○" FontSize="15" Margin="0,0,10,0"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextMutedBrush}"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{loc:Str programs_session_label}"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="TxtTodaySessionMinutes" x:FieldModifier="internal"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <Button x:Name="BtnStartTodaySession" x:FieldModifier="internal"
+                                                Grid.Column="2" MinWidth="190"
+                                                Content="{loc:Str btn_program_start_session}"
+                                                Style="{StaticResource PinkButton}"
+                                                Click="BtnStartTodaySession_Click"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Ambient row (only when the day carries one) -->
+                                <Border x:Name="TodayAmbientRow" x:FieldModifier="internal" Visibility="Collapsed"
+                                        Padding="14,12" CornerRadius="10" Margin="0,8,0,0"
+                                        Background="{DynamicResource SurfaceBgBrush}">
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Str programs_ambient_header}"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="TxtTodayAmbient" x:FieldModifier="internal"
+                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                   FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="TxtTodayAmbientProgress" x:FieldModifier="internal"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Tasks -->
+                                <TextBlock Text="{loc:Str programs_tasks_header}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" FontWeight="SemiBold" Margin="0,16,0,8"/>
+
+                                <TextBlock x:Name="TxtTodayNoTasks" x:FieldModifier="internal" Visibility="Collapsed"
+                                           Text="{loc:Str programs_no_tasks}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="12" Margin="2,0,0,0"/>
+
+                                <ItemsControl x:Name="TodayTaskList" x:FieldModifier="internal">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="14,12" CornerRadius="10" Margin="0,0,0,8"
+                                                    Opacity="{Binding RowOpacity}"
+                                                    Background="{DynamicResource SurfaceBgBrush}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding StatusGlyph}"
+                                                               Foreground="{Binding StatusBrush}"
+                                                               FontSize="15" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding Description}"
+                                                                       Foreground="{Binding TextBrush}"
+                                                                       FontSize="13" TextWrapping="Wrap"
+                                                                       VerticalAlignment="Center"/>
+                                                            <Border CornerRadius="9999" Padding="7,1" Margin="8,0,0,0"
+                                                                    VerticalAlignment="Center"
+                                                                    Visibility="{Binding BadgeVisibility}"
+                                                                    Background="{DynamicResource ElevatedSurfaceBrush}">
+                                                                <TextBlock Text="{Binding BadgeText}"
+                                                                           Foreground="{DynamicResource TextMutedBrush}"
+                                                                           FontSize="10" FontWeight="SemiBold"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding ProgressText}"
+                                                                   Visibility="{Binding ProgressVisibility}"
+                                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                                   FontSize="11" Margin="0,3,0,0"/>
+                                                    </StackPanel>
+                                                    <Button Grid.Column="2" MinWidth="120" Margin="12,0,0,0"
+                                                            Visibility="{Binding SubmitVisibility}"
+                                                            Content="{loc:Str btn_program_submit_photo}"
+                                                            Tag="{Binding TaskId}"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Click="BtnProgramSubmitRitual_Click"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock x:Name="TxtRitualPrivacyNote" x:FieldModifier="internal" Visibility="Collapsed"
+                                           Text="{loc:Str programs_photo_local_note}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" FontStyle="Italic" Margin="2,2,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ================================================================= -->
+                    <!-- LAPSED: one screen, two buttons, no editorialising                 -->
+                    <!-- ================================================================= -->
+                    <StackPanel x:Name="ProgramsLapsedPanel" x:FieldModifier="internal" Visibility="Collapsed">
+                        <Border Padding="24,22" CornerRadius="12"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str programs_lapsed_title}"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           FontSize="18" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtLapsedBody" x:FieldModifier="internal"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="13" TextWrapping="Wrap" LineHeight="20"
+                                           Margin="0,10,0,0" MaxWidth="620" HorizontalAlignment="Left"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                                    <Button x:Name="BtnProgramRestart" x:FieldModifier="internal"
+                                            Content="{loc:Str btn_program_restart}"
+                                            Style="{StaticResource PinkButton}" MinWidth="150"
+                                            Click="BtnProgramRestart_Click"/>
+                                    <Button Content="{loc:Str btn_program_withdraw}"
+                                            Style="{StaticResource SecondaryButton}" MinWidth="120"
+                                            Margin="10,0,0,0" Click="BtnProgramWithdraw_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ================================================================= -->
+                    <!-- GRADUATED                                                          -->
+                    <!-- ================================================================= -->
+                    <StackPanel x:Name="ProgramsGraduatedPanel" x:FieldModifier="internal" Visibility="Collapsed">
+                        <Border Padding="24,22" CornerRadius="12"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Width="22" Height="22" Margin="0,0,8,0" VerticalAlignment="Center"
+                                           Source="{Binding Source='🏆', Converter={StaticResource EmojiToImageSource}}"/>
+                                    <TextBlock Text="{loc:Str programs_graduated_title}"
+                                               Foreground="{DynamicResource PinkBrush}"
+                                               FontSize="19" FontWeight="Bold" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock x:Name="TxtGraduatedSub" x:FieldModifier="internal"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           FontSize="14" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="TxtGraduatedStats" x:FieldModifier="internal"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                <Button x:Name="BtnProgramDismissGraduated" x:FieldModifier="internal"
+                                        Content="{loc:Str btn_program_dismiss}"
+                                        Style="{StaticResource PinkButton}" MinWidth="130"
+                                        HorizontalAlignment="Left" Margin="0,20,0,0"
+                                        Click="BtnProgramDismissGraduated_Click"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>

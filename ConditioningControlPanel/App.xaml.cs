@@ -63,6 +63,14 @@ namespace ConditioningControlPanel
         private static EventWaitHandle? _showSignal;
         private static EventWaitHandle? _showAckSignal;
         private static bool _recoveredFromStaleInstance;
+        // How many processes the takeover actually terminated. Can be zero even after a failed
+        // ack: the mutex holder may be a build from a different folder that we refuse to touch.
+        private static int _staleInstancesKilled;
+        // KillStaleInstances runs before Serilog is configured, so its per-process verdicts are
+        // buffered here and replayed the moment Logger exists. Without them a takeover that kills
+        // the wrong process (or refuses to kill the right one) leaves no trace in logs/app-*.log
+        // and the next person has to guess.
+        private static readonly List<string> _staleInstanceDecisions = new();
         private SplashScreen? _splash;
         private static Thread? _showSignalThread;
         private readonly TaskCompletionSource _patreonInitDone = new();
@@ -364,6 +372,9 @@ namespace ConditioningControlPanel
         public static CommunityPromptService CommunityPrompts { get; private set; } = null!;
         public static PersonalityService Personality { get; private set; } = null!;
         public static RoadmapService Roadmap { get; private set; } = null!;
+        /// <summary>Multi-day Training Programs runtime. Fully qualified because the namespace
+        /// segment <c>Program</c> collides with the <c>Program</c> type in C# name resolution.</summary>
+        public static Services.Program.ProgramService Programs { get; private set; } = null!;
         public static SkillTreeService SkillTree { get; private set; } = null!;
         public static KeywordTriggerService KeywordTriggers { get; private set; } = null!;
         public static KeywordTriggerPresetService KeywordPresets { get; private set; } = null!;
@@ -1043,8 +1054,13 @@ namespace ConditioningControlPanel
 
                     // No acknowledgment within the window: the primary is wedged or headless. Kill it
                     // and take over. (Logger isn't up yet here; we record the recovery once it is.)
+                    // The kill is deliberately fail-closed, so it can legitimately terminate nothing
+                    // when the mutex holder is a build from another folder or a process we can't
+                    // identify. We fall through either way: running as a second instance without the
+                    // mutex is strictly better than exiting, and every wait below is bounded, so a
+                    // survivor can't wedge this launch.
                     _recoveredFromStaleInstance = true;
-                    KillStaleInstances();
+                    _staleInstancesKilled = KillStaleInstances();
 
                     // Claim single-instance ownership now that the zombie is gone. If it died holding
                     // the mutex, WaitOne throws AbandonedMutexException but we DO acquire it.
@@ -1172,7 +1188,21 @@ namespace ConditioningControlPanel
             // Surface a single-instance takeover (a prior wedged/headless process was killed so
             // this launch could proceed). Recorded here because Logger isn't up during the handshake.
             if (_recoveredFromStaleInstance)
-                Logger.Warning("[LIFECYCLE] Previous instance was unresponsive (no show-ack within {Ms}ms) — killed it and took over as primary", ShowAckTimeoutMs);
+            {
+                if (_staleInstancesKilled > 0)
+                    Logger.Warning("[LIFECYCLE] Previous instance was unresponsive (no show-ack within {Ms}ms) — killed {Killed} stale process(es) and took over as primary", ShowAckTimeoutMs, _staleInstancesKilled);
+                else
+                    Logger.Warning("[LIFECYCLE] Previous instance was unresponsive (no show-ack within {Ms}ms) but nothing was confirmed to be this same executable, so nothing was killed. Running as a secondary instance; the single-instance mutex stays with the other process", ShowAckTimeoutMs);
+            }
+
+            // Replay the per-process takeover verdicts buffered before Serilog existed. This is the
+            // only record of WHY a sibling process was killed or spared.
+            lock (_staleInstanceDecisions)
+            {
+                foreach (var decision in _staleInstanceDecisions)
+                    Logger.Information("{TakeoverDecision}", decision);
+                _staleInstanceDecisions.Clear();
+            }
 
             // If a Rabbit Hole run was live when the process last died, the native vanish left nothing
             // in crash.log — but the chaos sentinel file is still on disk. Report+consume it so the
@@ -1471,6 +1501,7 @@ namespace ConditioningControlPanel
             Roadmap = new RoadmapService();
             // Needs Settings, Progression and Quests (all above); reads Patreon lazily, so it is
             // safe here even though Patreon is not constructed until later in OnStartup.
+            Programs = new Services.Program.ProgramService();
             SkillTree = new SkillTreeService();
             Tutorial = new TutorialService();
 
@@ -1900,45 +1931,142 @@ namespace ConditioningControlPanel
         // Terminate any OTHER running CCP process that shares our executable path. Called from the
         // single-instance handshake only after the existing instance failed to acknowledge within
         // ShowAckTimeoutMs — i.e. it is wedged (render-thread deadlock) or headless and is keeping
-        // the single-instance mutex alive. Matching on the full exe path avoids nuking an unrelated
-        // same-named process or a separate install; ProcessName is a best-effort fallback when the
-        // other process's MainModule can't be read (access denied). Runs before Logger init.
-        private static void KillStaleInstances()
+        // the single-instance mutex alive. Returns how many processes were actually terminated.
+        //
+        // The match fails CLOSED: a process is killed only when we can positively read its image
+        // path AND it equals ours. The old code started from "pathMatches = true" and only ever
+        // cleared that flag when the other process's MainModule was readable, so every process the
+        // probe could not see became a kill target. MainModule is exactly the wrong probe for that:
+        // it needs PROCESS_QUERY_INFORMATION|PROCESS_VM_READ and walks the target's module list, so
+        // it throws or quietly returns null across elevation, session and bitness boundaries (on a
+        // normal desktop it is unreadable for roughly half of all running processes). The guard
+        // therefore degraded to "kill anything named ConditioningControlPanel.exe", which is every
+        // worktree's build, and running two worktrees at once became impossible. Skipping a
+        // process we cannot identify costs nothing: if we cannot even open it for a limited-info
+        // query, Kill() would have been denied anyway. Runs before Logger init, so verdicts are
+        // buffered and replayed once Serilog is up.
+        private static int KillStaleInstances()
         {
+            int killed = 0;
             try
             {
                 int selfId = Environment.ProcessId;
-                string? selfPath = null;
-                try { selfPath = Process.GetCurrentProcess().MainModule?.FileName; } catch { }
+                // Environment.ProcessPath is the apphost path straight from the runtime, no handle
+                // and no module walk, so it is the one path we can always trust about ourselves.
+                string? selfPath = NormalizeExePath(Environment.ProcessPath)
+                                   ?? NormalizeExePath(TryGetProcessImagePath(Process.GetCurrentProcess()));
                 string selfName = Process.GetCurrentProcess().ProcessName;
+
+                if (selfPath == null)
+                {
+                    NoteStaleInstanceDecision("[LIFECYCLE] Takeover aborted: our own executable path is unreadable, so no other process can be confirmed to be this same build");
+                    return 0;
+                }
 
                 foreach (var proc in Process.GetProcessesByName(selfName))
                 {
+                    int otherId = -1;
                     try
                     {
-                        if (proc.Id == selfId) continue;
+                        otherId = proc.Id;
+                        if (otherId == selfId) continue;
 
-                        // Prefer an exact executable-path match; fall back to name-only if the
-                        // path is unreadable (e.g. the target is elevated).
-                        bool pathMatches = true;
-                        if (selfPath != null)
+                        string? otherPath = NormalizeExePath(TryGetProcessImagePath(proc));
+                        if (otherPath == null)
                         {
-                            string? otherPath = null;
-                            try { otherPath = proc.MainModule?.FileName; } catch { otherPath = null; }
-                            if (otherPath != null)
-                                pathMatches = string.Equals(otherPath, selfPath, StringComparison.OrdinalIgnoreCase);
+                            NoteStaleInstanceDecision($"[LIFECYCLE] Takeover skipped pid {otherId}: its executable path could not be read, so we cannot prove it is this build");
+                            continue;
                         }
-                        if (!pathMatches) continue;
+                        if (!string.Equals(otherPath, selfPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            NoteStaleInstanceDecision($"[LIFECYCLE] Takeover skipped pid {otherId}: it runs {otherPath}, we run {selfPath}");
+                            continue;
+                        }
 
                         proc.Kill();
                         proc.WaitForExit(5000);
+                        killed++;
+                        NoteStaleInstanceDecision($"[LIFECYCLE] Takeover killed pid {otherId} ({otherPath}) after it failed to acknowledge the show-signal");
                     }
-                    catch { /* process may have exited on its own, or we lack rights — skip it */ }
+                    catch (Exception ex)
+                    {
+                        // Process may have exited on its own, or we lack rights to end it.
+                        NoteStaleInstanceDecision($"[LIFECYCLE] Takeover could not act on pid {otherId}: {ex.GetType().Name} {ex.Message}");
+                    }
                     finally { try { proc.Dispose(); } catch { } }
                 }
             }
-            catch { /* enumeration failed — takeover still proceeds; the mutex re-acquire is best-effort */ }
+            catch (Exception ex)
+            {
+                // Enumeration failed — takeover still proceeds; the mutex re-acquire is best-effort.
+                NoteStaleInstanceDecision($"[LIFECYCLE] Takeover could not enumerate processes: {ex.GetType().Name} {ex.Message}");
+            }
+            return killed;
         }
+
+        // Reads the on-disk image path of a running process without relying on Process.MainModule.
+        // QueryFullProcessImageName only needs PROCESS_QUERY_LIMITED_INFORMATION and is answered by
+        // the kernel rather than by reading the target's memory, so it succeeds against elevated,
+        // cross-session and cross-bitness processes that MainModule cannot see. MainModule stays as
+        // a second chance; when both come back empty the caller must treat the process as unknown
+        // and leave it alone.
+        private static string? TryGetProcessImagePath(Process proc)
+        {
+            try
+            {
+                IntPtr handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, proc.Id);
+                if (handle != IntPtr.Zero)
+                {
+                    try
+                    {
+                        var buffer = new StringBuilder(1024);
+                        int size = buffer.Capacity;
+                        if (QueryFullProcessImageName(handle, 0, buffer, ref size) && size > 0)
+                            return buffer.ToString();
+                    }
+                    finally { try { CloseHandle(handle); } catch { } }
+                }
+            }
+            catch { }
+
+            try { return proc.MainModule?.FileName; }
+            catch { return null; }
+        }
+
+        // Canonical form for comparing two executable paths: the same exe can be reached through a
+        // relative launch or a trailing-slash-laden path, and Windows paths are case-insensitive.
+        private static string? NormalizeExePath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            try { return Path.GetFullPath(path.Trim()); }
+            catch { return path.Trim(); }
+        }
+
+        // Buffers one takeover verdict for replay after Logger init. Bounded so a machine with a
+        // pile of same-named processes can't grow this without limit.
+        private static void NoteStaleInstanceDecision(string message)
+        {
+            try
+            {
+                lock (_staleInstanceDecisions)
+                {
+                    if (_staleInstanceDecisions.Count < 32)
+                        _staleInstanceDecisions.Add(message);
+                }
+            }
+            catch { }
+        }
+
+        private const int PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode, EntryPoint = "QueryFullProcessImageNameW")]
+        private static extern bool QueryFullProcessImageName(IntPtr hProcess, int dwFlags, StringBuilder lpExeName, ref int lpdwSize);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr hObject);
 
         // Standard WPF "bring to front" sequence. Activate() alone is silently
         // ignored when Windows' ForegroundLockTimeout is active (e.g. another
@@ -3331,6 +3459,7 @@ Application State:
             FocusGame?.Dispose();
             ContentPacks?.Dispose();
             Roadmap?.Dispose();
+            Programs?.Dispose();
             SkillTree?.Dispose();
             QuestDefinitions?.Dispose();
             Quests?.Dispose();

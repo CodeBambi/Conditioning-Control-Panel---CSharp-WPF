@@ -15,17 +15,77 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>   <!-- Training Programs "Today" card -->
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- ============================================================ -->
+        <!-- TRAINING PROGRAMS - "TODAY" CARD (row 0, full width).         -->
+        <!-- Collapsed entirely unless a program is running; painted from  -->
+        <!-- MainWindow.ProgramsTab.cs (RefreshProgramTodayCard). Clicking -->
+        <!-- it opens the Programs tab.                                    -->
+        <!-- ============================================================ -->
+        <Button x:Name="ProgramTodayCard" x:FieldModifier="internal"
+                Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                Margin="5,5,5,0" Visibility="Collapsed" Cursor="Hand"
+                HorizontalContentAlignment="Stretch"
+                BorderBrush="{DynamicResource PinkBrush}"
+                Loaded="ProgramTodayCard_Loaded" Click="ProgramTodayCard_Click">
+            <Button.Style>
+                <Style TargetType="Button">
+                    <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="cardBorder" CornerRadius="10" Padding="14,11"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}">
+                                    <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="cardBorder" Property="Background"
+                                                Value="{DynamicResource SurfaceBgBrush}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Button.Style>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border x:Name="ProgramTodayAccent" x:FieldModifier="internal" Grid.Column="0"
+                        Width="4" CornerRadius="2" Margin="0,1,12,1"
+                        Background="{DynamicResource PinkBrush}"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtProgramTodayTitle" x:FieldModifier="internal"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="TxtProgramTodayLine" x:FieldModifier="internal"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               FontSize="13" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" Margin="12,0,2,0"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="18"/>
+            </Grid>
+        </Button>
+
+        <!-- ============================================================ -->
         <!-- PREMIUM QUICK-TOGGLE RAIL (col 0). Quick on/off for gated     -->
         <!-- features. Greyed with a lock (doubles as an ad) when the      -->
         <!-- user is not a logged-in patron.                               -->
         <!-- ============================================================ -->
-        <Border x:Name="PremiumRail" x:FieldModifier="internal" Grid.Column="0" Grid.Row="0" Margin="5,5,0,5"
+        <Border x:Name="PremiumRail" x:FieldModifier="internal" Grid.Column="0" Grid.Row="1" Margin="5,5,0,5"
                 Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
                 BorderThickness="1" CornerRadius="12">
             <Border.Resources>
@@ -296,7 +356,7 @@
         <!-- ============================================================ -->
         <!-- VELVET MOSAIC DASHBOARD - 4x4 feature card grid (col 0)       -->
         <!-- ============================================================ -->
-        <Grid Grid.Column="1" Grid.Row="0" x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="5">
+        <Grid Grid.Column="1" Grid.Row="1" x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
@@ -588,7 +648,7 @@
         <!-- referenced by MainWindow.xaml.cs until the full rewire is    -->
         <!-- complete. Phase 6+ will delete this block.                   -->
         <!-- ============================================================ -->
-        <Grid x:Name="LegacyDashboardHost" x:FieldModifier="internal" Grid.Column="1" Grid.Row="0" Visibility="Collapsed">
+        <Grid x:Name="LegacyDashboardHost" x:FieldModifier="internal" Grid.Column="1" Grid.Row="1" Visibility="Collapsed">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="330"/>
             <ColumnDefinition Width="360"/>
@@ -1078,7 +1138,7 @@
         <!-- /LegacyDashboardHost -->
     
         <!-- RIGHT HALF (Browser / Audio / Quick Links) — col 2 (after premium rail + feature grid) -->
-        <Grid Grid.Column="2" Grid.Row="0" Margin="5">
+        <Grid Grid.Column="2" Grid.Row="1" Margin="5">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
@@ -1756,7 +1816,7 @@
         <!-- VELVET MOSAIC HELPER BUTTON ROW - full width, under both     -->
         <!-- the feature grid AND the right half.                         -->
         <!-- ============================================================ -->
-        <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
+        <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
               Height="30" Margin="5,4,5,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -1884,8 +1944,8 @@
             </Button>
         </Grid>
 
-        <!-- Scrolling Marquee Banner - row 2, spans all columns -->
-        <Border x:Name="MarqueeBanner" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+        <!-- Scrolling Marquee Banner - row 3, spans all columns -->
+        <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
                 Background="#1A0A1A" BorderBrush="{DynamicResource DarkPinkBrush}" BorderThickness="2"
                 CornerRadius="8" Height="48" Margin="5,5,5,0" ClipToBounds="True">
             <Border.Effect>
