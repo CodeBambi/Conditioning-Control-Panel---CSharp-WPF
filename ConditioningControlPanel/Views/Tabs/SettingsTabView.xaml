@@ -1294,12 +1294,28 @@
             </Grid.RowDefinitions>
     
             <!-- Browser Section -->
-            <Border Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,5"
+            <!-- ClipToBounds is a backstop, not the fix: the WebView2 below is a native HWND
+                 (an HwndHost), and WPF's layout clip does not reliably clip native children.
+                 If this card is ever over-filled again the spill has to stop at the card's own
+                 edge instead of painting over the account card and the helper-button row. -->
+            <Border Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,5" ClipToBounds="True"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-                <StackPanel>
+                <!-- Grid, not StackPanel. A StackPanel hands each child its DESIRED height and
+                     never shrinks it, so the browser box below (which used to carry a hard
+                     Height="340") kept its old size when the Training Programs "Today" banner
+                     took ~64 design units out of this column - and the native WebView2 painted
+                     straight through the card's bottom edge. With Auto/* the browser box is
+                     simply whatever is left after the header: it shrinks when the banner
+                     appears, grows back when it goes, and follows window resize / DPI change
+                     for free, because layout - not a constant - decides its height. -->
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
                     <!-- Browser Header - single row with title, tabs, status, webcam toggle, pop out -->
-                    <Grid Margin="0,0,0,4">
+                    <Grid Grid.Row="0" Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -1519,8 +1535,10 @@
                         </Button>
                     </Grid>
     
-                    <!-- Browser Container -->
-                    <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True" Height="340">
+                    <!-- Browser Container. No fixed Height on purpose - see the Grid note above.
+                         It fills the star row, so the WebView2's layout slot (and therefore its
+                         native window) is always inside this card. -->
+                    <Border Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -1613,7 +1631,7 @@
                             </Grid>
                         </Grid>
                     </Border>
-                </StackPanel>
+                </Grid>
             </Border>
     
             <!-- Audio Section + Quick Actions -->

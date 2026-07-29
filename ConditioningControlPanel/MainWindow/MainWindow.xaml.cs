@@ -1518,6 +1518,7 @@ namespace ConditioningControlPanel
                     ("features/awareness.png", AwarenessTab.ImgAwarenessFeature),
                     ("features/remote_control.png", RemoteControlTab.ImgRemoteControlFeature),
                     ("features/blink_trainer.png", BlinkTrainerTab.ImgBlinkTrainerFeature),
+                    ("lockdown_icon.png", LockdownTab.ImgLockdownFeature),
                 };
                 foreach (var (path, img) in descImageMap)
                 {
@@ -1525,6 +1526,36 @@ namespace ConditioningControlPanel
                     var resolved = ModResourceResolver.ResolveImage(path);
                     if (resolved != null)
                         img.Source = resolved;
+                }
+
+                // Premium quick-launch rail chip art. These live as ImageBrush resources
+                // inside PremiumRail.Resources with a hardcoded pack:// UriSource, so the
+                // rail was the one place on the Dashboard that kept the base art after a
+                // mod switch. Mutate each brush's ImageSource in place — the chips bind to
+                // them with {StaticResource}, so they all repaint from the one assignment.
+                // The DecodePixelWidth values mirror the XAML: the rail only ever shows
+                // these ~170px wide, and re-resolving without a decode cap would pull the
+                // full-size neon PNGs into memory.
+                var railArtMap = new (string key, string resourcePath, int decodeWidth)[]
+                {
+                    ("ArtTakeover",  "features/takeover.png",       384),
+                    ("ArtAwareness", "features/awareness.png",      512),
+                    ("ArtHaptics",   "features/vibe.png",           384),
+                    ("ArtIntake",    "features/lab_quiz_hero.png",  512),
+                    ("ArtRemote",    "features/remote_control.png", 768),
+                    ("ArtBlink",     "features/blink_trainer.png",  512),
+                    ("ArtLockdown",  "lockdown_icon.png",          1024),
+                };
+                var railResources = SettingsTab.PremiumRail?.Resources;
+                if (railResources != null)
+                {
+                    foreach (var (key, path, decodeWidth) in railArtMap)
+                    {
+                        if (railResources[key] is not ImageBrush brush || brush.IsFrozen) continue;
+                        var image = LoadModImageDecoded(path, decodeWidth);
+                        if (image != null)
+                            brush.ImageSource = image;
+                    }
                 }
 
                 // Lab hero headers (mod-sensitive): drone-mode ships green versions under
@@ -1547,6 +1578,32 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to load some feature images");
+            }
+        }
+
+        /// <summary>
+        /// Loads a resource image (mod override first, embedded fallback) at a capped decode
+        /// size. ModResourceResolver.ResolveImage decodes at full resolution and caches, which
+        /// is wrong for the rail's marquee PNGs — this goes through ResolveUri instead so the
+        /// mod override still wins but DecodePixelWidth is honoured. Returns null on failure.
+        /// </summary>
+        private static BitmapImage? LoadModImageDecoded(string resourcePath, int decodeWidth)
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(ModResourceResolver.ResolveUri(resourcePath), UriKind.Absolute);
+                bitmap.DecodePixelWidth = decodeWidth;
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("LoadModImageDecoded failed for {Path}: {Error}", resourcePath, ex.Message);
+                return null;
             }
         }
 
