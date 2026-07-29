@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
 
@@ -242,6 +243,95 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.LstLeaderboard_MouseDoubleClick(sender, e);
+        }
+
+        // ------------------------------------------------------------------
+        // Wheel speed
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Restore the pre-Pixel-scrolling wheel feel.
+        ///
+        /// The roster runs on VirtualizingPanel.ScrollUnit=Pixel so "Jump to me" can centre a
+        /// row instead of leaving it half-cut against the sticky you-bar (see the note on the
+        /// ListView). The side effect is that WPF's built-in wheel handling switches from
+        /// "3 ITEMS per notch" to "3 text lines = 48dip per notch", which is barely one row -
+        /// a 200-row board would take 200 notches to walk. So the wheel is driven here instead,
+        /// at three measured rows per notch, which is what it did before.
+        ///
+        /// Held modifiers are left alone: Ctrl+wheel and Shift+wheel are not ours to eat.
+        /// </summary>
+        private void LstLeaderboard_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            try
+            {
+                if (e.Handled || e.Delta == 0) return;
+                if (Keyboard.Modifiers != ModifierKeys.None) return;
+
+                var scroller = RosterScrollViewer();
+                if (scroller == null) return;
+
+                var step = e.Delta / 120.0 * 3.0 * RosterRowPitch();
+                scroller.ScrollToVerticalOffset(scroller.VerticalOffset - step);
+                e.Handled = true;
+            }
+            catch (Exception ex)
+            {
+                // Never let a wheel notch take the tab down; the worst case is the WPF default.
+                App.Logger?.Debug(ex, "Leaderboard wheel scroll failed");
+            }
+        }
+
+        private ScrollViewer? _rosterScroller;
+
+        private ScrollViewer? RosterScrollViewer()
+        {
+            if (_rosterScroller != null) return _rosterScroller;
+            if (LstLeaderboard == null || VisualTreeHelper.GetChildrenCount(LstLeaderboard) == 0) return null;
+            _rosterScroller = FindDescendant<ScrollViewer>(LstLeaderboard);
+            return _rosterScroller;
+        }
+
+        /// <summary>
+        /// Height of a real roster row. Measured rather than hard-coded because the row pitch is
+        /// set by padding/margins in LbRowTemplate that are explicitly called out as tunable -
+        /// and the LARGEST realised container is taken, because the list interleaves short
+        /// non-selectable tier-band rows with real ones.
+        /// </summary>
+        private double RosterRowPitch()
+        {
+            try
+            {
+                var generator = LstLeaderboard?.ItemContainerGenerator;
+                if (generator == null) return 52;
+
+                double pitch = 0;
+                var scan = Math.Min(LstLeaderboard!.Items.Count, 12);
+                for (int i = 0; i < scan; i++)
+                {
+                    if (generator.ContainerFromIndex(i) is FrameworkElement fe && fe.ActualHeight > pitch)
+                        pitch = fe.ActualHeight;
+                }
+                return pitch > 12 ? pitch : 52;
+            }
+            catch
+            {
+                return 52;
+            }
+        }
+
+        private static T? FindDescendant<T>(DependencyObject? root) where T : DependencyObject
+        {
+            if (root == null) return null;
+            var count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is T hit) return hit;
+                var deep = FindDescendant<T>(child);
+                if (deep != null) return deep;
+            }
+            return null;
         }
     }
 

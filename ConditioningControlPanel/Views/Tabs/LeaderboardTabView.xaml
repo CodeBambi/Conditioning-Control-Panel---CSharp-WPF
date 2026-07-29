@@ -18,12 +18,21 @@
     <UserControl.Resources>
 
         <!-- ======================= shared board geometry =======================
-             The board is a single centred block rather than a full-bleed table.
-             At 1450px of tab width the fixed numeric columns only need ~560px, so
-             a full-width roster left ~900px of dead air between the name and the
-             Level column and the eye lost the row. Everything that has to stay
-             column-aligned - header, podium, legend, roster, sticky you-bar -
-             hangs off this one width, and the leftover becomes page margin.
+             The board is a single block rather than a full-bleed table. Everything
+             that has to stay column-aligned - header, podium, legend, roster,
+             sticky you-bar - hangs off this ONE width, and the leftover becomes
+             page margin. Change it here or the five blocks stop pixel-aligning.
+
+             The cap used to be 1120, which was tuned back when the roster dumped
+             every spare pixel into the Subject column. On a ~1440dip window that
+             left two dead bands ~160dip wide down either side of the page while
+             the board itself stayed narrow. The cap is now 1920: wide enough that
+             a normal 1080p/1440p-class window is filled edge to edge (the blocks
+             are HorizontalAlignment=Stretch, and Stretch degrades to Center only
+             once the cap actually bites), but still a cap, so an ultrawide gets a
+             readable board instead of a 3000px table with a name floating at the
+             far left of it. The extra width is NOT all handed to Subject - see the
+             column contract below.
 
              Horizontal alignment contract for the four column-bearing blocks
              (legend / roster rows / you-bar all measure from the SAME block edges):
@@ -31,8 +40,26 @@
                  content right = block right - 31   (14 + 17px reserved scrollbar)
              The roster reserves its scrollbar permanently (VerticalScrollBarVisibility
              = Visible on the ListView) so the columns can't shift by 17px the moment
-             a filter makes the list short. Change one of these, change all of them. -->
-        <sys:Double x:Key="LbBlockWidth">1120</sys:Double>
+             a filter makes the list short. Change one of these, change all of them.
+
+             Column contract (legend header / LbRowTemplate / sticky you-bar - all
+             three carry the SAME six definitions):
+                 0 rank         68        fixed
+                 1 subject      2*        min 130
+                 2 level        82        fixed
+                 3 xp          112        fixed
+                 4 achievements  *        min 268, max 420
+                 5 streak       90        fixed
+             Subject and Achievements share the slack 2:1 instead of Subject taking
+             all of it, so widening the board grows the achievement bar too rather
+             than opening a canyon between the name and the Level column. The 268
+             minimum means that at the old 1120 cap the arithmetic lands on exactly
+             the old layout (subject 455 / achievements 268), so nothing moves until
+             the board is actually wider than ~1200; the 420 maximum stops the bar
+             from turning into the widest thing on the page on an ultrawide. The
+             minimums also keep the narrow-window floor at the old 795dip, so no new
+             clipping is introduced when the window is dragged small. -->
+        <sys:Double x:Key="LbBlockWidth">1920</sys:Double>
 
         <!-- ============================= chrome styles ============================= -->
 
@@ -237,13 +264,15 @@
                 </Border.ToolTip>
 
                 <Grid>
-                    <!-- KEEP IN SYNC with the legend header and the sticky you-bar below. -->
+                    <!-- KEEP IN SYNC with the legend header and the sticky you-bar below.
+                         See the column contract next to LbBlockWidth for why 1 and 4 are
+                         the two proportional columns. -->
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="68"/>
-                        <ColumnDefinition Width="*" MinWidth="130"/>
+                        <ColumnDefinition Width="2*" MinWidth="130"/>
                         <ColumnDefinition Width="82"/>
                         <ColumnDefinition Width="112"/>
-                        <ColumnDefinition Width="268"/>
+                        <ColumnDefinition Width="*" MinWidth="268" MaxWidth="420"/>
                         <ColumnDefinition Width="90"/>
                     </Grid.ColumnDefinitions>
 
@@ -832,10 +861,10 @@
                     <!-- KEEP IN SYNC with LbRowTemplate and the sticky you-bar. -->
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="68"/>
-                        <ColumnDefinition Width="*" MinWidth="130"/>
+                        <ColumnDefinition Width="2*" MinWidth="130"/>
                         <ColumnDefinition Width="82"/>
                         <ColumnDefinition Width="112"/>
-                        <ColumnDefinition Width="268"/>
+                        <ColumnDefinition Width="*" MinWidth="268" MaxWidth="420"/>
                         <ColumnDefinition Width="90"/>
                     </Grid.ColumnDefinitions>
                     <Button Grid.Column="0" Style="{StaticResource LbLegendHeader}" Tag="rank"
@@ -866,6 +895,16 @@
             </Border>
 
             <Grid Grid.Row="1">
+                <!-- ScrollUnit=Pixel is deliberate and load-bearing for "Jump to me".
+                     The WPF default is Item scrolling, where VerticalOffset counts ROWS,
+                     the last row on screen is always drawn half-cut against the viewport
+                     edge, and there is no way to express "put this row in the middle" -
+                     which is exactly how the target row ended up sliced by the sticky
+                     you-bar. In Pixel mode the offset is a real pixel offset, so
+                     MainWindow.Leaderboard.cs can measure the realised container and
+                     animate ScrollToVerticalOffset to a centred position. Row count here
+                     is capped at LeaderboardService.FetchLimit (200), so the usual pixel-
+                     mode cost - estimated extents while virtualising - is negligible. -->
                 <ListView x:Name="LstLeaderboard" x:FieldModifier="internal" Background="Transparent"
                           BorderThickness="0" Margin="0,1,0,2" Padding="0"
                           MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch"
@@ -875,7 +914,9 @@
                           VirtualizingStackPanel.IsVirtualizing="True"
                           VirtualizingStackPanel.VirtualizationMode="Recycling"
                           ScrollViewer.IsDeferredScrollingEnabled="True"
+                          VirtualizingPanel.ScrollUnit="Pixel"
                           ItemTemplateSelector="{StaticResource LbItemSelector}"
+                          PreviewMouseWheel="LstLeaderboard_PreviewMouseWheel"
                           MouseDoubleClick="LstLeaderboard_MouseDoubleClick">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
@@ -934,10 +975,10 @@
                 <!-- KEEP IN SYNC with LbRowTemplate and the legend header. -->
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="68"/>
-                    <ColumnDefinition Width="*" MinWidth="130"/>
+                    <ColumnDefinition Width="2*" MinWidth="130"/>
                     <ColumnDefinition Width="82"/>
                     <ColumnDefinition Width="112"/>
-                    <ColumnDefinition Width="268"/>
+                    <ColumnDefinition Width="*" MinWidth="268" MaxWidth="420"/>
                     <ColumnDefinition Width="90"/>
                 </Grid.ColumnDefinitions>
 
