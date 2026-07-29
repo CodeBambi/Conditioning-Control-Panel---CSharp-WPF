@@ -40,8 +40,12 @@
                     <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                     <Setter Property="Template">
                         <Setter.Value>
+                            <!-- Padding lives on the content Grid below, NOT here: the banner art and
+                                 FX layers are part of the content and have to reach the card's edges.
+                                 Moving it costs nothing - 14,11 of Padding and 14,11 of Margin arrange
+                                 to the same 58.92 box - and it keeps the whole card in one file. -->
                             <ControlTemplate TargetType="Button">
-                                <Border x:Name="cardBorder" CornerRadius="10" Padding="14,11"
+                                <Border x:Name="cardBorder" CornerRadius="10"
                                         Background="{TemplateBinding Background}"
                                         BorderBrush="{TemplateBinding BorderBrush}"
                                         BorderThickness="{TemplateBinding BorderThickness}">
@@ -59,24 +63,75 @@
                 </Style>
             </Button.Style>
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Border x:Name="ProgramTodayAccent" x:FieldModifier="internal" Grid.Column="0"
-                        Width="4" CornerRadius="2" Margin="0,1,12,1"
-                        Background="{DynamicResource PinkBrush}"/>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <TextBlock x:Name="TxtProgramTodayTitle" x:FieldModifier="internal"
-                               Foreground="{DynamicResource PinkBrush}"
-                               FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock x:Name="TxtProgramTodayLine" x:FieldModifier="internal"
-                               Foreground="{DynamicResource TextLightBrush}"
-                               FontSize="13" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
-                </StackPanel>
-                <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" Margin="12,0,2,0"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="18"/>
+                <!-- ============================================================ -->
+                <!-- BANNER DECORATION (art + FX). Painted and animated entirely   -->
+                <!-- from MainWindow.ProgramBanner.cs; Collapsed until             -->
+                <!-- ApplyProgramBannerArt() runs, so with no wiring and no PNGs   -->
+                <!-- the card renders exactly as it did before this layer existed. -->
+                <!--                                                                -->
+                <!-- Every child is empty here on purpose. Brushes are built from   -->
+                <!-- the PROGRAM's accent, which is only known at refresh time, and -->
+                <!-- a XAML placeholder brush would flash the wrong colour for one  -->
+                <!-- frame on a mod switch.                                         -->
+                <!--                                                                -->
+                <!-- The host takes a rounded Clip (set in code from ActualWidth):  -->
+                <!-- these layers are wider than the card and would otherwise paint -->
+                <!-- into the four corner squares outside the border's radius.      -->
+                <!-- IsHitTestVisible=False throughout - the whole card is a Button -->
+                <!-- and decoration must never swallow the click.                   -->
+                <!-- ============================================================ -->
+                <Grid x:Name="ProgramTodayDecor" x:FieldModifier="internal"
+                      Visibility="Collapsed" IsHitTestVisible="False">
+                    <!-- Themed program art. Fill is an ImageBrush; null art leaves it
+                         Collapsed and the card falls back to its flat look. -->
+                    <!-- The negative margin is the hover parallax's headroom: the art overhangs the
+                         card by 14 on each side, so nudging it never exposes a bare edge. The host's
+                         Clip hides the overhang. -->
+                    <Rectangle x:Name="ProgramTodayArt" x:FieldModifier="internal" Visibility="Collapsed"
+                               Margin="-14,0,-14,0">
+                        <Rectangle.RenderTransform>
+                            <TranslateTransform x:Name="ProgramTodayArtSlide" x:FieldModifier="internal"/>
+                        </Rectangle.RenderTransform>
+                    </Rectangle>
+                    <!-- Drifting accent fog. Wider than the card and slid back and forth. -->
+                    <Rectangle x:Name="ProgramTodayFog" x:FieldModifier="internal"
+                               HorizontalAlignment="Left" Visibility="Collapsed">
+                        <Rectangle.RenderTransform>
+                            <TranslateTransform x:Name="ProgramTodayFogSlide" x:FieldModifier="internal"/>
+                        </Rectangle.RenderTransform>
+                    </Rectangle>
+                    <!-- Periodic sheen sweep. Same idiom as the Programs tab session row. -->
+                    <Rectangle x:Name="ProgramTodaySheen" x:FieldModifier="internal"
+                               Width="150" HorizontalAlignment="Left" Visibility="Collapsed">
+                        <Rectangle.RenderTransform>
+                            <TranslateTransform x:Name="ProgramTodaySheenSlide" x:FieldModifier="internal"/>
+                        </Rectangle.RenderTransform>
+                    </Rectangle>
+                    <!-- Sparkles are added here in code: their positions are fractions of
+                         the card's width, which XAML cannot express on a Canvas. -->
+                    <Canvas x:Name="ProgramTodaySparkles" x:FieldModifier="internal"/>
+                </Grid>
+
+                <Grid Margin="14,11">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="ProgramTodayAccent" x:FieldModifier="internal" Grid.Column="0"
+                            Width="4" CornerRadius="2" Margin="0,1,12,1"
+                            Background="{DynamicResource PinkBrush}"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtProgramTodayTitle" x:FieldModifier="internal"
+                                   Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="TxtProgramTodayLine" x:FieldModifier="internal"
+                                   Foreground="{DynamicResource TextLightBrush}"
+                                   FontSize="13" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" Margin="12,0,2,0"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="18"/>
+                </Grid>
             </Grid>
         </Button>
 

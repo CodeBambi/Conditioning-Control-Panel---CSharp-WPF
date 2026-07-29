@@ -208,6 +208,65 @@ namespace ConditioningControlPanel
             };
         }
 
+        /// <summary>
+        /// The feature layers a program session can turn on, roughly in the order they arrive on
+        /// screen: a predicate over the day's settings, a localisation key, and the app's own
+        /// product icon for that feature.
+        ///
+        /// An explicit table rather than reflection over SessionSettings' *Enabled flags: a new flag
+        /// should be a deliberate entry here with a name and an icon, not a chip that appears on its
+        /// own labelled with a property name. Anything dead in the engine (PopQuiz, MiniGame,
+        /// BrainDrain) is deliberately absent - see the template notes in BuiltInPrograms.
+        /// </summary>
+        private static readonly (Func<Models.SessionSettings, bool> IsOn, string LabelKey, string IconPath)[]
+            ProgramLayerCatalog =
+        {
+            (s => s.FlashEnabled,            "programs_layer_flash",       "features/flash.png"),
+            (s => s.SubliminalEnabled,       "programs_layer_subliminal",  "features/subliminal.png"),
+            (s => s.AudioWhispersEnabled,    "programs_layer_whispers",    "features/audio_whispers.png"),
+            (s => s.BouncingTextEnabled,     "programs_layer_bouncing",    "features/bouncing_text.png"),
+            (s => s.BubblesEnabled,          "programs_layer_bubbles",     "features/Bubble_pop.png"),
+            (s => s.PinkFilterEnabled,       "programs_layer_pink",        "features/Pink_filter.png"),
+            (s => s.SpiralEnabled,           "programs_layer_spiral",      "features/spiral_overlay.png"),
+            (s => s.MandatoryVideosEnabled,  "programs_layer_video",       "features/mandatory_videos.png"),
+            (s => s.LockCardEnabled,         "programs_layer_lockcard",    "features/Phrase_Lock.png"),
+            (s => s.BubbleCountEnabled,      "programs_layer_bubblecount", "features/Bubble_count.png"),
+            (s => s.MindWipeEnabled,         "programs_layer_mindwipe",    "features/Mind_Wipers.png"),
+            (s => s.CornerGifEnabled,        "programs_layer_cornergif",   "features/corner_gif.png")
+        };
+
+        /// <summary>
+        /// The settings a day's session will run with, for display only.
+        ///
+        /// ProgramSessionBuilder lerps numeric fields but takes booleans, enums and phrase pools
+        /// straight from the template's Floor, so the floor IS the feature list and no lerp is
+        /// needed. Deliberately does NOT go through ProgramService.BuildTodaySession: that arms
+        /// _expectedSessionId, and a repaint must never make the service believe the tab started a
+        /// session. A day carrying sparse overrides can flip a flag, so those days - and only those -
+        /// pay for a clone.
+        /// </summary>
+        private static Models.SessionSettings? ProgramDaySettings(ProgramDefinition program, ProgramDay? day)
+        {
+            if (day == null) return null;
+
+            var template = program.GetTemplate(day.SessionTemplateId);
+            if (template?.Floor == null) return null;
+            if (day.Overrides is not { Count: > 0 }) return template.Floor;
+
+            try
+            {
+                var copy = Services.Program.ProgramSessionBuilder.Clone(template.Floor);
+                Services.Program.ProgramSessionBuilder.ApplyOverrides(copy, day.Overrides);
+                return copy;
+            }
+            catch (Exception ex)
+            {
+                // A bad override must cost the NEW markers, never the panel.
+                App.Logger?.Warning(ex, "Program day {Day} overrides could not be previewed", day.DayIndex);
+                return template.Floor;
+            }
+        }
+
         // -----------------------------------------------------------------------------------
         // Refresh
         // -----------------------------------------------------------------------------------
@@ -590,6 +649,11 @@ namespace ConditioningControlPanel
             tab.TxtTodayTitle.Text = day.Title;
             tab.TxtTodayBlurb.Text = day.Blurb;
 
+            // What today will actually do. The blurb is authored spoiler-free about the feeling;
+            // this is the honest mechanical answer, and it is what fills the band between the copy
+            // and the session row on a day whose blurb is two lines long.
+            BuildProgramTodayLayers(program, day, accent);
+
             // Today's reward chip (boss days mostly - authored per day).
             if (!string.IsNullOrWhiteSpace(day.RewardDescription))
             {
@@ -644,11 +708,13 @@ namespace ConditioningControlPanel
             // --- Tasks ---
             var items = new List<ProgramTaskItem>();
             var hasRitual = false;
+            var completedTasks = 0;
             var glassBrush = ProgramThemeBrush("GlassBorderBrush", Brushes.Gray);
 
             foreach (var task in day.Tasks)
             {
                 var complete = svc != null && svc.IsTaskComplete(record, task);
+                if (complete) completedTasks++;
                 var blocked = svc != null && svc.IsTaskBlocked(task);
                 var isRitual = task.Kind == ProgramTaskKind.Ritual;
                 if (isRitual) hasRitual = true;
@@ -725,6 +791,203 @@ namespace ConditioningControlPanel
             tab.TodayTaskList.ItemsSource = items;
             tab.TxtTodayNoTasks.Visibility = items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             tab.TxtRitualPrivacyNote.Visibility = hasRitual ? Visibility.Visible : Visibility.Collapsed;
+
+            // Cap the card column at the width the cards genuinely occupy - 360 card + 10 margin,
+            // three per row - so one task stops reserving a full-width band and the arc column beside
+            // it gets the rest. Zero tasks still gets one column's worth, which is what the "no tasks
+            // today" line wants. The cap is on a STAR column, so a narrow window shrinks it rather
+            // than overflowing the grid (see the note in ProgramsTabView.xaml).
+            tab.TaskListColumn.MaxWidth = Math.Clamp(items.Count, 1, 3) * 370;
+
+            if (items.Count > 0)
+            {
+                tab.TxtTodayTasksDone.Text = Loc.GetF("programs_tasks_done_count", completedTasks, items.Count);
+                tab.TodayTasksDonePill.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                tab.TodayTasksDonePill.Visibility = Visibility.Collapsed;
+            }
+
+            BuildProgramUpNext(program, enrollment, day, record, accent);
+        }
+
+        /// <summary>
+        /// The layer chips under the day blurb: one per feature today's session turns on, with the
+        /// ones that were NOT in yesterday's session marked NEW.
+        ///
+        /// This is the only place in the app that says what a program day will actually do. It earns
+        /// the space three ways: it gives the template its identity back (the authored name and
+        /// description are otherwise never shown), it makes the escalation curve legible a day at a
+        /// time, and on a feature that ramps flash rate, opacity and spiral on a schedule it is the
+        /// honest "here is what you are about to sit through" the plan asks for (§10.4).
+        /// </summary>
+        private void BuildProgramTodayLayers(ProgramDefinition program, ProgramDay day, Brush accent)
+        {
+            var tab = ProgramsTab;
+
+            var template = program.GetTemplate(day.SessionTemplateId);
+            var settings = ProgramDaySettings(program, day);
+
+            if (template == null || settings == null)
+            {
+                tab.TodayLayersPanel.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            // Yesterday's layer set, so today's additions can be marked. Day 1 has no previous day
+            // and therefore gets no NEW markers - flagging every layer on day one is noise.
+            var previous = day.DayIndex > 1
+                ? ProgramDaySettings(program, program.GetDay(day.DayIndex - 1))
+                : null;
+
+            var mutedBrush = ProgramThemeBrush("TextMutedBrush", Brushes.Gray);
+            var lightBrush = ProgramThemeBrush("TextLightBrush", Brushes.White);
+            var glassBrush = ProgramThemeBrush("GlassBorderBrush", Brushes.Gray);
+            var newTip = Loc.Get("programs_layer_new_tip");
+
+            var chips = new List<ProgramLayerChip>();
+
+            foreach (var (isOn, labelKey, iconPath) in ProgramLayerCatalog)
+            {
+                if (!isOn(settings)) continue;
+
+                var label = Loc.Get(labelKey);
+                var isNew = previous != null && !isOn(previous);
+
+                var chip = new ProgramLayerChip
+                {
+                    Label = label,
+                    AccentBrush = accent,
+                    LabelBrush = isNew ? lightBrush : mutedBrush,
+                    BorderBrush = isNew ? accent : glassBrush,
+                    NewVisibility = isNew ? Visibility.Visible : Visibility.Collapsed,
+                    Tip = isNew ? $"{label} - {newTip}" : label
+                };
+
+                // Resolved here, not in a binding: the carriers hold finished values only. A missing
+                // PNG collapses the image and leaves a plain labelled pill, never an empty box.
+                var icon = Services.ModResourceResolver.ResolveImage(iconPath);
+                if (icon != null)
+                {
+                    chip.Icon = icon;
+                    chip.IconVisibility = Visibility.Visible;
+                }
+
+                chips.Add(chip);
+            }
+
+            tab.TxtTodayTemplateName.Text = template.Name;
+            tab.TxtTodayTemplateName.Foreground = accent;
+            tab.TxtTodayTemplateBlurb.Text = template.Description;
+            tab.TxtTodayTemplateBlurb.Visibility = string.IsNullOrWhiteSpace(template.Description)
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+
+            tab.TodayLayerList.ItemsSource = chips;
+            tab.TodayLayersPanel.Visibility = chips.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// The column beside the checklist: the next three days, the hour today closes at, and the
+        /// streak.
+        ///
+        /// All three are things the run view could not say before. The upcoming days are the
+        /// pre-commitment beat the design leans on (§4.1) and no new spoiler - the enrollment
+        /// ceremony already shows the whole arc and the reward track already puts every day title on
+        /// a tooltip. The boundary hour is the one mechanic that silently costs someone a day and it
+        /// appeared nowhere in the UI. The streak is consistency, which is what the program is
+        /// actually asking for and is not the same number as the header's DAYS DONE total.
+        /// </summary>
+        private void BuildProgramUpNext(ProgramDefinition program, ProgramEnrollment enrollment,
+                                        ProgramDay day, ProgramDayRecord record, Brush accent)
+        {
+            var tab = ProgramsTab;
+            var mutedBrush = ProgramThemeBrush("TextMutedBrush", Brushes.Gray);
+
+            var upcoming = program.AllDays.Where(d => d.DayIndex > day.DayIndex).Take(3).ToList();
+            var items = new List<ProgramUpNextItem>(upcoming.Count);
+
+            for (int i = 0; i < upcoming.Count; i++)
+            {
+                var next = upcoming[i];
+
+                var parts = new List<string> { Loc.GetF("programs_session_minutes", next.SessionMinutes) };
+
+                // The first task says what the day is about; the rest are a count, so a day carrying
+                // three tasks cannot grow this line past the column.
+                var firstTask = next.Tasks.FirstOrDefault();
+                if (firstTask != null && !string.IsNullOrWhiteSpace(firstTask.Description))
+                {
+                    parts.Add(firstTask.Description);
+                    if (next.Tasks.Count > 1)
+                        parts.Add(Loc.GetF("programs_next_more_tasks", next.Tasks.Count - 1));
+                }
+
+                items.Add(new ProgramUpNextItem
+                {
+                    DayLabel = Loc.GetF("programs_card_day", next.DayIndex),
+                    Title = next.Title,
+                    Meta = string.Join("  ·  ", parts),
+                    DayBrush = next.IsBoss ? accent : mutedBrush,
+                    Glyph = next.IsBoss ? "👑" : "",
+                    GlyphTip = next.IsBoss ? Loc.Get("programs_boss_badge") : "",
+                    GlyphVisibility = next.IsBoss ? Visibility.Visible : Visibility.Collapsed,
+
+                    // Further-out days sit back, so the list reads as a horizon rather than a menu.
+                    RowOpacity = 1.0 - (i * 0.18)
+                });
+            }
+
+            tab.TodayUpNextList.ItemsSource = items;
+            tab.TxtTodayUpNextFinal.Visibility = items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            // Rollover. With the default 04:00 boundary a 2am session still counts for the day before,
+            // which is exactly the kind of rule people only discover by losing a day to it.
+            var boundaryText = DateTime.Today
+                .AddHours(Math.Clamp(enrollment.DayBoundaryHour, 0, 23))
+                .ToShortTimeString();
+
+            var closesVisible = true;
+            var noteVisible = false;
+
+            if (enrollment.State == ProgramEnrollmentState.Paused)
+            {
+                tab.TxtTodayCloses.Text = Loc.Get("programs_closes_paused");
+            }
+            else if (record.DayCompleted && items.Count > 0)
+            {
+                tab.TxtTodayCloses.Text = Loc.GetF("programs_closes_done", upcoming[0].DayIndex, boundaryText);
+            }
+            else if (record.DayCompleted)
+            {
+                // Last day, already done - the graduation panel is what comes next, not a deadline.
+                closesVisible = false;
+            }
+            else
+            {
+                tab.TxtTodayCloses.Text = Loc.GetF("programs_closes_at", boundaryText);
+                tab.TxtTodayClosesNote.Text = Loc.Get("programs_closes_note");
+                noteVisible = true;
+            }
+
+            tab.TxtTodayCloses.Visibility = closesVisible ? Visibility.Visible : Visibility.Collapsed;
+            tab.TxtTodayClosesNote.Visibility = noteVisible ? Visibility.Visible : Visibility.Collapsed;
+
+            // Consecutive completed days ending at today (or at yesterday while today is still open).
+            var streak = 0;
+            for (int i = record.DayCompleted ? enrollment.CurrentDay : enrollment.CurrentDay - 1; i >= 1; i--)
+            {
+                if (enrollment.GetRecord(i)?.DayCompleted != true) break;
+                streak++;
+            }
+
+            tab.TxtTodayStreak.Text = streak switch
+            {
+                0 => Loc.Get("programs_streak_none"),
+                1 => Loc.Get("programs_streak_one"),
+                _ => Loc.GetF("programs_streak_many", streak)
+            };
         }
 
         // -----------------------------------------------------------------------------------
@@ -1445,6 +1708,11 @@ namespace ConditioningControlPanel
                     day.Title,
                     remainder
                 });
+
+                // Themed art + idle FX for this program (MainWindow.ProgramBanner.cs). Kept out of
+                // the collapse path on purpose: the decoration stops itself off the card's own
+                // IsVisible, so "no program", "another tab" and "shutting down" are all one hook.
+                ApplyProgramBannerArt(program, accent);
 
                 dash.ProgramTodayCard.Visibility = Visibility.Visible;
             }

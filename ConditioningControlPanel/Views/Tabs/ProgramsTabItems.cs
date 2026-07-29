@@ -132,6 +132,58 @@ namespace ConditioningControlPanel.Views.Tabs
         public Brush TextBrush { get; set; } = Brushes.White;
     }
 
+    /// <summary>
+    /// One feature layer today's session turns on ("Bubbles", "Pink filter"), shown under the day
+    /// blurb. Built from the day's session TEMPLATE, not from the live engine - the run view says
+    /// what today will do before it has done any of it.
+    /// </summary>
+    public class ProgramLayerChip
+    {
+        public string Label { get; set; } = "";
+
+        /// <summary>Full text on hover, including the "new today" note when the layer is new.</summary>
+        public string Tip { get; set; } = "";
+
+        /// <summary>
+        /// The app's own product icon for the feature (Resources/features/*), resolved in code like
+        /// every other value here. Full-colour on purpose - the task cards and the Dashboard show
+        /// this exact set full-colour, so a tinted copy would read as a different, lesser set.
+        /// Collapsed when the PNG does not resolve; the chip is then a plain labelled pill.
+        /// </summary>
+        public ImageSource? Icon { get; set; }
+        public Visibility IconVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>Accent when the layer is new today, the plain glass border otherwise.</summary>
+        public Brush BorderBrush { get; set; } = Brushes.Transparent;
+        public Brush LabelBrush { get; set; } = Brushes.White;
+
+        /// <summary>Fill of the NEW pill. The program accent, resolved in code.</summary>
+        public Brush AccentBrush { get; set; } = Brushes.Gray;
+
+        /// <summary>The NEW pill: this layer was not in the previous day's session.</summary>
+        public Visibility NewVisibility { get; set; } = Visibility.Collapsed;
+    }
+
+    /// <summary>One upcoming day in the run view's "up next" column.</summary>
+    public class ProgramUpNextItem
+    {
+        public string DayLabel { get; set; } = "";
+        public string Title { get; set; } = "";
+
+        /// <summary>Pre-joined "45 minutes · Complete 3 lock cards · Boss day".</summary>
+        public string Meta { get; set; } = "";
+
+        /// <summary>Accent on a boss day, muted otherwise.</summary>
+        public Brush DayBrush { get; set; } = Brushes.Gray;
+
+        public string Glyph { get; set; } = "";
+        public string GlyphTip { get; set; } = "";
+        public Visibility GlyphVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>Further-out days sit back a little, so the list reads as a horizon.</summary>
+        public double RowOpacity { get; set; } = 1.0;
+    }
+
     /// <summary>One chapter of the arc, shown up front in the enrollment ceremony.</summary>
     public class ProgramChapterItem
     {

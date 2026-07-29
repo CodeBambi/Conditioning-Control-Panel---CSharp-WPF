@@ -563,6 +563,78 @@
                                                FontSize="14" TextWrapping="Wrap" LineHeight="22" Margin="0,10,0,0"
                                                MaxWidth="820" HorizontalAlignment="Left"/>
 
+                                    <!-- ============ What today actually runs ============
+                                         The blurb says what today FEELS like ("something pretty
+                                         turns up"); this says what the session will DO - the
+                                         template's own identity plus one chip per layer it turns
+                                         on, with the layers that were not in yesterday's session
+                                         marked NEW. That is the escalation made legible, and on a
+                                         feature that ramps flash rate, opacity and spiral on a
+                                         curve it is also the duty-of-care answer to "what am I
+                                         about to sit through" (plan §10.4).
+                                         Every value is resolved in code onto a carrier, including
+                                         the app's own feature icon - same set, same full colour as
+                                         the task cards and the Dashboard.
+                                         MaxWidth matches the blurb so the copy column keeps one
+                                         edge and the chips never run under the hero art's fade. -->
+                                    <StackPanel x:Name="TodayLayersPanel" x:FieldModifier="internal"
+                                                Visibility="Collapsed" Margin="0,16,0,0"
+                                                MaxWidth="820" HorizontalAlignment="Left">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{loc:Str programs_layers_header}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            <TextBlock Text="  ·  " Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="TxtTodayTemplateName" x:FieldModifier="internal"
+                                                       Foreground="{DynamicResource PinkBrush}"
+                                                       FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock x:Name="TxtTodayTemplateBlurb" x:FieldModifier="internal"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
+
+                                        <ItemsControl x:Name="TodayLayerList" x:FieldModifier="internal"
+                                                      Margin="0,9,0,0">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border CornerRadius="9999" Padding="9,4" Margin="0,0,7,7"
+                                                            Background="{DynamicResource SurfaceBgBrush}"
+                                                            BorderBrush="{Binding BorderBrush}" BorderThickness="1"
+                                                            ToolTip="{Binding Tip}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Image Width="15" Height="15" Margin="0,0,7,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Source="{Binding Icon}"
+                                                                   Visibility="{Binding IconVisibility}"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                            <TextBlock Text="{Binding Label}"
+                                                                       Foreground="{Binding LabelBrush}"
+                                                                       FontSize="11" FontWeight="SemiBold"
+                                                                       VerticalAlignment="Center"/>
+                                                            <!-- NEW pill: this layer was not in yesterday's
+                                                                 session. Accent-filled, so it reads at a
+                                                                 glance without a second colour in the theme. -->
+                                                            <Border CornerRadius="9999" Padding="5,0" Margin="7,0,0,0"
+                                                                    VerticalAlignment="Center"
+                                                                    Visibility="{Binding NewVisibility}"
+                                                                    Background="{Binding AccentBrush}">
+                                                                <TextBlock Text="{loc:Str programs_layer_new}"
+                                                                           Foreground="{DynamicResource TextLightBrush}"
+                                                                           FontSize="9" FontWeight="Bold"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
                                     <!-- Today's reward chip (rare - boss days mostly) -->
                                     <Border x:Name="TodayRewardChip" x:FieldModifier="internal" Visibility="Collapsed"
                                             CornerRadius="9999" Padding="10,4" Margin="0,12,0,0"
@@ -731,12 +803,56 @@
                                     </StackPanel>
                                 </Border>
 
-                                <!-- Tasks: quest cards, not full-width strips. A WrapPanel of fixed
-                                     width cards means one task reads as one deliberate card instead
-                                     of a strip with 1300px of nothing behind it. -->
-                                <TextBlock Text="{loc:Str programs_tasks_header}"
-                                           Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="11" FontWeight="SemiBold" Margin="0,18,0,10"/>
+                                <!-- ============ Checklist + the arc ============
+                                     Tasks are quest cards, not full-width strips. But a day with
+                                     ONE task still left a 360px card adrift in a 1700px band, so
+                                     the card column is CAPPED in code to the width the cards
+                                     actually occupy (3 per row, MainWindow.BuildProgramTodayPanel)
+                                     and everything that cap frees goes to the arc: the next three
+                                     days, the hour today closes at, and the streak. Both columns
+                                     therefore hold real content at one task and at five.
+
+                                     The cap is a ColumnDefinition MaxWidth on a STAR column, not
+                                     an Auto column. An Auto column measures the WrapPanel at
+                                     infinity, so five cards would lay out in one ~1850px row and
+                                     WPF would clip the overflow silently - no scrollbar, no
+                                     binding error. A capped star also shrinks below the cap on a
+                                     narrow window instead of overflowing the grid. -->
+                                <Grid Margin="0,18,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <!-- 2:1 so the cards reach their cap on a normal window (a
+                                             1:1 split leaves two cards stacked at 1400px wide);
+                                             the surplus a capped star does not use flows to the
+                                             column beside it, and MinWidth keeps the arc readable
+                                             when the window is narrow enough that the cap never
+                                             binds at all. -->
+                                        <ColumnDefinition x:Name="TaskListColumn" x:FieldModifier="internal"
+                                                          Width="2*" MaxWidth="370"/>
+                                        <ColumnDefinition Width="1*" MinWidth="240"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{loc:Str programs_tasks_header}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            <!-- Done counter: a lone card is a checklist of one, not
+                                                 an orphan, once the set it belongs to is stated. -->
+                                            <Border x:Name="TodayTasksDonePill" x:FieldModifier="internal"
+                                                    Grid.Column="2" Visibility="Collapsed"
+                                                    CornerRadius="9999" Padding="8,2" Margin="10,0,10,0"
+                                                    Background="{DynamicResource SurfaceBgBrush}"
+                                                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                                <TextBlock x:Name="TxtTodayTasksDone" x:FieldModifier="internal"
+                                                           Foreground="{DynamicResource TextMutedBrush}"
+                                                           FontSize="10" FontWeight="Bold"/>
+                                            </Border>
+                                        </Grid>
 
                                 <TextBlock x:Name="TxtTodayNoTasks" x:FieldModifier="internal" Visibility="Collapsed"
                                            Text="{loc:Str programs_no_tasks}"
@@ -883,6 +999,89 @@
                                            Text="{loc:Str programs_photo_local_note}"
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            FontSize="11" FontStyle="Italic" Margin="2,2,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <!-- The arc, beside the checklist. Three things the run view
+                                         could not say before: what the next days are (the
+                                         pre-commitment beat - the enrollment ceremony already
+                                         shows the whole arc, so nothing here is a new spoiler),
+                                         the hour today closes at (the single mechanic that
+                                         actually costs people a day), and the streak. Top-aligned
+                                         so a two-row card list does not stretch it. -->
+                                    <Border Grid.Column="1" Margin="14,0,0,0" Padding="14,12"
+                                            VerticalAlignment="Top" CornerRadius="12"
+                                            Background="{DynamicResource SurfaceBgBrush}"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Text="{loc:Str programs_next_header}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" FontWeight="SemiBold" Margin="0,0,0,10"/>
+
+                                            <ItemsControl x:Name="TodayUpNextList" x:FieldModifier="internal">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <!-- Title and meta live in a STAR column, not a
+                                                             horizontal StackPanel: a StackPanel measures
+                                                             its children at infinite width, so
+                                                             TextTrimming would never engage and a long
+                                                             authored title would be clipped instead. -->
+                                                        <Grid Margin="0,0,0,10" Opacity="{Binding RowOpacity}">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Border Grid.Column="0" MinWidth="48" CornerRadius="6"
+                                                                    Padding="7,3" Margin="0,0,10,0"
+                                                                    VerticalAlignment="Top"
+                                                                    Background="{DynamicResource ElevatedSurfaceBrush}">
+                                                                <TextBlock Text="{Binding DayLabel}"
+                                                                           Foreground="{Binding DayBrush}"
+                                                                           FontSize="10" FontWeight="Bold"
+                                                                           HorizontalAlignment="Center"/>
+                                                            </Border>
+                                                            <StackPanel Grid.Column="1">
+                                                                <TextBlock Text="{Binding Title}"
+                                                                           Foreground="{DynamicResource TextLightBrush}"
+                                                                           FontSize="12" FontWeight="SemiBold"
+                                                                           TextTrimming="CharacterEllipsis"/>
+                                                                <TextBlock Text="{Binding Meta}"
+                                                                           Foreground="{DynamicResource TextMutedBrush}"
+                                                                           FontSize="11" Margin="0,2,0,0"
+                                                                           TextTrimming="CharacterEllipsis"/>
+                                                            </StackPanel>
+                                                            <helpers:EmojiTextBlock Grid.Column="2" Text="{Binding Glyph}"
+                                                                                    FontSize="12" Margin="8,0,0,0"
+                                                                                    VerticalAlignment="Top"
+                                                                                    ToolTip="{Binding GlyphTip}"
+                                                                                    Visibility="{Binding GlyphVisibility}"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <!-- Shown on the last day, where there is no "next". -->
+                                            <TextBlock x:Name="TxtTodayUpNextFinal" x:FieldModifier="internal"
+                                                       Visibility="Collapsed"
+                                                       Text="{loc:Str programs_next_final}"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="12" TextWrapping="Wrap"/>
+
+                                            <Border Height="1" Margin="0,4,0,10"
+                                                    Background="{DynamicResource GlassBorderBrush}"/>
+
+                                            <TextBlock x:Name="TxtTodayCloses" x:FieldModifier="internal"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock x:Name="TxtTodayClosesNote" x:FieldModifier="internal"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                            <TextBlock x:Name="TxtTodayStreak" x:FieldModifier="internal"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
                             </StackPanel>
                         </Border>
                     </StackPanel>
