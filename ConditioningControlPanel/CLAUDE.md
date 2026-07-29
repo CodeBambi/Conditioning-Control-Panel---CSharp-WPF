@@ -23,14 +23,14 @@ dotnet run
 | `MainWindow/MainWindow.xaml:~569` | `BtnUpdateAvailable` Content + ToolTip loc keys |
 | `Localization/Languages/*.json` (9 files) | `btn_vX_Y_Z_is_out` + `tooltip_vX_Y_Z_*` keys |
 
-Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.txt` (plain-text notes for the GitHub release; no em-dashes). After signing: push main, tag `vX.Y.Z`, create the GitHub release (mark Latest), POST server marquee + update-banner (`x-admin-token`), update download links + version badge in `C:\Projects\cclabs-site` (index.html + guide-getting-started.html, then commit+push and `vercel deploy --prod`), announce on Discord. Note: de.json contains a pre-existing control character that strict JSON parsers reject; validate with a lenient parser (Newtonsoft tolerates it).
+Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.txt` (plain-text notes for the GitHub release; no em-dashes). After signing: push main, tag `vX.Y.Z`, create the GitHub release (mark Latest), POST server marquee + update-banner (`x-admin-token`), update download links + version badge in `C:\Projects\cclabs-site` (index.html + guide-getting-started.html, then commit+push and `vercel deploy --prod`), announce on Discord. The language files are strict-JSON clean as of 2026-07-29 - see **Localization** under Known Issues before editing them.
 
 ### Important Paths
 | Path | Purpose |
 |------|---------|
 | `logs/crash.log` | Crash logs with stack traces - CHECK THIS FIRST |
-| `%APPDATA%/ConditioningControlPanel/` | User data, settings, tokens |
-| `%APPDATA%/ConditioningControlPanel/assets/` | Default assets folder |
+| `%LOCALAPPDATA%/ConditioningControlPanel/` | User data, settings, tokens (`App.UserDataPath`) |
+| `%LOCALAPPDATA%/ConditioningControlPanel/assets/` | Default assets folder (`App.UserAssetsPath`) |
 | `App.EffectiveAssetsPath` | User's chosen assets folder (or default) |
 | `../docs/` | GitHub Pages website |
 | `../releases/` | Velopack release output |
@@ -90,7 +90,7 @@ Follow `../RELEASE_WORKFLOW.md` - covers all version locations, build steps, and
 - Services are accessed via static properties on `App` class: `App.Flash`, `App.Video`, `App.Audio`, `App.Patreon`, etc.
 - Settings via `App.Settings.Current` (AppSettings instance)
 - Assets path: `App.EffectiveAssetsPath` returns custom path if set, else default `App.UserAssetsPath`
-- User data in `%APPDATA%/ConditioningControlPanel/`
+- User data in `%LOCALAPPDATA%/ConditioningControlPanel/` (`App.UserDataPath`, via `SpecialFolder.LocalApplicationData`)
 - Patreon features gated by `App.Patreon?.HasPremiumAccess` or `App.Patreon?.HasAiAccess`
 
 ### UI Architecture
@@ -117,6 +117,11 @@ Follow `../RELEASE_WORKFLOW.md` - covers all version locations, build steps, and
 ### Build Issues
 9. **Velopack "Access denied"**: Delete `%LOCALAPPDATA%\Temp\Velopack` folder and retry
 10. **Build warnings about Screen**: These are CA1416 platform warnings - safe to ignore for Windows-only app
+
+### Localization
+11. **Never put a literal line break inside a language-file string.** Until 2026-07-29, 8 of the 9 `Localization/Languages/*.json` files carried raw newlines inside 38 tooltip values, so only Newtonsoft's leniency parsed them - `System.Text.Json`, `jq`, Python and most format-on-save tools rejected all 8. They are now escaped as `\n`/`\r\n` and every file parses strictly. Keep it that way: write `\n`, not an actual newline.
+12. **A dead language file no longer empties the UI.** `LocalizationManager.LoadLanguageFile` returns an empty dictionary on failure; `SetLanguage` treats that as "fall back to English", and `EnsureFallbackLoaded` logs **Fatal** if `en.json` itself fails (the one case with nothing to fall back to - the UI then renders raw keys like `btn_start_flashes`). If you see that Fatal line, the language file is broken, not the UI.
+13. **Edit language files as raw text, preserving bytes.** `es/fr/pt-BR/de/ja/ko/ru/zh-CN.json` are CRLF; `en.json` is LF. Reading them in a newline-translating text mode and writing them back silently rewrites every line in the file.
 
 ## Crash Logging
 - Crashes are logged to `logs/crash.log` with full stack traces

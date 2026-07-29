@@ -221,44 +221,27 @@
   "tooltip_your_rank_percentile_popular_girl_skill": "あなたのランクパーセンタイル（ポピュラーガールスキル）",
   "label_top_0": "上位 0%",
   "label_login_with_discord_or_patreon_to_track_your_x": "DiscordまたはPatreonでログインしてXPを記録しましょう！",
-  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "有効時：画像をクリックで消去
-無効時：画像はクリック透過",
-  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "ヒドラモード：画像をクリックすると
-消える代わりに2つ増殖します
-エスカレートするチャレンジ！",
+  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "有効時：画像をクリックで消去\r\n無効時：画像はクリック透過",
+  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "ヒドラモード：画像をクリックすると\r\n消える代わりに2つ増殖します\r\nエスカレートするチャレンジ！",
   "setting_hydra": "🐙ヒドラ",
-  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "連動：ヒドラ増殖は親フラッシュのタイマーを共有し
-親が消えると一緒に消えます
-独立：各増殖が独自のフルタイマーを持ち
-よりカオスに！",
+  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "連動：ヒドラ増殖は親フラッシュのタイマーを共有し\r\n親が消えると一緒に消えます\r\n独立：各増殖が独自のフルタイマーを持ち\r\nよりカオスに！",
   "setting_linked": "🔗連動",
-  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "フラッシュ画像のピンク輝きエフェクトを切り替えます
-ゴールデンラッキー輝きは常に表示",
+  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "フラッシュ画像のピンク輝きエフェクトを切り替えます\r\nゴールデンラッキー輝きは常に表示",
   "setting_glow": "✨輝き",
-  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "1時間あたりのフラッシュイベント数
-値が大きいほど頻度が上がります",
+  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "1時間あたりのフラッシュイベント数\r\n値が大きいほど頻度が上がります",
   "setting_per_hour": "回/時",
-  "tooltip_number_of_images_shown_per_flash_event_multip": "フラッシュイベントごとの画像数
-複数の画像が同時に表示されます",
+  "tooltip_number_of_images_shown_per_flash_event_multip": "フラッシュイベントごとの画像数\r\n複数の画像が同時に表示されます",
   "setting_images": "画像数",
-  "tooltip_maximum_images_displayed_at_once_limits_scree": "同時表示の最大画像数
-ヒドラモード中の画面の混雑を制限します",
+  "tooltip_maximum_images_displayed_at_once_limits_scree": "同時表示の最大画像数\r\nヒドラモード中の画面の混雑を制限します",
   "section_visuals": "👁 ビジュアル",
-  "tooltip_scale_of_flash_images_100_original_size_200_d": "フラッシュ画像のスケール
-100% = 元のサイズ、200% = 2倍",
+  "tooltip_scale_of_flash_images_100_original_size_200_d": "フラッシュ画像のスケール\r\n100% = 元のサイズ、200% = 2倍",
   "setting_size": "サイズ",
-  "tooltip_transparency_of_flash_images_lower_more_see_t": "フラッシュ画像の透明度
-低い = より透過、100% = 完全に不透明",
-  "tooltip_fade_in_out_animation_speed_0_instant_appear": "フェードイン・アウトのアニメーション速度
-0% = 即座に表示・消去
-100% = 滑らかなフェード",
+  "tooltip_transparency_of_flash_images_lower_more_see_t": "フラッシュ画像の透明度\r\n低い = より透過、100% = 完全に不透明",
+  "tooltip_fade_in_out_animation_speed_0_instant_appear": "フェードイン・アウトのアニメーション速度\r\n0% = 即座に表示・消去\r\n100% = 滑らかなフェード",
   "setting_fade": "フェード",
-  "tooltip_how_long_images_stay_on_screen_only_used_when": "画像の表示時間
-オーディオ無効時のみ使用",
+  "tooltip_how_long_images_stay_on_screen_only_used_when": "画像の表示時間\r\nオーディオ無効時のみ使用",
   "setting_5s": "5秒",
-  "tooltip_when_enabled_flash_duration_matches_audio_len": "有効時：フラッシュの長さがオーディオに連動
-無効にすると手動スライダーを使用
-60回/時を超えると自動的にオーディオ無効",
+  "tooltip_when_enabled_flash_duration_matches_audio_len": "有効時：フラッシュの長さがオーディオに連動\r\n無効にすると手動スライダーを使用\r\n60回/時を超えると自動的にオーディオ無効",
   "label_link_to_audio_trigger": "📊 オーディオトリガーに連動",
   "label_max_30_h": "⚠ 最大30回/時",
   "tooltip_click_me_rapidly": "連打して！💗",
@@ -287,8 +270,7 @@
   "tooltip_enable_disable_subliminal_messages": "サブリミナルメッセージの有効・無効",
   "tooltip_messages_shown_per_minute": "1分あたりの表示メッセージ数",
   "label_per_min": "回/分",
-  "tooltip_display_duration_in_frames_lower_faster_flash": "表示フレーム数
-少ない = 速いフラッシュ、読み取りにくい",
+  "tooltip_display_duration_in_frames_lower_faster_flash": "表示フレーム数\r\n少ない = 速いフラッシュ、読み取りにくい",
   "label_frames": "フレーム",
   "tooltip_text_visibility_lower_more_subtle": "テキストの視認性。低い = より微妙",
   "tooltip_play_whispered_audio_when_subliminal_messages": "サブリミナルメッセージ表示時にささやきオーディオを再生",
@@ -307,12 +289,9 @@
   "setting_auto_run": "自動実行",
   "tooltip_start_minimized_to_system_tray": "システムトレイに最小化して起動",
   "setting_start_hidden": "非表示起動",
-  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ 危険：パニックキーを完全に無効化！
-緊急停止ができなくなります
-十分注意して使用してください",
+  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ 危険：パニックキーを完全に無効化！\r\n緊急停止ができなくなります\r\n十分注意して使用してください",
   "setting_no_panic": "⚠ パニック無効",
-  "tooltip_disable_all_network_features_updates_ai_leade": "すべてのネットワーク機能を無効化（更新、AI、リーダーボード）
-外部接続なしで完全オフラインで動作",
+  "tooltip_disable_all_network_features_updates_ai_leade": "すべてのネットワーク機能を無効化（更新、AI、リーダーボード）\r\n外部接続なしで完全オフラインで動作",
   "setting_offline_mode": "オフラインモード",
   "tooltip_select_a_specific_video_to_play_on_startup_wh": "起動時に再生する動画を選択（起動時動画が有効な場合）",
   "label_startup_video": "起動時動画：",
@@ -320,8 +299,7 @@
   "tooltip_browse_for_startup_video": "起動時動画を参照",
   "tooltip_clear_selection_use_random": "選択をクリア（ランダムを使用）",
   "label_use_borderless_windowed_for_overlays": "💡 オーバーレイにはボーダーレスウィンドウを使用",
-  "tooltip_exclusive_fullscreen_games_block_overlays_use": "排他的フルスクリーンゲームはオーバーレイをブロックします
-代わりにボーダーレスウィンドウモードを使用してください",
+  "tooltip_exclusive_fullscreen_games_block_overlays_use": "排他的フルスクリーンゲームはオーバーレイをブロックします\r\n代わりにボーダーレスウィンドウモードを使用してください",
   "btn_escape": "🔑 脱出キー",
   "tooltip_click_to_change_panic_key": "クリックでパニックキーを変更",
   "section_browser": "🌐 ブラウザ",
@@ -426,12 +404,9 @@
   "btn_save_2": "💾 保存",
   "btn_delete_2": "🗑 削除",
   "btn_start_session": "▶ セッション開始",
-  "tooltip_features_that_unlock_as_you_level_up_keep_con": "レベルアップで解除される機能
-コンディショニングを続けてXPを獲得し、新機能を解除しましょう！",
+  "tooltip_features_that_unlock_as_you_level_up_keep_con": "レベルアップで解除される機能\r\nコンディショニングを続けてXPを獲得し、新機能を解除しましょう！",
   "section_unlockables": "🎁 アンロック",
-  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "催眠スパイラルアニメーションオーバーレイ
-すべての画面をカスタマイズ可能な不透明度でカバー
-レベル10で解除",
+  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "催眠スパイラルアニメーションオーバーレイ\r\nすべての画面をカスタマイズ可能な不透明度でカバー\r\nレベル10で解除",
   "label_spiral_overlay": "🌀 スパイラルオーバーレイ",
   "label_lvl_10": "🔒 Lvl 10",
   "label_reach_level_10_to_unlock": "レベル10で解除",
@@ -450,17 +425,13 @@
   "tooltip_spiral_opacity_5_50": "スパイラルの不透明度（5% - 50%）",
   "tooltip_choose_a_spiral_gif_animation": "スパイラルGIFアニメーションを選択",
   "label_if_you_have_display_problems_try_setting_your": "⚠ 表示に問題がある場合は、モニターのDPIスケーリングを推奨設定にしてください",
-  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "全画面ピンクカラーティントオーバーレイ
-微妙にも強烈にも、お好みで！
-レベル10で解除",
+  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "全画面ピンクカラーティントオーバーレイ\r\n微妙にも強烈にも、お好みで！\r\nレベル10で解除",
   "label_pink_filter": "💗 ピンクフィルター",
   "tooltip_enable_disable_pink_tint_overlay": "ピンクティントオーバーレイを有効・無効",
   "tooltip_apply_pink_color_filter_to_all_monitors": "全モニターにピンクカラーフィルターを適用",
   "tooltip_pink_filter_intensity": "ピンクフィルターの強度",
   "tooltip_filter_opacity_5_50": "フィルターの不透明度（5% - 50%）",
-  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "浮かぶバブルを割ってXPを獲得！
-定期的に出現する楽しいミニゲーム
-レベル20で解除",
+  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "浮かぶバブルを割ってXPを獲得！\r\n定期的に出現する楽しいミニゲーム\r\nレベル20で解除",
   "label_bubble_pop": "🫧 バブルポップ",
   "label_lvl_20": "🔒 Lvl 20",
   "label_reach_level_20_to_unlock": "レベル20で解除",
@@ -471,9 +442,7 @@
   "setting_volume": "音量",
   "tooltip_volume_of_bubble_pop_sounds": "バブルポップ効果音の音量",
   "tooltip_bubble_pop_sound_volume": "バブルポップの音量",
-  "tooltip_screen_lock_that_requires_typing_phrases_rein": "フレーズ入力が必要な画面ロック
-繰り返しによるコンディショニング強化
-レベル35で解除",
+  "tooltip_screen_lock_that_requires_typing_phrases_rein": "フレーズ入力が必要な画面ロック\r\n繰り返しによるコンディショニング強化\r\nレベル35で解除",
   "label_lock_card": "📐 ロックカード",
   "label_lvl_35": "🔒 Lvl 35",
   "label_reach_level_35_to_unlock": "レベル35で解除",
@@ -491,9 +460,7 @@
   "btn_manage_phrases": "📝 フレーズ管理",
   "tooltip_edit_phrases_that_must_be_typed": "入力が必要なフレーズを編集",
   "tooltip_customize_lock_card_colors": "ロックカードの色をカスタマイズ",
-  "tooltip_count_the_bubbles_challenge_memory_and_attent": "バブル数え上げチャレンジ！
-記憶力と注意力のテストでボーナスXP
-レベル50で解除",
+  "tooltip_count_the_bubbles_challenge_memory_and_attent": "バブル数え上げチャレンジ！\r\n記憶力と注意力のテストでボーナスXP\r\nレベル50で解除",
   "label_bubble_count": "🫧 バブルカウント",
   "label_lvl_50": "🔒 Lvl 50",
   "label_reach_level_50_to_unlock": "レベル50で解除",
@@ -507,10 +474,7 @@
   "tooltip_prevent_closing_until_correctly_answered": "正解するまで閉じられない",
   "btn_test_now": "🎮 テスト",
   "tooltip_trigger_a_bubble_count_challenge_now": "バブルカウントチャレンジを今すぐ開始",
-  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "DVDスクリーンセーバー風バウンステキスト！
-カスタマイズ可能なフレーズが画面中を跳ねます
-バウンスごとに+25 XP（最大150 XP/分）
-レベル60で解除",
+  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "DVDスクリーンセーバー風バウンステキスト！\r\nカスタマイズ可能なフレーズが画面中を跳ねます\r\nバウンスごとに+25 XP（最大150 XP/分）\r\nレベル60で解除",
   "label_bouncing_text": "📺 バウンステキスト",
   "label_lvl_60": "🔒 Lvl 60",
   "label_reach_level_60_to_unlock": "レベル60で解除",
@@ -529,9 +493,7 @@
   "section_brain_drain": "💧 ブレインドレイン",
   "section_rework": "🔧 改修中",
   "section_up_for_rework_this_feature_is_temporarily_dis": "改修予定 - パフォーマンス最適化のため一時的に無効です。今後のアップデートをお待ちください！",
-  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "ランダムなマインドワイプ音声エフェクト！
-セッション中に頻度が上昇
-レベル75で解除",
+  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "ランダムなマインドワイプ音声エフェクト！\r\nセッション中に頻度が上昇\r\nレベル75で解除",
   "label_mind_wipe": "🧠 マインドワイプ",
   "label_lvl_75": "🔒 Lvl 75",
   "label_reach_level_75_to_unlock": "レベル75で解除",
@@ -927,6 +889,50 @@
   "label_resets_monthly_your_rank_is_everything": "毎月リセット — ランクがすべて～",
   "section_rank": "ランク",
   "label_og": "OG",
+  "lb_tier_dissolved": "溶けた者",
+  "lb_tier_dissolved_sub": "もう逆らうものは残っていない",
+  "lb_tier_hollowed": "うつろな者",
+  "lb_tier_hollowed_sub": "明かりはついている。運転手はいない",
+  "lb_tier_spiralbound": "螺旋に縛られた者",
+  "lb_tier_spiralbound_sub": "ループはとっくに閉じている",
+  "lb_tier_sunken": "沈んだ者",
+  "lb_tier_sunken_sub": "気づく段階はとうに過ぎた",
+  "lb_tier_pliant": "従順な者",
+  "lb_tier_pliant_sub": "まだ嫌と言う。本気じゃない",
+  "lb_tier_drifting": "漂う者",
+  "lb_tier_drifting_sub": "ゆっくり沈んでいる、わざと",
+  "lb_tier_blinking": "まだ瞬きする者",
+  "lb_tier_blinking_sub": "ここは初めて。丸わかり",
+  "lb_tier_range": "ランク {0}-{1}",
+  "lb_tier_range_open": "ランク {0}+",
+  "lb_season_ends_in": "シーズン終了まで {0}",
+  "lb_season_ended": "シーズンは終了しました",
+  "lb_time_dh": "{0}日 {1}時間",
+  "lb_time_hm": "{0}時間 {1}分",
+  "lb_time_m": "{0}分",
+  "lb_search_placeholder": "サブジェクトを検索...",
+  "lb_filter_all": "すべて",
+  "lb_filter_online": "オンライン",
+  "lb_filter_patrons": "パトロン",
+  "lb_filter_og": "OG",
+  "lb_online_and_total": "{0} オンライン - 全 {1} サブジェクト",
+  "lb_you": "あなた",
+  "lb_gap_to_next": "#{2} の {1} を抜くまで {0} XP",
+  "lb_gap_leader": "あなたが頂点。抜く相手はもういない～",
+  "lb_gap_unknown": "その調子で～",
+  "lb_top_percent": "上位 {0}%",
+  "lb_col_subject": "サブジェクト",
+  "lb_col_streak": "ストリーク",
+  "lb_no_badges": "バッジなし",
+  "lb_empty_filter": "該当する人はいないみたい～",
+  "lb_delta_new": "NEW",
+  "lb_tooltip_online": "現在オンライン",
+  "lb_tooltip_offline": "オフライン",
+  "lb_tooltip_og": "シーズン0からの古参",
+  "lb_tooltip_row": "ダブルクリックでプロフィールを表示",
+  "lb_tooltip_delta": "前回訪問からのランク変動",
+  "lb_all_time_title": "全期間",
+  "lb_all_time_sub": "全シーズンの累計XP",
   "section_name": "名前",
   "section_patreon": "Patreon",
   "section_disc": "Disc.",
