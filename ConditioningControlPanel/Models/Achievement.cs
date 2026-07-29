@@ -559,8 +559,8 @@ public class Achievement
         {
             Id = "top_of_the_class",
             Name = "Top of the Class",
-            Requirement = "Get a perfect score on a quiz",
-            FlavorText = "Perfect score. Empty head, perfect score. Funny how that works.",
+            Requirement = "Score 90% or better on a quiz",
+            FlavorText = "Top marks. Empty head, top marks. Funny how that works.",
             ImageName = "top_of_the_class.png",
             Category = AchievementCategory.Minigames,
             IsExclusive = true
@@ -579,7 +579,7 @@ public class Achievement
         {
             Id = "honor_roll",
             Name = "Honor Roll",
-            Requirement = "Get a perfect score in 3 different categories",
+            Requirement = "Score 90% or better in 3 different categories",
             FlavorText = "Cleared category after category. Nothing left to learn here.",
             ImageName = "honor_roll.png",
             Category = AchievementCategory.Minigames,

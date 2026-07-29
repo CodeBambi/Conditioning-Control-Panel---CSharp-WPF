@@ -22,6 +22,10 @@ namespace ConditioningControlPanel
     {
         public static bool IsOpen { get; private set; }
 
+        /// <summary>Score percentage that counts as a "perfect" run for the quiz achievements
+        /// (top_of_the_class, honor_roll). Below 100 on purpose - see ShowResult.</summary>
+        private const double PerfectScorePercent = 90;
+
         /// <summary>WaveStream wrapper that loops the source indefinitely.</summary>
         private class LoopStream : WaveStream
         {
@@ -521,10 +525,14 @@ namespace ConditioningControlPanel
 
             // EMIT hook for GamificationBridge quiz achievements. perfect/passed are
             // defined here (the quiz has no native pass/perfect concept): perfect =
-            // full marks, passed = >= 60%. Category uses the definition id.
+            // >= 90%, passed = >= 60%. Category uses the definition id.
+            //
+            // "Perfect" is deliberately NOT full marks: several categories score on a
+            // profile curve where the top answer is subjective, so 100% is often
+            // unreachable and the two perfect-score achievements were dead tiles.
             try
             {
-                var perfect = result.MaxScore > 0 && result.TotalScore == result.MaxScore;
+                var perfect = result.MaxScore > 0 && percentage >= PerfectScorePercent;
                 var passed = percentage >= 60;
                 var categoryId = catDef?.Id ?? result.Category.ToString();
                 QuizService.RaiseQuizCompleted(result.TotalScore, passed, perfect, categoryId);
