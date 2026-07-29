@@ -54,6 +54,18 @@ namespace ConditioningControlPanel
         private void BtnPrograms_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("programs");
+
+            // The pulse is spent the moment the tab is found, whether or not the explainer shows.
+            if (App.Settings?.Current is { } s && !s.HasSeenProgramsTab)
+            {
+                s.HasSeenProgramsTab = true;
+                StopProgramsTabPulse();
+                App.Settings?.Save();
+            }
+
+            // Last, and deliberately after ShowTab: the explainer opens on top of the tab the user
+            // just landed on, so dismissing it leaves them looking at the thing it described.
+            ProgramsIntroPopup.ShowIfFirstTime(this);
         }
 
         private void BtnEnhancements_Click(object sender, RoutedEventArgs e)
@@ -167,6 +179,10 @@ namespace ConditioningControlPanel
                     AnimateTabIn(SettingsTab);
                     BtnSettings.Style = activeStyle;
                     RefreshPremiumRail(); // recompute chip dots (incl. Voice) from live state on every show
+                    // Training Programs own the day's feature mix. Re-derived (never latched) on
+                    // every show of the Dashboard, so arriving here can never find a stale lock -
+                    // not after a crash, an abort, or a session event that fired out of order.
+                    RefreshProgramFeatureLock();
                     // Weekly intake pass: paint the centre tile, and play the once-a-week flip
                     // ceremony if this week's reveal hasn't run yet. Must be AFTER the tab is made
                     // visible - the spin is skipped for an off-screen tile so a background login

@@ -56,7 +56,11 @@ Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.tx
 3. Initialize in `App.OnStartup()` after other services
 
 ### Release a New Version
-Follow `../RELEASE_WORKFLOW.md` - covers all version locations, build steps, and deployment.
+Use `/release X.Y.Z "Subtitle"` - it covers all version locations, patch notes, localization keys, and
+the Discord announce step. Version locations are also tabulated above under **Version Locations**.
+
+(`../RELEASE_WORKFLOW.md` was removed from this public repo in `13eae254`; the skill is now the source
+of truth.)
 
 ## Project Structure
 

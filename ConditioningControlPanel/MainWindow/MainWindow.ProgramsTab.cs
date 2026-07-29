@@ -25,6 +25,68 @@ namespace ConditioningControlPanel
         private bool _programsSubscribed;
 
         // -----------------------------------------------------------------------------------
+        // "New tab" attention pulse
+        //
+        // A straight port of the Deeper tab's pulse (MainWindow.DeeperTab.cs) rather than a shared
+        // helper. The two are only incidentally identical: Deeper's is spent history nobody should be
+        // touching, and factoring them together would couple a shipped announcement to the next one.
+        // When a third tab needs this, that is the point to generalise.
+        // -----------------------------------------------------------------------------------
+
+        private bool _programsPulseRunning;
+
+        /// <summary>
+        /// Grows the Programs tab button four times, then stops for good.
+        ///
+        /// The scale is animated on a ScaleTransform declared in XAML (BtnProgramsScale) because the
+        /// button's Style is the shared TabButton template - animating the transform leaves the
+        /// template alone, so the tab still restyles normally when it becomes the active one.
+        /// </summary>
+        private void StartProgramsTabPulse()
+        {
+            if (BtnProgramsScale == null || _programsPulseRunning) return;
+            _programsPulseRunning = true;
+            var anim = new DoubleAnimation
+            {
+                From = 1.0,
+                To = 1.12,
+                Duration = TimeSpan.FromMilliseconds(700),
+                AutoReverse = true,
+                RepeatBehavior = new RepeatBehavior(4),
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+            };
+            anim.Completed += (_, _) =>
+            {
+                _programsPulseRunning = false;
+                if (BtnProgramsScale != null)
+                {
+                    BtnProgramsScale.ScaleX = 1.0;
+                    BtnProgramsScale.ScaleY = 1.0;
+                }
+            };
+            BtnProgramsScale.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+            BtnProgramsScale.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+        }
+
+        /// <summary>
+        /// Detaches the animation and forces the button back to rest. Passing null to BeginAnimation
+        /// is what releases the animation's hold on the property - without it the last animated value
+        /// sticks, and a click landing mid-pulse would leave the tab button permanently oversized.
+        /// </summary>
+        private void StopProgramsTabPulse()
+        {
+            if (!_programsPulseRunning && BtnProgramsScale == null) return;
+            _programsPulseRunning = false;
+            if (BtnProgramsScale != null)
+            {
+                BtnProgramsScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                BtnProgramsScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                BtnProgramsScale.ScaleX = 1.0;
+                BtnProgramsScale.ScaleY = 1.0;
+            }
+        }
+
+        // -----------------------------------------------------------------------------------
         // Wiring
         // -----------------------------------------------------------------------------------
 

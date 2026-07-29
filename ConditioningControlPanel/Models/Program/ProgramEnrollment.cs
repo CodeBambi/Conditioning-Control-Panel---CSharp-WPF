@@ -67,6 +67,17 @@ public class ProgramDayRecord
 
     /// <summary>Ambient minutes accumulated, when the day carries an ambient requirement.</summary>
     public int AmbientMinutes { get; set; }
+
+    /// <summary>
+    /// Ritual task id to the on-disk path of the photo filed for it.
+    ///
+    /// This exists so a program can read its own days back - Presentation's day-1/day-14 diptych
+    /// cannot be built from the roadmap alone, because a program ritual only advances a roadmap step
+    /// when the user happens to be standing on it. Paths are local; the photo is copied into the
+    /// existing diary folder and is never uploaded, never synced, and never rendered onto a share
+    /// card. Storing the path rather than the bytes keeps the enrollment JSON small.
+    /// </summary>
+    public Dictionary<string, string> RitualPhotos { get; set; } = new();
 }
 
 /// <summary>What a rollover evaluation concluded. Returned by the pure clock so the service can act.</summary>

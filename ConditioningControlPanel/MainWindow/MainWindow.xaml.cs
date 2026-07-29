@@ -2321,6 +2321,27 @@ namespace ConditioningControlPanel
                 });
             }
 
+            // Programs tab first-launch pulse — the same one-shot announcement the Deeper tab got.
+            // No feature toggle to check: the Programs tab is always present, so HasSeenProgramsTab
+            // is the only gate. Started independently of the Deeper pulse rather than in an else-if,
+            // because a user who has already found Deeper still has to be told about this one.
+            var programsSettings = App.Settings?.Current;
+            if (programsSettings != null && !programsSettings.HasSeenProgramsTab)
+            {
+                _ = Dispatcher.InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(1200);
+                        StartProgramsTabPulse();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to start Programs tab pulse");
+                    }
+                });
+            }
+
             // Check if any authenticated user needs to complete registration (choose display name)
             // This handles users who had cached tokens but cancelled the registration dialog previously
             _ = CheckPendingRegistrationAsync();

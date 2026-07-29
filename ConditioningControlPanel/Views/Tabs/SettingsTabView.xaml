@@ -790,6 +790,52 @@
                                   Icon="pack://application:,,,/Resources/features/Bubble_count.png"
                                   HelpSectionId="BubbleCount"
                                   Click="CardBubbleCount_Click"/>
+
+            <!-- ============================================================ -->
+            <!-- PROGRAM FEATURE LOCK - the "why" pill. Shown only while a     -->
+            <!-- Training Program session is running; painted and hidden from   -->
+            <!-- MainWindow.ProgramLock.cs (ApplyProgramLockRibbon), which      -->
+            <!-- DERIVES the state from live engine state rather than latching. -->
+            <!--                                                                -->
+            <!-- It is an OVERLAY, and that is load-bearing: RowSpan/ColumnSpan  -->
+            <!-- cover the whole mosaic and VerticalAlignment=Top pins it to     -->
+            <!-- the top edge, so it adds ZERO height to the fixed 1489x901      -->
+            <!-- design canvas. Adding real height here is how the Remote chip   -->
+            <!-- got eaten by WPF's silent layout clip - no scrollbar, no        -->
+            <!-- warning, no binding error.                                      -->
+            <!--                                                                -->
+            <!-- IsHitTestVisible=False on purpose: being locked out of          -->
+            <!-- CHANGING the day's feature mix is no reason to be locked out of -->
+            <!-- reading it, so every tile underneath still opens its popup.     -->
+            <!-- The refusal happens in code, not by swallowing clicks.          -->
+            <!-- ============================================================ -->
+            <Border x:Name="ProgramFeatureLockRibbon" x:FieldModifier="internal"
+                    Grid.Row="0" Grid.RowSpan="4" Grid.Column="0" Grid.ColumnSpan="4"
+                    Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="30"
+                    VerticalAlignment="Top" HorizontalAlignment="Center"
+                    MaxWidth="620" Margin="0,14,0,0" Padding="13,6,13,6"
+                    Background="#F21A1A2E" BorderBrush="{DynamicResource PinkBrush}"
+                    BorderThickness="1" CornerRadius="10">
+                <Border.Effect>
+                    <DropShadowEffect Color="{DynamicResource PinkColor}"
+                                      BlurRadius="16" ShadowDepth="0" Opacity="0.6"/>
+                </Border.Effect>
+                <StackPanel Orientation="Horizontal">
+                    <!-- WPF cannot draw COLR/CPAL colour-emoji fonts; EmojiTextBlock is the
+                         app-wide route for every emoji (same idiom as PremiumRailLock). -->
+                    <helpers:EmojiTextBlock Text="🔒" FontSize="13" VerticalAlignment="Center"
+                                            Margin="0,0,8,0"/>
+                    <!-- Text is written by ApplyProgramLockRibbon. The literal here is a
+                         design-time placeholder only - it is never shown, because the ribbon
+                         is Collapsed until that method fills it in. -->
+                    <TextBlock x:Name="TxtProgramFeatureLock" x:FieldModifier="internal"
+                               Text="Program is running this"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="11" FontWeight="SemiBold"
+                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
         </Grid>
     
         <!-- ============================================================ -->
