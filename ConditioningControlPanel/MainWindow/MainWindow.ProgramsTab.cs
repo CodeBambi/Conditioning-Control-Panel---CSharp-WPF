@@ -356,21 +356,10 @@ namespace ConditioningControlPanel
             tab.TodayCompleteBanner.Visibility = record.DayCompleted ? Visibility.Visible : Visibility.Collapsed;
 
             // --- Session slot ---
+            // Glyph / button / progress strip all live in UpdateProgramSessionRow so the
+            // full repaint and the once-a-second live tick can never disagree about them.
             tab.TxtTodaySessionMinutes.Text = Loc.GetF("programs_session_minutes", day.SessionMinutes);
-            if (record.SessionCompleted)
-            {
-                tab.TxtTodaySessionGlyph.Text = "✓";
-                tab.TxtTodaySessionGlyph.Foreground = accent;
-                tab.BtnStartTodaySession.Content = Loc.Get("programs_session_done");
-                tab.BtnStartTodaySession.IsEnabled = false;
-            }
-            else
-            {
-                tab.TxtTodaySessionGlyph.Text = "○";
-                tab.TxtTodaySessionGlyph.Foreground = mutedBrush;
-                tab.BtnStartTodaySession.Content = Loc.Get("btn_program_start_session");
-                tab.BtnStartTodaySession.IsEnabled = !paused;
-            }
+            UpdateProgramSessionRow();
 
             // --- Ambient layer ---
             var ambient = day.Ambient;
@@ -444,6 +433,225 @@ namespace ConditioningControlPanel
             tab.TodayTaskList.ItemsSource = items;
             tab.TxtTodayNoTasks.Visibility = items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             tab.TxtRitualPrivacyNote.Visibility = hasRitual ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // -----------------------------------------------------------------------------------
+        // Live session row
+        // -----------------------------------------------------------------------------------
+
+        /// <summary>mm:ss, or h:mm:ss past the hour. Never negative.</summary>
+        private static string FormatProgramClock(TimeSpan span)
+        {
+            if (span < TimeSpan.Zero) span = TimeSpan.Zero;
+            return span.TotalHours >= 1
+                ? $"{(int)span.TotalHours}:{span.Minutes:D2}:{span.Seconds:D2}"
+                : $"{(int)span.TotalMinutes}:{span.Seconds:D2}";
+        }
+
+        /// <summary>
+        /// Repaints the Session row's live state: the glyph, the button and the progress strip.
+        ///
+        /// Called once per engine tick from OnSessionProgressUpdated (MainWindow.Presets.cs), so it
+        /// must stay cheap - no list rebuilds, no disk, no service walks. It does NOT spin a timer:
+        /// SessionEngine's own 1-second DispatcherTimer already drives ProgressUpdated, and all three
+        /// engine construction sites (Presets, RemoteControl, ProgramsTab) subscribe the same
+        /// MainWindow handlers, so there is nothing extra to subscribe and nothing to unsubscribe.
+        ///
+        /// A session this tab did NOT start (Dashboard, preset, remote) is deliberately not claimed:
+        /// no progress bar, no completion, just a disabled button saying something else is running.
+        /// ProgramService.IsProgramSession is the discriminator, the same one that decides whether a
+        /// completed session may tick the day.
+        /// </summary>
+        internal void UpdateProgramSessionRow()
+        {
+            try
+            {
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+                // No IsLoaded gate on purpose: the first full repaint can run before the window
+                // finishes loading, and gating here would leave the row showing the XAML default
+                // ("Start today's session") over a session that is already in flight. Only child
+                // control properties are touched, so this is safe pre-load; teardown is covered
+                // by the dispatcher check above.
+                var tab = ProgramsTab;
+                if (tab?.TodaySessionProgressRow == null) return;
+
+                var svc = App.Programs;
+                var enrollment = svc?.ActiveEnrollment;
+                var record = svc?.TodayRecord;
+
+                if (svc == null || enrollment == null || record == null)
+                {
+                    tab.TodaySessionProgressRow.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                var mutedBrush = ProgramThemeBrush("TextMutedBrush", Brushes.Gray);
+                var accent = ProgramAccentBrush(svc.ActiveProgram?.AccentColor);
+                var paused = enrollment.State == ProgramEnrollmentState.Paused;
+
+                var engine = _sessionEngine;
+                var running = engine?.IsRunning == true;
+                var current = running ? engine!.CurrentSession : null;
+                var isOurs = running && svc.IsProgramSession(current);
+
+                if (isOurs && current != null)
+                {
+                    var total = TimeSpan.FromMinutes(Math.Max(1, current.DurationMinutes));
+                    var elapsed = engine!.ElapsedTime;
+                    if (elapsed > total) elapsed = total;
+
+                    tab.TodaySessionProgressBar.Foreground = accent;
+                    tab.TodaySessionProgressBar.Value = Math.Clamp(engine.ProgressPercent, 0, 100);
+
+                    var clock = Loc.GetF("programs_session_progress",
+                        FormatProgramClock(elapsed), FormatProgramClock(total));
+                    tab.TxtTodaySessionProgress.Text = engine.IsPaused
+                        ? Loc.GetF("programs_session_progress_paused", clock)
+                        : clock;
+
+                    tab.TodaySessionProgressRow.Visibility = Visibility.Visible;
+
+                    tab.TxtTodaySessionGlyph.Text = "◉";
+                    tab.TxtTodaySessionGlyph.Foreground = accent;
+
+                    // Deliberately NOT a second stop button: the bottom bar's STOP is on every
+                    // screen and owns ending a session. A stop here would sit exactly where
+                    // "Start today's session" was a second ago - a misclick would abandon the day.
+                    tab.BtnStartTodaySession.Content = Loc.Get("programs_session_in_progress");
+                    tab.BtnStartTodaySession.IsEnabled = false;
+                    tab.BtnStartTodaySession.ToolTip = Loc.Get("programs_session_stop_hint");
+                    return;
+                }
+
+                // Nothing of ours in flight - hide the strip and fall back to the slot states.
+                tab.TodaySessionProgressRow.Visibility = Visibility.Collapsed;
+                tab.TodaySessionProgressBar.Value = 0;
+                tab.BtnStartTodaySession.ToolTip = null;
+
+                if (record.SessionCompleted)
+                {
+                    tab.TxtTodaySessionGlyph.Text = "✓";
+                    tab.TxtTodaySessionGlyph.Foreground = accent;
+                    tab.BtnStartTodaySession.Content = Loc.Get("programs_session_done");
+                    tab.BtnStartTodaySession.IsEnabled = false;
+                    return;
+                }
+
+                tab.TxtTodaySessionGlyph.Text = "○";
+                tab.TxtTodaySessionGlyph.Foreground = mutedBrush;
+
+                if (running)
+                {
+                    // Someone else's session. Say so plainly, and refuse to start on top of it -
+                    // StartProgramSession would otherwise kill it without asking.
+                    tab.BtnStartTodaySession.Content = Loc.Get("programs_session_other_running");
+                    tab.BtnStartTodaySession.IsEnabled = false;
+                    tab.BtnStartTodaySession.ToolTip = Loc.Get("programs_session_other_running_hint");
+                    return;
+                }
+
+                tab.BtnStartTodaySession.Content = Loc.Get("btn_program_start_session");
+                tab.BtnStartTodaySession.IsEnabled = !paused;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "UpdateProgramSessionRow failed");
+            }
+        }
+
+        // -----------------------------------------------------------------------------------
+        // Session start/end announcements
+        //
+        // Both fire from the shared MainWindow session handlers (OnSessionStarted /
+        // OnSessionStopped in MainWindow.Presets.cs), which ALL THREE engine construction sites
+        // subscribe - Presets.cs, RemoteControl.cs and ProgramsTab.cs. Hooking there rather than
+        // at a construction site is what stops this silently working in one path only.
+        //
+        // Surface: App.Notifications (Services/Notifications/NotificationService.cs), the app's
+        // standard non-modal toast host in MainWindow's top-right. No new window, no new service.
+        // -----------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Announces the start of a session THIS program launched. A foreign session is silent -
+        /// the Programs feature has nothing to say about it.
+        /// </summary>
+        internal void AnnounceProgramSessionStarted()
+        {
+            try
+            {
+                var svc = App.Programs;
+                var program = svc?.ActiveProgram;
+                var enrollment = svc?.ActiveEnrollment;
+                if (svc == null || program == null || enrollment == null) return;
+                if (!svc.IsProgramSession(_sessionEngine?.CurrentSession)) return;
+
+                App.Notifications?.Show(
+                    Loc.GetF("programs_toast_session_started", program.Title, enrollment.CurrentDay),
+                    Services.NotificationType.Info,
+                    TimeSpan.FromSeconds(6));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Program session start toast failed");
+            }
+        }
+
+        /// <summary>
+        /// Announces the end of a session this program launched.
+        ///
+        /// SessionEngine raises SessionStopped BEFORE SessionCompleted (StopSession fires the
+        /// former, then does the XP/achievement work, then the latter), and it is
+        /// SessionCompleted that lets ProgramService tick today's slot. So the caller passes the
+        /// program-session verdict captured at SessionStopped time and this runs deferred at
+        /// Background priority - by then StopSession has fully unwound and TodayRecord tells us
+        /// whether the session finished or was cut short.
+        /// </summary>
+        internal void AnnounceProgramSessionEnded(bool wasProgramSession)
+        {
+            if (!wasProgramSession) return;
+
+            try
+            {
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+                dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+                {
+                    try
+                    {
+                        if (Application.Current?.Dispatcher == null) return;
+                        if (Application.Current.Dispatcher.HasShutdownStarted) return;
+
+                        var svc = App.Programs;
+                        var program = svc?.ActiveProgram;
+                        if (svc == null || program == null) return;
+
+                        var completed = svc.TodayRecord?.SessionCompleted == true;
+
+                        App.Notifications?.Show(
+                            completed
+                                ? Loc.GetF("programs_toast_session_completed", program.Title)
+                                : Loc.GetF("programs_toast_session_ended_early", program.Title),
+                            completed ? Services.NotificationType.Success : Services.NotificationType.Warning,
+                            TimeSpan.FromSeconds(8),
+                            Loc.Get("programs_toast_view_today"),
+                            () => ShowTab("programs"));
+
+                        // The slot may have flipped to done during that unwind.
+                        UpdateProgramSessionRow();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Program session end toast failed");
+                    }
+                }));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Program session end toast could not be scheduled");
+            }
         }
 
         // -----------------------------------------------------------------------------------
@@ -617,12 +825,25 @@ namespace ConditioningControlPanel
         /// Mirrors StartSessionFromRemote (MainWindow.RemoteControl.cs). The session engine is a
         /// private MainWindow field created lazily, so this is the only place the Programs feature
         /// can reach it. StartSessionAsync THROWS when a session is already running - it does not
-        /// return false - so any running session is stopped first.
+        /// return false - so a session already in flight is refused here, before anything is built.
         /// </summary>
         internal async void StartProgramSession()
         {
             try
             {
+                // Never start on top of a running session. This used to stop whatever was running
+                // and take over, which silently killed a session started from the Dashboard, a
+                // preset or the remote. The button is disabled in that state too
+                // (UpdateProgramSessionRow); this is the guard behind it.
+                if (_sessionEngine?.IsRunning == true)
+                {
+                    App.Logger?.Information("[Programs] Start refused - a session is already running");
+                    UpdateProgramSessionRow();
+                    ShowStyledDialog(Loc.Get("programs_session_busy_title"),
+                        Loc.Get("programs_session_busy_body"), Loc.Get("btn_ok"), "");
+                    return;
+                }
+
                 var session = App.Programs?.BuildTodaySession();
                 if (session == null)
                 {
@@ -630,12 +851,6 @@ namespace ConditioningControlPanel
                     ShowStyledDialog(Loc.Get("title_error"), Loc.Get("programs_session_start_failed"),
                         Loc.Get("btn_ok"), "");
                     return;
-                }
-
-                if (_sessionEngine?.IsRunning == true)
-                {
-                    App.Logger?.Information("[Programs] Stopping the running session before the program session");
-                    _sessionEngine.StopSession(completed: false);
                 }
 
                 if (_sessionEngine == null)

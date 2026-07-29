@@ -7,6 +7,30 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <!-- Thin session-progress bar. Foreground is overwritten in code with the program's
+             accent brush; the fallbacks stay DynamicResource so mods re-theme it at runtime. -->
+        <Style x:Key="ProgramThinBar" TargetType="ProgressBar">
+            <Setter Property="Height" Value="6"/>
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="Maximum" Value="100"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid>
+                            <Border Background="{TemplateBinding Background}" CornerRadius="3"/>
+                            <Border x:Name="PART_Track"/>
+                            <Border x:Name="PART_Indicator" HorizontalAlignment="Left" CornerRadius="3"
+                                    Background="{TemplateBinding Foreground}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
     <Grid>
         <Border Style="{StaticResource SectionPanel}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -272,20 +296,27 @@
                                                FontSize="12" FontWeight="Bold"/>
                                 </Border>
 
-                                <!-- Session row -->
+                                <!-- Session row.
+                                     Row 0 is the always-present slot; row 1 is the live progress
+                                     strip, shown only while THIS program's session is running
+                                     (MainWindow.ProgramsTab.cs / UpdateProgramSessionRow). -->
                                 <Border Padding="14,12" CornerRadius="10" Margin="0,14,0,0"
                                         Background="{DynamicResource SurfaceBgBrush}">
                                     <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock x:Name="TxtTodaySessionGlyph" x:FieldModifier="internal"
-                                                   Grid.Column="0" Text="○" FontSize="15" Margin="0,0,10,0"
+                                                   Grid.Row="0" Grid.Column="0" Text="○" FontSize="15" Margin="0,0,10,0"
                                                    VerticalAlignment="Center"
                                                    Foreground="{DynamicResource TextMutedBrush}"/>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="{loc:Str programs_session_label}"
                                                        Foreground="{DynamicResource TextLightBrush}"
                                                        FontSize="13" FontWeight="SemiBold"/>
@@ -294,10 +325,29 @@
                                                        FontSize="11" Margin="0,2,0,0"/>
                                         </StackPanel>
                                         <Button x:Name="BtnStartTodaySession" x:FieldModifier="internal"
-                                                Grid.Column="2" MinWidth="190"
+                                                Grid.Row="0" Grid.Column="2" MinWidth="190"
                                                 Content="{loc:Str btn_program_start_session}"
                                                 Style="{StaticResource PinkButton}"
                                                 Click="BtnStartTodaySession_Click"/>
+
+                                        <!-- Live progress strip (collapsed unless the program's own session is in flight) -->
+                                        <Grid x:Name="TodaySessionProgressRow" x:FieldModifier="internal"
+                                              Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                                              Margin="0,12,0,0" Visibility="Collapsed">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <ProgressBar x:Name="TodaySessionProgressBar" x:FieldModifier="internal"
+                                                         Grid.Column="0" VerticalAlignment="Center"
+                                                         Minimum="0" Maximum="100" Value="0"
+                                                         Style="{StaticResource ProgramThinBar}"/>
+                                            <TextBlock x:Name="TxtTodaySessionProgress" x:FieldModifier="internal"
+                                                       Grid.Column="1" Margin="12,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" FontWeight="SemiBold"/>
+                                        </Grid>
                                     </Grid>
                                 </Border>
 

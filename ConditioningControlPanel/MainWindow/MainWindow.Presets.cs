@@ -1340,6 +1340,11 @@ namespace ConditioningControlPanel
                         : mName;
                     var pauseIndicator = _sessionEngine.IsPaused ? $" [{Loc.Get("label_paused")}]" : "";
                     TxtStartLabel.Text = Loc.GetF("label_0_1_2_3", name, $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}", pauseIndicator);
+
+                    // Training Programs: drive the TODAY panel's session progress strip off this
+                    // same 1-second engine tick rather than a second timer. It no-ops unless the
+                    // running session is the one the Programs tab launched.
+                    UpdateProgramSessionRow();
                 }
             });
         }
@@ -1383,12 +1388,23 @@ namespace ConditioningControlPanel
                     BtnPauseSession.Visibility = Visibility.Visible;
                     if (TxtPauseIcon != null) TxtPauseIcon.Text = "⏸";
                 }
+
+                // Training Programs: flip the TODAY panel out of its idle "start" state, and
+                // announce it. Both no-op unless this is the program's own session.
+                UpdateProgramSessionRow();
+                AnnounceProgramSessionStarted();
             });
         }
 
         private void OnSessionStopped(object? sender, EventArgs e)
         {
             App.IsSessionRunning = false;
+
+            // Captured BEFORE the dispatcher work: SessionEngine nulls _currentSession at the end
+            // of StopSession, and ProgramService clears its expected id when SessionCompleted
+            // fires - both of which can happen before a queued Invoke body runs.
+            var wasProgramSession = App.Programs?.IsProgramSession(_sessionEngine?.CurrentSession) == true;
+
             Dispatcher.Invoke(() =>
             {
                 // Stop the engine when session stops
@@ -1407,6 +1423,11 @@ namespace ConditioningControlPanel
 
                 // Hide pause button
                 BtnPauseSession.Visibility = Visibility.Collapsed;
+
+                // Training Programs: back to the idle slot, then announce (deferred - the
+                // day's slot is only marked done later in this same StopSession call).
+                UpdateProgramSessionRow();
+                AnnounceProgramSessionEnded(wasProgramSession);
             });
         }
 

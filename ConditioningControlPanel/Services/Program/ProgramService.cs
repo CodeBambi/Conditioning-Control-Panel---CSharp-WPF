@@ -423,6 +423,19 @@ public class ProgramService : IDisposable
     }
 
     /// <summary>
+    /// True when <paramref name="session"/> is the one this program launched.
+    ///
+    /// The Programs tab asks this before it claims a running session as today's: a session
+    /// started from the Dashboard, a preset or the remote must never drive the day's progress
+    /// bar or mark the day complete. Same discriminator OnSessionCompleted uses, so the two can
+    /// never disagree. Reads only in-memory state - safe to call every engine tick.
+    /// </summary>
+    public bool IsProgramSession(Models.Session? session) =>
+        session != null
+        && _expectedSessionId != null
+        && string.Equals(session.Id, _expectedSessionId, StringComparison.Ordinal);
+
+    /// <summary>
     /// Wire the MainWindow-owned session engine. Mirrors BarkService.AttachSessionEngine - the engine
     /// is created lazily on first session, so the service cannot subscribe at its own construction.
     /// Re-attaching safely detaches the previous engine.
