@@ -50,6 +50,10 @@ namespace ConditioningControlPanel
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
+            // The tab's FX (ambient dust canvas + the owned-node breath) wire themselves up on
+            // first refresh - see MainWindow.EnhancementsFx.cs. Idempotent.
+            EnsureEnhancementsFx();
+
             // Update skill points display
             EnhancementsTab.TxtSkillPoints.Text = settings.SkillPoints.ToString();
 
@@ -76,12 +80,18 @@ namespace ConditioningControlPanel
         private void DrawSkillTree()
         {
             EnhancementsTab.SkillTreeCanvas.Children.Clear();
+            // The nodes about to be rebuilt own the glows the shared breath drives.
+            ResetOwnedNodeGlows();
 
             // Set animated background on the outer border
             EnhancementsTab.SkillTreeOuterBorder.Background = CreateAnimatedSkillTreeBrush(isHeader: false);
 
-            // Add sparkle particles behind everything
-            AddSkillTreeParticles();
+            // The tree's floating sparkles are now the AmbientFxCanvas DustField declared behind
+            // the scroller in EnhancementsTabView.xaml: budgeted by the performance tier, tinted
+            // from the mod palette, and parked with the tab. The 55 hand-rolled ellipses it
+            // replaces each held their own Forever clock across the full 3760dip canvas - most of
+            // them animating off-screen - which is exactly the "one focal loop" rule the FX plan
+            // exists to enforce.
             _skillTreeAnimationsActive = true;
 
             // Add header section at the start of the canvas
@@ -148,6 +158,9 @@ namespace ConditioningControlPanel
                     EnhancementsTab.SkillTreeCanvas.Children.Add(node);
                 }
             }
+
+            // One clock for every owned node's glow, started only if the gate allows it.
+            ApplyOwnedNodeBreath();
         }
 
         /// <summary>
@@ -696,56 +709,6 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Adds floating sparkle particles to the skill tree canvas background
-        /// </summary>
-        private void AddSkillTreeParticles()
-        {
-            // 55 forever-pulsing ellipses is the tree's other ambient loop — same gate as the brush.
-            if (!Services.MotionFx.AllowAmbientLoops) return;
-
-            var colors = new[]
-            {
-                Color.FromArgb(90, 255, 105, 180),   // pink
-                Color.FromArgb(80, 180, 130, 255),    // purple
-                Color.FromArgb(70, 255, 255, 255),    // white
-                Color.FromArgb(100, 255, 182, 193),   // light pink
-                Color.FromArgb(85, 200, 160, 255),    // lavender
-            };
-
-            for (int i = 0; i < 55; i++)
-            {
-                var size = 3.0 + Random.Shared.NextDouble() * 5.0; // 3-8px
-                var ellipse = new System.Windows.Shapes.Ellipse
-                {
-                    Width = size,
-                    Height = size,
-                    Fill = new SolidColorBrush(colors[Random.Shared.Next(colors.Length)]),
-                    Opacity = 0
-                };
-
-                Canvas.SetLeft(ellipse, Random.Shared.NextDouble() * 3760);
-                Canvas.SetTop(ellipse, Random.Shared.NextDouble() * 460);
-                Canvas.SetZIndex(ellipse, -1);
-
-                // Pulsing opacity animation with random duration and start delay
-                var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation
-                {
-                    From = 0,
-                    To = 1,
-                    Duration = TimeSpan.FromSeconds(2 + Random.Shared.NextDouble() * 3), // 2-5s
-                    BeginTime = TimeSpan.FromSeconds(Random.Shared.NextDouble() * 5),     // 0-5s delay
-                    AutoReverse = true,
-                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
-                    EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
-                };
-                System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(opacityAnim, AmbientFrameRate);
-                ellipse.BeginAnimation(System.Windows.UIElement.OpacityProperty, opacityAnim);
-
-                EnhancementsTab.SkillTreeCanvas.Children.Add(ellipse);
-            }
-        }
-
-        /// <summary>
         /// Draws connecting lines between parent and child nodes
         /// </summary>
         private void DrawConnectionLines(Dictionary<string, (double X, double Y)> positions)
@@ -862,13 +825,18 @@ namespace ConditioningControlPanel
             // Add glow effect for unlocked or purchasable nodes
             if (isUnlocked)
             {
-                border.Effect = new DropShadowEffect
+                // Owned nodes breathe this glow. The effect is registered with the tab's shared
+                // clock (MainWindow.EnhancementsFx.cs) rather than given an animation of its own,
+                // so a fully-bought tree still runs exactly one timeline.
+                var ownedGlow = new DropShadowEffect
                 {
                     Color = Colors.LimeGreen,
                     BlurRadius = 18,
                     ShadowDepth = 0,
                     Opacity = 0.6
                 };
+                border.Effect = ownedGlow;
+                RegisterOwnedNodeGlow(ownedGlow);
             }
             else if (canPurchase)
             {
@@ -881,40 +849,10 @@ namespace ConditioningControlPanel
                 };
             }
 
-            // Hover animation - scale up with pop effect
-            border.MouseEnter += (s, e) =>
-            {
-                var scaleTransform = border.RenderTransform as ScaleTransform;
-                if (scaleTransform != null)
-                {
-                    Canvas.SetZIndex(border, 10); // bring to front while hovered
-                    var anim = new System.Windows.Media.Animation.DoubleAnimation
-                    {
-                        To = 1.25,
-                        Duration = TimeSpan.FromMilliseconds(250),
-                        EasingFunction = new System.Windows.Media.Animation.BackEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut, Amplitude = 0.4 }
-                    };
-                    scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
-                    scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
-                }
-            };
-
-            border.MouseLeave += (s, e) =>
-            {
-                var scaleTransform = border.RenderTransform as ScaleTransform;
-                if (scaleTransform != null)
-                {
-                    Canvas.SetZIndex(border, 0); // restore z-order
-                    var anim = new System.Windows.Media.Animation.DoubleAnimation
-                    {
-                        To = 1.0,
-                        Duration = TimeSpan.FromMilliseconds(200),
-                        EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
-                    };
-                    scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
-                    scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
-                }
-            };
+            // Hover: scale up with pop effect, plus the z-order lift. Both live in
+            // MainWindow.EnhancementsFx.cs so the motion gate is applied in one place.
+            border.MouseEnter += (s, e) => ApplySkillNodeHover(border, true);
+            border.MouseLeave += (s, e) => ApplySkillNodeHover(border, false);
 
             // Click handler
             if (canPurchase)

@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -19,15 +20,35 @@
         </StackPanel>
 
         <Border x:Name="SkillTreeOuterBorder" x:FieldModifier="internal" Background="#151528" CornerRadius="12" Padding="5" Margin="20,5,20,20">
-            <ScrollViewer x:Name="SkillTreeScroller"
-                     Style="{StaticResource SkillTreeScrollViewerStyle}"
-                     HorizontalScrollBarVisibility="Visible"
-                     VerticalScrollBarVisibility="Disabled"
-                     PreviewMouseWheel="SkillTreeScroller_PreviewMouseWheel">
-                <Canvas x:Name="SkillTreeCanvas" x:FieldModifier="internal" Width="3760" Height="460" HorizontalAlignment="Left">
-                    <!-- Header and skill nodes will be drawn programmatically -->
-                </Canvas>
-            </ScrollViewer>
+            <Grid ClipToBounds="True">
+                <!-- ============================================================ -->
+                <!-- The tab's one ambient particle loop, behind the tree.        -->
+                <!--                                                              -->
+                <!-- It sits OUTSIDE the ScrollViewer on purpose: the tree canvas -->
+                <!-- is 3760dip wide, so a dust field parented to it would size a -->
+                <!-- Skia surface eight screens wide to draw a viewport's worth   -->
+                <!-- of sparks. Here it is exactly the visible board, and the     -->
+                <!-- dust reads as air in front of the backdrop rather than as    -->
+                <!-- scenery bolted to the scroll.                                -->
+                <!--                                                              -->
+                <!-- The animated gradient behind it (SkillTreeOuterBorder's      -->
+                <!-- Background, built in MainWindow.Enhancements.cs) is          -->
+                <!-- background PAINT, not the focal loop - see FX plan S4.       -->
+                <!-- MainWindow.EnhancementsFx registers this canvas with         -->
+                <!-- RegisterTabFx, so it parks on every tab switch.              -->
+                <!-- ============================================================ -->
+                <fx:AmbientFxCanvas x:Name="SkillTreeFx" x:FieldModifier="internal"/>
+
+                <ScrollViewer x:Name="SkillTreeScroller"
+                         Style="{StaticResource SkillTreeScrollViewerStyle}"
+                         HorizontalScrollBarVisibility="Visible"
+                         VerticalScrollBarVisibility="Disabled"
+                         PreviewMouseWheel="SkillTreeScroller_PreviewMouseWheel">
+                    <Canvas x:Name="SkillTreeCanvas" x:FieldModifier="internal" Width="3760" Height="460" HorizontalAlignment="Left">
+                        <!-- Header and skill nodes will be drawn programmatically -->
+                    </Canvas>
+                </ScrollViewer>
+            </Grid>
         </Border>
 
         <!-- Login Required Overlay -->
