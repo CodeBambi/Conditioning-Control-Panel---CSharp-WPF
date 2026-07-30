@@ -55,6 +55,15 @@ Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.tx
 2. Add static property in `App.xaml.cs`: `public static YourService? YourService { get; private set; }`
 3. Initialize in `App.OnStartup()` after other services
 
+### Add a New Achievement
+1. Add the entry to `Models/Achievement.cs` (`Achievement.All`) + art in `Resources/achievements/`
+2. Add loc keys `achievement_<id>_name/_req/_flavor` to the 9 `Localization/Languages/*.json` files
+3. **Server side or the Discord post silently never happens:** add the id to
+   `ccp-server` `proxy/data/achievements.json` (name/requirement/image/flavor, optional
+   per-mod `flavor_overrides`) - the webhook 400s unknown ids
+4. Upload the PNG (+256px webp sibling) to `cclabs-site/achievements/` and deploy - the
+   bot hotlinks `https://cclabs.app/achievements/<image>`
+
 ### Release a New Version
 Use `/release X.Y.Z "Subtitle"` - it covers all version locations, patch notes, localization keys, and
 the Discord announce step. Version locations are also tabulated above under **Version Locations**.

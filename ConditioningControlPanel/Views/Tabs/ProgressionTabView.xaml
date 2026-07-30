@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
         <Grid>
@@ -52,7 +53,7 @@
                             <Grid Margin="0,8,0,0">
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str btn_enable}"
                                            ToolTip="{loc:Str tooltip_enable_disable_spiral_overlay_on_all_monitors}"/>
-                                <CheckBox x:Name="ChkSpiralEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" 
+                                <CheckBox x:Name="ChkSpiralEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}" 
                                           HorizontalAlignment="Right"
                                           Checked="ChkSpiralEnabled_Changed" Unchecked="ChkSpiralEnabled_Changed"
                                           ToolTip="{loc:Str tooltip_show_hypnotic_spiral_overlay}"/>
@@ -65,7 +66,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_opacity}"
                                            ToolTip="{loc:Str tooltip_spiral_transparency_level}"/>
-                                <Slider Grid.Column="1" x:Name="SliderSpiralOpacity" x:FieldModifier="internal" Minimum="5" Maximum="50" Value="15" 
+                                <Slider Grid.Column="1" x:Name="SliderSpiralOpacity" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="5" Maximum="50" Value="15" 
                                         Margin="10,0" ValueChanged="SliderSpiralOpacity_Changed"
                                         ToolTip="{loc:Str tooltip_spiral_opacity_5_50}"/>
                                 <TextBlock x:Name="TxtSpiralOpacity" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="15%"/>
@@ -117,7 +118,7 @@
                             <Grid Margin="0,8,0,0">
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str btn_enable}"
                                            ToolTip="{loc:Str tooltip_enable_disable_pink_tint_overlay}"/>
-                                <CheckBox x:Name="ChkPinkFilterEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" 
+                                <CheckBox x:Name="ChkPinkFilterEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}" 
                                           HorizontalAlignment="Right"
                                           Checked="ChkPinkFilterEnabled_Changed" Unchecked="ChkPinkFilterEnabled_Changed"
                                           ToolTip="{loc:Str tooltip_apply_pink_color_filter_to_all_monitors}"/>
@@ -130,7 +131,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_opacity}"
                                            ToolTip="{loc:Str tooltip_pink_filter_intensity}"/>
-                                <Slider Grid.Column="1" x:Name="SliderPinkOpacity" x:FieldModifier="internal" Minimum="5" Maximum="50" Value="10" 
+                                <Slider Grid.Column="1" x:Name="SliderPinkOpacity" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="5" Maximum="50" Value="10" 
                                         Margin="10,0" ValueChanged="SliderPinkOpacity_Changed"
                                         ToolTip="{loc:Str tooltip_filter_opacity_5_50}"/>
                                 <TextBlock x:Name="TxtPinkOpacity" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="10%"/>
@@ -176,7 +177,7 @@
                             <Grid Margin="0,8,0,0">
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str btn_enable}"
                                            ToolTip="{loc:Str tooltip_enable_disable_bubble_pop_mini_game}"/>
-                                <CheckBox x:Name="ChkBubblesEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" 
+                                <CheckBox x:Name="ChkBubblesEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}" 
                                           HorizontalAlignment="Right"
                                           Checked="ChkBubblesEnabled_Changed" Unchecked="ChkBubblesEnabled_Changed"
                                           ToolTip="{loc:Str tooltip_pop_bubbles_to_earn_xp}"/>
@@ -192,7 +193,7 @@
                                 <!-- Range MUST match BubblePopFeatureControl's SliderFreq (1-60): SaveSettings
                                      round-trips settings through these legacy controls, so a narrower range here
                                      CLAMPS the popup's value (bubbles snapped to 15 on engine start / panic). -->
-                                <Slider Grid.Column="1" x:Name="SliderBubbleFreq" x:FieldModifier="internal" Minimum="1" Maximum="60" Value="5"
+                                <Slider Grid.Column="1" x:Name="SliderBubbleFreq" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="1" Maximum="60" Value="5"
                                         Margin="10,0" ValueChanged="SliderBubbleFreq_Changed"
                                         ToolTip="{loc:Str tooltip_bubble_spawn_rate}"/>
                                 <TextBlock x:Name="TxtBubbleFreq" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="5"/>
@@ -257,7 +258,7 @@
                             <Grid Margin="0,8,0,0">
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str btn_enable}"
                                            ToolTip="{loc:Str tooltip_enable_disable_lock_card_popups}"/>
-                                <CheckBox x:Name="ChkLockCardEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" 
+                                <CheckBox x:Name="ChkLockCardEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}" 
                                           HorizontalAlignment="Right"
                                           Checked="ChkLockCardEnabled_Changed" Unchecked="ChkLockCardEnabled_Changed"
                                           ToolTip="{loc:Str tooltip_show_lock_cards_that_require_typing_to_dismis}"/>
@@ -270,7 +271,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_per_hour}"
                                            ToolTip="{loc:Str tooltip_lock_cards_shown_per_hour}"/>
-                                <Slider Grid.Column="1" x:Name="SliderLockCardFreq" x:FieldModifier="internal" Minimum="1" Maximum="10" Value="2" 
+                                <Slider Grid.Column="1" x:Name="SliderLockCardFreq" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="1" Maximum="10" Value="2" 
                                         Margin="10,0" ValueChanged="SliderLockCardFreq_Changed"
                                         ToolTip="{loc:Str tooltip_lock_card_frequency_1_10_per_hour}"/>
                                 <TextBlock x:Name="TxtLockCardFreq" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="2"/>
@@ -283,7 +284,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_repeats}"
                                            ToolTip="{loc:Str tooltip_times_the_phrase_must_be_typed}"/>
-                                <Slider Grid.Column="1" x:Name="SliderLockCardRepeats" x:FieldModifier="internal" Minimum="1" Maximum="10" Value="3" 
+                                <Slider Grid.Column="1" x:Name="SliderLockCardRepeats" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="1" Maximum="10" Value="3" 
                                         Margin="10,0" ValueChanged="SliderLockCardRepeats_Changed"
                                         ToolTip="{loc:Str tooltip_number_of_times_to_type_the_phrase_1_10}"/>
                                 <TextBlock x:Name="TxtLockCardRepeats" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="3x"/>
@@ -346,7 +347,7 @@
                                     <helpers:EmojiTextBlock x:Name="TxtFeatureBubbleCount" x:FieldModifier="internal" Text="{loc:Str label_bubble_count}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
                                     <helpers:EmojiTextBlock Text="{loc:Str label_lvl_50_2}" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
                                 </StackPanel>
-                                <CheckBox x:Name="ChkBubbleCountEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" 
+                                <CheckBox x:Name="ChkBubbleCountEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}" 
                                           HorizontalAlignment="Right"
                                           Checked="ChkBubbleCountEnabled_Changed" Unchecked="ChkBubbleCountEnabled_Changed"/>
                             </Grid>
@@ -362,7 +363,7 @@
                                                ToolTip="{loc:Str tooltip_how_often_the_bubble_count_challenge_appears}"/>
                                     <TextBlock x:Name="TxtBubbleCountFreq" x:FieldModifier="internal" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="2"/>
                                 </Grid>
-                                <Slider x:Name="SliderBubbleCountFreq" x:FieldModifier="internal" Minimum="1" Maximum="10" Value="2" 
+                                <Slider x:Name="SliderBubbleCountFreq" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="1" Maximum="10" Value="2" 
                                         Margin="0,1" ValueChanged="SliderBubbleCountFreq_Changed"
                                         ToolTip="{loc:Str tooltip_challenges_per_hour_1_10}"/>
                                 
@@ -373,7 +374,7 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_difficulty}"/>
-                                    <ComboBox x:Name="CmbBubbleCountDifficulty" x:FieldModifier="internal" Grid.Column="1" 
+                                    <ComboBox x:Name="CmbBubbleCountDifficulty" x:FieldModifier="internal" feat:SessionLock.Owned="True" Grid.Column="1" 
                                               Width="100" Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
                                               SelectionChanged="CmbBubbleCountDifficulty_Changed">
                                         <ComboBoxItem Content="{loc:Str btn_easy}" Tag="0"/>
@@ -437,7 +438,7 @@
                                     <helpers:EmojiTextBlock x:Name="TxtFeatureBouncing" x:FieldModifier="internal" Text="{loc:Str label_bouncing_text}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
                                     <helpers:EmojiTextBlock Text="{loc:Str label_lvl_60_2}" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
                                 </StackPanel>
-                                <CheckBox x:Name="ChkBouncingTextEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" 
+                                <CheckBox x:Name="ChkBouncingTextEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}" 
                                           HorizontalAlignment="Right"
                                           Checked="ChkBouncingTextEnabled_Changed" Unchecked="ChkBouncingTextEnabled_Changed"/>
                             </Grid>
@@ -453,7 +454,7 @@
                                                ToolTip="{loc:Str tooltip_how_fast_the_text_bounces}"/>
                                     <TextBlock x:Name="TxtBouncingTextSpeed" x:FieldModifier="internal" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="5"/>
                                 </Grid>
-                                <Slider x:Name="SliderBouncingTextSpeed" Minimum="1" Maximum="10" Value="5" 
+                                <Slider x:Name="SliderBouncingTextSpeed" feat:SessionLock.Owned="True" Minimum="1" Maximum="10" Value="5" 
                                         Margin="0,1" ValueChanged="SliderBouncingTextSpeed_Changed"
                                         ToolTip="{loc:Str tooltip_bounce_speed_1_slow_10_fast}"/>
                                 
@@ -467,7 +468,7 @@
                                                ToolTip="{loc:Str tooltip_text_size_50_to_300}"/>
                                     <TextBlock x:Name="TxtBouncingTextSize" x:FieldModifier="internal" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="100%"/>
                                 </Grid>
-                                <Slider x:Name="SliderBouncingTextSize" x:FieldModifier="internal" Minimum="50" Maximum="300" Value="100" 
+                                <Slider x:Name="SliderBouncingTextSize" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="50" Maximum="300" Value="100" 
                                         Margin="0,1" ValueChanged="SliderBouncingTextSize_Changed"
                                         ToolTip="{loc:Str tooltip_text_size_50_small_100_normal_300_huge}"/>
                                 
@@ -528,12 +529,12 @@
                             <!-- Hidden elements to prevent XAML binding errors -->
                             <StackPanel x:Name="BrainDrainLocked" x:FieldModifier="internal" Visibility="Collapsed"/>
                             <StackPanel x:Name="BrainDrainUnlocked" x:FieldModifier="internal" Visibility="Collapsed">
-                                <CheckBox x:Name="ChkBrainDrainEnabled" x:FieldModifier="internal" Visibility="Collapsed"/>
+                                <CheckBox x:Name="ChkBrainDrainEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Visibility="Collapsed"/>
                                 <StackPanel x:Name="BrainDrainSettings" Visibility="Collapsed">
                                     <TextBlock x:Name="TxtBrainDrainIntensity" x:FieldModifier="internal"/>
                                     <!-- Explicit range: a WPF Slider defaults to Maximum=10, which silently
                                          clamps this percent value in the SaveSettings round-trip. -->
-                                    <Slider x:Name="SliderBrainDrainIntensity" x:FieldModifier="internal" Minimum="1" Maximum="100"/>
+                                    <Slider x:Name="SliderBrainDrainIntensity" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="1" Maximum="100"/>
                                     <CheckBox x:Name="ChkBrainDrainHighRefresh" x:FieldModifier="internal"/>
                                 </StackPanel>
                             </StackPanel>
@@ -575,7 +576,7 @@
                                     <helpers:EmojiTextBlock x:Name="TxtFeatureMindWipe" x:FieldModifier="internal" Text="{loc:Str label_mind_wipe}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
                                     <helpers:EmojiTextBlock Text="{loc:Str label_lvl_75_2}" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
                                 </StackPanel>
-                                <CheckBox x:Name="ChkMindWipeEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
+                                <CheckBox x:Name="ChkMindWipeEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}"
                                           HorizontalAlignment="Right"
                                           Checked="ChkMindWipeEnabled_Changed" Unchecked="ChkMindWipeEnabled_Changed"/>
                             </Grid>
@@ -591,7 +592,7 @@
                                                ToolTip="{loc:Str tooltip_how_many_times_per_hour_outside_sessions}"/>
                                     <TextBlock x:Name="TxtMindWipeFreq" x:FieldModifier="internal" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="{loc:Str label_6_h}"/>
                                 </Grid>
-                                <Slider x:Name="SliderMindWipeFreq" x:FieldModifier="internal" Minimum="1" Maximum="180" Value="6"
+                                <Slider x:Name="SliderMindWipeFreq" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="1" Maximum="180" Value="6"
                                         Margin="0,1" ValueChanged="SliderMindWipeFreq_Changed"
                                         ToolTip="{loc:Str tooltip_mind_wipe_frequency_1_180_per_hour}"/>
     

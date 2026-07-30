@@ -2523,5 +2523,11 @@
   "tooltip_motion_level": "Cuánto puede moverse la interfaz.\nCompleto = todo, incluidos los efectos ambientales lentos.\nReducido = solo fundidos y transiciones, sin efectos en bucle, partículas ni paralaje.\nDesactivado = sin ninguna animación.\nLa opción “Efectos de animación” de Windows solo puede reducirlo más, nunca devolver movimiento.",
   "label_motion_full": "Completo",
   "label_motion_reduced": "Reducido",
-  "label_motion_off": "Desactivado"
+  "label_motion_off": "Desactivado",
+  "program_lock_reason": "{0} está ejecutando esto - Día {1}. Sus funciones e intensidad están bloqueadas hasta que termine la sesión.",
+  "program_lock_reason_no_day": "{0} está ejecutando esto. Sus funciones e intensidad están bloqueadas hasta que termine la sesión.",
+  "program_lock_reason_generic": "Un programa de entrenamiento está ejecutando esta sesión. Sus funciones e intensidad están bloqueadas hasta que termine.",
+  "session_lock_reason": "¡Estás en una sesión! Sus funciones e intensidad están bloqueadas hasta que termine.",
+  "session_lock_action_title": "Estás en una sesión",
+  "session_lock_action_body": "{0}\n\nEsto sobrescribiría lo que la sesión prescribió. Detén la sesión primero si de verdad quieres cambiarlo."
 }

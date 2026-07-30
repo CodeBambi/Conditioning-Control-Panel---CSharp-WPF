@@ -232,6 +232,32 @@
                             </Grid>
                         </Border>
 
+                        <!-- Mic consent / privacy — mirrors the webcam "Revoke consent" button on the Lab tab.
+                             Only shown once consent has been given (RefreshSheListeningTab toggles it). -->
+                        <Border x:Name="SL_PrivacyCard" x:FieldModifier="internal" Visibility="Collapsed"
+                                Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
+                                BorderThickness="1" CornerRadius="10" Padding="20,12" Margin="0,14,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                    <TextBlock Text="Privacy" Foreground="#9090A8" FontSize="12"/>
+                                    <TextBlock Text="Take back your mic consent — every voice feature turns off and she asks again next time."
+                                               Foreground="#888" FontSize="10" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <Button x:Name="BtnSL_RevokeConsent" Grid.Column="1" Content="Revoke consent"
+                                        ToolTip="Stops the mic, turns off wake word, push-to-talk, spoken mantras and voice lock cards, and clears your consent. You'll be re-prompted next time you enable a voice feature."
+                                        Padding="11,6" VerticalAlignment="Center"
+                                        Background="Transparent" Foreground="{DynamicResource DangerBrush}"
+                                        BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
+                                        FontSize="11" FontWeight="SemiBold" Cursor="Hand" Click="BtnSL_RevokeConsent_Click">
+                                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                                </Button>
+                            </Grid>
+                        </Border>
+
                     </StackPanel>
 
                     <!-- Translucent gating overlay (free users) -->

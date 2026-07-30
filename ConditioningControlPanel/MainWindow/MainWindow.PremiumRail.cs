@@ -146,6 +146,17 @@ namespace ConditioningControlPanel
         {
             if (SettingsTab == null || RemoteControlTab == null) return;
 
+            // Refused mid-session, and not for purity: shared control cannot actually WORK while a
+            // session runs. RemoteControlService writes FlashEnabled / SubliminalEnabled /
+            // PinkFilter* / Spiral* / LockCardEnabled, but SessionEngine.UpdateRampingValues
+            // rewrites the ramped ones about once a second - so a partner's changes to flash
+            // opacity/frequency or the overlays get stomped within a tick while the unramped ones
+            // stick. Half-working control split between two people is worse than a clear refusal.
+            //
+            // If handing over mid-session ever becomes a wanted feature, the fix is to make remote
+            // writes authoritative over the ramp - not to remove this guard.
+            if (RefuseActionIfSessionLocked("remote-start")) return;
+
             // Difficulty bubble → tier combo index (0 light/easy, 1 standard/medium, 2 full/hard).
             int tierIdx = SettingsTab.RemoteDiffHard?.IsChecked == true ? 2
                         : SettingsTab.RemoteDiffEasy?.IsChecked == true ? 0 : 1;
@@ -238,7 +249,7 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void PremiumChip_Click(PremiumFeature feature)
         {
-            // A Training Program session owns the day's feature mix (MainWindow.ProgramLock.cs).
+            // A running session owns the prescribed dose (MainWindow.SessionFeatureLock.cs).
             // Takeover / Awareness / Haptics are part of that mix, so the rail cannot flip them
             // mid-session. Deliberately NOT gated: Voice (the mic is a privacy control - the user
             // must always be able to disarm it) and Graded Intake (navigation, not a toggle).
@@ -247,7 +258,7 @@ namespace ConditioningControlPanel
                 case PremiumFeature.Takeover:
                 case PremiumFeature.Awareness:
                 case PremiumFeature.Haptics:
-                    if (RefuseIfProgramFeatureLocked($"chip:{feature}")) return;
+                    if (RefuseIfSessionFeatureLocked($"chip:{feature}")) return;
                     break;
             }
 

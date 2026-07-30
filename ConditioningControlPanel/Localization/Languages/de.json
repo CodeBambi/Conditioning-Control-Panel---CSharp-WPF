@@ -2531,5 +2531,11 @@
   "tooltip_motion_level": "Wie viel sich die Oberfläche bewegen darf.\nVoll = alles, einschließlich langsamer Ambient-Effekte.\nReduziert = nur Überblendungen und Übergänge, keine Endlos-Effekte, Partikel oder Parallaxe.\nAus = keinerlei Animation.\nDie Windows-Einstellung „Animationseffekte“ kann dies nur weiter reduzieren, niemals Bewegung zurückholen.",
   "label_motion_full": "Voll",
   "label_motion_reduced": "Reduziert",
-  "label_motion_off": "Aus"
+  "label_motion_off": "Aus",
+  "program_lock_reason": "{0} steuert dies - Tag {1}. Funktionen und Intensität sind bis zum Ende der Sitzung gesperrt.",
+  "program_lock_reason_no_day": "{0} steuert dies. Funktionen und Intensität sind bis zum Ende der Sitzung gesperrt.",
+  "program_lock_reason_generic": "Ein Trainingsprogramm steuert diese Sitzung. Funktionen und Intensität sind bis zum Ende gesperrt.",
+  "session_lock_reason": "Du bist in einer Sitzung! Funktionen und Intensität sind bis zum Ende gesperrt.",
+  "session_lock_action_title": "Du bist in einer Sitzung",
+  "session_lock_action_body": "{0}\n\nDies würde überschreiben, was die Sitzung vorgegeben hat. Beende zuerst die Sitzung, wenn du es wirklich ändern willst."
 }

@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -79,7 +80,7 @@
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                     <TextBlock Text="{loc:Str btn_enable}" Foreground="#AAA" FontSize="12"
                                                VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <CheckBox x:Name="ChkHapticsEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
+                                    <CheckBox x:Name="ChkHapticsEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}"
                                               VerticalAlignment="Center"
                                               Checked="ChkHapticsEnabled_Changed" Unchecked="ChkHapticsEnabled_Changed"/>
                                 </StackPanel>

@@ -38,6 +38,28 @@ namespace ConditioningControlPanel.Models
         Regex
     }
 
+    /// <summary>
+    /// Which applications keyword triggers are allowed to fire in, judged by the process that owns
+    /// the foreground window at match time.
+    ///
+    /// Until this existed the answer was "all of them, always" - the only control was the master
+    /// enable. That is fine for a browser and wrong for a work call, a shared screen, or a
+    /// full-screen game, and it matters more now that Training Programs ask users to arm triggers
+    /// for days at a stretch. <see cref="Everywhere"/> is the default so nothing changes for anyone
+    /// who does not go looking for this.
+    /// </summary>
+    public enum AwarenessAppScope
+    {
+        /// <summary>Fire wherever the user happens to be. The historical (and default) behaviour.</summary>
+        Everywhere = 0,
+
+        /// <summary>Fire everywhere EXCEPT the listed processes. The "not during work" shape.</summary>
+        ExceptListed = 1,
+
+        /// <summary>Fire ONLY in the listed processes. The "only while I'm browsing" shape.</summary>
+        OnlyListed = 2
+    }
+
     public enum KeywordVisualEffect
     {
         None,

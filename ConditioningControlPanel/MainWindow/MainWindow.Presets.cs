@@ -807,9 +807,9 @@ namespace ConditioningControlPanel
             if (e.OriginalSource is not Features.FeatureCard card) return;
             var s = App.Settings?.Current;
             if (s == null) return;
-            // A Training Program owns the day's feature mix - see MainWindow.ProgramLock.cs.
+            // A running session owns the prescribed dose - see MainWindow.SessionFeatureLock.cs.
             // Derived from live engine state on every click, so there is nothing to un-stick.
-            if (RefuseIfProgramFeatureLocked($"card:{card.Title}")) return;
+            if (RefuseIfSessionFeatureLocked($"card:{card.Title}")) return;
             var running = App.IsEngineRunning;
             try
             {
@@ -885,15 +885,16 @@ namespace ConditioningControlPanel
                 catch { /* window may be shutting down */ }
             };
             _activeFeaturePopup = popup;
-            // Tracked so RefreshProgramFeatureLock can re-derive the lock onto a popup that is
-            // already open when a program session starts or ends (MainWindow.ProgramLock.cs).
+            // Tracked so RefreshSessionFeatureLock can re-derive the lock onto a popup that is
+            // already open when a session starts or ends (MainWindow.SessionFeatureLock.cs).
             _activeFeaturePopupContent = content;
             popup.Show(); // Non-modal so bubbles and other interactions keep working
 
-            // A Training Program owns the day's feature mix: grey the master enable toggle and
-            // say why. Applied AFTER Show so the content has been through Initialized and
-            // FindName resolves. Both directions are handled, so nothing latches.
-            ApplyProgramLockToFeaturePopup(content);
+            // A running session owns the prescribed dose: grey the master enable toggle and the
+            // dials it prescribes, and say why. Applied AFTER Show so the content has been
+            // through Initialized and FindName resolves - and so the visual tree the sweep walks
+            // actually exists. Both directions are handled, so nothing latches.
+            ApplySessionLockToFeaturePopup(content);
 
             // Bark hook: identify the feature by control type (locale-independent), e.g.
             // FlashFeatureControl -> "Flash". Gated/chanced in the rules so it isn't spammy.
@@ -1256,8 +1257,40 @@ namespace ConditioningControlPanel
             });
         }
 
+        /// <summary>
+        /// Deadline until which one session-summary modal is swallowed. Set by Withdraw, which ends
+        /// today's session on purpose and has already told the user so in its own confirm.
+        ///
+        /// A DEADLINE rather than a bool because the summary is driven by SessionLogReady, and if
+        /// that event never arrived a sticky flag would silently eat the NEXT session's summary
+        /// instead. Nothing is lost by suppressing it: the log is still written and still readable
+        /// from the session history window.
+        /// </summary>
+        private DateTime _suppressSessionSummaryUntil = DateTime.MinValue;
+
+        /// <summary>
+        /// Swallow the next session summary if one arrives shortly. Called before a stop the user
+        /// has already explicitly confirmed, so the app does not editorialise on top of it.
+        /// </summary>
+        internal void SuppressNextSessionSummary(string reason)
+        {
+            _suppressSessionSummaryUntil = DateTime.UtcNow.AddSeconds(20);
+            App.Logger?.Information("Session summary suppressed for the next stop ({Reason})", reason);
+        }
+
         private void OnSessionLogReady(object? sender, SessionLogReadyEventArgs e)
         {
+            // Withdraw is specified to be unweighted and without commentary. A modal headlined
+            // "Session Ended Early" immediately after the user confirmed "the run ends here, and
+            // today's session stops with it" is commentary, and reads as a rebuke for using the
+            // way out. Consumed one-shot so only that stop is quiet.
+            if (DateTime.UtcNow < _suppressSessionSummaryUntil)
+            {
+                _suppressSessionSummaryUntil = DateTime.MinValue;
+                App.Logger?.Information("Session summary skipped (deliberate stop)");
+                return;
+            }
+
             var log = e.Log;
             Dispatcher.BeginInvoke(() => ShowSessionSummaryWhenClear(log, attempt: 0));
         }
@@ -1344,7 +1377,7 @@ namespace ConditioningControlPanel
                 // Program feature lock heartbeat. Re-derives once a second and repaints only on
                 // a change, so the toggles cannot stay locked (or stay open) through any
                 // out-of-order or dropped session event. force:false = skip redundant repaints.
-                RefreshProgramFeatureLock(force: false);
+                RefreshSessionFeatureLock(force: false);
 
                 if (_sessionEngine?.CurrentSession != null)
                 {
@@ -1387,6 +1420,9 @@ namespace ConditioningControlPanel
         private void OnSessionStarted(object? sender, EventArgs e)
         {
             App.IsSessionRunning = true;
+            // Safety net for the one-shot above: a new session always gets its own summary, even if
+            // a suppression was armed and its stop somehow never produced a log.
+            _suppressSessionSummaryUntil = DateTime.MinValue;
             Dispatcher.Invoke(() =>
             {
                 PresetsTab.BtnStartSession.Content = Loc.Get("btn_stop_session_2");
@@ -1420,9 +1456,9 @@ namespace ConditioningControlPanel
                 // announce it. Both no-op unless this is the program's own session.
                 UpdateProgramSessionRow();
                 AnnounceProgramSessionStarted();
-                // ... and lock the user's feature toggles: the program prescribes the day's
-                // mix. No-ops for preset / remote sessions. See MainWindow.ProgramLock.cs.
-                RefreshProgramFeatureLock();
+                // ... and lock the dials the session prescribes. Applies to EVERY session -
+                // program, preset and remote - see MainWindow.SessionFeatureLock.cs rule 1.
+                RefreshSessionFeatureLock();
             });
         }
 
@@ -1458,12 +1494,12 @@ namespace ConditioningControlPanel
                 // day's slot is only marked done later in this same StopSession call).
                 UpdateProgramSessionRow();
                 AnnounceProgramSessionEnded(wasProgramSession);
-                // Hand the feature toggles back. Deliberately NOT conditional on
+                // Hand the dials back. Deliberately NOT conditional on
                 // wasProgramSession: the refresh RE-DERIVES the lock from live engine state,
                 // so calling it unconditionally is what guarantees the toggles come back on
                 // every exit path (completion, STOP, abort, withdraw) even if this handler
                 // fires out of order or twice.
-                RefreshProgramFeatureLock();
+                RefreshSessionFeatureLock();
             });
         }
 
@@ -1690,6 +1726,13 @@ namespace ConditioningControlPanel
 
         private void LoadPreset(Models.Preset preset)
         {
+            // The chokepoint: Preset.ApplyTo overwrites ~40 of the fields a running session
+            // prescribes, so applying a preset mid-session discards the dose wholesale. Guarded
+            // HERE rather than only at the click handler so every caller is covered, present and
+            // future - this tab is also where BtnStartSession and the countdown live, which makes
+            // it the preset surface a user is most likely to be looking at mid-session.
+            if (RefuseActionIfSessionLocked($"load-preset:{preset.Name}")) return;
+
             preset.ApplyTo(App.Settings.Current);
             App.Settings.Save();
             
@@ -1707,7 +1750,10 @@ namespace ConditioningControlPanel
         internal void BtnLoadPreset_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedPreset == null) return;
-            
+            // Checked before the confirm too, so the user is never asked to approve something
+            // that is then refused. LoadPreset re-checks as the real guard.
+            if (RefuseActionIfSessionLocked("load-preset-click")) return;
+
             var result = MessageBox.Show(
                 Loc.GetF("msg_load_preset_confirm_0", _selectedPreset.Name),
                 Loc.Get("title_load_preset"),

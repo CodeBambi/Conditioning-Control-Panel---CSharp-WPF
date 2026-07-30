@@ -912,7 +912,8 @@ namespace ConditioningControlPanel
             // Initialize companion settings
             CompanionTab.ChkAvatarEnabledCompanion.IsChecked = settings.AvatarEnabled;
             CompanionTab.ChkMuteAvatarCompanion.IsChecked = settings.AvatarMuted;
-            CompanionTab.ChkMuteWhispersCompanion.IsChecked = !settings.SubAudioEnabled;
+            // "Muted" is now its own flag, not the inverse of the enable (AppSettings.SubAudioMuted).
+            CompanionTab.ChkMuteWhispersCompanion.IsChecked = settings.SubAudioMuted;
             CompanionTab.SliderIdleIntervalCompanion.Value = settings.IdleGiggleIntervalSeconds;
             CompanionTab.TxtIdleIntervalCompanion.Text = $"{settings.IdleGiggleIntervalSeconds}s";
             CompanionTab.SliderBubbleDurationCompanion.Value = settings.BubbleDurationSeconds;
@@ -1880,17 +1881,19 @@ namespace ConditioningControlPanel
             var checkbox = sender as CheckBox;
             var isMuted = checkbox?.IsChecked == true;
 
-            // Toggle SubAudioEnabled (muted = disabled)
+            // Flips the dedicated MUTE, not SubAudioEnabled - see AppSettings.SubAudioMuted. Mute
+            // is a comfort/safety reflex and stays available during a session; the whispers ENABLE
+            // is part of the prescribed dose and is locked while one runs.
             if (App.Settings?.Current != null)
             {
-                App.Settings.Current.SubAudioEnabled = !isMuted;
+                App.Settings.Current.SubAudioMuted = isMuted;
                 App.Settings.Save();
             }
 
-            // Sync Settings tab checkbox (inverted - it's "enabled" not "muted")
-            _isLoading = true;
-            SettingsTab.ChkAudioWhispers.IsChecked = !isMuted;
-            _isLoading = false;
+            // Deliberately NO LONGER syncing SettingsTab.ChkAudioWhispers: that checkbox is the
+            // feature's enable and this one is a mute. They were the same flag before, so muting
+            // silently turned the feature off; keeping them in step now would re-create exactly
+            // the bypass this split exists to remove.
 
             // Sync avatar menu
             _avatarTubeWindow?.UpdateQuickMenuState();
@@ -1964,8 +1967,10 @@ namespace ConditioningControlPanel
                 // Settings tab - SettingsTab.ChkAudioWhispers represents "whispers enabled"
                 SettingsTab.ChkAudioWhispers.IsChecked = enabled;
 
-                // Companion tab - CompanionTab.ChkMuteWhispersCompanion represents "whispers muted" (inverted)
-                CompanionTab.ChkMuteWhispersCompanion.IsChecked = !enabled;
+                // The Companion tab's box is a MUTE and no longer mirrors the enable, so it is
+                // driven from SubAudioMuted rather than !enabled (AppSettings.SubAudioMuted).
+                CompanionTab.ChkMuteWhispersCompanion.IsChecked =
+                    App.Settings?.Current?.SubAudioMuted == true;
             }
             finally
             {

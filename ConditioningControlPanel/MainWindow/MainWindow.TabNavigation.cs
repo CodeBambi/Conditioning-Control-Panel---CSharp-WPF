@@ -178,7 +178,7 @@ namespace ConditioningControlPanel
                     // Training Programs own the day's feature mix. Re-derived (never latched) on
                     // every show of the Dashboard, so arriving here can never find a stale lock -
                     // not after a crash, an abort, or a session event that fired out of order.
-                    RefreshProgramFeatureLock();
+                    RefreshSessionFeatureLock();
                     // Weekly intake pass: paint the centre tile, and play the once-a-week flip
                     // ceremony if this week's reveal hasn't run yet. Must be AFTER the tab is made
                     // visible - the spin is skipped for an off-screen tile so a background login
