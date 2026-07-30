@@ -674,6 +674,17 @@ namespace ConditioningControlPanel.Services
                             }
                         }
 
+                        // Sync the cumulable streak-fix charge balance. The server grants +1 per season
+                        // rollover and decrements on spend, so it is authoritative in both directions.
+                        if (v2Result?.OopsieCredits != null && settings.StreakFixCharges != v2Result.OopsieCredits.Value)
+                        {
+                            var oldCharges = settings.StreakFixCharges;
+                            settings.StreakFixCharges = v2Result.OopsieCredits.Value;
+                            App.Settings?.Save();
+                            App.Logger?.Information("V2 Sync: Streak fix charges synced from server: {Old} -> {New}",
+                                oldCharges, v2Result.OopsieCredits.Value);
+                        }
+
                         // Sync display name from server (server is authoritative — admin renames, etc.)
                         if (!string.IsNullOrEmpty(v2Result?.User?.DisplayName) &&
                             v2Result.User.DisplayName != settings.UserDisplayName)
@@ -2860,6 +2871,9 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("oopsie_used_season")]
             public string? OopsieUsedSeason { get; set; }
 
+            [JsonProperty("oopsie_credits")]
+            public int? OopsieCredits { get; set; }
+
             [JsonProperty("is_season0_og")]
             public bool? IsSeason0Og { get; set; }
 
@@ -2922,6 +2936,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("oopsie_used_season")]
             public string? OopsieUsedSeason { get; set; }
+
+            [JsonProperty("oopsie_credits")]
+            public int? OopsieCredits { get; set; }
         }
 
         private class OopsieErrorResponse

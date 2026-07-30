@@ -392,7 +392,8 @@
                                                FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                     <Button x:Name="BtnFixStreak" x:FieldModifier="internal" Grid.Column="2" Content="{loc:Str btn_fix_day}"
                                             Style="{StaticResource OutlineButton}" Padding="8,3" FontSize="11"
-                                            Click="BtnFixStreak_Click" Visibility="Collapsed" VerticalAlignment="Center"/>
+                                            Click="BtnFixStreak_Click" Visibility="Collapsed" VerticalAlignment="Center"
+                                            ToolTipService.ShowOnDisabled="True"/>
                                 </Grid>
                                 <Canvas x:Name="StreakCalendarCanvas" x:FieldModifier="internal" Height="50" ClipToBounds="True"
                                        SizeChanged="StreakCalendarCanvas_SizeChanged"/>
@@ -414,27 +415,39 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" HorizontalAlignment="Center">
                                         <TextBlock x:Name="TxtTotalDailyCompleted" x:FieldModifier="internal" Text="0"
-                                                   Foreground="#FFD700" FontSize="28" FontWeight="Bold"
+                                                   Foreground="#FFD700" FontSize="24" FontWeight="Bold"
                                                    HorizontalAlignment="Center"/>
                                         <TextBlock Text="{loc:Str label_daily_completed}" Foreground="#888888"
-                                                   FontSize="11" HorizontalAlignment="Center"/>
+                                                   FontSize="11" HorizontalAlignment="Center" TextAlignment="Center"
+                                                   TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" HorizontalAlignment="Center">
                                         <TextBlock x:Name="TxtTotalWeeklyCompleted" x:FieldModifier="internal" Text="0"
-                                                   Foreground="#9370DB" FontSize="28" FontWeight="Bold"
+                                                   Foreground="#9370DB" FontSize="24" FontWeight="Bold"
                                                    HorizontalAlignment="Center"/>
                                         <TextBlock Text="{loc:Str label_weekly_completed}" Foreground="#888888"
-                                                   FontSize="11" HorizontalAlignment="Center"/>
+                                                   FontSize="11" HorizontalAlignment="Center" TextAlignment="Center"
+                                                   TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="2" HorizontalAlignment="Center">
                                         <TextBlock x:Name="TxtTotalQuestXP" x:FieldModifier="internal" Text="0"
-                                                   Foreground="{DynamicResource PinkBrush}" FontSize="28" FontWeight="Bold"
+                                                   Foreground="{DynamicResource PinkBrush}" FontSize="24" FontWeight="Bold"
                                                    HorizontalAlignment="Center"/>
                                         <TextBlock Text="{loc:Str label_total_xp_earned}" Foreground="#888888"
-                                                   FontSize="11" HorizontalAlignment="Center"/>
+                                                   FontSize="11" HorizontalAlignment="Center" TextAlignment="Center"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3" HorizontalAlignment="Center">
+                                        <TextBlock x:Name="TxtStreakFixCharges" x:FieldModifier="internal" Text="0"
+                                                   Foreground="#4FC3F7" FontSize="24" FontWeight="Bold"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str label_streak_fixes}" Foreground="#888888"
+                                                   FontSize="11" HorizontalAlignment="Center" TextAlignment="Center"
+                                                   TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
