@@ -109,6 +109,9 @@ namespace ConditioningControlPanel
             StopSeasonTitleShimmer();
             StopLockdownPulse();
             StopSkillTreeAnimations();
+            // Every registered AmbientFxCanvas parks with its tab (see MainWindow.AmbientFx.cs) —
+            // new per-tab canvases get the stop hook without touching this method again.
+            SwitchTabFx(tab);
 
             // Hide all tabs
             SettingsTab.Visibility = Visibility.Collapsed;

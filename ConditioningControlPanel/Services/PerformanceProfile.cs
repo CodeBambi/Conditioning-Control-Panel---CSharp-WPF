@@ -94,6 +94,30 @@ public static class PerformanceProfile
         _ => 24,
     };
 
+    /// <summary>
+    /// Whether ambient (idle, always-on) motion is allowed at all, per tier. Every looping FX -
+    /// fog drifts, shimmers, animated gradient brushes, marquees, AmbientFxCanvas - checks this
+    /// BEFORE starting its clock, so the Performance tier costs zero instead of "less pretty but
+    /// still burning CPU". One-shot interaction motion (hover, press, transitions) is not gated.
+    /// </summary>
+    public static bool AllowAmbientMotion(PerformanceTier tier) => tier != PerformanceTier.Performance;
+
+    /// <summary>Particle budget for one ambient canvas, per tier (0 = no particle layers).</summary>
+    public static int MaxAmbientParticles(PerformanceTier tier) => tier switch
+    {
+        PerformanceTier.Performance => 0,
+        PerformanceTier.Balanced => 24,
+        _ => 60,
+    };
+
+    /// <summary>Target frames per second for ambient Skia canvases, per tier (0 = do not run).</summary>
+    public static int FxTargetFps(PerformanceTier tier) => tier switch
+    {
+        PerformanceTier.Performance => 0,
+        PerformanceTier.Balanced => 24,
+        _ => 30,
+    };
+
     /// <summary>Brain Drain screen-capture frames per second, per tier.</summary>
     public static int BrainDrainFps(PerformanceTier tier) => tier switch
     {
