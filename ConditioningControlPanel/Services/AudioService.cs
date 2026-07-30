@@ -499,13 +499,15 @@ namespace ConditioningControlPanel.Services
                 var settings = App.Settings?.Current;
                 if (settings != null)
                 {
-                    App.Logger?.Information("[AudioDiag] Settings: MasterVolume={Master}%, SubAudioEnabled={SubEnabled}, SubAudioVolume={SubVol}%, FlashAudioEnabled={FlashEnabled}, AudioDuckingEnabled={DuckEnabled}",
-                        settings.MasterVolume, settings.SubAudioEnabled, settings.SubAudioVolume, settings.FlashAudioEnabled, settings.AudioDuckingEnabled);
+                    App.Logger?.Information("[AudioDiag] Settings: MasterVolume={Master}%, SubAudioEnabled={SubEnabled}, SubAudioMuted={SubMuted}, SubAudioVolume={SubVol}%, FlashAudioEnabled={FlashEnabled}, AudioDuckingEnabled={DuckEnabled}",
+                        settings.MasterVolume, settings.SubAudioEnabled, settings.SubAudioMuted, settings.SubAudioVolume, settings.FlashAudioEnabled, settings.AudioDuckingEnabled);
 
                     if (settings.MasterVolume == 0)
                         App.Logger?.Warning("[AudioDiag] MasterVolume is 0% — ALL audio will be silent");
                     if (!settings.SubAudioEnabled)
                         App.Logger?.Information("[AudioDiag] SubAudioEnabled is OFF — whisper/trigger audio will not play");
+                    else if (settings.SubAudioMuted)
+                        App.Logger?.Information("[AudioDiag] Whispers are MUTED (SubAudioMuted) — enabled but silenced by the user");
                 }
             }
             catch (Exception ex)
@@ -605,6 +607,7 @@ namespace ConditioningControlPanel.Services
             {
                 diagnostics.AppendLine($"\nMaster Volume: {s.MasterVolume}%");
                 diagnostics.AppendLine($"Whispers Enabled: {s.SubAudioEnabled}");
+                diagnostics.AppendLine($"Whispers Muted: {s.SubAudioMuted}");
                 diagnostics.AppendLine($"Whisper Volume: {s.SubAudioVolume}%");
                 diagnostics.AppendLine($"Flash Audio Enabled: {s.FlashAudioEnabled}");
                 var effectiveWhisperVol = Math.Pow((s.SubAudioVolume / 100.0) * (s.MasterVolume / 100.0), 1.5) * 100;

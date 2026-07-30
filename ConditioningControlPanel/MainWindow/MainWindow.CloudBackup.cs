@@ -81,6 +81,10 @@ namespace ConditioningControlPanel
         internal async void BtnRestoreSettings_Click(object sender, RoutedEventArgs e)
         {
             if (App.ProfileSync == null) return;
+            // SettingsService.RestoreFrom swaps the whole AppSettings object, so mid-session every
+            // prescribed value is gone at once - the largest blast radius of any bypass, even
+            // though this tab is rarely visited during a session.
+            if (RefuseActionIfSessionLocked("cloud-restore-settings")) return;
 
             var confirm = MessageBox.Show(
                 Loc.Get("msg_restore_settings_confirm"),

@@ -130,10 +130,70 @@
 
                                             <!-- Header + copy -->
                                             <StackPanel Grid.Row="2" Margin="18,16,18,0">
+                                                <!--
+                                                    Identity crest. Exactly one of this and the bare
+                                                    glyph below it is ever visible - the same contract
+                                                    as the run header's sigil-or-accent-bar slot. No
+                                                    art resolves, no crest, and the card is exactly
+                                                    the one that shipped before this existed.
+
+                                                    Negative margins are load-bearing, not sloppy: the
+                                                    halo is 8px wider than the chip on every side, so
+                                                    pulling the host back by 8 lands the CHIP on the
+                                                    StackPanel's 18,16 origin and keeps it optically
+                                                    flush with the title underneath.
+                                                -->
+                                                <Grid Width="88" Height="88" HorizontalAlignment="Left"
+                                                      Margin="-8,-8,0,2"
+                                                      Visibility="{Binding ArtVisibility}">
+                                                    <Ellipse Width="88" Height="88" Opacity="0.55"
+                                                             IsHitTestVisible="False"
+                                                             Fill="{Binding ArtGlowBrush}"/>
+
+                                                    <Border Width="72" Height="72" CornerRadius="36"
+                                                            Background="{DynamicResource SurfaceBgBrush}"
+                                                            BorderBrush="{DynamicResource GlassBorderBrush}"
+                                                            BorderThickness="1">
+                                                        <!--
+                                                            Program art is white RGB with its luminance in
+                                                            the ALPHA channel (see Services/Program/ProgramArt.cs),
+                                                            so it is a Rectangle FILLED with the program
+                                                            accent and MASKED by the image - never an
+                                                            <Image>, which renders a near-invisible
+                                                            white-on-transparent smear, and never a
+                                                            translucent accent over opaque greyscale, which
+                                                            lifts the blacks and gives the washed-out
+                                                            "failed tint" look. Fill + OpacityMask is also
+                                                            why the crest can only ever be the program's own
+                                                            colour, so it cannot clash under any mod.
+
+                                                            Rounded to match the chip: the generated art does
+                                                            not fall off to pure black at its edges, so a
+                                                            square Rectangle paints a faint accent SQUARE
+                                                            inside the round host.
+
+                                                            Held just off full so the glyph on top stays the
+                                                            thing the eye lands on.
+                                                        -->
+                                                        <Rectangle Width="66" Height="66"
+                                                                   RadiusX="33" RadiusY="33" Opacity="0.8"
+                                                                   Fill="{Binding AccentBrush}"
+                                                                   OpacityMask="{Binding ArtMask}"/>
+                                                    </Border>
+
+                                                    <!-- The program's own glyph, on its own art. Four of the
+                                                         five shipped programs have no sigil and land on the
+                                                         same shared archetype plate, so the glyph is what
+                                                         keeps their crests apart at a glance. -->
+                                                    <helpers:EmojiTextBlock Text="{Binding Icon}" FontSize="30"
+                                                                            HorizontalAlignment="Center"
+                                                                            VerticalAlignment="Center"/>
+                                                </Grid>
+
                                                 <helpers:EmojiTextBlock Text="{Binding Icon}" FontSize="44"
                                                                         HorizontalAlignment="Left"
                                                                         Margin="0,0,0,10"
-                                                                        Visibility="{Binding IconVisibility}"/>
+                                                                        Visibility="{Binding IconOnlyVisibility}"/>
                                                 <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextLightBrush}"
                                                            FontSize="18" FontWeight="Bold" TextWrapping="Wrap"/>
                                                 <WrapPanel Margin="0,8,0,0">

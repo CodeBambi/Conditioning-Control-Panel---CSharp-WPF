@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
       <Grid>
@@ -48,7 +49,7 @@
                         <Ellipse x:Name="AwarenessStatusDot" x:FieldModifier="internal" Width="8" Height="8" Fill="#606060" Margin="0,0,8,0"/>
                         <TextBlock x:Name="TxtAwarenessStatus" x:FieldModifier="internal" Text="Off" Foreground="#A0A0A0"
                                    FontSize="12" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                        <CheckBox x:Name="ChkAwarenessMaster" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
+                        <CheckBox x:Name="ChkAwarenessMaster" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}"
                                   VerticalAlignment="Center"
                                   Checked="ChkAwarenessMaster_Changed" Unchecked="ChkAwarenessMaster_Changed">
                             <CheckBox.ToolTip>
@@ -278,6 +279,90 @@
                             </CheckBox>
                             <TextBlock Text="OCR skips words inside Control Panel, avatar bubbles, and subliminal flashes — so she won't react to her own voice."
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,10"/>
+
+                            <!-- ===== Where triggers may fire =====
+                                 Scopes every source (OCR, keyboard, clipboard) by the process that
+                                 owns the foreground window. Defaults to Everywhere, which is exactly
+                                 what shipped before this existed, so this panel is inert until the
+                                 mode is changed. The list + chips collapse in that state - see
+                                 MainWindow.Awareness.cs RefreshAwarenessAppScopeUi. -->
+                            <Border Background="#141426" BorderBrush="#2E2E48" BorderThickness="1"
+                                    CornerRadius="8" Padding="10,8" Margin="0,0,0,10">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBlock Text="Where she may notice" Foreground="White"
+                                                   FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock Text="Triggers normally fire in whatever app you're in. Narrow that here — it applies to typing, OCR and clipboard alike."
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                               TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                    <ComboBox x:Name="CmbAwarenessAppScope" x:FieldModifier="internal"
+                                              SelectionChanged="CmbAwarenessAppScope_SelectionChanged"
+                                              Background="White" Foreground="Black"
+                                              FontSize="11" Padding="6,4" HorizontalAlignment="Left" MinWidth="210">
+                                        <ComboBox.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel MaxWidth="340">
+                                                    <TextBlock Text="Where triggers may fire" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                        Judged by the app that owns the window you're focused on, checked at the moment a keyword would fire.
+                                                    </TextBlock>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                        Use "Everywhere except" to keep her out of work, calls and shared screens. Use "Only in" when you want her limited to one or two apps. If an app refuses to identify itself, "Only in" stays quiet and "except" still fires.
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </ComboBox.ToolTip>
+                                        <ComboBoxItem Content="Everywhere" Tag="Everywhere"
+                                                      Foreground="Black" Background="White" IsSelected="True"/>
+                                        <ComboBoxItem Content="Everywhere except these apps" Tag="ExceptListed"
+                                                      Foreground="Black" Background="White"/>
+                                        <ComboBoxItem Content="Only in these apps" Tag="OnlyListed"
+                                                      Foreground="Black" Background="White"/>
+                                    </ComboBox>
+
+                                    <StackPanel x:Name="AwarenessAppListPanel" x:FieldModifier="internal"
+                                                Visibility="Collapsed" Margin="0,8,0,0">
+                                        <TextBox x:Name="TxtAwarenessAppList" x:FieldModifier="internal"
+                                                 Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
+                                                 FontSize="11" Padding="6,4"
+                                                 ToolTip="App names, comma separated — e.g. chrome, discord, ms-teams. The .exe is optional. Press Enter or click away to apply."
+                                                 LostFocus="TxtAwarenessAppList_LostFocus"
+                                                 KeyDown="TxtAwarenessAppList_KeyDown"/>
+                                        <TextBlock Text="Comma separated app names. The .exe is optional."
+                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="10"
+                                                   TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                        <TextBlock x:Name="TxtAwarenessSeenAppsLabel" x:FieldModifier="internal"
+                                                   Text="Recently focused — click to add:"
+                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="10"
+                                                   Margin="0,8,0,4" Visibility="Collapsed"/>
+                                        <!-- Filled at runtime from KeywordTriggerService.GetRecentForegroundApps():
+                                             nobody knows offhand that Teams is "ms-teams", so the list is
+                                             unusable without this. -->
+                                        <WrapPanel x:Name="AwarenessSeenAppsPanel" x:FieldModifier="internal"/>
+                                    </StackPanel>
+
+                                    <CheckBox x:Name="ChkAwarenessIgnoreOwnFocus" x:FieldModifier="internal"
+                                              Foreground="White" FontSize="11" Margin="0,10,0,0"
+                                              Checked="ChkAwarenessIgnoreOwnFocus_Changed"
+                                              Unchecked="ChkAwarenessIgnoreOwnFocus_Changed">
+                                        <CheckBox.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel MaxWidth="340">
+                                                    <TextBlock Text="Stay quiet while Control Panel has focus" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                        Stops a keyword firing when you type it into Control Panel itself — the trigger editor, the search box, or the companion's chat box.
+                                                    </TextBlock>
+                                                    <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                        Different from "Ignore CCP's own windows" above, which only filters OCR by screen position and cannot see your typing at all. Leave this off if you want her reacting to what you say to her in chat.
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </CheckBox.ToolTip>
+                                        <TextBlock Text="Stay quiet while Control Panel has focus" TextWrapping="Wrap"/>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
                             <CheckBox x:Name="ChkAwarenessLoopProtection" x:FieldModifier="internal"
                                       Foreground="White" FontSize="12" Margin="0,4,0,2"
                                       Checked="ChkAwarenessLoopProtection_Changed" Unchecked="ChkAwarenessLoopProtection_Changed">
@@ -402,7 +487,7 @@
     
         <!-- Translucent gating overlay (only for free users) -->
         <Border x:Name="AwarenessGate" x:FieldModifier="internal" Visibility="Collapsed"
-                Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
+                Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
                 CornerRadius="10" IsHitTestVisible="True">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
@@ -410,7 +495,7 @@
                            FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                 <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
                            Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
                         Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
                     <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
                 </Button>

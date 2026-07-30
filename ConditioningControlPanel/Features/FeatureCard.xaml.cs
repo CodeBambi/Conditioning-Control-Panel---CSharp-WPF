@@ -1,16 +1,41 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Features
 {
     /// <summary>
     /// Click-to-open tile for a feature on the dashboard grid. Shows an icon + title;
     /// when locked, desaturates the content and overlays a padlock + required level.
+    ///
+    /// FX (PR-2 of the overhaul), all of it opacity-only and all of it colour-driven from
+    /// FxTheme so a mod switch re-tints the mosaic without touching this file:
+    ///   * hover  = <see cref="MotionFx.HoverLift"/> on the root border + a 150ms rim-light;
+    ///   * active = the ActiveGlow drop shadow and the ring breathe together on one 3.5s clock.
+    /// Both clocks are gated on <see cref="MotionFx"/> + <see cref="PerformanceProfile"/> and stop
+    /// when the window is deactivated or minimised; the resting state is the static art that
+    /// shipped before, never "the same thing, slower".
     /// </summary>
     public partial class FeatureCard : UserControl
     {
+        private const double ActiveGlowMinOpacity = 0.50;
+        private const double ActiveGlowMaxOpacity = 0.90;
+        private const double ActiveRingMinOpacity = 0.55;
+        private const double ActiveRingMaxOpacity = 1.00;
+        private const double ActiveBreathSeconds = 3.5;
+        private const double RimLightOpacity = 0.85;
+        private const int RimLightMs = 150;
+        private const int AmbientFrameRate = 24;
+
+        private Window? _hostWindow;
+        private bool _hovered;
+
         public static readonly DependencyProperty TitleProperty =
             DependencyProperty.Register(nameof(Title), typeof(string), typeof(FeatureCard),
                 new PropertyMetadata("Feature", OnTitleChanged));
@@ -123,7 +148,10 @@ namespace ConditioningControlPanel.Features
             // Build the help tooltip once the card is in the visual tree so that
             // FindResource can walk up into the owning Window's resources where
             // HelpButtonStyle / HelpTooltipStyle / PinkBrush live.
-            Loaded += (_, _) => RefreshHelpTooltip();
+            Loaded += OnCardLoaded;
+            Unloaded += OnCardUnloaded;
+            MouseEnter += OnCardMouseEnter;
+            MouseLeave += OnCardMouseLeave;
         }
 
         private static void OnTitleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -233,7 +261,172 @@ namespace ConditioningControlPanel.Features
             // can't really be "on" even if the underlying setting is true.
             var showActive = IsActive && !IsLocked;
             ActiveBorder.Visibility = showActive ? Visibility.Visible : Visibility.Collapsed;
-            ActiveGlow.Opacity = showActive ? 0.55 : 0.0;
+            ApplyActiveBreath(showActive);
+        }
+
+        // ============================== FX ==============================
+
+        /// <summary>
+        /// Re-evaluates every clock this card owns. Called on load, on activation changes, and
+        /// from MainWindow when the mod or the reduced-motion setting moves.
+        /// </summary>
+        internal void RefreshFx()
+        {
+            try { ApplyActiveBreath(IsActive && !IsLocked); }
+            catch (Exception ex) { App.Logger?.Debug("FeatureCard.RefreshFx: {E}", ex.Message); }
+        }
+
+        /// <summary>The single gate for this card's ambient clock: window focus + motion + tier.</summary>
+        private bool AmbientAllowed
+        {
+            get
+            {
+                var w = _hostWindow;
+                if (w != null && (!w.IsActive || w.WindowState == WindowState.Minimized)) return false;
+                return MotionFx.AllowAmbientLoops;
+            }
+        }
+
+        /// <summary>
+        /// The active tile's breath: the drop shadow and the ring share one 3.5s clock so the
+        /// tile pulses as one object rather than as two overlapping effects. When ambient motion
+        /// is not allowed both park at their PEAK values, which is the static look that shipped -
+        /// degrading to "dimmer forever" would just look broken.
+        /// </summary>
+        private void ApplyActiveBreath(bool active)
+        {
+            try
+            {
+                if (ActiveGlow == null || ActiveBorder == null) return;
+
+                if (!active)
+                {
+                    StopAnim(ActiveGlow, DropShadowEffect.OpacityProperty);
+                    ActiveGlow.Opacity = 0;
+                    ActiveBorder.BeginAnimation(OpacityProperty, null);
+                    ActiveBorder.Opacity = 1;
+                    return;
+                }
+
+                var tier = PerformanceProfile.CurrentTier;
+                bool glow = PerformanceProfile.AllowGlow(tier) && MotionFx.Level != MotionLevel.Off;
+                if (glow && !ActiveGlow.IsFrozen)
+                    ActiveGlow.BlurRadius = Math.Min(18, PerformanceProfile.MaxGlowBlurRadius(tier));
+
+                if (!AmbientAllowed)
+                {
+                    StopAnim(ActiveGlow, DropShadowEffect.OpacityProperty);
+                    ActiveGlow.Opacity = glow ? ActiveGlowMaxOpacity : 0;
+                    ActiveBorder.BeginAnimation(OpacityProperty, null);
+                    ActiveBorder.Opacity = ActiveRingMaxOpacity;
+                    return;
+                }
+
+                if (glow) Breathe(ActiveGlow, DropShadowEffect.OpacityProperty, ActiveGlowMinOpacity, ActiveGlowMaxOpacity);
+                else { StopAnim(ActiveGlow, DropShadowEffect.OpacityProperty); ActiveGlow.Opacity = 0; }
+
+                Breathe(ActiveBorder, OpacityProperty, ActiveRingMinOpacity, ActiveRingMaxOpacity);
+            }
+            catch (Exception ex) { App.Logger?.Debug("FeatureCard.ApplyActiveBreath: {E}", ex.Message); }
+        }
+
+        private static void Breathe(IAnimatable target, DependencyProperty property, double min, double max)
+        {
+            if (target is Freezable { IsFrozen: true }) return;
+            var anim = new DoubleAnimation(min, max, TimeSpan.FromSeconds(ActiveBreathSeconds))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+            };
+            Timeline.SetDesiredFrameRate(anim, AmbientFrameRate);
+            target.BeginAnimation(property, anim);
+        }
+
+        private static void StopAnim(IAnimatable target, DependencyProperty property)
+        {
+            if (target is Freezable { IsFrozen: true }) return;
+            target.BeginAnimation(property, null);
+        }
+
+        private void OnCardLoaded(object sender, RoutedEventArgs e)
+        {
+            RefreshHelpTooltip();
+            try
+            {
+                HookWindow(Window.GetWindow(this));
+                RefreshFx();
+            }
+            catch (Exception ex) { App.Logger?.Debug("FeatureCard.OnCardLoaded: {E}", ex.Message); }
+        }
+
+        private void OnCardUnloaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                UnhookWindow();
+                ApplyActiveBreath(false);
+            }
+            catch (Exception ex) { App.Logger?.Debug("FeatureCard.OnCardUnloaded: {E}", ex.Message); }
+        }
+
+        private void HookWindow(Window? window)
+        {
+            if (ReferenceEquals(_hostWindow, window)) return;
+            UnhookWindow();
+            _hostWindow = window;
+            if (_hostWindow == null) return;
+            _hostWindow.Activated += OnHostWindowStateish;
+            _hostWindow.Deactivated += OnHostWindowStateish;
+            _hostWindow.StateChanged += OnHostWindowStateish;
+        }
+
+        private void UnhookWindow()
+        {
+            if (_hostWindow == null) return;
+            _hostWindow.Activated -= OnHostWindowStateish;
+            _hostWindow.Deactivated -= OnHostWindowStateish;
+            _hostWindow.StateChanged -= OnHostWindowStateish;
+            _hostWindow = null;
+        }
+
+        private void OnHostWindowStateish(object? sender, EventArgs e) => RefreshFx();
+
+        private void OnCardMouseEnter(object sender, MouseEventArgs e) => ApplyHover(true);
+
+        private void OnCardMouseLeave(object sender, MouseEventArgs e) => ApplyHover(false);
+
+        /// <summary>
+        /// Hover: a 1.02 lift plus the rim-light. RenderTransform only, so the tile never takes
+        /// layout with it - the 6px margin on RootBorder is the headroom the lift paints into.
+        /// </summary>
+        private void ApplyHover(bool on)
+        {
+            if (_hovered == on) return;
+            _hovered = on;
+            try
+            {
+                // A locked tile is not an affordance; lighting it up on hover promises a click
+                // that does nothing.
+                if (IsLocked) on = false;
+
+                MotionFx.HoverLift(RootBorder, on);
+
+                if (RimLight == null) return;
+                double to = on ? RimLightOpacity : 0;
+                if (!MotionFx.AllowTransitions)
+                {
+                    RimLight.BeginAnimation(OpacityProperty, null);
+                    RimLight.Opacity = to;
+                    return;
+                }
+                var fade = new DoubleAnimation(to, TimeSpan.FromMilliseconds(RimLightMs))
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                };
+                RimLight.BeginAnimation(OpacityProperty, fade);
+            }
+            catch (Exception ex) { App.Logger?.Debug("FeatureCard.ApplyHover: {E}", ex.Message); }
         }
 
         private void OnClick(object sender, MouseButtonEventArgs e)

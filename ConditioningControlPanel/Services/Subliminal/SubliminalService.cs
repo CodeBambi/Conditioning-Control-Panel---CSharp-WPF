@@ -209,7 +209,7 @@ namespace ConditioningControlPanel.Services
             // Check for linked audio
             string? audioPath = FindLinkedAudio(text);
             
-            if (audioPath != null && App.Settings.Current.SubAudioEnabled)
+            if (audioPath != null && App.Settings.Current.SubAudioAudible)
             {
                 // Duck other audio, play whisper, then show visual
                 if (App.Settings.Current.AudioDuckingEnabled)
@@ -368,7 +368,7 @@ namespace ConditioningControlPanel.Services
             var resetText = App.Mods?.GetResetTriggerText() ?? "Reset";
             string? resetAudio = FindLinkedAudio(resetText);
 
-            if (resetAudio != null && App.Settings.Current.SubAudioEnabled)
+            if (resetAudio != null && App.Settings.Current.SubAudioAudible)
             {
                 if (App.Settings.Current.AudioDuckingEnabled)
                     App.Audio?.Duck(App.Settings.Current.DuckingLevel);
@@ -398,7 +398,7 @@ namespace ConditioningControlPanel.Services
         public void PlayTriggerAudio(string trigger)
         {
             // Check if whispers are enabled
-            if (App.Settings?.Current?.SubAudioEnabled != true)
+            if (App.Settings?.Current?.SubAudioAudible != true)
             {
                 return;
             }

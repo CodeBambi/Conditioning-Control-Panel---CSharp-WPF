@@ -2,7 +2,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
-             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers">
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features">
 
     <StackPanel>
         <!-- Master enable -->
@@ -21,6 +22,7 @@
                                TextWrapping="Wrap" Margin="0,2,0,0"/>
                 </StackPanel>
                 <CheckBox Grid.Column="1" x:Name="ChkEnable"
+                          feat:SessionLock.Owned="True"
                           Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                           Checked="ChkEnable_Changed" Unchecked="ChkEnable_Changed"/>
             </Grid>
@@ -37,6 +39,7 @@
                                Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                 </Grid>
                 <Slider x:Name="SliderFrequency" Minimum="1" Maximum="180" Value="10"
+                        feat:SessionLock.Owned="True"
                         ValueChanged="SliderFrequency_Changed"/>
             </StackPanel>
         </Border>
@@ -52,6 +55,7 @@
                                Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                 </Grid>
                 <Slider x:Name="SliderImages" Minimum="1" Maximum="20" Value="5"
+                        feat:SessionLock.Owned="True"
                         ValueChanged="SliderImages_Changed"/>
             </StackPanel>
         </Border>

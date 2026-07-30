@@ -602,6 +602,31 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Map the active mod to the theme id the community bot uses to pick a voice for the post.
+        /// Community/custom mods (and anything we can't resolve) fall back to "default".
+        /// </summary>
+        private static string GetModThemeId()
+        {
+            try
+            {
+                return App.Mods?.ActiveModId switch
+                {
+                    BuiltInMods.CCPDefaultId => "default",
+                    BuiltInMods.BambiSleepId => "bambi",
+                    BuiltInMods.SissyHypnoId => "sissy",
+                    BuiltInMods.DronificationId => "drone",
+                    BuiltInMods.LockedId => "circe",
+                    _ => "default"
+                };
+            }
+            catch
+            {
+                // Never throw: this runs inside the fire-and-forget share path.
+                return "default";
+            }
+        }
+
+        /// <summary>
         /// Send achievement announcement to community Discord via server
         /// </summary>
         public async Task<bool> SendAchievementWebhookAsync(Achievement achievement, string? displayName = null)
@@ -625,7 +650,11 @@ namespace ConditioningControlPanel.Services
                     unified_id = unifiedId,
                     achievement_name = achievement.Name,
                     achievement_requirement = achievement.Requirement,
-                    image_name = achievement.ImageName
+                    image_name = achievement.ImageName,
+                    // New fields the bot composes mod-themed posts from; the legacy fields above
+                    // stay so servers that haven't rolled out yet keep working.
+                    achievement_id = achievement.Id,
+                    mod_id = GetModThemeId()
                 };
 
                 var request = new HttpRequestMessage(HttpMethod.Post, "/discord/community-webhook")
@@ -687,7 +716,9 @@ namespace ConditioningControlPanel.Services
                     display_name = name,
                     unified_id = unifiedId,
                     level = level,
-                    image_name = imageName
+                    image_name = imageName,
+                    // Lets the bot theme the post; legacy servers ignore it and keep using image_name.
+                    mod_id = GetModThemeId()
                 };
 
                 var request = new HttpRequestMessage(HttpMethod.Post, "/discord/community-webhook")

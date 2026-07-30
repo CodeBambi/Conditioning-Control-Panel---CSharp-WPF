@@ -870,8 +870,8 @@ namespace ConditioningControlPanel.Services.Quiz
                 // Respect the WPF global subliminal-audio toggle: when it's OFF, whispers
                 // are off everywhere, so the intake ships text-only entries (no audio
                 // resolution / inlining at all). Mirrors SubliminalService, which gates
-                // every whisper playback on the same SubAudioEnabled flag.
-                bool audioEnabled = App.Settings?.Current?.SubAudioEnabled == true;
+                // every whisper playback on the same SubAudioAudible flag (enabled AND not muted).
+                bool audioEnabled = App.Settings?.Current?.SubAudioAudible == true;
 
                 long budget = SubAudioBudgetBytes;
                 var list = new List<object>(active.Count);

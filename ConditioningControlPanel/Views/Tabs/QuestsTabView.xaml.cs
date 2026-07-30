@@ -10,6 +10,15 @@ namespace ConditioningControlPanel.Views.Tabs
         public QuestsTabView()
         {
             InitializeComponent();
+            // FX lifecycle (PR-3a): the quest bars are filled from the tab's own show, because
+            // RefreshQuestUI runs before the tracks have ever been measured.
+            IsVisibleChanged += QuestsTabView_IsVisibleChanged;
+        }
+
+        private void QuestsTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnQuestsTabVisibilityChanged(IsVisible);
         }
 
         private void BtnFixStreak_Click(object sender, RoutedEventArgs e)

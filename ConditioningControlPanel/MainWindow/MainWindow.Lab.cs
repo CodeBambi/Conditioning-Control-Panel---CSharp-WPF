@@ -312,7 +312,12 @@ namespace ConditioningControlPanel
                            || state == Services.IntakePassState.Available;
 
                 if (GradedIntakeTab.GradedIntakeGate != null)
+                {
                     GradedIntakeTab.GradedIntakeGate.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+                    // FX (PR-4a): the shared animated gate treatment. Decoration only - it never
+                    // touches Visibility, the three-state copy, or the pass logic above.
+                    Controls.PremiumGateFx.Attach(GradedIntakeTab.GradedIntakeGate);
+                }
                 if (GradedIntakeTab.GradedIntakeGatedContent != null)
                     GradedIntakeTab.GradedIntakeGatedContent.IsEnabled = open;
                 if (GradedIntakeTab.GradedIntakePassBanner != null)

@@ -31,13 +31,32 @@ namespace ConditioningControlPanel.Views.Tabs
         /// <summary>
         /// The program's banner strip for the card's header band - the same art the Dashboard
         /// Today card wears, resolved with no generic fallback (see ProgramArt.Banner). Null
-        /// collapses the band and the emoji icon carries the header alone.
+        /// collapses the band.
         /// </summary>
         public ImageSource? BannerArt { get; set; }
         public Visibility BannerVisibility { get; set; } = Visibility.Collapsed;
 
-        /// <summary>Inverse of <see cref="BannerVisibility"/> - the emoji is the no-art fallback.</summary>
-        public Visibility IconVisibility { get; set; } = Visibility.Visible;
+        /// <summary>
+        /// The program's art, as the OPACITY MASK for the crest's accent-filled Rectangle - never as
+        /// an Image source. Program art ships as white RGB with its luminance in the ALPHA channel
+        /// (see Services/Program/ProgramArt.cs), so accent Fill + this as the mask is what makes
+        /// bright source read as full accent and dark source as transparent. Null when nothing
+        /// resolves, in which case <see cref="ArtVisibility"/> collapses the crest.
+        /// </summary>
+        public Brush? ArtMask { get; set; }
+
+        /// <summary>Accent halo behind the crest. Frozen radial, built in code from the accent.</summary>
+        public Brush ArtGlowBrush { get; set; } = Brushes.Transparent;
+
+        /// <summary>Shows the art crest. Collapsed is the normal no-art state, not a failure.</summary>
+        public Visibility ArtVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>
+        /// Inverse of <see cref="ArtVisibility"/>: the bare 44px glyph the card showed before the
+        /// crest existed. Exactly one of the two is ever visible, so missing art costs the card its
+        /// crest and nothing else - same contract as the run header's sigil-or-accent-bar slot.
+        /// </summary>
+        public Visibility IconOnlyVisibility { get; set; } = Visibility.Visible;
 
         /// <summary>Premium program the user cannot currently take - the ✨ locked treatment.</summary>
         public bool IsLocked { get; set; }

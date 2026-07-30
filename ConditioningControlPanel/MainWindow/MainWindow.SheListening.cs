@@ -513,6 +513,10 @@ namespace ConditioningControlPanel
                     : new SolidColorBrush(Color.FromRgb(0x90, 0xEE, 0x90));
             }
 
+            // FX (PR-4a): the mic disc breathes only while the mic is genuinely armed. Not "the tab
+            // is open", not "a device exists" - armed. Everything else leaves it a still disc.
+            SetSheListeningStatusPulse(armed);
+
             if (!available)
             {
                 SheListeningTab.SL_StatusDot.Fill = new SolidColorBrush(Color.FromRgb(0x5A, 0x4A, 0x6A));

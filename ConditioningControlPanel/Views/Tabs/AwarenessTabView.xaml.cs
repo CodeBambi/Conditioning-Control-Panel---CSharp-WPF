@@ -42,6 +42,26 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkAwarenessIgnoreOwnUi_Changed(sender, e);
         }
+        private void ChkAwarenessIgnoreOwnFocus_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkAwarenessIgnoreOwnFocus_Changed(sender, e);
+        }
+        private void CmbAwarenessAppScope_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.CmbAwarenessAppScope_SelectionChanged(sender, e);
+        }
+        private void TxtAwarenessAppList_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.TxtAwarenessAppList_KeyDown(sender, e);
+        }
+        private void TxtAwarenessAppList_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.TxtAwarenessAppList_LostFocus(sender, e);
+        }
         private void ChkAwarenessKeyboard_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

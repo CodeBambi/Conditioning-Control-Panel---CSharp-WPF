@@ -170,8 +170,23 @@ namespace ConditioningControlPanel.Services
         /// startup RestorePoolsFromSettings copies the stale backup over the active pool and
         /// the user's changes appear to disappear.
         /// </summary>
+        /// <summary>
+        /// Set while ActivateMod is itself rewriting the pools, so its own writes do not bounce back
+        /// through this mirror and get saved as if the user had made them.
+        ///
+        /// Load-bearing during a session. RestorePoolsFromSettings ASSIGNS each pool (which raises
+        /// INPC, unlike the in-place mutation SessionEngine uses), and so does
+        /// ReapplyPhrasePoolOverrides. Without this flag those two writes would fire the mirror
+        /// while _activeMod is already the INCOMING mod - saving the outgoing mod's pools, and then
+        /// the session's prescribed phrases, over the incoming mod's perfectly good backup. The
+        /// backup we just finished reading needs no rewrite, so suppressing is also simply correct.
+        /// </summary>
+        private bool _suppressPoolMirror;
+
         private void CurrentSettings_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
+            if (_suppressPoolMirror) return;
+
             if (e.PropertyName is not (nameof(AppSettings.SubliminalPool)
                 or nameof(AppSettings.AttentionPool)
                 or nameof(AppSettings.LockCardPhrases)
@@ -433,7 +448,7 @@ namespace ConditioningControlPanel.Services
         /// Validates and sanitizes a mod manifest on install.
         /// Returns null if valid, or an error message string if rejected.
         /// </summary>
-        private static string? SanitizeManifest(ModManifest manifest)
+        internal static string? SanitizeManifest(ModManifest manifest)
         {
             // --- Field length caps ---
             if (manifest.Name.Length > 100) return "Mod name is too long (max 100 characters).";
@@ -441,10 +456,11 @@ namespace ConditioningControlPanel.Services
             if (manifest.Author.Length > 100) return "Author name is too long (max 100 characters).";
             if (manifest.Description?.Length > 1000) manifest.Description = manifest.Description[..1000];
 
+            var hexPattern = new Regex(@"^#[0-9A-Fa-f]{6}$");
+
             // --- Theme color validation ---
             if (manifest.Theme != null)
             {
-                var hexPattern = new Regex(@"^#[0-9A-Fa-f]{6}$");
                 if (manifest.Theme.AccentColor != null && !hexPattern.IsMatch(manifest.Theme.AccentColor))
                     return "Accent color must be a valid #RRGGBB hex code.";
                 if (manifest.Theme.AccentLightColor != null && !hexPattern.IsMatch(manifest.Theme.AccentLightColor))
@@ -459,6 +475,21 @@ namespace ConditioningControlPanel.Services
                     return "Surface color must be a valid #RRGGBB hex code.";
                 if (manifest.Theme.FilterColor != null && !hexPattern.IsMatch(manifest.Theme.FilterColor))
                     return "Filter color must be a valid #RRGGBB hex code.";
+            }
+
+            // --- FX palette validation ---
+            if (manifest.FxPalette != null)
+            {
+                if (manifest.FxPalette.MistColor != null && !hexPattern.IsMatch(manifest.FxPalette.MistColor))
+                    return "Mist color must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.ParticleColor != null && !hexPattern.IsMatch(manifest.FxPalette.ParticleColor))
+                    return "Particle color must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.GlowColor != null && !hexPattern.IsMatch(manifest.FxPalette.GlowColor))
+                    return "Glow color must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.FlashTint != null && !hexPattern.IsMatch(manifest.FxPalette.FlashTint))
+                    return "Flash tint must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.MistOpacity is double mo && (mo < 0 || mo > 1))
+                    return "Mist opacity must be between 0 and 1.";
             }
 
             // --- URL validation: only HTTPS allowed ---
@@ -737,8 +768,25 @@ namespace ConditioningControlPanel.Services
 
             _activeMod = mod;
 
-            // Restore pool customizations for the new mod (if any were saved previously)
-            RestorePoolsFromSettings(modId);
+            // Restore pool customizations for the new mod (if any were saved previously), then give
+            // a running session its prescribed phrases back - the restore just installed the
+            // incoming mod's pools, which would otherwise leave the session speaking the user's
+            // phrases instead of the ones it prescribed. Only pools the session actually overrode
+            // are re-asserted, so the mod switch still fully applies to the rest.
+            //
+            // Both steps assign pools and so would trip the INPC mirror; see _suppressPoolMirror
+            // for why letting them would corrupt the incoming mod's backup.
+            _suppressPoolMirror = true;
+            try
+            {
+                RestorePoolsFromSettings(modId);
+                try { SessionEngine.Active?.ReapplyPhrasePoolOverrides(); }
+                catch (Exception ex) { _log?.Debug("ActivateMod: session pool re-apply failed: {E}", ex.Message); }
+            }
+            finally
+            {
+                _suppressPoolMirror = false;
+            }
 
             // Clear resource cache
             ModResourceResolver.ClearCache();
@@ -815,6 +863,49 @@ namespace ConditioningControlPanel.Services
             var hex = GetFilterColorHex();
             return ParseHexColor(hex);
         }
+
+        // ---- Ambient FX palette ----
+        // Every FX colour in the app resolves through here (never off a mod name and never off a
+        // per-mod art path — built-in mods have InstalledPath == null, so file lookups never fire
+        // for them). Chain: fxPalette slot → theme.filterColor → theme.accentColor → app default.
+
+        /// <summary>App-wide FX fallback when a mod defines neither an fxPalette slot nor a theme.</summary>
+        internal const string FxDefaultHex = "#FF69B4";
+
+        /// <summary>The pure fallback chain, split out so it is testable without a live ModService.</summary>
+        internal static string ResolveFxSlotHex(string? slot, string? filterColor, string? accentColor)
+        {
+            if (!string.IsNullOrWhiteSpace(slot)) return slot!;
+            if (!string.IsNullOrWhiteSpace(filterColor)) return filterColor!;
+            if (!string.IsNullOrWhiteSpace(accentColor)) return accentColor!;
+            return FxDefaultHex;
+        }
+
+        private string GetFxSlotHex(Func<ModManifest, string?> slot)
+        {
+            var m = _activeMod.Manifest;
+            return ResolveFxSlotHex(slot(m), m.Theme?.FilterColor, m.Theme?.AccentColor);
+        }
+
+        public string GetMistColorHex() => GetFxSlotHex(m => m.FxPalette?.MistColor);
+
+        public (byte R, byte G, byte B) GetMistColorRgb() => ParseHexColor(GetMistColorHex());
+
+        public string GetParticleColorHex() => GetFxSlotHex(m => m.FxPalette?.ParticleColor);
+
+        public (byte R, byte G, byte B) GetParticleColorRgb() => ParseHexColor(GetParticleColorHex());
+
+        public string GetGlowColorHex() => GetFxSlotHex(m => m.FxPalette?.GlowColor);
+
+        public (byte R, byte G, byte B) GetGlowColorRgb() => ParseHexColor(GetGlowColorHex());
+
+        public string GetFlashTintHex() => GetFxSlotHex(m => m.FxPalette?.FlashTint);
+
+        public (byte R, byte G, byte B) GetFlashTintRgb() => ParseHexColor(GetFlashTintHex());
+
+        /// <summary>Fog/aurora opacity multiplier (0-1). Defaults to 1 when the mod doesn't set one.</summary>
+        public double GetMistOpacity() =>
+            Math.Clamp(_activeMod.Manifest.FxPalette?.MistOpacity ?? 1.0, 0.0, 1.0);
 
         /// <summary>
         /// Returns the secondary/purple color for the active mod.
@@ -1457,6 +1548,22 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Re-reads the ACTIVE mod's saved pools into the live settings.
+        ///
+        /// Called by SessionEngine.RestoreSettings when the user switched mods mid-session: the
+        /// snapshot the engine restores belongs to the mod that was active when the session started,
+        /// so without this the wrong mod's phrases stay live until the next relaunch. The mirror is
+        /// suppressed for the same reason as in ActivateMod - this only READS a backup, so it must
+        /// not turn round and rewrite it.
+        /// </summary>
+        internal void ReapplyActiveModPools()
+        {
+            _suppressPoolMirror = true;
+            try { RestorePoolsFromSettings(_activeMod.Id); }
+            finally { _suppressPoolMirror = false; }
+        }
+
         private void SaveCurrentPoolsToSettings(string modId)
         {
             var settings = App.Settings?.Current;
@@ -1468,16 +1575,41 @@ namespace ConditioningControlPanel.Services
             settings.CustomTriggersByMod ??= new Dictionary<string, List<string>>();
             settings.BouncingTextPoolByMod ??= new Dictionary<string, Dictionary<string, bool>>();
 
-            if (settings.SubliminalPool != null)
-                settings.SubliminalPoolByMod[modId] = new Dictionary<string, bool>(settings.SubliminalPool);
+            // While a session is running, the LIVE phrase pools are the session's prescribed
+            // phrases, not the user's own - SessionEngine.ApplySessionSettings overwrote them.
+            // Persisting the live pool here would therefore replace the user's saved pool for this
+            // mod with session content, and because SessionEngine.RestoreSettings only restores the
+            // FLAT pool and never this per-mod backup, the bad data outlives the session and gets
+            // copied straight over the good pool by RestorePoolsFromSettings on the next launch.
+            // So back up what the user actually owns: the engine's pre-session snapshot.
+            //
+            // This covers both routes in - the direct call from ActivateMod, and the INPC mirror in
+            // CurrentSettings_PropertyChanged. Nothing is lost by preferring the snapshot: a pool
+            // edit made mid-session was already going to be discarded by RestoreSettings at the
+            // end, so the only behaviour change is that it no longer corrupts the backup too.
+            var engine = SessionEngine.Active;
+            var sessionOwnsPools = engine?.IsOverridingPhrasePools == true;
+
+            var subPool = (sessionOwnsPools ? engine!.UserSubliminalPool : null) ?? settings.SubliminalPool;
+            var lockPool = (sessionOwnsPools ? engine!.UserLockCardPool : null) ?? settings.LockCardPhrases;
+            var bouncePool = (sessionOwnsPools ? engine!.UserBouncingTextPool : null) ?? settings.BouncingTextPool;
+
+            if (subPool != null)
+                settings.SubliminalPoolByMod[modId] = new Dictionary<string, bool>(subPool);
+            // AttentionPool and CustomTriggers are never overridden by a session, so the live
+            // values are always the user's own.
             if (settings.AttentionPool != null)
                 settings.AttentionPoolByMod[modId] = new Dictionary<string, bool>(settings.AttentionPool);
-            if (settings.LockCardPhrases != null)
-                settings.LockCardPhrasesByMod[modId] = new Dictionary<string, bool>(settings.LockCardPhrases);
+            if (lockPool != null)
+                settings.LockCardPhrasesByMod[modId] = new Dictionary<string, bool>(lockPool);
             if (settings.CustomTriggers != null)
                 settings.CustomTriggersByMod[modId] = new List<string>(settings.CustomTriggers);
-            if (settings.BouncingTextPool != null)
-                settings.BouncingTextPoolByMod[modId] = new Dictionary<string, bool>(settings.BouncingTextPool);
+            if (bouncePool != null)
+                settings.BouncingTextPoolByMod[modId] = new Dictionary<string, bool>(bouncePool);
+
+            if (sessionOwnsPools)
+                _log?.Information("ModService: backed up the USER's pre-session pools for {ModId}, " +
+                                  "not the running session's prescribed phrases", modId);
         }
 
         private void RestorePoolsFromSettings(string modId)

@@ -150,6 +150,7 @@ namespace ConditioningControlPanel
             border.MouseEnter += (s, e) => border.BorderBrush = FindResource("PinkBrush") as SolidColorBrush;
             border.MouseLeave += (s, e) => border.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96));
             border.MouseLeftButtonUp += SessionCard_Click;
+            PrepareSessionRowFx(border);
 
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -418,6 +419,9 @@ namespace ConditioningControlPanel
             PresetsTab.BtnStartSession.IsEnabled = session.IsAvailable;
             PresetsTab.BtnStartSession.Content = session.IsAvailable ? "▶ Start Session" : "🔒 Coming Soon";
             PresetsTab.BtnExportSession.IsEnabled = true;
+
+            // Move the tab's one ambient loop onto the row that is now selected.
+            RefreshCardSheen();
         }
 
         private string GenerateSessionTimelineDescription(Models.Session session)

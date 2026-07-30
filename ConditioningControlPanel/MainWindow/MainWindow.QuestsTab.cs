@@ -156,9 +156,10 @@ namespace ConditioningControlPanel
                 double progressPercent = dailyDef.TargetValue > 0
                     ? Math.Min(1.0, (double)dailyProgress.CurrentProgress / dailyDef.TargetValue)
                     : 0;
-                QuestsTab.DailyProgressFill.Width = QuestsTab.DailyProgressTrack.ActualWidth > 0
-                    ? QuestsTab.DailyProgressTrack.ActualWidth * progressPercent
-                    : 0;
+                // Tweened rather than assigned (MainWindow.TabFxPresetsQuestsAchievements.cs): the
+                // fraction is remembered so the bar can also be re-applied once the track has a
+                // width - this method runs before the tab has ever been measured.
+                SetQuestProgress(dailyFraction: progressPercent, weeklyFraction: null);
 
                 // Show completed overlay if done (briefly visible before next quest loads)
                 if (dailyProgress.IsCompleted)
@@ -227,9 +228,7 @@ namespace ConditioningControlPanel
                 double progressPercent = weeklyDef.TargetValue > 0
                     ? Math.Min(1.0, (double)weeklyProgress.CurrentProgress / weeklyDef.TargetValue)
                     : 0;
-                QuestsTab.WeeklyProgressFill.Width = QuestsTab.WeeklyProgressTrack.ActualWidth > 0
-                    ? QuestsTab.WeeklyProgressTrack.ActualWidth * progressPercent
-                    : 0;
+                SetQuestProgress(dailyFraction: null, weeklyFraction: progressPercent);
 
                 // Show completed overlay if done
                 if (weeklyProgress.IsCompleted)

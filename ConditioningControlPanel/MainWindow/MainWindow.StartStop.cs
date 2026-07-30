@@ -132,6 +132,11 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void RandomizeAndStart()
         {
+            // Mid-session this used to re-roll the prescribed mix and then start nothing (the
+            // engine is already running, so the `if (!_isRunning)` below was the only guard and
+            // it only covered the start, not the randomize). Refuse the whole action.
+            if (RefuseActionIfSessionLocked("jump-right-in")) return;
+
             var s = App.Settings?.Current;
             if (s != null)
             {

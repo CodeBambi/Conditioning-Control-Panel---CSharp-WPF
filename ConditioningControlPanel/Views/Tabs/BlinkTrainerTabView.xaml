@@ -191,23 +191,15 @@
     
                             <!-- ═══ STATUS ROW ═══ -->
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0">
-                                <!-- Idle-state opacity pulse. Started / stopped by the Phase D state
-                                     machine via FindResource("BlinkTrainerStatusDotPulse"). -->
+                                <!-- The 0.8s idle blink that used to live here (a Storyboard in this
+                                     element's own Resources) was retired by the FX pass: it ran in
+                                     IdleReady, i.e. when nothing was happening. The dot now breathes
+                                     a mod-tinted glow only while a session is RUNNING - see
+                                     SetBlinkTrainerStatusPulse in
+                                     MainWindow/MainWindow.TabFxTakeoverLabStatus.cs. -->
                                 <Ellipse x:Name="BlinkTrainerStatusDot" x:FieldModifier="internal" Width="10" Height="10"
                                          Fill="{DynamicResource PinkBrush}" Margin="0,0,10,0"
-                                         VerticalAlignment="Center">
-                                    <Ellipse.Resources>
-                                        <Storyboard x:Key="BlinkTrainerStatusDotPulse" RepeatBehavior="Forever" AutoReverse="True">
-                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                             From="1.0" To="0.4"
-                                                             Duration="0:0:0.8">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <QuadraticEase EasingMode="EaseInOut"/>
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
-                                        </Storyboard>
-                                    </Ellipse.Resources>
-                                </Ellipse>
+                                         VerticalAlignment="Center"/>
                                 <TextBlock x:Name="BlinkTrainerStatusText" x:FieldModifier="internal"
                                            Text="{loc:Str blink_trainer_status_ready}"
                                            Foreground="{DynamicResource TextMutedBrush}"

@@ -71,6 +71,13 @@ public class ProgramService : IDisposable
     /// <summary>Id of the session the program launched, so an unrelated session can't tick the day.</summary>
     private string? _expectedSessionId;
 
+    /// <summary>
+    /// The engine handed over by <see cref="AttachSessionEngine"/>, kept so leaving the program can
+    /// end the session the program started. Subscribing to its events was never enough: withdrawing
+    /// has to be able to ACT on the engine, not just hear from it.
+    /// </summary>
+    private SessionEngine? _engine;
+
     public ProgramState State { get; private set; }
 
     /// <summary>Every program the user can enroll in. Built-ins today; file-loaded programs later.</summary>
@@ -247,17 +254,59 @@ public class ProgramService : IDisposable
         return enrollment;
     }
 
-    /// <summary>Stops the clock. Free, reversible, spends nothing.</summary>
-    public void Pause()
+    /// <summary>
+    /// Whether the clock can be stopped right now. False only while the program's OWN session is
+    /// live, because there is no reading of "paused" that survives it:
+    ///
+    /// - Let the session run and it finishes into a paused enrollment, where
+    ///   <see cref="NotifySessionCompleted"/> refuses to tick the slot (it requires state Active).
+    ///   The user completes the day and gets nothing, silently. That is the trap this guard exists
+    ///   for and it is the worst of the three outcomes.
+    /// - Stop the session on the user's behalf and pausing has just cost them the session they were
+    ///   most of the way through, which contradicts "spends nothing".
+    /// - Refuse, and pausing keeps its promise exactly. Nothing is lost either way, and STOP is
+    ///   right there on the bottom bar for a user who wants the session gone too.
+    ///
+    /// Note this bounds Pause only. Withdraw is never gated - see <see cref="Withdraw"/>.
+    /// </summary>
+    public bool CanPause(out string reason)
+    {
+        reason = "";
+
+        var enrollment = State.Active;
+        if (enrollment is not { State: ProgramEnrollmentState.Active }) return false;
+
+        var engine = _engine;
+        if (engine?.IsRunning == true && IsProgramSession(engine.CurrentSession))
+        {
+            reason = "Today's session is still running.";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Stops the clock. Free, reversible, spends nothing - which is exactly why it declines while
+    /// today's session is in flight (see <see cref="CanPause"/>). Returns false if it declined.
+    /// </summary>
+    public bool Pause()
     {
         var enrollment = State.Active;
-        if (enrollment is not { State: ProgramEnrollmentState.Active }) return;
+        if (enrollment is not { State: ProgramEnrollmentState.Active }) return false;
+
+        if (!CanPause(out var reason))
+        {
+            App.Logger?.Information("Program {Program} pause declined: {Reason}", enrollment.ProgramId, reason);
+            return false;
+        }
 
         enrollment.State = ProgramEnrollmentState.Paused;
         enrollment.PausedAt = DateTime.Now;
         MarkDirty();
         RaiseTodayChanged();
         App.Logger?.Information("Program {Program} paused on day {Day}", enrollment.ProgramId, enrollment.CurrentDay);
+        return true;
     }
 
     /// <summary>
@@ -286,6 +335,12 @@ public class ProgramService : IDisposable
     {
         var enrollment = State.Active;
         if (enrollment == null) return;
+
+        // Before anything else, and before the enrollment is torn down: end today's session if it
+        // is still on screen. "Withdraw" has to mean the program stops, not just that its bookkeeping
+        // stops. Done first so the stop unwinds against a still-coherent enrollment - see
+        // StopProgramSessionIfRunning for the two bugs this closes.
+        StopProgramSessionIfRunning("withdraw");
 
         enrollment.State = ProgramEnrollmentState.Withdrawn;
         State.History.Add(enrollment);
@@ -436,6 +491,53 @@ public class ProgramService : IDisposable
         && string.Equals(session.Id, _expectedSessionId, StringComparison.Ordinal);
 
     /// <summary>
+    /// Ends the running session if - and only if - it is the one this program started, and forgets
+    /// the expected id either way. Returns true if a session was actually stopped.
+    ///
+    /// Leaving a program used to leave its session running, which was two bugs in one. The visible
+    /// one: the user withdraws to get out, and the program's flashes, videos and lock cards keep
+    /// coming for the rest of the prescribed hour. The quiet one: <see cref="IsProgramSession"/>
+    /// answers purely from <see cref="_expectedSessionId"/>, which Withdraw did not clear, so
+    /// MainWindow's feature lock (MainWindow.SessionFeatureLock.cs) stayed ON for a program the user had
+    /// already left - greying out their own Dashboard toggles and citing a run that no longer
+    /// existed. Ending the session fixes both, because the lock is derived from engine liveness.
+    ///
+    /// Stops with completed:false, i.e. exactly as if the user had pressed STOP: the day's session
+    /// slot does not tick, because a withdrawn day was not done. That also means SessionCompleted
+    /// never fires, which is why the id is cleared here rather than relying on OnSessionCompleted.
+    ///
+    /// Foreign sessions are deliberately untouched. If the user is running a preset or a remote
+    /// session while a program happens to be enrolled, walking away from the program is not
+    /// permission to kill something the program did not start.
+    /// </summary>
+    public bool StopProgramSessionIfRunning(string reason)
+    {
+        try
+        {
+            var engine = _engine;
+            if (engine == null || !engine.IsRunning) return false;
+            if (!IsProgramSession(engine.CurrentSession)) return false;
+
+            App.Logger?.Information("ProgramService: stopping program session ({Reason})", reason);
+
+            // Raises SessionStopped synchronously, which is what re-derives the feature lock and
+            // resets the bottom bar. Clear the id AFTER the stop so anything listening on that
+            // event can still tell the session apart from a foreign one while it unwinds.
+            engine.StopSession();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning(ex, "ProgramService: could not stop the program session ({Reason})", reason);
+            return false;
+        }
+        finally
+        {
+            _expectedSessionId = null;
+        }
+    }
+
+    /// <summary>
     /// Wire the MainWindow-owned session engine. Mirrors BarkService.AttachSessionEngine - the engine
     /// is created lazily on first session, so the service cannot subscribe at its own construction.
     /// Re-attaching safely detaches the previous engine.
@@ -455,6 +557,8 @@ public class ProgramService : IDisposable
             EventHandler<SessionCompletedEventArgs> completed = (_, e) => OnSessionCompleted(e);
             engine.SessionCompleted += completed;
             _engineUnsubscribe.Add(() => engine.SessionCompleted -= completed);
+
+            _engine = engine;
 
             App.Logger?.Debug("ProgramService: attached to SessionEngine");
         }
@@ -866,6 +970,9 @@ public class ProgramService : IDisposable
             try { unsubscribe(); } catch { }
         }
         _engineUnsubscribe.Clear();
+        // Dropped alongside its subscriptions: an engine we no longer listen to is one we must not
+        // reach into either, and shutdown is not a moment to be calling StopSession.
+        _engine = null;
 
         if (_isDirty) Save();
     }

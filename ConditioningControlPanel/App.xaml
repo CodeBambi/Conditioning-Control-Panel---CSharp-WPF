@@ -10,6 +10,8 @@
         <ResourceDictionary Source="Resources/Theme/Brushes.xaml"/>
         <ResourceDictionary Source="Resources/Theme/Controls.xaml"/>
         <ResourceDictionary Source="Resources/Theme/Converters.xaml"/>
+        <!-- Shared motion library (durations, hover lift, press squish, glow pulse, sheen) -->
+        <ResourceDictionary Source="Resources/Theme/Motion.xaml"/>
         <!-- MainWindow chrome/tab styles shared with tab UserControls -->
         <ResourceDictionary Source="Resources/Theme/MainWindow.xaml"/>
         <!-- Season Recap card palette (scoped v6 dark-violet tokens) -->
