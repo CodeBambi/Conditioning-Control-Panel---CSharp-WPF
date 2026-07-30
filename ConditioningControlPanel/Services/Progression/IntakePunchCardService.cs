@@ -52,6 +52,13 @@ public class IntakePunchCardService : IDisposable
     /// this is the tuning knob, not a magic number.</summary>
     public const double SessionCreditPercent = 50.0;
 
+    /// <summary>The card is hidden everywhere in the UI while the prize at eight holes is still
+    /// TBD - it comes back once there is something real to hand over. Gates the Quests-tab
+    /// panel, the weekly-nudge pitch line and the intake-pass help tip; the service itself keeps
+    /// stamping silently so nobody loses progress in the meantime. readonly rather than const so
+    /// the gated paint paths do not trip unreachable-code warnings.</summary>
+    public static readonly bool UiEnabled = false;
+
     /// <summary>Ceiling on un-redeemed drafts. Can never legitimately exceed the holes left, and
     /// bounding it stops a pathological file from growing without limit.</summary>
     private const int MaxPendingDrafts = TotalHoles;

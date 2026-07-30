@@ -30,6 +30,7 @@
   "help_intake_pass_how": "The pass is spent on completion, never on launch, so a crash or an abort costs you nothing. Weeks are real ISO weeks and roll over at local midnight on Monday. The card only appears while you have a pass to think about; finishing a run puts the logo back until next week.",
   "intake_nudge_title": "Your weekly intake pass is ready",
   "intake_nudge_pitch": "Your free Graded Intake just unlocked. It interviews you, drafts a session tuned to you - and stamps your punch card when you run it.",
+  "intake_nudge_pitch_nopunch": "Your free Graded Intake just unlocked. It interviews you and drafts a session tuned to you.",
   "intake_nudge_action": "Start my intake",
   "intake_nudge_later": "Maybe later",
   "intake_nudge_body": "A fresh Graded Intake run is waiting on your Dashboard. It drafts a session shaped around how you answer - and stamps your punch card once you run it.",
