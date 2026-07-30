@@ -93,6 +93,43 @@ internal static class ProgramArt
         catch { return null; }
     }
 
+    /// <summary>
+    /// Full-colour banner strip (24.6:1, left ~45% pre-faded to alpha 0 in the file) - the art the
+    /// Dashboard Today card wears. Unlike the plate/sigil art this is NOT a luminance mask; it is
+    /// rendered as-is.
+    ///
+    /// Order: the program's own file, then a file shared by every program on the same mod, then
+    /// (optionally) the generic fallback. The browse catalogue passes includeDefault:false - five
+    /// cards side by side wearing the same fallback banner read as a copy-paste bug, and the emoji
+    /// icon is the better tiebreaker there - while the Today card shows one program at a time and
+    /// keeps the default.
+    /// </summary>
+    /// <returns>A frozen ImageSource, or null - the caller collapses the art layer.</returns>
+    internal static ImageSource? Banner(ProgramDefinition? program, bool includeDefault = true)
+    {
+        try
+        {
+            if (program == null) return null;
+
+            var key = Slug(program.Id);
+            if (!string.IsNullOrEmpty(key))
+            {
+                var owned = ModResourceResolver.ResolveImage($"{Folder}/banner_{key}.png");
+                if (owned != null) return owned;
+            }
+
+            var modKey = Slug(program.ModId);
+            if (!string.IsNullOrEmpty(modKey))
+            {
+                var byMod = ModResourceResolver.ResolveImage($"{Folder}/banner_{modKey}.png");
+                if (byMod != null) return byMod;
+            }
+
+            return includeDefault ? ModResourceResolver.ResolveImage($"{Folder}/banner_default.png") : null;
+        }
+        catch { return null; }
+    }
+
     /// <summary>Program sigil for the run header. Null collapses it and restores the 4px accent bar.</summary>
     internal static ImageSource? Sigil(ProgramDefinition? program)
     {

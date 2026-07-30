@@ -439,6 +439,10 @@ namespace ConditioningControlPanel
                     IsLocked = locked
                 };
 
+                var banner = Services.Program.ProgramArt.Banner(def, includeDefault: false);
+                item.BannerArt = banner;
+                item.BannerVisibility = banner != null ? Visibility.Visible : Visibility.Collapsed;
+
                 // Identity crest. Sigil first, then day 1's mood plate - the plate resolves through
                 // the shared archetype chain (and ultimately plate_default), so a program with no
                 // sigil of its own still gets a dressed crest. Only four of the five shipped programs

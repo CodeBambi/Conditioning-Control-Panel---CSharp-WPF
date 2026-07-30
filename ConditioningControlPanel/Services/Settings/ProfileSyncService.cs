@@ -674,6 +674,21 @@ namespace ConditioningControlPanel.Services
                             }
                         }
 
+                        // Sync the cumulable streak-fix charge balance. The server grants +1 per season
+                        // rollover and decrements on spend, so it is authoritative in both directions.
+                        // The assignment raises the settings INPC, which is what repaints the quests
+                        // tab (MainWindow.OnSettingsPropertyChangedForQuests) — the tile and the
+                        // "Fix Day (n)" caption are written imperatively, not bound, so without that
+                        // a user parked on the tab keeps seeing the stale balance.
+                        if (v2Result?.OopsieCredits != null && settings.StreakFixCharges != v2Result.OopsieCredits.Value)
+                        {
+                            var oldCharges = settings.StreakFixCharges;
+                            settings.StreakFixCharges = v2Result.OopsieCredits.Value;
+                            App.Settings?.Save();
+                            App.Logger?.Information("V2 Sync: Streak fix charges synced from server: {Old} -> {New}",
+                                oldCharges, v2Result.OopsieCredits.Value);
+                        }
+
                         // Sync display name from server (server is authoritative — admin renames, etc.)
                         if (!string.IsNullOrEmpty(v2Result?.User?.DisplayName) &&
                             v2Result.User.DisplayName != settings.UserDisplayName)
@@ -1966,17 +1981,19 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Use oopsie insurance via server-side validation.
-        /// Deducts 500 XP on server and marks as used for this season.
+        /// Spend one streak-fix charge ("Oopsie Insurance") via server-side validation.
+        /// The spend itself is free: the server decrements the account's cumulable charge balance
+        /// (oopsie_credits), records the fixed day and marks the season flag. No XP is deducted.
         /// </summary>
         /// <param name="fixDate">The date to fix, in YYYY-MM-DD format</param>
-        /// <returns>Tuple of (success, error message, new XP value)</returns>
-        public async Task<(bool success, string? error, int? newXp)> UseOopsieInsuranceAsync(string fixDate)
+        /// <returns>Tuple of (success, error message, the account XP total the server echoed back,
+        /// the account's remaining charge balance — null when an older server omits it)</returns>
+        public async Task<(bool success, string? error, int? newXp, int? credits)> UseOopsieInsuranceAsync(string fixDate)
         {
             var unifiedId = App.Settings?.Current?.UnifiedId;
             if (string.IsNullOrEmpty(unifiedId))
             {
-                return (false, "Oopsie Insurance requires a cloud account. Please log in first.", null);
+                return (false, "Oopsie Insurance requires a cloud account. Please log in first.", null, null);
             }
 
             try
@@ -1999,17 +2016,18 @@ namespace ConditioningControlPanel.Services
                     var errorResult = JsonConvert.DeserializeObject<OopsieErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
                     App.Logger?.Warning("Oopsie insurance failed: {Error}", errorMsg);
-                    return (false, errorMsg, null);
+                    return (false, errorMsg, null, null);
                 }
 
                 var result = JsonConvert.DeserializeObject<OopsieSuccessResponse>(json);
-                App.Logger?.Information("Oopsie insurance used via server: new XP = {NewXP}", result?.NewXp);
-                return (true, null, result?.NewXp);
+                App.Logger?.Information("Oopsie insurance used via server: {Credits} charge(s) left (server XP echo = {NewXP})",
+                    result?.OopsieCredits, result?.NewXp);
+                return (true, null, result?.NewXp, result?.OopsieCredits);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Oopsie insurance request failed");
-                return (false, $"Connection failed: {ex.Message}", null);
+                return (false, $"Connection failed: {ex.Message}", null, null);
             }
         }
 
@@ -2860,6 +2878,9 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("oopsie_used_season")]
             public string? OopsieUsedSeason { get; set; }
 
+            [JsonProperty("oopsie_credits")]
+            public int? OopsieCredits { get; set; }
+
             [JsonProperty("is_season0_og")]
             public bool? IsSeason0Og { get; set; }
 
@@ -2922,6 +2943,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("oopsie_used_season")]
             public string? OopsieUsedSeason { get; set; }
+
+            [JsonProperty("oopsie_credits")]
+            public int? OopsieCredits { get; set; }
         }
 
         private class OopsieErrorResponse

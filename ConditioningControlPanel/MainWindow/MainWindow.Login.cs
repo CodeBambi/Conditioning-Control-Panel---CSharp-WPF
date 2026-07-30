@@ -183,6 +183,7 @@ namespace ConditioningControlPanel
                 s.SkillPoints = 0;
                 s.UnlockedSkills = new List<string>();
                 s.SeasonalStreakRecoveryUsed = false;
+                s.StreakFixCharges = 0; // per-account, server-authoritative balance
                 s.HighestLevelEver = 0;
 
                 // Quest streak

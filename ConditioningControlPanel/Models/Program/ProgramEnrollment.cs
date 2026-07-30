@@ -5,8 +5,9 @@ using System.Linq;
 namespace ConditioningControlPanel.Models.Program;
 
 /// <summary>
-/// How much of a run leaves the machine. Private is the default - an informed opt-out beats a
-/// silent default in both directions, so the enrollment ceremony asks explicitly.
+/// How much of a run leaves the machine. The enrollment ceremony no longer asks - programs take
+/// no photos and there is no leaderboard to feed, so every new enrollment is Private. The enum
+/// and the persisted field stay so older saved enrollments keep round-tripping.
 /// </summary>
 public enum ProgramShareLevel
 {

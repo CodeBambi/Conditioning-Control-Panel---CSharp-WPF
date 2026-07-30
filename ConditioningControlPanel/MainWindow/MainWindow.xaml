@@ -349,6 +349,14 @@
                             <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
                                    Source="{Binding Source='📅', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_programs}" FontSize="11"/>
+                            <!-- BETA pill: gold on purpose - it must stand apart from the pink
+                                 accent so it reads as a status, not a highlight. Literal text
+                                 like the version strings, not a loc key. -->
+                            <Border Margin="5,0,0,0" VerticalAlignment="Center" CornerRadius="9999"
+                                    Padding="5,1" Background="#33FFD700"
+                                    BorderBrush="#AAFFD700" BorderThickness="1">
+                                <TextBlock Text="BETA" FontSize="8" FontWeight="Bold" Foreground="#FFD700"/>
+                            </Border>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnEnhancements" Tag="Enhancements" Style="{StaticResource TabButton}"

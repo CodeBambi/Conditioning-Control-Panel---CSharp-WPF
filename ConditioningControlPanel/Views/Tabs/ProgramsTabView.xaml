@@ -58,6 +58,12 @@
                             <TextBlock Text="{loc:Str programs_browse_header}"
                                        Foreground="{DynamicResource PinkBrush}"
                                        FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <!-- Same gold BETA pill as the nav button, scaled up for the header. -->
+                            <Border Margin="8,0,0,0" VerticalAlignment="Center" CornerRadius="9999"
+                                    Padding="7,2" Background="#33FFD700"
+                                    BorderBrush="#AAFFD700" BorderThickness="1">
+                                <TextBlock Text="BETA" FontSize="10" FontWeight="Bold" Foreground="#FFD700"/>
+                            </Border>
                         </StackPanel>
                         <TextBlock Text="{loc:Str programs_browse_sub}"
                                    Foreground="{DynamicResource TextMutedBrush}"
@@ -94,6 +100,7 @@
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
                                                 <RowDefinition Height="*"/>
                                                 <RowDefinition Height="Auto"/>
                                             </Grid.RowDefinitions>
@@ -103,8 +110,26 @@
                                                     CornerRadius="11,11,0,0"
                                                     Background="{Binding AccentBrush}"/>
 
+                                            <!-- Banner art band. The source is the Today card's 24.6:1
+                                                 strip: its left half is pre-faded to alpha 0 and the
+                                                 artwork densest at the right end, so UniformToFill with
+                                                 AlignmentX=Right crops to the richest slice and the
+                                                 fade bleeds into the card surface on its own. Margin 1
+                                                 keeps the fill inside the card's 1px border. -->
+                                            <Border Grid.Row="1" Height="64" Margin="1,0,1,0"
+                                                    ClipToBounds="True"
+                                                    Visibility="{Binding BannerVisibility}">
+                                                <Rectangle IsHitTestVisible="False">
+                                                    <Rectangle.Fill>
+                                                        <ImageBrush ImageSource="{Binding BannerArt}"
+                                                                    Stretch="UniformToFill"
+                                                                    AlignmentX="Right" AlignmentY="Center"/>
+                                                    </Rectangle.Fill>
+                                                </Rectangle>
+                                            </Border>
+
                                             <!-- Header + copy -->
-                                            <StackPanel Grid.Row="1" Margin="18,16,18,0">
+                                            <StackPanel Grid.Row="2" Margin="18,16,18,0">
                                                 <!--
                                                     Identity crest. Exactly one of this and the bare
                                                     glyph below it is ever visible - the same contract
@@ -195,7 +220,7 @@
                                             </StackPanel>
 
                                             <!-- Enroll / locked - pinned to the bottom of the card -->
-                                            <Button Grid.Row="2" Margin="18,16,18,16"
+                                            <Button Grid.Row="3" Margin="18,16,18,16"
                                                     HorizontalAlignment="Stretch"
                                                     Content="{Binding ActionText}"
                                                     Tag="{Binding ProgramId}"

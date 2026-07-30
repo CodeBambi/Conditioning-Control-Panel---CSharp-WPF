@@ -206,38 +206,13 @@ namespace ConditioningControlPanel
         // -----------------------------------------------------------------------------------
 
         /// <summary>
-        /// Banner art for a program: its own file, then a file shared by every program on the same
-        /// mod, then the generic fallback.
-        ///
-        /// The mod-keyed middle step is what stops an unshipped program rendering the generic
-        /// banner when its mod already has one - four of the five programs in the content brief are
-        /// still unimplemented, and their ids are not settled.
+        /// Banner art for a program. The lookup chain lives in <see cref="ProgramArt.Banner"/> so
+        /// the browse catalogue resolves the exact same art; the Today card keeps the generic
+        /// fallback because it shows one program at a time.
         /// </summary>
         /// <returns>A frozen ImageSource, or null - the caller collapses the art layer.</returns>
         private static ImageSource? ResolveProgramBannerArt(ProgramDefinition? program)
-        {
-            try
-            {
-                if (program == null) return null;
-
-                var key = ProgramArt.Slug(program.Id);
-                if (!string.IsNullOrEmpty(key))
-                {
-                    var owned = ModResourceResolver.ResolveImage($"{ProgramBannerFolder}/banner_{key}.png");
-                    if (owned != null) return owned;
-                }
-
-                var modKey = ProgramArt.Slug(program.ModId);
-                if (!string.IsNullOrEmpty(modKey))
-                {
-                    var byMod = ModResourceResolver.ResolveImage($"{ProgramBannerFolder}/banner_{modKey}.png");
-                    if (byMod != null) return byMod;
-                }
-
-                return ModResourceResolver.ResolveImage($"{ProgramBannerFolder}/banner_default.png");
-            }
-            catch { return null; }
-        }
+            => ProgramArt.Banner(program);
 
         // -----------------------------------------------------------------------------------
         // Accent-derived brushes

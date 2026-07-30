@@ -110,6 +110,10 @@ namespace ConditioningControlPanel
         private Brush? _preLockdownWindowBg;
         private Brush? _preLockdownTitleBarBg;
         private bool _isStreakFixMode = false;
+        // Guards the manual streak-fix spend. MessageBox.Show pumps messages, so without this a
+        // double-click (or a click on a second day while the first day's server call is in flight)
+        // re-enters StreakFixDay_Click and spends twice from one balance check.
+        private bool _streakFixInFlight = false;
         private DispatcherTimer? _remoteNotificationTimer;
         private DispatcherTimer? _remoteSessionInfoTimer;
 
@@ -395,6 +399,16 @@ namespace ConditioningControlPanel
                 App.Quests.QuestCompleted += OnQuestCompleted;
                 App.Quests.QuestProgressChanged += OnQuestProgressChanged;
                 App.Quests.QuestsRefreshed += (s, e) => Dispatcher.Invoke(() => RefreshQuestUI());
+            }
+
+            // Repaint the quests tab whenever the streak-fix balance moves. StreakFixCharges is
+            // written imperatively (stats tile + button caption), not bound, and it changes from four
+            // places — sync adoption, the manual spend, the automatic spend and the skill purchase —
+            // most of them off the UI thread. Riding the settings INPC catches all four with one
+            // subscription and keeps the services out of MainWindow.
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.PropertyChanged += OnSettingsPropertyChangedForQuests;
             }
 
             // Subscribe to skill tree events

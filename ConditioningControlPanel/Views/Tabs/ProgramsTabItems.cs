@@ -29,6 +29,14 @@ namespace ConditioningControlPanel.Views.Tabs
         public Brush AccentBrush { get; set; } = Brushes.Gray;
 
         /// <summary>
+        /// The program's banner strip for the card's header band - the same art the Dashboard
+        /// Today card wears, resolved with no generic fallback (see ProgramArt.Banner). Null
+        /// collapses the band.
+        /// </summary>
+        public ImageSource? BannerArt { get; set; }
+        public Visibility BannerVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>
         /// The program's art, as the OPACITY MASK for the crest's accent-filled Rectangle - never as
         /// an Image source. Program art ships as white RGB with its luminance in the ALPHA channel
         /// (see Services/Program/ProgramArt.cs), so accent Fill + this as the mask is what makes

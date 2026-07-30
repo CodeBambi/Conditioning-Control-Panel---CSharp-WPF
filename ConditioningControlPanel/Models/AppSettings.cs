@@ -464,6 +464,17 @@ namespace ConditioningControlPanel.Models
             set { _seasonalStreakRecoveryUsed = value; OnPropertyChanged(); }
         }
 
+        private int _streakFixCharges = 0;
+        /// <summary>
+        /// Cumulable streak-fix charges ("Oopsie Insurance"). Granted +1 every season
+        /// rollover, server-authoritative, never expires. Spending one is free.
+        /// </summary>
+        public int StreakFixCharges
+        {
+            get => _streakFixCharges;
+            set { _streakFixCharges = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
         private int _nightTimeUsageCount = 0;
         /// <summary>
         /// Number of times app was used between 11pm-5am.

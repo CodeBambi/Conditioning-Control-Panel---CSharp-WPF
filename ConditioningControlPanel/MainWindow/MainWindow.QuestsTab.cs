@@ -270,6 +270,7 @@ namespace ConditioningControlPanel
             QuestsTab.TxtTotalDailyCompleted.Text = questService.Progress.TotalDailyQuestsCompleted.ToString();
             QuestsTab.TxtTotalWeeklyCompleted.Text = questService.Progress.TotalWeeklyQuestsCompleted.ToString();
             QuestsTab.TxtTotalQuestXP.Text = questService.Progress.TotalXPFromQuests.ToString();
+            QuestsTab.TxtStreakFixCharges.Text = (App.Settings?.Current?.StreakFixCharges ?? 0).ToString();
 
             // Update header stats
             int completedToday = dailyCompleted + (weeklyProgress?.IsCompleted == true ? 1 : 0);
@@ -652,39 +653,32 @@ namespace ConditioningControlPanel
             var streak = App.Settings?.Current?.DailyQuestStreak ?? 0;
             QuestsTab.TxtQuestStreakCount.Text = streak > 0 ? $"\U0001f525 {streak} day streak (+{streak * 3}% XP)" : "";
 
-            // Show/hide/enable Fix Day button based on skill, XP, season usage, and missed days
+            // Fix Day button. Streak fixes are now a cumulable charge balance every account earns
+            // (+1 per season, never expires, free to spend), so the button is visible to EVERYONE —
+            // owning the "oopsie_insurance" skill only buys the automatic spend, not the button.
             var settings = App.Settings?.Current;
-            bool hasSkill = App.SkillTree?.HasSkill("oopsie_insurance") == true;
-            bool alreadyUsed = settings?.SeasonalStreakRecoveryUsed == true;
-            bool hasEnoughXP = (settings?.PlayerXP ?? 0) >= 500;
+            int charges = settings?.StreakFixCharges ?? 0;
+            // Charges are granted and spent server-side only, so a signed-out user can neither earn
+            // nor use one — say that up front instead of promising a season grant that will never
+            // arrive, or enabling the button on a cached balance and only admitting it at the click.
+            bool signedIn = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-            if (hasSkill)
-            {
-                QuestsTab.BtnFixStreak.Visibility = Visibility.Visible;
-                QuestsTab.BtnFixStreak.IsEnabled = !_isStreakFixMode || _isStreakFixMode; // Always enabled when skill owned
+            QuestsTab.BtnFixStreak.Visibility = Visibility.Visible;
+            // Cancel must stay clickable even at 0 charges, otherwise fix mode has no exit.
+            QuestsTab.BtnFixStreak.IsEnabled = _isStreakFixMode || (signedIn && charges > 0 && hasMissedDays);
 
-                if (_isStreakFixMode)
-                {
-                    QuestsTab.BtnFixStreak.Content = Loc.Get("btn_cancel_2");
-                }
-                else
-                {
-                    QuestsTab.BtnFixStreak.Content = Loc.Get("btn_fix_day");
-                }
+            QuestsTab.BtnFixStreak.Content = _isStreakFixMode
+                ? Loc.Get("btn_cancel_2")
+                : Loc.GetF("btn_fix_day_with_count", charges);
 
-                if (alreadyUsed)
-                    QuestsTab.BtnFixStreak.ToolTip = Loc.Get("tooltip_already_used_this_season");
-                else if (!hasEnoughXP)
-                    QuestsTab.BtnFixStreak.ToolTip = Loc.Get("tooltip_requires_500_xp");
-                else if (!hasMissedDays)
-                    QuestsTab.BtnFixStreak.ToolTip = Loc.Get("tooltip_no_missed_days_your_streak_is_perfect");
-                else
-                    QuestsTab.BtnFixStreak.ToolTip = Loc.Get("tooltip_use_oopsie_insurance_to_fix_a_missed_day_500");
-            }
+            if (!signedIn)
+                QuestsTab.BtnFixStreak.ToolTip = Loc.Get("tooltip_streak_fixes_need_account");
+            else if (charges <= 0)
+                QuestsTab.BtnFixStreak.ToolTip = Loc.Get("tooltip_no_streak_fixes_left");
+            else if (!hasMissedDays)
+                QuestsTab.BtnFixStreak.ToolTip = Loc.Get("tooltip_no_missed_days_your_streak_is_perfect");
             else
-            {
-                QuestsTab.BtnFixStreak.Visibility = Visibility.Collapsed;
-            }
+                QuestsTab.BtnFixStreak.ToolTip = Loc.GetF("tooltip_use_streak_fix", charges);
         }
 
         internal void StreakCalendarCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -700,14 +694,14 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // Validate prerequisites with user-friendly messages
+            // Validate prerequisites with user-friendly messages.
+            // No skill and no XP cost any more: the only gate is the charge balance.
             var settings = App.Settings?.Current;
             if (settings == null) return;
-            if (App.SkillTree?.HasSkill("oopsie_insurance") != true) return;
 
-            if (settings.SeasonalStreakRecoveryUsed)
+            if (settings.StreakFixCharges < 1)
             {
-                QuestsTab.TxtFixStreakStatus.Text = Loc.Get("label_already_used_oopsie_insurance_this_season");
+                QuestsTab.TxtFixStreakStatus.Text = Loc.Get("label_no_streak_fixes_left");
                 QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Visible;
                 return;
             }
@@ -729,16 +723,9 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            if (settings.PlayerXP < 500)
-            {
-                QuestsTab.TxtFixStreakStatus.Text = Loc.Get("label_not_enough_xp_you_need_500_xp_to_fix_a_day");
-                QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Visible;
-                return;
-            }
-
             // Enter fix mode
             _isStreakFixMode = true;
-            QuestsTab.TxtFixStreakStatus.Text = Loc.Get("label_click_a_missed_day_to_fix_it_costs_500_xp_onc");
+            QuestsTab.TxtFixStreakStatus.Text = Loc.Get("label_click_a_missed_day_to_fix_it_free");
             QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Visible;
             RefreshStreakCalendar();
         }
@@ -756,85 +743,158 @@ namespace ConditioningControlPanel
             if (sender is not System.Windows.Shapes.Rectangle highlight) return;
             if (highlight.Tag is not DateTime fixDate) return;
 
-            var settings = App.Settings?.Current;
-            if (settings == null) return;
-
-            // Confirm with user
-            var result = MessageBox.Show(
-                $"Fix {fixDate:MMMM d}?\n\nThis will cost 500 XP and can only be used once per season.",
-                "Oopsie Insurance",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            if (result != MessageBoxResult.Yes) return;
-
-            // Use server-side oopsie insurance if online
-            var fixDateStr = fixDate.ToString("yyyy-MM-dd");
-            if (App.ProfileSync != null && !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId))
+            // One spend at a time. MessageBox.Show below pumps messages, so a double-click on the
+            // same day opens a second nested handler off the same balance check, and clicking day B
+            // while day A is still awaiting the server starts a concurrent spend.
+            if (_streakFixInFlight) return;
+            _streakFixInFlight = true;
+            try
             {
-                QuestsTab.TxtFixStreakStatus.Text = Loc.Get("label_processing");
-                QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Visible;
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
 
-                var (success, error, newXp) = await App.ProfileSync.UseOopsieInsuranceAsync(fixDateStr);
-                if (!success)
+                // Re-check the balance here, not only when fix mode was entered: it can move in
+                // between (a sync from another device, the automatic spend, an earlier click).
+                if (settings.StreakFixCharges < 1)
                 {
-                    QuestsTab.TxtFixStreakStatus.Text = $"❌ {error ?? "Failed to use Oopsie Insurance"}";
+                    QuestsTab.TxtFixStreakStatus.Text = Loc.Get("label_no_streak_fixes_left");
+                    QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Visible;
+                    return;
+                }
+
+                // Confirm with user
+                var result = MessageBox.Show(
+                    Loc.GetF("label_fix_day_confirm_body", fixDate.ToString("MMMM d"), settings.StreakFixCharges),
+                    Loc.Get("label_fix_day_confirm_title"),
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result != MessageBoxResult.Yes) return;
+
+                // Server-side spend only — charges live on the account.
+                var fixDateStr = fixDate.ToString("yyyy-MM-dd");
+                if (App.ProfileSync == null || string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId))
+                {
+                    // No cloud account
+                    QuestsTab.TxtFixStreakStatus.Text = Loc.Get("label_oopsie_insurance_requires_a_cloud_account_ple");
                     QuestsTab.TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF5252"));
                     QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Visible;
                     return;
                 }
 
-                // Server succeeded - update local state
-                if (newXp.HasValue)
-                {
-                    // Server returns total XP; convert back to current-level XP
-                    var currentLevel = settings.PlayerLevel;
-                    var newLevelXp = App.Progression?.GetCurrentLevelXP(currentLevel, newXp.Value) ?? (settings.PlayerXP - 500);
-                    settings.PlayerXP = Math.Max(0, newLevelXp);
-                }
-                else
-                {
-                    settings.PlayerXP -= 500;
-                }
-                settings.SeasonalStreakRecoveryUsed = true;
-            }
-            else
-            {
-                // No cloud account
-                QuestsTab.TxtFixStreakStatus.Text = Loc.Get("label_oopsie_insurance_requires_a_cloud_account_ple");
-                QuestsTab.TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF5252"));
+                QuestsTab.TxtFixStreakStatus.Text = Loc.Get("label_processing");
                 QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Visible;
-                return;
-            }
 
-            // Add the fixed date to completion dates
-            var questService = App.Quests;
-            if (questService?.Progress != null)
+                var (success, error, _, credits) = await App.ProfileSync.UseOopsieInsuranceAsync(fixDateStr);
+
+                // Everything past the await is post-await UI work: route it through the helper so it
+                // no-ops instead of throwing if the window went away while the call was in flight.
+                if (!success)
+                {
+                    DispatcherHelper.RunOnUISync(() =>
+                    {
+                        QuestsTab.TxtFixStreakStatus.Text = $"❌ {error ?? Loc.Get("label_streak_fix_failed")}";
+                        QuestsTab.TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF5252"));
+                        QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Visible;
+                    });
+                    return;
+                }
+
+                // Server succeeded, so the spend is committed there — apply it locally even if the
+                // user cancelled fix mode meanwhile. Prefer the balance the endpoint returns (it is
+                // authoritative and already accounts for grants/spends from other devices); the
+                // blind local decrement is only the fallback for an older server that omits it.
+                //
+                // XP is deliberately NOT touched here. The fix is free now, so the server's echoed
+                // total is just a snapshot that can be behind this device, and adopting it would
+                // roll the player's XP backwards. ProfileSyncService owns XP reconciliation.
+                settings.StreakFixCharges = credits ?? Math.Max(0, settings.StreakFixCharges - 1);
+                settings.SeasonalStreakRecoveryUsed = true; // back-compat flag, no longer a gate
+
+                // Add the fixed date to completion dates. Deduped: a repeat spend on the same day
+                // must not push a second entry into the streak calendar's source list.
+                var questService = App.Quests;
+                if (questService?.Progress != null &&
+                    !questService.Progress.DailyQuestCompletionDates.Any(d => d.Date == fixDate.Date))
+                {
+                    questService.Progress.DailyQuestCompletionDates.Add(fixDate);
+                    questService.Save();
+                }
+
+                // Recalculate the streak
+                RecalculateDailyQuestStreak();
+
+                App.Settings?.Save();
+                App.Logger?.Information("Streak fix used on {Date} (server-validated), {Remaining} charge(s) left",
+                    fixDate, settings.StreakFixCharges);
+
+                // If fix mode was cancelled while the call was in flight the calendar has already
+                // been torn down and the status line hidden — don't repaint a success banner over
+                // it. RefreshQuestUI still runs so the stats tile and calendar show the new state.
+                bool stillFixing = _isStreakFixMode;
+                DispatcherHelper.RunOnUISync(() =>
+                {
+                    if (stillFixing)
+                    {
+                        _isStreakFixMode = false;
+                        QuestsTab.TxtFixStreakStatus.Text = Loc.GetF("label_streak_fixed_success", fixDate.ToString("MMMM d"));
+                        QuestsTab.TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#00E676"));
+                        QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Visible;
+                    }
+                    // RefreshQuestUI (not just the calendar) so the "Streak fixes" stats tile
+                    // updates alongside the button caption.
+                    RefreshQuestUI();
+                });
+
+                if (!stillFixing) return;
+
+                // Auto-hide status after 3 seconds. Fire-and-forget with the same guarded idiom the
+                // quest-complete banner uses (MainWindow.Quests.cs), so a close during the wait
+                // cannot throw and the in-flight guard is released as soon as the spend is done.
+                _ = Task.Delay(3000).ContinueWith(_ =>
+                {
+                    DispatcherHelper.RunOnUISync(() =>
+                    {
+                        try
+                        {
+                            if (_isStreakFixMode) return;
+                            QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Collapsed;
+                            QuestsTab.TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
+                        }
+                        catch { /* status line is cosmetic — never take the app down for it */ }
+                    });
+                });
+            }
+            catch (Exception ex)
             {
-                questService.Progress.DailyQuestCompletionDates.Add(fixDate);
-                questService.Save();
+                App.Logger?.Warning("Streak fix failed: {Error}", ex.Message);
             }
-
-            // Recalculate the streak
-            RecalculateDailyQuestStreak();
-
-            App.Settings?.Save();
-            App.Logger?.Information("Oopsie Insurance used to fix {Date} for 500 XP (server-validated)", fixDate);
-
-            // Exit fix mode and refresh
-            _isStreakFixMode = false;
-            QuestsTab.TxtFixStreakStatus.Text = $"✅ Fixed {fixDate:MMMM d}! Streak updated.";
-            QuestsTab.TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#00E676"));
-            QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Visible;
-            RefreshStreakCalendar();
-
-            // Auto-hide status after 3 seconds
-            await Task.Delay(3000);
-            if (!_isStreakFixMode)
+            finally
             {
-                QuestsTab.TxtFixStreakStatus.Visibility = Visibility.Collapsed;
-                QuestsTab.TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
+                _streakFixInFlight = false;
             }
+        }
+
+        /// <summary>
+        /// Repaints the quests tab when the streak-fix balance changes underneath it.
+        ///
+        /// <para><see cref="AppSettings.StreakFixCharges"/> is painted imperatively (the stats tile in
+        /// <see cref="RefreshQuestUI"/>, the button caption in <see cref="RefreshStreakCalendar"/>)
+        /// rather than bound, and it moves from four places — the sync adoption, the manual spend,
+        /// the automatic spend and the skill purchase. Listening on the settings INPC covers all four
+        /// without any service reaching into the window; a user parked on the tab would otherwise
+        /// keep staring at a stale, disabled "Fix Day (0)".</para>
+        /// </summary>
+        private void OnSettingsPropertyChangedForQuests(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(AppSettings.StreakFixCharges)) return;
+
+            // Sync adoption runs on a background thread; RunOnUI marshals and no-ops on shutdown.
+            DispatcherHelper.RunOnUI(() =>
+            {
+                try { RefreshQuestUI(); }
+                catch (Exception ex) { App.Logger?.Warning("Quest UI refresh after streak-fix balance change failed: {Error}", ex.Message); }
+            });
         }
 
         private void RecalculateDailyQuestStreak()

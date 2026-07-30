@@ -286,8 +286,8 @@ public class AchievementProgress
             }
             else if (App.SkillTree?.UseOopsieInsurance() == true)
             {
-                // Insurance saved the streak at cost of 500 XP! Keep current streak
-                App.Logger?.Information("Oopsie Insurance saved streak at {Days} days for 500 XP", ConsecutiveDays);
+                // A streak fix charge was spent automatically — keep current streak
+                App.Logger?.Information("Oopsie Insurance auto-spent a streak fix, saving streak at {Days} days", ConsecutiveDays);
             }
             else
             {
