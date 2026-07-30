@@ -3322,5 +3322,11 @@
   "tooltip_lab": "实验室 — 仍在测试中的实验性功能，可能不够稳定。",
   "tooltip_patreon_exclusives": "专属 — 仅限支持者的功能和内容。",
   "tooltip_how_to_use": "使用方法 — 快速上手指南。",
-  "label_local_ai_consent_pull_model": "下载 AI 模型。"
+  "label_local_ai_consent_pull_model": "下载 AI 模型。",
+  "program_lock_reason": "{0} 正在运行此内容 - 第 {1} 天。功能和强度将锁定至本次会话结束。",
+  "program_lock_reason_no_day": "{0} 正在运行此内容。功能和强度将锁定至本次会话结束。",
+  "program_lock_reason_generic": "训练计划正在运行本次会话。功能和强度将锁定至结束。",
+  "session_lock_reason": "您正在会话中！功能和强度将锁定至结束。",
+  "session_lock_action_title": "您正在会话中",
+  "session_lock_action_body": "{0}\n\n这将覆盖本次会话所设定的内容。如果确实要更改，请先停止会话。"
 }

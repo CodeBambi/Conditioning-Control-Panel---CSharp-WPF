@@ -871,7 +871,7 @@ namespace ConditioningControlPanel.Services.Quiz
                 // are off everywhere, so the intake ships text-only entries (no audio
                 // resolution / inlining at all). Mirrors SubliminalService, which gates
                 // every whisper playback on the same SubAudioEnabled flag.
-                bool audioEnabled = App.Settings?.Current?.SubAudioEnabled == true;
+                bool audioEnabled = App.Settings?.Current?.SubAudioAudible == true;
 
                 long budget = SubAudioBudgetBytes;
                 var list = new List<object>(active.Count);

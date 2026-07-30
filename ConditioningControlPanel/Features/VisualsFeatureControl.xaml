@@ -2,7 +2,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
-             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers">
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features">
 
     <StackPanel>
         <Border Background="{DynamicResource SurfaceBgBrush}"
@@ -15,6 +16,7 @@
                                Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                 </Grid>
                 <Slider x:Name="SliderSize" Minimum="50" Maximum="250" Value="100"
+                        feat:SessionLock.Owned="True"
                         ValueChanged="SliderSize_Changed"/>
                 <TextBlock Text="{loc:Str tooltip_scale_of_flash_images_100_original_size_200_d}"
                            Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
@@ -32,6 +34,7 @@
                                Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                 </Grid>
                 <Slider x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="100"
+                        feat:SessionLock.Owned="True"
                         ValueChanged="SliderOpacity_Changed"/>
                 <TextBlock Text="{loc:Str tooltip_transparency_of_flash_images_lower_more_see_t}"
                            Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
@@ -66,6 +69,7 @@
                                Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                 </Grid>
                 <Slider x:Name="SliderDuration" Minimum="1" Maximum="30" Value="5"
+                        feat:SessionLock.Owned="True"
                         ValueChanged="SliderDuration_Changed"/>
                 <TextBlock Text="{loc:Str tooltip_how_long_images_stay_on_screen_only_used_when}"
                            Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
@@ -88,6 +92,10 @@
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,2,0,0"/>
                 </StackPanel>
+                <!-- Deliberately NOT SessionLock.Owned, even though SessionSettings.FlashAudioEnabled
+                     is a session-prescribed enable. Killing sound is the one change a user most
+                     often needs to make RIGHT NOW and for reasons outside the session (someone
+                     walked in). That puts it on the safety side of the line, like volume. -->
                 <CheckBox Grid.Column="1" x:Name="ChkAudio"
                           Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                           Checked="ChkAudio_Changed" Unchecked="ChkAudio_Changed"/>

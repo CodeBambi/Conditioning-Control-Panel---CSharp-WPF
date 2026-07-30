@@ -2518,5 +2518,11 @@
   "tooltip_lab": "ラボ — テスト中の実験的機能です。不安定な場合があります。",
   "tooltip_patreon_exclusives": "限定 — 支援者だけの機能とコンテンツ。",
   "tooltip_how_to_use": "使い方 — はじめての方向けのクイックガイド。",
-  "label_local_ai_consent_pull_model": "AIモデルをダウンロードします。"
+  "label_local_ai_consent_pull_model": "AIモデルをダウンロードします。",
+  "program_lock_reason": "{0} が進行中です - {1} 日目。セッション終了までは機能と強度がロックされます。",
+  "program_lock_reason_no_day": "{0} が進行中です。セッション終了までは機能と強度がロックされます。",
+  "program_lock_reason_generic": "トレーニングプログラムがこのセッションを進行中です。終了までは機能と強度がロックされます。",
+  "session_lock_reason": "セッション中です！終了までは機能と強度がロックされます。",
+  "session_lock_action_title": "セッション中です",
+  "session_lock_action_body": "{0}\n\nこれはセッションが指定した内容を上書きします。本当に変更したい場合は、まずセッションを停止してください。"
 }

@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
       <Grid>
@@ -48,7 +49,7 @@
                         <Ellipse x:Name="AwarenessStatusDot" x:FieldModifier="internal" Width="8" Height="8" Fill="#606060" Margin="0,0,8,0"/>
                         <TextBlock x:Name="TxtAwarenessStatus" x:FieldModifier="internal" Text="Off" Foreground="#A0A0A0"
                                    FontSize="12" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                        <CheckBox x:Name="ChkAwarenessMaster" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
+                        <CheckBox x:Name="ChkAwarenessMaster" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}"
                                   VerticalAlignment="Center"
                                   Checked="ChkAwarenessMaster_Changed" Unchecked="ChkAwarenessMaster_Changed">
                             <CheckBox.ToolTip>

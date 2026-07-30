@@ -498,7 +498,7 @@ public class ProgramService : IDisposable
     /// one: the user withdraws to get out, and the program's flashes, videos and lock cards keep
     /// coming for the rest of the prescribed hour. The quiet one: <see cref="IsProgramSession"/>
     /// answers purely from <see cref="_expectedSessionId"/>, which Withdraw did not clear, so
-    /// MainWindow's feature lock (MainWindow.ProgramLock.cs) stayed ON for a program the user had
+    /// MainWindow's feature lock (MainWindow.SessionFeatureLock.cs) stayed ON for a program the user had
     /// already left - greying out their own Dashboard toggles and citing a run that no longer
     /// existed. Ending the session fixes both, because the lock is derived from engine liveness.
     ///

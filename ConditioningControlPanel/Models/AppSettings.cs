@@ -1172,6 +1172,36 @@ namespace ConditioningControlPanel.Models
             set { _subAudioEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _subAudioMuted = false;
+        /// <summary>
+        /// A plain MUTE for whisper/trigger audio, deliberately separate from
+        /// <see cref="SubAudioEnabled"/>.
+        ///
+        /// The avatar's "Mute whispers" menu item and the Companion tab used to flip
+        /// SubAudioEnabled, i.e. the feature's master ENABLE - which a session prescribes
+        /// (SessionSettings.AudioWhispersEnabled) and the session feature lock therefore locks. So
+        /// "mute" was really "opt out of the prescribed whispers dose", and once the lock landed it
+        /// would have been unavailable exactly when a user most wants it: someone walks in and the
+        /// sound needs to stop NOW.
+        ///
+        /// Splitting them lets the mute stay available during a session (it is a comfort/safety
+        /// reflex, like volume) while the dose itself stays locked. Nothing here changes how much
+        /// conditioning is scheduled - only whether you can currently hear it.
+        /// </summary>
+        public bool SubAudioMuted
+        {
+            get => _subAudioMuted;
+            set { _subAudioMuted = value; OnPropertyChanged(); OnPropertyChanged(nameof(SubAudioAudible)); }
+        }
+
+        /// <summary>
+        /// The single gate every whisper/trigger playback path should test: the feature is on AND
+        /// the user has not muted it. Prefer this over reading SubAudioEnabled directly, so a new
+        /// playback site cannot silently ignore the mute.
+        /// </summary>
+        [JsonIgnore]
+        public bool SubAudioAudible => SubAudioEnabled && !SubAudioMuted;
+
         private int _subAudioVolume = 50; // 0-100%
         public int SubAudioVolume
         {

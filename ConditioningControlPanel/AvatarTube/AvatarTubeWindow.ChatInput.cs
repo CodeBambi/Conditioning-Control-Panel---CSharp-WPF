@@ -1245,11 +1245,12 @@ namespace ConditioningControlPanel
 
         private void MenuItemMuteWhispers_Click(object sender, RoutedEventArgs e)
         {
-            // Toggle SubAudioEnabled setting (mute = disabled)
-            var currentEnabled = App.Settings?.Current?.SubAudioEnabled ?? false;
+            // Flips the dedicated MUTE, not SubAudioEnabled. That flag is the feature's master
+            // enable, which a session prescribes and the session feature lock locks - muting must
+            // stay available mid-session (see AppSettings.SubAudioMuted).
             if (App.Settings?.Current != null)
             {
-                App.Settings.Current.SubAudioEnabled = !currentEnabled;
+                App.Settings.Current.SubAudioMuted = !App.Settings.Current.SubAudioMuted;
                 App.Settings.Save();
             }
 
@@ -1258,7 +1259,9 @@ namespace ConditioningControlPanel
             // Sync to MainWindow UI (Settings tab and Companion tab)
             if (_parentWindow is MainWindow mainWindow)
             {
-                mainWindow.SyncWhispersUI(!currentEnabled);
+                // The ENABLE is unchanged by a mute now, so pass it through as-is; SyncWhispersUI
+                // reads the mute checkbox's state from SubAudioMuted itself.
+                mainWindow.SyncWhispersUI(App.Settings?.Current?.SubAudioEnabled == true);
             }
         }
 
@@ -1356,8 +1359,7 @@ namespace ConditioningControlPanel
             MenuItemMute.Header = _isMuted ? Loc.Get("menu_mute_avatar_on") : Loc.Get("menu_mute_avatar_off");
             MenuItemMute.Foreground = _isMuted ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Colors.White);
 
-            // Mute whispers (inverted - muted when SubAudioEnabled is false)
-            var whispersMuted = App.Settings?.Current?.SubAudioEnabled != true;
+            var whispersMuted = App.Settings?.Current?.SubAudioMuted == true;
             MenuItemMuteWhispers.Header = whispersMuted ? Loc.Get("menu_mute_whispers_on") : Loc.Get("menu_mute_whispers_off");
             MenuItemMuteWhispers.Foreground = whispersMuted ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Colors.White);
 
@@ -1425,10 +1427,9 @@ namespace ConditioningControlPanel
         /// </summary>
         public void SetMuteWhispers(bool isMuted)
         {
-            // isMuted = true means disable whispers (SubAudioEnabled = false)
             if (App.Settings?.Current != null)
             {
-                App.Settings.Current.SubAudioEnabled = !isMuted;
+                App.Settings.Current.SubAudioMuted = isMuted;
                 App.Settings.Save();
             }
             UpdateQuickMenuState();

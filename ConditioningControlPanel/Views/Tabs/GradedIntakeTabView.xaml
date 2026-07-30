@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -225,13 +226,13 @@
                         <TextBlock Text="{loc:Str label_reinforcement_questions_pop_up_during_session}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,12"/>
 
-                        <CheckBox x:Name="ChkPopQuizEnabled" x:FieldModifier="internal" Content="{loc:Str setting_enable_pop_up_questions}"
+                        <CheckBox x:Name="ChkPopQuizEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Content="{loc:Str setting_enable_pop_up_questions}"
                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,10"
                                   Checked="ChkPopQuizEnabled_Changed" Unchecked="ChkPopQuizEnabled_Changed"/>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                             <TextBlock Text="{loc:Str label_frequency}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <Slider x:Name="SliderPopQuizFrequency" x:FieldModifier="internal" Minimum="1" Maximum="100" Width="160"
+                            <Slider x:Name="SliderPopQuizFrequency" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="1" Maximum="100" Width="160"
                                     VerticalAlignment="Center"
                                     ValueChanged="SliderPopQuizFrequency_ValueChanged"/>
                             <TextBlock x:Name="TxtPopQuizFrequency" x:FieldModifier="internal" Foreground="#B0B0C8" FontSize="12"
