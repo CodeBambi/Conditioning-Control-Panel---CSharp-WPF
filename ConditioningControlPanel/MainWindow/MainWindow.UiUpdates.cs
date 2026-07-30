@@ -2780,6 +2780,7 @@ namespace ConditioningControlPanel
             StartMarqueeAnimation();
             // Chrome loops (nav glow breath, START glow + sheen, XP gloss) re-evaluate both ways:
             // down to Reduced/Off stops them now, back up to Full re-arms them without a restart.
+            // RefreshChromeFx also drives the dashboard loops (see ApplyChromeFxLoops).
             RefreshChromeFx();
         }
 

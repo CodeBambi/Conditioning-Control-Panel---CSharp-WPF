@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:features="clr-namespace:ConditioningControlPanel.Features"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
@@ -376,7 +377,8 @@
                          full-bleed art as the chips, but the caption and controls sit over it
                          instead of below a centred icon, which is what the icon block used to
                          cost this card in height. -->
-                    <Border Margin="0,0,0,4" Background="{StaticResource ArtLockdown}"
+                    <Border x:Name="CardLockdown" x:FieldModifier="internal"
+                            Margin="0,0,0,4" Background="{StaticResource ArtLockdown}"
                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9"
                             RenderOptions.BitmapScalingMode="HighQuality"
                             ToolTip="Lockdown — locks you in for the set time (panic key disabled)">
@@ -406,7 +408,8 @@
                     </Border>
                     <!-- Blink Trainer — launcher with +/- duration and countdown. Same
                          full-bleed treatment as Lockdown. -->
-                    <Border Margin="0,0,0,4" Background="{StaticResource ArtBlink}"
+                    <Border x:Name="CardBlink" x:FieldModifier="internal"
+                            Margin="0,0,0,4" Background="{StaticResource ArtBlink}"
                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9"
                             RenderOptions.BitmapScalingMode="HighQuality"
                             ToolTip="Blink Trainer — webcam blink-gated visuals">
@@ -518,7 +521,27 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-    
+
+            <!-- ============================================================ -->
+            <!-- AMBIENT LAYER - the one looping FX on the whole Dashboard.    -->
+            <!-- Declared FIRST so it is the bottom of the grid's z-order: the -->
+            <!-- tiles paint their own opaque surfaces on top, so the fog and  -->
+            <!-- dust read through the gutters and through the near-           -->
+            <!-- transparent centre logo tile, never over a card face.         -->
+            <!--                                                                -->
+            <!-- It is inside the root 1489x901 Viewbox and therefore bitmap-   -->
+            <!-- scaled. That is fine and deliberate: soft fog and out-of-focus -->
+            <!-- dust have no edges for the scale to soften. Crisp particles    -->
+            <!-- would need to live outside the Viewbox - see the FX plan S2.   -->
+            <!--                                                                -->
+            <!-- AmbientFxCanvas is hit-test invisible by construction, runs a  -->
+            <!-- self-stopping clock, and MainWindow.DashboardFx registers it   -->
+            <!-- with RegisterTabFx so it parks on every tab switch.            -->
+            <!-- ============================================================ -->
+            <fx:AmbientFxCanvas x:Name="MosaicFx" x:FieldModifier="internal"
+                                Grid.Row="0" Grid.RowSpan="4"
+                                Grid.Column="0" Grid.ColumnSpan="4"/>
+
             <!-- The Title="" literals below are English design-time fallbacks only.
                  At runtime MainWindow.ApplyModFeatureNames() overwrites every card
                  title with the localized (and mod-text-replaced) name. -->
@@ -584,10 +607,43 @@
 
                     <!-- FACE A: the wordmark. Default face; the only face premium users and
                          spent-week users ever see, byte-for-byte what shipped before. -->
-                    <Border x:Name="LogoFaceLogo" x:FieldModifier="internal" CornerRadius="12" ClipToBounds="True">
-                        <Image x:Name="ImgLogo" x:FieldModifier="internal" Stretch="Uniform"
-                               HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <!-- The Ken Burns drift (scale 1.00 -> 1.04 over 40s, MainWindow.DashboardFx)
+                         lives on THIS border and not on ImgLogo or on LogoFlipHost, and that is
+                         a correctness rule, not a preference: LogoFlipHost's TransformGroup is
+                         owned by the intake flip ceremony, and ImgLogo's ScaleTransform is owned
+                         by the rapid-click easter-egg pulse. Both would snap the drift back to
+                         1.0 mid-animation. This border sits between them and is otherwise
+                         untouched, so the three transforms compose instead of fighting. -->
+                    <Border x:Name="LogoFaceLogo" x:FieldModifier="internal" CornerRadius="12" ClipToBounds="True"
+                            RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="LogoDriftScale" ScaleX="1" ScaleY="1"/>
+                        </Border.RenderTransform>
+                        <Grid>
+                            <Image x:Name="ImgLogo" x:FieldModifier="internal" Stretch="Uniform"
+                                   HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <!-- Occasional light pass over the wordmark (one shot every 25-40s,
+                                 fired by a timer in MainWindow.DashboardFx - never an idle loop).
+                                 Opacity 0 at rest, so it costs nothing between passes. -->
+                            <Rectangle x:Name="LogoSheen" x:FieldModifier="internal"
+                                       Width="110" HorizontalAlignment="Left"
+                                       IsHitTestVisible="False" Opacity="0">
+                                <Rectangle.Fill>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="Transparent" Offset="0"/>
+                                        <GradientStop Color="{DynamicResource FxFlashTintColor}" Offset="0.5"/>
+                                        <GradientStop Color="Transparent" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Rectangle.Fill>
+                                <Rectangle.RenderTransform>
+                                    <TransformGroup>
+                                        <SkewTransform AngleX="-18"/>
+                                        <TranslateTransform x:Name="LogoSheenSlide"/>
+                                    </TransformGroup>
+                                </Rectangle.RenderTransform>
+                            </Rectangle>
+                        </Grid>
                     </Border>
 
                     <!-- FACE B: the weekly pass card. Collapsed by default so nothing about the
@@ -1362,9 +1418,26 @@
                  (an HwndHost), and WPF's layout clip does not reliably clip native children.
                  If this card is ever over-filled again the spill has to stop at the card's own
                  edge instead of painting over the account card and the helper-button row. -->
-            <Border Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,5" ClipToBounds="True"
-                    Background="{DynamicResource ElevatedSurfaceBrush}"
-                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+            <!-- AIRSPACE. The WebView2 inside this card is a native HWND: nothing WPF draws can
+                 ever appear over it, and a RenderTransform on the card would leave the browser
+                 behind. So this card's FX are on the FRAME and the HEADER only - a slow light
+                 travelling around the border (animated gradient stops, driven and tier-gated
+                 from MainWindow.DashboardFx) plus a pulse on the status text while it is still
+                 loading. Nothing here paints over the web surface, and nothing here moves it. -->
+            <Border x:Name="BrowserCardFrame" x:FieldModifier="internal"
+                    Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,5" ClipToBounds="True"
+                    Background="{DynamicResource ElevatedSurfaceBrush}" BorderThickness="1">
+                <Border.BorderBrush>
+                    <!-- The resting offsets park the bright core entirely BEFORE the brush's 0
+                         mark. LinearGradientBrush pads past its last stop, so at rest the whole
+                         frame is flat GlassBorder - byte-for-byte the border that shipped. The
+                         travelling band only exists while the loop is running. -->
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop x:Name="BrowserFrameStopLead" Color="{DynamicResource GlassBorder}" Offset="-0.30"/>
+                        <GradientStop x:Name="BrowserFrameStopCore" Color="{DynamicResource FxGlowColor}" Offset="-0.15"/>
+                        <GradientStop x:Name="BrowserFrameStopTail" Color="{DynamicResource GlassBorder}" Offset="0"/>
+                    </LinearGradientBrush>
+                </Border.BorderBrush>
                 <!-- Grid, not StackPanel. A StackPanel hands each child its DESIRED height and
                      never shrinks it, so the browser box below (which used to carry a hard
                      Height="340") kept its old size when the Training Programs "Today" banner
@@ -1465,7 +1538,7 @@
                                 FontSize="11" Padding="6,3" Margin="8,0,0,0">
                             <Button.Style>
                                 <Style TargetType="Button">
-                                    <Setter Property="Background" Value="#33FF69B4"/>
+                                    <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
                                     <Setter Property="Foreground" Value="White"/>
                                     <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
                                     <Setter Property="BorderThickness" Value="1"/>
@@ -1481,7 +1554,7 @@
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="#55FF69B4"/>
+                                                        <Setter Property="Background" Value="{DynamicResource TransparentPink50Brush}"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -1517,7 +1590,7 @@
                                 FontSize="9" Padding="6,3" Margin="0,0,6,0" VerticalAlignment="Center">
                             <Button.Style>
                                 <Style TargetType="Button">
-                                    <Setter Property="Background" Value="#33FF69B4"/>
+                                    <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
                                     <Setter Property="Foreground" Value="White"/>
                                     <Setter Property="FontWeight" Value="SemiBold"/>
                                     <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
@@ -1534,7 +1607,7 @@
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="#55FF69B4"/>
+                                                        <Setter Property="Background" Value="{DynamicResource TransparentPink50Brush}"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -1557,7 +1630,7 @@
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="#55FF69B4"/>
+                                            <Setter Property="Background" Value="{DynamicResource TransparentPink50Brush}"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>

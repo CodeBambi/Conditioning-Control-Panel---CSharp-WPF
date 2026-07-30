@@ -16,41 +16,20 @@
         <Border.RenderTransform>
             <ScaleTransform x:Name="RootScale" ScaleX="1" ScaleY="1"/>
         </Border.RenderTransform>
+        <!-- The card's glow. Colour comes from FxTheme (FxGlowColor is rewritten on every mod
+             switch) rather than PinkColor, so an active tile is the mod's colour, not Bambi's.
+             Opacity is driven entirely from code (ApplyActiveState / StartActiveBreath): the
+             active state is a slow 3.5s breath at MotionLevel.Full and a static hold otherwise. -->
         <Border.Effect>
             <DropShadowEffect x:Name="ActiveGlow"
-                              Color="{DynamicResource PinkColor}"
+                              Color="{DynamicResource FxGlowColor}"
                               BlurRadius="18"
                               ShadowDepth="0"
                               Opacity="0"/>
         </Border.Effect>
-        <Border.Triggers>
-            <EventTrigger RoutedEvent="MouseEnter">
-                <BeginStoryboard>
-                    <Storyboard>
-                        <DoubleAnimation Storyboard.TargetName="RootScale"
-                                         Storyboard.TargetProperty="ScaleX"
-                                         To="1.03" Duration="0:0:0.15"/>
-                        <DoubleAnimation Storyboard.TargetName="RootScale"
-                                         Storyboard.TargetProperty="ScaleY"
-                                         To="1.03" Duration="0:0:0.15"/>
-                        <!-- hover glow handled by ActiveGlow if the card is active -->
-                    </Storyboard>
-                </BeginStoryboard>
-            </EventTrigger>
-            <EventTrigger RoutedEvent="MouseLeave">
-                <BeginStoryboard>
-                    <Storyboard>
-                        <DoubleAnimation Storyboard.TargetName="RootScale"
-                                         Storyboard.TargetProperty="ScaleX"
-                                         To="1" Duration="0:0:0.15"/>
-                        <DoubleAnimation Storyboard.TargetName="RootScale"
-                                         Storyboard.TargetProperty="ScaleY"
-                                         To="1" Duration="0:0:0.15"/>
-                        <!-- leave ActiveGlow alone on mouseleave -->
-                    </Storyboard>
-                </BeginStoryboard>
-            </EventTrigger>
-        </Border.Triggers>
+        <!-- Hover motion used to be two EventTrigger storyboards here. It moved to code-behind
+             (OnCardMouseEnter / MotionFx.HoverLift) so it honours the reduced-motion setting -
+             a XAML EventTrigger has no way to ask. -->
 
         <Grid x:Name="ContentRoot">
             <!-- Full-bleed background image via ImageBrush (respects parent CornerRadius) -->
@@ -93,11 +72,23 @@
                            FontWeight="SemiBold"/>
             </Border>
 
-            <!-- Active overlay: pink ring when the underlying feature is enabled.
+            <!-- Hover rim-light. A separate 1.5px ring rather than a brush swap on RootBorder:
+                 the root border brush is a DynamicResource and animating it would mean cloning
+                 the brush per card. Opacity-only, 150ms, driven from code-behind. -->
+            <Border x:Name="RimLight"
+                    BorderBrush="{DynamicResource FxGlowBrush}"
+                    BorderThickness="1.5"
+                    CornerRadius="12"
+                    IsHitTestVisible="False"
+                    Opacity="0"/>
+
+            <!-- Active overlay: mod-tinted ring when the underlying feature is enabled.
                  Thicker stroke makes the "on" state read at a glance; right-click
-                 a card to toggle the feature on/off. -->
+                 a card to toggle the feature on/off. The ring BREATHES with the glow
+                 (opacity 0.55 to 1.0, 3.5s) instead of sitting at a flat 3.5px stroke -
+                 the stroke width is unchanged, so peak weight is exactly what shipped. -->
             <Border x:Name="ActiveBorder"
-                    BorderBrush="{DynamicResource PinkBrush}"
+                    BorderBrush="{DynamicResource FxGlowBrush}"
                     BorderThickness="3.5"
                     CornerRadius="12"
                     IsHitTestVisible="False"

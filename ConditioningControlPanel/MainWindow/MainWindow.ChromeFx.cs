@@ -159,6 +159,9 @@ namespace ConditioningControlPanel
             ApplyNavGlowBreath();
             ApplyStartButtonGlow();
             ApplyXpSheen();
+            // PR-2's dashboard loops ride the same funnel rather than hooking Activated /
+            // Deactivated / StateChanged a second time. No-op until InitializeDashboardFx runs.
+            ApplyDashboardFxLoops();
 
             try
             {

@@ -243,10 +243,16 @@ namespace ConditioningControlPanel
         // Accent-derived brushes
         // -----------------------------------------------------------------------------------
 
+        /// <summary>
+        /// The colour every FX layer on this card is built from. A running program's own accent
+        /// wins - the card is that program's identity - but when it has none the fallback is the
+        /// ACTIVE MOD's FX glow (FxTheme), not a hard-coded pink, so an un-accented program's
+        /// banner re-tints with the mod like the rest of the dashboard.
+        /// </summary>
         private static Color ProgramBannerAccentColor(Brush? accent)
         {
             if (accent is SolidColorBrush solid) return solid.Color;
-            return Color.FromRgb(0xFF, 0x69, 0xB4);
+            return FxTheme.GlowColor;
         }
 
         private static Color WithAlpha(Color c, byte a) => Color.FromArgb(a, c.R, c.G, c.B);
