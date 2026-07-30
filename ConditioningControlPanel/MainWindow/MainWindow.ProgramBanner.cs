@@ -243,10 +243,16 @@ namespace ConditioningControlPanel
         // Accent-derived brushes
         // -----------------------------------------------------------------------------------
 
+        /// <summary>
+        /// The colour every FX layer on this card is built from. A running program's own accent
+        /// wins - the card is that program's identity - but when it has none the fallback is the
+        /// ACTIVE MOD's FX glow (FxTheme), not a hard-coded pink, so an un-accented program's
+        /// banner re-tints with the mod like the rest of the dashboard.
+        /// </summary>
         private static Color ProgramBannerAccentColor(Brush? accent)
         {
             if (accent is SolidColorBrush solid) return solid.Color;
-            return Color.FromRgb(0xFF, 0x69, 0xB4);
+            return FxTheme.GlowColor;
         }
 
         private static Color WithAlpha(Color c, byte a) => Color.FromArgb(a, c.R, c.G, c.B);
@@ -301,6 +307,9 @@ namespace ConditioningControlPanel
         private void StartProgramBannerFx()
         {
             if (_programBannerFxRunning) return;
+            // Ambient clocks only run at MotionLevel.Full on a tier that allows ambient motion.
+            // Otherwise the card keeps its static art: the FX layers never leave Collapsed.
+            if (!MotionFx.AllowAmbientLoops) return;
 
             try
             {
@@ -316,13 +325,14 @@ namespace ConditioningControlPanel
 
                 // -- FX 1: drifting fog -------------------------------------------------------
                 dash.ProgramTodayFog.Visibility = Visibility.Visible;
-                dash.ProgramTodayFogSlide.BeginAnimation(TranslateTransform.XProperty,
-                    new DoubleAnimation(0, -w * 0.55, TimeSpan.FromSeconds(26))
-                    {
-                        AutoReverse = true,
-                        RepeatBehavior = RepeatBehavior.Forever,
-                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-                    });
+                var fog = new DoubleAnimation(0, -w * 0.55, TimeSpan.FromSeconds(26))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+                };
+                Timeline.SetDesiredFrameRate(fog, AmbientFrameRate);
+                dash.ProgramTodayFogSlide.BeginAnimation(TranslateTransform.XProperty, fog);
 
                 // -- FX 2: sheen sweep --------------------------------------------------------
                 // One keyframe animation rather than a Storyboard with a delay: the long flat tail
@@ -333,6 +343,7 @@ namespace ConditioningControlPanel
                 sweep.KeyFrames.Add(new DiscreteDoubleKeyFrame(-160, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(1.75))));
                 sweep.KeyFrames.Add(new LinearDoubleKeyFrame(-160, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(11))));
                 sweep.RepeatBehavior = RepeatBehavior.Forever;
+                Timeline.SetDesiredFrameRate(sweep, AmbientFrameRate);
                 dash.ProgramTodaySheen.Visibility = Visibility.Visible;
                 dash.ProgramTodaySheenSlide.BeginAnimation(TranslateTransform.XProperty, sweep);
 
@@ -344,13 +355,14 @@ namespace ConditioningControlPanel
                 // built in MainWindow.ProgramsTab.cs; the accent bar is the card's other
                 // program-identity mark and it costs one animation on an element that already
                 // exists.
-                dash.ProgramTodayAccent.BeginAnimation(UIElement.OpacityProperty,
-                    new DoubleAnimation(0.55, 1.0, TimeSpan.FromSeconds(3.4))
-                    {
-                        AutoReverse = true,
-                        RepeatBehavior = RepeatBehavior.Forever,
-                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-                    });
+                var breath = new DoubleAnimation(0.55, 1.0, TimeSpan.FromSeconds(3.4))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+                };
+                Timeline.SetDesiredFrameRate(breath, AmbientFrameRate);
+                dash.ProgramTodayAccent.BeginAnimation(UIElement.OpacityProperty, breath);
 
                 _programBannerFxRunning = true;
             }
@@ -468,6 +480,7 @@ namespace ConditioningControlPanel
                 });
                 twinkle.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(1.3))));
                 twinkle.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(6))));
+                Timeline.SetDesiredFrameRate(twinkle, AmbientFrameRate);
 
                 dot.BeginAnimation(UIElement.OpacityProperty, twinkle);
             }

@@ -323,9 +323,16 @@ namespace ConditioningControlPanel
             SetDot(SettingsTab.DotVoice, MicIsArmed());
         }
 
-        private static void SetDot(System.Windows.Shapes.Ellipse? dot, bool on)
+        /// <summary>
+        /// Paints one chip's live-state dot. This is also the event-driven trigger for the dot's
+        /// pulse (MainWindow.DashboardFx.cs): a dot only breathes while its feature is genuinely
+        /// on, so a rail with nothing running holds no clocks.
+        /// </summary>
+        private void SetDot(System.Windows.Shapes.Ellipse? dot, bool on)
         {
-            if (dot != null) dot.Fill = on ? PremiumDotOn : PremiumDotOff;
+            if (dot == null) return;
+            dot.Fill = on ? PremiumDotOn : PremiumDotOff;
+            ApplyRailDotPulse(dot, on);
         }
     }
 }

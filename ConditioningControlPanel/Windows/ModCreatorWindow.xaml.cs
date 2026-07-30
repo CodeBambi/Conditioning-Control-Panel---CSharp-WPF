@@ -37,6 +37,8 @@ namespace ConditioningControlPanel
         private TextBox? _txtBgHex, _txtPanelHex, _txtSurfaceHex;
         private Border? _swatchAccent, _swatchLight, _swatchDark, _swatchFilter;
         private Border? _swatchBg, _swatchPanel, _swatchSurface;
+        private TextBox? _txtMistHex, _txtParticleHex, _txtGlowHex, _txtFlashTintHex;
+        private Border? _swatchMist, _swatchParticle, _swatchGlow, _swatchFlashTint;
         private StackPanel? _previewStrip;
         private TextBox? _txtCompanionName, _txtUserTerm, _txtModeDisplayName, _txtTalkToLabel, _txtTakeoverLabel;
         private TextBox? _txtFreeze, _txtReset, _txtCumCollapse, _txtAutonomyOn;
@@ -586,6 +588,10 @@ namespace ConditioningControlPanel
             stack.Children.Add(previewSlot);
         }
 
+        // FX palette rows are "unset = inherit": a row still on this value exports as null, so the
+        // palette keeps falling back to filterColor → accentColor (ModService.ResolveFxSlotHex).
+        private const string FxRowDefault = "#FF69B4";
+
         // ─── Theme Section ───────────────────────────────────────
         private void BuildThemeSection()
         {
@@ -605,6 +611,13 @@ namespace ConditioningControlPanel
             (_swatchBg, _txtBgHex) = CreateColorRow(stack, "Background Color", "#1A1A2E");
             (_swatchPanel, _txtPanelHex) = CreateColorRow(stack, "Panel Color", "#252542");
             (_swatchSurface, _txtSurfaceHex) = CreateColorRow(stack, "Surface Color", "#1E1E3A");
+
+            stack.Children.Add(CreateSubHeader("Ambient FX Palette"));
+            stack.Children.Add(CreateSectionDescription("Optional. Colors for the drifting fog, particle bursts, glow breathing and one-shot flashes. Leave these on the defaults and the FX follow your Filter Color, then your Accent Color — only set them when you want the atmosphere a different color from the UI."));
+            (_swatchMist, _txtMistHex) = CreateColorRow(stack, "Mist Color", FxRowDefault);
+            (_swatchParticle, _txtParticleHex) = CreateColorRow(stack, "Particle Color", FxRowDefault);
+            (_swatchGlow, _txtGlowHex) = CreateColorRow(stack, "Glow Color", FxRowDefault);
+            (_swatchFlashTint, _txtFlashTintHex) = CreateColorRow(stack, "Flash Tint", FxRowDefault);
 
             stack.Children.Add(CreateSubHeader("Preview"));
             _previewStrip = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
@@ -2025,6 +2038,12 @@ namespace ConditioningControlPanel
                 if (_txtFilterHex != null) _txtFilterHex.Text = manifest.Theme.FilterColor ?? "#FF69B4";
             }
 
+            // FX palette
+            if (_txtMistHex != null) _txtMistHex.Text = manifest.FxPalette?.MistColor ?? FxRowDefault;
+            if (_txtParticleHex != null) _txtParticleHex.Text = manifest.FxPalette?.ParticleColor ?? FxRowDefault;
+            if (_txtGlowHex != null) _txtGlowHex.Text = manifest.FxPalette?.GlowColor ?? FxRowDefault;
+            if (_txtFlashTintHex != null) _txtFlashTintHex.Text = manifest.FxPalette?.FlashTint ?? FxRowDefault;
+
             // Identity
             if (manifest.Identity != null)
             {
@@ -2172,6 +2191,23 @@ namespace ConditioningControlPanel
                     PanelColor = panel != "#252542" ? panel : null,
                     SurfaceColor = surface != "#1E1E3A" ? surface : null,
                     FilterColor = filter != accent ? filter : null,
+                };
+            }
+
+            // FX palette — only the rows the creator actually moved off the inherit default.
+            var mist = _txtMistHex?.Text.Trim() ?? FxRowDefault;
+            var particle = _txtParticleHex?.Text.Trim() ?? FxRowDefault;
+            var glow = _txtGlowHex?.Text.Trim() ?? FxRowDefault;
+            var flashTint = _txtFlashTintHex?.Text.Trim() ?? FxRowDefault;
+            if (mist != FxRowDefault || particle != FxRowDefault
+                || glow != FxRowDefault || flashTint != FxRowDefault)
+            {
+                manifest.FxPalette = new ModFxPalette
+                {
+                    MistColor = mist != FxRowDefault ? mist : null,
+                    ParticleColor = particle != FxRowDefault ? particle : null,
+                    GlowColor = glow != FxRowDefault ? glow : null,
+                    FlashTint = flashTint != FxRowDefault ? flashTint : null,
                 };
             }
 

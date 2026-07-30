@@ -10,6 +10,16 @@ namespace ConditioningControlPanel.Views.Tabs
         public PresetsTabView()
         {
             InitializeComponent();
+            // FX lifecycle (PR-3a). Hooked here rather than in ShowTab so the tab owns its own
+            // decoration: the card sheen starts when the tab appears and its clock is dropped the
+            // moment it is collapsed again.
+            IsVisibleChanged += PresetsTabView_IsVisibleChanged;
+        }
+
+        private void PresetsTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnPresetsTabVisibilityChanged(IsVisible);
         }
 
         private void BtnCreateSession_Click(object sender, RoutedEventArgs e)

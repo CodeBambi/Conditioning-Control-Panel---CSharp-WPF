@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              xmlns:local="clr-namespace:ConditioningControlPanel"
              mc:Ignorable="d"
@@ -59,90 +60,100 @@
                             <GradientStop Color="#FF3A1030" Offset="1"/>
                         </LinearGradientBrush>
                     </Border.Background>
-                    <Grid Margin="24,20,24,20">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-    
-                        <!-- left: title + blurb -->
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                <TextBlock Text="🐇 DOWN THE RABBIT HOLE" Foreground="White" FontSize="24" FontWeight="Bold">
-                                    <TextBlock.Effect>
-                                        <DropShadowEffect Color="#FFFF69B4" BlurRadius="22" ShadowDepth="0" Opacity="0.7"/>
-                                    </TextBlock.Effect>
-                                </TextBlock>
-                                <Border Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                        CornerRadius="6" Padding="7,2" Margin="12,2,0,0" VerticalAlignment="Center">
-                                    <TextBlock Text="NEW" Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="10"/>
-                                </Border>
+                    <Grid>
+                        <!-- The Lab's one ambient loop: embers rising behind the portal card.
+                             Declared first so it paints under everything, spans the whole card
+                             (outside the content Margin, so embers reach the card's edges), and is
+                             hit-test invisible by construction. Colour comes from FxTheme, so a
+                             green Dronification build gets green embers rather than an orange
+                             hard-coded into the Lab. Parked by RegisterTabFx("lab", ...). -->
+                        <fx:AmbientFxCanvas x:Name="RabbitHoleFx" x:FieldModifier="internal"/>
+
+                        <Grid Margin="24,20,24,20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- left: title + blurb -->
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="🐇 DOWN THE RABBIT HOLE" Foreground="White" FontSize="24" FontWeight="Bold">
+                                        <TextBlock.Effect>
+                                            <DropShadowEffect Color="{DynamicResource FxGlowColor}" BlurRadius="22" ShadowDepth="0" Opacity="0.7"/>
+                                        </TextBlock.Effect>
+                                    </TextBlock>
+                                    <Border Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                            CornerRadius="6" Padding="7,2" Margin="12,2,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="NEW" Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="10"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="it's right there. it's always been right there. bubbles drift up carrying flashes, videos, overlays. snap them in time or let them trigger you. stack streaks, accept mantras, sink deeper."
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="13" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"/>
                             </StackPanel>
-                            <TextBlock Text="it's right there. it's always been right there. bubbles drift up carrying flashes, videos, overlays. snap them in time or let them trigger you. stack streaks, accept mantras, sink deeper."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="13" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"/>
-                        </StackPanel>
     
-                        <!-- right: launch -->
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="24,0,0,0">
-                            <!-- Play-mode pick: retired from the Lab card now that the in-game main
-                                 menu owns mode selection (FALL IN = Free Desktop; Story is greyed there
-                                 until it ships). Kept collapsed — flip back to Visible to restore the
-                                 radios here. Story is still disabled via ChaosModeService.StoryModeEnabled. -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,8" Visibility="Collapsed">
-                                <RadioButton x:Name="RbChaosFreeDesktop" GroupName="ChaosPlayMode" Content="🖥 Free Desktop"
-                                             Checked="ChaosPlayMode_Changed" Cursor="Hand"
-                                             Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,14,0"
-                                             ToolTip="Play over your real desktop — your companion floats along."/>
-                                <RadioButton x:Name="RbChaosStory" GroupName="ChaosPlayMode" Content="▶ Story"
-                                             Checked="ChaosPlayMode_Changed" Cursor="Hand"
-                                             Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
-                                             ToolTip="The Madam's narrated descent — coming soon."/>
-                                <!-- Hidden in code-behind once ChaosModeService.StoryModeEnabled flips true. -->
-                                <Border x:Name="ChaosStorySoonBadge" Background="{DynamicResource TransparentPink20Brush}"
-                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" CornerRadius="5"
-                                        Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center">
-                                    <TextBlock Text="COMING SOON" Foreground="{DynamicResource PinkBrush}"
-                                               FontFamily="Consolas" FontWeight="Bold" FontSize="9"/>
-                                </Border>
+                            <!-- right: launch -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="24,0,0,0">
+                                <!-- Play-mode pick: retired from the Lab card now that the in-game main
+                                     menu owns mode selection (FALL IN = Free Desktop; Story is greyed there
+                                     until it ships). Kept collapsed — flip back to Visible to restore the
+                                     radios here. Story is still disabled via ChaosModeService.StoryModeEnabled. -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,8" Visibility="Collapsed">
+                                    <RadioButton x:Name="RbChaosFreeDesktop" GroupName="ChaosPlayMode" Content="🖥 Free Desktop"
+                                                 Checked="ChaosPlayMode_Changed" Cursor="Hand"
+                                                 Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,14,0"
+                                                 ToolTip="Play over your real desktop — your companion floats along."/>
+                                    <RadioButton x:Name="RbChaosStory" GroupName="ChaosPlayMode" Content="▶ Story"
+                                                 Checked="ChaosPlayMode_Changed" Cursor="Hand"
+                                                 Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                                 ToolTip="The Madam's narrated descent — coming soon."/>
+                                    <!-- Hidden in code-behind once ChaosModeService.StoryModeEnabled flips true. -->
+                                    <Border x:Name="ChaosStorySoonBadge" Background="{DynamicResource TransparentPink20Brush}"
+                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" CornerRadius="5"
+                                            Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="COMING SOON" Foreground="{DynamicResource PinkBrush}"
+                                                   FontFamily="Consolas" FontWeight="Bold" FontSize="9"/>
+                                    </Border>
+                                </StackPanel>
+                                <Button x:Name="BtnStartChaos" Content="▶ FALL IN" Cursor="Hand" ToolTip="you were always going to."
+                                        Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="16"
+                                        BorderThickness="0" Padding="30,14" HorizontalAlignment="Right"
+                                        Click="BtnStartChaos_Click">
+                                    <Button.Effect>
+                                        <DropShadowEffect Color="{DynamicResource FxGlowColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                                    </Button.Effect>
+                                    <Button.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="14"/>
+                                        </Style>
+                                    </Button.Resources>
+                                </Button>
+                                <Button x:Name="BtnQuickStartChaos" Content="💧 Quick Drop" Cursor="Hand"
+                                        Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="12"
+                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="14,6" Margin="0,8,0,0"
+                                        HorizontalAlignment="Right" ToolTip="skip the dollhouse. fall straight in with your saved settings"
+                                        Click="BtnQuickStartChaos_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="9"/>
+                                        </Style>
+                                    </Button.Resources>
+                                </Button>
+                                <CheckBox Content="Announcements"
+                                          IsChecked="{Binding Source={x:Static local:App.Settings}, Path=Current.ChaosAnnouncerEnabled, Mode=TwoWay}"
+                                          Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Cursor="Hand"
+                                          HorizontalAlignment="Right" Margin="0,10,0,0"
+                                          ToolTip="Flash on-screen subtitle announcements (mantra, resistance, depth, streak) during a descent"/>
+                                <CheckBox Content="3D game (recommended)"
+                                          IsChecked="{Binding Source={x:Static local:App.Settings}, Path=Current.ChaosWebGameEnabled, Mode=TwoWay}"
+                                          Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Cursor="Hand"
+                                          HorizontalAlignment="Right" Margin="0,6,0,0"
+                                          ToolTip="Play inside the 3D rabbit-hole tunnel (browser engine). Untick to use the classic desktop version - e.g. if the 3D one won't start on this machine."/>
                             </StackPanel>
-                            <Button x:Name="BtnStartChaos" Content="▶ FALL IN" Cursor="Hand" ToolTip="you were always going to."
-                                    Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="16"
-                                    BorderThickness="0" Padding="30,14" HorizontalAlignment="Right"
-                                    Click="BtnStartChaos_Click">
-                                <Button.Effect>
-                                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
-                                </Button.Effect>
-                                <Button.Resources>
-                                    <Style TargetType="Border">
-                                        <Setter Property="CornerRadius" Value="14"/>
-                                    </Style>
-                                </Button.Resources>
-                            </Button>
-                            <Button x:Name="BtnQuickStartChaos" Content="💧 Quick Drop" Cursor="Hand"
-                                    Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="12"
-                                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="14,6" Margin="0,8,0,0"
-                                    HorizontalAlignment="Right" ToolTip="skip the dollhouse. fall straight in with your saved settings"
-                                    Click="BtnQuickStartChaos_Click">
-                                <Button.Resources>
-                                    <Style TargetType="Border">
-                                        <Setter Property="CornerRadius" Value="9"/>
-                                    </Style>
-                                </Button.Resources>
-                            </Button>
-                            <CheckBox Content="Announcements"
-                                      IsChecked="{Binding Source={x:Static local:App.Settings}, Path=Current.ChaosAnnouncerEnabled, Mode=TwoWay}"
-                                      Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Cursor="Hand"
-                                      HorizontalAlignment="Right" Margin="0,10,0,0"
-                                      ToolTip="Flash on-screen subtitle announcements (mantra, resistance, depth, streak) during a descent"/>
-                            <CheckBox Content="3D game (recommended)"
-                                      IsChecked="{Binding Source={x:Static local:App.Settings}, Path=Current.ChaosWebGameEnabled, Mode=TwoWay}"
-                                      Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Cursor="Hand"
-                                      HorizontalAlignment="Right" Margin="0,6,0,0"
-                                      ToolTip="Play inside the 3D rabbit-hole tunnel (browser engine). Untick to use the classic desktop version - e.g. if the 3D one won't start on this machine."/>
-                        </StackPanel>
+                        </Grid>
                     </Grid>
                 </Border>
-    
+
                 <!-- HOW TO PLAY moved to the Rabbit Hole main menu (📖 HOW TO PLAY button → card tutorial overlay). -->
 
                 <!-- ===================== ZONE: MIND ===================== -->
@@ -191,7 +202,7 @@
                             <!-- Manila folder, redrawn from the game's own CSS art (bureau.css:241-252)
                                  as vectors so it stays crisp at any DPI. Same palette: paper #E9DFC6,
                                  paper-dark #D8CBA8, sheets #F4ECD8 with #C9BC9C edges. -->
-                            <Viewbox Width="132" Height="96" HorizontalAlignment="Center" Margin="0,0,0,16">
+                            <Viewbox x:Name="BureauFolderArt" x:FieldModifier="internal" Width="132" Height="96" HorizontalAlignment="Center" Margin="0,0,0,16" RenderTransformOrigin="0.5,0.5">
                                 <Canvas Width="52" Height="38">
                                     <!-- back panel -->
                                     <Border Canvas.Left="0" Canvas.Top="10" Width="52" Height="28" CornerRadius="3" Background="#D8CBA8"/>

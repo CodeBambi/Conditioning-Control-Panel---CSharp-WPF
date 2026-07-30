@@ -74,6 +74,8 @@
                                 Padding="10,8" Margin="0,0,0,6"
                                 Cursor="Hand"
                                 MouseLeftButtonUp="DeeperRow_Click"
+                                MouseEnter="DeeperRow_MouseEnter"
+                                MouseLeave="DeeperRow_MouseLeave"
                                 ToolTip="{loc:Str deeper_hub_tip_row_open}">
                             <Border.Style>
                                 <Style TargetType="Border">
@@ -212,7 +214,12 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Image Grid.Column="0" Width="38" Height="38"
+                        <!-- The tab's ONE ambient loop (FX plan S4): MainWindow.DeeperFx drifts
+                             this wave glyph on a 20s+ clock via a RenderTransform. The header row
+                             is Auto-height with an 18px bottom margin and the glyph carries a 14px
+                             right margin, so a 3px drift cannot clip or move anything. -->
+                        <Image x:Name="DeeperWaveGlyph" x:FieldModifier="internal"
+                               Grid.Column="0" Width="38" Height="38"
                                VerticalAlignment="Center" Margin="0,0,14,0"
                                Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">

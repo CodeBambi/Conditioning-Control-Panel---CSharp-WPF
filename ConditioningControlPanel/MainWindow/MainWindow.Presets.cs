@@ -268,13 +268,17 @@ namespace ConditioningControlPanel
                 BorderThickness = new Thickness(2),
                 CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(8),
-                Margin = new Thickness(0, 0, 6, 0),
+                // 1px of vertical margin is headroom for the hover lift: the row sits in a
+                // ScrollViewer whose viewport is exactly the card height, and WPF would clip the
+                // top and bottom of a 1.02 scale without so much as a warning.
+                Margin = new Thickness(0, 1, 6, 1),
                 Width = 100,
                 Height = 70,
                 Cursor = Cursors.Hand,
                 Tag = preset.Id
             };
-            
+            PreparePresetCardFx(card);
+
             card.MouseLeftButtonDown += (s, e) => SelectPreset(preset);
             card.MouseEnter += (s, e) => {
                 if (_selectedPreset?.Id != preset.Id)
@@ -389,6 +393,10 @@ namespace ConditioningControlPanel
             PresetsTab.BtnExportPreset.IsEnabled = true;
             PresetsTab.BtnSharePreset.IsEnabled = !preset.IsDefault;
             UpdatePresetShareStatusBadge(preset);
+
+            // Move the tab's one ambient loop onto the card that is now selected. After
+            // RefreshPresetsList, deliberately - it rebuilt every card in the row.
+            RefreshCardSheen();
         }
         
         internal void SessionCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)

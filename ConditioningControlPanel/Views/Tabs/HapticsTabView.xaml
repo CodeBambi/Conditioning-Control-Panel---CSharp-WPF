@@ -156,7 +156,11 @@
                                     <!-- Status row -->
                                     <Grid Margin="0,0,0,10">
                                         <StackPanel Orientation="Horizontal">
-                                            <Ellipse Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center" Fill="#FF6B6B"/>
+                                            <!-- Named so the FX pass can breathe a glow behind it while
+                                                 a device is actually connected. Fill stays owned by
+                                                 BtnHapticConnect_Click. -->
+                                            <Ellipse x:Name="HapticStatusDot" x:FieldModifier="internal"
+                                                     Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center" Fill="#FF6B6B"/>
                                             <TextBlock Text="{loc:Str label_status}" Foreground="{DynamicResource TextMutedBrush}" FontSize="13" VerticalAlignment="Center"/>
                                             <TextBlock x:Name="TxtHapticStatus" x:FieldModifier="internal" Text="{loc:Str label_disconnected}"
                                                        Foreground="#FF6B6B" FontSize="13" Margin="6,0,0,0" VerticalAlignment="Center"/>
@@ -798,7 +802,7 @@
     
                     <!-- Translucent gating overlay (only for free users) -->
                     <Border x:Name="HapticsGate" x:FieldModifier="internal" Visibility="Collapsed"
-                            Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
+                            Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
                             CornerRadius="10" IsHitTestVisible="True">
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
@@ -806,7 +810,7 @@
                                        FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                             <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
                                        Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                            <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                            <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
                                     Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
                                 <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
                             </Button>

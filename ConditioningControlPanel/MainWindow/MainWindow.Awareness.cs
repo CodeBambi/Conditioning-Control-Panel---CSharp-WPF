@@ -364,6 +364,10 @@ namespace ConditioningControlPanel
         private void UpdateAwarenessStatusIndicator(bool on)
         {
             if (AwarenessTab.AwarenessStatusDot == null || AwarenessTab.TxtAwarenessStatus == null) return;
+
+            // FX (PR-4a): the dot breathes only while the engine is genuinely live.
+            SetAwarenessStatusPulse(on);
+
             if (on)
             {
                 AwarenessTab.AwarenessStatusDot.Fill = (System.Windows.Media.Brush)FindResource("PinkBrush");

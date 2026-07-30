@@ -247,6 +247,18 @@ namespace ConditioningControlPanel
                 ApplyGlobalCameraHotkey();
                 HookFocusGazeService();
                 HookBlinkTrainerService();
+                // Tooltip hygiene: start tracking before the user can hover anything, so no tooltip
+                // is ever opened untracked (the lazy hook this replaced installed its handlers on
+                // the first tab switch, i.e. potentially after the first tooltip was already up).
+                // See MainWindow.ToolTipHygiene.cs.
+                EnsureToolTipHygiene();
+                // Chrome FX (PR-1): nav hover/active glow, START breath + sheen, XP gloss.
+                // After load, so every templated nav button is real before we touch it.
+                InitializeChromeFx();
+                // Dashboard FX (PR-2): mosaic ambient canvas, tile hover/active breath, logo
+                // drift, rail hover, browser frame. Same reason for being here, and it must
+                // follow InitializeChromeFx - it rides that file's loop funnel.
+                InitializeDashboardFx();
             };
             Closing += (_, _) => Services.GlobalHotkeyService.UnregisterAll();
             // The title-bar X now MINIMIZES TO TRAY (see OnClosing) instead of quitting — users expect
@@ -617,6 +629,9 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                // Event FX (PR-5) FIRST, while the XP bar is still standing at the cap it just
+                // reached - UpdateLevelDisplay wraps it back to a sliver. Fire-and-forget.
+                CelebrateLevelUp();
                 UpdateLevelDisplay();
                 // Show level up notification
                 _trayIcon?.ShowNotification("Level Up!", $"You reached Level {newLevel}!", System.Windows.Forms.ToolTipIcon.Info);
@@ -1340,6 +1355,12 @@ namespace ConditioningControlPanel
                     TxtBannerTertiary.Foreground = accentBrush;
 
                 // Mod selector ComboBox repopulates itself in InitializeModSelector — no per-element refresh here.
+
+                // Chrome + dashboard FX: the Fx* dynamic resources have already been rewritten by
+                // FxTheme, so the XAML-bound sheen bands, tile rings and browser frame re-tint
+                // themselves; the code-built glow effects (active nav button, START) hold a Color
+                // and need this nudge to follow the mod. RefreshChromeFx drives both passes.
+                RefreshChromeFx();
 
                 App.Logger?.Debug("Theme-aware UI elements refreshed for mod {ModId}", App.Mods?.ActiveModId);
             }

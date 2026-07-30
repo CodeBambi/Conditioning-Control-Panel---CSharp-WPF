@@ -60,6 +60,21 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
+    /// How much motion the UI is allowed to show.
+    /// Full = everything (ambient loops, particles, parallax, entrance staggers).
+    /// Reduced = crossfades and state transitions only — no looping FX, no particles, no parallax.
+    /// Off = no animation at all; every helper snaps straight to the end state.
+    /// Capped to Reduced automatically when Windows' "Animation effects" is off
+    /// (SystemParameters.ClientAreaAnimation). See Services/MotionFx.cs.
+    /// </summary>
+    public enum MotionLevel
+    {
+        Full,
+        Reduced,
+        Off
+    }
+
+    /// <summary>
     /// Application settings model - matches Python DEFAULT_SETTINGS
     /// </summary>
     public class AppSettings : INotifyPropertyChanged
@@ -3158,6 +3173,20 @@ namespace ConditioningControlPanel.Models
         {
             get => _autoPerformanceMode;
             set { _autoPerformanceMode = value; OnPropertyChanged(); }
+        }
+
+        private MotionLevel _motionLevel = MotionLevel.Full;
+        /// <summary>
+        /// How much UI motion is allowed. Full by default; Reduced keeps crossfades but kills
+        /// ambient loops, particles and parallax; Off snaps everything. The effective level is
+        /// additionally capped to Reduced when the OS animation-effects flag is off — read
+        /// Services/MotionFx.Level rather than this property.
+        /// </summary>
+        [JsonProperty("MotionLevel")]
+        public MotionLevel MotionLevel
+        {
+            get => _motionLevel;
+            set { _motionLevel = value; OnPropertyChanged(); }
         }
 
         private bool _videoForceHardwareDecoding = false;

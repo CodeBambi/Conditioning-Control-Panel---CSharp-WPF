@@ -448,7 +448,7 @@ namespace ConditioningControlPanel.Services
         /// Validates and sanitizes a mod manifest on install.
         /// Returns null if valid, or an error message string if rejected.
         /// </summary>
-        private static string? SanitizeManifest(ModManifest manifest)
+        internal static string? SanitizeManifest(ModManifest manifest)
         {
             // --- Field length caps ---
             if (manifest.Name.Length > 100) return "Mod name is too long (max 100 characters).";
@@ -456,10 +456,11 @@ namespace ConditioningControlPanel.Services
             if (manifest.Author.Length > 100) return "Author name is too long (max 100 characters).";
             if (manifest.Description?.Length > 1000) manifest.Description = manifest.Description[..1000];
 
+            var hexPattern = new Regex(@"^#[0-9A-Fa-f]{6}$");
+
             // --- Theme color validation ---
             if (manifest.Theme != null)
             {
-                var hexPattern = new Regex(@"^#[0-9A-Fa-f]{6}$");
                 if (manifest.Theme.AccentColor != null && !hexPattern.IsMatch(manifest.Theme.AccentColor))
                     return "Accent color must be a valid #RRGGBB hex code.";
                 if (manifest.Theme.AccentLightColor != null && !hexPattern.IsMatch(manifest.Theme.AccentLightColor))
@@ -474,6 +475,21 @@ namespace ConditioningControlPanel.Services
                     return "Surface color must be a valid #RRGGBB hex code.";
                 if (manifest.Theme.FilterColor != null && !hexPattern.IsMatch(manifest.Theme.FilterColor))
                     return "Filter color must be a valid #RRGGBB hex code.";
+            }
+
+            // --- FX palette validation ---
+            if (manifest.FxPalette != null)
+            {
+                if (manifest.FxPalette.MistColor != null && !hexPattern.IsMatch(manifest.FxPalette.MistColor))
+                    return "Mist color must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.ParticleColor != null && !hexPattern.IsMatch(manifest.FxPalette.ParticleColor))
+                    return "Particle color must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.GlowColor != null && !hexPattern.IsMatch(manifest.FxPalette.GlowColor))
+                    return "Glow color must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.FlashTint != null && !hexPattern.IsMatch(manifest.FxPalette.FlashTint))
+                    return "Flash tint must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.MistOpacity is double mo && (mo < 0 || mo > 1))
+                    return "Mist opacity must be between 0 and 1.";
             }
 
             // --- URL validation: only HTTPS allowed ---
@@ -847,6 +863,49 @@ namespace ConditioningControlPanel.Services
             var hex = GetFilterColorHex();
             return ParseHexColor(hex);
         }
+
+        // ---- Ambient FX palette ----
+        // Every FX colour in the app resolves through here (never off a mod name and never off a
+        // per-mod art path — built-in mods have InstalledPath == null, so file lookups never fire
+        // for them). Chain: fxPalette slot → theme.filterColor → theme.accentColor → app default.
+
+        /// <summary>App-wide FX fallback when a mod defines neither an fxPalette slot nor a theme.</summary>
+        internal const string FxDefaultHex = "#FF69B4";
+
+        /// <summary>The pure fallback chain, split out so it is testable without a live ModService.</summary>
+        internal static string ResolveFxSlotHex(string? slot, string? filterColor, string? accentColor)
+        {
+            if (!string.IsNullOrWhiteSpace(slot)) return slot!;
+            if (!string.IsNullOrWhiteSpace(filterColor)) return filterColor!;
+            if (!string.IsNullOrWhiteSpace(accentColor)) return accentColor!;
+            return FxDefaultHex;
+        }
+
+        private string GetFxSlotHex(Func<ModManifest, string?> slot)
+        {
+            var m = _activeMod.Manifest;
+            return ResolveFxSlotHex(slot(m), m.Theme?.FilterColor, m.Theme?.AccentColor);
+        }
+
+        public string GetMistColorHex() => GetFxSlotHex(m => m.FxPalette?.MistColor);
+
+        public (byte R, byte G, byte B) GetMistColorRgb() => ParseHexColor(GetMistColorHex());
+
+        public string GetParticleColorHex() => GetFxSlotHex(m => m.FxPalette?.ParticleColor);
+
+        public (byte R, byte G, byte B) GetParticleColorRgb() => ParseHexColor(GetParticleColorHex());
+
+        public string GetGlowColorHex() => GetFxSlotHex(m => m.FxPalette?.GlowColor);
+
+        public (byte R, byte G, byte B) GetGlowColorRgb() => ParseHexColor(GetGlowColorHex());
+
+        public string GetFlashTintHex() => GetFxSlotHex(m => m.FxPalette?.FlashTint);
+
+        public (byte R, byte G, byte B) GetFlashTintRgb() => ParseHexColor(GetFlashTintHex());
+
+        /// <summary>Fog/aurora opacity multiplier (0-1). Defaults to 1 when the mod doesn't set one.</summary>
+        public double GetMistOpacity() =>
+            Math.Clamp(_activeMod.Manifest.FxPalette?.MistOpacity ?? 1.0, 0.0, 1.0);
 
         /// <summary>
         /// Returns the secondary/purple color for the active mod.

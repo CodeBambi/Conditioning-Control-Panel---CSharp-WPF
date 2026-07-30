@@ -667,6 +667,29 @@
                                 <Run Text="{loc:Str label_a_special_thanks_to_platinum_puppets_for_prov}"/>
                             </Hyperlink>
                         </TextBlock>
+                        <!-- Chrome FX (PR-1): one-shot sheen pass over the banner when the message
+                             changes. Its own ClipToBounds host so the band can't escape the card -
+                             deliberately NOT ClipToBounds on the shared Grid, which would start
+                             clipping the banner text itself. Hit-test invisible so the hyperlinks
+                             underneath keep working. Driven from MainWindow.ChromeFx.cs. -->
+                        <Grid x:Name="BannerSheenHost" ClipToBounds="True" IsHitTestVisible="False">
+                            <Border x:Name="BannerSheen" Width="110" HorizontalAlignment="Left" Opacity="0"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Offset="0" Color="#00FFFFFF"/>
+                                        <GradientStop Offset="0.5" Color="{DynamicResource FxGlowColor}"/>
+                                        <GradientStop Offset="1" Color="#00FFFFFF"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.RenderTransform>
+                                    <TransformGroup>
+                                        <SkewTransform AngleX="-20"/>
+                                        <TranslateTransform x:Name="BannerSheenSlide"/>
+                                    </TransformGroup>
+                                </Border.RenderTransform>
+                            </Border>
+                        </Grid>
                     </Grid>
                 </Border>
 
@@ -979,10 +1002,30 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock x:Name="TxtLevelLabel" Grid.Column="0" Text="{loc:Str label_lvl_1_2}" Foreground="{DynamicResource PinkBrush}"
                                FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                    <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" Margin="0,0,10,0">
+                    <!-- x:Name is for the PR-5 level-up burst: the TRACK is where the bar's cap
+                         sits, and after a level-up the fill has already wrapped back to a sliver. -->
+                    <Border x:Name="XPBarTrack" Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" Margin="0,0,10,0">
                         <Grid>
                             <Border x:Name="XPBar" Background="{DynamicResource PinkBrush}" CornerRadius="4"
-                                    HorizontalAlignment="Left" Width="100"/>
+                                    HorizontalAlignment="Left" Width="100">
+                                <!-- Chrome FX (PR-1): a slow gloss travelling along the filled part of
+                                     the bar. White on purpose - it reads as light catching the fill
+                                     rather than a second accent colour on top of the accent. Parked at
+                                     Opacity 0 with no clock unless ambient loops are allowed; the three
+                                     stop offsets are animated from MainWindow.ChromeFx.cs. -->
+                                <!-- Inset past the pill's rounded caps: a Border does not clip its
+                                     child to CornerRadius, so a full-bleed gloss would show square
+                                     corners poking out of the 8px-tall bar at each end. -->
+                                <Border x:Name="XPBarSheen" Margin="4,0" IsHitTestVisible="False" Opacity="0">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop x:Name="XPSheenLead" Offset="-0.30" Color="#00FFFFFF"/>
+                                            <GradientStop x:Name="XPSheenCore" Offset="-0.15" Color="#59FFFFFF"/>
+                                            <GradientStop x:Name="XPSheenTail" Offset="0.00" Color="#00FFFFFF"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                            </Border>
                             <Border x:Name="XPBarFlashOverlay" Background="{DynamicResource PinkBrush}" CornerRadius="4"
                                     HorizontalAlignment="Left"
                                     Width="{Binding Width, ElementName=XPBar}"
@@ -1177,6 +1220,22 @@
                     <TextBlock x:Name="TxtRememberIcon" Text="☆" FontSize="24" VerticalAlignment="Center" TextAlignment="Center"/>
                 </Button>
 
+                <!-- START glow layer (chrome FX, PR-1). A separate element UNDER the button, not an
+                     Effect on the button itself: WPF renders any element carrying an Effect through
+                     an intermediate surface, which would drop ClearType on the app's biggest label.
+                     Inset 4px behind a CornerRadius=8 button, so only its halo is ever visible; the
+                     breath animates this layer's Opacity, never the blur radius. Both colours are
+                     Fx* dynamic resources, so a mod switch re-tints it with no code involved. -->
+                <Border x:Name="StartGlowLayer" Grid.Column="1" Height="42" Margin="4,0"
+                        VerticalAlignment="Center" CornerRadius="8"
+                        Background="{DynamicResource FxGlowBrush}" IsHitTestVisible="False"
+                        Opacity="0" Visibility="Collapsed">
+                    <Border.Effect>
+                        <DropShadowEffect x:Name="StartGlowShadow" Color="{DynamicResource FxGlowColor}"
+                                          BlurRadius="20" ShadowDepth="0" Opacity="1"/>
+                    </Border.Effect>
+                </Border>
+
                 <!-- START Button (with session timer display) -->
                 <Button x:Name="BtnStart" Grid.Column="1" Style="{StaticResource PinkButton}"
                         Background="{DynamicResource AccentGradientBrush}"
@@ -1187,6 +1246,34 @@
                         <TextBlock x:Name="TxtStartLabel" Text="{loc:Str label_start}" FontSize="18" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
+
+                <!-- START sheen band (chrome FX, PR-1). Deliberately a SIBLING overlay rather than
+                     button content: PinkButton's ContentPresenter is centre-aligned and sizes to its
+                     child, so a band placed inside the button could only ever sweep the label. This
+                     host shares the button's cell and height, is hit-test invisible, and is clipped
+                     to the button's rounded rect in code (StartSheenHost_SizeChanged) so the band
+                     can't poke out of the corners. Colour comes from FxGlowColor, so it re-tints
+                     with the mod; the sweep itself is driven from MainWindow.ChromeFx.cs and only
+                     runs while the window is active and ambient loops are allowed. -->
+                <Grid x:Name="StartSheenHost" Grid.Column="1" Height="50" IsHitTestVisible="False"
+                      SizeChanged="StartSheenHost_SizeChanged">
+                    <Border x:Name="StartSheen" Width="80" HorizontalAlignment="Left" Opacity="0"
+                            RenderTransformOrigin="0.5,0.5">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Offset="0" Color="#00FFFFFF"/>
+                                <GradientStop Offset="0.5" Color="{DynamicResource FxGlowColor}"/>
+                                <GradientStop Offset="1" Color="#00FFFFFF"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Border.RenderTransform>
+                            <TransformGroup>
+                                <SkewTransform AngleX="-18"/>
+                                <TranslateTransform x:Name="StartSheenSlide"/>
+                            </TransformGroup>
+                        </Border.RenderTransform>
+                    </Border>
+                </Grid>
 
                 <!-- Start options caret (Start normally / Jump right in). Its own independent
                      button: a real width and a gap from START so it doesn't read as a split-button
@@ -1761,5 +1848,36 @@
                 HorizontalAlignment="Right" VerticalAlignment="Top"
                 Margin="0,40,16,0" Width="380"
                 Panel.ZIndex="9998"/>
+
+    <!-- Event FX layer (PR-5). Deliberately OUTSIDE the Viewbox: everything inside it is
+         bitmap-scaled from the fixed 1489x901 design canvas, which is fine for a soft fog wash
+         but turns crisp particles to mush. This host lives in the window's own pixel space, so a
+         burst lands at native resolution wherever its anchor happens to be on screen.
+
+         It holds no clock and no Skia surface until the first event moment: the AmbientFxCanvas
+         is created lazily by EnsureEventBurstLayer(), and between bursts it runs no timer at all
+         (AmbientFxCanvas.ShouldRun only says yes while sparks are alive). ZIndex matches the
+         toast host and it is declared after it, so a burst reads on top of a toast, while the
+         fullscreen browser overlay (9999) still covers everything. -->
+    <Grid x:Name="EventFxHost" IsHitTestVisible="False" Panel.ZIndex="9998">
+        <!-- Prestige only: one full-chrome sheen pass, swept from MainWindow.EventFx.cs. Parked
+             at Opacity 0 holding no clock; the band rides FxGlowColor so it re-tints per mod. -->
+        <Border x:Name="PrestigeSheen" Width="260" HorizontalAlignment="Left" Opacity="0"
+                IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Offset="0" Color="#00FFFFFF"/>
+                    <GradientStop Offset="0.5" Color="{DynamicResource FxGlowColor}"/>
+                    <GradientStop Offset="1" Color="#00FFFFFF"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <Border.RenderTransform>
+                <TransformGroup>
+                    <SkewTransform AngleX="-18"/>
+                    <TranslateTransform x:Name="PrestigeSheenSlide"/>
+                </TransformGroup>
+            </Border.RenderTransform>
+        </Border>
+    </Grid>
     </Grid>
 </Window>

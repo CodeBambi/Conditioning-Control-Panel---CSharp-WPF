@@ -540,6 +540,11 @@ namespace ConditioningControlPanel
         {
             if (target == null) return;
 
+            // FX-overhaul alignment: this is interaction-length motion, so it survives Reduced and
+            // is dropped entirely at MotionLevel.Off. The scroll still happens either way - the
+            // button's JOB is to take you there; the flare is the decoration on top of it.
+            if (!MotionFx.AllowTransitions) return;
+
             var effect = new DropShadowEffect
             {
                 Color = accent,
@@ -689,6 +694,10 @@ namespace ConditioningControlPanel
             }
 
             if (Math.Abs(to - from) < 0.5) { Land(); return; }
+
+            // FX-overhaul alignment: at MotionLevel.Off the glide becomes a jump. The user still
+            // ends up exactly where the button promised, without the travel.
+            if (!MotionFx.AllowTransitions) { Land(); return; }
 
             sv.SetValue(LbScrollOffsetProperty, from);
 
@@ -964,6 +973,10 @@ namespace ConditioningControlPanel
                 {
                     // Assign canonical ranks + bake rank deltas, then render.
                     RankLeaderboardEntries();
+                    // Arm the rank-change wash for the rebuild the sort is about to run. Only a
+                    // real refresh arms it: a filter or a search rebuild changes the view, not the
+                    // standings, and flashing there would claim movement that never happened.
+                    _lbRankFlashPending = true;
                     ApplyLeaderboardSort(sortBy ?? "rank");
 
                     LeaderboardTab.TxtLeaderboardStatus.Text =
@@ -1082,6 +1095,12 @@ namespace ConditioningControlPanel
             var tab = LeaderboardTab;
             if (tab?.LstLeaderboard == null) return;
 
+            // The tab's FX hooks wire themselves up on the first rebuild - see
+            // MainWindow.LeaderboardFx.cs. Idempotent.
+            EnsureLeaderboardFx();
+            // Whatever the previous view left decorated is about to be recycled onto other rows.
+            ClearRankFlashes();
+
             try
             {
                 IEnumerable<Services.LeaderboardEntry> query = _leaderboardRanked;
@@ -1162,6 +1181,12 @@ namespace ConditioningControlPanel
 
                 UpdateYourRankDisplay();
                 UpdateYouBar();
+
+                // Decoration last, and only on what this rebuild actually produced: the podium's
+                // hero breath + entrance, and the rank-change wash when a refresh armed one.
+                var moved = _lbRankFlashPending ? CollectMovedRows(display) : null;
+                _lbRankFlashPending = false;
+                RunLeaderboardFxPass(showPodium ? view[0] : null, moved);
             }
             catch (Exception ex)
             {

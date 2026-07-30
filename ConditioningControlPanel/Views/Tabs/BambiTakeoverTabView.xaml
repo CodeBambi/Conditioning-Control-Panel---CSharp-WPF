@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -84,21 +85,15 @@
                                 <ColumnDefinition Width="20"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <!-- Orb (placeholder: drawn ellipse + halo; swap for nano-banana art later) -->
-                            <Grid Grid.Column="0" Width="92" Height="92" VerticalAlignment="Center">
-                                <Ellipse x:Name="OrbHalo" x:FieldModifier="internal" Width="92" Height="92" Opacity="0">
-                                    <Ellipse.Fill>
-                                        <RadialGradientBrush>
-                                            <GradientStop Color="#FF69B4" Offset="0.0"/>
-                                            <GradientStop Color="#00FF69B4" Offset="1.0"/>
-                                        </RadialGradientBrush>
-                                    </Ellipse.Fill>
-                                </Ellipse>
-                                <Ellipse x:Name="OrbCore" x:FieldModifier="internal" Width="58" Height="58" Fill="#3A3A52"
-                                         Stroke="#5A4A6A" StrokeThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Image Width="30" Height="30" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Source="{Binding Source='🌀', Converter={StaticResource EmojiToImageSource}}"/>
-                            </Grid>
+                            <!-- The orb. Was two stacked Ellipses plus a spiral emoji standing in for
+                                 one; it is now a real Skia surface (Controls/TakeoverOrb.cs) that
+                                 draws its own layered glow, rotating inner swirl and orbiting wisps,
+                                 re-tints per mod and parks whenever the tab is not on screen.
+                                 112 rather than the old 92: the wisp ring orbits out to ~0.46 of the
+                                 shorter edge and WPF clips overflow silently, so the slot is sized
+                                 for the FX at peak rather than for the old flat disc. -->
+                            <fx:TakeoverOrb x:Name="TakeoverOrbFx" x:FieldModifier="internal"
+                                            Grid.Column="0" Width="112" Height="112" VerticalAlignment="Center"/>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                 <TextBlock x:Name="TxtTakeoverStatus" x:FieldModifier="internal" Text="○ DORMANT"
                                            Foreground="#8888A0" FontSize="18" FontWeight="Bold"/>
@@ -406,7 +401,7 @@
     
                 <!-- Translucent gating overlay (only for free users) -->
                 <Border x:Name="BambiTakeoverGate" x:FieldModifier="internal" Visibility="Collapsed"
-                        Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
+                        Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
                         CornerRadius="10" IsHitTestVisible="True">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
@@ -414,7 +409,7 @@
                                    FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                         <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
                                    Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                        <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                        <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
                                 Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
                             <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
                         </Button>

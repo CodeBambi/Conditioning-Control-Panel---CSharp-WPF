@@ -266,6 +266,11 @@ namespace ConditioningControlPanel
                     HapticsTab.BtnHapticConnect.IsEnabled = true;
                 }
             }
+
+            // FX (PR-4a): the status dot breathes only while a device is genuinely connected.
+            // Read back off the service rather than off which branch we took, so a disconnect that
+            // failed, or a connect that reported success but dropped, still tells the truth.
+            SetHapticsStatusPulse(App.Haptics.IsConnected);
         }
 
         private System.Windows.Threading.DispatcherTimer? _hapticSliderDebounce;

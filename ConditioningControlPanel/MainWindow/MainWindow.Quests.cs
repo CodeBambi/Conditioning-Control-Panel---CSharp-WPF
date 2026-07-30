@@ -61,6 +61,10 @@ namespace ConditioningControlPanel
                 // Refresh the quest UI
                 RefreshQuestUI();
 
+                // Event FX (PR-5): burst at the cap of the bar that just filled, or on the Quests
+                // nav button when the completion landed off-tab. See MainWindow.EventFx.cs.
+                CelebrateQuestComplete(e.QuestType);
+
                 // Hide inline banner after 5 seconds
                 Task.Delay(5000).ContinueWith(_ =>
                 {

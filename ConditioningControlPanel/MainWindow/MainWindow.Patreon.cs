@@ -177,6 +177,14 @@ namespace ConditioningControlPanel
             if (gate == null) return;
             var hasPremium = App.Patreon?.HasPremiumAccess == true;
             gate.Visibility = hasPremium ? Visibility.Collapsed : Visibility.Visible;
+
+            // FX (PR-4a): one shared animated treatment for every gate in the app - scrim fog
+            // drift, a breathing glow behind the padlock, a sheen across the CTA. Attach is
+            // idempotent, decorates only (it never touches Visibility or entitlement), and parks
+            // all three clocks whenever the gate is collapsed or motion is reduced. This is the
+            // choke point six of the eight gates already share; the other two (Blink Trainer,
+            // Graded Intake) attach from their own refresh methods.
+            Controls.PremiumGateFx.Attach(gate);
         }
 
         #endregion

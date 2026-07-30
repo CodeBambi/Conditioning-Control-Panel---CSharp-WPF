@@ -1396,12 +1396,16 @@ namespace ConditioningControlPanel
                 new RoutedEventHandler((s, _) => Services.WindowChromeHelper.ApplyDarkTitleBar((Window)s)));
             // Recolor the Season Recap card palette from the active mod.
             Services.RecapTheme.ApplyForActiveMod();
-            // On mod switch: re-tint open window title bars and re-skin the recap palette (UI thread).
+            // Seed the ambient FX palette (fog/particles/glow/flash tint) from the active mod.
+            Services.FxTheme.ApplyForActiveMod();
+            // On mod switch: re-tint open window title bars and re-skin the recap + FX palettes
+            // (UI thread). ModChanged is the authoritative signal — ApplyActiveModChange is not.
             Mods.ModChanged += (_, __) =>
             {
                 void Recolor()
                 {
                     Services.RecapTheme.ApplyForActiveMod();
+                    Services.FxTheme.ApplyForActiveMod();
                     foreach (Window w in Current.Windows)
                         Services.WindowChromeHelper.ApplyDarkTitleBar(w);
                 }

@@ -415,6 +415,10 @@ namespace ConditioningControlPanel
             fadeInTarget.IsHitTestVisible = true;
 
             _bannerCurrentIndex = nextIndex;
+
+            // Chrome FX: a light sheen rides the crossfade. Throttled inside (the rotation is a
+            // 4s timer; a pass every 4s would be an ambient strobe, not a change cue).
+            SweepBannerSheen();
         }
 
         /// <summary>
@@ -425,6 +429,9 @@ namespace ConditioningControlPanel
             if (string.IsNullOrEmpty(message)) return;
 
             TxtBannerSecondary.Text = message;
+
+            // A genuinely new message, so it bypasses the rotation throttle.
+            SweepBannerSheen(force: true);
 
             // Ensure timer is running
             if (_bannerRotationTimer != null && !_bannerRotationTimer.IsEnabled)
@@ -884,6 +891,20 @@ namespace ConditioningControlPanel
                 var fullText = string.Concat(Enumerable.Repeat(singleSegment, segmentsNeeded));
                 SettingsTab.MarqueeText.Text = fullText;
 
+                // Ambient loop: at the Performance tier or under reduced motion the banner shows a
+                // single static segment parked at the origin rather than scrolling forever.
+                if (!Services.MotionFx.AllowAmbientLoops)
+                {
+                    SettingsTab.MarqueeText.Text = singleSegment;
+                    if (SettingsTab.MarqueeText.RenderTransform is TranslateTransform park)
+                    {
+                        park.BeginAnimation(TranslateTransform.XProperty, null);
+                        park.X = 0;
+                    }
+                    _marqueeStoryboard = null;
+                    return;
+                }
+
                 // Animation: scroll exactly one segment width, then loop back seamlessly
                 // From 0 to -segmentWidth creates perfect loop since next segment is identical
                 var animation = new System.Windows.Media.Animation.DoubleAnimation
@@ -893,6 +914,7 @@ namespace ConditioningControlPanel
                     Duration = TimeSpan.FromSeconds(segmentWidth / 80), // Speed: 80 pixels per second
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
                 };
+                System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(animation, AmbientFrameRate);
 
                 _marqueeStoryboard = new System.Windows.Media.Animation.Storyboard();
                 _marqueeStoryboard.Children.Add(animation);
