@@ -20,38 +20,39 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.5.2";
+        public const string AppVersion = "6.6.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.5.2 - Questioning... the narrative? 🤭💗
+        public const string CurrentPatchNotes = @"v6.6.0 - Enrolled 💗
 
-A stability pass on top of 6.5.1. Locks that are meant to hold now hold, panic actually stops things, and your desktop comes back the way you left it.
+✨ FEATURES
+- Multi-day Training Programs (BETA) - five programs across 7/14/28 days with an enrollment ceremony, a reward-track run view, day tasks, and a feature lock while a program session runs
+- Weekly Intake Pass - a free weekly taste of the Graded Intake for everyone
+- Streak-Fix charges - Oopsie Insurance is now a stackable credit balance: +1 every season, free to spend, and 6 retroactive credits waiting for existing users
+- Bouncing Text overhaul - color modes, an effects pack, an optional second text, and an opacity control
+- Tube Fit editor - live avatar resize preview right in the Mod Manager
+- Keyword triggers can now be scoped to apps - block list, allow list, or only-in-listed-apps
+- Withdraw from a program now properly ends its session and unlocks your dashboard
+- New first-run experience - revived tour, feature intro cards, and a premium celebration
+- Achievement posts on Discord are now mod-aware
 
-🩹 FIXES
-- Your wallpaper is no longer cleared for good when a wallpaper change gets interrupted. (#692)
-- ""Keep the wallpaper"" and the pulse length are back in Takeover, so a change can stay if you want it to. (#694)
-- Mandatory video plays through the audio device you picked instead of the Windows default. (#707, #708)
-- Corner GIF overlays no longer wedge the app on startup, and a crash while restoring them can no longer follow you through a reinstall. (#709)
-- Voice commands can no longer talk their way out of a strict locked video. (#706)
-- Panic during a mandatory video now ends the run instead of quietly queueing the next one.
-- Failing an attention check no longer hands you an escapable video on the retry.
-- Dashboard cards follow your mod's text replacements. (#713)
-- Leaderboard: ""Jump to me"" stopped pointing at a page that never existed, and your rank no longer contradicts the board it is printed on. (#693)
-- The freeze behind the blurred video background is fixed. (#632, #636, #687)
-- A stuck audio duck no longer leaves the machine silenced, and Test Audio cannot hang. (#686)
-- Mantra chant respects mute, disarms on panic, and no longer resumes by itself. (#685)
-- Wake word calibration finally hears the ""hey"". (#682)
-- Flash and spiral GIFs sample across the whole file instead of truncating, so long GIFs keep their ending. (#683)
-- The Monitor dropdown wins over the calibration pin in the blink trainer. (#681)
-- Lock card evidence and achievement unlocks can no longer hang. (#677, #684)
+🎨 UI/UX
+- App-wide FX overhaul - mod-driven color palettes, ambient effects, tab choreography, event bursts, and a reduced-motion setting for those who want calm
+- Leaderboard rebuilt as a ranked roster with a jump-to-me that glides
+- Program browse cards wear their banner art and identity crests
+- A running session now locks the dials it prescribes - no more fighting your own settings mid-session
+- Dashboard mini-game sections got explanatory tooltips
 
-🌍 LOCALIZATION
-- 10 missing keys, plus new keys for the wallpaper toggle and the leaderboard rank line. (#678)
-
-Season: Jelly July";
+🔧 BUG FIXES
+- Chinese subliminal text no longer draws as empty boxes (per-font text runs)
+- Corner GIF overlays no longer crash the app (shipped in the 6.5.2 prerelease, now for everyone)
+- Voice consent can now be revoked for the microphone too
+- Language files hardened - a broken translation file now falls back to English instead of blanking the UI
+- Quiz ""perfect"" achievement now accepts 90% and up
+- Keyword haptics honor the per-trigger intensity slider";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
