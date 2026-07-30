@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -12,7 +13,27 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-    
+
+            <!-- ============================================================ -->
+            <!-- AMBIENT LAYER - the one looping FX on this tab: a very sparse -->
+            <!-- fog drift behind the roster. Declared FIRST so it is the      -->
+            <!-- bottom of the grid's z-order; the cards paint their own opaque-->
+            <!-- surfaces on top, so the mist only reads through the gutters.  -->
+            <!--                                                              -->
+            <!-- Two puffs at low intensity, not the default three: this tab is-->
+            <!-- a roster you scan, and the air behind it must never compete   -->
+            <!-- with a name. The tint comes from FxTheme (the mod's mist      -->
+            <!-- colour), so it follows the active mod instead of being nailed -->
+            <!-- to one hex - see MainWindow.SubjectsFx for why that is not    -->
+            <!-- literally NeonPurple.                                        -->
+            <!--                                                              -->
+            <!-- AmbientFxCanvas is hit-test invisible by construction, runs a -->
+            <!-- self-stopping clock, and MainWindow.SubjectsFx registers it   -->
+            <!-- with RegisterTabFx so it parks on every tab switch.           -->
+            <!-- ============================================================ -->
+            <fx:AmbientFxCanvas x:Name="SubjectsAmbientFx" x:FieldModifier="internal"
+                                Grid.Row="0" Grid.RowSpan="3"/>
+
             <!-- Header -->
             <Grid Grid.Row="0" Margin="0,0,0,18">
                 <Grid.ColumnDefinitions>
@@ -172,6 +193,9 @@
                                             Tag="{Binding UnifiedId}"
                                             IsEnabled="{Binding IsConnectEnabled}"
                                             Click="BtnConnectSubject_Click"
+                                            PreviewMouseLeftButtonDown="BtnConnectSubject_PressDown"
+                                            PreviewMouseLeftButtonUp="BtnConnectSubject_PressUp"
+                                            MouseLeave="BtnConnectSubject_PressUp"
                                             FontSize="13" FontWeight="Bold"
                                             Padding="0,8" BorderThickness="0" Cursor="Hand">
                                         <Button.Style>
