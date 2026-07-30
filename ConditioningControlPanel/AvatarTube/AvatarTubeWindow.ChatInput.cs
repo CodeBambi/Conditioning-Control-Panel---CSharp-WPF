@@ -30,7 +30,8 @@ namespace ConditioningControlPanel
         private bool _isInputVisible = false;
         private readonly List<DateTime> _rapidClickTimestamps = new(); // Track clicks for 50-in-1-minute trigger
         private bool _isShowingChatHistory = false;
-        // Note: Whispers mute state is now read from App.Settings.Current.SubAudioEnabled
+        // Note: Whispers mute state is read from App.Settings.Current.SubAudioMuted, which is
+        // deliberately separate from the SubAudioEnabled master (see AppSettings.SubAudioMuted).
         private bool _isBrowserPaused = false; // Browser audio paused state
 
         // ===== P1.4 moderation counter / chat cooldown =====
@@ -1233,7 +1234,7 @@ namespace ConditioningControlPanel
         /// Sets the avatar's mute state from an external caller (the "mute"/"unmute" voice commands)
         /// and refreshes the quick-menu labels — mirrors what <see cref="MenuItemMute_Click"/> does on a
         /// manual toggle, minus the settings write (the caller owns that). UpdateQuickMenuState also
-        /// re-reads SubAudioEnabled, so the "mute whispers" menu label refreshes here too.
+        /// re-reads SubAudioMuted, so the "mute whispers" menu label refreshes here too.
         /// </summary>
         public void ApplyMuteState(bool avatarMuted)
         {
@@ -1423,7 +1424,7 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Set mute whispers state from MainWindow (toggles SubAudioEnabled)
+        /// Set mute whispers state from MainWindow (toggles SubAudioMuted, not the master enable)
         /// </summary>
         public void SetMuteWhispers(bool isMuted)
         {
