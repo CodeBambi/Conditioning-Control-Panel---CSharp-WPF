@@ -58,6 +58,165 @@
 
             <Border Background="{DynamicResource SurfaceBgBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <TextBlock Text="{loc:Str setting_opacity}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtOpacity" Text="100%" HorizontalAlignment="Right"
+                                   Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
+                    </Grid>
+                    <Slider x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="100"
+                            ValueChanged="SliderOpacity_Changed"/>
+                    <TextBlock Text="{loc:Str tooltip_bouncing_text_opacity_10_ghostly_100_solid}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str setting_color_mode}" Foreground="White"
+                               FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                    <ComboBox x:Name="CmbColorMode"
+                              Style="{DynamicResource DarkComboBoxStyle}"
+                              SelectionChanged="CmbColorMode_Changed">
+                        <ComboBoxItem Content="{loc:Str option_color_random}"/>
+                        <ComboBoxItem Content="{loc:Str option_color_fixed}"/>
+                        <ComboBoxItem Content="{loc:Str option_color_rainbow}"/>
+                    </ComboBox>
+                    <TextBlock Text="{loc:Str tooltip_random_rerolls_every_bounce_fixed_keeps_one_c}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                    <Grid x:Name="PanelFixedColor" Margin="0,10,0,0" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str setting_text_color}" Foreground="White"
+                                   FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border x:Name="ColorSwatch" Width="30" Height="30" CornerRadius="6"
+                                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                    Background="#FF69B4" Margin="0,0,8,0"/>
+                            <Button x:Name="BtnChooseColor" Content="{loc:Str btn_choose_color}"
+                                    Style="{StaticResource SmallPinkButton}" Click="BtnChooseColor_Click"/>
+                            <Button x:Name="BtnResetColor" Content="{loc:Str btn_reset}"
+                                    Style="{StaticResource SmallPinkButton}" Click="BtnResetColor_Click"
+                                    Margin="6,0,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str label_effects}" Foreground="White"
+                               FontSize="13" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <TextBlock Text="{loc:Str tooltip_bouncing_text_effects_combine_freely}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <UniformGrid Columns="2">
+                        <Grid Margin="0,4,10,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_breathing}" Foreground="White"
+                                       FontSize="12" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkFxBreathing" Style="{StaticResource ToggleStyle}"
+                                      VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                        </Grid>
+                        <Grid Margin="0,4,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_wobble}" Foreground="White"
+                                       FontSize="12" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkFxWobble" Style="{StaticResource ToggleStyle}"
+                                      VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                        </Grid>
+                        <Grid Margin="0,4,10,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_spin}" Foreground="White"
+                                       FontSize="12" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkFxSpin" Style="{StaticResource ToggleStyle}"
+                                      VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                        </Grid>
+                        <Grid Margin="0,4,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_velocity_tilt}" Foreground="White"
+                                       FontSize="12" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkFxVelocityTilt" Style="{StaticResource ToggleStyle}"
+                                      VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                        </Grid>
+                        <Grid Margin="0,4,10,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_squash}" Foreground="White"
+                                       FontSize="12" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkFxSquash" Style="{StaticResource ToggleStyle}"
+                                      VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                        </Grid>
+                        <Grid Margin="0,4,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_corner_burst}" Foreground="White"
+                                       FontSize="12" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkFxCornerBurst" Style="{StaticResource ToggleStyle}"
+                                      VerticalAlignment="Center" Checked="FxToggle_Changed" Unchecked="FxToggle_Changed"/>
+                        </Grid>
+                        <Grid Margin="0,4,10,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str setting_fx_outline}" Foreground="White"
+                                       FontSize="12" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkOutline" Style="{StaticResource ToggleStyle}"
+                                      VerticalAlignment="Center" Checked="ChkOutline_Changed" Unchecked="ChkOutline_Changed"/>
+                        </Grid>
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str setting_second_text}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_second_independent_bouncing_text}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkSecondText"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkSecondText_Changed" Unchecked="ChkSecondText_Changed"/>
+                </Grid>
+            </Border>
+
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
                     BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
                 <Grid>
                     <Grid.ColumnDefinitions>
