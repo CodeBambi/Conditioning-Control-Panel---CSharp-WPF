@@ -57,8 +57,14 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
     
-                            <!-- Avatar: dark gradient bg, head/shoulders bitmap crop -->
-                            <Border Grid.Column="0" Width="96" Height="96" CornerRadius="48" Margin="0,0,16,0"
+                            <!-- Avatar: dark gradient bg, head/shoulders bitmap crop.
+                                 CompanionHeroAvatarRing is the tab's ONE ambient loop (FX plan S4):
+                                 MainWindow.CompanionFx breathes this disc 1.00<->1.015 over 5s via a
+                                 RenderTransform, so the clip, the ring and the portrait scale as one
+                                 piece and nothing in the strip re-lays-out. The 0.72px of growth sits
+                                 inside the hero border's 16px padding, so it cannot clip. -->
+                            <Border x:Name="CompanionHeroAvatarRing" x:FieldModifier="internal"
+                                    Grid.Column="0" Width="96" Height="96" CornerRadius="48" Margin="0,0,16,0"
                                     BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
                                     VerticalAlignment="Center">
                                 <Border.Background>
@@ -332,7 +338,11 @@
     
                     <!-- AI BRAIN SECTION -->
                     <Grid Margin="0,0,0,10">
-                        <Border CornerRadius="14" Padding="16" BorderThickness="1">
+                        <!-- CompanionAiBrainCard is the sheen host for a successful provider
+                             connection test (MainWindow.CompanionFx). Event-driven one-shot:
+                             no clock exists on this card while it sits idle. -->
+                        <Border x:Name="CompanionAiBrainCard" x:FieldModifier="internal"
+                                CornerRadius="14" Padding="16" BorderThickness="1">
                             <Border.Background>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                     <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>

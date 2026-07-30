@@ -10,6 +10,29 @@ namespace ConditioningControlPanel.Views.Tabs
         public DeeperTabView()
         {
             InitializeComponent();
+            // FX lifecycle (PR-4b): the header glyph's drift starts when the tab appears and is
+            // parked the moment it is collapsed again.
+            IsVisibleChanged += DeeperTabView_IsVisibleChanged;
+        }
+
+        private void DeeperTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnDeeperTabVisibilityChanged(IsVisible);
+        }
+
+        // Row hover lift. Composed with (not a replacement for) the row's existing IsMouseOver
+        // border-brush reveal, which stays in the DataTemplate's own style.
+        private void DeeperRow_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnDeeperRowHover(sender as FrameworkElement, true);
+        }
+
+        private void DeeperRow_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnDeeperRowHover(sender as FrameworkElement, false);
         }
 
         private void BtnDeeperCatalogue_Click(object sender, RoutedEventArgs e)

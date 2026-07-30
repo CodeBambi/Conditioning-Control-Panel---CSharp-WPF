@@ -12,14 +12,21 @@
         <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="10"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <Border Grid.Column="0" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel Margin="15">
+                <!-- ProfileColumnStack is the entrance-stagger host (MainWindow.ProfileFx): its
+                     direct children are the tab's cards. The rotating OG border below is left
+                     exactly as it shipped - it is this tab's one ambient element. -->
+                <StackPanel x:Name="ProfileColumnStack" x:FieldModifier="internal" Margin="15">
                     <Grid Margin="0,0,0,15">
                         <TextBlock Text="{loc:Str label_profile_viewer}" Foreground="#5865F2" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
                         <Button x:Name="HelpBtnDiscordProfile" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="DiscordProfile"/>
                     </Grid>
     
-                    <!-- Search Input -->
-                    <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="8" Padding="10" Margin="0,0,0,15">
+                    <!-- Search Input. The 1px border is transparent at rest and brightens on focus
+                         (MainWindow.ProfileFx); Padding drops from 10 to 9 so the box occupies
+                         exactly the same space it always did. -->
+                    <Border x:Name="ProfileSearchBox" x:FieldModifier="internal"
+                            Background="{DynamicResource SurfaceBgBrush}" CornerRadius="8"
+                            BorderThickness="1" Padding="9" Margin="0,0,0,15">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
