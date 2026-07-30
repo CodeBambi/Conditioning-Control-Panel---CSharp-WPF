@@ -2975,6 +2975,76 @@ namespace ConditioningControlPanel.Models
             set { _bouncingTextAlwaysOnTop = value; OnPropertyChanged(); }
         }
 
+        private int _bouncingTextColorMode = 0; // 0=Random (classic), 1=Fixed, 2=Rainbow cycle
+        public int BouncingTextColorMode
+        {
+            get => _bouncingTextColorMode;
+            set { _bouncingTextColorMode = Math.Clamp(value, 0, 2); OnPropertyChanged(); }
+        }
+
+        private string _bouncingTextFixedColor = ""; // "#RRGGBB"; empty = hot pink
+        public string BouncingTextFixedColor
+        {
+            get => _bouncingTextFixedColor;
+            set { _bouncingTextFixedColor = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxBreathing = false;
+        public bool BouncingTextFxBreathing
+        {
+            get => _bouncingTextFxBreathing;
+            set { _bouncingTextFxBreathing = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxWobble = false;
+        public bool BouncingTextFxWobble
+        {
+            get => _bouncingTextFxWobble;
+            set { _bouncingTextFxWobble = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxSpin = false;
+        public bool BouncingTextFxSpin
+        {
+            get => _bouncingTextFxSpin;
+            set { _bouncingTextFxSpin = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxVelocityTilt = false;
+        public bool BouncingTextFxVelocityTilt
+        {
+            get => _bouncingTextFxVelocityTilt;
+            set { _bouncingTextFxVelocityTilt = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxSquashStretch = true;
+        public bool BouncingTextFxSquashStretch
+        {
+            get => _bouncingTextFxSquashStretch;
+            set { _bouncingTextFxSquashStretch = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextFxCornerBurst = true;
+        public bool BouncingTextFxCornerBurst
+        {
+            get => _bouncingTextFxCornerBurst;
+            set { _bouncingTextFxCornerBurst = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextOutline = false;
+        public bool BouncingTextOutline
+        {
+            get => _bouncingTextOutline;
+            set { _bouncingTextOutline = value; OnPropertyChanged(); }
+        }
+
+        private bool _bouncingTextSecondText = false;
+        public bool BouncingTextSecondText
+        {
+            get => _bouncingTextSecondText;
+            set { _bouncingTextSecondText = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Pink Filter (Unlocks Lv.10)
