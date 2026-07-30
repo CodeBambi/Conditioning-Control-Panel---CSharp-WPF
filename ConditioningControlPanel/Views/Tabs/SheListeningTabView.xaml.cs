@@ -69,5 +69,9 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.BtnGateUnlock_Click(sender, e);
         }
+        private void BtnSL_RevokeConsent_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.SL_RevokeMicConsent_Click(sender, e);
+        }
     }
 }

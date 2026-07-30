@@ -901,6 +901,52 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        // === AWARENESS KEYWORD PATTERN ===
+
+        /// <summary>
+        /// Short haptic pulse for an Awareness keyword hit. Intensity comes from the trigger's
+        /// own action config (the per-action slider in the preset editor), NOT a global slider,
+        /// and the only gates are the master haptics toggle and a connected device — a keyword
+        /// haptic must not depend on the Subliminal feature's toggle or intensity slider.
+        /// </summary>
+        public async Task TriggerKeywordPatternAsync(string triggerText, double intensity)
+        {
+            if (!Settings.Enabled || _activeProvider == null || !_activeProvider.IsConnected)
+                return;
+
+            _currentEventType = "Keyword";
+            intensity = GetSliderIntensity(intensity);
+            var textLower = triggerText.ToLowerInvariant();
+
+            HapticTriggered?.Invoke(this, $"Keyword: {(int)(intensity * 100)}%");
+
+            try
+            {
+                // Same short text-keyed durations as the subliminal pattern
+                // Buttplug.io needs longer durations due to protocol overhead
+                int durationMs;
+                var durationMultiplier = IsButtplugProvider ? 2.0 : 1.0;
+
+                if (textLower.Contains("cum") || textLower.Contains("collapse") || textLower.Contains("drop"))
+                {
+                    durationMs = (int)(250 * durationMultiplier);
+                }
+                else if (textLower.Contains("freeze") || textLower.Contains("zap"))
+                {
+                    durationMs = (int)(120 * durationMultiplier);
+                }
+                else
+                {
+                    durationMs = (int)(150 * durationMultiplier);
+                }
+                await ApplyVibrationModeAsync(intensity, durationMs, Settings.SubliminalMode);
+            }
+            finally
+            {
+                _currentEventType = null;
+            }
+        }
+
         // === AVATAR EASTER EGG PATTERN ===
 
         /// <summary>
