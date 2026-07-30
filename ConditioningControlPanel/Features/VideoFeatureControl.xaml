@@ -100,16 +100,24 @@
                 BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
             <StackPanel>
                 <Grid Margin="0,0,0,10">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <helpers:EmojiTextBlock Text="{loc:Str label_mini_game}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock Text="{loc:Str tooltip_enable_attention_check_targets}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
-                    <CheckBox x:Name="ChkMiniGame" Style="{StaticResource ToggleStyle}"
+                    <CheckBox Grid.Column="1" x:Name="ChkMiniGame" Style="{StaticResource ToggleStyle}"
                               HorizontalAlignment="Right" VerticalAlignment="Center"
+                              ToolTip="{loc:Str tooltip_enable_attention_check_targets}"
                               Checked="ChkMiniGame_Changed" Unchecked="ChkMiniGame_Changed"/>
                 </Grid>
 
                 <!-- Targets -->
-                <Grid Margin="0,0,0,8">
+                <Grid Margin="0,0,0,8" ToolTip="{loc:Str tooltip_number_of_targets_to_click_per_video}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -127,24 +135,27 @@
                                Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="SemiBold"/>
                 </Grid>
                 <Slider x:Name="SliderTargets" Minimum="1" Maximum="10" Value="3"
+                        ToolTip="{loc:Str tooltip_number_of_targets_to_click_per_video}"
                         ValueChanged="SliderTargets_Changed" Margin="0,0,0,10"/>
 
                 <!-- Duration -->
-                <Grid Margin="0,0,0,2">
+                <Grid Margin="0,0,0,2" ToolTip="{loc:Str tooltip_seconds_each_target_stays_visible}">
                     <TextBlock Text="{loc:Str setting_duration}" Foreground="White" FontSize="12"/>
                     <TextBlock x:Name="TxtDuration" Text="5" HorizontalAlignment="Right"
                                Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="SemiBold"/>
                 </Grid>
                 <Slider x:Name="SliderDuration" Minimum="1" Maximum="15" Value="5"
+                        ToolTip="{loc:Str tooltip_seconds_each_target_stays_visible}"
                         ValueChanged="SliderDuration_Changed" Margin="0,0,0,10"/>
 
                 <!-- Target size -->
-                <Grid Margin="0,0,0,2">
+                <Grid Margin="0,0,0,2" ToolTip="{loc:Str tooltip_target_button_size_in_pixels}">
                     <TextBlock Text="{loc:Str setting_size}" Foreground="White" FontSize="12"/>
                     <TextBlock x:Name="TxtTargetSize" Text="70" HorizontalAlignment="Right"
                                Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="SemiBold"/>
                 </Grid>
                 <Slider x:Name="SliderTargetSize" Minimum="30" Maximum="150" Value="70"
+                        ToolTip="{loc:Str tooltip_target_button_size_in_pixels}"
                         ValueChanged="SliderTargetSize_Changed" Margin="0,0,0,12"/>
 
                 <!-- Phase 3 placeholder copy — voice-pass at ship. -->
@@ -171,8 +182,10 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Button Grid.Column="0" Content="{loc:Str btn_phrases}"
+                            ToolTip="{loc:Str tooltip_edit_attention_check_phrases}"
                             Style="{DynamicResource OutlineButton}" Click="BtnManageAttention_Click"/>
                     <Button Grid.Column="2" Content="{loc:Str btn_style}"
+                            ToolTip="{loc:Str tooltip_customize_target_appearance_colors_border_fon}"
                             Style="{DynamicResource OutlineButton}" Click="BtnAttentionStyle_Click"/>
                 </Grid>
             </StackPanel>

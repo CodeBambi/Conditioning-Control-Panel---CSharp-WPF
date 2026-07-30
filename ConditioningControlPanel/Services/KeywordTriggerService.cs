@@ -1187,7 +1187,10 @@ namespace ConditioningControlPanel.Services
                     return 0;
 
                 case HapticAction haptic:
-                    _ = App.Haptics?.TriggerSubliminalPatternAsync(trigger.Keyword);
+                    // Per-action intensity from the preset editor's slider. Routing through the
+                    // subliminal pattern here used to ignore it AND silently require the Subliminal
+                    // haptic feature to be enabled — keyword haptics gate only on the master toggle.
+                    _ = App.Haptics?.TriggerKeywordPatternAsync(trigger.Keyword, haptic.Intensity);
                     return 0;
 
                 case AddXpAction xp:
@@ -1439,7 +1442,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 if (trigger.HapticEnabled)
-                    _ = App.Haptics?.TriggerSubliminalPatternAsync(trigger.Keyword);
+                    _ = App.Haptics?.TriggerKeywordPatternAsync(trigger.Keyword, trigger.HapticIntensity);
 
                 if (trigger.XPAward > 0)
                 {
