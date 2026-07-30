@@ -439,6 +439,30 @@ namespace ConditioningControlPanel
                     IsLocked = locked
                 };
 
+                // Identity crest. Sigil first, then day 1's mood plate - the plate resolves through
+                // the shared archetype chain (and ultimately plate_default), so a program with no
+                // sigil of its own still gets a dressed crest. Only four of the five shipped programs
+                // are in that position, which is exactly why the fallback is not optional. Null means
+                // a mod shipped no program art at all: the crest collapses and the card keeps the
+                // bare 44px glyph it had before the crest existed.
+                var art = Services.Program.ProgramArt.Sigil(def)
+                          ?? Services.Program.ProgramArt.DayPlate(def, def.GetDay(1));
+                if (art != null)
+                {
+                    // The art is white RGB with the luminance in the ALPHA channel, so the template's
+                    // Rectangle is FILLED with the accent and this brush is its OPACITY MASK. Frozen,
+                    // so handing the same brush to every repaint is free and thread-safe. Uniform, not
+                    // UniformToFill: these are 512x512 emblems and glows, and cropping one into the
+                    // round chip would cut the glyph rather than fill the disc.
+                    var mask = new ImageBrush(art) { Stretch = Stretch.Uniform };
+                    mask.Freeze();
+
+                    item.ArtMask = mask;
+                    item.ArtGlowBrush = ProgramRadialGlowBrush(item.AccentBrush, 130);
+                    item.ArtVisibility = Visibility.Visible;
+                    item.IconOnlyVisibility = Visibility.Collapsed;
+                }
+
                 if (locked)
                 {
                     item.ActionText = Loc.Get("btn_program_locked");
@@ -1115,6 +1139,25 @@ namespace ConditioningControlPanel
                 var current = running ? engine!.CurrentSession : null;
                 var isOurs = running && svc.IsProgramSession(current);
 
+                // Pause cannot honour "spends nothing" while today's session is in flight, so the
+                // button says so up front instead of taking the click and declining (see
+                // ProgramService.CanPause). Set before every early return below so no path leaves it
+                // stale, and only ever disabled for OUR session - Resume, and pausing around a
+                // foreign session, both stay available. Withdraw is deliberately never touched here.
+                if (tab.BtnProgramPauseResume != null)
+                {
+                    if (isOurs && !paused)
+                    {
+                        tab.BtnProgramPauseResume.IsEnabled = false;
+                        tab.BtnProgramPauseResume.ToolTip = Loc.Get("programs_pause_blocked_hint");
+                    }
+                    else
+                    {
+                        tab.BtnProgramPauseResume.ClearValue(UIElement.IsEnabledProperty);
+                        tab.BtnProgramPauseResume.ClearValue(FrameworkElement.ToolTipProperty);
+                    }
+                }
+
                 if (isOurs && current != null)
                 {
                     var total = TimeSpan.FromMinutes(Math.Max(1, current.DurationMinutes));
@@ -1533,8 +1576,23 @@ namespace ConditioningControlPanel
                 var svc = App.Programs;
                 if (svc?.ActiveEnrollment == null) return;
 
-                if (svc.ActiveEnrollment.State == ProgramEnrollmentState.Paused) svc.Resume();
-                else svc.Pause();
+                if (svc.ActiveEnrollment.State == ProgramEnrollmentState.Paused)
+                {
+                    svc.Resume();
+                }
+                else if (!svc.Pause())
+                {
+                    // Declined because today's session is still running. UpdateProgramSessionRow
+                    // normally disables the button in that state, so reaching here means a race
+                    // (the session started between the repaint and the click) - say why rather than
+                    // dead-clicking. Not a confirm: there is nothing to confirm, so no cancel text.
+                    ShowStyledDialog(
+                        Loc.Get("programs_pause_blocked_title"),
+                        Loc.Get("programs_pause_blocked_body"),
+                        Loc.Get("btn_ok"),
+                        "");
+                    return;
+                }
 
                 RefreshProgramsUI();
             }
@@ -1554,13 +1612,27 @@ namespace ConditioningControlPanel
             {
                 if (App.Programs?.ActiveEnrollment == null) return;
 
+                // Withdrawing now also ends today's session (ProgramService.Withdraw), so when one
+                // is on screen the confirm has to say so - the user is about to lose more than the
+                // enrollment, and finding that out afterwards is not consent.
+                var sessionLive = _sessionEngine?.IsRunning == true
+                    && App.Programs.IsProgramSession(_sessionEngine.CurrentSession);
+
                 var confirmed = ShowStyledDialog(
                     Loc.Get("programs_withdraw_confirm_title"),
-                    Loc.Get("programs_withdraw_confirm_body"),
+                    Loc.Get(sessionLive
+                        ? "programs_withdraw_confirm_body_session"
+                        : "programs_withdraw_confirm_body"),
                     Loc.Get("btn_program_withdraw_confirm"),
                     Loc.Get("btn_program_withdraw_keep"));
 
                 if (!confirmed) return;
+
+                // The confirm above already said the session stops. Letting the standard
+                // "Session Ended Early" summary fire on top of it would editorialise on a control
+                // specified to be unweighted and without commentary. Armed only when a session is
+                // actually live, so nothing is suppressed when there was nothing to stop.
+                if (sessionLive) SuppressNextSessionSummary("program withdraw");
 
                 App.Programs?.Withdraw();
                 RefreshProgramsUI();

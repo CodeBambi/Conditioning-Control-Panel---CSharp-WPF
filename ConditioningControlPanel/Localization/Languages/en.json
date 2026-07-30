@@ -3663,6 +3663,10 @@
   "btn_program_withdraw": "Withdraw",
   "programs_withdraw_confirm_title": "Withdraw from this program?",
   "programs_withdraw_confirm_body": "The run ends here. Anything you have already banked stays yours, and you can enroll again whenever you like.",
+  "programs_withdraw_confirm_body_session": "The run ends here, and today's session stops with it. Anything you have already banked stays yours, and you can enroll again whenever you like.",
+  "programs_pause_blocked_title": "Finish today's session first",
+  "programs_pause_blocked_body": "Pausing is meant to cost you nothing, and it cannot promise that while today's session is running. Let it finish, or end it with STOP in the bar at the bottom of the window, then pause.",
+  "programs_pause_blocked_hint": "Available once today's session has finished. Pausing mid-session would either void the session or throw it away.",
   "btn_program_withdraw_confirm": "Withdraw",
   "btn_program_withdraw_keep": "Stay enrolled",
   "programs_strip_header": "PROGRESS",
@@ -3681,9 +3685,9 @@
   "programs_return_badge": "Return day",
   "programs_session_label": "Session",
   "programs_session_minutes": "{0} minutes",
-  "program_lock_reason": "{0} is running this - Day {1}. Feature toggles are locked until the session ends.",
-  "program_lock_reason_no_day": "{0} is running this. Feature toggles are locked until the session ends.",
-  "program_lock_reason_generic": "A training program is running this session. Feature toggles are locked until it ends.",
+  "program_lock_reason": "{0} is running this - Day {1}. Its features and intensity are locked until the session ends.",
+  "program_lock_reason_no_day": "{0} is running this. Its features and intensity are locked until the session ends.",
+  "program_lock_reason_generic": "A training program is running this session. Its features and intensity are locked until it ends.",
   "btn_program_start_session": "Start today's session",
   "programs_session_done": "Session complete",
   "programs_session_progress": "{0} / {1}",
@@ -3783,5 +3787,8 @@
   "program_enroll_safety_header": "PLAIN TALK, OUT OF CHARACTER",
   "program_enroll_contract_header": "Type the phrase to enroll",
   "program_enroll_contract_hint": "Type it exactly as written above.",
-  "btn_program_enroll_confirm": "Enroll"
+  "btn_program_enroll_confirm": "Enroll",
+  "session_lock_reason": "You're in a session! Its features and intensity are locked until it ends.",
+  "session_lock_action_title": "You're in a session",
+  "session_lock_action_body": "{0}\n\nThis would overwrite what the session prescribed. Stop the session first if you really want to change it."
 }

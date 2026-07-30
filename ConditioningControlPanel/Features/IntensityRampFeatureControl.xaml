@@ -1,7 +1,8 @@
 <UserControl x:Class="ConditioningControlPanel.Features.IntensityRampFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features">
 
     <StackPanel>
         <!-- Enable -->
@@ -59,7 +60,19 @@
                 ToolTip="{loc:Str tooltip_ramp_curve}">
             <StackPanel>
                 <TextBlock Text="{loc:Str label_ramp_curve}" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                <ComboBox x:Name="CmbRampCurve" SelectionChanged="CmbRampCurve_Changed" Foreground="Black">
+                <!-- THE ONLY OWNED CONTROL IN THIS POPUP, and it is not obvious why.
+                     Everything else here drives the GLOBAL intensity ramp, which deliberately
+                     stands down while a session runs: RampTimer_Tick gates each visual link on
+                     !sessionActive (MainWindow.StartStop.cs:485/493/501) so the two ramp systems
+                     cannot fight, and its remaining links are audio volume, which is never
+                     locked. Those dials are therefore already inert mid-session and locking them
+                     would buy nothing.
+                     The curve is the exception: SessionEngine.UpdateRampingValues resolves
+                     `settings.RampCurve ?? App.Settings.Current.RampCurve` (SessionEngine.cs:526)
+                     on EVERY tick, and per-session RampCurve is nullable and usually unset - so
+                     for most sessions this dropdown reshapes the running session's own ramp. -->
+                <ComboBox x:Name="CmbRampCurve" feat:SessionLock.Owned="True"
+                          SelectionChanged="CmbRampCurve_Changed" Foreground="Black">
                     <ComboBoxItem Content="{loc:Str ramp_curve_linear}" Tag="Linear" Foreground="Black"/>
                     <ComboBoxItem Content="{loc:Str ramp_curve_ease_in}" Tag="EaseIn" Foreground="Black"/>
                     <ComboBoxItem Content="{loc:Str ramp_curve_ease_out}" Tag="EaseOut" Foreground="Black"/>

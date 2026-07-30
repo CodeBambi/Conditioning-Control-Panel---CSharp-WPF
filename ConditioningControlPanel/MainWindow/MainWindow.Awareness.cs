@@ -98,6 +98,10 @@ namespace ConditioningControlPanel
 
             RefreshAwarenessPulseFeed();
             RefreshAwarenessPresetCards();
+            // Outside the _isLoading block above because it manages that flag itself, and the
+            // seen-app chips have to be rebuilt on every open - the list of apps the user has
+            // touched grows while they are on other tabs.
+            RefreshAwarenessAppScopeUi();
         }
 
         private bool _presetsChangedSubscribed;
@@ -493,6 +497,200 @@ namespace ConditioningControlPanel
             var settings = App.Settings?.Current;
             if (settings == null) return;
             settings.AwarenessIgnoreOwnUi = AwarenessTab.ChkAwarenessIgnoreOwnUi?.IsChecked == true;
+            App.Settings?.Save();
+        }
+
+        // -------------------------------------------------------------------------------
+        // App scope: which applications triggers may fire in
+        //
+        // The service side is KeywordTriggerService's "Foreground app scope" region; this is
+        // just the editor for it. Nothing here starts or stops anything - the gate is read
+        // live at match time, so a change takes effect on the very next keystroke with no
+        // restart and nothing to re-arm.
+        // -------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Pushes the three app-scope settings into the controls and shows or hides the list
+        /// depending on the mode. Called from SyncAwarenessTabUI, and again after any change,
+        /// so the collapsed/expanded state can never disagree with the selected mode.
+        /// </summary>
+        private void RefreshAwarenessAppScopeUi()
+        {
+            var settings = App.Settings?.Current;
+            var tab = AwarenessTab;
+            if (settings == null || tab == null) return;
+
+            _isLoading = true;
+            try
+            {
+                if (tab.CmbAwarenessAppScope != null)
+                {
+                    // Matched on Tag rather than index so reordering the XAML items cannot
+                    // silently remap a saved setting onto the wrong mode.
+                    var wanted = settings.KeywordTriggerAppScope.ToString();
+                    foreach (var item in tab.CmbAwarenessAppScope.Items.OfType<ComboBoxItem>())
+                        item.IsSelected = string.Equals(item.Tag as string, wanted, StringComparison.Ordinal);
+                }
+
+                if (tab.TxtAwarenessAppList != null)
+                    tab.TxtAwarenessAppList.Text = string.Join(", ", settings.KeywordTriggerApps ?? new List<string>());
+
+                if (tab.ChkAwarenessIgnoreOwnFocus != null)
+                    tab.ChkAwarenessIgnoreOwnFocus.IsChecked = settings.KeywordTriggerIgnoreOwnFocus;
+
+                // The list is meaningless in Everywhere mode, and leaving it visible invites
+                // someone to fill it in and wonder why nothing changed.
+                if (tab.AwarenessAppListPanel != null)
+                {
+                    tab.AwarenessAppListPanel.Visibility =
+                        settings.KeywordTriggerAppScope == AwarenessAppScope.Everywhere
+                            ? Visibility.Collapsed
+                            : Visibility.Visible;
+                }
+            }
+            finally
+            {
+                _isLoading = false;
+            }
+
+            RefreshAwarenessSeenAppChips();
+        }
+
+        /// <summary>
+        /// Offers the apps recently seen in the foreground as one-click additions.
+        ///
+        /// Without this the list is close to unusable: process names are not app names, and
+        /// nobody knows offhand that Teams is "ms-teams". The names come from the service's
+        /// in-memory ring (never persisted, our own process excluded), so an app the user has
+        /// not touched since launch simply is not offered - typing it by hand still works.
+        /// </summary>
+        private void RefreshAwarenessSeenAppChips()
+        {
+            var tab = AwarenessTab;
+            if (tab?.AwarenessSeenAppsPanel == null) return;
+
+            try
+            {
+                tab.AwarenessSeenAppsPanel.Children.Clear();
+
+                var settings = App.Settings?.Current;
+                var listed = settings?.KeywordTriggerApps ?? new List<string>();
+
+                // Already-listed apps are dropped rather than shown inert: a chip that does
+                // nothing when clicked reads as broken.
+                var seen = (App.KeywordTriggers?.GetRecentForegroundApps() ?? Array.Empty<string>())
+                    .Where(a => !KeywordTriggerService.MatchesAppList(listed, a))
+                    .ToList();
+
+                if (tab.TxtAwarenessSeenAppsLabel != null)
+                    tab.TxtAwarenessSeenAppsLabel.Visibility = seen.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+                foreach (var app in seen)
+                {
+                    var chip = new Button
+                    {
+                        Content = "+ " + app,
+                        Tag = app,
+                        FontSize = 10,
+                        Padding = new Thickness(7, 3, 7, 3),
+                        Margin = new Thickness(0, 0, 5, 5),
+                        Cursor = Cursors.Hand,
+                        Foreground = Brushes.White,
+                        Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x44)),
+                        BorderBrush = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x5A)),
+                        BorderThickness = new Thickness(1),
+                        ToolTip = $"Add '{app}' to the list"
+                    };
+                    chip.Click += AwarenessSeenAppChip_Click;
+                    tab.AwarenessSeenAppsPanel.Children.Add(chip);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("RefreshAwarenessSeenAppChips failed: {Error}", ex.Message);
+            }
+        }
+
+        private void AwarenessSeenAppChip_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not string app) return;
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            var list = new List<string>(settings.KeywordTriggerApps ?? new List<string>());
+            if (!KeywordTriggerService.MatchesAppList(list, app)) list.Add(app);
+            settings.KeywordTriggerApps = list;
+            App.Settings?.Save();
+
+            App.Logger?.Information("Awareness app scope: added '{App}' ({Mode}, {Count} listed)",
+                app, settings.KeywordTriggerAppScope, list.Count);
+
+            RefreshAwarenessAppScopeUi();
+        }
+
+        internal void CmbAwarenessAppScope_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            var tag = (AwarenessTab.CmbAwarenessAppScope?.SelectedItem as ComboBoxItem)?.Tag as string;
+            if (!Enum.TryParse<AwarenessAppScope>(tag, out var scope)) return;
+
+            settings.KeywordTriggerAppScope = scope;
+            App.Settings?.Save();
+
+            App.Logger?.Information("Awareness app scope set to {Mode} ({Count} apps listed)",
+                scope, settings.KeywordTriggerApps?.Count ?? 0);
+
+            RefreshAwarenessAppScopeUi();
+        }
+
+        internal void TxtAwarenessAppList_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter) return;
+            CommitAwarenessAppList();
+            // Move focus off the box so the commit is visibly acknowledged (the text is
+            // rewritten in canonical form) rather than looking like nothing happened.
+            Keyboard.ClearFocus();
+        }
+
+        internal void TxtAwarenessAppList_LostFocus(object sender, RoutedEventArgs e) => CommitAwarenessAppList();
+
+        /// <summary>
+        /// Parses the box and stores the cleaned list. Deliberately commit-on-Enter/blur rather
+        /// than per-keystroke: mid-typing text like "chrome, di" would otherwise be saved as a
+        /// real entry, and in Only-in mode that momentarily narrows the scope to nonsense.
+        /// </summary>
+        private void CommitAwarenessAppList()
+        {
+            if (_isLoading) return;
+
+            var settings = App.Settings?.Current;
+            var box = AwarenessTab?.TxtAwarenessAppList;
+            if (settings == null || box == null) return;
+
+            var parsed = KeywordTriggerService.ParseAppList(box.Text);
+            var existing = settings.KeywordTriggerApps ?? new List<string>();
+            if (parsed.SequenceEqual(existing, StringComparer.OrdinalIgnoreCase)) return;
+
+            settings.KeywordTriggerApps = parsed;
+            App.Settings?.Save();
+
+            App.Logger?.Information("Awareness app scope list set to {Count} app(s) ({Mode})",
+                parsed.Count, settings.KeywordTriggerAppScope);
+
+            RefreshAwarenessAppScopeUi();
+        }
+
+        internal void ChkAwarenessIgnoreOwnFocus_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            settings.KeywordTriggerIgnoreOwnFocus = AwarenessTab.ChkAwarenessIgnoreOwnFocus?.IsChecked == true;
             App.Settings?.Save();
         }
 

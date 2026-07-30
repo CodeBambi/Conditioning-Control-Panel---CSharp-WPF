@@ -2526,5 +2526,11 @@
   "tooltip_lab": "Le Labo — fonctionnalités expérimentales en test. Attendez-vous à des imperfections.",
   "tooltip_patreon_exclusives": "Exclusifs — fonctionnalités et contenus réservés aux soutiens.",
   "tooltip_how_to_use": "Comment ça marche — guide rapide pour démarrer.",
-  "label_local_ai_consent_pull_model": "Télécharger le modèle d'IA."
+  "label_local_ai_consent_pull_model": "Télécharger le modèle d'IA.",
+  "program_lock_reason": "{0} gère ceci - Jour {1}. Ses fonctionnalités et son intensité sont verrouillées jusqu'à la fin de la séance.",
+  "program_lock_reason_no_day": "{0} gère ceci. Ses fonctionnalités et son intensité sont verrouillées jusqu'à la fin de la séance.",
+  "program_lock_reason_generic": "Un programme d'entraînement gère cette séance. Ses fonctionnalités et son intensité sont verrouillées jusqu'à la fin.",
+  "session_lock_reason": "Vous êtes en séance ! Ses fonctionnalités et son intensité sont verrouillées jusqu'à la fin.",
+  "session_lock_action_title": "Vous êtes en séance",
+  "session_lock_action_body": "{0}\n\nCela écraserait ce que la séance a prescrit. Arrêtez la séance d'abord si vous voulez vraiment le changer."
 }

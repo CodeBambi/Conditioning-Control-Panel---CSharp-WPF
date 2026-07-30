@@ -30,7 +30,8 @@ namespace ConditioningControlPanel
         private bool _isInputVisible = false;
         private readonly List<DateTime> _rapidClickTimestamps = new(); // Track clicks for 50-in-1-minute trigger
         private bool _isShowingChatHistory = false;
-        // Note: Whispers mute state is now read from App.Settings.Current.SubAudioEnabled
+        // Note: Whispers mute state is read from App.Settings.Current.SubAudioMuted, which is
+        // deliberately separate from the SubAudioEnabled master (see AppSettings.SubAudioMuted).
         private bool _isBrowserPaused = false; // Browser audio paused state
 
         // ===== P1.4 moderation counter / chat cooldown =====
@@ -1233,7 +1234,7 @@ namespace ConditioningControlPanel
         /// Sets the avatar's mute state from an external caller (the "mute"/"unmute" voice commands)
         /// and refreshes the quick-menu labels — mirrors what <see cref="MenuItemMute_Click"/> does on a
         /// manual toggle, minus the settings write (the caller owns that). UpdateQuickMenuState also
-        /// re-reads SubAudioEnabled, so the "mute whispers" menu label refreshes here too.
+        /// re-reads SubAudioMuted, so the "mute whispers" menu label refreshes here too.
         /// </summary>
         public void ApplyMuteState(bool avatarMuted)
         {
@@ -1245,11 +1246,12 @@ namespace ConditioningControlPanel
 
         private void MenuItemMuteWhispers_Click(object sender, RoutedEventArgs e)
         {
-            // Toggle SubAudioEnabled setting (mute = disabled)
-            var currentEnabled = App.Settings?.Current?.SubAudioEnabled ?? false;
+            // Flips the dedicated MUTE, not SubAudioEnabled. That flag is the feature's master
+            // enable, which a session prescribes and the session feature lock locks - muting must
+            // stay available mid-session (see AppSettings.SubAudioMuted).
             if (App.Settings?.Current != null)
             {
-                App.Settings.Current.SubAudioEnabled = !currentEnabled;
+                App.Settings.Current.SubAudioMuted = !App.Settings.Current.SubAudioMuted;
                 App.Settings.Save();
             }
 
@@ -1258,7 +1260,9 @@ namespace ConditioningControlPanel
             // Sync to MainWindow UI (Settings tab and Companion tab)
             if (_parentWindow is MainWindow mainWindow)
             {
-                mainWindow.SyncWhispersUI(!currentEnabled);
+                // The ENABLE is unchanged by a mute now, so pass it through as-is; SyncWhispersUI
+                // reads the mute checkbox's state from SubAudioMuted itself.
+                mainWindow.SyncWhispersUI(App.Settings?.Current?.SubAudioEnabled == true);
             }
         }
 
@@ -1356,8 +1360,7 @@ namespace ConditioningControlPanel
             MenuItemMute.Header = _isMuted ? Loc.Get("menu_mute_avatar_on") : Loc.Get("menu_mute_avatar_off");
             MenuItemMute.Foreground = _isMuted ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Colors.White);
 
-            // Mute whispers (inverted - muted when SubAudioEnabled is false)
-            var whispersMuted = App.Settings?.Current?.SubAudioEnabled != true;
+            var whispersMuted = App.Settings?.Current?.SubAudioMuted == true;
             MenuItemMuteWhispers.Header = whispersMuted ? Loc.Get("menu_mute_whispers_on") : Loc.Get("menu_mute_whispers_off");
             MenuItemMuteWhispers.Foreground = whispersMuted ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Colors.White);
 
@@ -1421,14 +1424,13 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Set mute whispers state from MainWindow (toggles SubAudioEnabled)
+        /// Set mute whispers state from MainWindow (toggles SubAudioMuted, not the master enable)
         /// </summary>
         public void SetMuteWhispers(bool isMuted)
         {
-            // isMuted = true means disable whispers (SubAudioEnabled = false)
             if (App.Settings?.Current != null)
             {
-                App.Settings.Current.SubAudioEnabled = !isMuted;
+                App.Settings.Current.SubAudioMuted = isMuted;
                 App.Settings.Save();
             }
             UpdateQuickMenuState();

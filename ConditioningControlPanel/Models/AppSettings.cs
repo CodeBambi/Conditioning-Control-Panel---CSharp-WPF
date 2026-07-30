@@ -1172,6 +1172,36 @@ namespace ConditioningControlPanel.Models
             set { _subAudioEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _subAudioMuted = false;
+        /// <summary>
+        /// A plain MUTE for whisper/trigger audio, deliberately separate from
+        /// <see cref="SubAudioEnabled"/>.
+        ///
+        /// The avatar's "Mute whispers" menu item and the Companion tab used to flip
+        /// SubAudioEnabled, i.e. the feature's master ENABLE - which a session prescribes
+        /// (SessionSettings.AudioWhispersEnabled) and the session feature lock therefore locks. So
+        /// "mute" was really "opt out of the prescribed whispers dose", and once the lock landed it
+        /// would have been unavailable exactly when a user most wants it: someone walks in and the
+        /// sound needs to stop NOW.
+        ///
+        /// Splitting them lets the mute stay available during a session (it is a comfort/safety
+        /// reflex, like volume) while the dose itself stays locked. Nothing here changes how much
+        /// conditioning is scheduled - only whether you can currently hear it.
+        /// </summary>
+        public bool SubAudioMuted
+        {
+            get => _subAudioMuted;
+            set { _subAudioMuted = value; OnPropertyChanged(); OnPropertyChanged(nameof(SubAudioAudible)); }
+        }
+
+        /// <summary>
+        /// The single gate every whisper/trigger playback path should test: the feature is on AND
+        /// the user has not muted it. Prefer this over reading SubAudioEnabled directly, so a new
+        /// playback site cannot silently ignore the mute.
+        /// </summary>
+        [JsonIgnore]
+        public bool SubAudioAudible => SubAudioEnabled && !SubAudioMuted;
+
         private int _subAudioVolume = 50; // 0-100%
         public int SubAudioVolume
         {
@@ -4667,6 +4697,53 @@ namespace ConditioningControlPanel.Models
         {
             get => _keywordSessionMultiplier;
             set { _keywordSessionMultiplier = Math.Clamp(value, 1.0, 3.0); OnPropertyChanged(); }
+        }
+
+        private AwarenessAppScope _keywordTriggerAppScope = AwarenessAppScope.Everywhere;
+        /// <summary>
+        /// Which applications triggers may fire in, judged by the foreground window's process.
+        /// Defaults to <see cref="AwarenessAppScope.Everywhere"/>, i.e. the behaviour that shipped
+        /// before this setting existed - turning app scoping on is an opt-in.
+        /// </summary>
+        [JsonProperty]
+        public AwarenessAppScope KeywordTriggerAppScope
+        {
+            get => _keywordTriggerAppScope;
+            set { _keywordTriggerAppScope = value; OnPropertyChanged(); }
+        }
+
+        private List<string> _keywordTriggerApps = new();
+        /// <summary>
+        /// The process names <see cref="KeywordTriggerAppScope"/> refers to - one list, read as a
+        /// block list or an allow list depending on the mode, so there is never a second stale list
+        /// sitting behind the one in use.
+        ///
+        /// Entries are process names, matched case-insensitively with an optional ".exe" that is
+        /// stripped before comparing ("chrome", "Chrome", "chrome.exe" are the same entry). Empty
+        /// while the mode is Everywhere.
+        /// </summary>
+        [JsonProperty]
+        public List<string> KeywordTriggerApps
+        {
+            get => _keywordTriggerApps;
+            set { _keywordTriggerApps = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private bool _keywordTriggerIgnoreOwnFocus = false;
+        /// <summary>
+        /// Suppress every source while a Control Panel window itself holds focus - so typing a
+        /// keyword INTO the trigger editor, or into the companion's chat box, does not fire it.
+        ///
+        /// Distinct from <see cref="AwarenessIgnoreOwnUi"/>, which drops OCR hits that land inside
+        /// our own window RECTANGLES. That one cannot see the keyboard path at all; this one is
+        /// about who has focus and applies to every source. Default off: someone typing to their
+        /// companion may well want the reaction, so this is offered rather than assumed.
+        /// </summary>
+        [JsonProperty]
+        public bool KeywordTriggerIgnoreOwnFocus
+        {
+            get => _keywordTriggerIgnoreOwnFocus;
+            set { _keywordTriggerIgnoreOwnFocus = value; OnPropertyChanged(); }
         }
 
         private bool _screenOcrEnabled = false;
