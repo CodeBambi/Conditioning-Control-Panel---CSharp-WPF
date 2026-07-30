@@ -437,14 +437,11 @@ public class SkillTreeService : IDisposable
     }
 
     /// <summary>
-    /// Spend one streak-fix charge to restore a broken streak (free — charges are the currency),
-    /// keeping the last charge in reserve for the manual button.
+    /// Spend one streak-fix charge to restore a broken streak (free — charges are the currency).
     /// This is the automatic trigger from AchievementProgress.UpdateDailyStreak().
     /// For the manual button, MainWindow uses ProfileSyncService.UseOopsieInsuranceAsync() directly.
     /// The "oopsie_insurance" skill gate stays on this path deliberately: everyone earns charges, but
     /// only skill owners have them spent automatically — everyone else banks them and picks the day.
-    /// Auto-spend therefore stops at one charge remaining, so owning the skill never costs you the
-    /// ability to bank one (see the balance guard below).
     /// Falls back to local-only if offline (acceptable for passive auto-trigger).
     /// </summary>
     public bool UseOopsieInsurance()
@@ -453,12 +450,14 @@ public class SkillTreeService : IDisposable
         if (settings == null) return false;
 
         if (!HasSkill("oopsie_insurance")) return false;
-        // <= 1, NOT < 1, and that is deliberate: the last charge is reserved for the user to spend
-        // manually on a day they choose. Charges are cumulable so people can bank them and take a
-        // break — but this auto path only runs for skill owners, so an unreserved auto-spend would
-        // eat every charge the moment it is granted and leave the people who paid 12 skill points
-        // as the only ones who can never save one. Auto-spend covers the surplus; the floor is theirs.
-        if (settings.StreakFixCharges <= 1) return false;
+        // Spends down to the last charge, deliberately. An earlier revision reserved one for the
+        // user to spend manually, to stop the skill from eating everything a skill owner banks.
+        // That reserve was wrong: this path repairs the LOGIN streak (ConsecutiveDays), while the
+        // manual Fix Day button repairs the QUEST streak (DailyQuestCompletionDates ->
+        // DailyQuestStreak) and has no way to restore ConsecutiveDays. So a reserved charge could
+        // never buy back what this path protects — it just let a login streak die with charges in
+        // the bank. Better to spend the last one than to lose a streak that nothing can recover.
+        if (settings.StreakFixCharges < 1) return false;
 
         // Deduct locally first so the balance is correct offline and so the fire-and-forget below
         // cannot race it: the server call adopts the authoritative balance when it answers, and
