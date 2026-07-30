@@ -39,6 +39,9 @@ namespace ConditioningControlPanel
 
         private bool _profileFxInitialized;
 
+        /// <summary>Whether the OG border's storyboard is currently turning.</summary>
+        private bool _ogBorderLoopRunning;
+
         /// <summary>The search box's own border brush. Built once and mutated by animation, so the
         /// focus glow never allocates and never touches an app-level resource.</summary>
         private SolidColorBrush? _profileSearchBrush;
@@ -49,8 +52,11 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (!visible || !IsIncomingTab("discord")) return;  // the outgoing tab's fade-out re-show
+                // The OG border is the tab's hero loop and it is gated whether or not the tab is
+                // the incoming one — parking it is exactly what a hide should do.
                 InitializeProfileFx();
+                ApplyOgBorderLoop();
+                if (!visible || !IsIncomingTab("discord")) return;  // the outgoing tab's fade-out re-show
                 StaggerProfileCards();
             }
             catch (Exception ex) { App.Logger?.Debug("OnProfileTabVisibilityChanged: {E}", ex.Message); }
@@ -69,8 +75,63 @@ namespace ConditioningControlPanel
                     search.LostFocus += ProfileSearch_LostFocus;
                 }
                 EnsureProfileSearchBrush();
+
+                // PR-5 coherence pass: the OG border was the one pre-existing ambient loop the
+                // overhaul never retrofitted. Its own hooks, so the shared funnels stay untouched.
+                Activated += OnProfileFxWindowStateish;
+                Deactivated += OnProfileFxWindowStateish;
+                StateChanged += OnProfileFxWindowStateish;
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "InitializeProfileFx failed"); }
+        }
+
+        private void OnProfileFxWindowStateish(object? sender, EventArgs e) => ApplyOgBorderLoop();
+
+        // ============================== OG border loop ==============================
+
+        /// <summary>
+        /// Gates the rotating OG border - a 3s forever storyboard on a gradient's RelativeTransform
+        /// that shipped ungated: it kept turning with the Profile tab hidden, with the window
+        /// minimised, and at MotionLevel.Off. The art is untouched (it is the best animated element
+        /// in the app); all that changes is when its clock is allowed to run, and that it now draws
+        /// at the shared ambient frame rate instead of the full compositor rate.
+        ///
+        /// Stop() returns the gradient to Angle 0, which is a perfectly good static resting state,
+        /// so the degraded mode is "a still gold border" rather than "a border frozen mid-turn".
+        /// </summary>
+        internal void ApplyOgBorderLoop()
+        {
+            try
+            {
+                // Reachable from the profile-render paths, which can run before the tab has ever
+                // been shown - so the window hooks are installed here rather than assumed.
+                InitializeProfileFx();
+                var container = DiscordTab?.OgBorderContainer;
+                if (container == null) return;
+                if (container.Resources["OgBorderAnimation"] is not Storyboard storyboard) return;
+
+                bool wanted = container.Visibility == Visibility.Visible
+                              && MotionFx.AllowAmbientLoops
+                              && IsActive
+                              && WindowState != WindowState.Minimized
+                              && DiscordTab?.IsVisible == true;
+
+                if (!wanted)
+                {
+                    if (!_ogBorderLoopRunning) return;
+                    _ogBorderLoopRunning = false;
+                    storyboard.Stop(container);
+                    return;
+                }
+
+                // Begin() restarts from Angle 0, so only ever call it on the stopped -> running
+                // edge. Without this, every Activated event would visibly snap the border back.
+                if (_ogBorderLoopRunning) return;
+                if (!storyboard.IsFrozen) Timeline.SetDesiredFrameRate(storyboard, AmbientFrameRate);
+                storyboard.Begin(container, true);
+                _ogBorderLoopRunning = true;
+            }
+            catch (Exception ex) { App.Logger?.Debug("ApplyOgBorderLoop: {E}", ex.Message); }
         }
 
         // ============================== entrance stagger ==============================

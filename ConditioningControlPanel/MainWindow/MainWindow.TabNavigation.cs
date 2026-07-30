@@ -102,6 +102,9 @@ namespace ConditioningControlPanel
             // Every registered AmbientFxCanvas parks with its tab (see MainWindow.AmbientFx.cs) —
             // new per-tab canvases get the stop hook without touching this method again.
             SwitchTabFx(tab);
+            // A tooltip opened by a stationary cursor outlives the tab it belongs to, because
+            // nothing ever moved the mouse off its owner. See MainWindow.ChromeFx.cs.
+            CloseStaleToolTip();
 
             // Hide all tabs
             SettingsTab.Visibility = Visibility.Collapsed;

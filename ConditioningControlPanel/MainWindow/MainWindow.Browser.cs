@@ -1486,22 +1486,9 @@ namespace ConditioningControlPanel
             var isOg = App.Settings?.Current?.IsSeason0Og == true;
             if (DiscordTab.OgBorderContainer != null)
             {
-                if (isOg)
-                {
-                    DiscordTab.OgBorderContainer.Visibility = Visibility.Visible;
-                    if (DiscordTab.OgBorderContainer.Resources["OgBorderAnimation"] is System.Windows.Media.Animation.Storyboard storyboard)
-                    {
-                        storyboard.Begin(DiscordTab.OgBorderContainer, true);
-                    }
-                }
-                else
-                {
-                    DiscordTab.OgBorderContainer.Visibility = Visibility.Collapsed;
-                    if (DiscordTab.OgBorderContainer.Resources["OgBorderAnimation"] is System.Windows.Media.Animation.Storyboard storyboard)
-                    {
-                        storyboard.Stop(DiscordTab.OgBorderContainer);
-                    }
-                }
+                DiscordTab.OgBorderContainer.Visibility = isOg ? Visibility.Visible : Visibility.Collapsed;
+                // See the sibling site above: ApplyOgBorderLoop owns the clock (PR-5).
+                ApplyOgBorderLoop();
             }
             // OG GOOD GIRL banner badge for own profile
             if (DiscordTab.OgBannerBadge != null)
@@ -1723,24 +1710,13 @@ namespace ConditioningControlPanel
             // OG user animated border
             if (DiscordTab.OgBorderContainer != null)
             {
-                if (entry.IsSeason0Og)
-                {
-                    DiscordTab.OgBorderContainer.Visibility = Visibility.Visible;
-                    // Start the rotation animation
-                    if (DiscordTab.OgBorderContainer.Resources["OgBorderAnimation"] is System.Windows.Media.Animation.Storyboard storyboard)
-                    {
-                        storyboard.Begin(DiscordTab.OgBorderContainer, true);
-                    }
-                }
-                else
-                {
-                    DiscordTab.OgBorderContainer.Visibility = Visibility.Collapsed;
-                    // Stop any running animation
-                    if (DiscordTab.OgBorderContainer.Resources["OgBorderAnimation"] is System.Windows.Media.Animation.Storyboard storyboard)
-                    {
-                        storyboard.Stop(DiscordTab.OgBorderContainer);
-                    }
-                }
+                DiscordTab.OgBorderContainer.Visibility = entry.IsSeason0Og
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                // Starting/stopping the rotation is ApplyOgBorderLoop's job (PR-5): it also
+                // parks the loop when the tab is hidden, the window is inactive or the user
+                // turned motion down. See MainWindow.ProfileFx.cs.
+                ApplyOgBorderLoop();
             }
             // OG GOOD GIRL banner badge next to name
             if (DiscordTab.OgBannerBadge != null)

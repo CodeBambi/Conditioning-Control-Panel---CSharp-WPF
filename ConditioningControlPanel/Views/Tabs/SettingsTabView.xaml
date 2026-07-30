@@ -2255,19 +2255,19 @@
             <Border.Effect>
                 <DropShadowEffect Color="{DynamicResource DarkPink}" BlurRadius="15" ShadowDepth="0" Opacity="0.5"/>
             </Border.Effect>
+            <!-- Chrome FX edge fade (PR-1, fixed in PR-5). The mask CANNOT live on MarqueeCanvas:
+                 a relative-mapped OpacityMask is stretched over the masked visual's own bounds,
+                 and the canvas's bounds are its overflowing child - a marquee string thousands of
+                 pixels wide. A 6% fade of THAT is hundreds of pixels off-screen, which is exactly
+                 why the fade was invisible in the shipped build.
+
+                 Two changes fix it for good: the mask moves onto this wrapper, whose only child
+                 clips itself (so the wrapper's bounds really are the 48px viewport), and the brush
+                 is rebuilt in code with MappingMode=Absolute (MarqueeFadeHost_SizeChanged) so the
+                 fade is a genuine ~40px at each end regardless of any bounding box at all. -->
+            <Grid x:Name="MarqueeFadeHost" ClipToBounds="True"
+                  SizeChanged="MarqueeFadeHost_SizeChanged">
             <Canvas x:Name="MarqueeCanvas" x:FieldModifier="internal" ClipToBounds="True">
-                <!-- Chrome FX (PR-1): edge-fade masks so the scrolling text dissolves into the
-                     card instead of being guillotined at the clip. Static brush - zero runtime
-                     cost, and it stays correct when the marquee is parked (Performance tier /
-                     reduced motion) because nothing animates it. -->
-                <Canvas.OpacityMask>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                        <GradientStop Offset="0.00" Color="#00000000"/>
-                        <GradientStop Offset="0.06" Color="#FF000000"/>
-                        <GradientStop Offset="0.94" Color="#FF000000"/>
-                        <GradientStop Offset="1.00" Color="#00000000"/>
-                    </LinearGradientBrush>
-                </Canvas.OpacityMask>
                 <TextBlock x:Name="MarqueeText" x:FieldModifier="internal"
                            Text="{loc:Str label_v5_2_1_is_out_thanks_to_all_the_100_patreons}"
                            FontFamily="Impact" FontSize="28" FontWeight="Bold"
@@ -2280,6 +2280,7 @@
                     </TextBlock.RenderTransform>
                 </TextBlock>
             </Canvas>
+            </Grid>
         </Border>
         </Grid>
 </UserControl>

@@ -2,14 +2,60 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
     public partial class SettingsTabView : UserControl
     {
+        /// <summary>Width of the marquee's edge fade, in the banner's own units.</summary>
+        private const double MarqueeFadePx = 40;
+
         public SettingsTabView()
         {
             InitializeComponent();
+        }
+
+        /// <summary>
+        /// Rebuilds the marquee's edge-fade mask whenever the banner is resized.
+        ///
+        /// Self-contained on purpose (no MainWindow hop): it needs nothing but its own width, and
+        /// the banner resizes with every window resize. The brush uses
+        /// <see cref="BrushMappingMode.Absolute"/> so its start/end points are this element's own
+        /// coordinates rather than a bounding box - the shipped relative-mapped version was
+        /// stretched across the marquee text's full (thousands of pixels wide) bounds, which put
+        /// its 6% fade entirely off-screen and made the effect invisible. Absolute mapping also
+        /// means the fade stays a constant ~40px instead of growing with the window.
+        /// </summary>
+        private void MarqueeFadeHost_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            try
+            {
+                if (sender is not FrameworkElement host) return;
+                double w = e.NewSize.Width;
+                if (double.IsNaN(w) || w <= 16) { host.OpacityMask = null; return; }
+
+                // Never eat more than a quarter of the banner from each side on a narrow window.
+                double fade = Math.Min(MarqueeFadePx, w / 4.0);
+                double stop = fade / w;
+
+                var brush = new LinearGradientBrush
+                {
+                    MappingMode = BrushMappingMode.Absolute,
+                    StartPoint = new Point(0, 0),
+                    EndPoint = new Point(w, 0),
+                };
+                brush.GradientStops.Add(new GradientStop(Colors.Transparent, 0.0));
+                brush.GradientStops.Add(new GradientStop(Colors.Black, stop));
+                brush.GradientStops.Add(new GradientStop(Colors.Black, 1.0 - stop));
+                brush.GradientStops.Add(new GradientStop(Colors.Transparent, 1.0));
+                brush.Freeze();
+                host.OpacityMask = brush;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("MarqueeFadeHost_SizeChanged: {E}", ex.Message);
+            }
         }
 
         private void BrowserLoadingText_Click(object sender, MouseButtonEventArgs e)
