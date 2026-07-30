@@ -120,4 +120,11 @@
          XAML anchors read {DynamicResource AccentGradientBrush}; everything else stays on PinkBrush. -->
     <SolidColorBrush x:Key="AccentGradientBrush" Color="{DynamicResource PinkColor}"/>
 
+    <!-- Ambient FX brushes. Design-time seeds; Services/FxTheme replaces all four (and their
+         Color keys in Colors.xaml) at startup and on every mod switch. -->
+    <SolidColorBrush x:Key="FxMistBrush" Color="{DynamicResource FxMistColor}"/>
+    <SolidColorBrush x:Key="FxParticleBrush" Color="{DynamicResource FxParticleColor}"/>
+    <SolidColorBrush x:Key="FxGlowBrush" Color="{DynamicResource FxGlowColor}"/>
+    <SolidColorBrush x:Key="FxFlashTintBrush" Color="{DynamicResource FxFlashTintColor}"/>
+
 </ResourceDictionary>
