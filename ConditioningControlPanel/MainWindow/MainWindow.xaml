@@ -1002,7 +1002,9 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock x:Name="TxtLevelLabel" Grid.Column="0" Text="{loc:Str label_lvl_1_2}" Foreground="{DynamicResource PinkBrush}"
                                FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                    <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" Margin="0,0,10,0">
+                    <!-- x:Name is for the PR-5 level-up burst: the TRACK is where the bar's cap
+                         sits, and after a level-up the fill has already wrapped back to a sliver. -->
+                    <Border x:Name="XPBarTrack" Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" Margin="0,0,10,0">
                         <Grid>
                             <Border x:Name="XPBar" Background="{DynamicResource PinkBrush}" CornerRadius="4"
                                     HorizontalAlignment="Left" Width="100">
@@ -1846,5 +1848,36 @@
                 HorizontalAlignment="Right" VerticalAlignment="Top"
                 Margin="0,40,16,0" Width="380"
                 Panel.ZIndex="9998"/>
+
+    <!-- Event FX layer (PR-5). Deliberately OUTSIDE the Viewbox: everything inside it is
+         bitmap-scaled from the fixed 1489x901 design canvas, which is fine for a soft fog wash
+         but turns crisp particles to mush. This host lives in the window's own pixel space, so a
+         burst lands at native resolution wherever its anchor happens to be on screen.
+
+         It holds no clock and no Skia surface until the first event moment: the AmbientFxCanvas
+         is created lazily by EnsureEventBurstLayer(), and between bursts it runs no timer at all
+         (AmbientFxCanvas.ShouldRun only says yes while sparks are alive). ZIndex matches the
+         toast host and it is declared after it, so a burst reads on top of a toast, while the
+         fullscreen browser overlay (9999) still covers everything. -->
+    <Grid x:Name="EventFxHost" IsHitTestVisible="False" Panel.ZIndex="9998">
+        <!-- Prestige only: one full-chrome sheen pass, swept from MainWindow.EventFx.cs. Parked
+             at Opacity 0 holding no clock; the band rides FxGlowColor so it re-tints per mod. -->
+        <Border x:Name="PrestigeSheen" Width="260" HorizontalAlignment="Left" Opacity="0"
+                IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Offset="0" Color="#00FFFFFF"/>
+                    <GradientStop Offset="0.5" Color="{DynamicResource FxGlowColor}"/>
+                    <GradientStop Offset="1" Color="#00FFFFFF"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <Border.RenderTransform>
+                <TransformGroup>
+                    <SkewTransform AngleX="-18"/>
+                    <TranslateTransform x:Name="PrestigeSheenSlide"/>
+                </TransformGroup>
+            </Border.RenderTransform>
+        </Border>
+    </Grid>
     </Grid>
 </Window>

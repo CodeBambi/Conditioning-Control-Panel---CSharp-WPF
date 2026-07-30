@@ -736,7 +736,13 @@ namespace ConditioningControlPanel
             if (record.DayCompleted && _programDayCompletePopped != enrollment.CurrentDay)
             {
                 _programDayCompletePopped = enrollment.CurrentDay;
-                if (tab.IsVisible) PopProgramScale(tab.TodayCompleteBannerScale);
+                if (tab.IsVisible)
+                {
+                    PopProgramScale(tab.TodayCompleteBannerScale);
+                    // Event FX (PR-5): the burst rides the same once-per-day guard as the pop, so
+                    // a day that completed in the background never replays it later.
+                    CelebrateProgramDayComplete(tab.TodayCompleteBanner);
+                }
             }
 
             // --- Session slot ---

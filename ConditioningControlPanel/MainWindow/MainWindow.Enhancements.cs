@@ -323,6 +323,9 @@ namespace ConditioningControlPanel
             prestigeBorder.Child = prestigeStack;
             prestigeBorder.ToolTip = Loc.Get("tooltip_prestige");
             mainStack.Children.Add(prestigeBorder);
+            // Event FX (PR-5): remembered so a prestige rank-up can burst on the number that
+            // changed. Re-pointed on every refresh, so it never holds a detached border.
+            _prestigeRowBorder = prestigeBorder;
 
             // Ditzy Data Stats Toggle Button (only show if ditzy_data skill is unlocked)
             var hasDitzyData = App.SkillTree?.HasSkill("ditzy_data") == true;
@@ -2068,6 +2071,9 @@ namespace ConditioningControlPanel
                 {
                     // Disable the card during purchase to prevent double-clicks
                     border.IsEnabled = false;
+                    // Event FX (PR-5): prestige rank is 1 + lifetime points spent / 100, so the
+                    // rank-up moment IS a purchase that crosses a hundred. Sample it before.
+                    var prestigeBefore = PrestigeRankNow();
                     try
                     {
                         var (success, error) = await (App.SkillTree?.PurchaseSkillAsync(skillId)
@@ -2087,6 +2093,12 @@ namespace ConditioningControlPanel
                             }
 
                             App.Logger?.Information("Skill purchased via UI: {SkillId}", skillId);
+
+                            // Burst on the node the user just bought - and, if the spend crossed a
+                            // prestige rank, the full-chrome prestige moment on top. Must run
+                            // BEFORE the finally block: RefreshEnhancementsUI rebuilds the tree
+                            // and detaches this border, and a detached anchor cannot be mapped.
+                            CelebrateEnhancementPurchase(border, prestigeBefore);
                         }
                         else if (!string.IsNullOrEmpty(error))
                         {

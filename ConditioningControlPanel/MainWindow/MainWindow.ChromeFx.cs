@@ -117,6 +117,11 @@ namespace ConditioningControlPanel
                 };
                 _startSheenTimer.Tick += (_, __) => SweepStartSheen();
 
+                // Build the event burst surface now rather than on the first level-up. It costs one
+                // small Skia bitmap and no clock, and it means the first event moment never has to
+                // wait for a Loaded event to make its canvas eligible to tick.
+                EnsureEventBurstLayer();
+
                 ApplyNavActiveGlow(NavButtonForTab(_activeTabKey));
                 ApplyChromeFxLoops();
             }

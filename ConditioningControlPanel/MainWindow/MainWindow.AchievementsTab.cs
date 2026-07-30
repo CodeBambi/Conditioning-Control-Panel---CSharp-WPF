@@ -236,6 +236,9 @@ namespace ConditioningControlPanel
             Dispatcher.Invoke(() =>
             {
                 RefreshAchievementTile(achievement.Id);
+                // Event FX (PR-5): tile reveal + burst, or a burst on the Achievements nav button
+                // when the grid is not the tab on screen. See MainWindow.EventFx.cs.
+                CelebrateAchievementUnlock(achievement.Id);
                 App.Logger?.Information("Achievement tile refreshed: {Name}", achievement.Name);
             });
         }

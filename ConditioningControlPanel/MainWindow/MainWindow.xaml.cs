@@ -624,6 +624,9 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                // Event FX (PR-5) FIRST, while the XP bar is still standing at the cap it just
+                // reached - UpdateLevelDisplay wraps it back to a sliver. Fire-and-forget.
+                CelebrateLevelUp();
                 UpdateLevelDisplay();
                 // Show level up notification
                 _trayIcon?.ShowNotification("Level Up!", $"You reached Level {newLevel}!", System.Windows.Forms.ToolTipIcon.Info);
