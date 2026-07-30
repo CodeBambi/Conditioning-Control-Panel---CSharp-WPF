@@ -2525,5 +2525,10 @@
   "tooltip_lab": "O Laboratório — recursos experimentais ainda em teste. Podem ter falhas.",
   "tooltip_patreon_exclusives": "Exclusivos — recursos e conteúdos só para apoiadores.",
   "tooltip_how_to_use": "Como usar — um guia rápido para começar.",
-  "label_local_ai_consent_pull_model": "Baixar o modelo de IA."
+  "label_local_ai_consent_pull_model": "Baixar o modelo de IA.",
+  "setting_motion_level": "Movimento",
+  "tooltip_motion_level": "Quanto a interface pode se mover.\nCompleto = tudo, incluindo efeitos ambientes lentos.\nReduzido = apenas transições e esmaecimentos, sem efeitos em loop, partículas ou parallax.\nDesligado = nenhuma animação.\nA opção “Efeitos de animação” do Windows só pode reduzir ainda mais, nunca devolver movimento.",
+  "label_motion_full": "Completo",
+  "label_motion_reduced": "Reduzido",
+  "label_motion_off": "Desligado"
 }

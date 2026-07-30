@@ -3322,5 +3322,10 @@
   "tooltip_lab": "实验室 — 仍在测试中的实验性功能，可能不够稳定。",
   "tooltip_patreon_exclusives": "专属 — 仅限支持者的功能和内容。",
   "tooltip_how_to_use": "使用方法 — 快速上手指南。",
-  "label_local_ai_consent_pull_model": "下载 AI 模型。"
+  "label_local_ai_consent_pull_model": "下载 AI 模型。",
+  "setting_motion_level": "动效",
+  "tooltip_motion_level": "界面可以有多少动效。\n完整 = 全部，包括缓慢的氛围特效。\n简化 = 仅保留淡入淡出和过渡，不再有循环特效、粒子或视差。\n关闭 = 完全没有动画。\nWindows 自带的“动画效果”设置只会进一步降低此级别，不会恢复动效。",
+  "label_motion_full": "完整",
+  "label_motion_reduced": "简化",
+  "label_motion_off": "关闭"
 }

@@ -355,6 +355,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkPerformanceMode_Changed(sender, e);
         }
+        private void CmbMotionLevel_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.CmbMotionLevel_SelectionChanged(sender, e);
+        }
         private void ChkRandomizeTargets_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

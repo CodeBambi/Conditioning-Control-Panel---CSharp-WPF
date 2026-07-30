@@ -2518,5 +2518,10 @@
   "tooltip_lab": "ラボ — テスト中の実験的機能です。不安定な場合があります。",
   "tooltip_patreon_exclusives": "限定 — 支援者だけの機能とコンテンツ。",
   "tooltip_how_to_use": "使い方 — はじめての方向けのクイックガイド。",
-  "label_local_ai_consent_pull_model": "AIモデルをダウンロードします。"
+  "label_local_ai_consent_pull_model": "AIモデルをダウンロードします。",
+  "setting_motion_level": "モーション",
+  "tooltip_motion_level": "インターフェイスの動きの量を設定します。\nフル = ゆっくりしたアンビエント効果を含むすべて。\n控えめ = フェードとトランジションのみ。ループ効果やパーティクルはありません。\nオフ = アニメーションを一切使いません。\nWindows の「アニメーション効果」設定はこれをさらに弱めることはできますが、戻すことはできません。",
+  "label_motion_full": "フル",
+  "label_motion_reduced": "控えめ",
+  "label_motion_off": "オフ"
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -606,6 +606,16 @@ namespace ConditioningControlPanel
             brush.StartPoint = new Point(0, 0);
             brush.EndPoint = new Point(1, 1);
 
+            // Ambient loop: at the Performance tier or under reduced motion the tree keeps exactly
+            // this gradient, it just never gets a clock.
+            bool animate = Services.MotionFx.AllowAmbientLoops;
+            void Drift(GradientStop stop, DependencyProperty prop, AnimationTimeline anim)
+            {
+                if (!animate) return;
+                Timeline.SetDesiredFrameRate(anim, AmbientFrameRate);
+                stop.BeginAnimation(prop, anim);
+            }
+
             if (isHeader)
             {
                 // Header: dark purple → vivid purple-pink → dark purple
@@ -623,7 +633,7 @@ namespace ConditioningControlPanel
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
                     EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
                 };
-                brush.GradientStops[1].BeginAnimation(GradientStop.OffsetProperty, offsetAnim);
+                Drift(brush.GradientStops[1], GradientStop.OffsetProperty, offsetAnim);
 
                 // Animate middle stop color: shift between purple tones
                 var colorAnim = new System.Windows.Media.Animation.ColorAnimation
@@ -635,7 +645,7 @@ namespace ConditioningControlPanel
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
                     EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
                 };
-                brush.GradientStops[1].BeginAnimation(GradientStop.ColorProperty, colorAnim);
+                Drift(brush.GradientStops[1], GradientStop.ColorProperty, colorAnim);
             }
             else
             {
@@ -655,7 +665,7 @@ namespace ConditioningControlPanel
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
                     EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
                 };
-                brush.GradientStops[1].BeginAnimation(GradientStop.OffsetProperty, offset1Anim);
+                Drift(brush.GradientStops[1], GradientStop.OffsetProperty, offset1Anim);
 
                 // Animate stop[2] offset: drift 0.5 ↔ 0.85
                 var offset2Anim = new System.Windows.Media.Animation.DoubleAnimation
@@ -667,7 +677,7 @@ namespace ConditioningControlPanel
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
                     EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
                 };
-                brush.GradientStops[2].BeginAnimation(GradientStop.OffsetProperty, offset2Anim);
+                Drift(brush.GradientStops[2], GradientStop.OffsetProperty, offset2Anim);
 
                 // Animate stop[1] color: shift between purple and blue tones
                 var colorAnim = new System.Windows.Media.Animation.ColorAnimation
@@ -679,7 +689,7 @@ namespace ConditioningControlPanel
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
                     EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
                 };
-                brush.GradientStops[1].BeginAnimation(GradientStop.ColorProperty, colorAnim);
+                Drift(brush.GradientStops[1], GradientStop.ColorProperty, colorAnim);
             }
 
             return brush;
@@ -690,6 +700,9 @@ namespace ConditioningControlPanel
         /// </summary>
         private void AddSkillTreeParticles()
         {
+            // 55 forever-pulsing ellipses is the tree's other ambient loop — same gate as the brush.
+            if (!Services.MotionFx.AllowAmbientLoops) return;
+
             var colors = new[]
             {
                 Color.FromArgb(90, 255, 105, 180),   // pink
@@ -725,6 +738,7 @@ namespace ConditioningControlPanel
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
                     EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
                 };
+                System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(opacityAnim, AmbientFrameRate);
                 ellipse.BeginAnimation(System.Windows.UIElement.OpacityProperty, opacityAnim);
 
                 EnhancementsTab.SkillTreeCanvas.Children.Add(ellipse);

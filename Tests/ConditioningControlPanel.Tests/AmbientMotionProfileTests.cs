@@ -66,4 +66,34 @@ public class AmbientMotionProfileTests
     [InlineData(MotionLevel.Off, MotionLevel.Off)]
     public void OsAnimationsOff_CapsToReduced_ButNeverAddsMotionBack(MotionLevel setting, MotionLevel expected)
         => Assert.Equal(expected, MotionFx.ResolveLevel(setting, osAnimationsEnabled: false));
+
+    [Theory]
+    [InlineData(MotionLevel.Full)]
+    [InlineData(MotionLevel.Reduced)]
+    [InlineData(MotionLevel.Off)]
+    public void MotionLevel_RoundTripsThroughSettingsJson(MotionLevel level)
+    {
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(new AppSettings { MotionLevel = level });
+        var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<AppSettings>(json);
+        Assert.NotNull(restored);
+        Assert.Equal(level, restored!.MotionLevel);
+    }
+
+    [Fact]
+    public void ExistingSettingsFile_WithoutTheKey_LandsOnFull()
+    {
+        // Every user upgrading into this build has no MotionLevel in their settings.json.
+        var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<AppSettings>("{\"PerformanceMode\":false}");
+        Assert.NotNull(restored);
+        Assert.Equal(MotionLevel.Full, restored!.MotionLevel);
+    }
+
+    [Fact]
+    public void SettingsComboIndex_MatchesTheEnumOrder()
+    {
+        // MainWindow binds the picker by SelectedIndex; a reorder here would silently mis-set it.
+        Assert.Equal(0, (int)MotionLevel.Full);
+        Assert.Equal(1, (int)MotionLevel.Reduced);
+        Assert.Equal(2, (int)MotionLevel.Off);
+    }
 }

@@ -1186,6 +1186,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
@@ -1263,6 +1264,23 @@
                                         ToolTip="{loc:Str tooltip_intake_nudge_enabled}">
                                 <CheckBox x:Name="ChkIntakeNudge" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_intake_nudge_enabled}" Margin="6,0,0,0"/>
+                            </StackPanel>
+
+                            <!-- Reduced motion. Sits with the other rendering switches because it is
+                                 one: Reduced/Off stop every ambient loop and particle field before
+                                 they start (Services/MotionFx). Capped to Reduced automatically when
+                                 Windows' own "Animation effects" flag is off. -->
+                            <StackPanel Grid.Row="6" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
+                                        ToolTip="{loc:Str tooltip_motion_level}">
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_motion_level}" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="CmbMotionLevel" x:FieldModifier="internal" Width="110" Margin="6,0,0,0"
+                                          Foreground="Black" Background="White"
+                                          ToolTip="{loc:Str tooltip_motion_level}"
+                                          SelectionChanged="CmbMotionLevel_SelectionChanged">
+                                    <ComboBoxItem Content="{loc:Str label_motion_full}"/>
+                                    <ComboBoxItem Content="{loc:Str label_motion_reduced}"/>
+                                    <ComboBoxItem Content="{loc:Str label_motion_off}"/>
+                                </ComboBox>
                             </StackPanel>
                         </Grid>
     

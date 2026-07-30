@@ -2525,5 +2525,10 @@
   "tooltip_lab": "연구소 — 아직 테스트 중인 실험적 기능. 다소 불안정할 수 있습니다.",
   "tooltip_patreon_exclusives": "독점 — 후원자 전용 기능과 콘텐츠.",
   "tooltip_how_to_use": "사용법 — 시작을 위한 간단 안내.",
-  "label_local_ai_consent_pull_model": "AI 모델을 다운로드합니다."
+  "label_local_ai_consent_pull_model": "AI 모델을 다운로드합니다.",
+  "setting_motion_level": "모션",
+  "tooltip_motion_level": "인터페이스가 얼마나 움직일지 설정합니다.\n전체 = 느린 분위기 효과를 포함한 모든 것.\n줄임 = 페이드와 전환만. 반복 효과와 입자 효과는 없음.\n끔 = 애니메이션 없음.\nWindows의 “애니메이션 효과” 설정은 이를 더 줄일 수만 있고 되돌릴 수는 없습니다.",
+  "label_motion_full": "전체",
+  "label_motion_reduced": "줄임",
+  "label_motion_off": "끔"
 }

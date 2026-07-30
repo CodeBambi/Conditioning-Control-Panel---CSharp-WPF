@@ -83,6 +83,9 @@ namespace ConditioningControlPanel
         private void StartSeasonTitleShimmer()
         {
             if (_seasonTitleStoryboard != null) return; // already running
+            // Ambient loop: never starts at the Performance tier or under reduced motion — the
+            // season banner keeps its static gradient instead.
+            if (!Services.MotionFx.AllowAmbientLoops) return;
             try
             {
                 // The brush and title live inside the QuestsTabView UserControl, which has its OWN
@@ -106,6 +109,7 @@ namespace ConditioningControlPanel
                 _seasonTitleStoryboard.Children.Add(startPt);
                 _seasonTitleStoryboard.Children.Add(endPt);
                 _seasonTitleStoryboard.Children.Add(glow);
+                Timeline.SetDesiredFrameRate(_seasonTitleStoryboard, AmbientFrameRate);
                 _seasonTitleStoryboard.Begin(this, true);
             }
             catch (Exception ex)

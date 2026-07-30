@@ -3783,5 +3783,10 @@
   "program_enroll_safety_header": "PLAIN TALK, OUT OF CHARACTER",
   "program_enroll_contract_header": "Type the phrase to enroll",
   "program_enroll_contract_hint": "Type it exactly as written above.",
-  "btn_program_enroll_confirm": "Enroll"
+  "btn_program_enroll_confirm": "Enroll",
+  "setting_motion_level": "Motion",
+  "tooltip_motion_level": "How much the interface is allowed to move.\nFull = everything, including slow ambient effects.\nReduced = fades and transitions only, with no looping effects, particles or parallax.\nOff = no animation at all.\nWindows’ own “Animation effects” setting can only reduce this further, never add motion back.",
+  "label_motion_full": "Full",
+  "label_motion_reduced": "Reduced",
+  "label_motion_off": "Off"
 }

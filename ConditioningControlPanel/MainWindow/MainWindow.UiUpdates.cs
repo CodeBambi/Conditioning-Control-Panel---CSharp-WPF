@@ -2759,6 +2759,30 @@ namespace ConditioningControlPanel
             App.Logger?.Information("Auto performance mode set to {Enabled}", App.Settings.Current.AutoPerformanceMode);
         }
 
+        internal void CmbMotionLevel_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var index = SettingsTab.CmbMotionLevel?.SelectedIndex ?? 0;
+            var level = index switch
+            {
+                1 => Models.MotionLevel.Reduced,
+                2 => Models.MotionLevel.Off,
+                _ => Models.MotionLevel.Full,
+            };
+            App.Settings.Current.MotionLevel = level;
+            App.Logger?.Information("Motion level set to {Level}", level);
+            // Loops read the gate when they start, so a switch to Reduced/Off needs the running ones
+            // stopped now; a switch back to Full re-arms them on the next tab visit.
+            if (!Services.MotionFx.AllowAmbientLoops)
+            {
+                StopSeasonTitleShimmer();
+                StopSkillTreeAnimations();
+                StopProgramBannerFx();
+                SwitchTabFx(string.Empty);
+            }
+            StartMarqueeAnimation();
+        }
+
         internal void ChkVideoHwDecode_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;

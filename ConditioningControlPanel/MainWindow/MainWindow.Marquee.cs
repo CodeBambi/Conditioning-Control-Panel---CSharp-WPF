@@ -884,6 +884,20 @@ namespace ConditioningControlPanel
                 var fullText = string.Concat(Enumerable.Repeat(singleSegment, segmentsNeeded));
                 SettingsTab.MarqueeText.Text = fullText;
 
+                // Ambient loop: at the Performance tier or under reduced motion the banner shows a
+                // single static segment parked at the origin rather than scrolling forever.
+                if (!Services.MotionFx.AllowAmbientLoops)
+                {
+                    SettingsTab.MarqueeText.Text = singleSegment;
+                    if (SettingsTab.MarqueeText.RenderTransform is TranslateTransform park)
+                    {
+                        park.BeginAnimation(TranslateTransform.XProperty, null);
+                        park.X = 0;
+                    }
+                    _marqueeStoryboard = null;
+                    return;
+                }
+
                 // Animation: scroll exactly one segment width, then loop back seamlessly
                 // From 0 to -segmentWidth creates perfect loop since next segment is identical
                 var animation = new System.Windows.Media.Animation.DoubleAnimation
@@ -893,6 +907,7 @@ namespace ConditioningControlPanel
                     Duration = TimeSpan.FromSeconds(segmentWidth / 80), // Speed: 80 pixels per second
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
                 };
+                System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(animation, AmbientFrameRate);
 
                 _marqueeStoryboard = new System.Windows.Media.Animation.Storyboard();
                 _marqueeStoryboard.Children.Add(animation);

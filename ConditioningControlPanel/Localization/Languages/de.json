@@ -2526,5 +2526,10 @@
   "tooltip_lab": "Das Labor — experimentelle Funktionen im Test. Ecken und Kanten sind normal.",
   "tooltip_patreon_exclusives": "Exklusiv — Funktionen und Inhalte nur für Unterstützer.",
   "tooltip_how_to_use": "Anleitung — Kurzeinstieg für den Start.",
-  "label_local_ai_consent_pull_model": "Das KI-Modell herunterladen."
+  "label_local_ai_consent_pull_model": "Das KI-Modell herunterladen.",
+  "setting_motion_level": "Bewegung",
+  "tooltip_motion_level": "Wie viel sich die Oberfläche bewegen darf.\nVoll = alles, einschließlich langsamer Ambient-Effekte.\nReduziert = nur Überblendungen und Übergänge, keine Endlos-Effekte, Partikel oder Parallaxe.\nAus = keinerlei Animation.\nDie Windows-Einstellung „Animationseffekte“ kann dies nur weiter reduzieren, niemals Bewegung zurückholen.",
+  "label_motion_full": "Voll",
+  "label_motion_reduced": "Reduziert",
+  "label_motion_off": "Aus"
 }

@@ -9,6 +9,10 @@ namespace ConditioningControlPanel
     // parked on the way out of its tab and resumed on the way in, for free.
     public partial class MainWindow
     {
+        /// <summary>Frame-rate cap for every ambient (8-60s loop) storyboard the window starts.
+        /// Interaction motion keeps the full compositor rate.</summary>
+        internal const int AmbientFrameRate = 24;
+
         private readonly Dictionary<string, List<AmbientFxCanvas>> _tabFxCanvases =
             new(StringComparer.OrdinalIgnoreCase);
 
