@@ -247,6 +247,11 @@ namespace ConditioningControlPanel
                 ApplyGlobalCameraHotkey();
                 HookFocusGazeService();
                 HookBlinkTrainerService();
+                // Tooltip hygiene: start tracking before the user can hover anything, so no tooltip
+                // is ever opened untracked (the lazy hook this replaced installed its handlers on
+                // the first tab switch, i.e. potentially after the first tooltip was already up).
+                // See MainWindow.ToolTipHygiene.cs.
+                EnsureToolTipHygiene();
                 // Chrome FX (PR-1): nav hover/active glow, START breath + sheen, XP gloss.
                 // After load, so every templated nav button is real before we touch it.
                 InitializeChromeFx();
