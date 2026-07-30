@@ -149,6 +149,31 @@
                                         </Style>
                                     </Button.Style>
                                 </Button>
+                                <Button x:Name="BtnTubeFit" Content="{loc:Str btn_tube_fit}" Click="BtnTubeFit_Click"
+                                        ToolTip="{loc:Str tooltip_tube_fit}"
+                                        Background="{DynamicResource PanelAccentBrush}" Foreground="#B084DC" FontWeight="SemiBold"
+                                        Padding="16,8" BorderThickness="0" Cursor="Hand" Margin="0,0,10,0"
+                                        Visibility="Collapsed">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
                                 <Button x:Name="BtnUninstall" Content="{loc:Str btn_uninstall}" Click="BtnUninstall_Click"
                                         Background="{DynamicResource PanelAccentBrush}" Foreground="#FF6B6B" FontWeight="SemiBold"
                                         Padding="16,8" BorderThickness="0" Cursor="Hand">
