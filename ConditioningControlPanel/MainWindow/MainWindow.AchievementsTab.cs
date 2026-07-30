@@ -123,6 +123,9 @@ namespace ConditioningControlPanel
             AchievementsTab.AchievementGrid.Children.Clear();
             AchievementsTab.PatronAchievementGrid?.Children.Clear();
             _achievementImages.Clear();
+            // The old tiles are gone; drop the FX bookkeeping with them.
+            _achievementTilesUnlocked.Clear();
+            _achievementTilesWired.Clear();
 
             var tileStyle = FindResource("AchievementTile") as Style;
 
@@ -155,6 +158,9 @@ namespace ConditioningControlPanel
                 }
 
                 border.Child = image;
+                // Hover holo-foil tilt, unlocked tiles only (see
+                // MainWindow.TabFxPresetsQuestsAchievements.cs).
+                PrepareAchievementTileFx(border, isUnlocked);
 
                 if (achievement.IsExclusive)
                     AchievementsTab.PatronAchievementGrid?.Children.Add(border);
@@ -200,6 +206,9 @@ namespace ConditioningControlPanel
                 var parent = image.Parent as Border;
                 if (parent != null)
                 {
+                    // A tile that just unlocked starts offering the hover tilt (and one that was
+                    // somehow re-locked stops).
+                    SetAchievementTileUnlocked(parent, isUnlocked);
                     var achName2 = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name;
                     var achFlavor2 = App.Mods?.MakeModAware(achievement.FlavorText) ?? achievement.FlavorText;
                     var achReq2 = App.Mods?.MakeModAware(achievement.Requirement) ?? achievement.Requirement;
