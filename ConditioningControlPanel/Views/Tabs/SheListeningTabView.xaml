@@ -236,7 +236,7 @@
 
                     <!-- Translucent gating overlay (free users) -->
                     <Border x:Name="SheListeningGate" x:FieldModifier="internal" Visibility="Collapsed"
-                            Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
+                            Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
                             CornerRadius="10" IsHitTestVisible="True">
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
@@ -244,7 +244,7 @@
                                        FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                             <TextBlock Text="Support to unlock voice control." FontSize="14"
                                        Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                            <Button Click="BtnSL_GateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                            <Button Click="BtnSL_GateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
                                     Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
                                 <helpers:EmojiTextBlock Text="🔓 Unlock with Patreon"/>
                             </Button>

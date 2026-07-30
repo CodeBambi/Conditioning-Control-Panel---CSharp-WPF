@@ -14,7 +14,6 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class MainWindow
     {
-        private static readonly Color PinkColor = Color.FromRgb(0xFF, 0x69, 0xB4);
         private static readonly Color GreenColor = Color.FromRgb(0x90, 0xEE, 0x90);
         private static readonly Color MutedColor = Color.FromRgb(0x88, 0x88, 0xA0);
         private DispatcherTimer? _voicePanelHideTimer;
@@ -40,6 +39,7 @@ namespace ConditioningControlPanel
                     App.Autonomy.VoicePromptStarted += OnVoicePromptStarted;
                     App.Autonomy.VoicePromptFinished += OnVoicePromptFinished;
                 }
+                EnsurePr4aFx();
                 SetTakeoverActiveUi(App.Autonomy?.IsEnabled == true);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "InitTakeoverVoiceUi failed"); }
@@ -66,8 +66,9 @@ namespace ConditioningControlPanel
             var tab = BambiTakeoverTab;
             if (tab == null) return;
 
-            if (tab.OrbCore != null)
-                tab.OrbCore.Fill = new SolidColorBrush(active ? PinkColor : Color.FromRgb(0x3A, 0x3A, 0x52));
+            // The orb owns its own colour (from FxTheme) and its own dormant/active look; all this
+            // has to tell it is which of the two it is in.
+            tab.TakeoverOrbFx?.SetActive(active);
 
             if (tab.TxtTakeoverStatus != null)
             {
@@ -79,29 +80,7 @@ namespace ConditioningControlPanel
                     ? "She has the reins. Tap stop any time."
                     : "She's not watching right now.";
 
-            if (active) StartOrbBreath();
-            else { StopOrbBreath(); HideVoicePanel(); }
-        }
-
-        private void StartOrbBreath()
-        {
-            var halo = BambiTakeoverTab?.OrbHalo;
-            if (halo == null) return;
-            var anim = new DoubleAnimation(0.22, 0.78, new Duration(TimeSpan.FromSeconds(1.6)))
-            {
-                AutoReverse = true,
-                RepeatBehavior = RepeatBehavior.Forever,
-                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-            };
-            halo.BeginAnimation(UIElement.OpacityProperty, anim);
-        }
-
-        private void StopOrbBreath()
-        {
-            var halo = BambiTakeoverTab?.OrbHalo;
-            if (halo == null) return;
-            halo.BeginAnimation(UIElement.OpacityProperty, null);
-            halo.Opacity = 0;
+            if (!active) HideVoicePanel();
         }
 
         // ── Live voice panel ──────────────────────────────────────────────────
@@ -121,7 +100,9 @@ namespace ConditioningControlPanel
             if (tab.TxtTakeoverStatus != null)
             {
                 tab.TxtTakeoverStatus.Text = "● LISTENING";
-                tab.TxtTakeoverStatus.Foreground = new SolidColorBrush(PinkColor);
+                // The accent, from the mod palette rather than the literal pink that used to be
+                // baked in here - LISTENING is her colour, and hers changes with the mod.
+                tab.TxtTakeoverStatus.Foreground = new SolidColorBrush(Services.FxTheme.GlowColor);
             }
         });
 
@@ -137,6 +118,11 @@ namespace ConditioningControlPanel
         {
             if (BambiTakeoverTab?.VoiceLevelFill?.RenderTransform is ScaleTransform st)
                 st.ScaleX = Math.Min(1.0, Math.Max(0.0, level / 0.2)); // speech RMS ~0..0.2 -> full bar
+
+            // Status-driven, not ambient: the orb only ever brightens off a level the mic actually
+            // reported, and the value decays inside the orb's own tick. Setting a float on a parked
+            // orb costs nothing, so there is no gate to check here.
+            BambiTakeoverTab?.TakeoverOrbFx?.SetEnergy(level);
         }
 
         private void OnVoicePromptFinished(object? sender, PhraseResult r) => RunOnUi(() =>

@@ -275,6 +275,9 @@ namespace ConditioningControlPanel
             if (BlinkTrainerTab.BlinkTrainerGate == null) return;
             bool premium = App.Patreon?.HasPremiumAccess == true;
             BlinkTrainerTab.BlinkTrainerGate.Visibility = premium ? Visibility.Collapsed : Visibility.Visible;
+            // FX (PR-4a): the shared animated gate treatment. Decoration only - see
+            // Controls/PremiumGateFx.cs and the twin call in MainWindow.Patreon.RefreshPremiumGate.
+            Controls.PremiumGateFx.Attach(BlinkTrainerTab.BlinkTrainerGate);
             if (BlinkTrainerTab.BlinkTrainerGatedContent != null)
                 BlinkTrainerTab.BlinkTrainerGatedContent.IsEnabled = premium;
             // Stage actions (status row, Start session, tracker toggle) moved
@@ -603,7 +606,6 @@ namespace ConditioningControlPanel
 
         private BlinkTrainerStatusState _currentBlinkTrainerStatusState = BlinkTrainerStatusState.IdleReady;
         private RoutedEventHandler? _blinkTrainerStatusActionHandler;
-        private Storyboard? _blinkTrainerStatusDotPulseClock;
 
         private BlinkTrainerStatusState DetermineBlinkTrainerStatusState()
         {
@@ -674,7 +676,11 @@ namespace ConditioningControlPanel
             // mid-pulse when leaving IdleReady.
             BlinkTrainerTab.BlinkTrainerStatusDot.BeginAnimation(UIElement.OpacityProperty, null);
             BlinkTrainerTab.BlinkTrainerStatusDot.Opacity = 1;
-            StopBlinkTrainerStatusDotPulse();
+
+            // FX (PR-4a): the dot breathes while a session is genuinely RUNNING, and only then.
+            // It used to blink at 0.8s in IdleReady - an idle loop on a tab where, by definition,
+            // nothing is happening - which the FX plan rules out for every status surface.
+            SetBlinkTrainerStatusPulse(state == BlinkTrainerStatusState.Running);
 
             string startLabel = Localization.Loc.Get("blink_trainer_start_session");
             string stopLabel = Localization.Loc.Get("blink_trainer_stop_session");
@@ -687,7 +693,6 @@ namespace ConditioningControlPanel
                     BlinkTrainerTab.BlinkTrainerStatusText.Foreground = FindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
                     WireBlinkTrainerStatusAction(null, null);
                     SetStartButtonState(enabled: true, content: startLabel);
-                    StartBlinkTrainerStatusDotPulse();
                     break;
 
                 case BlinkTrainerStatusState.Running:
@@ -777,29 +782,10 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void StartBlinkTrainerStatusDotPulse()
-        {
-            try
-            {
-                if (BlinkTrainerTab.BlinkTrainerStatusDot == null) return;
-                var sb = BlinkTrainerTab.BlinkTrainerStatusDot.Resources["BlinkTrainerStatusDotPulse"] as Storyboard;
-                if (sb == null) return;
-                _blinkTrainerStatusDotPulseClock = sb;
-                sb.Begin(BlinkTrainerTab.BlinkTrainerStatusDot, true);
-            }
-            catch (Exception ex) { App.Logger?.Warning(ex, "StartBlinkTrainerStatusDotPulse failed"); }
-        }
-
-        private void StopBlinkTrainerStatusDotPulse()
-        {
-            try
-            {
-                if (_blinkTrainerStatusDotPulseClock != null && BlinkTrainerTab.BlinkTrainerStatusDot != null)
-                    _blinkTrainerStatusDotPulseClock.Stop(BlinkTrainerTab.BlinkTrainerStatusDot);
-                _blinkTrainerStatusDotPulseClock = null;
-            }
-            catch { }
-        }
+        // The IdleReady blink (a 0.8s opacity Storyboard living in the dot's own Resources) was
+        // retired by the FX pass - see ApplyBlinkTrainerStatusState. The dot now breathes a glow
+        // while a session is RUNNING, from SetBlinkTrainerStatusPulse
+        // (MainWindow.TabFxTakeoverLabStatus.cs), and is otherwise perfectly still.
 
         // Status action button handlers — routed via WireBlinkTrainerStatusAction
         // so only the current state's handler is wired at any time.
