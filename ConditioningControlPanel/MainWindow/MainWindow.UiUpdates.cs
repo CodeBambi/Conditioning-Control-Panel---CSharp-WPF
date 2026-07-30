@@ -67,17 +67,14 @@ namespace ConditioningControlPanel
 
             TxtLevel.Text = $"Lvl {level}";
             TxtLevelLabel.Text = $"LVL {level}";
-            TxtXP.Text = $"{(int)xp} / {(int)xpNeeded} XP";
 
-            // Update XP bar width.
-            // XPBar.Parent is the wrapping Grid (not the outer Border with rounded corners),
-            // so we read the container's ActualWidth directly. Casting Parent to Border made
-            // the expression always null, falling back to 100 px regardless of progress —
-            // visible bug: bar appeared frozen at 100 px after install.
-            var progress = Math.Min(1.0, xp / xpNeeded);
-            var container = XPBar.Parent as FrameworkElement;
-            var available = container?.ActualWidth ?? 0;
-            if (available > 0) XPBar.Width = progress * available;
+            // XP readout + bar fill (chrome FX): the number odometers from its previous value and
+            // the bar tweens to its new width instead of both snapping. Both fall back to an
+            // instant set under reduced motion. See AnimateXpDisplay in MainWindow.ChromeFx.cs -
+            // it reads the same container ActualWidth this used to (XPBar.Parent is the wrapping
+            // Grid, NOT the rounded outer Border; casting it to Border made the expression always
+            // null and froze the bar at its 100px XAML default).
+            AnimateXpDisplay(xp, xpNeeded, level);
 
             // Update title based on level
             var rankTitle = level switch
@@ -2781,6 +2778,9 @@ namespace ConditioningControlPanel
                 SwitchTabFx(string.Empty);
             }
             StartMarqueeAnimation();
+            // Chrome loops (nav glow breath, START glow + sheen, XP gloss) re-evaluate both ways:
+            // down to Reduced/Off stops them now, back up to Full re-arms them without a restart.
+            RefreshChromeFx();
         }
 
         internal void ChkVideoHwDecode_Changed(object sender, RoutedEventArgs e)

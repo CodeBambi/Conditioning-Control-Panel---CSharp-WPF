@@ -16,6 +16,15 @@
 
     <SolidColorBrush x:Key="DangerBrush" Color="{DynamicResource Danger}"/>
 
+    <!-- Ambient FX brushes. DESIGN-TIME SEEDS ONLY, exactly like their Color keys in Colors.xaml:
+         Services/FxTheme.ApplyForActiveMod overwrites all four (Color + Brush) at startup and on
+         every mod switch. They exist here so a chrome FX layer still has a brush to draw with if
+         that call ever fails, and so the XAML designer isn't left with null backgrounds. -->
+    <SolidColorBrush x:Key="FxMistBrush" Color="{DynamicResource FxMistColor}"/>
+    <SolidColorBrush x:Key="FxParticleBrush" Color="{DynamicResource FxParticleColor}"/>
+    <SolidColorBrush x:Key="FxGlowBrush" Color="{DynamicResource FxGlowColor}"/>
+    <SolidColorBrush x:Key="FxFlashTintBrush" Color="{DynamicResource FxFlashTintColor}"/>
+
     <!-- Semantic success green (see Colors.xaml). Static across mods. -->
     <SolidColorBrush x:Key="SuccessGreenBrush" Color="{DynamicResource SuccessGreen}"/>
     <SolidColorBrush x:Key="SuccessGreenDeepBrush" Color="{DynamicResource SuccessGreenDeep}"/>

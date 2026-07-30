@@ -247,6 +247,9 @@ namespace ConditioningControlPanel
                 ApplyGlobalCameraHotkey();
                 HookFocusGazeService();
                 HookBlinkTrainerService();
+                // Chrome FX (PR-1): nav hover/active glow, START breath + sheen, XP gloss.
+                // After load, so every templated nav button is real before we touch it.
+                InitializeChromeFx();
             };
             Closing += (_, _) => Services.GlobalHotkeyService.UnregisterAll();
             // The title-bar X now MINIMIZES TO TRAY (see OnClosing) instead of quitting — users expect
@@ -1340,6 +1343,11 @@ namespace ConditioningControlPanel
                     TxtBannerTertiary.Foreground = accentBrush;
 
                 // Mod selector ComboBox repopulates itself in InitializeModSelector — no per-element refresh here.
+
+                // Chrome FX: the Fx* dynamic resources have already been rewritten by FxTheme, so
+                // the XAML-bound sheen bands re-tint themselves; the two code-built glow effects
+                // (active nav button, START) hold a Color and need this nudge to follow the mod.
+                RefreshChromeFx();
 
                 App.Logger?.Debug("Theme-aware UI elements refreshed for mod {ModId}", App.Mods?.ActiveModId);
             }

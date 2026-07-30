@@ -73,22 +73,8 @@ namespace ConditioningControlPanel
             ShowTab("enhancements");
         }
 
-        private void AnimateTabIn(UIElement tab)
-        {
-            try
-            {
-                tab.Opacity = 0;
-                var anim = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200))
-                {
-                    EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-                };
-                tab.BeginAnimation(OpacityProperty, anim);
-            }
-            catch
-            {
-                tab.Opacity = 1;
-            }
-        }
+        // AnimateTabIn now lives in MainWindow.ChromeFx.cs: the bare 200ms fade was replaced by
+        // the PR-1 choreography (outgoing fade -> directional slide + fade -> entrance stagger).
 
         internal void ShowTab(string tab)
         {
@@ -104,6 +90,10 @@ namespace ConditioningControlPanel
 
             // Bark hook: announce navigation (gated/chanced in the rules so it isn't spammy).
             try { App.Bark?.NotifyTabNavigated(tab); } catch { }
+
+            // Park the incoming key for the transition choreography. AnimateTabIn reads it, so the
+            // ~25 call sites below stay a single argument and still get a slide direction.
+            _pendingTabKey = tab;
 
             // Stop animations on tabs we're leaving to reduce idle CPU
             StopSeasonTitleShimmer();
@@ -374,6 +364,11 @@ namespace ConditioningControlPanel
                     break;
 
             }
+
+            // Chrome FX: move the breathing active-tab glow onto whichever nav button owns this
+            // tab (Exclusives destinations light the Exclusives launcher). Last, so it runs
+            // whatever the switch above did - and it never throws.
+            ApplyNavActiveGlow(NavButtonForTab(tab));
         }
 
         /// <summary>

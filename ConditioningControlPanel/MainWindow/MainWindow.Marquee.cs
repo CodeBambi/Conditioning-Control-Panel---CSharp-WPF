@@ -415,6 +415,10 @@ namespace ConditioningControlPanel
             fadeInTarget.IsHitTestVisible = true;
 
             _bannerCurrentIndex = nextIndex;
+
+            // Chrome FX: a light sheen rides the crossfade. Throttled inside (the rotation is a
+            // 4s timer; a pass every 4s would be an ambient strobe, not a change cue).
+            SweepBannerSheen();
         }
 
         /// <summary>
@@ -425,6 +429,9 @@ namespace ConditioningControlPanel
             if (string.IsNullOrEmpty(message)) return;
 
             TxtBannerSecondary.Text = message;
+
+            // A genuinely new message, so it bypasses the rotation throttle.
+            SweepBannerSheen(force: true);
 
             // Ensure timer is running
             if (_bannerRotationTimer != null && !_bannerRotationTimer.IsEnabled)

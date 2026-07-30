@@ -167,6 +167,9 @@ namespace ConditioningControlPanel
                 _statPillUpdateTimer?.Stop();
                 _conditioningTimeTimer?.Stop();
                 _conditioningTimeSyncTimer?.Stop();
+                // Chrome FX clocks (MainWindow.ChromeFx.cs)
+                _startSheenTimer?.Stop();
+                _staggerCleanupTimer?.Stop();
 
                 // Unsubscribe service events to allow GC of this window
                 UnsubscribeWebcamDebug();
