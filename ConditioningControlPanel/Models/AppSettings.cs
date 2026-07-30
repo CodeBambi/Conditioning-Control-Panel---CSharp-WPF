@@ -1363,6 +1363,14 @@ namespace ConditioningControlPanel.Models
         public Dictionary<string, Dictionary<string, string>>? VideoLinksByMod { get; set; }
 
         /// <summary>
+        /// Per-mod user overrides for avatar tube layout (set via the Mod Manager's Tube Fit editor).
+        /// When a mod id has an entry here it REPLACES the mod manifest's tubeLayout values.
+        /// Keyed by mod ID string.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, ModTubeLayout>? TubeLayoutOverridesByMod { get; set; }
+
+        /// <summary>
         /// Migrate legacy ContentMode-based settings to mod-based settings.
         /// Called once after deserialization when ActiveModId hasn't been set yet.
         /// </summary>

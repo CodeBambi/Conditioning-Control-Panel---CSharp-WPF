@@ -1,0 +1,200 @@
+<Window x:Class="ConditioningControlPanel.TubeFitDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str tube_fit_title}"
+        Height="640" Width="760"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Window.Resources>
+        <!-- Attached/Detached pill. RadioButton (a ToggleButton) so the pair is mutually
+             exclusive for free; GroupName keeps them paired. -->
+        <Style x:Key="TubeFitModePill" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="#B0B0B0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="18,7"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="bd" Background="{DynamicResource PanelAccentBrush}" CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Flat pill button used by the bottom bar and the pose stepper -->
+        <Style x:Key="TubeFitButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title Bar -->
+            <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="12,12,0,0" Padding="20,12"
+                    MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <Grid>
+                    <TextBlock Text="{loc:Str tube_fit_title}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <Button x:Name="BtnClose" Content="X" Click="BtnClose_Click"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Background="Transparent" Foreground="#B0B0B0" FontSize="16" FontWeight="Bold"
+                            BorderThickness="0" Cursor="Hand" Padding="8,2"
+                            Width="30" Height="30"/>
+                </Grid>
+            </Border>
+
+            <!-- Main Content -->
+            <Grid Grid.Row="1" Margin="15,12,15,12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="{loc:Str tube_fit_subtitle}"
+                           Foreground="#A0A0A0" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                <!-- WYSIWYG preview. The nested Viewbox/Grid pair replicates the real tube window:
+                     the outer 780x1020 grid is the window rect (it clips, like the window bounds),
+                     the inner Viewbox + 780x1080 grid is the tube's ContentViewbox design canvas. -->
+                <Border Grid.Row="1" Grid.Column="0" Width="350" Height="458"
+                        ClipToBounds="True" Background="#10101E" CornerRadius="8">
+                    <Viewbox Stretch="Uniform">
+                        <Grid Width="780" Height="1020" ClipToBounds="True">
+                            <Viewbox Stretch="Uniform">
+                                <Grid Width="780" Height="1080" ClipToBounds="False">
+                                    <Image x:Name="PreviewTube" Stretch="Uniform"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Border x:Name="PreviewAvatarBorder"
+                                            HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                            RenderTransformOrigin="0.5,0.5">
+                                        <Image x:Name="PreviewAvatar" Stretch="Uniform"
+                                               MaxWidth="198" MaxHeight="306"
+                                               RenderTransformOrigin="0.5,0.5"/>
+                                    </Border>
+                                </Grid>
+                            </Viewbox>
+                        </Grid>
+                    </Viewbox>
+                </Border>
+
+                <!-- Controls -->
+                <StackPanel Grid.Row="1" Grid.Column="1" Margin="14,0,0,0">
+                    <!-- Attached / Detached -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                        <RadioButton x:Name="RbAttached" GroupName="TubeFitMode" Style="{StaticResource TubeFitModePill}"
+                                     Content="{loc:Str tube_fit_attached}" Margin="0,0,8,0"
+                                     Checked="Mode_Checked"/>
+                        <RadioButton x:Name="RbDetached" GroupName="TubeFitMode" Style="{StaticResource TubeFitModePill}"
+                                     Content="{loc:Str tube_fit_detached}"
+                                     Checked="Mode_Checked"/>
+                    </StackPanel>
+
+                    <!-- Avatar scale -->
+                    <Grid Margin="0,0,0,4">
+                        <TextBlock Text="{loc:Str tube_fit_scale}" Foreground="{DynamicResource TextLightBrush}" FontSize="13"/>
+                        <TextBlock x:Name="TxtScaleValue" HorizontalAlignment="Right" Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="13" FontWeight="SemiBold"/>
+                    </Grid>
+                    <Slider x:Name="SldScale" Minimum="0.1" Maximum="3.0" SmallChange="0.01" LargeChange="0.1"
+                            TickFrequency="0.01" IsSnapToTickEnabled="True"
+                            ValueChanged="SldScale_ValueChanged" Margin="0,0,0,16"/>
+
+                    <!-- Horizontal offset -->
+                    <Grid Margin="0,0,0,4">
+                        <TextBlock Text="{loc:Str tube_fit_offset_x}" Foreground="{DynamicResource TextLightBrush}" FontSize="13"/>
+                        <TextBlock x:Name="TxtOffsetXValue" HorizontalAlignment="Right" Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="13" FontWeight="SemiBold"/>
+                    </Grid>
+                    <Slider x:Name="SldOffsetX" Minimum="-1000" Maximum="1000" SmallChange="1" LargeChange="10"
+                            TickFrequency="1" IsSnapToTickEnabled="True"
+                            ValueChanged="SldOffsetX_ValueChanged" Margin="0,0,0,16"/>
+
+                    <!-- Vertical offset -->
+                    <Grid Margin="0,0,0,4">
+                        <TextBlock Text="{loc:Str tube_fit_offset_y}" Foreground="{DynamicResource TextLightBrush}" FontSize="13"/>
+                        <TextBlock x:Name="TxtOffsetYValue" HorizontalAlignment="Right" Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="13" FontWeight="SemiBold"/>
+                    </Grid>
+                    <Slider x:Name="SldOffsetY" Minimum="-500" Maximum="500" SmallChange="1" LargeChange="10"
+                            TickFrequency="1" IsSnapToTickEnabled="True"
+                            ValueChanged="SldOffsetY_ValueChanged" Margin="0,0,0,18"/>
+
+                    <!-- Pose cycler -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <Button x:Name="BtnPrevPose" Content="&#x25C0;" Click="BtnPrevPose_Click"
+                                Style="{StaticResource TubeFitButton}" Padding="10,5" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="TxtPose" Foreground="{DynamicResource TextLightBrush}" FontSize="13"
+                                   VerticalAlignment="Center" MinWidth="70" TextAlignment="Center"/>
+                        <Button x:Name="BtnNextPose" Content="&#x25B6;" Click="BtnNextPose_Click"
+                                Style="{StaticResource TubeFitButton}" Padding="10,5" Margin="8,0,0,0"/>
+                    </StackPanel>
+
+                    <TextBlock x:Name="TxtImageInfo" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Bottom Bar -->
+            <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,12,12" Padding="15,10">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="BtnSave" Content="{loc:Str tube_fit_save}" Click="BtnSave_Click"
+                            Style="{StaticResource TubeFitButton}"
+                            Background="{DynamicResource PinkBrush}" Margin="0,0,10,0"/>
+                    <Button x:Name="BtnReset" Content="{loc:Str tube_fit_reset}" Click="BtnReset_Click"
+                            Style="{StaticResource TubeFitButton}" Foreground="#B084DC" Margin="0,0,10,0"/>
+                    <Button x:Name="BtnCancel" Content="{loc:Str tube_fit_cancel}" Click="BtnCancel_Click"
+                            Style="{StaticResource TubeFitButton}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

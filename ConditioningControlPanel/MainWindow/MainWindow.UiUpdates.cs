@@ -1852,22 +1852,30 @@ namespace ConditioningControlPanel
         /// <summary>What the Weekly Intake Pass actually is, in the shape
         /// <see cref="HelpTooltipBuilder"/> renders: header, "What It Does", tips, "How It
         /// Works".</summary>
-        private static HelpContent BuildIntakePassHelpContent() => new()
+        private static HelpContent BuildIntakePassHelpContent()
         {
-            SectionId = "IntakePass",
-            // The header icon is drawn by a plain TextBlock, which cannot render COLR/CPAL colour
-            // emoji - a BMP dingbat is the only glyph that survives.
-            Icon = "★",
-            Title = Loc.Get("help_intake_pass_title"),
-            WhatItDoes = Loc.Get("help_intake_pass_what"),
-            Tips = new List<string>
+            var tips = new List<string>
             {
                 Loc.Get("help_intake_pass_tip_free"),
                 Loc.Get("help_intake_pass_tip_patron"),
-                Loc.Get("help_intake_pass_tip_punch"),
-            },
-            HowItWorks = Loc.Get("help_intake_pass_how"),
-        };
+            };
+            // The punch-card tip only while the card itself is on screen (hidden while its
+            // prize is TBD - IntakePunchCardService.UiEnabled).
+            if (IntakePunchCardService.UiEnabled)
+                tips.Add(Loc.Get("help_intake_pass_tip_punch"));
+
+            return new()
+            {
+                SectionId = "IntakePass",
+                // The header icon is drawn by a plain TextBlock, which cannot render COLR/CPAL
+                // colour emoji - a BMP dingbat is the only glyph that survives.
+                Icon = "★",
+                Title = Loc.Get("help_intake_pass_title"),
+                WhatItDoes = Loc.Get("help_intake_pass_what"),
+                Tips = tips,
+                HowItWorks = Loc.Get("help_intake_pass_how"),
+            };
+        }
 
         /// <summary>Kills any in-flight spin and snaps the tile's transform back to rest. Called
         /// before every state change so the tile can never be left frozen mid-turn (a held

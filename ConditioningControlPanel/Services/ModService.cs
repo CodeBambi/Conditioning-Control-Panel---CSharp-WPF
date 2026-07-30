@@ -1134,11 +1134,25 @@ namespace ConditioningControlPanel.Services
             _activeMod.Manifest.CustomAvatarSets?.FirstOrDefault(c => c.SetNumber == setNumber)?.UnlockLevel;
 
         // Tube layout offsets
-        public int GetAvatarOffsetX() => _activeMod.Manifest.TubeLayout?.AvatarOffsetX ?? 0;
-        public int GetAvatarDetachedOffsetX() => _activeMod.Manifest.TubeLayout?.AvatarDetachedOffsetX ?? 0;
-        public double GetAvatarScale() => _activeMod.Manifest.TubeLayout?.AvatarScale ?? 1.0;
-        public int GetAvatarOffsetY() => _activeMod.Manifest.TubeLayout?.AvatarOffsetY ?? 0;
-        public int GetAvatarDetachedOffsetY() => _activeMod.Manifest.TubeLayout?.AvatarDetachedOffsetY ?? 0;
+        /// <summary>
+        /// The tube layout actually in force for the active mod: a user override saved by the Mod
+        /// Manager's Tube Fit editor (AppSettings.TubeLayoutOverridesByMod) fully REPLACES the mod's
+        /// shipped manifest tubeLayout, so the user's fit always wins. Null when neither exists.
+        /// </summary>
+        private Models.ModTubeLayout? EffectiveTubeLayout()
+        {
+            if (App.Settings?.Current?.TubeLayoutOverridesByMod?.TryGetValue(ActiveModId, out var userLayout) == true
+                && userLayout != null)
+                return userLayout;
+
+            return _activeMod?.Manifest?.TubeLayout;
+        }
+
+        public int GetAvatarOffsetX() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetX ?? 0, -1000, 1000);
+        public int GetAvatarDetachedOffsetX() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetX ?? 0, -1000, 1000);
+        public double GetAvatarScale() => Math.Clamp(EffectiveTubeLayout()?.AvatarScale ?? 1.0, 0.1, 3.0);
+        public int GetAvatarOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetY ?? 0, -500, 500);
+        public int GetAvatarDetachedOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetY ?? 0, -500, 500);
 
         // Enhancement overrides — check explicit override first, then fall back to MakeModAware(default)
         public string GetEnhancementTreeTitle() =>

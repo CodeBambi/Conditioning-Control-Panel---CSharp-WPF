@@ -336,7 +336,7 @@
                              would mean inventing both before a single circle appeared on screen. The
                              streak calendar directly below already paints itself from code on the same
                              refresh pass - matching it is the smaller, more honest change. -->
-                        <Border x:Name="PunchCardPanel" x:FieldModifier="internal"
+                        <Border x:Name="PunchCardPanel" x:FieldModifier="internal" Visibility="Collapsed"
                                 Background="{DynamicResource DarkerBgBrush}" CornerRadius="10" Padding="15,12" Margin="0,20,0,0">
                             <StackPanel>
                                 <!-- Header: ticket + title on the left, "3 of 8" on the right, mirroring

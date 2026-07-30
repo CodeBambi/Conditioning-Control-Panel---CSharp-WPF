@@ -303,6 +303,15 @@ namespace ConditioningControlPanel
             var holes = QuestsTab?.PunchCardHoles;
             if (holes == null) return;
 
+            // Hidden while the eight-hole prize is TBD (IntakePunchCardService.UiEnabled).
+            // Stamps still accrue in the service; only the paint is suppressed.
+            if (!IntakePunchCardService.UiEnabled)
+            {
+                if (QuestsTab?.PunchCardPanel != null)
+                    QuestsTab.PunchCardPanel.Visibility = Visibility.Collapsed;
+                return;
+            }
+
             try
             {
                 var card = App.IntakePunchCard;

@@ -135,6 +135,10 @@ namespace ConditioningControlPanel
             TxtActiveIndicator.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
             BtnActivate.Visibility = isActive ? Visibility.Collapsed : Visibility.Visible;
 
+            // Tube Fit edits the avatar's fit inside the tube for the mod that's actually rendering,
+            // so it only makes sense (and only previews correctly) for the active mod.
+            BtnTubeFit.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
+
             // Can't uninstall built-in mods or active mod
             BtnUninstall.Visibility = (!mod.IsBuiltIn && !isActive) ? Visibility.Visible : Visibility.Collapsed;
 
@@ -271,6 +275,14 @@ namespace ConditioningControlPanel
                     BtnExport.IsEnabled = true;
                 }
             }
+        }
+
+        // Live WYSIWYG editor for the avatar's scale/offsets inside the tube. Saves a per-mod user
+        // override in settings (never into the mod), so no ModWasChanged refresh is needed.
+        private void BtnTubeFit_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new TubeFitDialog { Owner = this };
+            dialog.ShowDialog();
         }
 
         private void BtnCreate_Click(object sender, RoutedEventArgs e)

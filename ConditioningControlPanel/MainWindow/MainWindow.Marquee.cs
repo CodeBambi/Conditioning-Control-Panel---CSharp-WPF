@@ -772,9 +772,14 @@ namespace ConditioningControlPanel
                     // already carries the old terse copy in en.json, so reusing it would keep
                     // showing the old line until someone remembered to edit the value, whereas a
                     // key that does not exist yet falls through LocOr to the English below.
-                    // "intake_nudge_body" is now orphaned and can be deleted.
-                    LocOr("intake_nudge_pitch",
-                        "Your free Graded Intake just unlocked. It interviews you, drafts a session tuned to you - and stamps your punch card when you run it."),
+                    // "intake_nudge_body" is now orphaned and can be deleted. The punch-free
+                    // variant runs while the card is hidden (IntakePunchCardService.UiEnabled) -
+                    // this pitch must not promise a stamp the user can never see.
+                    Services.IntakePunchCardService.UiEnabled
+                        ? LocOr("intake_nudge_pitch",
+                            "Your free Graded Intake just unlocked. It interviews you, drafts a session tuned to you - and stamps your punch card when you run it.")
+                        : LocOr("intake_nudge_pitch_nopunch",
+                            "Your free Graded Intake just unlocked. It interviews you and drafts a session tuned to you."),
                     imageUrl: null,
                     linkUrl: null,
                     theme: null,
