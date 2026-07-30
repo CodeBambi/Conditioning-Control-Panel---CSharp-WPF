@@ -160,61 +160,10 @@
                                Foreground="{DynamicResource TextMutedBrush}"
                                FontSize="11" FontStyle="Italic" Margin="0,0,0,18"/>
 
-                    <!-- (c) Share level. Private is pre-selected but a deliberate tap is required. -->
-                    <TextBlock Text="{loc:Str program_enroll_share_header}"
-                               Foreground="{DynamicResource PinkBrush}"
-                               FontSize="13" FontWeight="Bold" Margin="0,10,0,4"/>
-                    <TextBlock Text="{loc:Str program_enroll_share_note}"
-                               Foreground="{DynamicResource TextMutedBrush}"
-                               FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
-
-                    <UniformGrid Columns="3">
-                        <RadioButton x:Name="RadioSharePrivate" GroupName="ProgramShare"
-                                     Style="{StaticResource CardRadio}" IsChecked="True"
-                                     Click="ShareCard_Click">
-                            <StackPanel>
-                                <TextBlock Text="{loc:Str program_enroll_share_private}"
-                                           Foreground="{DynamicResource TextLightBrush}"
-                                           FontSize="13" FontWeight="Bold"/>
-                                <TextBlock Text="{loc:Str program_enroll_share_private_body}"
-                                           Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="11" TextWrapping="Wrap" LineHeight="17" Margin="0,5,0,0"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton x:Name="RadioShareLedger" GroupName="ProgramShare"
-                                     Style="{StaticResource CardRadio}" Margin="8,0,8,0"
-                                     Click="ShareCard_Click">
-                            <StackPanel>
-                                <TextBlock Text="{loc:Str program_enroll_share_ledger}"
-                                           Foreground="{DynamicResource TextLightBrush}"
-                                           FontSize="13" FontWeight="Bold"/>
-                                <TextBlock Text="{loc:Str program_enroll_share_ledger_body}"
-                                           Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="11" TextWrapping="Wrap" LineHeight="17" Margin="0,5,0,0"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton x:Name="RadioSharePublic" GroupName="ProgramShare"
-                                     Style="{StaticResource CardRadio}" Margin="0"
-                                     Click="ShareCard_Click">
-                            <StackPanel>
-                                <TextBlock Text="{loc:Str program_enroll_share_public}"
-                                           Foreground="{DynamicResource TextLightBrush}"
-                                           FontSize="13" FontWeight="Bold"/>
-                                <TextBlock Text="{loc:Str program_enroll_share_public_body}"
-                                           Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="11" TextWrapping="Wrap" LineHeight="17" Margin="0,5,0,0"/>
-                            </StackPanel>
-                        </RadioButton>
-                    </UniformGrid>
-
-                    <TextBlock Text="{loc:Str program_enroll_share_photos_note}"
-                               Foreground="{DynamicResource TextLightBrush}"
-                               FontSize="11" TextWrapping="Wrap" LineHeight="17" Margin="0,10,0,18"/>
-
-                    <!-- (d) The clock -->
+                    <!-- (c) The clock -->
                     <TextBlock Text="{loc:Str program_enroll_clock_header}"
                                Foreground="{DynamicResource PinkBrush}"
-                               FontSize="13" FontWeight="Bold" Margin="0,0,0,8"/>
+                               FontSize="13" FontWeight="Bold" Margin="0,12,0,8"/>
                     <Grid Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>

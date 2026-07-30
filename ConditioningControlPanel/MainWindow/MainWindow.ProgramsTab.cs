@@ -439,6 +439,11 @@ namespace ConditioningControlPanel
                     IsLocked = locked
                 };
 
+                var banner = Services.Program.ProgramArt.Banner(def, includeDefault: false);
+                item.BannerArt = banner;
+                item.BannerVisibility = banner != null ? Visibility.Visible : Visibility.Collapsed;
+                item.IconVisibility = banner == null ? Visibility.Visible : Visibility.Collapsed;
+
                 if (locked)
                 {
                     item.ActionText = Loc.Get("btn_program_locked");

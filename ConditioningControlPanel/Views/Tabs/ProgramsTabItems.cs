@@ -28,6 +28,17 @@ namespace ConditioningControlPanel.Views.Tabs
 
         public Brush AccentBrush { get; set; } = Brushes.Gray;
 
+        /// <summary>
+        /// The program's banner strip for the card's header band - the same art the Dashboard
+        /// Today card wears, resolved with no generic fallback (see ProgramArt.Banner). Null
+        /// collapses the band and the emoji icon carries the header alone.
+        /// </summary>
+        public ImageSource? BannerArt { get; set; }
+        public Visibility BannerVisibility { get; set; } = Visibility.Collapsed;
+
+        /// <summary>Inverse of <see cref="BannerVisibility"/> - the emoji is the no-art fallback.</summary>
+        public Visibility IconVisibility { get; set; } = Visibility.Visible;
+
         /// <summary>Premium program the user cannot currently take - the ✨ locked treatment.</summary>
         public bool IsLocked { get; set; }
 

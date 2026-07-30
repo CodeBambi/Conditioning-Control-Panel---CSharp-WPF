@@ -11,9 +11,8 @@ using ConditioningControlPanel.Views.Tabs;
 namespace ConditioningControlPanel;
 
 /// <summary>
-/// The enrollment ceremony. Four steps on one scrollable panel: the whole arc up front,
-/// Standard vs Strict, the share level (Private pre-selected but requiring a deliberate tap),
-/// and the clock plus a typed contract phrase.
+/// The enrollment ceremony. Three steps on one scrollable panel: the whole arc up front,
+/// Standard vs Strict, and the clock plus a typed contract phrase.
 ///
 /// The dialog decides nothing - it collects. MainWindow.ProgramsTab.cs calls
 /// ProgramService.Enroll with what comes back.
@@ -22,11 +21,14 @@ public partial class ProgramEnrollDialog : Window
 {
     private readonly ProgramDefinition _program;
 
-    /// <summary>Set only by a real click on a share card, never by the pre-selection.</summary>
-    private bool _shareTouched;
-
     public bool StrictMode { get; private set; }
-    public ProgramShareLevel ShareLevel { get; private set; } = ProgramShareLevel.Private;
+
+    /// <summary>
+    /// Programs no longer ask - they take no photos and there is no leaderboard to feed, so the
+    /// choice was meaningless. The field stays so old saved enrollments still round-trip; every
+    /// new enrollment is Private.
+    /// </summary>
+    public ProgramShareLevel ShareLevel { get; } = ProgramShareLevel.Private;
     public int DayBoundaryHour { get; private set; } = 4;
     public int NudgeHour { get; private set; } = 20;
 
@@ -114,13 +116,6 @@ public partial class ProgramEnrollDialog : Window
         return Application.Current?.TryFindResource("PinkBrush") as Brush ?? Brushes.HotPink;
     }
 
-    /// <summary>Only a real tap counts - the pre-selection deliberately does not.</summary>
-    private void ShareCard_Click(object sender, RoutedEventArgs e)
-    {
-        _shareTouched = true;
-        UpdateConfirmState();
-    }
-
     private void ContractInput_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         => UpdateConfirmState();
 
@@ -135,11 +130,9 @@ public partial class ProgramEnrollDialog : Window
     private void UpdateConfirmState()
     {
         var contractOk = ContractMatches();
-        BtnConfirmEnroll.IsEnabled = _shareTouched && contractOk;
+        BtnConfirmEnroll.IsEnabled = contractOk;
 
-        TxtBlockedHint.Text = !_shareTouched
-            ? Loc.Get("program_enroll_share_untouched")
-            : (contractOk ? "" : Loc.Get("program_enroll_contract_hint"));
+        TxtBlockedHint.Text = contractOk ? "" : Loc.Get("program_enroll_contract_hint");
     }
 
     private void BtnCancel_Click(object sender, RoutedEventArgs e)
@@ -151,12 +144,6 @@ public partial class ProgramEnrollDialog : Window
     private void BtnConfirm_Click(object sender, RoutedEventArgs e)
     {
         StrictMode = RadioModeStrict.IsChecked == true && _program.Rules.StrictAvailable;
-
-        ShareLevel = RadioSharePublic.IsChecked == true
-            ? ProgramShareLevel.Public
-            : RadioShareLedger.IsChecked == true
-                ? ProgramShareLevel.Ledger
-                : ProgramShareLevel.Private;
 
         DayBoundaryHour = Math.Clamp(CmbBoundaryHour.SelectedIndex, 0, 23);
         NudgeHour = CmbNudgeHour.SelectedIndex <= 0 ? -1 : CmbNudgeHour.SelectedIndex - 1;
