@@ -5430,6 +5430,21 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region First-time experience
+
+        // One-shot feature intro cards (Windows/FeatureIntroPopup). Each key is spent the
+        // moment its card is about to open - same contract as HasSeenProgramsIntro - so a
+        // card that fails to display burns nothing and one that displays never re-fires.
+        private List<string> _seenFeatureIntros = new();
+        [JsonProperty]
+        public List<string> SeenFeatureIntros
+        {
+            get => _seenFeatureIntros;
+            set { _seenFeatureIntros = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Deeper
 
         private bool _enableDeeper = true;

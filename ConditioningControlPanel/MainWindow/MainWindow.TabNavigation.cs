@@ -308,6 +308,7 @@ namespace ConditioningControlPanel
                     AwarenessTab.Visibility = Visibility.Visible;
                     AnimateTabIn(AwarenessTab);
                     SyncAwarenessTabUI();
+                    MaybeShowFeatureIntro("awareness");
                     break;
 
                 case "remotecontrol":
@@ -338,6 +339,7 @@ namespace ConditioningControlPanel
                     HapticsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(HapticsTab);
                     UpdatePatreonUI();
+                    MaybeShowFeatureIntro("haptics");
                     break;
 
                 case "lockdown":
@@ -345,18 +347,21 @@ namespace ConditioningControlPanel
                     AnimateTabIn(LockdownTab);
                     StartLockdownPulse();
                     RefreshPremiumGate(LockdownTab.LockdownGate);
+                    MaybeShowFeatureIntro("lockdown");
                     break;
 
                 case "blinktrainer":
                     BlinkTrainerTab.Visibility = Visibility.Visible;
                     AnimateTabIn(BlinkTrainerTab);
                     RefreshBlinkTrainerTab();
+                    MaybeShowFeatureIntro("blinktrainer");
                     break;
 
                 case "shelistening":
                     SheListeningTab.Visibility = Visibility.Visible;
                     AnimateTabIn(SheListeningTab);
                     RefreshSheListeningTab();
+                    MaybeShowFeatureIntro("shelistening");
                     break;
 
                 case "gradedintake":
@@ -372,6 +377,26 @@ namespace ConditioningControlPanel
             // tab (Exclusives destinations light the Exclusives launcher). Last, so it runs
             // whatever the switch above did - and it never throws.
             ApplyNavActiveGlow(NavButtonForTab(tab));
+        }
+
+        /// <summary>
+        /// One-shot explainer cards for tabs whose purpose isn't obvious from their controls
+        /// (see FeatureIntros for the roster). Suppressed while a session is running - a modal
+        /// must never land on top of live conditioning. FeatureIntroPopup itself guards the
+        /// guided tour (which navigates tabs through ShowTab) and paces cards so a user
+        /// clicking through every tab doesn't eat a modal per click.
+        /// </summary>
+        private void MaybeShowFeatureIntro(string key)
+        {
+            try
+            {
+                if (_sessionEngine?.IsRunning == true) return;
+                FeatureIntroPopup.ShowIfFirstTime(key, this);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Feature intro hook failed for {Key}", key);
+            }
         }
 
         /// <summary>
