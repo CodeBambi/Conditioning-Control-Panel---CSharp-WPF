@@ -428,12 +428,22 @@ namespace ConditioningControlPanel
                         await Task.Delay(500);
                     }
 
+                    // The spotlight overlay measures this window's controls, so it must not
+                    // start against a window that hasn't loaded yet (up to 10s).
+                    for (int i = 0; i < 20 && !IsLoaded; i++)
+                    {
+                        await Task.Delay(500);
+                    }
+
                     // Only start tutorial if update dialog is done
-                    if (!App.IsUpdateDialogActive)
+                    if (!App.IsUpdateDialogActive && IsLoaded)
                     {
                         StartTutorial();
                     }
-                }), System.Windows.Threading.DispatcherPriority.Loaded);
+                    // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
+                    // host + avatar animations) that Loaded-priority items are starved and never
+                    // run - the first-launch tour silently never started at Loaded priority.
+                }), System.Windows.Threading.DispatcherPriority.Normal);
             }
             else
             {
@@ -2098,6 +2108,12 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "Blink Trainer flagship sticky: failed");
             }
+
+            // One-time premium celebration for entitlements granted silently (cached state
+            // restored in the ctor, the grace window, V2-linked accounts). The provider
+            // TierChanged handlers cover the loud grant paths; this covers the quiet ones
+            // on the next launch.
+            MaybeShowPremiumCelebration();
 
             // Catalogue submission feedback: poll for any pending Deeper
             // submissions that have been accepted/published since last launch and

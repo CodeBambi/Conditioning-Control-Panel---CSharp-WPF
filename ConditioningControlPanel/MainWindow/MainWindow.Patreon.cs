@@ -876,7 +876,32 @@ namespace ConditioningControlPanel
             {
                 UpdatePatreonUI();
                 UpdateUnlockablesVisibility(App.Settings?.Current?.PlayerLevel ?? 1);
+                MaybeShowPremiumCelebration();
             });
+        }
+
+        /// <summary>
+        /// One-time "premium unlocked" celebration card. Re-reads the combined entitlement
+        /// (Patreon tier + whitelist + cached grace + SubscribeStar) rather than trusting any
+        /// single event's tier argument, because several grant paths - cached state restored in
+        /// the ctor, the 14-day grace window, V2-linked accounts - never raise TierChanged at
+        /// all. Suppressed (unspent) while a session, the guided tour, or the update dialog is
+        /// on screen; MainWindow_Loaded re-checks on every launch, so suppression only delays
+        /// the card, never burns it.
+        /// </summary>
+        private void MaybeShowPremiumCelebration()
+        {
+            try
+            {
+                if (App.Patreon?.HasPremiumAccess != true) return;
+                if (_sessionEngine?.IsRunning == true) return;
+                if (App.IsUpdateDialogActive || IsStartupDialogShowing) return;
+                FeatureIntroPopup.ShowCelebrationIfFirstTime(this);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Premium celebration hook failed");
+            }
         }
 
         private void InitializePatreonTab()
