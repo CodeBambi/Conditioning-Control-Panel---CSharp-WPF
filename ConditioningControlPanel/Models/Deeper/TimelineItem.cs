@@ -66,6 +66,10 @@ namespace ConditioningControlPanel.Models.Deeper
         public const string PinkFilter = "pink_filter";
         public const string Spiral     = "spiral";
         public const string BrainDrain = "braindrain";
+        /// <summary>Melt variant of Brain Drain. Shares the one underlying blur overlay (and all of
+        /// its hold/ramp state) with <see cref="BrainDrain"/> — the two never co-exist. The melt warp
+        /// itself lands in Phase 2; today it behaves identically to <see cref="BrainDrain"/>.</summary>
+        public const string BrainDrainMelt = "braindrain_melt";
     }
 
     /// <summary>

@@ -8,8 +8,11 @@ namespace ConditioningControlPanel.Services.Compositor;
 /// screen into a persistent DIB section (1/downscale size), the small frame is blurred ONCE per
 /// capture tick on a small raster surface, and Render just upscales the blurred image over the
 /// monitor - the upscale is part of the blur, exactly like the legacy Image Stretch=Fill path.
-/// Blur radius parity with the legacy WPF BlurEffect: an on-screen radius R renders here as a
-/// source-space gaussian of sigma R/(3*downscale) applied before the xdownscale upscale.
+/// Blur radius parity with the legacy WPF BlurEffect: the legacy path set BlurEffect.Radius on the
+/// ALREADY-DOWNSCALED bitmap, so the radius SetIntensity stores is a SOURCE-space radius - the
+/// gaussian applied here is simply sigma = radius/3 (WPF's radius-to-sigma ratio), and the
+/// xdownscale upscale that follows widens it on screen exactly as it did for the legacy Image.
+/// A second /downscale here would be double-counting (it was, and it made every blur invisible).
 /// Renders on the capture-EXCLUDED surface (self-capture guard); plain SRCCOPY StretchBlt also
 /// skips layered windows entirely, so other overlays never feed back into the blur (legacy same).
 /// OverlayService owns all intensity/ramp/pulse math and pushes values; this layer only
@@ -33,7 +36,21 @@ public sealed class BrainDrainLayer : BaseLayer
     private float _lastSigma = -1f;
 
     private int _downscale = 4;
-    private double _screenRadius;               // WPF-BlurEffect-equivalent on-screen radius
+    private double _sourceRadius;               // WPF-BlurEffect-equivalent radius ON THE DOWNSCALED SOURCE
+    // Alpha-mix axis (compositor path only). At low intensity the gaussian is a fraction of a
+    // source pixel wide - i.e. nothing - so the *strength* has to come from how much of the blurred
+    // copy we paint over the real screen. Intensity 1..40 ramps the draw alpha linearly 0.35 -> 1.0
+    // (the real screen shows through underneath = a subtle haze); at 40 and above the layer is fully
+    // opaque and sigma alone carries the depth (sigma at 40 is already ~5 screen px at downscale 4).
+    // That makes perceived strength continuous across 1 -> 100 instead of "nothing, then blur".
+    // Pulse always paints at full alpha - a pulse is meant to slam.
+    private const int AlphaFullIntensity = 40;
+    private const double AlphaFloor = 0.35;
+    private byte _drawAlpha = 255;
+    // Melt variant ("braindrain_melt"): shares this layer and ALL of OverlayService's hold/ramp
+    // state - a melt band and a plain blur band never co-exist by design.
+    // TODO: melt warp rendered in Phase 2.
+    private bool _melt;
     private TimeSpan _captureInterval = TimeSpan.FromMilliseconds(33);
     private TimeSpan _sinceCapture;
 
@@ -48,9 +65,12 @@ public sealed class BrainDrainLayer : BaseLayer
     public override bool ExcludeFromCapture => true;
     public override bool WorldSpacePx => true;
 
-    /// <summary>Start capturing + blurring at the given intensity (legacy 1..200 scale).</summary>
-    public void Start(int intensity)
+    /// <summary>Start capturing + blurring at the given intensity (legacy 1..200 scale).
+    /// <paramref name="melt"/> selects the "braindrain_melt" variant (visuals land in Phase 2;
+    /// for now it renders identically to the plain blur).</summary>
+    public void Start(int intensity, bool melt = false)
     {
+        _melt = melt;
         var settings = App.Settings?.Current;
         var tier = PerformanceProfile.CurrentTier;
         _downscale = PerformanceProfile.BrainDrainDownscale(tier);
@@ -68,15 +88,34 @@ public sealed class BrainDrainLayer : BaseLayer
     {
         SetActive(false);
         ReleaseCaptures();
+        _melt = false;
     }
 
-    /// <summary>Normal/ramp/restore path - legacy on-screen radius is intensity*0.4/downscale
-    /// (the WPF BlurEffect radius was tuned against the downscaled source).</summary>
-    public void SetIntensity(int intensity) => _screenRadius = intensity * 0.4 / Math.Max(1, _downscale);
+    /// <summary>Normal/ramp/restore path - the legacy source-space radius is intensity*0.4/downscale
+    /// (the WPF BlurEffect radius was applied to the downscaled bitmap, so it is already
+    /// source-space; CapturePass just turns it into sigma = radius/3).</summary>
+    public void SetIntensity(int intensity)
+    {
+        _sourceRadius = intensity * 0.4 / Math.Max(1, _downscale);
+        _drawAlpha = AlphaFor(intensity);
+    }
 
     /// <summary>Pulse boost - legacy PulseOverlays sets the raw radius boosted*0.4 with NO
-    /// downscale divide (deliberately much heavier than the steady state).</summary>
-    public void Pulse(int boostedIntensity) => _screenRadius = boostedIntensity * 0.4;
+    /// downscale divide (deliberately much heavier than the steady state), at full opacity.</summary>
+    public void Pulse(int boostedIntensity)
+    {
+        _sourceRadius = boostedIntensity * 0.4;
+        _drawAlpha = 255;
+    }
+
+    /// <summary>Draw alpha for an intensity: 0.35 at 1, linear to fully opaque at
+    /// <see cref="AlphaFullIntensity"/> and above. See the field comment for why.</summary>
+    private static byte AlphaFor(int intensity)
+    {
+        int i = Math.Clamp(intensity, 1, AlphaFullIntensity);
+        double a = AlphaFloor + (1.0 - AlphaFloor) * (i - 1) / (AlphaFullIntensity - 1.0);
+        return (byte)Math.Clamp(Math.Round(a * 255.0), 0, 255);
+    }
 
     public override void OnDeactivated() => ReleaseCaptures();
 
@@ -106,6 +145,10 @@ public sealed class BrainDrainLayer : BaseLayer
     {
         // World-space: boundsPx is this monitor's rect; draw only its own capture.
         int cx = (boundsPx.Left + boundsPx.Right) / 2, cy = (boundsPx.Top + boundsPx.Bottom) / 2;
+        // Alpha mix: white-with-alpha modulates the image draw (RGB is ignored for DrawImage).
+        // Set per frame - Render, SetIntensity and Pulse are all on the UI thread, so this can
+        // never read a half-written value, and it keeps the ramp path free of paint bookkeeping.
+        _drawPaint.Color = SKColors.White.WithAlpha(_drawAlpha);
         foreach (var c in _captures)
         {
             if (c.Blurred == null || !c.Bounds.Contains(cx, cy)) continue;
@@ -197,8 +240,10 @@ public sealed class BrainDrainLayer : BaseLayer
     {
         if (_captures.Count == 0) return;
 
-        // Rebuild the blur filter only when the radius actually changed.
-        float sigma = (float)(_screenRadius / (3.0 * Math.Max(1, _downscale)));
+        // Rebuild the blur filter only when the radius actually changed. _sourceRadius is ALREADY
+        // source-space (see SetIntensity) - dividing by _downscale again here is what made every
+        // steady-state blur invisible (max intensity landed at sigma ~0.83px, 1..6 at literally zero).
+        float sigma = (float)(_sourceRadius / 3.0);
         if (Math.Abs(sigma - _lastSigma) > 0.01f)
         {
             _lastSigma = sigma;
