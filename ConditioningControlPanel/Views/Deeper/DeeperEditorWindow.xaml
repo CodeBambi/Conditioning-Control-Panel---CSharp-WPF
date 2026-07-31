@@ -1578,8 +1578,8 @@
                                       SelectionChanged="CmbOverlayKind_SelectionChanged">
                                 <ComboBoxItem Content="Pink Filter" Tag="pink_filter"/>
                                 <ComboBoxItem Content="Spiral" Tag="spiral"/>
-                                <!-- Brain Drain temporarily removed while we test/verify the blur feature. -->
-                                <!-- <ComboBoxItem Content="Brain Drain" Tag="braindrain"/> -->
+                                <ComboBoxItem Content="Brain Drain" Tag="braindrain"/>
+                                <ComboBoxItem Content="Brain Melt" Tag="braindrain_melt"/>
                             </ComboBox>
                             <TextBlock Text="Duration (ms)" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtOverlayDuration" Style="{StaticResource EditorTextBox}"
@@ -1593,7 +1593,7 @@
                                     ValueChanged="SliderOverlayOpacity_ValueChanged"/>
                             <CheckBox x:Name="ChkOverlayRamp"
                                       Content="Ramp opacity over the region"
-                                      ToolTip="Fade the overlay from a start opacity to an end opacity across this region's duration (pink filter + spiral)."
+                                      ToolTip="Fade the overlay from a start opacity to an end opacity across this region's duration (all overlay kinds; Brain Drain ramps its blur depth)."
                                       Click="ChkOverlayRamp_Changed"
                                       Foreground="{DynamicResource TextLightBrush}"
                                       Margin="0,0,0,6"/>

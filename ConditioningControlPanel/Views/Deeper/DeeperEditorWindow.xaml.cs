@@ -3544,8 +3544,9 @@ namespace ConditioningControlPanel.Views.Deeper
                 te.DurationMs, v => te.DurationMs = Math.Max(50, v));
         }
 
-        // Overlay-kind combo for TriggerEffect. Pink Filter / Spiral / Brain
-        // Drain; matches the inline overlay editor's CmbOverlayKind.
+        // Overlay-kind combo for TriggerEffect. Pink Filter / Spiral / Brain Drain /
+        // Brain Melt; matches the inline overlay editor's CmbOverlayKind (same order,
+        // same friendly labels, same Tag = raw kind constant round-trip).
         private void AddOverlayKindCombo(Panel host, TriggerEffectAction te)
         {
             host.Children.Add(new TextBlock
@@ -3558,12 +3559,14 @@ namespace ConditioningControlPanel.Views.Deeper
                 Style = (Style)FindResource("EditorComboBox"),
                 ItemContainerStyle = (Style)FindResource("EditorComboBoxItem")
             };
-            // Brain Drain temporarily withheld from the editor while we test/verify the blur
-            // feature. Constant + runtime kept so existing saved scripts still load/run.
-            string[] kinds = { OverlayKinds.PinkFilter, OverlayKinds.Spiral };
-            foreach (var k in kinds)
+            // Tag stays the raw kind constant (what gets serialized); Content is the
+            // friendly label the inline CmbOverlayKind picker shows.
+            string[] kinds = { OverlayKinds.PinkFilter, OverlayKinds.Spiral,
+                               OverlayKinds.BrainDrain, OverlayKinds.BrainDrainMelt };
+            string[] labels = { "Pink Filter", "Spiral", "Brain Drain", "Brain Melt" };
+            for (int i = 0; i < kinds.Length; i++)
             {
-                combo.Items.Add(new ComboBoxItem { Content = k, Tag = k });
+                combo.Items.Add(new ComboBoxItem { Content = labels[i], Tag = kinds[i] });
             }
             var curK = te.OverlayKind ?? OverlayKinds.PinkFilter;
             var idx = Array.IndexOf(kinds, curK);
