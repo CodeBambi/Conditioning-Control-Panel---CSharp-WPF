@@ -39,13 +39,14 @@ public sealed class BrainDrainLayer : BaseLayer
     private double _sourceRadius;               // WPF-BlurEffect-equivalent radius ON THE DOWNSCALED SOURCE
     // Alpha-mix axis (compositor path only). At low intensity the gaussian is a fraction of a
     // source pixel wide - i.e. nothing - so the *strength* has to come from how much of the blurred
-    // copy we paint over the real screen. Intensity 1..40 ramps the draw alpha linearly 0.35 -> 1.0
-    // (the real screen shows through underneath = a subtle haze); at 40 and above the layer is fully
-    // opaque and sigma alone carries the depth (sigma at 40 is already ~5 screen px at downscale 4).
-    // That makes perceived strength continuous across 1 -> 100 instead of "nothing, then blur".
-    // Pulse always paints at full alpha - a pulse is meant to slam.
-    private const int AlphaFullIntensity = 40;
-    private const double AlphaFloor = 0.35;
+    // copy we paint over the real screen. Intensity 1..100 ramps the draw alpha linearly 0.30 -> 0.85:
+    // the real screen ALWAYS ghosts through (owner call, 2026-07-31: the effect must stay subtle -
+    // full-opacity blur read as "basically illegible"). Sigma rises alongside, so perceived strength
+    // is continuous across 1 -> 100 while the ceiling stays a dreamy haze, not a wall.
+    // Pulse still paints at full alpha - a pulse is a deliberate 1-second slam.
+    private const int AlphaFullIntensity = 100;
+    private const double AlphaFloor = 0.30;
+    private const double AlphaCeiling = 0.85;
     private byte _drawAlpha = 255;
     // Melt variant ("braindrain_melt"): shares this layer and ALL of OverlayService's hold/ramp
     // state - a melt band and a plain blur band never co-exist by design.
@@ -128,37 +129,49 @@ public sealed class BrainDrainLayer : BaseLayer
         _melt = false;
     }
 
-    /// <summary>Normal/ramp/restore path - the legacy source-space radius is intensity*0.4/downscale
-    /// (the WPF BlurEffect radius was applied to the downscaled bitmap, so it is already
-    /// source-space; CapturePass just turns it into sigma = radius/3).</summary>
+    // Blur strength per intensity point, SOURCE px per unit. The legacy constant was 0.4 (radius
+    // parity with the pre-compositor BlurEffect); retuned to 0.14 on the 2026-07-31 subtle pass -
+    // max intensity is now sigma ~4.7 screen px at downscale 4 (a dreamy haze the screen structure
+    // survives) instead of ~13 (illegible). The legacy windowed path in OverlayService reads this
+    // same constant - keep them identical.
+    internal const double RadiusScale = 0.14;
+
+    /// <summary>Normal/ramp/restore path - a SOURCE-space radius (the pre-compositor BlurEffect
+    /// radius was applied to the downscaled bitmap; CapturePass turns it into sigma = radius/3).
+    /// Strength curve retuned subtle 2026-07-31, see <see cref="RadiusScale"/>.</summary>
     public void SetIntensity(int intensity)
     {
-        _sourceRadius = intensity * 0.4 / Math.Max(1, _downscale);
+        _sourceRadius = intensity * RadiusScale / Math.Max(1, _downscale);
         _drawAlpha = AlphaFor(intensity);
         // Melt amplitude curve (SOURCE px, quoted at downscale 4 then divided by the actual
-        // downscale so the on-screen warp is tier-independent):  amp = 2 + intensity * 0.12.
+        // downscale so the on-screen warp is tier-independent):  amp = 1 + intensity * 0.045.
         // A displacement map offsets by +/- amp/2, so on screen at x4 that is +/- 2*amp px:
-        //   intensity 30  -> amp 5.6  -> +/-11 screen px  = a gentle shimmer
-        //   intensity 60  -> amp 9.2  -> +/-18 screen px  = clearly liquid
-        //   intensity 100 -> amp 14.0 -> +/-28 screen px  = heavy dripping distortion
-        // Clamped at the legacy 200 ceiling (amp 26) so a runaway value cannot eat the frame.
-        _meltAmplitude = (float)((2.0 + Math.Clamp(intensity, 0, 200) * 0.12) * 4.0 / Math.Max(1, _downscale));
+        //   intensity 30  -> amp 2.35 -> +/-4.7 screen px  = a whisper of shimmer
+        //   intensity 60  -> amp 3.7  -> +/-7.4 screen px  = gently liquid
+        //   intensity 100 -> amp 5.5  -> +/-11 screen px   = clearly melting, still readable
+        // (Subtle retune 2026-07-31; the original 2 + i*0.12 read as "basically illegible".)
+        // Clamped at the legacy 200 ceiling (amp 10) so a runaway value cannot eat the frame.
+        _meltAmplitude = (float)((1.0 + Math.Clamp(intensity, 0, 200) * 0.045) * 4.0 / Math.Max(1, _downscale));
     }
 
-    /// <summary>Pulse boost - legacy PulseOverlays sets the raw radius boosted*0.4 with NO
-    /// downscale divide (deliberately much heavier than the steady state), at full opacity.</summary>
+    /// <summary>Pulse boost - a deliberate 1-second slam: full draw alpha and the boosted radius
+    /// WITHOUT the downscale divide was the legacy behavior, but post subtle-retune that would be
+    /// a white-out (sigma ~9 SOURCE px). The pulse now keeps the divide and simply rides the
+    /// boosted (2x, capped 200) intensity: ~2x the steady sigma at full alpha - still a clear kick
+    /// against an 0.85-alpha steady state.</summary>
     public void Pulse(int boostedIntensity)
     {
-        _sourceRadius = boostedIntensity * 0.4;
+        _sourceRadius = boostedIntensity * RadiusScale / Math.Max(1, _downscale);
         _drawAlpha = 255;
     }
 
-    /// <summary>Draw alpha for an intensity: 0.35 at 1, linear to fully opaque at
-    /// <see cref="AlphaFullIntensity"/> and above. See the field comment for why.</summary>
+    /// <summary>Draw alpha for an intensity: <see cref="AlphaFloor"/> at 1, linear to
+    /// <see cref="AlphaCeiling"/> at <see cref="AlphaFullIntensity"/> and above - never fully
+    /// opaque. See the field comment for why.</summary>
     private static byte AlphaFor(int intensity)
     {
         int i = Math.Clamp(intensity, 1, AlphaFullIntensity);
-        double a = AlphaFloor + (1.0 - AlphaFloor) * (i - 1) / (AlphaFullIntensity - 1.0);
+        double a = AlphaFloor + (AlphaCeiling - AlphaFloor) * (i - 1) / (AlphaFullIntensity - 1.0);
         return (byte)Math.Clamp(Math.Round(a * 255.0), 0, 255);
     }
 

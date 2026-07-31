@@ -496,7 +496,9 @@ public class OverlayService : IDisposable
             if (hasBrainDrain)
             {
                 var boostedIntensity = Math.Min(_currentBrainDrainIntensity * 2, 200);
-                double blurRadius = boostedIntensity * 0.4;
+                // Subtle retune 2026-07-31: pulse keeps the downscale divide now (the old raw
+                // boosted*0.4 radius would white-out against the retuned steady state).
+                double blurRadius = boostedIntensity * Compositor.BrainDrainLayer.RadiusScale / Math.Max(1, _brainDrainDownscale);
                 if (_brainDrainLayer?.IsActive == true)
                     _brainDrainLayer.Pulse(boostedIntensity);
                 foreach (var img in _brainDrainImages.Values)
@@ -2004,7 +2006,7 @@ public class OverlayService : IDisposable
     {
         _currentBrainDrainIntensity = intensity;
         // Keep in sync with CreateBrainDrainWindow's downscaled-source radius.
-        double blurRadius = (intensity * 0.4) / Math.Max(1, _brainDrainDownscale);
+        double blurRadius = (intensity * Compositor.BrainDrainLayer.RadiusScale) / Math.Max(1, _brainDrainDownscale);
 
         DispatcherHelper.RunOnUISync(() =>
         {
@@ -2140,7 +2142,8 @@ public class OverlayService : IDisposable
             var wpfBounds = GetWpfScreenBounds(screen);
             // The source bitmap is 1/divisor size and gets upscaled by Stretch=Fill, so a
             // proportionally smaller blur radius yields the same on-screen blur far more cheaply.
-            double blurRadius = (intensity * 0.4) / Math.Max(1, _brainDrainDownscale);
+            // Strength constant shared with the compositor layer (subtle retune 2026-07-31).
+            double blurRadius = (intensity * Compositor.BrainDrainLayer.RadiusScale) / Math.Max(1, _brainDrainDownscale);
 
             var image = new System.Windows.Controls.Image
             {

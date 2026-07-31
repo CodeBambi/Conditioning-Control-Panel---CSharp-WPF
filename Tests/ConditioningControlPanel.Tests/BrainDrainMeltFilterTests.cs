@@ -27,8 +27,9 @@ public class BrainDrainMeltFilterTests
     private const float MeltSwayPx = 2.5f;
     private const float MeltSwayRate = 0.55f;
 
+    // Mirrors BrainDrainLayer.SetIntensity's melt amplitude (subtle retune 2026-07-31).
     private static float Amplitude(int intensity, int downscale) =>
-        (float)((2.0 + Math.Clamp(intensity, 0, 200) * 0.12) * 4.0 / Math.Max(1, downscale));
+        (float)((1.0 + Math.Clamp(intensity, 0, 200) * 0.045) * 4.0 / Math.Max(1, downscale));
 
     private static SKImage NoiseTile()
     {
