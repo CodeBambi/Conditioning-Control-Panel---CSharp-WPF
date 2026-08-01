@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Windows.Threading;
@@ -100,6 +102,8 @@ namespace ConditioningControlPanel.Services
                 Priority = ThreadPriority.BelowNormal,
             };
             beat.Start();
+
+            InstallDispatcherHooks(dispatcher);
 
             Log("SESSION", $"---- app start, v{UpdateService.AppVersion}, pid {Environment.ProcessId} ----");
         }
@@ -260,6 +264,181 @@ namespace ConditioningControlPanel.Services
                 }
                 catch { }
             }
+        }
+
+        // ------------------------------------------------------------------------------------
+        // SLOW DISPATCHER OPERATION TRACER (#750-#753)
+        //
+        // The heartbeat proves the UI thread wedges ~8-9s AFTER PlayVideo's prologue has already
+        // returned — i.e. the blocker is NOT in the video show path at all, it is some other
+        // callback that the dispatcher runs while the 1.3s delay timer is pending. This hook names
+        // it: every DispatcherOperation is timed between OperationStarted and OperationCompleted,
+        // and anything that occupies the UI thread for half a second or more logs one line naming
+        // the delegate that did it.
+        //
+        // CONTRACT: hooks run ON the wedging thread, so they must be trivially cheap and must never
+        // throw (an exception out of a Dispatcher hook takes the app down — the exact failure we are
+        // chasing). Everything here is try/caught, does dictionary work only, and the log call is
+        // enqueue-only. Output is throttled so a storm of slow ops cannot flood the trace.
+        // ------------------------------------------------------------------------------------
+
+        private const long SlowOpMs = 500;         // report anything that holds the UI thread this long
+        private const int MaxSlowLinesPerMinute = 20;
+        private const int MaxTrackedOps = 512;     // hard cap; a leaked entry must never grow unbounded
+
+        private static readonly object _opLock = new();
+        private static readonly Dictionary<DispatcherOperation, long> _opStart = new();
+        private static int _slowLinesThisWindow;
+        private static long _slowWindowStartTicks;
+        private static int _slowSuppressed;
+        private static FieldInfo? _opMethodField;
+        private static FieldInfo? _timerTickField;
+        private static bool _methodFieldProbed;
+        private static bool _tickFieldProbed;
+
+        private static void InstallDispatcherHooks(Dispatcher dispatcher)
+        {
+            try
+            {
+                var hooks = dispatcher.Hooks;
+                hooks.OperationStarted += OnOperationStarted;
+                hooks.OperationCompleted += OnOperationFinished;
+                hooks.OperationAborted += OnOperationFinished;
+            }
+            catch { /* diagnostics must never take the app down */ }
+        }
+
+        private static void OnOperationStarted(object? sender, DispatcherHookEventArgs e)
+        {
+            try
+            {
+                lock (_opLock)
+                {
+                    // A completed/aborted op always removes itself; this cap only guards against an
+                    // op that somehow never finishes (shutdown races) pinning memory forever.
+                    if (_opStart.Count >= MaxTrackedOps) _opStart.Clear();
+                    _opStart[e.Operation] = Stopwatch.GetTimestamp();
+                }
+            }
+            catch { }
+        }
+
+        private static void OnOperationFinished(object? sender, DispatcherHookEventArgs e)
+        {
+            try
+            {
+                long started;
+                lock (_opLock)
+                {
+                    if (!_opStart.TryGetValue(e.Operation, out started)) return;
+                    _opStart.Remove(e.Operation);
+                }
+
+                long ms = (Stopwatch.GetTimestamp() - started) * 1000 / Stopwatch.Frequency;
+                if (ms < SlowOpMs) return;
+                if (!AllowSlowLine()) return;
+
+                Log("DISPATCH", $"slow op {ms}ms method={DescribeOperation(e.Operation)}");
+            }
+            catch { }
+        }
+
+        /// <summary>Rolling one-minute budget so a storm of slow ops can't drown the trace.</summary>
+        private static bool AllowSlowLine()
+        {
+            long now = DateTime.UtcNow.Ticks;
+            if (now - _slowWindowStartTicks > TimeSpan.TicksPerMinute)
+            {
+                int suppressed = _slowSuppressed;
+                _slowWindowStartTicks = now;
+                _slowLinesThisWindow = 0;
+                _slowSuppressed = 0;
+                if (suppressed > 0) Log("DISPATCH", $"({suppressed} further slow op line(s) suppressed by the rate limit)");
+            }
+            if (_slowLinesThisWindow >= MaxSlowLinesPerMinute) { _slowSuppressed++; return false; }
+            _slowLinesThisWindow++;
+            return true;
+        }
+
+        /// <summary>
+        /// Best-effort name of whatever the operation was running. The callback lives in a private
+        /// field of DispatcherOperation, so this is reflection — probed once, and every failure mode
+        /// degrades to "(unknown)" rather than throwing on the UI thread.
+        /// </summary>
+        private static string DescribeOperation(DispatcherOperation op)
+        {
+            try
+            {
+                if (!_methodFieldProbed)
+                {
+                    _methodFieldProbed = true;
+                    _opMethodField = typeof(DispatcherOperation)
+                        .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
+                        .FirstOrDefaultCompat(f => f.Name == "_method")
+                        ?? typeof(DispatcherOperation)
+                            .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
+                            .FirstOrDefaultCompat(f => typeof(Delegate).IsAssignableFrom(f.FieldType));
+                }
+
+                var d = _opMethodField?.GetValue(op) as Delegate;
+                string name = d == null ? "(unknown)" : Describe(d, allowTimerDrill: true);
+                return $"{name} prio={op.Priority}";
+            }
+            catch { return "(unknown)"; }
+        }
+
+        private static string Describe(Delegate d, bool allowTimerDrill)
+        {
+            try
+            {
+                var m = d.Method;
+                var declaring = m.DeclaringType;
+                // A lambda's declaring type is a compiler-generated closure nested in the real owner;
+                // walk out to the owner so the line reads "FlashService.<Start>b__7_1", not "<>c".
+                string owner = (declaring?.Name?.StartsWith("<") == true
+                    ? declaring.DeclaringType?.Name
+                    : declaring?.Name) ?? "?";
+                string name = owner + "." + m.Name;
+
+                // DispatcherTimer posts DispatcherTimer.FireTick, which names nothing. Drill through
+                // to the Tick subscriber — that is the callback actually eating the UI thread.
+                if (allowTimerDrill && d.Target is DispatcherTimer timer)
+                {
+                    var sub = DescribeTimerTick(timer);
+                    if (!string.IsNullOrEmpty(sub)) name += " -> " + sub;
+                }
+                return name;
+            }
+            catch { return "(unknown)"; }
+        }
+
+        private static string? DescribeTimerTick(DispatcherTimer timer)
+        {
+            try
+            {
+                if (!_tickFieldProbed)
+                {
+                    _tickFieldProbed = true;
+                    _timerTickField = typeof(DispatcherTimer)
+                        .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
+                        .FirstOrDefaultCompat(f => f.Name == "Tick" || f.Name == "_tick");
+                }
+                if (_timerTickField?.GetValue(timer) is not Delegate tick) return null;
+                var list = tick.GetInvocationList();
+                if (list.Length == 0) return null;
+                return Describe(list[0], allowTimerDrill: false);
+            }
+            catch { return null; }
+        }
+    }
+
+    internal static class VideoDiagReflectionExtensions
+    {
+        /// <summary>Local FirstOrDefault so VideoDiag needs no LINQ import in its hot hook path.</summary>
+        internal static FieldInfo? FirstOrDefaultCompat(this FieldInfo[] fields, Func<FieldInfo, bool> match)
+        {
+            foreach (var f in fields) if (match(f)) return f;
+            return null;
         }
     }
 }

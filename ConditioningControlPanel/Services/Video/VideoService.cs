@@ -1753,10 +1753,17 @@ namespace ConditioningControlPanel.Services
         {
             App.Logger?.Information("VideoService: StartVideoPlayback called for {File}", Path.GetFileName(path));
 
+            // Every step from here to the first frame is bracketed (#750-#753): the reporters' crash
+            // lands somewhere in this window with an empty crash.log, so the LAST breadcrumb in the
+            // trace is the only thing that says which native call the process died inside.
+            var showSw = System.Diagnostics.Stopwatch.StartNew();
+            VideoDiag.Log("VIDEO", "StartVideoPlayback entry");
+
             // Safety check: ensure app is still running
             if (Application.Current == null)
             {
                 App.Logger?.Warning("VideoService: Application.Current is null, aborting playback");
+                VideoDiag.Log("VIDEO", "StartVideoPlayback ABORT - Application.Current is null");
                 return;
             }
 
@@ -1773,6 +1780,7 @@ namespace ConditioningControlPanel.Services
                 // that slipped past selection. Wall-clock from playback start; a few seconds of LibVLC
                 // startup latency before frames roll is negligible against a minutes-long cap.
                 StartMaxLengthCapTimer();
+                VideoDiag.Log("VIDEO", $"safety + max-length timers armed +{showSw.ElapsedMilliseconds}ms");
 
                 // Ensure LibVLC is initialized (deferred from startup for faster launch).
                 // #616-#623 NOTE: this call runs ON THE UI THREAD and takes _libVLCLock, which a
@@ -1788,11 +1796,13 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("VideoService: LibVLC initialized = {Initialized}, LibVLC instance = {HasInstance}",
                     _libVLCInitialized, _libVLC != null);
 
+                VideoDiag.Log("VIDEO", $"show block begin (RunOnUISync) +{showSw.ElapsedMilliseconds}ms");
                 DispatcherHelper.RunOnUISync(() =>
                 {
                     try
                     {
                         var allScreens = App.GetAllScreensCached().ToList();
+                        VideoDiag.Log("VIDEO", $"screens enumerated ({allScreens.Count}) +{showSw.ElapsedMilliseconds}ms");
                         if (allScreens.Count == 0)
                         {
                             App.Logger?.Error("VideoService: No screens available - cannot play video");
@@ -1873,14 +1883,20 @@ namespace ConditioningControlPanel.Services
                         // never triggers a z-order raise. Focus-preserving, so ESC/panic still work.
                         foreach (var w in _windows) PreventClickRaise(w);
 
+                        VideoDiag.Log("VIDEO", $"z-order guards applied +{showSw.ElapsedMilliseconds}ms");
+
                         // Ambient bubble game: pause + clear so it doesn't fight the video for
                         // clicks / z-order (no-op during a chaos run, which isn't "running").
                         // A chaos run keeps its bubbles + HUD alive and lifts them back above the
                         // video itself — see ChaosModeService's VideoStarted handler.
                         App.Bubbles?.PauseAndClear();
+                        VideoDiag.Log("VIDEO", $"bubbles paused +{showSw.ElapsedMilliseconds}ms");
 
                         if (App.Settings.Current.AttentionChecksEnabled)
+                        {
                             SetupAttention();
+                            VideoDiag.Log("VIDEO", $"attention checks armed +{showSw.ElapsedMilliseconds}ms");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -1901,7 +1917,7 @@ namespace ConditioningControlPanel.Services
                     StartWedgeWatchdog();
                 }
 
-                VideoDiag.Log("VIDEO", $"show complete - {_windows.Count} window(s) on screen");
+                VideoDiag.Log("VIDEO", $"show complete +{showSw.ElapsedMilliseconds}ms - {_windows.Count} window(s) on screen");
                 VideoStarted?.Invoke(this, EventArgs.Empty);
                 _ = App.Haptics?.StartVideoBackgroundVibeAsync();
                 App.Logger?.Information("Playing: {File}", Path.GetFileName(path));
@@ -1927,9 +1943,16 @@ namespace ConditioningControlPanel.Services
             Window? win = null;
             LibVLCSharp.Shared.MediaPlayer? mediaPlayer = null;
 
+            // Sub-step breadcrumbs for the single longest UI-thread block in the show path. The
+            // window-create bracket alone only says "it died in here"; these say WHICH native call
+            // (DPI probe, surface build, LibVLC player ctor, Show(), Play()) it died inside.
+            var winSw = System.Diagnostics.Stopwatch.StartNew();
+            string tag = withAudio ? "primary" : "secondary";
+
             try
             {
                 var dpiScale = BubbleCountWindow.GetDpiForScreen(screen);
+                VideoDiag.Log("VIDEO", $"win[{tag}]: dpi probed +{winSw.ElapsedMilliseconds}ms");
                 win = new Window
                 {
                     WindowStyle = WindowStyle.None,
@@ -1957,6 +1980,7 @@ namespace ConditioningControlPanel.Services
                 // play, unlike a pre-parse of the container), and the blurred fill auto-hides for a
                 // clip that already matches the screen — so a landscape video pays no blur cost.
                 bool useBlur = App.Settings?.Current?.VideoBlurredBackgroundEnabled == true;
+                VideoDiag.Log("VIDEO", $"win[{tag}]: shell created (blur={useBlur}) +{winSw.ElapsedMilliseconds}ms");
 
                 // Create the video surface: either the blurred-background composite or a VideoView.
                 VideoView? videoView = null;
@@ -1978,9 +2002,11 @@ namespace ConditioningControlPanel.Services
                         Background = Brushes.Black
                     };
                 }
+                VideoDiag.Log("VIDEO", $"win[{tag}]: surface built +{winSw.ElapsedMilliseconds}ms");
 
                 // Create media player for this video.
                 mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC!);
+                VideoDiag.Log("VIDEO", $"win[{tag}]: MediaPlayer ctor +{winSw.ElapsedMilliseconds}ms");
                 // Mandatory-video windows default to SOFTWARE decoding. On Windows 11 (build 26200)
                 // and some Win10 machines the LibVLC hardware (DXVA/D3D11) path intermittently fails
                 // to present a frame — the window stays white and MediaEnded never fires, wedging
@@ -2189,9 +2215,12 @@ namespace ConditioningControlPanel.Services
             // Pin to the monitor's true physical bounds so a secondary monitor with different DPI
             // scaling gets the full screen instead of a part-width window (see ForceFullScreenBounds).
             ForceFullScreenBounds(win, screen);
+            VideoDiag.Log("VIDEO", $"win[{tag}]: Show() begin +{winSw.ElapsedMilliseconds}ms");
             win.Show();
+            VideoDiag.Log("VIDEO", $"win[{tag}]: Show() end +{winSw.ElapsedMilliseconds}ms");
             if (withAudio) win.Activate();
             DisableChildWindowInput(win);
+            VideoDiag.Log("VIDEO", $"win[{tag}]: activated +{winSw.ElapsedMilliseconds}ms");
 
             // Attach media player to the surface and start playback. The blurred path wires LibVLC
             // memory callbacks (SetVideoFormat + SetVideoCallbacks) instead of a VideoView; it must
@@ -2200,11 +2229,13 @@ namespace ConditioningControlPanel.Services
                 blurSurface!.Attach(mediaPlayer);
             else
                 videoView!.MediaPlayer = mediaPlayer;
+            VideoDiag.Log("VIDEO", $"win[{tag}]: surface attached +{winSw.ElapsedMilliseconds}ms");
 
             // Create media - use file path directly for better compatibility
             // Media is disposed after Play() — LibVLC internally ref-counts, so this is safe
             // (DualMonitorVideoService already uses this pattern with 'using var media')
             using var media = new Media(_libVLC!, path, FromType.FromPath);
+            VideoDiag.Log("VIDEO", $"win[{tag}]: Media ctor +{winSw.ElapsedMilliseconds}ms");
             // Secondaries skip audio decoding entirely. Setting Mute=true after Play() opened
             // a second WASAPI session on the same MMDevice; Windows collapsed both into one
             // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
@@ -2254,7 +2285,9 @@ namespace ConditioningControlPanel.Services
             }
 
             // Play the media
+            VideoDiag.Log("VIDEO", $"win[{tag}]: Play() issued +{winSw.ElapsedMilliseconds}ms");
             mediaPlayer.Play(media);
+            VideoDiag.Log("VIDEO", $"win[{tag}]: Play() returned +{winSw.ElapsedMilliseconds}ms");
 
             // Configure audio AFTER Play() - LibVLC sometimes ignores settings before playback.
             // Don't call SetAudioTrack here: Play() is async and tracks aren't enumerated yet,
