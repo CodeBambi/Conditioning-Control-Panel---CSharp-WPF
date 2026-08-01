@@ -753,7 +753,9 @@ namespace ConditioningControlPanel.Services.AIService
                     return null;
                 }
 
-                var content = ExtractContent(body);
+                // #739: think:false is requested above, but a model that ignores it (or a non-Ollama
+                // OpenAI-compatible host behind the same setting) still returns its scratchpad.
+                var content = AiTextHygiene.Clean(ExtractContent(body));
                 return string.IsNullOrWhiteSpace(content) ? null : content;
             }
             catch (Exception ex)

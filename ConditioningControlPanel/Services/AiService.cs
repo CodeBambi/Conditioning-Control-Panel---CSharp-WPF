@@ -399,6 +399,13 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("AiService: Got reply ({RequestCount}/{Limit} today, {Remaining} remaining)",
                     _dailyRequestCount, DailyLimit, DailyRequestsRemaining);
 
+                // #739: "companion spits out gibberish" could not be diagnosed from a user's log,
+                // because nothing recorded what the model actually returned - only that a reply
+                // arrived. One repro with this line settles whether the text was already garbage on
+                // arrival (a provider/model problem) or was mangled downstream by our own cleanup.
+                App.Logger?.Debug("AiService: raw reply ({Length} chars): {Raw}",
+                    result.Content?.Length ?? 0, result.Content ?? "(null)");
+
                 // Sanitize response to remove any leaked metadata tags FIRST (so context-tag
                 // echoes don't accidentally trip moderation regexes).
                 var sanitized = SanitizeResponse(result.Content);
@@ -449,6 +456,10 @@ namespace ConditioningControlPanel.Services
         {
             if (string.IsNullOrEmpty(response))
                 return response ?? string.Empty;
+
+            // #739: reasoning blocks and tokenizer artifacts first. The cloud path had no such
+            // cleanup at all, so a reasoning model's scratchpad rendered verbatim into the bubble.
+            response = AiTextHygiene.Clean(response);
 
             // Remove context metadata tags like [Category: X | App: Y | Title: Z | Duration: Nm]
             var sanitized = Regex.Replace(response, @"\[Category:[^\]]*\]", "", RegexOptions.IgnoreCase);
