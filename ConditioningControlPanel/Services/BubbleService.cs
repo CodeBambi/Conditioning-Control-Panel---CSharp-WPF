@@ -1058,14 +1058,60 @@ public class BubbleService : IDisposable
                           onBenignPop: b =>
                           {
                               AwardAmbientPop(b);
-                              var sw = System.Diagnostics.Stopwatch.StartNew();
-                              try { b.Spec?.Payload?.Fire(); } catch { }
-                              sw.Stop();
-                              if (sw.ElapsedMilliseconds >= 20)
-                                  App.Logger?.Information("[POPLAG] payload {Kind} Fire() took {Ms}ms",
-                                      b.Spec?.Payload?.DisplayName ?? "?", sw.ElapsedMilliseconds);
+                              FireAmbientPayload(b);
                           },
                           forceWindowMode: !hostUp, ambientTrigger: true);
+    }
+
+    /// <summary>
+    /// #732: fire a popped ambient trigger bubble's payload without wedging the click.
+    ///
+    /// A "video" trigger is in the default variant pool, and its payload used to run inline in the
+    /// mouse handler: <c>VideoService.TriggerVideo</c> selects the clip on the calling thread, and
+    /// for a content-pack video that means reading the whole encrypted file, AES-decrypting it into
+    /// a second copy and writing it back to disk - tens of seconds of dead UI for a large clip,
+    /// with no exception and so no crash log. Popping a second video bubble over a running video
+    /// was worse: it forced a cleanup the code itself documents as blocking the dispatcher for up
+    /// to ~4.9s, which can then land on a native LibVLC rebuild that no DispatcherTimer watchdog
+    /// can rescue. Both read to the user as "I clicked a bubble and it froze".
+    ///
+    /// The codebase already treats these payloads as wedge risks - <see cref="IsEggClaimableEffect"/>
+    /// keeps the avatar egg away from exactly these two kinds (#628) - but the user's own click
+    /// reached the same Fire() unguarded.
+    /// </summary>
+    private void FireAmbientPayload(Bubble b)
+    {
+        var payload = b.Spec?.Payload;
+        if (payload == null) return;
+
+        var heavy = payload.Kind is EffectBubblePayloadKind.Video or EffectBubblePayloadKind.HtLink;
+
+        // One fullscreen takeover at a time, mirroring the chaos detonation path's gate. Without
+        // it a second pop forces ForceCleanup/CloseAll from inside the input handler.
+        if (heavy && App.Video?.IsPlaying == true)
+        {
+            App.Logger?.Information("Bubble: dropped {Kind} pop — a video is already playing", payload.Kind);
+            return;
+        }
+
+        if (heavy)
+        {
+            // Let the click return first; the payload opens a fullscreen window either way.
+            DispatcherHelper.RunOnUI(() => FireAndLogPayload(payload), DispatcherPriority.Background);
+            return;
+        }
+
+        FireAndLogPayload(payload);
+    }
+
+    private static void FireAndLogPayload(EffectPayload payload)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try { payload.Fire(); } catch { }
+        sw.Stop();
+        if (sw.ElapsedMilliseconds >= 20)
+            App.Logger?.Information("[POPLAG] payload {Kind} Fire() took {Ms}ms",
+                payload.DisplayName ?? "?", sw.ElapsedMilliseconds);
     }
 
     private void OnMiss(Bubble bubble)
