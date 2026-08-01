@@ -113,6 +113,7 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _heartbeatTimer;
         private long _uiHeartbeatTicks;
         private volatile bool _wedgeRescueFired;
+        private volatile bool _preRollStallLogged; // one pre-roll stall line per armed watchdog
         // Fire only after a long, unambiguous stall — this targets the multi-minute lockouts, never a
         // UI thread that's merely busy for a beat. The legitimate ~4s teardown pump-wait keeps the
         // heartbeat ticking (it pumps Background-priority work), so it won't trip this.
@@ -131,6 +132,15 @@ namespace ConditioningControlPanel.Services
 
         private bool _isRunning;
         private bool _videoPlaying;
+        // True only once a real player/window exists on screen. _videoPlaying goes true ~2.6s
+        // EARLIER — at the top of PlayVideo, before the Discord/flash/duck prologue and the 1.3s
+        // announce delay — so it cannot be used to answer "is playback actually live?". The wedge
+        // watchdog used to ask exactly that of _videoPlaying and treated a pre-roll stall as a
+        // wedged playback, whose rescue rebuilds LibVLC on a background thread while the UI thread
+        // is on its way into EnsureLibVLCInitialized: a _libVLCLock race that killed the process
+        // natively with an empty crash.log (#750-#753). Set in StartVideoPlayback, cleared by every
+        // teardown path.
+        private volatile bool _playbackStarted;
         private bool _triggerInProgress; // Guards the 800ms freeze delay window in TriggerVideo
         private bool _strictActive;
         // True across the strict retry GAP: from the moment a strict run's attention check fails
@@ -1318,6 +1328,7 @@ namespace ConditioningControlPanel.Services
             _maxLenCapTimer?.Stop();
             _maxLenCapTimer = null;
             _videoPlaying = false;
+            _playbackStarted = false;
             _triggerInProgress = false;
             _strictActive = false;
             CancelPendingRetry();
@@ -1670,6 +1681,7 @@ namespace ConditioningControlPanel.Services
             if (!isVoutRetry) _voutRetryUsed = false;
 
             _videoPlaying = true;
+            _playbackStarted = false; // nothing is on screen yet — we are entering pre-roll
             _strictActive = strict;
             // A video is on screen again, so whatever gap we were covering is over. Cleared HERE,
             // after the two flags above are already set, so a reader on another thread never sees a
@@ -1682,6 +1694,8 @@ namespace ConditioningControlPanel.Services
 
             // Arm the off-thread wedge watchdog NOW, before any window is created — the freeze often
             // strikes mid window-creation of this video, before the safety timers get a chance to arm.
+            // During pre-roll it can only OBSERVE (a stall diag line); the destructive rescue is
+            // gated on _playbackStarted and re-armed from StartVideoPlayback. See WedgeWatchdogTick.
             StartWedgeWatchdog();
 
             // Update Discord presence
@@ -1854,6 +1868,17 @@ namespace ConditioningControlPanel.Services
                         Cleanup();
                     }
                 });
+
+                // Playback is REAL from here: a window (and, on the LibVLC path, a registered media
+                // player) exists. Only now may the wedge watchdog do its destructive retire/rescue.
+                // Re-arm it so the pre-roll's stall — which is exactly what the reporters hit while
+                // Duck() enumerated their audio endpoints — doesn't count toward the wedge threshold
+                // and immediately trip a rescue against a perfectly healthy playback (#750-#753).
+                if (_windows.Count > 0)
+                {
+                    _playbackStarted = true;
+                    StartWedgeWatchdog();
+                }
 
                 VideoDiag.Log("VIDEO", $"show complete - {_windows.Count} window(s) on screen");
                 VideoStarted?.Invoke(this, EventArgs.Empty);
@@ -4019,6 +4044,7 @@ namespace ConditioningControlPanel.Services
         private void StartWedgeWatchdog()
         {
             _wedgeRescueFired = false;
+            _preRollStallLogged = false;
             System.Threading.Interlocked.Exchange(ref _uiHeartbeatTicks, DateTime.UtcNow.Ticks);
 
             // UI-thread heartbeat: proves the dispatcher is still draining. Background priority so a
@@ -4050,6 +4076,10 @@ namespace ConditioningControlPanel.Services
         /// heart-beating for <see cref="WedgeStallMs"/>, the dispatcher is wedged (frozen final frame,
         /// topmost window holding the screen). Break it off-thread and queue a teardown so the app
         /// recovers without a hard shutdown. Fires at most once per playback.
+        ///
+        /// PRE-ROLL is observe-only: see <see cref="_playbackStarted"/>. Retiring LibVLC while the
+        /// UI thread is still walking PlayVideo's prologue towards EnsureLibVLCInitialized races the
+        /// background rebuild on _libVLCLock and takes the process down natively (#750-#753).
         /// </summary>
         private void WedgeWatchdogTick()
         {
@@ -4060,6 +4090,22 @@ namespace ConditioningControlPanel.Services
                 var last = System.Threading.Interlocked.Read(ref _uiHeartbeatTicks);
                 var stallMs = (DateTime.UtcNow.Ticks - last) / TimeSpan.TicksPerMillisecond;
                 if (stallMs < WedgeStallMs) return;
+
+                bool live = _playbackStarted;
+                if (!live) lock (_mediaPlayersLock) { live = _mediaPlayers.Count > 0; }
+                if (!live)
+                {
+                    // The UI thread IS stalled, but there is nothing on screen to rescue yet.
+                    // Record it (once) and let the next tick reconsider — whatever the prologue is
+                    // blocked on will either finish, or the app will die where the trace points.
+                    if (!_preRollStallLogged)
+                    {
+                        _preRollStallLogged = true;
+                        App.Logger?.Warning("VideoService: UI thread stalled {StallMs}ms during video PRE-ROLL — no rescue (nothing on screen yet)", stallMs);
+                        VideoDiag.Log("WEDGE", $"UI thread stalled {stallMs}ms during PRE-ROLL - observing only, no LibVLC retire");
+                    }
+                    return;
+                }
 
                 _wedgeRescueFired = true;
                 App.Logger?.Error(
@@ -4202,6 +4248,7 @@ namespace ConditioningControlPanel.Services
                 // Closing veto (SetupStrictHandlers) can never block the window teardown
                 // below, even if a caller forgot to clear it.
                 _videoPlaying = false;
+                _playbackStarted = false;
                 // Invalidate any in-flight watchdog continuation (see _teardownGeneration).
                 System.Threading.Interlocked.Increment(ref _teardownGeneration);
             }
