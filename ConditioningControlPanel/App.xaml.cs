@@ -2133,6 +2133,10 @@ namespace ConditioningControlPanel
                     catch { /* diagnostics only — never let logging fault the continuation */ }
                 }, TaskContinuationOptions.ExecuteSynchronously);
             }
+            else
+            {
+                Logger?.Information("Achievement '{Name}' not shared to Discord: DiscordShareAchievements is off", achievement.Name);
+            }
         }
         
         /// <summary>
