@@ -765,6 +765,7 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current != null && sender is CheckBox chk)
             {
                 App.Settings.Current.DiscordShareAchievements = chk.IsChecked == true;
+                App.Settings.Save();
             }
         }
 
@@ -773,6 +774,7 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current != null && sender is CheckBox chk)
             {
                 App.Settings.Current.DiscordShareLevelUps = chk.IsChecked == true;
+                App.Settings.Save();
             }
         }
 

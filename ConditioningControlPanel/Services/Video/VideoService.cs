@@ -113,6 +113,7 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _heartbeatTimer;
         private long _uiHeartbeatTicks;
         private volatile bool _wedgeRescueFired;
+        private volatile bool _preRollStallLogged; // one pre-roll stall line per armed watchdog
         // Fire only after a long, unambiguous stall — this targets the multi-minute lockouts, never a
         // UI thread that's merely busy for a beat. The legitimate ~4s teardown pump-wait keeps the
         // heartbeat ticking (it pumps Background-priority work), so it won't trip this.
@@ -131,6 +132,15 @@ namespace ConditioningControlPanel.Services
 
         private bool _isRunning;
         private bool _videoPlaying;
+        // True only once a real player/window exists on screen. _videoPlaying goes true ~2.6s
+        // EARLIER — at the top of PlayVideo, before the Discord/flash/duck prologue and the 1.3s
+        // announce delay — so it cannot be used to answer "is playback actually live?". The wedge
+        // watchdog used to ask exactly that of _videoPlaying and treated a pre-roll stall as a
+        // wedged playback, whose rescue rebuilds LibVLC on a background thread while the UI thread
+        // is on its way into EnsureLibVLCInitialized: a _libVLCLock race that killed the process
+        // natively with an empty crash.log (#750-#753). Set in StartVideoPlayback, cleared by every
+        // teardown path.
+        private volatile bool _playbackStarted;
         private bool _triggerInProgress; // Guards the 800ms freeze delay window in TriggerVideo
         private bool _strictActive;
         // True across the strict retry GAP: from the moment a strict run's attention check fails
@@ -1093,6 +1103,11 @@ namespace ConditioningControlPanel.Services
             // PlayVideo, LibVLC window creation) is UI-affine and must stay there.
             Task.Run(() =>
             {
+                // Bracketed because this step is invisible from the outside and can take seconds
+                // (content-pack decrypt, full-library refill). A trace that shows SELECT: begin and
+                // never an end means the trigger died here, not in playback (#750-#753).
+                var selectSw = System.Diagnostics.Stopwatch.StartNew();
+                VideoDiag.Log("SELECT", "begin (off-thread)");
                 string? selected = null;
                 try
                 {
@@ -1102,6 +1117,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Logger?.Error(ex, "VideoService: GetNextVideo failed");
                 }
+                VideoDiag.Log("SELECT", $"end after {selectSw.ElapsedMilliseconds}ms clip={(selected == null ? "(none)" : Path.GetFileName(selected))}");
 
                 DispatcherHelper.RunOnUI(() =>
                 {
@@ -1318,6 +1334,7 @@ namespace ConditioningControlPanel.Services
             _maxLenCapTimer?.Stop();
             _maxLenCapTimer = null;
             _videoPlaying = false;
+            _playbackStarted = false;
             _triggerInProgress = false;
             _strictActive = false;
             CancelPendingRetry();
@@ -1670,6 +1687,7 @@ namespace ConditioningControlPanel.Services
             if (!isVoutRetry) _voutRetryUsed = false;
 
             _videoPlaying = true;
+            _playbackStarted = false; // nothing is on screen yet — we are entering pre-roll
             _strictActive = strict;
             // A video is on screen again, so whatever gap we were covering is over. Cleared HERE,
             // after the two flags above are already set, so a reader on another thread never sees a
@@ -1680,18 +1698,30 @@ namespace ConditioningControlPanel.Services
             _hits = _total = 0;
             _spawnTimes.Clear();
 
+            // Everything from here to the delay timer's tick used to be a diag blind spot: the trace
+            // jumped straight from "BEGIN" to "libvlc-init begin" ~2.6s later, so a report whose
+            // freeze began inside this prologue told us nothing about WHICH step ate the dispatcher.
+            // One breadcrumb per step, each carrying the elapsed prologue time (#750-#753).
+            var prologueSw = System.Diagnostics.Stopwatch.StartNew();
+
             // Arm the off-thread wedge watchdog NOW, before any window is created — the freeze often
             // strikes mid window-creation of this video, before the safety timers get a chance to arm.
+            // During pre-roll it can only OBSERVE (a stall diag line); the destructive rescue is
+            // gated on _playbackStarted and re-armed from StartVideoPlayback. See WedgeWatchdogTick.
             StartWedgeWatchdog();
+            VideoDiag.Log("VIDEO", $"prologue: wedge watchdog armed +{prologueSw.ElapsedMilliseconds}ms");
 
             // Update Discord presence
             App.DiscordRpc?.SetVideoActivity();
+            VideoDiag.Log("VIDEO", $"prologue: SetVideoActivity +{prologueSw.ElapsedMilliseconds}ms");
 
             // Fire pre-announcement event 1.3s before video starts
             VideoAboutToStart?.Invoke(this, EventArgs.Empty);
+            VideoDiag.Log("VIDEO", $"prologue: VideoAboutToStart handlers +{prologueSw.ElapsedMilliseconds}ms");
 
             // Stop flashes during video
             App.Flash?.Stop();
+            VideoDiag.Log("VIDEO", $"prologue: Flash.Stop +{prologueSw.ElapsedMilliseconds}ms");
 
             // Duck other apps. Record that we took a duck ref so CloseAll releases exactly one
             // matching Unduck on teardown — otherwise a retry/troll "watch again" loop ducks again
@@ -1700,6 +1730,9 @@ namespace ConditioningControlPanel.Services
             {
                 App.Audio?.Duck(App.Settings.Current.DuckingLevel);
                 _didDuck = true;
+                // Duck() only queues now — the sweep's own "DUCK: duck applied after Nms" line
+                // (AudioService) is what says how long the WASAPI walk actually took.
+                VideoDiag.Log("VIDEO", $"prologue: Duck requested +{prologueSw.ElapsedMilliseconds}ms");
             }
 
             // Delay video start by 1.3 seconds to allow avatar to announce
@@ -1708,20 +1741,29 @@ namespace ConditioningControlPanel.Services
             delayTimer.Tick += (s, e) =>
             {
                 delayTimer.Stop();
+                VideoDiag.Log("VIDEO", $"prologue: delay timer ticked +{prologueSw.ElapsedMilliseconds}ms - starting playback");
                 App.Logger?.Debug("VideoService: Delay complete, calling StartVideoPlayback");
                 StartVideoPlayback(path, strict);
             };
             delayTimer.Start();
+            VideoDiag.Log("VIDEO", $"prologue: 1.3s delay timer scheduled +{prologueSw.ElapsedMilliseconds}ms");
         }
 
         private void StartVideoPlayback(string path, bool strict)
         {
             App.Logger?.Information("VideoService: StartVideoPlayback called for {File}", Path.GetFileName(path));
 
+            // Every step from here to the first frame is bracketed (#750-#753): the reporters' crash
+            // lands somewhere in this window with an empty crash.log, so the LAST breadcrumb in the
+            // trace is the only thing that says which native call the process died inside.
+            var showSw = System.Diagnostics.Stopwatch.StartNew();
+            VideoDiag.Log("VIDEO", "StartVideoPlayback entry");
+
             // Safety check: ensure app is still running
             if (Application.Current == null)
             {
                 App.Logger?.Warning("VideoService: Application.Current is null, aborting playback");
+                VideoDiag.Log("VIDEO", "StartVideoPlayback ABORT - Application.Current is null");
                 return;
             }
 
@@ -1738,6 +1780,7 @@ namespace ConditioningControlPanel.Services
                 // that slipped past selection. Wall-clock from playback start; a few seconds of LibVLC
                 // startup latency before frames roll is negligible against a minutes-long cap.
                 StartMaxLengthCapTimer();
+                VideoDiag.Log("VIDEO", $"safety + max-length timers armed +{showSw.ElapsedMilliseconds}ms");
 
                 // Ensure LibVLC is initialized (deferred from startup for faster launch).
                 // #616-#623 NOTE: this call runs ON THE UI THREAD and takes _libVLCLock, which a
@@ -1753,11 +1796,13 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("VideoService: LibVLC initialized = {Initialized}, LibVLC instance = {HasInstance}",
                     _libVLCInitialized, _libVLC != null);
 
+                VideoDiag.Log("VIDEO", $"show block begin (RunOnUISync) +{showSw.ElapsedMilliseconds}ms");
                 DispatcherHelper.RunOnUISync(() =>
                 {
                     try
                     {
                         var allScreens = App.GetAllScreensCached().ToList();
+                        VideoDiag.Log("VIDEO", $"screens enumerated ({allScreens.Count}) +{showSw.ElapsedMilliseconds}ms");
                         if (allScreens.Count == 0)
                         {
                             App.Logger?.Error("VideoService: No screens available - cannot play video");
@@ -1838,14 +1883,20 @@ namespace ConditioningControlPanel.Services
                         // never triggers a z-order raise. Focus-preserving, so ESC/panic still work.
                         foreach (var w in _windows) PreventClickRaise(w);
 
+                        VideoDiag.Log("VIDEO", $"z-order guards applied +{showSw.ElapsedMilliseconds}ms");
+
                         // Ambient bubble game: pause + clear so it doesn't fight the video for
                         // clicks / z-order (no-op during a chaos run, which isn't "running").
                         // A chaos run keeps its bubbles + HUD alive and lifts them back above the
                         // video itself — see ChaosModeService's VideoStarted handler.
                         App.Bubbles?.PauseAndClear();
+                        VideoDiag.Log("VIDEO", $"bubbles paused +{showSw.ElapsedMilliseconds}ms");
 
                         if (App.Settings.Current.AttentionChecksEnabled)
+                        {
                             SetupAttention();
+                            VideoDiag.Log("VIDEO", $"attention checks armed +{showSw.ElapsedMilliseconds}ms");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -1855,7 +1906,18 @@ namespace ConditioningControlPanel.Services
                     }
                 });
 
-                VideoDiag.Log("VIDEO", $"show complete - {_windows.Count} window(s) on screen");
+                // Playback is REAL from here: a window (and, on the LibVLC path, a registered media
+                // player) exists. Only now may the wedge watchdog do its destructive retire/rescue.
+                // Re-arm it so the pre-roll's stall — which is exactly what the reporters hit while
+                // Duck() enumerated their audio endpoints — doesn't count toward the wedge threshold
+                // and immediately trip a rescue against a perfectly healthy playback (#750-#753).
+                if (_windows.Count > 0)
+                {
+                    _playbackStarted = true;
+                    StartWedgeWatchdog();
+                }
+
+                VideoDiag.Log("VIDEO", $"show complete +{showSw.ElapsedMilliseconds}ms - {_windows.Count} window(s) on screen");
                 VideoStarted?.Invoke(this, EventArgs.Empty);
                 _ = App.Haptics?.StartVideoBackgroundVibeAsync();
                 App.Logger?.Information("Playing: {File}", Path.GetFileName(path));
@@ -1881,9 +1943,16 @@ namespace ConditioningControlPanel.Services
             Window? win = null;
             LibVLCSharp.Shared.MediaPlayer? mediaPlayer = null;
 
+            // Sub-step breadcrumbs for the single longest UI-thread block in the show path. The
+            // window-create bracket alone only says "it died in here"; these say WHICH native call
+            // (DPI probe, surface build, LibVLC player ctor, Show(), Play()) it died inside.
+            var winSw = System.Diagnostics.Stopwatch.StartNew();
+            string tag = withAudio ? "primary" : "secondary";
+
             try
             {
                 var dpiScale = BubbleCountWindow.GetDpiForScreen(screen);
+                VideoDiag.Log("VIDEO", $"win[{tag}]: dpi probed +{winSw.ElapsedMilliseconds}ms");
                 win = new Window
                 {
                     WindowStyle = WindowStyle.None,
@@ -1911,6 +1980,7 @@ namespace ConditioningControlPanel.Services
                 // play, unlike a pre-parse of the container), and the blurred fill auto-hides for a
                 // clip that already matches the screen — so a landscape video pays no blur cost.
                 bool useBlur = App.Settings?.Current?.VideoBlurredBackgroundEnabled == true;
+                VideoDiag.Log("VIDEO", $"win[{tag}]: shell created (blur={useBlur}) +{winSw.ElapsedMilliseconds}ms");
 
                 // Create the video surface: either the blurred-background composite or a VideoView.
                 VideoView? videoView = null;
@@ -1932,9 +2002,11 @@ namespace ConditioningControlPanel.Services
                         Background = Brushes.Black
                     };
                 }
+                VideoDiag.Log("VIDEO", $"win[{tag}]: surface built +{winSw.ElapsedMilliseconds}ms");
 
                 // Create media player for this video.
                 mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC!);
+                VideoDiag.Log("VIDEO", $"win[{tag}]: MediaPlayer ctor +{winSw.ElapsedMilliseconds}ms");
                 // Mandatory-video windows default to SOFTWARE decoding. On Windows 11 (build 26200)
                 // and some Win10 machines the LibVLC hardware (DXVA/D3D11) path intermittently fails
                 // to present a frame — the window stays white and MediaEnded never fires, wedging
@@ -2143,9 +2215,12 @@ namespace ConditioningControlPanel.Services
             // Pin to the monitor's true physical bounds so a secondary monitor with different DPI
             // scaling gets the full screen instead of a part-width window (see ForceFullScreenBounds).
             ForceFullScreenBounds(win, screen);
+            VideoDiag.Log("VIDEO", $"win[{tag}]: Show() begin +{winSw.ElapsedMilliseconds}ms");
             win.Show();
+            VideoDiag.Log("VIDEO", $"win[{tag}]: Show() end +{winSw.ElapsedMilliseconds}ms");
             if (withAudio) win.Activate();
             DisableChildWindowInput(win);
+            VideoDiag.Log("VIDEO", $"win[{tag}]: activated +{winSw.ElapsedMilliseconds}ms");
 
             // Attach media player to the surface and start playback. The blurred path wires LibVLC
             // memory callbacks (SetVideoFormat + SetVideoCallbacks) instead of a VideoView; it must
@@ -2154,11 +2229,13 @@ namespace ConditioningControlPanel.Services
                 blurSurface!.Attach(mediaPlayer);
             else
                 videoView!.MediaPlayer = mediaPlayer;
+            VideoDiag.Log("VIDEO", $"win[{tag}]: surface attached +{winSw.ElapsedMilliseconds}ms");
 
             // Create media - use file path directly for better compatibility
             // Media is disposed after Play() — LibVLC internally ref-counts, so this is safe
             // (DualMonitorVideoService already uses this pattern with 'using var media')
             using var media = new Media(_libVLC!, path, FromType.FromPath);
+            VideoDiag.Log("VIDEO", $"win[{tag}]: Media ctor +{winSw.ElapsedMilliseconds}ms");
             // Secondaries skip audio decoding entirely. Setting Mute=true after Play() opened
             // a second WASAPI session on the same MMDevice; Windows collapsed both into one
             // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
@@ -2208,7 +2285,9 @@ namespace ConditioningControlPanel.Services
             }
 
             // Play the media
+            VideoDiag.Log("VIDEO", $"win[{tag}]: Play() issued +{winSw.ElapsedMilliseconds}ms");
             mediaPlayer.Play(media);
+            VideoDiag.Log("VIDEO", $"win[{tag}]: Play() returned +{winSw.ElapsedMilliseconds}ms");
 
             // Configure audio AFTER Play() - LibVLC sometimes ignores settings before playback.
             // Don't call SetAudioTrack here: Play() is async and tracks aren't enumerated yet,
@@ -4019,6 +4098,7 @@ namespace ConditioningControlPanel.Services
         private void StartWedgeWatchdog()
         {
             _wedgeRescueFired = false;
+            _preRollStallLogged = false;
             System.Threading.Interlocked.Exchange(ref _uiHeartbeatTicks, DateTime.UtcNow.Ticks);
 
             // UI-thread heartbeat: proves the dispatcher is still draining. Background priority so a
@@ -4050,6 +4130,10 @@ namespace ConditioningControlPanel.Services
         /// heart-beating for <see cref="WedgeStallMs"/>, the dispatcher is wedged (frozen final frame,
         /// topmost window holding the screen). Break it off-thread and queue a teardown so the app
         /// recovers without a hard shutdown. Fires at most once per playback.
+        ///
+        /// PRE-ROLL is observe-only: see <see cref="_playbackStarted"/>. Retiring LibVLC while the
+        /// UI thread is still walking PlayVideo's prologue towards EnsureLibVLCInitialized races the
+        /// background rebuild on _libVLCLock and takes the process down natively (#750-#753).
         /// </summary>
         private void WedgeWatchdogTick()
         {
@@ -4060,6 +4144,22 @@ namespace ConditioningControlPanel.Services
                 var last = System.Threading.Interlocked.Read(ref _uiHeartbeatTicks);
                 var stallMs = (DateTime.UtcNow.Ticks - last) / TimeSpan.TicksPerMillisecond;
                 if (stallMs < WedgeStallMs) return;
+
+                bool live = _playbackStarted;
+                if (!live) lock (_mediaPlayersLock) { live = _mediaPlayers.Count > 0; }
+                if (!live)
+                {
+                    // The UI thread IS stalled, but there is nothing on screen to rescue yet.
+                    // Record it (once) and let the next tick reconsider — whatever the prologue is
+                    // blocked on will either finish, or the app will die where the trace points.
+                    if (!_preRollStallLogged)
+                    {
+                        _preRollStallLogged = true;
+                        App.Logger?.Warning("VideoService: UI thread stalled {StallMs}ms during video PRE-ROLL — no rescue (nothing on screen yet)", stallMs);
+                        VideoDiag.Log("WEDGE", $"UI thread stalled {stallMs}ms during PRE-ROLL - observing only, no LibVLC retire");
+                    }
+                    return;
+                }
 
                 _wedgeRescueFired = true;
                 App.Logger?.Error(
@@ -4202,6 +4302,7 @@ namespace ConditioningControlPanel.Services
                 // Closing veto (SetupStrictHandlers) can never block the window teardown
                 // below, even if a caller forgot to clear it.
                 _videoPlaying = false;
+                _playbackStarted = false;
                 // Invalidate any in-flight watchdog continuation (see _teardownGeneration).
                 System.Threading.Interlocked.Increment(ref _teardownGeneration);
             }

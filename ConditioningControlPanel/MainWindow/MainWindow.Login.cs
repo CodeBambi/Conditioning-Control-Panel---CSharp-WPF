@@ -162,6 +162,15 @@ namespace ConditioningControlPanel
                     }
                 });
 
+                // First-time login is the OTHER way a Discord account gets attached: the
+                // link-an-existing-account flows offer achievement sharing, this one never did,
+                // so Discord-first users never saw the prompt and their unlocks silently never
+                // posted (#749). The method self-guards on DiscordShareAchievements, so calling
+                // it after every successful login only prompts the users who still need it.
+                if (App.Discord?.IsAuthenticated == true)
+                {
+                    OfferAchievementSharingAfterDiscordLink();
+                }
             }
         }
 

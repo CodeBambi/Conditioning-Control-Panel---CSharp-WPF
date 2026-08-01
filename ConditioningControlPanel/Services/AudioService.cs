@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using NAudio.Wave;
 using NAudio.CoreAudioApi;
@@ -60,6 +62,27 @@ namespace ConditioningControlPanel.Services
         private const int FileCountProbeCap = 500;
 
         private bool _disposed;
+
+        // ── Serialized WASAPI sweep worker (#750-#753) ────────────────────────────────────────
+        // Duck()/Unduck() are called from the UI thread (VideoService.PlayVideo, CloseAll) and used
+        // to run the whole endpoint/session enumeration inline, under _lockObj. That enumeration is
+        // unbounded work: one reporter's machine has 12 render endpoints and a single misbehaving
+        // one blocked the dispatcher for 20+ seconds the instant a mandatory video started. Every
+        // sweep now runs here instead, on ONE thread, in submission order — so a Duck immediately
+        // followed by an Unduck still nets out correctly — while the callers return immediately.
+        private readonly BlockingCollection<Action> _duckWork = new();
+        private Thread? _duckWorker;
+        private int _duckWorkerStarted;
+        private int _duckWorkDepth;                                  // queued + in-flight sweeps
+        private readonly ManualResetEventSlim _duckWorkIdle = new(true);
+        private const int WorkerFlushTimeoutMs = 4_000;              // app-exit restore budget
+        private const int SlowSweepWarnMs = 2_000;
+
+        // The sweeps' own device enumerator, created ON the worker thread. MMDeviceEnumerator is a
+        // ThreadingModel=Both COM object, so one created on the UI thread lives in that STA and every
+        // property read from another thread would marshal straight back onto the dispatcher — the
+        // exact block this worker exists to remove. _deviceEnumerator stays for the UI-side lookups.
+        private MMDeviceEnumerator? _sweepEnumerator;
 
         // Cached WebView2 process IDs to avoid slow Process.GetProcessById() on every duck
         private HashSet<int> _webView2Pids = new();
@@ -641,9 +664,25 @@ namespace ConditioningControlPanel.Services
         #region Crash Recovery
 
         /// <summary>
-        /// Check if the app crashed while audio was ducked and restore volumes.
+        /// Check if the app crashed while audio was ducked and restore volumes. The file probe is
+        /// cheap and stays inline; the restore itself is a full render-endpoint sweep, so it goes on
+        /// the worker like every other sweep — it used to run on the UI thread inside OnStartup.
         /// </summary>
         private void RecoverFromCrash()
+        {
+            try
+            {
+                if (!File.Exists(DuckingRecoveryFile)) return;
+                EnqueueDuckWork("crash-recovery", RecoverFromCrashSweep);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Could not schedule ducking crash recovery: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>Worker-thread half of <see cref="RecoverFromCrash"/>.</summary>
+        private void RecoverFromCrashSweep()
         {
             try
             {
@@ -654,7 +693,7 @@ namespace ConditioningControlPanel.Services
                 var json = File.ReadAllText(DuckingRecoveryFile);
                 var savedVolumes = JsonConvert.DeserializeObject<Dictionary<int, float>>(json);
 
-                if (savedVolumes != null && savedVolumes.Count > 0 && _deviceEnumerator != null)
+                if (savedVolumes != null && savedVolumes.Count > 0)
                 {
                     using var scope = CollectRenderSessions();
                     var sessions = scope.Sessions;
@@ -691,17 +730,21 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Save current ducking state for crash recovery.
+        /// Save current ducking state for crash recovery. Snapshots under the lock and writes
+        /// outside it — this runs on the sweep worker, where the file I/O must not pin _lockObj.
         /// </summary>
         private void SaveDuckingState()
         {
             try
             {
+                Dictionary<int, float> snapshot;
+                lock (_lockObj) { snapshot = new Dictionary<int, float>(_originalVolumes); }
+
                 var dir = Path.GetDirectoryName(DuckingRecoveryFile);
                 if (!string.IsNullOrEmpty(dir))
                     Directory.CreateDirectory(dir);
 
-                var json = JsonConvert.SerializeObject(_originalVolumes);
+                var json = JsonConvert.SerializeObject(snapshot);
                 File.WriteAllText(DuckingRecoveryFile, json);
             }
             catch (Exception ex)
@@ -837,7 +880,9 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Lower the volume of other applications
+        /// Lower the volume of other applications. Returns immediately: only the ref count, the
+        /// duck flag and the two timers are touched here — the WASAPI sweep that actually moves the
+        /// sliders is queued onto the serialized worker (#750-#753).
         /// </summary>
         /// <param name="strength">0-100 (0 = no ducking, 100 = full mute)</param>
         public void Duck(int strength = 80)
@@ -847,123 +892,158 @@ namespace ConditioningControlPanel.Services
 
             if (_deviceEnumerator == null) return;
 
+            float amount;
             lock (_lockObj)
             {
                 _duckCount++;
                 if (_isDucked) return; // Already ducked — just bump the ref count
-                
+
                 _duckAmount = Math.Clamp(strength, 0, 100) / 100.0f;
-                
-                try
+                amount = _duckAmount;
+
+                // "Ducked" is a LOGICAL state decided synchronously, before the sweep has run.
+                // Deciding it from the sweep's outcome instead would let an Unduck that arrives
+                // while the sweep is still queued see !_isDucked and skip the restore entirely.
+                _isDucked = true;
+
+                // Watchdog: force-unduck if ducking exceeds max duration.
+                // Catches leaked ref counts from cancelled Task.Delay callbacks,
+                // missing Unduck on audio failure, etc. Repeats so a single failed sweep
+                // still gets another attempt; it retires itself once nothing is ducked.
+                _duckWatchdog?.Dispose();
+                _duckWatchdog = new System.Threading.Timer(_ => DuckWatchdogTick(),
+                    null, DuckWatchdogMs, DuckWatchdogMs);
+
+                // Rescan for new sessions during the duck window — without this, a Discord
+                // notification or Steam ping that creates an audio session AFTER Duck() ran
+                // plays at full volume.
+                _duckRescanTimer?.Dispose();
+                _duckRescanTimer = new System.Threading.Timer(_ => RescanForNewSessions(),
+                    null, DuckRescanIntervalMs, DuckRescanIntervalMs);
+            }
+
+            // Our layered-audio mixer is in-process, so the session-based ducker (which skips our
+            // own PID) can't touch it — duck it cooperatively instead. (#659) In-process gain
+            // change, no COM, so it stays inline and our own layers dip on the same frame.
+            try { App.LayeredAudio?.ApplyDuck(amount); } catch { }
+
+            EnqueueDuckWork("duck", () => ApplyDuckSweep(amount, strength), trace: true);
+        }
+
+        /// <summary>
+        /// Worker-thread half of <see cref="Duck"/>: walk every render endpoint, remember each
+        /// session's original volume and lower it. Never touches _lockObj across a COM call.
+        /// </summary>
+        private void ApplyDuckSweep(float amount, int strength)
+        {
+            var currentProcessId = Environment.ProcessId;
+            var excludeWebView2 = App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true;
+            var webViewPids = excludeWebView2 ? RefreshWebView2Pids() : new HashSet<int>();
+
+            int ducked = 0;
+            using (var scope = CollectRenderSessions())
+            {
+                var sessions = scope.Sessions;
+                for (int i = 0; i < sessions.Count; i++)
                 {
-                    var currentProcessId = Environment.ProcessId;
-                    using var scope = CollectRenderSessions();
-                    var sessions = scope.Sessions;
-
-                    // Check if we should exclude BambiCloud (WebView2) from ducking
-                    var excludeWebView2 = App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true;
-
-                    // Refresh WebView2 PID cache if expired (avoids slow Process.GetProcessById per session)
-                    if (excludeWebView2 && DateTime.UtcNow - _webView2PidsCacheTime > WebView2CacheExpiry)
+                    try
                     {
-                        try
+                        var session = sessions[i];
+                        var processId = (int)session.GetProcessID;
+
+                        // Skip our own process
+                        if (processId == currentProcessId || processId == 0) continue;
+
+                        // Skip WebView2 processes if setting is enabled (for BambiCloud audio)
+                        if (excludeWebView2 && webViewPids.Contains(processId))
+                            continue;
+
+                        var currentVolume = session.SimpleAudioVolume.Volume;
+
+                        // Store original volume + process name (for fallback matching at restore time
+                        // if PID changes — e.g. user closes and reopens Firefox during the session).
+                        lock (_lockObj)
                         {
-                            var newPids = new HashSet<int>();
-                            foreach (var proc in Process.GetProcesses())
-                            {
-                                try
-                                {
-                                    var name = proc.ProcessName.ToLowerInvariant();
-                                    if (name.Contains("msedgewebview2") || name.Contains("webview2"))
-                                        newPids.Add(proc.Id);
-                                }
-                                catch { }
-                                finally { proc.Dispose(); }
-                            }
-                            _webView2Pids = newPids;
-                            _webView2PidsCacheTime = DateTime.UtcNow;
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Debug("Failed to refresh WebView2 PID cache: {Error}", ex.Message);
-                        }
-                    }
-
-                    for (int i = 0; i < sessions.Count; i++)
-                    {
-                        try
-                        {
-                            var session = sessions[i];
-                            var processId = (int)session.GetProcessID;
-
-                            // Skip our own process
-                            if (processId == currentProcessId || processId == 0) continue;
-
-                            // Skip WebView2 processes if setting is enabled (for BambiCloud audio)
-                            if (excludeWebView2 && _webView2Pids.Contains(processId))
-                                continue;
-
-                            var currentVolume = session.SimpleAudioVolume.Volume;
-
-                            // Store original volume + process name (for fallback matching at restore time
-                            // if PID changes — e.g. user closes and reopens Firefox during the session).
+                            if (!_isDucked) return;  // unducked out from under us — leave the rest alone
+                            // Never overwrite a surviving entry: after a restore that threw, the
+                            // stored value is the TRUE original and the live one is already ducked.
+                            // Recapturing it here is how volumes used to ratchet toward 0%.
+                            if (_originalVolumes.ContainsKey(processId)) continue;
                             _originalVolumes[processId] = currentVolume;
-                            _processNames[processId] = TryGetProcessName(processId);
+                        }
+                        var name = TryGetProcessName(processId);
+                        lock (_lockObj) { _processNames[processId] = name; }
 
-                            // Calculate ducked volume
-                            var newVolume = currentVolume * (1.0f - _duckAmount);
-                            session.SimpleAudioVolume.Volume = Math.Max(0.0f, newVolume);
-                        }
-                        catch (Exception ex)
-                        {
-                            // Session may have ended
-                            App.Logger?.Debug("Failed to duck audio session: {Error}", ex.Message);
-                        }
+                        // Calculate ducked volume
+                        var newVolume = currentVolume * (1.0f - amount);
+                        session.SimpleAudioVolume.Volume = Math.Max(0.0f, newVolume);
+                        ducked++;
                     }
-
-                    _isDucked = true;
-
-                    // Our layered-audio mixer is in-process, so the session-based ducker above
-                    // (which skips our own PID) can't touch it — duck it cooperatively instead. (#659)
-                    try { App.LayeredAudio?.ApplyDuck(_duckAmount); } catch { }
-
-                    // Watchdog: force-unduck if ducking exceeds max duration.
-                    // Catches leaked ref counts from cancelled Task.Delay callbacks,
-                    // missing Unduck on audio failure, etc. Repeats so a single failed sweep
-                    // still gets another attempt; it retires itself once nothing is ducked.
-                    _duckWatchdog?.Dispose();
-                    _duckWatchdog = new System.Threading.Timer(_ => DuckWatchdogTick(),
-                        null, DuckWatchdogMs, DuckWatchdogMs);
-
-                    // Rescan for new sessions during the duck window — without this, a Discord
-                    // notification or Steam ping that creates an audio session AFTER Duck() ran
-                    // plays at full volume.
-                    _duckRescanTimer?.Dispose();
-                    _duckRescanTimer = new System.Threading.Timer(_ => RescanForNewSessions(),
-                        null, DuckRescanIntervalMs, DuckRescanIntervalMs);
-
-                    // Save state for crash recovery
-                    SaveDuckingState();
-
-                    App.Logger?.Debug("Ducked {Count} audio sessions by {Amount}%", _originalVolumes.Count, strength);
+                    catch (Exception ex)
+                    {
+                        // Session may have ended
+                        App.Logger?.Debug("Failed to duck audio session: {Error}", ex.Message);
+                    }
                 }
-                catch (Exception ex)
+            }
+
+            // Save state for crash recovery
+            SaveDuckingState();
+
+            App.Logger?.Debug("Ducked {Count} audio sessions by {Amount}%", ducked, strength);
+        }
+
+        /// <summary>
+        /// Refresh the WebView2 PID cache if it has expired. Walks the whole process table, so it
+        /// only ever runs on the sweep worker. Returns the current set (never null).
+        /// </summary>
+        private HashSet<int> RefreshWebView2Pids()
+        {
+            lock (_lockObj)
+            {
+                if (DateTime.UtcNow - _webView2PidsCacheTime <= WebView2CacheExpiry)
+                    return _webView2Pids;
+            }
+
+            try
+            {
+                var newPids = new HashSet<int>();
+                foreach (var proc in Process.GetProcesses())
                 {
-                    App.Logger?.Debug("Audio ducking failed: {Error}", ex.Message);
-                    // Duck failed — compensate for the increment so ref count stays balanced
-                    _duckCount = Math.Max(0, _duckCount - 1);
+                    try
+                    {
+                        var name = proc.ProcessName.ToLowerInvariant();
+                        if (name.Contains("msedgewebview2") || name.Contains("webview2"))
+                            newPids.Add(proc.Id);
+                    }
+                    catch { }
+                    finally { proc.Dispose(); }
                 }
+                lock (_lockObj)
+                {
+                    _webView2Pids = newPids;
+                    _webView2PidsCacheTime = DateTime.UtcNow;
+                }
+                return newPids;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to refresh WebView2 PID cache: {Error}", ex.Message);
+                lock (_lockObj) { return _webView2Pids; }
             }
         }
 
         /// <summary>
-        /// Restore the original volume of other applications.
+        /// Restore the original volume of other applications. Returns immediately — like
+        /// <see cref="Duck"/>, only the flags move here and the sweep is queued behind whatever
+        /// duck/rescan work is already in flight, so ordering is preserved.
         /// Pass the generation from DuckGeneration captured at Duck() time to prevent stale callbacks
         /// from interfering with newer ducking sessions.
         /// </summary>
         /// <param name="generation">Duck generation to validate against. Pass -1 to skip generation check (legacy callers).</param>
         public void Unduck(long generation = -1)
         {
+            bool restore = false;
             lock (_lockObj)
             {
                 // If a generation was specified and doesn't match current, this is a stale callback — ignore
@@ -982,137 +1062,154 @@ namespace ConditioningControlPanel.Services
                 _duckCount = Math.Max(0, _duckCount - 1);
                 if (_duckCount > 0) return; // Other consumers still need ducking
 
-                try
-                {
-                    RestoreDuckedVolumes();
-
-                    _duckWatchdog?.Dispose();
-                    _duckWatchdog = null;
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning("Audio unducking failed, preserving state for retry: {Error}", ex.Message);
-                    // CRITICAL: Do NOT clear _originalVolumes or set _isDucked=false here.
-                    // If we do, the next Duck() will re-read the currently-ducked volumes as
-                    // "originals", causing volumes to ratchet toward 0% over repeated cycles.
-                    // Keep state intact so the next Unduck/ForceUnduck can retry restoration.
-                    //
-                    // Restore _duckCount to 1 (not 0) so the system can recover:
-                    // If _duckCount=0 + _isDucked=true, Duck() silently returns and no future
-                    // Unduck() can ever restore volumes — audio stays permanently ducked.
-                    // The (repeating) watchdog is deliberately left armed to retry from here.
-                    _duckCount = 1;
-                    // Keep recovery file so crash recovery can restore if app exits
-                }
-                finally
-                {
-                    // #686: these MUST happen even when restoration throws. A surviving rescan
-                    // timer re-ducks every audio session on the machine every 2.5s forever
-                    // ("all audio stopped"), and the cooperative layered-audio duck would be
-                    // released only on the success path. Both are safe to repeat.
-                    _duckRescanTimer?.Dispose();
-                    _duckRescanTimer = null;
-                    try { App.LayeredAudio?.ReleaseDuck(); } catch { } // restore layered-audio gain (#659)
-                }
+                _isDucked = false;
+                _duckWatchdog?.Dispose();
+                _duckWatchdog = null;
+                // #686: the rescan timer MUST die here. A survivor re-ducks every audio session on
+                // the machine every 2.5s forever ("all audio stopped").
+                _duckRescanTimer?.Dispose();
+                _duckRescanTimer = null;
+                restore = true;
             }
+
+            try { App.LayeredAudio?.ReleaseDuck(); } catch { } // restore layered-audio gain (#659)
+
+            if (restore) EnqueueDuckWork("unduck", RestoreDuckedVolumes, trace: true);
         }
 
         /// <summary>
-        /// Restores the volumes captured at Duck() time and clears the ducked state. Caller must
-        /// hold <see cref="_lockObj"/>. Throws on unexpected failure — callers decide whether to
-        /// preserve state for a retry.
+        /// Restores the volumes captured at Duck() time. Runs ONLY on the sweep worker: it walks
+        /// every render endpoint, which is exactly the unbounded COM work that must never sit on the
+        /// UI thread (#750-#753 — one trace died inside this call, reached from CloseAll's finally).
+        /// The lock is taken only to snapshot the captured volumes and to write the result back.
         /// </summary>
         private void RestoreDuckedVolumes()
         {
-            using var scope = CollectRenderSessions();
-            var sessions = scope.Sessions;
+            Dictionary<int, float> wanted;
+            Dictionary<int, string> names;
+            lock (_lockObj)
+            {
+                wanted = new Dictionary<int, float>(_originalVolumes);
+                names = new Dictionary<int, string>(_processNames);
+            }
 
             var restored = new HashSet<int>();
-            var nameToCurrentPid = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-            for (int i = 0; i < sessions.Count; i++)
+            try
             {
-                try
-                {
-                    var session = sessions[i];
-                    var processId = (int)session.GetProcessID;
+                using var scope = CollectRenderSessions();
+                var sessions = scope.Sessions;
 
-                    if (_originalVolumes.TryGetValue(processId, out var originalVolume))
-                    {
-                        session.SimpleAudioVolume.Volume = originalVolume;
-                        restored.Add(processId);
-                    }
-                    else
-                    {
-                        // Build a name-index for fallback restoration of PIDs that no longer exist
-                        var name = TryGetProcessName(processId);
-                        if (!string.IsNullOrEmpty(name) && !nameToCurrentPid.ContainsKey(name))
-                            nameToCurrentPid[name] = processId;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Session may have ended
-                    App.Logger?.Debug("Failed to unduck audio session: {Error}", ex.Message);
-                }
-            }
+                var nameToCurrentPid = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-            // Fallback: for stored PIDs whose original session is gone, try to find a
-            // current session for the same process name (e.g. user restarted Firefox
-            // mid-session — new PID, same app).
-            foreach (var kv in _originalVolumes)
-            {
-                if (restored.Contains(kv.Key)) continue;
-                if (!_processNames.TryGetValue(kv.Key, out var name) || string.IsNullOrEmpty(name)) continue;
-                if (!nameToCurrentPid.TryGetValue(name, out var currentPid)) continue;
-
-                try
+                for (int i = 0; i < sessions.Count; i++)
                 {
-                    for (int i = 0; i < sessions.Count; i++)
+                    try
                     {
                         var session = sessions[i];
-                        if ((int)session.GetProcessID == currentPid)
+                        var processId = (int)session.GetProcessID;
+
+                        if (wanted.TryGetValue(processId, out var originalVolume))
                         {
-                            session.SimpleAudioVolume.Volume = kv.Value;
-                            restored.Add(kv.Key);
-                            break;
+                            session.SimpleAudioVolume.Volume = originalVolume;
+                            restored.Add(processId);
+                        }
+                        else
+                        {
+                            // Build a name-index for fallback restoration of PIDs that no longer exist
+                            var name = TryGetProcessName(processId);
+                            if (!string.IsNullOrEmpty(name) && !nameToCurrentPid.ContainsKey(name))
+                                nameToCurrentPid[name] = processId;
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        // Session may have ended
+                        App.Logger?.Debug("Failed to unduck audio session: {Error}", ex.Message);
+                    }
                 }
-                catch { /* session may have ended between checks */ }
+
+                // Fallback: for stored PIDs whose original session is gone, try to find a
+                // current session for the same process name (e.g. user restarted Firefox
+                // mid-session — new PID, same app).
+                foreach (var kv in wanted)
+                {
+                    if (restored.Contains(kv.Key)) continue;
+                    if (!names.TryGetValue(kv.Key, out var name) || string.IsNullOrEmpty(name)) continue;
+                    if (!nameToCurrentPid.TryGetValue(name, out var currentPid)) continue;
+
+                    try
+                    {
+                        for (int i = 0; i < sessions.Count; i++)
+                        {
+                            var session = sessions[i];
+                            if ((int)session.GetProcessID == currentPid)
+                            {
+                                session.SimpleAudioVolume.Volume = kv.Value;
+                                restored.Add(kv.Key);
+                                break;
+                            }
+                        }
+                    }
+                    catch { /* session may have ended between checks */ }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Audio unducking failed, preserving state for retry: {Error}", ex.Message);
+                lock (_lockObj)
+                {
+                    // CRITICAL: Do NOT clear _originalVolumes here. If we do, the next Duck() will
+                    // re-read the currently-ducked volumes as "originals", causing volumes to
+                    // ratchet toward 0% over repeated cycles. Keep state intact — and pin _isDucked
+                    // back on with _duckCount=1 (not 0) so the system can recover: _duckCount=0 +
+                    // _isDucked=true would make Duck() silently return and no future Unduck() could
+                    // ever restore. Re-arm the watchdog so it retries from here.
+                    _isDucked = true;
+                    _duckCount = 1;
+                    if (!_disposed && _duckWatchdog == null)
+                        _duckWatchdog = new System.Threading.Timer(_ => DuckWatchdogTick(),
+                            null, DuckWatchdogMs, DuckWatchdogMs);
+                }
+                // Keep the recovery file so crash recovery can restore if the app exits.
+                return;
             }
 
-            // Move any unrestored entries (PID gone, app silent / not playing) to pending
-            // and let the retry timer re-attempt as the app resumes producing audio.
-            foreach (var kv in _originalVolumes)
+            int pendingCount;
+            lock (_lockObj)
             {
-                if (!restored.Contains(kv.Key))
-                    _pendingRestores[kv.Key] = kv.Value;
+                foreach (var kv in wanted)
+                {
+                    _originalVolumes.Remove(kv.Key);
+                    // Anything we couldn't reach (PID gone, app silent / not playing) goes pending
+                    // so the retry timer can re-attempt as the app resumes producing audio.
+                    if (restored.Contains(kv.Key)) _processNames.Remove(kv.Key);
+                    else _pendingRestores[kv.Key] = kv.Value;
+                }
+
+                pendingCount = _pendingRestores.Count;
+                if (pendingCount > 0)
+                {
+                    _restoreRetryDeadline = DateTime.UtcNow + RestoreRetryWindow;
+                    _restoreRetryTimer?.Dispose();
+                    _restoreRetryTimer = new System.Threading.Timer(_ => RestoreRetryTick(),
+                        null, RestoreRetryIntervalMs, RestoreRetryIntervalMs);
+                }
+                else
+                {
+                    // All restored — process names no longer needed
+                    _processNames.Clear();
+                }
             }
 
-            _originalVolumes.Clear();
-            _isDucked = false;
-
-            if (_pendingRestores.Count > 0)
-            {
+            if (pendingCount > 0)
                 App.Logger?.Information("[Ducking] {Count} session(s) had no current audio at unduck — will retry restore for up to {Min} min",
-                    _pendingRestores.Count, RestoreRetryWindow.TotalMinutes);
-                _restoreRetryDeadline = DateTime.UtcNow + RestoreRetryWindow;
-                _restoreRetryTimer?.Dispose();
-                _restoreRetryTimer = new System.Threading.Timer(_ => RestoreRetryTick(),
-                    null, RestoreRetryIntervalMs, RestoreRetryIntervalMs);
-            }
-            else
-            {
-                // All restored — process names no longer needed
-                _processNames.Clear();
-            }
+                    pendingCount, RestoreRetryWindow.TotalMinutes);
 
             // Clear crash recovery file
             ClearDuckingState();
 
             App.Logger?.Debug("Audio unducked ({Restored} restored, {Pending} deferred)",
-                restored.Count, _pendingRestores.Count);
+                restored.Count, pendingCount);
         }
 
         /// <summary>
@@ -1123,6 +1220,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void DuckWatchdogTick()
         {
+            bool restore = false;
             lock (_lockObj)
             {
                 if (_disposed) return;
@@ -1143,18 +1241,11 @@ namespace ConditioningControlPanel.Services
                 _duckGeneration++; // invalidate any in-flight stale Unduck callbacks
                 _duckRescanTimer?.Dispose();
                 _duckRescanTimer = null;
-                try { App.LayeredAudio?.ReleaseDuck(); } catch { }
-
-                try
-                {
-                    RestoreDuckedVolumes();
-                }
-                catch (Exception ex)
-                {
-                    // Volumes stay in _pendingRestores / crash-recovery for a later attempt.
-                    App.Logger?.Warning("[Ducking] Watchdog restore failed: {Error}", ex.Message);
-                }
+                restore = true;
             }
+
+            try { App.LayeredAudio?.ReleaseDuck(); } catch { }
+            if (restore) EnqueueDuckWork("watchdog-restore", RestoreDuckedVolumes, trace: true);
         }
 
         /// <summary>
@@ -1191,15 +1282,20 @@ namespace ConditioningControlPanel.Services
         /// multimedia device. A user who routes their browser / media player to a secondary
         /// output would otherwise never get ducked, since those sessions live on a different
         /// device's session manager (bug #415).
+        ///
+        /// WORKER-THREAD ONLY. A machine with a dozen endpoints (or one that answers slowly) makes
+        /// this take tens of seconds, which is the whole of #750-#753 — never call it from the UI
+        /// thread. Uses the worker's own enumerator so the COM calls stay inside its apartment.
         /// </summary>
         private RenderSessionScope CollectRenderSessions()
         {
             var scope = new RenderSessionScope();
-            if (_deviceEnumerator == null) return scope;
+            var enumerator = _sweepEnumerator ?? _deviceEnumerator;
+            if (enumerator == null) return scope;
 
             try
             {
-                var endpoints = _deviceEnumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
+                var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
                 scope.Own(endpoints);
                 for (int d = 0; d < endpoints.Count; d++)
                 {
@@ -1277,58 +1373,79 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Periodically called while ducked to catch new audio sessions (e.g. Discord notification,
         /// Steam ping) that didn't exist when Duck() ran. Without this, those play un-ducked.
+        /// Threadpool-timer entry point: it only decides whether to queue a sweep.
         /// </summary>
         private void RescanForNewSessions()
         {
+            if (_disposed) return;
             lock (_lockObj)
             {
-                if (!_isDucked || _deviceEnumerator == null || _disposed) return;
+                if (!_isDucked || _deviceEnumerator == null) return;
+            }
 
-                try
+            // A sweep is already queued or running. SKIP this cycle rather than queueing behind it:
+            // on a machine where one endpoint answers slower than the 2.5s cadence the backlog grew
+            // without bound and outlived the duck window entirely (#750-#753).
+            if (Volatile.Read(ref _duckWorkDepth) > 0) return;
+
+            EnqueueDuckWork("rescan", RescanSweep);
+        }
+
+        /// <summary>Worker-thread half of <see cref="RescanForNewSessions"/>.</summary>
+        private void RescanSweep()
+        {
+            float amount;
+            lock (_lockObj)
+            {
+                if (!_isDucked || _disposed) return;
+                amount = _duckAmount;
+            }
+
+            var currentProcessId = Environment.ProcessId;
+            var excludeWebView2 = App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true;
+            var webViewPids = excludeWebView2 ? RefreshWebView2Pids() : new HashSet<int>();
+
+            int newlyDucked = 0;
+            using (var scope = CollectRenderSessions())
+            {
+                var sessions = scope.Sessions;
+                for (int i = 0; i < sessions.Count; i++)
                 {
-                    var currentProcessId = Environment.ProcessId;
-                    var excludeWebView2 = App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true;
-                    using var scope = CollectRenderSessions();
-                    var sessions = scope.Sessions;
-
-                    int newlyDucked = 0;
-                    for (int i = 0; i < sessions.Count; i++)
+                    try
                     {
-                        try
+                        var session = sessions[i];
+                        var processId = (int)session.GetProcessID;
+
+                        if (processId == currentProcessId || processId == 0) continue;
+                        if (excludeWebView2 && webViewPids.Contains(processId)) continue;
+
+                        var currentVolume = session.SimpleAudioVolume.Volume;
+                        // Skip sessions already at 0 — most likely they're sessions we ducked in a
+                        // prior generation and the PID got recycled; treating their 0 as "original"
+                        // would silence the app forever.
+                        if (currentVolume <= 0.001f) continue;
+
+                        lock (_lockObj)
                         {
-                            var session = sessions[i];
-                            var processId = (int)session.GetProcessID;
-
-                            if (processId == currentProcessId || processId == 0) continue;
-                            if (excludeWebView2 && _webView2Pids.Contains(processId)) continue;
-                            if (_originalVolumes.ContainsKey(processId)) continue; // already ducked
-
-                            var currentVolume = session.SimpleAudioVolume.Volume;
-                            // Skip sessions already at 0 — most likely they're sessions we ducked in a
-                            // prior generation and the PID got recycled; treating their 0 as "original"
-                            // would silence the app forever.
-                            if (currentVolume <= 0.001f) continue;
-
+                            if (!_isDucked) return;                                 // unducked mid-sweep
+                            if (_originalVolumes.ContainsKey(processId)) continue;  // already ducked
                             _originalVolumes[processId] = currentVolume;
-                            _processNames[processId] = TryGetProcessName(processId);
-
-                            var newVolume = currentVolume * (1.0f - _duckAmount);
-                            session.SimpleAudioVolume.Volume = Math.Max(0.0f, newVolume);
-                            newlyDucked++;
                         }
-                        catch { /* session may have ended */ }
-                    }
+                        var name = TryGetProcessName(processId);
+                        lock (_lockObj) { _processNames[processId] = name; }
 
-                    if (newlyDucked > 0)
-                    {
-                        App.Logger?.Debug("[Ducking] Rescan ducked {Count} new session(s)", newlyDucked);
-                        SaveDuckingState();
+                        var newVolume = currentVolume * (1.0f - amount);
+                        session.SimpleAudioVolume.Volume = Math.Max(0.0f, newVolume);
+                        newlyDucked++;
                     }
+                    catch { /* session may have ended */ }
                 }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("[Ducking] Rescan failed: {Error}", ex.Message);
-                }
+            }
+
+            if (newlyDucked > 0)
+            {
+                App.Logger?.Debug("[Ducking] Rescan ducked {Count} new session(s)", newlyDucked);
+                SaveDuckingState();
             }
         }
 
@@ -1339,9 +1456,11 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void RestoreRetryTick()
         {
+            if (_disposed) return;
+
             lock (_lockObj)
             {
-                if (_disposed || _pendingRestores.Count == 0)
+                if (_pendingRestores.Count == 0)
                 {
                     _restoreRetryTimer?.Dispose();
                     _restoreRetryTimer = null;
@@ -1361,93 +1480,204 @@ namespace ConditioningControlPanel.Services
                 }
 
                 if (_deviceEnumerator == null) return;
+            }
 
-                try
+            // Same skip-don't-queue rule as the rescan: this is a best-effort retry on a 5s
+            // cadence, and piling them up behind a slow endpoint helps nobody (#750-#753).
+            if (Volatile.Read(ref _duckWorkDepth) > 0) return;
+
+            EnqueueDuckWork("restore-retry", RestoreRetrySweep);
+        }
+
+        /// <summary>Worker-thread half of <see cref="RestoreRetryTick"/>.</summary>
+        private void RestoreRetrySweep()
+        {
+            Dictionary<int, float> pending;
+            Dictionary<int, string> names;
+            lock (_lockObj)
+            {
+                if (_disposed || _pendingRestores.Count == 0) return;
+                pending = new Dictionary<int, float>(_pendingRestores);
+                names = new Dictionary<int, string>(_processNames);
+            }
+
+            var restored = new List<int>();
+
+            using (var scope = CollectRenderSessions())
+            {
+                var sessions = scope.Sessions;
+
+                // Build PID-by-name index so we can match a stored PID to a new PID for the same app
+                var nameToPid = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < sessions.Count; i++)
                 {
-                    using var scope = CollectRenderSessions();
-                    var sessions = scope.Sessions;
-                    var restored = new List<int>();
+                    try
+                    {
+                        var pid = (int)sessions[i].GetProcessID;
+                        if (pid == 0) continue;
+                        var name = TryGetProcessName(pid);
+                        if (!string.IsNullOrEmpty(name) && !nameToPid.ContainsKey(name))
+                            nameToPid[name] = pid;
+                    }
+                    catch { }
+                }
 
-                    // Build PID-by-name index so we can match a stored PID to a new PID for the same app
-                    var nameToPid = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kv in pending)
+                {
+                    var storedPid = kv.Key;
+                    var originalVolume = kv.Value;
+                    int? targetPid = null;
+
+                    // Try direct PID match first
                     for (int i = 0; i < sessions.Count; i++)
                     {
                         try
                         {
-                            var pid = (int)sessions[i].GetProcessID;
-                            if (pid == 0) continue;
-                            var name = TryGetProcessName(pid);
-                            if (!string.IsNullOrEmpty(name) && !nameToPid.ContainsKey(name))
-                                nameToPid[name] = pid;
+                            if ((int)sessions[i].GetProcessID == storedPid) { targetPid = storedPid; break; }
                         }
                         catch { }
                     }
 
-                    foreach (var kv in _pendingRestores)
+                    // Fallback: process-name match (handles app-restart with new PID)
+                    if (targetPid == null && names.TryGetValue(storedPid, out var name)
+                        && !string.IsNullOrEmpty(name) && nameToPid.TryGetValue(name, out var freshPid))
                     {
-                        var storedPid = kv.Key;
-                        var originalVolume = kv.Value;
-                        int? targetPid = null;
+                        targetPid = freshPid;
+                    }
 
-                        // Try direct PID match first
-                        for (int i = 0; i < sessions.Count; i++)
+                    if (targetPid == null) continue;
+
+                    for (int i = 0; i < sessions.Count; i++)
+                    {
+                        try
                         {
-                            try
+                            var session = sessions[i];
+                            if ((int)session.GetProcessID == targetPid.Value)
                             {
-                                if ((int)sessions[i].GetProcessID == storedPid) { targetPid = storedPid; break; }
+                                session.SimpleAudioVolume.Volume = originalVolume;
+                                restored.Add(storedPid);
+                                break;
                             }
-                            catch { }
                         }
-
-                        // Fallback: process-name match (handles app-restart with new PID)
-                        if (targetPid == null && _processNames.TryGetValue(storedPid, out var name)
-                            && !string.IsNullOrEmpty(name) && nameToPid.TryGetValue(name, out var freshPid))
-                        {
-                            targetPid = freshPid;
-                        }
-
-                        if (targetPid == null) continue;
-
-                        for (int i = 0; i < sessions.Count; i++)
-                        {
-                            try
-                            {
-                                var session = sessions[i];
-                                if ((int)session.GetProcessID == targetPid.Value)
-                                {
-                                    session.SimpleAudioVolume.Volume = originalVolume;
-                                    restored.Add(storedPid);
-                                    break;
-                                }
-                            }
-                            catch { }
-                        }
+                        catch { }
                     }
-
-                    if (restored.Count > 0)
-                    {
-                        foreach (var pid in restored)
-                        {
-                            _pendingRestores.Remove(pid);
-                            _processNames.Remove(pid);
-                        }
-                        App.Logger?.Information("[Ducking] Deferred-restore: recovered volume for {Count} session(s); {Remaining} still pending",
-                            restored.Count, _pendingRestores.Count);
-                    }
-
-                    if (_pendingRestores.Count == 0)
-                    {
-                        _processNames.Clear();
-                        _restoreRetryTimer?.Dispose();
-                        _restoreRetryTimer = null;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("[Ducking] Restore retry tick failed: {Error}", ex.Message);
                 }
             }
+
+            int remaining;
+            lock (_lockObj)
+            {
+                foreach (var pid in restored)
+                {
+                    _pendingRestores.Remove(pid);
+                    _processNames.Remove(pid);
+                }
+
+                remaining = _pendingRestores.Count;
+                if (remaining == 0)
+                {
+                    _processNames.Clear();
+                    _restoreRetryTimer?.Dispose();
+                    _restoreRetryTimer = null;
+                }
+            }
+
+            if (restored.Count > 0)
+                App.Logger?.Information("[Ducking] Deferred-restore: recovered volume for {Count} session(s); {Remaining} still pending",
+                    restored.Count, remaining);
         }
+
+        #region Sweep worker
+
+        /// <summary>
+        /// Queue one WASAPI sweep onto the single serialized worker thread and return immediately —
+        /// this is what keeps Duck/Unduck off the UI thread's critical path (#750-#753). Items run
+        /// in submission order, so a Duck followed straight away by an Unduck still nets out right.
+        /// </summary>
+        private void EnqueueDuckWork(string name, Action work, bool trace = false)
+        {
+            if (_disposed) return;
+            EnsureDuckWorker();
+
+            Interlocked.Increment(ref _duckWorkDepth);
+            _duckWorkIdle.Reset();
+            try
+            {
+                _duckWork.Add(() =>
+                {
+                    var sw = Stopwatch.StartNew();
+                    try { work(); }
+                    catch (Exception ex) { App.Logger?.Debug("[Ducking] {Op} sweep failed: {Error}", name, ex.Message); }
+                    finally
+                    {
+                        var ms = sw.ElapsedMilliseconds;
+                        // A sweep this slow IS the freeze the reporters saw — it just no longer
+                        // happens on their dispatcher. Naming it in the video trace makes the next
+                        // report a straight read instead of another blind spot.
+                        if (trace || ms >= SlowSweepWarnMs)
+                            VideoDiag.Log("DUCK", $"{name} applied after {ms}ms");
+                        if (ms >= SlowSweepWarnMs)
+                            App.Logger?.Warning("[Ducking] {Op} sweep took {Ms}ms — a render endpoint on this machine is answering slowly", name, ms);
+                        if (Interlocked.Decrement(ref _duckWorkDepth) <= 0) _duckWorkIdle.Set();
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                // Collection completed (shutdown) — undo the depth bump so the exit flush can finish.
+                if (Interlocked.Decrement(ref _duckWorkDepth) <= 0) _duckWorkIdle.Set();
+                App.Logger?.Debug("[Ducking] could not queue {Op}: {Error}", name, ex.Message);
+            }
+        }
+
+        private void EnsureDuckWorker()
+        {
+            if (Interlocked.Exchange(ref _duckWorkerStarted, 1) == 1) return;
+            _duckWorker = new Thread(DuckWorkerLoop)
+            {
+                IsBackground = true,
+                Name = "AudioDuckWorker",
+                Priority = ThreadPriority.BelowNormal,
+            };
+            _duckWorker.Start();
+        }
+
+        private void DuckWorkerLoop()
+        {
+            // Created here on purpose — see the _sweepEnumerator field comment. A COM apartment
+            // mismatch would send every sweep back through the dispatcher, defeating the whole point.
+            try { _sweepEnumerator = new MMDeviceEnumerator(); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("[Ducking] sweep worker could not create its own device enumerator: {Error}", ex.Message);
+            }
+
+            try
+            {
+                foreach (var item in _duckWork.GetConsumingEnumerable())
+                {
+                    try { item(); } catch { }
+                }
+            }
+            catch { /* collection completed / disposed */ }
+
+            try { _sweepEnumerator?.Dispose(); } catch { }
+            _sweepEnumerator = null;
+        }
+
+        /// <summary>
+        /// Block until every queued sweep has finished, or <paramref name="timeoutMs"/> elapses.
+        /// Dispose-only: app exit must not leave other apps pinned at the ducked volume, but a
+        /// machine with a wedged endpoint must not hold the exit open either — ducking_recovery.json
+        /// is still on disk in that case and the next launch restores from it.
+        /// </summary>
+        private bool FlushDuckWork(int timeoutMs)
+        {
+            try { return _duckWorkIdle.Wait(timeoutMs); }
+            catch { return false; }
+        }
+
+        #endregion
 
         #endregion
 
@@ -1456,19 +1686,32 @@ namespace ConditioningControlPanel.Services
         public void Dispose()
         {
             if (_disposed) return;
-            _disposed = true;
 
-            // Restore audio levels — force unduck regardless of ref count
-            if (_isDucked)
-            {
-                ForceUnduck();
-            }
+            // Restore audio levels — force unduck regardless of ref count. This runs BEFORE
+            // _disposed goes up: the sweeps bail out when it is set, and an exit that skipped the
+            // restore would leave every other app on the machine pinned at the ducked volume until
+            // the crash-recovery file is picked up on the NEXT launch.
+            bool wasDucked;
+            lock (_lockObj) { wasDucked = _isDucked; }
+            if (wasDucked) ForceUnduck();
+
+            var flushed = FlushDuckWork(WorkerFlushTimeoutMs);
+            if (!flushed)
+                App.Logger?.Warning("[Ducking] exit flush timed out after {Ms}ms — a sweep is still in flight; ducking_recovery.json will restore on the next launch",
+                    WorkerFlushTimeoutMs);
+
+            _disposed = true;
 
             StopSound();
             _duckWatchdog?.Dispose();
             _duckRescanTimer?.Dispose();
             _restoreRetryTimer?.Dispose();
-            _deviceEnumerator?.Dispose();
+            try { _duckWork.CompleteAdding(); } catch { }
+
+            // Only release the enumerators once we know no sweep is mid-COM-call on one. Yanking
+            // them out from under a wedged worker turns a clean exit into a native crash; process
+            // teardown reclaims them in the timed-out case.
+            if (flushed) _deviceEnumerator?.Dispose();
         }
 
         #endregion

@@ -118,6 +118,14 @@ public static class UiHangWatchdog
                         _hangLogged = true;
                         App.Logger?.Error("[WATCHDOG] UI thread unresponsive for {Sec:F0}s{Phase} — likely render-thread deadlock",
                             silence / 1000.0, started ? "" : " (never pumped — wedged during startup)");
+                        // Mirror into the video trace. These lines only ever went to the ROLLING
+                        // Serilog file, which a post-freeze relaunch scrolls straight out of the
+                        // 100-line tail a bug report attaches — the exact evidence loss VideoDiag
+                        // exists to prevent (#750-#753). Log() is a no-op until VideoDiag.Start ran.
+                        VideoDiag.Log("WATCHDOG", string.Format(
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            "UI thread unresponsive for {0:F0}s{1}",
+                            silence / 1000.0, started ? "" : " (never pumped - wedged during startup)"));
                     }
                     if (!_dumpWritten)
                     {
@@ -129,6 +137,7 @@ public static class UiHangWatchdog
                 {
                     _hangLogged = false;
                     App.Logger?.Warning("[WATCHDOG] UI thread recovered");
+                    VideoDiag.Log("WATCHDOG", "UI thread recovered");
                 }
             }
             catch { }
@@ -271,6 +280,7 @@ public static class UiHangWatchdog
                         && File.Exists(path) && new FileInfo(path).Length > 100_000)
                     {
                         App.Logger?.Error("[WATCHDOG] hang dump written (external) after {Sec:F0}s of silence: {Path}", silenceMs / 1000.0, path);
+                        VideoDiag.Log("WATCHDOG", "hang dump written (external): " + path);
                         return;
                     }
                     // Do NOT Kill() a dumper that is mid-write: MiniDumpWriteDump suspends the
@@ -290,13 +300,20 @@ public static class UiHangWatchdog
             bool ok = MiniDumpWriteDump(proc.Handle, (uint)proc.Id, fs.SafeFileHandle, CompactDumpType,
                                         IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
             if (ok)
+            {
                 App.Logger?.Error("[WATCHDOG] hang dump written after {Sec:F0}s of silence: {Path}", silenceMs / 1000.0, path);
+                VideoDiag.Log("WATCHDOG", "hang dump written (in-proc): " + path);
+            }
             else
+            {
                 App.Logger?.Error("[WATCHDOG] MiniDumpWriteDump failed (error {Err})", Marshal.GetLastWin32Error());
+                VideoDiag.Log("WATCHDOG", "MiniDumpWriteDump failed (error " + Marshal.GetLastWin32Error() + ")");
+            }
         }
         catch (Exception ex)
         {
             App.Logger?.Error("[WATCHDOG] hang dump failed: {E}", ex.Message);
+            VideoDiag.Log("WATCHDOG", "hang dump failed: " + ex.Message);
         }
     }
 
