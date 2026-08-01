@@ -49,6 +49,30 @@ namespace ConditioningControlPanel.Services
             && int.TryParse(k.Substring(0, 4), out _)
             && int.TryParse(k.Substring(5, 2), out _);
 
+        /// <summary>
+        /// Whether a season key just handed to us by the server should replace the local
+        /// <see cref="Models.AppSettings.CurrentSeason"/>.
+        ///
+        /// This exists because the key is what makes the recap fire at all: everything downstream
+        /// compares <see cref="CurrentSeasonKey"/> against LastSeasonResetSeen / SeasonStatsSeason,
+        /// and CurrentSeasonKey prefers the stored server value over wall-clock. A client that
+        /// never learns the new key therefore compares "2026-07" with "2026-07" and silently
+        /// decides nothing happened — which is exactly how the August 1 rollover produced no card.
+        ///
+        /// Adopt only a well-formed key that is strictly AFTER what we hold (or when we hold
+        /// nothing usable). Seasons only ever move forward, so a backward key is a desync or a
+        /// stale read, and taking it would let the recap fire a second time for a season already
+        /// recapped, or roll the live stats bucket backwards.
+        /// </summary>
+        internal static bool ShouldAdoptServerSeason(string? serverSeason, string? localSeason)
+        {
+            if (string.IsNullOrWhiteSpace(serverSeason) || !LooksLikeMonthKey(serverSeason!))
+                return false;
+            if (string.IsNullOrWhiteSpace(localSeason) || !LooksLikeMonthKey(localSeason!))
+                return true;
+            return string.CompareOrdinal(serverSeason!, localSeason!) > 0;
+        }
+
         // ---------- live counter mutations (call from feature hook points) ----------
 
         /// <summary>
