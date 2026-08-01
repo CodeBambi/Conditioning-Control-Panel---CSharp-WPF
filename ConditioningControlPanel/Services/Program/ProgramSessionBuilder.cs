@@ -176,7 +176,10 @@ public static class ProgramSessionBuilder
         return result;
     }
 
-    private static int LerpInt(int a, int b, double t) => (int)Math.Round(a + ((b - a) * t), MidpointRounding.AwayFromZero);
+    /// <summary>Internal so <see cref="Models.Program.ProgramDefinition.Validate"/> can predict the
+    /// same start minutes the builder will actually produce (#747) instead of duplicating the
+    /// rounding and drifting from it.</summary>
+    internal static int LerpInt(int a, int b, double t) => (int)Math.Round(a + ((b - a) * t), MidpointRounding.AwayFromZero);
 
     private static double Lerp(double a, double b, double t) => a + ((b - a) * t);
 

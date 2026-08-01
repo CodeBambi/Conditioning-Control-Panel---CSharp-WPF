@@ -449,6 +449,14 @@ public class ProgramService : IDisposable
     /// Build today's session. Transient: never written to disk and never registered with
     /// SessionManager, so it cannot collide with the user's own sessions or spawn a stray card.
     /// </summary>
+    /// <summary>
+    /// #747: a Return Day runs shorter than the day it replaces. Single source of truth, because the
+    /// Today card used to advertise the authored 30 minutes while the engine built an 18-minute
+    /// session - and every minute-denominated task was then measured against the shorter run.
+    /// </summary>
+    public static int ReturnDayMinutes(int authoredMinutes) =>
+        Math.Max(15, (int)Math.Round(authoredMinutes * 0.6));
+
     public Models.Session? BuildTodaySession()
     {
         var program = ActiveProgram;
@@ -463,7 +471,7 @@ public class ProgramService : IDisposable
             var record = TodayRecord;
             if (record?.IsReturnDay == true)
             {
-                session.DurationMinutes = Math.Max(15, (int)Math.Round(session.DurationMinutes * 0.6));
+                session.DurationMinutes = ReturnDayMinutes(session.DurationMinutes);
                 session.Name += " (Return)";
             }
 

@@ -3754,6 +3754,7 @@
   "programs_tasks_header": "TASKS",
   "programs_no_tasks": "No tasks today - just the session.",
   "programs_task_optional": "Optional",
+  "programs_task_outside_session": "Outside session",
   "programs_task_locked": "Needs a pledge - not required today",
   "programs_task_progress": "{0} / {1}",
   "btn_program_submit_photo": "Submit photo",

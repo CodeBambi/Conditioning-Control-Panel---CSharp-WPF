@@ -776,7 +776,12 @@ namespace ConditioningControlPanel
             // --- Session slot ---
             // Glyph / button / progress strip all live in UpdateProgramSessionRow so the
             // full repaint and the once-a-second live tick can never disagree about them.
-            tab.TxtTodaySessionMinutes.Text = Loc.GetF("programs_session_minutes", day.SessionMinutes);
+            // #747: a Return Day builds a shorter session than the day authors, so advertise what
+            // will actually run - the card promised 30 minutes while the engine ran 18.
+            var advertisedMinutes = record.IsReturnDay
+                ? Services.Program.ProgramService.ReturnDayMinutes(day.SessionMinutes)
+                : day.SessionMinutes;
+            tab.TxtTodaySessionMinutes.Text = Loc.GetF("programs_session_minutes", advertisedMinutes);
             UpdateProgramSessionRow();
 
             // --- Ambient layer ---
@@ -869,6 +874,15 @@ namespace ConditioningControlPanel
                 if (blocked)
                 {
                     item.BadgeText = Loc.Get("programs_task_locked");
+                    item.BadgeVisibility = Visibility.Visible;
+                }
+                else if (task.OutsideSession)
+                {
+                    // #747: this task's own session cannot finish it - the credit comes from the
+                    // user's own dashboard time. Users read a bar that stalls at 18/20 as broken
+                    // tracking and file a bug, so say where the work happens. Ranked above Optional
+                    // because it explains behaviour rather than offering a choice.
+                    item.BadgeText = Loc.Get("programs_task_outside_session");
                     item.BadgeVisibility = Visibility.Visible;
                 }
                 else if (task.Optional)

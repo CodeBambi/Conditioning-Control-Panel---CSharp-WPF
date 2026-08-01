@@ -221,6 +221,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "c3_protocol_locks",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         // The FW-Process pool is narrowed to a single phrase so this cycle lands on
                         // "I AM A UNIT", the line the content brief names for cycle 3.
@@ -251,6 +252,7 @@ public static partial class BuiltInPrograms
                         // verified is a timed fixation on the Hypno Vortex, and it doubles as the
                         // hand-driven introduction to the overlay FW-Overwrite turns on at cycle 6.
                         Id = "c4_fixation",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Hold 12 minutes of Hypno Vortex. [LOG] VISUAL FIXATION",
                         Verifier = QuestCategory.Spiral,
@@ -273,6 +275,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "c5_enumeration",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 1 enumeration task. [LOG] PACKET COUNT VERIFICATION",
                         Verifier = QuestCategory.BubbleCount,
@@ -371,6 +374,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "c8_vortex",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Hold 20 minutes of Hypno Vortex. [LOG] IDLE CYCLE",
                         Verifier = QuestCategory.Spiral,

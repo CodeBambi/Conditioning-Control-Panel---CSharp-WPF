@@ -186,6 +186,7 @@ public static partial class BuiltInPrograms
                                 new ProgramTask
                                 {
                                     Id = "d2_lockcards",
+                                    OutsideSession = true,
                                     Kind = ProgramTaskKind.AutoVerified,
                                     Description = "Complete 2 lock cards",
                                     Verifier = QuestCategory.LockCard,
@@ -213,6 +214,7 @@ public static partial class BuiltInPrograms
                                 new ProgramTask
                                 {
                                     Id = "d3_pink",
+                                    OutsideSession = true,
                                     Kind = ProgramTaskKind.AutoVerified,
                                     // PinkFilter accumulates in whole minutes.
                                     Description = "Keep the pink filter on for 10 minutes",
@@ -244,6 +246,7 @@ public static partial class BuiltInPrograms
                                 new ProgramTask
                                 {
                                     Id = "d4_bubblecount",
+                                    OutsideSession = true,
                                     Kind = ProgramTaskKind.AutoVerified,
                                     Description = "Finish 1 bubble count game",
                                     Verifier = QuestCategory.BubbleCount,
@@ -270,6 +273,7 @@ public static partial class BuiltInPrograms
                                 new ProgramTask
                                 {
                                     Id = "d5_video",
+                                    OutsideSession = true,
                                     Kind = ProgramTaskKind.AutoVerified,
                                     // Video accumulates in whole minutes.
                                     Description = "Watch 12 minutes of video",
@@ -323,6 +327,7 @@ public static partial class BuiltInPrograms
                                     // day 5, because its only task was the optional ritual. Now the
                                     // one thing it requires is the one thing that is new about it.
                                     Id = "d6_lockcards",
+                                    OutsideSession = true,
                                     Kind = ProgramTaskKind.AutoVerified,
                                     Description = "Complete 1 lock card",
                                     Verifier = QuestCategory.LockCard,
@@ -360,6 +365,7 @@ public static partial class BuiltInPrograms
                                 new ProgramTask
                                 {
                                     Id = "d7_lockcards",
+                                    OutsideSession = true,
                                     Kind = ProgramTaskKind.AutoVerified,
                                     Description = "Complete 3 lock cards",
                                     Verifier = QuestCategory.LockCard,

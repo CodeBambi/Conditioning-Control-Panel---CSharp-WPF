@@ -197,6 +197,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d2_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 2 lock cards",
                         Verifier = QuestCategory.LockCard,
@@ -284,6 +285,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d6_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 3 lock cards",
                         Verifier = QuestCategory.LockCard,
@@ -376,6 +378,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d8_pink",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Keep the pink filter on for 20 minutes",
                         Verifier = QuestCategory.PinkFilter,
@@ -417,6 +420,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d9_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 15 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -470,6 +474,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d11_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 4 lock cards",
                         Verifier = QuestCategory.LockCard,
