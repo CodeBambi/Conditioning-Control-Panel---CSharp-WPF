@@ -3527,6 +3527,7 @@
   "blink_trainer_error_no_assets": "No images / GIFs found in the selected folders.",
   "blink_trainer_error_webcam_uninit": "Webcam service not initialized.",
   "blink_trainer_error_no_consent": "Enable webcam consent first.",
+  "blink_trainer_error_webcam_not_running": "Turn on webcam tracking first.",
   "blink_trainer_error_webcam_start_format": "Could not start webcam ({0}).",
   "blink_trainer_error_overlay_create": "Could not create overlay window.",
   "deeper_tutorial_header": "Tutorial: walk me through editing my first…",

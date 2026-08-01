@@ -3220,6 +3220,7 @@
   "blink_trainer_error_no_assets": "在所选文件夹中未找到图片/GIF",
   "blink_trainer_error_webcam_uninit": "摄像头服务未初始化",
   "blink_trainer_error_no_consent": "请先启用摄像头同意",
+  "blink_trainer_error_webcam_not_running": "请先开启摄像头追踪。",
   "blink_trainer_error_webcam_start_format": "无法启动摄像头（{0}）",
   "blink_trainer_error_overlay_create": "无法创建覆盖层窗口",
   "deeper_tutorial_header": "Tutorial: walk me through editing my first…",

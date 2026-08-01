@@ -177,6 +177,11 @@ namespace ConditioningControlPanel
         /// </summary>
         internal async void BtnBlinkTrainerStartSession_Click(object sender, RoutedEventArgs e)
         {
+            // #743: the prewarm below can take the full 90s camera-open timeout, and nothing used
+            // to stop the user clicking again meanwhile. The service now refuses a concurrent
+            // start outright, but a dead button is the honest signal that work is in flight.
+            var button = sender as System.Windows.Controls.Button;
+            if (button != null) button.IsEnabled = false;
             try
             {
                 if (App.BlinkTrainer == null) return;
@@ -216,6 +221,10 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Blink Trainer Start handler failed");
+            }
+            finally
+            {
+                if (button != null) button.IsEnabled = true;
             }
         }
 
