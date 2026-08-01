@@ -1576,10 +1576,13 @@
                                       ItemContainerStyle="{StaticResource EditorComboBoxItem}"
                                       ToolTip="{loc:Str deeper_editor_tip_overlay_kind}"
                                       SelectionChanged="CmbOverlayKind_SelectionChanged">
+                                <!-- Brain Drain + Brain Melt are withheld while the effect is reworked.
+                                     Do NOT re-add them here alone: OverlayService.BrainDrainWithheld
+                                     skips them at playback, so a picker entry would author a dead
+                                     effect. SelectOverlayKindCombo re-injects the entry on demand for
+                                     content that already uses one, so saved kinds still round-trip. -->
                                 <ComboBoxItem Content="Pink Filter" Tag="pink_filter"/>
                                 <ComboBoxItem Content="Spiral" Tag="spiral"/>
-                                <ComboBoxItem Content="Brain Drain" Tag="braindrain"/>
-                                <ComboBoxItem Content="Brain Melt" Tag="braindrain_melt"/>
                             </ComboBox>
                             <TextBlock Text="Duration (ms)" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtOverlayDuration" Style="{StaticResource EditorTextBox}"
@@ -1593,7 +1596,7 @@
                                     ValueChanged="SliderOverlayOpacity_ValueChanged"/>
                             <CheckBox x:Name="ChkOverlayRamp"
                                       Content="Ramp opacity over the region"
-                                      ToolTip="Fade the overlay from a start opacity to an end opacity across this region's duration (all overlay kinds; Brain Drain ramps its blur depth)."
+                                      ToolTip="Fade the overlay from a start opacity to an end opacity across this region's duration (pink filter + spiral)."
                                       Click="ChkOverlayRamp_Changed"
                                       Foreground="{DynamicResource TextLightBrush}"
                                       Margin="0,0,0,6"/>

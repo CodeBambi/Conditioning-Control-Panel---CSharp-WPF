@@ -3,7 +3,6 @@ v6.6.1 - Airhead August
 A hotfix for things that were quietly broken in 6.6.0.
 
 BUG FIXES
-- Brain Drain renders again instead of a white screen. Note that Brain Drain and Brain Melt are only reachable through Deeper enhancements for now - there is no standalone toggle for them yet.
 - Program days that could never be completed are fixed. 33 tasks across all five programs asked for something their own session never delivered, and Kept Day 1 sat at 0% forever.
 - Lock cards now always land inside your session. At 1 per hour the first card could be scheduled past the end of a short session, so it never arrived at all.
 - Fixed a crash to desktop when the webcam failed to open and retried.
@@ -12,9 +11,8 @@ BUG FIXES
 - The companion no longer occasionally replies with garbled text or with its own thinking notes.
 - Your end-of-season recap card shows up again. The app was never told the season had rolled over, so the card silently never appeared. If you missed your July card, this release brings it back.
 
-FEATURES
-- Brain Melt - a new animated displacement warp overlay. Like Brain Drain, it lives inside Deeper enhancements for now.
-- Brain Drain and Brain Melt are selectable again in the Deeper editor overlay pickers.
+OTHER
+- Brain Drain and Brain Melt are withheld for now while we rework the effect. They are hidden from the Deeper editor pickers, and any enhancement that already uses one still plays normally - that overlay is simply skipped, nothing else about the video changes.
 
 UI/UX
 - Saving a preset no longer implies your settings were not already saved.

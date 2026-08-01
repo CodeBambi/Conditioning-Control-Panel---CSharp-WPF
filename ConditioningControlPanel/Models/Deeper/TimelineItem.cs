@@ -70,6 +70,15 @@ namespace ConditioningControlPanel.Models.Deeper
         /// its hold/ramp state) with <see cref="BrainDrain"/> — the two never co-exist. The melt warp
         /// itself lands in Phase 2; today it behaves identically to <see cref="BrainDrain"/>.</summary>
         public const string BrainDrainMelt = "braindrain_melt";
+
+        /// <summary>
+        /// True for overlay kinds withheld while Brain Drain is reworked. These stay VALID
+        /// (existing creator content loads, validates and saves unchanged) but are hidden from
+        /// the editor pickers and skipped at playback — see OverlayService.BrainDrainWithheld,
+        /// which is the runtime half of the same decision. Keep the two in sync.
+        /// </summary>
+        public static bool IsWithheld(string? kind) =>
+            kind == BrainDrain || kind == BrainDrainMelt;
     }
 
     /// <summary>

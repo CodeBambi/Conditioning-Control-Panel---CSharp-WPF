@@ -637,9 +637,43 @@ namespace ConditioningControlPanel.Views.Deeper
             if (SpeakEffectEditor != null) SpeakEffectEditor.Visibility = Visibility.Collapsed;
         }
 
+        /// <summary>
+        /// Brain Drain / Brain Melt are hidden from <c>CmbOverlayKind</c> while the effect is
+        /// reworked, but creator content authored before that may already carry one. Without
+        /// this the picker would fall through to index 0 and display "Pink Filter" over a
+        /// braindrain effect — a lie the next edit in this editor would bake into the file.
+        /// So inject a clearly-labelled entry for the current value only, and drop it again
+        /// once the selection moves to a live kind. Tag stays the raw constant, so a plain
+        /// load-then-save round-trips the effect unchanged; playback still skips it (see
+        /// OverlayService.BrainDrainWithheld).
+        /// </summary>
+        private void SyncWithheldOverlayKindItem(string? kind)
+        {
+            // The XAML picker no longer declares any withheld kind, so anything still tagged
+            // with one is an entry we injected for a previously-selected effect.
+            for (int i = CmbOverlayKind.Items.Count - 1; i >= 0; i--)
+            {
+                if (CmbOverlayKind.Items[i] is ComboBoxItem stale
+                    && OverlayKinds.IsWithheld(stale.Tag as string))
+                {
+                    CmbOverlayKind.Items.RemoveAt(i);
+                }
+            }
+            if (!OverlayKinds.IsWithheld(kind)) return;
+
+            CmbOverlayKind.Items.Add(new ComboBoxItem
+            {
+                Content = kind == OverlayKinds.BrainDrainMelt
+                    ? "Brain Melt (unavailable)"
+                    : "Brain Drain (unavailable)",
+                Tag = kind
+            });
+        }
+
         private void SelectOverlayKindCombo(string? kind)
         {
             if (CmbOverlayKind == null) return;
+            SyncWithheldOverlayKindItem(kind);
             foreach (ComboBoxItem cbi in CmbOverlayKind.Items)
             {
                 if ((cbi.Tag as string) == (kind ?? OverlayKinds.PinkFilter))

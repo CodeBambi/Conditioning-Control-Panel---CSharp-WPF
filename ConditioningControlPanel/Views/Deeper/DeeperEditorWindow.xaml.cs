@@ -3544,9 +3544,10 @@ namespace ConditioningControlPanel.Views.Deeper
                 te.DurationMs, v => te.DurationMs = Math.Max(50, v));
         }
 
-        // Overlay-kind combo for TriggerEffect. Pink Filter / Spiral / Brain Drain /
-        // Brain Melt; matches the inline overlay editor's CmbOverlayKind (same order,
-        // same friendly labels, same Tag = raw kind constant round-trip).
+        // Overlay-kind combo for TriggerEffect. Pink Filter / Spiral; matches the inline
+        // overlay editor's CmbOverlayKind (same order, same friendly labels, same Tag = raw
+        // kind constant round-trip). Brain Drain / Brain Melt are withheld while the effect
+        // is reworked and are only listed when THIS action already uses one.
         private void AddOverlayKindCombo(Panel host, TriggerEffectAction te)
         {
             host.Children.Add(new TextBlock
@@ -3561,15 +3562,23 @@ namespace ConditioningControlPanel.Views.Deeper
             };
             // Tag stays the raw kind constant (what gets serialized); Content is the
             // friendly label the inline CmbOverlayKind picker shows.
-            string[] kinds = { OverlayKinds.PinkFilter, OverlayKinds.Spiral,
-                               OverlayKinds.BrainDrain, OverlayKinds.BrainDrainMelt };
-            string[] labels = { "Pink Filter", "Spiral", "Brain Drain", "Brain Melt" };
-            for (int i = 0; i < kinds.Length; i++)
+            var kinds  = new List<string> { OverlayKinds.PinkFilter, OverlayKinds.Spiral };
+            var labels = new List<string> { "Pink Filter", "Spiral" };
+            var curK = te.OverlayKind ?? OverlayKinds.PinkFilter;
+            // Keep an already-authored withheld kind selectable so a rule that uses one still
+            // displays honestly and round-trips on save, without offering it for new actions.
+            if (OverlayKinds.IsWithheld(curK))
+            {
+                kinds.Add(curK);
+                labels.Add(curK == OverlayKinds.BrainDrainMelt
+                    ? "Brain Melt (unavailable)"
+                    : "Brain Drain (unavailable)");
+            }
+            for (int i = 0; i < kinds.Count; i++)
             {
                 combo.Items.Add(new ComboBoxItem { Content = labels[i], Tag = kinds[i] });
             }
-            var curK = te.OverlayKind ?? OverlayKinds.PinkFilter;
-            var idx = Array.IndexOf(kinds, curK);
+            var idx = kinds.IndexOf(curK);
             combo.SelectedIndex = idx >= 0 ? idx : 0;
             combo.SelectionChanged += (_, _) =>
             {

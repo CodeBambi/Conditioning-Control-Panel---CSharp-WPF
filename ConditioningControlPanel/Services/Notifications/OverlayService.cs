@@ -1893,12 +1893,36 @@ public class OverlayService : IDisposable
     private IntPtr _captureMemDc;
     private IntPtr _captureHBitmap;
 
+    /// <summary>
+    /// Brain Drain / Brain Melt are WITHHELD from playback while the effect is reworked.
+    /// This is the single authoritative gate: <see cref="StartBrainDrainBlur"/> is the only
+    /// place the visual comes up, so flipping this covers every caller (Deeper region bands,
+    /// Deeper timed effects, chaos effect bubbles, session/preset settings) at once.
+    ///
+    /// Deliberately a SKIP, not an error: creator content that already carries a braindrain
+    /// overlay keeps its saved kind, still validates, still loads, and still plays every OTHER
+    /// effect on its timeline — only the blur is silently omitted. All the stop/hold/ramp
+    /// bookkeeping around it stays live and harmlessly no-ops because nothing is showing
+    /// (StopBrainDrainBlur on nothing is a no-op; the hold counters still pair up).
+    ///
+    /// To re-enable: set this to false and restore the two picker entries in
+    /// DeeperEditorWindow (CmbOverlayKind + AddOverlayKindCombo).
+    /// </summary>
+    /// <remarks>static readonly, not const: a const would make the rest of
+    /// <see cref="StartBrainDrainBlur"/> compile-time unreachable (CS0162).</remarks>
+    public static readonly bool BrainDrainWithheld = true;
+
     /// <summary><paramref name="melt"/> selects the "braindrain_melt" variant. Melt and plain blur
     /// are ONE overlay - they never co-exist by design - so the flag only picks the render mode on
     /// the compositor layer (Phase 2; today it renders identically). The legacy per-screen-window
     /// path ignores it.</summary>
     public void StartBrainDrainBlur(int intensity, bool melt = false)
     {
+        if (BrainDrainWithheld)
+        {
+            App.Logger?.Debug("Brain Drain skipped (withheld while the effect is reworked); melt {Melt}", melt);
+            return;
+        }
         if (BrainDrainShowing) return;
 
         _currentBrainDrainIntensity = intensity;
