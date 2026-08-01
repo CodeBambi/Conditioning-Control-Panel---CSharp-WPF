@@ -1,0 +1,14 @@
+v6.6.2 - Video Hotfix
+
+A critical hotfix for the crashes that hit when a mandatory video starts.
+
+BUG FIXES
+- Fixed the crash and freeze when a mandatory video starts. Reading a video file could take the whole app down with it, and it no longer can. This is the cause behind the crash reports that came in after 6.6.1.
+- Video length scanning is gentler now. Videos are measured one file at a time instead of all at once, and the result is remembered between sessions, so each video is only ever measured once.
+- Audio ducking no longer runs on the UI thread. Videos start snappier and ducking can no longer freeze the app.
+- Video playback now records far more detail when something goes wrong, so future reports are quicker to fix.
+
+UI/UX
+- Discord now asks about achievement sharing after a first-time login too, and the sharing toggles save the moment you flip them.
+
+Season: Airhead August
