@@ -670,7 +670,7 @@
   "deeper_editor_tip_bubble_intensity": "Burst rate. 0 = a trickle, 1 = a wall.",
   "deeper_editor_tip_subliminal_text": "Text to flash. Keep it short — under a second of reading.",
   "deeper_editor_tip_subliminal_duration": "How long the subliminal is visible, in milliseconds.",
-  "deeper_editor_tip_overlay_kind": "Which overlay to draw — Pink Filter, Spiral, or Brain Drain.",
+  "deeper_editor_tip_overlay_kind": "Which overlay to draw — Pink Filter, Spiral, Brain Drain, or Brain Melt.",
   "deeper_editor_tip_overlay_duration": "How long the overlay stays on screen, in milliseconds.",
   "deeper_editor_tip_overlay_opacity": "Overlay alpha. 0 = invisible, 1 = solid.",
   "deeper_editor_tip_effect_delete": "Delete this effect.",

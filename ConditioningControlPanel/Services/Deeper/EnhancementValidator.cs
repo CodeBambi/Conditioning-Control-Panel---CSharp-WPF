@@ -185,7 +185,8 @@ namespace ConditioningControlPanel.Services.Deeper
                 case EffectTypes.Overlay:
                     if (item.EffectOverlayKind != OverlayKinds.PinkFilter
                         && item.EffectOverlayKind != OverlayKinds.Spiral
-                        && item.EffectOverlayKind != OverlayKinds.BrainDrain)
+                        && item.EffectOverlayKind != OverlayKinds.BrainDrain
+                        && item.EffectOverlayKind != OverlayKinds.BrainDrainMelt)
                     {
                         errors.Add(new ValidationError { Path = path, Message = $"Unknown overlay kind \"{item.EffectOverlayKind}\"." });
                     }
@@ -764,7 +765,8 @@ namespace ConditioningControlPanel.Services.Deeper
                     {
                         if (te.OverlayKind != OverlayKinds.PinkFilter
                             && te.OverlayKind != OverlayKinds.Spiral
-                            && te.OverlayKind != OverlayKinds.BrainDrain)
+                            && te.OverlayKind != OverlayKinds.BrainDrain
+                            && te.OverlayKind != OverlayKinds.BrainDrainMelt)
                         {
                             errors.Add(new ValidationError { Path = path, Message = $"Unknown overlay kind \"{te.OverlayKind}\"." });
                         }

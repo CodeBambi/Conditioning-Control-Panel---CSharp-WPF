@@ -513,7 +513,7 @@
   "deeper_editor_tip_bubble_intensity": "爆发速率。0 = 涓涓细流，1 = 一面墙",
   "deeper_editor_tip_subliminal_text": "要闪烁的文字。保持简短——不到一秒的阅读时间",
   "deeper_editor_tip_subliminal_duration": "潜意识内容的可见时间，以毫秒为单位",
-  "deeper_editor_tip_overlay_kind": "绘制哪个覆盖层——粉色滤镜、螺旋或脑力流失",
+  "deeper_editor_tip_overlay_kind": "绘制哪个覆盖层——粉色滤镜、螺旋、脑力流失或脑力融化",
   "deeper_editor_tip_overlay_duration": "覆盖层在屏幕上停留的时间，以毫秒为单位",
   "deeper_editor_tip_overlay_opacity": "覆盖层透明度。0 = 不可见，1 = 实心",
   "deeper_editor_tip_effect_delete": "删除此效果",

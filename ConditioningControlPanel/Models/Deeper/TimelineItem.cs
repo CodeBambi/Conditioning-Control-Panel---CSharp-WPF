@@ -66,6 +66,10 @@ namespace ConditioningControlPanel.Models.Deeper
         public const string PinkFilter = "pink_filter";
         public const string Spiral     = "spiral";
         public const string BrainDrain = "braindrain";
+        /// <summary>Melt variant of Brain Drain. Shares the one underlying blur overlay (and all of
+        /// its hold/ramp state) with <see cref="BrainDrain"/> — the two never co-exist. The melt warp
+        /// itself lands in Phase 2; today it behaves identically to <see cref="BrainDrain"/>.</summary>
+        public const string BrainDrainMelt = "braindrain_melt";
     }
 
     /// <summary>
@@ -184,7 +188,8 @@ namespace ConditioningControlPanel.Models.Deeper
         public double EffectOpacity { get; set; } = 0.5;
 
         // Optional opacity ramp for overlay effects: interpolate opacity from
-        // start→end across the item's duration (pink_filter + spiral). Both absent
+        // start→end across the item's duration (all overlay kinds — braindrain maps
+        // the 0..1 ramp to blur intensity, see SetSustainedOverlayOpacity). Both absent
         // (old files) => flat EffectOpacity, no ramp. Additive; no schema bump.
         [JsonProperty("effect_opacity_start", NullValueHandling = NullValueHandling.Ignore)]
         public double? EffectOpacityStart { get; set; }
