@@ -1103,6 +1103,11 @@ namespace ConditioningControlPanel.Services
             // PlayVideo, LibVLC window creation) is UI-affine and must stay there.
             Task.Run(() =>
             {
+                // Bracketed because this step is invisible from the outside and can take seconds
+                // (content-pack decrypt, full-library refill). A trace that shows SELECT: begin and
+                // never an end means the trigger died here, not in playback (#750-#753).
+                var selectSw = System.Diagnostics.Stopwatch.StartNew();
+                VideoDiag.Log("SELECT", "begin (off-thread)");
                 string? selected = null;
                 try
                 {
@@ -1112,6 +1117,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Logger?.Error(ex, "VideoService: GetNextVideo failed");
                 }
+                VideoDiag.Log("SELECT", $"end after {selectSw.ElapsedMilliseconds}ms clip={(selected == null ? "(none)" : Path.GetFileName(selected))}");
 
                 DispatcherHelper.RunOnUI(() =>
                 {
@@ -1692,20 +1698,30 @@ namespace ConditioningControlPanel.Services
             _hits = _total = 0;
             _spawnTimes.Clear();
 
+            // Everything from here to the delay timer's tick used to be a diag blind spot: the trace
+            // jumped straight from "BEGIN" to "libvlc-init begin" ~2.6s later, so a report whose
+            // freeze began inside this prologue told us nothing about WHICH step ate the dispatcher.
+            // One breadcrumb per step, each carrying the elapsed prologue time (#750-#753).
+            var prologueSw = System.Diagnostics.Stopwatch.StartNew();
+
             // Arm the off-thread wedge watchdog NOW, before any window is created — the freeze often
             // strikes mid window-creation of this video, before the safety timers get a chance to arm.
             // During pre-roll it can only OBSERVE (a stall diag line); the destructive rescue is
             // gated on _playbackStarted and re-armed from StartVideoPlayback. See WedgeWatchdogTick.
             StartWedgeWatchdog();
+            VideoDiag.Log("VIDEO", $"prologue: wedge watchdog armed +{prologueSw.ElapsedMilliseconds}ms");
 
             // Update Discord presence
             App.DiscordRpc?.SetVideoActivity();
+            VideoDiag.Log("VIDEO", $"prologue: SetVideoActivity +{prologueSw.ElapsedMilliseconds}ms");
 
             // Fire pre-announcement event 1.3s before video starts
             VideoAboutToStart?.Invoke(this, EventArgs.Empty);
+            VideoDiag.Log("VIDEO", $"prologue: VideoAboutToStart handlers +{prologueSw.ElapsedMilliseconds}ms");
 
             // Stop flashes during video
             App.Flash?.Stop();
+            VideoDiag.Log("VIDEO", $"prologue: Flash.Stop +{prologueSw.ElapsedMilliseconds}ms");
 
             // Duck other apps. Record that we took a duck ref so CloseAll releases exactly one
             // matching Unduck on teardown — otherwise a retry/troll "watch again" loop ducks again
@@ -1714,6 +1730,9 @@ namespace ConditioningControlPanel.Services
             {
                 App.Audio?.Duck(App.Settings.Current.DuckingLevel);
                 _didDuck = true;
+                // Duck() only queues now — the sweep's own "DUCK: duck applied after Nms" line
+                // (AudioService) is what says how long the WASAPI walk actually took.
+                VideoDiag.Log("VIDEO", $"prologue: Duck requested +{prologueSw.ElapsedMilliseconds}ms");
             }
 
             // Delay video start by 1.3 seconds to allow avatar to announce
@@ -1722,10 +1741,12 @@ namespace ConditioningControlPanel.Services
             delayTimer.Tick += (s, e) =>
             {
                 delayTimer.Stop();
+                VideoDiag.Log("VIDEO", $"prologue: delay timer ticked +{prologueSw.ElapsedMilliseconds}ms - starting playback");
                 App.Logger?.Debug("VideoService: Delay complete, calling StartVideoPlayback");
                 StartVideoPlayback(path, strict);
             };
             delayTimer.Start();
+            VideoDiag.Log("VIDEO", $"prologue: 1.3s delay timer scheduled +{prologueSw.ElapsedMilliseconds}ms");
         }
 
         private void StartVideoPlayback(string path, bool strict)
