@@ -20,29 +20,22 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.6.1";
+        public const string AppVersion = "6.6.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.6.1 - Airhead August 💗
+        public const string CurrentPatchNotes = @"v6.6.2 - Video Hotfix 💗
 
 🔧 BUG FIXES
-- Program days that could never be completed are fixed. 33 tasks across all five programs asked for something their own session never delivered, and Kept Day 1 sat at 0% forever
-- Lock cards now always land inside your session. At 1 per hour the first card could be scheduled past the end of a short session, so it never arrived at all
-- Fixed a crash to desktop when the webcam failed to open and retried
-- Popping a video bubble no longer freezes the app
-- A detached companion keeps animating when you minimize the main window instead of freezing on one frame
-- The companion no longer occasionally replies with garbled text or with its own thinking notes
-- Your end-of-season recap card shows up again. The app was never told the season had rolled over, so the card silently never appeared
-
-📦 OTHER
-- Brain Drain and Brain Melt are withheld for now while we rework the effect. They are hidden from the Deeper editor pickers, and any enhancement that already uses one still plays normally - that overlay is simply skipped, nothing else about the video changes
+- Fixed the crash and freeze when a mandatory video starts. Reading a video file could take the whole app down with it, and it no longer can
+- Video length scanning is gentler now. One file at a time instead of all at once, and the result is remembered between sessions, so each video is only ever measured once
+- Audio ducking no longer runs on the UI thread. Videos start snappier and ducking can no longer freeze the app
+- Video playback now records far more detail when something goes wrong, so future reports are quicker to fix
 
 🎨 UI/UX
-- Saving a preset no longer implies your settings were not already saved
-- The Remote Control tab now tells you the pairing URL instead of leaving you to guess it
+- Discord now asks about achievement sharing after a first-time login too, and the sharing toggles save the moment you flip them
 
 Season: Airhead August";
 
