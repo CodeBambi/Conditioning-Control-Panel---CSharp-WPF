@@ -700,14 +700,22 @@ namespace ConditioningControlPanel
                     switch (state)
                     {
                         case WindowState.Minimized:
-                            PauseAvatarGif();
                             if (_isAttached)
                             {
+                                PauseAvatarGif();
                                 App.Logger?.Information("[AVATAR-BLINK] hidden — parent window minimized");
                                 Hide();
                             }
                             else
                             {
+                                // #744: a detached tube is a standalone widget - it stays on screen
+                                // when the main window minimizes, so it has to stay animated too.
+                                // PauseAvatarGif used to run above this branch while the only resume
+                                // sat on the Normal/Maximized case, leaving the tube visible and
+                                // frozen on one frame. Worse in emote mode, where the pause also
+                                // stops the watchdog and the rotation is driven by clip-completion
+                                // callbacks, so nothing could ever restart it.
+                                ResumeAvatarGif();
                                 // When detached, force visibility and topmost
                                 EnsureVisibleWhenDetached();
                             }
@@ -763,14 +771,17 @@ namespace ConditioningControlPanel
                     }
                     else
                     {
-                        PauseAvatarGif();
                         if (_isAttached)
                         {
+                            PauseAvatarGif();
                             App.Logger?.Information("[AVATAR-BLINK] hidden — parent IsVisible went false (state={State})", state);
                             Hide();
                         }
                         else
                         {
+                            // #744: same as the minimize case - a detached tube stays on screen, so
+                            // it must keep animating. This is the minimize-to-tray path.
+                            ResumeAvatarGif();
                             // When detached, force visibility and topmost
                             EnsureVisibleWhenDetached();
                         }

@@ -1343,6 +1343,12 @@ namespace ConditioningControlPanel
             try { AnimationBehavior.GetAnimator(ImgAvatarAnimatedB)?.Pause(); } catch { }
             StopTalkSequence(); // abort any in-flight spoken line; resume returns to idle rotation
             _circeWatchdog?.Stop(); _circeMinHoldTimer?.Stop();
+
+            // #744: stopping the min-hold timer without clearing what it was going to swap in strands
+            // the rotation. Both recovery paths - OnCirceClipCompleted and the watchdog tick - early
+            // return while a pending clip is set, and nothing else clears it, so the avatar could stay
+            // frozen even after the window came back.
+            _circePendingClip = null;
         }
 
         private void CirceResume()
@@ -1351,7 +1357,9 @@ namespace ConditioningControlPanel
             try { AnimationBehavior.GetAnimator(ImgAvatarAnimated)?.Play(); } catch { }
             try { AnimationBehavior.GetAnimator(ImgAvatarAnimatedB)?.Play(); } catch { }
             // Restart the rotation-safety poll so rotation keeps going after returning on-screen.
-            if (_circeCurrentClip != null) EnsureWatchdogRunning();
+            // #744: unconditionally - the watchdog is what recovers a rotation that has no current
+            // clip, so gating it on _circeCurrentClip left exactly the stuck case unrecoverable.
+            EnsureWatchdogRunning();
         }
 
         private bool _dpiEmotesQuiesced;
