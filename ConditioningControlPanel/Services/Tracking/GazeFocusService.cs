@@ -198,7 +198,12 @@ public class GazeFocusService : IDisposable
     {
         if (IsActive) return true;
         if (App.Webcam == null) return false;
-        if (!App.Webcam.IsRunning && !App.Webcam.Start()) return false;
+        // #743: this method is deliberately UI-thread-marshalled (see EvaluateDesiredState), and
+        // WebcamTrackingService.Start() blocks synchronously for up to the 90s camera-open timeout
+        // while it opens the device and builds three ONNX sessions. Calling it here froze the
+        // window until the OS "not responding" reaper killed the app. The webcam must already be
+        // up - brought there by an awaited StartAsync() on a UI path that can show progress.
+        if (!App.Webcam.IsRunning) return false;
         if (App.Webcam.Calibration == null) return false;
 
         Subscribe();

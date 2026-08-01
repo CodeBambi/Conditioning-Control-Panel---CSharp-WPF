@@ -99,9 +99,14 @@ public class BlinkTrainerService : IDisposable
             // Webcam: must have consent + be running.
             if (App.Webcam == null) { LastError = Loc.Get("blink_trainer_error_webcam_uninit"); return false; }
             if (!WebcamTrackingService.IsConsentCurrent()) { LastError = Loc.Get("blink_trainer_error_no_consent"); return false; }
-            if (!App.Webcam.IsRunning && !App.Webcam.Start())
+            // #743: never start the engine from here. This runs on the UI thread, and
+            // WebcamTrackingService.Start() opens the camera and builds three ONNX sessions
+            // synchronously - up to the 90s open timeout. That freezes the window until Windows
+            // ghosts it and the "not responding" reaper kills the process: a crash to desktop with
+            // no managed exception. Callers must bring the webcam up via StartAsync() first.
+            if (!App.Webcam.IsRunning)
             {
-                LastError = Loc.GetF("blink_trainer_error_webcam_start_format", App.Webcam.State);
+                LastError = Loc.Get("blink_trainer_error_webcam_not_running");
                 return false;
             }
 

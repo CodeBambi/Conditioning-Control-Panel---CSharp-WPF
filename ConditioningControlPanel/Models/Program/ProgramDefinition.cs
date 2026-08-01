@@ -72,6 +72,14 @@ public class ProgramTask
     /// optional by design - never gate the conversion funnel on a physical act.
     /// </summary>
     public bool Optional { get; set; }
+
+    /// <summary>
+    /// #747: this task is meant to be satisfied by the user's own dashboard time, NOT by the day's
+    /// session - so the feasibility check skips it. Set it deliberately; leaving it false on a task
+    /// the session cannot possibly deliver is the authoring bug that shipped Kept Day 1 unfinishable
+    /// (see <see cref="ProgramDefinition.Validate"/>).
+    /// </summary>
+    public bool OutsideSession { get; set; }
 }
 
 /// <summary>
@@ -349,6 +357,111 @@ public class ProgramDefinition
                 if (task.Kind == ProgramTaskKind.Ritual && string.IsNullOrWhiteSpace(task.RoadmapStepId))
                 {
                     error = $"Day {day.DayIndex} task '{task.Id}' is a ritual but names no roadmap step.";
+                    return false;
+                }
+
+                if (!IsTaskFeasible(day, task, out var why))
+                {
+                    error = $"Day {day.DayIndex} task '{task.Id}' can never be completed: {why}";
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The ±3 minute jitter <c>SessionEngine.RandomizeStartTimes</c> adds to delayed starts. A task
+    /// that only just fits on paper fails a third of the time once the randomiser moves the start
+    /// later, so the budget is checked against the worst case.
+    /// </summary>
+    private const int StartJitterMinutes = 3;
+
+    /// <summary>Which session feature a verifier draws its credit from.</summary>
+    /// <param name="Name">Human name for the error message.</param>
+    /// <param name="MinuteDenominated">True when TargetValue counts minutes of runtime rather than events.</param>
+    private readonly record struct VerifierFeature(
+        string Name,
+        bool MinuteDenominated,
+        Func<SessionSettings, bool> Enabled,
+        Func<SessionSettings, int> StartMinute);
+
+    private static readonly Dictionary<QuestCategory, VerifierFeature> SessionFeatureVerifiers = new()
+    {
+        [QuestCategory.Flash] = new("flash images", false, s => s.FlashEnabled, s => s.FlashStartMinute),
+        [QuestCategory.Video] = new("mandatory videos", true, s => s.MandatoryVideosEnabled, s => s.MandatoryVideosStartMinute),
+        [QuestCategory.Spiral] = new("spiral", true, s => s.SpiralEnabled, s => s.SpiralStartMinute),
+        [QuestCategory.PinkFilter] = new("pink filter", true, s => s.PinkFilterEnabled, s => s.PinkFilterStartMinute),
+        [QuestCategory.Bubbles] = new("bubbles", false, s => s.BubblesEnabled, s => s.BubblesStartMinute),
+        [QuestCategory.LockCard] = new("lock cards", false, s => s.LockCardEnabled, s => s.LockCardStartMinute),
+        [QuestCategory.BubbleCount] = new("bubble count", false, s => s.BubbleCountEnabled, s => s.BubbleCountStartMinute),
+    };
+
+    /// <summary>
+    /// #736/#747: can the day's own session actually deliver what the task asks for?
+    ///
+    /// Both bugs shipped because nothing asked this. Kept Day 1 required a lock card from a session
+    /// that could not produce one, and Kept Day 2 required 20 minutes of pink filter from a session
+    /// that only ever offered 16-21. Because those tasks are non-optional, the days were unpassable
+    /// and the programs hard-blocked.
+    ///
+    /// Tasks flagged <see cref="ProgramTask.OutsideSession"/> are exempt - they are meant to be
+    /// satisfied by the user's own dashboard time.
+    /// </summary>
+    internal bool IsTaskFeasible(ProgramDay day, ProgramTask task, out string why)
+    {
+        why = "";
+
+        if (task.Kind != ProgramTaskKind.AutoVerified) return true;
+        if (task.OutsideSession) return true;
+        if (task.Verifier is not { } verifier) return true;
+        if (!SessionFeatureVerifiers.TryGetValue(verifier, out var feature)) return true;
+
+        var template = GetTemplate(day.SessionTemplateId);
+        if (template == null) return true; // already reported by the caller
+
+        // Booleans come from Floor - which features a template runs is the template's identity.
+        if (!feature.Enabled(template.Floor))
+        {
+            why = $"the '{template.Id}' session has {feature.Name} switched off. " +
+                  "Enable it in the template, retarget the task, or mark the task OutsideSession.";
+            return false;
+        }
+
+        var startMinute = Services.Program.ProgramSessionBuilder.LerpInt(
+            feature.StartMinute(template.Floor), feature.StartMinute(template.Ceiling), day.Intensity);
+
+        // A delayed start is only jittered when it is non-zero.
+        var jitter = startMinute > 0 ? StartJitterMinutes : 0;
+        var availableMinutes = day.SessionMinutes - startMinute - jitter;
+
+        if (availableMinutes <= 0)
+        {
+            why = $"{feature.Name} starts at minute {startMinute} of a {day.SessionMinutes} minute session.";
+            return false;
+        }
+
+        if (feature.MinuteDenominated && task.TargetValue > availableMinutes)
+        {
+            why = $"it needs {task.TargetValue} minutes of {feature.Name} but the session offers at most " +
+                  $"{availableMinutes} (starts minute {startMinute}, ±{StartJitterMinutes} jitter, of {day.SessionMinutes}).";
+            return false;
+        }
+
+        // Lock cards arrive at a known rate, so an event count can be checked too. The first card is
+        // guaranteed inside the window (#736); every later one costs a full interval.
+        if (verifier == QuestCategory.LockCard && task.TargetValue > 1)
+        {
+            var perHour = template.Floor.LockCardFrequency;
+            if (perHour is > 0)
+            {
+                var intervalMinutes = 60.0 / perHour.Value;
+                var achievable = 1 + (int)Math.Floor(availableMinutes / intervalMinutes);
+                if (task.TargetValue > achievable)
+                {
+                    why = $"it needs {task.TargetValue} lock cards but {perHour}/hour over {availableMinutes} " +
+                          $"minutes can deliver at most {achievable}.";
                     return false;
                 }
             }

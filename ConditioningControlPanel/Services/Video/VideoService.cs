@@ -1082,7 +1082,50 @@ namespace ConditioningControlPanel.Services
             // the global setting can change inside that window.
             var strict = strictOverride ?? App.Settings.Current.StrictLockEnabled;
 
-            var path = GetNextVideo();
+            // #732: selection is not cheap. For a content-pack clip GetNextVideo decrypts the whole
+            // encrypted file to a temp path - read the file into a byte[], AES-decrypt into a second
+            // copy, write it back to disk - and RefillVideoQueues can walk the entire video library
+            // when the queues drain. Running that on the dispatcher froze the app for as long as the
+            // copy took, with no exception and so no crash log. Users popping a "video" trigger
+            // bubble hit it straight from the mouse handler and reported a hang they had to kill.
+            //
+            // Select off-thread, then resume on the UI thread: everything downstream (message boxes,
+            // PlayVideo, LibVLC window creation) is UI-affine and must stay there.
+            Task.Run(() =>
+            {
+                string? selected = null;
+                try
+                {
+                    selected = GetNextVideo();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "VideoService: GetNextVideo failed");
+                }
+
+                DispatcherHelper.RunOnUI(() =>
+                {
+                    try
+                    {
+                        ContinueTriggerVideo(selected, strict, silentIfEmpty);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Error(ex, "VideoService: TriggerVideo continuation failed");
+                        _triggerInProgress = false;
+                        App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
+                    }
+                });
+            });
+        }
+
+        /// <summary>
+        /// The rest of <see cref="TriggerVideo"/>, resumed on the UI thread once the clip has been
+        /// chosen off it (#732). Split out rather than inlined so the expensive selection cannot
+        /// drift back onto the dispatcher.
+        /// </summary>
+        private void ContinueTriggerVideo(string? path, bool strict, bool silentIfEmpty)
+        {
             App.Logger?.Information("VideoService: GetNextVideo returned: {Path}", path ?? "(null)");
 
             if (string.IsNullOrEmpty(path))

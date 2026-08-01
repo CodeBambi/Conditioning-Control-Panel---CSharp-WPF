@@ -257,6 +257,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d2_filter",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         // The filter overlay accumulates in whole minutes.
                         Description = "Keep the colour filter on for 20 minutes",
@@ -284,6 +285,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d3_grateful",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 2 lock cards - I AM KEPT, AND I AM GRATEFUL.",
                         Verifier = QuestCategory.LockCard,
@@ -311,6 +313,7 @@ public static partial class BuiltInPrograms
                         // playback and the copy leaves the choice of video to her, which is truer to
                         // the program anyway.
                         Id = "d4_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Watch 15 minutes of video",
                         Verifier = QuestCategory.Video,
@@ -429,6 +432,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d8_bubbles",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Pop 30 bubbles",
                         Verifier = QuestCategory.Bubbles,
@@ -455,6 +459,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d9_dont_decide",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 3 lock cards - GOOD BOYS DON'T DECIDE.",
                         Verifier = QuestCategory.LockCard,
@@ -553,6 +558,7 @@ public static partial class BuiltInPrograms
                         // grades you on) with the verifier the engine actually has: the bubble count
                         // attention check, twice.
                         Id = "d13_counts",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Finish 2 bubble count games",
                         Verifier = QuestCategory.BubbleCount,
@@ -592,6 +598,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d14_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 3 lock cards",
                         Verifier = QuestCategory.LockCard,
@@ -803,6 +810,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d20_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 4 lock cards - I DON'T NEED CONTROL. SHE HAS IT.",
                         Verifier = QuestCategory.LockCard,
@@ -895,6 +903,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d22_bubbles",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Pop 30 bubbles",
                         Verifier = QuestCategory.Bubbles,
@@ -1054,6 +1063,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d26_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 4 lock cards",
                         Verifier = QuestCategory.LockCard,

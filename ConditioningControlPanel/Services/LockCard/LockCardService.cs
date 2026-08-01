@@ -51,10 +51,15 @@ namespace ConditioningControlPanel.Services
             });
         }
 
-        public void Start()
+        /// <param name="windowMinutes">
+        /// #736: how long the caller expects to keep the service running — a session's remaining
+        /// minutes. When supplied, the first card is guaranteed to land inside that window with
+        /// room to complete it. Null (dashboard use) means open-ended.
+        /// </param>
+        public void Start(double? windowMinutes = null)
         {
             if (_isRunning) return;
-            
+
             var settings = App.Settings.Current;
 
             if (!settings.LockCardEnabled)
@@ -62,25 +67,22 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("LockCardService: Disabled in settings");
                 return;
             }
-            
+
             _isRunning = true;
-            
-            // Calculate interval based on frequency (per hour)
-            var perHour = settings.LockCardFrequency;
-            var intervalMinutes = 60.0 / perHour;
-            
-            // Add some randomness (±30%)
-            var minInterval = intervalMinutes * 0.7;
-            var maxInterval = intervalMinutes * 1.3;
-            
+
+            var perHour = Math.Max(1, settings.LockCardFrequency);
+            var firstDelay = ComputeFirstCardDelayMinutes(perHour, windowMinutes, _random.NextDouble());
+
             _timer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMinutes(_random.NextDouble() * (maxInterval - minInterval) + minInterval)
+                Interval = TimeSpan.FromMinutes(firstDelay)
             };
             _timer.Tick += Timer_Tick;
             _timer.Start();
-            
-            App.Logger?.Information("LockCardService started - approximately {PerHour}/hour", perHour);
+
+            App.Logger?.Information(
+                "LockCardService started - approximately {PerHour}/hour, first card in {First:F1}min (window {Window})",
+                perHour, firstDelay, windowMinutes is > 0 ? $"{windowMinutes.Value:F1}min" : "open-ended");
         }
 
         public void Stop()
@@ -98,7 +100,7 @@ namespace ConditioningControlPanel.Services
         {
             // Recalculate next interval with randomness
             var settings = App.Settings.Current;
-            var perHour = settings.LockCardFrequency;
+            var perHour = Math.Max(1, settings.LockCardFrequency);
             var intervalMinutes = 60.0 / perHour;
             var minInterval = intervalMinutes * 0.7;
             var maxInterval = intervalMinutes * 1.3;
@@ -113,6 +115,32 @@ namespace ConditioningControlPanel.Services
             
             // Show the lock card
             ShowLockCard();
+        }
+
+        /// <summary>#736: delay before the FIRST lock card of a run, in minutes. Pure so the
+        /// reachability guarantee is unit-testable without a dispatcher.
+        ///
+        /// The first card is an OFFSET into the opening interval, not a whole inter-arrival gap.
+        /// Scheduling it at 60/freq ±30% (as before) put the earliest possible card at 1/hour at
+        /// minute 42, so a 30-minute session could never produce one — which hard-blocked every
+        /// program day whose task required a lock card. Subsequent cards keep the ±30% spacing in
+        /// <see cref="Timer_Tick"/>.
+        ///
+        /// When <paramref name="windowMinutes"/> is supplied the card is additionally clamped to
+        /// land inside it, leaving the tail free so the user can actually complete the card.
+        /// </summary>
+        /// <param name="perHour">Cards per hour; values below 1 are treated as 1.</param>
+        /// <param name="windowMinutes">Minutes the service will keep running, or null for open-ended.</param>
+        /// <param name="roll">A uniform random sample in [0,1).</param>
+        internal static double ComputeFirstCardDelayMinutes(int perHour, double? windowMinutes, double roll)
+        {
+            var intervalMinutes = 60.0 / Math.Max(1, perHour);
+
+            var maxFirst = intervalMinutes;
+            if (windowMinutes is > 0)
+                maxFirst = Math.Min(maxFirst, windowMinutes.Value * 0.8);
+
+            return roll * maxFirst;
         }
 
         /// <summary>Decision for what to do when <see cref="ShowLockCard"/> finds a lock card already

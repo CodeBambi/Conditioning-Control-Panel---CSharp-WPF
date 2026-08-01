@@ -199,13 +199,9 @@ namespace ConditioningControlPanel.Services.AIService
             if (s.OpenAiCompatibleMinP.HasValue) payload["min_p"] = s.OpenAiCompatibleMinP.Value;
         }
 
-        private static string CleanTokenizerArtifacts(string? text)
-        {
-            if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
-
-            // GPT-2/GPT-Neo/llama.cpp tokenizers sometimes emit 'Ġ' for leading spaces.
-            return text.Replace("Ġ", " ");
-        }
+        /// <summary>#739: now a thin alias over the shared helper. This cleanup used to live only
+        /// here, so the cloud and local providers never got it despite hitting the same models.</summary>
+        private static string CleanTokenizerArtifacts(string? text) => AiTextHygiene.Clean(text);
 
         public async Task<ConnectionDiagnosticResult> TestEndpointAsync(CancellationToken cancellationToken = default)
         {

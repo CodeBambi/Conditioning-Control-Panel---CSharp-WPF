@@ -592,32 +592,31 @@ namespace ConditioningControlPanel
             // Determine if we should create new or overwrite
             if (currentPreset == null || currentPreset.IsDefault || string.IsNullOrEmpty(currentPresetName))
             {
-                // No preset, default preset, or unknown - ask to create new
+                // #738: SaveSettings() above already wrote the settings, so this dialog is only
+                // offering an extra preset. It used to ask "would you like to save...?", which
+                // reads as the save itself - answering No and then being told "Settings saved!"
+                // looked like the app had ignored the answer. Say what already happened, and drop
+                // the second confirmation box: the title now carries it.
                 var result = MessageBox.Show(
-                    "Would you like to save your current settings as a new preset?\n\n" +
-                    "This will create a custom preset that you can load later.",
-                    "Save as Preset",
+                    Loc.Get("msg_settings_saved_offer_preset"),
+                    Loc.Get("title_settings_saved"),
                     MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
+                    MessageBoxImage.Information);
 
                 if (result == MessageBoxResult.Yes)
                 {
                     PromptSaveNewPreset();
                 }
-                else
-                {
-                    MessageBox.Show(Loc.Get("msg_settings_saved"), Loc.Get("title_success"), MessageBoxButton.OK, MessageBoxImage.Information);
-                }
             }
             else
             {
-                // Custom user preset - ask to overwrite
+                // #738: same framing fix - the settings are already saved, so Cancel is "leave my
+                // presets alone", not "don't save". Spelling the three buttons out keeps that clear.
                 var result = MessageBox.Show(
-                    $"Do you want to overwrite preset '{currentPreset.Name}' with your current settings?\n\n" +
-                    "Click 'Yes' to overwrite, 'No' to save as new preset, or 'Cancel' to just save settings.",
-                    "Overwrite Preset?",
+                    Loc.GetF("msg_settings_saved_offer_overwrite_format", currentPreset.Name),
+                    Loc.Get("title_settings_saved"),
                     MessageBoxButton.YesNoCancel,
-                    MessageBoxImage.Question);
+                    MessageBoxImage.Information);
 
                 if (result == MessageBoxResult.Yes)
                 {
@@ -643,11 +642,8 @@ namespace ConditioningControlPanel
                     // Save as new preset
                     PromptSaveNewPreset();
                 }
-                else
-                {
-                    // Cancel - just show settings saved message
-                    MessageBox.Show(Loc.Get("msg_settings_saved"), Loc.Get("title_success"), MessageBoxButton.OK, MessageBoxImage.Information);
-                }
+                // Cancel: nothing more to do. The settings were saved before the dialog and its
+                // title said so, so a second "Settings saved!" box only muddied the answer (#738).
             }
         }
 

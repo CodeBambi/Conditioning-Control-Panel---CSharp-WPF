@@ -47,7 +47,15 @@ public class ProgramDefinitionValidateTests
         LengthDays = 2,
         Templates = new List<ProgramSessionTemplate>
         {
-            new() { Id = "tpl-induction", Name = "Induction", Floor = new SessionSettings(), Ceiling = new SessionSettings() }
+            // Bubbles are on because the fixture's tasks verify against them: since #736/#747 a
+            // program whose session cannot deliver its own task is rejected as unfinishable.
+            new()
+            {
+                Id = "tpl-induction",
+                Name = "Induction",
+                Floor = new SessionSettings { BubblesEnabled = true },
+                Ceiling = new SessionSettings { BubblesEnabled = true }
+            }
         },
         Chapters = new List<ProgramChapter>
         {

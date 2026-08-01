@@ -186,6 +186,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d2_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         // The template still has lock cards off - the user meets them by hand on the
                         // dashboard today and finds them already running from day 4. The blurb names
@@ -284,6 +285,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d6_bubblecount",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Finish 1 bubble count game",
                         Verifier = QuestCategory.BubbleCount,
@@ -313,6 +315,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d7_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 4 lock cards",
                         Verifier = QuestCategory.LockCard,
@@ -385,6 +388,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d9_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 3 lock cards",
                         Verifier = QuestCategory.LockCard,
@@ -407,6 +411,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d10_video",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         // Deviation: the brief asks for "one Deeper-enhanced video". QuestCategory has
                         // no way to tell a Deeper-enhanced video from any other video - Video counts
@@ -563,6 +568,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d15_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 3 lock cards - the phrases you're arming",
                         Verifier = QuestCategory.LockCard,
@@ -644,6 +650,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d18_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 4 lock cards",
                         Verifier = QuestCategory.LockCard,
@@ -963,6 +970,7 @@ public static partial class BuiltInPrograms
                     new ProgramTask
                     {
                         Id = "d27_lockcards",
+                        OutsideSession = true,
                         Kind = ProgramTaskKind.AutoVerified,
                         Description = "Complete 2 lock cards",
                         Verifier = QuestCategory.LockCard,

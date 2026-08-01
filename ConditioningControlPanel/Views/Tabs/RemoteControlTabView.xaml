@@ -246,6 +246,15 @@
                                                 Padding="14,8" Margin="10,0,0,0" BorderThickness="0" Cursor="Hand"
                                                 Click="BtnCopyRemoteLink_Click"/>
                                     </StackPanel>
+                                    <!-- #746: say the URL out loud. It previously existed only
+                                         behind Copy Link and inside the QR image, so a user who
+                                         couldn't scan had no way to learn where to go - the bug
+                                         report asked which app to install on the phone. -->
+                                    <TextBlock Text="{loc:Str desc_remote_pairing_url}"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
+                                               TextWrapping="Wrap" MaxWidth="360" HorizontalAlignment="Left"
+                                               Margin="0,14,0,0"/>
+
                                     <Border x:Name="RemoteLinkPanel" x:FieldModifier="internal" Visibility="Collapsed"/>
                                     <Border x:Name="RemoteCodePanel" x:FieldModifier="internal" Visibility="Collapsed"/>
     
