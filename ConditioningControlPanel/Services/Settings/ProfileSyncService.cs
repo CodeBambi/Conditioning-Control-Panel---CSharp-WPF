@@ -343,6 +343,35 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Ask the UI to present the season recap if it is due. No-ops harmlessly when MainWindow
+        /// is not up yet (early boot) — the startup call in MainWindow covers that case, and by
+        /// then the season key we just adopted is already saved.
+        /// </summary>
+        private static void NudgeSeasonRecap()
+        {
+            try
+            {
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        (System.Windows.Application.Current?.MainWindow as ConditioningControlPanel.MainWindow)?.TryPresentSeasonRecap();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Season recap nudge failed");
+                    }
+                }));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Season recap nudge could not be dispatched");
+            }
+        }
+
+        /// <summary>
         /// When local progression looks like fresh defaults at boot (Level 1, &lt;100 XP),
         /// the push-guard in <see cref="SyncProfileAsync"/> skips the round-trip, so a
         /// settings reset / restore never pulls the real level back down (#293). This does
@@ -366,6 +395,22 @@ namespace ConditioningControlPanel.Services
                 var v2Auth = new V2AuthService();
                 var user = await v2Auth.GetUserProfileAsync(unifiedId);
                 if (user == null) return false;
+
+                // Adopt the season key here, ahead of every early return below. This fetch already
+                // carries current_season (the profile projection always included it), but the
+                // "server is also at defaults" return further down threw the whole payload away —
+                // and a season reset is PRECISELY when local and server both sit at Level 1 / 0 XP,
+                // so the one path that could have healed a stale key bailed out exactly when it
+                // mattered. Doing it before ApplyUserDataToSettings also means it lands even when
+                // there is no level/XP progress to adopt.
+                if (Services.SeasonRecapService.ShouldAdoptServerSeason(user.CurrentSeason, settings.CurrentSeason))
+                {
+                    App.Logger?.Information("Boot heal: season key advanced {Old} -> {New} via read-only profile fetch",
+                        string.IsNullOrEmpty(settings.CurrentSeason) ? "(none)" : settings.CurrentSeason, user.CurrentSeason);
+                    settings.CurrentSeason = user.CurrentSeason;
+                    App.Settings?.Save();
+                    NudgeSeasonRecap();
+                }
 
                 // Apply server-side whitelist even when level/xp are at season-reset
                 // defaults. The flag normally rides the sync POST response, but the
@@ -823,6 +868,26 @@ namespace ConditioningControlPanel.Services
                                 }
                             }
                             if (needsCompanionSave) App.Settings?.Save();
+                        }
+
+                        // Adopt the server's season key BEFORE the level_reset handler below, because
+                        // that handler is what nudges the recap — and the recap's whole decision is a
+                        // comparison against this key. Getting these the wrong way round is the actual
+                        // August 1 bug: the rollover arrived, the recap ran, and it compared the old
+                        // key with itself and concluded the season had not changed.
+                        var serverSeason = v2Result?.User?.CurrentSeason;
+                        if (Services.SeasonRecapService.ShouldAdoptServerSeason(serverSeason, settings.CurrentSeason))
+                        {
+                            App.Logger?.Information("V2 Sync: season key advanced {Old} -> {New} (server-authoritative)",
+                                string.IsNullOrEmpty(settings.CurrentSeason) ? "(none)" : settings.CurrentSeason, serverSeason);
+                            settings.CurrentSeason = serverSeason;
+                            App.Settings?.Save();
+
+                            // Nudge the recap on the key change itself, not only on level_reset.
+                            // level_reset is one-shot from the server, so relying on it alone means a
+                            // client that misses that single response can never recap that season.
+                            // Cheap to call: TryPresentSeasonRecap shows at most once per app run.
+                            NudgeSeasonRecap();
                         }
 
                         // Handle level_reset — server admin reset all levels, force client to accept
@@ -2925,6 +2990,13 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("highest_level_ever")]
             public int? HighestLevelEver { get; set; }
+
+            // The sync endpoint is what PERFORMS the season rollover, so it is the first thing
+            // that knows the new key — but it used to omit it from its response projection while
+            // the auth projections included it, leaving sync-only clients permanently on the old
+            // season. Null on servers older than that fix; ShouldAdoptServerSeason ignores null.
+            [JsonProperty("current_season")]
+            public string? CurrentSeason { get; set; }
 
             [JsonProperty("achievements")]
             public List<string>? Achievements { get; set; }
