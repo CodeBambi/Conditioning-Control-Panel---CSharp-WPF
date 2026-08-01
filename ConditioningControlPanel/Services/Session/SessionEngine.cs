@@ -128,6 +128,14 @@ namespace ConditioningControlPanel.Services
         public double ProgressPercent => _currentSession != null
             ? Math.Min(100, (ElapsedTime.TotalMinutes / _currentSession.DurationMinutes) * 100)
             : 0;
+
+        /// <summary>
+        /// #736: minutes genuinely left in the running session, for features that must fit their
+        /// schedule inside it (see <see cref="LockCardService.Start"/>). Null when no session is
+        /// running, which callers read as "open-ended".
+        /// </summary>
+        private double? SessionWindowMinutes =>
+            _currentSession == null ? null : RemainingTime.TotalMinutes;
         
         public SessionEngine(MainWindow mainWindow)
         {
@@ -460,7 +468,7 @@ namespace ConditioningControlPanel.Services
             if (settings.FlashEnabled && !IsFeaturePending("flash")) App.Flash?.Start();
             if (settings.SubliminalEnabled && !IsFeaturePending("subliminal")) App.Subliminal?.Start();
             if (settings.BubblesEnabled) App.Bubbles?.Start();
-            if (settings.LockCardEnabled && !IsFeaturePending("lock cards")) App.LockCard?.Start();
+            if (settings.LockCardEnabled && !IsFeaturePending("lock cards")) App.LockCard?.Start(SessionWindowMinutes);
             if (App.Settings.Current.PopQuizEnabled) App.PopQuiz?.Start();
             if (settings.BubbleCountEnabled && !IsFeaturePending("bubble count")) App.BubbleCount?.Start();
             if (settings.BouncingTextEnabled && !IsFeaturePending("bouncing text")) App.BouncingText?.Start();
@@ -1236,12 +1244,15 @@ namespace ConditioningControlPanel.Services
 
                 if (settings.LockCardStartMinute == 0)
                 {
-                    App.LockCard?.Start();
+                    App.LockCard?.Start(SessionWindowMinutes);
                 }
                 else
                 {
                     App.LockCard?.Stop();
-                    DeferFeatureStart("lock cards", settings.LockCardStartMinute, () => App.LockCard?.Start());
+                    // #736: the window is evaluated when the deferred start actually fires, so the
+                    // first card is scheduled against the time genuinely left in the session.
+                    DeferFeatureStart("lock cards", settings.LockCardStartMinute,
+                        () => App.LockCard?.Start(SessionWindowMinutes));
                 }
             }
             else
