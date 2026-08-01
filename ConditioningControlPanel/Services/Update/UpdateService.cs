@@ -20,39 +20,33 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.6.0";
+        public const string AppVersion = "6.6.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.6.0 - Enrolled 💗
-
-✨ FEATURES
-- Multi-day Training Programs (BETA) - five programs across 7/14/28 days with an enrollment ceremony, a reward-track run view, day tasks, and a feature lock while a program session runs
-- Weekly Intake Pass - a free weekly taste of the Graded Intake for everyone
-- Streak-Fix charges - Oopsie Insurance is now a stackable credit balance: +1 every season, free to spend, and 6 retroactive credits waiting for existing users
-- Bouncing Text overhaul - color modes, an effects pack, an optional second text, and an opacity control
-- Tube Fit editor - live avatar resize preview right in the Mod Manager
-- Keyword triggers can now be scoped to apps - block list, allow list, or only-in-listed-apps
-- Withdraw from a program now properly ends its session and unlocks your dashboard
-- New first-run experience - revived tour, feature intro cards, and a premium celebration
-- Achievement posts on Discord are now mod-aware
-
-🎨 UI/UX
-- App-wide FX overhaul - mod-driven color palettes, ambient effects, tab choreography, event bursts, and a reduced-motion setting for those who want calm
-- Leaderboard rebuilt as a ranked roster with a jump-to-me that glides
-- Program browse cards wear their banner art and identity crests
-- A running session now locks the dials it prescribes - no more fighting your own settings mid-session
-- Dashboard mini-game sections got explanatory tooltips
+        public const string CurrentPatchNotes = @"v6.6.1 - Airhead August 💗
 
 🔧 BUG FIXES
-- Chinese subliminal text no longer draws as empty boxes (per-font text runs)
-- Corner GIF overlays no longer crash the app (shipped in the 6.5.2 prerelease, now for everyone)
-- Voice consent can now be revoked for the microphone too
-- Language files hardened - a broken translation file now falls back to English instead of blanking the UI
-- Quiz ""perfect"" achievement now accepts 90% and up
-- Keyword haptics honor the per-trigger intensity slider";
+- Brain Drain renders again instead of a white screen. Note that Brain Drain and Brain Melt are only reachable through Deeper enhancements for now - there is no standalone toggle for them yet
+- Program days that could never be completed are fixed. 33 tasks across all five programs asked for something their own session never delivered, and Kept Day 1 sat at 0% forever
+- Lock cards now always land inside your session. At 1 per hour the first card could be scheduled past the end of a short session, so it never arrived at all
+- Fixed a crash to desktop when the webcam failed to open and retried
+- Popping a video bubble no longer freezes the app
+- A detached companion keeps animating when you minimize the main window instead of freezing on one frame
+- The companion no longer occasionally replies with garbled text or with its own thinking notes
+- Your end-of-season recap card shows up again. The app was never told the season had rolled over, so the card silently never appeared
+
+✨ FEATURES
+- Brain Melt - a new animated displacement warp overlay. Like Brain Drain, it lives inside Deeper enhancements for now
+- Brain Drain and Brain Melt are selectable again in the Deeper editor overlay pickers
+
+🎨 UI/UX
+- Saving a preset no longer implies your settings were not already saved
+- The Remote Control tab now tells you the pairing URL instead of leaving you to guess it
+
+Season: Airhead August";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
