@@ -454,6 +454,98 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// One-shot guard for settings recovered from a rolling daily backup
+        /// (<see cref="SettingsService.RestoredFromBackup"/>). Such a backup restores progression
+        /// WHOLESALE and can be up to three calendar days old, so it may carry a previous season's
+        /// level, XP and skill tree. Uploading that state makes the rollback permanent — the
+        /// server takes the higher level, and every down-merge here is max/union, so it can never
+        /// self-correct (#761). This does a READ-ONLY V2 profile fetch (GET, no upload) first and:
+        ///
+        /// - server season is NEWER than the restored one while local still sits above it: the
+        ///   restore reverted across a rollover, and <c>level_reset</c> is one-shot server-side
+        ///   (the pre-corruption client already consumed it), so nothing else will ever apply it —
+        ///   adopt the server's post-rollover level/XP and drop the mechanical skills the backup
+        ///   resurrected, exactly like the <c>level_reset</c> branch in <see cref="SyncProfileAsync"/>;
+        /// - server is simply ahead: adopt it via the take-higher apply;
+        /// - otherwise keep local (the server is genuinely behind) and let the push proceed.
+        ///
+        /// Returns false ONLY when the server profile could not be read — the caller then skips
+        /// the whole sync rather than risk uploading stale progression, and retries next tick.
+        /// </summary>
+        private async Task<bool> ReconcileRestoredProfileAsync(string unifiedId)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return false;
+
+            try
+            {
+                var v2Auth = new V2AuthService();
+                var user = await v2Auth.GetUserProfileAsync(unifiedId);
+                if (user == null)
+                {
+                    App.Logger?.Warning("Restore reconcile: read-only profile fetch returned nothing for {Id}", unifiedId);
+                    return false;
+                }
+
+                var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+                var serverTotalXp = (double)user.Xp;
+
+                // Compare against the key the BACKUP carried, not the live one: a login or the
+                // #293 boot heal can have advanced settings.CurrentSeason since the restore, which
+                // would hide the rollover the restored level/XP still belong to.
+                var restoredSeason = App.Settings?.RestoredSeason ?? settings.CurrentSeason;
+                var seasonAdvanced = Services.SeasonRecapService.ShouldAdoptServerSeason(user.CurrentSeason, restoredSeason);
+
+                if (seasonAdvanced && localTotalXp > serverTotalXp)
+                {
+                    App.Logger?.Warning("Restore reconcile: restored settings belong to season {Old} but the server is on {New} — the backup reverted a rollover. Adopting the server profile: Level {LL} ({LX} XP) -> Level {SL} ({SX} XP).",
+                        string.IsNullOrEmpty(restoredSeason) ? "(none)" : restoredSeason,
+                        user.CurrentSeason, settings.PlayerLevel, (int)localTotalXp, user.Level, user.Xp);
+
+                    settings.PlayerLevel = user.Level;
+                    settings.PlayerXP = App.Progression?.GetCurrentLevelXP(user.Level, serverTotalXp) ?? 0;
+                    settings.HighestLevelEver = user.HighestLevelEver;
+                    settings.CurrentSeason = user.CurrentSeason;
+
+                    // Same policy as the level_reset branch: the POINT BALANCE is never reset,
+                    // only the tree — keep permanent nodes, drop the mechanical ones the backup
+                    // brought back. (The profile projection carries no unlocked_skills list, so
+                    // there is nothing to union in here; the next sync response re-adds anything
+                    // the server still holds.)
+                    settings.UnlockedSkills = (settings.UnlockedSkills ?? new List<string>())
+                        .Where(id => Models.SkillDefinition.PermanentIds.Contains(id)).ToList();
+                    App.SkillTree?.OnSeasonReset();
+
+                    settings.SeasonResetPending = true;
+                    NudgeSeasonRecap();
+                }
+                else if (serverTotalXp > localTotalXp)
+                {
+                    App.Logger?.Warning("Restore reconcile: server is ahead of the restored backup (Level {SL}, {SX} XP vs local Level {LL}, {LX} XP) — adopting the server profile.",
+                        user.Level, user.Xp, settings.PlayerLevel, (int)localTotalXp);
+                    v2Auth.ApplyUserDataToSettings(user); // take-higher; saves internally
+                }
+                else
+                {
+                    App.Logger?.Information("Restore reconcile: server (Level {SL}, {SX} XP, season {SS}) is not ahead of the restored local profile (Level {LL}, {LX} XP, season {LS}) — keeping local.",
+                        user.Level, user.Xp, user.CurrentSeason, settings.PlayerLevel, (int)localTotalXp, settings.CurrentSeason);
+                }
+
+                // Flush before dropping the guard. The branches above save through the 500ms
+                // debounce, so a crash inside that window would leave the PRE-reconcile level on
+                // disk with the marker already gone — and the next run would push it for real.
+                App.Settings?.SaveImmediate();
+                App.Settings?.ClearRestoredFromBackupFlag();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Restore reconcile failed — leaving the guard armed and skipping this sync");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Sync local progression to cloud.
         /// Called after sessions and periodically.
         /// </summary>
@@ -520,10 +612,27 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
 
+                // This session's settings came out of a rolling daily backup, so the level/XP/skills
+                // below may be up to three days stale and can predate a season rollover. Reconcile
+                // against the server BEFORE the push: the sync POST is the first server contact of
+                // a run, and once a stale-but-higher profile is up there every down-merge rule is
+                // max/union, so nothing can ever bring it back down again (#761).
+                if (App.Settings?.RestoredFromBackup == true)
+                {
+                    var restoredUnifiedId = settings.UnifiedId;
+                    if (!string.IsNullOrEmpty(restoredUnifiedId) &&
+                        !await ReconcileRestoredProfileAsync(restoredUnifiedId!))
+                    {
+                        App.Logger?.Warning("Sync blocked — settings were restored from a local backup and the server profile could not be read to reconcile them. Retrying on the next sync.");
+                        return false;
+                    }
+                }
+
                 // Get achievement stats for additional tracking
                 var achievementProgress = achievements?.Progress;
 
-                // Calculate total accumulated XP (sum of all levels + current progress)
+                // Calculate total accumulated XP (sum of all levels + current progress).
+                // Read AFTER the restore reconcile above, which can rewrite level/XP.
                 var totalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
 
                 // Guard: if local data looks like fresh defaults (Level 1, near-zero XP) and we
@@ -2519,6 +2628,16 @@ namespace ConditioningControlPanel.Services
 
             var unifiedId = App.Settings?.Current?.UnifiedId;
             if (string.IsNullOrEmpty(unifiedId)) return false;
+
+            // Settings recovered from a rolling daily backup can be up to three days stale. An
+            // automatic upload here would overwrite the cloud copy — the one snapshot that still
+            // holds the pre-corruption state — before the sync reconcile has run (#761). A forced
+            // (user-initiated) backup still goes through; that is an explicit choice.
+            if (!force && App.Settings?.RestoredFromBackup == true)
+            {
+                App.Logger?.Debug("Settings cloud backup skipped — local settings came from a daily backup and have not been reconciled yet");
+                return false;
+            }
 
             // Debounce: skip if backed up recently (unless forced)
             // Uses Interlocked for thread safety — multiple async paths can call this concurrently

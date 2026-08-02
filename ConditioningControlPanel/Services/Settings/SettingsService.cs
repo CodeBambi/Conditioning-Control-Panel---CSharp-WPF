@@ -18,6 +18,20 @@ namespace ConditioningControlPanel.Services
         private volatile bool _savePending;
         private volatile bool _suppressCloudBackupPending;
 
+        // Serializes the rotate+write half of SaveImmediate. Without it two overlapping saves
+        // (debounce timer thread + a direct UI-thread call) could File.Move each other's
+        // half-written temp over settings.json (#761). Never taken while _timerLock is held,
+        // and never held across the UI-thread serialize hop — both would deadlock the shutdown
+        // path, where SaveImmediate runs ON the UI thread.
+        private readonly object _saveLock = new();
+        private readonly object _timerLock = new();
+        private long _saveSequence;
+        private long _lastWrittenSaveSequence;
+
+        // Bounded wait for the UI-thread re-serialize retry; a busy (or wedged) UI thread must
+        // never stall the save path indefinitely.
+        private static readonly TimeSpan SerializeMarshalTimeout = TimeSpan.FromSeconds(2);
+
         public AppSettings Current { get; private set; }
 
         /// <summary>
@@ -48,6 +62,32 @@ namespace ConditioningControlPanel.Services
         public string? LastCorruptBackupPath { get; private set; }
 
         /// <summary>
+        /// True when <see cref="Current"/> came out of a rolling daily backup rather than
+        /// settings.json (see <see cref="TryLoadFromDailyBackup"/>). A backup can be up to three
+        /// calendar days old and restores progression WHOLESALE, so the level/XP/skills in memory
+        /// may predate a season rollover — <c>ProfileSyncService</c> reconciles against the server
+        /// before pushing anything, otherwise the rollback becomes permanent (#761).
+        /// Survives a restart via a marker file next to settings.json; cleared by
+        /// <see cref="ClearRestoredFromBackupFlag"/> once the reconcile has run.
+        /// </summary>
+        public bool RestoredFromBackup { get; private set; }
+
+        /// <summary>UTC time of the restore recorded by <see cref="RestoredFromBackup"/>.</summary>
+        public DateTime? RestoredFromBackupUtc { get; private set; }
+
+        /// <summary>Path of the daily backup <see cref="Current"/> was restored from, if any.</summary>
+        public string? RestoredBackupPath { get; private set; }
+
+        /// <summary>
+        /// The season key the restored backup carried, captured at restore time. The reconcile
+        /// must compare the SERVER key against this and not against the live
+        /// <c>CurrentSeason</c>: a login (V2AuthService.ApplyUserDataToSettings) or the #293 boot
+        /// heal can advance the live key first, which would hide the rollover the restored
+        /// level/XP actually belong to (#761).
+        /// </summary>
+        public string? RestoredSeason { get; private set; }
+
+        /// <summary>
         /// Preset IDs that need a re-install pass after services are wired up. Populated by
         /// <see cref="MergeBuiltInAwarenessPresets"/> when an installed preset's <c>Version</c>
         /// is bumped — we can't call <c>App.KeywordPresets.InstallPreset</c> from inside
@@ -65,6 +105,11 @@ namespace ConditioningControlPanel.Services
             MigrateSettingsFromOldLocation();
 
             Current = Load();
+
+            // A restore from an earlier run that never reached the reconcile (app closed, or
+            // offline the whole session) still needs the sync guard — the flag lives in memory,
+            // the marker on disk.
+            if (!RestoredFromBackup) TryReadRestoreMarker();
         }
 
         /// <summary>
@@ -97,19 +142,12 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                // Recover from interrupted atomic write: if temp file exists but main doesn't,
-                // the app crashed after writing temp but before the rename completed
-                var tempPath = _settingsPath + ".tmp";
-                if (File.Exists(tempPath) && !File.Exists(_settingsPath))
-                {
-                    App.Logger?.Information("Recovering settings from interrupted save (temp file)");
-                    File.Move(tempPath, _settingsPath);
-                }
-                else if (File.Exists(tempPath))
-                {
-                    // Main file exists and temp is stale — clean it up
-                    try { File.Delete(tempPath); } catch { }
-                }
+                // Recover from an interrupted atomic write: if a temp file exists but the main
+                // one doesn't, the app died after the write but before the rename. Saves use a
+                // per-write temp name now, so glob (the legacy fixed settings.json.tmp matches too)
+                // and only adopt a candidate that still parses — a truncated temp must never be
+                // promoted to settings.json.
+                RecoverAndCleanTempFiles();
 
                 if (File.Exists(_settingsPath))
                 {
@@ -228,6 +266,53 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Promotes the newest still-parseable <c>settings.json*.tmp</c> left behind by an
+        /// interrupted save when settings.json itself is gone, then deletes every leftover temp.
+        /// </summary>
+        private void RecoverAndCleanTempFiles()
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(_settingsPath);
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
+
+                var temps = Directory.GetFiles(dir, Path.GetFileName(_settingsPath) + "*.tmp");
+                if (temps.Length == 0) return;
+
+                if (!File.Exists(_settingsPath))
+                {
+                    foreach (var candidate in temps.OrderByDescending(File.GetLastWriteTimeUtc))
+                    {
+                        try
+                        {
+                            // Well-formedness check only — per-member tolerance is the loader's job.
+                            JObject.Parse(File.ReadAllText(candidate));
+                        }
+                        catch
+                        {
+                            App.Logger?.Warning("Discarding partial settings temp file {Temp}", candidate);
+                            continue;
+                        }
+
+                        App.Logger?.Information("Recovering settings from interrupted save ({Temp})", candidate);
+                        File.Move(candidate, _settingsPath);
+                        break;
+                    }
+                }
+
+                foreach (var leftover in temps)
+                {
+                    if (!File.Exists(leftover)) continue;
+                    try { File.Delete(leftover); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Settings temp-file recovery failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Tries settings.bak-1.json .. settings.bak-3.json (newest first) after the main
         /// file failed to parse. Returns the first backup that deserializes, with the same
         /// post-load migrations the normal path applies, or null if none work.
@@ -256,6 +341,14 @@ namespace ConditioningControlPanel.Services
                     settings.MigrateEnableUnifiedOverlayHost();
                     settings.MigrateEnableCompositorOffThreadPresent();
 
+                    // Record the restore: the backup restores progression wholesale, so sync must
+                    // reconcile with the server before pushing any of it back up (#761).
+                    RestoredFromBackup = true;
+                    RestoredFromBackupUtc = DateTime.UtcNow;
+                    RestoredBackupPath = bakPath;
+                    RestoredSeason = settings.CurrentSeason;
+                    WriteRestoreMarker();
+
                     App.Logger?.Warning("Settings RESTORED from daily backup {Backup} (main file was unparseable)", bakPath);
                     return settings;
                 }
@@ -265,6 +358,64 @@ namespace ConditioningControlPanel.Services
                 }
             }
             return null;
+        }
+
+        private string RestoreMarkerPath => _settingsPath + ".restored";
+
+        private void WriteRestoreMarker()
+        {
+            try
+            {
+                // utc|backup path|season key as restored. '|' cannot occur in a Windows path.
+                File.WriteAllText(RestoreMarkerPath,
+                    $"{RestoredFromBackupUtc:o}|{RestoredBackupPath}|{RestoredSeason}");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Could not write settings restore marker: {Error}", ex.Message);
+            }
+        }
+
+        private void TryReadRestoreMarker()
+        {
+            try
+            {
+                if (!File.Exists(RestoreMarkerPath)) return;
+
+                var parts = File.ReadAllText(RestoreMarkerPath).Split('|');
+                RestoredFromBackup = true;
+                RestoredFromBackupUtc = DateTime.TryParse(parts[0],
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out var stamp)
+                    ? stamp
+                    : (DateTime?)null;
+                RestoredBackupPath = parts.Length > 1 ? parts[1] : null;
+                RestoredSeason = parts.Length > 2 && !string.IsNullOrWhiteSpace(parts[2]) ? parts[2] : null;
+
+                App.Logger?.Warning("Settings were restored from daily backup {Backup} (season {Season}) on a previous run and have not been reconciled with the cloud profile yet",
+                    RestoredBackupPath, RestoredSeason);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Could not read settings restore marker: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Called by <c>ProfileSyncService</c> once the restored profile has been reconciled
+        /// against the server, so the one-shot guard doesn't re-run on every later sync (#761).
+        /// </summary>
+        public void ClearRestoredFromBackupFlag()
+        {
+            RestoredFromBackup = false;
+            try
+            {
+                if (File.Exists(RestoreMarkerPath)) File.Delete(RestoreMarkerPath);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Could not clear settings restore marker: {Error}", ex.Message);
+            }
         }
 
         /// <summary>
@@ -510,17 +661,20 @@ namespace ConditioningControlPanel.Services
             if (suppressCloudBackup)
                 _suppressCloudBackupPending = true;
 
-            _saveDebounceTimer?.Dispose();
-            _saveDebounceTimer = new System.Threading.Timer(_ =>
+            lock (_timerLock)
             {
-                if (_savePending)
+                _saveDebounceTimer?.Dispose();
+                _saveDebounceTimer = new System.Threading.Timer(_ =>
                 {
-                    _savePending = false;
-                    var suppress = _suppressCloudBackupPending;
-                    _suppressCloudBackupPending = false;
-                    SaveImmediate(suppress);
-                }
-            }, null, 500, Timeout.Infinite);
+                    if (_savePending)
+                    {
+                        _savePending = false;
+                        var suppress = _suppressCloudBackupPending;
+                        _suppressCloudBackupPending = false;
+                        SaveImmediate(suppress);
+                    }
+                }, null, 500, Timeout.Infinite);
+            }
         }
 
         /// <summary>
@@ -532,8 +686,11 @@ namespace ConditioningControlPanel.Services
             // Cancel any pending debounce — we're flushing now
             _savePending = false;
             _suppressCloudBackupPending = false;
-            _saveDebounceTimer?.Dispose();
-            _saveDebounceTimer = null;
+            lock (_timerLock)
+            {
+                _saveDebounceTimer?.Dispose();
+                _saveDebounceTimer = null;
+            }
 
             try
             {
@@ -543,20 +700,52 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("Settings.Save: ActivePackIds BEFORE serialize: [{Ids}]",
                     string.Join(", ", Current.ActivePackIds ?? new List<string>()));
 
-                // Snapshot the previous good file into the rolling daily backups before the
-                // first overwrite of the day. The atomic write below protects against a crash
-                // MID-write, but not against the file being destroyed by something else
-                // entirely (support: preset wiped by a PC crash) — this gives Load() and the
-                // user up to 3 previous days to fall back on.
-                RotateDailyBackupBeforeWrite();
+                // Serialized OUTSIDE _saveLock: the snapshot can hop to the UI thread, and holding
+                // the write lock across that hop deadlocks against a UI-thread SaveImmediate.
+                // The sequence number keeps an older snapshot from landing after a newer one.
+                var sequence = Interlocked.Increment(ref _saveSequence);
+                var json = SerializeCurrentSnapshot();
 
-                var json = JsonConvert.SerializeObject(Current, Formatting.Indented);
+                lock (_saveLock)
+                {
+                    if (sequence < Interlocked.Read(ref _lastWrittenSaveSequence))
+                    {
+                        App.Logger?.Debug("Settings save #{Sequence} dropped — a newer snapshot already reached disk", sequence);
+                        return;
+                    }
 
-                // Atomic write: write to temp file then replace, so a crash mid-write
-                // can't corrupt the settings file (prevents save state reversion bug)
-                var tempPath = _settingsPath + ".tmp";
-                File.WriteAllText(tempPath, json);
-                File.Move(tempPath, _settingsPath, overwrite: true);
+                    // Snapshot the previous good file into the rolling daily backups before the
+                    // first overwrite of the day. The atomic write below protects against a crash
+                    // MID-write, but not against the file being destroyed by something else
+                    // entirely (support: preset wiped by a PC crash) — this gives Load() and the
+                    // user up to 3 previous days to fall back on.
+                    RotateDailyBackupBeforeWrite();
+
+                    // Atomic write: write to a per-write temp file then replace, so neither a
+                    // crash mid-write nor a concurrent save can publish a half-written file
+                    // (a shared temp name let two saves rename each other's partial write over
+                    // settings.json — #761). Flush(true) commits the bytes to the device before
+                    // the rename makes them the live settings.
+                    var tempPath = _settingsPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                    try
+                    {
+                        using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                        using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))
+                        {
+                            writer.Write(json);
+                            writer.Flush();
+                            stream.Flush(true);
+                        }
+                        File.Move(tempPath, _settingsPath, overwrite: true);
+                    }
+                    catch
+                    {
+                        try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+                        throw;
+                    }
+
+                    Interlocked.Exchange(ref _lastWrittenSaveSequence, sequence);
+                }
 
                 App.Logger?.Debug("Settings saved to {Path} (Triggers: {TriggerCount}, ActivePacks: {PackCount})",
                     _settingsPath, Current.CustomTriggers?.Count ?? 0, Current.ActivePackIds?.Count ?? 0);
@@ -587,6 +776,45 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Could not save settings");
+            }
+        }
+
+        /// <summary>
+        /// Serializes <see cref="Current"/> for the on-disk write. The pools/phrase lists are
+        /// edited on the UI thread, so a debounced background save can hit one mid-edit while
+        /// the user pastes a long list — <c>List&lt;T&gt;</c> enumeration throws on structural
+        /// modification, which used to be swallowed and the save silently skipped (#761).
+        /// Serializing on the UI thread unconditionally would put the whole settings graph on
+        /// the UI thread twice a second during play (Save fires constantly), so the throw is
+        /// caught and only the RETRY hops to the UI thread, where no edit can be in flight.
+        /// </summary>
+        private string SerializeCurrentSnapshot()
+        {
+            try
+            {
+                return JsonConvert.SerializeObject(Current, Formatting.Indented);
+            }
+            catch (Exception ex)
+            {
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted || dispatcher.CheckAccess())
+                    throw;
+
+                App.Logger?.Debug("Settings serialize raced a UI-thread edit ({Error}) — retrying on the UI thread", ex.Message);
+
+                var op = dispatcher.InvokeAsync(() => JsonConvert.SerializeObject(Current, Formatting.Indented));
+                // Observe a faulted op even if the wait below times out, otherwise it resurfaces
+                // through TaskScheduler.UnobservedTaskException with no useful context.
+                op.Task.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+
+                if (op.Task.Wait(SerializeMarshalTimeout))
+                    return op.Task.Result;
+
+                // Bounded: a busy (or wedged) UI thread must never stall the save path. Drop this
+                // save rather than write a snapshot we could not take cleanly — the next one wins.
+                op.Abort();
+                App.Logger?.Warning("Settings serialize could not reach the UI thread in time — skipping this save");
+                throw;
             }
         }
 

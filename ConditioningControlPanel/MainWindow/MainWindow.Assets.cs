@@ -1232,14 +1232,20 @@ namespace ConditioningControlPanel
         /// but the media services hold their own caches/queues that only refill lazily —
         /// without this the mandatory video keeps playing from a stale full-pool queue
         /// (count says "1 active" while playback ignores the toggle until restart).
-        /// FlashService clears its 60s file-listing cache; Video/BubbleCount just empty
-        /// their queues (cheap, O(1)) and refill from the current selection on next use.
+        /// FlashService clears its 60s file-listing cache AND its live selection pools;
+        /// Video/BubbleCount just empty their queues (cheap, O(1)) and refill from the
+        /// current selection on next use.
+        /// DisabledAssetPaths is a HashSet mutated in place, so no PropertyChanged fires and
+        /// nothing autosaves — without the explicit save the toggle is lost on restart unless
+        /// the user also presses "Save Selection". Settings.Save() is debounced (500ms), so a
+        /// rapid run of checkbox clicks still costs one disk write.
         /// </summary>
         private void InvalidateAssetPoolsAfterSelectionChange()
         {
             App.Flash?.ClearFileCache();
             App.Video?.ReloadAssets();
             App.BubbleCount?.ReloadAssets();
+            App.Settings.Save();
         }
 
         internal void BtnSelectAllAssets_Click(object sender, RoutedEventArgs e)

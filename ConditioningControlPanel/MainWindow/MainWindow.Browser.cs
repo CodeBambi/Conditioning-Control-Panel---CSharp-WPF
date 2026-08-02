@@ -32,10 +32,26 @@ namespace ConditioningControlPanel
     {
         #region Browser
 
+        // True only while InitializeBrowserAsync is between its first await and completion.
+        // Re-entering there would tear down the browser it is still building.
+        private bool _browserInitializing;
+
+        // True between "CreateBrowserAsync handed back a control" and BrowserReady/BrowserInitFailed,
+        // i.e. while CoreWebView2 is still coming up in WebView_Loaded. During that window the
+        // browser legitimately fails the readiness check without being wedged — tearing it down
+        // there would kill an initialization that is still in flight.
+        private bool _browserCorePending;
+
         private async System.Threading.Tasks.Task InitializeBrowserAsync(string? overrideStartUrl = null)
         {
-            if (_browserInitialized) return;
+            if (_browserInitialized || _browserInitializing) return;
 
+            // A browser whose CoreWebView2 never came up leaves the flag cleared but the dead
+            // control still parented (embedded container or pop-out). Drop it before building a
+            // replacement, otherwise two WebView2s stack up and the visible one is the dead one.
+            if (_browser != null) TearDownBrowserForReinit("stale browser before re-init");
+
+            _browserInitializing = true;
             try
             {
                 SettingsTab.TxtBrowserStatus.Text = Loc.Get("label_loading");
@@ -65,6 +81,7 @@ namespace ConditioningControlPanel
                 {
                     Dispatcher.Invoke(() =>
                     {
+                        _browserCorePending = false;
                         SettingsTab.TxtBrowserStatus.Text = Loc.Get("label_connected_2");
                         SettingsTab.TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(0, 230, 118)); // Green
 
@@ -87,6 +104,10 @@ namespace ConditioningControlPanel
                             App.DeeperBrowserDiscovery?.Attach(_browser.WebView);
                             if (App.DeeperBrowserDiscovery != null)
                             {
+                                // The service outlives the BrowserService, so a re-init would
+                                // stack a second copy of these handlers on the same instance.
+                                App.DeeperBrowserDiscovery.Bound -= OnDeeperBrowserBound;
+                                App.DeeperBrowserDiscovery.Unbound -= OnDeeperBrowserUnbound;
                                 App.DeeperBrowserDiscovery.Bound += OnDeeperBrowserBound;
                                 App.DeeperBrowserDiscovery.Unbound += OnDeeperBrowserUnbound;
                             }
@@ -154,10 +175,29 @@ namespace ConditioningControlPanel
                         catch (Exception ex) { App.Logger?.Debug("Browser teardown after ProcessFailed: {Error}", ex.Message); }
                         _browser = null;
                         _browserInitialized = false;
+                        _browserCorePending = false;
                         SettingsTab.BrowserLoadingText.Visibility = Visibility.Visible;
                         SettingsTab.BrowserLoadingText.Text = "Browser crashed - click a site to restart";
                         SettingsTab.TxtBrowserStatus.Text = "Disconnected";
                         SettingsTab.TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(230, 80, 80));
+                    });
+                };
+
+                // CoreWebView2 never came up. _browserInitialized is set the moment
+                // CreateBrowserAsync hands back the control — i.e. before this can fire — so
+                // without clearing it here the flag latches true over a dead browser and every
+                // later Navigate is silently dropped for the process lifetime (#760).
+                _browser.BrowserInitFailed += (s, reason) =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        App.Logger?.Warning("Browser init failed ({Reason}) - marking browser not ready", reason);
+                        _browserInitialized = false;
+                        _browserCorePending = false;
+                        SettingsTab.BrowserLoadingText.Visibility = Visibility.Visible;
+                        SettingsTab.BrowserLoadingText.Text = "Browser failed to start - click a site to retry";
+                        SettingsTab.TxtBrowserStatus.Text = Loc.Get("label_error_2");
+                        SettingsTab.TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
                     });
                 };
 
@@ -177,6 +217,7 @@ namespace ConditioningControlPanel
                     SettingsTab.BrowserLoadingText.Visibility = Visibility.Collapsed;
                     SettingsTab.BrowserContainer.Children.Add(webView);
                     _browserInitialized = true;
+                    _browserCorePending = true;   // cleared by BrowserReady / BrowserInitFailed
                     SyncBrowserMuteIcon();
 
                     // Note: WebMessageReceived handler is attached in BrowserReady event
@@ -225,11 +266,73 @@ namespace ConditioningControlPanel
                 SettingsTab.TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
                 MessageBox.Show(errorMsg, Loc.Get("title_browser_error"), MessageBoxButton.OK, MessageBoxImage.Error);
             }
+            finally
+            {
+                _browserInitializing = false;
+            }
         }
 
         internal async void BrowserLoadingText_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             await InitializeBrowserAsync();
+        }
+
+        /// <summary>
+        /// Drops a browser that can no longer navigate (CoreWebView2 never came up, or died)
+        /// so the next lazy-init builds a fresh one. Mirrors the BrowserProcessFailed teardown.
+        /// </summary>
+        private void TearDownBrowserForReinit(string reason)
+        {
+            App.Logger?.Warning("Tearing down browser for re-init: {Reason}", reason);
+
+            var dead = _browser;
+            var deadView = _browser?.WebView;
+
+            // Clear the fields FIRST: closing the pop-out below runs its Closed handler, which
+            // re-parents _browser.WebView back into the embedded container if it still sees one.
+            _browser = null;
+            _browserInitialized = false;
+            _browserCorePending = false;
+
+            try
+            {
+                if (deadView != null && SettingsTab.BrowserContainer.Children.Contains(deadView))
+                    SettingsTab.BrowserContainer.Children.Remove(deadView);
+
+                if (_browserPopoutWindow != null)
+                {
+                    _browserPopoutWindow.Content = null;
+                    _browserPopoutWindow.Close();
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("Browser teardown before re-init: {Error}", ex.Message); }
+
+            try { (dead as IDisposable)?.Dispose(); } catch { }
+        }
+
+        /// <summary>
+        /// Brings whichever surface actually hosts the WebView to the front. When the browser is
+        /// popped out, activating MainWindow buries the pop-out the page loads into behind it,
+        /// which looks exactly like "the link did nothing" (#760).
+        /// </summary>
+        private void FocusBrowserSurface()
+        {
+            if (_browserPopoutWindow != null)
+            {
+                try
+                {
+                    if (_browserPopoutWindow.WindowState == WindowState.Minimized)
+                        _browserPopoutWindow.WindowState = WindowState.Normal;
+                    _browserPopoutWindow.Activate();
+                    _browserPopoutWindow.Focus();
+                }
+                catch (Exception ex) { App.Logger?.Debug("Failed to focus browser pop-out: {Error}", ex.Message); }
+                return;
+            }
+
+            ShowTab("settings");
+            Activate();
+            Focus();
         }
 
         private async System.Threading.Tasks.Task InitAndNavigateAsync(string url, bool autoPlayFullscreen)
@@ -240,7 +343,13 @@ namespace ConditioningControlPanel
             // WebView_Loaded (which runs after we'd return), so the request never reached
             // CoreWebView2 and the start-URL load (BambiCloud) stuck.
             await InitializeBrowserAsync(url);
-            if (!_browserInitialized || _browser == null) return;
+            if (!_browserInitialized || _browser == null)
+            {
+                // Init failed, and the synchronous caller already returned true — nothing else
+                // will retry, so hand the link to the system browser rather than eat it (#760).
+                OpenUrlExternallyAfterBrowserFailure(url);
+                return;
+            }
 
             // Sync the radio button to the URL we just initialized to so the toggle UI
             // matches the page. Suppress the toggle handler's homepage navigation since
@@ -284,10 +393,50 @@ namespace ConditioningControlPanel
                 _browser.NavigationCompleted += OnNavCompleted;
             }
 
-            // Show the Settings tab and bring the window forward
-            ShowTab("settings");
-            Activate();
-            Focus();
+            // Bring the surface hosting the browser forward (embedded tab or pop-out window)
+            FocusBrowserSurface();
+        }
+
+        /// <summary>
+        /// Defers a navigation until an in-flight CoreWebView2 bring-up finishes. Bounded: a
+        /// bring-up that never completes falls through to the external browser rather than
+        /// swallowing the click. Continuations resume on the dispatcher (UI thread).
+        /// </summary>
+        private async System.Threading.Tasks.Task NavigateWhenBrowserReadyAsync(string url, bool autoPlayFullscreen)
+        {
+            // Surface the browser while it finishes coming up, exactly as the ready path does —
+            // otherwise the click looks ignored for as long as the bring-up takes.
+            FocusBrowserSurface();
+
+            for (int i = 0; i < 60 && _browserCorePending; i++)
+                await Task.Delay(250);
+
+            if (_browser?.IsInitialized == true && _browser.WebView?.CoreWebView2 != null)
+            {
+                NavigateToUrlInBrowser(url, autoPlayFullscreen);
+                return;
+            }
+
+            App.Logger?.Warning("Browser never finished initializing - opening externally: {Url}", url);
+            OpenUrlExternallyAfterBrowserFailure(url);
+        }
+
+        /// <summary>
+        /// Last-resort escape hatch when the embedded browser cannot be brought up: open the
+        /// link in the system browser (HTTPS only) so the click isn't silently swallowed.
+        /// </summary>
+        private void OpenUrlExternallyAfterBrowserFailure(string url)
+        {
+            try
+            {
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return;
+                App.Logger?.Warning("Embedded browser init failed, opening externally: {Url}", url);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to open URL externally: {Url}", url);
+            }
         }
 
         internal async void BrowserSiteToggle_Changed(object sender, RoutedEventArgs e)
@@ -359,9 +508,31 @@ namespace ConditioningControlPanel
                 return false;
             }
 
-            // Lazy-load browser if not yet initialized
-            if (!_browserInitialized)
+            // Lazy-load browser if it isn't REALLY ready. _browserInitialized only means
+            // CreateBrowserAsync handed back a control — it is set before CoreWebView2 exists, so
+            // it stays true over a browser whose init failed and every Navigate is then dropped in
+            // silence for the process lifetime (#760). Consult the service's own state too and
+            // re-init on mismatch so a wedged browser self-heals on the next click.
+            var browserReady = _browserInitialized && _browser != null
+                && _browser.IsInitialized && _browser.WebView?.CoreWebView2 != null;
+
+            if (!browserReady)
             {
+                if (_browserInitialized && _browserCorePending && _browser != null)
+                {
+                    // Not wedged - CoreWebView2 is simply still coming up (_browserInitialized is
+                    // set the moment CreateBrowserAsync returns, BrowserReady only fires once
+                    // WebView_Loaded finishes). Re-initializing here would tear down an init that
+                    // is still in flight, so wait it out and navigate when it lands.
+                    _ = NavigateWhenBrowserReadyAsync(url, autoPlayFullscreen);
+                    return true;
+                }
+                if (_browserInitialized)
+                {
+                    App.Logger?.Warning("Browser flagged ready but is not usable (service init={Init}, core={HasCore}) - re-initializing for {Url}",
+                        _browser?.IsInitialized == true, _browser?.WebView?.CoreWebView2 != null, url);
+                    _browserInitialized = false; // let InitializeBrowserAsync tear down and rebuild
+                }
                 _ = InitAndNavigateAsync(url, autoPlayFullscreen);
                 return true; // Navigation will happen after init completes
             }
@@ -374,10 +545,8 @@ namespace ConditioningControlPanel
 
             try
             {
-                // Bring window to focus and show the Settings tab (where the browser is)
-                ShowTab("settings");
-                Activate();
-                Focus();
+                // Bring the surface hosting the browser forward (embedded tab or pop-out window)
+                FocusBrowserSurface();
 
                 var lowerUrl = url.ToLowerInvariant();
 
@@ -407,6 +576,7 @@ namespace ConditioningControlPanel
                 // If auto-play fullscreen requested, set up handler for when navigation completes.
                 // BambiCloud playlists are audio (no <video> element, no fullscreen) — they need a
                 // different injection that clicks the playlist's main play button.
+                EventHandler<Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? navCompletedHandler = null;
                 if (autoPlayFullscreen && _browser.WebView?.CoreWebView2 != null)
                 {
                     var isBambiCloudPlaylist = lowerUrl.Contains("bambicloud.com/playlist/");
@@ -424,11 +594,25 @@ namespace ConditioningControlPanel
                         }
                     }
 
-                    _browser.WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+                    navCompletedHandler = OnNavigationCompleted;
+                    _browser.WebView.CoreWebView2.NavigationCompleted += navCompletedHandler;
+                }
+                else if (autoPlayFullscreen)
+                {
+                    App.Logger?.Warning("Auto-play/fullscreen requested but CoreWebView2 is null - takeover skipped: {Url}", url);
                 }
 
-                // Navigate
-                _browser.Navigate(url);
+                // Navigate. A dropped Navigate must surface as failure: reporting success here is
+                // what skipped the caller's external-browser fallback and made the click look
+                // like it did nothing at all (#760).
+                if (!_browser.Navigate(url))
+                {
+                    if (navCompletedHandler != null && _browser.WebView?.CoreWebView2 != null)
+                        _browser.WebView.CoreWebView2.NavigationCompleted -= navCompletedHandler;
+
+                    App.Logger?.Warning("Speech link navigation dropped by browser service: {Url}", url);
+                    return false;
+                }
 
                 App.Logger?.Information("Speech link navigated to: {Url} (Site: {Site}, AutoPlay: {AutoPlay})",
                     url, lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube", autoPlayFullscreen);
@@ -2412,7 +2596,13 @@ namespace ConditioningControlPanel
             // leaving it stranded.
             App.BrowserMedia?.ReplaceSession(
                 Services.Browser.BrowserMediaService.MediaOwner.Remote, takeover: true);
-            NavigateToUrlInBrowser(url, autoPlayFullscreen: true);
+            if (!NavigateToUrlInBrowser(url, autoPlayFullscreen: true))
+            {
+                // Nothing is playing here, so don't leave the claim standing until the heartbeat
+                // retires it — panic/session-end would otherwise act on a video that never loaded.
+                _remoteBrowserVideoActive = false;
+                App.BrowserMedia?.OnMediaStopped("remote-browser-unavailable");
+            }
         }
 
         /// <summary>

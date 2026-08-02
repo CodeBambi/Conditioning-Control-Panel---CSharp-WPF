@@ -467,7 +467,10 @@ namespace ConditioningControlPanel.Services
         /// <param name="totalDurationMs">Total duration for the pattern</param>
         public async Task SetSyncPatternAsync(float[] intensities, int totalDurationMs)
         {
-            if (!Settings.Enabled || !Settings.AudioSync.Enabled)
+            // Deliberately not gated on Settings.AudioSync.Enabled: the only callers are Deeper
+            // (runtime dispatcher + editor preview), while the audio-sync feature uses
+            // SetSyncIntensityAsync. That default-OFF toggle would drop every Deeper haptic.
+            if (!Settings.Enabled)
                 return;
 
             if (_activeProvider == null || !_activeProvider.IsConnected)
@@ -480,9 +483,9 @@ namespace ConditioningControlPanel.Services
             var levels = new int[intensities.Length];
             for (int i = 0; i < intensities.Length; i++)
             {
-                var clamped = Math.Clamp(intensities[i],
-                    (float)Settings.AudioSync.MinIntensity,
-                    (float)Settings.AudioSync.MaxIntensity);
+                // Authored Deeper intensities are used as-is - the audio-sync min/max sliders tune a
+                // different feature and would distort the pattern.
+                var clamped = Math.Clamp(intensities[i], 0f, 1f);
                 levels[i] = Haptics.LovenseProvider.IntensityToLevel(clamped);
             }
 

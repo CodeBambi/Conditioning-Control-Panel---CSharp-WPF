@@ -28,9 +28,23 @@ public class InteractionQueueService
     private readonly object _lock = new();
     private DispatcherTimer? _stuckDetectionTimer;
     private DateTime _interactionStartTime;
+    // Bumped on every claim of the slot, so a teardown path can tell "the claim I tripped on" from
+    // "a new claim of the same type that the teardown itself dequeued".
+    private long _claimId;
 
     // Default max time before auto-recovery when duration is unknown (5 minutes)
     private const int DefaultMaxInteractionMinutes = 5;
+
+    // User-paced interactions (lock cards, pop quizzes) have no duration of their own — the 5-minute
+    // backstop is a video-shaped timeout applied to a typing/speaking-shaped interaction. While their
+    // window is still on screen the tick renews instead of recovering, up to a hard ceiling after which
+    // the UI is force-closed BEFORE the slot is released (#763).
+    private const int UserPacedRenewMinutes = 5;
+    private const int UserPacedMaxInteractionMinutes = 30;
+    // Last-ditch cap on holding the slot for a window that reports itself open but won't go away:
+    // an un-closable overlay is bad, a permanently wedged queue (no further interactions all session)
+    // is worse.
+    private const int HeldSlotAbandonMinutes = 60;
 
     /// <summary>
     /// Currently active interaction type, or null if none
@@ -76,6 +90,7 @@ public class InteractionQueueService
             {
                 CurrentInteraction = type;
                 _interactionStartTime = DateTime.Now;
+                _claimId++;
                 StartStuckDetectionTimer();
                 App.Logger?.Information("InteractionQueue: Starting {Type}", type);
                 triggerAction();
@@ -140,6 +155,22 @@ public class InteractionQueueService
         }
     }
 
+    /// <summary>
+    /// Release the slot only if it is still the exact claim identified by <paramref name="claimId"/>.
+    /// A type-only check is not enough on the stuck-recovery path: the force-cleanup it runs may already
+    /// have released the slot AND dequeued a new interaction of the same type, whose window has not been
+    /// created yet (the trigger is dispatched asynchronously) — a type-only release would drop that fresh
+    /// claim on the floor.
+    /// </summary>
+    private void CompleteIfClaim(InteractionType type, long claimId)
+    {
+        lock (_lock)
+        {
+            if (CurrentInteraction != type || _claimId != claimId) return;
+            CompleteLocked(type);
+        }
+    }
+
     /// <summary>Completion logic; caller MUST hold <see cref="_lock"/>.</summary>
     private void CompleteLocked(InteractionType type)
     {
@@ -171,6 +202,7 @@ public class InteractionQueueService
                 var next = _queue.Dequeue();
                 CurrentInteraction = next.Type;
                 _interactionStartTime = DateTime.Now;
+                _claimId++;
                 StartStuckDetectionTimer();
                 App.Logger?.Information("InteractionQueue: Starting queued {Type} (remaining: {Count})",
                     next.Type, _queue.Count);
@@ -311,11 +343,55 @@ public class InteractionQueueService
         }
     }
 
+    /// <summary>Interactions paced by the user rather than by content: they end when a human types,
+    /// speaks or clicks, so elapsed time alone says nothing about whether they are stuck.</summary>
+    private static bool IsUserPaced(InteractionType type)
+        => type is InteractionType.LockCard or InteractionType.PopQuiz;
+
+    /// <summary>Test seam: how the queue asks whether an interaction's fullscreen UI is still on screen.
+    /// Overridable so headless tests can drive the stuck-timer paths without realizing WPF windows
+    /// (the default path needs a real visible-window set).</summary>
+    internal static Func<InteractionType, bool> UiStillOnScreenProbe = DefaultUiStillOnScreen;
+
+    private static bool DefaultUiStillOnScreen(InteractionType type)
+    {
+        try
+        {
+            return type switch
+            {
+                InteractionType.LockCard => LockCardWindow.IsAnyOpen(),
+                InteractionType.PopQuiz => PopQuizWindow.IsAnyOpen(),
+                _ => false
+            };
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Re-arm the stuck timer for a claim that turned out not to be stuck. Claim-guarded so a
+    /// slot that changed hands while we were tearing down keeps its own (already armed) timer.</summary>
+    private void RenewStuckTimeout(InteractionType type, long claimId, TimeSpan interval)
+    {
+        lock (_lock)
+        {
+            if (CurrentInteraction != type || _claimId != claimId) return;
+            StartStuckDetectionTimer(interval);
+        }
+    }
+
     private void OnStuckDetectionTimerTick(object? sender, EventArgs e)
     {
-        _stuckDetectionTimer?.Stop();
+        // Stop the timer that actually fired, not whatever the field points at now: if the slot changed
+        // hands between this timer firing and the handler running, the field is already the NEW claim's
+        // timer, and stopping it would leave that claim with no stuck detection at all (the renew and
+        // "not stuck anymore" paths below return without re-arming it).
+        ((sender as DispatcherTimer) ?? _stuckDetectionTimer)?.Stop();
 
         InteractionType stuckType;
+        long claimId;
+        TimeSpan activeDuration;
         lock (_lock)
         {
             if (!CurrentInteraction.HasValue)
@@ -324,10 +400,25 @@ public class InteractionQueueService
             }
 
             stuckType = CurrentInteraction.Value;
-            var activeDuration = DateTime.Now - _interactionStartTime;
-            App.Logger?.Warning("InteractionQueue: STUCK INTERACTION DETECTED! {Type} has been active for {Duration:F1} minutes. Auto-recovering...",
-                stuckType, activeDuration.TotalMinutes);
+            claimId = _claimId;
+            activeDuration = DateTime.Now - _interactionStartTime;
         }
+
+        // A lock card or pop quiz that is still on screen is waiting on a human, not stuck — nobody
+        // calls ExtendTimeout for them, so the 5-minute default used to "recover" a perfectly healthy
+        // card. Renew instead, up to the hard ceiling; someone who walked away still gets the screen
+        // cleared, just never while their card is up (#763).
+        if (IsUserPaced(stuckType) && activeDuration.TotalMinutes < UserPacedMaxInteractionMinutes
+            && UiStillOnScreenProbe(stuckType))
+        {
+            App.Logger?.Debug("InteractionQueue: {Type} still on screen after {Duration:F1} min - user-paced, renewing stuck timeout",
+                stuckType, activeDuration.TotalMinutes);
+            RenewStuckTimeout(stuckType, claimId, TimeSpan.FromMinutes(UserPacedRenewMinutes));
+            return;
+        }
+
+        App.Logger?.Warning("InteractionQueue: STUCK INTERACTION DETECTED! {Type} has been active for {Duration:F1} minutes. Auto-recovering...",
+            stuckType, activeDuration.TotalMinutes);
 
         // Tear down OUTSIDE the lock, then release. Ordering matters twice over:
         // - Not under _lock: the cleanups call back into CompleteIfCurrent; running them
@@ -351,6 +442,12 @@ public class InteractionQueueService
                 case InteractionType.BubbleCount:
                     App.BubbleCount?.ForceCleanup();
                     break;
+                case InteractionType.LockCard:
+                    LockCardWindow.ForceCloseAll();          // releases the slot itself when it is ours
+                    break;
+                case InteractionType.PopQuiz:
+                    PopQuizWindow.ForceCloseAll();           // OnClosed releases the slot
+                    break;
                 case InteractionType.WebVideo:
                     App.BrowserMedia?.ForceEndCore("queue-stuck-recovery"); // sync teardown, then releases
                     break;
@@ -362,9 +459,22 @@ public class InteractionQueueService
         }
         finally
         {
-            // Backstop: if the cleanup path didn't release the slot itself (or threw),
-            // free it now that no teardown is running. Idempotent and type-guarded.
-            CompleteIfCurrent(stuckType);
+            // The slot is the ONLY thing keeping two fullscreen HWND_TOPMOST overlays apart, so it must
+            // never be released while its window is still up — releasing under a live lock card is how a
+            // card and a pop quiz ended up stacked (#763). If teardown could not clear the UI, keep
+            // holding the claim and re-arm instead of handing the screen to the next interaction.
+            if (UiStillOnScreenProbe(stuckType) && activeDuration.TotalMinutes < HeldSlotAbandonMinutes)
+            {
+                App.Logger?.Warning("InteractionQueue: {Type} UI still on screen after force-cleanup - holding the slot instead of releasing it under a live overlay",
+                    stuckType);
+                RenewStuckTimeout(stuckType, claimId, TimeSpan.FromMinutes(DefaultMaxInteractionMinutes));
+            }
+            else
+            {
+                // Backstop: if the cleanup path didn't release the slot itself (or threw),
+                // free it now that no teardown is running. Idempotent and claim-guarded.
+                CompleteIfClaim(stuckType, claimId);
+            }
         }
     }
 }

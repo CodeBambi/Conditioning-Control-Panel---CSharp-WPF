@@ -85,6 +85,10 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<string>? TitleChanged;
         public event EventHandler<bool>? FullscreenChanged;
         public event EventHandler<CoreWebView2ProcessFailedEventArgs>? BrowserProcessFailed;
+        /// <summary>CoreWebView2 never came up (EnsureCoreWebView2Async threw or returned a null
+        /// core). Consumers holding their own "browser is ready" flag must clear it here, or the
+        /// browser stays wedged for the process lifetime with every Navigate silently dropped.</summary>
+        public event EventHandler<string>? BrowserInitFailed;
         /// <summary>Web messages posted from a subframe (iframe-hosted players). The top-level
         /// CoreWebView2.WebMessageReceived never sees these, so consumers must handle both.</summary>
         public event EventHandler<CoreWebView2WebMessageReceivedEventArgs>? FrameWebMessageReceived;
@@ -212,6 +216,7 @@ namespace ConditioningControlPanel.Services
                 if (_webView.CoreWebView2 == null)
                 {
                     App.Logger?.Error("CoreWebView2 is null after EnsureCoreWebView2Async");
+                    RaiseInitFailed("CoreWebView2 null after EnsureCoreWebView2Async");
                     return;
                 }
 
@@ -484,7 +489,18 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Error("Failed to initialize CoreWebView2: {Type} - {Error}", ex.GetType().Name, ex.Message);
+                // This catch also covers BrowserReady?.Invoke above, which runs consumer code
+                // AFTER _isInitialized is already true. A handler throwing there must not tear a
+                // working browser down, so only a genuine bring-up failure clears readiness.
+                if (!_isInitialized) RaiseInitFailed($"{ex.GetType().Name}: {ex.Message}");
             }
+        }
+
+        private void RaiseInitFailed(string reason)
+        {
+            _isInitialized = false;
+            try { BrowserInitFailed?.Invoke(this, reason); }
+            catch (Exception ex) { App.Logger?.Debug("BrowserInitFailed handler threw: {Error}", ex.Message); }
         }
 
         /// <summary>
@@ -1168,11 +1184,18 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Navigate to a URL (only HTTPS allowed for security)
+        /// Navigate to a URL (only HTTPS allowed for security).
+        /// Returns true only when the request actually reached CoreWebView2 — callers use this
+        /// to decide whether to fall back instead of reporting a navigation that never happened.
         /// </summary>
-        public void Navigate(string url)
+        public bool Navigate(string url)
         {
-            if (_disposed || !_isInitialized || _webView?.CoreWebView2 == null) return;
+            if (_disposed || !_isInitialized || _webView?.CoreWebView2 == null)
+            {
+                App.Logger?.Warning("Navigate dropped - browser not ready (disposed={Disposed}, init={Init}, core={HasCore}): {Url}",
+                    _disposed, _isInitialized, _webView?.CoreWebView2 != null, url);
+                return false;
+            }
 
             try
             {
@@ -1187,7 +1210,7 @@ namespace ConditioningControlPanel.Services
                     lowerUrl.StartsWith("vbscript:"))
                 {
                     App.Logger?.Warning("Blocked potentially dangerous URL scheme: {Url}", url);
-                    return;
+                    return false;
                 }
 
                 // Force HTTPS for security
@@ -1209,15 +1232,17 @@ namespace ConditioningControlPanel.Services
                     (uri.Scheme != Uri.UriSchemeHttps))
                 {
                     App.Logger?.Warning("Invalid URL rejected: {Url}", url);
-                    return;
+                    return false;
                 }
 
                 _webView.CoreWebView2.Navigate(url);
                 App.Logger?.Debug("Navigating to: {Url}", url);
+                return true;
             }
             catch (Exception ex)
             {
                 App.Logger?.Error("Navigation failed: {Error}", ex.Message);
+                return false;
             }
         }
 

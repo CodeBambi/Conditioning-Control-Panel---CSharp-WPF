@@ -1198,6 +1198,11 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
+                    // The embedded browser never issued the navigation, so release the session we
+                    // just claimed above — otherwise the app keeps treating a video that is not
+                    // playing here as an active web-media session.
+                    App.BrowserMedia?.OnMediaStopped("embedded-browser-unavailable");
+
                     // Fallback: open in external browser (HTTPS only for safety)
                     if (Uri.TryCreate(url, UriKind.Absolute, out var fallbackUri) && fallbackUri.Scheme == "https")
                     {
