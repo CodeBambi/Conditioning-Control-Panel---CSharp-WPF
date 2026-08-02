@@ -1,0 +1,16 @@
+v6.6.3 - Video Hotfix
+
+A follow-up hotfix that hardens video playback against stuck players, plus a batch of stability fixes from your reports.
+
+BUG FIXES
+- A video that freezes mid-stop can no longer wedge the whole app. Stuck players are retired and rebuilt off-thread, and a frozen fullscreen video now releases the desktop instead of trapping you behind it.
+- Fixed a crash where a video's frame buffer was freed while the decoder was still writing into it.
+- Black screens no longer count toward video watch time, and video lengths are tracked correctly again after a player is replaced.
+- The Bubble Count minigame got the same treatment: no more stale players, a memory leak fixed, and it now backs off for a minute instead of retrying into a broken state.
+- Deeper haptics now work even when Video Haptic Sync is off. The setting was silently gating them.
+- The built-in browser recovers when it fails to load, actually falls back to your external browser, and the pop-out window comes to the front properly.
+- Settings saves can no longer race each other or get corrupted by a badly timed shutdown, and restoring a backup no longer gets overwritten by profile sync.
+- Unchecking an asset folder now immediately removes its images from the flash rotation.
+- A stuck Lock Card or Pop Quiz can no longer jam interactions forever. The app now recovers and closes it cleanly.
+
+Season: Airhead August
