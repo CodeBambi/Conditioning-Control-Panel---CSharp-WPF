@@ -124,6 +124,24 @@ public class BubbleCountService : IDisposable
         if (!forceTest && (!_isRunning || _isBusy)) return;
         if (_isBusy) return; // Still prevent double-triggering
 
+        // A video teardown whose native Stop() never returned leaves a LibVLC thread stuck in this
+        // process forever. #766 is exactly that: poisoning at 22:05, a bubble-count video built on
+        // the wreckage at 22:18, and a dispatcher that never drained again. Skip this turn rather
+        // than stand another player up on it - the shared instance is being rebuilt inside the same
+        // window, and the scheduler brings the next game around anyway.
+        var poisonMs = VideoService.NativePoisonCooldownRemainingMs;
+        if (poisonMs > 0)
+        {
+            App.Logger?.Warning("BubbleCountService: skipping game - a wedged native Stop() poisoned the shared LibVLC ({Sec:F0}s of cooldown left)",
+                poisonMs / 1000.0);
+            VideoDiag.Log("BUBBLE", $"game skipped - native poison cooldown, {poisonMs}ms remaining");
+            // If the interaction queue dequeued us into this call, hand the slot back or nothing
+            // else runs until stuck detection fires.
+            if (App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.BubbleCount)
+                App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+            return;
+        }
+
         var settings = App.Settings.Current;
 
         // Check if another fullscreen interaction is active (video, lock card)
@@ -299,6 +317,21 @@ public class BubbleCountService : IDisposable
         // auto-completing BubbleCount during the retry gap, which would let queued
         // interactions (e.g. Video) start while the retry game plays.
         App.InteractionQueue?.ExtendTimeout(300);
+
+        // Same post-poisoning hold-off as TriggerGame. End the game outright rather than let the
+        // strict retry loop bounce off the cooldown every couple of seconds for a minute.
+        var poisonMs = VideoService.NativePoisonCooldownRemainingMs;
+        if (poisonMs > 0)
+        {
+            App.Logger?.Warning("BubbleCountService: retry abandoned - shared LibVLC poisoned ({Sec:F0}s of cooldown left)", poisonMs / 1000.0);
+            VideoDiag.Log("BUBBLE", $"retry abandoned - native poison cooldown, {poisonMs}ms remaining");
+            _retryCount = 0;
+            _isBusy = false;
+            App.Bubbles?.Resume();
+            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+            GameFailed?.Invoke(this, EventArgs.Empty);
+            return;
+        }
 
         try
         {

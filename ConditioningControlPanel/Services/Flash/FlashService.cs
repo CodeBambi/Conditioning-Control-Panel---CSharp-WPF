@@ -2149,7 +2149,8 @@ namespace ConditioningControlPanel.Services
                     CleanupTempPackFiles();
                 }
 
-                // Refresh image lists if empty (first call or after cache clear)
+                // Refresh image lists if empty (first call, or after ClearFileCache/LoadAssets
+                // emptied the pools so a selection change takes effect on this draw)
                 if (_imageList.Count == 0 && _packImageList.Count == 0)
                 {
                     RefreshImageLists();
@@ -2496,13 +2497,25 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Clear the file list cache (called when assets are reloaded or selection changes)
+        /// Clear the file list cache (called when assets are reloaded or selection changes).
+        /// Also empties the live selection pools: they are drawn from by random index and never
+        /// drained, so clearing only the 60s listing cache left every flash still picking from
+        /// the pre-toggle paths until the next LoadAssets().
         /// </summary>
         public void ClearFileCache()
         {
-            lock (_cacheLock)
+            // Lock order: _lockObj BEFORE _cacheLock, matching
+            // GetNextImages -> RefreshImageLists -> GetMediaFiles. The reverse order deadlocks.
+            lock (_lockObj)
             {
-                _fileListCache.Clear();
+                _imageList.Clear();  // forces RefreshImageLists() on the next draw
+                _packImageList.Clear();
+                _soundQueue = new Queue<string>();
+
+                lock (_cacheLock)
+                {
+                    _fileListCache.Clear();
+                }
             }
         }
 

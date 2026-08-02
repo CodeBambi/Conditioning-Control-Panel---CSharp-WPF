@@ -112,7 +112,15 @@ namespace ConditioningControlPanel.Services
         private System.Threading.Timer? _wedgeWatchdog;
         private DispatcherTimer? _heartbeatTimer;
         private long _uiHeartbeatTicks;
-        private volatile bool _wedgeRescueFired;
+        // Highest rescue rung already run for this playback (0 = none). Replaces the old one-shot
+        // _wedgeRescueFired: in #767 the single rescue called player.Stop() INLINE on this timer
+        // thread, the call never returned, and that was the end of the story - dispatcher dead at
+        // 30s, 60s, forever. The ladder below keeps escalating, and every rung is bounded.
+        private volatile int _wedgeRescueRung;
+        // Set the first time a stall past WedgeStallMs is observed and left set for the rest of the
+        // playback. Read by the strict Closing veto so Alt+F4 works once the app is demonstrably
+        // wedged (#765) - a lock the user cannot escape is only defensible while the app responds.
+        private volatile bool _wedgeStallSeen;
         private volatile bool _preRollStallLogged; // one pre-roll stall line per armed watchdog
         // Fire only after a long, unambiguous stall — this targets the multi-minute lockouts, never a
         // UI thread that's merely busy for a beat. The legitimate ~4s teardown pump-wait keeps the
@@ -123,6 +131,36 @@ namespace ConditioningControlPanel.Services
         // callbacks is already pathological (the pump-wait keeps beating), so the rescue now engages
         // while the user is still watching the frozen frame rather than after they gave up.
         private const int WedgeStallMs = 8000;
+        // Escalating rescue ladder, measured from the START of the stall (#765/#766/#767):
+        //   rung 1 (8s)  - stop every native player OFF this thread. Non-destructive.
+        //   rung 2 (18s) - the wedge outlived the stops: retire the shared LibVLC instance.
+        //   rung 3 (28s) - give the user their machine back (see RunWedgeEscapeHatch).
+        // Rung 3 costs two Win32 calls and touches zero native VLC state, so it is the only rung
+        // allowed during pre-roll and during teardown.
+        private const int WedgeRescueRung2Ms = 18000;
+        private const int WedgeRescueRung3Ms = 28000;
+        // Bounded budget for one rung's off-thread Stop() batch. A player that outlives it is wedged
+        // for good and must not hold up the remaining players or the later rungs.
+        private const int WedgeStopBudgetMs = 3000;
+        // HWNDs of the live video windows, cached at creation (PreventClickRaise already resolves the
+        // HwndSource) so the escape-hatch rung can reach them from a threadpool thread. Window handles
+        // are process-wide and the Win32 calls the hatch makes need neither the dispatcher nor LibVLC,
+        // which is the whole point: they still work when the UI thread never drains again (#765).
+        private readonly List<IntPtr> _videoWindowHandles = new();
+        private readonly object _videoWindowHandlesLock = new();
+        // How long the async disposal task waits (OFF the dispatcher) for a straggling Stop() before
+        // it treats the player as wedged and quarantines it. Only a real wedge should ever spend a
+        // retire from the per-session budget.
+        private const int StopStragglerGraceMs = 4000;
+
+#if DEBUG
+        // Fault injection for the wedge cluster (#765/#766/#767). Set CCP_FAULT_WEDGE_STOP=1 and the
+        // first player's Stop() in CloseAll never completes - the exact native state the reports land
+        // in - so the teardown, rescue-ladder and escape-hatch behaviour can be play-tested without
+        // waiting for the intermittent aout stall to reproduce. DEBUG-only, read once per process.
+        private static readonly bool FaultInjectWedgeStop =
+            Environment.GetEnvironmentVariable("CCP_FAULT_WEDGE_STOP") == "1";
+#endif
 
         // Watch-time crediting for stats/quests (#447). _lastWatchPositionMs tracks the current video's
         // latest playback position (LibVLC TimeChanged); _creditedWatchSeconds is a watermark of what's
@@ -221,6 +259,10 @@ namespace ConditioningControlPanel.Services
         // down in CloseAll — invalidates the frame buffer + unhooks the render tick, then frees the
         // native buffer after a delay so an in-flight LibVLC frame can't touch freed memory.
         private readonly List<BlurVmemSurface> _blurSurfaces = new();
+        // One frame-liveness watchdog per live blur surface (see StartBlurFrameWatchdog). Threadpool
+        // timers, not DispatcherTimers, so they still fire while the UI thread is wedged.
+        private readonly List<System.Threading.Timer> _blurFrameWatchTimers = new();
+        private readonly object _blurFrameWatchLock = new();
 
         // Primary-monitor refs for the Deeper enhancement engine. Set when the
         // audio-bearing video window is created, cleared in CloseAll. Reading
@@ -624,6 +666,11 @@ namespace ConditioningControlPanel.Services
             // the "one bad teardown, then every video is a white screen" spiral (#559, and the
             // suspected shape of #616/#617/#621/#622/#623). Count it in the trace.
             VideoDiag.Log("QUARANTINE", $"{nativeObj.GetType().Name} rooted ({reason}) - {count} object(s) now quarantined");
+            // Every caller of this method quarantines a player whose Stop() never came back, so this
+            // is the one choke point where "the process now holds a permanently stuck native thread"
+            // becomes true — including on the vmem path, where CloseAll no longer waits on the
+            // dispatcher and therefore never logs the "Stop() WEDGED" line itself.
+            RecordNativePoisoning($"{nativeObj.GetType().Name} quarantined: {reason}");
         }
 
         /// <summary>
@@ -699,6 +746,327 @@ namespace ConditioningControlPanel.Services
             });
             return true;
         }
+
+        #region Managed lease (shared LibVLC for consumers outside the mandatory-video pipeline)
+
+        // Bubble count plays fullscreen topmost video on the SAME shared LibVLC as the mandatory
+        // pipeline, and until now it did so by copying the static SharedLibVLC into a field of its
+        // own — outside _libVLCLock, and well before the player was actually built (#766). A retire
+        // landing in that gap builds a MediaPlayer on an instance that is already quarantined, and
+        // nothing in this class knew those players existed: no wedge rescue, no quarantine, no
+        // trace. The lease closes both halves — the player is built on a locked-in instance, and it
+        // joins the rescue paths below.
+        //
+        // Leases are tracked SEPARATELY from _mediaPlayers on purpose: CloseAll owns everything in
+        // _mediaPlayers and disposes it, and disposing a bubble-count player out from under its live
+        // VideoView is the multi-monitor detach crash. They join the rescue/quarantine paths, which
+        // is what "managed" has to mean here — not shared ownership.
+        private readonly List<(LibVLCSharp.Shared.MediaPlayer Player, LibVLC Owner)> _managedLeases = new();
+        private readonly object _managedLock = new();
+
+        /// <summary>
+        /// Build a MediaPlayer on the CURRENT shared LibVLC and register it so it participates in
+        /// the wedge-rescue and quarantine machinery. Construction happens under _libVLCLock, so
+        /// the instance cannot be retired out from under the player mid-build.
+        /// </summary>
+        /// <param name="ownerTag">Short owner name for the trace, e.g. "bubble-count[primary]".</param>
+        /// <param name="owner">
+        /// The instance the player was built on. Create the caller's <c>Media</c> from THIS
+        /// reference rather than re-reading <see cref="SharedLibVLC"/>: a retire between the two
+        /// would otherwise hand a fresh instance's Media to a retired instance's player. A retired
+        /// instance is quarantined, never disposed, so this reference stays valid for the life of
+        /// the player.
+        /// </param>
+        public LibVLCSharp.Shared.MediaPlayer? CreateManagedPlayer(string ownerTag, out LibVLC? owner)
+        {
+            owner = null;
+            try
+            {
+                EnsureLibVLCInitialized();
+
+                LibVLCSharp.Shared.MediaPlayer player;
+                LibVLC instance;
+                lock (_libVLCLock)
+                {
+                    // Taking this lock can block behind a background rebuild's native `new LibVLC(...)`
+                    // (see RetireSharedLibVLC). That wait is the point: the alternative is the race
+                    // that built bubble-count players on retired instances.
+                    if (_libVLC == null)
+                    {
+                        VideoDiag.Log("LEASE", $"{ownerTag}: no shared LibVLC instance - player NOT created");
+                        return null;
+                    }
+                    instance = _libVLC;
+                    player = new LibVLCSharp.Shared.MediaPlayer(instance);
+                }
+
+                owner = instance;
+                lock (_managedLock) { _managedLeases.Add((player, instance)); }
+                VideoDiag.Log("LEASE", $"{ownerTag}: managed player created");
+                return player;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "VideoService: CreateManagedPlayer failed for {Owner}", ownerTag);
+                VideoDiag.Log("LEASE", $"{ownerTag}: managed player creation THREW: {ex.Message}");
+                owner = null;
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Hand a leased player back. <paramref name="stopTask"/> is the task that called Stop() on
+        /// it: a task that never completes means the player is WEDGED, and a wedged player must be
+        /// quarantined (rooted forever) rather than disposed — disposing one is exactly what poisons
+        /// the shared instance for every later video (#559). Everything here runs off the
+        /// dispatcher; the caller may return immediately.
+        /// </summary>
+        public void ReleaseManagedPlayer(LibVLCSharp.Shared.MediaPlayer? player, Task? stopTask, string ownerTag)
+        {
+            if (player == null) return;
+
+            LibVLC? owner = null;
+            lock (_managedLock)
+            {
+                int i = _managedLeases.FindIndex(e => ReferenceEquals(e.Player, player));
+                if (i >= 0)
+                {
+                    owner = _managedLeases[i].Owner;
+                    _managedLeases.RemoveAt(i);
+                }
+            }
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    if (stopTask != null && !stopTask.IsCompleted)
+                    {
+                        VideoDiag.Log("LEASE", $"{ownerTag}: Stop() still running - waiting {StopStragglerGraceMs}ms off-thread before deciding");
+                        await Task.WhenAny(stopTask, Task.Delay(StopStragglerGraceMs));
+                    }
+                    // Same settle delay the mandatory teardown uses: let an in-flight EndReached or
+                    // render callback finish before the native object goes anywhere.
+                    await Task.Delay(750);
+
+                    if (stopTask != null && !stopTask.IsCompleted)
+                    {
+                        QuarantineNative(player, $"{ownerTag}: Stop() never completed");
+                        RetireSharedLibVLC(owner, $"a wedged {ownerTag} player was quarantined");
+                        return;
+                    }
+
+                    player.Dispose();
+                    VideoDiag.Log("LEASE", $"{ownerTag}: managed player disposed");
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("VideoService: ReleaseManagedPlayer({Owner}) failed - {Error}", ownerTag, ex.Message);
+                }
+            });
+        }
+
+        // ---- post-poisoning cooldown (#766) ----
+        // A Stop() that never returns leaves a native LibVLC thread stuck in this process for good.
+        // #766 is that state recorded at 22:05, a bubble-count video built on top of the wreckage at
+        // 22:18, and a dispatcher that never drained again. After a poisoning the shared instance is
+        // retired and rebuilt; consumers that can simply skip a turn should wait that out rather
+        // than immediately stand up another player.
+        private const int NativePoisonCooldownMs = 60000;
+        private static long _nativePoisonTicks;
+
+        /// <summary>
+        /// Milliseconds left of the post-poisoning cooldown, 0 when clear. Optional consumers
+        /// (bubble count) skip a turn while it is non-zero. The mandatory pipeline never checks it:
+        /// its own retire/quarantine already covers the case, and skipping a mandatory video would
+        /// be a functional regression.
+        /// </summary>
+        public static long NativePoisonCooldownRemainingMs
+        {
+            get
+            {
+                var at = Interlocked.Read(ref _nativePoisonTicks);
+                if (at == 0) return 0;
+                var elapsed = (DateTime.UtcNow.Ticks - at) / TimeSpan.TicksPerMillisecond;
+                return elapsed >= NativePoisonCooldownMs ? 0 : NativePoisonCooldownMs - elapsed;
+            }
+        }
+
+        /// <summary>Arm the cooldown. Called wherever a native Stop() is established as wedged.</summary>
+        private static void RecordNativePoisoning(string reason)
+        {
+            Interlocked.Exchange(ref _nativePoisonTicks, DateTime.UtcNow.Ticks);
+            App.Logger?.Warning(
+                "VideoService: native poisoning recorded ({Reason}) - holding new shared-LibVLC players off for {Sec}s",
+                reason, NativePoisonCooldownMs / 1000);
+            VideoDiag.Log("POISON", $"{reason} - {NativePoisonCooldownMs}ms cooldown armed for new shared-LibVLC players");
+        }
+
+        // ---- wedge protection for leased playback ----
+        // The mandatory watchdog is armed by StartVideoPlayback and gated on its own playback state,
+        // so bubble count was completely unguarded (#766): its only guard was a DispatcherTimer,
+        // i.e. dead the instant the UI thread it is meant to watch stops pumping. This is the same
+        // ladder, driven off VideoDiag's process-wide UI heartbeat instead of a private one, and
+        // without the mandatory rung 2 — retiring the shared instance mid-game rescues nothing and
+        // spends one of the four per-session retires.
+        private System.Threading.Timer? _managedWedgeWatchdog;
+        private volatile int _managedRescueRung;
+        private volatile string _managedLabel = "";
+        private readonly List<IntPtr> _managedWindowHandles = new();
+
+        /// <summary>
+        /// Arm the wedge ladder around a leased playback. Call BEFORE the first native call (the
+        /// #766 wedge is inside the MediaPlayer/HwndHost/Play sequence itself), and disarm when the
+        /// windows are gone. Independent of the mandatory watchdog, so arming this does not disturb
+        /// a video that is somehow still playing.
+        /// </summary>
+        public void ArmManagedWedgeWatchdog(string label)
+        {
+            _managedLabel = label;
+            _managedRescueRung = 0;
+            // Always called BEFORE the run's windows exist, so anything still cached here belongs to
+            // a previous run that never disarmed (its teardown threw). Those handles are dead, and
+            // acting on them would make the escape hatch's trace line lie about what it released.
+            lock (_managedLock) { _managedWindowHandles.Clear(); }
+            try { _managedWedgeWatchdog?.Dispose(); } catch { }
+            _managedWedgeWatchdog = new System.Threading.Timer(_ => ManagedWedgeTick(), null, 3000, 3000);
+            VideoDiag.Log("WEDGE", $"{label}: managed wedge watchdog armed");
+        }
+
+        /// <summary>Disarm the leased-playback ladder and forget its window handles.</summary>
+        public void DisarmManagedWedgeWatchdog()
+        {
+            // Teardown paths call this unconditionally (the panic key closes bubble count whether or
+            // not a game was running), so stay silent when there was nothing armed rather than write
+            // a WEDGE line naming a run that ended long ago.
+            bool wasArmed = _managedWedgeWatchdog != null;
+            try { _managedWedgeWatchdog?.Dispose(); } catch { }
+            _managedWedgeWatchdog = null;
+            lock (_managedLock) { _managedWindowHandles.Clear(); }
+            if (wasArmed) VideoDiag.Log("WEDGE", $"{_managedLabel}: managed wedge watchdog disarmed");
+        }
+
+        /// <summary>
+        /// Cache a leased window's HWND for the escape-hatch rung. Call from SourceInitialized:
+        /// once the UI thread wedges nothing can resolve a Window to its handle any more (#765).
+        /// </summary>
+        public void RegisterManagedWindow(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return;
+            lock (_managedLock)
+            {
+                if (!_managedWindowHandles.Contains(hwnd)) _managedWindowHandles.Add(hwnd);
+            }
+        }
+
+        private void ManagedWedgeTick()
+        {
+            try
+            {
+                if (_managedWedgeWatchdog == null) return;
+
+                // VideoDiag's heartbeat is process-wide and always running, so this ladder needs no
+                // DispatcherTimer of its own — one less thing that dies with the thread it watches.
+                long stallMs = VideoDiag.UiStallMs;
+                if (stallMs < WedgeStallMs) return;
+
+                if (_managedRescueRung < 1)
+                {
+                    _managedRescueRung = 1;
+                    App.Logger?.Error("VideoService: UI thread wedged {StallMs}ms during {Label} playback — off-thread rescue",
+                        stallMs, _managedLabel);
+                    VideoDiag.Log("WEDGE", $"{_managedLabel}: UI THREAD WEDGED {stallMs}ms - rung 1: off-thread player Stop()");
+                    StopManagedPlayersOffThread();
+                    return;
+                }
+
+                if (_managedRescueRung < 3 && stallMs >= WedgeRescueRung3Ms)
+                {
+                    _managedRescueRung = 3;
+                    RunManagedEscapeHatch(stallMs);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ManagedWedgeTick error: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Rung 1 for leased playback: stop every leased player, each on its OWN task, with a
+        /// bounded batch wait. A hung player must cost only its own task — never the watchdog
+        /// thread, and never the later rung (the inline Stop() is what ended the rescue in #767).
+        /// </summary>
+        private void StopManagedPlayersOffThread()
+        {
+            List<LibVLCSharp.Shared.MediaPlayer> players;
+            lock (_managedLock) { players = _managedLeases.Select(e => e.Player).ToList(); }
+            VideoDiag.Log("WEDGE", $"{_managedLabel}: stopping {players.Count} leased player(s) off-thread");
+            if (players.Count == 0) return;
+
+            var tasks = new Task[players.Count];
+            for (int i = 0; i < players.Count; i++)
+            {
+                var index = i;
+                var player = players[i];
+                tasks[i] = Task.Run(() =>
+                {
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    try
+                    {
+                        player.Stop();
+                        VideoDiag.Log("WEDGE", $"{_managedLabel}: player[{index}].Stop returned after {sw.ElapsedMilliseconds}ms");
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Managed wedge rescue: player.Stop failed - {Error}", ex.Message);
+                        VideoDiag.Log("WEDGE", $"{_managedLabel}: player[{index}].Stop threw after {sw.ElapsedMilliseconds}ms: {ex.Message}");
+                    }
+                });
+            }
+
+            if (!Task.WaitAll(tasks, WedgeStopBudgetMs))
+                VideoDiag.Log("WEDGE", $"{_managedLabel}: at least one leased Stop() is STILL running after {WedgeStopBudgetMs}ms - leaving it to the quarantine path");
+        }
+
+        /// <summary>
+        /// Rung 3 for leased playback — the same escape hatch the mandatory windows get (see
+        /// <see cref="RunWedgeEscapeHatch"/>). Bubble-count windows are fullscreen, topmost and (in
+        /// strict mode) refuse Esc, so a wedged dispatcher leaves the user with no way to reach the
+        /// desktop or Task Manager. Two Win32 calls against our own cached HWNDs: no dispatcher, no
+        /// LibVLC, no managed window state, so it still works when the UI thread never drains again.
+        /// </summary>
+        private void RunManagedEscapeHatch(long stallMs)
+        {
+            IntPtr[] handles;
+            lock (_managedLock) { handles = _managedWindowHandles.ToArray(); }
+            VideoDiag.Log("WEDGE", $"{_managedLabel}: rung 3 ESCAPE HATCH (stalled {stallMs}ms) - dropping {handles.Length} window(s) out of the topmost band and hiding them");
+            App.Logger?.Error("VideoService: UI thread wedged {StallMs}ms during {Label} — releasing {Count} topmost window(s) so the desktop and Task Manager are reachable",
+                stallMs, _managedLabel, handles.Length);
+            if (handles.Length == 0) return;
+
+            // Own task: a cross-thread window call can itself block on the hung owner thread, and
+            // that must never take the watchdog's timer thread with it.
+            Task.Run(() =>
+            {
+                foreach (var hwnd in handles)
+                {
+                    try
+                    {
+                        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+                        ShowWindow(hwnd, SW_HIDE);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Managed escape hatch: window release failed - {Error}", ex.Message);
+                    }
+                }
+                VideoDiag.Log("WEDGE", $"{_managedLabel}: rung 3 ESCAPE HATCH: window release calls issued");
+            });
+        }
+
+        #endregion
 
         /// <summary>
         /// Refresh the videos path based on current settings.
@@ -1695,6 +2063,10 @@ namespace ConditioningControlPanel.Services
             CancelPendingRetry();
             _retryPath = path;
             _startTime = DateTime.Now;
+            // Fresh clip ⇒ fresh length. _duration was only ever ASSIGNED (LengthChanged / MediaOpened)
+            // and never cleared, so a clip that died before LengthChanged inherited the previous
+            // clip's length and was credited with it on the skip path (#767).
+            _duration = 0;
             _hits = _total = 0;
             _spawnTimes.Clear();
 
@@ -1988,7 +2360,9 @@ namespace ConditioningControlPanel.Services
                 if (useBlur)
                 {
                     double screenAspect = (double)screen.Bounds.Width / Math.Max(1, screen.Bounds.Height);
-                    blurSurface = new BlurVmemSurface(screenAspect);
+                    // Every BLUR: line carries the surface tag so a report says WHICH screen died
+                    // instead of leaving it to be inferred from thread counts (#767).
+                    blurSurface = new BlurVmemSurface(screenAspect, $"{tag} {screen.DeviceName}");
                     _blurSurfaces.Add(blurSurface);
                     App.Logger?.Information("VideoService: blurred-background path armed for {File} on {Screen} (screenAspect={AR:0.000})",
                         Path.GetFileName(path), screen.DeviceName, screenAspect);
@@ -2039,8 +2413,15 @@ namespace ConditioningControlPanel.Services
                     catch (Exception ex) { App.Logger?.Debug("PrimaryPlaybackTimeMsChanged handler error: {Error}", ex.Message); }
                 };
 
+                // Handlers are never unsubscribed and a wedged player is quarantined rather than
+                // disposed, so a LATE event can still arrive from a player whose video is long gone.
+                // Same generation guard the watchdog continuations use (see _teardownGeneration): a
+                // stale LengthChanged must not overwrite the current clip's duration or re-arm the
+                // safety timer against a video that already ended.
+                var lengthGen = _teardownGeneration;
                 mediaPlayer.LengthChanged += (s, e) =>
                 {
+                    if (lengthGen != _teardownGeneration) return;
                     _duration = e.Length / 1000.0; // Convert ms to seconds
                     App.Logger?.Information("VideoService: LibVLC LengthChanged fired, duration={Duration}s", _duration);
 
@@ -2089,7 +2470,11 @@ namespace ConditioningControlPanel.Services
                         var dispatcher = Application.Current?.Dispatcher;
                         if (dispatcher != null && !dispatcher.HasShutdownStarted)
                         {
-                            dispatcher.BeginInvoke(() => StartSafetyTimer(_duration));
+                            dispatcher.BeginInvoke(() =>
+                            {
+                                if (lengthGen != _teardownGeneration) return; // a teardown beat us to the UI thread
+                                StartSafetyTimer(_duration);
+                            });
                         }
                         else
                         {
@@ -2303,18 +2688,23 @@ namespace ConditioningControlPanel.Services
                 // that is the line to read when a report says "video plays but has no sound".
                 App.Logger?.Information("LibVLC audio requested: Volume={Vol}, Mute={Mute} (pre-aout - see the [VIDEO] aout line for what actually happened)",
                     mediaPlayer.Volume, mediaPlayer.Mute);
-
-                // Arm the vout watchdog on the primary player: if no video output exists within the
-                // grace window the screen is white regardless of decode state (#557-#560/#574) —
-                // self-heal by retiring the shared instance and retrying once (see VoutWatchdogFire).
-                // The blurred path renders through memory callbacks (no vout HWND, so none of the
-                // DXVA present failures the vout watchdog targets), so it uses a simpler frame-arrival
-                // watchdog instead: no frame within the grace window ⇒ skip to the next video.
-                if (useBlur)
-                    StartBlurFrameWatchdog(blurSurface!);
-                else
-                    StartVoutWatchdog(mediaPlayer, path, strict);
             }
+
+            // Arm the vout watchdog on the primary player: if no video output exists within the
+            // grace window the screen is white regardless of decode state (#557-#560/#574) —
+            // self-heal by retiring the shared instance and retrying once (see VoutWatchdogFire).
+            // The blurred path renders through memory callbacks (no vout HWND, so none of the
+            // DXVA present failures the vout watchdog targets), so it uses a simpler frame-arrival
+            // watchdog instead: no frame within the grace window ⇒ skip to the next video.
+            //
+            // The frame watchdog is armed for EVERY blurred surface, not just the audio-bearing one:
+            // it used to live inside the `withAudio` block, so a stalled SECONDARY was invisible and
+            // a healthy secondary could not rescue a stalled primary (#767). The vout watchdog stays
+            // primary-only — its heal retires and replays the whole video.
+            if (useBlur)
+                StartBlurFrameWatchdog(blurSurface!, $"{tag} {screen.DeviceName}");
+            else if (withAudio)
+                StartVoutWatchdog(mediaPlayer, path, strict);
 
                 App.Logger?.Debug("LibVLC video window on: {Screen} (audio: {Audio}, vol: {Vol}, mute: {Mute})",
                     screen.DeviceName, withAudio, mediaPlayer.Volume, mediaPlayer.Mute);
@@ -2434,27 +2824,56 @@ namespace ConditioningControlPanel.Services
         /// video rather than sit on a black screen. Cheaper counterpart to StartVoutWatchdog, which
         /// targets the VideoView/DXVA white-screen the memory path can't hit.
         /// </summary>
-        private void StartBlurFrameWatchdog(BlurVmemSurface surface)
+        private void StartBlurFrameWatchdog(BlurVmemSurface surface, string surfaceTag)
         {
             var gen = _teardownGeneration;
-            // DIAGNOSTIC NOTE (#616/#617/#621/#622/#623): unlike StartVoutWatchdog (a threadpool
-            // timer) this guard is a DispatcherTimer, so it is dead weight in exactly the scenario
-            // the reports describe — a wedged UI thread. The blurred-background path is the DEFAULT
-            // in 6.5.0, which means the default render path's only frame-liveness guard cannot fire
-            // during a freeze. Logged, not changed: replacing it is a behaviour change, not
-            // instrumentation. See the write-up.
-            VideoDiag.Log("BLUR", $"frame watchdog armed (DispatcherTimer, {VoutGraceMs}ms) - cannot fire if the UI thread wedges");
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(VoutGraceMs) };
-            timer.Tick += (s, e) =>
+            // This used to be a DispatcherTimer, and its own comment admitted the flaw: the blurred
+            // path is the DEFAULT render path, and its only frame-liveness guard could not fire in
+            // exactly the scenario it exists for — a wedged UI thread (#616-#623/#766). It is now a
+            // threadpool timer like StartVoutWatchdog, so the verdict lands in the trace even during
+            // a freeze; only the teardown it decides on is marshalled back to the dispatcher.
+            VideoDiag.Log("BLUR", $"[{surfaceTag}] frame watchdog armed (threadpool timer, {VoutGraceMs}ms)");
+            var timer = new System.Threading.Timer(_ =>
             {
-                timer.Stop();
-                if (!_videoPlaying || gen != _teardownGeneration) return; // torn down / superseded
-                if (surface.HasRendered) { VideoDiag.Log("BLUR", "frame watchdog: frames are arriving, all good"); return; }
-                App.Logger?.Warning("VideoService: blurred-background video produced no frame within {Ms}ms — skipping to next", VoutGraceMs);
-                VideoDiag.Log("BLUR", $"NO FRAME within {VoutGraceMs}ms - black-screen state confirmed, skipping to next video");
-                try { OnEnded(); } catch (Exception ex) { App.Logger?.Debug("StartBlurFrameWatchdog OnEnded threw: {E}", ex.Message); }
-            };
-            timer.Start();
+                try
+                {
+                    if (!_videoPlaying || _isCleaningUp || gen != _teardownGeneration) return; // torn down / superseded
+                    if (surface.HasRendered) { VideoDiag.Log("BLUR", $"[{surfaceTag}] frame watchdog: frames are arriving, all good"); return; }
+                    App.Logger?.Warning("VideoService: blurred-background video produced no frame within {Ms}ms on {Surface} — skipping to next",
+                        VoutGraceMs, surfaceTag);
+                    VideoDiag.Log("BLUR", $"[{surfaceTag}] NO FRAME within {VoutGraceMs}ms - black-screen state confirmed, skipping to next video");
+
+                    var dispatcher = Application.Current?.Dispatcher;
+                    if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                    dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (!_videoPlaying || _isCleaningUp || gen != _teardownGeneration) return;
+                        // Nothing was ever on screen for this surface: the natural-end path must NOT
+                        // seed the watch position to the full clip length (#767).
+                        try { EndCurrentVideo(noFrameRendered: true); }
+                        catch (Exception ex) { App.Logger?.Debug("StartBlurFrameWatchdog OnEnded threw: {E}", ex.Message); }
+                    }));
+                }
+                catch (Exception ex) { App.Logger?.Debug("StartBlurFrameWatchdog tick error: {E}", ex.Message); }
+            }, null, VoutGraceMs, System.Threading.Timeout.Infinite);
+
+            lock (_blurFrameWatchLock) { _blurFrameWatchTimers.Add(timer); }
+        }
+
+        /// <summary>Disarm every blur frame watchdog armed for the current playback. Called from the
+        /// CloseAll finally, next to StopVoutWatchdog.</summary>
+        private void StopBlurFrameWatchdogs()
+        {
+            List<System.Threading.Timer> timers;
+            lock (_blurFrameWatchLock)
+            {
+                timers = _blurFrameWatchTimers.ToList();
+                _blurFrameWatchTimers.Clear();
+            }
+            foreach (var t in timers)
+            {
+                try { t.Dispose(); } catch { }
+            }
         }
 
         /// <summary>
@@ -2477,6 +2896,9 @@ namespace ConditioningControlPanel.Services
             private const int BgSnapshotDivisor = 8;
 
             private readonly double _screenAspect;
+            // "primary \\.\DISPLAY1" — stamped on every BLUR line so a dual-monitor report says which
+            // surface stalled instead of leaving it to be inferred from decoder thread counts (#767).
+            private readonly string _tag;
             private readonly object _bufferLock = new();
             private readonly System.Windows.Shapes.Rectangle _background;
             private readonly ImageBrush _bgBrush;
@@ -2493,6 +2915,12 @@ namespace ConditioningControlPanel.Services
             private volatile bool _hasRendered;
             private bool _hooked;
             private bool _disposed;
+            private bool _bufferReleased;
+
+            /// <summary>The player whose vmem callbacks feed this surface (set in Attach). CloseAll
+            /// uses it to pair the surface with the player's Stop() task, which owns the moment the
+            /// native frame buffer becomes safe to free.</summary>
+            public LibVLCSharp.Shared.MediaPlayer? Player { get; private set; }
 
             // #687: managed staging copy of the newest decoded frame. The UI thread copies the native
             // buffer into this UNDER _bufferLock and then RELEASES the lock before it goes anywhere
@@ -2527,9 +2955,14 @@ namespace ConditioningControlPanel.Services
             /// <summary>True once at least one frame has been blitted to the surface.</summary>
             public bool HasRendered => _hasRendered;
 
-            public BlurVmemSurface(double screenAspect)
+            /// <summary>Tagged BLUR trace line for this surface. Enqueue-only, safe from the UI
+            /// thread and from LibVLC's native callback threads alike.</summary>
+            private void Diag(string message) => VideoDiag.Log("BLUR", $"[{_tag}] {message}");
+
+            public BlurVmemSurface(double screenAspect, string tag)
             {
                 _screenAspect = screenAspect > 0 ? screenAspect : (16.0 / 9.0);
+                _tag = string.IsNullOrEmpty(tag) ? "?" : tag;
 
                 // Blurred fill: same frame scaled to cover the whole screen (cropping the excess),
                 // heavily blurred. Hidden until the format callback decides bars are actually needed.
@@ -2586,6 +3019,7 @@ namespace ConditioningControlPanel.Services
             /// created lazily inside the format callback once the decoder reports the real size.</summary>
             public void Attach(LibVLCSharp.Shared.MediaPlayer player)
             {
+                Player = player;
                 _formatCb = FormatCallback;
                 _cleanupCb = CleanupCallback;
                 _lockCb = LockCallback;
@@ -2640,7 +3074,7 @@ namespace ConditioningControlPanel.Services
                 // blurFill=true arms the fullscreen Gaussian; in 6.5.0 it ran every frame over the LIVE
                 // per-frame bitmap and that was the freeze (#616-#623/#632/#636/#687). It now runs over
                 // a small frozen snapshot instead, but the trace still records when it is armed.
-                VideoDiag.Log("BLUR", $"format cb - video {vw}x{vh}, buffer {bw}x{bh}, blurFill={needsBlur}");
+                Diag($"format cb - video {vw}x{vh}, buffer {bw}x{bh}, blurFill={needsBlur}");
 
                 var disp = Application.Current?.Dispatcher;
                 if (disp != null && !disp.HasShutdownStarted)
@@ -2670,7 +3104,7 @@ namespace ConditioningControlPanel.Services
                 {
                     if (!IsRebuildCurrent(gen, Volatile.Read(ref _formatGeneration)))
                     {
-                        VideoDiag.Log("BLUR", $"stale bitmap rebuild dropped ({bw}x{bh}, gen {gen} superseded)");
+                        Diag($"stale bitmap rebuild dropped ({bw}x{bh}, gen {gen} superseded)");
                         return;
                     }
 
@@ -2683,7 +3117,7 @@ namespace ConditioningControlPanel.Services
                     }
                     if (!applied)
                     {
-                        VideoDiag.Log("BLUR", $"stale bitmap rebuild dropped at swap ({bw}x{bh}, gen {gen} superseded)");
+                        Diag($"stale bitmap rebuild dropped at swap ({bw}x{bh}, gen {gen} superseded)");
                         return;
                     }
 
@@ -2793,7 +3227,7 @@ namespace ConditioningControlPanel.Services
                     if (_staging.Length < bytes)
                     {
                         _staging = new byte[bytes];
-                        VideoDiag.Log("BLUR", $"staging buffer grown to {bytes / 1024}KB for {w}x{h}");
+                        Diag($"staging buffer grown to {bytes / 1024}KB for {w}x{h}");
                     }
                     Marshal.Copy(_frameBuffer, _staging, 0, bytes);
                     staging = _staging;
@@ -2830,9 +3264,9 @@ namespace ConditioningControlPanel.Services
                     }
                     long blitMs = Environment.TickCount64 - lockStart;
                     if (blitMs >= 250)
-                        VideoDiag.Log("BLUR", $"UI-thread frame blit took {blitMs}ms (WriteableBitmap.Lock contended with the render thread)");
+                        Diag($"UI-thread frame blit took {blitMs}ms (WriteableBitmap.Lock contended with the render thread)");
                     if (!_hasRendered)
-                        VideoDiag.Log("BLUR", $"first frame blitted ({w}x{h})");
+                        Diag($"first frame blitted ({w}x{h})");
                     _hasRendered = true;
 
                     RefreshBackgroundSnapshot(staging, w, h);
@@ -2870,11 +3304,11 @@ namespace ConditioningControlPanel.Services
                     if (_snapBuf.Length < need)
                     {
                         _snapBuf = new byte[need];
-                        VideoDiag.Log("BLUR", $"blur-fill snapshot source is {sw}x{sh} (1/{BgSnapshotDivisor} of {w}x{h}, every {BgSnapshotEveryNFrames} frames)");
+                        Diag($"blur-fill snapshot source is {sw}x{sh} (1/{BgSnapshotDivisor} of {w}x{h}, every {BgSnapshotEveryNFrames} frames)");
                     }
                     else if (sw != _snapW || sh != _snapH)
                     {
-                        VideoDiag.Log("BLUR", $"blur-fill snapshot resized to {sw}x{sh} (from {w}x{h})");
+                        Diag($"blur-fill snapshot resized to {sw}x{sh} (from {w}x{h})");
                     }
                     _snapW = sw;
                     _snapH = sh;
@@ -2943,39 +3377,64 @@ namespace ConditioningControlPanel.Services
                 if (_disposed) return;
                 _disposed = true;
 
-                // Invalidate the buffer first so LockCallback hands LibVLC nothing, and stop blitting.
-                _bufferValid = false;
+                // Stop compositing only. The NATIVE frame buffer is deliberately NOT freed or
+                // invalidated here: LibVLC's vmem lock callback must always be handed a real plane
+                // pointer — writing null planes sends the decoder's next memcpy into address zero
+                // (0xC0000005 in msvcrt, reproduced 2026-08-02 under CCP_FAULT_WEDGE_STOP) — and on
+                // the blur path CloseAll no longer waits for Stop(), so a decoder that is still
+                // rendering is the EXPECTED case when this runs. The buffer keeps absorbing frames
+                // nobody reads until ReleaseBufferAfter(...) frees it once this surface's player has
+                // actually finished stopping; a Stop() that never completes leaks it (a few MB) by
+                // design — the same trade the player quarantine makes.
                 _frameReady = false;
                 Unhook();
 
-                // #616-#623: this `lock` is taken on the UI THREAD during CloseAll and contends with
-                // LibVLC's native FormatCallback/LockCallback, which hold the same lock. Unlike the
-                // per-frame blit (which uses TryEnter with an 8ms budget) this one waits forever, so
-                // a decoder thread stuck inside a callback wedges the dispatcher here. Bracketed so
-                // the trace shows whether teardown died on this exact lock.
-                IntPtr buf;
+                // Bounded like the per-frame blit (8ms TryEnter budget): this runs on the UI thread
+                // and contends with native FormatCallback/LockCallback. The bitmap is managed-only;
+                // if the lock can't be had, the GC gets it anyway once the rebuild posts drain.
                 long lockStart = Environment.TickCount64;
-                lock (_bufferLock)
+                bool got = Monitor.TryEnter(_bufferLock, 250);
+                if (got)
                 {
-                    buf = _frameBuffer;
-                    _frameBuffer = IntPtr.Zero;
-                    _bitmap = null;
+                    try { _bitmap = null; }
+                    finally { Monitor.Exit(_bufferLock); }
                 }
                 long waited = Environment.TickCount64 - lockStart;
-                VideoDiag.Log("BLUR", waited >= 100
-                    ? $"surface disposed - waited {waited}ms for _bufferLock (native callback contention)"
-                    : "surface disposed");
+                Diag(got
+                    ? (waited >= 100
+                        ? $"surface disposed - waited {waited}ms for _bufferLock (native callback contention); buffer held for the decoder"
+                        : "surface disposed (buffer held until the player's Stop() completes)")
+                    : $"surface disposed - _bufferLock still held by a native callback after {waited}ms; buffer held for the decoder");
+            }
 
-                // Free the native buffer only after a delay, so any frame still in flight on a
-                // LibVLC thread can't write into freed memory. The player is already stopped by
-                // CloseAll before this runs, so this is belt-and-suspenders.
+            /// <summary>
+            /// Free the native frame buffer once <paramref name="stopTask"/> — this surface's
+            /// player's Stop() — has completed, i.e. once LibVLC guarantees no vmem callback can
+            /// still hand the buffer to a decoder thread. A stop that never completes (the wedge
+            /// this whole path exists for) never frees it: leaked deliberately.
+            /// </summary>
+            public void ReleaseBufferAfter(Task stopTask)
+            {
+                if (stopTask.IsCompleted) { FreeBufferOnce(); return; }
+                stopTask.ContinueWith(_ => FreeBufferOnce(), TaskScheduler.Default);
+            }
+
+            private void FreeBufferOnce()
+            {
+                IntPtr buf;
+                lock (_bufferLock)
+                {
+                    if (_bufferReleased) return;
+                    _bufferReleased = true;
+                    buf = _frameBuffer;
+                    _frameBuffer = IntPtr.Zero;
+                    _bufferValid = false;
+                    _bitmap = null;
+                }
                 if (buf != IntPtr.Zero)
                 {
-                    Task.Run(async () =>
-                    {
-                        await Task.Delay(500);
-                        try { Marshal.FreeHGlobal(buf); } catch { /* ignore */ }
-                    });
+                    try { Marshal.FreeHGlobal(buf); } catch { /* ignore */ }
+                    Diag("frame buffer freed (player Stop() completed)");
                 }
             }
         }
@@ -3168,7 +3627,12 @@ namespace ConditioningControlPanel.Services
                 // is never vetoed — otherwise a strict window whose _videoPlaying was
                 // left true becomes permanently un-closable and renders solid black
                 // (the "video ended, black window won't close" report).
-                win.Closing += (s, e) => { if (_videoPlaying && !_isCleaningUp) e.Cancel = true; };
+                //
+                // The veto also stands down once the wedge watchdog has recorded a stall past
+                // WedgeStallMs: a strict lock is only defensible while the app is actually
+                // responding, and #765 is a user staring at a frozen fullscreen frame that refuses
+                // Alt+F4 with no way to reach Task Manager behind it.
+                win.Closing += (s, e) => { if (_videoPlaying && !_isCleaningUp && !_wedgeStallSeen) e.Cancel = true; };
                 win.PreviewKeyDown += (s, e) =>
                 {
                     // In strict mode, block panic key, Alt+F4, and system keys
@@ -3459,10 +3923,22 @@ namespace ConditioningControlPanel.Services
 
         #region Video End / Penalty / Mercy
 
-        private void OnEnded()
+        /// <summary>
+        /// The video reached its end (LibVLC EndReached / MediaElement MediaEnded / no screens).
+        /// Deliberately parameterless and NOT overloaded: the LibVLC handlers hand this method GROUP
+        /// to Dispatcher.BeginInvoke, which only binds while the group has exactly one candidate.
+        /// </summary>
+        private void OnEnded() => EndCurrentVideo(noFrameRendered: false);
+
+        /// <param name="noFrameRendered">
+        /// True only for the blur frame watchdog's black-screen skip: the surface never produced a
+        /// single frame, so the natural-end "credit the whole clip" seed below must be skipped.
+        /// Without this a 9-second black screen was credited as 357.8s watched (#767).
+        /// </param>
+        private void EndCurrentVideo(bool noFrameRendered)
         {
-            App.Logger?.Information("VideoService: OnEnded() called, _videoPlaying={Playing}, _windows={WinCount}, _isCleaningUp={Cleaning}",
-                _videoPlaying, _windows.Count, _isCleaningUp);
+            App.Logger?.Information("VideoService: OnEnded() called, _videoPlaying={Playing}, _windows={WinCount}, _isCleaningUp={Cleaning}, noFrame={NoFrame}",
+                _videoPlaying, _windows.Count, _isCleaningUp, noFrameRendered);
 
             // Skip if cleanup is already in progress (e.g., from panic key)
             if (_isCleaningUp)
@@ -3593,7 +4069,10 @@ namespace ConditioningControlPanel.Services
             // fails credit what was watched too — #447). The WPF MediaElement fallback path has no
             // TimeChanged position, so on a natural end seed the watched position to the full duration to
             // preserve the old "credit full length" behavior; the LibVLC path is already at ~duration here.
-            if (_lastWatchPositionMs <= 0 && _duration > 0)
+            // NOT on the no-frame skip: nothing was ever on screen, so the honest credit is zero.
+            if (noFrameRendered)
+                VideoDiag.Log("VIDEO", "no frame ever rendered - crediting 0s watched (skipping the full-duration seed)");
+            else if (_lastWatchPositionMs <= 0 && _duration > 0)
                 _lastWatchPositionMs = _duration * 1000.0;
 
             Cleanup();
@@ -4097,7 +4576,8 @@ namespace ConditioningControlPanel.Services
 
         private void StartWedgeWatchdog()
         {
-            _wedgeRescueFired = false;
+            _wedgeRescueRung = 0;
+            _wedgeStallSeen = false;
             _preRollStallLogged = false;
             System.Threading.Interlocked.Exchange(ref _uiHeartbeatTicks, DateTime.UtcNow.Ticks);
 
@@ -4126,110 +4606,215 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Runs on a threadpool thread every ~3s. If a video is playing but the UI thread stopped
-        /// heart-beating for <see cref="WedgeStallMs"/>, the dispatcher is wedged (frozen final frame,
-        /// topmost window holding the screen). Break it off-thread and queue a teardown so the app
-        /// recovers without a hard shutdown. Fires at most once per playback.
+        /// Runs on a threadpool thread every ~3s. If the UI thread stopped heart-beating for
+        /// <see cref="WedgeStallMs"/> while a video is playing (or being torn down), the dispatcher is
+        /// wedged — frozen final frame, topmost fullscreen window holding the whole screen. Escalates
+        /// through the rescue ladder described on <see cref="WedgeRescueRung2Ms"/> until either the
+        /// dispatcher drains again or the user has their machine back.
         ///
-        /// PRE-ROLL is observe-only: see <see cref="_playbackStarted"/>. Retiring LibVLC while the
-        /// UI thread is still walking PlayVideo's prologue towards EnsureLibVLCInitialized races the
-        /// background rebuild on _libVLCLock and takes the process down natively (#750-#753).
+        /// PRE-ROLL and TEARDOWN are restricted to the escape hatch: see <see cref="_playbackStarted"/>.
+        /// Retiring LibVLC while the UI thread is still walking PlayVideo's prologue towards
+        /// EnsureLibVLCInitialized races the background rebuild on _libVLCLock and takes the process
+        /// down natively (#750-#753), and during a teardown the players are already being stopped.
         /// </summary>
         private void WedgeWatchdogTick()
         {
             try
             {
-                if (!_videoPlaying || _wedgeRescueFired) return;
+                // #766/#767: stay armed through CloseAll. _videoPlaying is cleared at the TOP of the
+                // teardown, so gating on it alone made the app's longest predictable UI-thread block
+                // structurally invisible to the guard that exists to catch exactly that.
+                bool cleaning = _isCleaningUp;
+                if (!_videoPlaying && !cleaning) return;
+                if (_wedgeRescueRung >= 3) return; // ladder exhausted - nothing left to try
 
                 var last = System.Threading.Interlocked.Read(ref _uiHeartbeatTicks);
                 var stallMs = (DateTime.UtcNow.Ticks - last) / TimeSpan.TicksPerMillisecond;
                 if (stallMs < WedgeStallMs) return;
 
+                // Remembered for the rest of the playback: once the app has demonstrably wedged, the
+                // strict Closing veto stands down so Alt+F4 works (#765).
+                _wedgeStallSeen = true;
+
                 bool live = _playbackStarted;
                 if (!live) lock (_mediaPlayersLock) { live = _mediaPlayers.Count > 0; }
-                if (!live)
+
+                if (!live || cleaning)
                 {
-                    // The UI thread IS stalled, but there is nothing on screen to rescue yet.
-                    // Record it (once) and let the next tick reconsider — whatever the prologue is
-                    // blocked on will either finish, or the app will die where the trace points.
+                    // Nothing safe to rescue: either nothing is on screen yet (pre-roll) or teardown
+                    // already owns the players. Record it once, and still give the user an exit — the
+                    // escape hatch is two Win32 calls against our own windows and touches zero native
+                    // VLC state, so it cannot reproduce #750-#753.
                     if (!_preRollStallLogged)
                     {
                         _preRollStallLogged = true;
-                        App.Logger?.Warning("VideoService: UI thread stalled {StallMs}ms during video PRE-ROLL — no rescue (nothing on screen yet)", stallMs);
-                        VideoDiag.Log("WEDGE", $"UI thread stalled {stallMs}ms during PRE-ROLL - observing only, no LibVLC retire");
+                        var phase = cleaning ? "TEARDOWN" : "PRE-ROLL";
+                        App.Logger?.Warning("VideoService: UI thread stalled {StallMs}ms during video {Phase} — escape hatch only, no LibVLC rescue", stallMs, phase);
+                        VideoDiag.Log("WEDGE", $"UI thread stalled {stallMs}ms during {phase} - escape hatch only, no LibVLC retire");
                     }
+                    if (stallMs >= WedgeRescueRung3Ms)
+                        RunWedgeEscapeHatch(stallMs, cleaning ? "teardown" : "pre-roll");
                     return;
                 }
 
-                _wedgeRescueFired = true;
-                App.Logger?.Error(
-                    "VideoService: UI thread wedged {StallMs}ms during video playback — off-thread rescue (freeze/lockout guard)",
-                    stallMs);
-                // This is THE line the five v6.5.0 reports need (#616/#617/#621/#622/#623): it dates
-                // the freeze to the second and proves the rescue ran. Everything below is logged
-                // step by step because the rescue itself can be what hangs (a native Stop() that
-                // never returns), and we currently cannot tell those two cases apart.
-                VideoDiag.Log("WEDGE", $"UI THREAD WEDGED {stallMs}ms during playback - starting off-thread rescue");
-
-                // Stop native players off-thread. LibVLC Stop() is thread-safe (CloseAll already calls
-                // it from Task.Run) and can unblock a stuck decode/render that's holding the UI thread.
-                // Harmless when the list is empty (e.g. the wedge is mid window-recreate before the new
-                // player is registered — the posted teardown below still recovers it once unblocked).
-                List<LibVLCSharp.Shared.MediaPlayer> players;
-                lock (_mediaPlayersLock) { players = _mediaPlayers.ToList(); }
-                VideoDiag.Log("WEDGE", $"stopping {players.Count} native player(s) off-thread");
-                for (int i = 0; i < players.Count; i++)
+                if (_wedgeRescueRung < 1)
                 {
-                    var sw = System.Diagnostics.Stopwatch.StartNew();
-                    try
-                    {
-                        players[i].Stop();
-                        VideoDiag.Log("WEDGE", $"player[{i}].Stop returned after {sw.ElapsedMilliseconds}ms");
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Debug("Wedge rescue: player.Stop failed - {Error}", ex.Message);
-                        VideoDiag.Log("WEDGE", $"player[{i}].Stop threw after {sw.ElapsedMilliseconds}ms: {ex.Message}");
-                    }
+                    _wedgeRescueRung = 1;
+                    App.Logger?.Error(
+                        "VideoService: UI thread wedged {StallMs}ms during video playback — off-thread rescue (freeze/lockout guard)",
+                        stallMs);
+                    // This is THE line the freeze reports need (#616-#623, #765-#767): it dates the
+                    // freeze to the second and proves the rescue ran. Every rung is logged because the
+                    // rescue itself can be what hangs (a native Stop() that never returns), and the
+                    // trace is the only way to tell those two cases apart.
+                    VideoDiag.Log("WEDGE", $"UI THREAD WEDGED {stallMs}ms during playback - rung 1: off-thread player Stop()");
+                    WedgeStopPlayersOffThread();
+                    PostWedgeTeardown();
+                    return;
                 }
 
-                // A wedge mid-playback means the shared instance's native state is suspect - the #559
-                // pattern is precisely "one wedge, then every later video white-screens". Retire it so
-                // the next video starts on a clean instance (the retired one is rooted, never disposed).
-                RetireSharedLibVLC(_libVLC, "UI-thread wedge rescue during playback");
-
-                // Queue a real teardown + reschedule for the instant the dispatcher drains again, so a
-                // multi-minute lockout collapses to a brief stutter instead of stranding the frozen
-                // frame until the user kills the app or the next scheduled video jolts it loose.
-                // Generation-guarded: if some other teardown already ran by then (e.g. the vout heal
-                // tore down and started its retry video), this must not kill the newcomer.
-                var gen = _teardownGeneration;
-                try
+                if (_wedgeRescueRung < 2 && stallMs >= WedgeRescueRung2Ms)
                 {
-                    var dispatcher = Application.Current?.Dispatcher;
-                    if (dispatcher != null && !dispatcher.HasShutdownStarted)
-                    {
-                        VideoDiag.Log("WEDGE", "posting rescue teardown to the dispatcher");
-                        dispatcher.BeginInvoke(new Action(() =>
-                        {
-                            // If this line never appears in a report's trace, the dispatcher NEVER
-                            // drained again — i.e. the rescue's off-thread Stop() did not break the
-                            // wedge and only a process kill / hard reset could end it.
-                            VideoDiag.Log("WEDGE", $"rescue teardown running (dispatcher drained again after {VideoDiag.UiStallMs}ms)");
-                            if (_teardownGeneration != gen) return;
-                            try { ForceCleanup(); }
-                            catch (Exception ex) { App.Logger?.Warning(ex, "Wedge rescue: ForceCleanup threw"); }
-                            if (_isRunning) ScheduleNext();
-                            VideoDiag.Log("WEDGE", "rescue teardown complete");
-                        }));
-                    }
+                    // Rung 1 did not break it. A wedge that survives a Stop() means the shared
+                    // instance's native state is suspect - the #559 pattern is precisely "one wedge,
+                    // then every later video white-screens". Retire it so the next video starts on a
+                    // clean instance (the retired one is rooted, never disposed).
+                    _wedgeRescueRung = 2;
+                    VideoDiag.Log("WEDGE", $"still wedged after {stallMs}ms - rung 2: retiring the shared LibVLC instance");
+                    RetireSharedLibVLC(_libVLC, "UI-thread wedge rescue during playback");
+                    PostWedgeTeardown();
+                    return;
                 }
-                catch (Exception ex) { App.Logger?.Debug("Wedge rescue: dispatch failed - {Error}", ex.Message); }
+
+                if (stallMs >= WedgeRescueRung3Ms)
+                    RunWedgeEscapeHatch(stallMs, "playback");
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("WedgeWatchdogTick error: {Error}", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Rung 1: stop every native player, each on its OWN task, with a bounded batch wait. Runs on
+        /// the watchdog's threadpool thread.
+        ///
+        /// The old rescue called <c>players[i].Stop()</c> inline on this thread. In #767 the very
+        /// first call never returned, so the second player was never stopped, the retire never ran,
+        /// and no later rescue was possible — the app was frozen for good. A hung player must cost
+        /// only its own task.
+        /// </summary>
+        private void WedgeStopPlayersOffThread()
+        {
+            List<LibVLCSharp.Shared.MediaPlayer> players;
+            lock (_mediaPlayersLock) { players = _mediaPlayers.ToList(); }
+            // Leased players (bubble count) run on the SAME shared instance, so a wedge that the
+            // mandatory players cannot explain may well be theirs. Stopping everything native is
+            // the whole point of this rung.
+            lock (_managedLock) { players.AddRange(_managedLeases.Select(e => e.Player)); }
+            VideoDiag.Log("WEDGE", $"stopping {players.Count} native player(s) off-thread");
+            if (players.Count == 0) return;
+
+            var tasks = new Task[players.Count];
+            for (int i = 0; i < players.Count; i++)
+            {
+                var index = i;
+                var player = players[i];
+                tasks[i] = Task.Run(() =>
+                {
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    try
+                    {
+                        player.Stop();
+                        VideoDiag.Log("WEDGE", $"player[{index}].Stop returned after {sw.ElapsedMilliseconds}ms");
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Wedge rescue: player.Stop failed - {Error}", ex.Message);
+                        VideoDiag.Log("WEDGE", $"player[{index}].Stop threw after {sw.ElapsedMilliseconds}ms: {ex.Message}");
+                    }
+                });
+            }
+
+            if (!Task.WaitAll(tasks, WedgeStopBudgetMs))
+                VideoDiag.Log("WEDGE", $"rung 1: at least one player Stop() is STILL running after {WedgeStopBudgetMs}ms - leaving it to the quarantine path and moving on");
+        }
+
+        /// <summary>
+        /// Queue a real teardown + reschedule for the instant the dispatcher drains again, so a
+        /// multi-minute lockout collapses to a brief stutter instead of stranding the frozen frame
+        /// until the user kills the app. Generation-guarded: if some other teardown already ran by
+        /// then (e.g. the vout heal tore down and started its retry video), this must not kill the
+        /// newcomer. Safe to call from more than one rung — the first one to land bumps the
+        /// generation and the rest bail.
+        /// </summary>
+        private void PostWedgeTeardown()
+        {
+            var gen = _teardownGeneration;
+            try
+            {
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                VideoDiag.Log("WEDGE", "posting rescue teardown to the dispatcher");
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    // If this line never appears in a report's trace, the dispatcher NEVER drained
+                    // again — i.e. that rung did not break the wedge and the ladder had to escalate.
+                    VideoDiag.Log("WEDGE", $"rescue teardown running (dispatcher drained again after {VideoDiag.UiStallMs}ms)");
+                    if (_teardownGeneration != gen) return;
+                    try { ForceCleanup(); }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "Wedge rescue: ForceCleanup threw"); }
+                    if (_isRunning) ScheduleNext();
+                    VideoDiag.Log("WEDGE", "rescue teardown complete");
+                }));
+            }
+            catch (Exception ex) { App.Logger?.Debug("Wedge rescue: dispatch failed - {Error}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Rung 3, the escape hatch — and the fix that actually closes #765 ("app frozen, and because
+        /// the video window is always-on-top I can't even reach Task Manager to kill it").
+        ///
+        /// Every video window is Topmost at full physical bounds over the taskbar, WS_EX_NOACTIVATE +
+        /// MA_NOACTIVATE, and in strict mode its Closing is vetoed — so a wedged dispatcher leaves the
+        /// user with no way out but a hard reset. This drops those windows out of the topmost band and
+        /// hides them using nothing but our own cached HWNDs: no dispatcher, no LibVLC, no managed
+        /// window state. It therefore works when the UI thread never drains again, and it is safe even
+        /// during pre-roll because it touches zero native VLC state (it cannot reproduce #750-#753).
+        /// Runs on its own task: cross-thread window calls can themselves block on the hung owner
+        /// thread, and that must never take the watchdog's timer thread with them.
+        /// </summary>
+        private void RunWedgeEscapeHatch(long stallMs, string phase)
+        {
+            if (_wedgeRescueRung >= 3) return;
+            _wedgeRescueRung = 3;
+
+            IntPtr[] handles;
+            lock (_videoWindowHandlesLock) { handles = _videoWindowHandles.ToArray(); }
+            VideoDiag.Log("WEDGE", $"rung 3 ESCAPE HATCH ({phase}, stalled {stallMs}ms): dropping {handles.Length} fullscreen window(s) out of the topmost band and hiding them");
+            App.Logger?.Error("VideoService: UI thread wedged {StallMs}ms during {Phase} — releasing {Count} topmost video window(s) so the desktop and Task Manager are reachable",
+                stallMs, phase, handles.Length);
+            if (handles.Length == 0) return;
+
+            Task.Run(() =>
+            {
+                foreach (var hwnd in handles)
+                {
+                    try
+                    {
+                        // SWP_ASYNCWINDOWPOS: the owning thread is by definition not pumping, so the
+                        // request must be posted rather than sent - otherwise this call joins the wedge.
+                        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+                        ShowWindow(hwnd, SW_HIDE);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Wedge escape hatch: window release failed - {Error}", ex.Message);
+                    }
+                }
+                VideoDiag.Log("WEDGE", "rung 3 ESCAPE HATCH: window release calls issued");
+            });
         }
 
         #endregion
@@ -4348,10 +4933,22 @@ namespace ConditioningControlPanel.Services
                 // Stop all players in parallel with timeout to prevent one hanging player from blocking
                 // others. Keep the player↔task pairing: a player whose Stop() never completes is WEDGED
                 // and must be quarantined at disposal time, not disposed (see _nativeQuarantine).
-                var stopPairs = playersCopy.Select(player => (player, task: Task.Run(() =>
+                var stopPairs = playersCopy.Select((player, index) => (player, task: Task.Run(() =>
                 {
                     try
                     {
+#if DEBUG
+                        // Fault injection (CCP_FAULT_WEDGE_STOP=1): make the first player's Stop()
+                        // never return, which is exactly the native state #765-#767 land in. Lets the
+                        // teardown/rescue/escape-hatch changes be play-tested without reproducing the
+                        // intermittent aout stall. The thread is burned for the life of the process -
+                        // acceptable for a DEBUG-only switch, and it mirrors the real failure.
+                        if (index == 0 && FaultInjectWedgeStop)
+                        {
+                            VideoDiag.Log("CLOSE", "FAULT INJECTION (CCP_FAULT_WEDGE_STOP): player[0] Stop() will never complete");
+                            Thread.Sleep(System.Threading.Timeout.Infinite);
+                        }
+#endif
                         player.Stop();
                     }
                     catch (Exception ex)
@@ -4363,7 +4960,24 @@ namespace ConditioningControlPanel.Services
                 // can never condemn a FRESH instance that a vout-retry has since built.
                 var owningLibVLC = _libVLC;
 
-                if (stopPairs.Count > 0)
+                // The waits below exist for ONE reason: detaching a VideoView/HwndHost from a player
+                // that is still presenting is the historic multi-monitor crash (see the detach comment
+                // further down). The blurred-background path has no HwndHost at all — LibVLC renders
+                // into a memory buffer that WPF composites — so when every window on screen is a blur
+                // surface there is nothing to protect, and no reason to spend up to ~4.9s of DISPATCHER
+                // time waiting for a Stop() that may never return (#766/#767: measured 4936ms/4978ms,
+                // during which the panic key is silently dropped by Windows). Close immediately and let
+                // the async continuation at the bottom of this method quarantine the wedged player
+                // off-thread, exactly as it already does today.
+                bool vmemOnly = _blurSurfaces.Count > 0 && _blurSurfaces.Count == _windows.Count;
+
+                if (stopPairs.Count > 0 && vmemOnly)
+                {
+                    VideoDiag.Log("CLOSE",
+                        $"vmem/blur path ({_blurSurfaces.Count} surface(s), no HwndHost) - skipping the 500ms + 4s Stop() waits, " +
+                        $"{stopPairs.Count} stop task(s) handed to the async quarantine path");
+                }
+                else if (stopPairs.Count > 0)
                 {
                     var stopTasks = stopPairs.Select(p => p.task).ToArray();
 
@@ -4391,6 +5005,7 @@ namespace ConditioningControlPanel.Services
                             // owning instance NOW so the very next video (which may start within seconds)
                             // gets a clean one instead of inheriting the corrupted native state (#559).
                             RetireSharedLibVLC(owningLibVLC, "player Stop() wedged past extended wait");
+                            RecordNativePoisoning("player Stop() wedged past the extended wait");
                         }
                         else
                         {
@@ -4403,7 +5018,9 @@ namespace ConditioningControlPanel.Services
                 // CRITICAL: Wait a bit after stopping players to let LibVLC finish any pending operations
                 // This prevents crashes when detaching VideoView while LibVLC is still processing
                 // Use message-pump-aware wait to prevent deadlock (LibVLC threads may need UI thread)
-                if (playersCopy.Count > 0)
+                // Skipped on the vmem path for the same reason as the waits above: no VideoView is
+                // detached below, so there is nothing this settle time protects.
+                if (playersCopy.Count > 0 && !vmemOnly)
                 {
                     WaitWithMessagePump(300);
                 }
@@ -4438,7 +5055,7 @@ namespace ConditioningControlPanel.Services
 
                 // Another small delay after detaching before closing windows
                 // Use message-pump-aware wait to prevent deadlock with LibVLC
-                if (windowsCopy.Count > 0)
+                if (windowsCopy.Count > 0 && !vmemOnly)
                 {
                     WaitWithMessagePump(100);
                 }
@@ -4470,15 +5087,25 @@ namespace ConditioningControlPanel.Services
                     }
                 }
                 _windows.Clear();
+                // The escape hatch's handles die with the windows (see RunWedgeEscapeHatch).
+                lock (_videoWindowHandlesLock) { _videoWindowHandles.Clear(); }
 
-                // Tear down any blurred-background memory-render surfaces: invalidate the frame
-                // buffer + unhook the render tick now (the players above are already stopped), then
-                // free the native buffer after a delay so an in-flight frame can't touch freed memory.
+                // Tear down any blurred-background memory-render surfaces: stop compositing now, but
+                // free each native frame buffer only after ITS player's Stop() task has completed —
+                // on the vmem path nothing above waited for the stops, so the decoder may still be
+                // handing frames to the surface right here, and both freeing the buffer and nulling
+                // the plane pointer under a live decoder are native AVs (the latter reproduced
+                // 2026-08-02 under CCP_FAULT_WEDGE_STOP: msvcrt memcpy into address zero).
                 if (_blurSurfaces.Count > 0)
                 {
                     foreach (var s in _blurSurfaces.ToList())
                     {
-                        try { s.Dispose(); }
+                        try
+                        {
+                            s.Dispose();
+                            var pair = stopPairs.FirstOrDefault(p => ReferenceEquals(p.player, s.Player));
+                            s.ReleaseBufferAfter(pair.task ?? Task.CompletedTask);
+                        }
                         catch (Exception ex) { App.Logger?.Debug("CloseAll: blur surface dispose failed - {Error}", ex.Message); }
                     }
                     _blurSurfaces.Clear();
@@ -4524,6 +5151,18 @@ namespace ConditioningControlPanel.Services
                             // Wait for any pending EndReached events to complete their Task.Run dispatch
                             await Task.Delay(1000);
 
+                            // On the vmem path nothing waited for these Stop() calls on the dispatcher,
+                            // so this is the ONLY budget a merely-slow (not wedged) Stop gets before it
+                            // is quarantined — and a quarantine also retires the shared instance, which
+                            // burns one of the four per-session retires. Give the stragglers the same
+                            // total grace the UI thread used to give them, just off-thread.
+                            var pending = stopPairs.Where(p => !p.task.IsCompleted).Select(p => p.task).ToArray();
+                            if (pending.Length > 0)
+                            {
+                                VideoDiag.Log("CLOSE", $"{pending.Length} player Stop() task(s) still running - waiting {StopStragglerGraceMs}ms off-thread before quarantining");
+                                await Task.WhenAny(Task.WhenAll(pending), Task.Delay(StopStragglerGraceMs));
+                            }
+
                             foreach (var (player, task) in stopPairs)
                             {
                                 if (!task.IsCompleted)
@@ -4550,9 +5189,14 @@ namespace ConditioningControlPanel.Services
             }
             finally
             {
-                // Video is torn down — the wedge and vout watchdogs have nothing left to guard.
+                // Video is torn down — the wedge, vout and blur-frame watchdogs have nothing left to
+                // guard. The wedge watchdog is stopped LAST-but-here on purpose: it stays armed for
+                // the whole of the teardown above (WedgeWatchdogTick gates on _videoPlaying ||
+                // _isCleaningUp), because that teardown is the app's longest predictable UI block and
+                // used to be the one window the guard could not see (#766/#767).
                 StopWedgeWatchdog();
                 StopVoutWatchdog();
+                StopBlurFrameWatchdogs();
 
                 // Release the audio-duck ref taken in PlayVideo, exactly once per teardown. Balancing
                 // it here (not only in Cleanup) covers the paths that tear down WITHOUT Cleanup — the
@@ -4887,10 +5531,21 @@ namespace ConditioningControlPanel.Services
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+        // Used only by the wedge escape hatch (RunWedgeEscapeHatch) — both calls are cross-thread
+        // safe and need neither the dispatcher nor LibVLC, which is why they still work on a window
+        // whose owning UI thread has stopped pumping.
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_NOACTIVATE = 0x08000000;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_ASYNCWINDOWPOS = 0x4000;
+        private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+        private const int SW_HIDE = 0;
         private const int WM_MOUSEACTIVATE = 0x0021;
         private const int MA_NOACTIVATE = 3;
 
@@ -4980,6 +5635,12 @@ namespace ConditioningControlPanel.Services
                     {
                         var hwnd = new WindowInteropHelper(win).Handle;
                         if (hwnd == IntPtr.Zero) return;
+                        // Cache the handle for the wedge escape hatch while we have it: once the UI
+                        // thread wedges, nothing can resolve a Window to its HWND any more (#765).
+                        lock (_videoWindowHandlesLock)
+                        {
+                            if (!_videoWindowHandles.Contains(hwnd)) _videoWindowHandles.Add(hwnd);
+                        }
                         HwndSource.FromHwnd(hwnd)?.AddHook(NoClickRaiseHook);
                     }
                     catch (Exception ex)

@@ -251,6 +251,24 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Whether a pop quiz is actually on screen right now. Gates on the visible set rather than the
+        /// <see cref="IsOpen"/> flag: that flag is raised in the constructor and only lowered in
+        /// OnClosed, so a quiz that failed between construction and Show() would leave it stuck true
+        /// and block every later interaction.
+        /// </summary>
+        public static bool IsAnyOpen()
+        {
+            try
+            {
+                return Application.Current?.Windows.OfType<PopQuizWindow>().Any(w => w.IsVisible) == true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Force close all pop quiz windows (used by panic button)
         /// </summary>
         public static void ForceCloseAll()

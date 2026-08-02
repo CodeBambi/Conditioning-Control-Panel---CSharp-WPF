@@ -175,7 +175,7 @@ namespace ConditioningControlPanel.Services
             ShowPopQuiz();
         }
 
-        public void ShowPopQuiz(bool isTest = false)
+        public void ShowPopQuiz(bool isTest = false, bool isDeferredReplay = false)
         {
             DispatcherHelper.RunOnUISync(() =>
             {
@@ -183,6 +183,36 @@ namespace ConditioningControlPanel.Services
                 if (Application.Current.Windows.OfType<PopQuizWindow>().Any())
                 {
                     App.Logger?.Debug("PopQuizService: A pop quiz is already open. Skipping.");
+                    return;
+                }
+
+                // #763: cross-check the OTHER fullscreen interaction directly, not just the queue. Both
+                // this window and a lock card are ownerless HWND_TOPMOST covers, so if the interaction
+                // slot is ever released with a card still up (the 5-minute stuck backstop used to do
+                // exactly that) they render stacked on each other. Defer through the queue instead,
+                // capped at one re-defer like LockCardService's policy so a close race can't bounce.
+                if (LockCardWindow.IsAnyOpen())
+                {
+                    if (isDeferredReplay)
+                    {
+                        App.Logger?.Warning("PopQuizService: Deferred pop quiz still blocked by an open lock card on replay. Dropping after one re-defer.");
+                        // Slot-guarded: this replay is dispatched asynchronously, so a panic/ForceReset
+                        // and a fresh claim can land in between - an unconditional Complete would clear
+                        // whatever is current instead (the #462 class).
+                        App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.PopQuiz);
+                    }
+                    else if (App.InteractionQueue != null)
+                    {
+                        App.Logger?.Warning("PopQuizService: A lock card is on screen. Deferring this pop quiz to the interaction queue.");
+                        App.InteractionQueue.TryStart(
+                            InteractionQueueService.InteractionType.PopQuiz,
+                            () => ShowPopQuiz(isTest, isDeferredReplay: true),
+                            queue: true);
+                    }
+                    else
+                    {
+                        App.Logger?.Warning("PopQuizService: A lock card is on screen and no interaction queue is available to defer to. Dropping.");
+                    }
                     return;
                 }
 
