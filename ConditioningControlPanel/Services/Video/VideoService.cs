@@ -2915,6 +2915,12 @@ namespace ConditioningControlPanel.Services
             private volatile bool _hasRendered;
             private bool _hooked;
             private bool _disposed;
+            private bool _bufferReleased;
+
+            /// <summary>The player whose vmem callbacks feed this surface (set in Attach). CloseAll
+            /// uses it to pair the surface with the player's Stop() task, which owns the moment the
+            /// native frame buffer becomes safe to free.</summary>
+            public LibVLCSharp.Shared.MediaPlayer? Player { get; private set; }
 
             // #687: managed staging copy of the newest decoded frame. The UI thread copies the native
             // buffer into this UNDER _bufferLock and then RELEASES the lock before it goes anywhere
@@ -3013,6 +3019,7 @@ namespace ConditioningControlPanel.Services
             /// created lazily inside the format callback once the decoder reports the real size.</summary>
             public void Attach(LibVLCSharp.Shared.MediaPlayer player)
             {
+                Player = player;
                 _formatCb = FormatCallback;
                 _cleanupCb = CleanupCallback;
                 _lockCb = LockCallback;
@@ -3370,61 +3377,64 @@ namespace ConditioningControlPanel.Services
                 if (_disposed) return;
                 _disposed = true;
 
-                // Invalidate the buffer first so LockCallback hands LibVLC nothing, and stop blitting.
-                _bufferValid = false;
+                // Stop compositing only. The NATIVE frame buffer is deliberately NOT freed or
+                // invalidated here: LibVLC's vmem lock callback must always be handed a real plane
+                // pointer — writing null planes sends the decoder's next memcpy into address zero
+                // (0xC0000005 in msvcrt, reproduced 2026-08-02 under CCP_FAULT_WEDGE_STOP) — and on
+                // the blur path CloseAll no longer waits for Stop(), so a decoder that is still
+                // rendering is the EXPECTED case when this runs. The buffer keeps absorbing frames
+                // nobody reads until ReleaseBufferAfter(...) frees it once this surface's player has
+                // actually finished stopping; a Stop() that never completes leaks it (a few MB) by
+                // design — the same trade the player quarantine makes.
                 _frameReady = false;
                 Unhook();
 
-                // #616-#623/#766: this lock is taken on the UI THREAD during CloseAll and contends with
-                // LibVLC's native FormatCallback/LockCallback, which hold the same lock. It used to
-                // wait forever, so a decoder thread parked inside a callback wedged the dispatcher
-                // right here — and CloseAll no longer waits for Stop() on the blur path, so a LIVE
-                // wedged decoder is now the expected case rather than the rare one. Bounded like the
-                // per-frame blit (which uses an 8ms TryEnter budget).
-                //
-                // On failure we deliberately LEAK the HGlobal frame buffer: a native callback that
-                // still holds the lock may be mid-write into it, and freeing memory under a live
-                // decoder is a use-after-free. _bufferValid is already false above, so LockCallback
-                // hands LibVLC nothing from here on; the leak is one frame buffer (a few MB) per
-                // wedge, which is the same trade the player quarantine already makes.
-                IntPtr buf = IntPtr.Zero;
+                // Bounded like the per-frame blit (8ms TryEnter budget): this runs on the UI thread
+                // and contends with native FormatCallback/LockCallback. The bitmap is managed-only;
+                // if the lock can't be had, the GC gets it anyway once the rebuild posts drain.
                 long lockStart = Environment.TickCount64;
                 bool got = Monitor.TryEnter(_bufferLock, 250);
                 if (got)
                 {
-                    try
-                    {
-                        buf = _frameBuffer;
-                        _frameBuffer = IntPtr.Zero;
-                        _bitmap = null;
-                    }
+                    try { _bitmap = null; }
                     finally { Monitor.Exit(_bufferLock); }
                 }
                 long waited = Environment.TickCount64 - lockStart;
-                if (!got)
-                {
-                    App.Logger?.Warning("VideoService: blur surface {Tag} disposed while a native callback still held its buffer lock - leaking the frame buffer deliberately", _tag);
-                    Diag($"surface disposed - _bufferLock STILL held by a live native callback after {waited}ms; leaking the frame buffer (never free memory a wedged decoder may write into)");
-                }
-                else
-                {
-                    Diag(waited >= 100
-                        ? $"surface disposed - waited {waited}ms for _bufferLock (native callback contention)"
-                        : "surface disposed");
-                }
+                Diag(got
+                    ? (waited >= 100
+                        ? $"surface disposed - waited {waited}ms for _bufferLock (native callback contention); buffer held for the decoder"
+                        : "surface disposed (buffer held until the player's Stop() completes)")
+                    : $"surface disposed - _bufferLock still held by a native callback after {waited}ms; buffer held for the decoder");
+            }
 
-                // Free the native buffer only after a delay, so any frame still in flight on a
-                // LibVLC thread can't write into freed memory. On the blur path CloseAll no longer
-                // waits for Stop(), so this delay is now a real guard rather than belt-and-suspenders:
-                // _bufferValid is false, so LockCallback hands out nothing new, and the delay covers
-                // the one frame that may already hold the pointer.
+            /// <summary>
+            /// Free the native frame buffer once <paramref name="stopTask"/> — this surface's
+            /// player's Stop() — has completed, i.e. once LibVLC guarantees no vmem callback can
+            /// still hand the buffer to a decoder thread. A stop that never completes (the wedge
+            /// this whole path exists for) never frees it: leaked deliberately.
+            /// </summary>
+            public void ReleaseBufferAfter(Task stopTask)
+            {
+                if (stopTask.IsCompleted) { FreeBufferOnce(); return; }
+                stopTask.ContinueWith(_ => FreeBufferOnce(), TaskScheduler.Default);
+            }
+
+            private void FreeBufferOnce()
+            {
+                IntPtr buf;
+                lock (_bufferLock)
+                {
+                    if (_bufferReleased) return;
+                    _bufferReleased = true;
+                    buf = _frameBuffer;
+                    _frameBuffer = IntPtr.Zero;
+                    _bufferValid = false;
+                    _bitmap = null;
+                }
                 if (buf != IntPtr.Zero)
                 {
-                    Task.Run(async () =>
-                    {
-                        await Task.Delay(500);
-                        try { Marshal.FreeHGlobal(buf); } catch { /* ignore */ }
-                    });
+                    try { Marshal.FreeHGlobal(buf); } catch { /* ignore */ }
+                    Diag("frame buffer freed (player Stop() completed)");
                 }
             }
         }
@@ -5080,14 +5090,22 @@ namespace ConditioningControlPanel.Services
                 // The escape hatch's handles die with the windows (see RunWedgeEscapeHatch).
                 lock (_videoWindowHandlesLock) { _videoWindowHandles.Clear(); }
 
-                // Tear down any blurred-background memory-render surfaces: invalidate the frame
-                // buffer + unhook the render tick now (the players above are already stopped), then
-                // free the native buffer after a delay so an in-flight frame can't touch freed memory.
+                // Tear down any blurred-background memory-render surfaces: stop compositing now, but
+                // free each native frame buffer only after ITS player's Stop() task has completed —
+                // on the vmem path nothing above waited for the stops, so the decoder may still be
+                // handing frames to the surface right here, and both freeing the buffer and nulling
+                // the plane pointer under a live decoder are native AVs (the latter reproduced
+                // 2026-08-02 under CCP_FAULT_WEDGE_STOP: msvcrt memcpy into address zero).
                 if (_blurSurfaces.Count > 0)
                 {
                     foreach (var s in _blurSurfaces.ToList())
                     {
-                        try { s.Dispose(); }
+                        try
+                        {
+                            s.Dispose();
+                            var pair = stopPairs.FirstOrDefault(p => ReferenceEquals(p.player, s.Player));
+                            s.ReleaseBufferAfter(pair.task ?? Task.CompletedTask);
+                        }
                         catch (Exception ex) { App.Logger?.Debug("CloseAll: blur surface dispose failed - {Error}", ex.Message); }
                     }
                     _blurSurfaces.Clear();
