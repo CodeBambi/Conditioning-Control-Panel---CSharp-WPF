@@ -2462,8 +2462,16 @@ public class OverlayService : IDisposable
         try
         {
             if (App.Compositor is { } engine)
+            {
                 foreach (var hostHwnd in engine.GetVisibleHostHandles())
                     ReassertOne(hostHwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
+                // The detached avatar tube parks itself directly BELOW the host covering its monitor
+                // so the pink tint stops flickering on and off the companion (#776). It does that on
+                // its OWN thread (AvatarOwnThread => cross-thread SetWindowPos is a deadlock source
+                // here), reading a lock-free anchor snapshot; refresh it now so a missed show/hide
+                // edge self-heals on this tick instead of persisting until the next one.
+                engine.RepublishHostAnchors();
+            }
         }
         catch (Exception ex)
         {
@@ -2475,19 +2483,29 @@ public class OverlayService : IDisposable
     /// <summary>One window's worth of ReassertZOrder. Normally: below the active video (#497), else
     /// topmost. When <paramref name="aboveVideo"/> (a live Deeper overlay band), the overlay is the
     /// enhanced video's own effect, so pin it to the top of the topmost band ABOVE the video instead.</summary>
-    /// <summary>Where a single overlay window should be pinned relative to a (possibly playing) video.</summary>
-    internal enum ZOrderAction { None, PinBelowVideo, PinTopmost }
+    /// <summary>Where a single topmost window should be pinned relative to a (possibly playing) video
+    /// and to the shared compositor host that carries the fullscreen effects.</summary>
+    internal enum ZOrderAction { None, PinBelowVideo, PinBelowCompositorHost, PinTopmost }
 
     /// <summary>
-    /// Pure z-order decision for one overlay window. Extracted from <see cref="ReassertOne"/> so the
+    /// Pure z-order decision for one topmost window. Extracted from <see cref="ReassertOne"/> so the
     /// Deeper-band-above-video rule (and the #497 below-video pin it must preserve) can be unit-tested.
     /// <paramref name="aboveVideo"/> — a live Deeper enhancement band, so the overlay IS the video's own
     /// effect and must sit above it; otherwise a co-existing video keeps overlays pinned just below it.
+    /// <paramref name="yieldToCompositorHost"/> — the caller is a self-raising topmost window that is
+    /// NOT a compositor layer and must live UNDER the host's effects. Only the detached avatar tube
+    /// passes this: it re-pinned itself to the top of the topmost band every 500ms while the host
+    /// re-pinned itself every 5s, so the pink tint flickered on and off the companion (#776). The tube
+    /// now inserts directly below the host instead — still topmost, still above ordinary app windows,
+    /// but permanently under the tint. Ordered AFTER the video rule so #497 can never be traded away.
     /// </summary>
-    internal static ZOrderAction ResolveZOrderAction(bool hasVideo, bool isVideoWindow, bool aboveVideo, bool needsPin, bool force)
+    internal static ZOrderAction ResolveZOrderAction(bool hasVideo, bool isVideoWindow, bool aboveVideo,
+        bool needsPin, bool force, bool yieldToCompositorHost = false)
     {
         if (hasVideo && !isVideoWindow && !aboveVideo)
             return ZOrderAction.PinBelowVideo;
+        if (yieldToCompositorHost)
+            return ZOrderAction.PinBelowCompositorHost;
         if (needsPin || force || aboveVideo)
             return ZOrderAction.PinTopmost;
         return ZOrderAction.None;
@@ -2515,6 +2533,11 @@ public class OverlayService : IDisposable
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 if (needsPin) anyRecovered = true;
                 break;
+            // ZOrderAction.PinBelowCompositorHost is never produced here — the overlay windows and
+            // the hosts ARE the compositor's layers. It belongs to the detached avatar tube, which
+            // applies it itself in AvatarTubeWindow.ReassertTopmost: that window can live on its own
+            // dispatcher (AvatarOwnThread), and a cross-thread SetWindowPos sends WM_WINDOWPOSCHANGING
+            // synchronously — this app's documented deadlock source (#431/#451).
         }
     }
 
