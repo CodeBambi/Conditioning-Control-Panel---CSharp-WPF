@@ -1,0 +1,1459 @@
+// The match state machine — port of Services/GoonGame/GoonMatchService.cs.
+//
+//   Idle -> Lobby -> Consent -> Draft -> Countdown -> Live -> SuddenDeath -> Recap -> Idle
+//
+// Owns a transport (injected), the local endurance ramp built from the player's OWN draft and the
+// combined match seed, the scoring/charge economy, the mercy and abandon flows, the receiver-side
+// payload gate and the two-way result handshake.
+//
+// It PLANS but never PERFORMS: element cues and admitted payloads leave as events; the exec/
+// layer does the fan-out. Node-import-safe — no DOM at import, no DOM at runtime.
+//
+// Safety rails honoured here (protocol §11):
+//  * Mercy is available in EVERY phase and always ends the match locally, even if the wire is
+//    dead. Pre-Live it degrades to a clean cancel that never reaches the ledger.
+//  * No payload kind can touch panic/lockdown/tray/session state — no such message exists.
+//  * The RECEIVER enforces the economy: burst/gap rate limit, charge cost against the opponent's
+//    last self-reported meter, one heavy per match, schedule-buffer clamp and text cap —
+//    regardless of what the wire claims.
+//
+// ---------------------------------------------------------------------------------------------
+// TRANSPORT SURFACE CONSUMED (duck-typed; net/ owns the implementations). Mechanical camelCase of
+// C# IGoonTransport / GoonTransportBase — the transport OWNS the MatchClock and gives it first
+// refusal on inbound frames, exactly as GoonTransportBase does, so clock ping/pong never reaches
+// this class:
+//   transport.state                        -> GoonTransportState code
+//   transport.clock                        -> MatchClock (nowMatchMs(), matchMsToLocal(), isSynced)
+//   transport.onMessageReceived(fn) -> unsub        (alias accepted: onMessage)
+//   transport.onStateChanged(fn)    -> unsub        (alias accepted: onState)
+//   transport.sendAsync(msg)        -> Promise      (alias accepted: send)
+//   transport.createInviteAsync(signal) -> Promise<string|null>   (alias: createInvite)
+//   transport.joinAsync(code, signal)   -> Promise<boolean>       (alias: join)
+//
+// ---------------------------------------------------------------------------------------------
+// SUDDEN-DEATH RUNNER SEAM — mechanical camelCase of C# IGoonSuddenDeathRunner. rounds/* owns the
+// implementation; these names are the contract, do not rename:
+//   match.suddenDeathRunner  (settable; `match.runner` is an alias onto the same backing field)
+//   runner.onRoundWon(fn(roundNo))          -> unsub
+//   runner.onRoundLost(fn(roundNo))         -> unsub
+//   runner.onNetLossReached(fn(localLost))  -> unsub     localLost === true means WE lost
+//   runner.startAsync(context, signal)      -> Promise   (C# StartAsync(ctx, ct); alias: start)
+//   runner.handleMessage(msg)                            round + mercy traffic, forwarded by us
+//   runner.stopAsync()                      -> Promise   idempotent (alias: stop)
+// context = {transport, clock, rngFactory, matchSeed:bigint, isHost, localMode, remoteMode,
+//            netLossThreshold, allowedRoundKinds}
+// The runner NEVER subscribes to the transport itself — this class owns the message pump.
+//
+// ---------------------------------------------------------------------------------------------
+// EXECUTOR SEAM (exec/ subscribes):
+//   onElementStartRequested(fn(cue))     cue = {element, intensity, durationMs, elapsedMs}
+//   onElementIntensityChanged(fn(cue))
+//   onElementStopRequested(fn(cue))
+//   onPayloadAccepted(fn({payload, fireAtLocalMs}))
+//   ... and calls back notifyInboundPayloadFinished(payloadId, endured) when it is done.
+
+import {
+  GoonAttentionMode, GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonTransportState,
+  GoonConsts, costOf, enumName, isClockMessage,
+  makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMercy,
+  makePayloadReceipt, makeResult, makeTick, makePayload,
+} from './contracts.js';
+import { GoonRng, combineSeeds, newSeedContribution } from './rng.js';
+import { localMonotonicMs } from './clock.js';
+import { ticker } from './scheduler.js';
+import { GoonPayloadRateLimiter, GoonReceiptStatus, GoonScoring } from './scoring.js';
+import { GoonCueAction, PICKS_PER_PLAYER, PoolV1, buildRamp, isValidDraft, matchRiskTier } from './draft.js';
+import { UNIVERSAL_ROUND, intersect, local as localCapsOf } from './caps.js';
+import { EMOTE_ICON_MAX_CHARS, EMOTE_TEXT_MAX_CHARS, TEXT_MAX_CHARS, sanitizeName, sanitizeText } from '../exec/sanitize.js';
+
+// ---- local tuning, deliberately NOT in GoonConsts (mirrors the C# private consts) ----
+const COUNTDOWN_MS = 5000;
+const PHASE_TIMER_INTERVAL_MS = 200;
+const RESULT_HANDSHAKE_TIMEOUT_MS = 10000;
+const DRAW_WINDOW_MS = 1500;
+const PAYLOAD_SCHEDULE_BUFFER_MS = 1500;   // >= GoonConsts.MinScheduleBufferMs
+const NO_CAM_CHECK_INTERVAL_MS = 90000;
+const MAX_PAYLOAD_DURATION_MS = 180000;
+
+/** Freshness of the opponent's state ticks. */
+export const GoonConnectionHealth = Object.freeze({ Fresh: 0, Wobbly: 1, Dead: 2 });
+
+/** Mirror of the opponent, rebuilt from every tick. Bindable by the HUD. */
+export class GoonOpponentState {
+  constructor() {
+    this.displayName = '';
+    this.appVersion = '';
+    this.platform = '';           // windows | android | ios | web
+    this.toyConnected = false;
+    this.attentionMode = GoonAttentionMode.NoCam;
+
+    this.score = 0;
+    this.attentionPct = 100;
+    this.charges = 0;
+    this.toyActive = false;
+    this.closeness = null;
+    this.activeEffects = [];
+
+    this.lastTickLocalMs = 0;
+    this.health = GoonConnectionHealth.Fresh;
+    this.hasSeenTick = false;
+  }
+}
+
+/**
+ * The signed end-of-match record. Each side's own score is authoritative for that side; the two
+ * clients countersign the outcome. Disagreement is recorded as disputed and the uncontested parts
+ * still earn their cosmetics.
+ */
+export class GoonMatchResult {
+  constructor(o = {}) {
+    this.endReason = o.endReason ?? GoonEndReason.Mercy;
+    this.winnerIsHost = o.winnerIsHost ?? null;   // null = draw
+    this.localIsHost = !!o.localIsHost;
+    this.hostScore = o.hostScore ?? 0;
+    this.guestScore = o.guestScore ?? 0;
+    this.survivedMs = o.survivedMs ?? 0;
+
+    this.agreed = false;
+    this.disputed = false;
+    this.remoteClaim = null;
+    this.countsForLedger = o.countsForLedger ?? true;
+  }
+
+  get localWon() { return this.winnerIsHost !== null && this.winnerIsHost === this.localIsHost; }
+  get localScore() { return this.localIsHost ? this.hostScore : this.guestScore; }
+  get remoteScore() { return this.localIsHost ? this.guestScore : this.hostScore; }
+}
+
+// ------------------------------------------------------------------ small helpers
+
+function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+/** C# Math.Round(double) is banker's rounding. */
+function roundHalfToEven(x) {
+  const f = Math.floor(x);
+  const d = x - f;
+  if (d > 0.5) return f + 1;
+  if (d < 0.5) return f;
+  return f % 2 === 0 ? f : f + 1;
+}
+
+/** Resolve a duck-typed method by preferred name, then aliases. */
+function bindFn(obj, names) {
+  if (!obj) return null;
+  for (const n of names) if (typeof obj[n] === 'function') return obj[n].bind(obj);
+  return null;
+}
+
+function makeEvent() {
+  const set = new Set();
+  return {
+    on(fn) {
+      if (typeof fn !== 'function') return () => {};
+      set.add(fn);
+      return () => set.delete(fn);
+    },
+    emit(arg, onError) {
+      if (set.size === 0) return;
+      for (const fn of Array.from(set)) {
+        try { fn(arg); } catch (e) { if (onError) onError(e); }
+      }
+    },
+    clear() { set.clear(); },
+  };
+}
+
+export class GoonMatchService {
+  /**
+   * @param {object} transport see the TRANSPORT SURFACE block above
+   * @param {boolean} isHost
+   * @param {object} [o]
+   * @param {(seed:bigint)=>object} [o.rngFactory] defaults to the real xoshiro256** GoonRng
+   * @param {object} [o.logger] console-shaped
+   * @param {string} [o.displayName] C# reads App.Settings; the page must inject it
+   * @param {string} [o.appVersion]  C# reads UpdateService.AppVersion; likewise
+   * @param {object} [o.caps] override for what we advertise (see caps.js local())
+   */
+  constructor(transport, isHost, {
+    rngFactory = (seed) => new GoonRng(seed),
+    logger = null,
+    displayName = 'Player',
+    appVersion = '',
+    caps = null,
+    tag = 'GG',
+  } = {}) {
+    if (!transport) throw new Error('GoonMatchService: transport required');
+    this._transport = transport;
+    this._isHost = !!isHost;
+    this._rngFactory = typeof rngFactory === 'function' ? rngFactory : ((seed) => new GoonRng(seed));
+    this._log = logger || (typeof console !== 'undefined' ? console : null);
+    this._tag = tag;
+
+    this._send$ = bindFn(transport, ['sendAsync', 'send']);
+    this._createInvite$ = bindFn(transport, ['createInviteAsync', 'createInvite']);
+    this._join$ = bindFn(transport, ['joinAsync', 'join']);
+
+    this._liveWatchStartLocalMs = null;
+    this._liveWatchStoppedLocalMs = null;
+    this._inboundLimiter = new GoonPayloadRateLimiter();
+    this._outboundLimiter = new GoonPayloadRateLimiter();
+    this._outboundCosts = new Map();
+    this._activeElements = new Set();
+    this._localDraft = [];
+    this._remoteDraft = [];
+
+    this._liveTicker = null;    // 1 s score/ramp/tick pump
+    this._phaseTicker = null;   // 200 ms countdown + handshake deadlines
+
+    this._remoteHello = null;
+    this._helloSent = false;
+    this._localConsentConfirmed = false;
+    this._remoteConsentConfirmed = false;
+    this._localDraftLocked = false;
+    this._remoteDraftLocked = false;
+    this._startProposed = false;
+
+    this._localSeedContribution = null;
+    this._remoteSeedContribution = null;
+
+    this._ramp = [];
+    this._rampIndex = 0;
+    this._liveDurationMs = 0;
+    this._lastTickSentLocalMs = 0;
+    this._nextInteractionCheckMs = 0;
+
+    this._payloadSeq = 0;
+    this._localHeavyUsed = false;
+    this._localHeavyPayloadId = null;
+    this._remoteHeavyUsed = false;
+    this._opponentChargesKnown = 0;
+
+    this._localMercyMatchMs = null;
+    this._remoteMercyMatchMs = null;
+
+    this._ended = false;
+    this._finalized = false;
+    this._countersignSent = false;
+    this._resultDeadlineLocalMs = 0;
+
+    this._runner = null;
+    this._runnerUnsubs = [];
+    this._runnerAbort = null;
+    this._disposed = false;
+
+    this._phase = GoonMatchPhase.Idle;
+    this._matchSeed = 0n;
+    this._startMatchMs = 0;
+    this._lobbyFailureReason = null;
+    this._localCloseness = null;
+
+    this.localAttentionMode = GoonAttentionMode.NoCam;
+    this.localToyConnected = false;
+    this.localDisplayName = displayName;
+    this.localAppVersion = appVersion;
+
+    this._localCaps = caps || localCapsOf();
+    this._availableDraftPool = PoolV1.slice();
+    this._availablePayloadKinds = Object.values(GoonPayloadKind);
+    this._allowedRoundKinds = [UNIVERSAL_ROUND];
+
+    this._consentSheet = makeConsent();
+    this._scoring = new GoonScoring(this.localAttentionMode, 0, { logger: this._log });
+    this._opponent = new GoonOpponentState();
+    this._result = null;
+
+    this._ev = {
+      phaseChanged: makeEvent(),
+      elementStartRequested: makeEvent(),
+      elementIntensityChanged: makeEvent(),
+      elementStopRequested: makeEvent(),
+      payloadAccepted: makeEvent(),
+      payloadRejected: makeEvent(),
+      payloadReceiptReceived: makeEvent(),
+      consentChanged: makeEvent(),
+      draftChanged: makeEvent(),
+      opponentStateChanged: makeEvent(),
+      connectionHealthChanged: makeEvent(),
+      emoteReceived: makeEvent(),
+      interactionCheckDue: makeEvent(),
+      lobbyFailed: makeEvent(),
+      matchEnded: makeEvent(),
+      resultFinalized: makeEvent(),
+    };
+
+    const onMsg = bindFn(transport, ['onMessageReceived', 'onMessage']);
+    const onState = bindFn(transport, ['onStateChanged', 'onState']);
+    this._transportUnsubs = [];
+    if (onMsg) this._transportUnsubs.push(onMsg((m) => this._onMessageReceived(m)) || (() => {}));
+    if (onState) this._transportUnsubs.push(onState((s) => this._onTransportStateChanged(s)) || (() => {}));
+  }
+
+  // ------------------------------------------------------------ state
+
+  get isHost() { return this._isHost; }
+  get phase() { return this._phase; }
+  get scoring() { return this._scoring; }
+  get opponent() { return this._opponent; }
+  get result() { return this._result; }
+
+  /** The sheet both sides must confirm byte-identically before drafting (a `consent` message). */
+  get consentSheet() { return this._consentSheet; }
+  get localConsentConfirmed() { return this._localConsentConfirmed; }
+  get remoteConsentConfirmed() { return this._remoteConsentConfirmed; }
+
+  get localDraft() { return this._localDraft; }
+  get remoteDraft() { return this._remoteDraft; }
+  get localDraftLocked() { return this._localDraftLocked; }
+  get remoteDraftLocked() { return this._remoteDraftLocked; }
+
+  /** @returns {bigint} */
+  get matchSeed() { return this._matchSeed; }
+  get startMatchMs() { return this._startMatchMs; }
+
+  /** Why the lobby was torn down, when it was (protocol/caps mismatch). */
+  get lobbyFailureReason() { return this._lobbyFailureReason; }
+
+  /** Self-reported closeness dial, 0-3 or null. Bluffable BY DESIGN. */
+  get localCloseness() { return this._localCloseness; }
+
+  /** The opponent's lobby hello (identity + capabilities), once it arrives. */
+  get remoteHello() { return this._remoteHello; }
+  get localCaps() { return this._localCaps; }
+  get remoteCaps() { return this._remoteHello ? this._remoteHello.caps : null; }
+
+  /** The draft pool actually offered: the INTERSECTION of both clients' elements. */
+  get availableDraftPool() { return this._availableDraftPool; }
+  /** Payload kinds the PEER can actually run — the only ones we may send. */
+  get availablePayloadKinds() { return this._availablePayloadKinds; }
+  /** Round kinds both clients advertised (ReactionDuel always included). */
+  get allowedRoundKinds() { return this._allowedRoundKinds; }
+
+  /** C# TimeSpan LiveElapsed / LiveRemaining -> milliseconds (JS has no TimeSpan). */
+  get liveElapsedMs() { return this._liveElapsed(); }
+  get liveRemainingMs() {
+    if (this._liveDurationMs <= 0) return 0;
+    const remaining = this._liveDurationMs - this._liveElapsed();
+    return remaining <= 0 ? 0 : remaining;
+  }
+
+  /** The sudden-death seam. `runner` is an alias for the same field (see header block). */
+  get suddenDeathRunner() { return this._runner; }
+  set suddenDeathRunner(v) { this._runner = v || null; }
+  get runner() { return this._runner; }
+  set runner(v) { this._runner = v || null; }
+
+  // ----------------------------------------------------------- events
+
+  onPhaseChanged(fn) { return this._ev.phaseChanged.on(fn); }
+  onElementStartRequested(fn) { return this._ev.elementStartRequested.on(fn); }
+  onElementIntensityChanged(fn) { return this._ev.elementIntensityChanged.on(fn); }
+  onElementStopRequested(fn) { return this._ev.elementStopRequested.on(fn); }
+  onPayloadAccepted(fn) { return this._ev.payloadAccepted.on(fn); }
+  onPayloadRejected(fn) { return this._ev.payloadRejected.on(fn); }
+  onPayloadReceiptReceived(fn) { return this._ev.payloadReceiptReceived.on(fn); }
+  onConsentChanged(fn) { return this._ev.consentChanged.on(fn); }
+  onDraftChanged(fn) { return this._ev.draftChanged.on(fn); }
+  onOpponentStateChanged(fn) { return this._ev.opponentStateChanged.on(fn); }
+  onConnectionHealthChanged(fn) { return this._ev.connectionHealthChanged.on(fn); }
+  onEmoteReceived(fn) { return this._ev.emoteReceived.on(fn); }
+  /** No-cam only: prompt an interaction check, then call reportInteractionCheck(). */
+  onInteractionCheckDue(fn) { return this._ev.interactionCheckDue.on(fn); }
+  onLobbyFailed(fn) { return this._ev.lobbyFailed.on(fn); }
+  onMatchEnded(fn) { return this._ev.matchEnded.on(fn); }
+  onResultFinalized(fn) { return this._ev.resultFinalized.on(fn); }
+
+  // ------------------------------------------------------- lobby entry
+
+  /** Host path. Resolves with the invite code to show the user, or null on failure. */
+  async createInviteAsync(signal) {
+    if (this._phase !== GoonMatchPhase.Idle) return null;
+    this._setPhase(GoonMatchPhase.Lobby);
+    this._startPhaseTimer();
+    try {
+      if (!this._createInvite$) throw new Error('transport has no createInviteAsync');
+      const code = await this._createInvite$(signal);
+      if (!code) {
+        this._warn('invite creation returned no code');
+        this._resetToIdle();
+      }
+      return code || null;
+    } catch (e) {
+      this._error(`invite creation failed: ${(e && e.stack) || e}`);
+      this._resetToIdle();
+      return null;
+    }
+  }
+
+  /** Joiner path. */
+  async joinAsync(inviteCode, signal) {
+    if (this._phase !== GoonMatchPhase.Idle) return false;
+    this._setPhase(GoonMatchPhase.Lobby);
+    this._startPhaseTimer();
+    try {
+      if (!this._join$) throw new Error('transport has no joinAsync');
+      const ok = await this._join$(inviteCode, signal);
+      if (!ok) this._resetToIdle();
+      return !!ok;
+    } catch (e) {
+      this._error(`join failed: ${(e && e.stack) || e}`);
+      this._resetToIdle();
+      return false;
+    }
+  }
+
+  /**
+   * Enters the Lobby over a transport that is already signaling or connected — the relay-fallback
+   * path, where the relay re-uses the room the failed P2P attempt minted, so neither
+   * createInviteAsync nor joinAsync may be called again.
+   */
+  adoptLobby() {
+    if (this._phase !== GoonMatchPhase.Idle) return false;
+    this._setPhase(GoonMatchPhase.Lobby);
+    this._startPhaseTimer();
+    // If the transport connected before this service subscribed, its state change already fired
+    // without us and nothing else will trigger the hello.
+    const st = this._transport.state;
+    if (st === GoonTransportState.ConnectedP2P || st === GoonTransportState.ConnectedRelay) this._sendHelloOnce();
+    return true;
+  }
+
+  // ----------------------------------------------------------- consent
+
+  /** Publishes a new sheet. ANY change clears BOTH confirmations. */
+  proposeConsent(liveDurationSec, toyCap, payloadMinGapMs) {
+    if (this._phase !== GoonMatchPhase.Lobby && this._phase !== GoonMatchPhase.Consent) return;
+
+    this._consentSheet = makeConsent({
+      live_duration_sec: clamp(liveDurationSec, 60, 3600),
+      // The sheet can only LOWER a receiver's own cap; the local mixer caps unconditionally on top.
+      toy_cap: clamp(toyCap, 0.0, 1.0),
+      payload_min_gap_ms: Math.max(GoonConsts.PayloadMinGapMs, payloadMinGapMs),
+      confirmed: false,
+    });
+    this._localConsentConfirmed = false;
+    this._remoteConsentConfirmed = false;
+    this._send(this._consentSheet);
+    this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
+  }
+
+  /** Confirms the CURRENT sheet. Both confirmations on one fingerprint -> Draft. */
+  confirmConsent() {
+    if (this._phase !== GoonMatchPhase.Consent) return;
+    this._localConsentConfirmed = true;
+    this._send(cloneSheet(this._consentSheet, true));
+    this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
+    this._tryEnterDraft();
+  }
+
+  /** Backing out of the sheet. Never ends the lobby by itself. */
+  withdrawConsent() {
+    if (this._phase !== GoonMatchPhase.Consent) return;
+    this._localConsentConfirmed = false;
+    this._send(cloneSheet(this._consentSheet, false));
+    this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
+  }
+
+  // ------------------------------------------------------------- draft
+
+  /** Sets (and broadcasts) the local picks. C# out-error -> {ok, error}. */
+  setDraft(picks) {
+    if (this._phase !== GoonMatchPhase.Draft) return { ok: false, error: 'not drafting' };
+    if (this._localDraftLocked) return { ok: false, error: 'draft already locked' };
+    const valid = isValidDraft(picks);
+    if (!valid.ok) return valid;
+    const avail = this._allPicksAvailable(picks);
+    if (!avail.ok) return avail;
+
+    this._localDraft = picks.slice();
+    this._send(makeDraft({ elements: this._localDraft.slice(), locked: false }));
+    this._ev.draftChanged.emit(undefined, (e) => this._warn(`draftChanged handler threw: ${e && e.message}`));
+    return { ok: true, error: '' };
+  }
+
+  /** Locks the local draft. Both locked -> the host schedules the countdown. */
+  lockDraft() {
+    if (this._phase !== GoonMatchPhase.Draft) return { ok: false, error: 'not drafting' };
+    const valid = isValidDraft(this._localDraft);
+    if (!valid.ok) return valid;
+    const avail = this._allPicksAvailable(this._localDraft);
+    if (!avail.ok) return avail;
+
+    this._localDraftLocked = true;
+    this._send(makeDraft({ elements: this._localDraft.slice(), locked: true }));
+    this._scoring.configure(this.localAttentionMode, matchRiskTier(this._localDraft));
+    this._ev.draftChanged.emit(undefined, (e) => this._warn(`draftChanged handler threw: ${e && e.message}`));
+    return { ok: true, error: '' };
+  }
+
+  /** Every pick must sit in the caps intersection — no drafting what the peer cannot mirror. */
+  _allPicksAvailable(picks) {
+    for (const pick of picks) {
+      if (this._availableDraftPool.includes(pick)) continue;
+      return { ok: false, error: `${pick} is not supported by the opponent's client` };
+    }
+    return { ok: true, error: '' };
+  }
+
+  // -------------------------------------------------- live-phase input
+
+  /** Gaze-derived attention percentage (0..100). Cam mode only. */
+  reportAttention(pct) { this._scoring.reportAttention(pct); }
+
+  /** Outcome of an interaction check prompt. No-cam mode only. */
+  reportInteractionCheck(passed) {
+    this._scoring.reportInteractionCheck(passed);
+    if (!passed) this._info(`interaction check failed (${this._scoring.failedChecks} total)`);
+  }
+
+  setCloseness(closeness) {
+    this._localCloseness = (closeness === null || closeness === undefined) ? null : clamp(closeness | 0, 0, 3);
+  }
+
+  sendEmote(text, icon) {
+    if (this._ended || this._phase === GoonMatchPhase.Idle) return;
+    this._send(makeEmote({
+      text: sanitizeText(text, EMOTE_TEXT_MAX_CHARS),
+      icon: sanitizeText(icon, EMOTE_ICON_MAX_CHARS),
+    }));
+  }
+
+  // ---------------------------------------------------------- payloads
+
+  /**
+   * Fires an offensive payload at the opponent. Sender-side mirror of the receiver's gate
+   * (charges, rate limit, one heavy per match) so a well-behaved client is never rejected; the
+   * receiver re-checks everything anyway. C# out-error -> {ok, error, id}.
+   */
+  tryFirePayload(request) {
+    if (!request) return { ok: false, error: 'no request', id: null };
+    if (this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath) {
+      return { ok: false, error: 'match is not live', id: null };
+    }
+    if (request.kind === GoonPayloadKind.BrainDrain && this._localHeavyUsed) {
+      return { ok: false, error: 'heavy already used this match', id: null };
+    }
+    if (!this._availablePayloadKinds.includes(request.kind)) {
+      return { ok: false, error: `opponent's client cannot run ${request.kind}`, id: null };
+    }
+
+    let cost = costOf(request.kind);
+    if (cost <= 0 || !Number.isFinite(cost)) return { ok: false, error: 'unknown payload', id: null };
+    if (this._scoring.charges < cost) return { ok: false, error: `needs ${cost} charge(s)`, id: null };
+
+    const nowLocal = localMonotonicMs();
+    if (!this._outboundLimiter.tryAdmit(nowLocal)) {
+      return {
+        ok: false,
+        error: `rate limited (${Math.trunc(this._outboundLimiter.msUntilNextToken(nowLocal) / 1000)}s)`,
+        id: null,
+      };
+    }
+    const spend = this._scoring.trySpend(request.kind);
+    if (!spend.ok) return { ok: false, error: `needs ${spend.cost} charge(s)`, id: null };
+    cost = spend.cost;
+
+    const id = `p${++this._payloadSeq}${this._isHost ? 'h' : 'g'}`;
+    const msg = makePayload({
+      id,
+      kind: request.kind,
+      fire_at_match_ms: this._clockNow() + Math.max(GoonConsts.MinScheduleBufferMs, PAYLOAD_SCHEDULE_BUFFER_MS),
+      duration_ms: clamp(request.durationMs ?? 30000, 1000, MAX_PAYLOAD_DURATION_MS),
+      tags: request.tags ?? null,
+      text: sanitizeText(request.text, TEXT_MAX_CHARS),
+      voice: !!request.voice,
+      pattern: request.pattern ?? null,
+      intensity: clamp(request.intensity ?? 0.5, 0.0, 1.0),
+    });
+
+    if (request.kind === GoonPayloadKind.BrainDrain) {
+      this._localHeavyUsed = true;
+      this._localHeavyPayloadId = id;
+    }
+    this._outboundCosts.set(id, cost);
+    this._send(msg);
+    this._info(`payload out ${id} ${request.kind} cost ${cost}`);
+    return { ok: true, error: '', id };
+  }
+
+  /**
+   * The executor calls this when an accepted inbound payload finishes.
+   * endured = the receiver took it all the way -> +1 charge.
+   */
+  notifyInboundPayloadFinished(payloadId, endured) {
+    if (!payloadId) return;
+    this._send(makePayloadReceipt({
+      id: payloadId,
+      status: endured ? GoonReceiptStatus.Survived : GoonReceiptStatus.Completed,
+    }));
+    if (endured) this._scoring.awardPayloadEndured();
+  }
+
+  // ------------------------------------------------------------- mercy
+
+  /**
+   * The dignified concede. Available in EVERY phase — the Esc ladder maps straight here.
+   * Pre-Live it degrades to a clean cancel that never reaches the ledger.
+   */
+  declareMercy() {
+    if (this._ended || this._phase === GoonMatchPhase.Idle) return;
+
+    const atMs = this._clockNow();
+    this._localMercyMatchMs = atMs;
+    this._send(makeMercy({ at_match_ms: atMs }));
+
+    const preLive = this._isPreLive(this._phase);
+    const draw = this._remoteMercyMatchMs !== null && Math.abs(atMs - this._remoteMercyMatchMs) <= DRAW_WINDOW_MS;
+
+    this._info(`local mercy at ${atMs} (preLive=${preLive}, draw=${draw})`);
+    this._endMatch(draw ? GoonEndReason.Draw : GoonEndReason.Mercy, !draw, !preLive);
+  }
+
+  /** Aborts a lobby/consent/draft locally without the mercy semantics (UI "cancel"). */
+  cancelMatch(reason) {
+    if (this._ended) { this._resetToIdle(); return; }
+    this._info(`match cancelled: ${reason}`);
+    if (this._phase === GoonMatchPhase.Live || this._phase === GoonMatchPhase.SuddenDeath) {
+      this.declareMercy();
+      return;
+    }
+    this._send(makeMercy({ at_match_ms: this._clockNow() }));
+    this._endMatch(GoonEndReason.Mercy, true, false);
+  }
+
+  /**
+   * Clean lobby failure: incompatible protocol version or an empty capability intersection. Tears
+   * the lobby down with a reason instead of letting the two clients desync mid-match.
+   */
+  _failLobby(reason) {
+    this._warn(`lobby failed: ${reason}`);
+    this._lobbyFailureReason = reason;
+    this._ev.lobbyFailed.emit(reason, (e) => this._warn(`lobbyFailed handler threw: ${e && e.message}`));
+
+    // No dedicated teardown verb in the protocol: a pre-live mercy is the clean exit both clients
+    // already understand, and it never reaches the ledger.
+    this._send(makeMercy({ at_match_ms: this._clockNow() }));
+    this._ended = true;
+    this._stopTimers();
+    this._stopPhaseTimer();
+    this._setPhase(GoonMatchPhase.Idle);
+  }
+
+  // ------------------------------------------------------ message pump
+
+  _onMessageReceived(message) {
+    if (this._disposed || !message) return;
+    try {
+      switch (message.t) {
+        case 'hello': this._handleHello(message); break;
+        case 'consent': this._handleConsent(message); break;
+        case 'draft': this._handleDraft(message); break;
+        case 'match_start': this._handleMatchStart(message); break;
+        case 'tick': this._handleTick(message); break;
+        case 'payload': this._handleInboundPayload(message); break;
+        case 'payload_receipt': this._handleReceipt(message); break;
+        case 'mercy': this._handleRemoteMercy(message); break;
+        case 'emote': this._handleEmote(message); break;
+        case 'result': this._handleRemoteResult(message); break;
+        case 'round':
+        case 'round_result':
+          this._forwardToRunner(message);
+          break;
+        default:
+          // Clock ping/pong belongs to the transport; anything else is a newer protocol.
+          if (!isClockMessage(message)) this._info(`ignoring message '${message.t}'`);
+          break;
+      }
+    } catch (e) {
+      this._error(`message handling failed for ${message.t}: ${(e && e.stack) || e}`);
+    }
+  }
+
+  _onTransportStateChanged(state) {
+    if (this._disposed) return;
+    this._info(`transport state ${state}`);
+    if (state === GoonTransportState.ConnectedP2P || state === GoonTransportState.ConnectedRelay) {
+      this._sendHelloOnce();
+    }
+  }
+
+  _sendHelloOnce() {
+    if (this._helloSent) return;
+    this._helloSent = true;
+    this._send(makeHello({
+      display_name: this.localDisplayName || 'Player',
+      attention_mode: this.localAttentionMode,
+      toy_connected: this.localToyConnected,
+      app_version: this.localAppVersion || '',
+      caps: this._localCaps,
+    }));
+  }
+
+  _handleHello(hello) {
+    this._remoteHello = hello;
+    this._opponent.displayName = sanitizeName(hello.display_name);
+    this._opponent.appVersion = sanitizeText(hello.app_version, 16);
+    this._opponent.attentionMode = hello.attention_mode;
+    this._opponent.toyConnected = hello.toy_connected;
+    this._opponent.platform = sanitizeText(hello.caps ? hello.caps.platform : '', 16);
+    this._ev.opponentStateChanged.emit(undefined, (e) => this._warn(`opponentStateChanged handler threw: ${e && e.message}`));
+
+    this._sendHelloOnce();
+
+    // Protocol compatibility — fail the lobby cleanly instead of desyncing later.
+    const caps = hello.caps;
+    if (caps && caps.min_v > GoonConsts.ProtocolVersion) {
+      this._failLobby(`opponent requires protocol v${caps.min_v}, this client speaks v${GoonConsts.ProtocolVersion} - update required`);
+      return;
+    }
+    if (hello.v < this._localCaps.min_v) {
+      this._failLobby(`opponent speaks protocol v${hello.v}, this client needs at least v${this._localCaps.min_v}`);
+      return;
+    }
+
+    // Every cross-client set is an intersection of the two advertisements.
+    this._availableDraftPool = intersect(this._localCaps.elements, caps && caps.elements);
+    this._availablePayloadKinds = intersect(this._localCaps.payloads, caps && caps.payloads);
+
+    const rounds = intersect(this._localCaps.rounds, caps && caps.rounds);
+    if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
+    this._allowedRoundKinds = rounds;
+
+    if (this._availableDraftPool.length < PICKS_PER_PLAYER) {
+      this._failLobby(`only ${this._availableDraftPool.length} shared draft element(s) - need ${PICKS_PER_PLAYER}`);
+      return;
+    }
+
+    this._info(`caps: peer ${this._opponent.platform} v${hello.v}, pool ${this._availableDraftPool.length}, ` +
+      `payloads ${this._availablePayloadKinds.length}, rounds ${this._allowedRoundKinds.length}`);
+
+    if (this._phase === GoonMatchPhase.Lobby) {
+      this._setPhase(GoonMatchPhase.Consent);
+      // The host authors the opening proposal; the guest may counter-propose.
+      if (this._isHost) {
+        this.proposeConsent(
+          this._consentSheet.live_duration_sec,
+          this._consentSheet.toy_cap,
+          this._consentSheet.payload_min_gap_ms,
+        );
+      }
+    }
+  }
+
+  _handleConsent(sheet) {
+    if (this._phase === GoonMatchPhase.Lobby) this._setPhase(GoonMatchPhase.Consent);
+    if (this._phase !== GoonMatchPhase.Consent) return;
+
+    if (!sameSheet(sheet, this._consentSheet)) {
+      // A counter-proposal: adopt it and clear BOTH confirms so nobody can be advanced onto
+      // terms they never saw.
+      this._consentSheet = cloneSheet(sheet, false);
+      this._localConsentConfirmed = false;
+      this._remoteConsentConfirmed = !!sheet.confirmed;
+      this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
+      return;
+    }
+
+    this._remoteConsentConfirmed = !!sheet.confirmed;
+    this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
+    this._tryEnterDraft();
+  }
+
+  _tryEnterDraft() {
+    if (this._phase !== GoonMatchPhase.Consent) return;
+    if (!this._localConsentConfirmed || !this._remoteConsentConfirmed) return;
+
+    this._liveDurationMs = this._consentSheet.live_duration_sec * 1000;
+    this._inboundLimiter.reset();
+    this._outboundLimiter.reset();
+    this._setPhase(GoonMatchPhase.Draft);
+  }
+
+  _handleDraft(draft) {
+    if (this._phase !== GoonMatchPhase.Draft) return;
+
+    // Their picks must also live in the shared pool; anything else is dropped rather than trusted
+    // (their client would be enduring something we cannot show).
+    const picks = [];
+    for (const e of new Set(draft.elements || [])) {
+      if (!this._availableDraftPool.includes(e)) continue;
+      if (picks.length >= PICKS_PER_PLAYER) break;
+      picks.push(e);
+    }
+    this._remoteDraft = picks;
+    this._remoteDraftLocked = !!draft.locked && picks.length === PICKS_PER_PLAYER;
+    this._ev.draftChanged.emit(undefined, (e) => this._warn(`draftChanged handler threw: ${e && e.message}`));
+  }
+
+  // -------------------------------------------------------- countdown
+
+  _tryProposeStart() {
+    if (this._startProposed || !this._isHost) return;
+    if (this._phase !== GoonMatchPhase.Draft) return;
+    if (!this._localDraftLocked || !this._remoteDraftLocked) return;
+    if (!this._clock() || !this._clock().isSynced) return;   // fire-at-timestamp needs a synced clock
+
+    this._startProposed = true;
+    if (this._localSeedContribution === null) this._localSeedContribution = newSeedContribution();
+    this._startMatchMs = this._clockNow() + Math.max(GoonConsts.MinScheduleBufferMs, COUNTDOWN_MS);
+    this._send(makeMatchStart({ start_match_ms: this._startMatchMs, seed_contribution: this._localSeedContribution }));
+    this._setPhase(GoonMatchPhase.Countdown);
+  }
+
+  _handleMatchStart(start) {
+    if (this._phase !== GoonMatchPhase.Draft && this._phase !== GoonMatchPhase.Countdown) return;
+
+    this._remoteSeedContribution = start.seed_contribution;
+
+    if (!this._isHost) {
+      // Guest adopts the host's instant and answers with its own contribution.
+      this._startMatchMs = start.start_match_ms;
+      if (this._localSeedContribution === null) {
+        this._localSeedContribution = newSeedContribution();
+        this._send(makeMatchStart({
+          start_match_ms: this._startMatchMs,
+          seed_contribution: this._localSeedContribution,
+        }));
+      }
+      this._setPhase(GoonMatchPhase.Countdown);
+    }
+
+    if (this._localSeedContribution !== null && this._remoteSeedContribution !== null) {
+      this._matchSeed = combineSeeds(this._localSeedContribution, this._remoteSeedContribution);
+    }
+  }
+
+  // ------------------------------------------------------------- live
+
+  _enterLive() {
+    if (this._phase !== GoonMatchPhase.Countdown) return;
+
+    if (this._matchSeed === 0n && this._localSeedContribution !== null) {
+      // Peer contribution never arrived — degrade to our own rather than stall the match.
+      this._matchSeed = this._localSeedContribution;
+      this._warn('starting Live without a peer seed contribution');
+    }
+
+    this._scoring.reset();
+    this._scoring.configure(this.localAttentionMode, matchRiskTier(this._localDraft));
+    this._ramp = buildRamp(this._localDraft, this._matchSeed, this._consentSheet.live_duration_sec, this._rngFactory);
+    this._rampIndex = 0;
+    this._liveDurationMs = this._consentSheet.live_duration_sec * 1000;
+    this._activeElements.clear();
+    this._restartLiveWatch();
+    this._lastTickSentLocalMs = localMonotonicMs();
+    this._opponent.lastTickLocalMs = localMonotonicMs();
+    this._nextInteractionCheckMs = NO_CAM_CHECK_INTERVAL_MS;
+
+    this._liveTicker = ticker(1000, (elapsedMs) => this._liveTick(elapsedMs), { logger: this._log, tag: `${this._tag}Live` });
+
+    this._info(`Live phase: seed ${this._matchSeed.toString(16)}, ${this._consentSheet.live_duration_sec}s, ` +
+      `draft ${this._localDraft.join('+')}, risk ${this._scoring.riskTier}, ${this._ramp.length} cues`);
+
+    this._setPhase(GoonMatchPhase.Live);
+  }
+
+  /** @param {number} realElapsedMs actual ms since the previous tick (throttled tabs catch up) */
+  _liveTick(realElapsedMs) {
+    if (this._disposed || this._ended) return;
+    if (this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath) return;
+
+    try {
+      const elapsed = this._liveElapsed();
+
+      if (this._phase === GoonMatchPhase.Live) {
+        this._pumpRamp(elapsed);
+        this._scoring.tick(Math.max(0, realElapsedMs) / 1000);
+        this._pumpInteractionChecks(elapsed);
+
+        if (elapsed >= this._liveDurationMs) {
+          this._enterSuddenDeath();
+          return;
+        }
+      }
+
+      this._maybeSendStateTick();
+      this._checkOpponentFreshness();
+    } catch (e) {
+      this._error(`live tick failed: ${(e && e.stack) || e}`);
+    }
+  }
+
+  _pumpRamp(elapsedMs) {
+    while (this._rampIndex < this._ramp.length && this._ramp[this._rampIndex].offsetMs <= elapsedMs) {
+      const cue = this._ramp[this._rampIndex++];
+      const args = {
+        element: cue.element,
+        intensity: cue.intensity,
+        durationMs: cue.durationMs,
+        elapsedMs,
+      };
+
+      switch (cue.action) {
+        case GoonCueAction.Start:
+          if (!this._activeElements.has(cue.element)) {
+            this._activeElements.add(cue.element);
+            this._raiseCue('elementStartRequested', args);
+          } else {
+            this._raiseCue('elementIntensityChanged', args);
+          }
+          break;
+        case GoonCueAction.Intensity:
+          if (this._activeElements.has(cue.element)) this._raiseCue('elementIntensityChanged', args);
+          break;
+        case GoonCueAction.Stop:
+          if (this._activeElements.delete(cue.element)) this._raiseCue('elementStopRequested', args);
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  _pumpInteractionChecks(elapsedMs) {
+    if (this.localAttentionMode !== GoonAttentionMode.NoCam) return;
+    if (elapsedMs < this._nextInteractionCheckMs) return;
+    this._nextInteractionCheckMs = elapsedMs + NO_CAM_CHECK_INTERVAL_MS;
+    this._ev.interactionCheckDue.emit(undefined, (e) => this._warn(`interactionCheckDue handler threw: ${e && e.message}`));
+  }
+
+  _maybeSendStateTick() {
+    const now = localMonotonicMs();
+    if (now - this._lastTickSentLocalMs < GoonConsts.TickIntervalMs) return;
+    this._lastTickSentLocalMs = now;
+
+    this._send(makeTick({
+      at_match_ms: this._clockNow(),
+      score: this._scoring.score,
+      attention_pct: roundHalfToEven(this._scoring.attentionPct),
+      attention_mode: this.localAttentionMode,
+      // C# sends GoonElement.ToString(), i.e. the NAME ("Flashes") — a Windows peer's HUD reads
+      // these verbatim, so the name is the wire value, not the code.
+      active_effects: Array.from(this._activeElements, (x) => enumName(GoonElement, x)),
+      toy: this._activeElements.has(GoonElement.ToyPatterns),
+      closeness: this._localCloseness,
+      charges: this._scoring.charges,
+    }));
+  }
+
+  _checkOpponentFreshness() {
+    const age = localMonotonicMs() - this._opponent.lastTickLocalMs;
+    const health = age >= GoonConsts.TickDeadMs ? GoonConnectionHealth.Dead
+      : age >= GoonConsts.TickStaleMs ? GoonConnectionHealth.Wobbly
+        : GoonConnectionHealth.Fresh;
+
+    if (health !== this._opponent.health) {
+      this._opponent.health = health;
+      this._info(`opponent connection ${health} (age ${Math.trunc(age)}ms)`);
+      this._ev.connectionHealthChanged.emit(health, (e) => this._warn(`connectionHealthChanged handler threw: ${e && e.message}`));
+    }
+
+    if (health === GoonConnectionHealth.Dead && !this._ended) {
+      // Recorded as an abandon, NEVER auto-declared a mercy.
+      this._endMatch(GoonEndReason.Abandon, false, true);
+    }
+  }
+
+  _handleTick(tick) {
+    this._opponent.score = tick.score;
+    this._opponent.attentionPct = clamp(tick.attention_pct, 0, 100);
+    this._opponent.attentionMode = tick.attention_mode;
+    this._opponent.activeEffects = tick.active_effects || [];
+    this._opponent.toyActive = !!tick.toy;
+    this._opponent.closeness = (tick.closeness === null || tick.closeness === undefined) ? null : clamp(tick.closeness, 0, 3);
+    this._opponent.charges = clamp(tick.charges, 0, GoonConsts.ChargeCap);
+    this._opponent.lastTickLocalMs = localMonotonicMs();
+    this._opponent.hasSeenTick = true;
+
+    // The opponent's self-reported meter is the ceiling we hold them to when their next payload
+    // lands (C# assigns unconditionally — a lower claim tightens the ceiling immediately).
+    this._opponentChargesKnown = this._opponent.charges;
+
+    if (this._opponent.health !== GoonConnectionHealth.Fresh) {
+      this._opponent.health = GoonConnectionHealth.Fresh;
+      this._ev.connectionHealthChanged.emit(GoonConnectionHealth.Fresh, (e) => this._warn(`connectionHealthChanged handler threw: ${e && e.message}`));
+    }
+    this._ev.opponentStateChanged.emit(undefined, (e) => this._warn(`opponentStateChanged handler threw: ${e && e.message}`));
+  }
+
+  // ----------------------------------------------- inbound payload gate
+
+  _handleInboundPayload(payload) {
+    if (!payload.id) payload.id = `anon${++this._payloadSeq}`;
+
+    if (this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath) {
+      this._rejectPayload(payload, GoonReceiptStatus.RejectedFiltered, 'not live');
+      return;
+    }
+
+    const cost = costOf(payload.kind);
+    if (cost <= 0 || !Number.isFinite(cost)) {
+      this._rejectPayload(payload, GoonReceiptStatus.RejectedFiltered, 'unknown kind');
+      return;
+    }
+    // Belt-and-braces: a kind we never advertised is not runnable here, whatever the wire says.
+    if (!this._localCaps.payloads.includes(payload.kind)) {
+      this._rejectPayload(payload, GoonReceiptStatus.RejectedFiltered, 'kind not in our advertised caps');
+      return;
+    }
+    if (payload.kind === GoonPayloadKind.BrainDrain && this._remoteHeavyUsed) {
+      this._rejectPayload(payload, GoonReceiptStatus.RejectedFiltered, 'heavy already used');
+      return;
+    }
+
+    const nowLocal = localMonotonicMs();
+    if (!this._inboundLimiter.tryAdmit(nowLocal)) {
+      this._rejectPayload(payload, GoonReceiptStatus.RejectedRate, 'rate limit');
+      return;
+    }
+    if (this._opponentChargesKnown < cost) {
+      // Economy violation. No dedicated receipt status exists in v1, so it rides rejected_rate.
+      this._rejectPayload(payload, GoonReceiptStatus.RejectedRate,
+        `charge economy: claimed ${this._opponentChargesKnown} < cost ${cost}`);
+      return;
+    }
+
+    this._opponentChargesKnown -= cost;
+    if (payload.kind === GoonPayloadKind.BrainDrain) this._remoteHeavyUsed = true;
+
+    // Defensive normalisation. exec/ still owns full receiver-side resolution (tags -> own
+    // library, tag stripping, level gates, mixer caps).
+    payload.text = sanitizeText(payload.text, TEXT_MAX_CHARS);
+    payload.intensity = clamp(payload.intensity, 0.0, 1.0);
+    payload.duration_ms = clamp(payload.duration_ms, 1000, MAX_PAYLOAD_DURATION_MS);
+
+    const earliestMatchMs = this._clockNow() + GoonConsts.MinScheduleBufferMs;
+    if (payload.fire_at_match_ms < earliestMatchMs) payload.fire_at_match_ms = earliestMatchMs;
+
+    this._send(makePayloadReceipt({ id: payload.id, status: GoonReceiptStatus.Accepted }));
+
+    let fireAtLocalMs;
+    try { fireAtLocalMs = this._clock().matchMsToLocal(payload.fire_at_match_ms); }
+    catch { fireAtLocalMs = localMonotonicMs() + GoonConsts.MinScheduleBufferMs; }
+
+    this._info(`payload in ${payload.id} ${payload.kind} accepted, fires in ${Math.trunc(fireAtLocalMs - localMonotonicMs())}ms`);
+
+    this._ev.payloadAccepted.emit({ payload, fireAtLocalMs },
+      (e) => this._error(`payloadAccepted handler threw: ${(e && e.stack) || e}`));
+  }
+
+  _rejectPayload(payload, status, reason) {
+    this._info(`payload in ${payload.id} ${payload.kind} rejected: ${reason}`);
+    const receipt = makePayloadReceipt({ id: payload.id, status });
+    this._send(receipt);
+    this._ev.payloadRejected.emit(receipt, (e) => this._warn(`payloadRejected handler threw: ${e && e.message}`));
+  }
+
+  _handleReceipt(receipt) {
+    const status = typeof receipt.status === 'string' ? receipt.status : '';
+    if (receipt.id && status.toLowerCase().startsWith('rejected') && this._outboundCosts.has(receipt.id)) {
+      const cost = this._outboundCosts.get(receipt.id);
+      this._outboundCosts.delete(receipt.id);
+      this._scoring.refund(cost);
+      // A rejected heavy was never delivered — give the once-per-match slot back.
+      if (this._localHeavyPayloadId === receipt.id) {
+        this._localHeavyPayloadId = null;
+        this._localHeavyUsed = false;
+      }
+      this._info(`payload ${receipt.id} rejected (${status}) - ${cost} charge(s) refunded`);
+    } else if (receipt.id && (status === GoonReceiptStatus.Completed || status === GoonReceiptStatus.Survived)) {
+      this._outboundCosts.delete(receipt.id);
+    }
+
+    this._ev.payloadReceiptReceived.emit(receipt, (e) => this._warn(`payloadReceiptReceived handler threw: ${e && e.message}`));
+  }
+
+  _handleEmote(emote) {
+    emote.text = sanitizeText(emote.text, EMOTE_TEXT_MAX_CHARS);
+    emote.icon = sanitizeText(emote.icon, EMOTE_ICON_MAX_CHARS);
+    this._ev.emoteReceived.emit(emote, (e) => this._warn(`emoteReceived handler threw: ${e && e.message}`));
+  }
+
+  _handleRemoteMercy(mercy) {
+    if (this._ended) return;
+    this._remoteMercyMatchMs = mercy.at_match_ms;
+    if (this._phase === GoonMatchPhase.SuddenDeath) this._forwardToRunner(mercy);
+
+    const preLive = this._isPreLive(this._phase);
+    const draw = this._localMercyMatchMs !== null && Math.abs(mercy.at_match_ms - this._localMercyMatchMs) <= DRAW_WINDOW_MS;
+
+    this._info(`opponent mercy at ${mercy.at_match_ms} (draw=${draw})`);
+    this._endMatch(draw ? GoonEndReason.Draw : GoonEndReason.Mercy, false, !preLive);
+  }
+
+  _isPreLive(phase) {
+    return phase === GoonMatchPhase.Lobby || phase === GoonMatchPhase.Consent
+      || phase === GoonMatchPhase.Draft || phase === GoonMatchPhase.Countdown;
+  }
+
+  // ------------------------------------------------------ sudden death
+
+  _enterSuddenDeath() {
+    if (this._phase !== GoonMatchPhase.Live) return;
+
+    this._stopAllElements();
+    this._setPhase(GoonMatchPhase.SuddenDeath);
+
+    const runner = this._runner;
+    if (!runner) {
+      // No runner attached: degrade to the score comparison rather than hanging.
+      this._warn('no sudden-death runner attached - settling on score');
+      const mine = this._scoring.score;
+      const theirs = this._opponent.score;
+      if (mine === theirs) this._endMatch(GoonEndReason.Draw, false, true);
+      else this._endMatch(GoonEndReason.SuddenDeathLoss, mine < theirs, true);
+      return;
+    }
+
+    this._runnerUnsubs = [];
+    const sub = (name, fn) => {
+      const reg = bindFn(runner, [name]);
+      if (reg) {
+        const off = reg(fn);
+        if (typeof off === 'function') this._runnerUnsubs.push(off);
+      } else {
+        this._warn(`sudden-death runner has no ${name}()`);
+      }
+    };
+    sub('onRoundWon', (roundNo) => this._onRoundWon(roundNo));
+    sub('onRoundLost', (roundNo) => this._onRoundLost(roundNo));
+    sub('onNetLossReached', (localLost) => this._onNetLossReached(localLost));
+
+    const ctx = {
+      transport: this._transport,
+      clock: this._clock(),
+      rngFactory: this._rngFactory,
+      matchSeed: this._matchSeed,
+      isHost: this._isHost,
+      localMode: this.localAttentionMode,
+      remoteMode: this._opponent.attentionMode,
+      netLossThreshold: GoonConsts.SuddenDeathNetLoss,
+      // Caps intersection: never schedule a round the peer's client cannot render.
+      allowedRoundKinds: this._allowedRoundKinds,
+    };
+
+    this._runnerAbort = (typeof AbortController === 'function') ? new AbortController() : null;
+    void this._runSuddenDeath(runner, ctx, this._runnerAbort ? this._runnerAbort.signal : undefined);
+  }
+
+  async _runSuddenDeath(runner, ctx, signal) {
+    try {
+      const start = bindFn(runner, ['startAsync', 'start']);
+      if (!start) throw new Error('sudden-death runner has no startAsync()');
+      await start(ctx, signal);
+    } catch (e) {
+      if (signal && signal.aborted) return;               // mercy / dispose during sudden death
+      if (e && e.name === 'AbortError') return;
+      this._error(`sudden-death runner failed: ${(e && e.stack) || e}`);
+      if (this._disposed || this._ended) return;
+      try { this._endMatch(GoonEndReason.Draw, false, true); }
+      catch (inner) { this._error(`sudden-death failure handling threw: ${(inner && inner.stack) || inner}`); }
+    }
+  }
+
+  _forwardToRunner(message) {
+    const runner = this._runner;
+    if (!runner) return;
+    const handle = bindFn(runner, ['handleMessage']);
+    if (!handle) return;
+    try { handle(message); }
+    catch (e) { this._error(`runner.handleMessage threw for ${message.t}: ${(e && e.stack) || e}`); }
+  }
+
+  _onRoundWon(roundNo) {
+    if (this._disposed) return;
+    this._info(`sudden-death round ${roundNo} won`);
+    this._scoring.awardEventWon();
+  }
+
+  _onRoundLost(roundNo) {
+    if (this._disposed) return;
+    this._info(`sudden-death round ${roundNo} lost`);
+  }
+
+  _onNetLossReached(localLost) {
+    if (this._disposed) return;
+    this._endMatch(GoonEndReason.SuddenDeathLoss, !!localLost, true);
+  }
+
+  _detachRunner() {
+    const runner = this._runner;
+    if (!runner) return;
+
+    for (const off of this._runnerUnsubs) { try { off(); } catch { /* already gone */ } }
+    this._runnerUnsubs = [];
+    this._runner = null;
+
+    try { if (this._runnerAbort) this._runnerAbort.abort(); } catch { /* already gone */ }
+    this._runnerAbort = null;
+
+    const stop = bindFn(runner, ['stopAsync', 'stop']);
+    if (!stop) return;
+    try {
+      const p = stop();
+      if (p && typeof p.then === 'function') p.then(undefined, (e) => this._warn(`sudden-death stopAsync threw: ${e && e.message}`));
+    } catch (e) {
+      this._warn(`sudden-death stopAsync threw: ${e && e.message}`);
+    }
+  }
+
+  // ------------------------------------------------- end + result sign
+
+  _endMatch(reason, localLost, countsForLedger) {
+    if (this._ended) return;
+    this._ended = true;
+
+    this._stopTimers();
+    this._stopAllElements();
+    this._detachRunner();
+
+    const survivedMs = this._liveElapsed();
+    this._stopLiveWatch();
+
+    const winnerIsHost = reason === GoonEndReason.Draw ? null : (localLost ? !this._isHost : this._isHost);
+
+    const result = new GoonMatchResult({
+      endReason: reason,
+      winnerIsHost,
+      localIsHost: this._isHost,
+      hostScore: this._isHost ? this._scoring.score : this._opponent.score,
+      guestScore: this._isHost ? this._opponent.score : this._scoring.score,
+      survivedMs,
+      countsForLedger,
+    });
+    this._result = result;
+
+    this._setPhase(GoonMatchPhase.Recap);
+
+    this._send(makeResult({
+      end_reason: reason,
+      winner_is_host: winnerIsHost,
+      host_score: result.hostScore,
+      guest_score: result.guestScore,
+      survived_ms: survivedMs,
+      agree: false,
+    }));
+
+    this._resultDeadlineLocalMs = localMonotonicMs() + RESULT_HANDSHAKE_TIMEOUT_MS;
+    this._info(`match ended: ${reason}, localLost=${localLost}, survived ${Math.trunc(survivedMs / 1000)}s, ` +
+      `${result.hostScore}-${result.guestScore}`);
+
+    this._ev.matchEnded.emit(result, (e) => this._error(`matchEnded handler threw: ${(e && e.stack) || e}`));
+  }
+
+  _handleRemoteResult(remote) {
+    if (!this._ended) {
+      // Their end signal reached us before ours fired (lost mercy, or a sudden-death exit resolved
+      // on their side first). Adopt their outcome.
+      const localLost = remote.winner_is_host !== null && remote.winner_is_host !== undefined
+        && remote.winner_is_host !== this._isHost;
+      this._endMatch(remote.end_reason, localLost, true);
+    }
+    const result = this._result;
+    if (!result) return;
+
+    // Each side's own score is authoritative for its own half.
+    if (this._isHost) result.guestScore = remote.guest_score;
+    else result.hostScore = remote.host_score;
+
+    if (remote.agree) {
+      result.agreed = true;
+      result.disputed = false;
+      this._finalizeResult();
+      return;
+    }
+
+    const sameReason = remote.end_reason === result.endReason;
+    const remoteWinner = (remote.winner_is_host === undefined) ? null : remote.winner_is_host;
+    const sameWinner = remoteWinner === result.winnerIsHost;
+
+    if (sameReason && sameWinner) {
+      if (!this._countersignSent) {
+        this._countersignSent = true;
+        this._send(makeResult({
+          end_reason: result.endReason,
+          winner_is_host: result.winnerIsHost,
+          host_score: result.hostScore,
+          guest_score: result.guestScore,
+          survived_ms: result.survivedMs,
+          agree: true,
+        }));
+      }
+      result.agreed = true;
+      result.disputed = false;
+    } else {
+      // Disputed: both claims are recorded; the ledger stores the pair and the uncontested
+      // cosmetics (survival time, payload counts) are still granted.
+      result.disputed = true;
+      result.remoteClaim = remote;
+      this._warn(`result DISPUTED - local ${result.endReason}/${result.winnerIsHost} vs remote ${remote.end_reason}/${remoteWinner}`);
+    }
+
+    this._finalizeResult();
+  }
+
+  _finalizeResult() {
+    const result = this._result;
+    if (this._finalized || !result) return;
+    this._finalized = true;
+    this._stopPhaseTimer();
+    this._ev.resultFinalized.emit(result, (e) => this._error(`resultFinalized handler threw: ${(e && e.stack) || e}`));
+  }
+
+  // ------------------------------------------------------ phase plumbing
+
+  _setPhase(phase) {
+    if (this._phase === phase) return;
+    this._phase = phase;
+    this._info(`phase -> ${phase}`);
+    this._ev.phaseChanged.emit(phase, (e) => this._error(`phaseChanged handler threw: ${(e && e.stack) || e}`));
+  }
+
+  _startPhaseTimer() {
+    if (this._phaseTicker) return;
+    this._phaseTicker = ticker(PHASE_TIMER_INTERVAL_MS, () => this._phaseTick(), { logger: this._log, tag: `${this._tag}Phase` });
+  }
+
+  _phaseTick() {
+    if (this._disposed) return;
+    try {
+      switch (this._phase) {
+        case GoonMatchPhase.Draft:
+          this._tryProposeStart();
+          break;
+
+        case GoonMatchPhase.Countdown:
+          if (this._startMatchMs > 0 && this._clockNow() >= this._startMatchMs) this._enterLive();
+          break;
+
+        case GoonMatchPhase.Recap:
+          if (!this._finalized && localMonotonicMs() >= this._resultDeadlineLocalMs) {
+            if (this._result && !this._result.agreed) {
+              this._result.disputed = true;
+              this._warn('result handshake timed out - recorded as disputed');
+            }
+            this._finalizeResult();
+          }
+          break;
+
+        default:
+          break;
+      }
+    } catch (e) {
+      this._error(`phase tick failed: ${(e && e.stack) || e}`);
+    }
+  }
+
+  _stopPhaseTimer() {
+    if (!this._phaseTicker) return;
+    this._phaseTicker.stop();
+    this._phaseTicker = null;
+  }
+
+  _stopTimers() {
+    if (this._liveTicker) {
+      this._liveTicker.stop();
+      this._liveTicker = null;
+    }
+    // The phase timer keeps running through Recap for the handshake deadline.
+  }
+
+  /** Stops every element the ramp started. exec/ does the real teardown. */
+  _stopAllElements() {
+    if (this._activeElements.size === 0) return;
+    const elapsed = this._liveElapsed();
+    for (const element of Array.from(this._activeElements)) {
+      this._raiseCue('elementStopRequested', { element, intensity: 0, durationMs: 0, elapsedMs: elapsed });
+    }
+    this._activeElements.clear();
+  }
+
+  _resetToIdle() {
+    this._stopTimers();
+    this._stopPhaseTimer();
+    this._setPhase(GoonMatchPhase.Idle);
+  }
+
+  // ------------------------------------------------------------ helpers
+
+  _clock() {
+    try { return this._transport.clock || null; } catch { return null; }
+  }
+
+  _clockNow() {
+    try {
+      const c = this._clock();
+      return c ? c.nowMatchMs() : 0;
+    } catch { return 0; }
+  }
+
+  _restartLiveWatch() {
+    this._liveWatchStartLocalMs = localMonotonicMs();
+    this._liveWatchStoppedLocalMs = null;
+  }
+
+  _stopLiveWatch() {
+    if (this._liveWatchStartLocalMs !== null && this._liveWatchStoppedLocalMs === null) {
+      this._liveWatchStoppedLocalMs = localMonotonicMs();
+    }
+  }
+
+  /** Monotonic ms since the Live phase began; frozen once the match ends (C# Stopwatch). */
+  _liveElapsed() {
+    if (this._liveWatchStartLocalMs === null) return 0;
+    const end = this._liveWatchStoppedLocalMs === null ? localMonotonicMs() : this._liveWatchStoppedLocalMs;
+    return Math.floor(end - this._liveWatchStartLocalMs);
+  }
+
+  _send(message) {
+    if (this._disposed || !message) return;
+    try {
+      if (!this._send$) { this._warn(`no transport send for ${message.t}`); return; }
+      const p = this._send$(message);
+      if (p && typeof p.then === 'function') {
+        p.then(undefined, (e) => this._warn(`send failed for ${message.t}: ${e && e.message}`));
+      }
+    } catch (e) {
+      this._warn(`send failed for ${message.t}: ${e && e.message}`);
+    }
+  }
+
+  _raiseCue(name, args) {
+    this._ev[name].emit(args, (e) => this._error(`element cue handler threw for ${args.element}: ${(e && e.stack) || e}`));
+  }
+
+  _info(m) { if (this._log && this._log.info) this._log.info(`[${this._tag}] ${m}`); }
+  _warn(m) { if (this._log && this._log.warn) this._log.warn(`[${this._tag}] ${m}`); }
+  _error(m) { if (this._log && this._log.error) this._log.error(`[${this._tag}] ${m}`); }
+
+  dispose() {
+    if (this._disposed) return;
+    this._disposed = true;
+
+    for (const off of this._transportUnsubs) { try { off(); } catch { /* already gone */ } }
+    this._transportUnsubs = [];
+
+    this._stopTimers();
+    this._stopPhaseTimer();
+    this._detachRunner();
+    this._stopLiveWatch();
+    for (const ev of Object.values(this._ev)) ev.clear();
+  }
+}
+
+// ------------------------------------------------------------------ sheet helpers
+
+function cloneSheet(sheet, confirmed) {
+  return makeConsent({
+    live_duration_sec: sheet.live_duration_sec,
+    toy_cap: sheet.toy_cap,
+    payload_min_gap_ms: sheet.payload_min_gap_ms,
+    confirmed,
+  });
+}
+
+/** Sheet identity ignores `confirmed` — the TERMS must match, not the signature. */
+function sameSheet(a, b) {
+  return a.live_duration_sec === b.live_duration_sec
+    && Math.abs(a.toy_cap - b.toy_cap) < 0.0001
+    && a.payload_min_gap_ms === b.payload_min_gap_ms;
+}
