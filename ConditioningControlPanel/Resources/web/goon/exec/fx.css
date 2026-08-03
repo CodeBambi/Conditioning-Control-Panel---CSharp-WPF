@@ -43,8 +43,17 @@
  * degrees, in and out on one timed animation. Never full-window, never centred.
  *
  * SIZE lives in --gg-flash-size (38vmin + 15%, the owner's bump). exec/flashes.js
- * only writes the property for HYDRA CHILDREN, which taper per generation; it is
- * a size var and never a transform, so it cannot fight the tilt or the fade.
+ * writes the property for HYDRA CHILDREN (which taper per generation) and for a
+ * WHEEL RESIZE while a flash is held; it is a size var and never a transform, so
+ * it cannot fight the tilt, the fade, or the drag offset.
+ *
+ * DRAGGABLE — a flash can be picked up, thrown, and resized in hand. That whole
+ * mode lives in .gg-flash--grabbed / .is-held / .gg-flash--expire below, and the
+ * rule that makes it work is `animation: none`: while a flash is held or flying,
+ * JS writes its transform inline every frame, and an inline transform only wins
+ * once no keyframe is running (animations outrank inline styles in the cascade).
+ * Everything a dragged flash does after that — its lift, its pop, its death —
+ * therefore animates OPACITY ONLY.
  *
  * CLICKABLE — but only the `--hydra` variant. exec/bubbles.js mints plain
  * `.gg-flash` nodes for its pop effect and those must stay click-through, so the
@@ -73,11 +82,19 @@
   100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.05); }
 }
 
-/* The pointer opt-in. Base .gg-flash stays click-through (bubbles' pop flashes). */
+/* The pointer opt-in. Base .gg-flash stays click-through (bubbles' pop flashes).
+   touch-action:none because this node is DRAGGABLE (see below): a touch that
+   starts on a flash belongs to the flash, not to the page's pan/zoom. It also
+   still kills the double-tap zoom when splitting fast, which is why the old
+   `manipulation` was here. -webkit-user-drag stops the browser's own image drag
+   (the ghost preview) from stealing the gesture. */
 .gg-flash--hydra {
   pointer-events: auto;
-  touch-action: manipulation;      /* no double-tap zoom when splitting fast */
-  cursor: pointer;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 /* The stage (z20) owns the video surface and the lock card. While it holds
    anything, the flashes go back to being scenery. */
@@ -94,6 +111,32 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
   100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.05); }
 }
 
+/* GRABBED — the flash has been dragged, so it has LEFT the keyframe world and
+   exec/flashes.js owns it from here: transform (anchor offset + tilt + lift) is
+   written inline every frame, opacity is pinned, and its retirement is a JS
+   timer instead of an animation's end.
+   `animation: none` is what makes the inline transform authoritative at all:
+   animation declarations outrank inline author styles in the cascade, so a
+   running keyframe would drag the node straight back to its CSS anchor. Same
+   specificity as .gg-flash / --hatch, so SOURCE ORDER is doing the work — this
+   block must stay below them. */
+.gg-flash--grabbed {
+  animation: none;
+  opacity: var(--gg-flash-op, 0.95);
+  will-change: transform, opacity;
+}
+/* ...and while it is actually in hand: heavier shadow, no transition on the
+   filter (it is re-evaluated per frame anyway) and the grabbing cursor. The lift
+   itself is a scale inside the inline transform, not here — one writer for
+   transform, always. Nothing raises z-index (rule 1): flashes.js re-appends the
+   held node so DOM order alone floats it over its siblings. */
+.gg-flash--grabbed.is-held {
+  cursor: grabbing;
+  filter:
+    drop-shadow(0 0 34px rgba(var(--gg-pink-rgb), 0.95))
+    drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55));
+}
+
 /* The dismissed one. The shorthand replaces the running fade outright, and the
    animationend it fires is the same teardown hook the fade would have used. */
 .gg-flash.is-popped {
@@ -104,6 +147,18 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
   0%   { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1); }
   45%  { opacity: 0.9; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.2); }
   100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.34); }
+}
+
+/* THE EXITS FOR A DRAGGED FLASH. Both are OPACITY ONLY — a keyframe that touched
+   transform would outrank the inline one and teleport the node home for its own
+   death, which is the single worst-looking bug this feature can have. So a
+   dragged flash fades out where you left it, and the pop keeps only its timing.
+   Both must sit after the rules they override (--grabbed, .is-popped). */
+.gg-flash--grabbed.is-popped { animation: ggFlashFade 220ms ease-out forwards; }
+.gg-flash--expire { animation: ggFlashFade 420ms ease forwards; }
+@keyframes ggFlashFade {
+  from { opacity: var(--gg-flash-op, 0.95); }
+  to   { opacity: 0; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -448,6 +503,12 @@ body:has(#gg-stage > *) .gg-bubble { pointer-events: none; cursor: default; }
     transform: translate(-50%, -50%);
   }
   .gg-flash.is-popped { animation: none; opacity: 0; }
+  /* Dragging still works here (it is direct manipulation, not motion): the
+     grabbed transform is inline, so it beats the rule above whatever the order.
+     Only the two JS-owned FADES need saying — without them a touched flash would
+     sit at full opacity until its kill timer yanked it. */
+  .gg-flash--expire,
+  .gg-flash--grabbed.is-popped { animation: none; opacity: 0; }
   .gg-sub-word { transform: translate(-50%, -50%) !important; transition: opacity 300ms ease; }
   .gg-bubble { animation: none; }        /* no sway; the rise still carries it up */
   .gg-spiral { animation: none; }        /* no spin; the pane still covers + blends */

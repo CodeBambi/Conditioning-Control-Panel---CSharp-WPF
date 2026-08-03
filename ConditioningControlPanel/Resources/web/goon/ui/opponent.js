@@ -28,6 +28,7 @@
 
 import { GoonConnectionHealth } from '../core/match.js';
 import { GoonConsts, GoonElement, GoonPayloadKind, enumName } from '../core/contracts.js';
+import { GoonReceiptStatus } from '../core/scoring.js';
 import { S } from './strings.js';
 
 /** Closeness 0-3 -> the word that always rides with the colour. */
@@ -71,6 +72,29 @@ export const MINI_FOR_PAYLOAD = Object.freeze({
 });
 
 const ANIM_BUDGET = 2;
+
+/**
+ * Receipt statuses that END a payload window.
+ *
+ * A payload gets TWO receipts, not one: `accepted` the instant the peer admits
+ * it, and a terminal one when it is over. Closing on `accepted` closed every
+ * window ~60 ms after it opened — i.e. before the lead time had even elapsed,
+ * so no payload we fired ever showed on their screen. Anything NOT in this set
+ * (a future status, a garbled one) is treated as non-terminal and left to the
+ * window's own timer, which is clamped at MAX_WINDOW_MS and cannot strand it.
+ */
+const TERMINAL_RECEIPTS = new Set([
+  GoonReceiptStatus.Survived,
+  GoonReceiptStatus.Completed,
+  GoonReceiptStatus.RejectedRate,
+  GoonReceiptStatus.RejectedFiltered,
+]);
+
+/** Terminal-status test that also covers `rejected_*` reasons added later. */
+export function isTerminalReceipt(status) {
+  const s = String(status || '');
+  return TERMINAL_RECEIPTS.has(s) || s.indexOf('rejected') === 0;
+}
 
 /** How long the green pass wash + checkmark hold. Feedback, never ambience. */
 const PASS_MS = 1200;
@@ -292,14 +316,19 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
     wants.sort((a, b) => (forced.has(b.key) ? 1 : 0) - (forced.has(a.key) ? 1 : 0));
     for (const m of wants) { if (moving.size < ANIM_BUDGET) moving.add(m.key); }
 
+    // An effect name we have no mini for (a newer peer, a garbled tick) must not
+    // silently blank the idle word: count what we can actually DRAW.
+    let drawn = 0;
     for (const m of MINIS) {
       const node = parts.get(m.key);
       if (!node) continue;
-      cls(node, 'is-on', live.has(m.key));
+      const on = live.has(m.key);
+      if (on) drawn++;
+      cls(node, 'is-on', on);
       cls(node, 'is-anim', moving.has(m.key));
       cls(node, 'is-yours', forced.has(m.key));
     }
-    if (idle) idle.hidden = live.size > 0;
+    if (idle) idle.hidden = drawn > 0;
   }
 
   function paintCloseness(op) {
@@ -453,19 +482,22 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
   }
 
   /**
-   * …and this when the receipt for one of ours comes back. `survived` is the
+   * …and this when a receipt for one of ours comes back. `survived` is the
    * flagship: they took the whole thing and held. That earns the green.
+   *
+   * NOT every receipt is the end. The engine acks with `accepted` the moment
+   * the peer admits the payload — roughly 60 ms after the fire, and 1.4 s
+   * BEFORE the window is even due to open. Closing on that ack meant no fired
+   * payload ever reached their little screen; only their own ramp did, which is
+   * why the monitor looked like it only ever showed one thing.
    */
   function markReceipt(id, status) {
-    const w = id ? windows.get(id) : null;
+    if (!id) return;
     const s = String(status || '');
-    if (s === 'survived') {
-      playPass(w && w.key);
-      closeWindow(id);
-      return;
-    }
-    // completed / rejected_* — the window is over either way, quietly.
-    if (id) closeWindow(id);
+    if (!isTerminalReceipt(s)) return;        // `accepted` — it is still landing
+    const w = windows.get(id);
+    if (s === GoonReceiptStatus.Survived) playPass(w && w.key);
+    closeWindow(id);
   }
 
   /** Green wash + checkmark, and the lock-card mockup lights up with them. */

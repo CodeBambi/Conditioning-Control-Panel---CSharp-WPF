@@ -900,6 +900,205 @@ function makeFakeMatch() {
   ok(!/router\.show\(\s*'options'/.test(bootSrc), 'Options is never a screen navigation');
 }
 
+/* ===========================================================================
+ * 12. REGRESSION — the opponent monitor "worked then stopped" (0803).
+ *
+ * Two independent bugs, one symptom. The owner saw the little screen animate
+ * early in a Practice duel, then go dead, and reported that the only thing he
+ * ever saw on it was the flashes mini.
+ *
+ *   12a. EVERY payload window was destroyed ~60 ms after it opened, because
+ *        markReceipt() treated the engine's `accepted` ACK as terminal. A
+ *        payload gets TWO receipts and only the second one ends it. Nothing the
+ *        player FIRED ever reached their screen; only the opponent's own ramp
+ *        did — and the only ramp element with entryFraction 0.00 is Flashes,
+ *        which is why "flashes" was the whole show.
+ *
+ *   12b. Every mini rode --gg-deco-play, which goon.css flips to `paused` at
+ *        html[data-gg-fx="hot"] — and exec/layers.js calls "hot" at three
+ *        concurrent local effects, i.e. a normal three-element draft, with no
+ *        payload in flight at all. Mid-match the whole rect froze.
+ * ======================================================================== */
+{
+  const { GoonReceiptStatus } = await import('../core/scoring.js');
+
+  // --- 12a-i. the pure status predicate ------------------------------------
+  ok(typeof opponentMod.isTerminalReceipt === 'function', 'ui/opponent.js exports isTerminalReceipt');
+  const term = opponentMod.isTerminalReceipt;
+  ok(term(GoonReceiptStatus.Survived), "'survived' ends a payload window");
+  ok(term(GoonReceiptStatus.Completed), "'completed' ends a payload window");
+  ok(term(GoonReceiptStatus.RejectedRate), "'rejected_rate' ends a payload window");
+  ok(term(GoonReceiptStatus.RejectedFiltered), "'rejected_filtered' ends a payload window");
+  ok(term('rejected_something_new'), 'any future rejected_* reason ends it too');
+  ok(!term(GoonReceiptStatus.Accepted),
+    "'accepted' is an ACK, NOT the end — closing on it is what killed every window");
+  ok(!term(''), 'a blank status is not terminal');
+  ok(!term('landing'), 'an unknown status is left to the window timer rather than closing it early');
+
+  // --- 12a-ii. the real receipt ORDER, against a mounted monitor ------------
+  const match = makeFakeMatch();
+  match.opponent.activeEffects = [];
+  const host = document.createElement('div');
+  const mon = opponentMod.mountOpponent({ host, match, audio: { sfx() {} } });
+  const proj = findOne(mon.root, 'gg-mon-proj');
+  const lock = findOne(proj, 'gg-mini-lock');
+
+  mon.markPayloadFired({ id: 'r1', kind: GoonPayloadKind.LockCard, durationMs: 30000, leadMs: 60 });
+  // …and the ACK lands BEFORE the lead elapses. That is the production
+  // ordering: fire -> `accepted` in tens of ms -> the window is due later.
+  mon.markReceipt('r1', GoonReceiptStatus.Accepted);
+  await sleep(140);
+  ok(hasClass(lock, 'is-on'), 'an `accepted` ACK does not cancel the payload window');
+  ok(hasClass(lock, 'is-yours'), 'and the mini is still marked as ours');
+  mon.markReceipt('r1', GoonReceiptStatus.Accepted);
+  await sleep(20);
+  ok(hasClass(lock, 'is-on'), 'a duplicate ACK is equally harmless');
+
+  // the terminal receipt still ends it — and now the window is still THERE when
+  // it arrives, so the pass can green the right mini (it used to be gone).
+  mon.markReceipt('r1', GoonReceiptStatus.Survived);
+  ok(hasClass(lock, 'is-pass'), 'a survived lock card greens the CARD, not just the wash');
+  ok(!hasClass(lock, 'is-on'), 'and the terminal receipt closes the window');
+  ok(hasClass(findOne(proj, 'gg-mon-check'), 'is-in'), 'the checkmark still plays');
+
+  // --- 12a-iii. …and it keeps working, fire after fire ---------------------
+  const flash = findOne(proj, 'gg-mini-flash');
+  for (let cycle = 1; cycle <= 3; cycle++) {
+    const id = 'cyc' + cycle;
+    mon.markPayloadFired({ id, kind: GoonPayloadKind.FlashBurst, durationMs: 6000, leadMs: 20 });
+    mon.markReceipt(id, GoonReceiptStatus.Accepted);
+    await sleep(80);
+    ok(hasClass(flash, 'is-on') && hasClass(flash, 'is-yours'), `fire/ack/close cycle ${cycle} still opens a window`);
+    mon.markReceipt(id, GoonReceiptStatus.Survived);
+    ok(!hasClass(flash, 'is-on'), `cycle ${cycle} closes cleanly`);
+  }
+
+  // --- 12a-iv. an effect name we cannot draw must not blank the rect -------
+  match.opponent.activeEffects = ['Flashes', 'NotAnElementWeKnow', 999];
+  let threw = false;
+  try { match._emit('opp'); } catch (_e) { threw = true; }
+  ok(!threw, 'paintMinis survives an unknown effect name');
+  ok(hasClass(flash, 'is-on'), 'the names it DOES know still paint');
+  ok(findOne(proj, 'gg-mini-idle').hidden === true, 'and the idle word steps aside for them');
+  match.opponent.activeEffects = ['NotAnElementWeKnow'];
+  match._emit('opp');
+  ok(findOne(proj, 'gg-mini-idle').hidden === false,
+    'a tick of NOTHING BUT unknown names leaves the idle word up rather than an empty rect');
+
+  mon.unmount();
+  ok(match._subs.released === match._subs.taken, 'the fixed monitor still leaks no subscriptions',
+    `${match._subs.released}/${match._subs.taken}`);
+}
+
+/* --- 12a-v. the same thing down the REAL mount path -----------------------
+ * mountHud -> arsenal.fire -> onFired -> markPayloadFired, with the engine's
+ * `accepted` receipt arriving on the real event, at the real time. This is the
+ * shape the shipped bug had: everything wired, every check above green, and the
+ * mini still never lit. */
+{
+  const match = makeFakeMatch();
+  match.opponent.activeEffects = [];
+  const hud = hudMod.mountHud({ match, audio: { sfx() {} } });
+  const proj = findOne(dom.byId.get('gg-hud'), 'gg-mon-proj');
+  const bub = findOne(proj, 'gg-mini-bubbles');
+
+  const res = hud.parts.arsenal.fire('bubbles');
+  ok(res && res.ok === true, 'the real desk fires a bubble swarm');
+  match._emit('pRec', { id: res.id, status: 'accepted' });    // ~60 ms in production
+  ok(!hasClass(bub, 'is-on'), 'the mini is still dark while the payload is in the air');
+
+  await sleep(Math.max(GoonConsts.MinScheduleBufferMs, 1500) + 250);
+  ok(hasClass(bub, 'is-on'), 'the window opens on the real clock DESPITE the accepted ACK');
+  ok(hasClass(bub, 'is-yours'), 'and it is marked as ours');
+  ok(hasClass(bub, 'is-anim'), 'a payload we fired outranks their ramp for the motion budget');
+
+  match._emit('pRec', { id: res.id, status: 'survived' });
+  ok(!hasClass(bub, 'is-on'), 'the terminal receipt closes it');
+  ok(hasClass(findOne(proj, 'gg-mon-check'), 'is-in'), 'and the pass plays');
+
+  hud.unmount();
+  ok(match._subs.released === match._subs.taken, 'no subscription leak on the real path',
+    `${match._subs.released}/${match._subs.taken}`);
+}
+
+/* --- 12a-vi. the engine half of the contract ------------------------------
+ * The block above supplies its own 'accepted' string. If core/match.js ever
+ * stopped ACKing, the exemption would look like dead code and get "tidied"
+ * away. Read the engine instead of trusting it. */
+{
+  const fs = await import('node:fs/promises');
+  const url = await import('node:url');
+  const read = async (p) => fs.readFile(url.fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+  const matchSrc = await read('../core/match.js');
+  const oppSrc = await read('../ui/opponent.js');
+
+  ok(/makePayloadReceipt\(\{\s*id:\s*payload\.id,\s*status:\s*GoonReceiptStatus\.Accepted/.test(matchSrc),
+    'core/match.js ACKs an admitted payload with `accepted` BEFORE any terminal receipt');
+  ok(/payloadReceiptReceived\.emit/.test(matchSrc), 'and every receipt reaches onPayloadReceiptReceived');
+  ok(/isTerminalReceipt/.test(oppSrc), 'ui/opponent.js filters receipts through isTerminalReceipt');
+  ok(!/if \(s === 'survived'\)[\s\S]{0,200}if \(id\) closeWindow\(id\);/.test(oppSrc),
+    'and no longer closes the window on every receipt it is handed');
+}
+
+/* --- 12b. the CSS half: the projection rect is exempt from the heat pause --
+ * Asserted across BOTH files. goon.css owns the armor switch and hud.css owns
+ * the exemption; either one alone is either a frozen monitor or a dead rule. */
+{
+  const fs = await import('node:fs/promises');
+  const url = await import('node:url');
+  const read = async (p) => fs.readFile(url.fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+  const hudCss = await read('../ui/hud.css');
+  const goonCss = await read('../goon.css');
+
+  ok(/html\[data-gg-fx="hot"\]\s*\{[^}]*--gg-deco-play:\s*paused/.test(goonCss),
+    'goon.css still parks decorative motion at html[data-gg-fx="hot"]');
+
+  const projBlocks = hudCss.match(/\.gg-mon-proj\s*\{[^}]*\}/g) || [];
+  ok(projBlocks.length > 0, 'hud.css has a .gg-mon-proj block');
+  ok(projBlocks.some((b) => /--gg-deco-play:\s*running/.test(b)),
+    'the projection rect re-declares --gg-deco-play: running — the monitor is information, not chrome');
+
+  // Nothing inside the rect may set it back to paused (that would re-freeze the
+  // minis through inheritance without touching a single .gg-mini rule).
+  const paused = (hudCss.match(/[^}]*--gg-deco-play:\s*paused[^}]*/g) || [])
+    .filter((b) => /gg-mon|gg-mini/.test(b));
+  ok(paused.length === 0, 'no rule inside the monitor re-pauses the minis', String(paused.length));
+
+  // The minis still declare the property, so the exemption is load-bearing
+  // rather than decorative: strip it and they freeze again.
+  ok(/\.gg-mini-[a-z]+\.is-anim[^{]*\{[^}]*animation-play-state:\s*var\(--gg-deco-play\)/.test(hudCss),
+    'the mini rules still ride --gg-deco-play (which is what the exemption overrides)');
+
+  // …and the hard off switches must still win over the exemption.
+  ok(/prefers-reduced-motion[\s\S]{0,400}\.gg-mini\.is-anim[\s\S]{0,300}animation:\s*none\s*!important/.test(hudCss),
+    'prefers-reduced-motion still stops the minis outright');
+  ok(/is-calm[\s\S]{0,200}\.gg-mini\.is-anim[\s\S]{0,200}animation:\s*none\s*!important/.test(hudCss),
+    '.is-calm (the reduced-motion pref) still stops them too');
+}
+
+/* --- 12c. what SHOULD be on their screen, and when ------------------------
+ * The ramp is why an early match legitimately shows one mini or none: only
+ * entryFraction 0.00 is live at t=0. This is NOT the bug — it is asserted here
+ * so nobody "fixes" correct behaviour while chasing a frozen rect. */
+{
+  const { buildRamp, profileOf, GoonCueAction } = await import('../core/draft.js');
+  const LIVE_SEC = 720;
+  const ramp = buildRamp([GoonElement.Flashes, GoonElement.Spiral, GoonElement.BrainDrain], 0x1234n, LIVE_SEC);
+  const firstStart = (element) => {
+    const cue = ramp.find((c) => c.element === element && c.action === GoonCueAction.Start);
+    return cue ? cue.offsetMs : -1;
+  };
+  ok(profileOf(GoonElement.Flashes).entryFraction === 0,
+    'Flashes is the one element that enters at t=0 — the reason "flashes only" reads as normal early on');
+  ok(firstStart(GoonElement.Flashes) === 0, 'so its mini is live from the first second');
+  ok(firstStart(GoonElement.Spiral) === Math.trunc(LIVE_SEC * 1000 * 0.25),
+    'Spiral does not appear until a quarter of the way in', String(firstStart(GoonElement.Spiral)));
+  ok(firstStart(GoonElement.BrainDrain) === Math.trunc(LIVE_SEC * 1000 * 0.35),
+    'and BrainDrain not until 35%', String(firstStart(GoonElement.BrainDrain)));
+  ok(firstStart(GoonElement.Spiral) > 120000 && firstStart(GoonElement.BrainDrain) > 120000,
+    'i.e. an empty-ish monitor in the first two minutes of a 12-minute match is CORRECT');
+}
+
 await sleep(60);
 console.log(`\nselftest-hud: ${n - failures}/${n} checks passed`);
 if (failures > 0) {

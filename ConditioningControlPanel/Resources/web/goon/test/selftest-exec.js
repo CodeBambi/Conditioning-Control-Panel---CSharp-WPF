@@ -493,6 +493,26 @@ async function main() {
   }
 
   // -------------------------------------- flashes: the DtRH scatter + the hydra
+  //
+  // FLASH-BLOCK POINTER HELPER. The stub's fire() carries no coordinates and no
+  // button, which was fine while the hydra lived on a bare pointerdown. Grab /
+  // fling / wheel are all functions of WHERE the pointer was and WHEN, so the
+  // three flash blocks below dispatch their own events instead.
+  let PID = 0;
+  function ptr(el, type, x, y, extra) {
+    const e = Object.assign({
+      type, button: 0, pointerId: PID, clientX: x, clientY: y, defaulted: false,
+      preventDefault() { e.defaulted = true; }, stopPropagation() {},
+    }, extra || {});
+    for (const fn of ((el._listeners && el._listeners.get(type)) || []).slice()) fn(e);
+    return e;
+  }
+  // A press that never moves: the click the hydra still answers to.
+  const tap = (el, x = 100, y = 100) => { PID++; ptr(el, 'pointerdown', x, y); ptr(el, 'pointerup', x, y); };
+  const dxOf = (el) => {
+    const mm = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(el.style.getPropertyValue('transform') || '');
+    return mm ? parseFloat(mm[1]) : NaN;
+  };
   {
     const { MAX_LIVE, HYDRA_CHILDREN, BASE_HOLD_MS } = await import('../exec/flashes.js');
     ok(MAX_LIVE === 20 && HYDRA_CHILDREN === 2 && BASE_HOLD_MS === 5000,
@@ -538,7 +558,14 @@ async function main() {
     ok(before > 0, 'stopping the bed leaves the airborne flashes on screen', String(before));
 
     const target = shotsOf()[0];
-    target.fire('pointerdown');
+    // The hydra now answers to pointerUP, so that a press can still turn into a
+    // drag. A press on its own must therefore do nothing at all.
+    PID++;
+    ptr(target, 'pointerdown', 100, 100);
+    ok(!target._cls.has('is-popped'), 'pointerdown alone no longer pops — the press is still deciding');
+    ptr(target, 'pointermove', 104, 103);      // 5px: inside DRAG_SLOP_PX, still a click
+    ok(!target._cls.has('gg-flash--grabbed'), 'a wobble inside the slop is not a grab', target.className);
+    ptr(target, 'pointerup', 104, 103);
     ok(target._cls.has('is-popped'), 'a clicked flash pops out');
     ok(heard.includes('flash-pop'), 'the click hits the flash-pop sfx hook', heard.join(','));
     await sleep(320);                              // both children hatch by 210ms
@@ -555,7 +582,7 @@ async function main() {
 
     // Hammer the split: every round doubles the field until MAX_LIVE bites.
     for (let round = 0; round < 6 && shotsOf().length < MAX_LIVE; round++) {
-      for (const el of shotsOf()) el.fire('pointerdown');
+      for (const el of shotsOf()) tap(el);
       await sleep(280);
     }
     await sleep(300);
@@ -563,7 +590,7 @@ async function main() {
     ok(atCap.length === MAX_LIVE, 'the hydra fills to the cap and refuses to pass it',
       String(atCap.length));
 
-    atCap[0].fire('pointerdown');
+    tap(atCap[0]);
     await sleep(320);
     ok(shotsOf().length === MAX_LIVE - 1,
       'at the cap a click only dismisses — no children', String(shotsOf().length));
@@ -587,11 +614,201 @@ async function main() {
     await sleep(140);
     const shots = host.findAll('gg-flash').filter((el) => !el._cls.has('is-popped'));
     ok(shots.length > 0, 'a FlashBurst puts flashes on screen', String(shots.length));
-    shots[0].fire('pointerdown');
+    tap(shots[0]);
     ok(m.receipts.length === 0, 'clicking a flash does not settle the burst early');
+    // ...and neither does dragging one across the screen and throwing it.
+    PID++;
+    ptr(shots[shots.length - 1], 'pointerdown', 300, 300);
+    ptr(shots[shots.length - 1], 'pointermove', 420, 360);
+    ptr(shots[shots.length - 1], 'pointerup', 460, 380);
+    ok(m.receipts.length === 0, 'dragging and flinging a flash does not settle the burst either');
     await sleep(3300);
     ok(m.receipts.length === 1 && m.receipts[0].endured === true,
       'the burst still receipts endured after its full duration', JSON.stringify(m.receipts));
+    ex.stopAll();
+    ex.detach();
+  }
+
+  // ------------------------------ flashes: grab, fling, wheel-to-resize (owner)
+  //
+  // One block on purpose: the long wait that proves a HELD flash's clock is
+  // paused is the same wall-clock time the fling needs to glide to a stop, so
+  // the two ride together instead of costing the suite two lifetimes.
+  {
+    const F = await import('../exec/flashes.js');
+    ok(F.DRAG_SLOP_PX === 6 && F.WHEEL_STEP === 1.08 && F.SIZE_MIN_FACTOR === 0.5
+      && F.SIZE_MAX_FACTOR === 2.5 && F.FLING_FRICTION === 0.94,
+      'the drag/fling/wheel dials are the shipped numbers',
+      `${F.DRAG_SLOP_PX}px slop, x${F.WHEEL_STEP} per notch, ${F.SIZE_MIN_FACTOR}..${F.SIZE_MAX_FACTOR}x, ${F.FLING_FRICTION} friction`);
+
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-flash');
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    const shotsOf = () => host.findAll('gg-flash').filter((el) => !el._cls.has('is-popped'));
+
+    let t0 = Date.now();
+    m.emitStart({ element: GoonElement.Flashes, intensity: 1, durationMs: 0, elapsedMs: 0 });
+    await sleep(1600);                       // two beats at i=1 -> four flashes to play with
+    m.emitStop({ element: GoonElement.Flashes, intensity: 0, durationMs: 0, elapsedMs: 0 });
+    await sleep(340);
+    // The cadence owes us four (beats at ~0 and <=1235ms, two flashes each), but
+    // breed the rest rather than throw if a slow host cost us one — and re-base
+    // the lifetime clock when we do, since the newcomers are younger.
+    for (let i = 0; shotsOf().length < 4 && i < 4; i++) { tap(shotsOf()[0]); await sleep(300); t0 = Date.now(); }
+    const cast = shotsOf();
+    ok(cast.length >= 4, 'the bed left enough flashes to drag around', String(cast.length));
+    // Grabbing re-appends a node (that is how it floats above its siblings without
+    // touching z-index), so every reference is taken BEFORE anyone touches one.
+    const held = cast[0];        // goes into the hand and stays there
+    const ctrl = cast[1];        // never touched: the control for "the clock is real"
+    const flung = cast[2];
+    const cancelled = cast[3];
+    const durHeld = parseFloat(held.style.getPropertyValue('--gg-flash-dur'));
+
+    // ---- the press that becomes a grab
+    const anchorX = parseFloat(flung.style.getPropertyValue('left')) / 100 * 1280;
+    const anchorY = parseFloat(flung.style.getPropertyValue('top')) / 100 * 720;
+    PID++;
+    const down = ptr(flung, 'pointerdown', 500, 500);
+    ok(down.defaulted === true, 'the press preventDefaults (no native image-drag ghost)');
+    ok(!flung._cls.has('gg-flash--grabbed'), 'the press is not a grab yet');
+    ptr(flung, 'pointermove', 503, 504);     // 5px: still inside the slop
+    ok(!flung._cls.has('gg-flash--grabbed'), 'movement inside the slop is still a click', flung.className);
+    ptr(flung, 'pointermove', 600, 600);     // past it: this is a grab
+    ok(flung._cls.has('gg-flash--grabbed') && flung._cls.has('is-held'),
+      'past the slop the flash is in hand', flung.className);
+    const t = flung.style.getPropertyValue('transform');
+    ok(/translate\(-50%, -50%\) translate\(100\.0px, 100\.0px\)/.test(t),
+      'the held flash follows the pointer, one-to-one', t);
+    ok(/rotate\(-?[\d.]+deg\)/.test(t) && /scale\(1\.06\)/.test(t),
+      'the drag transform still carries the tilt, plus the lift', t);
+    ok(dxOf(flung) === 100, 'drag offset is px on top of the vw/vh anchor, which never moves',
+      `${flung.style.getPropertyValue('left')} + ${dxOf(flung)}px`);
+
+    // ---- wheel while holding: --gg-flash-size only, clamped, and never scrolls
+    const sizeOf = (el) => parseFloat(el.style.getPropertyValue('--gg-flash-size')) || 43.7;
+    const base = sizeOf(flung);
+    const w = ptr(flung, 'wheel', 600, 600, { deltaY: -100 });
+    ok(w.defaulted === true, 'a wheel while held preventDefaults so the page can never scroll');
+    ok(Math.abs(sizeOf(flung) - base * F.WHEEL_STEP) < 0.06,
+      'one notch up grows it by exactly one wheel step', `${base} -> ${sizeOf(flung)}`);
+    ok((flung.style.getPropertyValue('transform').match(/scale\(/g) || []).length === 1
+      && /scale\(1\.06\)/.test(flung.style.getPropertyValue('transform')),
+      'the wheel never stacks a transform scale on top of the tilt/drag — size is the var alone',
+      flung.style.getPropertyValue('transform'));
+    for (let i = 0; i < 30; i++) ptr(flung, 'wheel', 600, 600, { deltaY: -120 });
+    ok(Math.abs(sizeOf(flung) - base * F.SIZE_MAX_FACTOR) < 0.06,
+      'growth clamps at 2.5x its own base size', String(sizeOf(flung)));
+    for (let i = 0; i < 60; i++) ptr(flung, 'wheel', 600, 600, { deltaY: 120 });
+    ok(Math.abs(sizeOf(flung) - base * F.SIZE_MIN_FACTOR) < 0.06,
+      'and shrink clamps at 0.5x', String(sizeOf(flung)));
+
+    // ---- the other hand is busy: a second pointer is ignored, not half-driven
+    PID++;
+    ptr(cancelled, 'pointerdown', 200, 200);
+    ptr(cancelled, 'pointermove', 300, 300);
+    ok(!cancelled._cls.has('gg-flash--grabbed'),
+      'a second finger during a live drag is ignored outright', cancelled.className);
+    PID--;
+
+    // ---- the throw. Park it mid-screen first so the glide has room to run
+    // without kissing a wall, let the parking move age out of the velocity
+    // window, THEN flick: 40px in ~50ms is the only momentum it should keep.
+    // (pointer x -> node centre: centre = anchor + (x - 500), the press origin.)
+    const px = (centre) => centre - anchorX + 500;
+    const py = (centre) => centre - anchorY + 500;
+    ptr(flung, 'pointermove', px(400), py(360));
+    await sleep(150);
+    ptr(flung, 'pointermove', px(400), py(360));
+    await sleep(25);
+    ptr(flung, 'pointermove', px(420), py(360));
+    await sleep(25);
+    ptr(flung, 'pointermove', px(440), py(360));
+    const up = ptr(flung, 'pointerup', px(440), py(360));
+    ok(up.defaulted === true, 'the release preventDefaults too');
+    ok(!flung._cls.has('is-popped'),
+      'a press that became a drag is NOT a click — no hydra on release', flung.className);
+    ok(!flung._cls.has('is-held') && flung._cls.has('gg-flash--grabbed'),
+      'released: out of hand, still JS-owned', flung.className);
+
+    const g0 = dxOf(flung);
+    await sleep(130);
+    const g1 = dxOf(flung);
+    ok(g1 > g0 + 4, 'a release with velocity throws it — the glide is running', `${g0} -> ${g1}`);
+    await sleep(170);
+    const g2 = dxOf(flung);
+    ok((g2 - g1) < (g1 - g0) && g2 > g1, 'friction: each stretch is shorter than the last',
+      `${g0} -> ${g1} -> ${g2}`);
+    await sleep(950);
+    const g3 = dxOf(flung);
+    await sleep(150);
+    ok(Math.abs(dxOf(flung) - g3) < 1, 'and it comes to rest instead of gliding forever',
+      `${g3} -> ${dxOf(flung)}`);
+    const restX = dxOf(flung) + anchorX;
+    ok(flung.isConnected && restX >= 0.07 * 1280 - 1 && restX <= 0.93 * 1280 + 1,
+      'it landed inside the bounce box rather than sailing off (that needs a real hurl)',
+      String(Math.round(restX)));
+
+    // ---- pointercancel is a gentle drop: no pop, no stuck hold, hand empty
+    PID++;
+    ptr(cancelled, 'pointerdown', 200, 200);
+    ptr(cancelled, 'pointermove', 280, 250);
+    ok(cancelled._cls.has('is-held'), 'the third flash is in hand', cancelled.className);
+    ptr(cancelled, 'pointercancel', 280, 250);
+    ok(!cancelled._cls.has('is-held') && !cancelled._cls.has('is-popped') && cancelled.isConnected,
+      'pointercancel drops it where it lies: no pop, no stuck hold', cancelled.className);
+    ok(Math.abs(dxOf(cancelled) - 80) < 0.01,
+      'a cancelled drag keeps the ground it covered', String(dxOf(cancelled)));
+    // The hand is empty again — the very next press is a clean click.
+    tap(cancelled, 280, 250);
+    ok(cancelled._cls.has('is-popped'),
+      'and the next press still works, so no drag state was left stuck');
+
+    // ---- the long hold: the lifetime clock PAUSES in the hand
+    PID++;
+    ptr(held, 'pointerdown', 700, 400);
+    ptr(held, 'pointermove', 760, 440);
+    ok(held._cls.has('is-held'), 'the first flash is in hand for the rest of this block');
+    // Past its own death: spawn + --gg-flash-dur + the module's 600ms safety net.
+    const waitMs = (t0 + durHeld + 1300) - Date.now();
+    if (waitMs > 0) await sleep(waitMs);
+    ok(!ctrl.isConnected,
+      'the untouched control flash retired on schedule (the clock really did run out)');
+    ok(held.isConnected && !held._cls.has('gg-flash--expire'),
+      'a HELD flash outlives its own lifetime — the clock is paused, not merely stretched',
+      held.className);
+    ptr(held, 'pointerup', 760, 440);
+    ok(held.isConnected && !held._cls.has('is-held') && !held._cls.has('is-popped'),
+      'letting go hands it back to the clock without popping it', held.className);
+    await sleep(150);
+    ok(held.isConnected, 'and it does not vanish the instant it is released');
+
+    ex.stopAll();
+    ex.detach();
+  }
+
+  // ------------------------ flashes: stop() never leaves one stuck in your hand
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-flash');
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    m.emitStart({ element: GoonElement.Flashes, intensity: 1, durationMs: 0, elapsedMs: 0 });
+    await sleep(60);
+    const g = host.findAll('gg-flash')[0];
+    ok(!!g, 'a flash to grab');
+    PID++;
+    ptr(g, 'pointerdown', 300, 300);
+    ptr(g, 'pointermove', 380, 340);
+    ok(g._cls.has('is-held'), 'held when the element stops');
+    m.emitStop({ element: GoonElement.Flashes, intensity: 0, durationMs: 0, elapsedMs: 0 });
+    ok(!g._cls.has('is-held') && !g._cls.has('is-popped') && g.isConnected,
+      'stop() takes it out of your hand gently — no pop, still on screen', g.className);
+    tap(g, 300, 300);
+    ok(g._cls.has('is-popped'), 'and the hand is empty: the next press works');
     ex.stopAll();
     ex.detach();
   }

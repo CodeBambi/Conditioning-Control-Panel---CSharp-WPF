@@ -7,7 +7,9 @@
  *   * everything is gg- prefixed and lives here; goon.css (tokens, z-stack,
  *     component kit, MERCY isolation) is never edited by this wave;
  *   * decorative motion opts in with `animation-play-state: var(--gg-deco-play)`
- *     so goon.css's armor rule can park it at html[data-gg-fx="hot"];
+ *     so goon.css's armor rule can park it at html[data-gg-fx="hot"] — the ONE
+ *     exemption is .gg-mon-proj, which re-declares the property because the
+ *     opponent's little screen is information, not chrome (see its block);
  *   * every colour state also carries a word in the DOM — nothing here is the
  *     only channel for a piece of information;
  *   * hit areas are >= 48px on anything a finger is expected to find;
@@ -451,6 +453,23 @@
 .gg-mon-proj {
   position: absolute;
   z-index: 3;
+  /* THE MONITOR IS INFORMATION, NOT DECORATION — and this one line is why it
+     moves at all past the first minute of a duel.
+
+     goon.css parks decorative motion by flipping --gg-deco-play to `paused` at
+     html[data-gg-fx="hot"], and exec/layers.js calls "hot" at THREE concurrent
+     local effects. A normal draft is three sustained elements, so the local
+     stack is hot for most of a match with no payload in flight at all: every
+     mini froze mid-keyframe and the little screen read as dead. ("The
+     animations on the little opponent screen seemed to work then stopped.")
+
+     Re-declaring the custom property here re-runs everything inside the rect
+     and NOTHING else — custom properties inherit, so the whole subtree sees
+     `running` while the rest of the HUD keeps the armor. The cost is nine
+     sub-100px boxes; the mercy button's frame budget never notices them.
+     The hard off switches (prefers-reduced-motion, .is-calm) use
+     `animation: none !important` and still win over this. */
+  --gg-deco-play: running;
   left: 26%;
   width: 48%;
   top: 47%;
