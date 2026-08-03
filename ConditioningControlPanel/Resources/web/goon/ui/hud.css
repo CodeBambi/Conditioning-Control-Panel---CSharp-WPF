@@ -229,6 +229,13 @@
  *   too poor / used / filtered  desaturate + dim (plus the word, as always)
  *   cooling                 a small conic dial in the corner, not a box overlay
  *   missing art             a CSS stand-in, also chromeless (spiral = a disc)
+ *   LOCKED                  fully desaturated + a small "?" over the sticker.
+ *                           No hover lift, no grab cursor, no drag — ui/arsenal.js
+ *                           refuses the gesture, this stops it LOOKING grabbable.
+ *   ARMED                   full colour + a ×N stack badge on the shoulder
+ *
+ * The lock/badge are the ONLY chrome added by the drop economy, and both ride
+ * the sticker's own box — still no plates (deliberate owner call).
  * ------------------------------------------------------------------------ */
 .gg-item {
   position: relative;
@@ -321,6 +328,82 @@
 .gg-item.is-used .gg-item-name { text-decoration: line-through; }
 .gg-item.is-dragging { opacity: 0.35; }
 .gg-item.is-shake { animation: ggShake .12s linear 1; }
+
+/* ---- the drop economy: locked / armed ------------------------------------
+   A locked slot is an item you have not EARNED yet, not one you cannot afford:
+   it is dimmer than "too poor", it does not lift under the pointer, and the
+   cursor says so too. The word ("locked") is on the tile as always. */
+.gg-item.is-locked { opacity: 0.34; cursor: default; }
+.gg-item.is-locked .gg-item-img,
+.gg-item.is-locked .gg-item-fallback {
+  filter: grayscale(1) brightness(0.5) drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55));
+}
+/* the one affordance a locked sticker gets */
+.gg-item-lock {
+  position: absolute;
+  top: 38%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-style: normal;
+  font-weight: 800;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: rgba(var(--gg-pink-rgb), 0.85);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+}
+.gg-item:not(.is-locked) .gg-item-lock { display: none; }
+/* no lift, no glow, no ghost: a locked tile is scenery until a bubble drops one */
+.gg-item.is-locked:hover, .gg-item.is-locked:focus-visible { transform: none; }
+.gg-item.is-locked:hover .gg-item-img,
+.gg-item.is-locked:hover .gg-item-fallback,
+.gg-item.is-locked:focus-visible .gg-item-img,
+.gg-item.is-locked:focus-visible .gg-item-fallback {
+  filter: grayscale(1) brightness(0.5) drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55));
+}
+
+/* how many shots are banked. Hidden (the element carries `hidden`) at zero. */
+.gg-item-stack {
+  position: absolute;
+  top: -2px; left: 0;
+  min-width: 17px;
+  padding: 0 4px;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(10, 4, 18, 0.92);
+  box-shadow: 0 0 0 1px rgba(var(--gg-pink-rgb), 0.6), 0 2px 6px rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  pointer-events: none;
+}
+.gg-item-stack[hidden] { display: none; }
+
+/* the drop landing: ONE short pulse, then nothing. No looping animation is ever
+   left running on the rails (the mercy frame budget is not negotiable). */
+.gg-item.is-dropped .gg-item-img,
+.gg-item.is-dropped .gg-item-fallback {
+  animation: ggDropIn .5s ease-out 1;
+}
+@keyframes ggDropIn {
+  0%   { transform: scale(0.86); filter: brightness(2) drop-shadow(0 0 18px rgba(var(--gg-pink-rgb), 1)); }
+  60%  { transform: scale(1.12); }
+  100% { transform: scale(1); filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55)); }
+}
+/* the spark that flies from the popped bubble to the slot it fed. Fixed, above
+   the HUD but UNDER mercy (z55, same tier as the fire spark and the drag ghost),
+   and removed on a timer whether or not a frame ever ran. */
+.gg-drop-fly {
+  position: fixed;
+  width: 14px; height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, var(--gg-pink) 60%, rgba(var(--gg-pink-rgb), 0) 100%);
+  box-shadow: 0 0 16px rgba(var(--gg-pink-rgb), 0.95);
+  pointer-events: none;
+  z-index: 55;
+  transition: transform .48s cubic-bezier(.2, .7, .3, 1), opacity .48s ease;
+}
 @keyframes ggShake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-4px); }
@@ -665,6 +748,63 @@
 .gg-mini-drain .gg-mini-drain-vig {
   position: absolute; inset: 0;
   background: radial-gradient(115% 100% at 50% 50%, transparent 22%, rgba(6, 2, 12, 0.88) 100%);
+}
+
+/* emote: the one mini that is not an effect at all -----------------------
+   When WE send an emote it lands on THEIR screen, so it plays in the projection
+   rect like everything else we fire. `t:'emote'` has no receipt lifecycle, so
+   the window is a fixed dwell (EMOTE_MINI_MS in ui/opponent.js) and .is-out IS
+   the terminal beat — there is no survived/rejected to answer.
+
+   .is-on carries the ARRIVAL bounce and .is-anim the sit-there breathe, and they
+   are deliberately on different elements: `animation` is a shorthand, so one
+   rule on .gg-mini-emote-bub would silently cancel the other whenever the mini
+   held both classes. The bounce rides .is-on rather than .is-anim so a spent
+   motion budget mutes the loop without swallowing the pop; the mini still takes
+   a budget slot like any other (anim: true in the MINIS table). */
+.gg-mini.gg-mini-emote.is-on { display: flex; align-items: center; justify-content: center; }
+.gg-mini-emote-bub {
+  max-width: 88%;
+  display: flex; align-items: center; gap: 0.22rem;
+  padding: 0.16rem 0.36rem;
+  border-radius: 9px 9px 9px 2px;
+  background: rgba(12, 6, 20, 0.94);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.75);
+  box-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.35);
+  transform-origin: 12% 100%;
+}
+.gg-mini-emote-icon { font-size: 0.72rem; line-height: 1; }
+.gg-mini-emote-text {
+  font-size: 0.54rem; line-height: 1.2; color: var(--gg-text-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gg-mini.gg-mini-emote.is-on .gg-mini-emote-bub { animation: ggMiniEmotePop 380ms cubic-bezier(.2, .9, .3, 1.5) 1 both; }
+@keyframes ggMiniEmotePop {
+  0% { opacity: 0; transform: scale(0.3) translateY(6px); }
+  60% { opacity: 1; transform: scale(1.12) translateY(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.gg-mini-emote.is-anim .gg-mini-emote-icon { animation: ggMiniEmoteBreathe 1.5s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniEmoteBreathe { 0%, 100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.16) rotate(-6deg); } }
+/* the send is over: a tiny wiggle, then it is gone */
+.gg-mini.gg-mini-emote.is-out .gg-mini-emote-bub { animation: ggMiniEmoteOut 420ms ease-in 1 both; }
+@keyframes ggMiniEmoteOut {
+  0% { opacity: 1; transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(4deg) scale(1.04); }
+  55% { transform: rotate(-4deg) scale(1.02); }
+  100% { opacity: 0; transform: rotate(0deg) scale(0.86) translateY(4px); }
+}
+/* …and the one failure that actually exists: the peer's link is DEAD, so nobody
+   is ever going to read this. Grey, and drop it. */
+.gg-mini.gg-mini-emote.is-lost .gg-mini-emote-bub {
+  filter: grayscale(1);
+  border-color: rgba(255, 255, 255, 0.26);
+  box-shadow: none;
+  animation: ggMiniEmoteDrop 520ms ease-in 1 both;
+}
+@keyframes ggMiniEmoteDrop {
+  0% { opacity: 0.75; transform: translateY(0) rotate(0deg); }
+  100% { opacity: 0; transform: translateY(14px) rotate(8deg); }
 }
 
 /* pass feedback: green wash + checkmark. EXEMPT from the motion budget and
@@ -1165,13 +1305,20 @@
  * is the hard off switch for people who asked for it.
  * ------------------------------------------------------------------------ */
 @media (prefers-reduced-motion: reduce) {
+  /* the emote bubble animates off .is-on/.is-out as well as .is-anim, so it is
+     listed on its own — .is-anim alone would leave the pop and the wiggle up. */
   .gg-mini.is-anim,
   .gg-mini.is-anim *,
   .gg-mini.is-anim::before,
+  .gg-mini-emote *,
   .gg-mon-close.is-edge,
   .gg-sd-track.is-close .gg-sd-notch.is-end,
   .gg-timer.is-urgent .gg-timer-clock { animation: none !important; }
   .gg-pip.is-pop, .gg-item.is-shake, .gg-sd-card.is-slip { animation: none !important; }
+  /* a drop still READS as a drop (the ×N badge, the word) — it just stops moving */
+  .gg-item.is-dropped .gg-item-img,
+  .gg-item.is-dropped .gg-item-fallback { animation: none !important; }
+  .gg-drop-fly { transition: none !important; opacity: 0; }
   .gg-sd-marker, .gg-timer-fill, .gg-mon-att-fill { transition: none !important; }
   /* the pass still lands — it just stops travelling */
   .gg-mon-check.is-in { animation: ggCheckFade 1.2s linear 1 forwards !important; transform: translate(-50%, -50%) scale(1); }
@@ -1179,4 +1326,5 @@
 }
 .gg-hud-frame.is-calm .gg-mini.is-anim,
 .gg-hud-frame.is-calm .gg-mini.is-anim::before,
-.gg-hud-frame.is-calm .gg-mini.is-anim * { animation: none !important; }
+.gg-hud-frame.is-calm .gg-mini.is-anim *,
+.gg-hud-frame.is-calm .gg-mini-emote * { animation: none !important; }

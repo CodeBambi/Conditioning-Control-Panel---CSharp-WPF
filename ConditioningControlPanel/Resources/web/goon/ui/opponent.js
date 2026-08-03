@@ -7,15 +7,26 @@
  * screen. The miniature is DOM/CSS only: it is a caricature, never a stream, and
  * no frame of their machine ever crosses the wire.
  *
- * Two things drive the minis, and they are different on purpose:
+ * Three things drive the minis, and they are different on purpose:
  *   1. the effect NAMES on their state tick ("Flashes", "Spiral", ...) — their
  *      own draft ramp, the ambience;
  *   2. the payloads WE fired (markPayloadFired / markReceipt, threaded from
  *      ui/arsenal.js through ui/hud.js) — a payload they are enduring never
- *      appears in active_effects, so the sender animates its own window.
+ *      appears in active_effects, so the sender animates its own window;
+ *   3. the emotes WE sent (markEmoteFired) — see the tap below.
  * A payload that comes back `survived` gets the green wash + checkmark: the one
  * piece of motion here that is feedback rather than ambience, and the only one
  * exempt from the two-mini motion budget.
+ *
+ * EMOTES ARE NOT PAYLOADS. `t:'emote'` is its own message family: no cost, no
+ * rate limiter beyond the sheet's own 5 s, no `accepted` ACK and NO RECEIPT AT
+ * ALL. So there is nothing for ui/hud.js to thread the way it threads a fire,
+ * and the mini runs on a fixed dwell instead of a receipt lifecycle. Both
+ * directions are drawn, in different places, because they mean different things:
+ *   OUTBOUND (markEmoteFired) — our line landing on THEIR screen: a speech
+ *     bubble inside the projection rect, exactly like the payload minis;
+ *   INBOUND  (showEmote)      — their line, spoken AT us: the .gg-mon-bubble on
+ *     the bezel, which is not part of their screen and never was.
  *
  * The monitor is also the payload DROP TARGET (ui/arsenal.js hit-tests against
  * the element this module exposes as `dropTarget`).
@@ -27,7 +38,7 @@
  * ==========================================================================*/
 
 import { GoonConnectionHealth } from '../core/match.js';
-import { GoonConsts, GoonElement, GoonPayloadKind, enumName } from '../core/contracts.js';
+import { GoonConsts, GoonElement, GoonMatchPhase, GoonPayloadKind, enumName } from '../core/contracts.js';
 import { GoonReceiptStatus } from '../core/scoring.js';
 import { S } from './strings.js';
 
@@ -53,7 +64,22 @@ const MINIS = Object.freeze([
   { key: 'LockCards', cls: 'gg-mini-lock', anim: false },
   { key: 'ToyPatterns', cls: 'gg-mini-toy', anim: true },
   { key: 'BrainDrain', cls: 'gg-mini-drain', anim: false },
+  // Not a wire effect name — nothing ever puts 'Emote' in active_effects. It is
+  // in this table so the emote rides the SAME machinery as every other mini:
+  // one window in `windows`, one budget slot, one is-on/is-anim/is-yours pass.
+  { key: 'Emote', cls: 'gg-mini-emote', anim: true },
 ]);
+
+/** The emote mini's whole life. No receipt ever ends it — see the header. */
+export const EMOTE_MINI_MS = 2600;
+/** The wiggle+fade that plays out the last of that dwell. */
+const EMOTE_MINI_OUTRO_MS = 420;
+/** The bubble is ~90 px wide on a 220 px monitor; anything longer is ellipsis. */
+const EMOTE_MINI_TEXT_MAX = 22;
+/** Two marks of the same line inside this are one send seen twice. */
+const EMOTE_MINI_DEDUPE_MS = 400;
+/** The synthetic window id: there is only ever one emote on their screen. */
+const EMOTE_WINDOW_ID = '#emote';
 
 /**
  * What YOU fired -> the mini that should play while it is landing on them.
@@ -171,7 +197,13 @@ function effectName(v) {
 export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
   const led = createLedger();
   const root = el('div', 'gg-mon');
-  if (!root || !host) return { unmount() { led.run(); }, root: null, dropTarget: null, showEmote() {} };
+  if (!root || !host) {
+    return {
+      unmount() { led.run(); },
+      root: null, dropTarget: null,
+      showEmote() {}, markEmoteFired() { return false; },
+    };
+  }
 
   // ---- head: name · connection dot · their score · charge pips ------------
   const head = add(root, el('div', 'gg-mon-head'));
@@ -212,6 +244,8 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
   // face the art paints.
   const proj = add(frame, el('div', 'gg-mon-proj'));
   const parts = new Map();
+  let emoteIconEl = null;
+  let emoteTextEl = null;
   for (const m of MINIS) {
     const node = add(proj, el('div', 'gg-mini ' + m.cls));
     if (m.key === 'Flashes') for (let i = 0; i < 4; i++) add(node, el('i', 'gg-mini-shard'));
@@ -230,6 +264,11 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
     }
     if (m.key === 'ToyPatterns') add(node, el('i', 'gg-mini-toy-dot'));
     if (m.key === 'BrainDrain') add(node, el('i', 'gg-mini-drain-vig'));
+    if (m.key === 'Emote') {
+      const bub = add(node, el('div', 'gg-mini-emote-bub'));
+      emoteIconEl = add(bub, el('span', 'gg-mini-emote-icon'));
+      emoteTextEl = add(bub, el('span', 'gg-mini-emote-text'));
+    }
     parts.set(m.key, node);
   }
   const idle = add(proj, el('div', 'gg-mini-idle', S.monitor.idle));
@@ -281,6 +320,8 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
   let lastHealth = GoonConnectionHealth.Fresh;
   let emoteTimer = 0;
   let passTimer = 0;
+  let lastEmoteMarkAt = -Infinity;
+  let lastEmoteMarkKey = null;
 
   /** payload id -> {key, open, timers[]} for the payloads WE fired. */
   const windows = new Map();
@@ -414,6 +455,42 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
   });
   sub('onEmoteReceived', (e) => showEmote(e && e.text, e && e.icon));
 
+  /* ------------------------------------------------ the outgoing-emote tap
+   *
+   * There is no onEmoteSent/onFired for an emote to arrive on: the engine has
+   * `t:'emote'` as a fire-and-forget family (core/match.js sendEmote -> _send,
+   * no id, no receipt, no event), and ui/emotes.js calls it directly off the
+   * sheet. The only signal that an emote actually went out is the call itself,
+   * so we borrow it for the life of the mount and hand it straight back.
+   *
+   * markEmoteFired() below is the REAL seam. If ui/hud.js ever grows a hook
+   * (mountEmotes({ onSent }) -> opponent.markEmoteFired), point it there and
+   * delete this block — the dedupe inside markEmoteFired makes an overlap
+   * where BOTH fire harmless rather than a double bubble.
+   */
+  if (match && typeof match.sendEmote === 'function') {
+    const original = match.sendEmote;
+    const hadOwn = Object.prototype.hasOwnProperty.call(match, 'sendEmote');
+    const tapped = function sendEmoteTapped(t, i) {
+      const out = original.apply(this, arguments);
+      // Mirror the engine's own guard: a send it drops must not draw anything.
+      try {
+        if (match.phase !== GoonMatchPhase.Idle) markEmoteFired(t, i);
+      } catch (_e) { /* a mini must never break a send */ }
+      return out;
+    };
+    try {
+      match.sendEmote = tapped;
+      led.add(() => {
+        try {
+          if (match.sendEmote !== tapped) return;      // someone else re-tapped: leave it
+          if (hadOwn) match.sendEmote = original;
+          else delete match.sendEmote;
+        } catch (_e) { /* gone */ }
+      });
+    } catch (_e) { /* a frozen engine just means no outgoing mini */ }
+  }
+
   // the abandon clock has to tick even when no state arrives (that IS the point)
   led.interval(1000, () => { try { paint(); } catch (_e) { /* never break the HUD */ } });
   paint();
@@ -481,6 +558,67 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
     w.timers.push(laterOnce(Math.max(0, leadMs | 0) + run, () => closeWindow(id)));
   }
 
+  /** Drops the emote window AND the classes only it uses. */
+  function closeEmoteWindow() {
+    const node = parts.get('Emote');
+    cls(node, 'is-out', false);
+    cls(node, 'is-lost', false);
+    closeWindow(EMOTE_WINDOW_ID);
+  }
+
+  /**
+   * An emote WE sent, landing on their little screen.
+   *
+   * Unlike a payload there is no lead (nothing is scheduled: the engine puts it
+   * on the wire immediately) and no receipt (the family has none), so the whole
+   * lifecycle is local: pop in, sit for EMOTE_MINI_MS, wiggle out. The one
+   * failure state that genuinely exists is a peer whose link is already DEAD —
+   * that line is not going to be read by anyone, so it greys and drops instead.
+   *
+   * @param   {string} [msg]  one of ui/emotes.js EMOTE_PRESETS
+   * @param   {string} [icon] one of ui/emotes.js EMOTE_ICONS
+   * @returns {boolean} whether a bubble was actually drawn
+   */
+  function markEmoteFired(msg, icon) {
+    const node = parts.get('Emote');
+    if (!node) return false;
+
+    const line = String(msg == null ? '' : msg);
+    const glyph = String(icon == null ? '' : icon);
+    const key = line + String.fromCharCode(31) + glyph;
+    const at = nowMs();
+    if (key === lastEmoteMarkKey && at - lastEmoteMarkAt < EMOTE_MINI_DEDUPE_MS) return false;
+    lastEmoteMarkKey = key;
+    lastEmoteMarkAt = at;
+
+    closeEmoteWindow();
+
+    // Both of these are OUR OWN canned strings, but they go through textContent
+    // for the same reason everything else on this monitor does.
+    text(emoteIconEl, glyph || (line ? '' : '💬'));
+    text(emoteTextEl, line.length > EMOTE_MINI_TEXT_MAX ? line.slice(0, EMOTE_MINI_TEXT_MAX - 1) + '…' : line);
+
+    const lost = health() === GoonConnectionHealth.Dead;
+    cls(node, 'is-lost', lost);
+
+    const w = { key: 'Emote', kind: null, open: true, timers: [] };
+    windows.set(EMOTE_WINDOW_ID, w);
+    // The bounce-in is CSS: the node goes display:none -> flex, which restarts it.
+    // (No cue here — ui/emotes.js already plays `gg-emote` on the send itself,
+    // and the arsenal tile plays it again when the sheet opens. Three is a lot.)
+    paint();
+
+    if (!lost) {
+      w.timers.push(laterOnce(EMOTE_MINI_MS - EMOTE_MINI_OUTRO_MS, () => {
+        if (windows.get(EMOTE_WINDOW_ID) === w) cls(node, 'is-out', true);
+      }));
+    }
+    w.timers.push(laterOnce(EMOTE_MINI_MS, () => {
+      if (windows.get(EMOTE_WINDOW_ID) === w) closeEmoteWindow();
+    }));
+    return true;
+  }
+
   /**
    * …and this when a receipt for one of ours comes back. `survived` is the
    * flagship: they took the whole thing and held. That earns the green.
@@ -522,6 +660,8 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
     /** The projection rect — exposed so a play-test driver can find the minis. */
     projection: proj,
     showEmote,
+    /** OUR emote, on THEIR screen. The seam a ui/hud.js hook would call. */
+    markEmoteFired,
     setTargeted,
     markPayloadFired,
     markReceipt,

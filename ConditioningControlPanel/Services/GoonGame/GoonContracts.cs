@@ -248,11 +248,23 @@ namespace ConditioningControlPanel.Services.GoonGame
         [JsonProperty("confirmed")] public bool Confirmed { get; set; }
     }
 
+    /// <summary>
+    /// The draft agreement (2026-08-03 redesign). <c>allowed</c> is the sender's ALLOWED element
+    /// set and <c>confirmed</c> its signature on the current pair of sets; the effective pool is
+    /// the INTERSECTION of the two allowed sets, and any change to either clears BOTH confirms.
+    ///
+    /// <c>elements</c>/<c>locked</c> are the v1 field names. They stay on the wire carrying the
+    /// same values as <c>allowed</c>/<c>confirmed</c> so an older reader (or a capture, or a log)
+    /// still parses; new readers prefer the new pair and fall back to the legacy one when it is
+    /// absent. APPEND-ONLY: never renumber, never repurpose, never drop a field.
+    /// </summary>
     public sealed class DraftMsg : GoonMessage
     {
         public override string Type => "draft";
-        [JsonProperty("elements")] public List<GoonElement> Elements { get; set; } = new();  // exactly 3
-        [JsonProperty("locked")] public bool Locked { get; set; }
+        [JsonProperty("elements")] public List<GoonElement> Elements { get; set; } = new();  // legacy mirror of Allowed
+        [JsonProperty("locked")] public bool Locked { get; set; }                            // legacy mirror of Confirmed
+        [JsonProperty("allowed")] public List<GoonElement>? Allowed { get; set; }
+        [JsonProperty("confirmed")] public bool? Confirmed { get; set; }
     }
 
     /// <summary>Match start: fires the Live phase at a shared-clock instant.</summary>

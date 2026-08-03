@@ -6,10 +6,23 @@
  * the same click-to-pop with its sparkle burst — and the same pop-driven effect
  * flick that payloadFx.js gives a popped bubble in the Fall.
  *
- * POPPING IS COSMETIC IN GG v1. It is a toy for your hands while the duel runs:
- * it scores nothing, it ends nothing, and it changes NO receipt semantics. A
- * BubbleSwarm payload still runs its full duration_ms and then done(true) if it
- * was never interrupted, whether you popped every bubble or none of them.
+ * POPPING PAYS NOW — but it still changes NO receipt semantics. A pop rolls an
+ * ITEM DROP for the arsenal (ui/drops.js), and that is the whole incentive loop:
+ * pop bubbles -> earn drops -> throw items at the opponent. A BubbleSwarm payload
+ * still runs its full duration_ms and then done(true) if it was never
+ * interrupted, whether you popped every bubble or none of them.
+ *
+ * THE DROP SEAM IS AN EVENT, NOT AN IMPORT. This module knows nothing about the
+ * HUD, the arsenal or charges: every pop dispatches
+ *
+ *     document.dispatchEvent(new CustomEvent('gg-bubble-pop', {
+ *       detail: { kind, worth, payload, size }
+ *     }))
+ *
+ * and ui/hud.js -> ui/drops.js does the economics. `worth` is the drop weight:
+ * 1 for a plain bubble, POP_WORTH_EFFECT for one of the five effect kinds, and
+ * ZERO for a bubble an opponent's BubbleSwarm minted (their clutter must never
+ * pay us — see fromPayload below).
  *
  * POINTER RULES. #gg-fx and every one of its sub-layers are pointer-events:none;
  * `.gg-bubble` is the ONLY node in this tier that opts back in (fx.css), so the
@@ -27,10 +40,16 @@
 
 import { pickSpiralUrl } from './spiral.js';
 
-const MAX_LIVE = 26;        // hard ceiling on bubble nodes, swarm included
-const MAX_POP_FLASH = 4;    // pop-driven flash images live at once (payloadFx MAX_FLASH's cousin)
-const TOPUP_MS = 600;       // cadence of the population top-up tick (DtRH parity)
-const SWARM_BONUS = 4;      // extra bubbles a BubbleSwarm payload puts on the bed
+export const MAX_LIVE = 26;   // hard ceiling on bubble nodes, swarm included
+const MAX_POP_FLASH = 4;      // pop-driven flash images live at once (payloadFx MAX_FLASH's cousin)
+const SWARM_BONUS = 4;        // extra bubbles a BubbleSwarm payload puts on the bed
+
+/* Cadence of the population top-up tick. The field is ALWAYS ON now and ramps
+   0.15 -> 1.0 across the match, so the tick is a dial too: sparse and slow at
+   the open, a steady drip late. Quantised to 100 ms buckets inside
+   bubbleTuning() so a continuous ramp cannot restart the interval every cue. */
+export const TOPUP_MS_CALM = 1200;   // intensity 0
+export const TOPUP_MS_HOT = 400;     // intensity 1
 
 // seconds to cross the window at intensity 0 / intensity 1 (DtRH tuning block)
 const RISE_MIN_CALM = 9, RISE_MAX_CALM = 16;
@@ -50,6 +69,29 @@ const KINDS = [
 ];
 const KIND_TOTAL = KINDS.reduce((a, k) => a + k.w, 0);
 
+/* --------------------------------------------------------------- drop seam */
+
+/** The event ui/hud.js listens for. One dispatch per pop, no exceptions. */
+export const POP_EVENT = 'gg-bubble-pop';
+
+/** Drop weight of an effect-kind pop. ui/drops.js multiplies its base chance by
+ *  this, so 1 -> 12% and 2.5 -> 30% at the shipped tuning. */
+export const POP_WORTH_EFFECT = 2.5;
+/** Plain bubble. */
+export const POP_WORTH_NORMAL = 1;
+/** A bubble an opponent's BubbleSwarm minted. Clutter, not income. */
+export const POP_WORTH_PAYLOAD = 0;
+
+/**
+ * What one pop is worth to the economy.
+ * @param {string} kind         bubble kind ('normal' | 'flash' | ...)
+ * @param {boolean} fromPayload minted by an inbound BubbleSwarm
+ */
+export function popWorthOf(kind, fromPayload) {
+  if (fromPayload) return POP_WORTH_PAYLOAD;
+  return kind && kind !== 'normal' ? POP_WORTH_EFFECT : POP_WORTH_NORMAL;
+}
+
 const clamp01 = (n) => (typeof n === 'number' && n === n ? (n < 0 ? 0 : n > 1 ? 1 : n) : 0);
 const lerp = (a, b, t) => a + (b - a) * clamp01(t);
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -66,14 +108,23 @@ const reducedMotion = () => {
   catch (_e) { return false; }
 };
 
-/** Cue intensity -> population + rise speed (DtRH: intensity is density, not size). */
+/**
+ * Cue intensity -> population + rise speed + spawn cadence (DtRH: intensity is
+ * density, not size). MONOTONIC BY CONTRACT, and selftest-exec asserts it:
+ * targetCount never falls as intensity rises, topupMs/riseMinS/riseMaxS never
+ * rise. That is the whole "starts sparse, ends dense" ramp.
+ */
 export function bubbleTuning(intensity, calm, countMin, countMax) {
   const i = clamp01(intensity);
   const slow = calm ? 1.5 : 1;
+  // 100 ms buckets: a ramp that nudges intensity every second must not restart
+  // the top-up interval every second (see ensureTopup).
+  const topup = Math.round(lerp(TOPUP_MS_CALM, TOPUP_MS_HOT, i) / 100) * 100;
   return {
     targetCount: Math.round(lerp(countMin, countMax, i)),
     riseMinS: lerp(RISE_MIN_CALM, RISE_MIN_HOT, i) * slow,
     riseMaxS: lerp(RISE_MAX_CALM, RISE_MAX_HOT, i) * slow,
+    topupMs: Math.max(120, topup) * (calm ? 1.5 : 1),
   };
 }
 
@@ -82,15 +133,22 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
   const warn = (m) => { if (log && log.warn) log.warn(`[gg:bubbles] ${m}`); };
   const calm = reducedMotion();
   const mobile = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth < 640 : false;
-  const COUNT_MIN = mobile ? 4 : 5;
-  const COUNT_MAX = mobile ? 9 : 16;
+  // The field runs the WHOLE match now, so intensity 0 has to be genuinely
+  // sparse; intensity 1 + SWARM_BONUS lands exactly on MAX_LIVE (26) on desktop.
+  const COUNT_MIN = mobile ? 2 : 3;
+  const COUNT_MAX = mobile ? 12 : 22;
 
-  const live = new Set();          // {wrap, bubble, kind, popped}
+  const live = new Set();          // {wrap, bubble, kind, popped, fromPayload}
   let elementIntensity = null;     // null = the ramp is not asking for a bed
   const payloadRuns = new Set();   // live BubbleSwarm runs (each {intensity})
   let topupTimer = 0;
+  let topupMs = 0;                 // cadence the running interval was built with
+  let seeded = false;
   let tune = bubbleTuning(0, calm, COUNT_MIN, COUNT_MAX);
   let targetCount = 0;
+  // What the ELEMENT ramp alone asks for. Everything above it while a swarm is
+  // running is the swarm's, and a swarm's bubble pays nothing (POP_WORTH_PAYLOAD).
+  let fieldTarget = 0;
 
   const layer = () => (layers && typeof layers.get === 'function' ? layers.get('bubbles') : null);
   const sfx = (id) => { if (audio && typeof audio.sfx === 'function') { try { audio.sfx(id); } catch (_e) { /* ignore */ } } };
@@ -115,6 +173,13 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     if (targetCount > 0 && live.size < targetCount) spawn(false);
   }
 
+  /** Live bubbles that belong to OUR ramp (i.e. the ones a pop can be paid for). */
+  function fieldCount() {
+    let n = 0;
+    for (const rec of live) if (!rec.fromPayload) n++;
+    return n;
+  }
+
   /** One bubble. `seed` scatters it mid-rise so a (re)fill does not march in. */
   function spawn(seed) {
     prune();
@@ -123,6 +188,8 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     if (!host || typeof document === 'undefined') return;
     if (live.size >= Math.min(MAX_LIVE, targetCount)) return;
 
+    // Our own bed fills first; anything past it while a swarm is up is THEIRS.
+    const fromPayload = payloadRuns.size > 0 && fieldCount() >= fieldTarget;
     const kind = pickKind();
     const size = Math.round(rand(BUB_MIN_PX, BUB_MAX_PX));
     const rise = rand(tune.riseMinS, tune.riseMaxS);
@@ -139,9 +206,11 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     bubble.style.setProperty('height', `${size}px`);
     bubble.style.setProperty('--gg-sway', `${Math.round(rand(18, 46))}px`);
     bubble.style.setProperty('--gg-sway-dur', `${rand(2.5, 5).toFixed(2)}s`);
+    // The tag a play-test/headless harness can read back: which side minted it.
+    try { bubble.setAttribute('data-gg-mint', fromPayload ? 'payload' : 'field'); } catch (_e) { /* stub DOM */ }
     wrap.appendChild(bubble);
 
-    const rec = { wrap, bubble, kind, popped: false, size };
+    const rec = { wrap, bubble, kind, popped: false, size, fromPayload };
     live.add(rec);
 
     // e.target guard: the bubble's own pop animation bubbles up through the wrap.
@@ -166,14 +235,44 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     soon(() => recycle(rec), Math.round(rise * 1000) + 500);
   }
 
+  function stopTopup() {
+    try { clearInterval(topupTimer); } catch (_e) { /* ignore */ }
+    topupTimer = 0;
+    topupMs = 0;
+  }
+
+  /**
+   * A soft tick adds ONE bubble at a time, so a ramp never dumps a wall of them
+   * in one frame (DtRH's top-up interval). The CADENCE is part of the ramp now,
+   * so the interval is rebuilt when the bucketed value actually moves.
+   */
+  function ensureTopup() {
+    const wantMs = Math.max(120, Math.round(tune.topupMs));
+    if (topupTimer && wantMs === topupMs) return;
+    if (topupTimer) { try { clearInterval(topupTimer); } catch (_e) { /* ignore */ } topupTimer = 0; }
+    topupMs = wantMs;
+    topupTimer = setInterval(() => {
+      prune();
+      if (targetCount > 0 && live.size < targetCount) spawn(false);
+    }, wantMs);
+    if (topupTimer && typeof topupTimer.unref === 'function') topupTimer.unref();
+    if (!seeded) {
+      seeded = true;
+      // Seed the first few mid-rise so the field does not fade in one at a time.
+      const seedN = Math.min(3, targetCount);
+      for (let i = 0; i < seedN; i++) soon(() => { if (targetCount > 0) spawn(true); }, i * 180);
+    }
+  }
+
   function refresh() {
     const wants = [];
     if (elementIntensity !== null) wants.push(elementIntensity);
     for (const r of payloadRuns) wants.push(r.intensity);
     if (!wants.length) {
       targetCount = 0;
-      try { clearInterval(topupTimer); } catch (_e) { /* ignore */ }
-      topupTimer = 0;
+      fieldTarget = 0;
+      seeded = false;
+      stopTopup();
       // Airborne bubbles finish their rise — yanking 20 nodes mid-flight reads
       // as a glitch, and each one retires on its own timer.
       return;
@@ -181,18 +280,10 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     const want = Math.max.apply(null, wants);
     tune = bubbleTuning(want, calm, COUNT_MIN, COUNT_MAX);
     targetCount = Math.min(MAX_LIVE, tune.targetCount + (payloadRuns.size ? SWARM_BONUS : 0));
-    if (!topupTimer) {
-      // A soft tick adds ONE bubble at a time, so a ramp never dumps a wall of
-      // them in one frame (DtRH's top-up interval, verbatim).
-      topupTimer = setInterval(() => {
-        prune();
-        if (targetCount > 0 && live.size < targetCount) spawn(false);
-      }, TOPUP_MS);
-      if (topupTimer && typeof topupTimer.unref === 'function') topupTimer.unref();
-      // Seed the first few mid-rise so the field does not fade in one at a time.
-      const seedN = Math.min(3, targetCount);
-      for (let i = 0; i < seedN; i++) soon(() => { if (targetCount > 0) spawn(true); }, i * 180);
-    }
+    fieldTarget = elementIntensity === null
+      ? 0
+      : Math.min(MAX_LIVE, bubbleTuning(elementIntensity, calm, COUNT_MIN, COUNT_MAX).targetCount);
+    ensureTopup();
   }
 
   /* --------------------------------------------------------------- pop + fx */
@@ -373,11 +464,33 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     }
   }
 
+  /**
+   * The economy seam. Fired for EVERY pop including a worth-0 one, so ui/drops.js
+   * can count clutter as well as income. A listener that throws is the listener's
+   * problem: dispatchEvent never lets it reach the field.
+   */
+  function announcePop(rec, x, y) {
+    if (typeof document === 'undefined' || !document || typeof document.dispatchEvent !== 'function') return;
+    if (typeof CustomEvent !== 'function') return;
+    const detail = {
+      kind: rec.kind,
+      worth: popWorthOf(rec.kind, rec.fromPayload),
+      payload: !!rec.fromPayload,
+      size: rec.size,
+      // where it burst, so the HUD can fly its drop sparkle from the right spot
+      x: typeof x === 'number' ? x : 0,
+      y: typeof y === 'number' ? y : 0,
+    };
+    try { document.dispatchEvent(new CustomEvent(POP_EVENT, { detail, bubbles: true })); }
+    catch (e) { warn(`pop dispatch threw: ${e && e.message}`); }
+  }
+
   function pop(rec, x, y) {
     rec.popped = true;
     rec.bubble.classList.add('is-pop');
     sparkleBurst(x, y);
     sfx('bubble-pop');
+    announcePop(rec, x, y);
     // Bubble size IS the strength dial in the Fall; same here.
     const strength = Math.round(clamp01((rec.size - BUB_MIN_PX) / (BUB_MAX_PX - BUB_MIN_PX)) * 100);
     try { popFx(rec.kind, strength); } catch (e) { warn(`popFx ${rec.kind} threw: ${e && e.message}`); }
@@ -408,8 +521,13 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
 
     /**
      * BubbleSwarm: a wave. Denser than any bed the ramp asks for, and it runs its
-     * full duration whatever the player does with it — popping is cosmetic, so
-     * the receipt is "ran to completion" (endured) unless something interrupts.
+     * full duration whatever the player does with it — popping never settles it,
+     * so the receipt is "ran to completion" (endured) unless something interrupts.
+     *
+     * ITS bubbles pay NOTHING. Everything above the element ramp's own target
+     * while a swarm is up is minted for the swarm (spawn(): fromPayload), pops
+     * with worth 0, and is skipped by the drop roller — otherwise firing a swarm
+     * at someone would hand them free items.
      */
     renderPayload(payload, done) {
       const p = payload || {};

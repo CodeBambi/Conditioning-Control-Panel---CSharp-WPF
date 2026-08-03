@@ -2,9 +2,14 @@
 //
 //   Idle -> Lobby -> Consent -> Draft -> Countdown -> Live -> SuddenDeath -> Recap -> Idle
 //
-// Owns a transport (injected), the local endurance ramp built from the player's OWN draft and the
-// combined match seed, the scoring/charge economy, the mercy and abandon flows, the receiver-side
-// payload gate and the two-way result handshake.
+// Owns a transport (injected), the SHARED endurance ramp rolled from the draft agreement (the
+// intersection of both players' allowed sets) and the combined match seed, the scoring/charge
+// economy, the mercy and abandon flows, the receiver-side payload gate and the two-way result
+// handshake.
+//
+// DRAFT (2026-08-03 redesign): both players toggle what they ALLOW, the pool is the intersection,
+// any toggle clears BOTH signatures, and the ramp both sides run is one seeded roll over that
+// pool — identical instants, identical elements. Bubbles are an always-on baseline underneath it.
 //
 // It PLANS but never PERFORMS: element cues and admitted payloads leave as events; the exec/
 // layer does the fan-out. Node-import-safe — no DOM at import, no DOM at runtime.
@@ -62,7 +67,10 @@ import { GoonRng, combineSeeds, newSeedContribution } from './rng.js';
 import { localMonotonicMs } from './clock.js';
 import { ticker } from './scheduler.js';
 import { GoonPayloadRateLimiter, GoonReceiptStatus, GoonScoring } from './scoring.js';
-import { GoonCueAction, PICKS_PER_PLAYER, PoolV1, buildRamp, isValidDraft, matchRiskTier } from './draft.js';
+import {
+  ALWAYS_ON_ELEMENT, GoonCueAction, MIN_ALLOWED_ELEMENTS, PoolV1, buildRamp, defaultAllowed, isValidAllowed,
+  isValidSharedPool, matchRiskTier, normalizeAllowed, sharedPool,
+} from './draft.js';
 import { UNIVERSAL_ROUND, intersect, local as localCapsOf } from './caps.js';
 import { EMOTE_ICON_MAX_CHARS, EMOTE_TEXT_MAX_CHARS, TEXT_MAX_CHARS, sanitizeName, sanitizeText } from '../exec/sanitize.js';
 
@@ -199,8 +207,11 @@ export class GoonMatchService {
     this._outboundLimiter = new GoonPayloadRateLimiter();
     this._outboundCosts = new Map();
     this._activeElements = new Set();
-    this._localDraft = [];
-    this._remoteDraft = [];
+    // The agreement: two allowed sets, two signatures, one intersection.
+    this._localAllowed = [];
+    this._remoteAllowed = [];
+    this._sharedPool = [];
+    this._draftResolved = false;
 
     this._liveTicker = null;    // 1 s score/ramp/tick pump
     this._phaseTicker = null;   // 200 ms countdown + handshake deadlines
@@ -209,8 +220,8 @@ export class GoonMatchService {
     this._helloSent = false;
     this._localConsentConfirmed = false;
     this._remoteConsentConfirmed = false;
-    this._localDraftLocked = false;
-    this._remoteDraftLocked = false;
+    this._localDraftConfirmed = false;
+    this._remoteDraftConfirmed = false;
     this._startProposed = false;
 
     this._localSeedContribution = null;
@@ -301,10 +312,24 @@ export class GoonMatchService {
   get localConsentConfirmed() { return this._localConsentConfirmed; }
   get remoteConsentConfirmed() { return this._remoteConsentConfirmed; }
 
-  get localDraft() { return this._localDraft; }
-  get remoteDraft() { return this._remoteDraft; }
-  get localDraftLocked() { return this._localDraftLocked; }
-  get remoteDraftLocked() { return this._remoteDraftLocked; }
+  /** What WE allow (canonical, always-on element excluded). */
+  get localAllowedElements() { return this._localAllowed; }
+  /** What THEY allow, as last broadcast. */
+  get remoteAllowedElements() { return this._remoteAllowed; }
+  /** The intersection — the pool the ramp is rolled from. Both clients compute the same list. */
+  get sharedElementPool() { return sharedPool(this._localAllowed, this._remoteAllowed); }
+  get localDraftConfirmed() { return this._localDraftConfirmed; }
+  get remoteDraftConfirmed() { return this._remoteDraftConfirmed; }
+  /** True once both signatures landed on one pair of sets with a workable intersection. */
+  get draftResolved() { return this._draftResolved; }
+  get minAllowedElements() { return MIN_ALLOWED_ELEMENTS; }
+
+  // LEGACY aliases: the pre-agreement names, kept so ui/soloDriver.js and older tooling keep
+  // working. localDraft/remoteDraft are now the ALLOWED sets, not three private picks.
+  get localDraft() { return this._localAllowed; }
+  get remoteDraft() { return this._remoteAllowed; }
+  get localDraftLocked() { return this._localDraftConfirmed; }
+  get remoteDraftLocked() { return this._remoteDraftConfirmed; }
 
   /** @returns {bigint} */
   get matchSeed() { return this._matchSeed; }
@@ -454,44 +479,100 @@ export class GoonMatchService {
   }
 
   // ------------------------------------------------------------- draft
+  //
+  // The draft is a mutual agreement, not two loadouts: each side publishes the elements it ALLOWS
+  // and the effective pool is the intersection. Changing a toggle clears BOTH signatures — the
+  // same rule the consent sheet lives by, for the same reason (nobody is advanced onto terms they
+  // never saw). Two signatures on one pair of sets resolve the draft.
 
-  /** Sets (and broadcasts) the local picks. C# out-error -> {ok, error}. */
-  setDraft(picks) {
+  /**
+   * Publishes the local allowed set. ANY change clears BOTH confirmations.
+   * C# out-error -> {ok, error}.
+   */
+  setAllowedElements(allowed) {
     if (this._phase !== GoonMatchPhase.Draft) return { ok: false, error: 'not drafting' };
-    if (this._localDraftLocked) return { ok: false, error: 'draft already locked' };
-    const valid = isValidDraft(picks);
-    if (!valid.ok) return valid;
-    const avail = this._allPicksAvailable(picks);
-    if (!avail.ok) return avail;
 
-    this._localDraft = picks.slice();
-    this._send(makeDraft({ elements: this._localDraft.slice(), locked: false }));
+    const next = this._sanitizeAllowed(allowed);
+    const valid = isValidAllowed(next);
+    if (!valid.ok) return valid;
+
+    this._localAllowed = next;
+    this._localDraftConfirmed = false;
+    this._remoteDraftConfirmed = false;
+    this._draftResolved = false;
+    this._sendDraftState();
     this._ev.draftChanged.emit(undefined, (e) => this._warn(`draftChanged handler threw: ${e && e.message}`));
     return { ok: true, error: '' };
   }
 
-  /** Locks the local draft. Both locked -> the host schedules the countdown. */
-  lockDraft() {
+  /**
+   * Flips one element on or off. Returns the same {ok,error} shape; a toggle that would leave
+   * fewer than MIN_ALLOWED_ELEMENTS on is REFUSED and nothing changes.
+   */
+  toggleAllowedElement(element) {
     if (this._phase !== GoonMatchPhase.Draft) return { ok: false, error: 'not drafting' };
-    const valid = isValidDraft(this._localDraft);
-    if (!valid.ok) return valid;
-    const avail = this._allPicksAvailable(this._localDraft);
-    if (!avail.ok) return avail;
+    const e = Number(element);
+    const has = this._localAllowed.includes(e);
+    const next = has ? this._localAllowed.filter((x) => x !== e) : this._localAllowed.concat([e]);
+    return this.setAllowedElements(next);
+  }
 
-    this._localDraftLocked = true;
-    this._send(makeDraft({ elements: this._localDraft.slice(), locked: true }));
-    this._scoring.configure(this.localAttentionMode, matchRiskTier(this._localDraft));
+  /** Signs the CURRENT pair of sets. Both signatures + a workable intersection -> resolved. */
+  confirmDraft() {
+    if (this._phase !== GoonMatchPhase.Draft) return { ok: false, error: 'not drafting' };
+
+    const mine = isValidAllowed(this._localAllowed);
+    if (!mine.ok) return mine;
+
+    const pool = sharedPool(this._localAllowed, this._remoteAllowed);
+    const shared = isValidSharedPool(pool);
+    if (!shared.ok) return shared;      // the confirm strip shows this inline; nothing is signed
+
+    this._localDraftConfirmed = true;
+    this._sendDraftState();
+    this._scoring.configure(this.localAttentionMode, matchRiskTier(pool));
     this._ev.draftChanged.emit(undefined, (e) => this._warn(`draftChanged handler threw: ${e && e.message}`));
+    this._tryResolveDraft();
     return { ok: true, error: '' };
   }
 
-  /** Every pick must sit in the caps intersection — no drafting what the peer cannot mirror. */
-  _allPicksAvailable(picks) {
-    for (const pick of picks) {
-      if (this._availableDraftPool.includes(pick)) continue;
-      return { ok: false, error: `${pick} is not supported by the opponent's client` };
-    }
-    return { ok: true, error: '' };
+  /** Backing out of a signature without touching the toggles. */
+  withdrawDraft() {
+    if (this._phase !== GoonMatchPhase.Draft || !this._localDraftConfirmed) return;
+    this._localDraftConfirmed = false;
+    this._draftResolved = false;
+    this._sendDraftState();
+    this._ev.draftChanged.emit(undefined, (e) => this._warn(`draftChanged handler threw: ${e && e.message}`));
+  }
+
+  // LEGACY names. setDraft(list) is setAllowedElements(list); lockDraft() is confirmDraft().
+  setDraft(picks) { return this.setAllowedElements(picks); }
+  lockDraft() { return this.confirmDraft(); }
+
+  /** Anything the caps intersection cannot mirror is dropped rather than trusted. */
+  _sanitizeAllowed(allowed) {
+    const pool = this._availableDraftPool;
+    return normalizeAllowed((allowed || []).filter((e) => pool.includes(Number(e))));
+  }
+
+  _sendDraftState() {
+    this._send(makeDraft({
+      allowed: this._localAllowed.slice(),
+      confirmed: this._localDraftConfirmed,
+    }));
+  }
+
+  _tryResolveDraft() {
+    if (this._phase !== GoonMatchPhase.Draft) return;
+    if (!this._localDraftConfirmed || !this._remoteDraftConfirmed) return;
+
+    const pool = sharedPool(this._localAllowed, this._remoteAllowed);
+    if (!isValidSharedPool(pool).ok) return;   // cannot happen once both confirmed, but never guess
+
+    this._sharedPool = pool;
+    this._draftResolved = true;
+    this._scoring.configure(this.localAttentionMode, matchRiskTier(pool));
+    this._info(`draft agreed: pool ${pool.join('+')} (+ always-on ${enumName(GoonElement, ALWAYS_ON_ELEMENT)})`);
   }
 
   // -------------------------------------------------- live-phase input
@@ -578,6 +659,28 @@ export class GoonMatchService {
     this._send(msg);
     this._info(`payload out ${id} ${request.kind} cost ${cost}`);
     return { ok: true, error: '', id };
+  }
+
+  /**
+   * Credits charges earned outside the payload/round economy (the bubble economy is the first
+   * consumer). Integer count >= 1; the total is clamped to GoonConsts.ChargeCap exactly like every
+   * other earning, and the next state tick reports the new meter. No-ops outside the Live phase.
+   *
+   * MIRROR: GoonMatchService.CreditCharges(int, string).
+   *
+   * @returns {boolean} true when at least the request was accepted (credited, cap permitting)
+   */
+  creditCharges(count, reason) {
+    if (this._disposed || this._ended) return false;
+    if (this._phase !== GoonMatchPhase.Live) return false;
+
+    const n = Math.trunc(Number(count));
+    if (!Number.isFinite(n) || n < 1) return false;
+
+    const before = this._scoring.charges;
+    for (let i = 0; i < n; i++) this._scoring.awardEventWon();   // caps at GoonConsts.ChargeCap
+    this._info(`charges +${n} (${reason || 'unspecified'}) -> ${this._scoring.charges} (was ${before})`);
+    return true;
   }
 
   /**
@@ -723,8 +826,11 @@ export class GoonMatchService {
     if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
     this._allowedRoundKinds = rounds;
 
-    if (this._availableDraftPool.length < PICKS_PER_PLAYER) {
-      this._failLobby(`only ${this._availableDraftPool.length} shared draft element(s) - need ${PICKS_PER_PLAYER}`);
+    // The always-on element does not count: the agreement needs MIN_ALLOWED_ELEMENTS TOGGLEABLE
+    // elements both clients can run, or there is nothing to roll a ramp from.
+    const rollable = normalizeAllowed(this._availableDraftPool);
+    if (rollable.length < MIN_ALLOWED_ELEMENTS) {
+      this._failLobby(`only ${rollable.length} shared draft element(s) - need ${MIN_ALLOWED_ELEMENTS}`);
       return;
     }
 
@@ -770,23 +876,47 @@ export class GoonMatchService {
     this._liveDurationMs = this._consentSheet.live_duration_sec * 1000;
     this._inboundLimiter.reset();
     this._outboundLimiter.reset();
+
+    // Everything the pairing can run is allowed by default, on both sides — the agreement screen
+    // is about switching things OFF. The peer's set is assumed to be the same default until their
+    // first draft frame says otherwise, so the intersection is never briefly empty.
+    this._localAllowed = defaultAllowed(this._availableDraftPool);
+    this._remoteAllowed = defaultAllowed(this._availableDraftPool);
+    this._localDraftConfirmed = false;
+    this._remoteDraftConfirmed = false;
+    this._draftResolved = false;
+    this._sharedPool = [];
+
     this._setPhase(GoonMatchPhase.Draft);
+    this._sendDraftState();
   }
 
   _handleDraft(draft) {
     if (this._phase !== GoonMatchPhase.Draft) return;
 
-    // Their picks must also live in the shared pool; anything else is dropped rather than trusted
-    // (their client would be enduring something we cannot show).
-    const picks = [];
-    for (const e of new Set(draft.elements || [])) {
-      if (!this._availableDraftPool.includes(e)) continue;
-      if (picks.length >= PICKS_PER_PLAYER) break;
-      picks.push(e);
+    // Prefer the v2 fields; fall back to the v1 pair so a capture/older frame still parses.
+    const rawAllowed = (Array.isArray(draft.allowed) && draft.allowed.length > 0)
+      ? draft.allowed : (draft.elements || []);
+    const rawConfirmed = (draft.confirmed === undefined || draft.confirmed === null)
+      ? !!draft.locked : !!draft.confirmed;
+
+    const incoming = this._sanitizeAllowed(rawAllowed);
+    const changed = !sameElementSet(incoming, this._remoteAllowed);
+
+    this._remoteAllowed = incoming;
+    this._remoteDraftConfirmed = rawConfirmed;
+
+    if (changed) {
+      // They moved a toggle: BOTH signatures die, exactly as on the consent sheet. Re-publishing
+      // our (unchanged) set tells them our signature dropped — and because the set is unchanged,
+      // their handler sees `changed === false` and the exchange terminates.
+      this._localDraftConfirmed = false;
+      this._draftResolved = false;
+      this._sendDraftState();
     }
-    this._remoteDraft = picks;
-    this._remoteDraftLocked = !!draft.locked && picks.length === PICKS_PER_PLAYER;
+
     this._ev.draftChanged.emit(undefined, (e) => this._warn(`draftChanged handler threw: ${e && e.message}`));
+    this._tryResolveDraft();
   }
 
   // -------------------------------------------------------- countdown
@@ -794,7 +924,7 @@ export class GoonMatchService {
   _tryProposeStart() {
     if (this._startProposed || !this._isHost) return;
     if (this._phase !== GoonMatchPhase.Draft) return;
-    if (!this._localDraftLocked || !this._remoteDraftLocked) return;
+    if (!this._draftResolved) return;
     if (!this._clock() || !this._clock().isSynced) return;   // fire-at-timestamp needs a synced clock
 
     this._startProposed = true;
@@ -838,9 +968,16 @@ export class GoonMatchService {
       this._warn('starting Live without a peer seed contribution');
     }
 
+    // The pool is the agreement's intersection, and the ramp is rolled from it — one schedule,
+    // both players, no exchange: buildRamp is a pure function of (pool, seed, duration).
+    const pool = this._draftResolved && this._sharedPool.length > 0
+      ? this._sharedPool
+      : sharedPool(this._localAllowed, this._remoteAllowed);
+    this._sharedPool = pool;
+
     this._scoring.reset();
-    this._scoring.configure(this.localAttentionMode, matchRiskTier(this._localDraft));
-    this._ramp = buildRamp(this._localDraft, this._matchSeed, this._consentSheet.live_duration_sec, this._rngFactory);
+    this._scoring.configure(this.localAttentionMode, matchRiskTier(pool));
+    this._ramp = buildRamp(pool, this._matchSeed, this._consentSheet.live_duration_sec, this._rngFactory);
     this._rampIndex = 0;
     this._liveDurationMs = this._consentSheet.live_duration_sec * 1000;
     this._activeElements.clear();
@@ -852,7 +989,7 @@ export class GoonMatchService {
     this._liveTicker = ticker(1000, (elapsedMs) => this._liveTick(elapsedMs), { logger: this._log, tag: `${this._tag}Live` });
 
     this._info(`Live phase: seed ${this._matchSeed.toString(16)}, ${this._consentSheet.live_duration_sec}s, ` +
-      `draft ${this._localDraft.join('+')}, risk ${this._scoring.riskTier}, ${this._ramp.length} cues`);
+      `pool ${pool.join('+')} (+always-on bubbles), risk ${this._scoring.riskTier}, ${this._ramp.length} cues`);
 
     this._setPhase(GoonMatchPhase.Live);
   }
@@ -1458,6 +1595,13 @@ function cloneSheet(sheet, confirmed) {
     payload_min_gap_ms: sheet.payload_min_gap_ms,
     confirmed,
   });
+}
+
+/** Set identity for two CANONICAL (normalizeAllowed'd) element lists. */
+function sameElementSet(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 /** Sheet identity ignores `confirmed` — the TERMS must match, not the signature. */

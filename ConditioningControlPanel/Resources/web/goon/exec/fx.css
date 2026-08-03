@@ -214,13 +214,23 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
  * pointer-events:none; the bubble opts back in. The :has() rule below takes that
  * opt-in away the moment the stage holds a video or a lock card, so a bubble
  * drifting over the typing card can never swallow the click.
+ *
+ * HEAT-EXEMPT. The field is GAMEPLAY, not ambience: it runs the whole match and
+ * popping it is how the arsenal gets fed (exec/bubbles.js -> ui/drops.js), so a
+ * frozen bubble is a broken economy, not a saved frame. The two rules below
+ * re-declare --gg-deco-play exactly the way .gg-mon-proj does in ui/hud.css, and
+ * they are the ONLY exemption in this layer: the pop WASHES (.gg-spiral,
+ * .gg-drain.is-glitching, the pop flashes) are decoration and still park at
+ * html[data-gg-fx="hot"].
  * ------------------------------------------------------------------------ */
 .gg-bubble-wrap {
   position: absolute;
   bottom: 0;
   pointer-events: none;
   will-change: transform;
+  --gg-deco-play: running;
   animation: ggBubbleRise var(--gg-rise, 12s) linear forwards;
+  animation-play-state: var(--gg-deco-play, running);
 }
 @keyframes ggBubbleRise {
   /* Rises, then dissolves in place near the top instead of shooting off-screen. */
@@ -234,7 +244,9 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
   border-radius: 50%;
   cursor: pointer;
   will-change: transform;
+  --gg-deco-play: running;         /* gameplay, not decoration — see the banner */
   animation: ggBubbleSway var(--gg-sway-dur, 4s) ease-in-out infinite alternate;
+  animation-play-state: var(--gg-deco-play, running);
   background: center / contain no-repeat url('/dtrh/assets/bubbles/bubble.png');
   filter: drop-shadow(0 0 7px rgba(var(--gg-pink-rgb), 0.5));
 }
@@ -360,8 +372,12 @@ body:has(#gg-stage > *) .gg-bubble { pointer-events: none; cursor: default; }
   transition: opacity var(--gg-drain-fade, 900ms) ease;
 }
 .gg-drain.is-on { opacity: var(--gg-drain-op, 0.35); }
-/* The glitch shudder a popped glitch bubble puts over the drain (showGlitch). */
-.gg-drain.is-glitching { animation: ggDrainGlitch 0.16s steps(2) infinite; }
+/* The glitch shudder a popped glitch bubble puts over the drain (showGlitch).
+   A WASH, i.e. decoration: unlike the bubble that threw it, this parks at hot. */
+.gg-drain.is-glitching {
+  animation: ggDrainGlitch 0.16s steps(2) infinite;
+  animation-play-state: var(--gg-deco-play, running);
+}
 @keyframes ggDrainGlitch {
   0%   { transform: translate(0, 0); filter: none; }
   50%  { transform: translate(-1.2%, 0); filter: hue-rotate(35deg) saturate(1.5); }

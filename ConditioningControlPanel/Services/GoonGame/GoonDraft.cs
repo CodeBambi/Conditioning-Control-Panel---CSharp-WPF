@@ -3,17 +3,28 @@ using System.Collections.Generic;
 using System.Linq;
 
 // ============================================================================
-// GOON GAME — Phase B. Draft pool metadata + the deterministic "what do I have
-// to endure" ramp built from the drafted elements and the combined match seed.
+// GOON GAME — Phase B. Draft agreement metadata + the deterministic
+// "what do we both have to endure" ramp.
 //
-// The draft defines what YOU endure. Risk tiers below are the v1 balance
-// proposal for the plan's open question "Draft pool risk-tier values per
-// element" — see the table in the class doc. They feed the score formula
-// 1 pt/s x (1 + GoonConsts.DraftRiskStep x riskTier) x attention multiplier.
+// REDESIGN (2026-08-03). The draft is no longer three private picks:
+//   1. Each player toggles which elements they ALLOW; the effective pool is the
+//      INTERSECTION of both allowed sets (SharedPool).
+//   2. BuildRamp ROLLS one schedule from that pool + the shared match seed, and
+//      BOTH players run it — same elements, same instants, perfectly even.
+//   3. Bubbles are an ALWAYS-ON baseline: never toggled, never rolled, emitted
+//      from t=0 to the end with intensity climbing 0.15 -> 1.00. The enum code
+//      is unchanged and still frozen; it is only out of the toggle/roll set.
+//
+// Risk tiers below still feed the score formula
+// 1 pt/s x (1 + GoonConsts.DraftRiskStep x riskTier) x attention multiplier,
+// now computed from the SHARED pool (identical for both players).
 //
 // This file only PLANS cues. Nothing here touches App.Flash/App.Video/... —
-// GoonMatchService raises the cues as events and Phase B's
-// GoonPayloadExecutor / Phase E wiring performs the fan-out.
+// GoonMatchService raises the cues as events and the executor fans them out.
+//
+// PARITY: Resources/web/goon/core/draft.js is a line-for-line transcription of
+// this file. The rng draw ORDER and COUNT in RollSegments are part of the
+// protocol — changing either desyncs a cross-client duel.
 // ============================================================================
 
 namespace ConditioningControlPanel.Services.GoonGame
@@ -21,12 +32,12 @@ namespace ConditioningControlPanel.Services.GoonGame
     /// <summary>What a planned cue asks the executor to do with an element.</summary>
     public enum GoonCueAction
     {
-        Start,      // begin the element (DurationMs > 0 for bursts, 0 = sustained until Stop)
-        Intensity,  // sustained element only: ramp update, same element, new intensity
+        Start,      // begin the element (DurationMs > 0 for segments, 0 = sustained until Stop)
+        Intensity,  // ramp update, same element, new intensity
         Stop,
     }
 
-    /// <summary>One planned instruction on the local player's endurance ramp.</summary>
+    /// <summary>One planned instruction on the shared endurance ramp.</summary>
     public sealed class GoonElementCue
     {
         /// <summary>Milliseconds from the start of the Live phase (local monotonic).</summary>
@@ -35,54 +46,54 @@ namespace ConditioningControlPanel.Services.GoonGame
         public GoonElement Element { get; init; }
         /// <summary>0..1 — pre-cap. Every receiver-side cap (toy mixer, level gates) still applies.</summary>
         public double Intensity { get; init; }
-        /// <summary>Burst length for Start cues; 0 for sustained elements and for Stop/Intensity.</summary>
+        /// <summary>Segment length for Start cues; 0 for sustained elements and for Stop/Intensity.</summary>
         public int DurationMs { get; init; }
 
         public override string ToString() =>
             $"{OffsetMs / 1000}s {Action} {Element} i={Intensity:F2}" + (DurationMs > 0 ? $" d={DurationMs / 1000}s" : "");
     }
 
-    /// <summary>Pacing shape of one drafted element. Values are the v1 tuning pass.</summary>
+    /// <summary>Pacing shape of one element. Values are the v1 tuning pass.</summary>
     public sealed class GoonElementProfile
     {
         public GoonElement Element { get; init; }
         /// <summary>0..3. Higher = harder to endure = better score multiplier.</summary>
         public int RiskTier { get; init; }
-        /// <summary>True = one Start at entry, periodic Intensity ramp cues, one Stop at the end.</summary>
+        /// <summary>True = the element's natural shape is a continuous presence rather than a burst.</summary>
         public bool Sustained { get; init; }
-        /// <summary>Fraction of the live phase that passes before this element first fires.</summary>
+        /// <summary>Appetite for opening the match: 0.00 leads, 0.35 closes. Orders the first pass.</summary>
         public double EntryFraction { get; init; }
         public int MinDurationMs { get; init; }
         public int MaxDurationMs { get; init; }
         /// <summary>Gap between bursts near the start of the match (long) ...</summary>
         public int EarlyGapMs { get; init; }
-        /// <summary>... and near the end (short). The ramp lerps between them.</summary>
+        /// <summary>... and near the end (short). Legacy shape data, kept for tooling.</summary>
         public int LateGapMs { get; init; }
         public double IntensityStart { get; init; }
         public double IntensityEnd { get; init; }
     }
 
     /// <summary>
-    /// Draft pool tables + deterministic ramp planner.
+    /// Agreement tables + deterministic ramp roller.
     ///
-    /// v1 risk tiers (open balance question in the plan — these are the starting point):
+    /// v1 risk tiers (unchanged by the redesign):
     ///   0  Flashes, BouncingText      ambient, always-on, low disruption
     ///   1  Subliminals, Bubbles       constant pull on attention, still passive
     ///   2  Videos, LockCards, ToyPatterns, Spiral  demand a response / physically escalate
     ///   3  BrainDrain                 the heavy; also the once-per-match payload
-    /// A draft of 3 therefore sums to 1..7 (min 0+0+1, max 3+2+2), i.e. a score
-    /// multiplier of 1.15x .. 2.05x at GoonConsts.DraftRiskStep = 0.15.
-    /// Spiral (2026-08-03) joins the tier-2 band: sustained like BrainDrain but
-    /// earlier and gentler, and unlike the heavy it may be fired repeatedly.
     /// </summary>
     public static class GoonDraft
     {
+        /// <summary>LEGACY: the pre-agreement draft size. Nothing enforces it any more.</summary>
         public const int PicksPerPlayer = 3;
 
-        /// <summary>Highest achievable summed risk tier for a legal 3-element draft (BrainDrain + two tier-2s).</summary>
+        /// <summary>Fewest elements a player may allow, and the smallest workable intersection.</summary>
+        public const int MinAllowedElements = 2;
+
+        /// <summary>Highest achievable summed risk tier (BrainDrain + two tier-2s).</summary>
         public const int MaxMatchRiskTier = 7;
 
-        /// <summary>Rotating pool, v1 = the whole enum (plan §Match flow step 3).</summary>
+        /// <summary>Rotating pool, v1 = the whole enum.</summary>
         public static readonly IReadOnlyList<GoonElement> PoolV1 = new[]
         {
             GoonElement.Flashes,
@@ -95,6 +106,21 @@ namespace ConditioningControlPanel.Services.GoonGame
             GoonElement.BouncingText,
             GoonElement.Spiral,
         };
+
+        /// <summary>
+        /// The one element that is never toggled and never rolled: it runs the whole match, for
+        /// both players. (The Bubbles PAYLOAD — the throwable swarm — is a different thing and is
+        /// untouched by this.)
+        /// </summary>
+        public const GoonElement AlwaysOnElement = GoonElement.Bubbles;
+
+        /// <summary>Always-on band: barely there at the whistle, unmissable at the end.</summary>
+        private const double AlwaysOnIntensityStart = 0.15;
+        private const double AlwaysOnIntensityEnd = 1.00;
+
+        /// <summary>What the agreement screen may toggle: the pool minus the always-on element.</summary>
+        public static readonly IReadOnlyList<GoonElement> TogglePool =
+            PoolV1.Where(e => e != AlwaysOnElement).ToArray();
 
         private static readonly Dictionary<GoonElement, GoonElementProfile> Profiles = new()
         {
@@ -186,9 +212,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                 IntensityStart = 0.25,
                 IntensityEnd = 0.75,
             },
-            // Modelled on BrainDrain — the same sustained shape (one Start, SustainedRampStepMs
-            // Intensity cues, one Stop) — but it opens a tenth of the match earlier and tops out
-            // lower, so a spiral+drain draft escalates in two visible steps instead of one wall.
+            // Modelled on BrainDrain — the same sustained shape — but it opens a tenth of the
+            // match earlier and tops out lower, so a spiral+drain pool escalates in two steps.
             [GoonElement.Spiral] = new GoonElementProfile
             {
                 Element = GoonElement.Spiral,
@@ -203,8 +228,26 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// <summary>Sustained elements get an Intensity refresh cue on this cadence.</summary>
         private const int SustainedRampStepMs = 30000;
 
-        /// <summary>Bursts shorter than this are dropped rather than squeezed against the end of the match.</summary>
+        /// <summary>Segments shorter than this are dropped rather than squeezed against the end.</summary>
         private const int MinUsefulBurstMs = 8000;
+
+        // ------------------------------------------------------ rolled-ramp tuning
+        // All integer milliseconds on purpose: passes/stride/segLen must come out bit-identical in
+        // C# and JS, and integer division is the only arithmetic that trivially does.
+
+        private const int RollTargetStrideMs = 30000;
+        private const int RollSegmentOverlap = 2;
+        private const int RollMinStrideMs = 6000;
+        private const int RollMinSegmentMs = 12000;
+        private const int RollMaxSegmentMs = 120000;
+        private const int RollJitterPct = 35;
+        private const int RollMaxSegments = 512;
+
+        /// <summary>
+        /// Reserved salt code for the ramp roll's sub-stream. Deliberately outside GoonElement so
+        /// the roll can never collide with a per-element stream.
+        /// </summary>
+        private const int RampRollSaltCode = 1000;
 
         public static GoonElementProfile ProfileOf(GoonElement element) =>
             Profiles.TryGetValue(element, out var p)
@@ -213,7 +256,7 @@ namespace ConditioningControlPanel.Services.GoonGame
 
         public static int RiskTierOf(GoonElement element) => ProfileOf(element).RiskTier;
 
-        /// <summary>Summed risk tier of a draft — the "riskTier" in the score formula.</summary>
+        /// <summary>Summed risk tier of a pool — the "riskTier" in the score formula.</summary>
         public static int MatchRiskTier(IEnumerable<GoonElement>? draft)
         {
             if (draft == null) return 0;
@@ -221,11 +264,76 @@ namespace ConditioningControlPanel.Services.GoonGame
             return Math.Clamp(total, 0, MaxMatchRiskTier);
         }
 
-        /// <summary>Score multiplier contributed by the draft: 1 + step x tier.</summary>
+        /// <summary>Score multiplier contributed by the pool: 1 + step x tier.</summary>
         public static double RiskMultiplier(int matchRiskTier) =>
             1.0 + GoonConsts.DraftRiskStep * Math.Clamp(matchRiskTier, 0, MaxMatchRiskTier);
 
-        /// <summary>Exactly <see cref="PicksPerPlayer"/> distinct elements drawn from the pool.</summary>
+        // ------------------------------------------------------------- agreement
+
+        /// <summary>
+        /// Canonical form of an allowed set: distinct, in the v1 pool, always-on element removed,
+        /// sorted ASCENDING. Canonical because both engines must derive the same pool from the
+        /// same two sets with no ordering to agree on.
+        /// </summary>
+        public static List<GoonElement> NormalizeAllowed(IEnumerable<GoonElement>? allowed)
+        {
+            var seen = new HashSet<GoonElement>();
+            var outList = new List<GoonElement>();
+            if (allowed != null)
+            {
+                foreach (var e in allowed)
+                {
+                    if (e == AlwaysOnElement) continue;     // never toggled, never rolled
+                    if (!PoolV1.Contains(e)) continue;
+                    if (!seen.Add(e)) continue;
+                    outList.Add(e);
+                }
+            }
+            outList.Sort((a, b) => ((int)a).CompareTo((int)b));
+            return outList;
+        }
+
+        /// <summary>Default: everything this pairing can actually run is ON.</summary>
+        public static List<GoonElement> DefaultAllowed(IEnumerable<GoonElement>? available)
+        {
+            var list = available?.ToList();
+            return NormalizeAllowed(list != null && list.Count > 0 ? list : PoolV1);
+        }
+
+        /// <summary>The effective pool: what BOTH players allow.</summary>
+        public static List<GoonElement> SharedPool(IEnumerable<GoonElement>? mine, IEnumerable<GoonElement>? theirs)
+        {
+            var a = NormalizeAllowed(mine);
+            var b = new HashSet<GoonElement>(NormalizeAllowed(theirs));
+            return a.Where(b.Contains).ToList();
+        }
+
+        /// <summary>A player may not confirm with fewer than <see cref="MinAllowedElements"/> on.</summary>
+        public static bool IsValidAllowed(IEnumerable<GoonElement>? allowed, out string error)
+        {
+            error = "";
+            if (NormalizeAllowed(allowed).Count < MinAllowedElements)
+            {
+                error = $"keep at least {MinAllowedElements} effects switched on";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>...and the two of you have to leave at least that many in common.</summary>
+        public static bool IsValidSharedPool(IEnumerable<GoonElement>? pool, out string error)
+        {
+            error = "";
+            var n = NormalizeAllowed(pool).Count;
+            if (n < MinAllowedElements)
+            {
+                error = $"you two only agree on {n} effect{(n == 1 ? "" : "s")} - open one more up";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>LEGACY validity check for the old three-pick draft. The engine no longer uses it.</summary>
         public static bool IsValidDraft(IReadOnlyList<GoonElement>? picks, out string error)
         {
             error = "";
@@ -250,112 +358,167 @@ namespace ConditioningControlPanel.Services.GoonGame
             return true;
         }
 
+        // ------------------------------------------------------------------ ramp
+
         /// <summary>
-        /// Plans the whole Live-phase ramp up front, deterministically, from the combined
-        /// match seed. Each element is salted by its own id (NOT by host/guest), so two
-        /// players who draft the same element endure the same shape — fair by construction.
-        /// Cues are returned sorted by <see cref="GoonElementCue.OffsetMs"/>.
+        /// Plans the whole Live-phase ramp up front from the SHARED pool and the combined match
+        /// seed. The result is identical on both machines by construction — nothing here reads
+        /// host/guest, the local player, or anything but its three arguments.
+        /// Cues are returned in <see cref="CompareCues"/> order.
         /// </summary>
         public static List<GoonElementCue> BuildRamp(
-            IReadOnlyList<GoonElement>? draft,
+            IReadOnlyList<GoonElement>? pool,
             ulong matchSeed,
             int liveDurationSec,
             Func<ulong, IGoonRng> rngFactory)
         {
             var cues = new List<GoonElementCue>();
-            if (draft == null || draft.Count == 0 || liveDurationSec <= 0 || rngFactory == null) return cues;
+            if (liveDurationSec <= 0 || rngFactory == null) return cues;
 
             long liveMs = (long)liveDurationSec * 1000L;
 
-            foreach (var element in draft.Distinct())
-            {
-                var profile = ProfileOf(element);
-                var rng = rngFactory(SaltSeed(matchSeed, element));
-                long entry = (long)(liveMs * Math.Clamp(profile.EntryFraction, 0.0, 0.9));
+            // 1. The always-on baseline. Not rolled, not toggleable, not optional.
+            PushSegment(cues, AlwaysOnElement, 0, liveMs,
+                AlwaysOnIntensityStart, AlwaysOnIntensityEnd, liveMs, sustained: true);
 
-                if (profile.Sustained)
-                {
-                    cues.Add(new GoonElementCue
-                    {
-                        OffsetMs = entry,
-                        Action = GoonCueAction.Start,
-                        Element = element,
-                        Intensity = profile.IntensityStart,
-                        DurationMs = 0,
-                    });
+            // 2. The rolled schedule over the shared pool.
+            var roll = NormalizeAllowed(pool);
+            if (roll.Count > 0) RollSegments(cues, roll, matchSeed, liveMs, rngFactory);
 
-                    for (long t = entry + SustainedRampStepMs; t < liveMs; t += SustainedRampStepMs)
-                    {
-                        double p = liveMs > entry ? (double)(t - entry) / (liveMs - entry) : 1.0;
-                        cues.Add(new GoonElementCue
-                        {
-                            OffsetMs = t,
-                            Action = GoonCueAction.Intensity,
-                            Element = element,
-                            Intensity = Lerp(profile.IntensityStart, profile.IntensityEnd, p),
-                        });
-                    }
-
-                    cues.Add(new GoonElementCue
-                    {
-                        OffsetMs = liveMs,
-                        Action = GoonCueAction.Stop,
-                        Element = element,
-                    });
-                    continue;
-                }
-
-                // Burst element: shrinking gaps + rising intensity as the match progresses.
-                long cursor = entry;
-                int guard = 0;
-                while (cursor < liveMs && guard++ < 512)
-                {
-                    double p = Math.Clamp((double)cursor / liveMs, 0.0, 1.0);
-                    int duration = profile.MaxDurationMs > profile.MinDurationMs
-                        ? rng.NextInt(profile.MinDurationMs, profile.MaxDurationMs + 1)
-                        : profile.MinDurationMs;
-
-                    if (cursor + duration > liveMs) duration = (int)(liveMs - cursor);
-                    if (duration < MinUsefulBurstMs) break;
-
-                    double intensity = Lerp(profile.IntensityStart, profile.IntensityEnd, p);
-
-                    cues.Add(new GoonElementCue
-                    {
-                        OffsetMs = cursor,
-                        Action = GoonCueAction.Start,
-                        Element = element,
-                        Intensity = intensity,
-                        DurationMs = duration,
-                    });
-                    cues.Add(new GoonElementCue
-                    {
-                        OffsetMs = cursor + duration,
-                        Action = GoonCueAction.Stop,
-                        Element = element,
-                    });
-
-                    double baseGap = Lerp(profile.EarlyGapMs, profile.LateGapMs, p);
-                    double jitter = 0.75 + rng.NextDouble() * 0.5;         // +-25 %
-                    cursor += duration + (long)Math.Max(5000, baseGap * jitter);
-                }
-            }
-
-            cues.Sort((a, b) =>
-            {
-                int c = a.OffsetMs.CompareTo(b.OffsetMs);
-                if (c != 0) return c;
-                // Stop before Start at the same instant, so a re-trigger reads cleanly downstream.
-                return ((int)b.Action).CompareTo((int)a.Action);
-            });
+            cues.Sort(CompareCues);
             return cues;
         }
 
-        private static ulong SaltSeed(ulong matchSeed, GoonElement element)
+        private static void PushSegment(
+            List<GoonElementCue> cues, GoonElement element, long startMs, long endMs,
+            double intensityStart, double intensityEnd, long liveMs, bool sustained)
+        {
+            // Intensity is a pure function of GLOBAL match progress, so every element escalates
+            // toward the end no matter which slots the roll gave it.
+            double At(long t) => Lerp(intensityStart, intensityEnd, liveMs > 0 ? (double)t / liveMs : 1.0);
+
+            cues.Add(new GoonElementCue
+            {
+                OffsetMs = startMs,
+                Action = GoonCueAction.Start,
+                Element = element,
+                Intensity = At(startMs),
+                DurationMs = sustained ? 0 : (int)(endMs - startMs),
+            });
+
+            for (long t = startMs + SustainedRampStepMs; t < endMs; t += SustainedRampStepMs)
+            {
+                cues.Add(new GoonElementCue
+                {
+                    OffsetMs = t,
+                    Action = GoonCueAction.Intensity,
+                    Element = element,
+                    Intensity = At(t),
+                });
+            }
+
+            cues.Add(new GoonElementCue
+            {
+                OffsetMs = endMs,
+                Action = GoonCueAction.Stop,
+                Element = element,
+            });
+        }
+
+        /// <summary>
+        /// The roll. Consumes the rng in a FIXED order — (K-1) NextInt draws per pass for the
+        /// shuffle, then exactly one NextDouble per slot for the jitter, whether or not the slot
+        /// survives the clamp. Any change to that order or count is a desync, not a tuning tweak.
+        /// </summary>
+        private static void RollSegments(
+            List<GoonElementCue> cues, List<GoonElement> roll, ulong matchSeed, long liveMs,
+            Func<ulong, IGoonRng> rngFactory)
+        {
+            int k = roll.Count;
+            var rng = rngFactory(SaltSeed(matchSeed, RampRollSaltCode));
+
+            long target = (long)k * RollTargetStrideMs;
+            long passes = Math.Max(1, (liveMs + target / 2) / target);
+            if (passes * k > RollMaxSegments) passes = Math.Max(1, RollMaxSegments / k);
+
+            long stride = Math.Max(RollMinStrideMs, liveMs / (passes * k));
+            long jitterMax = stride * RollJitterPct / 100;
+
+            long segLen = Math.Clamp(stride * RollSegmentOverlap, RollMinSegmentMs, RollMaxSegmentMs);
+            // Two segments of the SAME element are at least `separation` slots apart (see the
+            // pass-boundary swap below); keep them from overlapping each other, because a Stop
+            // landing inside the next Start would silently kill the element early and eat the time
+            // it was owed.
+            long separation = k >= 2 ? 2 : 1;
+            long sameElementCap = separation * stride - 2 * jitterMax - 1000;
+            if (segLen > sameElementCap) segLen = sameElementCap;
+            if (segLen < MinUsefulBurstMs) segLen = MinUsefulBurstMs;
+
+            GoonElement? lastOfPrevPass = null;
+            for (long p = 0; p < passes; p++)
+            {
+                var pass = new List<GoonElement>(roll);
+                // Fisher-Yates, identical to the JS binding — inlined because IGoonRng only
+                // promises NextInt/NextDouble.
+                for (int i = pass.Count - 1; i > 0; i--)
+                {
+                    int j = rng.NextInt(0, i + 1);
+                    (pass[i], pass[j]) = (pass[j], pass[i]);
+                }
+                // Opening pass only: a closer must not open the match. OrderBy is a STABLE sort,
+                // so ties keep the order the roll gave them (the JS Array.sort is stable too).
+                if (p == 0) pass = pass.OrderBy(e => ProfileOf(e).EntryFraction).ToList();
+                // Each element appears once per pass, but a pass BOUNDARY can hand it two adjacent
+                // slots. One deterministic swap (no rng draw) guarantees the two-slot separation
+                // the cap assumes.
+                if (k >= 2 && lastOfPrevPass.HasValue && pass[0] == lastOfPrevPass.Value)
+                {
+                    (pass[0], pass[1]) = (pass[1], pass[0]);
+                }
+                lastOfPrevPass = pass[k - 1];
+
+                for (int i = 0; i < k; i++)
+                {
+                    long slot = p * k + i;
+                    long jitter = (long)((rng.NextDouble() * 2 - 1) * jitterMax);
+
+                    long start = slot * stride + jitter;
+                    if (start > liveMs - MinUsefulBurstMs) start = liveMs - MinUsefulBurstMs;
+                    if (start < 0) start = 0;
+
+                    long end = start + segLen;
+                    if (end > liveMs) end = liveMs;
+                    if (end - start < MinUsefulBurstMs) continue;
+
+                    var prof = ProfileOf(pass[i]);
+                    PushSegment(cues, pass[i], start, end, prof.IntensityStart, prof.IntensityEnd, liveMs, sustained: false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Total order. Stop before Intensity before Start at one instant; element then duration
+        /// break the rest, so an unstable List.Sort cannot produce a different order than the JS
+        /// binding's stable one.
+        /// </summary>
+        private static int CompareCues(GoonElementCue a, GoonElementCue b)
+        {
+            int c = a.OffsetMs.CompareTo(b.OffsetMs);
+            if (c != 0) return c;
+            c = ((int)b.Action).CompareTo((int)a.Action);
+            if (c != 0) return c;
+            c = ((int)a.Element).CompareTo((int)b.Element);
+            if (c != 0) return c;
+            return a.DurationMs.CompareTo(b.DurationMs);
+        }
+
+        private static ulong SaltSeed(ulong matchSeed, GoonElement element) => SaltSeed(matchSeed, (int)element);
+
+        private static ulong SaltSeed(ulong matchSeed, int code)
         {
             unchecked
             {
-                ulong salt = (ulong)((int)element + 1) * 0x9E3779B97F4A7C15UL;
+                ulong salt = (ulong)(code + 1) * 0x9E3779B97F4A7C15UL;
                 return matchSeed ^ salt;
             }
         }

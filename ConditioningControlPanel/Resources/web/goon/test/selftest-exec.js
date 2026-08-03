@@ -129,12 +129,29 @@ for (const id of LAYER_IDS) {
 const documentElement = new StubEl('html');
 documentElement.isConnected = true;
 
+// Document-level events. exec/bubbles.js dispatches `gg-bubble-pop` on the
+// document (the drop-economy seam) and ui/hud.js is its only listener in
+// production; the stub carries just enough EventTarget for that one seam.
+const docListeners = new Map();
 globalThis.document = {
   documentElement,
   body: (() => { const b = new StubEl('body'); b.isConnected = true; return b; })(),
   createElement: (tag) => new StubEl(tag),
   createTextNode: (t) => { const e = new StubEl('#text'); e.textContent = t; return e; },
   getElementById: (id) => byId.get(id) || null,
+  addEventListener(type, fn) {
+    if (!docListeners.has(type)) docListeners.set(type, new Set());
+    docListeners.get(type).add(fn);
+  },
+  removeEventListener(type, fn) { const s = docListeners.get(type); if (s) s.delete(fn); },
+  dispatchEvent(evt) {
+    const s = docListeners.get(evt && evt.type);
+    if (s) for (const fn of Array.from(s)) { try { fn(evt); } catch (_e) { /* a listener is never load-bearing */ } }
+    return true;
+  },
+};
+globalThis.CustomEvent = class CustomEvent {
+  constructor(type, init) { this.type = type; this.detail = init && init.detail; this.bubbles = !!(init && init.bubbles); }
 };
 globalThis.window = { innerWidth: 1280, innerHeight: 720 };
 // Deliberately NOT defined: matchMedia, requestAnimationFrame, Image.
@@ -478,7 +495,19 @@ async function main() {
     ok(!!wrap && /s$/.test(wrap.style.getPropertyValue('--gg-rise')),
       'the wrap rises on a seconds-valued --gg-rise', wrap && wrap.style.getPropertyValue('--gg-rise'));
 
-    // POPPING IS COSMETIC: it must not touch the payload's receipt.
+    // THEIR SWARM PAYS NOTHING. With no element bed of our own running, every
+    // bubble on screen belongs to the inbound swarm: it is poppable clutter, it
+    // is tagged as theirs, and its pop is dispatched with worth 0 so the drop
+    // roller skips it. (Otherwise firing a swarm would gift them free items.)
+    ok(bubbles.every((b2) => b2.getAttribute('data-gg-mint') === 'payload'),
+      'a swarm with no field of our own mints ONLY payload-tagged bubbles',
+      bubbles.map((b2) => b2.getAttribute('data-gg-mint')).join(','));
+
+    const swarmPops = [];
+    const onSwarmPop = (e) => swarmPops.push(e.detail);
+    document.addEventListener('gg-bubble-pop', onSwarmPop);
+
+    // POPPING IS COSMETIC FOR THE RECEIPT: it must not settle the payload.
     const b = bubbles[0];
     b.fire('pointerdown');
     ok(b._cls.has('is-pop'), 'a bubble pops on pointerdown');
@@ -486,10 +515,100 @@ async function main() {
       String(host.findAll('gg-spark').length));
     ok(m.receipts.length === 0, 'popping does not settle the swarm early');
 
+    ok(swarmPops.length === 1, 'every pop dispatches exactly one gg-bubble-pop', String(swarmPops.length));
+    ok(swarmPops[0] && swarmPops[0].worth === 0,
+      'a payload-minted pop is worth NOTHING to the economy', JSON.stringify(swarmPops[0]));
+    ok(swarmPops[0] && swarmPops[0].payload === true, 'and says so on the detail');
+    ok(swarmPops[0] && typeof swarmPops[0].kind === 'string', 'the detail carries the bubble kind');
+    document.removeEventListener('gg-bubble-pop', onSwarmPop);
+
     await sleep(1500);
     ok(m.receipts.length === 1 && m.receipts[0].endured === true,
       'the swarm still receipts endured after its full duration', JSON.stringify(m.receipts));
     ex.detach();
+  }
+
+  /* ------------------------------ bubbles: the ALWAYS-ON field + the drop seam
+   * The field now runs t=0 -> match end and ramps 0.15 -> 1.0, so intensity has
+   * to be a real density dial (sparse open, dense finish) and every pop has to
+   * announce what it is worth. Both are asserted here; ui/drops.js does the
+   * economics and selftest-hud covers that half. */
+  {
+    const bub = await import('../exec/bubbles.js');
+
+    // the ramp itself: monotonic in every direction that matters
+    const steps = [0, 0.15, 0.35, 0.55, 0.8, 1];
+    const tunes = steps.map((i) => bub.bubbleTuning(i, false, 3, 22));
+    let mono = true;
+    let why = '';
+    for (let i = 1; i < tunes.length; i++) {
+      if (tunes[i].targetCount < tunes[i - 1].targetCount) { mono = false; why = 'count fell at ' + steps[i]; }
+      if (tunes[i].topupMs > tunes[i - 1].topupMs) { mono = false; why = 'cadence slowed at ' + steps[i]; }
+      if (tunes[i].riseMaxS > tunes[i - 1].riseMaxS) { mono = false; why = 'rise slowed at ' + steps[i]; }
+    }
+    ok(mono, 'intensity -> density/cadence/speed is monotonic across the ramp', why);
+    ok(tunes[0].targetCount * 3 < tunes[tunes.length - 1].targetCount,
+      'the field opens SPARSE and finishes at least 3x denser',
+      `${tunes[0].targetCount} -> ${tunes[tunes.length - 1].targetCount}`);
+    ok(tunes[tunes.length - 1].targetCount + 4 <= bub.MAX_LIVE,
+      'a full-intensity field plus a swarm still fits under the 26-node cap',
+      String(tunes[tunes.length - 1].targetCount + 4));
+    ok(tunes[tunes.length - 1].topupMs < tunes[0].topupMs / 2,
+      'and it spawns at least twice as fast late as early',
+      `${tunes[0].topupMs} -> ${tunes[tunes.length - 1].topupMs}`);
+
+    // the worth table exec/bubbles.js stamps on a pop
+    ok(bub.popWorthOf('normal', false) === bub.POP_WORTH_NORMAL, 'a plain bubble is worth 1');
+    ok(bub.popWorthOf('flash', false) === bub.POP_WORTH_EFFECT, 'an effect bubble is worth more');
+    ok(bub.POP_WORTH_EFFECT > bub.POP_WORTH_NORMAL, 'strictly more', String(bub.POP_WORTH_EFFECT));
+    ok(bub.popWorthOf('flash', true) === 0, 'and nothing at all when THEY minted it');
+    ok(bub.POP_EVENT === 'gg-bubble-pop', 'the seam is the documented event name', bub.POP_EVENT);
+
+    // …and the same thing through the live renderer
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    const pops = [];
+    const onPop = (e) => pops.push(e.detail);
+    document.addEventListener('gg-bubble-pop', onPop);
+
+    m.emitStart({ element: GoonElement.Bubbles, intensity: 0.15, durationMs: 0, elapsedMs: 0 });
+    await sleep(700);
+    const host = byId.get('gg-fx-bubbles');
+    const early = host.findAll('gg-bubble');
+    ok(early.length > 0, 'the always-on field seeds itself at the opening intensity', String(early.length));
+    ok(early.length <= bub.bubbleTuning(0.15, false, 3, 22).targetCount + 1,
+      'and stays sparse there', `${early.length} vs ${bub.bubbleTuning(0.15, false, 3, 22).targetCount}`);
+    ok(early.every((b2) => b2.getAttribute('data-gg-mint') === 'field'),
+      'every bubble our own ramp minted is tagged as ours');
+
+    // our own pops pay: worth follows the kind, never zero
+    const target = early[0];
+    target.fire('pointerdown');
+    ok(pops.length === 1, 'the field dispatches a pop event too', String(pops.length));
+    const kind = String(target.className).replace(/.*gg-bubble--(\w+).*/, '$1');
+    ok(pops[0].worth === (kind === 'normal' ? bub.POP_WORTH_NORMAL : bub.POP_WORTH_EFFECT),
+      'a field pop is worth what its kind is worth', `${kind}=${pops[0].worth}`);
+    ok(pops[0].payload === false, 'and is not flagged as clutter');
+    ok(typeof pops[0].x === 'number' && typeof pops[0].y === 'number',
+      'the detail carries where it burst, for the drop flourish');
+
+    // the ramp climbing must actually thicken the field
+    m.emitIntensity({ element: GoonElement.Bubbles, intensity: 1, durationMs: 0, elapsedMs: 60000 });
+    await sleep(1600);
+    const late = host.findAll('gg-bubble').filter((b2) => !b2._cls.has('is-pop'));
+    ok(late.length > early.length,
+      'ramping the intensity up puts MORE bubbles on the field', `${early.length} -> ${late.length}`);
+    ok(late.length <= bub.MAX_LIVE, 'and never breaches the hard cap', String(late.length));
+
+    // …and a pop after teardown must not keep paying: no listener, no field.
+    document.removeEventListener('gg-bubble-pop', onPop);
+    const seen = pops.length;
+    ex.detach();
+    ok(host.findAll('gg-bubble').length === 0, 'detach tore the whole field down',
+      String(host.findAll('gg-bubble').length));
+    ok(pops.length === seen, 'and nothing popped on the way out', `${seen} -> ${pops.length}`);
   }
 
   // -------------------------------------- flashes: the DtRH scatter + the hydra

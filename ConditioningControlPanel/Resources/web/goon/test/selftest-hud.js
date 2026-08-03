@@ -345,18 +345,51 @@ function makeFakeMatch() {
   ok(findAll(left, 'gg-plate').length === 0 && findAll(right, 'gg-plate').length === 0,
     'item tiles are chromeless: no .gg-plate anywhere on the rails');
 
+  // THE DROP ECONOMY. Every payload slot starts locked; only a bubble drop opens
+  // one. (Pre-economy this fire returned ok and the block below was the whole
+  // test — a locked slot that still fires is exactly the regression to catch.)
+  ok(ars.isLocked('flash') === true, 'a payload slot starts LOCKED');
+  ok(ars.stateOf('flash') === 'locked', 'and paints the locked state', String(ars.stateOf('flash')));
+  const lockedTile = findAll(left, 'gg-item').find((t) => t.getAttribute('data-gg-item') === 'flash');
+  ok(hasClass(lockedTile, 'is-locked'), 'the locked tile carries .is-locked');
+  ok(!!findOne(lockedTile, 'gg-item-lock'), 'and a lock affordance on the sticker');
+  const lockedWord = findOne(lockedTile, 'gg-item-state');
+  ok(lockedWord && String(lockedWord.textContent).length > 0,
+    'the locked state says so in a WORD, not colour alone', lockedWord && lockedWord.textContent);
+  const lockedFire = ars.fire('flash');
+  ok(lockedFire && lockedFire.ok === false && lockedFire.error === 'locked',
+    'a locked slot refuses to fire', JSON.stringify(lockedFire));
+  ok(match._fires.length === 0, 'and never reaches the engine', String(match._fires.length));
+
+  // the emote slot is social: no cost, so it is never locked and never dropped
+  ok(ars.isLocked('emote') === false, 'the free emote slot is never locked');
+  ok(ars.droppable().every((c) => c.id !== 'emote'), 'and never appears in the drop pool');
+  ok(arsenalMod.needsArming({ kind: null, id: 'emote' }, 0) === false, 'needsArming(): a 0-cost slot never arms');
+  ok(arsenalMod.needsArming({ kind: GoonPayloadKind.FlashBurst }, 1) === true, 'needsArming(): a priced payload does');
+
+  // a drop arms it, and only then does the same call reach the engine
+  ok(ars.armDrop('flash') === true, 'armDrop arms the slot');
+  ok(ars.armedCount('flash') === 1, 'one stack banked', String(ars.armedCount('flash')));
+  ok(ars.isLocked('flash') === false, 'an armed slot is no longer locked');
+  const badge = findOne(lockedTile, 'gg-item-stack');
+  ok(badge && badge.hidden === false && String(badge.textContent).indexOf('1') >= 0,
+    'the stack badge shows the count', badge && badge.textContent);
+
   const res = ars.fire('flash');
-  ok(res && res.ok === true, 'arsenal fire path reaches the engine');
+  ok(res && res.ok === true, 'an ARMED slot fires through to the engine');
   ok(match._fires.length === 1, 'exactly one payload per fire');
+  ok(ars.armedCount('flash') === 0, 'firing consumes one stack', String(ars.armedCount('flash')));
+  ok(ars.isLocked('flash') === true, 'an empty slot goes back to locked');
   const req = match._fires[0];
   const kinds = Object.values(GoonPayloadKind);
   ok(kinds.includes(req.kind), 'fired kind is in GoonPayloadKind', String(req.kind));
   ok(req.durationMs >= 1000 && req.durationMs <= 180000, 'duration inside the engine clamps', String(req.durationMs));
   ok(req.intensity > 0 && req.intensity <= 1, 'intensity inside 0..1', String(req.intensity));
 
-  // every payload item can be fired and every kind it sends is legal
+  // every payload item can be fired (once armed) and every kind it sends is legal
   for (const item of arsenalMod.ARSENAL_ITEMS) {
     if (item.kind === null) continue;
+    ars.armDrop(item.id);
     ars.fire(item.id);
   }
   ok(match._fires.every((f) => kinds.includes(f.kind)), 'every fired kind is a real payload kind');
@@ -364,6 +397,7 @@ function makeFakeMatch() {
 
   // a heavy is one per match: the second brain drain must be refused locally
   const before = match._fires.length;
+  ars.armDrop('braindrain');
   ars.fire('braindrain');
   ok(match._fires.length === before, 'brain drain is refused after it has been used');
 
@@ -384,6 +418,7 @@ function makeFakeMatch() {
     match,
     onFired: (shot) => fired.push(shot),
   });
+  ars.armDrop('spiral');
   const res = ars.fire('spiral');
   ok(res && res.ok === true, 'the spiral slot fires');
   ok(match._fires.length === 1 && match._fires[0].kind === GoonPayloadKind.Spiral,
@@ -392,6 +427,218 @@ function makeFakeMatch() {
   ok(fired.length === 1 && fired[0].id === res.id && fired[0].kind === GoonPayloadKind.Spiral && fired[0].durationMs > 0,
     'onFired hands hud.js the kind + duration + id of an accepted fire', JSON.stringify(fired));
   ars.unmount();
+}
+
+/* --- 2b-i. ARSENAL: stacking, locked gestures, and the drop pool ----------
+ * The economy in one block: multiple drops stack, firing eats one, an empty
+ * slot re-locks, and a locked slot refuses BOTH ways in (drag + keyboard) —
+ * every one of these passes trivially against the pre-economy arsenal, where
+ * a tile was only ever gated on charges. */
+{
+  const match = makeFakeMatch();
+  const left = document.createElement('div');
+  const ars = arsenalMod.mountArsenal({
+    leftHost: left,
+    rightHost: document.createElement('div'),
+    receiptsHost: document.createElement('div'),
+    match,
+    getDropTarget: () => document.createElement('div'),
+  });
+  const tileOf = (id) => findAll(left, 'gg-item').find((t) => t.getAttribute('data-gg-item') === id) || null;
+
+  // stacking
+  ars.armDrop('flash');
+  ars.armDrop('flash');
+  ok(ars.armedCount('flash') === 2, 'two drops of the same item stack', String(ars.armedCount('flash')));
+  ok(ars.armDrop('flash', { count: 2 }) === true, 'armDrop takes a count');
+  ok(ars.armedCount('flash') === 4, 'and adds it to the stack', String(ars.armedCount('flash')));
+  const stackBadge = findOne(tileOf('flash'), 'gg-item-stack');
+  ok(stackBadge && String(stackBadge.textContent).indexOf('4') >= 0,
+    'the badge tracks the stack', stackBadge && stackBadge.textContent);
+  ars.fire('flash');
+  ok(ars.armedCount('flash') === 3, 'one shot, one stack', String(ars.armedCount('flash')));
+  ok(ars.stateOf('flash') === 'ready', 'a stacked slot stays ready after firing', String(ars.stateOf('flash')));
+
+  // the LOCKED gestures: no drag ghost, no keyboard arm, no engine traffic
+  const before = match._fires.length;
+  const locked = tileOf('subliminal');
+  ok(ars.isLocked('subliminal') === true, 'the subliminal slot is still locked');
+  const bodyKids = document.body.children.length;
+  let PID = 900;
+  const ptr = (node, type, x, y) => {
+    const e = { type, button: 0, pointerId: PID, clientX: x, clientY: y, preventDefault() {}, stopPropagation() {} };
+    if (node && node.dispatchEvent) node.dispatchEvent(e);
+    return e;
+  };
+  ptr(locked, 'pointerdown', 20, 20);
+  ptr(locked, 'pointermove', 200, 200);
+  ptr(locked, 'pointerup', 200, 200);
+  ok(findAll(document.body, 'gg-item-ghost').length === 0, 'a locked slot mints no drag ghost');
+  ok(document.body.children.length === bodyKids, 'and leaves nothing behind in the body');
+  ok(match._fires.length === before, 'and never fires by drag', String(match._fires.length - before));
+  ok(!hasClass(locked, 'is-armed'), 'a locked slot never enters the armed (tap-to-target) state');
+
+  // keyboard: 2 is the subliminal slot; pressing it twice must still do nothing
+  const key = (k) => dom.win.dispatchEvent({ type: 'keydown', key: k, repeat: false });
+  key('2'); key('2');
+  ok(match._fires.length === before, 'keys cannot fire a locked slot either', String(match._fires.length - before));
+  ok(!hasClass(locked, 'is-armed'), 'and cannot arm it for a monitor tap');
+
+  // …the same key on an ARMED slot still works (the gate is the lock, not the key)
+  ars.armDrop('subliminal');
+  key('2'); key('2');
+  ok(match._fires.length === before + 1, 'the same two presses fire it once it is armed',
+    String(match._fires.length - before));
+
+  ars.unmount();
+}
+
+/* --- 2b-ii. the drop POOL respects caps, consent and the spent heavy ------ */
+{
+  // haptics off -> boot.js never advertises ToyPattern -> no toy tile at all
+  const match = makeFakeMatch();
+  match.localCaps = { payloads: Object.values(GoonPayloadKind).filter((k) => k !== GoonPayloadKind.ToyPattern) };
+  match.availablePayloadKinds = Object.values(GoonPayloadKind).filter((k) => k !== GoonPayloadKind.Video);
+  const ars = arsenalMod.mountArsenal({
+    leftHost: document.createElement('div'),
+    rightHost: document.createElement('div'),
+    receiptsHost: document.createElement('div'),
+    match,
+  });
+  const ids = ars.droppable().map((c) => c.id);
+  ok(!ids.includes('toy'), 'a gated kind (ToyPatterns without haptics) is not droppable', ids.join(','));
+  ok(!ids.includes('video'), 'a kind THEY cannot receive is not droppable either', ids.join(','));
+  ok(!ids.includes('emote'), 'the free social slot is never droppable', ids.join(','));
+  ok(ids.includes('flash') && ids.includes('braindrain'), 'everything legal still is', ids.join(','));
+  ok(ars.droppable().every((c) => typeof c.cost === 'number' && c.cost > 0),
+    'every candidate carries the cost the roller weights by');
+
+  // spend the heavy: it must leave the pool (arming it again is a dead drop)
+  ars.armDrop('braindrain');
+  const res = ars.fire('braindrain');
+  ok(res && res.ok === true, 'the heavy fires once');
+  ok(ars.stateOf('braindrain') === 'used', 'and then reads used', String(ars.stateOf('braindrain')));
+  ok(ars.droppable().every((c) => c.id !== 'braindrain'), 'a spent heavy leaves the drop pool');
+  ars.unmount();
+}
+
+/* --- 2b-iii. ui/drops.js: the roller ---------------------------------------
+ * Pure functions first (chance curve + rarity weighting), then the roller with
+ * a scripted RNG so the whole pop -> credit -> arm chain is deterministic. */
+{
+  const { DROP_TUNING, dropChanceFor, weightOf, pickDrop, createDropRoller } = await import('../ui/drops.js');
+  const bub = await import('../exec/bubbles.js');
+
+  ok(typeof DROP_TUNING.CHANCE_PER_WORTH === 'number' && typeof DROP_TUNING.COST_BIAS === 'number',
+    'ui/drops.js exports one tuning block');
+  ok(Math.abs(dropChanceFor(bub.POP_WORTH_NORMAL) - 0.12) < 1e-9,
+    'a normal bubble drops ~12% of the time', String(dropChanceFor(bub.POP_WORTH_NORMAL)));
+  ok(Math.abs(dropChanceFor(bub.POP_WORTH_EFFECT) - 0.30) < 1e-9,
+    'an effect bubble drops ~30% of the time', String(dropChanceFor(bub.POP_WORTH_EFFECT)));
+  ok(dropChanceFor(bub.POP_WORTH_EFFECT) > dropChanceFor(bub.POP_WORTH_NORMAL),
+    'effect bubbles are worth strictly more than plain ones');
+  ok(dropChanceFor(bub.POP_WORTH_PAYLOAD) === 0, 'a payload-minted bubble never rolls');
+  ok(dropChanceFor(undefined) === 0 && dropChanceFor(null) === 0, 'a malformed worth never rolls');
+  ok(dropChanceFor(999) <= DROP_TUNING.CHANCE_MAX, 'the chance is ceilinged', String(dropChanceFor(999)));
+  ok(weightOf(1) > weightOf(2) && weightOf(2) > weightOf(3), 'cheap items are commoner than expensive ones');
+
+  // the weighted pick: roll 0 lands on the first candidate, roll ~1 on the last
+  const pool = [{ id: 'flash', cost: 1, armed: 0 }, { id: 'video', cost: 2, armed: 0 }, { id: 'braindrain', cost: 3, armed: 0 }];
+  ok(pickDrop(pool, 0).id === 'flash', 'pickDrop is weighted, cheapest-first');
+  ok(pickDrop(pool, 0.999).id === 'braindrain', 'and reaches the rare end');
+  ok(pickDrop([], 0.5) === null, 'an empty pool drops nothing');
+  ok(pickDrop([{ id: 'flash', cost: 1, armed: DROP_TUNING.MAX_STACK }], 0.5) === null,
+    'a maxed-out stack stops being a candidate');
+
+  // the roller end to end
+  const armedIds = [];
+  const fakeArsenal = {
+    droppable: () => [{ id: 'flash', kind: GoonPayloadKind.FlashBurst, cost: 1, armed: 0 }],
+    armDrop: (id) => { armedIds.push(id); return true; },
+  };
+  const credits = [];
+  const match = {
+    phase: GoonMatchPhase.Live,
+    creditCharges(n, reason) { credits.push({ n, reason }); return true; },
+  };
+  const rolls = [0, 0];   // always a hit, always the first candidate
+  const roller = createDropRoller({ match, arsenal: fakeArsenal, random: () => rolls.shift() ?? 0 });
+
+  const clutter = roller.onPop({ kind: 'normal', worth: bub.POP_WORTH_PAYLOAD, payload: true });
+  ok(clutter.dropped === false && clutter.reason === 'clutter', 'a payload-minted pop is skipped entirely');
+  ok(credits.length === 0, 'and never credits a charge');
+
+  const hit = roller.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT, x: 10, y: 10 });
+  ok(hit.dropped === true && hit.id === 'flash', 'a winning roll arms an item', JSON.stringify(hit));
+  ok(credits.length === 1 && credits[0].n === 1 && credits[0].reason === 'bubble-drop',
+    'and credits the charge the item will cost, on the engine seam', JSON.stringify(credits));
+  ok(armedIds.length === 1, 'exactly one arm per drop');
+
+  // the engine refusing (wrong phase, capped, whatever) must block the arm
+  const noCredit = createDropRoller({
+    match: { phase: GoonMatchPhase.Live, creditCharges: () => false },
+    arsenal: fakeArsenal,
+    random: () => 0,
+  });
+  const blocked = noCredit.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT });
+  ok(blocked.dropped === false && blocked.reason === 'no-charge',
+    'creditCharges() saying no blocks the arm', JSON.stringify(blocked));
+  ok(armedIds.length === 1, 'and nothing was armed behind its back', String(armedIds.length));
+
+  // outside Live nothing rolls at all
+  const idle = createDropRoller({ match: { phase: GoonMatchPhase.Draft }, arsenal: fakeArsenal, random: () => 0 });
+  ok(idle.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT }).reason === 'phase', 'no drops outside a live match');
+
+  // a missing seam (older engine) must not break the loop
+  const noSeam = createDropRoller({ match: { phase: GoonMatchPhase.Live }, arsenal: fakeArsenal, random: () => 0 });
+  ok(noSeam.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT }).dropped === true,
+    'the roller still works against an engine without creditCharges');
+
+  // a miss is a miss
+  const missed = createDropRoller({ match, arsenal: fakeArsenal, random: () => 0.99 });
+  ok(missed.onPop({ kind: 'normal', worth: bub.POP_WORTH_NORMAL }).reason === 'miss', 'a losing roll drops nothing');
+}
+
+/* --- 2b-iv. the HUD glue: gg-bubble-pop -> roller -> armed sticker --------- */
+{
+  const match = makeFakeMatch();
+  const hud = hudMod.mountHud({ match, audio: { sfx() {} } });
+  ok(hud.parts.drops && typeof hud.parts.drops.onPop === 'function', 'mountHud builds the drop roller');
+  ok(hudMod.BUBBLE_POP_EVENT === 'gg-bubble-pop', 'and listens on exec/bubbles.js\'s event name');
+
+  const ars = hud.parts.arsenal;
+  ok(ars.droppable().length > 0, 'the desk has something to drop');
+  const beforeArmed = ars.droppable().reduce((a, c) => a + c.armed, 0);
+
+  // force the roll: this is client-local Math.random economy, so pinning it is
+  // the only way to assert the chain instead of a probability.
+  const realRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    document.dispatchEvent(new CustomEvent('gg-bubble-pop', {
+      detail: { kind: 'flash', worth: 2.5, payload: false, x: 40, y: 40 },
+    }));
+  } finally { Math.random = realRandom; }
+
+  const afterArmed = ars.droppable().reduce((a, c) => a + c.armed, 0);
+  ok(afterArmed === beforeArmed + 1, 'a real pop event arms exactly one item through the HUD',
+    `${beforeArmed} -> ${afterArmed}`);
+  ok(hud.parts.drops.stats.drops === 1, 'and the roller counted it', JSON.stringify(hud.parts.drops.stats));
+
+  // clutter from THEIR swarm changes nothing
+  Math.random = () => 0;
+  try {
+    document.dispatchEvent(new CustomEvent('gg-bubble-pop', {
+      detail: { kind: 'flash', worth: 0, payload: true, x: 40, y: 40 },
+    }));
+  } finally { Math.random = realRandom; }
+  ok(ars.droppable().reduce((a, c) => a + c.armed, 0) === afterArmed,
+    'a payload-minted pop arms nothing, however lucky the roll');
+  ok(hud.parts.drops.stats.clutter === 1, 'and is counted as clutter', JSON.stringify(hud.parts.drops.stats));
+
+  hud.unmount();
+  ok(match._subs.released === match._subs.taken, 'the drop glue leaks no subscriptions',
+    `${match._subs.released}/${match._subs.taken}`);
 }
 
 // -------------------------------- 2c. the risk table in ui/strings.js agrees
@@ -611,7 +858,7 @@ function makeFakeMatch() {
   ok(!!proj, 'the monitor has a projection rect');
   ok(mon.projection === proj, 'the projection rect is exposed to callers');
   const minis = findAll(proj, 'gg-mini');
-  ok(minis.length === 9, 'nine minis, all inside the projection rect', String(minis.length));
+  ok(minis.length === 10, 'ten minis (nine effects + the emote), all inside the projection rect', String(minis.length));
   ok(findAll(mon.root, 'gg-mini').length === minis.length, 'no mini is drawn outside the rect');
 
   // effect NAMES off their tick drive the minis, including the two quiet ones
@@ -663,6 +910,7 @@ function makeFakeMatch() {
 {
   const match = makeFakeMatch();
   const hud = hudMod.mountHud({ match, audio: { sfx() {} } });
+  hud.parts.arsenal.armDrop('lockcard');   // items are EARNED now (drop economy)
   const res = hud.parts.arsenal.fire('lockcard');
   ok(res && res.ok === true, 'the desk can fire through hud.parts.arsenal');
   match._emit('pRec', { id: res.id, status: 'survived' });
@@ -708,8 +956,8 @@ function makeFakeMatch() {
   const kids = frame.children;
   ok(kids.indexOf(proj) > kids.indexOf(bezel),
     'the projection rect is painted AFTER the opaque bezel <img>', `proj@${kids.indexOf(proj)} bezel@${kids.indexOf(bezel)}`);
-  ok(findAll(proj, 'gg-mini').length === 9 && findAll(mon.root, 'gg-mini').length === 9,
-    'all nine minis moved with the rect');
+  ok(findAll(proj, 'gg-mini').length === 10 && findAll(mon.root, 'gg-mini').length === 10,
+    'all ten minis moved with the rect');
   mon.unmount();
 }
 
@@ -743,6 +991,7 @@ function makeFakeMatch() {
   const seen = [];
   const real = mon.markPayloadFired;
   mon.markPayloadFired = (o) => { seen.push(o); return real(o); };
+  hud.parts.arsenal.armDrop('flash');      // items are EARNED now (drop economy)
   const res = hud.parts.arsenal.fire('flash');
   mon.markPayloadFired = real;
 
@@ -1002,6 +1251,7 @@ function makeFakeMatch() {
   const proj = findOne(dom.byId.get('gg-hud'), 'gg-mon-proj');
   const bub = findOne(proj, 'gg-mini-bubbles');
 
+  hud.parts.arsenal.armDrop('bubbles');    // items are EARNED now (drop economy)
   const res = hud.parts.arsenal.fire('bubbles');
   ok(res && res.ok === true, 'the real desk fires a bubble swarm');
   match._emit('pRec', { id: res.id, status: 'accepted' });    // ~60 ms in production
@@ -1077,26 +1327,167 @@ function makeFakeMatch() {
 }
 
 /* --- 12c. what SHOULD be on their screen, and when ------------------------
- * The ramp is why an early match legitimately shows one mini or none: only
- * entryFraction 0.00 is live at t=0. This is NOT the bug — it is asserted here
- * so nobody "fixes" correct behaviour while chasing a frozen rect. */
+ * The ramp is now a seeded ROLL over the shared pool (not per-element entry
+ * fractions), so what the monitor shows early is: bubbles from second zero,
+ * then the pool opening in gentlest-first order. Asserted here so nobody
+ * "fixes" a sparse early monitor while chasing a frozen rect. */
 {
-  const { buildRamp, profileOf, GoonCueAction } = await import('../core/draft.js');
+  const { buildRamp, profileOf, GoonCueAction, ALWAYS_ON_ELEMENT } = await import('../core/draft.js');
   const LIVE_SEC = 720;
-  const ramp = buildRamp([GoonElement.Flashes, GoonElement.Spiral, GoonElement.BrainDrain], 0x1234n, LIVE_SEC);
+  const pool = [GoonElement.Flashes, GoonElement.Spiral, GoonElement.BrainDrain];
+  const ramp = buildRamp(pool, 0x1234n, LIVE_SEC);
   const firstStart = (element) => {
     const cue = ramp.find((c) => c.element === element && c.action === GoonCueAction.Start);
     return cue ? cue.offsetMs : -1;
   };
-  ok(profileOf(GoonElement.Flashes).entryFraction === 0,
-    'Flashes is the one element that enters at t=0 — the reason "flashes only" reads as normal early on');
-  ok(firstStart(GoonElement.Flashes) === 0, 'so its mini is live from the first second');
-  ok(firstStart(GoonElement.Spiral) === Math.trunc(LIVE_SEC * 1000 * 0.25),
-    'Spiral does not appear until a quarter of the way in', String(firstStart(GoonElement.Spiral)));
-  ok(firstStart(GoonElement.BrainDrain) === Math.trunc(LIVE_SEC * 1000 * 0.35),
-    'and BrainDrain not until 35%', String(firstStart(GoonElement.BrainDrain)));
-  ok(firstStart(GoonElement.Spiral) > 120000 && firstStart(GoonElement.BrainDrain) > 120000,
-    'i.e. an empty-ish monitor in the first two minutes of a 12-minute match is CORRECT');
+  ok(ALWAYS_ON_ELEMENT === GoonElement.Bubbles && firstStart(GoonElement.Bubbles) === 0,
+    'Bubbles is the always-on baseline — its mini is legitimately live from the first second');
+  const bubbleStart = ramp.find((c) => c.element === GoonElement.Bubbles && c.action === GoonCueAction.Start);
+  ok(bubbleStart.intensity <= 0.16, 'but it opens gentle (0.15), so a quiet early monitor is CORRECT',
+    String(bubbleStart.intensity));
+  // The opening pass is stable-sorted by entryFraction: a closer never opens the match.
+  const rolled = pool.slice().sort((a, b) => firstStart(a) - firstStart(b));
+  ok(rolled[0] === GoonElement.Flashes && profileOf(GoonElement.Flashes).entryFraction === 0,
+    'the pool opens gentlest-first — Flashes (entryFraction 0) leads, which is why "flashes first" reads as normal',
+    rolled.map(String).join(','));
+  ok(firstStart(GoonElement.Spiral) > firstStart(GoonElement.Flashes)
+    && firstStart(GoonElement.BrainDrain) > firstStart(GoonElement.Flashes),
+    'Spiral and BrainDrain both wait their turn behind the opener');
+  // Every pool element IS rolled in — an element that never shows would be a real bug now.
+  ok(pool.every((e) => firstStart(e) >= 0), 'every allowed element gets screen time');
+  // And the schedule is even by construction: same args, same cues, both machines.
+  const again = buildRamp(pool, 0x1234n, LIVE_SEC);
+  ok(JSON.stringify(again) === JSON.stringify(ramp),
+    'the roll is deterministic — both players derive the IDENTICAL schedule');
+}
+
+/* ===========================================================================
+ * 13. THE EMOTE MINI — "when we use an emote we should have it display on the
+ *     little screen" (owner, 0803).
+ *
+ * The emote path is NOT the payload path and this section exists mostly to pin
+ * that down. `t:'emote'` is its own message family: ui/arsenal.js's emote slot
+ * has kind === null so it never reaches tryFirePayload/onFired, the engine's
+ * sendEmote() writes to the wire and returns nothing, and there is no id, no
+ * `accepted` ACK and no terminal receipt to hang a window off. So the mini runs
+ * on a fixed local dwell, and ui/opponent.js taps sendEmote to know it happened.
+ *
+ * The two directions are drawn in DIFFERENT places on purpose:
+ *   outbound = our line landing on their screen -> inside .gg-mon-proj;
+ *   inbound  = their line spoken at us          -> the .gg-mon-bubble on the bezel.
+ * ======================================================================== */
+{
+  const { GoonConnectionHealth } = await import('../core/match.js');
+  const match = makeFakeMatch();
+  match.opponent.activeEffects = [];
+  const virginSendEmote = match.sendEmote;
+  const host = document.createElement('div');
+  const mon = opponentMod.mountOpponent({ host, match, audio: { sfx() {} } });
+  const proj = findOne(mon.root, 'gg-mon-proj');
+  const emote = findOne(proj, 'gg-mini-emote');
+
+  // --- 13a. the shape -------------------------------------------------------
+  ok(typeof mon.markEmoteFired === 'function', 'ui/opponent.js exposes markEmoteFired — the seam a hud.js hook would call');
+  ok(typeof opponentMod.EMOTE_MINI_MS === 'number' && opponentMod.EMOTE_MINI_MS > 1000,
+    'and exports the dwell, so nothing has to hardcode it', String(opponentMod.EMOTE_MINI_MS));
+  ok(!!emote, 'the projection rect carries an emote mini');
+  ok(!hasClass(emote, 'is-on'), 'which is dark until something is actually said');
+  ok(Object.values(opponentMod.MINI_FOR_PAYLOAD).indexOf('Emote') < 0,
+    'the emote mini is NOT reachable from a payload kind — emotes are not payloads');
+
+  // --- 13b. the tap: a send draws it, with no ui/hud.js glue at all ----------
+  match.sendEmote('nice try', '😏');
+  ok(match._calls.emote.length === 1, 'the tap passes the send straight through to the engine');
+  ok(hasClass(emote, 'is-on'), 'sending an emote opens its mini on the little screen');
+  ok(hasClass(emote, 'is-yours'), 'and marks it as ours, like anything else we put on their screen');
+  ok(hasClass(emote, 'is-anim'), 'and it moves');
+  ok(findOne(proj, 'gg-mini-idle').hidden === true, 'the idle word steps aside for it');
+  ok(findOne(emote, 'gg-mini-emote-text').textContent === 'nice try', 'the line is written into the bubble',
+    String(findOne(emote, 'gg-mini-emote-text').textContent));
+  ok(findOne(emote, 'gg-mini-emote-icon').textContent === '😏', 'and so is the icon');
+
+  // --- 13c. one send is one bubble -----------------------------------------
+  ok(mon.markEmoteFired('nice try', '😏') === false,
+    'a second mark of the same line inside the dedupe window is the same send seen twice');
+  ok(mon.markEmoteFired('gg', '💦') === true, 'a different line does draw');
+  ok(findOne(emote, 'gg-mini-emote-text').textContent === 'gg', 'and replaces the old one');
+
+  // --- 13d. it takes a budget slot like every other mini --------------------
+  match.opponent.activeEffects = ['Flashes', 'Bubbles', 'Videos'];
+  match._emit('opp');
+  ok(findAll(proj, 'is-anim').length === 2, 'the two-mini motion budget still holds with an emote up',
+    String(findAll(proj, 'is-anim').length));
+  ok(hasClass(emote, 'is-anim'), 'and the emote outranks their ambient ramp for one of the slots');
+
+  // --- 13e. the payload receipt lifecycle cannot touch it -------------------
+  // There is no receipt for an emote; a receipt for something else must not be
+  // able to close its window (the windows Map is shared).
+  mon.markReceipt('nothing-like-this-id', 'survived');
+  ok(hasClass(emote, 'is-on'), "a stray payload receipt does not close the emote's window");
+
+  // --- 13f. the dwell IS the lifecycle: wiggle out, then gone ---------------
+  match.opponent.activeEffects = [];
+  match._emit('opp');
+  await sleep(opponentMod.EMOTE_MINI_MS - 300);
+  ok(hasClass(emote, 'is-on'), 'the bubble sits for its whole dwell');
+  ok(hasClass(emote, 'is-out'), 'and wiggles out at the end of it — the outro is the terminal beat');
+  await sleep(500);
+  ok(!hasClass(emote, 'is-on'), 'then closes on its own, with no receipt to close it');
+  ok(!hasClass(emote, 'is-out'), 'leaving no outro class behind for the next one');
+  ok(findOne(proj, 'gg-mini-idle').hidden === false, 'and the idle word comes back (no other mini forced)');
+
+  // --- 13g. the one failure that actually exists ---------------------------
+  match.opponent.health = GoonConnectionHealth.Dead;
+  ok(mon.markEmoteFired('you good?', '👀') === true, 'a send into a dead link still draws');
+  ok(hasClass(emote, 'is-lost'), '…greyed and dropping, because nobody is going to read it');
+  ok(!hasClass(emote, 'is-out'), 'a lost emote does not also play the normal outro');
+  match.opponent.health = GoonConnectionHealth.Fresh;
+
+  // --- 13h. inbound is a different thing, in a different place -------------
+  match._emit('emote', { text: 'still here', icon: '🔥' });
+  const bubble = findOne(mon.root, 'gg-mon-bubble');
+  ok(!!bubble && bubble.hidden === false, 'an emote THEY sent still lands in the bezel bubble');
+  ok(!proj.contains(bubble), 'which is not inside the projection rect — their words are not on their screen');
+
+  // --- 13i. the tap is a loan, not a theft ---------------------------------
+  mon.unmount();
+  ok(match.sendEmote === virginSendEmote, 'unmount hands match.sendEmote back exactly as it was');
+  ok(match._subs.released === match._subs.taken, 'the emote mini leaks no subscriptions',
+    `${match._subs.released}/${match._subs.taken}`);
+  match.sendEmote('gg', '');
+  ok(match._calls.emote.length === 2, 'and a send after unmount reaches the engine untouched',
+    String(match._calls.emote.length));
+  ok(!hasClass(emote, 'is-on'), 'drawing nothing, because the monitor it belonged to is gone');
+}
+
+/* --- 13j. the CSS half ----------------------------------------------------
+ * ui/opponent.js only ever toggles classes; every frame of this lives in
+ * hud.css, so a mini with no rules is an invisible feature that every JS check
+ * above still passes. */
+{
+  const fs = await import('node:fs/promises');
+  const url = await import('node:url');
+  const css = await fs.readFile(url.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8');
+
+  ok(/\.gg-mini\.gg-mini-emote\.is-on\s*\{[^}]*display:\s*flex/.test(css),
+    'hud.css shows the emote mini on .is-on (and outranks the shared .gg-mini.is-on display:block)');
+  ok(/@keyframes\s+ggMiniEmotePop/.test(css) && /\.is-on\s+\.gg-mini-emote-bub\s*\{[^}]*ggMiniEmotePop/.test(css),
+    'the arrival bounces in');
+  ok(/@keyframes\s+ggMiniEmoteOut/.test(css) && /\.is-out\s+\.gg-mini-emote-bub\s*\{[^}]*ggMiniEmoteOut/.test(css),
+    'the send plays out with a wiggle+fade');
+  ok(/\.is-lost\s+\.gg-mini-emote-bub\s*\{[^}]*grayscale/.test(css) && /@keyframes\s+ggMiniEmoteDrop/.test(css),
+    'and a lost one greys and drops');
+  // The pop and the breathe are on DIFFERENT elements on purpose: `animation` is
+  // a shorthand, so one rule on the bubble would cancel the other outright.
+  ok(/\.gg-mini-emote\.is-anim\s+\.gg-mini-emote-icon\s*\{[^}]*animation:/.test(css),
+    'the budgeted loop rides the icon, not the bubble the one-shots own');
+  ok(/\.gg-mini-emote\.is-anim\s+\.gg-mini-emote-icon\s*\{[^}]*animation-play-state:\s*var\(--gg-deco-play\)/.test(css),
+    'and still rides --gg-deco-play like every other mini');
+  // …and the hard off switches reach it even though it animates off .is-on.
+  ok(/prefers-reduced-motion[\s\S]{0,600}\.gg-mini-emote \*,[\s\S]{0,300}animation:\s*none\s*!important/.test(css),
+    'prefers-reduced-motion stops the emote bubble, which .is-anim alone would miss');
+  ok(/is-calm[\s\S]{0,400}\.gg-mini-emote \*\s*\{\s*animation:\s*none\s*!important/.test(css),
+    '.is-calm stops it too');
 }
 
 await sleep(60);

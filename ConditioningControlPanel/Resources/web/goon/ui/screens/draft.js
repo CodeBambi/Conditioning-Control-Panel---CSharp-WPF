@@ -1,27 +1,33 @@
 /* ============================================================================
- * ui/screens/draft.js — pick three elements. THEY ARE YOURS TO ENDURE.
+ * ui/screens/draft.js — the agreement. WHAT ARE YOU BOTH WILLING TO TAKE?
  *
- * The single most misread screen in the game, so the copy leads with it: your
- * draft builds YOUR ramp (core/draft.js buildRamp runs on your own picks), not
- * your opponent's. Higher risk is a higher score multiplier because you are
- * betting on your own endurance, not theirs.
+ * Redesigned 2026-08-03. This is no longer a pick-three loadout screen:
+ *   - every element starts ON; a tile toggles whether YOU allow it
+ *   - the effective pool is the INTERSECTION of both allowed sets, so switching
+ *     something off removes it for BOTH of you
+ *   - moving any toggle (yours or theirs) clears BOTH signatures, exactly like
+ *     the consent sheet — nobody gets advanced onto terms they never saw
+ *   - the match then ROLLS one schedule from that pool and the shared seed, and
+ *     both players run it: same elements, same instants, perfectly even
  *
- * Three tile states, all of them load-bearing:
- *   is-picked      — in your three, with its selection-order badge
- *   is-locked-out  — you already have three; this one is simply not available
+ * Tile states, all load-bearing:
+ *   is-on          — you allow it
+ *   is-off         — you switched it off (it is out of the pool)
+ *   is-theirs-off  — they switched it off; out of the pool whatever you do
+ *   is-always-on   — bubbles: never a toggle, runs the whole match for both
  *   is-unsupported — outside match.availableDraftPool, i.e. the CAPS
- *                    INTERSECTION. Their client cannot mirror it, so drafting it
- *                    would desync the match. The engine rejects it anyway
- *                    (setDraft -> _allPicksAvailable); the tile says so first.
+ *                    INTERSECTION. Their client cannot mirror it.
  *
- * The engine, not this screen, advances the phase: both drafts locked ->
- * host proposes the countdown. The glow sweep is the acknowledgement, not the
- * trigger.
+ * The engine, not this screen, advances the phase: both signatures on one pair
+ * of sets -> host proposes the countdown. The glow sweep is the acknowledgement,
+ * not the trigger.
  * ==========================================================================*/
 
 import { createLedger, el, button } from '../router.js';
 import { S, ELEMENTS } from '../strings.js';
-import { PICKS_PER_PLAYER, MAX_MATCH_RISK_TIER, matchRiskTier, riskMultiplier, riskTierOf } from '../../core/draft.js';
+import {
+  ALWAYS_ON_ELEMENT, MAX_MATCH_RISK_TIER, matchRiskTier, riskMultiplier, riskTierOf, sharedPool,
+} from '../../core/draft.js';
 
 /** One 24x24 glyph per element. Literal markup — no interpolation, ever. */
 const GLYPHS = {
@@ -47,8 +53,10 @@ export function mount(container, ctx) {
     return { unmount() { ledger.dispose(); } };
   }
 
-  /** Local selection order. The engine only ever sees a complete three. */
-  let picks = match.localDraft.slice();
+  /** Inline refusal under the confirm strip. Cleared by any successful move. */
+  let inlineError = '';
+  /** Sticky note once a toggle has invalidated the signatures. */
+  let sawChange = false;
 
   /* --------------------------------------------------------- duel header */
 
@@ -64,25 +72,31 @@ export function mount(container, ctx) {
   };
   const youMeter = mkMeter('you');
   const themMeter = mkMeter('them');
+  const youSig = el('span', { class: 'gg-draft-sig', text: '' });
+  const themSig = el('span', { class: 'gg-draft-sig', text: '' });
 
   const header = el('div', { class: 'gg-draft-head' }, [
     el('div', { class: 'gg-draft-side' }, [
       el('span', { class: 'gg-draft-who', text: match.localDisplayName || S.lobby.you }),
       youMeter.bar,
+      youSig,
     ]),
     el('span', { class: 'gg-duel-vs', text: 'vs', 'aria-hidden': 'true' }),
     el('div', { class: 'gg-draft-side gg-draft-side--them' }, [
       el('span', { class: 'gg-draft-who', text: match.opponent.displayName || S.lobby.them }),
       themMeter.bar,
+      themSig,
     ]),
   ]);
 
   /* ----------------------------------------------------------- the grid */
 
   const tiles = new Map();   // element -> {node, badge}
-  const grid = el('div', { class: 'gg-elems', role: 'group', 'aria-label': 'draft pool' });
+  const grid = el('div', { class: 'gg-elems', role: 'group', 'aria-label': 'effects both of you allow' });
 
   for (const meta of ELEMENTS) {
+    const alwaysOn = meta.id === ALWAYS_ON_ELEMENT;
+
     const pips = el('span', { class: 'gg-riskpips', 'aria-hidden': 'true' });
     const tier = riskTierOf(meta.id);
     for (let i = 0; i < 3; i++) pips.appendChild(el('i', { class: i < tier ? 'is-on' : '' }));
@@ -90,9 +104,9 @@ export function mount(container, ctx) {
     const badge = el('span', { class: 'gg-elem-badge', hidden: true });
     const node = el('button', {
       type: 'button',
-      class: 'gg-elem',
+      class: 'gg-elem' + (alwaysOn ? ' is-always-on' : ''),
       dataset: { element: String(meta.id) },
-      'aria-pressed': 'false',
+      'aria-pressed': alwaysOn ? 'true' : 'false',
     }, [
       badge,
       el('span', { class: 'gg-elem-glyph', html: GLYPHS[meta.id] || '' }),
@@ -101,9 +115,20 @@ export function mount(container, ctx) {
       el('span', { class: 'gg-elem-blurb', text: meta.blurb }),
       el('span', { class: 'gg-elem-why', text: S.draft.unsupported }),
     ]);
-    ledger.listen(node, 'click', () => toggle(meta.id));
-    ledger.listen(node, 'pointerenter', () => { try { audio?.sfx?.('ui-move'); } catch (_e) { /* stub */ } });
-    tiles.set(meta.id, { node, badge });
+
+    if (alwaysOn) {
+      // Not a toggle at all: it is the baseline both players run start to finish.
+      node.disabled = true;
+      node.setAttribute('aria-disabled', 'true');
+      node.title = S.draft.alwaysOnWhy;
+      badge.hidden = false;
+      badge.textContent = S.draft.alwaysOn;
+    } else {
+      ledger.listen(node, 'click', () => toggle(meta.id));
+      ledger.listen(node, 'pointerenter', () => { try { audio?.sfx?.('ui-move'); } catch (_e) { /* stub */ } });
+    }
+
+    tiles.set(meta.id, { node, badge, alwaysOn });
     grid.appendChild(node);
   }
 
@@ -112,62 +137,77 @@ export function mount(container, ctx) {
   const riskLabel = el('span', { class: 'gg-draft-risk', text: '' });
   const multLabel = el('span', { class: 'gg-draft-mult', text: '' });
   const footMeter = mkMeter('foot');
-  const lockBtn = button(ledger, S.draft.lock, () => lockIn(), { variant: 'primary', audio, sfx: 'draft-lock' });
-
-  const theirSlots = el('div', { class: 'gg-slots', 'aria-label': S.draft.theirs });
-  for (let i = 0; i < PICKS_PER_PLAYER; i++) theirSlots.appendChild(el('span', { class: 'gg-slot gg-deco' }));
+  const poolLabel = el('span', { class: 'gg-draft-pool', text: '' });
+  const errLabel = el('p', { class: 'gg-draft-error', text: '', role: 'status', hidden: true });
+  const confirmBtn = button(ledger, S.draft.confirm, () => confirmIn(), { variant: 'primary', audio, sfx: 'draft-lock' });
 
   const footer = el('div', { class: 'gg-draft-foot' }, [
     el('div', { class: 'gg-draft-meterwrap' }, [riskLabel, footMeter.bar, multLabel]),
-    el('div', { class: 'gg-draft-theirs' }, [el('span', { class: 'gg-slots-label', text: S.draft.theirs }), theirSlots]),
-    lockBtn,
+    el('div', { class: 'gg-draft-poolwrap' }, [
+      poolLabel,
+      el('span', { class: 'gg-draft-rolled', text: S.draft.rolled }),
+    ]),
+    confirmBtn,
   ]);
 
   const card = el('div', { class: 'gg-card gg-draft' }, [
     el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.draft.eyebrow })]),
     el('p', { class: 'gg-lead', text: S.draft.lead }),
-    header, grid, footer,
+    header, grid, footer, errLabel,
   ]);
   container.appendChild(card);
 
   /* -------------------------------------------------------------- logic */
 
   function isAvailable(id) { return match.availableDraftPool.includes(id); }
+  function myAllowed() { return match.localAllowedElements || []; }
+  function theirAllowed() { return match.remoteAllowedElements || []; }
+  function pool() { return sharedPool(myAllowed(), theirAllowed()); }
+
+  function showError(msg) {
+    inlineError = msg || '';
+    try { if (inlineError) audio?.sfx?.('ui-error'); } catch (_e) { /* stub bus */ }
+  }
 
   function toggle(id) {
-    if (match.localDraftLocked) return;
+    if (id === ALWAYS_ON_ELEMENT) return;
     if (!isAvailable(id)) {
       toasts?.warn?.(S.draft.unsupported);
       try { audio?.sfx?.('ui-error'); } catch (_e) { /* stub bus */ }
       return;
     }
-    const at = picks.indexOf(id);
-    if (at >= 0) {
-      picks.splice(at, 1);
-      try { audio?.sfx?.('draft-drop'); } catch (_e) { /* stub bus */ }
-    } else {
-      if (picks.length >= PICKS_PER_PLAYER) return;
-      picks.push(id);
-      try { audio?.sfx?.('draft-pick'); } catch (_e) { /* stub bus */ }
+
+    const res = match.toggleAllowedElement(id);
+    if (!res.ok) {
+      // The engine refuses a move that would leave you under the floor. Say so inline; the
+      // toggle state on screen is whatever the engine still holds.
+      showError(res.error === '' ? S.draft.tooFewYours(match.minAllowedElements) : res.error);
+      paint();
+      return;
     }
-    // Broadcast only a COMPLETE draft — the wire has no "partial" shape, and a
-    // half-draft on their screen would just be noise.
-    if (picks.length === PICKS_PER_PLAYER) {
-      const res = match.setDraft(picks.slice());
-      if (!res.ok) {
-        ledger.logger?.warn?.('[GG ui] setDraft rejected: ' + res.error);
-        toasts?.bad?.(res.error);
-      }
-    }
+
+    showError('');
+    sawChange = true;
+    try { audio?.sfx?.(myAllowed().includes(id) ? 'draft-pick' : 'draft-drop'); } catch (_e) { /* stub bus */ }
     paint();
   }
 
-  function lockIn() {
-    if (picks.length !== PICKS_PER_PLAYER || match.localDraftLocked) return;
-    const set = match.setDraft(picks.slice());
-    if (!set.ok) { toasts?.bad?.(set.error); return; }
-    const res = match.lockDraft();
-    if (!res.ok) { toasts?.bad?.(res.error); return; }
+  function confirmIn() {
+    if (match.localDraftConfirmed) {
+      match.withdrawDraft();
+      showError('');
+      paint();
+      return;
+    }
+    const res = match.confirmDraft();
+    if (!res.ok) {
+      const shared = pool().length;
+      showError(shared < match.minAllowedElements ? S.draft.tooFewShared(shared) : res.error);
+      paint();
+      return;
+    }
+    showError('');
+    sawChange = false;
     paint();
   }
 
@@ -176,54 +216,64 @@ export function mount(container, ctx) {
   }
 
   function paint() {
-    const locked = match.localDraftLocked;
-    const full = picks.length >= PICKS_PER_PLAYER;
+    const mine = myAllowed();
+    const theirs = theirAllowed();
+    const shared = pool();
 
     for (const meta of ELEMENTS) {
       const t = tiles.get(meta.id);
-      const order = picks.indexOf(meta.id);
+      if (t.alwaysOn) continue;                       // locked tile: nothing to repaint
+
       const avail = isAvailable(meta.id);
-      t.node.classList.toggle('is-picked', order >= 0);
+      const on = mine.includes(meta.id);
+      const theirsOff = avail && !theirs.includes(meta.id);
+
+      t.node.classList.toggle('is-on', avail && on);
+      t.node.classList.toggle('is-off', avail && !on);
+      t.node.classList.toggle('is-theirs-off', theirsOff);
       t.node.classList.toggle('is-unsupported', !avail);
-      t.node.classList.toggle('is-locked-out', avail && order < 0 && full);
-      t.node.disabled = locked || !avail;
-      t.node.setAttribute('aria-pressed', order >= 0 ? 'true' : 'false');
-      t.badge.hidden = order < 0;
-      t.badge.textContent = order >= 0 ? String(order + 1) : '';
+      t.node.disabled = !avail;
+      t.node.setAttribute('aria-pressed', on ? 'true' : 'false');
+      t.badge.hidden = !theirsOff;
+      t.badge.textContent = theirsOff ? S.draft.theirsOff : '';
     }
 
-    const myTier = matchRiskTier(picks);
-    paintMeter(youMeter, myTier);
-    paintMeter(footMeter, myTier);
-    paintMeter(themMeter, matchRiskTier(match.remoteDraft));
-    riskLabel.textContent = S.draft.risk(myTier);
-    multLabel.textContent = S.draft.score(riskMultiplier(myTier));
+    // Both players endure the same pool, so there is ONE risk figure — the meters show the same
+    // number on both sides, with the signature strip carrying who has signed off on it.
+    const tier = matchRiskTier(shared);
+    paintMeter(youMeter, tier);
+    paintMeter(footMeter, tier);
+    paintMeter(themMeter, tier);
+    riskLabel.textContent = S.draft.risk(tier);
+    multLabel.textContent = S.draft.score(riskMultiplier(tier));
+    poolLabel.textContent = S.draft.pool(shared.length);
 
-    const remote = match.remoteDraft;
-    const slots = theirSlots.children;
-    for (let i = 0; i < slots.length; i++) {
-      const has = i < remote.length;
-      slots[i].classList.toggle('is-filled', has);
-      slots[i].textContent = has ? (ELEMENTS.find((e) => e.id === remote[i])?.name || '?') : '';
-    }
-    theirSlots.classList.toggle('is-locked', match.remoteDraftLocked);
+    youSig.textContent = match.localDraftConfirmed ? S.draft.confirmed : '';
+    themSig.textContent = match.remoteDraftConfirmed ? S.draft.theirSignature : S.draft.theirWait;
 
-    lockBtn.disabled = locked || !full;
-    lockBtn.textContent = locked ? S.draft.locked : (full ? S.draft.lock : S.draft.pickCta);
-    lockBtn.classList.toggle('is-waiting', locked);
+    confirmBtn.textContent = match.localDraftConfirmed ? S.draft.confirmed : S.draft.confirm;
+    confirmBtn.classList.toggle('is-waiting', match.localDraftConfirmed);
+    confirmBtn.disabled = false;   // always live: it is also the way back out of a signature
 
-    // Both locked: a single sweep, then the engine takes it to Countdown.
-    const both = locked && match.remoteDraftLocked;
+    const note = inlineError || (sawChange && !match.localDraftConfirmed ? S.draft.changed : '');
+    errLabel.textContent = note;
+    errLabel.hidden = note === '';
+    errLabel.classList.toggle('is-bad', !!inlineError);
+
+    // Both signed: a single sweep, then the engine takes it to Countdown.
+    const both = match.draftResolved;
     if (both && !card.classList.contains('is-sealed')) {
       card.classList.add('is-sealed');
       try { audio?.sfx?.('draft-lock'); } catch (_e) { /* stub bus */ }
+    } else if (!both) {
+      card.classList.remove('is-sealed');
     }
   }
 
   ledger.sub(match.onDraftChanged(() => {
-    // The engine is authoritative on what it accepted; adopt it whenever it
-    // disagrees with our local order (a rejected pick, or a rebuild).
-    if (match.localDraftLocked) picks = match.localDraft.slice();
+    // The engine is authoritative on what it accepted (a toggle of theirs can have cleared our
+    // signature since the last paint).
+    if (!match.localDraftConfirmed && !match.remoteDraftConfirmed) inlineError = inlineError || '';
     paint();
   }));
   ledger.sub(match.onOpponentStateChanged(() => paint()));

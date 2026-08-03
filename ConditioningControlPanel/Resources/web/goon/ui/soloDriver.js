@@ -2,7 +2,7 @@
  * ui/soloDriver.js — the scripted opponent for Practice mode.
  *
  * Drives the GUEST half of a loopback pair through a whole match so the game is
- * playable alone: it confirms consent, drafts three shared elements, endures
+ * playable alone: it confirms consent, signs the draft agreement, endures
  * what you send it, occasionally sends something back, and answers sudden-death
  * rounds with mediocre-but-honest timings.
  *
@@ -22,7 +22,6 @@ import { GoonRng } from '../core/rng.js';
 import { GoonStimulusKind, fakeRoundInputs } from '../core/rounds/model.js';
 import { GoonSuddenDeathRunner } from '../core/suddenDeath.js';
 import { GoonMatchPhase, GoonPayloadKind, costOf } from '../core/contracts.js';
-import { PICKS_PER_PLAYER } from '../core/draft.js';
 
 /** How long the bot "thinks" before signing the consent sheet. */
 const CONSENT_THINK_MS = [700, 1600];
@@ -50,6 +49,8 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
   const rng = new GoonRng(typeof seed === 'bigint' ? seed : BigInt(seed | 0));
   let started = false;
   let payloadTimer = 0;
+  /** Latched once the bot has made its agreement decision (see doDraft). */
+  let draftDecided = false;
 
   const pick = (range) => range[0] + Math.trunc(rng.nextDouble() * (range[1] - range[0]));
   const log = (m) => { try { logger?.debug?.('[GG solo] ' + m); } catch (_e) { /* ignore */ } };
@@ -140,25 +141,31 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
   }
 
   function doDraft() {
-    if (match.phase !== GoonMatchPhase.Draft || match.localDraftLocked) return;
-    // setDraft RAISES draftChanged, which is one of our own subscriptions —
-    // without this the bot re-drafts inside its own notification until the
-    // stack blows. (It did, on the first headless run.)
-    if (match.localDraft.length === PICKS_PER_PLAYER) return;
-    const pool = (match.availableDraftPool || []).slice();
-    if (pool.length < PICKS_PER_PLAYER) { log('pool too small to draft'); return; }
-    // Fisher-Yates off the shared rng so a Practice run is reproducible.
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = rng.nextInt(0, i + 1);
-      const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+    if (match.phase !== GoonMatchPhase.Draft || match.localDraftConfirmed) return;
+    // setAllowedElements RAISES draftChanged, which is one of our own subscriptions — without
+    // this latch the bot re-decides inside its own notification until the stack blows. (It did,
+    // on the first headless run.) The latch also survives the human moving a toggle, which
+    // clears both signatures: `draftDecided` stays true, so the bot only re-signs.
+    const firstPass = !draftDecided;
+    draftDecided = true;
+
+    if (firstPass) {
+      // The agreement starts wide open. A practice opponent that vetoes ONE thing exercises the
+      // intersection without ever risking the two-element floor.
+      const mine = (match.localAllowedElements || []).slice();
+      if (mine.length > 3 && rng.nextDouble() < 0.6) {
+        const veto = mine[rng.nextInt(0, mine.length)];
+        const res = match.toggleAllowedElement(veto);
+        log('vetoed ' + veto + (res.ok ? '' : ' (' + res.error + ')'));
+      }
     }
-    const picks = pool.slice(0, PICKS_PER_PLAYER);
-    const set = match.setDraft(picks);
-    if (!set.ok) { log('setDraft rejected: ' + set.error); return; }
+
     ledger.timer(() => {
       if (ledger.isDisposed || match.phase !== GoonMatchPhase.Draft) return;
-      const res = match.lockDraft();
-      log('draft locked ' + picks.join('+') + (res.ok ? '' : ' (' + res.error + ')'));
+      if (match.localDraftConfirmed) return;
+      const res = match.confirmDraft();
+      log('draft signed, pool ' + (match.sharedElementPool || []).join('+') +
+        (res.ok ? '' : ' (' + res.error + ')'));
     }, pick(DRAFT_THINK_MS));
   }
 

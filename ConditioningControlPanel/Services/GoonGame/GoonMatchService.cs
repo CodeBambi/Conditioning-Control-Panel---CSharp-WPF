@@ -14,9 +14,15 @@ using System.Windows.Threading;
 //   Idle -> Lobby -> Consent -> Draft -> Countdown -> Live -> SuddenDeath -> Recap -> Idle
 //
 // Owns an IGoonTransport (injected; Phase A supplies the real WebRTC/relay one and
-// the loopback mock). Owns the local endurance ramp built from the player's OWN
-// draft and the combined match seed, the scoring/charge economy, the mercy and
-// abandon flows, the receiver-side payload gate, and the two-way result handshake.
+// the loopback mock). Owns the SHARED endurance ramp rolled from the draft
+// agreement (the intersection of both players' allowed sets) and the combined
+// match seed, the scoring/charge economy, the mercy and abandon flows, the
+// receiver-side payload gate, and the two-way result handshake.
+//
+// DRAFT (2026-08-03 redesign): both players toggle what they ALLOW, the pool is
+// the intersection, any toggle clears BOTH signatures, and the ramp both sides
+// run is one seeded roll over that pool — identical instants, identical
+// elements. Bubbles are an always-on baseline underneath it.
 //
 // It PLANS but never PERFORMS: element cues and admitted payloads leave as events;
 // Phase C (GoonPayloadExecutor) does the App.Flash/App.Video/... fan-out.
@@ -56,8 +62,11 @@ namespace ConditioningControlPanel.Services.GoonGame
         private readonly GoonPayloadRateLimiter _outboundLimiter = new();
         private readonly Dictionary<string, int> _outboundCosts = new();
         private readonly HashSet<GoonElement> _activeElements = new();
-        private readonly List<GoonElement> _localDraft = new();
-        private readonly List<GoonElement> _remoteDraft = new();
+        // The agreement: two allowed sets, two signatures, one intersection.
+        private List<GoonElement> _localAllowed = new();
+        private List<GoonElement> _remoteAllowed = new();
+        private List<GoonElement> _sharedPool = new();
+        private bool _draftResolved;
 
         private DispatcherTimer? _liveTimer;    // 1 s, SessionEngine idiom
         private DispatcherTimer? _phaseTimer;   // 200 ms, countdown + handshake deadlines
@@ -66,8 +75,8 @@ namespace ConditioningControlPanel.Services.GoonGame
         private bool _helloSent;
         private bool _localConsentConfirmed;
         private bool _remoteConsentConfirmed;
-        private bool _localDraftLocked;
-        private bool _remoteDraftLocked;
+        private bool _localDraftConfirmed;
+        private bool _remoteDraftConfirmed;
         private bool _startProposed;
 
         private ulong? _localSeedContribution;
@@ -127,10 +136,22 @@ namespace ConditioningControlPanel.Services.GoonGame
         public bool LocalConsentConfirmed => _localConsentConfirmed;
         public bool RemoteConsentConfirmed => _remoteConsentConfirmed;
 
-        public IReadOnlyList<GoonElement> LocalDraft => _localDraft;
-        public IReadOnlyList<GoonElement> RemoteDraft => _remoteDraft;
-        public bool LocalDraftLocked => _localDraftLocked;
-        public bool RemoteDraftLocked => _remoteDraftLocked;
+        /// <summary>What WE allow (canonical, always-on element excluded).</summary>
+        public IReadOnlyList<GoonElement> LocalAllowedElements => _localAllowed;
+        /// <summary>What THEY allow, as last broadcast.</summary>
+        public IReadOnlyList<GoonElement> RemoteAllowedElements => _remoteAllowed;
+        /// <summary>The intersection — the pool the ramp is rolled from. Both clients agree on it.</summary>
+        public IReadOnlyList<GoonElement> SharedElementPool => GoonDraft.SharedPool(_localAllowed, _remoteAllowed);
+        public bool LocalDraftConfirmed => _localDraftConfirmed;
+        public bool RemoteDraftConfirmed => _remoteDraftConfirmed;
+        /// <summary>True once both signatures landed on one pair of sets with a workable intersection.</summary>
+        public bool DraftResolved => _draftResolved;
+
+        // LEGACY aliases: the pre-agreement names. These are now the ALLOWED sets, not three picks.
+        public IReadOnlyList<GoonElement> LocalDraft => _localAllowed;
+        public IReadOnlyList<GoonElement> RemoteDraft => _remoteAllowed;
+        public bool LocalDraftLocked => _localDraftConfirmed;
+        public bool RemoteDraftLocked => _remoteDraftConfirmed;
 
         public ulong MatchSeed { get; private set; }
         public long StartMatchMs { get; private set; }
@@ -332,49 +353,104 @@ namespace ConditioningControlPanel.Services.GoonGame
         }
 
         // ------------------------------------------------------------- draft
+        //
+        // The draft is a mutual agreement, not two loadouts: each side publishes the elements it
+        // ALLOWS and the effective pool is the intersection. Changing a toggle clears BOTH
+        // signatures — the same rule the consent sheet lives by, for the same reason. Two
+        // signatures on one pair of sets resolve the draft.
 
-        /// <summary>Sets (and broadcasts) the local picks. Both drafts are visible before either locks.</summary>
-        public bool SetDraft(IReadOnlyList<GoonElement> picks, out string error)
+        /// <summary>Publishes the local allowed set. ANY change clears BOTH confirmations.</summary>
+        public bool SetAllowedElements(IReadOnlyList<GoonElement>? allowed, out string error)
         {
             error = "";
             if (Phase != GoonMatchPhase.Draft) { error = "not drafting"; return false; }
-            if (_localDraftLocked) { error = "draft already locked"; return false; }
-            if (!GoonDraft.IsValidDraft(picks, out error)) return false;
-            if (!AllPicksAvailable(picks, out error)) return false;
 
-            _localDraft.Clear();
-            _localDraft.AddRange(picks);
-            Send(new DraftMsg { Elements = _localDraft.ToList(), Locked = false });
+            var next = SanitizeAllowed(allowed);
+            if (!GoonDraft.IsValidAllowed(next, out error)) return false;
+
+            _localAllowed = next;
+            _localDraftConfirmed = false;
+            _remoteDraftConfirmed = false;
+            _draftResolved = false;
+            SendDraftState();
             RaiseSafe(DraftChanged);
             return true;
         }
 
-        /// <summary>Locks the local draft. Both locked -> the host schedules the countdown.</summary>
-        public bool LockDraft(out string error)
+        /// <summary>
+        /// Flips one element on or off. A toggle that would leave fewer than
+        /// <see cref="GoonDraft.MinAllowedElements"/> on is REFUSED and nothing changes.
+        /// </summary>
+        public bool ToggleAllowedElement(GoonElement element, out string error)
         {
             error = "";
             if (Phase != GoonMatchPhase.Draft) { error = "not drafting"; return false; }
-            if (!GoonDraft.IsValidDraft(_localDraft, out error)) return false;
-            if (!AllPicksAvailable(_localDraft, out error)) return false;
+            var next = _localAllowed.Contains(element)
+                ? _localAllowed.Where(e => e != element).ToList()
+                : _localAllowed.Concat(new[] { element }).ToList();
+            return SetAllowedElements(next, out error);
+        }
 
-            _localDraftLocked = true;
-            Send(new DraftMsg { Elements = _localDraft.ToList(), Locked = true });
-            Scoring.Configure(LocalAttentionMode, GoonDraft.MatchRiskTier(_localDraft));
+        /// <summary>Signs the CURRENT pair of sets. Both signatures + a workable intersection -> resolved.</summary>
+        public bool ConfirmDraft(out string error)
+        {
+            error = "";
+            if (Phase != GoonMatchPhase.Draft) { error = "not drafting"; return false; }
+            if (!GoonDraft.IsValidAllowed(_localAllowed, out error)) return false;
+
+            var pool = GoonDraft.SharedPool(_localAllowed, _remoteAllowed);
+            if (!GoonDraft.IsValidSharedPool(pool, out error)) return false;   // shown inline; nothing signed
+
+            _localDraftConfirmed = true;
+            SendDraftState();
+            Scoring.Configure(LocalAttentionMode, GoonDraft.MatchRiskTier(pool));
             RaiseSafe(DraftChanged);
+            TryResolveDraft();
             return true;
         }
 
-        /// <summary>Every pick must sit in the caps intersection — no drafting what the peer cannot mirror.</summary>
-        private bool AllPicksAvailable(IReadOnlyList<GoonElement> picks, out string error)
+        /// <summary>Backing out of a signature without touching the toggles.</summary>
+        public void WithdrawDraft()
         {
-            error = "";
-            foreach (var pick in picks)
+            if (Phase != GoonMatchPhase.Draft || !_localDraftConfirmed) return;
+            _localDraftConfirmed = false;
+            _draftResolved = false;
+            SendDraftState();
+            RaiseSafe(DraftChanged);
+        }
+
+        // LEGACY names. SetDraft(list) is SetAllowedElements(list); LockDraft() is ConfirmDraft().
+        public bool SetDraft(IReadOnlyList<GoonElement> picks, out string error) => SetAllowedElements(picks, out error);
+        public bool LockDraft(out string error) => ConfirmDraft(out error);
+
+        /// <summary>Anything the caps intersection cannot mirror is dropped rather than trusted.</summary>
+        private List<GoonElement> SanitizeAllowed(IEnumerable<GoonElement>? allowed) =>
+            GoonDraft.NormalizeAllowed((allowed ?? Enumerable.Empty<GoonElement>()).Where(AvailableDraftPool.Contains));
+
+        private void SendDraftState()
+        {
+            Send(new DraftMsg
             {
-                if (AvailableDraftPool.Contains(pick)) continue;
-                error = $"{pick} is not supported by the opponent's client";
-                return false;
-            }
-            return true;
+                Elements = _localAllowed.ToList(),      // legacy mirror
+                Locked = _localDraftConfirmed,          // legacy mirror
+                Allowed = _localAllowed.ToList(),
+                Confirmed = _localDraftConfirmed,
+            });
+        }
+
+        private void TryResolveDraft()
+        {
+            if (Phase != GoonMatchPhase.Draft) return;
+            if (!_localDraftConfirmed || !_remoteDraftConfirmed) return;
+
+            var pool = GoonDraft.SharedPool(_localAllowed, _remoteAllowed);
+            if (!GoonDraft.IsValidSharedPool(pool, out _)) return;   // cannot happen; never guess
+
+            _sharedPool = pool;
+            _draftResolved = true;
+            Scoring.Configure(LocalAttentionMode, GoonDraft.MatchRiskTier(pool));
+            App.Logger?.Information("[GG] draft agreed: pool {Pool} (+ always-on {AlwaysOn})",
+                string.Join("+", pool), GoonDraft.AlwaysOnElement);
         }
 
         // -------------------------------------------------- live-phase input
@@ -453,6 +529,28 @@ namespace ConditioningControlPanel.Services.GoonGame
             _outboundCosts[id] = cost;
             Send(msg);
             App.Logger?.Information("[GG] payload out {Id} {Kind} cost {Cost}", id, request.Kind, cost);
+            return true;
+        }
+
+        /// <summary>
+        /// Credits charges earned outside the payload/round economy (the bubble economy is the
+        /// first consumer). Integer count >= 1; the total is clamped to
+        /// <see cref="GoonConsts.ChargeCap"/> exactly like every other earning, and the next state
+        /// tick reports the new meter. No-ops outside the Live phase.
+        ///
+        /// MIRROR: Resources/web/goon/core/match.js creditCharges(count, reason).
+        /// </summary>
+        /// <returns>true when the request was accepted (credited, cap permitting).</returns>
+        public bool CreditCharges(int count, string reason)
+        {
+            if (_disposed || _ended) return false;
+            if (Phase != GoonMatchPhase.Live) return false;
+            if (count < 1) return false;
+
+            int before = Scoring.Charges;
+            for (int i = 0; i < count; i++) Scoring.AwardEventWon();   // caps at GoonConsts.ChargeCap
+            App.Logger?.Information("[GG] charges +{Count} ({Reason}) -> {Now} (was {Before})",
+                count, string.IsNullOrEmpty(reason) ? "unspecified" : reason, Scoring.Charges, before);
             return true;
         }
 
@@ -632,9 +730,12 @@ namespace ConditioningControlPanel.Services.GoonGame
             if (!rounds.Contains(GoonCapabilities.UniversalRound)) rounds.Add(GoonCapabilities.UniversalRound);
             AllowedRoundKinds = rounds;
 
-            if (AvailableDraftPool.Count < GoonDraft.PicksPerPlayer)
+            // The always-on element does not count: the agreement needs MinAllowedElements
+            // TOGGLEABLE elements both clients can run, or there is nothing to roll a ramp from.
+            var rollable = GoonDraft.NormalizeAllowed(AvailableDraftPool);
+            if (rollable.Count < GoonDraft.MinAllowedElements)
             {
-                FailLobby($"only {AvailableDraftPool.Count} shared draft element(s) - need {GoonDraft.PicksPerPlayer}");
+                FailLobby($"only {rollable.Count} shared draft element(s) - need {GoonDraft.MinAllowedElements}");
                 return;
             }
 
@@ -678,25 +779,48 @@ namespace ConditioningControlPanel.Services.GoonGame
             _liveDurationMs = (long)ConsentSheet.LiveDurationSec * 1000L;
             _inboundLimiter.Reset();
             _outboundLimiter.Reset();
+
+            // Everything the pairing can run is allowed by default, on both sides — the agreement
+            // screen is about switching things OFF. The peer's set is assumed to be the same
+            // default until their first draft frame says otherwise, so the intersection is never
+            // briefly empty.
+            _localAllowed = GoonDraft.DefaultAllowed(AvailableDraftPool);
+            _remoteAllowed = GoonDraft.DefaultAllowed(AvailableDraftPool);
+            _localDraftConfirmed = false;
+            _remoteDraftConfirmed = false;
+            _draftResolved = false;
+            _sharedPool = new List<GoonElement>();
+
             SetPhase(GoonMatchPhase.Draft);
+            SendDraftState();
         }
 
         private void HandleDraft(DraftMsg draft)
         {
             if (Phase != GoonMatchPhase.Draft) return;
 
-            _remoteDraft.Clear();
-            if (draft.Elements != null)
+            // Prefer the v2 fields; fall back to the v1 pair so a capture/older frame still parses.
+            var rawAllowed = (draft.Allowed != null && draft.Allowed.Count > 0) ? draft.Allowed : draft.Elements;
+            bool rawConfirmed = draft.Confirmed ?? draft.Locked;
+
+            var incoming = SanitizeAllowed(rawAllowed);
+            bool changed = !incoming.SequenceEqual(_remoteAllowed);
+
+            _remoteAllowed = incoming;
+            _remoteDraftConfirmed = rawConfirmed;
+
+            if (changed)
             {
-                // Their picks must also live in the shared pool; anything else is dropped
-                // rather than trusted (their client would be enduring something we cannot show).
-                _remoteDraft.AddRange(draft.Elements
-                    .Distinct()
-                    .Where(AvailableDraftPool.Contains)
-                    .Take(GoonDraft.PicksPerPlayer));
+                // They moved a toggle: BOTH signatures die, exactly as on the consent sheet.
+                // Re-publishing our (unchanged) set tells them our signature dropped — and because
+                // the set is unchanged, their handler sees changed == false and this terminates.
+                _localDraftConfirmed = false;
+                _draftResolved = false;
+                SendDraftState();
             }
-            _remoteDraftLocked = draft.Locked && _remoteDraft.Count == GoonDraft.PicksPerPlayer;
+
             RaiseSafe(DraftChanged);
+            TryResolveDraft();
         }
 
         // -------------------------------------------------------- countdown
@@ -705,7 +829,7 @@ namespace ConditioningControlPanel.Services.GoonGame
         {
             if (_startProposed || !IsHost) return;
             if (Phase != GoonMatchPhase.Draft) return;
-            if (!_localDraftLocked || !_remoteDraftLocked) return;
+            if (!_draftResolved) return;
             if (!_transport.Clock.IsSynced) return;   // fire-at-timestamp needs a synced clock
 
             _startProposed = true;
@@ -750,9 +874,16 @@ namespace ConditioningControlPanel.Services.GoonGame
                 App.Logger?.Warning("[GG] starting Live without a peer seed contribution");
             }
 
+            // The pool is the agreement's intersection, and the ramp is rolled from it — one
+            // schedule, both players, no exchange: BuildRamp is a pure function of its arguments.
+            var pool = (_draftResolved && _sharedPool.Count > 0)
+                ? _sharedPool
+                : GoonDraft.SharedPool(_localAllowed, _remoteAllowed);
+            _sharedPool = pool;
+
             Scoring.Reset();
-            Scoring.Configure(LocalAttentionMode, GoonDraft.MatchRiskTier(_localDraft));
-            _ramp = GoonDraft.BuildRamp(_localDraft, MatchSeed, ConsentSheet.LiveDurationSec, _rngFactory);
+            Scoring.Configure(LocalAttentionMode, GoonDraft.MatchRiskTier(pool));
+            _ramp = GoonDraft.BuildRamp(pool, MatchSeed, ConsentSheet.LiveDurationSec, _rngFactory);
             _rampIndex = 0;
             _liveDurationMs = (long)ConsentSheet.LiveDurationSec * 1000L;
             _activeElements.Clear();
@@ -768,8 +899,8 @@ namespace ConditioningControlPanel.Services.GoonGame
             _liveTimer.Tick += LiveTimer_Tick;
             _liveTimer.Start();
 
-            App.Logger?.Information("[GG] Live phase: seed {Seed:X16}, {Sec}s, draft {Draft}, risk {Risk}, {Cues} cues",
-                MatchSeed, ConsentSheet.LiveDurationSec, string.Join("+", _localDraft), Scoring.RiskTier, _ramp.Count);
+            App.Logger?.Information("[GG] Live phase: seed {Seed:X16}, {Sec}s, pool {Pool} (+always-on bubbles), risk {Risk}, {Cues} cues",
+                MatchSeed, ConsentSheet.LiveDurationSec, string.Join("+", pool), Scoring.RiskTier, _ramp.Count);
 
             SetPhase(GoonMatchPhase.Live);
         }

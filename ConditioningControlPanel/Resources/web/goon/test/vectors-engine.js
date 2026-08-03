@@ -5,13 +5,19 @@
 // Part 1 — RAMP PARITY: replays the `ramp` section of rng-vectors.json (dumped by the C#
 //          GoonVectorDumper, the REFERENCE implementation) through core/draft.js buildRamp and
 //          deep-compares every cue, in order, field by field. Then does the same for every NAMED
-//          case in `ramps` (baseline + spiral/braindrain), so each sustained profile's entry
-//          fraction and intensity band is covered, not just the ones the baseline draft happens
-//          to use. `ramps` is optional only so an un-regenerated vectors file fails loudly on
-//          content rather than confusingly on a missing key.
+//          case in `ramps` (baseline + spiral + a RESTRICTED two-element pool + the full toggle
+//          pool + always-on-only), so the roll's pass/stride maths and every intensity band are
+//          covered. Since the 2026-08-03 redesign the roll is seeded, so this section is also the
+//          proof that the two languages consume the rng in the same ORDER and COUNT.
+// Part 1b — SHARED POOL PARITY: the `shared_pools` section — two allowed sets in, one canonical
+//          intersection out — replayed through core/draft.js sharedPool.
+// Part 1c — REDESIGN INVARIANTS: always-on bubbles t=0 -> end at 0.15 -> 1.00, nothing outside the
+//          pool in the roll, balanced per-element active time, and one schedule for both players.
 // Part 2 — SMOKE: two GoonMatchService instances over an in-file fake transport pair (this file
-//          owns the fake; net/ owns the real ones) run hello -> consent -> draft -> match_start ->
-//          live ticks, and both sides must agree on the combined seed AND on the ramp it plans.
+//          owns the fake; net/ owns the real ones) run hello -> consent -> draft agreement ->
+//          match_start -> live ticks. Both sides must agree on the combined seed, on the shared
+//          pool and on the ramp; the agreement's confirm-clearing, minimum-intersection refusal
+//          and the creditCharges seam are exercised here too.
 //
 // Exit 0 PASS, 1 on the first mismatch (with detail), 2 when the vectors file is missing.
 
@@ -19,11 +25,15 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { GoonAttentionMode, GoonElement, GoonMatchPhase, GoonTransportState, isClockMessage } from '../core/contracts.js';
+import {
+  GoonAttentionMode, GoonConsts, GoonElement, GoonMatchPhase, GoonTransportState, isClockMessage,
+} from '../core/contracts.js';
 import { GoonRng } from '../core/rng.js';
 import { MatchClock } from '../core/clock.js';
 import { parse, serialize } from '../core/wire.js';
-import { GoonCueAction, buildRamp } from '../core/draft.js';
+import {
+  ALWAYS_ON_ELEMENT, GoonCueAction, MIN_ALLOWED_ELEMENTS, buildRamp, normalizeAllowed, sharedPool,
+} from '../core/draft.js';
 import { GoonMatchService } from '../core/match.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -120,14 +130,119 @@ if (namedRamps.length === 0) {
   process.exit(2);
 }
 let sawSpiral = false;
+let sawRestricted = false;
 for (const r of namedRamps) {
   rampCues += checkRamp(r, `ramps[${r.name || '?'}]`);
   rampCaseCount++;
   if ((r.elements || []).includes(GoonElement.Spiral)) sawSpiral = true;
+  // A pool at the legal minimum drives the pass/stride branch hardest; it also proves the two
+  // languages agree on a schedule that ISN'T the wide-open one.
+  if (normalizeAllowed(r.elements || []).length === MIN_ALLOWED_ELEMENTS) sawRestricted = true;
 }
 if (!sawSpiral) {
   console.error(`no ramps case drafts Spiral (element ${GoonElement.Spiral}) — stale vectors file`);
   process.exit(2);
+}
+if (!sawRestricted) {
+  console.error(`no ramps case uses a RESTRICTED pool of exactly ${MIN_ALLOWED_ELEMENTS} elements — stale vectors file`);
+  process.exit(2);
+}
+
+// ================================================================= part 1b: shared pool parity
+
+const poolCases = Array.isArray(data.shared_pools) ? data.shared_pools : [];
+if (poolCases.length === 0) {
+  console.error('vectors file has no `shared_pools` section — regenerate with --goon-vectors');
+  process.exit(2);
+}
+for (const c of poolCases) {
+  const got = sharedPool(c.a || [], c.b || []);
+  const want = c.pool || [];
+  if (JSON.stringify(got) !== JSON.stringify(want)) {
+    fail(`shared_pools[${c.name || '?'}]`, {
+      a: JSON.stringify(c.a), b: JSON.stringify(c.b),
+      expected: JSON.stringify(want), got: JSON.stringify(got),
+    });
+  }
+  if (c.min_allowed !== undefined && c.min_allowed !== MIN_ALLOWED_ELEMENTS) {
+    fail(`shared_pools[${c.name || '?'}]`, {
+      field: 'min_allowed', expected: c.min_allowed, got: MIN_ALLOWED_ELEMENTS,
+    });
+  }
+}
+
+// ============================================================ part 1c: redesign invariants
+//
+// These fail loudly against the PRE-redesign engine: it emitted no Bubbles cue unless Bubbles was
+// drafted, it built a ramp from ONE player's three picks, and its per-element time was whatever
+// the gap jitter happened to produce.
+
+{
+  const liveSec = 720;
+  const liveMs = liveSec * 1000;
+  const seed = 0xA5A5C0FFEEn;
+  const pool = [GoonElement.Flashes, GoonElement.Spiral, GoonElement.BrainDrain, GoonElement.Videos];
+
+  const ramp = buildRamp(pool, seed, liveSec, (s) => new GoonRng(s));
+
+  // (1) Always-on bubbles: one Start at t=0 at 0.15, a Stop at the very end, and a monotonic climb
+  //     that reaches for 1.00 — whatever the pool says.
+  const bub = ramp.filter((c) => c.element === ALWAYS_ON_ELEMENT);
+  const bubStarts = bub.filter((c) => c.action === GoonCueAction.Start);
+  const bubStops = bub.filter((c) => c.action === GoonCueAction.Stop);
+  expect(bubStarts.length === 1 && bubStarts[0].offsetMs === 0, 'bubbles start once, at t=0', {
+    starts: bubStarts.length, at: bubStarts[0] && bubStarts[0].offsetMs,
+  });
+  expect(Math.abs(bubStarts[0].intensity - 0.15) < 1e-12, 'bubbles open at 0.15', {
+    got: bubStarts[0].intensity,
+  });
+  expect(bubStarts[0].durationMs === 0, 'bubbles are sustained (durationMs 0), not a burst');
+  expect(bubStops.length === 1 && bubStops[0].offsetMs === liveMs, 'bubbles stop at the final whistle', {
+    stops: bubStops.length, at: bubStops[0] && bubStops[0].offsetMs,
+  });
+  const bubRamped = bub.filter((c) => c.action === GoonCueAction.Intensity);
+  let monotonic = true;
+  let prev = bubStarts[0].intensity;
+  for (const c of bubRamped) { if (c.intensity < prev - 1e-12) monotonic = false; prev = c.intensity; }
+  expect(bubRamped.length > 0 && monotonic, 'bubbles climb monotonically', { steps: bubRamped.length });
+  const wantLast = 0.15 + 0.85 * (bubRamped[bubRamped.length - 1].offsetMs / liveMs);
+  expect(Math.abs(prev - wantLast) < 1e-12 && prev > 0.9, 'bubbles reach for 1.00 by the end', {
+    last: prev, want: wantLast,
+  });
+  // ...and it is there even when NOTHING is in the pool.
+  const bare = buildRamp([], seed, liveSec, (s) => new GoonRng(s));
+  expect(bare.length > 0 && bare.every((c) => c.element === ALWAYS_ON_ELEMENT),
+    'an empty pool still runs the bubbles baseline and nothing else', { cues: bare.length });
+
+  // (2) The roll never reaches outside the pool (and never rolls the always-on element).
+  const rolled = ramp.filter((c) => c.element !== ALWAYS_ON_ELEMENT);
+  const strays = rolled.filter((c) => !pool.includes(c.element));
+  expect(strays.length === 0, 'the roll stays inside the agreed pool', { strays: JSON.stringify(strays.slice(0, 3)) });
+
+  // (3) Comparable total active time per element — the fairness requirement.
+  const active = new Map(pool.map((e) => [e, 0]));
+  const open = new Map();
+  for (const c of rolled) {
+    if (c.action === GoonCueAction.Start) open.set(c.element, c.offsetMs);
+    else if (c.action === GoonCueAction.Stop && open.has(c.element)) {
+      active.set(c.element, active.get(c.element) + (c.offsetMs - open.get(c.element)));
+      open.delete(c.element);
+    }
+  }
+  const totals = Array.from(active.values());
+  const lo = Math.min(...totals);
+  const hi = Math.max(...totals);
+  expect(lo > 0 && hi - lo <= 0.15 * hi, 'every element gets comparable active time', {
+    totals: JSON.stringify(Array.from(active.entries())), lo, hi,
+  });
+
+  // (4) One schedule, two players: same pool + same seed = the same cue list, and the order the
+  //     pool is written in must not matter (both engines normalize).
+  const asHost = buildRamp(pool, seed, liveSec, (s) => new GoonRng(s));
+  const asGuest = buildRamp(pool.slice().reverse(), seed, liveSec, (s) => new GoonRng(s));
+  expect(JSON.stringify(asHost) === JSON.stringify(asGuest), 'both players roll the identical schedule');
+  const otherSeed = buildRamp(pool, seed + 1n, liveSec, (s) => new GoonRng(s));
+  expect(JSON.stringify(otherSeed) !== JSON.stringify(asHost), 'a different seed rolls a different schedule');
 }
 
 // ============================================================================ part 2: fake wire
@@ -249,14 +364,59 @@ async function smoke() {
   host.confirmConsent();
   await waitFor('draft phase', () => host.phase === GoonMatchPhase.Draft && guest.phase === GoonMatchPhase.Draft);
 
-  // draft
-  const hostPicks = [GoonElement.Flashes, GoonElement.Bubbles, GoonElement.LockCards];
-  const guestPicks = [GoonElement.Subliminals, GoonElement.Videos, GoonElement.BouncingText];
-  expect(host.setDraft(hostPicks).ok, 'host setDraft');
-  expect(guest.setDraft(guestPicks).ok, 'guest setDraft');
-  await waitFor('drafts exchanged', () => host.remoteDraft.length === 3 && guest.remoteDraft.length === 3);
-  expect(host.lockDraft().ok, 'host lockDraft');
-  expect(guest.lockDraft().ok, 'guest lockDraft');
+  // ---- the draft agreement -------------------------------------------------------------
+  // Everything starts ON, on both sides, and each side has seen the other's default set.
+  await waitFor('default allowed sets exchanged', () => host.remoteAllowedElements.length > 0
+    && guest.remoteAllowedElements.length > 0);
+  expect(!host.localAllowedElements.includes(GoonElement.Bubbles),
+    'the always-on element is not in the toggle set', { allowed: host.localAllowedElements.join('+') });
+  expect(JSON.stringify(host.sharedElementPool) === JSON.stringify(guest.sharedElementPool),
+    'both sides compute the same intersection', {
+      host: host.sharedElementPool.join('+'), guest: guest.sharedElementPool.join('+'),
+    });
+
+  // A veto removes the element for BOTH of them.
+  expect(host.toggleAllowedElement(GoonElement.BrainDrain).ok, 'host vetoes the heavy');
+  await waitFor('veto crossed the wire', () => !guest.remoteAllowedElements.includes(GoonElement.BrainDrain));
+  expect(!guest.sharedElementPool.includes(GoonElement.BrainDrain),
+    'the vetoed element leaves the shared pool on the OTHER side too');
+
+  // Signatures: the guest signs, the host then moves a toggle, and BOTH signatures die.
+  expect(guest.confirmDraft().ok, 'guest signs');
+  await waitFor('host sees the guest signature', () => host.remoteDraftConfirmed);
+  expect(host.toggleAllowedElement(GoonElement.Videos).ok, 'host moves another toggle');
+  expect(!host.localDraftConfirmed && !host.remoteDraftConfirmed, 'a toggle clears BOTH signatures locally', {
+    local: host.localDraftConfirmed, remote: host.remoteDraftConfirmed,
+  });
+  await waitFor('guest signature cleared by the change', () => !guest.localDraftConfirmed);
+  expect(!host.draftResolved && !guest.draftResolved, 'and the draft is un-resolved again');
+
+  // The minimum bites: a pool below MIN_ALLOWED_ELEMENTS cannot be signed.
+  const tiny = host.setAllowedElements([GoonElement.Flashes]);
+  expect(!tiny.ok, 'you cannot allow fewer than the minimum', { error: tiny.error });
+  const pair = [GoonElement.Flashes, GoonElement.Spiral];
+  expect(host.setAllowedElements(pair).ok, 'host narrows to the legal minimum');
+  await waitFor('narrow set crossed', () => guest.remoteAllowedElements.length === 2);
+  const disjoint = guest.setAllowedElements([GoonElement.Videos, GoonElement.LockCards]);
+  expect(disjoint.ok, 'guest narrows to a DISJOINT pair');
+  await waitFor('disjoint set crossed', () => host.sharedElementPool.length === 0);
+  const refused = host.confirmDraft();
+  expect(!refused.ok, 'an empty intersection refuses the signature', { error: refused.error });
+  expect(!host.localDraftConfirmed, 'and nothing was signed');
+
+  // Back to something workable, then both sign.
+  expect(guest.setAllowedElements([GoonElement.Flashes, GoonElement.Spiral, GoonElement.Subliminals]).ok,
+    'guest re-opens an overlapping set');
+  await waitFor('overlap restored', () => host.sharedElementPool.length >= MIN_ALLOWED_ELEMENTS);
+  expect(host.confirmDraft().ok, 'host signs');
+  await waitFor('guest sees the host signature', () => guest.remoteDraftConfirmed);
+  expect(guest.confirmDraft().ok, 'guest signs');
+  await waitFor('draft resolved on both sides', () => host.draftResolved && guest.draftResolved);
+  const agreedPool = host.sharedElementPool;
+  expect(JSON.stringify(agreedPool) === JSON.stringify(guest.sharedElementPool),
+    'the agreed pool is identical on both sides', {
+      host: agreedPool.join('+'), guest: guest.sharedElementPool.join('+'),
+    });
 
   // match_start + countdown -> live (host proposes on its phase timer once both drafts lock)
   await waitFor('countdown', () => host.phase === GoonMatchPhase.Countdown && guest.phase === GoonMatchPhase.Countdown);
@@ -265,16 +425,25 @@ async function smoke() {
   });
   await waitFor('live phase', () => host.phase === GoonMatchPhase.Live && guest.phase === GoonMatchPhase.Live, 15000);
 
-  // Both sides combined the same seed, and therefore plan the same shape for the same draft.
+  // Both sides combined the same seed, and therefore roll the same schedule from the same pool.
   expect(host.matchSeed === guest.matchSeed && host.matchSeed !== 0n, 'combined seed', {
     host: host.matchSeed.toString(), guest: guest.matchSeed.toString(),
   });
-  for (const picks of [hostPicks, guestPicks]) {
-    const a = buildRamp(picks, host.matchSeed, 60, (s) => new GoonRng(s));
-    const b = buildRamp(picks, guest.matchSeed, 60, (s) => new GoonRng(s));
-    expect(JSON.stringify(a) === JSON.stringify(b), 'ramp agreement', { picks: picks.join('+') });
-    expect(a.length > 0, 'ramp non-empty', { picks: picks.join('+') });
-  }
+  const hostRamp = buildRamp(host.sharedElementPool, host.matchSeed, 60, (s) => new GoonRng(s));
+  const guestRamp = buildRamp(guest.sharedElementPool, guest.matchSeed, 60, (s) => new GoonRng(s));
+  expect(JSON.stringify(hostRamp) === JSON.stringify(guestRamp), 'both players run ONE schedule', {
+    pool: agreedPool.join('+'),
+  });
+  expect(hostRamp.some((c) => c.element === ALWAYS_ON_ELEMENT), 'the live ramp carries the bubbles baseline');
+  expect(hostRamp.some((c) => c.element !== ALWAYS_ON_ELEMENT), 'and the rolled pool on top of it');
+
+  // creditCharges: the seam the bubble economy consumes. Live only, integer >= 1, capped.
+  expect(host.creditCharges(0, 'zero') === false, 'creditCharges refuses a count below 1');
+  expect(host.creditCharges(1, 'smoke') === true, 'creditCharges credits in the Live phase');
+  const capped = host.scoring.charges;
+  expect(host.creditCharges(99, 'flood') === true, 'creditCharges accepts a big credit');
+  expect(host.scoring.charges === GoonConsts.ChargeCap && host.scoring.charges >= capped,
+    'and clamps at the charge cap', { charges: host.scoring.charges, cap: GoonConsts.ChargeCap });
 
   // A few live ticks: score accrues on both sides and state ticks cross the wire.
   await sleep(3200);
@@ -294,6 +463,9 @@ async function smoke() {
   expect(host.result.countsForLedger && guest.result.countsForLedger, 'live mercy counts for the ledger');
   expect(!host.result.disputed && !guest.result.disputed, 'result undisputed');
 
+  // ...and the charge seam is inert once the match is over.
+  expect(host.creditCharges(1, 'after the whistle') === false, 'creditCharges no-ops outside Live');
+
   const wanted = [GoonMatchPhase.Lobby, GoonMatchPhase.Consent, GoonMatchPhase.Draft,
     GoonMatchPhase.Countdown, GoonMatchPhase.Live, GoonMatchPhase.Recap];
   for (const side of ['host', 'guest']) {
@@ -312,7 +484,9 @@ async function smoke() {
 
 const smokeResult = await smoke();
 
-console.log(`PASS — ramp parity: ${rampCues} cues matched across ${rampCaseCount} draft(s), ` +
-  `Spiral covered (seed ${data.ramp.seed}); ` +
+console.log(`PASS — ramp parity: ${rampCues} cues matched across ${rampCaseCount} pool(s), ` +
+  `Spiral + a restricted pool covered (seed ${data.ramp.seed}); ` +
+  `shared-pool parity: ${poolCases.length} case(s); ` +
+  `invariants: always-on bubbles, in-pool roll, balanced time, one schedule; ` +
   `smoke: full phase run over a fake transport pair, combined seed ${smokeResult.seed}, host score ${smokeResult.score}`);
 process.exit(0);

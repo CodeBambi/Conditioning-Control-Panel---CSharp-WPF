@@ -49,7 +49,7 @@ export const S = Object.freeze({
     headline: 'how it works',
     bullets: [
       'two players, one clock. you both endure your own library at the same time.',
-      'you draft three elements. they are what YOU will endure — pick your poison.',
+      'you both agree what stays switched on. whatever is left, you BOTH endure — same effects, same moments.',
       'holding still earns points; enduring what they send you earns charges.',
       'charges buy payloads you fire at them. the receiver decides what it can run.',
       'mercy is always one key away. escape, any phase, no confirmation.',
@@ -112,8 +112,8 @@ export const S = Object.freeze({
 
   /* ---------------------------------------------------------------- draft */
   draft: {
-    eyebrow: 'draft what you will endure',
-    lead: 'three picks. they are yours to survive, not theirs.',
+    eyebrow: 'agree what you both endure',
+    lead: 'everything is on. switch off what you will not take — you both get whatever is left.',
     pickCta: 'Pick 3',
     lock: 'Lock in',
     locked: 'locked — waiting for them',
@@ -121,6 +121,19 @@ export const S = Object.freeze({
     risk: (n) => 'Match risk ' + n + ' / 7',
     score: (mult) => 'score ×' + mult.toFixed(2),
     unsupported: "your opponent's app can't do this",
+    /* --- the agreement pass (2026-08-03 redesign) --- */
+    confirm: "I'm good with this",
+    confirmed: 'signed — waiting for them',
+    theirSignature: 'they signed',
+    theirWait: 'still deciding',
+    theirsOff: 'they switched this off',
+    alwaysOn: 'always on',
+    alwaysOnWhy: 'bubbles run the whole match, for both of you. they build.',
+    pool: (n) => 'you both get ' + n + ' effect' + (n === 1 ? '' : 's') + ' + bubbles',
+    tooFewYours: (min) => 'keep at least ' + min + ' switched on.',
+    tooFewShared: (n) => 'you two only agree on ' + n + ' — one of you has to open something up.',
+    changed: 'something moved — both of you sign again.',
+    rolled: 'the running order is rolled from the match seed. same for both of you.',
   },
 
   /* ------------------------------------------------------------ countdown */
@@ -232,6 +245,22 @@ export const S = Object.freeze({
     passed: 'they held it',
   },
 
+  /* ------------------------------------------------- the arsenal + its economy
+   * Items are EARNED, not merely afforded: a slot sits locked until a popped
+   * bubble drops one (exec/bubbles.js -> ui/drops.js -> ui/arsenal.js). Every
+   * state below is a WORD on the tile, because the greyed sticker alone is
+   * colour and colour is never the only channel here. */
+  arsenal: {
+    locked: 'locked',
+    lockedTip: 'pop bubbles to earn this',
+    lockGlyph: '?',
+    /** the ×N badge on an armed sticker */
+    stack: (n) => '×' + (n | 0),
+    /** the flourish when a drop lands */
+    drop: (label) => '+1 ' + (label || 'item'),
+    dropToast: (label) => (label || 'item') + ' dropped',
+  },
+
   /* --------------------------------------------------------------- toasts */
   toasts: {
     copied: 'invite line copied',
@@ -252,7 +281,9 @@ export const ELEMENTS = Object.freeze([
   { id: GoonElement.Flashes, name: 'flashes', risk: 0, blurb: 'constant. builds all match.' },
   { id: GoonElement.BouncingText, name: 'bouncing text', risk: 0, blurb: 'always on your screen. slow burn.' },
   { id: GoonElement.Subliminals, name: 'subliminals', risk: 1, blurb: 'quiet, and it climbs to the top.' },
-  { id: GoonElement.Bubbles, name: 'bubbles', risk: 1, blurb: 'waves. 45–90s at a time.' },
+  // Always on for both players, start to finish — not a toggle. The draft grid renders it as a
+  // locked tile (core/draft.js ALWAYS_ON_ELEMENT); the blurb has to say so.
+  { id: GoonElement.Bubbles, name: 'bubbles', risk: 1, blurb: 'the whole match, both of you. thin at first, then not.' },
   { id: GoonElement.Videos, name: 'videos', risk: 2, blurb: 'long takeovers. 1–2 minutes.' },
   { id: GoonElement.LockCards, name: 'lock cards', risk: 2, blurb: "type it out. can't look away." },
   { id: GoonElement.ToyPatterns, name: 'toy patterns', risk: 2, blurb: 'bursts, capped by your own limit.' },

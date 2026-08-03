@@ -171,12 +171,26 @@ export function makeConsent(o = {}) {
   };
 }
 
+/**
+ * The draft agreement (2026-08-03 redesign). `allowed` is the sender's ALLOWED element set and
+ * `confirmed` its signature on the current pair of sets; the effective pool is the intersection of
+ * the two `allowed` sets.
+ *
+ * `elements`/`locked` are the v1 field names and stay on the wire, carrying the same values as
+ * `allowed`/`confirmed`, so an older reader (or a log, or a capture) still parses. New readers
+ * prefer `allowed`/`confirmed` and fall back to the legacy pair when they are absent.
+ * APPEND-ONLY: never renumber, never repurpose, never drop a field from this shape.
+ */
 export function makeDraft(o = {}) {
+  const allowed = o.allowed ?? o.elements ?? [];
+  const confirmed = o.confirmed ?? o.locked ?? false;
   return {
     t: 'draft',
     v: o.v ?? PROTOCOL_VERSION,
-    elements: o.elements ?? [],
-    locked: o.locked ?? false,
+    elements: o.elements ?? allowed,     // legacy mirror of `allowed`
+    locked: o.locked ?? confirmed,       // legacy mirror of `confirmed`
+    allowed,
+    confirmed,
   };
 }
 

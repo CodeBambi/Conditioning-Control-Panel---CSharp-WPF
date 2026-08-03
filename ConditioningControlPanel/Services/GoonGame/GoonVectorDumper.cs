@@ -64,8 +64,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                 ["derive"] = BuildDeriveVectors(),
                 ["salt_seed"] = BuildSaltSeedVectors(),
                 ["round_specs"] = BuildRoundSpecVectors(),
-                ["ramp"] = BuildRampVector(BaselineDraft),
+                ["ramp"] = BuildRampVector(BaselinePool),
                 ["ramps"] = BuildRampVectors(),
+                ["shared_pools"] = BuildSharedPoolVectors(),
             };
 
             var dir = Path.GetDirectoryName(path);
@@ -285,37 +286,79 @@ namespace ConditioningControlPanel.Services.GoonGame
 
         // ------------------------------------------------------------------ ramp
 
-        /// <summary>One three-element draft (a sustained element, a burst element, and a second
-        /// burst element with a different profile) planned over a full 12-minute live phase — the
-        /// widest single check in the file: entry fractions, the sustained ramp cadence, burst
-        /// duration/gap jitter, the end clamp, and the Stop-before-Start sort order.
-        /// Emitted as the top-level <c>ramp</c> section, which predates <c>ramps</c> and is kept
-        /// verbatim so an older gate keeps passing.</summary>
-        private static readonly List<GoonElement> BaselineDraft = new()
+        /// <summary>One three-element agreement pool planned over a full 12-minute live phase —
+        /// the widest single check in the file: the roll's pass/stride/segment maths, the jitter
+        /// draw order, the always-on Bubbles baseline, the end clamp and the total sort order.
+        /// Bubbles is deliberately IN the input so the vector proves it is stripped from the roll
+        /// while still appearing as the always-on element.
+        /// Emitted as the top-level <c>ramp</c> section, kept so an older gate keeps passing.</summary>
+        private static readonly List<GoonElement> BaselinePool = new()
         {
-            GoonElement.Flashes,     // 0 — sustained
-            GoonElement.Bubbles,     // 3 — burst
-            GoonElement.LockCards,   // 4 — burst, later entry
+            GoonElement.Flashes,     // 0 — leads (entry fraction 0.00)
+            GoonElement.Bubbles,     // 3 — ALWAYS ON: dropped from the roll, emitted t=0 -> end
+            GoonElement.LockCards,   // 4 — later opener
         };
 
         /// <summary>
-        /// Named ramp cases. Every SUSTAINED element with a distinct profile has to appear in at
-        /// least one draft here or its entry fraction / intensity band is untested — that is how a
-        /// new element (Spiral, 2026-08-03) gets covered without disturbing the baseline vector.
-        /// The spiral case deliberately drafts Spiral ALONGSIDE BrainDrain: the two share a shape
-        /// and differ only in onset and ceiling, which is exactly the pair a transcription slip
-        /// would swap.
+        /// Named ramp cases. Every element with a distinct profile has to appear in at least one
+        /// pool here or its intensity band is untested. The spiral case deliberately pools Spiral
+        /// ALONGSIDE BrainDrain: the two share a shape and differ only in onset and ceiling, which
+        /// is exactly the pair a transcription slip would swap. `restricted` is the two-element
+        /// minimum intersection (both players vetoed a lot) and `full` is the whole toggle pool,
+        /// which is what an untouched agreement actually rolls.
         /// </summary>
         private static readonly (string Name, List<GoonElement> Draft)[] RampCases =
         {
-            ("baseline", BaselineDraft),
+            ("baseline", BaselinePool),
             ("spiral", new List<GoonElement>
             {
-                GoonElement.Spiral,      // 8 — sustained, early onset, gentle ceiling
-                GoonElement.BrainDrain,  // 6 — sustained, late onset, hard ceiling
-                GoonElement.Videos,      // 1 — burst, so the sort order is still exercised
+                GoonElement.Spiral,      // 8 — early onset, gentle ceiling
+                GoonElement.BrainDrain,  // 6 — late onset, hard ceiling
+                GoonElement.Videos,      // 1 — a third shape, so the shuffle is exercised
             }),
+            ("restricted", new List<GoonElement>
+            {
+                // The smallest legal intersection: k = 2 drives the pass/stride branch hardest.
+                GoonElement.Subliminals, // 2
+                GoonElement.Spiral,      // 8
+            }),
+            ("full", GoonDraft.TogglePool.ToList()),      // every toggleable element, k = 8
+            ("always_on_only", new List<GoonElement> { GoonElement.Bubbles }),  // roll empty, baseline still emitted
         };
+
+        /// <summary>
+        /// The agreement intersection itself: two allowed sets in, one canonical pool out. Proves
+        /// the JS binding derives the same pool from the same pair (and drops the always-on
+        /// element, unknown codes and duplicates the same way).
+        /// </summary>
+        private static readonly (string Name, GoonElement[] A, GoonElement[] B)[] SharedPoolCases =
+        {
+            ("both_wide_open", GoonDraft.TogglePool.ToArray(), GoonDraft.TogglePool.ToArray()),
+            ("one_veto", GoonDraft.TogglePool.ToArray(),
+                GoonDraft.TogglePool.Where(e => e != GoonElement.BrainDrain).ToArray()),
+            ("narrow", new[] { GoonElement.Flashes, GoonElement.Spiral, GoonElement.Videos },
+                new[] { GoonElement.Spiral, GoonElement.Videos, GoonElement.LockCards }),
+            ("bubbles_are_stripped", new[] { GoonElement.Bubbles, GoonElement.Flashes, GoonElement.Spiral },
+                new[] { GoonElement.Bubbles, GoonElement.Spiral, GoonElement.Flashes }),
+            ("disjoint", new[] { GoonElement.Flashes }, new[] { GoonElement.Spiral }),
+        };
+
+        private static JArray BuildSharedPoolVectors()
+        {
+            var arr = new JArray();
+            foreach (var (name, a, b) in SharedPoolCases)
+            {
+                arr.Add(new JObject
+                {
+                    ["name"] = name,
+                    ["a"] = new JArray(a.Select(e => (object)(int)e).ToArray()),
+                    ["b"] = new JArray(b.Select(e => (object)(int)e).ToArray()),
+                    ["pool"] = new JArray(GoonDraft.SharedPool(a, b).Select(e => (object)(int)e).ToArray()),
+                    ["min_allowed"] = GoonDraft.MinAllowedElements,
+                });
+            }
+            return arr;
+        }
 
         private static JArray BuildRampVectors()
         {

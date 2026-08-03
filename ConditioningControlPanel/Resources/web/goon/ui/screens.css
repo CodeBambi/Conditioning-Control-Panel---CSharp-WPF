@@ -392,13 +392,16 @@
 .gg-elem-badge {
   position: absolute;
   top: -8px; right: -8px;
-  width: 22px; height: 22px;
+  min-width: 22px; height: 22px;
+  padding: 0 0.45rem;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 50%;
+  border-radius: 11px;
   background: linear-gradient(135deg, #d6479c, #8e50c9);
   color: #fff;
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 }
 .gg-elem.is-picked { border-color: var(--gg-pink); background: rgba(255, 105, 180, 0.12); transform: translateY(-2px); }
@@ -407,6 +410,26 @@
 .gg-elem.is-unsupported { opacity: 0.3; cursor: not-allowed; }
 .gg-elem.is-unsupported .gg-elem-blurb { display: none; }
 .gg-elem.is-unsupported .gg-elem-why { display: block; }
+
+/* --- the agreement pass (2026-08-03): tiles are toggles, not picks -------
+   is-on          you allow it (default for everything)
+   is-off         you switched it off, so neither of you gets it
+   is-theirs-off  THEY switched it off — out of the pool whatever you do
+   is-always-on   bubbles: not a toggle at all, the whole match for both  */
+.gg-elem.is-on { border-color: var(--gg-pink); background: rgba(255, 105, 180, 0.12); }
+.gg-elem.is-on .gg-elem-glyph svg { fill: var(--gg-pink); stroke: var(--gg-pink); }
+.gg-elem.is-off { opacity: 0.34; border-style: dashed; }
+.gg-elem.is-off .gg-elem-glyph svg { fill: var(--gg-text-4); stroke: var(--gg-text-4); }
+.gg-elem.is-theirs-off { opacity: 0.42; border-color: rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.02); }
+.gg-elem.is-theirs-off .gg-elem-badge { background: linear-gradient(135deg, #4b4b63, #6a6a86); }
+.gg-elem.is-always-on {
+  border-color: var(--gg-gold);
+  background: rgba(255, 212, 94, 0.08);
+  cursor: default;
+  opacity: 1;
+}
+.gg-elem.is-always-on .gg-elem-glyph svg { fill: var(--gg-gold); stroke: var(--gg-gold); }
+.gg-elem.is-always-on .gg-elem-badge { background: linear-gradient(135deg, #d9a441, #f0cf7a); color: #241a05; }
 
 .gg-draft-foot {
   display: flex;

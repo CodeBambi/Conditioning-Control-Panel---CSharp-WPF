@@ -7,12 +7,25 @@
  * with its cost in tiny diamonds under it. It always says what state it is in
  * with a WORD, never colour alone:
  *
- *   ready      full colour; the priciest affordable one gets the glow
+ *   locked     greyed sticker + "?" — you have not DROPPED one yet (see below)
+ *   ready      full colour + a ×N stack badge; the priciest affordable one glows
  *   too poor   45% + amber pips; tap -> shake + "costs {n} — you have {m}"
  *   cooling    conic sweep + the shared "next payload in {n}s" readout
  *   used       brain drain only, once per match: struck through
  *   filtered   hatched, "they can't receive this" (kind outside the peer caps)
  *   hidden     the kind is outside OUR OWN caps — the slot never renders
+ *
+ * THE DROP ECONOMY (2026-08-03 owner redesign). Items are NOT simply "affordable
+ * or not" any more. Every slot starts LOCKED and lights up only when a popped
+ * bubble drops it: exec/bubbles.js dispatches `gg-bubble-pop`, ui/drops.js rolls
+ * it, and a hit calls armDrop(id) here. Firing consumes ONE stack; at zero the
+ * slot goes back to locked. Charges remain the WIRE truth (the receiver still
+ * validates "sender charges >= cost"), so ui/drops.js credits the charge before
+ * it arms — charges beyond your armed stacks are just headroom, and a charge
+ * earned by SURVIVING a payload never arms anything on its own.
+ *
+ * The emote slot is social, costs nothing, and is therefore never locked and
+ * never dropped (see needsArming()).
  *
  * FIRING, three ways, all of them arriving at match.tryFirePayload():
  *   1. drag the item onto the monitor (pointer capture + rect hit-test)
@@ -25,6 +38,7 @@
 import { GoonConsts, GoonMatchPhase, GoonPayloadKind, costOf } from '../core/contracts.js';
 import { GoonPayloadRateLimiter, GoonReceiptStatus } from '../core/scoring.js';
 import { localMonotonicMs } from '../core/clock.js';
+import { S } from './strings.js';
 
 /**
  * The rails, in owner order — which is also the KEYBOARD order (1..8), so new
@@ -47,6 +61,26 @@ export const ARSENAL_ITEMS = Object.freeze([
 
 /** Payload slots, i.e. everything the number keys can reach. */
 const PAYLOAD_ITEMS = ARSENAL_ITEMS.filter((i) => i.kind !== null);
+
+/**
+ * Does this slot have to be EARNED before it can fire?
+ *
+ * A free slot (the emote sheet: no kind, no cost) never locks and never drops —
+ * chatting at someone is social, not economy. The rule is written against the
+ * COST rather than against the id, so the day emote grows a price it joins the
+ * drop pool with everything else and nothing here needs editing.
+ *
+ * @param {object} item ARSENAL_ITEMS entry
+ * @param {number} cost resolved cost (costOf is authority; see buildTile)
+ */
+export function needsArming(item, cost) {
+  return !!item && item.kind !== null && (cost | 0) > 0;
+}
+
+/** How many of an item a single drop hands you. */
+const DROP_STACK = 1;
+/** The drop flourish's window (must not leave a permanent animation behind). */
+const DROP_FLASH_MS = 520;
 
 /** Every payload we send goes out at this intensity in v1 (no per-item dial yet). */
 const FIRE_INTENSITY = 0.7;
@@ -228,11 +262,24 @@ export function mountArsenal({
     for (let i = 0; i < cost; i++) costPips.push(add(pipRow, el('i', 'gg-cost-pip')));
     const stateEl = add(root, el('span', 'gg-item-state'));
     const sweep = add(root, el('i', 'gg-item-sweep'));
+    // The economy chrome: a "?" while the slot is locked, a ×N badge once it is
+    // armed. Both ride the sticker's alpha — still no plate anywhere.
+    const lockEl = add(root, el('i', 'gg-item-lock', S.arsenal.lockGlyph));
+    if (lockEl) lockEl.setAttribute && lockEl.setAttribute('aria-hidden', 'true');
+    const stackEl = add(root, el('span', 'gg-item-stack'));
+    if (stackEl) stackEl.hidden = true;
     const tip = add(root, el('span', 'gg-item-tip'));
     if (tip) tip.hidden = true;
 
     add(host, root);
-    const rec = { item, cost, root, img, fallbackArt, nameEl, pipRow, costPips, stateEl, sweep, tip, state: 'ready', tipTimer: 0 };
+    const rec = {
+      item, cost, root, img, fallbackArt, nameEl, pipRow, costPips, stateEl, sweep,
+      lockEl, stackEl, tip,
+      state: 'ready', tipTimer: 0,
+      needsArm: needsArming(item, cost),
+      armed: 0,
+      paintedStack: -1,     // memo for paintStack (see there)
+    };
     wireTile(rec);
     return rec;
   }
@@ -256,34 +303,44 @@ export function mountArsenal({
     return p === GoonMatchPhase.Live || p === GoonMatchPhase.SuddenDeath;
   }
 
+  function isSpent(rec) {
+    return rec.item.kind === GoonPayloadKind.BrainDrain && heavyUsed;
+  }
+
   function paint() {
     const have = charges();
     const coolMs = cool.msLeft();
     const cooling = coolMs > 0;
 
-    // The priciest affordable tile earns the glow — the "you could spend this" nudge.
+    // The priciest ARMED + affordable tile earns the glow — "you could spend
+    // this". A locked tile never glows: there is nothing there to spend yet.
     let glowId = null;
     let glowCost = -1;
     for (const rec of tiles.values()) {
       if (rec.item.kind === null) continue;
+      if (rec.needsArm && rec.armed <= 0) continue;
       if (rec.cost <= have && rec.cost > glowCost && peerCanTake(rec.item.kind)) { glowCost = rec.cost; glowId = rec.item.id; }
     }
 
     for (const rec of tiles.values()) {
       const item = rec.item;
-      if (item.kind === null) {
+      if (!rec.needsArm) {
+        // Free/social slot (the emote sheet): always available, never a drop.
         setState(rec, 'ready', '');
         cls(rec.root, 'is-glow', false);
+        paintStack(rec);
         continue;
       }
       let state = 'ready';
       let word = '';
-      if (item.kind === GoonPayloadKind.BrainDrain && heavyUsed) { state = 'used'; word = 'used'; }
+      if (isSpent(rec)) { state = 'used'; word = 'used'; }
       else if (!peerCanTake(item.kind)) { state = 'filtered'; word = "they can't receive this"; }
+      else if (rec.armed <= 0) { state = 'locked'; word = S.arsenal.locked; }
       else if (rec.cost > have) { state = 'poor'; word = 'need ' + rec.cost; }
       else if (cooling) { state = 'cooling'; word = 'cooling'; }
 
       setState(rec, state, word);
+      paintStack(rec);
       cls(rec.root, 'is-glow', state === 'ready' && item.id === glowId);
       for (const pip of rec.costPips) cls(pip, 'is-short', state === 'poor');
       if (rec.sweep && rec.sweep.style) {
@@ -301,11 +358,28 @@ export function mountArsenal({
 
   function setState(rec, state, word) {
     if (rec.state !== state) {
-      for (const s of ['ready', 'poor', 'cooling', 'used', 'filtered']) cls(rec.root, 'is-' + s, s === state);
+      for (const s of ['ready', 'poor', 'cooling', 'used', 'filtered', 'locked']) cls(rec.root, 'is-' + s, s === state);
       rec.state = state;
     }
     text(rec.stateEl, word);
     if (rec.root) rec.root.disabled = false;   // never trap the pointer: taps still explain themselves
+  }
+
+  /**
+   * The ×N badge (armed) / the "?" (locked). Words, never colour alone.
+   * Memoised: paint() runs on a 250 ms interval and the stack almost never
+   * moves, so re-writing nine textContents four times a second would be pure
+   * churn on a page that is already carrying an effect stack.
+   */
+  function paintStack(rec) {
+    const showStack = rec.needsArm && rec.armed > 0;
+    if (rec.paintedStack === rec.armed) return;
+    rec.paintedStack = rec.armed;
+    if (rec.stackEl) {
+      text(rec.stackEl, showStack ? S.arsenal.stack(rec.armed) : '');
+      rec.stackEl.hidden = !showStack;
+    }
+    if (rec.lockEl) rec.lockEl.hidden = !(rec.needsArm && rec.armed <= 0);
   }
 
   // ------------------------------------------------------------- firing
@@ -337,6 +411,9 @@ export function mountArsenal({
     if (!rec || rec.item.kind === null) return { ok: false, error: 'not a payload', id: null };
     if (!match || typeof match.tryFirePayload !== 'function') return { ok: false, error: 'no match', id: null };
 
+    // LOCKED outranks every other refusal: nothing else about the tile matters
+    // until a bubble has dropped one.
+    if (rec.needsArm && rec.armed <= 0) { refuse(rec, S.arsenal.lockedTip); return { ok: false, error: 'locked', id: null }; }
     if (rec.state === 'poor') { refuse(rec, 'costs ' + rec.cost + ' — you have ' + charges()); return { ok: false, error: 'charges', id: null }; }
     if (rec.state === 'filtered') { refuse(rec, "they can't receive this"); return { ok: false, error: 'filtered', id: null }; }
     if (rec.state === 'used') { refuse(rec, 'one brain drain a match'); return { ok: false, error: 'used', id: null }; }
@@ -351,6 +428,9 @@ export function mountArsenal({
     if (res.ok) {
       cool.onFired();
       sfx(audio, 'gg-fire');
+      // One stack per shot. At zero the slot goes straight back to locked and
+      // only another drop can open it again.
+      if (rec.needsArm && rec.armed > 0) rec.armed--;
       if (rec.item.kind === GoonPayloadKind.BrainDrain) { heavyUsed = true; heavyId = res.id; }
       spark(rec);
       addReceipt(res.id, rec.item.label);
@@ -392,6 +472,93 @@ export function mountArsenal({
       setTimeout(() => { try { node.remove(); } catch (_e) { /* gone */ } }, 420);
     };
     if (fx && typeof fx.play === 'function') fx.play(300, run); else run();
+  }
+
+  // ------------------------------------------------------------- drops
+
+  /**
+   * Every slot a bubble drop may legally land on, i.e. what ui/drops.js rolls
+   * over. Kinds outside OUR caps never got a tile at all (see the mount loop:
+   * ToyPattern is absent whenever caps.haptics is false), kinds outside THEIR
+   * caps are dropped here, and a spent heavy is dropped here too — arming an
+   * item that can never be fired is a dead drop.
+   *
+   * @returns {Array<{id:string, kind:number, cost:number, armed:number}>}
+   */
+  function droppable() {
+    const out = [];
+    for (const rec of tiles.values()) {
+      if (!rec.needsArm) continue;
+      if (isSpent(rec)) continue;
+      if (!peerCanTake(rec.item.kind)) continue;
+      out.push({ id: rec.item.id, kind: rec.item.kind, cost: rec.cost, armed: rec.armed });
+    }
+    return out;
+  }
+
+  /**
+   * Arm one (or `count`) of an item. THE only way a slot leaves `locked`.
+   * ui/drops.js calls this AFTER match.creditCharges() said yes, so the wire
+   * truth (charges) and the local truth (stacks) can never disagree.
+   *
+   * @param {string} id ARSENAL_ITEMS id
+   * @param {{count?:number, from?:{x:number,y:number}|null, silent?:boolean}} [o]
+   * @returns {boolean} true when the slot took it
+   */
+  function armDrop(id, { count = DROP_STACK, from = null, silent = false } = {}) {
+    const rec = tiles.get(id);
+    if (!rec || !rec.needsArm) return false;
+    rec.armed += Math.max(1, count | 0);
+    paint();
+    if (!silent) dropFlourish(rec, from);
+    return true;
+  }
+
+  /** How many shots of an item are banked. */
+  function armedCount(id) {
+    const rec = tiles.get(id);
+    return rec ? (rec.armed | 0) : 0;
+  }
+
+  /** Current tile state word ('locked' | 'ready' | 'poor' | ...), for tests/HUD. */
+  function stateOf(id) {
+    const rec = tiles.get(id);
+    return rec ? rec.state : null;
+  }
+
+  /**
+   * A drop landed: a spark flies from the pop to the slot and the sticker gives
+   * one short pulse. Cheap, brief, and it leaves NO running animation behind —
+   * both nodes are removed on a timer whether or not a frame ever ran. A drop
+   * while the HUD is hot (or the drawer is open) still arms; only the flourish
+   * is skipped by the animation budget.
+   */
+  function dropFlourish(rec, from) {
+    tipOn(rec, S.arsenal.drop(rec.item.label));
+    const d = doc();
+    if (!d || !d.body || !rec.root) return;
+    const to = rectOf(rec.root);
+    const run = () => {
+      cls(rec.root, 'is-dropped', true);
+      setTimeout(() => cls(rec.root, 'is-dropped', false), DROP_FLASH_MS);
+      if (!from || typeof from.x !== 'number' || typeof from.y !== 'number' || !to.width) return;
+      const node = el('i', 'gg-drop-fly');
+      if (!node || !node.style) return;
+      node.style.left = from.x + 'px';
+      node.style.top = from.y + 'px';
+      add(d.body, node);
+      const dx = (to.left + to.width / 2) - from.x;
+      const dy = (to.top + to.height / 2) - from.y;
+      const fly = () => {
+        if (node.style) {
+          node.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(0.35)';
+          node.style.opacity = '0';
+        }
+      };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(fly); else fly();
+      setTimeout(() => { try { node.remove(); } catch (_e) { /* gone */ } }, DROP_FLASH_MS + 120);
+    };
+    if (fx && typeof fx.play === 'function') fx.play(DROP_FLASH_MS, run); else run();
   }
 
   // ------------------------------------------------------------- receipts
@@ -496,6 +663,9 @@ export function mountArsenal({
 
     led.listen(root, 'pointerdown', (e) => {
       if (rec.item.kind === null) { if (typeof onEmote === 'function') onEmote(); sfx(audio, 'gg-emote'); return; }
+      // A LOCKED slot is not draggable and not armable: the gesture ends here
+      // with a word, so no ghost is ever minted for an item you do not have.
+      if (rec.needsArm && rec.armed <= 0) { refuse(rec, S.arsenal.lockedTip); return; }
       pid = e && e.pointerId;
       startX = (e && e.clientX) || 0;
       startY = (e && e.clientY) || 0;
@@ -595,6 +765,16 @@ export function mountArsenal({
     arm(id) { const rec = tiles.get(id); if (rec) arm(rec); },
     disarm,
     paint,
+    /* --- the drop economy (ui/drops.js is the only caller in production) --- */
+    droppable,
+    armDrop,
+    armedCount,
+    stateOf,
+    /** True while the slot has nothing banked (and therefore refuses to fire). */
+    isLocked(id) {
+      const rec = tiles.get(id);
+      return !!rec && rec.needsArm && rec.armed <= 0;
+    },
     unmount() {
       disarm();
       led.run();

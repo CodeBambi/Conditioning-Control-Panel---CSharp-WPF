@@ -31,6 +31,10 @@ import { mountArsenal } from './arsenal.js';
 import { mountCloseness } from './closeness.js';
 import { mountAttention } from './attention.js';
 import { mountEmotes } from './emotes.js';
+import { createDropRoller } from './drops.js';
+
+/** exec/bubbles.js's economy seam. Kept as a literal so ui/ never imports exec/. */
+export const BUBBLE_POP_EVENT = 'gg-bubble-pop';
 
 /** Own-draft element cues -> the chip that shows them on the bottom-left rail. */
 const ELEMENT_META = Object.freeze({
@@ -289,6 +293,16 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     },
     onLog,
   });
+  // ------------------------------------------------------- the drop economy
+  // Popping a bubble is how the arsenal gets fed. exec/bubbles.js knows nothing
+  // about any of this: it dispatches one event per pop on `document` and this is
+  // the only listener. A pop while a drawer is open still rolls — the roll is
+  // silent bookkeeping, only its flourish rides the animation budget.
+  const drops = createDropRoller({ match, arsenal, audio, onLog });
+  led.listen(d, BUBBLE_POP_EVENT, (e) => {
+    try { drops.onPop(e && e.detail); } catch (_e) { /* a drop must never break the desk */ }
+  });
+
   const dial = mountCloseness({ host: dialHost, match, audio, onLog });
   const attention = mountAttention({
     host: attSlot,
@@ -494,7 +508,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
   return {
     /** Exposed so H (or a play-test driver) can poke the desk without re-deriving it. */
-    parts: { root, arsenal, opponent, dial, attention, emotes, fx },
+    parts: { root, arsenal, opponent, dial, attention, emotes, fx, drops },
     unmount() {
       fx.stop();
       for (const rec of Array.from(chips.values())) dropChipRec(rec);
