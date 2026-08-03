@@ -124,6 +124,11 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         private long _panicMutedUntil;
         private long _testGateUntil;
         private bool _gateWasOpen = true;
+        /// <summary>Phase F: the temperament preset in force for the CURRENT tick. Resolved once at
+        /// the top of <see cref="TickAsync"/> (a string switch per tick, not per device) and read by
+        /// <see cref="PromotePending"/> and <see cref="BuildOutputs"/>, both of which run on the
+        /// same loop thread.</summary>
+        private HapticTemperament _temperament = HapticTemperament.Default;
         private CancellationTokenSource? _loopCts;
         private Task? _loopTask;
         private bool _disposed;
@@ -163,6 +168,11 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         /// <summary>Master intensity multiplier (the repurposed legacy <c>GlobalIntensity</c>).</summary>
         public double MasterIntensity => Math.Clamp(_settings.GlobalIntensity, 0.0, 1.0);
 
+        /// <summary>PHASE F: the configured temperament preset. Every multiplier it carries is
+        /// applied AFTER the routing row's own intensity and BEFORE the master multiplier and the
+        /// master cap, so the cap always wins. Balanced (the default) is all 1.0.</summary>
+        public HapticTemperament Temperament => HapticTemperament.FromKey(_settings.V2.Temperament);
+
         // ===================================================================== loop
 
         public void Start()
@@ -195,6 +205,9 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         {
             var now = Environment.TickCount64;
             var gateOpen = IsGateOpen;
+            // Resolve the temperament ONCE per tick: PromotePending (envelope shaping + the
+            // concurrency window) and BuildOutputs (level scaling) must agree within a tick.
+            _temperament = HapticTemperament.FromKey(_settings.V2.Temperament);
 
             if (!gateOpen)
             {
@@ -295,6 +308,9 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         {
             changed = false;
             var v2 = _settings.V2;
+            // Phase F temperament: applied AFTER the routing row's intensity and BEFORE Finish()
+            // (master multiplier + master cap + per-device trim), so the cap always wins.
+            var temperament = _temperament;
 
             // --- per-motor split (Phase F audio band-split), only on multi-vibe toys ---
             double[]? motorFloors = null;
@@ -314,7 +330,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 var rule = v2.Rule((HapticLayer)i);
                 if (!rule.Enabled) continue;
                 if (!RoleMatches(rule.Target, device.Role)) continue;
-                var layerScale = Math.Clamp(rule.Intensity, 0, 1);
+                var layerScale = Math.Clamp(rule.Intensity, 0, 1) * temperament.ContinuousScale;
                 var scaled = value * layerScale;
                 if (scaled > floorTarget) floorTarget = scaled;
 
@@ -351,7 +367,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                     {
                         if (s.Priority != priority) continue;
                         if (!RoleMatches(s.Target, device.Role)) continue;
-                        groupSum += s.Value;
+                        groupSum += s.Value * temperament.TransientScale;
                     }
                     if (groupSum > 1) groupSum = 1;
                     if (groupSum > transient) transient = groupSum;
@@ -652,7 +668,11 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         private void PromotePending(long now)
         {
             if (_pending.Count == 0) return;
-            var max = Math.Max(1, _settings.V2.MaxConcurrentPulses);
+            var temperament = _temperament;
+            // Phase F: the temperament's pulse-priority bias widens (Intense/Cruel) or narrows
+            // (Gentle) the concurrency window. Priority only ever decides anything when that window
+            // is full, so this is what "bias" means in practice.
+            var max = Math.Clamp(Math.Max(1, _settings.V2.MaxConcurrentPulses) + temperament.PulsePriorityBias, 1, 12);
             for (int i = _pending.Count - 1; i >= 0; i--)
             {
                 var p = _pending[i];
@@ -675,13 +695,24 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                     SeqId = p.SeqId,
                     StartAt = now,
                     Intensity = Math.Clamp(p.Pulse.Intensity, 0, 1),
-                    AttackMs = Math.Max(0, p.Pulse.AttackMs),
+                    // Attack/decay are stretched or compressed by the temperament; HOLD is left
+                    // alone so a pattern keeps its rhythm and only changes its edge.
+                    AttackMs = ScaleMs(p.Pulse.AttackMs, temperament.AttackScale),
                     HoldMs = Math.Max(0, p.Pulse.HoldMs),
-                    DecayMs = Math.Max(0, p.Pulse.DecayMs),
+                    DecayMs = ScaleMs(p.Pulse.DecayMs, temperament.DecayScale),
                     Priority = p.Pulse.Priority,
                     Target = p.Pulse.Target
                 });
             }
+        }
+
+        /// <summary>Scale an envelope segment length, never below 0 and never past a tick's worth of
+        /// silliness. A zero segment stays zero (an instant edge is a deliberate shape).</summary>
+        private static int ScaleMs(int ms, double scale)
+        {
+            if (ms <= 0) return 0;
+            var v = (int)Math.Round(ms * scale);
+            return Math.Clamp(v, 1, 60_000);
         }
 
         private void ExpireActive(long now)

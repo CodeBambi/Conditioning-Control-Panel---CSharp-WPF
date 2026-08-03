@@ -37,6 +37,10 @@ namespace ConditioningControlPanel
         private readonly ObservableCollection<HapticRoutingGroupVm> _hapticRoutingGroups = new();
         private readonly ObservableCollection<HapticToyCardVm> _hapticToyCards = new();
         private DispatcherTimer? _hapticSliderDebounce;
+        /// <summary>Phase F: 1 Hz poll for the two pieces of live state that have no event
+        /// (mixer layer-suppression, FunScript's loaded path). Runs ONLY while the tab is on
+        /// screen — see <see cref="OnHapticsTabVisibilityChanged"/>.</summary>
+        private DispatcherTimer? _hapticLiveStatusTimer;
 
         private static HapticSettings HapticCfg => App.Settings.Current.Haptics;
 
@@ -119,6 +123,11 @@ namespace ConditioningControlPanel
                 App.Haptics.ConnectionChanged += OnHapticConnectionChanged;
                 App.Haptics.HapticTriggered += OnHapticActivity;
             }
+
+            // Phase F live status (suppression badge + loaded script) has no event to hang off, so
+            // it is polled — but only while the tab is actually on screen.
+            HapticsTab.IsVisibleChanged += OnHapticsTabVisibilityChanged;
+            if (HapticsTab.IsVisible) StartHapticLiveStatusTimer();
         }
 
         private void OnHapticRoutingRowChanged(object? sender, EventArgs e)
@@ -223,8 +232,73 @@ namespace ConditioningControlPanel
             var on = HapticCfg.AudioSync.Enabled;
             HapticsTab.VideoHapticSyncSliders.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
             HapticsTab.TxtAudioSyncDisabledHint.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+            // The Advanced expander tunes the same analysis pass, so it follows the same gate.
+            if (HapticsTab.HapticAudioAdvanced != null)
+                HapticsTab.HapticAudioAdvanced.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
             if (SettingsTab?.AudioSyncLatencyPanel != null)
                 SettingsTab.AudioSyncLatencyPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // ---------------------------------------------------------------- Phase F live status
+
+        private void OnHapticsTabVisibilityChanged(object? sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (HapticsTab?.IsVisible == true) StartHapticLiveStatusTimer();
+            else StopHapticLiveStatusTimer();
+        }
+
+        /// <summary>1 Hz, tab-visible only, two property reads and at most two Visibility writes.</summary>
+        private void StartHapticLiveStatusTimer()
+        {
+            RefreshHapticLiveStatus();
+            if (_hapticLiveStatusTimer != null) return;
+            _hapticLiveStatusTimer = new DispatcherTimer(DispatcherPriority.Normal)
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _hapticLiveStatusTimer.Tick += (s, e) => RefreshHapticLiveStatus();
+            _hapticLiveStatusTimer.Start();
+        }
+
+        private void StopHapticLiveStatusTimer()
+        {
+            _hapticLiveStatusTimer?.Stop();
+            _hapticLiveStatusTimer = null;
+        }
+
+        /// <summary>
+        /// The two pieces of Phase F state that only the engine knows: whether the mixer is standing
+        /// down because the user grabbed the toy's own controls, and which .funscript (if any) is
+        /// currently following the video. Both badges live in an Expander HEADER, so they are
+        /// visible whether or not the section is open.
+        /// </summary>
+        internal void RefreshHapticLiveStatus()
+        {
+            var tab = HapticsTab;
+            if (tab == null) return;
+
+            if (tab.HapticOverrideBadge != null)
+            {
+                bool suppressed = false;
+                try { suppressed = App.Haptics?.Mixer.AreLayersSuppressed == true; } catch { }
+                var want = suppressed ? Visibility.Visible : Visibility.Collapsed;
+                if (tab.HapticOverrideBadge.Visibility != want) tab.HapticOverrideBadge.Visibility = want;
+            }
+
+            if (tab.HapticFunScriptLoadedBadge != null)
+            {
+                string? path = null;
+                try { path = App.Haptics?.FunScript.LoadedScriptPath; } catch { }
+                var loaded = !string.IsNullOrWhiteSpace(path);
+                var want = loaded ? Visibility.Visible : Visibility.Collapsed;
+                if (tab.HapticFunScriptLoadedBadge.Visibility != want) tab.HapticFunScriptLoadedBadge.Visibility = want;
+                if (loaded && tab.TxtHapticFunScriptLoaded != null)
+                {
+                    var name = System.IO.Path.GetFileName(path!);
+                    var text = Loc.GetF("haptics_funscript_loaded", name);
+                    if (tab.TxtHapticFunScriptLoaded.Text != text) tab.TxtHapticFunScriptLoaded.Text = text;
+                }
+            }
         }
 
         /// <summary>Push every routing row's value back out of settings (post-load, post-import).</summary>
@@ -280,11 +354,109 @@ namespace ConditioningControlPanel
             HapticsTab.SliderVideoHapticPower.Value = syncPower;
             HapticsTab.TxtVideoHapticPower.Text = $"{syncPower}%";
 
+            // ---- Phase F -------------------------------------------------------
+            LoadHapticTemperamentToUi(s);
+            LoadHapticToyInputToUi(s);
+            LoadHapticMediaExtrasToUi(s);
+            LoadHapticAudioDspToUi(s);
+
             RefreshAudioSyncCardVisibility();
             RefreshHapticRoutingRows();
             RefreshHapticToys();
+            RefreshHapticLiveStatus();
             UpdateHapticPatternPreview();
         }
+
+        // ---------------------------------------------------------------- Phase F load helpers
+        // Deliberately one small method per section, all pure "settings -> control" with no layout
+        // knowledge, so the pending tab redesign can move the XAML without touching any of this.
+
+        /// <summary>The five temperament chips (a RadioButton group) plus the description line.</summary>
+        private void LoadHapticTemperamentToUi(HapticSettings s)
+        {
+            var temperament = HapticTemperament.FromKey(s.V2.Temperament);
+            var chips = HapticTemperamentChips;
+            for (int i = 0; i < chips.Length; i++)
+            {
+                if (chips[i] == null) continue;
+                chips[i]!.IsChecked = i == (int)temperament.Kind;
+            }
+            if (HapticsTab.TxtHapticTemperamentDesc != null)
+                HapticsTab.TxtHapticTemperamentDesc.Text = Loc.Get(temperament.DescriptionKey);
+        }
+
+        private void LoadHapticToyInputToUi(HapticSettings s)
+        {
+            HapticsTab.ChkHapticToyInput.IsChecked = s.ToyInputEnabled;
+            HapticsTab.ChkHapticToyAttentionCheck.IsChecked = s.AttentionCheckToyButton;
+
+            // A stored 0 means "back-off disabled"; the slider's range starts at 5, so it shows the
+            // minimum rather than a lie. Nothing is written back — the value only changes if the
+            // user actually drags it (the _isLoading guard in the handler sees to that).
+            var cooldown = Math.Clamp(s.UserOverrideCooldownSec <= 0 ? 5 : s.UserOverrideCooldownSec, 5, 120);
+            HapticsTab.SliderHapticOverrideCooldown.Value = cooldown;
+            HapticsTab.TxtHapticOverrideCooldown.Text = $"{cooldown}s";
+
+            ApplyHapticToyInputEnabledState(s.ToyInputEnabled);
+        }
+
+        /// <summary>Everything under the toy-input master toggle is dead weight without it.</summary>
+        private void ApplyHapticToyInputEnabledState(bool on)
+        {
+            if (HapticsTab?.ChkHapticToyAttentionCheck != null) HapticsTab.ChkHapticToyAttentionCheck.IsEnabled = on;
+            SetSliderEnabled(HapticsTab?.SliderHapticOverrideCooldown, on);
+        }
+
+        /// <summary>
+        /// The app's PinkSlider template has no disabled visual, so IsEnabled alone produces a
+        /// slider that looks live and silently ignores every drag. Dim it too.
+        /// </summary>
+        private static void SetSliderEnabled(Slider? slider, bool on)
+        {
+            if (slider == null) return;
+            slider.IsEnabled = on;
+            slider.Opacity = on ? 1.0 : 0.4;
+        }
+
+        private void LoadHapticMediaExtrasToUi(HapticSettings s)
+        {
+            HapticsTab.ChkHapticFunScript.IsChecked = s.FunScriptEnabled;
+            HapticsTab.ChkHapticFunScriptVibe.IsChecked = s.FunScriptToVibeConversion;
+            HapticsTab.ChkHapticFunScriptVibe.IsEnabled = s.FunScriptEnabled;
+
+            HapticsTab.ChkHapticLuminance.IsChecked = s.LuminanceSyncEnabled;
+            var lum = (int)Math.Round(Math.Clamp(s.LuminanceSyncIntensity, 0, 1) * 100);
+            HapticsTab.SliderHapticLuminance.Value = lum;
+            HapticsTab.TxtHapticLuminance.Text = $"{lum}%";
+            SetSliderEnabled(HapticsTab.SliderHapticLuminance, s.LuminanceSyncEnabled);
+        }
+
+        /// <summary>Band split + the six DSP knobs that were previously settings.json-only.</summary>
+        private void LoadHapticAudioDspToUi(HapticSettings s)
+        {
+            var a = s.AudioSync;
+            HapticsTab.ChkHapticBandSplit.IsChecked = a.BandSplit;
+
+            SetDspSlider(HapticsTab.SliderDspSensitivity, HapticsTab.TxtDspSensitivity, a.Sensitivity * 100, "x");
+            SetDspSlider(HapticsTab.SliderDspSmoothing, HapticsTab.TxtDspSmoothing, a.Smoothing * 100, "%");
+            SetDspSlider(HapticsTab.SliderDspBass, HapticsTab.TxtDspBass, a.BassWeight * 100, "%");
+            SetDspSlider(HapticsTab.SliderDspRms, HapticsTab.TxtDspRms, a.RmsWeight * 100, "%");
+            SetDspSlider(HapticsTab.SliderDspOnset, HapticsTab.TxtDspOnset, a.OnsetWeight * 100, "%");
+            SetDspSlider(HapticsTab.SliderDspMax, HapticsTab.TxtDspMax, a.MaxIntensity * 100, "%");
+        }
+
+        /// <summary>Sliders here are all "0-100 of a 0..1 setting"; sensitivity is the one that reads
+        /// as a multiplier instead of a percentage.</summary>
+        private static void SetDspSlider(Slider? slider, TextBlock? label, double value100, string unit)
+        {
+            if (slider == null) return;
+            var v = Math.Clamp(value100, slider.Minimum, slider.Maximum);
+            slider.Value = v;
+            if (label != null) label.Text = FormatDsp(v, unit);
+        }
+
+        private static string FormatDsp(double value100, string unit)
+            => unit == "x" ? (value100 / 100.0).ToString("0.00") + "x" : ((int)Math.Round(value100)) + "%";
 
         #endregion
 
@@ -528,6 +700,192 @@ namespace ConditioningControlPanel
             if (_isLoading || HapticsTab?.CmbHapticDtrhDensity == null) return;
             HapticCfg.DtrhDensity = HapticsTab.CmbHapticDtrhDensity.SelectedIndex;
             App.Settings.Save();
+        }
+
+        /// <summary>The five temperament chips in preset order (index == HapticTemperamentKind).</summary>
+        private RadioButton?[] HapticTemperamentChips => new[]
+        {
+            HapticsTab?.RbTemperGentle,
+            HapticsTab?.RbTemperBalanced,
+            HapticsTab?.RbTemperTease,
+            HapticsTab?.RbTemperIntense,
+            HapticsTab?.RbTemperCruel
+        };
+
+        /// <summary>
+        /// TEMPERAMENT DIAL. One preset key in settings; the mixer resolves it once per tick and
+        /// applies its multipliers after the routing intensity and before the master cap, so no
+        /// preset can ever exceed the safety ceiling.
+        /// </summary>
+        internal void RbHapticTemperament_Checked(object sender, RoutedEventArgs e)
+        {
+            if (sender is not RadioButton chip) return;
+            if (!int.TryParse(chip.Tag as string, out var index)) return;
+
+            var temperament = HapticTemperament.FromIndex(index);
+            if (HapticsTab?.TxtHapticTemperamentDesc != null)
+                HapticsTab.TxtHapticTemperamentDesc.Text = Loc.Get(temperament.DescriptionKey);
+
+            if (_isLoading) return;
+            if (HapticCfg.V2.Temperament == temperament.Key) return;
+            HapticCfg.V2.Temperament = temperament.Key;
+            App.Settings.Save();
+        }
+
+        #endregion
+
+        #region Haptics — toy input (two-way)
+
+        internal void ChkHapticToyInput_Changed(object sender, RoutedEventArgs e)
+        {
+            if (HapticsTab?.ChkHapticToyInput == null) return;
+            var on = HapticsTab.ChkHapticToyInput.IsChecked == true;
+            ApplyHapticToyInputEnabledState(on);
+            if (_isLoading) return;
+
+            HapticCfg.ToyInputEnabled = on;
+            App.Settings.Save();
+        }
+
+        internal void ChkHapticToyAttentionCheck_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading || HapticsTab?.ChkHapticToyAttentionCheck == null) return;
+            HapticCfg.AttentionCheckToyButton = HapticsTab.ChkHapticToyAttentionCheck.IsChecked == true;
+            App.Settings.Save();
+        }
+
+        /// <summary>How long the mixer's CONTINUOUS layers stand down after the user changes the
+        /// strength on the toy itself. Transient accents are deliberately unaffected.</summary>
+        internal void SliderHapticOverrideCooldown_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (HapticsTab?.TxtHapticOverrideCooldown == null) return;
+            var seconds = (int)HapticsTab.SliderHapticOverrideCooldown.Value;
+            HapticsTab.TxtHapticOverrideCooldown.Text = $"{seconds}s";
+            if (_isLoading) return;
+
+            HapticCfg.UserOverrideCooldownSec = seconds;
+            App.Settings.Save();
+        }
+
+        #endregion
+
+        #region Haptics — media extras (FunScript, flash brightness)
+
+        internal void ChkHapticFunScript_Changed(object sender, RoutedEventArgs e)
+        {
+            if (HapticsTab?.ChkHapticFunScript == null) return;
+            var on = HapticsTab.ChkHapticFunScript.IsChecked == true;
+            if (HapticsTab.ChkHapticFunScriptVibe != null) HapticsTab.ChkHapticFunScriptVibe.IsEnabled = on;
+            if (_isLoading) return;
+
+            HapticCfg.FunScriptEnabled = on;
+            App.Settings.Save();
+
+            // Turning it off mid-video must stop the script that is already following, not wait for
+            // the next clip (the service zeroes its layer on the way out).
+            if (!on) { try { App.Haptics?.FunScript.OnVideoStopped(); } catch { } }
+            RefreshHapticLiveStatus();
+        }
+
+        internal void ChkHapticFunScriptVibe_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading || HapticsTab?.ChkHapticFunScriptVibe == null) return;
+            HapticCfg.FunScriptToVibeConversion = HapticsTab.ChkHapticFunScriptVibe.IsChecked == true;
+            App.Settings.Save();
+        }
+
+        internal void ChkHapticLuminance_Changed(object sender, RoutedEventArgs e)
+        {
+            if (HapticsTab?.ChkHapticLuminance == null) return;
+            var on = HapticsTab.ChkHapticLuminance.IsChecked == true;
+            SetSliderEnabled(HapticsTab.SliderHapticLuminance, on);
+            if (_isLoading) return;
+
+            HapticCfg.LuminanceSyncEnabled = on;
+            App.Settings.Save();
+
+            // The layer holds its level until something changes it, so a live flash must not be
+            // left buzzing after the feature is switched off.
+            if (!on) { try { App.Haptics?.SetLayer(HapticLayer.Luminance, 0); } catch { } }
+        }
+
+        internal void SliderHapticLuminance_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (HapticsTab?.TxtHapticLuminance == null) return;
+            var percent = (int)HapticsTab.SliderHapticLuminance.Value;
+            HapticsTab.TxtHapticLuminance.Text = $"{percent}%";
+            if (_isLoading) return;
+
+            HapticCfg.LuminanceSyncIntensity = percent / 100.0;
+            App.Settings.Save();
+        }
+
+        #endregion
+
+        #region Haptics — audio sync advanced (band split + DSP)
+
+        internal void ChkHapticBandSplit_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading || HapticsTab?.ChkHapticBandSplit == null) return;
+            HapticCfg.AudioSync.BandSplit = HapticsTab.ChkHapticBandSplit.IsChecked == true;
+            App.Settings.Save();
+        }
+
+        internal void SliderDspSensitivity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => OnDspSliderChanged(HapticsTab?.SliderDspSensitivity, HapticsTab?.TxtDspSensitivity, "x",
+                                  v => HapticCfg.AudioSync.Sensitivity = v);
+
+        internal void SliderDspSmoothing_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => OnDspSliderChanged(HapticsTab?.SliderDspSmoothing, HapticsTab?.TxtDspSmoothing, "%",
+                                  v => HapticCfg.AudioSync.Smoothing = v);
+
+        internal void SliderDspBass_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => OnDspSliderChanged(HapticsTab?.SliderDspBass, HapticsTab?.TxtDspBass, "%",
+                                  v => HapticCfg.AudioSync.BassWeight = v);
+
+        internal void SliderDspRms_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => OnDspSliderChanged(HapticsTab?.SliderDspRms, HapticsTab?.TxtDspRms, "%",
+                                  v => HapticCfg.AudioSync.RmsWeight = v);
+
+        internal void SliderDspOnset_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => OnDspSliderChanged(HapticsTab?.SliderDspOnset, HapticsTab?.TxtDspOnset, "%",
+                                  v => HapticCfg.AudioSync.OnsetWeight = v);
+
+        internal void SliderDspMax_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => OnDspSliderChanged(HapticsTab?.SliderDspMax, HapticsTab?.TxtDspMax, "%",
+                                  v => HapticCfg.AudioSync.MaxIntensity = v);
+
+        /// <summary>Shared shape for all six: label first (so it tracks even during a load), then
+        /// the settings write. AudioSyncSettings clamps every one of these itself.</summary>
+        private void OnDspSliderChanged(Slider? slider, TextBlock? label, string unit, Action<double> apply)
+        {
+            if (slider == null) return;
+            if (label != null) label.Text = FormatDsp(slider.Value, unit);
+            if (_isLoading) return;
+
+            apply(slider.Value / 100.0);
+            App.Settings.Save();   // debounced 500 ms, so a drag is still one write
+        }
+
+        /// <summary>Back to the shipped analysis curve. The values come from a FRESH
+        /// <see cref="AudioSyncSettings"/> rather than hard-coded numbers, so the model stays the
+        /// single source of truth for what "default" means.</summary>
+        internal void BtnDspReset_Click(object sender, RoutedEventArgs e)
+        {
+            var defaults = new AudioSyncSettings();
+            var a = HapticCfg.AudioSync;
+            a.Sensitivity = defaults.Sensitivity;
+            a.Smoothing = defaults.Smoothing;
+            a.BassWeight = defaults.BassWeight;
+            a.RmsWeight = defaults.RmsWeight;
+            a.OnsetWeight = defaults.OnsetWeight;
+            a.MaxIntensity = defaults.MaxIntensity;
+            App.Settings.Save();
+
+            var wasLoading = _isLoading;
+            _isLoading = true;
+            try { LoadHapticAudioDspToUi(HapticCfg); }
+            finally { _isLoading = wasLoading; }
         }
 
         #endregion

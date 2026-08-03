@@ -249,31 +249,80 @@ Buttplug device index is session-scoped and unusable as a persisted key.
     Video Haptic Sync tuning card as an Advanced expander.
 
 ### Phase F — Features (after E; each cuttable)
-ENGINE side is done and headless-functional (defaults ARE the shipping behaviour — no UI binds any
-of it yet). UI side is Phase E/G.
+Engine AND UI are done. The defaults are still the shipping behaviour — the UI pass exposed the
+knobs without changing a single default, and everything it added is collapsed at rest (see the
+Phase F UI decisions at the end of this section).
 - [x] **Toy-button input** (engine): `Services/Haptics/ToyInputService.cs` — debounced `ButtonPressed`
       + awaitable `WaitForButtonAsync(timeoutMs, ct)`, `StrengthChanged` → mixer back-off.
       ONE consumer wired: VideoService attention checks (`AttentionCheckToyButton`, default OFF —
       a press ADDS to the mouse click, never replaces it; success posts `ToyButtonReward`).
-  - [ ] UI: expose the toggle; remaining consumers (lock-card alternative confirm, quest interaction).
+  - [x] UI: "Toy buttons and dials" collapsed Expander under the toy grid — master toggle,
+        the attention-check opt-in, the 5-120 s back-off slider, and a live
+        "Backing off - you took control" badge in the expander HEADER (visible while collapsed).
+  - [ ] Remaining consumers (lock-card alternative confirm, quest interaction) — still engine-only.
 - [x] **FunScript** (engine): `Services/Haptics/FunScript.cs` (pure parser/sampler, unit-tested) +
       `Services/Haptics/FunScriptService.cs` (wiring). Auto-loads `<video>.funscript` then
       `<video-dir>\funscripts\<name>.funscript`; Position actuators get a 300 ms lead, everything
       else gets the speed→intensity envelope on `HapticLayer.Pattern`. Default ON, zero-config.
-  - [ ] UI: none required; optional "script loaded" indicator + a script-folder picker.
+  - [x] UI: "Video sync scripts" collapsed Expander in the Media extras block — enable toggle +
+        "convert to vibration for toys that cannot stroke" + a "Following &lt;file&gt;.funscript"
+        badge in the header, bound (1 Hz poll) to `FunScriptService.LoadedScriptPath` and
+        Collapsed while it is null. No folder picker: discovery is beside-the-video by design,
+        so a picker would imply a choice that does not exist.
 - [x] **Audio-sync v2 band-split** (engine): `AudioSyncSettings.BandSplit` (`band_split`, default OFF)
       → `AudioAnalyzer.Analyze(..., wantBands, out low, out high)` from the SAME FFT pass →
       `ChunkManager.LowBandTrack/HighBandTrack` → `HapticService.SetSyncIntensityAsync(low, high)`
       → `HapticMixer.SetLayerPerActuator`. Only engages when a connected toy has ≥2 Vibrate
       actuators; 1-motor toys are byte-identical to before.
-  - [ ] UI: the band-split toggle + the 6 hidden DSP knobs in an Advanced expander.
+  - [x] UI: "Advanced tuning" collapsed Expander inside the Video Haptic Sync card (it follows the
+        same `AudioSync.Enabled` visibility gate as the delay/power sliders): the band-split toggle
+        plus the six DSP knobs — Sensitivity (0.10-3.00x), Smoothing (0-95%), Bass weight,
+        Volume weight (RMS), Beat weight (onset), Ceiling (`MaxIntensity`, 50-100%) — and a
+        "Reset to defaults" button whose values are read from a fresh `AudioSyncSettings`
+        instance, never hard-coded. `MinIntensity` is deliberately NOT exposed: the mixer's own
+        `MinPerceptibleIntensity` already owns the floor, and a user-set floor reads as a toy that
+        will not stop buzzing.
 - [x] **Flash-luminance sync** (engine): `HapticSettings.LuminanceSyncEnabled` (default OFF) +
       `LuminanceSyncIntensity` (0.5). `FlashService.ApplyLuminanceSync` samples the ALREADY-DECODED
       frozen `BitmapSource` down to 8×8 (WIC, no re-decode, per-file cached) → `HapticLayer.Luminance`
       with `autoZeroMs = the flash's own lifetime`, so there is no hide hook to get wrong.
       **SubliminalService has no image path** (text-only + whisper audio), so nothing was wired there.
-  - [ ] UI: expose toggle + intensity.
-- [ ] **Temperament dial**: presets (Gentle/Tease/Cruel/…) = multipliers over mixer params. NOT STARTED.
+  - [x] UI: "Flash brightness sync" collapsed Expander in the Media extras block — enable toggle +
+        a 0-100% strength slider (`LuminanceSyncIntensity`). The slider is dimmed to 0.4 opacity
+        while the feature is off, because `PinkSlider` has no disabled visual and a slider that
+        looks live but ignores drags is worse than no slider.
+- [x] **Temperament dial**: `Services/Haptics/Core/HapticTemperament.cs` — five presets, each a
+      multiplier set applied inside `HapticMixer`. Settings key `HapticSettingsV2.Temperament`
+      (`[JsonProperty("temperament")]`, default `"balanced"`; an unrecognised value falls back to
+      Balanced). UI: a 5-chip segmented `RadioButton` row in the Power card with a one-line
+      description that updates on selection — the ONE new control kept in plain sight.
+
+  **Multiplier table** (Balanced = all 1.0 / bias 0 = pre-temperament behaviour):
+
+  | Preset   | Continuous | Transient | Attack | Decay | Pulse-priority bias |
+  |----------|-----------:|----------:|-------:|------:|--------------------:|
+  | Gentle   | 0.70 | 0.75 | 1.40 | 1.30 | -1 |
+  | Balanced | 1.00 | 1.00 | 1.00 | 1.00 |  0 |
+  | Tease    | 0.85 | 0.90 | 1.60 | 1.80 |  0 |
+  | Intense  | 1.15 | 1.20 | 0.80 | 0.90 | +1 |
+  | Cruel    | 1.25 | 1.40 | 0.45 | 0.70 | +2 |
+
+  Where each column lands in the mixer:
+  - **Continuous** multiplies the layer rule's own intensity in `BuildOutputs` (so the band-split
+    per-motor path inherits it for free — it reuses the same `layerScale`).
+  - **Transient** multiplies each pulse sample as the priority groups are summed, before the
+    group clamp to 1.0.
+  - **Attack / Decay** scale the envelope segments in `PromotePending` as a pending step becomes an
+    active pulse. HOLD is untouched, so a pattern keeps its rhythm and only changes its EDGE.
+  - **Pulse-priority bias** is added to `MaxConcurrentPulses` (clamped 1-12). Priority is only ever
+    consulted when that window is full and the weakest active pulse must be evicted, so biasing
+    the window is the concrete meaning of "priority bias" in this mixer.
+  - Everything lands BEFORE `Finish()` = `min(raw x GlobalIntensity, MasterCap) x deviceTrim`, so
+    **the cap always wins** and a >1.0 scale can never exceed the user's safety ceiling.
+  - Known cosmetic wrinkle: `HapticMixer.Play` computes a sequence's `EndAt` from the UNSCALED
+    envelope, so with Tease/Cruel an awaited legacy call can complete a few tens of ms early/late
+    relative to the audible tail. `ExpireActive` uses the SCALED length, so nothing is ever cut
+    short on the toy.
 
 **Decisions made in Phase F (Phase E/G need these):**
 - **Contract extensions: none.** `HapticContracts.cs` was not touched — `HapticLayer.Luminance` and
@@ -311,6 +360,22 @@ of it yet). UI side is Phase E/G.
   position lead and the 10→500 units/s speed→intensity mapping are from the published conversion
   conventions, not measured on hardware. (c) Toy Events button frames were never captured from a
   real toy (Phase B open item (a)), so the attention-check alternative is untested end to end.
+
+**Decisions made in the Phase F UI pass (the design agent needs these):**
+- **Owner's mid-flight call: the tab was already too dense.** So of the five Phase F features,
+  only the temperament picker is visible at rest. Toy input, FunScript, flash brightness and the
+  audio DSP knobs each live in a `CollapsibleCard` Expander that is `IsExpanded="False"`, showing
+  a plain-language header plus one line of description. No new always-visible slider was added.
+- **Live state lives in expander HEADERS, not bodies** ("Backing off - you took control",
+  "Following &lt;script&gt;"), so a collapsed section can still tell you something is happening.
+- **Layout and logic are separated on purpose.** Every new control is loaded by one small
+  `Load*ToUi(HapticSettings)` helper in `MainWindow.Haptics.cs` and written by one handler; none
+  of them know where the control sits. Moving the XAML requires touching no C# beyond the
+  `HapticsTab.<name>` references.
+- **The routing rows resist UI automation.** Their `CheckBox`es sit in a `DataTemplate` with a
+  custom `ToggleStyle`, and UIA realises at most one of them at a time, so a smoke test cannot
+  toggle "Media > Audio sync" by AutomationId — it has to click the on-screen coordinate. Worth
+  knowing before anyone writes a UIA test against the redesigned tab.
 
 ### Phase G — Ship prep
 - [ ] Localization keys → all 9 `Localization/Languages/*.json` (STRICT JSON, `\n` escaped, never hand-flip line endings).

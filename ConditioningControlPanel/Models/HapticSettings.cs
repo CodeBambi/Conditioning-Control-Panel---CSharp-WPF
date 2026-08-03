@@ -731,6 +731,14 @@ namespace ConditioningControlPanel.Models
         /// <summary>How many transient envelopes may overlap before the weakest gets evicted.</summary>
         [JsonProperty("max_concurrent_pulses")] public int MaxConcurrentPulses { get; set; } = HapticMixer.DefaultMaxConcurrentPulses;
 
+        /// <summary>
+        /// PHASE F — TEMPERAMENT DIAL. Stable lowercase key of a <see cref="HapticTemperament"/>
+        /// preset: <c>gentle</c> / <c>balanced</c> / <c>tease</c> / <c>intense</c> / <c>cruel</c>.
+        /// "balanced" is all-1.0, i.e. exactly the pre-temperament behaviour, and is the default —
+        /// an unrecognised value falls back to it rather than doing something surprising.
+        /// </summary>
+        [JsonProperty("temperament")] public string Temperament { get; set; } = HapticTemperament.Default.Key;
+
         [JsonProperty("providers")] public Dictionary<string, HapticProviderConfig> Providers { get; set; } = new();
         [JsonProperty("devices")] public Dictionary<string, HapticDeviceConfig> Devices { get; set; } = new();
         /// <summary>Key = <see cref="HapticEventKind"/> member name (stable — they ARE settings keys).</summary>

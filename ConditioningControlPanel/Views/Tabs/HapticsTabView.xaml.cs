@@ -77,5 +77,55 @@ namespace ConditioningControlPanel.Views.Tabs
 
         private void SliderVideoHapticPower_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
             => Owner?.SliderVideoHapticPower_Changed(sender, e);
+
+        // ---- Phase F: temperament, toy input, FunScript, luminance, audio advanced ----
+
+        private void RbHapticTemperament_Checked(object sender, RoutedEventArgs e)
+            => Owner?.RbHapticTemperament_Checked(sender, e);
+
+        private void ChkHapticToyInput_Changed(object sender, RoutedEventArgs e)
+            => Owner?.ChkHapticToyInput_Changed(sender, e);
+
+        private void ChkHapticToyAttentionCheck_Changed(object sender, RoutedEventArgs e)
+            => Owner?.ChkHapticToyAttentionCheck_Changed(sender, e);
+
+        private void SliderHapticOverrideCooldown_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderHapticOverrideCooldown_Changed(sender, e);
+
+        private void ChkHapticFunScript_Changed(object sender, RoutedEventArgs e)
+            => Owner?.ChkHapticFunScript_Changed(sender, e);
+
+        private void ChkHapticFunScriptVibe_Changed(object sender, RoutedEventArgs e)
+            => Owner?.ChkHapticFunScriptVibe_Changed(sender, e);
+
+        private void ChkHapticLuminance_Changed(object sender, RoutedEventArgs e)
+            => Owner?.ChkHapticLuminance_Changed(sender, e);
+
+        private void SliderHapticLuminance_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderHapticLuminance_Changed(sender, e);
+
+        private void ChkHapticBandSplit_Changed(object sender, RoutedEventArgs e)
+            => Owner?.ChkHapticBandSplit_Changed(sender, e);
+
+        private void SliderDspSensitivity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderDspSensitivity_Changed(sender, e);
+
+        private void SliderDspSmoothing_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderDspSmoothing_Changed(sender, e);
+
+        private void SliderDspBass_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderDspBass_Changed(sender, e);
+
+        private void SliderDspRms_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderDspRms_Changed(sender, e);
+
+        private void SliderDspOnset_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderDspOnset_Changed(sender, e);
+
+        private void SliderDspMax_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderDspMax_Changed(sender, e);
+
+        private void BtnDspReset_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnDspReset_Click(sender, e);
     }
 }
