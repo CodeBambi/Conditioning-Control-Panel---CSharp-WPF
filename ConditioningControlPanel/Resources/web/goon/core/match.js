@@ -229,6 +229,8 @@ export class GoonMatchService {
 
     this._ramp = [];
     this._rampIndex = 0;
+    this._rampView = null;      // memoized read-only view of _ramp — see `rampCues`
+    this._rampViewSrc = null;
     this._liveDurationMs = 0;
     this._lastTickSentLocalMs = 0;
     this._nextInteractionCheckMs = 0;
@@ -359,6 +361,26 @@ export class GoonMatchService {
     if (this._liveDurationMs <= 0) return 0;
     const remaining = this._liveDurationMs - this._liveElapsed();
     return remaining <= 0 ? 0 : remaining;
+  }
+
+  /**
+   * READ-ONLY view of the rolled endurance ramp, for anything that wants to look AHEAD of the
+   * pump (ui/announcer.js reads it to warn "get ready to watch" before a video starts).
+   *
+   * Frozen cue copies, memoized per roll: a caller cannot reach the array the pump walks, and
+   * polling this every 250 ms costs one identity check. Empty before Live.
+   *
+   * JS-ONLY ADDITION: the C# GoonMatchService has no equivalent property. It is pure read and
+   * changes no behaviour, so parity is unaffected and the C# side needs nothing.
+   *
+   * @returns {ReadonlyArray<{offsetMs:number,action:number,element:number,intensity:number,durationMs:number}>}
+   */
+  get rampCues() {
+    const src = this._ramp || [];
+    if (this._rampView && this._rampViewSrc === src) return this._rampView;
+    this._rampViewSrc = src;
+    this._rampView = Object.freeze(src.map((c) => Object.freeze({ ...c })));
+    return this._rampView;
   }
 
   /** The sudden-death seam. `runner` is an alias for the same field (see header block). */

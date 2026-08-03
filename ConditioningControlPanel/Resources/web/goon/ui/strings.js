@@ -53,7 +53,7 @@ export const S = Object.freeze({
       'holding still earns points; enduring what they send you earns charges.',
       'charges buy payloads you fire at them. the receiver decides what it can run.',
       'mercy is always one key away. escape, any phase, no confirmation.',
-      'if nobody breaks before the clock, sudden death settles it in rounds.',
+      'if nobody breaks before the clock runs out, the higher score wins.',
     ],
     close: 'got it',
   },
@@ -150,7 +150,7 @@ export const S = Object.freeze({
     disputed: 'Results disagree — both were recorded.',
     unconfirmed: 'Unconfirmed — waiting on the other side.',
     mercyLine: (name, ms) => (name || 'they') + ' pressed mercy at ' + mmss(ms) + '.',
-    sdLine: (a, b) => 'Sudden death, ' + a + '–' + b + '.',
+    sdLine: (a, b) => 'The clock ran out, ' + a + '–' + b + '.',
     abandonLine: 'Connection lost for a minute.',
     drawLine: 'You both let go at the same moment.',
     scoreline: 'scoreline',
@@ -243,6 +243,38 @@ export const S = Object.freeze({
     dropHint: 'drop it here',
     /** The green checkmark on their projection: they took the whole payload. */
     passed: 'they held it',
+  },
+
+  /* ---------------------------------------------- the announcer ribbon (ui/announcer.js)
+   * The one place on the page that raises its voice, because it is calling a
+   * thing that is about to happen to BOTH of you (the ramp is one shared roll).
+   * Sentence case with a real exclamation mark is deliberate here and nowhere
+   * else: `ready` is a warning shouted across a room, `on` is the flat statement
+   * that it landed. Keyed by GoonElement code.
+   *
+   * BUBBLES HAVE NO LINE ON PURPOSE — they are on from t=0 to the end for both
+   * players, so an announcement would fire once at zero and mean nothing. */
+  announce: {
+    ready: {
+      [GoonElement.Flashes]: 'Get ready to stare!',
+      [GoonElement.Videos]: 'Get ready to watch!',
+      [GoonElement.Subliminals]: 'Get ready to soak it up!',
+      [GoonElement.LockCards]: 'Get ready to type!',
+      [GoonElement.ToyPatterns]: 'Get ready to buzz!',
+      [GoonElement.BrainDrain]: 'Get ready to melt!',
+      [GoonElement.BouncingText]: 'Get ready to read!',
+      [GoonElement.Spiral]: 'Get ready to sink!',
+    },
+    on: {
+      [GoonElement.Flashes]: 'Flashes on',
+      [GoonElement.Videos]: 'Video on',
+      [GoonElement.Subliminals]: 'Subliminals on',
+      [GoonElement.LockCards]: 'Lock card!',
+      [GoonElement.ToyPatterns]: 'Toy on',
+      [GoonElement.BrainDrain]: 'Brain drain on',
+      [GoonElement.BouncingText]: 'Bouncing text on',
+      [GoonElement.Spiral]: 'Spiral on',
+    },
   },
 
   /* ------------------------------------------------- the arsenal + its economy

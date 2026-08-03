@@ -1328,3 +1328,116 @@
 .gg-hud-frame.is-calm .gg-mini.is-anim::before,
 .gg-hud-frame.is-calm .gg-mini.is-anim *,
 .gg-hud-frame.is-calm .gg-mini-emote * { animation: none !important; }
+
+/* ===========================================================================
+ * ANNOUNCER — the top-centre ribbon (ui/announcer.js), added 2026-08-03.
+ *
+ * "we should announce briefly on the top of the screen whats going on (the
+ *  effects that happen to both player, like Get ready to watch! or Get ready to
+ *  type, etc and Video on, and Lock Card, etc)"
+ *
+ * PLACEMENT. Top-centre, but UNDER the timer plate, which owns the middle of the
+ * top bar (.gg-timer { justify-self: center }). It is absolutely placed so it
+ * takes no row in the frame's grid, narrow so it never reaches the opponent
+ * monitor in the right corner, and nowhere near MERCY's bottom-centre keep-out.
+ *
+ * POINTER-EVENTS. `.gg-hud-frame .gg-plate { pointer-events: auto }` above is
+ * specificity 0,2,0 and the ribbon wears .gg-plate for the data-gg-fx="hot"
+ * hardening — so the opt-out below is written at 0,2,0 as well, later in the
+ * file, or a banner would eat a click meant for #gg-stage.
+ *
+ * MOTION. Two one-shots on mutually exclusive classes (`animation` is a
+ * shorthand; two live rules on one element cancel each other) plus one
+ * decorative sheen on its own child. No loops at all: the ribbon costs the
+ * two-animation chrome budget nothing to leave on screen. With motion off the
+ * banner still APPEARS — the base state is visible and ui/announcer.js removes
+ * the node on a JS timer, never on animation-fill-mode.
+ * ======================================================================== */
+.gg-announce {
+  position: absolute;
+  top: clamp(4.4rem, 8vh, 6rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  width: max-content;
+  max-width: min(24rem, 52vw);
+}
+.gg-hud-frame .gg-announce,
+.gg-hud-frame .gg-announce-slot { pointer-events: none; }
+
+.gg-announce-slot {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  padding: 0.36rem 0.95rem 0.42rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fff;
+  opacity: 1;                       /* the base state is VISIBLE — see MOTION above */
+  text-shadow: 0 0 14px rgba(var(--gg-pink-rgb), 0.5), 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+/* the pink/violet accent, on ::after so goon.css's hot rule may still flatten
+   the plate background underneath it */
+.gg-announce-slot::after {
+  content: '';
+  position: absolute;
+  left: 14%; right: 14%; bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gg-pink), var(--gg-violet), transparent);
+}
+.gg-announce-glyph {
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--gg-pink);
+  text-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.8);
+}
+.gg-announce-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the warning is softer than the fact — and the two never look alike */
+.gg-announce-slot.is-pre { border-color: rgba(var(--gg-violet-rgb), 0.45); }
+.gg-announce-slot.is-pre .gg-announce-glyph { color: var(--gg-violet); text-shadow: 0 0 12px rgba(var(--gg-violet-rgb), 0.7); }
+.gg-announce-slot.is-now { box-shadow: 0 0 22px rgba(var(--gg-pink-rgb), 0.28); }
+
+.gg-announce-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform: translateX(-120%);
+  background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, 0.16) 50%, transparent 68%);
+}
+
+@keyframes ggAnnounceIn { from { opacity: 0; transform: translateY(-10px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes ggAnnounceOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-6px); } }
+@keyframes ggAnnounceSheen { to { transform: translateX(120%); } }
+.gg-announce-slot.is-in { animation: ggAnnounceIn .22s ease-out 1; }
+.gg-announce-slot.is-in > .gg-announce-sheen { animation: ggAnnounceSheen .5s ease-out 1 forwards; }
+/* .is-out is set only after .is-in is removed, and it is written last so that a
+   frame where both somehow overlap resolves to the outro. */
+.gg-announce-slot.is-out { animation: ggAnnounceOut .26s ease-in 1 forwards; }
+
+/* hot: the plate hardens like every other one (goon.css flattens the backdrop
+   filter), and the purely decorative sheen stops being drawn at all. */
+html[data-gg-fx="hot"] .gg-announce-slot { backdrop-filter: none; background: rgba(10, 5, 17, 0.92); }
+html[data-gg-fx="hot"] .gg-announce-sheen { display: none; }
+
+/* the hard off switches — the words still land, they just stop moving */
+.gg-hud-frame.is-calm .gg-announce-slot.is-in,
+.gg-hud-frame.is-calm .gg-announce-slot.is-out,
+.gg-hud-frame.is-calm .gg-announce-sheen { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .gg-announce-slot.is-in,
+  .gg-announce-slot.is-out,
+  .gg-announce-sheen { animation: none !important; }
+}
+
+@media (orientation: portrait), (max-width: 720px) {
+  .gg-announce { top: clamp(3.8rem, 7vh, 5rem); max-width: min(20rem, 84vw); }
+  .gg-announce-slot { font-size: 0.76rem; padding: 0.3rem 0.8rem 0.36rem; }
+}

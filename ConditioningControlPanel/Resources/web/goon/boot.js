@@ -499,11 +499,24 @@ function buildMatch(transport, isHost, { withSuddenDeathUi = true, displayName =
     }
     catch (e) { logger.warn('createSuddenDeathUi threw: ' + ((e && e.message) || e)); }
     currentSd = sd;
-    match.suddenDeathRunner = new GoonSuddenDeathRunner({
-      presenter: sd ? sd.presenter : null,   // null -> the headless presenter
-      inputs: sd ? sd.inputs : null,         // null -> feeds that never fire
-      logger,
-    });
+
+    /* SUDDEN DEATH IS DETACHED — owner's call, 2026-08-03, pending the rounds
+     * rework. The run is just the Live phase now: Countdown -> Live -> Recap.
+     *
+     * This is a ONE-LINE detach on purpose. core/match.js _enterSuddenDeath()
+     * already degrades to the score comparison when no runner is attached
+     * (equal -> Draw, else the higher score wins; a mercy mid-run is still a
+     * loss), so nothing else has to change and core/rounds/* + ui/sd/* stay in
+     * the tree, wired and tested, ready to come back. Re-enable by restoring
+     * the assignment below — nothing else was removed.
+     *
+     * match.suddenDeathRunner = new GoonSuddenDeathRunner({
+     *   presenter: sd ? sd.presenter : null,   // null -> the headless presenter
+     *   inputs: sd ? sd.inputs : null,         // null -> feeds that never fire
+     *   logger,
+     * });
+     */
+    void GoonSuddenDeathRunner;   // keeps the import honest while SD is detached
   }
   return match;
 }
@@ -555,6 +568,45 @@ function clearRecapFallback() {
 }
 
 /**
+ * CLEARING THE WAY FOR THE RECAP — the teardown the end of a match owes the
+ * player. Called the moment the phase turns Recap, and again on every forceRecap
+ * pass.
+ *
+ * THE BUG THIS EXISTS FOR: core/match.js _endMatch() stops every sustained
+ * ELEMENT (_stopAllElements), but it knows nothing about an in-flight PAYLOAD
+ * render — a lock card or a video the opponent sent, which exec/ mounted on
+ * #gg-stage and which happily runs out its own duration_ms (up to 45 s) after
+ * the match is over. #gg-stage is z20, full-bleed and ABOVE the screen stack
+ * (goon.css:71-72); ui/screens.css only makes it click-through while it is
+ * :empty. One husk left on it therefore turns the whole recap into a picture:
+ * the buttons are unreachable, and so is every click anywhere on the page.
+ * That is exactly what the owner hit — "clicking any button does nothing".
+ *
+ * executor.stopAll() cancels the renders (each still gets its closing receipt)
+ * AND empties the layers; layers.stopAll() repeats it in case the executor
+ * never built. The sweep at the end is the assertion, not the fix.
+ *
+ * The other two things that can outlive a match are chrome, not effects: a
+ * modal sheet (#gg-modal, z70) and the options drawer (z70). Nothing else
+ * closes them, so a match that ends underneath either one lands the player on a
+ * recap they cannot reach.
+ */
+function clearForRecap(why) {
+  try { executor?.stopAll?.(); } catch (e) { logger.warn('executor.stopAll threw: ' + ((e && e.message) || e)); }
+  try { layers.stopAll(); } catch (e) { logger.warn('layers.stopAll threw: ' + ((e && e.message) || e)); }
+  try { if (sheets && sheets.isOpen) sheets.close(null); } catch (_e) { /* ignore */ }
+  try { if (options && options.isOpen) options.close(); } catch (_e) { /* ignore */ }
+
+  if (!hasDom()) return;
+  const stage = el('gg-stage');
+  if (stage && stage.childElementCount) {
+    logger.warn('recap (' + (why || '?') + '): #gg-stage still held ' + stage.childElementCount +
+      ' node(s) after teardown — clearing, it would have eaten every click');
+    try { stage.replaceChildren(); } catch (_e) { /* ignore */ }
+  }
+}
+
+/**
  * Idempotent: puts the recap in front of the player, and (on the fallback pass)
  * clears anything left covering it. The mercy takeover dismisses itself
  * (ui/mercy.js), but it is a full-bleed z65 scrim over a z10 screen, so this
@@ -565,6 +617,7 @@ function clearRecapFallback() {
 function forceRecap(why, sweep) {
   const m = currentMatch;
   if (!m || m.phase !== GoonMatchPhase.Recap) return;
+  clearForRecap(why);
   if (sweep) {
     try { mercyHandle?.dismissTakeover?.(); } catch (_e) { /* ignore */ }
     if (hasDom()) {
@@ -675,6 +728,9 @@ function onPhase(phase) {
     case GoonMatchPhase.Recap:
       unmountHud();
       unmountMercy();
+      // BEFORE the screen goes up, not after: everything that was over the
+      // match has to come down or the recap is a picture (see clearForRecap).
+      clearForRecap('phase');
       router.show('recap');
       break;
 
@@ -972,6 +1028,11 @@ function finishExit(why) {
  *                              -> confirm-free cancel + leave. Pre-live is a
  *                                 clean fold that never reaches the ledger, so
  *                                 there is nothing to confirm.
+ *   TAP, Recap                 -> leave, exactly like "Back to menu". The match
+ *                                 is already over: there is nothing left to
+ *                                 concede, and Escape must never be a key that
+ *                                 does nothing. The owner hit precisely that —
+ *                                 an end card with no way out.
  *   TAP, no match              -> close the topmost overlay, or nothing.
  *   HOLD >= 1.2s               -> mercy first (if we have not already), THEN
  *                                 the exit handshake. Closing the window can
@@ -1016,9 +1077,16 @@ function onKeyDown(e) {
   } else if (m && isPreLive(phase)) {
     logger.info('escape -> pre-live cancel');
     void actions.leave('escape');
-  } else {
-    if (sheets && sheets.isOpen) sheets.close(null);
-    else if (options && options.isOpen) options.close();
+  } else if (sheets && sheets.isOpen) {
+    sheets.close(null);
+  } else if (options && options.isOpen) {
+    options.close();
+  } else if (phase === GoonMatchPhase.Recap || (router && router.current === 'recap')) {
+    // The end card is a screen, not a match: Escape leaves it the same way the
+    // button does. Checked AFTER the overlays so Escape still peels the drawer
+    // or a sheet off the recap first, one layer per press.
+    logger.info('escape -> leave the recap');
+    void actions.leave('escape-recap');
   }
 
   try {

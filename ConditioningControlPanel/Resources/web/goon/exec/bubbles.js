@@ -26,9 +26,20 @@
  *
  * POINTER RULES. #gg-fx and every one of its sub-layers are pointer-events:none;
  * `.gg-bubble` is the ONLY node in this tier that opts back in (fx.css), so the
- * rest of the layer stays click-through. fx.css additionally drops that opt-in
- * whenever #gg-stage is occupied, so a bubble can never eat a click meant for a
- * lock card or a video attention check.
+ * rest of the layer stays click-through. That opt-in is now UNCONDITIONAL: fx.css
+ * used to revoke it whenever #gg-stage held a video or a lock card, which was
+ * harmless while pops were cosmetic and starves the player outright now that pops
+ * are the only source of items.
+ *
+ * SO THE FIELD GETS OUT OF THE WAY INSTEAD OF GOING DEAF. While the stage holds
+ * something, spawnRanges() below keeps NEW bubbles in the left/right gutters
+ * beside the stage content — they rise vertically, so a gutter spawn stays a
+ * gutter bubble for its whole life and never covers the video controls or the
+ * typing card. Bubbles already airborne when a video starts may drift across it;
+ * they are left alone, because teleporting a live node reads as a glitch and the
+ * click they might steal is one click, not a locked-out minute. If the gutters
+ * are too thin to be worth it (MIN_GUTTER_PX), the field goes back to full width:
+ * a bubble over the video is an annoyance, a dead economy is a broken match.
  *
  * BUDGET. MAX_LIVE bubbles, MAX_POP_FLASH pop flashes, ONE reused pane per pop
  * effect kind (a fresh pop refreshes its deadline instead of stacking a second
@@ -108,6 +119,96 @@ const reducedMotion = () => {
   catch (_e) { return false; }
 };
 
+/* ------------------------------------------------------- stage avoidance */
+
+/** The spawn margins the field has always used, as a percent of the viewport.
+ *  `left` is the bubble's LEFT EDGE (the wrap has no width of its own), so the
+ *  high end is short of 100 to keep a fat bubble mostly on screen. */
+export const SPAWN_MIN_PCT = 2;
+export const SPAWN_MAX_PCT = 92;
+/** Combined gutter width below which biasing is not worth it — squeezing the
+ *  whole field through a 100px slot looks worse than letting it overlap. */
+export const MIN_GUTTER_PX = 160;
+/** A slice narrower than this carries no visible variety; drop it. */
+const MIN_RANGE_PCT = 1.5;
+
+const finiteOr = (v, fallback) => (typeof v === 'number' && v === v && v !== Infinity && v !== -Infinity ? v : fallback);
+
+/**
+ * Where a NEW bubble is allowed to start, given whatever the stage is showing.
+ *
+ * PURE, and deliberately so: it is the one piece of this that has an opinion
+ * worth pinning in a test, and it depends on nothing but numbers.
+ *
+ * @param {{left:number,right?:number,width?:number}|null} stageRect
+ *        the stage CONTENT's viewport rect (not the stage layer, which is
+ *        full-bleed), or null/garbage when the stage is empty or unmeasurable
+ * @param {number} viewportW  window.innerWidth
+ * @param {{minGutterPx?:number, bubblePx?:number}} [opts]
+ *        bubblePx is this bubble's own width: it grows RIGHTWARD from `left`, so
+ *        only the left gutter has to give it room.
+ * @returns {Array<[number, number]>} one or more [loPct, hiPct] spans. Always at
+ *        least one — the full-width span is the fallback for every degenerate
+ *        input, because a field that cannot spawn is the worse failure.
+ */
+export function spawnRanges(stageRect, viewportW, opts) {
+  const full = [[SPAWN_MIN_PCT, SPAWN_MAX_PCT]];
+  const o = opts || {};
+  const vw = finiteOr(Number(viewportW), 0);
+  if (!(vw > 0) || !stageRect || typeof stageRect !== 'object') return full;
+
+  const left = finiteOr(Number(stageRect.left), NaN);
+  const rawRight = stageRect.right !== undefined
+    ? Number(stageRect.right)
+    : Number(stageRect.left) + Number(stageRect.width);
+  const right = finiteOr(rawRight, NaN);
+  if (left !== left || right !== right || !(right > left)) return full;
+
+  const minGutter = finiteOr(Number(o.minGutterPx), MIN_GUTTER_PX);
+  const bubblePx = Math.max(0, finiteOr(Number(o.bubblePx), 0));
+
+  // A rect that hangs off either edge only counts for the part on screen.
+  const l = Math.max(0, Math.min(vw, left));
+  const r = Math.max(0, Math.min(vw, right));
+  if (l + (vw - r) < minGutter) return full;
+
+  const pct = (px) => (px / vw) * 100;
+  const ranges = [];
+  const leftHi = Math.min(SPAWN_MAX_PCT, pct(l - bubblePx));
+  if (leftHi - SPAWN_MIN_PCT >= MIN_RANGE_PCT) ranges.push([SPAWN_MIN_PCT, leftHi]);
+  const rightLo = Math.max(SPAWN_MIN_PCT, pct(r));
+  if (SPAWN_MAX_PCT - rightLo >= MIN_RANGE_PCT) ranges.push([rightLo, SPAWN_MAX_PCT]);
+  return ranges.length ? ranges : full;
+}
+
+/**
+ * Pick a left-edge percent out of spawnRanges()' output, WIDTH-WEIGHTED so a
+ * 600px gutter carries proportionally more of the field than a 200px one (an
+ * even split would visibly pile the bubbles up on the narrow side).
+ *
+ * Client-local placement only — plain Math.random, same as every other spawn
+ * dimension in this file. Nothing here reaches a receipt.
+ *
+ * @param {Array<[number, number]>} ranges
+ * @param {() => number} [rnd] injectable for tests
+ */
+export function pickSpawnPct(ranges, rnd) {
+  const r = typeof rnd === 'function' ? rnd : Math.random;
+  const list = (Array.isArray(ranges) ? ranges : [])
+    .filter((x) => Array.isArray(x) && finiteOr(x[1], NaN) > finiteOr(x[0], NaN));
+  if (!list.length) return SPAWN_MIN_PCT + r() * (SPAWN_MAX_PCT - SPAWN_MIN_PCT);
+  let total = 0;
+  for (const [a, b] of list) total += b - a;
+  let t = r() * total;
+  for (const [a, b] of list) {
+    const w = b - a;
+    if (t < w) return a + t;
+    t -= w;
+  }
+  const last = list[list.length - 1];
+  return last[0] + (last[1] - last[0]) * 0.5;   // r() === 1 exactly
+}
+
 /**
  * Cue intensity -> population + rise speed + spawn cadence (DtRH: intensity is
  * density, not size). MONOTONIC BY CONTRACT, and selftest-exec asserts it:
@@ -173,6 +274,53 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     if (targetCount > 0 && live.size < targetCount) spawn(false);
   }
 
+  /* ------------------------------------------------ stage rect, measured lazily
+   * getBoundingClientRect() forces layout, so this is read AT MOST once per
+   * STAGE_RECT_TTL_MS and only ever from spawn() — never per frame, and never
+   * from the sway/rise path, which is pure CSS and must stay that way. The rect
+   * only moves when a video or a lock card mounts, unmounts or the window
+   * resizes, all of which are far slower than the TTL. */
+  const STAGE_RECT_TTL_MS = 500;
+  let rectCache = null;
+  let rectAt = -Infinity;
+
+  function stageEl() {
+    if (layers && typeof layers.get === 'function') {
+      try { const el = layers.get('stage'); if (el) return el; } catch (_e) { /* fall through */ }
+    }
+    if (typeof document !== 'undefined' && document && typeof document.getElementById === 'function') {
+      try { return document.getElementById('gg-stage'); } catch (_e) { return null; }
+    }
+    return null;
+  }
+
+  /** The stage CONTENT's rect (its first child), or null when the stage is empty
+   *  or the host cannot measure (the node test stub has no layout box). */
+  function measureStage() {
+    const stage = stageEl();
+    if (!stage) return null;
+    const kid = stage.firstElementChild || stage.firstChild || null;
+    if (!kid || typeof kid.getBoundingClientRect !== 'function') return null;
+    let r = null;
+    try { r = kid.getBoundingClientRect(); } catch (_e) { return null; }
+    if (!r || !(r.width > 0) || !(r.height > 0)) return null;
+    return { left: r.left, right: r.right };
+  }
+
+  function stageRect() {
+    const now = Date.now();
+    if (now - rectAt < STAGE_RECT_TTL_MS) return rectCache;
+    rectAt = now;
+    rectCache = measureStage();
+    return rectCache;
+  }
+
+  function viewportWidth() {
+    if (typeof window === 'undefined' || !window) return 0;
+    const w = Number(window.innerWidth);
+    return (w > 0 && w === w) ? w : 0;
+  }
+
   /** Live bubbles that belong to OUR ramp (i.e. the ones a pop can be paid for). */
   function fieldCount() {
     let n = 0;
@@ -194,9 +342,13 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     const size = Math.round(rand(BUB_MIN_PX, BUB_MAX_PX));
     const rise = rand(tune.riseMinS, tune.riseMaxS);
 
+    // Stage-aware placement: gutters while a video/lock card is up, full width
+    // otherwise (and whenever the gutters are too thin to be worth the squeeze).
+    const spawnPct = pickSpawnPct(spawnRanges(stageRect(), viewportWidth(), { bubblePx: size }));
+
     const wrap = document.createElement('div');
     wrap.className = 'gg-bubble-wrap';
-    wrap.style.setProperty('left', `${rand(2, 92).toFixed(1)}%`);
+    wrap.style.setProperty('left', `${spawnPct.toFixed(1)}%`);
     wrap.style.setProperty('--gg-rise', `${rise.toFixed(2)}s`);
     if (seed) wrap.style.setProperty('animation-delay', `${(-rand(0, rise)).toFixed(2)}s`);
 

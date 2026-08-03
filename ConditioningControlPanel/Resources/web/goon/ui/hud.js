@@ -31,6 +31,7 @@ import { mountArsenal } from './arsenal.js';
 import { mountCloseness } from './closeness.js';
 import { mountAttention } from './attention.js';
 import { mountEmotes } from './emotes.js';
+import { mountAnnouncer } from './announcer.js';
 import { createDropRoller } from './drops.js';
 
 /** exec/bubbles.js's economy seam. Kept as a literal so ui/ never imports exec/. */
@@ -313,6 +314,11 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     onLog,
   });
 
+  // The ribbon that calls the shot before it lands. Absolutely placed inside the
+  // frame (under the timer, clear of the monitor), so it takes no grid row.
+  const announcer = mountAnnouncer({ host: root, match, onLog });
+
+  led.add(() => { try { announcer.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { attention.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { dial.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { arsenal.unmount(); } catch (_e) { /* gone */ } });
@@ -508,7 +514,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
   return {
     /** Exposed so H (or a play-test driver) can poke the desk without re-deriving it. */
-    parts: { root, arsenal, opponent, dial, attention, emotes, fx, drops },
+    parts: { root, arsenal, opponent, dial, attention, emotes, announcer, fx, drops },
     unmount() {
       fx.stop();
       for (const rec of Array.from(chips.values())) dropChipRec(rec);

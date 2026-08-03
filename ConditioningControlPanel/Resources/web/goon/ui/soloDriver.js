@@ -123,7 +123,15 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
     showRoundVerdict() { clearRound(); },
   };
 
-  match.suddenDeathRunner = new GoonSuddenDeathRunner({ presenter, inputs, logger });
+  /* SUDDEN DEATH IS DETACHED — owner's call, 2026-08-03, pending the rounds
+   * rework. Practice now mirrors a real run exactly: Countdown -> Live -> Recap,
+   * with the Live clock settling on score. The presenter above is left wired and
+   * unused on purpose; re-enable by restoring this line.
+   *
+   * match.suddenDeathRunner = new GoonSuddenDeathRunner({ presenter, inputs, logger });
+   */
+  void GoonSuddenDeathRunner;
+  void presenter;
 
   /* ------------------------------------------------------------------ phases */
 

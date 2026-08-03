@@ -1490,6 +1490,315 @@ function makeFakeMatch() {
     '.is-calm stops it too');
 }
 
+/* ===========================================================================
+ * 14. THE ANNOUNCER RIBBON — "we should announce briefly on the top of the
+ *     screen whats going on (the effects that happen to both player, like Get
+ *     ready to watch! or Get ready to type, etc and Video on, and Lock Card,
+ *     etc)" (owner, 0803).
+ *
+ * The claim the whole feature rests on: the ramp is ONE seeded roll that both
+ * machines compute identically, so warning about it is a true statement about
+ * both players. That makes the lead computation the load-bearing part, and it
+ * is a pure function precisely so it can be pinned here without a clock.
+ * ======================================================================== */
+
+const announcerMod = await import('../ui/announcer.js');
+const { GoonCueAction } = await import('../core/draft.js');
+const { S: STR } = await import('../ui/strings.js');
+
+// --- 14a. the pre-announce lead is exact ----------------------------------
+{
+  const {
+    upcomingAnnouncements, ANNOUNCE_LEAD_MS, mountAnnouncer, createAnnounceQueue,
+  } = announcerMod;
+
+  ok(typeof mountAnnouncer === 'function', 'ui/announcer.js exports mountAnnouncer');
+  ok(typeof upcomingAnnouncements === 'function', '…and the pure lead helper');
+  ok(typeof createAnnounceQueue === 'function', '…and the pure queue');
+
+  const S_ = GoonCueAction.Start, I_ = GoonCueAction.Intensity, X_ = GoonCueAction.Stop;
+  const ramp = [
+    { offsetMs: 0, action: S_, element: GoonElement.Bubbles, intensity: 0.15, durationMs: 0 },
+    { offsetMs: 10000, action: S_, element: GoonElement.Videos, intensity: 0.3, durationMs: 10000 },
+    { offsetMs: 12000, action: I_, element: GoonElement.Videos, intensity: 0.4, durationMs: 0 },
+    { offsetMs: 20000, action: X_, element: GoonElement.Videos, intensity: 0, durationMs: 0 },
+    { offsetMs: 30000, action: S_, element: GoonElement.LockCards, intensity: 0.5, durationMs: 15000 },
+    { offsetMs: 45000, action: X_, element: GoonElement.LockCards, intensity: 0, durationMs: 0 },
+    { offsetMs: 50000, action: S_, element: GoonElement.Videos, intensity: 0.7, durationMs: 20000 },
+  ];
+  const before = JSON.stringify(ramp);
+
+  const at6 = upcomingAnnouncements(ramp, 6000, ANNOUNCE_LEAD_MS);
+  ok(at6.length === 1, 'exactly one thing is coming 4s out', String(at6.length));
+  ok(at6[0] && at6[0].element === GoonElement.Videos, '…and it is the video');
+  ok(at6[0] && at6[0].atMs === 10000 && at6[0].inMs === 4000, '…with the real cue time and the real lead');
+
+  ok(upcomingAnnouncements(ramp, 5999, ANNOUNCE_LEAD_MS).length === 0,
+    'one millisecond earlier and it is not announced yet — the lead is 4s, not "about 4s"');
+  ok(upcomingAnnouncements(ramp, 10000, ANNOUNCE_LEAD_MS).every((a) => a.atMs !== 10000),
+    'a cue that has ALREADY fired is never pre-announced (the start event covers it)');
+
+  // the exclusions
+  const all = upcomingAnnouncements(ramp, 0, 600000);
+  ok(all.length === 3, 'over the whole ramp: three real starts', String(all.length));
+  ok(all.every((a) => a.element !== GoonElement.Bubbles),
+    'bubbles are NEVER announced — always-on for both players, so t=0 would mean nothing');
+  ok(upcomingAnnouncements(ramp, 0, ANNOUNCE_LEAD_MS).length === 0,
+    'and a match therefore opens in silence rather than with a bubbles banner');
+  ok(all.filter((a) => a.element === GoonElement.Videos).length === 2
+     && all.filter((a) => a.element === GoonElement.LockCards).length === 1,
+    'stop cues and intensity bumps produce nothing — only starts do');
+
+  // a Start for an element that is still running is an intensity bump, not a start
+  const overlap = [
+    { offsetMs: 1000, action: S_, element: GoonElement.Spiral, intensity: 0.2, durationMs: 0 },
+    { offsetMs: 9000, action: S_, element: GoonElement.Spiral, intensity: 0.6, durationMs: 0 },
+  ];
+  const dup = upcomingAnnouncements(overlap, 0, 600000);
+  ok(dup.length === 1 && dup[0].atMs === 1000,
+    'a second Start while the element is still active is not announced — the engine turns it into a ramp');
+
+  ok(JSON.stringify(ramp) === before, 'the helper never mutates the ramp it was handed');
+  ok(upcomingAnnouncements(null, 0, 4000).length === 0 && upcomingAnnouncements(undefined).length === 0,
+    'and junk in gives an empty list out, not a throw');
+}
+
+// --- 14b. one slot, and a dedupe window that still lets the pair through ---
+{
+  const {
+    createAnnounceQueue, ANNOUNCE_DEDUPE_MS, ANNOUNCE_LEAD_MS, ANNOUNCE_LEAD_BEATS_DEDUPE, ANNOUNCE_QUEUE_CAP,
+  } = announcerMod;
+
+  const q = createAnnounceQueue();
+  ok(q.offer(GoonElement.Videos, 'pre', 1000) === true, 'the first banner is admitted');
+  ok(q.offer(GoonElement.Videos, 'pre', 1500) === false, 'the same element again 500ms later is one event seen twice');
+  ok(q.offer(GoonElement.Videos, 'pre', 1000 + ANNOUNCE_DEDUPE_MS - 1) === false, 'still swallowed at the very edge');
+  ok(q.offer(GoonElement.Videos, 'pre', 1000 + ANNOUNCE_DEDUPE_MS) === true, 'and admitted the moment the window closes');
+  ok(q.offer(GoonElement.LockCards, 'pre', 1100) === true, 'the window is PER ELEMENT — a lock card is not a video');
+
+  // The pair the owner actually asked for: the warning and then the fact.
+  ok(ANNOUNCE_LEAD_BEATS_DEDUPE === true && ANNOUNCE_LEAD_MS > ANNOUNCE_DEDUPE_MS,
+    'the lead outruns the dedupe window, or "Video on" would be eaten as a duplicate of its own warning');
+  const pair = createAnnounceQueue();
+  ok(pair.offer(GoonElement.Videos, 'pre', 0) === true, '"Get ready to watch!" lands');
+  ok(pair.offer(GoonElement.Videos, 'on', ANNOUNCE_LEAD_MS) === true, '…and "Video on" lands 4s later too');
+
+  // the one deliberate bypass
+  const up = createAnnounceQueue();
+  up.offer(GoonElement.Videos, 'pre', 0);
+  ok(up.offer(GoonElement.Videos, 'on', 10) === true,
+    'a pre still on screen when the thing starts is REPLACED by the real line, not dropped');
+  ok(up.offer(GoonElement.Videos, 'on', 20) === false, '…but two "on" lines in a row are still one event');
+
+  const bad = createAnnounceQueue();
+  ok(bad.offer(GoonElement.Bubbles, 'on', 0) === false, 'the queue refuses bubbles outright');
+  ok(bad.offer(GoonElement.Videos, 'stop', 0) === false, 'and refuses anything that is not pre/on — stops are never announced');
+  ok(bad.offer(999, 'on', 0) === false, 'and refuses an element code that does not exist');
+
+  const deep = createAnnounceQueue();
+  const els = [GoonElement.Videos, GoonElement.LockCards, GoonElement.Flashes, GoonElement.Spiral,
+    GoonElement.Subliminals, GoonElement.BouncingText];
+  els.forEach((e, i) => deep.offer(e, 'pre', i));
+  ok(deep.size === ANNOUNCE_QUEUE_CAP, 'the backlog is capped — stale news is dropped, not shown late', String(deep.size));
+}
+
+// --- 14c. every element it can name has words -----------------------------
+{
+  const { ANNOUNCEABLE_ELEMENTS, isAnnounceable, announceText } = announcerMod;
+
+  ok(ANNOUNCEABLE_ELEMENTS.length === Object.keys(GoonElement).length - 1,
+    'every element except one is announceable', String(ANNOUNCEABLE_ELEMENTS.length));
+  ok(!isAnnounceable(GoonElement.Bubbles) && ANNOUNCEABLE_ELEMENTS.indexOf(GoonElement.Bubbles) < 0,
+    '…and the one is bubbles');
+
+  ok(!!STR.announce && !!STR.announce.ready && !!STR.announce.on, 'ui/strings.js carries the announce deck');
+  for (const e of ANNOUNCEABLE_ELEMENTS) {
+    const name = Object.keys(GoonElement).find((k) => GoonElement[k] === e);
+    ok(typeof STR.announce.ready[e] === 'string' && STR.announce.ready[e].length > 0,
+      `${name} has a "get ready" line`);
+    ok(typeof STR.announce.on[e] === 'string' && STR.announce.on[e].length > 0,
+      `${name} has an "on" line`);
+    ok(announceText(e, 'pre').length > 0 && announceText(e, 'on').length > 0,
+      `${name} resolves through announceText — a missing key would silently draw a blank plate`);
+  }
+  ok(announceText(GoonElement.Bubbles, 'on') === '' && announceText(GoonElement.Bubbles, 'pre') === '',
+    'bubbles have no copy at all, so nothing can accidentally announce them');
+
+  // the owner's own words, verbatim
+  ok(STR.announce.ready[GoonElement.Videos] === 'Get ready to watch!', 'the video warning is the line he wrote');
+  ok(STR.announce.ready[GoonElement.LockCards] === 'Get ready to type!', 'and so is the lock-card one');
+  ok(STR.announce.on[GoonElement.Videos] === 'Video on', 'and "Video on" is "Video on"');
+  ok(/lock card/i.test(STR.announce.on[GoonElement.LockCards]), 'and the lock card announces itself by name');
+}
+
+// --- 14d. mounted: the ribbon lives and dies with the desk -----------------
+{
+  const { mountAnnouncer, ANNOUNCE_LEAD_MS } = announcerMod;
+  const S_ = GoonCueAction.Start, X_ = GoonCueAction.Stop;
+  const match = makeFakeMatch();
+  match.liveElapsedMs = 6000;
+  match.rampCues = Object.freeze([
+    { offsetMs: 0, action: S_, element: GoonElement.Bubbles, intensity: 0.15, durationMs: 0 },
+    { offsetMs: 10000, action: S_, element: GoonElement.Videos, intensity: 0.3, durationMs: 10000 },
+    { offsetMs: 20000, action: X_, element: GoonElement.Videos, intensity: 0, durationMs: 0 },
+  ]);
+
+  const host = document.createElement('div');
+  host.className = 'gg-hud-frame';
+  const log = [];
+  const ann = mountAnnouncer({ host, match, onLog: log });
+
+  ok(!!ann.root && hasClass(ann.root, 'gg-announce'), 'the ribbon mounts into the frame');
+  ok(ann.root.getAttribute('aria-live') === 'polite', 'it is aria-live="polite" — announced, never shouted at a screen reader');
+  ok(ann.root.getAttribute('role') === 'status', '…with a status role');
+  ok(ann.showing() === null, 'and it starts empty');
+
+  // an element the ramp actually starts
+  match._emit('elStart', { element: GoonElement.Videos, intensity: 0.3, durationMs: 10000, elapsedMs: 6000 });
+  let slot = findOne(ann.root, 'gg-announce-slot');
+  ok(!!slot, 'a start puts a banner in the slot');
+  ok(!!findOne(ann.root, 'gg-announce-text') && findOne(ann.root, 'gg-announce-text').textContent === 'Video on',
+    'saying the thing that just happened');
+  ok(hasClass(slot, 'gg-plate'), 'it wears the same glass as the rest of the desk');
+  ok(ann.showing() && ann.showing().kind === 'on', 'and the module knows what it is showing');
+
+  // the things it must stay quiet about
+  const beforeQuiet = findAll(ann.root, 'gg-announce-slot').length;
+  match._emit('elStart', { element: GoonElement.Bubbles, intensity: 0.2, durationMs: 0, elapsedMs: 6100 });
+  match._emit('elStop', { element: GoonElement.Videos, intensity: 0, durationMs: 0, elapsedMs: 6200 });
+  match._emit('elInt', { element: GoonElement.Videos, intensity: 0.9, durationMs: 0, elapsedMs: 6300 });
+  ok(findAll(ann.root, 'gg-announce-slot').length === beforeQuiet,
+    'bubbles, stops and intensity bumps never draw a banner');
+  match._emit('elStart', { element: GoonElement.Videos, intensity: 0.3, durationMs: 10000, elapsedMs: 6400 });
+  ok(findAll(ann.root, 'gg-announce-slot').length === beforeQuiet && ann.queued() === 0,
+    'and the same element twice inside the window is one banner, not two');
+
+  // theirs: a payload never becomes an element cue, so it has its own path.
+  // Its own mount, its own empty slot — the queueing rules get their own check.
+  const inbound = makeFakeMatch();
+  inbound.rampCues = [];
+  const hostIn = document.createElement('div');
+  const annIn = mountAnnouncer({ host: hostIn, match: inbound, onLog: null });
+  inbound._emit('pAcc', { payload: { id: 'a1', kind: GoonPayloadKind.LockCard, duration_ms: 8000 }, fireAtLocalMs: 0 });
+  inbound._emit('pAcc', { payload: { id: 'a2', kind: GoonPayloadKind.BubbleSwarm, duration_ms: 8000 }, fireAtLocalMs: 0 });
+  await sleep(40);
+  const texts = findAll(annIn.root, 'gg-announce-text').map((t) => t.textContent);
+  ok(texts.some((t) => /lock card/i.test(t)), 'a payload THEY threw is announced too — it lands through the same renderer');
+  ok(!texts.some((t) => /bubble/i.test(t)), 'except a bubble swarm, which is the one thing that is always on anyway');
+  annIn.unmount();
+  ok(inbound._subs.released === inbound._subs.taken, 'and a pending payload announce leaks no subscription',
+    `${inbound._subs.released}/${inbound._subs.taken}`);
+
+  // the ramp look-ahead, live
+  const fresh = makeFakeMatch();
+  fresh.liveElapsedMs = 6000;
+  fresh.rampCues = match.rampCues;
+  const host2 = document.createElement('div');
+  const ann2 = mountAnnouncer({ host: host2, match: fresh, onLog: null });
+  await sleep(340);
+  const pre = findOne(ann2.root, 'gg-announce-text');
+  ok(!!pre && pre.textContent === 'Get ready to watch!',
+    'four seconds out, the ribbon warns both of you what is coming');
+  ok(ann2.showing() && ann2.showing().kind === 'pre', '…and knows it is a warning, not a fact');
+  ok(fresh.liveElapsedMs + ANNOUNCE_LEAD_MS === 10000, '(the fixture really is 4s from the cue)');
+
+  fresh._emit('elStart', { element: GoonElement.Videos, intensity: 0.3, durationMs: 10000, elapsedMs: 10000 });
+  await sleep(340);
+  ok(ann2.showing() && ann2.showing().kind === 'on',
+    'when it actually starts, the warning is replaced by the fact rather than queued behind it');
+  ok(findAll(ann2.root, 'gg-announce-slot').length === 1,
+    'and there is still only ever one slot');
+
+  // a second element does not wait out the full dwell — it cuts in once the
+  // sitting banner has been readable, or a busy stretch would report the match
+  // several seconds late.
+  fresh._emit('elStart', { element: GoonElement.LockCards, intensity: 0.4, durationMs: 8000, elapsedMs: 10500 });
+  ok(ann2.showing() && ann2.showing().element === GoonElement.Videos,
+    'it does not snatch the slot out from under a banner nobody has read yet');
+  await sleep(1300);
+  ok(ann2.showing() && ann2.showing().element === GoonElement.LockCards,
+    '…but it takes it on the minimum hold rather than after the whole dwell');
+  ok(findAll(ann2.root, 'gg-announce-slot').length === 1, 'and there is still exactly one');
+
+  ok(log.some((e) => e && e.t === 'announce'), 'every banner is written to the match log');
+
+  // lifecycle
+  const takenBefore = fresh._subs.taken;
+  ann2.unmount();
+  ok(fresh._subs.released === fresh._subs.taken && takenBefore > 0,
+    'unmount releases every engine subscription it took', `${fresh._subs.released}/${fresh._subs.taken}`);
+  ok(ann2.root.parentNode === null, 'and takes its own node with it');
+  fresh._emit('elStart', { element: GoonElement.Videos, intensity: 0.3, durationMs: 1000, elapsedMs: 11000 });
+  await sleep(320);
+  ok(findAll(ann2.root, 'gg-announce-slot').length === 0, 'a start after unmount draws nothing at all');
+  ann.unmount();
+  ok(match._subs.released === match._subs.taken, 'the first one leaks nothing either',
+    `${match._subs.released}/${match._subs.taken}`);
+}
+
+// --- 14e. hud.js really mounts it -----------------------------------------
+{
+  const match = makeFakeMatch();
+  match.rampCues = [];
+  const hud = hudMod.mountHud({ match, audio: null, prefs: null, matchLog: [] });
+  const frame = findOne(dom.byId.get('gg-hud'), 'gg-hud-frame');
+  ok(!!findOne(frame, 'gg-announce'), 'mountHud puts the ribbon inside the frame');
+  ok(!!hud.parts && !!hud.parts.announcer && typeof hud.parts.announcer.showing === 'function',
+    'and exposes it on parts, like every other sub-mount');
+  hud.unmount();
+  ok(dom.byId.get('gg-hud').children.length === 0, 'and it comes down with the desk');
+  ok(match._subs.released === match._subs.taken, 'with no subscription left behind',
+    `${match._subs.released}/${match._subs.taken}`);
+}
+
+/* --- 14f. the CSS half ----------------------------------------------------
+ * ui/announcer.js only toggles classes. Placement, the click-through and the
+ * three motion switches are all CSS, so a ribbon with no rules would pass every
+ * JS check above and still sit on top of the stage eating clicks. */
+{
+  const fs = await import('node:fs/promises');
+  const url = await import('node:url');
+  const css = await fs.readFile(url.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8');
+  const secAt = css.indexOf('ANNOUNCER — the top-centre ribbon');
+  ok(secAt > 0, 'hud.css carries the announcer section');
+  const sec = secAt > 0 ? css.slice(secAt) : '';
+
+  const block = /\.gg-announce\s*\{([^}]*)\}/.exec(sec);
+  ok(!!block, 'the ribbon has a positioning block');
+  const box = block ? block[1] : '';
+  ok(/position:\s*absolute/.test(box), 'it is absolutely placed, so it takes no row in the frame grid');
+  ok(/top:/.test(box) && !/bottom:/.test(box),
+    'anchored to the TOP — the bottom-centre belongs to MERCY and its 96px keep-out');
+  ok(/left:\s*50%/.test(box) && /translateX\(-50%\)/.test(box), '…and centred');
+  ok(/max-width:\s*min\(/.test(box), 'and narrow, so it never reaches the opponent monitor in the corner');
+
+  ok(/\.gg-hud-frame\s+\.gg-announce,\s*\n?\s*\.gg-hud-frame\s+\.gg-announce-slot\s*\{[^}]*pointer-events:\s*none/.test(sec),
+    'pointer-events: none at .gg-hud-frame specificity — .gg-plate would otherwise turn them back on');
+
+  ok(/\.gg-announce-slot\s*\{[^}]*opacity:\s*1/.test(sec),
+    'the resting slot is VISIBLE — with motion off the words still land');
+  ok(/@keyframes\s+ggAnnounceIn/.test(sec) && /\.gg-announce-slot\.is-in\s*\{[^}]*animation:\s*ggAnnounceIn/.test(sec),
+    'the banner slides in');
+  ok(/@keyframes\s+ggAnnounceOut/.test(sec) && /\.gg-announce-slot\.is-out\s*\{[^}]*animation:\s*ggAnnounceOut/.test(sec),
+    '…and out');
+  ok(sec.indexOf('.gg-announce-slot.is-out {') > sec.indexOf('.gg-announce-slot.is-in {'),
+    'the outro is written last, because `animation` is a shorthand and one of two live rules would lose');
+  ok(/\.gg-announce-slot\.is-in\s*>\s*\.gg-announce-sheen\s*\{[^}]*animation:\s*ggAnnounceSheen/.test(sec),
+    'the decorative sheen rides its OWN child element, never the slot the one-shots own');
+  ok(!/infinite/.test(sec),
+    'and nothing here loops — the ribbon costs the two-animation chrome budget nothing');
+
+  ok(/html\[data-gg-fx="hot"\]\s*\.gg-announce-slot\s*\{[^}]*backdrop-filter:\s*none/.test(sec),
+    'the plate hardens at data-gg-fx="hot" like every other plate');
+  ok(/html\[data-gg-fx="hot"\]\s*\.gg-announce-sheen\s*\{[^}]*display:\s*none/.test(sec),
+    '…and the decoration stops being drawn at all when the machine is busy');
+
+  ok(/\.gg-hud-frame\.is-calm\s+\.gg-announce-slot\.is-in[\s\S]{0,220}animation:\s*none\s*!important/.test(sec),
+    '.is-calm stops every frame of it');
+  ok(/prefers-reduced-motion[\s\S]{0,260}\.gg-announce-slot\.is-in[\s\S]{0,200}animation:\s*none\s*!important/.test(sec),
+    'and so does prefers-reduced-motion — the banner still appears, it just stops moving');
+}
+
 await sleep(60);
 console.log(`\nselftest-hud: ${n - failures}/${n} checks passed`);
 if (failures > 0) {

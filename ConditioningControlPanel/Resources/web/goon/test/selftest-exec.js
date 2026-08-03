@@ -611,6 +611,245 @@ async function main() {
     ok(pops.length === seen, 'and nothing popped on the way out', `${seen} -> ${pops.length}`);
   }
 
+  /* ------------------------------ bubbles: the fx.css contract the field rests on
+   * Two things about this field are STYLESHEET facts that no amount of JS can
+   * assert from the inside, and both of them were bugs:
+   *   1. braindrain.png and glitch.png are the same byte-identical near-grey
+   *      file, so without a colourising filter the two kinds are indistinguish-
+   *      able on screen;
+   *   2. `body:has(#gg-stage > *) .gg-bubble { pointer-events: none }` made the
+   *      whole economy unreachable for the length of every video and lock card.
+   * So the stylesheet is READ, the way selftest-hud reads hud.css for the monitor
+   * z-order. Comments are stripped first — the banner above the rules quotes the
+   * deleted selector verbatim, and a regression pin a comment can green is not a
+   * pin. */
+  {
+    const fs = await import('node:fs/promises');
+    const url = await import('node:url');
+    const raw = await fs.readFile(url.fileURLToPath(new URL('../exec/fx.css', import.meta.url)), 'utf8');
+    const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const ruleOf = (sel) => {
+      const m = new RegExp(esc(sel) + '\\s*\\{([^}]*)\\}').exec(css);
+      return m ? m[1] : null;
+    };
+    const filterOf = (sel) => {
+      const body = ruleOf(sel);
+      const m = body && /filter:\s*([^;]+)/.exec(body);
+      return m ? m[1].trim() : null;
+    };
+    // every colour-space filter function; drop-shadow is deliberately not here
+    const COLOUR_FNS = ['brightness(', 'sepia(', 'saturate(', 'hue-rotate(', 'contrast(', 'grayscale(', 'invert(', 'opacity('];
+    const shadowIsLast = (f) => {
+      const d = f.indexOf('drop-shadow(');
+      return d >= 0 && COLOUR_FNS.every((fn) => f.lastIndexOf(fn) < d);
+    };
+    const hueOf = (f) => { const m = /hue-rotate\(\s*(-?[\d.]+)deg\s*\)/.exec(f || ''); return m ? Number(m[1]) : null; };
+
+    const bd = filterOf('.gg-bubble--braindrain');
+    const gl = filterOf('.gg-bubble--glitch');
+    ok(!!bd && !!gl, 'fx.css still gives braindrain and glitch their own filter chain');
+    ok(!!bd && /sepia\(/.test(bd) && /saturate\(/.test(bd) && hueOf(bd) !== null,
+      'braindrain is COLOURISED (sepia + saturate + hue-rotate), not just shadowed', String(bd));
+    ok(!!gl && /sepia\(/.test(gl) && /saturate\(/.test(gl) && hueOf(gl) !== null,
+      'glitch is COLOURISED too', String(gl));
+    // sepia has to come first or there is no pigment for the rotation to swing:
+    // the art is near-white, and white cannot be saturated.
+    ok(!!bd && bd.indexOf('sepia(') < bd.indexOf('hue-rotate('),
+      'braindrain stamps its pigment (sepia) BEFORE swinging the hue', String(bd));
+    ok(!!gl && gl.indexOf('sepia(') < gl.indexOf('hue-rotate('),
+      'and so does glitch', String(gl));
+    ok(!!bd && /brightness\(\s*0?\.\d/.test(bd.slice(0, bd.indexOf('sepia('))),
+      'braindrain darkens first, so sepia has something to tint', String(bd));
+    ok(!!gl && /brightness\(\s*0?\.\d/.test(gl.slice(0, gl.indexOf('sepia('))),
+      'and so does glitch', String(gl));
+    ok(!!bd && shadowIsLast(bd), 'braindrain keeps its drop-shadow LAST', String(bd));
+    ok(!!gl && shadowIsLast(gl), 'glitch keeps its drop-shadow LAST', String(gl));
+    // THE POINT of the whole exercise: two identical PNGs, two different colours.
+    const dh = (hueOf(bd) === null || hueOf(gl) === null) ? 0
+      : Math.abs(((hueOf(bd) - hueOf(gl)) % 360 + 540) % 360 - 180);
+    ok(dh >= 60, 'the two identical sprites are swung to genuinely different hues',
+      `${hueOf(gl)}deg vs ${hueOf(bd)}deg`);
+    ok(bd !== gl, 'and the two rules are not the same chain');
+    // each hue matches the halo that kind already had (violet / acid green)
+    ok(!!bd && /rgba\(\s*180,\s*150,\s*255/.test(bd), 'braindrain kept its violet halo', String(bd));
+    ok(!!gl && /rgba\(\s*140,\s*255,\s*170/.test(gl), 'glitch kept its acid-green halo', String(gl));
+
+    // the kinds that already read coloured are untouched art-wise, and NO kind
+    // rule may declare `animation` — the shorthand would cancel the sway.
+    for (const k of ['flash', 'spiral', 'glitch', 'braindrain', 'pinkfilter']) {
+      const body = ruleOf(`.gg-bubble--${k}`);
+      ok(!!body && body.includes(`/dtrh/assets/bubbles/effects/${k}.png`),
+        `.gg-bubble--${k} still points at the DtRH sprite`, String(body));
+      ok(!!body && !/(^|[^-])animation:/.test(body),
+        `.gg-bubble--${k} does not redeclare the animation shorthand`, String(body));
+      ok(!!body && /drop-shadow\(/.test(body), `.gg-bubble--${k} still carries a coloured halo`);
+    }
+    ok(filterOf('.gg-bubble--spiral') === 'drop-shadow(0 0 9px rgba(110, 225, 255, 0.75))',
+      'spiral (cyan art, already saturated) is left alone', String(filterOf('.gg-bubble--spiral')));
+    ok(/rgba\(var\(--gg-pink-rgb\)/.test(String(filterOf('.gg-bubble--pinkfilter'))),
+      'pinkfilter (pink art, already saturated) is left alone', String(filterOf('.gg-bubble--pinkfilter')));
+
+    // ---- the regression pin: the field stays poppable over a video / lock card
+    ok(!/#gg-stage[^{]*\.gg-bubble\s*\{/.test(css),
+      'NO rule takes .gg-bubble pointer-events away while #gg-stage is occupied',
+      (/[^{}]*#gg-stage[^{]*\.gg-bubble\s*\{[^}]*\}/.exec(css) || [''])[0]);
+    ok(!/[^.\w-]\.gg-bubble\s*\{[^}]*pointer-events:\s*none/.test(css),
+      'and no plain .gg-bubble rule sets pointer-events:none');
+    const base = ruleOf('.gg-bubble');
+    ok(!!base && /pointer-events:\s*auto/.test(base), 'the bubble still opts INTO pointers', String(base));
+    ok(/\.gg-bubble\.is-pop\s*\{[^}]*pointer-events:\s*none/.test(css),
+      'a bubble mid-pop is still click-through (one pop per bubble)');
+
+    // ---- and the hydra's identical rule is INTENDED and must survive
+    ok(/body:has\(#gg-stage\s*>\s*\*\)\s*\.gg-flash--hydra\s*\{[^}]*pointer-events:\s*none/.test(css),
+      'the .gg-flash--hydra :has() rule is still there — flashes ARE scenery');
+
+    // ---- the heat split: the FIELD is exempt, the pop WASHES are not
+    ok(!!base && /--gg-deco-play:\s*running/.test(base),
+      'the bubble re-declares --gg-deco-play (gameplay, exempt from heat parking)');
+    ok(/\.gg-bubble-wrap\s*\{[^}]*--gg-deco-play:\s*running/.test(css),
+      'and so does its rising wrap');
+    for (const wash of ['.gg-spiral', '.gg-pink', '.gg-drain']) {
+      const body = ruleOf(wash);
+      ok(body === null || !/--gg-deco-play:\s*running/.test(body),
+        `${wash} is decoration and still parks at hot heat`, String(body));
+    }
+  }
+
+  /* ------------------------------ bubbles: the stage-avoidance spawn bias
+   * Now that a bubble stays poppable over a video, the field has to stop DRIFTING
+   * over one instead. spawnRanges() is the whole opinion, and it is pure, so it
+   * gets pinned properly: rect + viewport in, allowed left-edge spans out. */
+  {
+    const bub = await import('../exec/bubbles.js');
+    const { spawnRanges, pickSpawnPct, SPAWN_MIN_PCT, SPAWN_MAX_PCT, MIN_GUTTER_PX } = bub;
+    const VW = 1280;
+    const near = (a, b) => Math.abs(a - b) < 1e-6;
+    const isFull = (r) => r.length === 1 && near(r[0][0], SPAWN_MIN_PCT) && near(r[0][1], SPAWN_MAX_PCT);
+    const shape = (r) => JSON.stringify(r);
+
+    ok(SPAWN_MIN_PCT === 2 && SPAWN_MAX_PCT === 92,
+      'the spawn margins are the ones the field always used', `${SPAWN_MIN_PCT}..${SPAWN_MAX_PCT}`);
+    ok(MIN_GUTTER_PX === 160, 'and the give-up threshold is the documented 160px', String(MIN_GUTTER_PX));
+
+    // EMPTY STAGE -> full width, unchanged behaviour.
+    ok(isFull(spawnRanges(null, VW)), 'no stage content spawns full width', shape(spawnRanges(null, VW)));
+    ok(isFull(spawnRanges(undefined, VW)), 'and so does undefined');
+
+    // A CENTRED VIDEO -> two gutters, and nothing in between.
+    const vid = spawnRanges({ left: 320, right: 960 }, VW);
+    ok(vid.length === 2, 'a centred stage yields exactly two gutters', shape(vid));
+    ok(near(vid[0][0], 2) && near(vid[0][1], 25), 'the left gutter ends at the stage edge', shape(vid));
+    ok(near(vid[1][0], 75) && near(vid[1][1], 92), 'the right gutter starts at the stage edge', shape(vid));
+    ok(vid.every(([lo, hi]) => hi <= 25 || lo >= 75), 'and nothing overlaps the stage', shape(vid));
+
+    // A FAT BUBBLE grows rightward from `left`, so only the LEFT gutter pays for it.
+    const fat = spawnRanges({ left: 320, right: 960 }, VW, { bubblePx: 150 });
+    ok(near(fat[0][1], ((320 - 150) / VW) * 100),
+      "the left gutter leaves room for the bubble's own width", shape(fat));
+    ok(near(fat[1][0], 75), 'the right gutter does not (the bubble grows away from the stage)', shape(fat));
+
+    // width-driven rects work too (right is optional)
+    ok(shape(spawnRanges({ left: 320, width: 640 }, VW)) === shape(vid),
+      'a {left,width} rect is read the same as {left,right}', shape(spawnRanges({ left: 320, width: 640 }, VW)));
+
+    // TOO THIN -> give up and spawn full width. A starved economy is the worse bug.
+    ok(isFull(spawnRanges({ left: 40, right: 1240 }, VW)),
+      'gutters under 160px total fall back to full width', shape(spawnRanges({ left: 40, right: 1240 }, VW)));
+    ok(isFull(spawnRanges({ left: 0, right: VW }, VW)), 'a full-bleed stage falls back too');
+    const edge = spawnRanges({ left: 80, right: 1200 }, VW);   // 80 + 80 = exactly 160
+    ok(!isFull(edge), 'exactly 160px of gutter is still biased', shape(edge));
+    ok(edge.every(([lo, hi]) => hi - lo >= 1.5), 'and no unusably narrow slice is returned', shape(edge));
+
+    // A rect hanging off the viewport only counts for the part on screen.
+    const off = spawnRanges({ left: -200, right: 400 }, VW);
+    ok(off.length === 1 && near(off[0][0], 31.25) && near(off[0][1], 92),
+      'a stage hanging off the left edge leaves only the right gutter', shape(off));
+
+    // GARBAGE IN -> full width, never a throw and never an empty list.
+    const junk = [
+      [{ left: NaN, right: 5 }, VW], [{ left: 100, right: 50 }, VW], [{ left: 320, right: 960 }, 0],
+      [{ left: 320, right: 960 }, NaN], [{ left: 320, right: 960 }, -5], [{}, VW],
+      ['nope', VW], [42, VW], [{ left: 0, right: Infinity }, VW],
+    ];
+    let junkOk = true; let junkWhy = '';
+    for (const [rect, vw] of junk) {
+      let r = null;
+      try { r = spawnRanges(rect, vw); } catch (e) { junkOk = false; junkWhy = `threw on ${JSON.stringify(rect)}: ${e.message}`; continue; }
+      if (!Array.isArray(r) || !r.length) { junkOk = false; junkWhy = `empty for ${JSON.stringify(rect)}`; }
+      else if (!r.every(([lo, hi]) => hi > lo && lo >= SPAWN_MIN_PCT && hi <= SPAWN_MAX_PCT)) {
+        junkOk = false; junkWhy = `bad span for ${JSON.stringify(rect)}: ${shape(r)}`;
+      }
+    }
+    ok(junkOk, 'every degenerate input still yields a usable in-bounds span', junkWhy);
+
+    // ---- pickSpawnPct: width-weighted, in-bounds, deterministic under a fake rnd
+    ok(near(pickSpawnPct(vid, () => 0), 2), 'rnd 0 lands at the start of the first gutter',
+      String(pickSpawnPct(vid, () => 0)));
+    // WIDTH-WEIGHTED, and this is the arithmetic that proves it: the gutters are
+    // 23pct and 17pct wide (total 40), so rnd walks a 40-wide line, not two halves.
+    // 0.5 -> t=20, still inside the 23-wide left gutter -> 2+20.
+    // 0.7 -> t=28, past it by 5 -> 75+5. An even split would have given 12 and 82.
+    ok(near(pickSpawnPct(vid, () => 0.5), 22), 'the pick is WIDTH-WEIGHTED across gutters',
+      String(pickSpawnPct(vid, () => 0.5)));
+    ok(near(pickSpawnPct(vid, () => 0.7), 80), 'and it walks on into the second gutter',
+      String(pickSpawnPct(vid, () => 0.7)));
+    ok(pickSpawnPct(vid, () => 1) >= 75 && pickSpawnPct(vid, () => 1) <= 92,
+      'and rnd 1 (exclusive in theory) still lands in bounds', String(pickSpawnPct(vid, () => 1)));
+    let inGutter = true;
+    for (let i = 0; i < 400; i++) {
+      const p = pickSpawnPct(vid);
+      if (!((p >= 2 && p <= 25) || (p >= 75 && p <= 92))) { inGutter = false; break; }
+    }
+    ok(inGutter, '400 real draws all land inside a gutter, never over the stage');
+    let hitBoth = 0;
+    for (let i = 0; i < 400; i++) hitBoth |= (pickSpawnPct(vid) < 50 ? 1 : 2);
+    ok(hitBoth === 3, 'and both gutters actually get used', String(hitBoth));
+    for (const bad of [null, [], 'x', [[5, 5]], [[9, 2]], [[NaN, 3]]]) {
+      const p = pickSpawnPct(bad, () => 0.5);
+      ok(p >= SPAWN_MIN_PCT && p <= SPAWN_MAX_PCT,
+        `garbage ranges still pick something legal (${JSON.stringify(bad)})`, String(p));
+    }
+
+    // ---- and the LIVE renderer honours it. The stub has no layout engine, so the
+    // stage content is handed a getBoundingClientRect of its own — which is also
+    // the proof that the measurement reads the CHILD, not the full-bleed layer.
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const stage = byId.get('gg-stage');
+    const video = new StubEl('video');
+    video.getBoundingClientRect = () => ({ left: 320, right: 960, top: 100, bottom: 620, width: 640, height: 520 });
+    stage.appendChild(video);
+
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    m.emitStart({ element: GoonElement.Bubbles, intensity: 1, durationMs: 0, elapsedMs: 0 });
+    await sleep(1400);
+    const wraps = byId.get('gg-fx-bubbles').findAll('gg-bubble-wrap');
+    ok(wraps.length >= 3, 'the field still spawns while the stage is occupied', String(wraps.length));
+    const lefts = wraps.map((w) => parseFloat(w.style.getPropertyValue('left')));
+    ok(lefts.every((p) => p === p), 'every wrap got a numeric left', JSON.stringify(lefts));
+    // 25% is the stage's left edge and 75% its right; a fat bubble is pushed
+    // further left still, so <=25 / >=75 is the loosest correct assertion.
+    ok(lefts.every((p) => p <= 25 || p >= 75),
+      'and every NEW bubble spawned into a gutter, clear of the video',
+      JSON.stringify(lefts));
+
+    // Take the video away and the field goes back to using the whole width.
+    stage.replaceChildren();
+    await sleep(700);                                  // outlive the rect cache TTL
+    byId.get('gg-fx-bubbles').replaceChildren();
+    await sleep(2600);
+    const after = byId.get('gg-fx-bubbles').findAll('gg-bubble-wrap')
+      .map((w) => parseFloat(w.style.getPropertyValue('left')));
+    ok(after.length > 0, 'the field keeps spawning after the stage clears', String(after.length));
+    ok(after.some((p) => p > 25 && p < 75),
+      'and it uses the middle of the screen again', JSON.stringify(after));
+    ex.detach();
+  }
+
   // -------------------------------------- flashes: the DtRH scatter + the hydra
   //
   // FLASH-BLOCK POINTER HELPER. The stub's fire() carries no coordinates and no

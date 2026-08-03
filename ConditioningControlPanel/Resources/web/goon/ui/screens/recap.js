@@ -30,9 +30,33 @@ const KIND_NAMES = Object.freeze({
   3: 'video', 4: 'lock card', 5: 'toy pattern', 6: 'brain drain',
 });
 
+/**
+ * DEFENCE IN DEPTH, NOT THE FIX. boot.js clearForRecap() empties #gg-stage when
+ * the phase turns Recap; this is the screen refusing to mount underneath a husk
+ * regardless of who forgot. #gg-stage is z20 and full-bleed over the z10 screen
+ * stack, and ui/screens.css only makes it click-through while it is :empty — one
+ * leftover node and every button on this card is unreachable (it shipped that
+ * way: "clicking any button does nothing, esc does nothing too").
+ *
+ * It logs at WARN when it finds something, because finding something means the
+ * teardown regressed and that is worth a line in the log, not a silent patch.
+ */
+export function assertStageClear(logger) {
+  if (typeof document === 'undefined') return 0;
+  let stage = null;
+  try { stage = document.getElementById('gg-stage'); } catch (_e) { return 0; }
+  const n = stage ? (stage.childElementCount | 0) : 0;
+  if (!n) return 0;
+  try { logger?.warn?.('recap mounted with ' + n + ' node(s) still on #gg-stage — clearing (they would eat every click)'); }
+  catch (_e) { /* logger is optional */ }
+  try { stage.replaceChildren(); } catch (_e) { /* ignore */ }
+  return n;
+}
+
 export function mount(container, ctx) {
   const ledger = createLedger();
   ledger.logger = ctx?.logger || null;
+  assertStageClear(ctx?.logger);
 
   const { actions, audio, prefs, matchLog, getMatch } = ctx;
   const match = getMatch();
