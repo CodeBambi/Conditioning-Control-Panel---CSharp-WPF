@@ -2590,5 +2590,8 @@
   "my_reports_kind_bug": "不具合報告",
   "my_reports_kind_suggestion": "提案",
   "bug_report_token_label": "あなたの受付番号",
-  "bug_report_token_hint": "この番号を控えておいてください。詳細を追加したり報告について問い合わせるときは、Discord でこの番号を伝えてください。"
+  "bug_report_token_hint": "この番号を控えておいてください。詳細を追加したり報告について問い合わせるときは、Discord でこの番号を伝えてください。",
+  "video_grace_paused_title": "一時停止中",
+  "btn_video_grace_resume": "再生",
+  "video_grace_auto_resume_in": "{0}秒後に再開"
 }

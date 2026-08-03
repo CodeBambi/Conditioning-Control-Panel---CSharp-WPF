@@ -228,6 +228,49 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void SetEnhancementDriving(bool active) => _enhancementDriving = active;
 
+        // ---- Grace pause (#735) ----
+        // The first panic press while a mandatory video is really on screen PAUSES it behind a small
+        // "Paused / Resume" card instead of stopping the engine: someone walked in, the user needs the
+        // screen quiet for a moment, not a whole session torn down. Exactly ONE per video run; every
+        // later press falls through to the normal panic ladder, so it costs the user one extra tap to
+        // reach today's behaviour and two to reach exit-the-app.
+        private bool _gracePaused;
+        // Per-video budget. Set when the pause ENDS (manual or automatic) and reset by PlayVideo, so
+        // each attention-check retry / troll replay — a fresh GetNextVideo each time — gets its own.
+        private bool _gracePauseConsumed;
+        private DateTime _gracePausedAtUtc;
+        // Timestamp of the last performed grace pause, used ONLY for the double-fire dedup below.
+        private DateTime _lastGracePauseActionUtc = DateTime.MinValue;
+        private DispatcherTimer? _graceCountdownTimer;
+        private readonly List<GracePauseOverlayWindow> _graceOverlays = new();
+        /// <summary>Seconds the video stays paused before it resumes on its own.</summary>
+        internal const int GraceWindowSeconds = 60;
+        /// <summary>
+        /// Dedup window for ONE physical panic keystroke (see <see cref="TryGracePauseFromPanic"/>).
+        /// Far below any human rapid double-tap, far above the dispatcher latency between the window
+        /// handler and the queued global handler.
+        /// </summary>
+        internal const int GraceDedupMs = 200;
+        /// <summary>Floor for a re-armed guard timer, so rounding can never re-arm one at ~0ms.</summary>
+        private static readonly TimeSpan MinReArmInterval = TimeSpan.FromMilliseconds(250);
+
+        /// <summary>
+        /// Arm bookkeeping for a <see cref="DispatcherTimer"/>. WPF exposes no "time left", so the
+        /// grace pause records when each guard timer was armed and with what interval, stops it for
+        /// the duration of the pause, and re-arms it with what was left. Without this a 60s pause
+        /// would make the duration guillotine and the max-length cap fire 60s early (mid-video).
+        /// </summary>
+        private sealed class TimerArm
+        {
+            public DateTime ArmedUtc;
+            public TimeSpan Interval;
+            public TimeSpan Remaining;   // captured at pause, consumed at resume
+        }
+
+        private readonly TimerArm _safetyArm = new();
+        private readonly TimerArm _fallbackArm = new();
+        private readonly TimerArm _maxLenArm = new();
+
         // Cleanup synchronization to prevent race conditions
         private readonly object _cleanupLock = new();
         private volatile bool _isCleaningUp;
@@ -384,6 +427,15 @@ namespace ConditioningControlPanel.Services
         /// Whether a video is currently playing
         /// </summary>
         public bool IsPlaying => _videoPlaying;
+
+        /// <summary>
+        /// True while the current video is held by a grace pause (#735). The run has NOT ended —
+        /// <see cref="IsPlaying"/> and <see cref="IsStrictActive"/> stay true — so the strict Closing
+        /// veto still refuses Alt+F4 and the scheduler still treats the slot as busy. Watchdogs that
+        /// measure playback PROGRESS must stand down while this is set: a paused video makes no
+        /// progress by design.
+        /// </summary>
+        public bool IsGracePaused => _gracePaused;
 
         /// <summary>
         /// True while a strict-locked video is actively playing. Escape hatches that
@@ -1295,6 +1347,7 @@ namespace ConditioningControlPanel.Services
             _videoPlaying = false;
             _strictActive = false;
             CancelPendingRetry();
+            ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
             try
             {
                 CloseAll(synchronous: false);
@@ -1706,6 +1759,7 @@ namespace ConditioningControlPanel.Services
             _triggerInProgress = false;
             _strictActive = false;
             CancelPendingRetry();
+            ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
             CloseAll(synchronous);
             App.Audio?.ForceUnduck();
             _penalties = 0;
@@ -2063,6 +2117,12 @@ namespace ConditioningControlPanel.Services
             CancelPendingRetry();
             _retryPath = path;
             _startTime = DateTime.Now;
+            // A new video is really starting — including every attention-check retry / troll replay,
+            // each of which is a fresh GetNextVideo through this same method — so the run gets a fresh
+            // grace pause (#735). Any stale pause state is cleared too; the teardown before this
+            // already closed the card, this is the belt to that braces.
+            ClearGraceState();
+            _gracePauseConsumed = false;
             // Fresh clip ⇒ fresh length. _duration was only ever ASSIGNED (LengthChanged / MediaOpened)
             // and never cleared, so a clip that died before LengthChanged inherited the previous
             // clip's length and was credited with it on the skip path (#767).
@@ -2833,11 +2893,21 @@ namespace ConditioningControlPanel.Services
             // threadpool timer like StartVoutWatchdog, so the verdict lands in the trace even during
             // a freeze; only the teardown it decides on is marshalled back to the dispatcher.
             VideoDiag.Log("BLUR", $"[{surfaceTag}] frame watchdog armed (threadpool timer, {VoutGraceMs}ms)");
+            System.Threading.Timer? self = null;
             var timer = new System.Threading.Timer(_ =>
             {
                 try
                 {
                     if (!_videoPlaying || _isCleaningUp || gen != _teardownGeneration) return; // torn down / superseded
+                    // #735: a grace-paused vmem surface produces no new frames BY DESIGN. Judging it
+                    // here would skip to the next video the moment the user paused inside the grace
+                    // window. Re-arm for another full grace instead of standing down for good.
+                    if (_gracePaused)
+                    {
+                        VideoDiag.Log("BLUR", $"[{surfaceTag}] frame watchdog deferred - video is grace-paused");
+                        try { self?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch { }
+                        return;
+                    }
                     if (surface.HasRendered) { VideoDiag.Log("BLUR", $"[{surfaceTag}] frame watchdog: frames are arriving, all good"); return; }
                     App.Logger?.Warning("VideoService: blurred-background video produced no frame within {Ms}ms on {Surface} — skipping to next",
                         VoutGraceMs, surfaceTag);
@@ -2856,6 +2926,7 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex) { App.Logger?.Debug("StartBlurFrameWatchdog tick error: {E}", ex.Message); }
             }, null, VoutGraceMs, System.Threading.Timeout.Infinite);
+            self = timer;   // lets the grace-pause branch above re-arm this very timer
 
             lock (_blurFrameWatchLock) { _blurFrameWatchTimers.Add(timer); }
         }
@@ -3635,6 +3706,23 @@ namespace ConditioningControlPanel.Services
                 win.Closing += (s, e) => { if (_videoPlaying && !_isCleaningUp && !_wedgeStallSeen) e.Cancel = true; };
                 win.PreviewKeyDown += (s, e) =>
                 {
+                    // #735: in strict mode Escape may PAUSE, never escape. When Escape is NOT the
+                    // configured panic key it does nothing at all here today, so offering the grace
+                    // pause on it costs the lock nothing (the pause keeps _videoPlaying true, so the
+                    // Closing veto below still refuses Alt+F4) and gives a strict-locked user the
+                    // same "someone walked in" out. When Escape IS the panic key it falls through to
+                    // the block below exactly as before and the global hook drives the ladder.
+                    if (e.Key == Key.Escape &&
+                        !string.Equals(App.Settings.Current.PanicKey, Key.Escape.ToString(), StringComparison.Ordinal))
+                    {
+                        if (TryGracePauseFromPanic())
+                        {
+                            VideoDiag.Log("PANIC", "strict window: ESC consumed as video grace pause");
+                            e.Handled = true;
+                            return;
+                        }
+                    }
+
                     // In strict mode, block panic key, Alt+F4, and system keys
                     if (e.Key.ToString() == App.Settings.Current.PanicKey || e.Key == Key.System ||
                         (e.Key == Key.F4 && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)))
@@ -3667,16 +3755,31 @@ namespace ConditioningControlPanel.Services
                         // WPF key routing only happens if the dispatcher is draining input, so this
                         // line doubles as proof the UI thread was alive when the user pressed ESC
                         // (#616-#623: "I hit escape/panic and nothing happened").
-                        VideoDiag.Log("PANIC", "ESC received by the video window - dismissing via Cleanup");
                         e.Handled = true;
+                        // #735: first try the grace pause. If it is unavailable or already spent,
+                        // ESC keeps today's meaning exactly — dismiss this video via Cleanup().
+                        if (TryGracePauseFromPanic())
+                        {
+                            VideoDiag.Log("PANIC", "ESC consumed as video grace pause");
+                            return;
+                        }
+                        VideoDiag.Log("PANIC", "ESC received by the video window - dismissing via Cleanup");
                         Cleanup();
                         return;
                     }
                     if (App.Settings.Current.PanicKeyEnabled &&
                         e.Key.ToString() == App.Settings.Current.PanicKey)
                     {
-                        VideoDiag.Log("PANIC", $"panic key '{e.Key}' received by the video window - ForceCleanup");
                         e.Handled = true;
+                        // Same order as ESC above. The dedup window inside TryGracePauseFromPanic is
+                        // what stops the global hook's queued HandlePanicKeyPress from stopping the
+                        // engine a few ms after this pause.
+                        if (TryGracePauseFromPanic())
+                        {
+                            VideoDiag.Log("PANIC", $"panic key '{e.Key}' consumed by the video window as a grace pause");
+                            return;
+                        }
+                        VideoDiag.Log("PANIC", $"panic key '{e.Key}' received by the video window - ForceCleanup");
                         ForceCleanup();
                     }
                 };
@@ -4169,6 +4272,343 @@ namespace ConditioningControlPanel.Services
 
         #endregion
 
+        #region Grace Pause (#735)
+
+        /// <summary>What a panic press should do to a (possibly playing) mandatory video.</summary>
+        internal enum GraceDecision
+        {
+            /// <summary>Perform the grace pause; the press is consumed and must NOT reach the ladder.</summary>
+            Pause,
+            /// <summary>Same physical keystroke as a pause we just performed — swallow it, change nothing.</summary>
+            ConsumedDedup,
+            /// <summary>Not pausable (no video / already paused / budget spent / attention target live)
+            /// — the press is today's normal panic press.</summary>
+            FallThrough
+        }
+
+        /// <summary>
+        /// Pure decision for one panic press, extracted so the ladder can be unit-tested without
+        /// LibVLC (same seam pattern as <see cref="EvaluateVoutMidPlay"/>).
+        ///
+        /// THE DEDUP IS FIRST AND IT MATTERS. For one physical keystroke with a non-strict video
+        /// window focused, BOTH the window's PreviewKeyDown handler AND the global WH_KEYBOARD_LL
+        /// hook's queued <c>HandlePanicKeyPress</c> run: the hook callback queues first, the window
+        /// handler runs synchronously during message delivery, then the dispatcher drains the queued
+        /// global handler. Without dedup, press 1 would pause (window) and then immediately stop the
+        /// engine (global). The dedup is a TIME WINDOW rather than a "consume the next call" flag on
+        /// purpose: when the video window does NOT have focus only the global handler fires, and a
+        /// one-shot flag would then swallow the user's genuine SECOND press. 200ms is far below a
+        /// human rapid double-tap and far above the dispatcher latency between the two handlers.
+        /// </summary>
+        internal static GraceDecision EvaluateGraceRequest(
+            bool videoPlaying,
+            bool cleaningUp,
+            bool alreadyPaused,
+            bool consumed,
+            bool attentionTargetLive,
+            double msSinceLastGraceAction,
+            int dedupMs = GraceDedupMs)
+        {
+            if (msSinceLastGraceAction < dedupMs) return GraceDecision.ConsumedDedup;
+            if (!videoPlaying || cleaningUp) return GraceDecision.FallThrough;
+            if (alreadyPaused) return GraceDecision.FallThrough;   // press 2 = today's normal panic
+            if (consumed) return GraceDecision.FallThrough;        // one grace pause per video run
+            // Pausing while a "CLICK ME" target is live would break the mini-game's timing, and a
+            // panic press must NEVER be silently swallowed — so refuse the pause and let the press
+            // do what it has always done.
+            if (attentionTargetLive) return GraceDecision.FallThrough;
+            return GraceDecision.Pause;
+        }
+
+        /// <summary>Seconds still to show on the countdown card (rounded up, never negative).</summary>
+        internal static int GraceSecondsRemaining(double elapsedSeconds, int windowSeconds)
+            => (int)Math.Max(0, Math.Ceiling(windowSeconds - elapsedSeconds));
+
+        /// <summary>True once the grace window has fully elapsed and the video must resume itself.</summary>
+        internal static bool ShouldAutoResume(double elapsedSeconds, int windowSeconds)
+            => elapsedSeconds >= windowSeconds;
+
+        /// <summary>
+        /// Time left on a guard timer armed at <paramref name="armedUtc"/> for
+        /// <paramref name="interval"/>. Returns <see cref="TimeSpan.Zero"/> for a timer that was
+        /// never armed, and never less than <see cref="MinReArmInterval"/> otherwise.
+        /// </summary>
+        internal static TimeSpan RemainingTimerInterval(DateTime armedUtc, TimeSpan interval, DateTime nowUtc)
+        {
+            if (armedUtc == default || interval <= TimeSpan.Zero) return TimeSpan.Zero;
+            var remaining = interval - (nowUtc - armedUtc);
+            return remaining < MinReArmInterval ? MinReArmInterval : remaining;
+        }
+
+        /// <summary>
+        /// Entry point for the panic key (#735). Returns TRUE when the press was consumed as a grace
+        /// pause (or as the duplicate half of one) and the caller must return WITHOUT touching the
+        /// panic ladder, the bark, or the achievement tracker. Returns FALSE for "this is a normal
+        /// panic press, carry on".
+        ///
+        /// Must be called on the UI thread (both callers — MainWindow.HandlePanicKeyPress on the
+        /// dispatcher, and the video window's PreviewKeyDown — already are).
+        /// </summary>
+        public bool TryGracePauseFromPanic()
+        {
+            try
+            {
+                var nowUtc = DateTime.UtcNow;
+                var sinceMs = _lastGracePauseActionUtc == DateTime.MinValue
+                    ? double.MaxValue
+                    : (nowUtc - _lastGracePauseActionUtc).TotalMilliseconds;
+
+                bool targetLive;
+                lock (_targets) { targetLive = _targets.Count > 0; }
+
+                var decision = EvaluateGraceRequest(
+                    // _videoPlaying alone goes true ~2.6s before anything is on screen (see the field
+                    // comment on _playbackStarted): there is nothing to pause during pre-roll, and a
+                    // panic there should stop the run as it always has.
+                    videoPlaying: _videoPlaying && _playbackStarted,
+                    cleaningUp: _isCleaningUp,
+                    alreadyPaused: _gracePaused,
+                    consumed: _gracePauseConsumed,
+                    attentionTargetLive: targetLive,
+                    msSinceLastGraceAction: sinceMs);
+
+                switch (decision)
+                {
+                    case GraceDecision.ConsumedDedup:
+                        VideoDiag.Log("PANIC", $"grace pause dedup - same keystroke as the pause {sinceMs:F0}ms ago, swallowed");
+                        return true;
+                    case GraceDecision.Pause:
+                        DoGracePause(nowUtc);
+                        return true;
+                    default:
+                        VideoDiag.Log("PANIC",
+                            $"grace pause NOT available (playing={_videoPlaying}, started={_playbackStarted}, " +
+                            $"cleaning={_isCleaningUp}, paused={_gracePaused}, consumed={_gracePauseConsumed}, " +
+                            $"targetLive={targetLive}) - falling through to the normal panic ladder");
+                        return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                // A bug in here must never eat a panic press. Fall through to the normal ladder.
+                App.Logger?.Warning("VideoService.TryGracePauseFromPanic threw: {Error}", ex.Message);
+                VideoDiag.Log("PANIC", "grace pause THREW - falling through to the normal panic ladder: " + ex.Message);
+                return false;
+            }
+        }
+
+        private void DoGracePause(DateTime nowUtc)
+        {
+            _gracePaused = true;
+            _gracePausedAtUtc = nowUtc;
+            _lastGracePauseActionUtc = nowUtc;
+
+            PausePrimary();
+
+            // Freeze the wall-clock guards for the duration of the pause (see TimerArm).
+            PauseGuardTimers(nowUtc);
+
+            // The InteractionQueue's stuck-recovery would ForceCleanup a deliberately paused video.
+            // Slide its window past the whole pause plus the rest of the clip plus the usual buffer.
+            try
+            {
+                var remainingClipSec = Math.Max(
+                    _safetyArm.Remaining.TotalSeconds,
+                    Math.Max(_fallbackArm.Remaining.TotalSeconds, _maxLenArm.Remaining.TotalSeconds));
+                App.InteractionQueue?.ExtendTimeout(
+                    remainingClipSec + GraceWindowSeconds + 90,
+                    InteractionQueueService.InteractionType.Video);
+            }
+            catch (Exception ex) { App.Logger?.Debug("VideoService: grace-pause ExtendTimeout failed - {Error}", ex.Message); }
+
+            ShowGraceOverlays();
+            StartGraceCountdown();
+
+            App.Logger?.Information("VideoService: grace pause engaged ({Window}s window)", GraceWindowSeconds);
+            VideoDiag.Log("PANIC", $"GRACE PAUSE engaged - video held, auto-resume in {GraceWindowSeconds}s");
+        }
+
+        /// <summary>Ends the pause and resumes playback. Idempotent.</summary>
+        private void ResumeFromGrace(string reason)
+        {
+            if (!_gracePaused) return;
+            _gracePaused = false;
+            _gracePauseConsumed = true;   // one per video run — spent whether it ended by hand or by timeout
+
+            var pausedFor = DateTime.UtcNow - _gracePausedAtUtc;
+            if (pausedFor < TimeSpan.Zero) pausedFor = TimeSpan.Zero;
+
+            StopGraceCountdown();
+            CloseGraceOverlays();
+
+            // _startTime is the attention spawner's wall clock (CheckSpawnTargets compares
+            // DateTime.Now - _startTime against the scheduled spawn times) and is the ONLY read of
+            // that field in this file — watch-time credit is position-based (FinalizeWatchCredit
+            // reads _lastWatchPositionMs). Shift it forward by the pause so the targets keep landing
+            // at their intended positions in the CLIP rather than all at once on resume.
+            _startTime += pausedFor;
+
+            // The enhancement stall watch measures "seconds since playback last advanced" against a
+            // 90s grace. The pause itself contributed up to 60 of those seconds, so restart its clock
+            // here rather than letting the pause eat two thirds of the grace window (#536 + #735).
+            _lastSafetyProgressUtc = DateTime.UtcNow;
+
+            ResumeGuardTimers(DateTime.UtcNow);
+            PlayPrimary();
+
+            App.Logger?.Information("VideoService: grace pause released ({Reason}) after {Sec:F1}s", reason, pausedFor.TotalSeconds);
+            VideoDiag.Log("PANIC", $"grace pause RELEASED ({reason}) after {pausedFor.TotalSeconds:F1}s - playback resumed");
+        }
+
+        /// <summary>
+        /// Tears the grace-pause UI + state down WITHOUT resuming playback — the video itself is
+        /// going away. Called from the teardown funnel (<c>CloseAll</c>) and defensively from
+        /// ForceCleanup/Cleanup/Stop so a paused video that is panicked away, engine-stopped,
+        /// OS-locked or wedge-rescued can never leave an overlay window on screen.
+        /// </summary>
+        private void ClearGraceState()
+        {
+            StopGraceCountdown();
+            CloseGraceOverlays();
+            _gracePaused = false;
+            // _gracePauseConsumed is deliberately NOT cleared here: it is per-video and reset by
+            // PlayVideo, which every new run (including each attention retry) goes through.
+        }
+
+        private void StartGraceCountdown()
+        {
+            StopGraceCountdown();
+            // Any deferred grace action must die with the video it belonged to (see _teardownGeneration).
+            var gen = _teardownGeneration;
+            _graceCountdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _graceCountdownTimer.Tick += (s, e) =>
+            {
+                try
+                {
+                    if (gen != _teardownGeneration || !_gracePaused || _isCleaningUp)
+                    {
+                        StopGraceCountdown();
+                        return;
+                    }
+
+                    var elapsed = (DateTime.UtcNow - _gracePausedAtUtc).TotalSeconds;
+                    if (ShouldAutoResume(elapsed, GraceWindowSeconds))
+                    {
+                        StopGraceCountdown();
+                        ResumeFromGrace("auto-resume");
+                        return;
+                    }
+
+                    var left = GraceSecondsRemaining(elapsed, GraceWindowSeconds);
+                    foreach (var o in _graceOverlays.ToList()) o.SetRemainingSeconds(left);
+                }
+                catch (Exception ex) { App.Logger?.Debug("VideoService: grace countdown tick failed - {Error}", ex.Message); }
+            };
+            _graceCountdownTimer.Start();
+        }
+
+        private void StopGraceCountdown()
+        {
+            try { _graceCountdownTimer?.Stop(); } catch { }
+            _graceCountdownTimer = null;
+        }
+
+        private void ShowGraceOverlays()
+        {
+            CloseGraceOverlays();
+            try
+            {
+                // One card per screen that actually has a video window, centred on it.
+                foreach (var win in _windows.ToList())
+                {
+                    Screen screen;
+                    try { screen = ScreenForWindow(win); }
+                    catch { continue; }
+                    if (screen == null) continue;
+
+                    var overlay = new GracePauseOverlayWindow(screen, () => ResumeFromGrace("resume button"));
+                    overlay.SetRemainingSeconds(GraceWindowSeconds);
+                    _graceOverlays.Add(overlay);
+                }
+
+                if (_graceOverlays.Count == 0)
+                {
+                    // No window resolved to a screen (mid-teardown / screen reconfiguration). Put one
+                    // card on the primary rather than pausing with no way to resume by hand.
+                    var primary = Screen.PrimaryScreen;
+                    if (primary != null)
+                    {
+                        var overlay = new GracePauseOverlayWindow(primary, () => ResumeFromGrace("resume button"));
+                        overlay.SetRemainingSeconds(GraceWindowSeconds);
+                        _graceOverlays.Add(overlay);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("VideoService: failed to show grace pause overlay - {Error}", ex.Message);
+            }
+        }
+
+        private void CloseGraceOverlays()
+        {
+            foreach (var o in _graceOverlays.ToList())
+            {
+                try { o.Close(); }
+                catch (Exception ex) { App.Logger?.Debug("VideoService: failed to close grace overlay - {Error}", ex.Message); }
+            }
+            _graceOverlays.Clear();
+        }
+
+        private static Screen ScreenForWindow(Window win)
+        {
+            var hwnd = new WindowInteropHelper(win).Handle;
+            if (hwnd != IntPtr.Zero) return Screen.FromHandle(hwnd);
+            return Screen.PrimaryScreen ?? Screen.AllScreens[0];
+        }
+
+        private void PauseGuardTimers(DateTime nowUtc)
+        {
+            CaptureAndStop(_safetyTimer, _safetyArm, nowUtc);
+            CaptureAndStop(_fallbackSafetyTimer, _fallbackArm, nowUtc);
+            CaptureAndStop(_maxLenCapTimer, _maxLenArm, nowUtc);
+            VideoDiag.Log("PANIC",
+                $"guard timers frozen (safety={_safetyArm.Remaining.TotalSeconds:F1}s, " +
+                $"fallback={_fallbackArm.Remaining.TotalSeconds:F1}s, maxLen={_maxLenArm.Remaining.TotalSeconds:F1}s left)");
+        }
+
+        private static void CaptureAndStop(DispatcherTimer? timer, TimerArm arm, DateTime nowUtc)
+        {
+            arm.Remaining = TimeSpan.Zero;
+            if (timer == null || !timer.IsEnabled) return;
+            arm.Remaining = RemainingTimerInterval(arm.ArmedUtc, arm.Interval, nowUtc);
+            try { timer.Stop(); } catch { }
+        }
+
+        private void ResumeGuardTimers(DateTime nowUtc)
+        {
+            ReArm(_safetyTimer, _safetyArm, nowUtc);
+            ReArm(_fallbackSafetyTimer, _fallbackArm, nowUtc);
+            ReArm(_maxLenCapTimer, _maxLenArm, nowUtc);
+        }
+
+        private static void ReArm(DispatcherTimer? timer, TimerArm arm, DateTime nowUtc)
+        {
+            var remaining = arm.Remaining;
+            arm.Remaining = TimeSpan.Zero;
+            if (timer == null || remaining <= TimeSpan.Zero) return;
+            try
+            {
+                timer.Interval = remaining;
+                arm.ArmedUtc = nowUtc;
+                arm.Interval = remaining;
+                timer.Start();
+            }
+            catch (Exception ex) { App.Logger?.Debug("VideoService: failed to re-arm a guard timer after grace pause - {Error}", ex.Message); }
+        }
+
+        #endregion
+
         #region Safety Timeout
 
         /// <summary>
@@ -4203,6 +4643,16 @@ namespace ConditioningControlPanel.Services
                 // progress-based stall watch: keep the video alive while playback is still advancing,
                 // slide the InteractionQueue stuck window forward too, and only force-close once it has
                 // shown zero progress for the grace window (a genuine wedge, not an intended pause).
+                // #735: a grace-paused video makes no progress BY DESIGN, so the zero-progress
+                // force-end must stand down. (The pause also stops this timer outright — this is the
+                // belt to that braces, and it keeps the stall clock honest across the pause.)
+                if (_gracePaused)
+                {
+                    _lastSafetyProgressUtc = DateTime.UtcNow;
+                    if (_enhancementDriving) SetSafetyInterval(EnhancementRecheckInterval);
+                    return;
+                }
+
                 if (_enhancementDriving)
                 {
                     long curMs = -1;
@@ -4218,13 +4668,13 @@ namespace ConditioningControlPanel.Services
                         // loop either (its window is min 5 min / duration+30s — a long loop can reach it).
                         try { App.InteractionQueue?.ExtendTimeout(_duration > 0 ? _duration : MaxVideoFallbackSeconds, InteractionQueueService.InteractionType.Video); }
                         catch (Exception ex) { App.Logger?.Debug("VideoService: safety-timer ExtendTimeout failed: {E}", ex.Message); }
-                        if (_safetyTimer != null) _safetyTimer.Interval = EnhancementRecheckInterval;
+                        SetSafetyInterval(EnhancementRecheckInterval);
                         return;
                     }
 
                     if ((now - _lastSafetyProgressUtc).TotalSeconds < EnhancementStallGraceSeconds)
                     {
-                        if (_safetyTimer != null) _safetyTimer.Interval = EnhancementRecheckInterval;
+                        SetSafetyInterval(EnhancementRecheckInterval);
                         return; // paused (e.g. speak-hold) but within grace — not a wedge
                     }
 
@@ -4243,8 +4693,24 @@ namespace ConditioningControlPanel.Services
                 }
             };
             _safetyTimer.Start();
+            // Record the arm so a grace pause can stop this timer and re-arm it with what was left
+            // instead of restarting the whole guillotine (#735).
+            _safetyArm.ArmedUtc = DateTime.UtcNow;
+            _safetyArm.Interval = _safetyTimer.Interval;
+            _safetyArm.Remaining = TimeSpan.Zero;
 
             App.Logger?.Debug("VideoService: Safety timer started for {Duration}s (fallback timer stopped)", timeoutSeconds);
+        }
+
+        /// <summary>Changes the safety timer's interval AND its arm bookkeeping together — setting
+        /// <see cref="DispatcherTimer.Interval"/> restarts the countdown, so the two must never drift
+        /// apart or a grace pause would re-arm it with the wrong remainder (#735).</summary>
+        private void SetSafetyInterval(TimeSpan interval)
+        {
+            if (_safetyTimer == null) return;
+            _safetyTimer.Interval = interval;
+            _safetyArm.ArmedUtc = DateTime.UtcNow;
+            _safetyArm.Interval = interval;
         }
 
         /// <summary>
@@ -4268,6 +4734,9 @@ namespace ConditioningControlPanel.Services
                 }
             };
             _fallbackSafetyTimer.Start();
+            _fallbackArm.ArmedUtc = DateTime.UtcNow;   // grace-pause arm bookkeeping (#735)
+            _fallbackArm.Interval = _fallbackSafetyTimer.Interval;
+            _fallbackArm.Remaining = TimeSpan.Zero;
 
             App.Logger?.Debug("VideoService: Fallback safety timer started for {Duration}s", MaxVideoFallbackSeconds);
         }
@@ -4299,6 +4768,9 @@ namespace ConditioningControlPanel.Services
                 }
             };
             _maxLenCapTimer.Start();
+            _maxLenArm.ArmedUtc = DateTime.UtcNow;   // grace-pause arm bookkeeping (#735)
+            _maxLenArm.Interval = _maxLenCapTimer.Interval;
+            _maxLenArm.Remaining = TimeSpan.Zero;
 
             App.Logger?.Debug("VideoService: Max video-length cap timer started for {Max}s", maxSec);
         }
@@ -4364,6 +4836,15 @@ namespace ConditioningControlPanel.Services
             {
                 if (!_videoPlaying || _isCleaningUp) return;
                 if (!ReferenceEquals(player, _primaryMediaPlayer)) return;   // stale timer from a previous video
+                // #735: a video paused inside the start grace window may not have created its vout
+                // yet. Retiring the shared LibVLC over that would be a self-inflicted white-screen
+                // heal. Push the deadline out by another full grace instead of standing down.
+                if (_gracePaused)
+                {
+                    VideoDiag.Log("VOUT", "start watchdog deferred - video is grace-paused");
+                    try { _voutWatchTimer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch { }
+                    return;
+                }
                 if (_voutSeen) return;
                 // Authoritative live check — covers a vout that appeared before the event was wired.
                 try { if (player.VoutCount > 0) return; } catch { }
@@ -4467,6 +4948,12 @@ namespace ConditioningControlPanel.Services
             {
                 if (!_videoPlaying || _isCleaningUp || _voutMidHealUsed) return;
                 if (!ReferenceEquals(player, _primaryMediaPlayer)) return;   // stale timer from a previous video
+                // #735: this poll's decision keys off VoutCount, not time progress, and a paused
+                // LibVLC player keeps its video output — so a grace pause should be invisible here.
+                // Gated anyway because the cost of being wrong is asymmetric: a driver that tears the
+                // vout down on pause would spend a retire from the four-per-session budget and replay
+                // the clip under the user's Resume card. Nothing needs healing during a 60s pause.
+                if (_gracePaused) { _voutLostSinceTicks = 0; return; }
 
                 uint voutCount;
                 try { voutCount = player.VoutCount; } catch { return; }
@@ -4901,6 +5388,11 @@ namespace ConditioningControlPanel.Services
             {
                 _attentionTimer?.Stop();
                 _segmentArmedAtUtc = DateTime.MinValue;   // random-segment mode is one-shot per video
+                // #735: the video is going away, so the grace-pause card must go with it — every
+                // teardown (panic press 2, engine stop, OS lock/suspend, wedge watchdog, natural end)
+                // funnels through here, so this is the one place that guarantees zero orphaned
+                // overlay windows. It does NOT resume playback: the players are about to be stopped.
+                ClearGraceState();
 
                 lock (_targets)
                 {
@@ -5260,6 +5752,7 @@ namespace ConditioningControlPanel.Services
             _maxLenCapTimer = null;
             _videoPlaying = false;
             _triggerInProgress = false;
+            ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
             CloseAll();
 
             App.Logger?.Information("VideoService: Cleanup() - CloseAll completed, _windows now={WinCount}", _windows.Count);

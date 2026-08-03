@@ -3853,5 +3853,8 @@
   "my_reports_kind_bug": "Bug report",
   "my_reports_kind_suggestion": "Suggestion",
   "bug_report_token_label": "Your report number",
-  "bug_report_token_hint": "Save this number. Quote it in Discord if you want to add details or ask about your report."
+  "bug_report_token_hint": "Save this number. Quote it in Discord if you want to add details or ask about your report.",
+  "video_grace_paused_title": "Paused",
+  "btn_video_grace_resume": "Resume",
+  "video_grace_auto_resume_in": "Resuming in {0}s"
 }

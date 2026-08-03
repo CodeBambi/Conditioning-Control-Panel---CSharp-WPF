@@ -2597,5 +2597,8 @@
   "my_reports_kind_bug": "Сообщение об ошибке",
   "my_reports_kind_suggestion": "Предложение",
   "bug_report_token_label": "Номер вашего обращения",
-  "bug_report_token_hint": "Сохраните этот номер. Укажите его в Discord, если хотите добавить подробности или спросить о своём обращении."
+  "bug_report_token_hint": "Сохраните этот номер. Укажите его в Discord, если хотите добавить подробности или спросить о своём обращении.",
+  "video_grace_paused_title": "Пауза",
+  "btn_video_grace_resume": "Продолжить",
+  "video_grace_auto_resume_in": "Возобновление через {0} с"
 }

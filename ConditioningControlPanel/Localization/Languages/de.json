@@ -2598,5 +2598,8 @@
   "my_reports_kind_bug": "Fehlerbericht",
   "my_reports_kind_suggestion": "Vorschlag",
   "bug_report_token_label": "Deine Meldungsnummer",
-  "bug_report_token_hint": "Notiere dir diese Nummer. Nenne sie auf Discord, wenn du Details ergänzen oder nach deiner Meldung fragen möchtest."
+  "bug_report_token_hint": "Notiere dir diese Nummer. Nenne sie auf Discord, wenn du Details ergänzen oder nach deiner Meldung fragen möchtest.",
+  "video_grace_paused_title": "Pausiert",
+  "btn_video_grace_resume": "Fortsetzen",
+  "video_grace_auto_resume_in": "Fortsetzung in {0}s"
 }

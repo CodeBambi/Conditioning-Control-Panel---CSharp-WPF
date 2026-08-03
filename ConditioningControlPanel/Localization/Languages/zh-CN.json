@@ -3395,5 +3395,8 @@
   "my_reports_kind_bug": "问题反馈",
   "my_reports_kind_suggestion": "建议",
   "bug_report_token_label": "你的反馈编号",
-  "bug_report_token_hint": "请保存该编号。若要补充信息或询问处理进度，请在 Discord 中提供该编号。"
+  "bug_report_token_hint": "请保存该编号。若要补充信息或询问处理进度，请在 Discord 中提供该编号。",
+  "video_grace_paused_title": "已暂停",
+  "btn_video_grace_resume": "继续",
+  "video_grace_auto_resume_in": "{0} 秒后继续"
 }

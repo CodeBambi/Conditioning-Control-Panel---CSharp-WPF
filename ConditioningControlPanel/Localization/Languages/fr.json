@@ -2598,5 +2598,8 @@
   "my_reports_kind_bug": "Rapport de bug",
   "my_reports_kind_suggestion": "Suggestion",
   "bug_report_token_label": "Votre numéro de rapport",
-  "bug_report_token_hint": "Conservez ce numéro. Citez-le sur Discord pour ajouter des détails ou poser une question sur votre rapport."
+  "bug_report_token_hint": "Conservez ce numéro. Citez-le sur Discord pour ajouter des détails ou poser une question sur votre rapport.",
+  "video_grace_paused_title": "En pause",
+  "btn_video_grace_resume": "Reprendre",
+  "video_grace_auto_resume_in": "Reprise dans {0} s"
 }

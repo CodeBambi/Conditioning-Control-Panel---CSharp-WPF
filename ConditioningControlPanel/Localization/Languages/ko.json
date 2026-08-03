@@ -2597,5 +2597,8 @@
   "my_reports_kind_bug": "버그 신고",
   "my_reports_kind_suggestion": "제안",
   "bug_report_token_label": "접수 번호",
-  "bug_report_token_hint": "이 번호를 저장해 두세요. 내용을 추가하거나 문의할 때 디스코드에서 이 번호를 알려주시면 됩니다."
+  "bug_report_token_hint": "이 번호를 저장해 두세요. 내용을 추가하거나 문의할 때 디스코드에서 이 번호를 알려주시면 됩니다.",
+  "video_grace_paused_title": "일시정지됨",
+  "btn_video_grace_resume": "재생",
+  "video_grace_auto_resume_in": "{0}초 후 재개"
 }
