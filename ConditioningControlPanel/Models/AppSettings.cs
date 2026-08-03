@@ -235,6 +235,22 @@ namespace ConditioningControlPanel.Models
             set { _lastSeenVersion = value ?? ""; OnPropertyChanged(); }
         }
 
+        private List<string> _recentBugReports = new();
+        /// <summary>
+        /// Ring buffer of the report numbers (BUG-XXXXXXXXXX) the server handed back for bug
+        /// reports and suggestions this user filed (#769). Kept so the number survives the
+        /// success dialog and can be quoted in Discord later — surfaced by the "My Reports"
+        /// list in App Info. Entry format: "{token}|{ISO-8601 UTC timestamp}|{kind}" where
+        /// kind is "bug" or "suggestion". Newest last; capped at
+        /// <see cref="Services.BugReportService.MaxRecentReports"/> (oldest trimmed on insert).
+        /// </summary>
+        [JsonProperty("recent_bug_reports")]
+        public List<string> RecentBugReports
+        {
+            get => _recentBugReports;
+            set { _recentBugReports = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
         private string _dismissedAnnouncementId = "";
         /// <summary>
         /// ID of the last server announcement the user dismissed. Prevents showing the same announcement again.

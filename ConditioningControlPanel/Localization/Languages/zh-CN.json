@@ -3387,5 +3387,13 @@
   "program_lock_reason_generic": "训练计划正在运行本次会话。功能和强度将锁定至结束。",
   "session_lock_reason": "您正在会话中！功能和强度将锁定至结束。",
   "session_lock_action_title": "您正在会话中",
-  "session_lock_action_body": "{0}\n\n这将覆盖本次会话所设定的内容。如果确实要更改，请先停止会话。"
+  "session_lock_action_body": "{0}\n\n这将覆盖本次会话所设定的内容。如果确实要更改，请先停止会话。",
+  "btn_my_reports": "我的反馈",
+  "my_reports_title": "我的反馈",
+  "my_reports_subtitle": "你已提交的问题反馈和建议的编号。若要补充信息，请在 Discord 中提供该编号。",
+  "my_reports_empty": "暂无反馈记录。",
+  "my_reports_kind_bug": "问题反馈",
+  "my_reports_kind_suggestion": "建议",
+  "bug_report_token_label": "你的反馈编号",
+  "bug_report_token_hint": "请保存该编号。若要补充信息或询问处理进度，请在 Discord 中提供该编号。"
 }

@@ -2589,5 +2589,13 @@
   "program_lock_reason_generic": "Um programa de treinamento está executando esta sessão. Seus recursos e intensidade estão bloqueados até ela terminar.",
   "session_lock_reason": "Você está em uma sessão! Seus recursos e intensidade estão bloqueados até ela terminar.",
   "session_lock_action_title": "Você está em uma sessão",
-  "session_lock_action_body": "{0}\n\nIsso substituiria o que a sessão prescreveu. Pare a sessão primeiro se realmente quiser alterar."
+  "session_lock_action_body": "{0}\n\nIsso substituiria o que a sessão prescreveu. Pare a sessão primeiro se realmente quiser alterar.",
+  "btn_my_reports": "Meus relatos",
+  "my_reports_title": "Meus relatos",
+  "my_reports_subtitle": "Números dos relatos de bugs e sugestões que você enviou. Cite um no Discord se quiser acrescentar detalhes.",
+  "my_reports_empty": "Nenhum relato ainda.",
+  "my_reports_kind_bug": "Relato de bug",
+  "my_reports_kind_suggestion": "Sugestão",
+  "bug_report_token_label": "Seu número de relato",
+  "bug_report_token_hint": "Guarde este número. Cite-o no Discord se quiser acrescentar detalhes ou perguntar sobre o seu relato."
 }

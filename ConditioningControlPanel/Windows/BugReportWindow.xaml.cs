@@ -137,24 +137,20 @@ namespace ConditioningControlPanel
 
                 switch (result.Outcome)
                 {
+                    // #769: the report number used to flash past in a MessageBox — not selectable,
+                    // gone on OK. Show it in-window instead, selectable + copyable, and persisted
+                    // by the service so "My Reports" can hand it back later.
                     case BugReportService.SubmitOutcome.Success:
-                        MessageBox.Show(
-                            this,
-                            Loc.GetF(isSuggestion ? "suggestion_success_toast" : "bug_report_success_toast", result.Token ?? "(no token)"),
-                            caption,
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
-                        Close();
+                        ShowSuccessPanel(
+                            Loc.GetF(isSuggestion ? "suggestion_success_toast" : "bug_report_success_toast",
+                                     result.Token ?? "(no token)"),
+                            result.Token);
                         break;
 
                     case BugReportService.SubmitOutcome.SavedPending:
-                        MessageBox.Show(
-                            this,
+                        ShowSuccessPanel(
                             Loc.GetF("bug_report_saved_pending_toast", result.Token ?? ""),
-                            caption,
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
-                        Close();
+                            result.Token);
                         break;
 
                     case BugReportService.SubmitOutcome.ValidationFailed:
@@ -197,5 +193,44 @@ namespace ConditioningControlPanel
             if (_submitting) return;
             Close();
         }
+
+        /// <summary>
+        /// Swap the form for the success panel (#769). The report number stays on screen in a
+        /// read-only, selectable box with a Copy button until the user clicks Done, so it can be
+        /// quoted in Discord. A 202 without a token still shows the headline, minus the box.
+        /// </summary>
+        private void ShowSuccessPanel(string headline, string? token)
+        {
+            TxtSuccessHeadline.Text = headline;
+
+            bool hasToken = !string.IsNullOrWhiteSpace(token);
+            TxtSuccessToken.Text = token ?? string.Empty;
+
+            var tokenVis = hasToken ? Visibility.Visible : Visibility.Collapsed;
+            LblSuccessTokenLabel.Visibility = tokenVis;
+            SuccessTokenRow.Visibility = tokenVis;
+            TxtSuccessHint.Visibility = tokenVis;
+
+            SuccessPanel.Visibility = Visibility.Visible;
+            BtnSuccessDone.Focus();
+        }
+
+        private void BtnCopyToken_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var token = TxtSuccessToken.Text;
+                if (string.IsNullOrWhiteSpace(token)) return;
+                Clipboard.SetText(token);
+                BtnCopyToken.Content = Loc.Get("btn_copied");
+            }
+            catch (Exception ex)
+            {
+                // Clipboard can be locked by another process — never crash the dialog over it.
+                App.Logger?.Warning(ex, "[BugReport] clipboard copy failed");
+            }
+        }
+
+        private void BtnSuccessDone_Click(object sender, RoutedEventArgs e) => Close();
     }
 }

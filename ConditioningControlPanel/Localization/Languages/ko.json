@@ -2589,5 +2589,13 @@
   "program_lock_reason_generic": "트레이닝 프로그램이 이 세션을 진행 중입니다. 끝날 때까지 기능과 강도가 잠깁니다.",
   "session_lock_reason": "세션 중입니다! 끝날 때까지 기능과 강도가 잠깁니다.",
   "session_lock_action_title": "세션 중입니다",
-  "session_lock_action_body": "{0}\n\n이렇게 하면 세션이 지정한 내용을 덮어씁니다. 정말 변경하려면 먼저 세션을 중지하세요."
+  "session_lock_action_body": "{0}\n\n이렇게 하면 세션이 지정한 내용을 덮어씁니다. 정말 변경하려면 먼저 세션을 중지하세요.",
+  "btn_my_reports": "내 신고 내역",
+  "my_reports_title": "내 신고 내역",
+  "my_reports_subtitle": "지금까지 보낸 버그 신고와 제안의 접수 번호입니다. 내용을 추가하려면 디스코드에서 이 번호를 알려주세요.",
+  "my_reports_empty": "아직 신고 내역이 없습니다.",
+  "my_reports_kind_bug": "버그 신고",
+  "my_reports_kind_suggestion": "제안",
+  "bug_report_token_label": "접수 번호",
+  "bug_report_token_hint": "이 번호를 저장해 두세요. 내용을 추가하거나 문의할 때 디스코드에서 이 번호를 알려주시면 됩니다."
 }
