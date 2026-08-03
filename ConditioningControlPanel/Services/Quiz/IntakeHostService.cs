@@ -76,6 +76,11 @@ namespace ConditioningControlPanel.Services.Quiz
             if (_host != null) { _host.FocusWeb(); return; }
             try
             {
+                // The intake's vo/sfx/music (plus the dtrh bubble sfx it borrows) ship as the lazy
+                // audio-web pack. Fire-and-forget: no-op once installed, on a full install, or offline.
+                try { _ = App.ReleaseContent?.RequestPackAsync(ReleaseContentService.PackAudioWeb); }
+                catch (Exception ex) { App.Logger?.Debug("IntakeHost: audio-web request failed: {E}", ex.Message); }
+
                 _exiting = false;
                 _testMode = testMode;
                 _duckPreference = duckMainWindow;

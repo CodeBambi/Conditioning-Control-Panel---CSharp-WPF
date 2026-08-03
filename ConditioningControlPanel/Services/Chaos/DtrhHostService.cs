@@ -72,6 +72,11 @@ internal static class DtrhHostService
         if (_host != null) { _host.FocusWeb(); return; }
         try
         {
+            // The descent's audio (bubbles sfx, vn shared, drone bed) ships as the lazy audio-web
+            // pack. Fire-and-forget: no-op once installed, on a full install, or offline.
+            try { _ = App.ReleaseContent?.RequestPackAsync(ReleaseContentService.PackAudioWeb); }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost: audio-web request failed: {E}", ex.Message); }
+
             _exiting = false;
             _runActive = false;
             _worldFrozen = false;

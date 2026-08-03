@@ -44,6 +44,16 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         [JsonProperty("targetRoot")]
         public string TargetRoot { get; set; } = "";
+
+        /// <summary>
+        /// In-zip entry paths of any <c>.ccpmod</c> archives this pack carries, e.g.
+        /// <c>packs/drone-mode.ccpmod</c> (plan §8.5). They extract like every other entry — relative
+        /// to the content root — but are consumed by <c>ModService</c> rather than read in place, so
+        /// the manifest lists them explicitly instead of leaving the client to guess. Empty for packs
+        /// that carry only loose media.
+        /// </summary>
+        [JsonProperty("ccpmods")]
+        public List<string> Ccpmods { get; set; } = new();
     }
 
     /// <summary>

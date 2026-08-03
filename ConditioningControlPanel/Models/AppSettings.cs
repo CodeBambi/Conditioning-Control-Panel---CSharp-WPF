@@ -225,6 +225,20 @@ namespace ConditioningControlPanel.Models
             set { _welcomed = value; OnPropertyChanged(); }
         }
 
+        private bool _modPickerShown = false;
+        /// <summary>
+        /// True once the first-run mod picker (<c>ModPickerDialog</c>) has been offered. One-way: the
+        /// picker is a first-launch courtesy, not a recurring prompt — after this, mods are downloaded
+        /// from the Mod Manager. Set BEFORE the dialog is shown so a crash inside it cannot turn the
+        /// picker into an every-launch popup. Defaults false, so existing installs upgrading into the
+        /// modular build see it once too (docs/CONTENT_PACKS_PLAN.md §4/§5).
+        /// </summary>
+        public bool ModPickerShown
+        {
+            get => _modPickerShown;
+            set { _modPickerShown = value; OnPropertyChanged(); }
+        }
+
         private string _lastSeenVersion = "";
         /// <summary>
         /// Last version the user has seen patch notes for. Used to show "What's New" after updates.

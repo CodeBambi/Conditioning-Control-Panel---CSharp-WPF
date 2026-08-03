@@ -503,6 +503,28 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Re-reads the voice-line listing and re-runs the positional→filename id migration (plan
+        /// §7.2). Nothing is cached here — <see cref="GetVoiceLineFiles"/> enumerates on every call —
+        /// so this exists purely for the "audio arrived mid-session" case: a content pack has just
+        /// landed and the migration, which deliberately leaves legacy ids alone while the folder is
+        /// empty, can finally map them. Idempotent, cheap on an already-migrated profile, never throws.
+        /// Call on the UI thread (it may save settings).
+        /// </summary>
+        public static void RefreshVoiceLineIndex()
+        {
+            try
+            {
+                var files = GetVoiceLineFiles();
+                if (files.Count == 0) return;
+                MigrateLegacyVoiceLineIds(files);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("CompanionPhraseService: voice-line refresh failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Stable id for a built-in voice line, keyed on the audio FILENAME stem rather than the
         /// line's index in the sorted folder listing. Voice-line audio can now arrive AFTER first run
         /// (content packs download later), and an index-based id silently re-targets every toggle the

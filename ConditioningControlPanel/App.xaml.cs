@@ -1646,6 +1646,13 @@ namespace ConditioningControlPanel
             {
                 var releaseContent = new ReleaseContentService();
                 ReleaseContent = releaseContent;
+
+                // A pack landing mid-session must reach the mod system without a restart: extract a
+                // downloaded .ccpmod into its built-in slot, drop the resource caches, refresh mod
+                // lists. Wired here rather than in ModService's ctor - that runs far earlier, while
+                // ReleaseContent is still null.
+                Mods?.AttachReleaseContent(releaseContent);
+
                 _ = Task.Run(async () =>
                 {
                     try

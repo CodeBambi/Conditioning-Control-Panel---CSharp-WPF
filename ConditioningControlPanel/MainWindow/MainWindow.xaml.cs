@@ -438,7 +438,10 @@ namespace ConditioningControlPanel
             App.BouncingText.Stop();
             App.Overlay.Stop();
 
-            // v6.0: fresh installs land on CCP Default (neutral baseline). No first-launch mod picker.
+            // v6.0: fresh installs land on CCP Default (neutral baseline).
+            // Content packs (docs/CONTENT_PACKS_PLAN.md §4): the mod media no longer ships in the
+            // installer, so first launch DOES get a picker again — see ModPickerDialog.ShowIfNeeded,
+            // called from the first-launch block below (it no-ops on a full/dev layout).
 
             // Show welcome dialog on first launch, then start tutorial
             // But delay tutorial if update dialog is being shown
@@ -463,6 +466,12 @@ namespace ConditioningControlPanel
                     // Only start tutorial if update dialog is done
                     if (!App.IsUpdateDialogActive && IsLoaded)
                     {
+                        // Mod picker first: it is modal and the tutorial's spotlight overlay measures
+                        // THIS window's controls, so the two must never be on screen together. No-ops
+                        // on a full/dev install, when the pack service is missing, or after the
+                        // ModPickerShown flag is set.
+                        ModPickerDialog.ShowIfNeeded(this);
+
                         StartTutorial();
                     }
                     // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor

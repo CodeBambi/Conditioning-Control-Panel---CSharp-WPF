@@ -361,7 +361,15 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>Persisted install stamp for a pack, or null.</summary>
-        public InstalledPackStamp? GetStamp(string packId)
+        public InstalledPackStamp? GetStamp(string packId) => GetStampFor(packId);
+
+        /// <summary>
+        /// Instance-free stamp lookup — the stamps live in settings, not in this object. Exists
+        /// because <see cref="ModService"/> decides whether a downloaded <c>.ccpmod</c> needs
+        /// re-extracting inside ITS constructor, which App.OnStartup runs long before this service is
+        /// built (App.ReleaseContent is still null at that point).
+        /// </summary>
+        public static InstalledPackStamp? GetStampFor(string packId)
         {
             try
             {
