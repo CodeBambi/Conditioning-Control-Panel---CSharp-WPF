@@ -24,6 +24,13 @@ export const PREF_DEFAULTS = Object.freeze({
   musicVolume: 0.55,
   sfxVolume: 0.85,
   reduceMotion: false,
+  /**
+   * Floating video windows grow a ✕ and can be closed early. OFF by default:
+   * being thrown a window is something you sit through, and a dismiss button on
+   * by default would quietly turn the payload into a notification. A click still
+   * MUTES one either way — see exec/videos.js.
+   */
+  skippableVideos: false,
   /** Last consent terms this player proposed — pre-filled next lobby. */
   matchLengthSec: 720,
   payloadGapSec: 30,
@@ -64,6 +71,33 @@ function coerce(key, value) {
   return value === undefined || value === null ? def : String(value);
 }
 
+/* ---------------------------------------------------------------------------
+ * PREFS THAT LEAVE THE UI TIER.
+ *
+ * exec/ never imports ui/ — the renderers are handed layers, media and a logger
+ * and nothing else, and they are built once at startup, long before any drawer
+ * exists. So a preference one of them has to obey travels the way heat
+ * (data-gg-fx) and motion (data-gg-motion) already do: as an attribute on <html>.
+ *
+ * This is the ONE writer. Reflecting here rather than in ui/options.js is what
+ * makes the value true at STARTUP as well as on a toggle — the drawer may never
+ * be opened, and a stored `true` that only took effect after you opened Options
+ * would read as the setting having been forgotten.
+ * ------------------------------------------------------------------------ */
+const REFLECT = Object.freeze({
+  /** exec/videos.js reads this to decide whether a window's ✕ is real. */
+  skippableVideos: { attr: 'data-gg-vskip', on: 'on', off: 'off' },
+});
+
+function reflect(key, value) {
+  const spec = REFLECT[key];
+  if (!spec) return;
+  try {
+    if (typeof document === 'undefined' || !document || !document.documentElement) return;
+    document.documentElement.setAttribute(spec.attr, value ? spec.on : spec.off);
+  } catch (_e) { /* a host without a DOM simply never mirrors them */ }
+}
+
 /**
  * @param {object} [seed] the `prefs` blob the host sent on `init` (lowest priority
  *                        after the local store, which is the more recent edit).
@@ -75,6 +109,7 @@ export function createPrefs(seed) {
       if (src[k] !== undefined) values[k] = coerce(k, src[k]);
     }
   }
+  for (const k of Object.keys(REFLECT)) reflect(k, values[k]);
 
   const listeners = new Set();
   let flushTimer = 0;
@@ -92,6 +127,9 @@ export function createPrefs(seed) {
   }
 
   function emit(key) {
+    // Every change goes through here — set, merge and reset alike — so this is
+    // the one place the mirrored attributes can be kept honest.
+    reflect(key, values[key]);
     for (const fn of Array.from(listeners)) {
       try { fn(key, values[key], values); } catch (_e) { /* a listener must not break a setter */ }
     }

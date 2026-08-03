@@ -2139,6 +2139,128 @@ const audioMod = await import('../ui/audio.js');
     'the WebView2 autoplay flag is documented where the unlock path lives');
 }
 
+/* ===========================================================================
+ * 17. SKIPPABLE VIDEOS — the option, the pref, and the wire between ui/ and exec/
+ *
+ * The floating video windows exec/videos.js throws at you cannot be closed early
+ * any more; a player who wants an out turns "skippable videos" on here, and every
+ * window grows a ✕. Default OFF, because being thrown a window is something you
+ * sit through — a dismiss button on by default would quietly demote the payload
+ * into a notification.
+ *
+ * THE INTERESTING PART IS THE SEAM. exec/ imports no ui/ module (and is built
+ * once, at startup, long before this drawer exists), so the value travels the way
+ * heat and motion already do: ui/prefs.js mirrors it onto <html> as an attribute
+ * and exec/videos.js reads it there, fresh, at the moment of the click. Three
+ * things have to hold or the toggle is a lie, and none of them shows up in either
+ * file's own tests:
+ *   · the attribute is written at CONSTRUCTION, not only on change — otherwise a
+ *     stored `true` reads as forgotten until you open Options;
+ *   · the two files agree on the attribute's NAME and its truthy value;
+ *   · the drawer writes through prefs, so flipping the toggle moves the attribute
+ *     (which is what reaches windows that are already floating).
+ * ======================================================================== */
+{
+  const prefsMod = await import('../ui/prefs.js');
+  const optionsMod = await import('../ui/options.js');
+  const { S } = await import('../ui/strings.js');
+  const videosMod = await import('../exec/videos.js');
+  const root = dom.doc.documentElement;
+  const attrNow = () => root.getAttribute(videosMod.SKIP_ATTR);
+
+  // ---- the pref itself
+  ok(prefsMod.PREF_DEFAULTS.skippableVideos === false,
+    'skippableVideos is a pref, and it DEFAULTS OFF',
+    String(prefsMod.PREF_DEFAULTS.skippableVideos));
+  ok(typeof prefsMod.PREF_DEFAULTS.skippableVideos === 'boolean',
+    'a boolean, so a corrupt store coerces to one instead of poisoning the UI');
+
+  // ---- the mirror, at construction and on every door into the store
+  root.removeAttribute(videosMod.SKIP_ATTR);
+  const prefs = prefsMod.createPrefs({});
+  ok(attrNow() === 'off',
+    'creating the store writes the attribute IMMEDIATELY — a setting that only takes effect once you open Options is a setting that looks forgotten',
+    String(attrNow()));
+  ok(prefs.set('skippableVideos', true) === true && attrNow() === videosMod.SKIP_ON,
+    'turning it on moves the attribute', String(attrNow()));
+  ok(prefs.set('skippableVideos', false) === true && attrNow() === 'off',
+    'and off again', String(attrNow()));
+  prefs.merge({ skippableVideos: true });
+  ok(attrNow() === videosMod.SKIP_ON, 'a bulk merge mirrors too', String(attrNow()));
+  prefs.reset();
+  ok(attrNow() === 'off', 'and Reset puts it back to the default, on screen as well as in the store',
+    String(attrNow()));
+
+  // ---- a stored TRUE is true from the first frame, which is the whole point
+  root.removeAttribute(videosMod.SKIP_ATTR);
+  const seeded = prefsMod.createPrefs({ skippableVideos: true });
+  ok(seeded.get('skippableVideos') === true && attrNow() === videosMod.SKIP_ON,
+    'a player who turned it on last time has it on before anything is opened', String(attrNow()));
+
+  // ---- the two files agree on the name, and exec/ agrees it is off by default
+  ok(videosMod.SKIP_ATTR === 'data-gg-vskip' && videosMod.SKIP_ON === 'on',
+    'ui/prefs.js and exec/videos.js name the same attribute — a typo here is a dead toggle in both directions',
+    `${videosMod.SKIP_ATTR}="${videosMod.SKIP_ON}"`);
+  root.setAttribute(videosMod.SKIP_ATTR, 'off');
+  const vids = videosMod.createVideos({ layers: null, media: null });
+  ok(vids.skippable() === false, 'exec/ reads "off" as off');
+  root.setAttribute(videosMod.SKIP_ATTR, videosMod.SKIP_ON);
+  ok(vids.skippable() === true, 'and the agreed value as on — read fresh, never cached');
+  root.removeAttribute(videosMod.SKIP_ATTR);
+  ok(vids.skippable() === false, 'while an attribute nobody ever wrote is OFF, not undefined-on');
+
+  // ---- the copy
+  ok(typeof S.options.skippable === 'string' && S.options.skippable.length > 0,
+    'the drawer has a label for it', String(S.options.skippable));
+  ok(typeof S.options.skippableNote === 'string' && S.options.skippableNote.length > 0,
+    'and a line saying what it does', String(S.options.skippableNote));
+  ok(/mute/i.test(S.options.skippableNote),
+    'which says a window can always be MUTED with a click — the thing the toggle does NOT take away',
+    S.options.skippableNote);
+  ok(/✕/.test(S.options.skippableNote) || /close/i.test(S.options.skippableNote),
+    'and names the button it gives you', S.options.skippableNote);
+
+  // ---- the row, in a LIVE match (this is a knob about your own screen, not a
+  // match term, and the moment you want it is the moment a window is up)
+  const live = prefsMod.createPrefs({});
+  const options = optionsMod.createOptions({ prefs: live, session: { hosted: false }, isInMatch: () => true });
+  options.open();
+  await sleep(30);
+  const drawer = dom.byId.get('gg-drawer');
+  const panel = findOne(drawer, 'gg-panel');
+  ok(!!panel, 'the drawer opened');
+  const rowFor = (label) => findAll(panel, 'gg-panel-row')
+    .find((r) => (r.children[0] || {}).textContent === label) || null;
+  const skipRow = rowFor(S.options.skippable);
+  ok(!!skipRow, 'and carries a Skippable videos row, mid-match, next to the volumes and reduce-motion');
+  const toggle = skipRow ? findOne(skipRow, 'gg-toggle') : null;
+  ok(!!toggle, 'with the house toggle the other switches use');
+  ok(toggle && toggle.getAttribute('aria-pressed') === 'false',
+    'reading OFF, because that is what it is', String(toggle && toggle.getAttribute('aria-pressed')));
+  const notes = findAll(panel, 'gg-panel-note').map((p) => p.textContent);
+  ok(notes.includes(S.options.skippableNote), 'the explanation is on screen with it', JSON.stringify(notes));
+  ok(notes.includes(S.options.lockedNote),
+    'and the in-match lock note is still there — this row is not one of the locked terms', JSON.stringify(notes));
+
+  // FLIPPING IT REALLY REACHES exec/. Toggle -> prefs -> attribute is the whole
+  // chain; the windows already floating are on the far side of it, in CSS.
+  root.removeAttribute(videosMod.SKIP_ATTR);
+  toggle.dispatchEvent({ type: 'click' });
+  ok(live.get('skippableVideos') === true, 'clicking it writes the pref');
+  ok(toggle.getAttribute('aria-pressed') === 'true', 'and repaints itself');
+  ok(attrNow() === videosMod.SKIP_ON,
+    'and the attribute exec/videos.js reads moved with it — that is the ✕ appearing on windows already up',
+    String(attrNow()));
+  ok(vids.skippable() === true, 'as the renderer itself agrees', String(vids.skippable()));
+  toggle.dispatchEvent({ type: 'click' });
+  ok(live.get('skippableVideos') === false && vids.skippable() === false,
+    'and back off again, same frame, same chain', `${live.get('skippableVideos')} / ${attrNow()}`);
+
+  options.dispose();
+  await sleep(320);
+  root.removeAttribute(videosMod.SKIP_ATTR);
+}
+
 await sleep(60);
 console.log(`\nselftest-hud: ${n - failures}/${n} checks passed`);
 if (failures > 0) {

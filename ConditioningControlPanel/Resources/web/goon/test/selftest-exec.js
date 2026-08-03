@@ -221,6 +221,16 @@ const ghostWins = (host) => host.findAll('gg-vwin').filter((el) => el._cls.has('
 /** Past the ghost clock (GHOST_REMOVE_MS 600 + slack): the layer is settled. */
 const GHOST_WAIT = 700;
 
+/* THE ✕, AND THE OPTION THAT MAKES IT REAL (2026-08-04, owner-specced). A window
+ * used to be dismissed with a click; a click MUTES one now, and the only way to
+ * end one early is the ✕ — which exists only while the player has "skippable
+ * videos" switched on. The flag reaches exec/ as a root attribute (ui/prefs.js
+ * writes it; exec/ never imports ui/), so switching it here is switching it for
+ * real, and every block that wants to close a window has to say so. */
+const skipOn = (on) => documentElement.setAttribute('data-gg-vskip', on ? 'on' : 'off');
+const closeBtnOf = (win) => (win ? win.findAll('gg-vwin-x')[0] : null);
+const clickClose = (win) => { const b = closeBtnOf(win); if (b) b.fire('click'); return !!b; };
+
 const payloadOf = (o) => Object.assign({
   id: 'p1h', kind: GoonPayloadKind.ToyPattern, duration_ms: 1000,
   tags: null, text: '', voice: false, pattern: null, intensity: 0.5,
@@ -1517,7 +1527,11 @@ async function main() {
       fireAtLocalMs: localMonotonicMs(),
     });
 
-    // ---- a press that never moves is a CLICK, and a click dismisses
+    // ---- a press that never moves is a CLICK, and a click MUTES (2026-08-04).
+    // It used to DISMISS, which made the cheap gesture the destructive one: the
+    // only thing a click could do to a window you merely wanted quiet was destroy
+    // it. The window stays, un-receipted, wearing its muted glyph.
+    skipOn(false);
     fire('pC1');
     await sleep(80);
     const clicked = winsOf()[0];
@@ -1528,14 +1542,32 @@ async function main() {
     ptr(clicked, 'pointermove', 304, 303);     // 5px: inside DRAG_SLOP_PX
     ok(!clicked._cls.has('is-grabbed'), 'a wobble inside the slop is still a click', clicked.className);
     ptr(clicked, 'pointerup', 304, 303);
+    ok(!m.receipts.some((r) => r.id === 'pC1'),
+      'a click NEVER dismisses a window — that is the ✕\'s job alone', JSON.stringify(m.receipts));
+    ok(winsOf().length === 1 && clicked.isConnected && !clicked._cls.has('gg-vwin--out'),
+      'the window is still up, and still floating', clicked.className);
+    ok(clicked._cls.has('is-muted'), 'it is MUTED, and says so', clicked.className);
+    ok(!!clicked.findAll('gg-vwin-mute')[0], 'through the glyph every window carries for the purpose');
+    tap(clicked, 304, 303);
+    ok(!clicked._cls.has('is-muted') && winsOf().length === 1,
+      'and clicking again un-mutes it — a toggle, not a trapdoor', clicked.className);
+
+    // ---- the ✕ is the ONE dismissal, and only when the option is on
+    ok(!!closeBtnOf(clicked), 'every window builds its ✕ whether or not the option is on');
+    ok(clickClose(clicked) && winsOf().length === 1 && !m.receipts.some((r) => r.id === 'pC1'),
+      'and with the option OFF it refuses — a button that is merely invisible must still say no',
+      String(winsOf().length));
+    skipOn(true);
+    clickClose(clicked);
     const c1 = m.receipts.find((r) => r.id === 'pC1');
     ok(!!c1 && c1.endured === true,
-      'clicking a window closes it, and closing it yourself is ENDURED', JSON.stringify(c1));
+      'with it ON the ✕ closes the window, and choosing to close it is ENDURED', JSON.stringify(c1));
     ok(clicked._cls.has('gg-vwin--out') && !clicked._cls.has('is-on'),
       'the dismissed node glitches OUT rather than vanishing', clicked.className);
     await sleep(GHOST_WAIT);
-    ok(winsOf().length === 0, 'the clicked window is torn out', String(winsOf().length));
+    ok(winsOf().length === 0, 'the closed window is torn out', String(winsOf().length));
     ok(!clicked.isConnected, 'and the ghost with it — an exit that never removed the node is a leak');
+    skipOn(false);
 
     // ---- past the slop it is a DRAG: it follows the pointer and is NOT dismissed
     fire('pC2');
@@ -1586,11 +1618,15 @@ async function main() {
     ptr(dragged, 'pointercancel', 280, 250);
     ok(!dragged._cls.has('is-grabbed') && dragged.isConnected && !m.receipts.some((r) => r.id === 'pC2'),
       'pointercancel drops it where it lies: no dismissal, no stuck hold', dragged.className);
-    // The hand is empty again — the very next press is a clean click.
+    // The hand is empty again — the very next press is a clean click, i.e. a mute.
     tap(dragged, 280, 250);
+    ok(dragged._cls.has('is-muted'), 'and the next press is a clean click, so no drag state was left stuck',
+      dragged.className);
+    skipOn(true);
+    clickClose(dragged);
     const c2 = m.receipts.find((r) => r.id === 'pC2');
-    ok(!!c2 && c2.endured === true, 'and the next press still dismisses, so no drag state was left stuck',
-      JSON.stringify(c2));
+    ok(!!c2 && c2.endured === true, 'and its ✕ still closes it after all that handling', JSON.stringify(c2));
+    skipOn(false);
     await sleep(GHOST_WAIT);
 
     // ---- the clip ending closes the window on its own
@@ -1709,13 +1745,13 @@ async function main() {
 
     // ---- A DISMISSAL fades on the way out instead: nobody saw it coming, so the
     // ramp rides the GHOST while the exit animation plays.
+    skipOn(true);
     vids.renderPayload({ id: 'pA6', duration_ms: 40000, intensity: 0.5 }, () => {});
     const f = vidIn(0);
     await sleep(600);
     const node = liveWins(host)[0];
-    PID++;
-    ptr(node, 'pointerdown', 300, 300);
-    ptr(node, 'pointerup', 300, 300);
+    clickClose(node);
+    skipOn(false);
     ok(vids.windowCount() === 0 && vids.ghostCount() === 1,
       'the record left the pool and the node became a ghost, in that order',
       `${vids.windowCount()} pooled / ${vids.ghostCount()} ghost`);
@@ -1764,14 +1800,14 @@ async function main() {
     } finally {
       delete globalThis.matchMedia;
     }
+    skipOn(true);
     calmVids.renderPayload({ id: 'pCM', duration_ms: 40000, intensity: 0.5 }, () => {});
     const node = liveWins(host)[0];
     ok(!!node && !node.findAll('gg-vwin-drift')[0]._cls.has('gg-deco'),
       'a calm window is built without the decoration opt-in, as it always was');
-    PID++;
-    ptr(node, 'pointerdown', 300, 300);
-    ptr(node, 'pointerup', 300, 300);
-    ok(calmVids.windowCount() === 0, 'a click still dismisses it', String(calmVids.windowCount()));
+    clickClose(node);
+    skipOn(false);
+    ok(calmVids.windowCount() === 0, 'its ✕ still closes it', String(calmVids.windowCount()));
     ok(!node._cls.has(V.OUT_CLASS),
       'and it is NOT given an exit class it would then wait forever on', node.className);
     ok(!node._cls.has('is-on') && node.isConnected,
@@ -2211,10 +2247,10 @@ async function main() {
 
       // ---- an earned window is dismissed the same way a thrown one is
       const w2 = liveWins(winHost)[0];
-      PID++;
-      ptr(w2, 'pointerdown', 300, 300);
-      ptr(w2, 'pointerup', 300, 300);
-      ok(videos.windowCount() === 0, 'a click dismisses it, exactly like a thrown one',
+      skipOn(true);
+      clickClose(w2);
+      skipOn(false);
+      ok(videos.windowCount() === 0, 'its ✕ dismisses it, exactly like a thrown one\'s',
         String(videos.windowCount()));
       ok(m.receipts.length === 4, 'silently — closing your own window is not a survival',
         String(m.receipts.length));
@@ -2359,14 +2395,14 @@ async function main() {
     ok(videos.windowCount() === 4, 'still four after the fifth arrives', String(videos.windowCount()));
     ok(seen.slice(4).join(',') === '3,4', 'an eviction publishes the fall AND the rise', seen.slice(4).join(','));
 
-    // A click dismisses one — the player's own way out of a window. (The evicted window's node
-    // hangs around as a GHOST while it plays out its exit, so skip the husks: clicking one would
-    // be clicking a record that left the pool two paragraphs ago.)
+    // The ✕ dismisses one — the player's own way out of a window, when they have asked for one.
+    // (The evicted window's node hangs around as a GHOST while it plays out its exit, so skip the
+    // husks: closing one would be closing a record that left the pool two paragraphs ago.)
     const w0 = liveWins(winHost)[0];
-    PID++;
-    ptr(w0, 'pointerdown', 300, 300);
-    ptr(w0, 'pointerup', 300, 300);
-    ok(videos.windowCount() === 3, 'the click took one down', String(videos.windowCount()));
+    skipOn(true);
+    clickClose(w0);
+    skipOn(false);
+    ok(videos.windowCount() === 3, 'the ✕ took one down', String(videos.windowCount()));
     ok(last() === 3, 'and the count fell with it', String(last()));
 
     // …and the window the player EARNED counts exactly the same. This is the whole reason the
@@ -2444,6 +2480,386 @@ async function main() {
     ok(boom.windowCount() === 0 && endured === false,
       'and the window still settles, and still receipts', `${boom.windowCount()} / ${endured}`);
     ok(calls === 2, 'both edges were offered to it', String(calls));
+  }
+
+  /* ===================== SKIPPABLE WINDOWS, CLICK-TO-MUTE, PICKABLE AUDIO =====
+   * (2026-08-04, owner-specced.) Three changes to the floating window, and each
+   * one is a different answer to "what does the player get to decide":
+   *
+   *   1. A WINDOW CANNOT BE CLOSED EARLY unless the player asked for that, in
+   *      Options, and the default is that they did not. Being thrown a window is
+   *      something you sit through; a dismiss button on by default would quietly
+   *      demote the payload to a notification. The flag reaches this tier as a
+   *      root attribute because exec/ never imports ui/.
+   *   2. A CLICK MUTES, and only mutes. The cheap gesture must not be the
+   *      destructive one, and a window you merely want quiet must not have to be
+   *      destroyed to get that.
+   *   3. THE MIC IS PICKABLE: the last window TOUCHED (right-click, a completed
+   *      drag, a wheel-resize) or SPAWNED is the one you hear. Muting the audible
+   *      one leaves the room SILENT — nothing is promoted in its place, because
+   *      promoting the next one is the room deciding you wanted a different
+   *      soundtrack when what you said was "quiet".
+   *
+   * MERCY IS NEVER GATED BY ANY OF IT, which is the last block here: "unskippable"
+   * is a property of the window, not of the way out.
+   * ======================================================================== */
+
+  // -------------------------- the focus resolver, pure (no DOM, no browser)
+  {
+    const V = await import('../exec/videos.js');
+    ok(V.SKIP_ATTR === 'data-gg-vskip' && V.SKIP_ON === 'on',
+      'the option travels as a root attribute — exec/ imports no ui/ module, ever',
+      `${V.SKIP_ATTR}="${V.SKIP_ON}"`);
+    ok(V.SKIP_BTN_CLASS === 'gg-vwin-x' && V.SKIP_BTN_MIN_PX === 22,
+      'the ✕ has a class fx.css keys off and a pointer target it must meet',
+      `${V.SKIP_BTN_CLASS} >= ${V.SKIP_BTN_MIN_PX}px`);
+    ok(V.MUTED_CLASS === 'is-muted' && V.LIVE_CLASS === 'is-live',
+      'and the two states have names both files agree on', `${V.MUTED_CLASS} / ${V.LIVE_CLASS}`);
+
+    // A pool of n windows, wid 1..n, with the listed wids click-muted.
+    const pool = (n, muted = []) => Array.from({ length: n }, (_x, i) => ({ wid: i + 1, muted: muted.includes(i + 1) }));
+
+    ok(V.focusedIndexOf([], 1) === -1, 'nothing up, nobody speaks', String(V.focusedIndexOf([], 1)));
+    ok(V.focusedIndexOf(pool(3)) === 2,
+      'with no focus taken it is the NEWEST — the old invariant is the new default',
+      String(V.focusedIndexOf(pool(3))));
+    ok(V.focusedIndexOf(pool(3), null) === 2 && V.focusedIndexOf(pool(3), undefined) === 2,
+      'and a null/undefined focus is the same answer, not a crash');
+    ok(V.focusedIndexOf(pool(3), 1) === 0, 'a touched window takes the mic off the newest',
+      String(V.focusedIndexOf(pool(3), 1)));
+    ok(V.focusedIndexOf(pool(3), 2) === 1, 'wherever it is in the stack', String(V.focusedIndexOf(pool(3), 2)));
+    ok(V.focusedIndexOf(pool(3), 99) === 2,
+      'a focus id that has LEFT the pool (ended, evicted, ✕\'d) falls back to the newest remaining',
+      String(V.focusedIndexOf(pool(3), 99)));
+    ok(V.focusedIndexOf(pool(3, [2]), 2) === -1,
+      'muting the window that had the mic is SILENCE — nothing is promoted in its place',
+      String(V.focusedIndexOf(pool(3, [2]), 2)));
+    ok(V.focusedIndexOf(pool(3, [3]), 1) === 0,
+      'and somebody else being muted changes nothing about who speaks',
+      String(V.focusedIndexOf(pool(3, [3]), 1)));
+    ok(V.focusedIndexOf(pool(3, [3])) === -1,
+      'a muted NEWEST is silence too — the fallback respects a mute, it does not overrule one',
+      String(V.focusedIndexOf(pool(3, [3]))));
+
+    // The two volume helpers took an index and kept their old answers.
+    ok(JSON.stringify(V.unmutedFlags(4)) === '[false,false,false,true]',
+      'unmutedFlags with no index is exactly what it always was', JSON.stringify(V.unmutedFlags(4)));
+    ok(JSON.stringify(V.unmutedFlags(4, 1)) === '[false,true,false,false]',
+      'and with one, it is the index that speaks', JSON.stringify(V.unmutedFlags(4, 1)));
+    ok(JSON.stringify(V.unmutedFlags(4, -1)) === '[false,false,false,false]',
+      'index -1 is a silent room, which is a legal thing to be', JSON.stringify(V.unmutedFlags(4, -1)));
+    ok(JSON.stringify(V.audioTargets([0.7, 0.7, 0.7], 0)) === '[0.421,0,0]',
+      'audioTargets aims the level at the FOCUSED window', JSON.stringify(V.audioTargets([0.7, 0.7, 0.7], 0)));
+    ok(V.audioTargets([0.7, 0.7, 0.7], -1).every((x) => x === 0),
+      'and at nobody when the room is silenced', JSON.stringify(V.audioTargets([0.7, 0.7, 0.7], -1)));
+    ok(JSON.stringify(V.audioTargets([0.7, 0.7, 0.7])) === '[0,0,0.421]',
+      'while the un-indexed call is untouched — every newest-speaks pin above still means what it said',
+      JSON.stringify(V.audioTargets([0.7, 0.7, 0.7])));
+    for (let k = 1; k <= 6; k++) {
+      const t = V.audioTargets(new Array(k).fill(0.7), 0);
+      ok(t.filter((x) => x > 0).length === 1 && t[0] > 0, `still exactly one speaker at n=${k}`, JSON.stringify(t));
+    }
+  }
+
+  // ------------------- the ✕: only when asked for, never a drag, always endured
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-vwin');
+    const V = await import('../exec/videos.js');
+    const vids = V.createVideos({ layers, media: fakeMedia(), logger: quiet });
+
+    skipOn(false);
+    ok(vids.skippable() === false,
+      'DEFAULT OFF — a window runs its course, and nothing in the page had to say so',
+      String(vids.skippable()));
+    documentElement.removeAttribute(V.SKIP_ATTR);
+    ok(vids.skippable() === false,
+      'and a page that never wrote the attribute at all is off too, not undefined-on');
+
+    let endured = null;
+    vids.renderPayload({ id: 'pX1', duration_ms: 40000, intensity: 0.5 }, (e) => { endured = e; });
+    const node = liveWins(host)[0];
+    const btn = closeBtnOf(node);
+    ok(!!btn, 'the ✕ is BUILT into every window regardless — fx.css decides whether it exists for the player');
+    ok(btn.parentNode && btn.parentNode._cls.has('gg-vwin-inner'),
+      'it lives inside the window chrome, next to the dot it sits opposite', String(btn.parentNode && btn.parentNode.className));
+    ok(btn.getAttribute('type') === 'button' && !!btn.getAttribute('aria-label'),
+      'a real button with a real label', `${btn.getAttribute('type')} / ${btn.getAttribute('aria-label')}`);
+
+    // IT MUST NOT START A DRAG. The press stops at the button — and is NOT
+    // preventDefault'ed, because that is how a browser is talked out of the click
+    // that follows, and the click is the entire control.
+    let stopped = false;
+    const down = ptr(btn, 'pointerdown', 20, 20, { stopPropagation() { stopped = true; } });
+    ok(stopped === true, 'a press on the ✕ stops there: it can never become a drag of the window');
+    ok(down.defaulted === false,
+      'and it does not preventDefault — a swallowed default is a swallowed click');
+    ok(!node._cls.has('is-grabbed'), 'the window was never grabbed', node.className);
+
+    btn.fire('click');
+    ok(vids.windowCount() === 1 && endured === null,
+      'with the option OFF the ✕ refuses — invisible is not the same as harmless', String(vids.windowCount()));
+
+    skipOn(true);
+    ok(vids.skippable() === true, 'the option is read FRESH every time, never cached at spawn');
+    btn.fire('click');
+    ok(vids.windowCount() === 0 && endured === true,
+      'and now it closes the window, receipting ENDURED — the player chose to close it',
+      `${vids.windowCount()} / ${endured}`);
+    ok(node._cls.has(V.OUT_CLASS), 'through the ordinary exit, ghost and all', node.className);
+    await sleep(GHOST_WAIT);
+
+    // …and the button reaches windows that were ALREADY UP when the toggle
+    // flipped, because nothing about it is decided at spawn time.
+    skipOn(false);
+    vids.renderPayload({ id: 'pX2', duration_ms: 40000, intensity: 0.5 }, () => {});
+    const later = liveWins(host)[0];
+    skipOn(true);
+    ok(clickClose(later) && vids.windowCount() === 0,
+      'a window born while the option was off still answers its ✕ once it is on', String(vids.windowCount()));
+    skipOn(false);
+    await sleep(GHOST_WAIT);
+    vids.stopWindows();
+  }
+
+  /* --------------- the mic: pickable, mutable, and never auto-promoted
+   * Everything here is a gesture the player made, and the assertions are about
+   * WHO IS AUDIBLE afterwards. focusedIndex() is the renderer's own resolver
+   * running over the real pool, so a green run here is the same function the
+   * pure block above pinned, wired to real nodes.
+   * ------------------------------------------------------------------------ */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-vwin');
+    const V = await import('../exec/videos.js');
+    const vids = V.createVideos({ layers, media: fakeMedia(), logger: quiet });
+    const A = V.volumeFor(0.5);
+    /* NODES ARE HELD BY NAME HERE, never by DOM index: grabbing a window
+     * RE-APPENDS it (that is how the z-lift works — fx.css raises no z-index), so
+     * after the first drag the layer's order and the POOL's order are different
+     * things, and the pool's is the one focusedIndex() answers in. */
+    const vidOf = (nd) => nd.findAll('gg-vwin-vid')[0];
+    const spawn = (id) => {
+      vids.renderPayload({ id, duration_ms: 40000, intensity: 0.5 }, () => {});
+      const all = liveWins(host);
+      return all[all.length - 1];        // a spawn appends, so the newest IS last
+    };
+    skipOn(false);
+
+    const a = spawn('pF1'), b = spawn('pF2'), c = spawn('pF3');
+    ok(vids.windowCount() === 3, 'three windows up', String(vids.windowCount()));
+    ok(vids.focusedIndex() === 2, 'the newest SPAWN took the mic', String(vids.focusedIndex()));
+    ok(c._cls.has('is-live') && !a._cls.has('is-live'),
+      'and only that one wears .is-live, which is the pulsing dot', c.className);
+    await sleep(560);
+    ok(Math.abs(vidOf(c).volume - A) < 1e-9 && vidOf(a).volume === 0,
+      'it is the one making a sound', `${vidOf(a).volume} / ${vidOf(c).volume}`);
+
+    // ---- RIGHT CLICK is a touch, and it refuses the page's own menu
+    const rc = ptr(a, 'contextmenu', 300, 300, { button: 2 });
+    ok(rc.defaulted === true, 'a right-click preventDefaults — no browser menu over a duel');
+    ok(vids.focusedIndex() === 0, 'and hands the mic to the window under it', String(vids.focusedIndex()));
+    await sleep(120);
+    ok(vidOf(a).volume > 0 && vidOf(c).volume > 0 && vidOf(c).volume < A,
+      'the handover CROSSFADES, exactly like a spawn does',
+      `${vidOf(a).volume} up / ${vidOf(c).volume} down`);
+    await sleep(560);
+    ok(Math.abs(vidOf(a).volume - A) < 1e-9 && vidOf(c).volume === 0 && vidOf(c).muted === true,
+      'and lands: one speaker, the one you picked', `${vidOf(a).volume} / ${vidOf(c).volume}`);
+    ok(a._cls.has('is-live') && !c._cls.has('is-live'),
+      'the live light moved with it', `${a.className} | ${c.className}`);
+
+    // ---- A COMPLETED DRAG is a touch. A press that never moves is not.
+    PID++;
+    ptr(b, 'pointerdown', 500, 500);
+    ok(vids.focusedIndex() === 0, 'merely pressing a window takes nothing — the press is still deciding',
+      String(vids.focusedIndex()));
+    ptr(b, 'pointermove', 600, 600);
+    ptr(b, 'pointerup', 600, 600);
+    ok(!b._cls.has('is-grabbed'), 'released', b.className);
+    ok(vids.focusedIndex() === 1, 'dragging one hands it the mic', String(vids.focusedIndex()));
+
+    // ---- SO IS A WHEEL-RESIZE ("the last one we moved, resized, etc").
+    ptr(c, 'wheel', 300, 300, { deltaY: -100 });
+    ok(vids.focusedIndex() === 2, 'resizing one hands it the mic too', String(vids.focusedIndex()));
+    for (let i = 0; i < 8; i++) ptr(c, 'wheel', 300, 300, { deltaY: -100 });
+    ok(vids.focusedIndex() === 2,
+      'and a long spin is ONE handover, not eight — re-focusing the focused window is a no-op all the way down',
+      String(vids.focusedIndex()));
+    await sleep(560);
+    ok(Math.abs(vidOf(c).volume - A) < 1e-9 && vidOf(b).volume === 0,
+      'the sound really followed the wheel', `${vidOf(b).volume} / ${vidOf(c).volume}`);
+
+    // ---- CLICK-MUTING the audible window is SILENCE, and silence is a state
+    tap(c, 300, 300);
+    ok(JSON.stringify(vids.mutedFlags()) === '[false,false,true]',
+      'a click mutes exactly the window it landed on', JSON.stringify(vids.mutedFlags()));
+    ok(vids.focusedIndex() === -1,
+      'and with the audible one muted the room goes SILENT — no window is promoted into the gap',
+      String(vids.focusedIndex()));
+    ok(vids.windowCount() === 3, 'nothing was dismissed by any of that', String(vids.windowCount()));
+    ok(c._cls.has('is-muted') && !c._cls.has('is-live'),
+      'the muted window says so, and its light is out', c.className);
+    ok(liveWins(host).every((w) => !w._cls.has('is-live')),
+      'and nothing else lit up in its place', liveWins(host).map((w) => w.className).join(' | '));
+    await sleep(400);
+    ok([a, b, c].every((nd) => vidOf(nd).volume === 0),
+      'every window is at zero — silence is real, not merely un-drawn',
+      [a, b, c].map((nd) => vidOf(nd).volume).join(','));
+
+    // ---- a DRAG of a muted window moves it without asking it to speak
+    PID++;
+    ptr(c, 'pointerdown', 200, 200);
+    ptr(c, 'pointermove', 300, 260);
+    ptr(c, 'pointerup', 300, 260);
+    ok(vids.focusedIndex() === -1 && vids.mutedFlags()[2] === true,
+      'silencing a window and then moving it out of the way is ONE intention, not two',
+      `${vids.focusedIndex()} / ${JSON.stringify(vids.mutedFlags())}`);
+
+    // ---- RIGHT CLICK is the way back: an explicit "you, speak"
+    ptr(c, 'contextmenu', 300, 300, { button: 2 });
+    ok(vids.mutedFlags()[2] === false && vids.focusedIndex() === 2,
+      'a right-click UNMUTES as well as focusing — it outranks a stale shush',
+      `${JSON.stringify(vids.mutedFlags())} / ${vids.focusedIndex()}`);
+    await sleep(560);
+    ok(Math.abs(vidOf(c).volume - A) < 1e-9, 'and it is audible again', String(vidOf(c).volume));
+
+    // ---- the focused window LEAVING falls back to the newest remaining
+    ptr(a, 'contextmenu', 300, 300, { button: 2 });
+    ok(vids.focusedIndex() === 0, 'the oldest window has the mic', String(vids.focusedIndex()));
+    vidOf(a).onended();
+    ok(vids.windowCount() === 2 && vids.focusedIndex() === 1,
+      'its clip ends, and the mic falls back to the newest remaining — never to nobody',
+      `${vids.windowCount()} up, focus ${vids.focusedIndex()}`);
+    await sleep(GHOST_WAIT);
+
+    // …and an EVICTION is the same fall-back, from the other direction.
+    spawn('pF4'); spawn('pF5');
+    ok(vids.windowCount() === 4 && vids.focusedIndex() === 3, 'four up, the newest speaking',
+      `${vids.windowCount()} / ${vids.focusedIndex()}`);
+    ptr(b, 'contextmenu', 300, 300, { button: 2 });   // b is the OLDEST left in the pool
+    ok(vids.focusedIndex() === 0, 'the oldest takes the mic, one moment before it is displaced',
+      String(vids.focusedIndex()));
+    spawn('pF6');
+    ok(vids.windowCount() === 4 && vids.focusedIndex() === 3,
+      'the fifth window evicts the one holding the mic and takes it, as a spawn always does',
+      `${vids.windowCount()} / ${vids.focusedIndex()}`);
+    vids.stopWindows();
+    ok(vids.focusedIndex() === -1, 'an empty pool has no speaker at all', String(vids.focusedIndex()));
+    await sleep(GHOST_WAIT);
+  }
+
+  /* --------------- MERCY IS NEVER GATED. "Unskippable" is a property of the
+   * WINDOW, not of the way out: the payload's cancel fn and stopWindows() are
+   * what mercy, the recap and detach reach the pool through, and they take
+   * everything on the spot whatever the option says, whatever is muted and
+   * whoever has the mic. There is deliberately NO code path from the option to
+   * teardown — this block is the pin that keeps it that way.
+   * ------------------------------------------------------------------------ */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-vwin');
+    const V = await import('../exec/videos.js');
+    const vids = V.createVideos({ layers, media: fakeMedia(), logger: quiet });
+    skipOn(false);                       // the UNSKIPPABLE default, on purpose
+
+    const seen = [];
+    const cancels = ['pM1', 'pM2', 'pM3'].map((id) =>
+      vids.renderPayload({ id, duration_ms: 40000, intensity: 0.5 }, (e) => seen.push({ id, e })));
+    ok(vids.windowCount() === 3 && vids.skippable() === false,
+      'three windows the player may NOT close, which is the whole point of the default',
+      `${vids.windowCount()} / ${vids.skippable()}`);
+    // …and to be sure it is the option and not the pool: the ✕ is refusing.
+    ok(!clickClose(liveWins(host)[0]) || vids.windowCount() === 3,
+      'their ✕ does nothing at all', String(vids.windowCount()));
+    tap(liveWins(host)[1], 300, 300);    // one muted
+    ptr(liveWins(host)[0], 'contextmenu', 300, 300, { button: 2 });   // another holding the mic
+
+    ok(vids.stopWindows() === 3, 'mercy sweeps all three anyway', String(vids.windowCount()));
+    ok(vids.windowCount() === 0 && vids.ghostCount() === 0 && host.childNodes.length === 0,
+      'in the same tick, node and all — the recap inherits an EMPTY layer, not three it may not close',
+      `${vids.windowCount()} / ${vids.ghostCount()} / ${host.childNodes.length}`);
+    ok(vids.focusedIndex() === -1, 'and nothing is left holding the mic', String(vids.focusedIndex()));
+
+    // The other teardown door: the executor's own cancel fn, equally ungated.
+    const c = vids.renderPayload({ id: 'pM4', duration_ms: 40000, intensity: 0.5 }, (e) => seen.push({ id: 'pM4', e }));
+    tap(liveWins(host)[0], 300, 300);
+    c();
+    ok(vids.windowCount() === 0 && host.childNodes.length === 0,
+      'a cancel fn takes a muted, unskippable window on the spot too', String(host.childNodes.length));
+    ok(seen.length === 4 && seen.every((r) => r.e === false),
+      'and every one of them receipts COMPLETED — swept, not endured, and never a charge',
+      JSON.stringify(seen));
+    ok(cancels.every((fn) => typeof fn === 'function'), 'the cancel fns are still the uniform renderer shape');
+  }
+
+  /* --------------- the fx.css half of the same three changes ---------------
+   * The button's VISIBILITY is a stylesheet fact and nothing in JS can see it,
+   * which is exactly why it is done there: flipping the option must reach every
+   * window already on screen without the renderer hearing about it.
+   * ------------------------------------------------------------------------ */
+  {
+    const fs = await import('node:fs/promises');
+    const url = await import('node:url');
+    const raw = await fs.readFile(url.fileURLToPath(new URL('../exec/fx.css', import.meta.url)), 'utf8');
+    const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const ruleOf = (sel) => {
+      const m = new RegExp(esc(sel) + '\\s*\\{([^}]*)\\}').exec(css);
+      return m ? m[1] : null;
+    };
+    const V = await import('../exec/videos.js');
+
+    const x = ruleOf('.gg-vwin-x') || '';
+    ok(!!x, 'fx.css carries the ✕ rule');
+    ok(/display:\s*none/.test(x),
+      'and it is HIDDEN by default — the option is off, so for almost everyone the button does not exist',
+      x.replace(/\s+/g, ' ').trim());
+    const on = new RegExp('html\\[' + V.SKIP_ATTR + '="' + V.SKIP_ON + '"\\]\\s*\\.' + V.SKIP_BTN_CLASS + '\\s*\\{([^}]*)\\}').exec(css);
+    ok(!!on && /display:\s*(flex|block|grid)/.test(on[1]),
+      'the root attribute is what turns it on, so a live toggle reaches windows already floating',
+      String(on && on[1]));
+    const size = /width:\s*(\d+)px/.exec(x);
+    const hsize = /height:\s*(\d+)px/.exec(x);
+    ok(!!size && Number(size[1]) >= V.SKIP_BTN_MIN_PX && !!hsize && Number(hsize[1]) >= V.SKIP_BTN_MIN_PX,
+      `a real pointer target (>= ${V.SKIP_BTN_MIN_PX}px both ways)`, `${size && size[1]} x ${hsize && hsize[1]}`);
+    ok(/top:/.test(x) && /left:/.test(x) && !/right:/.test(x),
+      'pinned TOP-LEFT, opposite the live dot — the two controls never sit on each other',
+      x.replace(/\s+/g, ' ').trim());
+    ok(/pointer-events:\s*auto/.test(x), 'it opts into pointer events on a click-through layer');
+    ok(!/(^|[;\s])animation:/.test(x),
+      'and declares NO animation — the hover lift is a transition, because this element has a glitch-in playing over it',
+      x.replace(/\s+/g, ' ').trim());
+    ok(/transition:/.test(x), 'which is what the hover glow rides instead');
+    // THE GHOST'S BUTTON. pointer-events:none on the wrapper does NOT protect a
+    // child that opted back in — a husk with a live ✕ is the click shield this
+    // whole layer is arranged to prevent, wearing a different hat.
+    const ghostX = new RegExp('\\.gg-vwin\\.' + V.OUT_CLASS + '\\s+\\.' + V.SKIP_BTN_CLASS + '\\s*\\{([^}]*)\\}').exec(css);
+    ok(!!ghostX && /display:\s*none/.test(ghostX[1]) && /pointer-events:\s*none/.test(ghostX[1]),
+      'a GHOST has no ✕: the wrapper\'s pointer-events:none cannot protect a child that opts back in',
+      String(ghostX && ghostX[1]));
+
+    // THE MUTED GLYPH — state, not a control.
+    const mute = ruleOf('.gg-vwin-mute') || '';
+    ok(!!mute, 'fx.css carries the muted-speaker glyph');
+    ok(/display:\s*none/.test(mute), 'hidden until the window is muted', mute.replace(/\s+/g, ' ').trim());
+    ok(new RegExp('\\.gg-vwin\\.' + V.MUTED_CLASS + '\\s+\\.gg-vwin-mute\\s*\\{[^}]*display:\\s*(block|flex)').test(css),
+      'and shown by the same class exec/videos.js paints on the wrapper');
+    ok(/pointer-events:\s*none/.test(mute),
+      'it never eats the click that would un-mute the window under it', mute.replace(/\s+/g, ' ').trim());
+    ok(/mask:/.test(mute) && /--gg-pink-rgb/.test(mute),
+      'a masked glyph tinted in the house pink, not a coloured-in image', mute.replace(/\s+/g, ' ').trim());
+    ok(!/(^|[;\s])animation:/.test(mute), 'and it does not animate — it is a label');
+
+    // THE LIVE LIGHT now means "this is the one you can hear". The pulse stays
+    // declared on .gg-vwin-dot (its animation slot is the dot's, forever); the
+    // OTHER windows have it switched off by a more specific rule.
+    const dark = new RegExp('\\.gg-vwin:not\\(\\.' + V.LIVE_CLASS + '\\)\\s+\\.gg-vwin-dot\\s*\\{([^}]*)\\}').exec(css);
+    ok(!!dark && /animation:\s*none/.test(dark[1]),
+      'a window that is NOT the audible one has a dark, still light — one blinking dot means one thing',
+      String(dark && dark[1]));
+    ok(!!dark && /opacity:\s*0?\.\d+/.test(dark[1]),
+      'dimmed rather than removed, so the window still reads as a little monitor', String(dark && dark[1]));
   }
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);

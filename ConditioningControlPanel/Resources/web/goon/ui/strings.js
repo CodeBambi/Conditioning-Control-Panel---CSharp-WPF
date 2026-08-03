@@ -188,6 +188,10 @@ export const S = Object.freeze({
     music: 'Music',
     sfx: 'SFX',
     motion: 'Reduce motion',
+    skippable: 'Skippable videos',
+    /* Says what the toggle does AND what it does not take away: a window can
+       always be muted with a click, on or off. */
+    skippableNote: 'gives each floating video an ✕ to close it early. off, they run their course. either way a click mutes one, and a right-click hands it the sound.',
     fullscreen: 'Fullscreen',
     reset: 'Reset',
     close: 'close',

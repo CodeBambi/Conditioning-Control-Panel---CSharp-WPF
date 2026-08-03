@@ -75,6 +75,48 @@
  *     loadedmetadata tells us the clip's real duration. An end nobody saw coming
  *     (a click, an eviction) fades on the way out instead, on the GHOST.
  *
+ * WHO SPEAKS IS A CHOICE NOW, not a timestamp (2026-08-04, owner-specced). The
+ * mic still starts on the newest window, but the player can move it and can shut
+ * one up, and all three gestures are deliberately different:
+ *
+ *   LEFT CLICK (sub-slop) = MUTE TOGGLE for that window. It used to DISMISS,
+ *   which meant the only thing a click could do to a window you merely wanted
+ *   quiet was destroy it. Muting the audible window leaves the room SILENT: no
+ *   auto-promotion, because promoting the next one is the room deciding you
+ *   wanted a different soundtrack when what you said was "quiet".
+ *
+ *   HANDLING ONE IS A TOUCH — a right-click, a completed drag, or a wheel-resize
+ *   — and the last window TOUCHED (or SPAWNED) is the one that speaks. The
+ *   owner's rule, verbatim: "the last touched video is the active one for the
+ *   sound (in general, the last one we moved, resized, etc)". A right-click on a
+ *   click-muted window also UNMUTES it: an explicit "you, speak" beats a stale
+ *   "shush". Moving or resizing does not — silencing a window and then dragging
+ *   it out of the way is one intention, not two.
+ *
+ *   THE ✕, and only the ✕, dismisses — and only when the player asked for it (see
+ *   SKIPPABLE below).
+ *
+ * The resolver is pure and lives in focusedIndexOf(): given the pool and the
+ * focused id it answers WHICH INDEX speaks, or -1 for silence. audioTargets()
+ * merely takes that index instead of assuming the last one, which is why the
+ * newest-speaks pins still hold — newest IS the default answer.
+ *
+ * SKIPPABLE VIDEOS, DEFAULT OFF. A floating window runs its clip/60s course and
+ * cannot be closed early; that is the point of being thrown one. A player who
+ * wants an out turns "skippable videos" on in the options drawer and every window
+ * grows a ✕ (top-LEFT, opposite the live dot). exec/ never imports ui/, so the
+ * flag arrives the way heat and motion already do: as a ROOT ATTRIBUTE
+ * (data-gg-vskip, written by ui/prefs.js), read lazily at the moment of the
+ * click. fx.css hides the button outright when the attribute is off, so flipping
+ * the toggle changes every window already on screen with no plumbing at all, and
+ * the JS re-checks anyway — a button that is merely invisible must still refuse.
+ *
+ * MERCY IS NEVER GATED BY ANY OF THIS. "Unskippable" is a property of the WINDOW,
+ * not of the way out: the payload's cancel fn and stopWindows() (mercy, recap,
+ * detach) take everything down on the spot whatever the option says, whatever is
+ * muted, whatever has focus. There is no code path from the option to teardown,
+ * and that is deliberate.
+ *
  * THE GHOST — the node outlives the record, and ONLY the node. When a window
  * settles, the record leaves `wins` FIRST and unconditionally: the slot is free,
  * the count has already fallen, the receipt is already posted, MAX_WINDOWS
@@ -91,7 +133,7 @@
  * recap must inherit an empty layer, not four fading windows.
  *
  * RECEIPTS, mirrored from what the fullscreen payload did before:
- *   video ended · 60s cap · player dismissed it · displaced by a 5th window
+ *   video ended · 60s cap · player ✕'d it · displaced by a 5th window
  *                                              -> done(true)  "survived", +1 charge
  *   executor cancel (mercy / stopAll) · nothing playable in the library
  *                                              -> done(false) "completed", no charge
@@ -134,6 +176,18 @@ export const MERCY_KEEPOUT_PX = 96;
 export const AUDIO_FADE_IN_MS = 500;    // silence -> volumeFor(intensity)
 export const AUDIO_FADE_OUT_MS = 300;   // volumeFor(intensity) -> silence, then .muted
 export const AUDIO_RAMP_TICK_MS = 25;   // ~40 steps/s: inaudible stepping, no rAF needed
+
+/* --- SKIPPABLE VIDEOS. The pref is ui/prefs.js's (`skippableVideos`, default
+   false); it reaches this tier as a ROOT ATTRIBUTE, because exec/ does not import
+   ui/ and a renderer built once at startup must still see a toggle flipped
+   mid-match. fx.css keys the ✕'s visibility off the same attribute, so the two
+   halves cannot disagree about what "on" looks like. ------------------------- */
+export const SKIP_ATTR = 'data-gg-vskip';   // on <html>, written by ui/prefs.js
+export const SKIP_ON = 'on';                // …anything else, or absent, is OFF
+export const SKIP_BTN_CLASS = 'gg-vwin-x';
+export const SKIP_BTN_MIN_PX = 22;          // the pointer target fx.css must meet
+export const MUTED_CLASS = 'is-muted';      // this window was click-silenced
+export const LIVE_CLASS = 'is-live';        // …and this one is the one speaking
 
 /* --- the exit. The class fx.css hangs ggVwinOut off, how long that animation
    runs, and the timer that guarantees the node dies even if it never plays. --- */
@@ -178,28 +232,66 @@ export function volumeFor(intensity) {
 }
 
 /**
- * THE AUDIO INVARIANT, as a pure function: given `count` windows in spawn order,
- * exactly the newest (last) one is unmuted, and only when there is one at all.
- * Kept separate from the DOM so it can be asserted without a browser.
+ * WHO SPEAKS, as a pure function over the pool — the resolver the whole audio
+ * side now hangs off. Given the windows in spawn order and the id of the last one
+ * TOUCHED or SPAWNED, it answers the index that may make a sound, or -1 for
+ * silence. Four rules, and every one of them is a thing the player said:
+ *
+ *   · nothing up, nobody speaks;
+ *   · the FOCUSED window speaks — that is what focus means;
+ *   · a focus id that is no longer in the pool (it ended, it was evicted, it was
+ *     ✕'d) falls back to the NEWEST remaining, which is exactly what this module
+ *     did before focus existed and is why the newest-speaks pins still hold;
+ *   · a window the player CLICK-MUTED does not speak even when it is the focused
+ *     one, and nothing is promoted in its place. Muting the audible window means
+ *     silence, not "play me the next one".
+ *
+ * @param {Array<{wid?:*, muted?:boolean}>} pool windows, oldest first
+ * @param {*} [focusedId] the wid of the last window touched/spawned
+ * @returns {number} index into pool, or -1
  */
-export function unmutedFlags(count) {
+export function focusedIndexOf(pool, focusedId) {
+  const arr = Array.isArray(pool) ? pool : [];
+  if (!arr.length) return -1;
+  let idx = -1;
+  if (focusedId !== undefined && focusedId !== null) {
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i] && arr[i].wid === focusedId) { idx = i; break; }
+    }
+  }
+  if (idx < 0) idx = arr.length - 1;              // the newest, as it always was
+  return (arr[idx] && arr[idx].muted) ? -1 : idx;
+}
+
+/**
+ * THE AUDIO INVARIANT, as a pure function: given `count` windows in spawn order,
+ * exactly ONE is unmuted — by default the newest (last) one, and only when there
+ * is one at all. Kept separate from the DOM so it can be asserted without a
+ * browser.
+ * @param {number} count
+ * @param {number} [focusIndex] who speaks; defaults to the newest, -1 = silence
+ */
+export function unmutedFlags(count, focusIndex) {
   const n = Math.max(0, count | 0);
+  const f = (focusIndex === undefined || focusIndex === null) ? n - 1 : (focusIndex | 0);
   const out = new Array(n);
-  for (let i = 0; i < n; i++) out[i] = (i === n - 1);
+  for (let i = 0; i < n; i++) out[i] = (i === f);
   return out;
 }
 
 /**
  * THE SAME INVARIANT AS A VOLUME, which is what the ramps actually chase: given
  * the pool's intensities in spawn order, the volume every window should be
- * HEADING TOWARD. Exactly one non-zero, and it is volumeFor(intensity) of the
- * newest — never above it, so the ceiling stays wherever volumeFor put it.
+ * HEADING TOWARD. At most one non-zero, and it is volumeFor(intensity) of the
+ * window that has the mic — never above it, so the ceiling stays wherever
+ * volumeFor put it. A focusIndex of -1 is a room the player silenced: all zeroes.
  * @param {number[]} intensities
+ * @param {number} [focusIndex] defaults to the newest window
  * @returns {number[]}
  */
-export function audioTargets(intensities) {
+export function audioTargets(intensities, focusIndex) {
   const arr = Array.isArray(intensities) ? intensities : [];
-  const flags = unmutedFlags(arr.length);
+  const flags = unmutedFlags(arr.length, focusIndex);
   const out = new Array(arr.length);
   for (let i = 0; i < arr.length; i++) out[i] = flags[i] ? volumeFor(arr[i]) : 0;
   return out;
@@ -398,6 +490,8 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
   const runs = new Set();             // every live element run
   const wins = [];                    // floating windows, OLDEST FIRST
   let drag = null;                    // the ONE live press, if any
+  let focusedId = null;               // wid of the last window TOUCHED or SPAWNED
+  let widSeq = 0;                     // window ids: unique, thrown or earned
 
   const countSink = typeof onWindowCountChanged === 'function' ? onWindowCountChanged : null;
   let lastCount = 0;                  // what the sink was last told; edges only
@@ -418,6 +512,20 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
 
   const stage = () => (layers && typeof layers.get === 'function' ? layers.get('stage') : null);
   const winLayer = () => (layers && typeof layers.get === 'function' ? layers.get('vwin') : null);
+
+  /**
+   * Is "skippable videos" on RIGHT NOW? Read lazily, every time, off the root
+   * attribute ui/prefs.js maintains — never cached, because the whole point is
+   * that a player who turns it on mid-match can close the window already floating
+   * in front of them. A page with no such attribute (a bare test host, a
+   * pref store that never loaded) is OFF, which is the default anyway.
+   */
+  function skippable() {
+    try {
+      if (typeof document === 'undefined' || !document || !document.documentElement) return false;
+      return document.documentElement.getAttribute(SKIP_ATTR) === SKIP_ON;
+    } catch (_e) { return false; }
+  }
 
   /* =========================================================================
    * THE ELEMENT RUN — fullscreen on #gg-stage. This is the ramp's mandatory
@@ -546,19 +654,62 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
    * ======================================================================= */
 
   /**
-   * Only the newest window speaks — but it RAMPS there. Re-applied on every
-   * spawn and every settle, and it is the crossfade: the leaver's fall and the
-   * newcomer's rise are both started here, in one tick, so neither waits.
-   * Re-targeting a ramp that is already heading to the same place is skipped, or
-   * a fade would restart every time the pool so much as twitched.
+   * ONE window speaks — the focused one, by default the newest — but it RAMPS
+   * there. Re-applied on every spawn, every settle, every touch and every mute,
+   * and it is the crossfade: the leaver's fall and the newcomer's rise are both
+   * started here, in one tick, so neither waits. Re-targeting a ramp that is
+   * already heading to the same place is skipped, or a fade would restart every
+   * time the pool so much as twitched.
+   *
+   * It is also where the two STATE CLASSES are painted, for the same reason they
+   * are one function: what the player hears and what the player can see about
+   * what they are hearing must never be computed twice.
    */
   function applyAudio() {
-    const targets = audioTargets(wins.map((w) => w.intensity));
+    const idx = focusedIndexOf(wins, focusedId);
+    const targets = audioTargets(wins.map((w) => w.intensity), idx);
     for (let i = 0; i < wins.length; i++) {
-      const v = wins[i].video;
+      const rec = wins[i];
+      mark(rec, LIVE_CLASS, i === idx);
+      mark(rec, MUTED_CLASS, !!rec.muted);
+      const v = rec.video;
       if (!v || rampingTo(v, targets[i])) continue;
       rampVolume(v, targets[i]);
     }
+  }
+
+  const mark = (rec, cls, on) => {
+    try { if (rec && rec.node) rec.node.classList.toggle(cls, !!on); } catch (_e) { /* ignore */ }
+  };
+
+  /**
+   * A TOUCH: this window now holds the mic. Right-click, a completed drag and a
+   * wheel-resize are the three touches — anything the player did ON PURPOSE to
+   * one window. The ✕ is not one (that window is leaving), and neither is a
+   * pointer merely passing over.
+   *
+   * `unmute` is the right-click's extra: an explicit "you, speak" outranks a
+   * stale click-mute, which is the only way back out of a muted focus. A drag
+   * does NOT carry it — moving a window you silenced is not asking it to talk.
+   */
+  function focusWindow(rec, unmute) {
+    if (!rec || rec.finished) return;
+    if (unmute) rec.muted = false;
+    focusedId = rec.wid;
+    applyAudio();
+  }
+
+  /**
+   * A sub-slop LEFT CLICK: quiet, or not quiet. It used to dismiss, which is now
+   * the ✕'s job alone — a click is the cheap gesture and must not be the
+   * destructive one. Muting the window that happens to be speaking leaves the
+   * room silent on purpose: see focusedIndexOf.
+   */
+  function toggleMute(rec) {
+    if (!rec || rec.finished) return;
+    rec.muted = !rec.muted;
+    sfx('ui-select');
+    applyAudio();
   }
 
   /**
@@ -723,9 +874,13 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
   }
 
   function onPointerDown(rec, e) {
+    // THE BUTTON TEST COMES FIRST, and that ordering is load-bearing: a right
+    // press is the "you, speak" gesture (onContextMenu below), and swallowing its
+    // default here is how a browser gets talked out of raising contextmenu at
+    // all. A right press on a window is therefore left completely alone.
+    if (e && e.button != null && e.button !== 0) return;
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-    if (e && e.button != null && e.button !== 0) return;   // right-click belongs to the page
     if (rec.finished || !rec.node || !rec.node.isConnected) return;
 
     if (drag) {
@@ -820,8 +975,8 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
 
   /**
    * THE ONE EXIT. `why` is 'up' (released), 'cancel', 'stop' or 'watchdog'.
-   * Only 'up' can dismiss; every other reason is a gentle drop, which is what
-   * "no stuck held windows" means.
+   * Only 'up' is a gesture the player completed; every other reason is a gentle
+   * drop that changes nothing, which is what "no stuck held windows" means.
    */
   function endDrag(why) {
     const d = drag;
@@ -834,9 +989,10 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     if (!rec || !rec.node) return;
 
     if (!d.grabbed) {
-      // Never passed the slop: this press was a CLICK, and a click dismisses.
-      // The player watched it until they closed it, so that is ENDURED.
-      if (why === 'up' && rec.node.isConnected) settleWindow(rec, true);
+      // Never passed the slop: this press was a CLICK, and a click MUTES. It
+      // used to dismiss — a window is closed with its ✕ now, and only when the
+      // player asked for one (see the SKIPPABLE banner).
+      if (why === 'up' && rec.node.isConnected) toggleMute(rec);
       return;
     }
 
@@ -845,6 +1001,21 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     // The drift restarts from wherever it was dropped (its offset is already in
     // rec.dx/dy), so letting go moves nothing either.
     paint(rec);
+    // A completed drag is a TOUCH: you handled this window, so it is the one you
+    // are listening to. It does not un-mute — see focusWindow.
+    if (why === 'up') focusWindow(rec, false);
+  }
+
+  /**
+   * RIGHT CLICK: "you, speak." The page's own menu is refused (a context menu
+   * over a duel is nobody's idea of a gesture) and the window takes the mic,
+   * un-muting itself if the player had clicked it quiet earlier.
+   */
+  function onContextMenu(rec, e) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    if (!rec || rec.finished || !rec.node) return;
+    focusWindow(rec, true);
   }
 
   function onPointerUp(e) {
@@ -875,6 +1046,13 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
    * Wheel over a window resizes it through --gg-vwin-w — a WIDTH var, never a
    * stacked transform scale, which would fight the drag offset. No press needed:
    * the pointer being over the window is the whole gesture.
+   *
+   * AND RESIZING IS HANDLING IT, so it takes the mic like a drag does. The
+   * promotion happens on the NOTCH, before the size clamps: a player winding a
+   * window that is already as big as it goes has still told you which one they
+   * are looking at. Re-focusing the window that already has focus is a no-op all
+   * the way down (applyAudio skips a ramp already heading where it is going), so
+   * a thirty-notch spin is one handover, not thirty.
    */
   function onWheel(rec, e) {
     if (!rec || rec.finished || !rec.node) return;
@@ -882,6 +1060,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
     const dy = num(e && e.deltaY, 0);
     if (!dy) return;
+    focusWindow(rec, false);
     const notches = Math.max(-3, Math.min(3, Math.round(dy / 100) || (dy > 0 ? 1 : -1)));
     const lo = rec.baseW * SIZE_MIN_FACTOR;
     const hi = rec.baseW * SIZE_MAX_FACTOR;
@@ -951,17 +1130,53 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     const dot = document.createElement('span');
     dot.className = calm ? 'gg-vwin-dot' : 'gg-vwin-dot gg-deco';
 
+    // The muted-speaker glyph: state, not a control. Purely CSS (a masked SVG in
+    // fx.css), pointer-events off, shown only while .is-muted is on the wrapper.
+    const mute = document.createElement('span');
+    mute.className = 'gg-vwin-mute';
+    mute.setAttribute('aria-hidden', 'true');
+
+    // THE ✕ — the ONLY way to end a window early, and only when the player asked
+    // for one. It is built unconditionally and hidden by fx.css while the option
+    // is off, so flipping the toggle reaches windows that are ALREADY UP without
+    // this module hearing about it; the click handler re-checks anyway, because
+    // an invisible button that still works is a button.
+    const skipBtn = document.createElement('button');
+    skipBtn.className = SKIP_BTN_CLASS;
+    skipBtn.setAttribute('type', 'button');
+    skipBtn.setAttribute('aria-label', 'close this video');
+    skipBtn.textContent = '✕';
+
     inner.appendChild(video);
     inner.appendChild(dot);
+    inner.appendChild(mute);
+    inner.appendChild(skipBtn);
     driftEl.appendChild(inner);
     node.appendChild(driftEl);
 
     const rec = {
       node, drift: driftEl, video, handle, onDone,
       intensity: clamp01(intensity),
+      wid: ++widSeq, muted: false,
       dx: 0, dy: 0, held: false, finished: false,
       baseW, widthPx: baseW, tries: 0, endTimer: 0, fadeTimer: 0, bornAt: nowMs(),
     };
+
+    // The button must never start a drag: the press stops here. It is NOT
+    // preventDefault'ed — that is how a browser is talked out of the click that
+    // follows, and the click is the whole point of the control.
+    skipBtn.addEventListener('pointerdown', (e) => {
+      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    });
+    skipBtn.addEventListener('click', (e) => {
+      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      if (!skippable()) return;                 // hidden, and refusing regardless
+      if (rec.finished || !rec.node) return;
+      // The player chose to close it, which is the same receipt clicking it used
+      // to post: they sat with it until they were done. ENDURED.
+      settleWindow(rec, true);
+    });
 
     video.onerror = () => {
       rec.tries++;
@@ -983,12 +1198,15 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       }
     };
     node.addEventListener('pointerdown', (e) => onPointerDown(rec, e));
+    node.addEventListener('contextmenu', (e) => onContextMenu(rec, e));
     try { node.addEventListener('wheel', (e) => onWheel(rec, e), { passive: false }); }
     catch (_e) { try { node.addEventListener('wheel', (e) => onWheel(rec, e)); } catch (_e2) { /* ignore */ } }
 
     try { video.src = handle.url; } catch (_e) { /* onerror will redraw */ }
     host.appendChild(node);
     wins.push(rec);
+    // A fresh window takes the mic — arriving is the loudest touch there is.
+    focusedId = rec.wid;
     publishCount();
     soon(() => { if (!rec.finished && rec.node) rec.node.classList.add('is-on'); }, 16);
     applyAudio();
@@ -1037,9 +1255,10 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
 
     /**
      * ONE floating window per payload. It dies on whichever comes first: the
-     * clip ending, the duration cap (never more than WINDOW_CAP_MS), a click, or
-     * a fifth window displacing it — all of those are ENDURED. Only the cancel
-     * fn (mercy / stopAll) and an empty library are not.
+     * clip ending, the duration cap (never more than WINDOW_CAP_MS), the player's
+     * ✕ (only when "skippable videos" is on), or a fifth window displacing it —
+     * all of those are ENDURED. Only the cancel fn (mercy / stopAll) and an empty
+     * library are not.
      */
     renderPayload(payload, done) {
       const p = payload || {};
@@ -1062,8 +1281,8 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
      * A window the player EARNED — exec/bubbles.js's `video` kind popped, and
      * exec/executor.js routed the pop here over the POP_EVENT seam. Everything
      * about it is a payload window: the same `wins` pool, the same chrome, the
-     * same glitch-in, the same drag/wheel/click, the same 60s-or-clip-end
-     * lifetime, the same newest-unmuted chain, and layers.stopAll() takes it
+     * same glitch-in, the same drag/wheel/click/✕, the same 60s-or-clip-end
+     * lifetime, the same focus-follows-touch mic, and layers.stopAll() takes it
      * with the rest of the tier.
      *
      * THE TWO DIFFERENCES ARE BOTH ABOUT THE WIRE, AND BOTH ARE THE POINT:
@@ -1137,6 +1356,15 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
 
     /** Test/diagnostic seam: nodes that have left the pool and not yet the DOM. */
     ghostCount: () => ghosts.size,
+
+    /** Test/diagnostic seam: which pooled window has the mic, -1 for silence. */
+    focusedIndex: () => focusedIndexOf(wins, focusedId),
+
+    /** Test/diagnostic seam: who the player has click-muted, oldest first. */
+    mutedFlags: () => wins.map((w) => !!w.muted),
+
+    /** Test/diagnostic seam: is the ✕ live? (the root attribute, read fresh). */
+    skippable,
   };
 }
 

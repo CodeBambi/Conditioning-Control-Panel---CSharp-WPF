@@ -3,9 +3,11 @@
  * Fall's fall-styles.css, re-namespaced to gg-*).
  *
  * TWO MODES, one drawer:
- *   out of a match — volumes, motion, fullscreen, reset;
- *   IN a match     — volumes, motion, fullscreen ONLY, plus the line
- *                    "Match settings are locked once you start."
+ *   out of a match — volumes, motion, skippable videos, fullscreen, reset;
+ *   IN a match     — volumes, motion, skippable videos, fullscreen ONLY, plus
+ *                    the line "Match settings are locked once you start."
+ * Everything offered mid-match is a knob about YOUR OWN SCREEN. The locked
+ * settings are the ones on the wire.
  *
  * IT IS AN OVERLAY, NOT A SCREEN. In a live match it opens over the HUD from the
  * HUD's own gear (ui/hud.js dispatches `gg-options-open`, boot.js listens) and
@@ -113,6 +115,22 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
         try { doc.documentElement.setAttribute('data-gg-motion', v ? 'reduced' : 'full'); } catch (_e) { /* ignore */ }
       });
     body.appendChild(motion.node);
+
+    /* SKIPPABLE VIDEOS — and it is offered IN a match as well as out of one,
+     * which is not a hole in "match settings are locked once you start". The
+     * locked settings are the ones on the WIRE (the consent terms both players
+     * countersigned); this is a comfort knob about your own screen, like the
+     * volumes and reduce-motion above it, and the moment a player wants it is
+     * the moment a window is floating in front of them. ui/prefs.js mirrors it
+     * onto <html> and exec/videos.js reads it there, so flipping it reaches
+     * windows that are already up. */
+    const skippable = toggleRow(S.options.skippable,
+      () => prefs.get('skippableVideos'),
+      (v) => prefs.set('skippableVideos', v));
+    body.appendChild(skippable.node);
+    // A sibling, not a child of the row: .gg-panel-row is a label/control pair
+    // and a second line inside it would land in the control column.
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.skippableNote }));
 
     if (session && session.hosted && setFullscreen) {
       const fs = toggleRow(S.options.fullscreen,
