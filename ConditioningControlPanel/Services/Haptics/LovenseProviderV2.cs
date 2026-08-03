@@ -645,31 +645,12 @@ namespace ConditioningControlPanel.Services.Haptics
         // Address resolution
         // ==================================================================
 
-        /// <summary>
-        /// Reads the configured address. The override wins; otherwise the haptics settings are
-        /// read REFLECTIVELY on purpose - <c>HapticSettings</c> is being reworked into a nested v2
-        /// shape in parallel, and a property rename must not break this provider's compilation.
-        /// </summary>
+        /// <summary>Reads the configured address: the override wins, else the haptics settings.</summary>
         private string? ResolveConfiguredUrl()
         {
             if (!string.IsNullOrWhiteSpace(ConfiguredUrlOverride)) return ConfiguredUrlOverride;
-
-            try
-            {
-                object? haptics = App.Settings?.Current?.Haptics;
-                if (haptics == null) return null;
-
-                foreach (var name in new[] { "LovenseUrl", "LovenseAddress", "LovenseIp", "LovenseHost" })
-                {
-                    var pi = haptics.GetType().GetProperty(name);
-                    if (pi?.GetValue(haptics) is string s && !string.IsNullOrWhiteSpace(s)) return s;
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("Lovense: could not read the configured address ({Reason})", ex.Message);
-            }
-            return null;
+            var url = App.Settings?.Current?.Haptics?.LovenseUrl;
+            return string.IsNullOrWhiteSpace(url) ? null : url;
         }
 
         /// <summary>

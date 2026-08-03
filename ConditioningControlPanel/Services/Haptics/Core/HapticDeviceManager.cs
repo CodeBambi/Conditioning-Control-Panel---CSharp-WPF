@@ -33,10 +33,9 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             _settings = settings;
             _settings.EnsureV2Migrated();
 
-            // Only the mock exists on this branch. LovenseProviderV2 / ButtplugProviderV2 are
-            // being written in parallel (Phases B and C) and are wired in at integration.
             Register(new MockProviderV2());
-            // PROVIDER-REGISTRATION-POINT: LovenseProviderV2 + ButtplugProviderV2 added at integration
+            Register(new LovenseProviderV2());
+            Register(new ButtplugProviderV2());
         }
 
         /// <summary>Snapshot — safe to enumerate without locking.</summary>
