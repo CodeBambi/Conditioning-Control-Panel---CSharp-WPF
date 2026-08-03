@@ -326,6 +326,8 @@ public class CompositorEngine : IDisposable
         foreach (var screen in screens)
         {
             if (surface.ContainsKey(screen.DeviceName)) continue;
+            // Creating a layered host mid-run is the churn the class header warns about; name it.
+            using var _ = VideoDiag.UiScope($"Compositor.CreateHost({screen.DeviceName}{(excluded ? ",excluded" : "")})");
             if (_offThreadMode)
             {
                 surface[screen.DeviceName] = new LayeredCompositorHost(screen, excluded);
@@ -349,6 +351,11 @@ public class CompositorEngine : IDisposable
     /// (records an empty picture) and for prewarm.</summary>
     private void PresentSurface(Dictionary<string, ICompositorHost> surface, bool excluded)
     {
+        // Breadcrumb for the freeze reports: on the WPF-host path this is a full-screen UI-thread
+        // Skia raster (InvalidateSurface -> OnPaintSurface); on the off-thread path it records a
+        // picture and hands it over. Either way it is per-frame UI-thread work against a layered
+        // surface, so a hang that lands here has a name in the next report (VideoDiag.UiScope).
+        using var _ = VideoDiag.UiScope(excluded ? "Compositor.PresentSurface(excluded)" : "Compositor.PresentSurface(main)");
         IWpfLayer[]? layers = null;
         foreach (var host in surface.Values)
         {

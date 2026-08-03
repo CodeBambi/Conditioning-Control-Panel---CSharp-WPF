@@ -2996,6 +2996,15 @@ namespace ConditioningControlPanel.Services
             private bool _disposed;
             private bool _bufferReleased;
 
+            /// <summary>Per-frame budget for <c>WriteableBitmap.TryLock</c>. Long enough that an
+            /// ordinarily busy render thread still gets its frame through (a fullscreen Gaussian
+            /// pass measures in tens of ms), short enough that a WEDGED one costs a frame instead
+            /// of the dispatcher. See the call site in <see cref="OnRendering"/>.</summary>
+            private const int BlitLockBudgetMs = 150;
+            private static readonly Duration BlitLockBudget =
+                new(TimeSpan.FromMilliseconds(BlitLockBudgetMs));
+            private bool _blitLockTimeoutLogged;
+
             /// <summary>The player whose vmem callbacks feed this surface (set in Attach). CloseAll
             /// uses it to pair the surface with the player's Stop() task, which owns the moment the
             /// native frame buffer becomes safe to free.</summary>
@@ -3189,11 +3198,26 @@ namespace ConditioningControlPanel.Services
 
                     var bmp = new WriteableBitmap((int)bw, (int)bh, 96, 96, PixelFormats.Bgr32, null);
                     bool applied;
-                    lock (_bufferLock)
+                    // BOUNDED, like the per-frame blit (:TryEnter 8ms) and Dispose (:TryEnter 250ms):
+                    // this was the last plain `lock (_bufferLock)` left on the UI thread, and since
+                    // 6.6.3 CloseAll no longer waits for Stop() on this path, a decoder thread parked
+                    // in LockCallback/FormatCallback (i.e. the wedged-Stop state the quarantine path
+                    // exists for) can now still be holding this lock long after the surface's video
+                    // ended. An unbounded wait here would hand that native wedge the dispatcher.
+                    // Dropping the rebuild is safe: the geometry the decoder is producing is stale by
+                    // definition once a newer format callback lands, and OnRendering's dimension guard
+                    // skips frames until a rebuild does land.
+                    if (!Monitor.TryEnter(_bufferLock, 250))
+                    {
+                        Diag($"bitmap rebuild dropped ({bw}x{bh}, gen {gen}) - _bufferLock still held by a native callback after 250ms");
+                        return;
+                    }
+                    try
                     {
                         applied = IsRebuildCurrent(gen, _formatGeneration);
                         if (applied) _bitmap = bmp;
                     }
+                    finally { Monitor.Exit(_bufferLock); }
                     if (!applied)
                     {
                         Diag($"stale bitmap rebuild dropped at swap ({bw}x{bh}, gen {gen} superseded)");
@@ -3330,8 +3354,23 @@ namespace ConditioningControlPanel.Services
                 // blit crosses a human-visible stall, plus the very first frame. ----
                 try
                 {
+                    using var _ = VideoDiag.UiScope("BlurVmemSurface.Blit(WriteableBitmap.TryLock)");
                     long lockStart = Environment.TickCount64;
-                    bmp.Lock();
+                    // TryLock, NOT Lock: WriteableBitmap.Lock() has no timeout and waits on the WPF
+                    // RENDER thread to drop its read lock. A render thread that never drops it (the
+                    // "likely render-thread deadlock" every #775/#777/#779/#780 report ends on, and
+                    // the CWGXBitmapLockState::LockRead stack a previous hang dump caught) therefore
+                    // takes the dispatcher with it, permanently and silently. A dropped frame is
+                    // always the better trade: the decoder keeps running and the next frame retries.
+                    if (!bmp.TryLock(BlitLockBudget))
+                    {
+                        if (!_blitLockTimeoutLogged)
+                        {
+                            _blitLockTimeoutLogged = true;
+                            Diag($"frame DROPPED - WriteableBitmap.TryLock timed out after {BlitLockBudgetMs}ms (render thread is not releasing its read lock)");
+                        }
+                        return;
+                    }
                     try
                     {
                         Marshal.Copy(staging, 0, bmp.BackBuffer, bytes);

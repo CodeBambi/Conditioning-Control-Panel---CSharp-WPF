@@ -2989,11 +2989,15 @@ namespace ConditioningControlPanel.Services
                 // Closing a layered window mid-run is the render-thread-deadlock trigger.
                 if (window.IsLoaded && _windowPool.Count < WINDOW_POOL_MAX)
                 {
+                    using var _uiMark = VideoDiag.UiScope("FlashService.HideFlashWindow(layered)");
                     window.Hide();
                     _windowPool.Push(window);
                 }
                 else
                 {
+                    // The pool-overflow branch: the comment above says it, so breadcrumb it — if a
+                    // hang report's "last UI mark" is this, the deadlock trigger fired for real.
+                    using var _uiMark = VideoDiag.UiScope("FlashService.CloseFlashWindow(layered, pool full)");
                     window.Close();
                 }
             }

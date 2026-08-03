@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using NAudio.Wave;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services
 {
@@ -222,7 +223,7 @@ namespace ConditioningControlPanel.Services
                     _ = App.Haptics?.TriggerSubliminalPatternAsync(text);
                     Task.Delay(250).ContinueWith(__ =>
                     {
-                        Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(text));
+                        DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text));
                     });
                 });
 
@@ -289,7 +290,7 @@ namespace ConditioningControlPanel.Services
                     _ = App.Haptics?.TriggerSubliminalPatternAsync(text);
                     Task.Delay(250).ContinueWith(__ =>
                     {
-                        Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(text));
+                        DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text));
                     });
                 });
 
@@ -336,7 +337,7 @@ namespace ConditioningControlPanel.Services
             var delay = _random.Next(1000, 2000);
             Task.Delay(delay).ContinueWith(_ =>
             {
-                Application.Current?.Dispatcher?.Invoke(() => PlayBambiReset());
+                DispatcherHelper.RunOnUI(() => PlayBambiReset());
             });
         }
 
@@ -356,7 +357,7 @@ namespace ConditioningControlPanel.Services
             var delay = _random.Next(4000, 8000);
             Task.Delay(delay).ContinueWith(_ =>
             {
-                Application.Current?.Dispatcher?.Invoke(() => PlayBambiReset());
+                DispatcherHelper.RunOnUI(() => PlayBambiReset());
             });
         }
 
@@ -379,7 +380,7 @@ namespace ConditioningControlPanel.Services
                     _ = App.Haptics?.TriggerSubliminalPatternAsync(resetText);
                     Task.Delay(250).ContinueWith(__ =>
                     {
-                        Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(resetText));
+                        DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(resetText));
                     });
                 });
             }
@@ -588,7 +589,7 @@ namespace ConditioningControlPanel.Services
                     await Task.Delay(anticipationMs);
 
                 // Now show on UI thread
-                Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(text, opacity, overrideDurationMs));
+                DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text, opacity, overrideDurationMs));
             }
             catch (Exception ex)
             {

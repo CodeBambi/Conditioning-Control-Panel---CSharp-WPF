@@ -105,7 +105,11 @@ public static class ChaosNarrator
     /// <summary>Force-stop ducking + clear state (run teardown).</summary>
     public static void Reset()
     {
-        try { Application.Current?.Dispatcher.Invoke(() => { _endTimer?.Stop(); }); } catch { }
+        // RunOnUI (BeginInvoke), not a blocking Invoke: Reset() is called from chaos teardown on
+        // arbitrary threads and nothing here needs a result. An unbounded cross-thread Invoke just
+        // pins the caller's thread for as long as the UI thread is busy - and permanently if it
+        // wedges, which is how one freeze cascades into thread-pool starvation (#779: threads +200).
+        try { ConditioningControlPanel.Helpers.DispatcherHelper.RunOnUI(() => { _endTimer?.Stop(); }); } catch { }
         Interlocked.Exchange(ref _busyUntilTicks, 0);
         EndDuck();
     }

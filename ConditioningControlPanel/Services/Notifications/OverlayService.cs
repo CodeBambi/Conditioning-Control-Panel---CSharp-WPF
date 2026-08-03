@@ -2353,6 +2353,10 @@ public class OverlayService : IDisposable
     /// </summary>
     private void ReassertBounds()
     {
+        // Breadcrumb: this MOVES + RESIZES layered overlay windows (SetWindowPos with a size and
+        // SWP_SHOWWINDOW), which forces WPF to reallocate the layered surface and sync with the
+        // render thread - the shape behind this app's historical layered-window wedges.
+        using var _uiMark = VideoDiag.UiScope("OverlayService.ReassertBounds");
         // While a monitor/DPI change settles, both the screen cache and the HWND rects are in
         // flux — repositioning against stale geometry would fight the OS mid-storm (the same
         // reason the recreate path above defers). The post-settle kick heals any drift.
@@ -2424,6 +2428,11 @@ public class OverlayService : IDisposable
     /// </summary>
     private bool ReassertZOrder(bool force = false)
     {
+        // Breadcrumb: this sweeps SetWindowPos over every per-monitor layered overlay window AND
+        // every visible compositor host, on the UI thread, and NotifyTopWindowClosed forces a full
+        // pass after each mandatory video. Un-timeout-able Win32 - so name it for the next hang
+        // report instead (VideoDiag.UiScope).
+        using var _uiMark = VideoDiag.UiScope("OverlayService.ReassertZOrder");
         bool anyRecovered = false;
 
         // While a mandatory/session video is playing, keep the overlays in the topmost band but
@@ -2544,6 +2553,10 @@ public class OverlayService : IDisposable
     /// </summary>
     private void RecreateOverlays()
     {
+        // Breadcrumb: the ONE path that destroys and rebuilds every per-monitor layered overlay
+        // window mid-run. It fires 3s after a sustained topmost loss, which a closing fullscreen
+        // video reliably provokes - i.e. squarely inside the freeze window of #780.
+        using var _uiMark = VideoDiag.UiScope("OverlayService.RecreateOverlays");
         App.Logger?.Warning("Overlay topmost loss persisted for 3s — recreating overlay windows");
 
         var settings = App.Settings.Current;
