@@ -100,6 +100,95 @@ public class FlashAvoidCenterBandTests
         Assert.False(FlashService.TryPickAvoidCenterPoint(800, 600, 400, 300, 60, new System.Random(1), out _, out _));
     }
 
+    // ── the adaptive shrink: real flash geometry, not toy sizes ────────────
+    //
+    // A flash is sized at 40% of the monitor's width/height (CalculateGeometry) before the user's
+    // ImageScale, so at the DEFAULT scale a monitor-aspect image on 1920x1080 is 768x432 — not the
+    // 300x200 the original rows used. At that size the raw band pick collapses: 30% leaves zero
+    // legal area (the feature silently became a no-op and flashes went straight back to the
+    // crosshair) and the default 25% leaves 1.4% — two ~8px-wide slivers. The adaptive wrapper
+    // shrinks the effective box until at least MinLegalAreaFraction of the spawn area is legal.
+
+    private const int RealW = 768, RealH = 432;   // 1920x1080 monitor, ImageScale = 100
+
+    [Theory]
+    [InlineData(25)]   // the default — 1.4% legal before the shrink
+    [InlineData(30)]   // ZERO legal area before the shrink
+    [InlineData(60)]   // clamp ceiling, also zero
+    public void RealFlashGeometry_AdaptiveShrink_StillPlacesOutsideTheEffectiveBox(int pct)
+    {
+        var rng = new System.Random(2024);
+        int firstEffective = -1;
+
+        for (int i = 0; i < 5000; i++)
+        {
+            Assert.True(
+                FlashService.TryPickAvoidCenterPointAdaptive(1920, 1080, RealW, RealH, pct, rng,
+                    out int x, out int y, out int effectivePct),
+                "the adaptive pick must succeed for an ordinary flash on an ordinary monitor");
+
+            if (firstEffective < 0) firstEffective = effectivePct;
+            Assert.Equal(firstEffective, effectivePct);          // deterministic: geometry only
+            Assert.True(effectivePct <= System.Math.Min(pct, 60),
+                "the effective box may shrink, never grow past what the user asked for");
+            Assert.True(effectivePct >= 5, "5% is the floor");
+
+            // The point must clear the EFFECTIVE box — that is what the user actually gets.
+            Assert.False(Intersects(x, y, RealW, RealH, Box(1920, 1080, effectivePct)),
+                $"spawn {x},{y} punched into the effective {effectivePct}% box");
+        }
+
+        // …and the box it settled on must leave a genuinely usable region, not a sliver.
+        Assert.True(FlashService.LegalAreaFraction(1920, 1080, RealW, RealH, firstEffective) >= 0.10,
+            $"effective {firstEffective}% left only " +
+            $"{FlashService.LegalAreaFraction(1920, 1080, RealW, RealH, firstEffective):P2} of the spawn area");
+    }
+
+    [Fact]
+    public void RealFlashGeometry_WithoutTheShrink_IsTheBugThisFixes()
+    {
+        // Pin the numbers the fix exists for, so a change in the sizing rule re-opens this test and
+        // not a silent regression: at 30% the raw pick fails outright, at the default 25% it
+        // "succeeds" with 1.4% of the screen legal.
+        Assert.False(FlashService.TryPickAvoidCenterPoint(1920, 1080, RealW, RealH, 30, new System.Random(1), out _, out _));
+        Assert.Equal(0.0, FlashService.LegalAreaFraction(1920, 1080, RealW, RealH, 30), 6);
+
+        var at25 = FlashService.LegalAreaFraction(1920, 1080, RealW, RealH, 25);
+        Assert.True(at25 > 0 && at25 < 0.02, $"expected a ~1.4% sliver at 25%, got {at25:P2}");
+    }
+
+    [Fact]
+    public void AdaptiveShrink_KeepsTheRequestedBox_WhenItIsAlreadyRoomy()
+    {
+        // A small image never triggers the shrink — the user's setting is used verbatim.
+        Assert.True(FlashService.TryPickAvoidCenterPointAdaptive(1920, 1080, 300, 200, 25,
+            new System.Random(5), out _, out _, out int effectivePct));
+        Assert.Equal(25, effectivePct);
+    }
+
+    [Fact]
+    public void AdaptiveShrink_FallsBack_OnlyWhenEvenTheFloorIsHopeless()
+    {
+        // Image wider/taller than the whole padded spawn area: no percentage can help, so the caller
+        // must still get its unconstrained-placement signal.
+        Assert.False(FlashService.TryPickAvoidCenterPointAdaptive(800, 600, 900, 700, 60,
+            new System.Random(1), out _, out _, out _));
+    }
+
+    [Fact]
+    public void LegalArea_IsMonotonic_InThePercentage()
+    {
+        // The shrink loop relies on this: a smaller exclusion square is a subset of a bigger one, so
+        // the FIRST percentage that clears the bar is also the largest one that does.
+        double previous = 0;
+        for (int pct = 60; pct >= 5; pct -= 5)
+        {
+            var f = FlashService.LegalAreaFraction(1920, 1080, RealW, RealH, pct);
+            Assert.True(f >= previous, $"legal area shrank going from a bigger box to {pct}%");
+            previous = f;
+        }
+    }
+
     [Fact]
     public void ExclusionPercent_ClampedTo_5_60()
     {
