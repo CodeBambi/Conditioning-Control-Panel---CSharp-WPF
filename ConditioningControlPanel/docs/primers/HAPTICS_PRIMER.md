@@ -1,499 +1,624 @@
 # Haptics — Feature Primer
 
-> **Purpose.** One-load orientation for the device-vibration feature (Lovense / Buttplug-Intiface /
-> Mock, with audio-sync and per-feature patterns) so you can maintain it WITHOUT re-reading the
-> ~950-line `HapticService.cs`. §0 is the one-paragraph model. §1 is the provider abstraction. §2 is
-> the `HapticService` orchestrator. §3 connection lifecycle. §4 the pattern/command model. §5
-> audio-sync. §6 the DTRH director. §7 the (mis-filed) LockdownService. §8 settings. **§9 is the
-> load-bearing section — every way a vibration gets fired and every system it touches.** §10
-> file map, §11 where-to-change-X, §12 gotchas, §13 dated status.
+> **Purpose.** One-load orientation for the device-vibration feature so you can maintain it WITHOUT
+> re-reading the ~5,000 lines of `Services/Haptics/`. §0 is the one-paragraph model. §1 is the v2
+> contract set. §2 the mixer (the heart). §3 the device manager + the three concurrent providers.
+> §4 the `HapticService` facade. §5 patterns & temperament. §6 the Phase-F feature services
+> (Toy Events input, FunScript, band-split, luminance). §7 audio-sync and the DTRH director.
+> §8 settings + the v2 migration. **§9 is the load-bearing section — every way a vibration gets
+> fired and every system it touches.** §10 the UI tiers, §11 file map, §12 where-to-change-X,
+> **§13 gotchas**, §14 dated status, §15 build/run.
 >
-> **Verified against source 2026-07-23** on branch `fix/web-video-interruptions` (HEAD `6571e5f4`,
-> v6.5.0). Every `file:line` below was read-verified when written and is git-verifiable, but line
-> numbers drift — confirm with a quick read before quoting. §1–§12 track the code and rarely rot;
-> **§13 is a dated snapshot — verify with `git log` before acting.**
+> **Verified against source 2026-08-03** on branch `feat/haptics-overhaul` (worktree
+> `C:\Projects\ccp-wt-haptics`, off `f516cb25` = v6.6.3), i.e. **the v6.7 haptics overhaul**,
+> Phases A–G. Every `file:line` below was read-verified when written and is git-verifiable, but
+> line numbers drift — confirm with a quick read before quoting. §1–§13 track the code and rarely
+> rot; **§14 is a dated snapshot — verify with `git log` before acting.**
+>
+> The blow-by-blow record of WHY each decision was made is
+> `docs/HAPTICS_OVERHAUL_PLAN.md` (historical; not maintained). This primer describes the code
+> as it now stands.
 
 ---
 
 ## 0. What Haptics is, in one paragraph
 
-A **premium** subsystem that drives a user's vibrating device from in-app events. It is built on a
-small provider abstraction (`IHapticProvider`) with three concrete backends —
-**Lovense** (HTTP to the Lovense Remote/Connect local API), **Buttplug.io** (WebSocket to Intiface
-Central), and a **Mock** provider (an on-screen toast, no hardware) — selected by a single
-`HapticProviderType` setting. One orchestrator, **`HapticService`** (`App.Haptics`), owns all three
-provider instances, activates one at a time, translates a slider intensity (0..1) + a `VibrationMode`
-enum into device commands, and exposes a large menu of per-feature methods (bubble pop, flash decay,
-video background vibe + target-hit spikes, subliminal pulses, level-up / achievement celebrations,
-bouncing-text bounces, blink pulses, an avatar easter egg, and an AI `haptic` command). Two
-higher-level directors sit on top of it: **`AudioSyncService`** (analyzes a web video's audio into a
-`HapticTrack` and streams intensity in sync with playback) and **`DtrhHapticDirector`** (a two-layer
-ambient+accent envelope for the Down-the-Rabbit-Hole browser game). The feature is gated behind
-`HasPremiumAccess` at the UI (tab lock + enable toggle + connect button); the AI `haptic` command is
-additionally clamped to a user ceiling. The whole thing is wired at `App.OnStartup` and can
-auto-connect on launch.
+A **premium** subsystem that drives the user's vibrating toys from in-app events. Consumers no
+longer talk to devices: they post **semantic events** (`PostEvent(HapticEventKind)`) or set
+**continuous layers** (`SetLayer(HapticLayer, 0..1)`) on a single **`HapticMixer`**, which combines
+layers by MAX, sums transient envelopes within a priority group, applies the **temperament** dial,
+then `min(raw × GlobalIntensity, MasterCap) × per-device trim`, and pushes the result through one
+**10 Hz per-device output loop**. Below it, **`HapticDeviceManager`** keeps **three providers
+connected concurrently** — `LovenseProviderV2` (LAN Game Mode JSON + a Toy Events WebSocket),
+`ButtplugProviderV2` (Buttplug 5.0.1 / Intiface), `MockProviderV2` (three virtual toys with an
+on-screen toast) — merges their device lists, de-dupes the same physical toy seen twice, and
+remembers each toy's **Role / trim / enabled / nickname** by a stable `"{provider}:{id}"` key.
+Routing is **by role**, not by toy: every `HapticEventKind` and every `HapticLayer` has a settings
+row saying *enabled / intensity / pattern / target role*. `HapticService` (`App.Haptics`) survives
+as a **facade** — every pre-v6.7 public method keeps its exact signature, so all ~25 consumer call
+sites are untouched. On top sit `AudioSyncService`, `DtrhHapticDirector`, `FunScriptService` and
+`ToyInputService` (two-way: toy buttons come back IN). Premium is enforced **once**, in the mixer's
+gate, not sprinkled through the UI.
 
 ---
 
-## 1. The provider abstraction (`Services/Haptics/`)
+## 1. The v2 contracts (`Services/Haptics/Core/HapticContracts.cs`, 198 lines)
 
-`IHapticProvider` (`Services/Haptics/IHapticProvider.cs`, 37 lines) is the contract:
-`Name` / `IsConnected` / `ConnectedDevices`, three events (`ConnectionChanged`, `DeviceDiscovered`,
-`Error`), and five async ops: `ConnectAsync`, `DisconnectAsync`, `VibrateAsync(intensity, durationMs)`,
-`StopAsync`, `PingAsync`. `PingAsync` (`:35`) exists specifically because `IsConnected` **can lie** —
-the OS routing table can change after connect (e.g. a VPN flip) and leave `IsConnected == true` while
-the device is unreachable (see the interface doc-comment and §12.2). The `HapticProviderType` enum
-(`:7`) has four members: `None`, `Mock`, `Lovense`, `Buttplug`.
+Written first, everything else implemented against them. **Do not redesign; extend by adding
+members only.**
 
-### 1a. LovenseProvider (`LovenseProvider.cs`, 355 lines)
-Talks HTTP/JSON to the Lovense app's local server. Two modes (`LovenseConnectionMode`, `:12`):
-**Lan** (Lovense Remote on a phone — POST `/command` with JSON, requires a `timeSec`) and **Local**
-(Lovense Connect on PC — GET with query args, holds the level until the next command). Default mode
-is **Lan** (`:23`). `ConnectAsync` (`:72`) issues `GetToys` and parses the toy list (handles toys as
-either a JSON string (Remote) or object (Connect), `:98-114`); it grabs the **last** enumerated toy
-id into `_toyId` (`:132` — single-toy control). Intensity → level mapping is 0..1 → **0..20**, with
-`intensity <= 0.05` clamped to level 0 ("off") and 0.05..1.0 mapped to levels 3..20 (`:200-204`).
-There is a second, differently-shaped mapper `IntensityToLevel` (static, `:345`) used by the
-audio-sync pattern path (`SetSyncPatternAsync`) — note the two mappers do NOT agree (§12.6). Short
-commands (`durationMs < 500`) are treated as "continuous" and **rate-limited to 5/s** (`:207-224`).
-`VibratePatternAsync` (`:279`) collapses an array of levels to a single weighted-average (or a
-transient max) command and skips a same-level re-issue within 1s. SSL validation is bypassed **only**
-for `127.0.0.1`/`localhost` (self-signed local certs), enforced for real hosts (`:45-50`). `PingAsync`
-(`:163`) re-issues `GetToys` with a short 1.5s timeout so VPN-blocked routes fail fast.
+| Type | What it is |
+|---|---|
+| `ActuatorType` (`:16`) | `Vibrate, Rotate, Thrust, Finger, Suction, Oscillate, Pump, Depth, Position, Stroke, Constrict`. The addressing unit the old `IHapticProvider` never had. |
+| `HapticActuator` (`:32`) | One channel: `Type` + `Index` (disambiguates Edge's 2 vibes / Lapis's 3) + `Steps` (native resolution: 20 vibe/rotate/thrust, 3 pump/depth, 100 position). |
+| `ToyRole` (`:42`) | `All / Reward / Punish / Ambient`. **The routing matrix targets roles.** A toy set to `All` hears everything. |
+| `HapticDevice` (`:52`) | Id, `ProviderKey`, name, nickname, actuator list, battery, plus the persisted `Role`/`IntensityTrim`/`Enabled`. `DeviceKey => ProviderKey + ":" + Id`. |
+| `ActuatorOutput` (`:74`) | `(Type, Index, Intensity 0..1)` — the mixer's per-tick target, already trimmed and capped. **Level-set semantics:** providers hold the level until the next call. |
+| `ToyEventKind` / `HapticToyEvent` (`:85`/`:97`) | Two-way input: `ButtonDown/Up/Pressed`, `StrengthChanged`, `BatteryChanged`, `Shake`, `MotionChanged`. |
+| `IHapticProviderV2` (`:108`) | `Key`/`DisplayName`/`IsConnected`/`Devices`, events `DevicesChanged`/`ToyEvent`/`Error`, and `ConnectAsync`/`DisconnectAsync`/`SetOutputsAsync(deviceId, outputs, ct)`/`StopAllAsync`/`PingAsync`. Implementations must be thread-safe. |
+| `HapticLayer` (`:144`) | Continuous sources: `Video, AudioSync, Luminance, Dtrh, Session, Manual, Pattern`. |
+| `HapticEventKind` (`:161`) | 16 transient events. **The names ARE settings keys — never rename one.** |
+| `HapticPulse` (`:183`) | `{Intensity, AttackMs, HoldMs, DecayMs, Priority, Target}` — one transient envelope. |
 
-### 1b. ButtplugProvider (`ButtplugProvider.cs`, 282 lines)
-Wraps the `Buttplug.Client` NuGet package over a WebSocket to Intiface Central
-(`ws://127.0.0.1:12345` default, `:18`). `ConnectAsync` (`:37`) connects, scans 2s, then adds **every**
-vibrating device to `_activeDevices` (`:73-81`); if none can vibrate it falls back to the first device
-(`:83-90`). `IsConnected` is true only when the client is connected **and** at least one active device
-exists (`:24`). `VibrateAsync` (`:189`) fans the command out to all devices and schedules a
-fire-and-forget auto-stop after `durationMs` (Buttplug has no built-in duration, so this provider
-emulates it with a `CancellationTokenSource`-guarded `Task.Delay` → `Stop`, `:222-248`). Live device
-add/remove is handled via `DeviceAdded`/`DeviceRemoved`/`ServerDisconnect` events (`:112-147`).
-`PingAsync` (`:149`) just returns the cached connected state — the SDK raises `ServerDisconnect` when
-the WS drops, so the cached state is reliable and localhost tunnels rarely break.
-
-### 1c. MockHapticProvider (`MockHapticProvider.cs`, 149 lines)
-No hardware. `ConnectAsync` (`:27`) immediately reports two fake devices ("Mock Vibrator 1/2"). Every
-`VibrateAsync`/`StopAsync` shows a pink **toast window** in the bottom-right (`ShowHapticToast`, `:85`)
-with the intensity% and duration. Critically it **reuses a single toast window** — audio-sync fires at
-~30 Hz and spawning a Window per call previously crashed the WPF render thread with
-`UCEERR_RENDERTHREADFAILURE` after ~60s of leaked HWNDs (`:87-89`). `Error` is declared but never
-raised (`#pragma warning disable CS0067`, `:23`). **This is the DEFAULT provider** (§8, §12.1) — a
-first run vibrates nothing real, only toasts.
+The old `IHapticProvider` (`IHapticProvider.cs`, 37 lines) and its three implementations still
+compile but are **orphaned** — nothing constructs them (§13.11).
 
 ---
 
-## 2. The `HapticService` orchestrator (`HapticService.cs`, 954 lines)
+## 2. `HapticMixer` — the heart (`Core/HapticMixer.cs`, 933 lines)
 
-`App.Haptics`. Constructs all three providers up front (`:56-58`), wires their events through to its
-own (`WireProviderEvents`, `:103`), and subscribes to `HapticSettings.PropertyChanged` for **live
-stop** (`OnSettingsChanged`, `:69`): flipping master `Enabled` off, or flipping off the specific
-feature whose event is currently mid-flight (`_currentEventType`), immediately calls `StopAsync`.
+One instance, owned by `HapticService`. It is the ONLY thing that talks to devices.
 
-- **Active provider.** `_activeProvider` is null until `ConnectAsync` (§3). `IsConnected`,
-  `ProviderName`, `ConnectedDevices` all delegate to it. `IsButtplugProvider` (`:43`) is a settings
-  read, used to widen durations/anticipation because **Buttplug carries ~1.3s command latency**
-  (`SubliminalAnticipationMs` = 1300 for Buttplug else 250, `:48`).
-- **Intensity floor.** `MinPerceptibleIntensity = 0.06` (`:214`) — must clear LovenseProvider's
-  `<= 0.05 = off` cutoff (#516), so every floor in the service uses 0.06, never 0.05.
-  `GetSliderIntensity` (`:220`) clamps a slider value to `[0.06, 1.0]`. The design is "**slider value
-  directly controls device power**" — there is no global multiply (see §12.3 on the vestigial
-  `GlobalIntensity`).
-- **`ApplyVibrationModeAsync(intensity, durationMs, mode, token?)`** (`:230`) is the pattern engine.
-  It renders the six `VibrationMode`s (Constant / Pulse / Wave / Heartbeat / Escalate / Earthquake)
-  as sequences of `VibrateAsync` calls with `Task.Delay` gaps, cancellable via the optional token.
-  Every per-feature method funnels through this (except the video-background loop and ramp, which call
-  `VibrateAsync` directly — see §12.4).
-- **`TriggerAsync(eventType, sliderIntensity, durationMs)`** (`:335`) is the generic entry: it checks
-  master `Enabled` + provider connected + `IsFeatureEnabled(eventType)` (`:317`), sets
-  `_currentEventType`, fires the `HapticTriggered` UI event, and vibrates. Feature-name strings
-  ("BubblePop", "Video", "Subliminal", …) map to the per-event enable flags.
-- **`TestAsync`** (`:359`) returns a `HapticTestResult` (Success / NotConnected / Unreachable): it
-  `PingAsync`-verifies reachability first (dropping the connection + returning Unreachable on a VPN
-  break), then runs a 3-step 30/60/100% pattern.
-- **Special/celebration patterns** live here too: `LevelUpPatternAsync` (`:505`),
-  `AchievementPatternAsync` (`:541`), `RampUpAsync` (`:573`), `FlashDecayVibeAsync` (`:602`, 2s
-  exponential decay), `FlashClickVibeAsync` (`:648`), `BubblePopAsync` (`:692`, with a 2s combo
-  counter), `BouncingTextBounceAsync` (`:721`), `BlinkPulseAsync` (`:744`),
-  `TriggerSubliminalPatternAsync` (`:862`, duration keyed off trigger words), and
-  `AvatarEasterEggPatternAsync` (`:910`, ~8s). Each re-checks its enable flag between steps so a
-  live-toggle-off aborts mid-pattern.
-- **Live control:** `LiveIntensityUpdateAsync` (`:411`, a 1.5s preview for slider drags),
-  `SetSyncIntensityAsync` (`:438`, one continuous 200ms sample clamped to the audio-sync min/max) and
-  `SetSyncPatternAsync` (`:468`, a float[] pattern; routes to Lovense's `VibratePatternAsync` or falls
-  back to the average level on other providers).
-- **Ping watchdog:** a 30s `System.Threading.Timer` started on connect (`StartPingTimer`, `:161`);
-  requires **3 consecutive** ping failures (~90s) before disconnecting, so one Wi-Fi/cloud blip
-  doesn't kill the session (#302, `:29-33`, `PingTickAsync` `:174`).
-- **`Dispose`** (`:941`): unhooks settings, cancels the flash/video CTS, stops the ping timer,
-  `DisconnectAsync().Wait(1000)`.
+**Tunables** (`:70-92`): `DefaultTickMs = 100` (the 10 Hz loop), `IdleTickMs = 250`,
+`DefaultSoftRampMs = 800`, **`DefaultMasterCap = 0.70`**, `DefaultMaxConcurrentPulses = 4`,
+`MinPerceptibleIntensity = 0.06`, `ShutdownFlushCap = 2s`.
+
+**The gate** (`IsGateOpen`, `:151`). Premium + master toggle, evaluated **once, here** — not in
+every consumer as before. `AllowTestWindow(ms)` (`:164`) waives only `Settings.Enabled`, for a few
+seconds, so the Test button can prove hardware works with the master toggle off. **Premium is still
+required.**
+
+**Per tick** (the pipeline, `BuildOutputs` `:~300-420`):
+1. **Per-motor split** (Phase F band-split) if a layer carries a `double[]` breakdown.
+2. **Continuous floor** — layers combined by MAX, filtered by the target role, each scaled by its
+   layer rule's intensity × the temperament's `ContinuousScale`.
+3. **Soft ramp** — the floor's RISE is slew-limited over `SoftRampMs`; falls are instant.
+4. **Transients** — active pulses SUM within a priority group, MAX across groups, then ride over
+   the floor by MAX. Transients are NOT slew-limited, so short accents stay sharp.
+5. **`Finish()`** — `min(raw × GlobalIntensity, MasterCap) × deviceTrim`.
+6. **Quantize** to the actuator's native `Steps` and **suppress unchanged sends**.
+
+**Public surface**: `SetLayer(layer, value, autoZeroMs=0)` (`:476`),
+`SetLayerPerActuator(layer, double[]?)` (`:502`), `SuppressLayersUntil(utc)` / `AreLayersSuppressed`
+(`:546`/`:556`), `GetLayer` (`:561`), `PlayLayerEnvelope(layer, values, totalMs)` (`:569`),
+`Post(pulse)` (`:623`), `Play(steps) → HapticSequence` (`:628`, awaitable via `.Completion`,
+cancellable via `.Cancel()`), `CancelSequence` (`:656`), **`PanicStop()`** (`:749`), `ClearAll()`
+(`:762`), `FlushStopAsync(cap)` (`:806`), `SetPositionAsync(deviceKey, 0..1)` (`:830`),
+`Activity` event (`:138`, fires **on the loop thread** — subscribers must marshal themselves).
+
+**Safety model.** Master cap (default 0.70, so max output is 0.70 not 1.0), soft ramp on start and
+resume, explicit zeroing on disconnect/close, a `ProcessExit` hook (`:144`), and `PanicStop()` which
+bypasses everything.
+
+`SetPositionAsync` is deliberately **outside** the generic mix: Position is placement, not
+intensity. FunScript owns it.
 
 ---
 
-## 3. Connection lifecycle
+## 3. `HapticDeviceManager` + the three providers
 
-- **`ConnectAsync`** (`:110`) first `DisconnectAsync`es any current provider, selects the concrete
-  provider from `Settings.Provider` (`None → null`, `:116-122`), pushes the saved URL into it
-  (`SetUrl`, `:131-138`), connects, and — **on success — auto-sets `Settings.Enabled = true`** and
-  starts the ping timer (`:144-147`). A null provider (`None`) raises `Error` and returns false.
-- **Auto-connect on startup:** `App.OnStartup` checks `Settings.AutoConnect && Provider != Mock`
-  (`App.xaml.cs:1534`) and fires `AutoConnectHapticsAsync()` (`App.xaml.cs:1536` → body at
-  `App.xaml.cs:2450`) — a 2s delay then `Haptics.ConnectAsync()`, silent on failure. **Mock is
-  deliberately excluded** from auto-connect.
-- **Construction:** `Haptics = new HapticService(Settings.Current.Haptics)` (`App.xaml.cs:1499`),
-  static property declared `App.xaml.cs:340`. `AudioSync` is built one line later (`:1500`).
-- **Disposal:** `Haptics?.Dispose()` then `AudioSync?.Dispose()` on shutdown (`App.xaml.cs:3291-3292`).
-- **Manual connect/disconnect/test** come from the Haptics tab (§9d): `BtnHapticConnect_Click`
-  (`MainWindow.Haptics.cs:205`) toggles connect/disconnect and paints the status label;
-  `BtnHapticTest_Click` (`:298`) runs `TestAsync` and surfaces the Unreachable/NotConnected results.
+### 3a. The manager (`Core/HapticDeviceManager.cs`, 302 lines)
+Constructs and registers all three providers up front (`:36-38`) and calls
+`settings.EnsureV2Migrated()` in its ctor (`:34`). `EnabledProviders()` (`:91`) reads
+`V2.Provider(key).Enabled` — **per-provider checkboxes, several at once**. `ConnectAsync` connects
+every enabled provider in parallel; `Rebuild()` (`:183`) re-merges all device lists, applies the
+persisted `HapticDeviceConfig`, and **de-dupes the same physical toy seen through two providers by
+name**, preferring `lovense > buttplug > mock` (`ProviderPreference`, `:21`). `SetRole` / `SetTrim`
+/ `SetEnabled` / `SetNickname` (`:270-273`) write straight into settings.
 
----
+### 3b. `LovenseProviderV2` (`LovenseProviderV2.cs`, 1235 lines) + `LovensePatterns.cs` (350) + `LovenseToyEventsClient.cs` (525)
+LAN **Game Mode** only — the app never routes users through the Lovense cloud.
+- **Base URL**: tries HTTPS `https://{dashed-ip}.lovense.club:30010` then falls back to plain
+  `http://{ip}:20010`; the winner is session-only (`ActiveBaseUrl`, `:76`) and **never written to
+  settings**. The configured address comes from `ConfiguredUrlOverride` (`:85`), which integration
+  sets explicitly.
+- **`X-platform: Conditioning Control Panel`** on every request (`LovensePatterns.cs:25`) — it is
+  displayed inside Lovense Remote, so it is a branding surface.
+- **Per-toy registry** from `GetToys`, parsed as BOTH an escaped-JSON string and an object
+  (firmware varies). Capabilities come from `shortFunctionNames` (`v1`,`v2` → Edge's two motors);
+  firmware that omits both name lists falls back to a small model table, else one Vibrate.
+- **Keep-alive = `timeSec:0` + a 25 s refresh** (`KeepAliveInterval`, `:54`; `RunKeepAliveAsync`,
+  `:594`). Every Function command is indefinite, so **we own the stop**: zeros are always
+  transmitted explicitly (as `Vibrate:0`, never `Stop` spam) and `StopAllAsync` clears the
+  suppression cache before firing per-toy `Stop`s.
+- **One request per device, comma-combined** (`Vibrate:5,Rotate:10`). Parallelism is across
+  DEVICES, not verbs. `Stroke` is a RANGE not a level (`Stroke:0-{20..100}`, span ≥ 20); a zero
+  request omits the fragment because `Thrusting:0` is what actually stops it.
+- **Patterns/presets**: `SendPresetAsync` (`:443`, pulse/wave/fireworks/earthquake),
+  `SendPatternV1Async` (`:459`), and the PatternV2 keyframe set `Setup/Play/InitPlay/Stop/SyncTime`
+  (`:488-510`). Sending any of these **clears the unchanged-send cache**.
+- **Toy Events** (`LovenseToyEventsClient.cs`): `ws://{ip}:20010/v1` (or
+  `wss://{dashed}.lovense.club:30010/v1`), access-request handshake, 5 s ping, reconnect with
+  backoff, `IsSupported` feature-detect for older Remote versions.
+- `ConnectAsync` returns **true when Remote answers with zero toys** (raising an informational
+  `Error`); a 20 s poll picks toys up as they pair. Do not treat that as failure.
 
-## 4. The command / pattern model
+### 3c. `ButtplugProviderV2` (`ButtplugProviderV2.cs`, 707 lines)
+Package **`Buttplug` 5.0.1**, which speaks **message spec v4, NOT v3** (verified by reflecting over
+the shipped DLL — there is no `ScalarCmd`, no `VibrateCmd`, no `device.VibrateAsync()`). The v4
+surface: `OutputCmd`/`InputCmd`, `device.Features` (per-feature capabilities),
+`feature.TryGetOutputRange(type, out min, out max)`, `device.RunOutputAsync(featureIndex, cmd, ct)`,
+`client.InputReadingReceived`. The connector ships **inside** the same package
+(`Buttplug.Client.ButtplugWebsocketConnector`). Requires Intiface Central.
 
-There are **two unrelated "pattern" worlds** — don't conflate them.
+Mapping: `Vibrate→Vibrate`, `Rotate→Rotate`, `Oscillate→Oscillate`,
+`Position`+`HwPositionWithDuration`→`Position`, `Constrict→Constrict`; `Led`/`Temperature`/`Spray`
+ignored. There is **no** Buttplug output type for Thrust/Finger/Suction/Pump/Depth/Stroke — those
+are Lovense-only, which is why the dual path exists. Buttplug outputs **latch**, so
+`SetOutputsAsync` sends only on a quantized-step change and there is **no keep-alive**. `PingAsync`
+is a real wire round-trip (`RequestDeviceList` through the retained connector). Device id =
+Intiface display name (`:` stripped, `#n` for duplicates) — the numeric Buttplug index is
+session-scoped and unusable as a persisted key.
 
-### 4a. The AI `haptic` command
-`Models/CommandData/HapticCommandData.cs` (7 lines) — a `record (double Intensity, int Duration)`.
-`Services/Commands/HapticCommand.cs` (34 lines) clamps `Duration` to `[0, 10]s`
-(`MaxDurationSec = 10`, `:10`) and clamps `Intensity` to the user ceiling
-`CompanionPrompt.MaxAiHapticIntensity` (default **0.6**, `:19`), then fires
-`ApplyVibrationModeAsync(..., VibrationMode.Pulse)` (`:24`). Built by `CommandFactory.cs:36`,
-dispatched from `AiCommandService.cs:166`; the model is emitted by the AI per `PromptService.cs:66-67`
-("vibrate"/"buzz me"/"haptic" → `{command:"haptic", data:{Intensity, Duration}}`). The ceiling slider
-lives in the Lab tab (`MainWindow.Patreon.cs:1622/1703`).
-
-### 4b. The six built-in `VibrationMode`s
-`Models/HapticSettings.cs:10` — `Constant, Pulse, Wave, Heartbeat, Escalate, Earthquake`. Rendered by
-`ApplyVibrationModeAsync` (§2). This is what per-event `*Mode` settings select.
-
-### 4c. Deeper stock haptic patterns (creator-authored keyframes)
-`Models/Deeper/StockHapticPatterns.cs` (103 lines) — six **named keyframe curves** ("Pulse", "Throb",
-"Wave", "Steady", "Climax", "Tease", `:13`) as `[t_frac, intensity]` lists. `Sample()` (`:43`)
-interpolates a curve into an evenly-spaced `float[]` (N clamped to [8, 64] by duration) scaled by
-intensity; `TryGet` / `SeedCustomFrom` support the Deeper editor's curve UI. These feed
-`HapticService.SetSyncPatternAsync` at dispatch time — see §9c (Deeper haptic tracks).
-
-### 4d. The two `HapticTrack` classes (DIFFERENT — a naming collision, §12.5)
-- **`Models/HapticTrack.cs`** (203 lines, namespace `ConditioningControlPanel.Models`) — a **runtime
-  audio-analysis buffer**: chunked `float[]` intensity samples indexed by time (`SamplesPerSecond`,
-  `ChunkDurationSeconds`, sparse/progressive chunk loading, linear-interpolated `GetIntensityAt`,
-  `HasDataForTime`, `GetBufferAhead`). Consumed by `AudioSyncService` (§5). No JSON, no persistence.
-- **`Models/Deeper/HapticTrack.cs`** (59 lines, namespace `ConditioningControlPanel.Models.Deeper`) —
-  a **JSON schema**: a `HapticTrack{ id, List<HapticEvent> events }` where each `HapticEvent` carries
-  `start/duration/intensity` and **exactly one of** `pattern_name` (a StockHapticPatterns name) or
-  `custom_pattern` (raw keyframes), plus an `activation`. It's the serialized shape inside a
-  `.ccpenh.json` Deeper enhancement; `IHapticPatternTarget` lets the editor bind either. Nothing to do
-  with the audio-analysis class above beyond the shared type name.
-
----
-
-## 5. Audio-sync (`Services/AudioSyncService.cs`, 380 lines)
-
-Streams device intensity in time with a **web video's** audio. Constructed
-`AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync)` (`App.xaml.cs:1500`);
-`App.AudioSync` is nullable (`App.xaml.cs:341`). Settings in `Models/AudioSyncSettings.cs` (157 lines).
-
-Flow:
-1. **`OnVideoDetectedAsync(url)`** (`:91`): bails (but still fires `ProcessingCompleted` so the page's
-   JS overlay unblocks — §12.7) if audio-sync disabled or haptics not connected, or the URL doesn't
-   look like a video. Otherwise builds a `ChunkManager`, downloads+analyzes the first chunk (bass /
-   RMS / onset weighted, per `AudioSyncSettings`), waits up to 2min for the first chunk, then signals
-   ready. Analysis produces the runtime `HapticTrack` (§4d, the audio-analysis one).
-2. **`OnPlaybackStateUpdate(currentTime, paused)`** (`:163`): the JS reports playhead + paused at
-   frame rate. Handles pause (→ `StopAsync`), triggers background chunk processing, and computes a
-   **look-ahead** time = `currentTime + (300 + SubliminalAnticipationMs + ManualLatencyOffsetMs)` ms
-   to compensate device+network latency (`:214`); every 5s it force-resyncs to the exact time to kill
-   drift (`:199-209`). It reads `track.GetIntensityAt(lookAhead)` and calls `SendHapticAsync`.
-3. **`SendHapticAsync`** (`:319`) maps track intensity [0,1] into the device range
-   `[0.08, LiveIntensity]` (preserving dynamics while guaranteeing the device responds), then
-   `HapticService.SetSyncIntensityAsync` (which itself clamps to the `Min/MaxIntensity` settings).
-4. Seek (`OnVideoSeek`, `:236`) pauses the video while an unloaded chunk loads; `OnVideoEnded` /
-   `StopSync` / `Reset` tear down.
-
-**Wiring into the browser:** the audio-sync JS is injected only when
-`Haptics.AudioSync.Enabled && App.Haptics.IsConnected` (`MainWindow.Browser.cs:457`), and a late
-device connection re-arms it via `App.Haptics.ConnectionChanged` (`MainWindow.Browser.cs:967`). This
-path is for the in-app WebView2 browser's `<video>`, distinct from mandatory LibVLC video (§9a).
+### 3d. `MockProviderV2` (`Core/MockProviderV2.cs`, 191 lines) + `MockToast.cs` (101)
+Three virtual toys with real capability shapes: **Mock Lush** (1 vibe), **Mock Edge** (2 vibes),
+**Mock Solace** (Thrust 20 steps + Depth 3 steps, **no vibrate**). Feedback goes to the hoisted
+singleton toast in `Core/MockToast.cs` — **one window, shared with the legacy mock** (§13.10).
 
 ---
 
-## 6. The DTRH haptic director (`DtrhHapticDirector.cs`, 403 lines)
+## 4. `HapticService` — the facade (`Services/Haptics/HapticService.cs`, 872 lines)
 
-A `static` class that drives haptics during a **Down-the-Rabbit-Hole** browser-game descent. This is
-device-haptics plumbing layered on the DTRH feature — it is **not** DTRH gameplay (see the DTRH
-primer for the game itself). It is deliberately **not** a 1:1 event→buzz mapper because the game emits
-dozens of events/min and Buttplug adds ~1.3s latency. Instead it keeps a **two-layer envelope**:
+`App.Haptics` (declared `App.xaml.cs:354`, constructed `:1563`, disposed `:3483`). It owns the
+device manager, the mixer, `ToyInput` and `FunScript`, and re-raises their events.
 
-- **AMBIENT** (`AmbientTick`, `:347`): a slow "depth gauge" floor driven by the page's throttled
-  `{running, depth, melt}` feed (`OnHapticState`, `:203`). Scaled from `DtrhAmbientIntensity` by the
-  game's 0..1 depth and the Surfacing "melt", issued as long **30s** Constant commands refreshed
-  rarely (the same near-zero-traffic trick as the video background vibe). A 5s `System.Threading.Timer`.
-- **ACCENTS** (`PlayAccent`, `:244`): short pattern spikes on meaningful game events, tapped from the
-  bark event stream. A curated verb table (`Map`, `:35`) assigns each event a **tier** (1/2/3), a
-  fraction of `DtrhIntensity`, a `VibrationMode`, and a duration. Tier 3 preempts; tier 2 respects a
-  shared cooldown; tier 1 micro-events are **coalesced** into one swell scaled by count
-  (`Coalesce`/`FlushCoalesced`, `:297-322`). `DtrhDensity` (0=Sparse/1=Balanced/2=Rich) scales the
-  cooldowns and gates tier-1 entirely at Sparse.
+**Every pre-v6.7 public method keeps its exact signature** and now posts into the mixer:
+`TriggerAsync`, `ApplyVibrationModeAsync`, `LevelUpPatternAsync`, `AchievementPatternAsync`,
+`FlashDecayVibeAsync`, `FlashClickVibeAsync`, `BubblePopAsync`, `BouncingTextBounceAsync`,
+`BlinkPulseAsync`, `StartVideoBackgroundVibeAsync`/`StopVideoBackgroundVibeAsync`,
+`VideoTargetHitAsync`, `TriggerSubliminalPatternAsync`, `TriggerKeywordPatternAsync`,
+`AvatarEasterEggPatternAsync`, `SetSyncIntensityAsync`, `SetSyncPatternAsync`,
+`LiveIntensityUpdateAsync`, `RampUpAsync` (a thin shim; it had no callers), `TestAsync`, `StopAsync`.
 
-`Ready` (`:91`) requires host active, not test-mode, `Enabled && DtrhEnabled`, and
-`App.Haptics.IsConnected`. Lifecycle taps come from `DtrhHostService.cs`: `OnLaunch` (`:133`),
-`OnRunStarted` (`:276`), `OnGameEvent` (`:286`), `OnHapticState` (`:292`), `OnRunEnded` (`:551`),
-`OnWorldFreeze` (`:738`), `OnVideoCovering` on/off (`:790`/`:829`), `OnClosed` (`:957`). It yields the
-device to a covering mandatory video (`OnVideoCovering`, `:194`) and an in-world Freeze
-(`OnWorldFreeze`, `:180`), and stops everything on run-end/close/settings-off. Buttplug durations are
-doubled (`:274`).
+**New first-class API**: `PostEvent(kind, intensityOverride?)` (`:232`), `SetLayer` (`:237`),
+`GetLayer` (`:240`), `SetLayerPerActuator` (`:249`), `SuppressContinuousLayers(seconds)` (`:254`),
+`MaxVibrateMotors` (`:259`), `HasPositionActuator` (`:281`), `SetPositionAsync(0..1)` (`:303`),
+`PanicStop()` (`:331`), `PlayPatternAsync(...)` (`:334`),
+**`TestDeviceAsync(deviceKey, mode, intensity, ms)`** (`:485` — drives ONE device directly, because
+the mixer mixes by role and a per-toy test is not a role; master multiplier, cap and trim still
+apply and the device is always explicitly zeroed on the way out), plus the band-split overload
+`SetSyncIntensityAsync(lowBand, highBand)` (`:595`).
 
----
+**Live-stop** (`OnSettingsChanged`, `:~140`): master `Enabled` off ⇒ `PanicStop()`. A single feature
+toggled off mid-pattern cancels **only that** kind's live `HapticSequence` (`_liveByKind`), where
+the old code stopped the device outright and killed unrelated features.
 
-## 7. `LockdownService.cs` — MIS-FILED, not a haptics file (§12.8)
+**Connection.** `ConnectAsync` (`:155`) **deliberately no longer sets `Settings.Enabled = true`** —
+connecting a toy is not consent to buzz. A 30 s ping timer needs **3 consecutive** failures (~90 s)
+before dropping (#302). Auto-connect is `App.xaml.cs:1602` and **no longer skips Mock**.
 
-`Services/Haptics/LockdownService.cs` (226 lines) sits in the Haptics folder but its namespace is
-`ConditioningControlPanel.Services` and it has **zero** haptics coupling. It manages **lockdown mode**
-— a timed state that forces `StrictLockEnabled = true` / `PanicKeyEnabled = false`, writes a
-`lockdown_recovery.json` so a crash mid-lockdown can't leave the panic key permanently stuck off
-(#162), counts down, and exits via timer or the secret phrase `"let me out"` (`TryExitWithPhrase`,
-`:189`). Treat the folder placement as a filing accident: grepping `Services/Haptics/` for the haptics
-feature will pull this in and it means nothing. (Exactly the same red-herring shape as Mind Wipe
-living under `Services/LockCard/`.)
+Bugs this rewrite closed (from the class doc, `:20-39`): the force-enable on connect, two CTS
+dispose races that threw `ObjectDisposedException` into `UnobservedTaskException`, the single
+unsynchronized `_currentEventType`, and `Dispose` doing `.Wait(1000)` on the UI thread.
 
 ---
 
-## 8. Settings that gate & tune it (`Models/HapticSettings.cs`, 347 lines)
+## 5. Patterns and temperament
 
-`App.Settings.Current.Haptics`. All properties raise `PropertyChanged` (drives live-stop, §2).
+### 5a. `HapticPatterns` (`Core/HapticPatterns.cs`, 137 lines)
+The six `VibrationMode`s (`Constant, Pulse, Wave, Heartbeat, Escalate, Earthquake`) rendered as
+`HapticPulseStep` sequences: `Render(...)` (`:18`), `TotalMs` (`:93`), `Append` (`:106`), and
+`SampleAt(steps, timeMs)` (`:117`) — which is what the tab's envelope preview and the per-toy test
+draw, so the picture is the ENGINE's own curve rather than a look-alike. **This is the single
+plug-in point** for any future keyframe designer.
 
-| Setting | `:line` | Default | Effect |
-|---|---|---|---|
-| `Enabled` | 70 | **true** | Master gate for all triggers. Auto-set true on successful connect (`HapticService.cs:145`). UI enable is Patreon-gated (§9e). |
-| `Provider` | 76 | **Mock** | Which backend `ConnectAsync` activates. |
-| `AutoConnect` | 82 | false | Connect on startup (skipped for Mock, `App.xaml.cs:1534`). |
-| `GlobalIntensity` | 88 | 0.7 | **Largely vestigial (§12.3)** — only the top slider's live-preview value; never multiplied into event triggers. |
-| `{Feature}Enabled` | 94–157 | all true | Per-event gates: BubblePop, FlashDisplay, FlashClick, Video, TargetHit, Subliminal, LevelUp, Achievement, BouncingText, Blink. |
-| `{Feature}Intensity` | 160–218 | 0.5 (TargetHit 0.7, Blink 0.6) | Per-event device power (slider directly = power). |
-| `{Feature}Mode` | 221–279 | Constant (TargetHit/Subliminal/BouncingText/Blink=Pulse, LevelUp=Escalate, Achievement=Heartbeat) | Per-event `VibrationMode`. **`VideoMode` is set in UI but never read (§12.4).** |
-| `LovenseUrl` | 281 | `http://192.168.1.1:30010` | Lovense endpoint. |
-| `ButtplugUrl` | 287 | `ws://localhost:12345` | Intiface endpoint. |
-| `DtrhEnabled` | 300 | true | DTRH director on. |
-| `DtrhIntensity` | 308 | 0.6 | DTRH accent ceiling. |
-| `DtrhAmbientIntensity` | 316 | 0.12 | DTRH ambient floor at full depth (0 = accents only). |
-| `DtrhDensity` | 324 | 1 | 0 Sparse / 1 Balanced / 2 Rich. |
-| `AudioSync` | 336 | `new()` | Nested `AudioSyncSettings` (see below). |
+### 5b. `HapticTemperament` (`Core/HapticTemperament.cs`, 132 lines)
+Five presets keyed by a stable lowercase string in `V2.Temperament` (default `"balanced"`;
+unrecognised values fall back to Balanced).
 
-`BlinkEnabled` has **no Haptics-tab UI** — it's JSON-configurable only, a deferred polish item
-(doc-comment `:148-152`).
+| Preset | Continuous | Transient | Attack | Decay | Pulse-priority bias |
+|---|---:|---:|---:|---:|---:|
+| Gentle | 0.70 | 0.75 | 1.40 | 1.30 | −1 |
+| **Balanced** | 1.00 | 1.00 | 1.00 | 1.00 | 0 |
+| Tease | 0.85 | 0.90 | 1.60 | 1.80 | 0 |
+| Intense | 1.15 | 1.20 | 0.80 | 0.90 | +1 |
+| Cruel | 1.25 | 1.40 | 0.45 | 0.70 | +2 |
 
-`AudioSyncSettings` (`Models/AudioSyncSettings.cs`): `Enabled` (default **false**, `:15`),
-`Sensitivity`, `BassWeight`/`RmsWeight`/`OnsetWeight` (0.40/0.35/0.25), `Smoothing`, `MinIntensity`
-(0.05) / `MaxIntensity` (1.0), `ManualLatencyOffsetMs` (±600), `ChunkDurationSeconds` (300),
-`MinBufferAheadSeconds` (120), `LiveIntensity` (1.0). These are the only haptic settings with
-`[JsonProperty]` snake_case names.
+Where each column lands: **Continuous** multiplies the layer rule's intensity in `BuildOutputs`
+(so the band-split path inherits it for free — same `layerScale`); **Transient** multiplies each
+pulse sample as priority groups are summed, before the group clamp to 1.0; **Attack/Decay** scale
+the envelope segments in `PromotePending` (HOLD is untouched, so a pattern keeps its rhythm and
+only changes its EDGE); **Pulse-priority bias** is added to `MaxConcurrentPulses` (clamped 1–12) —
+priority is only consulted when that window is full and the weakest pulse must be evicted, so
+biasing the window IS what "priority bias" means here. All of it lands **before** `Finish()`, so
+the cap always wins and a >1.0 scale can never exceed the user's ceiling.
 
-**Setup wizard** — `Windows/HapticsSetupWindow.xaml(.cs)` (152 lines .cs): a 3-slide tutorial with a
-**local `Provider` enum `{ None, Lovense, Buttplug }`** (`:9`, distinct from the service's 4-member
-`HapticProviderType` — Mock has no tutorial). Purely informational; opened by `BtnHapticsHelp_Click`
-(`MainWindow.Haptics.cs:196`). It does not itself set the provider.
+### 5c. The other two "pattern" worlds (unchanged, don't conflate)
+- **AI `haptic` command** — `Services/Commands/HapticCommand.cs`, duration clamped to 10 s and
+  intensity clamped to `CompanionPrompt.MaxAiHapticIntensity` (default 0.6).
+- **Deeper stock patterns** — `Models/Deeper/StockHapticPatterns.cs`, six named keyframe curves
+  sampled into a `float[]` and sent via `SetSyncPatternAsync`, which now lands on
+  **`HapticLayer.Pattern`** so it cannot stomp AudioSync or Manual.
+
+---
+
+## 6. Phase-F feature services
+
+### 6a. Toy input (`ToyInputService.cs`, 227 lines) — two-way
+Subscribes to the device manager's `ToyEvent`. `ButtonPressed` is debounced at
+`DebounceMs = 350` (`:30`) because Lovense sends button-down **and** button-pressed for one squeeze;
+raised on the UI dispatcher. `WaitForButtonAsync(timeoutMs, ct)` (`:185`) is the awaitable form.
+`StrengthChanged` ⇒ `mixer.SuppressLayersUntil(now + UserOverrideCooldownSec)` and the
+`UserOverrode` event — **continuous layers mute, transients deliberately still fire** (an
+achievement buzz is an event, not the app taking the dial back). `IsAvailable` (`:55`) is true only
+when a connected device belongs to a provider that can raise input.
+**One consumer is wired:** video attention checks (`AttentionCheckToyButton`, default **off**) — a
+press ADDS to the mouse click, never replaces it, and success posts `ToyButtonReward`.
+
+### 6b. FunScript (`FunScript.cs` 188 + `FunScriptService.cs` 300)
+`FunScript` is a pure parser/sampler (unit-tested): `TryParse`, `PositionAt`, `SpeedAt`,
+`IntensityAt`, `SpeedToIntensity` with `MinSpeedUnitsPerSec = 10` / `MaxSpeedUnitsPerSec = 500`.
+The service auto-loads `<video>.funscript` then `<video-dir>\funscripts\<name>.funscript`
+(`CandidatePaths`, `:75`) — **discovery is beside-the-video by design; there is no folder picker.**
+Position actuators get a **300 ms lead** (`PositionLeadMs`); everything else gets the
+speed→intensity envelope on `HapticLayer.Pattern`. Sync rides the existing
+`PrimaryPlaybackTimeMsChanged` event, extrapolated with the wall clock at 20 Hz
+(`RenderIntervalMs = 50`); no report for `StaleMs = 900` ⇒ paused/stopped ⇒ the layer zeroes. A
+seek is just a report that disagrees with the extrapolation, so it self-corrects. Default **on**,
+zero-config.
+
+### 6c. Audio band-split
+`AudioSyncSettings.BandSplit` (`band_split`, default **off**) → `AudioAnalyzer.Analyze` emits low
+and high bands **from the same FFT pass** → `ChunkManager.LowBandTrack/HighBandTrack` →
+`HapticService.SetSyncIntensityAsync(low, high)` → `HapticMixer.SetLayerPerActuator`. It only
+engages when a connected toy has **≥2 Vibrate actuators**; one-motor toys are byte-identical to
+before (the scalar layer value is kept at `max(perMotor)`). The split only sets the RATIO between
+motors — soft-ramp, master multiplier, cap and trim still apply once each.
+
+### 6d. Flash-luminance sync
+`HapticSettings.LuminanceSyncEnabled` (default **off**) + `LuminanceSyncIntensity` (0.5).
+`FlashService.ApplyLuminanceSync` samples the **already-decoded** frozen `BitmapSource` down to 8×8
+(WIC, no re-decode, cached per file) into `HapticLayer.Luminance` with `autoZeroMs` = the flash's
+own lifetime, so there is no hide hook to get wrong. **SubliminalService has no image path**
+(text-only + whisper audio), so nothing is wired there.
+
+---
+
+## 7. Audio-sync and the DTRH director
+
+**`Services/AudioSyncService.cs`** — unchanged in shape: analyzes a **web** video's audio into a
+runtime `HapticTrack` (chunked `float[]` buffer), reports playhead at frame rate, computes a
+look-ahead of `currentTime + 300 + SubliminalAnticipationMs + ManualLatencyOffsetMs`, and calls
+`SetSyncIntensityAsync`. It now lands on `HapticLayer.AudioSync` instead of driving the device.
+The JS is injected only when `AudioSync.Enabled && App.Haptics.IsConnected`
+(`MainWindow.Browser.cs`), re-armed on a late connect. This is the WebView2 `<video>` path, distinct
+from mandatory LibVLC video.
+
+**`DtrhHapticDirector.cs`** (423 lines) — re-based onto the mixer with its tuning values unchanged.
+The slow "depth gauge" floor is now `HapticLayer.Dtrh` (was long 30 s Constant commands); the tiered
+accents are priority-tagged pulses posted as `HapticEventKind.DtrhAccent`. The curated verb table
+(`Map`), the 3 tiers, the shared cooldown, the 700 ms tier-1 coalescer and `DtrhDensity`
+(0 Sparse / 1 Balanced / 2 Rich) are all as before. This director was the only well-designed piece
+of the old stack and is the shape the mixer was modelled on.
+
+---
+
+## 8. Settings and the v2 migration (`Models/HapticSettings.cs`, 821 lines)
+
+`App.Settings.Current.Haptics`. The file has **three tiers**, and which one a value lives in matters:
+
+1. **Legacy flat properties, no `[JsonProperty]`** (PascalCase JSON). `Enabled`, `Provider`,
+   `AutoConnect`, `GlobalIntensity`, ten `{Feature}Enabled/Intensity/Mode` triples, `LovenseUrl`,
+   `ButtplugUrl`, the four `Dtrh*`, and `AudioSync`. **Renaming any of these silently resets that
+   user's setting, so none of them ever move.** `VideoMode` is `[Obsolete]` (dead; kept so old
+   files round-trip).
+2. **Phase-F additions, explicit snake_case `[JsonProperty]`** (`:367-439`): `toy_input_enabled`,
+   `attention_check_toy_button`, `user_override_cooldown_sec` (30), `funscript_enabled` (true),
+   `funscript_to_vibe` (true), `luminance_sync_enabled` (false), `luminance_sync_intensity` (0.5).
+3. **`V2` — `HapticSettingsV2`** (`:714`), key `"v2"`, every member explicitly named:
+   `schema_version`, `master_cap` (0.70), `soft_ramp_ms`, `output_hz` (10),
+   `max_concurrent_pulses`, `temperament`, and four dictionaries — `providers`, `devices`,
+   `events` (key = `HapticEventKind` member name), `layers` (key = `HapticLayer` member name).
+   `EnsureRows()` creates every row up front so the mixer only ever READS existing rows and never
+   races a dictionary mutation.
+
+**`GlobalIntensity` is no longer vestigial.** It is the live master multiplier applied by the mixer
+before the cap. Combined with `MasterCap = 0.70`, **max output is 0.70, not 1.0** — patch notes must
+say so.
+
+### 8a. `EnsureV2Migrated()` (`:479`) — the one-shot migration
+Idempotent, cheap, called from the `HapticService`, `HapticMixer` and `HapticDeviceManager`
+constructors (never from `SettingsService`, so the loader stays untouched).
+
+- **Schema 0 → 1**: `SeedRoutingFromLegacy` maps each legacy triple onto its routing row, including
+  the rows that historically rode another feature's settings — `QuestComplete` and
+  `AvatarEasterEgg` inherit **Achievement**, `GazeReward` inherits **Subliminal**, and
+  `KeywordTrigger` is seeded **always-enabled** with Subliminal's intensity/mode because it never
+  had its own toggle. Layers: `Video` ← `VideoEnabled`, `AudioSync` ← `AudioSync.Enabled`,
+  `Dtrh` ← `DtrhEnabled`, all at scale 1.0. `SeedProvidersFromLegacy` carries the single old
+  provider choice forward and copies both URLs. **A stored `GlobalIntensity <= 0.05` is rescued to
+  0.7** — that slider did nothing before, so a parked 0 was never a real preference.
+- **Schema 1 → 2**: enables the `Luminance` LAYER row. Schema 1 seeded it disabled ("off until the
+  feature exists"); without this pass, turning `LuminanceSyncEnabled` on would feel like nothing
+  because the layer rule would silently veto it. The FEATURE toggle stays the real gate.
+
+### 8b. `SyncLegacyToRouting` (`:581`)
+`HapticSettings.OnPropertyChanged` mirrors legacy property writes into the matching v2 rows. It
+exists because old call sites (and any settings-file edit) still write the flat properties. The
+Phase-E UI writes rows directly, so this is a compatibility bridge, not the main path.
 
 ---
 
 ## 9. HOW IT'S INVOKED & HOW IT INTERACTS WITH THE REST OF THE APP
 
-This is the section to read first. There is no single command sink — features call `App.Haptics?.*`
-methods directly, always null-safe (`App.Haptics` is `?.`-guarded everywhere and each method early-
-returns when not `Enabled`/connected/feature-enabled, so fire-and-forget is safe).
+Read this section first. There is still no single command sink — features call `App.Haptics?.*`
+directly, always null-safe, and each call early-returns behind the mixer's gate.
 
-### 9a. The trigger map (who fires a vibration)
+### 9a. The trigger map
 
-| Caller | `file:line` | Method |
+| Caller | Method | Lands on |
 |---|---|---|
-| **Bubble-pop minigame** | `Services/BubbleService.cs:963` | `BubblePopAsync()` (combo-scaled) |
-| **Flash images** (display) | `Services/Flash/FlashService.cs:1368/1395/1431` | `FlashDecayVibeAsync()` (2s decay) |
-| **Flash click** | `Services/Flash/FlashService.cs:1704` | `FlashClickVibeAsync()` |
-| **Mandatory video** (background bed) | `Services/Video/VideoService.cs:1723` | `StartVideoBackgroundVibeAsync()` on play |
-| **Mandatory video** (attention target hit) | `Services/Video/VideoService.cs:2847` | `VideoTargetHitAsync()` (intensity spike) |
-| **Mandatory video** (teardown) | `Services/Video/VideoService.cs:4073` | `StopVideoBackgroundVibeAsync()` |
-| **Subliminals** | `Services/Subliminal/SubliminalService.cs:222/289/379/584` (anticipation read `:580`) | `TriggerSubliminalPatternAsync(text)` |
-| **Bouncing text** (edge bounce) | `Services/Subliminal/BouncingTextService.cs:421` | `BouncingTextBounceAsync()` |
-| **Blink trainer** (Lab) | `Services/BlinkTrainerService.cs` → `BlinkPulseAsync` | per-blink pulse |
-| **Level-up** | `Services/Progression/ProgressionService.cs:95`; also `Services/Companion/CompanionService.cs:289` | `LevelUpPatternAsync()` |
-| **Achievement / quest complete** | `Services/Progression/AchievementService.cs:754-755`; `Services/Progression/QuestService.cs:979-980` | `AchievementPatternAsync()` (fired twice for emphasis) |
-| **Avatar 20-click easter egg** | `Services/Progression/AchievementService.cs:583` | `AvatarEasterEggPatternAsync()` (~8s) |
-| **Avatar speech triggers** | `AvatarTube/AvatarTubeWindow.Speech.cs:1789` | `TriggerSubliminalPatternAsync(trigger)` |
-| **Keyword triggers** (voice/typed) | `Services/KeywordTriggerService.cs:1190/1442` | `TriggerSubliminalPatternAsync(keyword)` |
-| **Gaze minigame** (Lab) | `Lab/GazeMinigame/GazeMinigameWindow.xaml.cs:1268` (`FireVibration`, from `:1196/:1204`) | `TriggerSubliminalPatternAsync(tag)`, gated by `GazeVibrationMode` (None/OnCorrect/OnWrong, `:575-594`) |
-| **AI `haptic` command** | `Services/Commands/HapticCommand.cs:24` | `ApplyVibrationModeAsync(..., Pulse)` clamped to `MaxAiHapticIntensity` |
-| **Remote control** | `Services/RemoteControlService.cs:1117` (`TriggerAsync("remote_control", 0.7, 2000)`), stop `:800` | partner-app verb |
-| **DTRH director** | `Services/Haptics/DtrhHapticDirector.cs:292/399` (via `DtrhHostService` taps, §6) | `ApplyVibrationModeAsync` / `StopAsync` |
-| **Audio-sync** (web video) | `Services/AudioSyncService.cs:345` | `SetSyncIntensityAsync` (§5) |
-| **Deeper enhancements** | `Services/Deeper/IActionDispatcher.cs:572` (stop `:527/:557`) | `SetSyncPatternAsync(samples, ms)` (§9c) |
-| **Deeper editor preview** | `Views/Deeper/DeeperEditorWindow.xaml.cs:2646` | `SetSyncPatternAsync` |
+| **Bubble-pop minigame** (`Services/BubbleService.cs`) | `BubblePopAsync()` | `HapticEventKind.BubblePop` |
+| **Flash images** (display) (`Services/Flash/FlashService.cs`) | `FlashDecayVibeAsync()` | `FlashDecay` |
+| **Flash images** (click) | `FlashClickVibeAsync()` | `FlashClick` |
+| **Flash images** (brightness) | `ApplyLuminanceSync` | layer `Luminance` |
+| **Mandatory video** (bed) (`Services/Video/VideoService.cs`) | `StartVideoBackgroundVibeAsync()` | layer `Video` |
+| **Mandatory video** (target hit) | `VideoTargetHitAsync()` | `VideoTargetHit` |
+| **Mandatory video** (toy-button alternative) | `ToyInput.WaitForButtonAsync` in `SpawnTarget` | `ToyButtonReward` |
+| **Mandatory video** (script) | `FunScriptService.OnVideoStarted/Stopped` | layer `Pattern` + Position |
+| **Subliminals** (`Services/Subliminal/SubliminalService.cs`) | `TriggerSubliminalPatternAsync(text)` | `SubliminalTrigger` |
+| **Bouncing text** (`Services/Subliminal/BouncingTextService.cs`) | `BouncingTextBounceAsync()` | `BouncingTextBounce` |
+| **Blink trainer** (Lab) | `BlinkPulseAsync()` | `BlinkPulse` |
+| **Level-up** (`Services/Progression/ProgressionService.cs`) | `LevelUpPatternAsync()` | `LevelUp` |
+| **Achievement** (`AchievementService.cs`) | `AchievementPatternAsync()` | `Achievement` |
+| **Quest complete** (`QuestService.cs`) | `AchievementPatternAsync()` | `QuestComplete` |
+| **Avatar 20-click egg** | `AvatarEasterEggPatternAsync()` | `AvatarEasterEgg` |
+| **Keyword triggers** (`KeywordTriggerService.cs`) | `TriggerKeywordPatternAsync(word, intensity)` | `KeywordTrigger` |
+| **Gaze minigame** (Lab) | `TriggerSubliminalPatternAsync(tag)` | `GazeReward` |
+| **AI `haptic` command** | `ApplyVibrationModeAsync(..., Pulse)` | `AiCommand` |
+| **Remote control** (`RemoteControlService.cs`) | `TriggerAsync("remote_control", …)` | facade shim |
+| **DTRH director** | ambient + tiered accents | layer `Dtrh` + `DtrhAccent` |
+| **Audio-sync** (web video) | `SetSyncIntensityAsync(…)` | layer `AudioSync` |
+| **Deeper enhancements / editor preview** | `SetSyncPatternAsync(samples, ms)` | layer `Pattern` |
 
-### 9b. Mandatory-video coupling (the richest touchpoint)
-On play, `VideoService` starts a constant background vibe at **10% of the Video slider** so target-hit
-spikes feel impactful (`StartVideoBackgroundVibeAsync`, `HapticService.cs:764`); a slider of 0 means
-"spikes only, no bed" (`:771`). Each attention-target hit fires `VideoTargetHitAsync` (`:823`) — a
-100ms spike that then, after a 150ms felt-delay, resumes the background bed, but **only if it's the
-newest hit** (a generation counter, `:846`) so a stale resume can't flatten a newer spike (#516).
+The old double-fire in `AchievementService` and `QuestService` (each called the pattern twice) was
+removed in Phase D.
 
-### 9c. Deeper enhancement haptic tracks
-`IActionDispatcher.DispatchHaptic` (`Services/Deeper/IActionDispatcher.cs:516`) resolves a
-`HapticEvent`'s `custom_pattern` or `pattern_name` (via `StockHapticPatterns.TryGet`) into keyframes,
-samples them (`StockHapticPatterns.Sample`), and sends `SetSyncPatternAsync`. On a `Restart` phase it
-sends `StopAsync` first to clear Lovense's 1s same-level debounce (`:556`). This is the
-`.ccpenh.json`-authored path — the `Models/Deeper/HapticTrack` schema (§4d) made runnable.
+### 9b. Video coupling (still the richest touchpoint)
+`StartVideoBackgroundVibeAsync` reads the **legacy** `VideoIntensity` level and sets
+`HapticLayer.Video`; the layer rule only gates and scales it. Target hits are pulses that ride
+over the floor by MAX, so a stale resume can no longer flatten a newer spike — the mixer's
+generation problem simply doesn't exist any more.
 
-### 9d. The Haptics tab UI (`MainWindow/MainWindow.Haptics.cs`, 514 lines; `Views/Tabs/HapticsTabView.xaml`, 818 lines)
-The tab view is a thin passthrough (`HapticsTabView.xaml.cs`, 101 lines — every handler forwards to
-the `MainWindow` partial). Handlers: enable toggle (`ChkHapticsEnabled_Changed`, `:35`), provider
-combo (`CmbHapticProvider_SelectionChanged`, `:155` — maps ComboBox tags to `HapticProviderType`,
-Mock/Lovense/Buttplug), URL text (`:322`), auto-connect (`:334`), connect/disconnect (`:205`), test
-(`:298`), the global intensity slider (`:273`, debounced 150ms live-preview), per-feature
-enable/intensity/mode (`ChkHapticFeature_Changed` `:340`, `SliderHapticFeature_Changed` `:393`,
-`CmbHapticMode_SelectionChanged` `:470`), the audio-sync toggle + latency/power sliders (`:56-140`),
-DTRH density (`:385`), and the help/setup button (`:196`). Settings load-back is in
-`MainWindow.Settings.cs` (e.g. `:260` global slider, `:319` video-mode combo).
+### 9c. Premium gating
+Enforced **once**, in `HapticMixer.IsGateOpen` (`:151`) — `App.Patreon?.HasPremiumAccess` plus the
+master toggle. The tab still shows its Patreon overlay, but the service-level hole is closed: an
+automated caller (session, preset, remote command) can no longer vibrate a non-premium device.
 
-### 9e. Premium gating (WHERE it's enforced)
-Haptics is one of the five `HasPremiumAccess` gates (Remote Control, Bambi Takeover, Haptics,
-Awareness, Lockdown — all share the single toggle). Enforcement:
-- **Tab overlay:** `RefreshPremiumGate(HapticsTab.HapticsGate)` (`MainWindow.Patreon.cs:249`) shows the
-  `HapticsGate` border (`HapticsTabView.xaml:799`) with an "Unlock with Patreon" CTA
-  (`BtnGateUnlock_Click`).
-- **Enable toggle:** `ChkHapticsEnabled_Changed` (`MainWindow.Haptics.cs:41`) blocks + shows
-  `msg_haptic_feedback_patreon_only` if `HasPremiumAccess != true`.
-- **Connect button:** `BtnHapticConnect_Click` (`MainWindow.Haptics.cs:208`) same check.
-- **AI command:** gated by the AI stack's `HasAiAccess` (the `haptic` command flows through
-  `AiCommandService`); `HapticCommand` itself adds the `MaxAiHapticIntensity` ceiling. There is **no
-  separate premium check inside `HapticService`** — the service will vibrate for anyone who reaches it
-  (§12.9). Gating is entirely at the UI/command layer.
-
-### 9f. What it does NOT touch
-No audio ducking, no XP award (haptics react to XP events, they don't grant them), no InteractionQueue
-membership, no Discord presence, no achievements of its own. It is a pure output sink reacting to other
-subsystems.
+### 9d. What it does NOT touch
+No audio ducking, no XP award, no InteractionQueue membership, no Discord presence, no achievements
+of its own. It is a pure output sink — plus, since Phase F, one narrow INPUT source (toy buttons)
+that feeds video attention checks.
 
 ---
 
-## 10. Where it lives — file map
+## 10. The UI, in three tiers (`Views/Tabs/HapticsTabView.xaml`, 1322 lines)
 
-All paths under `.../ConditioningControlPanel/`. All `file:line` verified 2026-07-23.
+The owner rejected the first (flat) redesign — *"so many sliders in plain sight… a recipe for choice
+fatigue"* — so the tab is deliberately tiered. Nothing was removed; what changed is **what is
+visible when**. At rest, on a fresh maximised 1080p open, there is **one** slider and about ten
+reachable controls.
+
+- **Tier 1 — first paint.** Header, a shrunk "what is this?" card, the connection strip
+  (provider chips, device count, Connect/Disconnect, **PANIC STOP**), a **How it feels** card
+  holding the single `Intensity` slider (`GlobalIntensity`) plus the five temperament chips, and
+  the toy cards (name/nickname, battery, capability chips, Role picker, trim slider, Test). Then
+  two collapsed doors. **Max power is NOT here** — it is a safety net, not a volume knob.
+- **Tier 2 — `Customize`** (`HapticCustomizeSection`). The routing matrix, grouped
+  Core/Rewards/Media/Games. A row at rest is `[toggle] icon Name … "50% · Pulse · All" ›`; the
+  summary strip is a `ToggleButton` that reveals that row's strength slider, pattern combo and
+  target combo inline. `HapticRowExpansionScope` keeps **one row open at a time** across every
+  group. Below the list, the **Extras** strip: FunScript enable, flash-brightness enable,
+  toy-button input, band split, and the indented "squeezing passes attention checks".
+- **Tier 3 — `Advanced`** (`HapticAdvancedSection`). Safety ceiling (Max power + warning),
+  toy-input back-off slider, FunScript "convert to vibration", flash-brightness strength, the DtRH
+  ambient/density pair, the Video-Haptic-Sync card (delay/power + the 6-knob DSP drawer), and the
+  Pattern lab.
+
+**It is data-driven.** `Views/Controls/HapticUiModels.cs` (514 lines) holds `HapticRoutingRowVm`,
+`HapticRoutingGroupVm`, `HapticToyCardVm`, `HapticProviderChipVm`, `HapticRowExpansionScope` and two
+converters. Each VM writes straight through to the settings object the engine reads and calls
+`App.Settings.Save()` (itself 500 ms-debounced, so slider drags coalesce into one write). **Adding a
+routing row is one line in `MainWindow.InitializeHapticsTab()`** (`MainWindow.Haptics.cs:58`), not a
+XAML copy-paste.
+
+**Which property a row writes is per-row and is NOT guessable** (`HapticRowLegacyBinding`,
+`HapticUiModels.cs:56`). Event rows → `V2.Rule(kind)`. The **Video** row writes the LEGACY
+`VideoIntensity`/`VideoEnabled` because `StartVideoBackgroundVibeAsync` reads the legacy level. The
+**AudioSync** row writes BOTH `AudioSync.Enabled` and the layer rule, because the service early-outs
+on the former.
+
+**Setup wizard v2** (`Windows/HapticsSetupWindow.xaml(.cs)`, 248+249 lines) is no longer
+informational: three pages (`Provider → Guide → Connect`) that write the v2 provider flags and the
+Lovense address, run the real Connect with progress, list the devices found, give actionable failure
+hints and offer a Test buzz. Mock/demo is a first-class path.
+
+---
+
+## 11. Where it lives — file map
+
+All paths under `.../ConditioningControlPanel/`. Line counts verified 2026-08-03.
 
 | File | Lines | Role |
 |---|---|---|
-| `Services/Haptics/IHapticProvider.cs` | 37 | Provider contract + `HapticProviderType` enum. |
-| `Services/Haptics/HapticService.cs` | 954 | **The orchestrator** (`App.Haptics`): provider selection, pattern engine, all per-feature methods, ping watchdog, live-stop. |
-| `Services/Haptics/LovenseProvider.cs` | 355 | Lovense HTTP provider (Lan/Local, 0-20 levels, rate-limit, pattern averaging). |
-| `Services/Haptics/ButtplugProvider.cs` | 282 | Buttplug/Intiface WebSocket provider (multi-device, emulated durations). |
-| `Services/Haptics/MockHapticProvider.cs` | 149 | Toast-only test provider. **Default.** |
-| `Services/Haptics/DtrhHapticDirector.cs` | 403 | DTRH ambient+accent envelope (static). |
-| `Services/Haptics/LockdownService.cs` | 226 | **NOT haptics** — strict-lock/panic lockdown mode, mis-filed (§7/§12.8). |
-| `Services/AudioSyncService.cs` | 380 | Web-video audio → synced intensity stream. |
-| `Models/HapticSettings.cs` | 347 | All haptic settings + `VibrationMode` enum. |
-| `Models/AudioSyncSettings.cs` | 157 | Audio-sync tuning (snake_case JSON). |
-| `Models/HapticTrack.cs` | 203 | Runtime audio-analysis intensity buffer (chunked). |
-| `Models/Deeper/HapticTrack.cs` | 59 | Deeper JSON schema (`HapticEvent`s) — **different class, same name**. |
-| `Models/Deeper/StockHapticPatterns.cs` | 103 | Six named keyframe curves + sampler. |
-| `Services/Commands/HapticCommand.cs` | 34 | AI `haptic` command (clamped duration + `MaxAiHapticIntensity`). |
-| `Models/CommandData/HapticCommandData.cs` | 7 | `record(Intensity, Duration)`. |
-| `Views/Tabs/HapticsTabView.xaml` (+`.xaml.cs` 101) | 818 | The Haptics tab UI + gate overlay. |
-| `Windows/HapticsSetupWindow.xaml` (+`.xaml.cs` 152) | 316 | 3-slide Lovense/Buttplug setup wizard. |
-| `MainWindow/MainWindow.Haptics.cs` | 514 | All tab handlers (connect/test/provider/sliders/features). |
+| `Services/Haptics/Core/HapticContracts.cs` | 198 | **The v2 contract set** (§1). Extend, never redesign. |
+| `Services/Haptics/Core/HapticMixer.cs` | 933 | **The heart**: layers, pulses, temperament, safety, the 10 Hz loop. |
+| `Services/Haptics/Core/HapticDeviceManager.cs` | 302 | N concurrent providers, device registry, per-toy config, dedupe. |
+| `Services/Haptics/Core/HapticPatterns.cs` | 137 | The six `VibrationMode`s as envelopes + `SampleAt`. |
+| `Services/Haptics/Core/HapticTemperament.cs` | 132 | Five presets and their multiplier sets. |
+| `Services/Haptics/Core/MockProviderV2.cs` | 191 | Three virtual toys with real capability shapes. |
+| `Services/Haptics/Core/MockToast.cs` | 101 | The **single** shared toast window (HWND-leak history). |
+| `Services/Haptics/HapticService.cs` | 872 | `App.Haptics` — the facade; legacy signatures preserved. |
+| `Services/Haptics/LovenseProviderV2.cs` | 1235 | LAN Game Mode: per-toy registry, keep-alive, patterns, presets. |
+| `Services/Haptics/LovensePatterns.cs` | 350 | Verb/step tables, `X-platform` header, quantizer, action fragments. |
+| `Services/Haptics/LovenseToyEventsClient.cs` | 525 | Toy Events WebSocket (`/v1`): buttons, strength, battery, shake. |
+| `Services/Haptics/ButtplugProviderV2.cs` | 707 | Buttplug 5.0.1 (**spec v4**) over Intiface. |
+| `Services/Haptics/ToyInputService.cs` | 227 | Debounced button input + user-override back-off. |
+| `Services/Haptics/FunScript.cs` | 188 | Pure parser/sampler (unit-tested). |
+| `Services/Haptics/FunScriptService.cs` | 300 | Discovery beside the video, 20 Hz sync, position lead. |
+| `Services/Haptics/DtrhHapticDirector.cs` | 423 | DtRH ambient layer + tiered accent pulses. |
+| `Services/AudioSyncService.cs` | 409 | Web-video audio → `HapticLayer.AudioSync` (+ the band split). |
+| `Models/HapticSettings.cs` | 821 | Legacy props + Phase-F props + `HapticSettingsV2` + the migration. |
+| `Models/AudioSyncSettings.cs` | 171 | Audio-sync tuning, all snake_case (incl. `band_split`). |
+| `Views/Tabs/HapticsTabView.xaml` | 1322 | The three-tier tab. |
+| `Views/Controls/HapticUiModels.cs` | 514 | Row/toy/provider VMs, expansion scope, converters. |
+| `MainWindow/MainWindow.Haptics.cs` | 1062 | Tab handlers + the small `Load*ToUi` helpers. |
+| `Windows/HapticsSetupWindow.xaml(.cs)` | 248+249 | Setup wizard v2 (writes settings, really connects). |
+| `Services/Haptics/IHapticProvider.cs` + `LovenseProvider.cs` + `ButtplugProvider.cs` + `MockHapticProvider.cs` | 37+355+361+68 | **DEAD** v1 path — compiles, nothing constructs it (§13.11). |
+| `Services/Haptics/LockdownService.cs` | 226 | **NOT haptics** — mis-filed lockdown mode (§13.12). |
 
-**C# wiring:** declared `App.xaml.cs:340`; constructed `:1499`; `AudioSync` `:1500`; auto-connect
-`:1534-1536` (body `:2450`); disposed `:3291-3292`.
+**C# wiring:** `App.Haptics` declared `App.xaml.cs:354`, constructed `:1563`, `AudioSync` `:1564`,
+auto-connect `:1602`, disposed `:3483-3484`. `ToyInputService` and `FunScriptService` are
+constructed by `HapticService`'s ctor (not `App.xaml.cs`) and reached as `App.Haptics.ToyInput` /
+`App.Haptics.FunScript`.
 
 ---
 
-## 11. Where to change X
+## 12. Where to change X
 
 | Want to… | Edit |
 |---|---|
-| Add a new device provider | Implement `IHapticProvider`; add a `HapticProviderType` member (`IHapticProvider.cs:7`); construct it in `HapticService` ctor (`:56-58`) + `WireProviderEvents`; add it to the `ConnectAsync` switch (`:116`) and any `SetUrl` branch (`:131`); add a ComboBox item + `CmbHapticProvider_SelectionChanged` case (`MainWindow.Haptics.cs:162`). |
-| Add a new built-in vibration mode | Add to the `VibrationMode` enum (`HapticSettings.cs:10`) + a `case` in `ApplyVibrationModeAsync` (`HapticService.cs:234`). |
-| Add a new stock Deeper pattern | Add to `StockHapticPatterns.Names` + `_patterns` (`StockHapticPatterns.cs:13/18`). |
-| Add a new trigger source | Call `App.Haptics?.TriggerAsync(name, intensity, ms)` (or a specific method); add a `IsFeatureEnabled` case (`HapticService.cs:317`) + settings if you want a per-event gate. |
-| Change intensity→device level | Lovense: `VibrateAsync` mapping (`LovenseProvider.cs:200`) **and** `IntensityToLevel` (`:345`) — keep them consistent (§12.6). Global floor: `MinPerceptibleIntensity` (`HapticService.cs:214`). |
-| Change audio-sync latency/mapping | Look-ahead calc `AudioSyncService.cs:214`; device-range map `SendHapticAsync:319`; weights/floors in `AudioSyncSettings.cs`. |
-| Change DTRH event→pattern mapping | The `Map` table (`DtrhHapticDirector.cs:35`); cooldown/density in `GapMult`/`PlayAccent` (`:237/244`); ambient shape `AmbientTick` (`:347`). |
-| Change the AI haptic ceiling | `CompanionPromptSettings.MaxAiHapticIntensity` + the Lab slider (`MainWindow.Patreon.cs:1622`). |
-| Change premium gating | `RefreshPremiumGate` call (`MainWindow.Patreon.cs:249`) + the two `HasPremiumAccess` checks (`MainWindow.Haptics.cs:41/208`). |
+| Add a device provider | Implement `IHapticProviderV2`; `Register(...)` it in the `HapticDeviceManager` ctor (`:36-38`); add its key to `ProviderPreference` (`:21`) and to `EnsureRows`'s provider list (`HapticSettings.cs:770`); add a checkbox + `HapticProviderChipVm`. |
+| Add a routing row | Add a member to `HapticEventKind` (**append** — names are settings keys), post it from the consumer, and add **one line** to `MainWindow.InitializeHapticsTab()`. `EnsureRows` creates the settings row for you. |
+| Add a continuous source | Add a `HapticLayer` member + `SetLayer` from the producer. Bump `HapticSettingsV2.SchemaVersion` **only** if an existing install needs the row flipped (see the Luminance precedent, §8a). |
+| Add a vibration mode | `VibrationMode` enum (`HapticSettings.cs:12`) + a case in `HapticPatterns.Render` (`:18`). |
+| Change the safety ceiling | `HapticMixer.DefaultMasterCap` (`:77`) / `HapticSettingsV2.MasterCap`. The Max-power slider is in Tier 3. |
+| Change the master multiplier | It **is** `HapticSettings.GlobalIntensity`, applied in `HapticMixer.Finish()`. |
+| Retune a temperament | The five static presets in `HapticTemperament.cs:93-101`; the table in §5b. |
+| Change Lovense wire behaviour | `LovenseProviderV2.SetOutputsAsync` (`:289`) for verbs/combining; `RunKeepAliveAsync` (`:594`) for the 25 s refresh; `LovensePatterns.StepsFor`/`FormatActionFragment` for quantization and action strings. |
+| Change FunScript feel | `PositionLeadMs` / `SpeedToIntensity` (`FunScript.cs:138`) / `MinSpeedUnitsPerSec`+`MaxSpeedUnitsPerSec`. |
+| Change DtRH mapping | The `Map` table in `DtrhHapticDirector.cs`; density in `GapMult`/`PlayAccent`. |
+| Change premium gating | `HapticMixer.IsGateOpen` (`:151`) — one place now. |
 
 ---
 
-## 12. Gotchas
+## 13. Gotchas
 
-1. **Mock is the default provider.** `HapticSettings.Provider` defaults to `Mock`
-   (`HapticSettings.cs:25`) and `Enabled` defaults true. A fresh install "works" but only shows a pink
-   toast — no real device buzzes until the user picks Lovense/Buttplug and connects. Auto-connect is
-   **skipped for Mock** (`App.xaml.cs:1534`), so a Mock user never even shows as connected on launch.
-2. **`IsConnected` can lie; always `PingAsync` before load-bearing ops.** Lovense's `IsConnected`
-   stays true after a VPN/route change breaks localhost reachability. `TestAsync` and the 30s ping
-   watchdog re-verify; a single blip is tolerated (3 consecutive failures / ~90s before drop, #302,
-   `HapticService.cs:29-33`).
-3. **`GlobalIntensity` is vestigial.** The "global intensity" slider writes
-   `Settings.GlobalIntensity` (`MainWindow.Haptics.cs:279`) and loads it back (`MainWindow.Settings.cs:260`),
-   and drives a live-preview buzz — but it is **never multiplied into any event trigger**. The design
-   is "each per-event slider directly controls device power." Don't assume it scales anything.
-4. **`VideoMode` is set but never read.** The UI persists `Settings.VideoMode`
-   (`MainWindow.Haptics.cs:492`, loaded `MainWindow.Settings.cs:319`) but `HapticService`'s video
-   paths (`StartVideoBackgroundVibeAsync`, `RampUpAsync`) call `VibrateAsync` directly / hard-code
-   Constant — they never consult `VideoMode`. Changing it does nothing. (`BlinkMode`, by contrast, IS
-   used — `HapticService.cs:754`.)
-5. **Two different `HapticTrack` classes.** `Models/HapticTrack.cs` (audio-analysis buffer, used by
-   AudioSync) vs `Models/Deeper/HapticTrack.cs` (JSON event schema, used by Deeper). Same name,
-   different namespace, unrelated. Grep with the namespace or folder to disambiguate (§4d).
-6. **Lovense has two disagreeing intensity→level mappers.** `VibrateAsync` maps 0.05..1.0 → levels
-   3..20 (`LovenseProvider.cs:200`), while `IntensityToLevel` (used by the pattern/audio-sync path,
-   `:345`) maps 0.02..1.0 → 0..20 with a different curve. The same requested intensity can produce
-   different levels depending on which path fires. Intentional-ish (pattern path favors dynamics) but
-   surprising.
-7. **A "skip" in audio-sync must still complete the page handshake.** The WebView2 overlay waits for a
-   ready signal before letting the video play; `OnVideoDetectedAsync` fires `ProcessingCompleted` even
-   when it bails (disabled / not connected / bad URL) so the user isn't stuck on "Preparing Haptic
-   Sync…" (`AudioSyncService.cs:99-101`).
-8. **`LockdownService.cs` is mis-filed under `Services/Haptics/`.** It is lockdown-mode plumbing with
-   no haptics coupling (§7). Ignore it when reasoning about the haptics feature; a `Services/Haptics/`
-   grep will surface it as noise.
-9. **The service enforces no premium gate.** `HasPremiumAccess` is checked only in the tab handlers
-   (`MainWindow.Haptics.cs:41/208`) and the tab overlay. Any code path that reaches `App.Haptics.*`
-   directly (a session, preset, remote command, or AI command with `HasAiAccess`) can vibrate a
-   device regardless of premium state. Gate at the caller if that matters.
-10. **Buttplug emulates durations with a fire-and-forget timer.** Unlike Lovense (`timeSec`), Buttplug
-    holds until stopped, so `ButtplugProvider.VibrateAsync` schedules a `Task.Delay(durationMs)` →
-    `Stop` guarded by a `CancellationTokenSource` (`ButtplugProvider.cs:222`). A new vibration cancels
-    the prior stop. Plus the ~1.3s protocol latency (`SubliminalAnticipationMs`) that widens every
-    duration/anticipation path.
-11. **Mock's toast window is a singleton for a reason.** Per-call windows leaked HWNDs and crashed the
-    render thread at audio-sync frame rate (`MockHapticProvider.cs:87-89`). Keep the reuse.
+1. **`GetToys` returns two different shapes.** Depending on Lovense Remote's firmware, `data.toys`
+   is either a JSON **object** or an **escaped JSON string**. Parse both. Runtime capability truth
+   is `shortFunctionNames`, not the model name.
+2. **The HTTPS Lovense path frequently dies on router DNS-rebinding protection.** Always try
+   `https://{dashed-ip}.lovense.club:30010` **and** fall back to plain `http://{ip}:20010`. The
+   winner is session-only (`ActiveBaseUrl`) and must **not** be persisted — the user's network can
+   change between launches.
+3. **`timeSec:0` has no server-side watchdog — WE own the stop.** Lovense commands are indefinite,
+   refreshed by a 25 s keep-alive. Zeros must always be transmitted explicitly (`Vibrate:0`), and
+   `StopAllAsync` must clear the unchanged-send suppression cache **before** firing `Stop`, or the
+   cache will swallow the very command that stops the toy. Sending a pattern or preset also
+   invalidates that cache — the toy is no longer where the cache thinks it is.
+4. **Buttplug 5.0.1 is message spec v4, not v3.** There is no `ScalarCmd`, no `VibrateCmd`, no
+   `device.VibrateAsync()`, no `VibrateAttributes`. Use `OutputCmd` / `device.RunOutputAsync` /
+   `device.Features`. The WebSocket connector ships **inside** the `Buttplug` package; the separate
+   `Buttplug.Client.Connectors.WebsocketConnector` package is 3.x-only. Buttplug 5.0.1 also forces
+   `Newtonsoft.Json >= 13.0.4` (the pinned 13.0.3 fails restore with NU1605).
+5. **Settings-migration traps.** (a) No legacy property may EVER be renamed — they have no
+   `[JsonProperty]`, so PascalCase IS the JSON key and a rename silently resets that user.
+   (b) `EnsureV2Migrated` sets `_v2Migrated = true` **first**, before seeding, so the seeding writes
+   rows rather than bouncing back through `SyncLegacyToRouting`. (c) Only bump `SchemaVersion` when
+   an EXISTING install genuinely needs another pass — each pass runs once, forever, on every user.
+   (d) `GlobalIntensity <= 0.05` is rescued to 0.7 on the schema-0→1 pass only; do not "fix" a
+   legitimately low value later.
+6. **Max output is 0.70, not 1.0.** `GlobalIntensity` (0.70) × `MasterCap` (0.70) both default to
+   0.70 and the cap is applied after everything, including temperament. A user who says "it feels
+   weaker than the old version" is describing the intended safety default, not a bug — Max power in
+   Tier 3 is the opt-in.
+7. **The routing rows resist UI automation.** Their `CheckBox`es live in a `DataTemplate` with a
+   custom `ToggleStyle`, and UIA realises at most one at a time — a smoke test cannot toggle
+   "Media > Audio sync" by AutomationId. Click the on-screen coordinate of the row's label `Text`
+   element, and **scroll it into view first**: a click on a row that is only half in the viewport
+   lands on the wrong control. Once a row is open, its slider IS reachable through
+   `RangeValuePattern`, which is how "an edit still saves" is verified.
+8. **`en.json` is byte-fragile.** It is CRLF with hand-grouped blank lines. Edit it with targeted
+   text edits — **never** round-trip it through a JSON dumper or a format-on-save. The same applies
+   to the other eight language files: write `\n`, never a literal newline inside a string, and let
+   `core.autocrlf` handle line endings (all nine are LF in git, CRLF in the worktree).
+9. **`PinkSlider` now has a real disabled visual.** `Resources/Theme/MainWindow.xaml:416` gained an
+   `IsEnabled=False` trigger (`:462`) that dims groove, fill and thumb. The old per-control
+   `Opacity = 0.4` workaround is gone app-wide — do not reintroduce it, and do bind `IsEnabled`
+   rather than poking opacity.
+10. **The mock toast window is a singleton for a reason.** Per-call windows leaked HWNDs and
+    crashed the WPF render thread with `UCEERR_RENDERTHREADFAILURE` at audio-sync frame rate. The
+    singleton was hoisted to `Core/MockToast.cs` so `MockProviderV2` and the legacy
+    `MockHapticProvider` share **one** window. Keep it that way.
+11. **The whole v1 provider path is dead code that still compiles.** `IHapticProvider`,
+    `LovenseProvider`, `ButtplugProvider`, `MockHapticProvider` are constructed by nothing
+    (`grep` for `new LovenseProvider()` returns zero call sites). A grep for "haptic provider" will
+    surface them; they are not the shipping path.
+12. **`LockdownService.cs` is mis-filed under `Services/Haptics/`.** Its namespace is
+    `ConditioningControlPanel.Services` and it has zero haptics coupling — it is strict-lock/panic
+    lockdown plumbing. Ignore it when reasoning about haptics.
+13. **Two unrelated classes named `HapticTrack`.** `Models/HapticTrack.cs` is the runtime
+    audio-analysis buffer used by AudioSync; `Models/Deeper/HapticTrack.cs` is the `.ccpenh.json`
+    event schema used by Deeper. Same name, different namespace, unrelated.
+14. **`EndAt` is computed from the UNSCALED envelope.** `HapticMixer.Play` derives a sequence's
+    `EndAt` before temperament scales attack/decay, so under Tease/Cruel an **awaited** legacy call
+    can complete a few tens of ms early or late relative to the audible tail. `ExpireActive` uses
+    the SCALED length, so nothing is ever cut short on the toy — this is cosmetic, but do not
+    "fix" it by making `ExpireActive` use the unscaled value.
+15. **`IsConnected` can still lie.** A VPN or routing change can break reachability while the flag
+    stays true. `PingAsync` touches the wire on both real providers; the 30 s watchdog tolerates
+    **3 consecutive** failures (~90 s) before dropping, so one blip does not kill a session (#302).
+16. **`ConnectAsync` returning true does not mean a toy exists.** `LovenseProviderV2` reports
+    success when Remote answers with zero toys (raising an informational `Error`) and picks toys up
+    on a 20 s poll as they pair. Neither the manager nor the UI should treat that as failure —
+    the wizard has a dedicated "Connected, but no toy yet" state for it.
+17. **Toy input is real hardware that most toys do not have.** Only some Lovense toys (via Game
+    Mode) and some Intiface devices raise button/strength events. `ToyInputService.IsAvailable`
+    gates the UI. A button press must always **ADD** to the mouse click for attention checks, never
+    replace it.
+18. **Still unverified against real hardware** (inherited open items): the Toy Events
+    access-request frame shape (two plausible forms are sent; the first five received frames log at
+    Debug — trim after a capture), `Position:` inside a Lovense `Function` action string
+    (Solace Pro), PatternV2 `Setup`→`Play` timing semantics, `battery`/`status` field types across
+    firmwares, and FunScript's 300 ms lead + 10→500 units/s speed mapping.
 
 ---
 
-## 13. STATUS & BACKLOG — snapshot 2026-07-23 (VERIFY with git before acting)
+## 14. STATUS & BACKLOG — snapshot 2026-08-03 (VERIFY with git before acting)
 
-- **State: mature and shipping.** No dedicated in-flight haptics branch; current HEAD `6571e5f4`
-  ("docs(primers): …") on `fix/web-video-interruptions` (v6.5.0). The provider/orchestrator core is
-  stable; recent-ish additions are the DTRH director (§6) and the Deeper stock-pattern path (§9c).
-- **Known unused / vestigial** (documented so they aren't "fixed" blindly): `GlobalIntensity` isn't
-  multiplied into triggers (§12.3); `VideoMode` is never read (§12.4); `BlinkEnabled` has no tab UI
-  (§8); `MockHapticProvider.Error` is never raised. None are user-facing bugs.
-- **Naming/filing hazards:** the two `HapticTrack` classes (§12.5) and the mis-filed
-  `LockdownService` (§12.8). Both are traps for grep-driven edits.
-- **Gating asymmetry:** premium enforcement is UI-only (§12.9) — worth remembering before wiring a new
-  automated caller.
-- **No dedicated xUnit coverage** was found for the haptics services in this pass; the pure-ish seams
-  worth a test if regressions appear are `ApplyVibrationModeAsync`, the Lovense level mappers, and
-  `HapticTrack.GetIntensityAt`. Verify current coverage with a quick grep before claiming any.
-- This primer is **new** and not previously committed.
+- **State: the v6.7 overhaul is code-complete on `feat/haptics-overhaul`.** Phases A–F are done and
+  ticked in `docs/HAPTICS_OVERHAUL_PLAN.md`; Phase G (ship prep) is in progress. `dotnet build` is
+  clean (0 errors) in that worktree.
+- **Done in Phase G so far:** all nine `Localization/Languages/*.json` carry the full
+  `haptics_*` / `wizard_*` / `btn_mock_test_mode` set (182 keys per language, strict-JSON verified);
+  the settings-migration round-trip has been exercised end to end (legacy v6.6.3 fragment → load →
+  `EnsureV2Migrated` → serialize → reload, nothing lost, rows seeded, `GlobalIntensity` preserved,
+  the ≤0.05 rescue and the schema-2 Luminance pass both confirmed).
+- **Left on Phase G:** Mock play-test via the automated UIA method (ABORT if an app instance you did
+  not start is already running), a real-toy pass by the owner, and the PR to `main`.
+- **Deferred on purpose:** the full keyframe designer that would unify the six stock modes with
+  Deeper's `StockHapticPatterns`. `Core/HapticPatterns.cs` is the single plug-in point and
+  `UpdateHapticPatternPreview()` already accepts an arbitrary envelope and carries the marked TODO.
+- **Engine-only, no consumer yet:** toy-button input for the lock-card alternative confirm and for
+  quest interaction. Only the video attention check is wired.
+- **Dead code awaiting deletion:** the v1 `IHapticProvider` path (§13.11). Left in-tree during the
+  overhaul so nothing had to be deleted and re-added; it is a safe removal once the branch lands.
+- **Test coverage:** `FunScript` (the pure parser/sampler) has unit tests. The mixer, the routing
+  migration and the Lovense quantizer are the next most testable seams. Verify current coverage
+  with a grep before claiming any.
 
 ---
 
-## 14. Build / run / dev
+## 15. Build / run / dev
 
 ```bash
 cd ConditioningControlPanel && dotnet build && dotnet run
 ```
-Haptics is Patreon-gated: unlock premium, open the **Haptics** tab, pick a provider (Mock needs no
-hardware and shows a corner toast), set the URL, **Connect**, then **Test**. For real devices, run the
-Lovense app (Remote on phone / Connect on PC) or Intiface Central first, then match the URL. Watch
-`logs/` for `Lovense …` / `ButtplugProvider …` / `SetSyncIntensity …` / `DtrhHaptics …` Serilog lines.
+
+Haptics is Patreon-gated. Unlock premium, open the **Haptics** tab, tick a provider (**Mock needs no
+hardware** and shows a corner toast with three virtual toys), **Connect**, then **Test** — or just
+run the setup wizard, which does all of it with progress and failure hints. For real toys: Lovense
+Remote on a phone with **Game Mode ON**, on the same Wi-Fi (the app finds the port itself), or
+Intiface Central running with its server started. Watch `logs/` for `LovenseV2 …` /
+`ButtplugV2 …` / `HapticMixer …` / `ToyInput …` / `FunScript …` / `DtrhHaptics …` Serilog lines.
+**PANIC STOP** in the connection strip is always live and bypasses everything.

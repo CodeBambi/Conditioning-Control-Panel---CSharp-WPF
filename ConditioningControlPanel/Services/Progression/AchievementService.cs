@@ -820,7 +820,8 @@ public class AchievementService : IDisposable
                 {
                     App.Logger?.Debug("Firing AchievementUnlocked event for: {Name}", achievement.Name);
                     AchievementUnlocked?.Invoke(this, achievement);
-                    _ = App.Haptics?.AchievementPatternAsync();
+                    // ONE call only: this fired twice, which stacked two overlapping copies of the
+                    // same pattern on the toy rather than making it play any stronger.
                     _ = App.Haptics?.AchievementPatternAsync();
                 }
                 catch (Exception ex)

@@ -1594,8 +1594,12 @@ namespace ConditioningControlPanel
             Catalogue = new CatalogueService();
             CatalogueLookup = new CatalogueLookupService();
 
-            // Auto-connect haptics if enabled (runs in background)
-            if (Settings.Current.Haptics.AutoConnect && Settings.Current.Haptics.Provider != Services.Haptics.HapticProviderType.Mock)
+            // Auto-connect haptics if enabled (runs in background).
+            // The v2 device manager connects every ENABLED provider concurrently and no-ops when
+            // none is enabled, so the old "skip when Provider == Mock" special case is gone: it
+            // meant a Mock user (the default provider!) could never auto-connect, and it could
+            // not express "Lovense + Intiface at once" either.
+            if (Settings.Current.Haptics.AutoConnect)
             {
                 _ = AutoConnectHapticsAsync();
             }

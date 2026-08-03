@@ -6,818 +6,1317 @@
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
+             xmlns:hx="clr-namespace:ConditioningControlPanel.Views.Controls"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="36,28,36,28" MaxWidth="1280" HorizontalAlignment="Center">
-    
-                <!-- Header -->
-                <Grid Margin="0,0,0,22">
+
+    <!-- ========================================================================
+         INFORMATION ARCHITECTURE (design pass, 2026-08-03)
+
+         The tab is functionally complete; what follows is only about WHAT IS
+         VISIBLE WHEN. Three tiers:
+
+           TIER 1 (first paint)  connection strip, ONE intensity slider, the
+                                 temperament chips, the toy cards, and a single
+                                 collapsed "Customize" door. Nothing else.
+           TIER 2 (one click)    Customize -> the routing list as compact rows
+                                 (a row opens to reveal its slider/pattern/target)
+                                 plus the Extras switch strip.
+           TIER 3 (two clicks)   Advanced -> safety ceiling, toy-control back-off,
+                                 media detail, DtRH tuning, audio DSP, pattern lab.
+
+         The default journey is: connect, pick a temperament, drag one slider,
+         leave. Everything else has to be asked for.
+
+         Converters and DataTemplates live in the UserControl's OWN Resources
+         root. A converter parked in a nested Grid.Resources is not visible from
+         inside a DataTemplate (the template is resolved against the template's
+         own scope), which is a trap this codebase has been bitten by before.
+         ======================================================================== -->
+    <UserControl.Resources>
+        <hx:BoolToStatusBrushConverter x:Key="StatusBrush"/>
+        <hx:EmptyStringToCollapsedConverter x:Key="EmptyToCollapsed"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Pill badge used for capability chips and the battery readout. -->
+        <Style x:Key="HapticChip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="9999"/>
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
+        <!-- Section card chrome, matching the Presets/Quests tabs. -->
+        <Style x:Key="HapticCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="#2E2E48"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="22,18"/>
+            <Setter Property="Margin" Value="0,0,0,14"/>
+        </Style>
+
+        <!-- Segmented picker chip (temperament). One RadioButton per preset: mutual exclusion,
+             keyboard support and focus come free, and the whole row reads as one control instead
+             of five buttons. -->
+        <Style x:Key="HapticSegmentChip" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,7,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Chip" CornerRadius="9999" Padding="18,7" BorderThickness="1"
+                                Background="{DynamicResource PanelBgBrush}"
+                                BorderBrush="{DynamicResource TransparentPink40Brush}">
+                            <TextBlock x:Name="ChipLabel" Text="{TemplateBinding Content}" FontSize="13"
+                                       Foreground="#CCCCCC" HorizontalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                <Setter TargetName="ChipLabel" Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chip" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                <Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                <Setter TargetName="ChipLabel" Property="Foreground" Value="White"/>
+                                <Setter TargetName="ChipLabel" Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="HapticCardTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Sub-section heading inside the Advanced drawer. Quieter than a card title:
+             Advanced is a list of small unrelated knobs, not six more cards. -->
+        <Style x:Key="HapticSubHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PinkSoftBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+
+        <Style x:Key="HapticSubCaption" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,-4,0,8"/>
+        </Style>
+
+        <!-- ============================ TIER-3 DRAWER =============================
+             One Border per Advanced sub-section so the drawer reads as a list of
+             calm blocks rather than a wall. -->
+        <Style x:Key="HapticAdvBlock" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="14,12"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+
+        <!-- ========================= ROUTING MATRIX =========================
+             At rest a row is: [toggle] icon name .................. "50% · Pulse · All"
+             The whole strip right of the toggle is one ToggleButton, so a click
+             anywhere on the row opens it; the toggle keeps its own hit area.
+             Only ONE row is open at a time (HapticRowExpansionScope). -->
+        <Style x:Key="HapticRowHeaderButton" TargetType="ToggleButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="RowShell" Background="Transparent" CornerRadius="7" Padding="8,6">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="RowShell" Property="Background" Value="#1EFFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="RowShell" Property="Background" Value="#22FF69B4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- The value pill: the entire row's configuration in one glance. Dimmed when the
+             row is off, because "Off" is a state, not a value. -->
+        <Style x:Key="HapticValuePill" TargetType="Border">
+            <Setter Property="CornerRadius" Value="9999"/>
+            <Setter Property="Padding" Value="10,3"/>
+            <Setter Property="Margin" Value="10,0,4,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RowEnabled}" Value="False">
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="HapticValuePillText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RowEnabled}" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+                    <Setter Property="FontWeight" Value="Normal"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="HapticRowLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RowEnabled}" Value="False">
+                    <Setter Property="Foreground" Value="#8C8CA5"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="HapticTinyLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- One provider status chip (Lovense / Intiface / Mock). -->
+        <DataTemplate x:Key="HapticProviderChipTemplate">
+            <Border CornerRadius="9999" Padding="10,4" Margin="0,0,8,0"
+                    Background="{DynamicResource PanelBgBrush}" BorderThickness="1"
+                    BorderBrush="{Binding IsConnected, Converter={StaticResource StatusBrush}}">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,6,0"
+                             Fill="{Binding IsConnected, Converter={StaticResource StatusBrush}}"/>
+                    <TextBlock Text="{Binding Label}" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- Capability chip (VIBE x2 / THRUST / DEPTH ...). -->
+        <DataTemplate x:Key="HapticCapabilityChipTemplate">
+            <Border Style="{StaticResource HapticChip}">
+                <TextBlock Text="{Binding}" Foreground="{DynamicResource PinkBrush}"
+                           FontSize="10" FontWeight="Bold"/>
+            </Border>
+        </DataTemplate>
+
+        <!-- ============================ TOY CARD ============================ -->
+        <DataTemplate x:Key="HapticToyCardTemplate">
+            <Border Width="330" Margin="0,0,12,12" CornerRadius="10" Padding="14,12"
+                    Background="{DynamicResource PanelBgBrush}" BorderThickness="1"
+                    BorderBrush="{DynamicResource GlassBorderBrush}">
+                <StackPanel>
+                    <!-- name + battery + per-toy enable -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{Binding Name}" Foreground="White" FontSize="14"
+                                       FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding ProviderLabel}" Foreground="{DynamicResource TextDimBrush}"
+                                       FontSize="10" Margin="0,1,0,0"/>
+                        </StackPanel>
+                        <Border Grid.Column="1" Style="{StaticResource HapticChip}" VerticalAlignment="Center"
+                                Margin="6,0,8,0" Visibility="{Binding BatteryVisibility}">
+                            <TextBlock Text="{Binding BatteryText}" Foreground="{DynamicResource SuccessGreenBrush}"
+                                       FontSize="10" FontWeight="Bold"/>
+                        </Border>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                  IsChecked="{Binding ToyEnabled, Mode=TwoWay}"
+                                  ToolTip="{loc:Str haptics_toy_enable_tip}"/>
+                    </Grid>
+
+                    <!-- capability chips -->
+                    <ItemsControl ItemsSource="{Binding Capabilities}"
+                                  ItemTemplate="{StaticResource HapticCapabilityChipTemplate}"
+                                  Margin="0,0,0,4">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+
+                    <!-- nickname -->
+                    <TextBlock Text="{loc:Str haptics_nickname}" Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="10" Margin="0,2,0,2"/>
+                    <TextBox Text="{Binding Nickname, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             Background="{DynamicResource DarkerBgBrush}" Foreground="White"
+                             BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                             CaretBrush="{DynamicResource PinkBrush}" Padding="6,4" FontSize="12"
+                             Margin="0,0,0,8"/>
+
+                    <!-- role -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str haptics_role}" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox Grid.Column="1" Style="{StaticResource DarkComboBoxStyle}" FontSize="11"
+                                  Height="24" SelectedIndex="{Binding RoleIndex, Mode=TwoWay}"
+                                  ToolTip="{loc:Str haptics_role_tip}">
+                            <ComboBoxItem Content="{loc:Str haptics_role_all}"/>
+                            <ComboBoxItem Content="{loc:Str haptics_role_reward}"/>
+                            <ComboBoxItem Content="{loc:Str haptics_role_punish}"/>
+                            <ComboBoxItem Content="{loc:Str haptics_role_ambient}"/>
+                        </ComboBox>
+                    </Grid>
+
+                    <!-- trim -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="42"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str haptics_trim}" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <Slider Grid.Column="1" Style="{StaticResource PinkSlider}" Minimum="0" Maximum="100"
+                                VerticalAlignment="Center" Value="{Binding TrimPercent, Mode=TwoWay}"
+                                ToolTip="{loc:Str haptics_trim_tip}"/>
+                        <TextBlock Grid.Column="2" Text="{Binding TrimText}" Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="11" FontWeight="Bold" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <Button Content="{loc:Str haptics_test_toy}" HorizontalAlignment="Stretch"
+                            Background="Transparent" Foreground="{DynamicResource PinkBrush}"
+                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                            Padding="8,5" FontSize="11" FontWeight="Bold" Cursor="Hand"
+                            Tag="{Binding DeviceKey}" Click="BtnHapticToyTest_Click"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- ======================= ROUTING ROW (compact) ======================= -->
+        <DataTemplate x:Key="HapticRoutingRowTemplate">
+            <StackPanel Margin="0,1">
+                <Grid ToolTip="{Binding Hint}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Image Grid.Column="0" Width="44" Height="44" VerticalAlignment="Center" Margin="0,0,16,0"
-                           Source="{Binding Source='💜', Converter={StaticResource EmojiToImageSource}}"/>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str tab_haptics}" Foreground="White" FontSize="26" FontWeight="Bold"/>
+
+                    <CheckBox Grid.Column="0" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Margin="4,0,8,0" IsChecked="{Binding RowEnabled, Mode=TwoWay}"/>
+
+                    <ToggleButton Grid.Column="1" Style="{StaticResource HapticRowHeaderButton}"
+                                  IsChecked="{Binding IsExpanded, Mode=TwoWay}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Image Grid.Column="0" Width="15" Height="15" VerticalAlignment="Center"
+                                   Margin="0,0,9,0"
+                                   Source="{Binding Icon, Converter={StaticResource EmojiToImageSource}}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Label}" Style="{StaticResource HapticRowLabel}"/>
+                            <Border Grid.Column="2" Style="{StaticResource HapticValuePill}">
+                                <TextBlock Text="{Binding ValueSummary}" Style="{StaticResource HapticValuePillText}"/>
+                            </Border>
+                            <TextBlock x:Name="RowChevron" Grid.Column="3" Text="&#x25B8;" FontSize="11"
+                                       Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center"
+                                       Margin="4,0,2,0" RenderTransformOrigin="0.5,0.5"/>
+                        </Grid>
+                    </ToggleButton>
+                </Grid>
+
+                <!-- The demanding controls. Present only while this row is the open one. -->
+                <Border Background="#1A000018" CornerRadius="8" Padding="14,10" Margin="52,2,4,6"
+                        Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="74"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="46"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{loc:Str haptics_col_intensity}" Style="{StaticResource HapticTinyLabel}"/>
+                            <Slider Grid.Column="1" Style="{StaticResource PinkSlider}" Minimum="0" Maximum="100"
+                                    Margin="6,0" VerticalAlignment="Center" IsEnabled="{Binding RowEnabled}"
+                                    Value="{Binding IntensityPercent, Mode=TwoWay}"/>
+                            <TextBlock Grid.Column="2" Text="{Binding IntensityText}"
+                                       Foreground="{DynamicResource PinkBrush}" FontSize="11" FontWeight="Bold"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <TextBlock Text="{loc:Str haptics_col_pattern}" Style="{StaticResource HapticTinyLabel}"
+                                       Width="74" Visibility="{Binding ModeVisibility}"/>
+                            <ComboBox Style="{StaticResource DarkComboBoxStyle}" FontSize="11" Height="24" Width="124"
+                                      Margin="6,0,0,0" VerticalAlignment="Center"
+                                      Visibility="{Binding ModeVisibility}"
+                                      IsEnabled="{Binding RowEnabled}"
+                                      SelectedIndex="{Binding ModeIndex, Mode=TwoWay}">
+                                <ComboBoxItem Content="{loc:Str btn_constant}"/>
+                                <ComboBoxItem Content="{loc:Str btn_pulse}"/>
+                                <ComboBoxItem Content="{loc:Str btn_wave}"/>
+                                <ComboBoxItem Content="{loc:Str btn_heartbeat}"/>
+                                <ComboBoxItem Content="{loc:Str btn_escalate}"/>
+                                <ComboBoxItem Content="{loc:Str btn_earthquake}"/>
+                            </ComboBox>
+
+                            <TextBlock Text="{loc:Str haptics_col_target}" Style="{StaticResource HapticTinyLabel}"
+                                       Margin="22,0,0,0"/>
+                            <ComboBox Style="{StaticResource DarkComboBoxStyle}" FontSize="11" Height="24" Width="112"
+                                      Margin="6,0,0,0" VerticalAlignment="Center"
+                                      IsEnabled="{Binding RowEnabled}"
+                                      SelectedIndex="{Binding RoleIndex, Mode=TwoWay}"
+                                      ToolTip="{loc:Str haptics_target_tip}">
+                                <ComboBoxItem Content="{loc:Str haptics_role_all}"/>
+                                <ComboBoxItem Content="{loc:Str haptics_role_reward}"/>
+                                <ComboBoxItem Content="{loc:Str haptics_role_punish}"/>
+                                <ComboBoxItem Content="{loc:Str haptics_role_ambient}"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Chevron state is a plain Setter, not a storyboard: a DataTemplate is
+                 re-realised per item and an animation clock left running on a recycled
+                 container is a much worse trade than losing a 150 ms rotate. -->
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                    <Setter TargetName="RowChevron" Property="Foreground"
+                            Value="{DynamicResource PinkBrush}"/>
+                    <Setter TargetName="RowChevron" Property="RenderTransform">
+                        <Setter.Value>
+                            <RotateTransform Angle="90"/>
+                        </Setter.Value>
+                    </Setter>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="HapticRoutingGroupTemplate">
+            <StackPanel Margin="0,0,0,16">
+                <StackPanel Orientation="Horizontal" Margin="2,0,0,5">
+                    <Image Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,6,0"
+                           Source="{Binding Icon, Converter={StaticResource EmojiToImageSource}}"/>
+                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource PinkSoftBrush}"
+                               FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                </StackPanel>
+                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="10" Padding="6,6">
+                    <ItemsControl ItemsSource="{Binding Rows}"
+                                  ItemTemplate="{StaticResource HapticRoutingRowTemplate}"/>
+                </Border>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="36,22,36,28" MaxWidth="1280" HorizontalAlignment="Center">
+
+            <!-- ============================ HEADER ============================ -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Image Grid.Column="0" Width="34" Height="34" VerticalAlignment="Center" Margin="0,0,14,0"
+                       Source="{Binding Source='&#x1F49C;', Converter={StaticResource EmojiToImageSource}}"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:Str tab_haptics}" Foreground="White" FontSize="24" FontWeight="Bold"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Description card. Deliberately short now: it used to spend a third of the
+                 first viewport listing per-feature sliders that are no longer the point. -->
+            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="18,14" Margin="0,0,0,14">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="18"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="96" Height="96" CornerRadius="10" ClipToBounds="True"
+                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" VerticalAlignment="Center">
+                        <Image x:Name="ImgHapticsVibeDesc" x:FieldModifier="internal"
+                               Source="pack://application:,,,/Resources/features/vibe.png"
+                               Stretch="UniformToFill"/>
+                    </Border>
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str label_what_is_this}" Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:Str desc_haptics}" Foreground="White" FontSize="14"
+                                   TextWrapping="Wrap" LineHeight="21"/>
                     </StackPanel>
                 </Grid>
-    
-                <!-- Description card (always visible) -->
-                <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
-                        BorderThickness="1" CornerRadius="12" Padding="24,20" Margin="0,0,0,22">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="22"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Width="160" Height="160" CornerRadius="12" ClipToBounds="True"
-                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" VerticalAlignment="Top">
-                            <Image x:Name="ImgHapticsVibeDesc" x:FieldModifier="internal"
-                                   Source="pack://application:,,,/Resources/features/vibe.png"
-                                   Stretch="UniformToFill"/>
-                        </Border>
-                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                            <TextBlock Text="{loc:Str label_what_is_this}" Foreground="{DynamicResource PinkBrush}"
-                                       FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="{loc:Str desc_haptics}" Foreground="White" FontSize="15"
-                                       TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="22"/>
-                            <TextBlock Text="{loc:Str desc_haptics_bullets}"
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
-                                       TextWrapping="Wrap" LineHeight="20"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-    
-                <!-- Interactive controls + translucent gating overlay -->
-                <Grid>
-                    <Grid>
-                <!-- Haptics Content (enabled for Patreon supporters) -->
+            </Border>
+
+            <!-- Interactive controls + translucent premium gate -->
+            <Grid>
                 <Grid x:Name="HapticsContentGrid" x:FieldModifier="internal">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="14"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-    
-                <!-- ============ SECTION 1: CONNECTION ============ -->
-                <Grid Grid.Row="0">
-                    <Border x:Name="HapticsConnectionBox" x:FieldModifier="internal" CornerRadius="10" Padding="22,18"
-                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1">
-                        <StackPanel>
-                            <!-- Header: title + master toggle -->
-                            <Grid Margin="0,0,0,16">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,10,0"
-                                           Source="{Binding Source='🔌', Converter={StaticResource EmojiToImageSource}}"/>
-                                    <TextBlock Text="{loc:Str label_haptic_connection}" Foreground="{DynamicResource PinkBrush}"
-                                               FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
-                                    <Button x:Name="HelpBtnHaptics" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="Haptics"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str btn_enable}" Foreground="#AAA" FontSize="12"
-                                               VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <CheckBox x:Name="ChkHapticsEnabled" x:FieldModifier="internal" feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}"
-                                              VerticalAlignment="Center"
-                                              Checked="ChkHapticsEnabled_Changed" Unchecked="ChkHapticsEnabled_Changed"/>
-                                </StackPanel>
-                            </Grid>
-    
-                            <!-- Provider + URL + Connect (single horizontal row) -->
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="200"/>
-                                    <ColumnDefinition Width="12"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="12"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="{loc:Str label_provider}" Foreground="White" FontSize="13"
-                                           VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                <ComboBox x:Name="CmbHapticProvider" x:FieldModifier="internal" Grid.Column="1" Padding="8,4" FontSize="13"
-                                          Background="{DynamicResource SurfaceBgBrush}" Foreground="Black" BorderThickness="0"
-                                          SelectionChanged="CmbHapticProvider_SelectionChanged">
-                                    <ComboBoxItem Content="{loc:Str btn_lovense_connect}" Tag="Lovense" Foreground="Black"/>
-                                    <ComboBoxItem Content="{loc:Str btn_buttplug_io_intiface}" Tag="Buttplug" Foreground="Black"/>
-                                </ComboBox>
-                                <TextBox x:Name="TxtHapticUrl" x:FieldModifier="internal" Grid.Column="3"
-                                         Background="#FFFFFF" Foreground="Black" BorderThickness="1"
-                                         BorderBrush="{DynamicResource PanelAccentBrush}" Padding="8,6" FontSize="13"
-                                         VerticalContentAlignment="Center"
-                                         TextChanged="TxtHapticUrl_TextChanged">
-                                    <TextBox.ToolTip>
-                                        <ToolTip Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1" Padding="12">
-                                            <StackPanel MaxWidth="280">
-                                                <TextBlock Text="{loc:Str label_connection_guide}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,8"/>
-                                                <TextBlock Text="{loc:Str label_lovense_connect}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold"/>
-                                                <TextBlock Foreground="#CCCCCC" FontSize="10" TextWrapping="Wrap" Margin="0,2,0,6">
-                                                    <Run Text="1."/><Run Text="{loc:Str label_open_lovense_remote_app}" Foreground="White"/>
-                                                    <LineBreak/><Run Text="2."/><Run Text="{loc:Str label_go_to_settings_game_mode}" Foreground="White"/>
-                                                    <LineBreak/><Run Text="3."/><Run Text="{loc:Str label_enable_game_mode_note_the_ip}" Foreground="White"/>
-                                                    <LineBreak/><Run Text="4."/><Run Text="{loc:Str label_enter_http_ip_30010}" Foreground="{DynamicResource PinkBrush}"/>
-                                                </TextBlock>
-                                                <TextBlock Text="{loc:Str label_buttplug_io_intiface}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold"/>
-                                                <TextBlock Foreground="#CCCCCC" FontSize="10" TextWrapping="Wrap" Margin="0,2,0,0">
-                                                    <Run Text="1."/><Run Text="{loc:Str label_open_intiface_central}" Foreground="White"/>
-                                                    <LineBreak/><Run Text="2."/><Run Text="{loc:Str label_click_start_server}" Foreground="White"/>
-                                                    <LineBreak/><Run Text="3."/><Run Text="{loc:Str label_click_start_scanning_for_devices}" Foreground="White"/>
-                                                    <LineBreak/><Run Text="4."/><Run Text="{loc:Str label_use_ws_localhost_12345}" Foreground="{DynamicResource PinkBrush}"/>
-                                                </TextBlock>
-                                            </StackPanel>
-                                        </ToolTip>
-                                    </TextBox.ToolTip>
-                                </TextBox>
-                                <Button x:Name="BtnHapticConnect" x:FieldModifier="internal" Grid.Column="5" Content="{loc:Str btn_connect}"
-                                        Background="{DynamicResource PinkBrush}" Foreground="White"
-                                        BorderThickness="0" Padding="18,8"
-                                        FontSize="13" FontWeight="Bold" Cursor="Hand"
-                                        Click="BtnHapticConnect_Click"/>
-                            </Grid>
-    
-                            <!-- URL hint + auto-connect (single row) -->
-                            <Grid Margin="0,0,0,14">
-                                <TextBlock x:Name="TxtHapticUrlHint" x:FieldModifier="internal"
-                                           Text="{loc:Str label_lovense_enter_ip_from_lovense_remote_settings}"
-                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
-                                           TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                <CheckBox x:Name="ChkHapticAutoConnect" x:FieldModifier="internal" Content="{loc:Str setting_auto_connect_on_startup}"
-                                          Foreground="#CCCCCC" FontSize="12" HorizontalAlignment="Right"
-                                          Checked="ChkHapticAutoConnect_Changed" Unchecked="ChkHapticAutoConnect_Changed"
-                                          ToolTip="{loc:Str tooltip_automatically_connect_to_your_haptic_device_w}"/>
-                            </Grid>
-    
-                            <!-- Status + Master Intensity + Test (in inset card) -->
-                            <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="16,12">
-                                <StackPanel>
-                                    <!-- Status row -->
-                                    <Grid Margin="0,0,0,10">
-                                        <StackPanel Orientation="Horizontal">
-                                            <!-- Named so the FX pass can breathe a glow behind it while
-                                                 a device is actually connected. Fill stays owned by
-                                                 BtnHapticConnect_Click. -->
+                    <StackPanel>
+
+                        <!-- ============ TIER 1.1 — CONNECTION STRIP ============
+                             Everything a first-run user needs and nothing they don't:
+                             who is connected, how many toys, Connect, PANIC STOP, the
+                             master enable. Provider checkboxes and the Lovense address
+                             live one click down, in "Set up connection" — the wizard
+                             writes both of them anyway. -->
+                        <Border x:Name="HapticsConnectionBox" x:FieldModifier="internal"
+                                Style="{StaticResource HapticCard}">
+                            <StackPanel>
+                                <!-- title + master toggle -->
+                                <Grid Margin="0,0,0,12">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="20" Height="20" VerticalAlignment="Center" Margin="0,0,10,0"
+                                               Source="{Binding Source='&#x1F50C;', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str label_haptic_connection}" Style="{StaticResource HapticCardTitle}"/>
+                                        <Button x:Name="HelpBtnHaptics" x:FieldModifier="internal"
+                                                Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center"
+                                                Margin="8,0,0,0" Tag="Haptics"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Str btn_enable}" Foreground="#AAA" FontSize="12"
+                                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <CheckBox x:Name="ChkHapticsEnabled" x:FieldModifier="internal"
+                                                  feat:SessionLock.Owned="True" Style="{StaticResource ToggleStyle}"
+                                                  VerticalAlignment="Center"
+                                                  Checked="ChkHapticsEnabled_Changed" Unchecked="ChkHapticsEnabled_Changed"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- provider chips + device count + connect + panic -->
+                                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="14,12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <ItemsControl x:Name="ProviderChipsList" x:FieldModifier="internal"
+                                                      Grid.Column="0" VerticalAlignment="Center"
+                                                      ItemTemplate="{StaticResource HapticProviderChipTemplate}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                                    Margin="10,0,10,0">
                                             <Ellipse x:Name="HapticStatusDot" x:FieldModifier="internal"
-                                                     Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center" Fill="#FF6B6B"/>
-                                            <TextBlock Text="{loc:Str label_status}" Foreground="{DynamicResource TextMutedBrush}" FontSize="13" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="TxtHapticStatus" x:FieldModifier="internal" Text="{loc:Str label_disconnected}"
-                                                       Foreground="#FF6B6B" FontSize="13" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                                     Width="10" Height="10" Margin="0,0,8,0"
+                                                     VerticalAlignment="Center" Fill="#FF6B6B"/>
+                                            <TextBlock x:Name="TxtHapticStatus" x:FieldModifier="internal"
+                                                       Text="{loc:Str label_disconnected}" Foreground="#FF6B6B"
+                                                       FontSize="12" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="TxtHapticDevices" x:FieldModifier="internal"
+                                                       Text="{loc:Str label_no_devices}" Foreground="{DynamicResource TextDimBrush}"
+                                                       FontSize="12" Margin="10,0,0,0" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
-                                        <TextBlock x:Name="TxtHapticDevices" x:FieldModifier="internal" Text="{loc:Str label_no_devices}"
-                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="12"
-                                                   HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                                    </Grid>
-                                    <!-- Intensity slider + test -->
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="50"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{loc:Str label_intensity}" Foreground="White" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                                        <Slider x:Name="SliderHapticIntensity" x:FieldModifier="internal" Grid.Column="1"
-                                                Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="100" Value="70" VerticalAlignment="Center"
-                                                ValueChanged="SliderHapticIntensity_ValueChanged"/>
-                                        <TextBlock x:Name="TxtHapticIntensity" x:FieldModifier="internal" Grid.Column="2" Text="70%"
-                                                   Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        <Button x:Name="BtnHapticTest" Grid.Column="3" Content="{loc:Str btn_test_vibration}"
-                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
-                                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                                Padding="14,8" Margin="12,0,0,0"
-                                                FontSize="13" FontWeight="Bold" Cursor="Hand"
-                                                Click="BtnHapticTest_Click"/>
-                                    </Grid>
-                                </StackPanel>
-                            </Border>
-    
-                            <!-- Help link -->
-                            <Button x:Name="BtnHapticsHelp" Content="{loc:Str btn_need_help_setting_up}"
-                                    HorizontalAlignment="Left" Margin="0,10,0,0" Background="Transparent"
-                                    Foreground="{DynamicResource PinkBrush}" BorderThickness="0" FontSize="12"
-                                    Cursor="Hand" Click="BtnHapticsHelp_Click" Padding="0">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <TextBlock Text="{TemplateBinding Content}"
-                                                               Foreground="{TemplateBinding Foreground}"
-                                                               FontSize="{TemplateBinding FontSize}"
-                                                               TextDecorations="Underline"/>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-                        </StackPanel>
-                    </Border>
-                    <!-- Lock Overlay (legacy, hidden — gating handled by HapticsGate) -->
-                    <Border x:Name="HapticsConnectionLock" x:FieldModifier="internal" Background="#80000000" CornerRadius="10" Visibility="Collapsed">
-                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                            <Image Width="36" Height="36" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str label_patreon_only_2}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-    
-                <!-- ============ SECTION 2: PER-FEATURE INTENSITY ============ -->
-                <Grid Grid.Row="2">
-                    <Border x:Name="HapticsFeatureBox" x:FieldModifier="internal" CornerRadius="10" Padding="22,18"
-                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1">
-                        <StackPanel>
-                            <!-- Header -->
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                <Image Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,10,0"
-                                       Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
-                                <TextBlock Text="{loc:Str section_feature_intensity}" Foreground="{DynamicResource PinkBrush}"
-                                           FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <TextBlock Text="{loc:Str label_adjust_vibration_strength_per_feature}"
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,14"/>
-    
-                            <!-- 2-column feature grid -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="22"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-    
-                                <!-- LEFT COLUMN: 5 features -->
-                                <StackPanel Grid.Column="0">
-    
-                                    <!-- Bubble Pop -->
-                                    <Grid Margin="0,5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="44"/>
-                                            <ColumnDefinition Width="100"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="38"/>
-                                            <ColumnDefinition Width="92"/>
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox x:Name="ChkHapticBubble" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                  VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Bubble"/>
-                                        <TextBlock Grid.Column="1" Text="{loc:Str label_bubbles}" Foreground="White" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                        <Slider x:Name="SliderHapticBubble" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="100" Value="50" Margin="5,0" VerticalAlignment="Center"
-                                                ValueChanged="SliderHapticFeature_Changed" Tag="Bubble"/>
-                                        <TextBlock x:Name="TxtHapticBubble" x:FieldModifier="internal" Grid.Column="3" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                        <ComboBox x:Name="CmbHapticBubbleMode" x:FieldModifier="internal" Grid.Column="4" SelectedIndex="0" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"
-                                                  Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                  SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Bubble">
-                                            <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                        </ComboBox>
-                                    </Grid>
-    
-                                    <!-- Flash Display -->
-                                    <Grid Margin="0,5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="44"/>
-                                            <ColumnDefinition Width="100"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="38"/>
-                                            <ColumnDefinition Width="92"/>
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox x:Name="ChkHapticFlashDisplay" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                  VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="FlashDisplay"/>
-                                        <TextBlock Grid.Column="1" Text="{loc:Str label_flash_show}" Foreground="White" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                        <Slider x:Name="SliderHapticFlashDisplay" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="100" Value="50" Margin="5,0" VerticalAlignment="Center"
-                                                ValueChanged="SliderHapticFeature_Changed" Tag="FlashDisplay"/>
-                                        <TextBlock x:Name="TxtHapticFlashDisplay" x:FieldModifier="internal" Grid.Column="3" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                        <ComboBox x:Name="CmbHapticFlashDisplayMode" x:FieldModifier="internal" Grid.Column="4" SelectedIndex="0" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"
-                                                  Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                  SelectionChanged="CmbHapticMode_SelectionChanged" Tag="FlashDisplay">
-                                            <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                        </ComboBox>
-                                    </Grid>
-    
-                                    <!-- Flash Click -->
-                                    <Grid Margin="0,5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="44"/>
-                                            <ColumnDefinition Width="100"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="38"/>
-                                            <ColumnDefinition Width="92"/>
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox x:Name="ChkHapticFlashClick" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                  VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="FlashClick"/>
-                                        <TextBlock Grid.Column="1" Text="{loc:Str label_flash_click}" Foreground="White" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                        <Slider x:Name="SliderHapticFlashClick" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="100" Value="50" Margin="5,0" VerticalAlignment="Center"
-                                                ValueChanged="SliderHapticFeature_Changed" Tag="FlashClick"/>
-                                        <TextBlock x:Name="TxtHapticFlashClick" x:FieldModifier="internal" Grid.Column="3" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                        <ComboBox x:Name="CmbHapticFlashClickMode" x:FieldModifier="internal" Grid.Column="4" SelectedIndex="0" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"
-                                                  Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                  SelectionChanged="CmbHapticMode_SelectionChanged" Tag="FlashClick">
-                                            <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                        </ComboBox>
-                                    </Grid>
-    
-                                    <!-- Video -->
-                                    <Grid Margin="0,5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="44"/>
-                                            <ColumnDefinition Width="100"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="38"/>
-                                            <ColumnDefinition Width="92"/>
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox x:Name="ChkHapticVideo" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                  VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Video"/>
-                                        <TextBlock Grid.Column="1" Text="{loc:Str tab_videos}" Foreground="White" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                        <Slider x:Name="SliderHapticVideo" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="100" Value="50" Margin="5,0" VerticalAlignment="Center"
-                                                ValueChanged="SliderHapticFeature_Changed" Tag="Video"/>
-                                        <TextBlock x:Name="TxtHapticVideo" x:FieldModifier="internal" Grid.Column="3" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                        <ComboBox x:Name="CmbHapticVideoMode" x:FieldModifier="internal" Grid.Column="4" SelectedIndex="0" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"
-                                                  Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                  SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Video">
-                                            <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                        </ComboBox>
-                                    </Grid>
-    
-                                    <!-- Target Hit (video attention targets) -->
-                                    <Grid Margin="0,5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="44"/>
-                                            <ColumnDefinition Width="100"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="38"/>
-                                            <ColumnDefinition Width="92"/>
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox x:Name="ChkHapticTargetHit" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                  VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="TargetHit"/>
-                                        <TextBlock Grid.Column="1" Text="{loc:Str label_target_hit}" Foreground="White" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                        <Slider x:Name="SliderHapticTargetHit" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="100" Value="70" Margin="5,0" VerticalAlignment="Center"
-                                                ValueChanged="SliderHapticFeature_Changed" Tag="TargetHit"/>
-                                        <TextBlock x:Name="TxtHapticTargetHit" x:FieldModifier="internal" Grid.Column="3" Text="70%" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                        <ComboBox x:Name="CmbHapticTargetHitMode" x:FieldModifier="internal" Grid.Column="4" SelectedIndex="1" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"
-                                                  Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                  SelectionChanged="CmbHapticMode_SelectionChanged" Tag="TargetHit">
-                                            <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                        </ComboBox>
-                                    </Grid>
-    
-                                </StackPanel>
-    
-                                <!-- RIGHT COLUMN: 4 features -->
-                                <StackPanel Grid.Column="2">
-    
-                                    <!-- Subliminal -->
-                                    <Grid Margin="0,5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="44"/>
-                                            <ColumnDefinition Width="100"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="38"/>
-                                            <ColumnDefinition Width="92"/>
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox x:Name="ChkHapticSubliminal" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                  VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Subliminal"/>
-                                        <TextBlock Grid.Column="1" Text="{loc:Str tab_subliminals}" Foreground="White" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                        <Slider x:Name="SliderHapticSubliminal" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="100" Value="50" Margin="5,0" VerticalAlignment="Center"
-                                                ValueChanged="SliderHapticFeature_Changed" Tag="Subliminal"/>
-                                        <TextBlock x:Name="TxtHapticSubliminal" x:FieldModifier="internal" Grid.Column="3" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                        <ComboBox x:Name="CmbHapticSubliminalMode" x:FieldModifier="internal" Grid.Column="4" SelectedIndex="1" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"
-                                                  Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                  SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Subliminal">
-                                            <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                        </ComboBox>
-                                    </Grid>
-    
-                                    <!-- Level Up -->
-                                    <Grid Margin="0,5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="44"/>
-                                            <ColumnDefinition Width="100"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="38"/>
-                                            <ColumnDefinition Width="92"/>
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox x:Name="ChkHapticLevelUp" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                  VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="LevelUp"/>
-                                        <TextBlock Grid.Column="1" Text="{loc:Str label_level_up}" Foreground="White" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                        <Slider x:Name="SliderHapticLevelUp" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="100" Value="50" Margin="5,0" VerticalAlignment="Center"
-                                                ValueChanged="SliderHapticFeature_Changed" Tag="LevelUp"/>
-                                        <TextBlock x:Name="TxtHapticLevelUp" x:FieldModifier="internal" Grid.Column="3" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                        <ComboBox x:Name="CmbHapticLevelUpMode" x:FieldModifier="internal" Grid.Column="4" SelectedIndex="4" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"
-                                                  Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                  SelectionChanged="CmbHapticMode_SelectionChanged" Tag="LevelUp">
-                                            <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                        </ComboBox>
-                                    </Grid>
-    
-                                    <!-- Achievement -->
-                                    <Grid Margin="0,5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="44"/>
-                                            <ColumnDefinition Width="100"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="38"/>
-                                            <ColumnDefinition Width="92"/>
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox x:Name="ChkHapticAchievement" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                  VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Achievement"/>
-                                        <TextBlock Grid.Column="1" Text="{loc:Str tab_achievements}" Foreground="White" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                        <Slider x:Name="SliderHapticAchievement" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="100" Value="50" Margin="5,0" VerticalAlignment="Center"
-                                                ValueChanged="SliderHapticFeature_Changed" Tag="Achievement"/>
-                                        <TextBlock x:Name="TxtHapticAchievement" x:FieldModifier="internal" Grid.Column="3" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                        <ComboBox x:Name="CmbHapticAchievementMode" x:FieldModifier="internal" Grid.Column="4" SelectedIndex="3" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"
-                                                  Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                  SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Achievement">
-                                            <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                        </ComboBox>
-                                    </Grid>
-    
-                                    <!-- Bouncing Text -->
-                                    <Grid Margin="0,5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="44"/>
-                                            <ColumnDefinition Width="100"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="38"/>
-                                            <ColumnDefinition Width="92"/>
-                                        </Grid.ColumnDefinitions>
-                                        <CheckBox x:Name="ChkHapticBouncingText" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                  VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="BouncingText"/>
-                                        <TextBlock Grid.Column="1" Text="{loc:Str label_bounce_text}" Foreground="White" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                        <Slider x:Name="SliderHapticBouncingText" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="100" Value="50" Margin="5,0" VerticalAlignment="Center"
-                                                ValueChanged="SliderHapticFeature_Changed" Tag="BouncingText"/>
-                                        <TextBlock x:Name="TxtHapticBouncingText" x:FieldModifier="internal" Grid.Column="3" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                        <ComboBox x:Name="CmbHapticBouncingTextMode" x:FieldModifier="internal" Grid.Column="4" SelectedIndex="1" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"
-                                                  Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                  SelectionChanged="CmbHapticMode_SelectionChanged" Tag="BouncingText">
-                                            <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                        </ComboBox>
-                                    </Grid>
-    
-                                </StackPanel>
-                            </Grid>
-    
-                    <!-- Down the Rabbit Hole - event-driven descent haptics (DtrhHapticDirector) -->
-                    <Border x:Name="DtrhHapticCard" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1,2,1,1"
-                            CornerRadius="8" Margin="0,12,0,0" Background="{DynamicResource SurfaceBgBrush}">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
 
-                            <!-- Header: title + enable toggle -->
-                            <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="8,8,0,0" Padding="12,10">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Image Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,6,0"
-                                                   Source="{Binding Source='🐇', Converter={StaticResource EmojiToImageSource}}"/>
-                                            <TextBlock Text="{loc:Str label_dtrh_haptics}" Foreground="{DynamicResource SecondaryBrush}"
-                                                       FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                        <TextBlock Text="{loc:Str label_dtrh_haptics_sub}"
-                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Str btn_enable}" Foreground="#AAAAAA" FontSize="10"
-                                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <CheckBox x:Name="ChkHapticDtrh" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                                  IsChecked="True" Tag="Dtrh"
-                                                  Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
+                                        <Button x:Name="BtnHapticConnect" x:FieldModifier="internal" Grid.Column="2"
+                                                Content="{loc:Str btn_connect}" Background="{DynamicResource PinkBrush}"
+                                                Foreground="White" BorderThickness="0" Padding="18,8" FontSize="13"
+                                                FontWeight="Bold" Cursor="Hand" Click="BtnHapticConnect_Click"/>
 
-                            <!-- Accents + Ambient sliders, Density picker -->
-                            <Grid Grid.Row="1" Margin="12,10,12,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="12"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="12"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel Grid.Column="0">
-                                    <Grid>
-                                        <TextBlock Text="{loc:Str label_dtrh_accents}" Foreground="#AAAAAA" FontSize="10"/>
-                                        <TextBlock x:Name="TxtHapticDtrh" x:FieldModifier="internal" Text="60%"
-                                                   Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
-                                                   HorizontalAlignment="Right"/>
+                                        <!-- Panic stop: never gated behind a confirmation, never subtle. -->
+                                        <Button x:Name="BtnHapticPanic" x:FieldModifier="internal" Grid.Column="3"
+                                                Background="#B3202A" Foreground="White" BorderBrush="#FF6B6B"
+                                                BorderThickness="1" Padding="16,8" Margin="10,0,0,0" FontSize="13"
+                                                FontWeight="Bold" Cursor="Hand" Click="BtnHapticPanic_Click"
+                                                ToolTip="{loc:Str haptics_panic_tip}">
+                                            <helpers:EmojiTextBlock Text="{loc:Str haptics_panic_stop}"/>
+                                        </Button>
                                     </Grid>
-                                    <Slider x:Name="SliderHapticDtrh" x:FieldModifier="internal" Style="{StaticResource PinkSlider}"
-                                            Minimum="0" Maximum="100" Value="60" Margin="0,4,0,0" Tag="Dtrh"
-                                            ValueChanged="SliderHapticFeature_Changed"
-                                            ToolTip="{loc:Str tooltip_dtrh_accents}"/>
-                                </StackPanel>
+                                </Border>
 
-                                <StackPanel Grid.Column="2">
-                                    <Grid>
-                                        <TextBlock Text="{loc:Str label_dtrh_ambient}" Foreground="#AAAAAA" FontSize="10"/>
-                                        <TextBlock x:Name="TxtHapticDtrhAmbient" x:FieldModifier="internal" Text="12%"
-                                                   Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
-                                                   HorizontalAlignment="Right"/>
-                                    </Grid>
-                                    <Slider x:Name="SliderHapticDtrhAmbient" x:FieldModifier="internal" Style="{StaticResource PinkSlider}"
-                                            Minimum="0" Maximum="60" Value="12" Margin="0,4,0,0" Tag="DtrhAmbient"
-                                            ValueChanged="SliderHapticFeature_Changed"
-                                            ToolTip="{loc:Str tooltip_dtrh_ambient}"/>
-                                </StackPanel>
+                                <!-- live one-liner from the engine (panic done, test failed, ...) -->
+                                <TextBlock x:Name="TxtHapticActivity" x:FieldModifier="internal" Text=""
+                                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                                           Margin="2,8,0,0" TextWrapping="Wrap"
+                                           Visibility="{Binding Text, RelativeSource={RelativeSource Self}, Converter={StaticResource EmptyToCollapsed}}"/>
 
-                                <StackPanel Grid.Column="4" VerticalAlignment="Bottom">
-                                    <TextBlock Text="{loc:Str label_dtrh_density}" Foreground="#AAAAAA" FontSize="10" Margin="0,0,0,2"/>
-                                    <ComboBox x:Name="CmbHapticDtrhDensity" x:FieldModifier="internal" Width="100" FontSize="11"
-                                              SelectedIndex="1" VerticalAlignment="Center"
-                                              Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}"
-                                              BorderBrush="{DynamicResource SecondaryBrush}"
-                                              SelectionChanged="CmbHapticDtrhDensity_SelectionChanged">
-                                        <ComboBoxItem Content="{loc:Str btn_density_sparse}" Foreground="{DynamicResource PinkBrush}"/>
-                                        <ComboBoxItem Content="{loc:Str btn_density_balanced}" Foreground="{DynamicResource PinkBrush}"/>
-                                        <ComboBoxItem Content="{loc:Str btn_density_rich}" Foreground="{DynamicResource PinkBrush}"/>
-                                    </ComboBox>
-                                </StackPanel>
-                            </Grid>
-                        </Grid>
-                    </Border>
-
-                    <!-- Video Haptic Sync - Enhanced Featured Card -->
-                    <Border x:Name="VideoHapticSyncCard" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1,2,1,1"
-                            CornerRadius="8" Margin="0,12,0,0" Background="{DynamicResource SurfaceBgBrush}">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-    
-                            <!-- Row 0: Header Section -->
-                            <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="8,8,0,0" Padding="12,10">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-    
-                                    <!-- Title and Description -->
-                                    <StackPanel Grid.Column="0">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Image Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,6,0"
-                                                   Source="{Binding Source='🎵', Converter={StaticResource EmojiToImageSource}}"/>
-                                            <TextBlock Text="{loc:Str label_video_haptic_sync}" Foreground="{DynamicResource SecondaryBrush}"
-                                                       FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                        <TextBlock Text="{loc:Str label_syncs_haptics_to_video_audio_in_real_time}"
-                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
-                                    </StackPanel>
-    
-                                    <!-- Help Button -->
-                                    <Button x:Name="HelpBtnVideoHapticSync" x:FieldModifier="internal" Grid.Column="1"
-                                            Style="{StaticResource HelpButtonStyle}" Tag="VideoHapticSync"
-                                            Margin="0,0,10,0"/>
-    
-                                    <!-- Master Enable Toggle -->
-                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Str btn_enable}" Foreground="#AAAAAA" FontSize="10"
-                                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <CheckBox x:Name="ChkHapticAudioSync" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                                  IsChecked="False"
-                                                  Checked="ChkHapticAudioSync_Changed"
-                                                  Unchecked="ChkHapticAudioSync_Changed"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-    
-                            <!-- Row 1: Algorithm Cards (left) + Image (right) -->
-                            <Grid Grid.Row="1" Margin="12,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="10"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-    
-                                <!-- Left: Algorithm Selection Cards (stacked vertically) -->
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str label_sync_algorithm}" Foreground="#AAAAAA" FontSize="10" Margin="0,0,0,5"/>
-    
-                                    <!-- Algorithm 1: Audio Reactive (Enabled) -->
-                                    <Border x:Name="AlgorithmCardAudioReactive"
-                                            Background="{DynamicResource PanelBgBrush}" CornerRadius="4" Padding="8,5" Cursor="Hand"
-                                            BorderThickness="2" BorderBrush="{DynamicResource SecondaryBrush}" Margin="0,0,0,3"
-                                            MouseLeftButtonDown="AlgorithmCard_Click" Tag="AudioReactive">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="#2A2A4E"/>
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
+                                <!-- - one click down: the setup that the wizard normally writes - -->
+                                <Expander x:Name="HapticConnectionSetup" x:FieldModifier="internal"
+                                          Style="{StaticResource CollapsibleCard}" IsExpanded="False" Margin="0,12,0,-10">
+                                    <Expander.Header>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{loc:Str label_audio_reactive}" Foreground="White"
-                                                       FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                            <Ellipse x:Name="AlgorithmIndicatorAudioReactive" Grid.Column="1"
-                                                     Width="6" Height="6" Fill="{DynamicResource SecondaryBrush}"
-                                                     VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{loc:Str haptics_connection_setup}" Foreground="{DynamicResource PinkBrush}"
+                                                           FontSize="13" FontWeight="Bold"/>
+                                                <TextBlock Text="{loc:Str haptics_connection_setup_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                                           FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                            <Button x:Name="BtnHapticsHelp" x:FieldModifier="internal" Grid.Column="1"
+                                                    Content="{loc:Str btn_need_help_setting_up}" Background="Transparent"
+                                                    Foreground="{DynamicResource PinkBrush}" BorderThickness="0" FontSize="12"
+                                                    Cursor="Hand" Click="BtnHapticsHelp_Click" Padding="0" Margin="12,0,10,0"
+                                                    VerticalAlignment="Center">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="Button">
+                                                                    <TextBlock Text="{TemplateBinding Content}"
+                                                                               Foreground="{TemplateBinding Foreground}"
+                                                                               FontSize="{TemplateBinding FontSize}"
+                                                                               TextDecorations="Underline"/>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
                                         </Grid>
-                                    </Border>
-    
-                                    <!-- Algorithm 2: Beat Detection (Coming Soon) -->
-                                    <Grid Margin="0,0,0,3">
-                                        <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="4" Padding="8,5">
-                                            <Border.Effect>
-                                                <BlurEffect Radius="2"/>
-                                            </Border.Effect>
-                                            <TextBlock Text="{loc:Str label_beat_detection}" Foreground="#666666"
-                                                       FontSize="10" FontWeight="SemiBold"/>
-                                        </Border>
-                                        <Border Background="#CC1A1A2E" CornerRadius="4">
-                                            <TextBlock Text="{loc:Str label_coming_soon}" Foreground="{DynamicResource SecondaryBrush}" FontSize="8"
-                                                       FontWeight="Bold" HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"/>
-                                        </Border>
-                                    </Grid>
-    
-                                    <!-- Algorithm 3: AI Enhanced (Coming Soon) -->
-                                    <Grid>
-                                        <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="4" Padding="8,5">
-                                            <Border.Effect>
-                                                <BlurEffect Radius="2"/>
-                                            </Border.Effect>
-                                            <TextBlock Text="{loc:Str label_ai_enhanced}" Foreground="#666666"
-                                                       FontSize="10" FontWeight="SemiBold"/>
-                                        </Border>
-                                        <Border Background="#CC1A1A2E" CornerRadius="4">
-                                            <TextBlock Text="{loc:Str label_coming_soon}" Foreground="{DynamicResource SecondaryBrush}" FontSize="8"
-                                                       FontWeight="Bold" HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"/>
-                                        </Border>
-                                    </Grid>
-                                </StackPanel>
-    
-                                <!-- Right: Square Image -->
-                                <Border Grid.Column="2" CornerRadius="6" ClipToBounds="True"
-                                        BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
-                                        Width="130" Height="130">
-                                    <Image x:Name="ImgVideoHapticSync" x:FieldModifier="internal"
-                                           Source="pack://application:,,,/Resources/features/vibe.png"
-                                           Stretch="UniformToFill"/>
-                                </Border>
-                            </Grid>
-    
-                            <!-- Row 3: Delay and Power Sliders -->
-                            <Border x:Name="VideoHapticSyncSliders" x:FieldModifier="internal" Grid.Row="3" Padding="12,8,12,12"
-                                    Visibility="Collapsed">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="12"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-    
-                                    <!-- Delay Slider -->
-                                    <StackPanel Grid.Column="0">
+                                    </Expander.Header>
+                                    <StackPanel Margin="0,6,0,0">
+                                        <TextBlock Text="{loc:Str haptics_providers_header}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox x:Name="ChkHapticProviderLovense" x:FieldModifier="internal"
+                                                      Grid.Column="0" Content="{loc:Str btn_lovense_connect}" Foreground="White"
+                                                      FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"
+                                                      Checked="ChkHapticProvider_Changed" Unchecked="ChkHapticProvider_Changed"
+                                                      Tag="lovense" ToolTip="{loc:Str haptics_provider_lovense_tip}"/>
+                                            <!-- Restyled: this box used to be raw #FFFFFF on a dark tab. -->
+                                            <TextBox x:Name="TxtHapticUrl" x:FieldModifier="internal" Grid.Column="1"
+                                                     Background="{DynamicResource DarkerBgBrush}" Foreground="White"
+                                                     BorderThickness="1" BorderBrush="{DynamicResource PanelAccentBrush}"
+                                                     CaretBrush="{DynamicResource PinkBrush}" Padding="8,6" FontSize="13"
+                                                     VerticalContentAlignment="Center" TextChanged="TxtHapticUrl_TextChanged"
+                                                     ToolTip="{loc:Str haptics_lovense_url_tip}"/>
+                                            <CheckBox x:Name="ChkHapticProviderIntiface" x:FieldModifier="internal"
+                                                      Grid.Column="2" Content="{loc:Str btn_buttplug_io_intiface}" Foreground="White"
+                                                      FontSize="12" VerticalAlignment="Center" Margin="14,0,10,0"
+                                                      Checked="ChkHapticProvider_Changed" Unchecked="ChkHapticProvider_Changed"
+                                                      Tag="buttplug" ToolTip="{loc:Str haptics_provider_intiface_tip}"/>
+                                            <CheckBox x:Name="ChkHapticProviderMock" x:FieldModifier="internal"
+                                                      Grid.Column="3" Content="{loc:Str haptics_provider_mock}" Foreground="White"
+                                                      FontSize="12" VerticalAlignment="Center"
+                                                      Checked="ChkHapticProvider_Changed" Unchecked="ChkHapticProvider_Changed"
+                                                      Tag="mock" ToolTip="{loc:Str haptics_provider_mock_tip}"/>
+                                        </Grid>
+
+                                        <TextBlock x:Name="TxtHapticUrlHint" x:FieldModifier="internal"
+                                                   Text="{loc:Str haptics_intiface_note}"
+                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                                                   TextWrapping="Wrap" Margin="0,0,0,12"/>
+
                                         <Grid>
-                                            <TextBlock Text="{loc:Str label_delay_2}" Foreground="#AAAAAA" FontSize="10"/>
-                                            <TextBlock x:Name="TxtVideoHapticDelay" x:FieldModifier="internal" Text="{loc:Str label_0ms}"
-                                                       Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
-                                                       HorizontalAlignment="Right"/>
+                                            <CheckBox x:Name="ChkHapticAutoConnect" x:FieldModifier="internal"
+                                                      Content="{loc:Str setting_auto_connect_on_startup}" Foreground="#CCCCCC"
+                                                      FontSize="12" VerticalAlignment="Center"
+                                                      Checked="ChkHapticAutoConnect_Changed" Unchecked="ChkHapticAutoConnect_Changed"
+                                                      ToolTip="{loc:Str tooltip_automatically_connect_to_your_haptic_device_w}"/>
+                                            <Button x:Name="BtnHapticTest" x:FieldModifier="internal" HorizontalAlignment="Right"
+                                                    Content="{loc:Str btn_test_vibration}" Background="{DynamicResource SurfaceBgBrush}"
+                                                    Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
+                                                    BorderThickness="1" Padding="14,7" FontSize="12" FontWeight="Bold"
+                                                    Cursor="Hand" Click="BtnHapticTest_Click"/>
                                         </Grid>
-                                        <Slider x:Name="SliderVideoHapticDelay" x:FieldModifier="internal" Minimum="-600" Maximum="600"
-                                                Value="0" Margin="0,4,0,0"
-                                                ValueChanged="SliderVideoHapticDelay_Changed"
-                                                ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}"/>
                                     </StackPanel>
-    
-                                    <!-- Power Slider -->
-                                    <StackPanel Grid.Column="2">
-                                        <Grid>
-                                            <TextBlock Text="{loc:Str label_power_2}" Foreground="#AAAAAA" FontSize="10"/>
-                                            <TextBlock x:Name="TxtVideoHapticPower" x:FieldModifier="internal" Text="100%"
-                                                       Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
-                                                       HorizontalAlignment="Right"/>
-                                        </Grid>
-                                        <Slider x:Name="SliderVideoHapticPower" x:FieldModifier="internal" Minimum="0" Maximum="100"
-                                                Value="100" Margin="0,4,0,0"
-                                                ValueChanged="SliderVideoHapticPower_Changed"
-                                                ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}"/>
+                                </Expander>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ============ TIER 1.2 — HOW IT FEELS ============
+                             The whole expressive surface for a normal user: ONE strength
+                             slider, and five chips that decide the character of everything.
+                             Max power (the safety ceiling) is deliberately NOT here — it is
+                             a safety net, not a volume knob, and it lives in Advanced. -->
+                        <Border Style="{StaticResource HapticCard}">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <Image Width="20" Height="20" VerticalAlignment="Center" Margin="0,0,10,0"
+                                           Source="{Binding Source='&#x1F39A;', Converter={StaticResource EmojiToImageSource}}"/>
+                                    <TextBlock Text="{loc:Str haptics_feel}" Style="{StaticResource HapticCardTitle}"/>
+                                </StackPanel>
+                                <TextBlock Text="{loc:Str haptics_feel_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="12" TextWrapping="Wrap" Margin="0,0,0,14"/>
+
+                                <!-- THE one slider on first paint -->
+                                <Grid Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{loc:Str haptics_intensity}" Foreground="White" FontSize="14"
+                                               FontWeight="Bold" VerticalAlignment="Center"/>
+                                    <Slider x:Name="SliderHapticIntensity" x:FieldModifier="internal" Grid.Column="1"
+                                            Style="{StaticResource PinkSlider}" Minimum="0" Maximum="100" Value="70"
+                                            VerticalAlignment="Center" ValueChanged="SliderHapticIntensity_ValueChanged"
+                                            ToolTip="{loc:Str haptics_master_intensity_tip}"/>
+                                    <TextBlock x:Name="TxtHapticIntensity" x:FieldModifier="internal" Grid.Column="2"
+                                               Text="70%" Foreground="{DynamicResource PinkBrush}" FontSize="14"
+                                               FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <!-- Temperament: the control that REPLACES twenty sliders. It gets
+                                     presence — full-width chip row, its own line of description. -->
+                                <TextBlock Text="{loc:Str haptics_temperament}" Foreground="White" FontSize="14"
+                                           FontWeight="Bold" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal" ToolTip="{loc:Str haptics_temperament_tip}">
+                                    <RadioButton x:Name="RbTemperGentle" x:FieldModifier="internal" Tag="0"
+                                                 GroupName="HapticTemperament" Style="{StaticResource HapticSegmentChip}"
+                                                 Content="{loc:Str haptics_temperament_gentle}"
+                                                 Checked="RbHapticTemperament_Checked"/>
+                                    <RadioButton x:Name="RbTemperBalanced" x:FieldModifier="internal" Tag="1"
+                                                 GroupName="HapticTemperament" Style="{StaticResource HapticSegmentChip}"
+                                                 Content="{loc:Str haptics_temperament_balanced}" IsChecked="True"
+                                                 Checked="RbHapticTemperament_Checked"/>
+                                    <RadioButton x:Name="RbTemperTease" x:FieldModifier="internal" Tag="2"
+                                                 GroupName="HapticTemperament" Style="{StaticResource HapticSegmentChip}"
+                                                 Content="{loc:Str haptics_temperament_tease}"
+                                                 Checked="RbHapticTemperament_Checked"/>
+                                    <RadioButton x:Name="RbTemperIntense" x:FieldModifier="internal" Tag="3"
+                                                 GroupName="HapticTemperament" Style="{StaticResource HapticSegmentChip}"
+                                                 Content="{loc:Str haptics_temperament_intense}"
+                                                 Checked="RbHapticTemperament_Checked"/>
+                                    <RadioButton x:Name="RbTemperCruel" x:FieldModifier="internal" Tag="4"
+                                                 GroupName="HapticTemperament" Style="{StaticResource HapticSegmentChip}"
+                                                 Content="{loc:Str haptics_temperament_cruel}"
+                                                 Checked="RbHapticTemperament_Checked"/>
+                                </StackPanel>
+                                <TextBlock x:Name="TxtHapticTemperamentDesc" x:FieldModifier="internal" Text=""
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                           TextWrapping="Wrap" Margin="2,10,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ============ TIER 1.3 — TOY CARDS ============
+                             Informative, not demanding. The "you took control" badge from the
+                             toy-input feature now lives in THIS header, so it is visible at rest
+                             even though its settings moved down into Extras/Advanced. -->
+                        <Border Style="{StaticResource HapticCard}">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,4">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="20" Height="20" VerticalAlignment="Center" Margin="0,0,10,0"
+                                               Source="{Binding Source='&#x1F9F8;', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str haptics_your_toys}" Style="{StaticResource HapticCardTitle}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                        <Border x:Name="HapticOverrideBadge" x:FieldModifier="internal"
+                                                Visibility="Collapsed" CornerRadius="9999" Padding="9,3" Margin="0,0,10,0"
+                                                Background="#33FFB020" BorderBrush="#88FFB020" BorderThickness="1">
+                                            <TextBlock Text="{loc:Str haptics_override_badge}" Foreground="#FFD08A"
+                                                       FontSize="10" FontWeight="Bold"/>
+                                        </Border>
+                                        <TextBlock x:Name="TxtHapticToyCount" x:FieldModifier="internal" Text=""
+                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="12"
+                                                   VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Grid>
-                            </Border>
-                        </Grid>
-                    </Border>
-                </StackPanel>
-            </Border>
-            <!-- Lock Overlay for Right Box -->
-            <Border x:Name="HapticsFeatureLock" x:FieldModifier="internal" Background="#80000000" CornerRadius="8" Visibility="Collapsed">
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <Image Width="36" Height="36" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
-                    <TextBlock Text="{loc:Str label_patreon_only_2}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
-                </StackPanel>
-            </Border>
-        </Grid>
-        </Grid>
-    
-        <!-- Patreon Only Overlay (hidden for Patreon supporters) -->
-        <Border x:Name="HapticsComingSoonOverlay" x:FieldModifier="internal" Background="#CC1A1A2E" CornerRadius="8">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock Text="{loc:Str label_patreon_only_2}" Foreground="{DynamicResource PinkBrush}" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center">
-                    <TextBlock.Effect>
-                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
-                    </TextBlock.Effect>
-                </TextBlock>
-                <TextBlock Text="{loc:Str label_unlock_haptic_feedback_by_supporting_on_patre}"
-                           Foreground="#AAAAAA" FontSize="13" HorizontalAlignment="Center" Margin="0,8,0,0"/>
-                <TextBlock Text="{loc:Str label_lovense_buttplug_io_support}"
-                           Foreground="{DynamicResource SecondaryBrush}" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-            </StackPanel>
-        </Border>
-            </Grid>
-    
-                    <!-- Translucent gating overlay (only for free users) -->
-                    <Border x:Name="HapticsGate" x:FieldModifier="internal" Visibility="Collapsed"
-                            Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
-                            CornerRadius="10" IsHitTestVisible="True">
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
-                                       FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
-                            <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
-                                       Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                            <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
-                                    Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
-                                <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
-                            </Button>
-                        </StackPanel>
-                    </Border>
+                                <TextBlock Text="{loc:Str haptics_your_toys_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                <ItemsControl x:Name="ToyCardsList" x:FieldModifier="internal"
+                                              ItemTemplate="{StaticResource HapticToyCardTemplate}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+
+                                <Border x:Name="ToysEmptyState" x:FieldModifier="internal"
+                                        Background="{DynamicResource PanelBgBrush}" CornerRadius="8"
+                                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                        Padding="18,14">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="{loc:Str haptics_no_toys}" Foreground="White" FontSize="13"
+                                                   FontWeight="Bold" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str haptics_no_toys_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="12" HorizontalAlignment="Center" TextAlignment="Center"
+                                                   TextWrapping="Wrap" MaxWidth="520" Margin="0,3,0,0"/>
+                                        <Button Content="{loc:Str haptics_run_wizard}" HorizontalAlignment="Center"
+                                                Margin="0,10,0,0" Background="{DynamicResource PinkBrush}" Foreground="White"
+                                                BorderThickness="0" Padding="16,7" FontSize="12" FontWeight="Bold"
+                                                Cursor="Hand" Click="BtnHapticsHelp_Click"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ============ TIER 2 + TIER 3 — THE TWO DOORS ============
+                             HapticsFeatureBox keeps its name (MainWindow.Patreon.cs disables it
+                             wholesale for free users); it is now an invisible wrapper around the
+                             only two things left on the page. -->
+                        <Border x:Name="HapticsFeatureBox" x:FieldModifier="internal"
+                                Background="Transparent" BorderThickness="0" Padding="0" Margin="0">
+                            <StackPanel>
+
+                                <!-- - TIER 2: CUSTOMIZE - -->
+                                <Expander x:Name="HapticCustomizeSection" x:FieldModifier="internal"
+                                          Style="{StaticResource CollapsibleCard}" IsExpanded="False">
+                                    <Expander.Header>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{loc:Str haptics_customize}" Foreground="{DynamicResource PinkBrush}"
+                                                           FontSize="14" FontWeight="Bold"/>
+                                                <TextBlock Text="{loc:Str haptics_customize_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                                           FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                            <!-- Live: collapsed unless FunScriptService.LoadedScriptPath != null.
+                                                 In the header so it shows while the section is shut. -->
+                                            <Border x:Name="HapticFunScriptLoadedBadge" x:FieldModifier="internal"
+                                                    Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0"
+                                                    Visibility="Collapsed" CornerRadius="9999" Padding="9,3"
+                                                    Background="#2200E676" BorderBrush="#5500E676" BorderThickness="1">
+                                                <TextBlock x:Name="TxtHapticFunScriptLoaded" x:FieldModifier="internal"
+                                                           Text="" Foreground="{DynamicResource SuccessGreenBrush}"
+                                                           FontSize="10" FontWeight="Bold" MaxWidth="260"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </Border>
+                                        </Grid>
+                                    </Expander.Header>
+
+                                    <StackPanel Margin="2,10,2,4">
+                                        <TextBlock Text="{loc:Str haptics_routing}" Style="{StaticResource HapticSubHeader}"/>
+                                        <TextBlock Text="{loc:Str haptics_row_tap_hint}" Style="{StaticResource HapticSubCaption}"/>
+
+                                        <ItemsControl x:Name="RoutingGroupsList" x:FieldModifier="internal"
+                                                      ItemTemplate="{StaticResource HapticRoutingGroupTemplate}"/>
+
+                                        <!-- - Extras: the switches that belong to no single row - -->
+                                        <TextBlock Text="{loc:Str haptics_extras}" Style="{StaticResource HapticSubHeader}"/>
+                                        <TextBlock Text="{loc:Str haptics_extras_sub}" Style="{StaticResource HapticSubCaption}"/>
+                                        <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="10" Padding="14,12">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="20"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+                                                <CheckBox x:Name="ChkHapticFunScript" x:FieldModifier="internal"
+                                                          Grid.Row="0" Grid.Column="0"
+                                                          Content="{loc:Str haptics_funscript_enable}" Foreground="White"
+                                                          FontSize="12" Margin="0,0,0,10"
+                                                          Checked="ChkHapticFunScript_Changed" Unchecked="ChkHapticFunScript_Changed"
+                                                          ToolTip="{loc:Str haptics_funscript_enable_tip}"/>
+                                                <CheckBox x:Name="ChkHapticLuminance" x:FieldModifier="internal"
+                                                          Grid.Row="0" Grid.Column="2"
+                                                          Content="{loc:Str haptics_luminance_enable}" Foreground="White"
+                                                          FontSize="12" Margin="0,0,0,10"
+                                                          Checked="ChkHapticLuminance_Changed" Unchecked="ChkHapticLuminance_Changed"
+                                                          ToolTip="{loc:Str haptics_luminance_enable_tip}"/>
+
+                                                <CheckBox x:Name="ChkHapticToyInput" x:FieldModifier="internal"
+                                                          Grid.Row="1" Grid.Column="0"
+                                                          Content="{loc:Str haptics_toy_input_enable}" Foreground="White"
+                                                          FontSize="12" Margin="0,0,0,10"
+                                                          Checked="ChkHapticToyInput_Changed" Unchecked="ChkHapticToyInput_Changed"
+                                                          ToolTip="{loc:Str haptics_toy_input_enable_tip}"/>
+                                                <CheckBox x:Name="ChkHapticBandSplit" x:FieldModifier="internal"
+                                                          Grid.Row="1" Grid.Column="2"
+                                                          Content="{loc:Str haptics_band_split}" Foreground="White"
+                                                          FontSize="12" Margin="0,0,0,10"
+                                                          Checked="ChkHapticBandSplit_Changed" Unchecked="ChkHapticBandSplit_Changed"
+                                                          ToolTip="{loc:Str haptics_band_split_tip}"/>
+
+                                                <!-- Depends on the toy-input master above, so it sits under it. -->
+                                                <CheckBox x:Name="ChkHapticToyAttentionCheck" x:FieldModifier="internal"
+                                                          Grid.Row="2" Grid.Column="0"
+                                                          Content="{loc:Str haptics_toy_attention_check}" Foreground="White"
+                                                          FontSize="12" Margin="18,0,0,0"
+                                                          Checked="ChkHapticToyAttentionCheck_Changed" Unchecked="ChkHapticToyAttentionCheck_Changed"
+                                                          ToolTip="{loc:Str haptics_toy_attention_check_tip}"/>
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
+                                </Expander>
+
+                                <!-- - TIER 3: ADVANCED -
+                                     Everything that is either dangerous (the ceiling), niche
+                                     (DSP, DtRH depth) or a toy in itself (pattern lab). -->
+                                <Expander x:Name="HapticAdvancedSection" x:FieldModifier="internal"
+                                          Style="{StaticResource CollapsibleCard}" IsExpanded="False">
+                                    <Expander.Header>
+                                        <StackPanel>
+                                            <TextBlock Text="{loc:Str haptics_advanced}" Foreground="{DynamicResource PinkBrush}"
+                                                       FontSize="14" FontWeight="Bold"/>
+                                            <TextBlock Text="{loc:Str haptics_advanced_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Expander.Header>
+
+                                    <StackPanel Margin="2,10,2,4">
+
+                                        <!-- - safety ceiling - -->
+                                        <Border Style="{StaticResource HapticAdvBlock}">
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Str haptics_safety}" Style="{StaticResource HapticSubHeader}"/>
+                                                <TextBlock Text="{loc:Str haptics_max_power_tip}" Style="{StaticResource HapticSubCaption}"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="110"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="52"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{loc:Str haptics_max_power}" Foreground="White" FontSize="12"
+                                                               FontWeight="Bold" VerticalAlignment="Center"/>
+                                                    <Slider x:Name="SliderHapticMaxPower" x:FieldModifier="internal" Grid.Column="1"
+                                                            Style="{StaticResource PinkSlider}" Minimum="5" Maximum="100" Value="70"
+                                                            VerticalAlignment="Center" ValueChanged="SliderHapticMaxPower_ValueChanged"
+                                                            ToolTip="{loc:Str haptics_max_power_tip}"/>
+                                                    <TextBlock x:Name="TxtHapticMaxPower" x:FieldModifier="internal" Grid.Column="2"
+                                                               Text="70%" Foreground="{DynamicResource PinkBrush}" FontSize="12"
+                                                               FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Grid>
+                                                <Border x:Name="HapticMaxPowerWarning" x:FieldModifier="internal" Visibility="Collapsed"
+                                                        Background="#33FFB020" BorderBrush="#88FFB020" BorderThickness="1"
+                                                        CornerRadius="6" Padding="10,6" Margin="0,8,0,0">
+                                                    <TextBlock Text="{loc:Str haptics_max_power_warning}" Foreground="#FFD08A"
+                                                               FontSize="11" TextWrapping="Wrap"/>
+                                                </Border>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- - toy buttons and dials (back-off window) - -->
+                                        <Border Style="{StaticResource HapticAdvBlock}">
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Str haptics_toy_input}" Style="{StaticResource HapticSubHeader}"/>
+                                                <TextBlock Text="{loc:Str haptics_toy_input_sub}" Style="{StaticResource HapticSubCaption}"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="110"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="52"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{loc:Str haptics_override_cooldown}" Foreground="#AAAAAA"
+                                                               FontSize="12" VerticalAlignment="Center"/>
+                                                    <Slider x:Name="SliderHapticOverrideCooldown" x:FieldModifier="internal"
+                                                            Grid.Column="1" Style="{StaticResource PinkSlider}"
+                                                            Minimum="5" Maximum="120" Value="30" VerticalAlignment="Center"
+                                                            ValueChanged="SliderHapticOverrideCooldown_Changed"
+                                                            ToolTip="{loc:Str haptics_override_cooldown_tip}"/>
+                                                    <TextBlock x:Name="TxtHapticOverrideCooldown" x:FieldModifier="internal"
+                                                               Grid.Column="2" Text="30s" Foreground="{DynamicResource PinkBrush}"
+                                                               FontSize="12" FontWeight="Bold" HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- - video sync scripts (detail) - -->
+                                        <Border Style="{StaticResource HapticAdvBlock}">
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Str haptics_funscript}" Style="{StaticResource HapticSubHeader}"/>
+                                                <TextBlock Text="{loc:Str haptics_funscript_sub}" Style="{StaticResource HapticSubCaption}"/>
+                                                <CheckBox x:Name="ChkHapticFunScriptVibe" x:FieldModifier="internal"
+                                                          Content="{loc:Str haptics_funscript_vibe}" Foreground="White"
+                                                          FontSize="12" Margin="0,0,0,6"
+                                                          Checked="ChkHapticFunScriptVibe_Changed" Unchecked="ChkHapticFunScriptVibe_Changed"
+                                                          ToolTip="{loc:Str haptics_funscript_vibe_tip}"/>
+                                                <TextBlock Text="{loc:Str haptics_funscript_where}" Foreground="{DynamicResource TextDimBrush}"
+                                                           FontSize="10" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- - flash brightness strength - -->
+                                        <Border Style="{StaticResource HapticAdvBlock}">
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Str haptics_luminance}" Style="{StaticResource HapticSubHeader}"/>
+                                                <TextBlock Text="{loc:Str haptics_luminance_sub}" Style="{StaticResource HapticSubCaption}"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="110"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="52"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{loc:Str haptics_luminance_intensity}" Foreground="#AAAAAA"
+                                                               FontSize="12" VerticalAlignment="Center"/>
+                                                    <Slider x:Name="SliderHapticLuminance" x:FieldModifier="internal"
+                                                            Grid.Column="1" Style="{StaticResource PinkSlider}"
+                                                            Minimum="0" Maximum="100" Value="50" VerticalAlignment="Center"
+                                                            ValueChanged="SliderHapticLuminance_Changed"
+                                                            ToolTip="{loc:Str haptics_luminance_intensity_tip}"/>
+                                                    <TextBlock x:Name="TxtHapticLuminance" x:FieldModifier="internal"
+                                                               Grid.Column="2" Text="50%" Foreground="{DynamicResource PinkBrush}"
+                                                               FontSize="12" FontWeight="Bold" HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- - Down the Rabbit Hole: two knobs the matrix cannot express - -->
+                                        <Border Style="{StaticResource HapticAdvBlock}">
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Str label_dtrh_haptics}" Style="{StaticResource HapticSubHeader}"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="16"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <Grid>
+                                                            <TextBlock Text="{loc:Str haptics_dtrh_ambient_label}" Foreground="#AAAAAA" FontSize="10"/>
+                                                            <TextBlock x:Name="TxtHapticDtrhAmbient" x:FieldModifier="internal" Text="12%"
+                                                                       Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                                       HorizontalAlignment="Right"/>
+                                                        </Grid>
+                                                        <Slider x:Name="SliderHapticDtrhAmbient" x:FieldModifier="internal"
+                                                                Style="{StaticResource PinkSlider}" Minimum="0" Maximum="60" Value="12"
+                                                                Margin="0,4,0,0" ValueChanged="SliderHapticDtrhAmbient_Changed"
+                                                                ToolTip="{loc:Str tooltip_dtrh_ambient}"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Bottom">
+                                                        <TextBlock Text="{loc:Str label_dtrh_density}" Foreground="#AAAAAA" FontSize="10" Margin="0,0,0,2"/>
+                                                        <ComboBox x:Name="CmbHapticDtrhDensity" x:FieldModifier="internal" Width="110"
+                                                                  Height="24" Style="{StaticResource DarkComboBoxStyle}" FontSize="11"
+                                                                  SelectedIndex="1" SelectionChanged="CmbHapticDtrhDensity_SelectionChanged">
+                                                            <ComboBoxItem Content="{loc:Str btn_density_sparse}"/>
+                                                            <ComboBoxItem Content="{loc:Str btn_density_balanced}"/>
+                                                            <ComboBoxItem Content="{loc:Str btn_density_rich}"/>
+                                                        </ComboBox>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- - video haptic sync: timing + the DSP drawer - -->
+                                        <Border Style="{StaticResource HapticAdvBlock}">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+                                                <Grid Grid.Row="0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{loc:Str label_video_haptic_sync}"
+                                                                   Style="{StaticResource HapticSubHeader}"/>
+                                                        <TextBlock Text="{loc:Str haptics_audio_sync_sub}"
+                                                                   Style="{StaticResource HapticSubCaption}" MaxWidth="620"
+                                                                   HorizontalAlignment="Left"/>
+                                                    </StackPanel>
+                                                    <Button x:Name="HelpBtnVideoHapticSync" x:FieldModifier="internal" Grid.Column="1"
+                                                            Style="{StaticResource HelpButtonStyle}" Tag="VideoHapticSync"
+                                                            Margin="0,0,10,0" VerticalAlignment="Top"/>
+                                                    <Border Grid.Column="2" CornerRadius="8" ClipToBounds="True" Width="64" Height="64"
+                                                            VerticalAlignment="Top"
+                                                            BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1">
+                                                        <Image x:Name="ImgVideoHapticSync" x:FieldModifier="internal"
+                                                               Source="pack://application:,,,/Resources/features/vibe.png"
+                                                               Stretch="UniformToFill"/>
+                                                    </Border>
+                                                </Grid>
+
+                                                <TextBlock x:Name="TxtAudioSyncDisabledHint" x:FieldModifier="internal" Grid.Row="1"
+                                                           Text="{loc:Str haptics_audio_sync_off_hint}" Margin="0,4,0,0"
+                                                           Foreground="{DynamicResource TextDimBrush}" FontSize="11" TextWrapping="Wrap"/>
+
+                                                <Border x:Name="VideoHapticSyncSliders" x:FieldModifier="internal" Grid.Row="2"
+                                                        Margin="0,10,0,0" Visibility="Collapsed">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="16"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0">
+                                                            <Grid>
+                                                                <TextBlock Text="{loc:Str label_delay_2}" Foreground="#AAAAAA" FontSize="10"/>
+                                                                <TextBlock x:Name="TxtVideoHapticDelay" x:FieldModifier="internal"
+                                                                           Text="{loc:Str label_0ms}" Foreground="{DynamicResource SecondaryBrush}"
+                                                                           FontSize="10" HorizontalAlignment="Right"/>
+                                                            </Grid>
+                                                            <Slider x:Name="SliderVideoHapticDelay" x:FieldModifier="internal"
+                                                                    Style="{StaticResource PinkSlider}" Minimum="-600" Maximum="600"
+                                                                    Value="0" Margin="0,4,0,0" ValueChanged="SliderVideoHapticDelay_Changed"
+                                                                    ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}"/>
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="2">
+                                                            <Grid>
+                                                                <TextBlock Text="{loc:Str label_power_2}" Foreground="#AAAAAA" FontSize="10"/>
+                                                                <TextBlock x:Name="TxtVideoHapticPower" x:FieldModifier="internal" Text="100%"
+                                                                           Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                                           HorizontalAlignment="Right"/>
+                                                            </Grid>
+                                                            <Slider x:Name="SliderVideoHapticPower" x:FieldModifier="internal"
+                                                                    Style="{StaticResource PinkSlider}" Minimum="0" Maximum="100"
+                                                                    Value="100" Margin="0,4,0,0" ValueChanged="SliderVideoHapticPower_Changed"
+                                                                    ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+
+                                                <!-- The six DSP knobs. Ranges and reset values come from
+                                                     Models/AudioSyncSettings.cs; band split moved up to Extras. -->
+                                                <Expander x:Name="HapticAudioAdvanced" x:FieldModifier="internal" Grid.Row="3"
+                                                          Visibility="Collapsed" IsExpanded="False" Margin="0,12,0,0"
+                                                          Style="{StaticResource CollapsibleCard}">
+                                                    <Expander.Header>
+                                                        <StackPanel>
+                                                            <TextBlock Text="{loc:Str haptics_audio_advanced}" Foreground="{DynamicResource PinkBrush}"
+                                                                       FontSize="13" FontWeight="Bold"/>
+                                                            <TextBlock Text="{loc:Str haptics_audio_advanced_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                                                       FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                                        </StackPanel>
+                                                    </Expander.Header>
+                                                    <StackPanel Margin="0,6,0,0">
+                                                        <TextBlock Text="{loc:Str haptics_dsp_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="16"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
+
+                                                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,10">
+                                                                <Grid>
+                                                                    <TextBlock Text="{loc:Str haptics_dsp_sensitivity}" Foreground="#AAAAAA" FontSize="10"/>
+                                                                    <TextBlock x:Name="TxtDspSensitivity" x:FieldModifier="internal" Text="1.00"
+                                                                               Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                                               HorizontalAlignment="Right"/>
+                                                                </Grid>
+                                                                <Slider x:Name="SliderDspSensitivity" x:FieldModifier="internal"
+                                                                        Style="{StaticResource PinkSlider}" Minimum="10" Maximum="300" Value="100"
+                                                                        Margin="0,4,0,0" ValueChanged="SliderDspSensitivity_Changed"
+                                                                        ToolTip="{loc:Str haptics_dsp_sensitivity_tip}"/>
+                                                            </StackPanel>
+
+                                                            <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,10">
+                                                                <Grid>
+                                                                    <TextBlock Text="{loc:Str haptics_dsp_smoothing}" Foreground="#AAAAAA" FontSize="10"/>
+                                                                    <TextBlock x:Name="TxtDspSmoothing" x:FieldModifier="internal" Text="30%"
+                                                                               Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                                               HorizontalAlignment="Right"/>
+                                                                </Grid>
+                                                                <Slider x:Name="SliderDspSmoothing" x:FieldModifier="internal"
+                                                                        Style="{StaticResource PinkSlider}" Minimum="0" Maximum="95" Value="30"
+                                                                        Margin="0,4,0,0" ValueChanged="SliderDspSmoothing_Changed"
+                                                                        ToolTip="{loc:Str haptics_dsp_smoothing_tip}"/>
+                                                            </StackPanel>
+
+                                                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,10">
+                                                                <Grid>
+                                                                    <TextBlock Text="{loc:Str haptics_dsp_bass}" Foreground="#AAAAAA" FontSize="10"/>
+                                                                    <TextBlock x:Name="TxtDspBass" x:FieldModifier="internal" Text="40%"
+                                                                               Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                                               HorizontalAlignment="Right"/>
+                                                                </Grid>
+                                                                <Slider x:Name="SliderDspBass" x:FieldModifier="internal"
+                                                                        Style="{StaticResource PinkSlider}" Minimum="0" Maximum="100" Value="40"
+                                                                        Margin="0,4,0,0" ValueChanged="SliderDspBass_Changed"
+                                                                        ToolTip="{loc:Str haptics_dsp_bass_tip}"/>
+                                                            </StackPanel>
+
+                                                            <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,10">
+                                                                <Grid>
+                                                                    <TextBlock Text="{loc:Str haptics_dsp_rms}" Foreground="#AAAAAA" FontSize="10"/>
+                                                                    <TextBlock x:Name="TxtDspRms" x:FieldModifier="internal" Text="35%"
+                                                                               Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                                               HorizontalAlignment="Right"/>
+                                                                </Grid>
+                                                                <Slider x:Name="SliderDspRms" x:FieldModifier="internal"
+                                                                        Style="{StaticResource PinkSlider}" Minimum="0" Maximum="100" Value="35"
+                                                                        Margin="0,4,0,0" ValueChanged="SliderDspRms_Changed"
+                                                                        ToolTip="{loc:Str haptics_dsp_rms_tip}"/>
+                                                            </StackPanel>
+
+                                                            <StackPanel Grid.Row="2" Grid.Column="0">
+                                                                <Grid>
+                                                                    <TextBlock Text="{loc:Str haptics_dsp_onset}" Foreground="#AAAAAA" FontSize="10"/>
+                                                                    <TextBlock x:Name="TxtDspOnset" x:FieldModifier="internal" Text="25%"
+                                                                               Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                                               HorizontalAlignment="Right"/>
+                                                                </Grid>
+                                                                <Slider x:Name="SliderDspOnset" x:FieldModifier="internal"
+                                                                        Style="{StaticResource PinkSlider}" Minimum="0" Maximum="100" Value="25"
+                                                                        Margin="0,4,0,0" ValueChanged="SliderDspOnset_Changed"
+                                                                        ToolTip="{loc:Str haptics_dsp_onset_tip}"/>
+                                                            </StackPanel>
+
+                                                            <StackPanel Grid.Row="2" Grid.Column="2">
+                                                                <Grid>
+                                                                    <TextBlock Text="{loc:Str haptics_dsp_max}" Foreground="#AAAAAA" FontSize="10"/>
+                                                                    <TextBlock x:Name="TxtDspMax" x:FieldModifier="internal" Text="100%"
+                                                                               Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                                               HorizontalAlignment="Right"/>
+                                                                </Grid>
+                                                                <Slider x:Name="SliderDspMax" x:FieldModifier="internal"
+                                                                        Style="{StaticResource PinkSlider}" Minimum="50" Maximum="100" Value="100"
+                                                                        Margin="0,4,0,0" ValueChanged="SliderDspMax_Changed"
+                                                                        ToolTip="{loc:Str haptics_dsp_max_tip}"/>
+                                                            </StackPanel>
+                                                        </Grid>
+
+                                                        <Button x:Name="BtnDspReset" x:FieldModifier="internal"
+                                                                Content="{loc:Str haptics_dsp_reset}" HorizontalAlignment="Left"
+                                                                Margin="0,12,0,0" Background="Transparent"
+                                                                Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource PinkBrush}"
+                                                                BorderThickness="1" Padding="12,5" FontSize="11" FontWeight="Bold"
+                                                                Cursor="Hand" Click="BtnDspReset_Click"/>
+                                                    </StackPanel>
+                                                </Expander>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- - pattern lab - -->
+                                        <Border Style="{StaticResource HapticAdvBlock}">
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Str haptics_pattern_lab}" Style="{StaticResource HapticSubHeader}"/>
+                                                <TextBlock Text="{loc:Str haptics_pattern_lab_sub}" Style="{StaticResource HapticSubCaption}"/>
+
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="14"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0" Width="230">
+                                                        <TextBlock Text="{loc:Str haptics_pattern_mode}" Foreground="{DynamicResource TextMutedBrush}"
+                                                                   FontSize="10" Margin="0,0,0,3"/>
+                                                        <ComboBox x:Name="CmbPatternMode" x:FieldModifier="internal" Height="26"
+                                                                  Style="{StaticResource DarkComboBoxStyle}" FontSize="12" SelectedIndex="0"
+                                                                  SelectionChanged="CmbPatternMode_SelectionChanged">
+                                                            <ComboBoxItem Content="{loc:Str btn_constant}"/>
+                                                            <ComboBoxItem Content="{loc:Str btn_pulse}"/>
+                                                            <ComboBoxItem Content="{loc:Str btn_wave}"/>
+                                                            <ComboBoxItem Content="{loc:Str btn_heartbeat}"/>
+                                                            <ComboBoxItem Content="{loc:Str btn_escalate}"/>
+                                                            <ComboBoxItem Content="{loc:Str btn_earthquake}"/>
+                                                        </ComboBox>
+
+                                                        <TextBlock Text="{loc:Str haptics_pattern_toy}" Foreground="{DynamicResource TextMutedBrush}"
+                                                                   FontSize="10" Margin="0,10,0,3"/>
+                                                        <ComboBox x:Name="CmbPatternToy" x:FieldModifier="internal" Height="26"
+                                                                  Style="{StaticResource DarkComboBoxStyle}" FontSize="12"/>
+
+                                                        <Grid Margin="0,10,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="46"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{loc:Str label_intensity}" Foreground="{DynamicResource TextMutedBrush}"
+                                                                       FontSize="10" VerticalAlignment="Center"/>
+                                                            <TextBlock x:Name="TxtPatternIntensity" x:FieldModifier="internal" Grid.Column="1"
+                                                                       Text="60%" Foreground="{DynamicResource PinkBrush}" FontSize="10"
+                                                                       FontWeight="Bold" HorizontalAlignment="Right"/>
+                                                        </Grid>
+                                                        <Slider x:Name="SliderPatternIntensity" x:FieldModifier="internal"
+                                                                Style="{StaticResource PinkSlider}" Minimum="5" Maximum="100" Value="60"
+                                                                Margin="0,3,0,0" ValueChanged="SliderPatternIntensity_Changed"/>
+
+                                                        <Button x:Name="BtnPatternPlay" x:FieldModifier="internal"
+                                                                Content="{loc:Str haptics_pattern_play}" Margin="0,12,0,0"
+                                                                Background="{DynamicResource PinkBrush}" Foreground="White"
+                                                                BorderThickness="0" Padding="14,7" FontSize="12" FontWeight="Bold"
+                                                                Cursor="Hand" Click="BtnPatternPlay_Click"/>
+                                                    </StackPanel>
+
+                                                    <!-- envelope preview -->
+                                                    <Border Grid.Column="2" Background="{DynamicResource DarkerBgBrush}" CornerRadius="8"
+                                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                                            Padding="10" MinHeight="150">
+                                                        <Grid>
+                                                            <Canvas x:Name="PatternPreviewCanvas" x:FieldModifier="internal"
+                                                                    ClipToBounds="True" SizeChanged="PatternPreviewCanvas_SizeChanged">
+                                                                <Polyline x:Name="PatternPreviewLine" x:FieldModifier="internal"
+                                                                          Stroke="{DynamicResource PinkBrush}" StrokeThickness="2"
+                                                                          StrokeLineJoin="Round"/>
+                                                            </Canvas>
+                                                            <TextBlock x:Name="TxtPatternPreviewLabel" x:FieldModifier="internal" Text=""
+                                                                       Foreground="{DynamicResource TextDimBrush}" FontSize="10"
+                                                                       HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
                 </Grid>
-    
-            </StackPanel>
-        </ScrollViewer>
+
+                <!-- Translucent gating overlay (only for free users) -->
+                <Border x:Name="HapticsGate" x:FieldModifier="internal" Visibility="Collapsed"
+                        Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
+                        CornerRadius="10" IsHitTestVisible="True">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Image Width="52" Height="52" HorizontalAlignment="Center"
+                               Source="{Binding Source='&#x1F512;', Converter={StaticResource EmojiToImageSource}}"/>
+                        <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
+                                   FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
+                                   Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                        <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
+                                Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
+                            <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

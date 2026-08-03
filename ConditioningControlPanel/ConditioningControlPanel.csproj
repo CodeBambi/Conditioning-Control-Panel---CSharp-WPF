@@ -48,8 +48,10 @@
 
   <ItemGroup>
     <!-- UI Framework -->
-    <PackageReference Include="Buttplug" Version="3.0.1" />
-    <PackageReference Include="Buttplug.Client.Connectors.WebsocketConnector" Version="3.0.1" />
+    <!-- Buttplug 5.x is one package: Core + Client + WebSocket connector (the separate
+         Buttplug.Client.Connectors.WebsocketConnector package is 3.x-only and is gone).
+         5.0.1 speaks Buttplug message spec v4 (OutputCmd/InputCmd). -->
+    <PackageReference Include="Buttplug" Version="5.0.1" />
     <PackageReference Include="DiscordRichPresence" Version="1.6.1.70" />
     <PackageReference Include="LibVLCSharp.WPF" Version="3.8.5" />
     <!-- Pin WindowsAppSDK (transitive from LibVLCSharp) and exclude its win10-* runtime assets
@@ -97,7 +99,8 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="5.0.0" />
     
     <!-- JSON Settings -->
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- 13.0.4 is the floor required by Buttplug 5.0.1 (NU1605 otherwise). Patch bump only. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     
     <!-- Security / Encryption -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
