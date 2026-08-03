@@ -524,6 +524,10 @@ export class GoonMatchService {
    * (charges, rate limit, one heavy per match) so a well-behaved client is never rejected; the
    * receiver re-checks everything anyway. C# out-error -> {ok, error, id}.
    */
+  msUntilNextPayloadMs() {
+    return this._outboundLimiter.msUntilNextToken(localMonotonicMs());
+  }
+
   tryFirePayload(request) {
     if (!request) return { ok: false, error: 'no request', id: null };
     if (this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath) {
@@ -542,6 +546,7 @@ export class GoonMatchService {
 
     const nowLocal = localMonotonicMs();
     if (!this._outboundLimiter.tryAdmit(nowLocal)) {
+      // (UI reads the same limiter via msUntilNextPayloadMs() below.)
       return {
         ok: false,
         error: `rate limited (${Math.trunc(this._outboundLimiter.msUntilNextToken(nowLocal) / 1000)}s)`,

@@ -1,0 +1,915 @@
+/* ============================================================================
+ * ui/hud.css — HUD TIER: the duel desk, the opponent monitor, the arsenal, the
+ * closeness dial, the attention check, the emote sheet, the mercy chrome and the
+ * whole sudden-death surface.
+ *
+ * Rules of the tier:
+ *   * everything is gg- prefixed and lives here; goon.css (tokens, z-stack,
+ *     component kit, MERCY isolation) is never edited by this wave;
+ *   * decorative motion opts in with `animation-play-state: var(--gg-deco-play)`
+ *     so goon.css's armor rule can park it at html[data-gg-fx="hot"];
+ *   * every colour state also carries a word in the DOM — nothing here is the
+ *     only channel for a piece of information;
+ *   * hit areas are >= 48px on anything a finger is expected to find;
+ *   * the CENTRE of the screen belongs to #gg-stage. The frame is edge-anchored
+ *     and the well in the middle is pointer-transparent.
+ * ==========================================================================*/
+
+:root {
+  --gg-hud-gap: clamp(0.5rem, 1.2vw, 1rem);
+  --gg-item: clamp(58px, 6vw, 78px);
+  --gg-mon-w: clamp(210px, 22vw, 280px);
+  --gg-amber: #ffb454;
+  --gg-hot: #ff1493;
+}
+
+/* ---------------------------------------------------------------------------
+ * FRAME
+ * ------------------------------------------------------------------------ */
+/* The id selector is load-bearing: goon.css says `#gg-hud > * { pointer-events:
+   auto }` (specificity 1,0,0), so a bare `.gg-hud-frame` rule would lose and the
+   frame would swallow every click meant for #gg-stage. */
+#gg-hud > .gg-hud-frame { pointer-events: none; }
+.gg-hud-frame {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--gg-hud-gap);
+  padding: clamp(0.6rem, 1.6vw, 1.4rem);
+  padding-bottom: calc(clamp(0.6rem, 1.6vw, 1.4rem) + env(safe-area-inset-bottom, 0px));
+  font-family: var(--gg-font);
+}
+.gg-hud-frame button,
+.gg-hud-frame .gg-plate,
+.gg-hud-frame .gg-item,
+.gg-hud-frame .gg-dial,
+.gg-hud-frame .gg-emotes,
+.gg-hud-frame .gg-att-token { pointer-events: auto; }
+
+/* Sudden death contracts the desk: rails, monitor and dial step aside. */
+.gg-hud-frame.is-sd .gg-hud-body,
+.gg-hud-frame.is-sd .gg-hud-bottom { opacity: 0; pointer-events: none; transition: opacity .35s ease; }
+.gg-hud-frame.is-over { opacity: 0.35; pointer-events: none; }
+
+/* ---------------------------------------------------------------------------
+ * TOP BAR — score · charges · risk | timer | attention · gear
+ * ------------------------------------------------------------------------ */
+.gg-hud-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: var(--gg-hud-gap);
+}
+
+.gg-scorebox { position: relative; display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start; }
+.gg-score {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.55), 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+.gg-risk { font-size: 0.68rem; color: var(--gg-text-4); font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+.gg-me { font-size: 0.68rem; color: var(--gg-text-3); }
+
+.gg-pips { display: flex; gap: 6px; align-items: center; }
+.gg-pip {
+  width: 16px; height: 16px;
+  transform: rotate(45deg);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.55);
+  border-radius: 3px;
+  background: transparent;
+  transition: background .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.gg-pip.is-on { background: var(--gg-pink); box-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.75); }
+.gg-pip.is-pop { animation: ggPipPop .4s ease-out 1; }
+.gg-pip--sm { width: 12px; height: 12px; }
+@keyframes ggPipPop {
+  0% { transform: rotate(45deg) scale(1); }
+  40% { transform: rotate(45deg) scale(1.55); }
+  100% { transform: rotate(45deg) scale(1); }
+}
+.gg-plus1 {
+  position: absolute; left: 2.4rem; top: 1.4rem;
+  font-size: 0.8rem; font-weight: 700; color: var(--gg-pink);
+  text-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.7);
+  animation: ggFloatUp .9s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes ggFloatUp {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-22px); }
+}
+
+.gg-timer { justify-self: center; min-width: 128px; text-align: center; padding: 0.4rem 0.9rem 0.5rem; }
+.gg-timer-clock { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+.gg-timer-track { margin-top: 0.35rem; height: 2px; background: rgba(255, 255, 255, 0.12); border-radius: 2px; overflow: hidden; }
+.gg-timer-fill { display: block; height: 100%; width: 0; background: var(--gg-pink); transition: width .4s linear; }
+.gg-timer.is-urgent .gg-timer-fill { background: var(--gg-gold); }
+.gg-timer.is-urgent .gg-timer-clock { color: var(--gg-gold); animation: ggPulse 1s steps(2, end) infinite; }
+.gg-timer.is-sd .gg-timer-clock { color: var(--gg-pink); font-size: 0.86rem; letter-spacing: 0.14em; }
+@keyframes ggPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+.gg-hud-topright { display: flex; justify-content: flex-end; align-items: flex-start; gap: 0.5rem; }
+.gg-gear {
+  width: 48px; height: 48px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; color: var(--gg-text-2);
+  background: var(--gg-plate-bg);
+  border: var(--gg-plate-border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.gg-gear:hover { color: #fff; border-color: var(--gg-pink); }
+
+/* ---------------------------------------------------------------------------
+ * ATTENTION — the ring, the dot history, the token, the missed-check banner
+ * ------------------------------------------------------------------------ */
+.gg-att { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.7rem; }
+.gg-att-ring {
+  position: relative;
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: conic-gradient(var(--gg-pink) var(--gg-ring, 0%), rgba(255, 255, 255, 0.10) 0);
+}
+.gg-att-ring::after {
+  content: ''; position: absolute; inset: 4px; border-radius: 50%;
+  background: rgba(12, 6, 20, 0.92);
+}
+.gg-att-ring-num { position: relative; z-index: 1; font-size: 0.68rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.gg-att-ring.is-due { box-shadow: 0 0 16px rgba(var(--gg-pink-rgb), 0.7); }
+.gg-att-col { display: flex; flex-direction: column; gap: 0.28rem; }
+.gg-att-label { font-size: 0.7rem; color: var(--gg-text-3); }
+.gg-att-dots { display: flex; gap: 4px; }
+.gg-att-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
+.gg-att-dot.is-ok { background: var(--gg-pink); }
+.gg-att-dot.is-bad { background: var(--gg-amber); }
+
+.gg-att-token {
+  position: fixed;
+  width: 88px; height: 88px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 2px solid var(--gg-pink);
+  background: rgba(20, 8, 28, 0.86);
+  box-shadow: 0 0 30px rgba(var(--gg-pink-rgb), 0.45);
+  color: #fff; font-size: 0.86rem; font-weight: 700; letter-spacing: 0.1em;
+  cursor: pointer;
+  opacity: 0; transform: scale(0.85);
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 2;
+}
+.gg-att-token.is-live { opacity: 1; transform: scale(1); }
+.gg-att-token.is-held { opacity: 0; transform: scale(1.25); border-color: var(--gg-pink); }
+.gg-att-token.is-missed { opacity: 0; transform: scale(0.8); border-color: var(--gg-amber); }
+.gg-att-token-ring {
+  position: absolute; inset: -6px; border-radius: 50%;
+  border: 2px solid rgba(var(--gg-pink-rgb), 0.35);
+  clip-path: inset(0 0 0 0);
+  animation: ggGrace var(--gg-grace, 12000ms) linear forwards;
+}
+@keyframes ggGrace { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 100% 0); } }
+.gg-att-token-word { position: relative; }
+
+.gg-att-chip {
+  position: fixed; left: 50%; top: 22%;
+  transform: translateX(-50%);
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(20, 8, 28, 0.9);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.6);
+  font-size: 0.8rem;
+  animation: ggFloatUp 1.8s ease-out forwards;
+  pointer-events: none;
+}
+.gg-att-banner {
+  position: fixed; left: 50%; top: 18%;
+  transform: translateX(-50%) translateY(-6px);
+  padding: 0.6rem 1.1rem;
+  border-radius: var(--gg-radius-plate);
+  background: rgba(38, 22, 6, 0.94);
+  border: 1px solid var(--gg-amber);
+  color: var(--gg-amber);
+  font-size: 0.86rem;
+  opacity: 0;
+  transition: opacity .2s ease, transform .2s ease;
+  pointer-events: none;
+}
+.gg-att-banner.is-in { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------------------------------------------------------------------------
+ * BODY — rails | well | monitor column
+ * ------------------------------------------------------------------------ */
+.gg-hud-body {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--gg-hud-gap);
+  min-height: 0;
+}
+.gg-well { pointer-events: none; }
+
+.gg-rail { display: flex; flex-direction: column; gap: 0.55rem; }
+.gg-rightcol { display: flex; flex-direction: column; align-items: flex-end; gap: 0.45rem; width: var(--gg-mon-w); }
+
+/* ---------------------------------------------------------------------------
+ * ARSENAL
+ * ------------------------------------------------------------------------ */
+.gg-item {
+  position: relative;
+  width: var(--gg-item);
+  min-height: var(--gg-item);
+  padding: 0.35rem 0.3rem 0.5rem;
+  display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+  cursor: pointer;
+  color: var(--gg-text-1);
+  transition: opacity .18s ease, box-shadow .18s ease, border-color .18s ease, transform .12s ease;
+  touch-action: none;
+}
+.gg-item-img { width: 60%; max-width: 46px; height: auto; display: block; pointer-events: none; user-select: none; }
+.gg-item.is-noart .gg-item-img { display: none; }
+.gg-item-name { font-size: 0.6rem; letter-spacing: 0.04em; color: var(--gg-text-2); text-align: center; }
+.gg-item-cost { display: flex; gap: 3px; }
+.gg-cost-pip { width: 7px; height: 7px; transform: rotate(45deg); border-radius: 2px; background: var(--gg-pink); }
+.gg-cost-pip.is-short { background: var(--gg-amber); }
+.gg-item-state { font-size: 0.55rem; color: var(--gg-text-4); text-align: center; min-height: 0.7em; line-height: 1.1; }
+
+.gg-item.is-poor { opacity: 0.45; }
+.gg-item.is-used { opacity: 0.5; }
+.gg-item.is-used .gg-item-name { text-decoration: line-through; }
+.gg-item.is-filtered {
+  opacity: 0.55;
+  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.06) 0 6px, transparent 6px 12px);
+}
+.gg-item.is-glow { box-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.35); border-color: rgba(var(--gg-pink-rgb), 0.7); }
+.gg-item.is-armed { border-color: var(--gg-pink); box-shadow: 0 0 0 2px rgba(var(--gg-pink-rgb), 0.55); }
+.gg-item.is-dragging { opacity: 0.35; }
+.gg-item.is-shake { animation: ggShake .12s linear 1; }
+@keyframes ggShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.gg-item-sweep {
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(rgba(var(--gg-pink-rgb), 0.22) var(--gg-sweep, 100%), rgba(0, 0, 0, 0.55) 0);
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+.gg-item.is-cooling .gg-item-sweep { opacity: 1; }
+
+.gg-item-tip {
+  position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 0.28rem 0.6rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(12, 6, 20, 0.96);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.5);
+  font-size: 0.66rem;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.gg-item-ghost {
+  position: fixed;
+  z-index: 55;
+  pointer-events: none;
+  opacity: 0.9;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.6));
+}
+.gg-spark {
+  position: fixed;
+  width: 12px; height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--gg-pink);
+  box-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.9);
+  pointer-events: none;
+  z-index: 55;
+  transition: transform .3s cubic-bezier(.2, .7, .3, 1), opacity .3s ease;
+}
+
+.gg-cool {
+  font-size: 0.68rem; color: var(--gg-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* receipts strip -------------------------------------------------------- */
+.gg-receipts { display: flex; flex-direction: column; gap: 3px; width: 100%; align-items: flex-end; }
+.gg-receipt {
+  display: flex; gap: 0.4rem; align-items: baseline;
+  font-size: 0.66rem; color: var(--gg-text-3);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(12, 6, 20, 0.6);
+  border-left: 2px solid rgba(var(--gg-pink-rgb), 0.5);
+}
+.gg-receipt-kind { color: var(--gg-text-2); }
+.gg-receipt.is-ok .gg-receipt-state { color: var(--gg-pink); }
+.gg-receipt.is-warn .gg-receipt-state { color: var(--gg-amber); }
+.gg-receipt.is-gold { border-left-color: var(--gg-gold); }
+.gg-receipt.is-gold .gg-receipt-state,
+.gg-receipt.is-gold .gg-receipt-note { color: var(--gg-gold); }
+
+/* ---------------------------------------------------------------------------
+ * OPPONENT MONITOR
+ * ------------------------------------------------------------------------ */
+.gg-mon-host { width: 100%; display: flex; justify-content: flex-end; }
+.gg-mon {
+  width: var(--gg-mon-w);
+  display: flex; flex-direction: column; gap: 0.3rem;
+  transition: opacity .3s ease;
+}
+.gg-mon.is-wobbly { opacity: 0.7; }
+.gg-mon.is-gone { opacity: 0.4; }
+
+.gg-mon-head { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; }
+.gg-mon-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--gg-pink);
+  box-shadow: 0 0 10px rgba(var(--gg-pink-rgb), 0.8);
+}
+.gg-mon-dot.is-wobbly { background: var(--gg-amber); box-shadow: 0 0 10px rgba(255, 180, 84, 0.7); }
+.gg-mon-dot.is-gone { background: #6d6d78; box-shadow: none; }
+.gg-mon-name { color: var(--gg-text-1); font-weight: 600; max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gg-mon-score { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--gg-text-2); }
+.gg-mon-pips { display: flex; gap: 4px; }
+
+.gg-mon-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: box-shadow .2s ease;
+}
+.gg-mon.is-targeted .gg-mon-frame { box-shadow: 0 0 0 2px var(--gg-pink), 0 0 28px rgba(var(--gg-pink-rgb), 0.5); }
+.gg-mon-bezel { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; z-index: 2; }
+.gg-mon-screen {
+  position: absolute;
+  inset: 7% 6% 12% 6%;
+  overflow: hidden;
+  border-radius: 4px;
+  background: radial-gradient(120% 120% at 50% 0%, #241033 0%, #100720 70%, #08040e 100%);
+  z-index: 1;
+}
+.gg-mon-frame.is-nobezel .gg-mon-screen { inset: 0; border: 1px solid rgba(var(--gg-pink-rgb), 0.35); border-radius: 10px; }
+.gg-mini-idle {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-size: 0.62rem; letter-spacing: 0.2em; text-transform: lowercase;
+  color: var(--gg-text-4);
+}
+
+/* the stylized miniature of their screen ---------------------------------- */
+.gg-mini { position: absolute; inset: 0; display: none; }
+.gg-mini.is-on { display: block; }
+
+.gg-mini-flash { background: #fff; opacity: 0; }
+.gg-mini-flash.is-anim { animation: ggMiniFlash .7s steps(2, end) infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniFlash { 0%, 60% { opacity: 0; } 70%, 80% { opacity: 0.55; } 100% { opacity: 0; } }
+
+.gg-mini-bubbles .gg-mini-bub {
+  position: absolute; bottom: -12px;
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.8);
+  background: rgba(var(--gg-pink-rgb), 0.18);
+}
+.gg-mini-bubbles .gg-mini-bub:nth-child(1) { left: 14%; }
+.gg-mini-bubbles .gg-mini-bub:nth-child(2) { left: 38%; width: 9px; height: 9px; }
+.gg-mini-bubbles .gg-mini-bub:nth-child(3) { left: 62%; width: 14px; height: 14px; }
+.gg-mini-bubbles .gg-mini-bub:nth-child(4) { left: 82%; width: 8px; height: 8px; }
+.gg-mini-bubbles.is-anim .gg-mini-bub { animation: ggMiniRise 3.2s linear infinite; animation-play-state: var(--gg-deco-play); }
+.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(2) { animation-delay: .6s; }
+.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(3) { animation-delay: 1.4s; }
+.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(4) { animation-delay: 2.1s; }
+@keyframes ggMiniRise { from { transform: translateY(0); opacity: 0.9; } to { transform: translateY(-120px); opacity: 0; } }
+
+.gg-mini-video { background: rgba(8, 4, 14, 0.85); }
+.gg-mini-video .gg-mini-bar {
+  position: absolute; left: 12%; right: 12%; height: 6px; border-radius: 3px;
+  background: linear-gradient(90deg, rgba(var(--gg-violet-rgb), 0.5), rgba(var(--gg-pink-rgb), 0.6));
+}
+.gg-mini-video .gg-mini-bar:nth-child(1) { top: 32%; }
+.gg-mini-video .gg-mini-bar:nth-child(2) { top: 50%; right: 30%; }
+.gg-mini-video .gg-mini-bar:nth-child(3) { top: 68%; right: 46%; }
+.gg-mini-video.is-anim .gg-mini-bar { animation: ggMiniShimmer 1.6s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniShimmer { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+
+.gg-mini-sub .gg-mini-line {
+  position: absolute; top: 46%; left: 100%;
+  white-space: nowrap;
+  font-size: 0.6rem; letter-spacing: 0.3em;
+  color: rgba(255, 255, 255, 0.8);
+}
+.gg-mini-sub.is-anim .gg-mini-line { animation: ggMiniScroll 4s linear infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniScroll { from { transform: translateX(0); } to { transform: translateX(-320px); } }
+
+.gg-mini-bounce .gg-mini-word {
+  position: absolute; top: 20%; left: 10%;
+  font-size: 0.6rem; font-weight: 700; color: var(--gg-pink);
+}
+.gg-mini-bounce.is-anim .gg-mini-word { animation: ggMiniBounce 3.4s ease-in-out infinite alternate; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniBounce { from { transform: translate(0, 0); } to { transform: translate(120px, 46px); } }
+
+.gg-mini-lock { display: none; }
+.gg-mini-lock.is-on { display: block; }
+.gg-mini-lock::after {
+  content: '';
+  position: absolute; left: 22%; right: 22%; top: 30%; bottom: 30%;
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.85);
+  border-radius: 4px;
+  background: rgba(20, 8, 28, 0.92);
+}
+.gg-mini-lock .gg-mini-lock-bar {
+  position: absolute; left: 28%; height: 3px; border-radius: 2px;
+  background: rgba(255, 255, 255, 0.55);
+  z-index: 1;
+}
+.gg-mini-lock .gg-mini-lock-bar:nth-child(1) { top: 44%; width: 44%; }
+.gg-mini-lock .gg-mini-lock-bar:nth-child(2) { top: 56%; width: 26%; }
+
+.gg-mini-toy .gg-mini-toy-dot {
+  position: absolute; right: 8%; bottom: 10%;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--gg-violet);
+  box-shadow: 0 0 12px rgba(var(--gg-violet-rgb), 0.8);
+}
+.gg-mini-toy.is-anim .gg-mini-toy-dot { animation: ggPulse 1.1s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
+
+.gg-mini-drain { background: rgba(30, 8, 46, 0.55); backdrop-filter: blur(1px); }
+
+/* emote bubble + drop hint ------------------------------------------------ */
+.gg-mon-bubble {
+  position: absolute; left: 8%; bottom: 12%;
+  max-width: 78%;
+  z-index: 3;
+  display: flex; gap: 0.35rem; align-items: baseline;
+  padding: 0.35rem 0.7rem;
+  border-radius: 12px 12px 12px 2px;
+  background: rgba(12, 6, 20, 0.94);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.6);
+  font-size: 0.72rem;
+  opacity: 0; transform: translateY(6px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.gg-mon-bubble.is-in { opacity: 1; transform: translateY(0); }
+.gg-mon-bubble-text { color: var(--gg-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gg-mon-hint {
+  position: absolute; inset: auto 0 0 0;
+  z-index: 3;
+  text-align: center;
+  font-size: 0.64rem; letter-spacing: 0.14em;
+  color: var(--gg-pink);
+  background: rgba(12, 6, 20, 0.8);
+  padding: 0.2rem 0;
+}
+
+/* their attention + the closeness they claim ------------------------------ */
+.gg-mon-att { width: 100%; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.gg-mon-att-fill { display: block; height: 100%; width: 100%; background: var(--gg-pink); transition: width .4s ease; }
+.gg-mon-att.is-low .gg-mon-att-fill { background: var(--gg-amber); }
+.gg-mon-att-label { font-size: 0.64rem; color: var(--gg-text-4); align-self: flex-end; }
+
+.gg-mon-close {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(12, 6, 20, 0.55);
+  transition: border-color .3s ease, box-shadow .3s ease;
+}
+.gg-mon-close-label { font-size: 0.6rem; letter-spacing: 0.16em; text-transform: lowercase; color: var(--gg-text-4); }
+.gg-mon-close-segs { display: flex; gap: 3px; margin: 0.25rem 0; }
+.gg-mon-close-seg { flex: 1 1 0; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); transition: background .3s ease; }
+.gg-mon-close[data-gg-close="0"] .gg-mon-close-seg.is-lit { background: var(--gg-pink); }
+.gg-mon-close[data-gg-close="1"] .gg-mon-close-seg.is-lit { background: #ff8ec9; }
+.gg-mon-close[data-gg-close="2"] .gg-mon-close-seg.is-lit { background: var(--gg-gold); }
+.gg-mon-close[data-gg-close="3"] .gg-mon-close-seg.is-lit { background: var(--gg-hot); }
+.gg-mon-close-word { font-size: 0.74rem; font-weight: 700; color: var(--gg-text-1); }
+.gg-mon-close.is-sweep { border-color: var(--gg-pink); box-shadow: 0 0 22px rgba(var(--gg-pink-rgb), 0.4); }
+.gg-mon-close.is-edge { border-color: var(--gg-hot); animation: ggBreathe 2s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggBreathe {
+  0%, 100% { box-shadow: 0 0 10px rgba(255, 20, 147, 0.25); }
+  50% { box-shadow: 0 0 26px rgba(255, 20, 147, 0.55); }
+}
+
+.gg-mon-foot { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--gg-text-4); }
+.gg-mon-abandon { color: var(--gg-amber); font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------------------
+ * BOTTOM DECK — own effects (left) · closeness dial (right)
+ * ------------------------------------------------------------------------ */
+.gg-hud-bottom {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: var(--gg-hud-gap);
+  padding-bottom: 4.6rem;      /* mercy owns the strip below this */
+}
+.gg-fxrail { display: flex; flex-direction: column; gap: 4px; max-width: 40vw; }
+.gg-fxchip {
+  position: relative;
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(12, 6, 20, 0.72);
+  border-left: 3px solid var(--gg-pink);
+  font-size: 0.68rem; color: var(--gg-text-2);
+  overflow: hidden;
+}
+.gg-fxchip.is-incoming { border-left-color: var(--gg-violet); }
+.gg-fxchip-glyph { color: var(--gg-pink); }
+.gg-fxchip.is-incoming .gg-fxchip-glyph { color: var(--gg-violet); }
+.gg-fxchip-bar {
+  position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+  background: rgba(var(--gg-pink-rgb), 0.6);
+}
+.gg-fxchip.is-incoming .gg-fxchip-bar { background: rgba(var(--gg-violet-rgb), 0.7); }
+
+.gg-dial-host { display: flex; justify-content: flex-end; }
+.gg-dial { min-width: 15rem; padding: 0.5rem 0.7rem 0.6rem; }
+.gg-dial-label { font-size: 0.62rem; letter-spacing: 0.16em; color: var(--gg-text-4); }
+.gg-dial-stops { display: flex; gap: 4px; margin: 0.35rem 0 0.3rem; }
+.gg-dial-stop {
+  flex: 1 1 0;
+  min-height: 48px;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--gg-text-4);
+  font-size: 0.62rem;
+  padding: 0;
+}
+.gg-dial-bar { width: 100%; height: 10px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); transition: background .25s ease, height .25s ease; }
+.gg-dial-stop.is-on .gg-dial-bar { background: var(--gg-pink); }
+.gg-dial[data-gg-close="2"] .gg-dial-stop.is-on .gg-dial-bar { background: var(--gg-gold); }
+.gg-dial[data-gg-close="3"] .gg-dial-stop.is-on .gg-dial-bar { background: var(--gg-hot); }
+.gg-dial-stop.is-head { color: var(--gg-text); }
+.gg-dial-stop.is-head .gg-dial-bar { height: 16px; }
+.gg-dial-fine { font-size: 0.6rem; color: var(--gg-text-4); }
+
+/* ---------------------------------------------------------------------------
+ * EMOTE SHEET
+ * ------------------------------------------------------------------------ */
+.gg-emotes {
+  position: absolute;
+  right: calc(var(--gg-mon-w) + 1.2rem);
+  bottom: 6rem;
+  width: min(19rem, 80vw);
+  z-index: 4;
+}
+.gg-emotes-title { font-size: 0.62rem; letter-spacing: 0.16em; color: var(--gg-text-4); margin-bottom: 0.4rem; }
+.gg-emotes-lines { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.gg-emote-line {
+  min-height: 48px;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(20, 12, 28, 0.8);
+  color: var(--gg-text-1);
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+.gg-emote-line:hover { border-color: var(--gg-pink); }
+.gg-emotes-icons { display: flex; gap: 4px; margin-top: 6px; }
+.gg-emote-icon {
+  width: 48px; height: 48px;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(20, 12, 28, 0.8);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.gg-emotes.is-cooling { opacity: 0.55; }
+.gg-emotes-cool { margin-top: 0.35rem; font-size: 0.62rem; color: var(--gg-text-4); min-height: 0.9em; }
+
+/* ---------------------------------------------------------------------------
+ * MERCY CHROME — the button itself is styled in goon.css (DO NOT TOUCH block).
+ * Everything here is around it, and never on top of it.
+ * ------------------------------------------------------------------------ */
+.gg-mercy-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+.gg-mercy-btn {
+  position: relative;
+  width: min(420px, 60vw);
+  height: 72px;
+  font-size: 1rem;
+}
+.gg-mercy-btn.is-arming { pointer-events: none; opacity: 1; }
+.gg-mercy-arm {
+  position: absolute; inset: -3px;
+  border-radius: var(--gg-radius-pill);
+  border: 1px solid rgba(255, 20, 147, 0.65);
+  clip-path: inset(0 100% 0 0);
+  animation: ggArm 700ms linear forwards;
+}
+@keyframes ggArm { to { clip-path: inset(0 0 0 0); } }
+.gg-mercy-fine { font-size: 0.64rem; letter-spacing: 0.1em; color: var(--gg-text-4); }
+
+/* NOT children of #gg-mercy: that layer carries `transform: translateX(-50%)`,
+   which makes it the containing block for any fixed-position descendant — a
+   full-bleed scrim inside it would size to the button. ui/mercy.js appends
+   these to <body>; the z-index keeps them above the HUD and the toasts. */
+.gg-mercy-takeover {
+  position: fixed; inset: 0;
+  z-index: 65;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem;
+  background: rgba(8, 4, 14, 0.92);
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.gg-mercy-takeover.is-in { opacity: 1; }
+.gg-mercy-takeover-title { margin: 0; font-size: clamp(1.6rem, 5vw, 2.6rem); font-weight: 800; color: #fff; }
+.gg-mercy-takeover-line { margin: 0; font-size: 0.95rem; color: var(--gg-text-3); }
+
+.gg-mercy-sting {
+  position: fixed; left: 50%; bottom: 8.5rem;
+  z-index: 65;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
+  padding: 0.7rem 1.4rem;
+  border-radius: var(--gg-radius-card);
+  background: rgba(12, 6, 20, 0.94);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.55);
+  opacity: 0;
+  transition: opacity .3s ease;
+}
+.gg-mercy-sting.is-in { opacity: 1; }
+.gg-mercy-sting-them { font-size: 0.9rem; color: var(--gg-text-1); }
+.gg-mercy-sting-you { font-size: 1.1rem; font-weight: 800; color: var(--gg-pink); }
+
+/* ===========================================================================
+ * SUDDEN DEATH
+ * ======================================================================== */
+.gg-sd {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.5rem;
+  /* clears the HUD top bar: the desk contracts on sudden death but the score,
+     charge pips and timer plate stay, and the ladder must not land on them. */
+  padding-top: clamp(4.6rem, 11vh, 6.4rem);
+  pointer-events: none;
+}
+.gg-sd > * { pointer-events: auto; }
+.gg-sd-round { font-size: 0.72rem; letter-spacing: 0.2em; color: var(--gg-text-3); }
+.gg-sd-track {
+  position: relative;
+  width: min(340px, 76vw);
+  height: 26px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 4px;
+}
+.gg-sd-track::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 50%;
+  height: 2px; background: rgba(255, 255, 255, 0.14);
+}
+.gg-sd-notch {
+  position: relative;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+}
+.gg-sd-notch.is-end { width: 12px; height: 12px; background: rgba(255, 255, 255, 0.3); }
+.gg-sd-notch.is-lit { background: var(--gg-pink); }
+.gg-sd-track.is-edge .gg-sd-notch.is-end { background: var(--gg-gold); box-shadow: 0 0 14px rgba(255, 212, 94, 0.7); }
+.gg-sd-track.is-close .gg-sd-notch.is-end { animation: ggPulse 1s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
+.gg-sd-marker {
+  position: absolute; top: 50%; left: 50%;
+  width: 14px; height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 16px rgba(var(--gg-pink-rgb), 0.9);
+  transition: left .4s cubic-bezier(.2, .7, .3, 1);
+}
+.gg-sd-track-label { font-size: 0.6rem; letter-spacing: 0.14em; color: var(--gg-text-4); }
+
+.gg-sd-stage { position: absolute; inset: 0; display: block; }
+
+/* intro ------------------------------------------------------------------ */
+.gg-sd-intro {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  opacity: 0; transition: opacity .2s ease;
+  z-index: 3;
+}
+.gg-sd-intro.is-in { opacity: 1; }
+.gg-sd-intro-card {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  padding: clamp(1rem, 3vw, 2rem) clamp(1.4rem, 5vw, 3rem);
+  background: var(--gg-card-bg);
+  border: var(--gg-card-border);
+  border-radius: var(--gg-radius-card);
+  text-align: center;
+}
+.gg-sd-intro-title { margin: 0; font-size: clamp(1.5rem, 4.4vw, 2.4rem); font-weight: 800; }
+.gg-sd-intro-rule { margin: 0; font-size: 0.95rem; color: var(--gg-text-2); }
+.gg-sd-chip {
+  padding: 0.2rem 0.7rem;
+  border-radius: var(--gg-radius-pill);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.5);
+  font-size: 0.66rem; letter-spacing: 0.12em; color: var(--gg-text-3);
+}
+.gg-sd-count { font-size: clamp(2.4rem, 9vw, 4.4rem); font-weight: 800; font-variant-numeric: tabular-nums; color: #fff; }
+.gg-sd-count.is-beat { text-shadow: 0 0 30px rgba(var(--gg-pink-rgb), 0.7); }
+
+/* verdict ---------------------------------------------------------------- */
+.gg-sd-verdict {
+  position: fixed; left: 50%; top: 26%;
+  transform: translateX(-50%);
+  opacity: 0; transition: opacity .2s ease;
+  z-index: 3;
+}
+.gg-sd-verdict.is-in { opacity: 1; }
+.gg-sd-verdict-card { text-align: center; min-width: min(22rem, 84vw); padding: 0.9rem 1.4rem; }
+.gg-sd-verdict-head { margin: 0 0 0.3rem; font-size: 1.2rem; font-weight: 800; }
+.gg-sd-verdict.is-win .gg-sd-verdict-head { color: var(--gg-pink); }
+.gg-sd-verdict.is-loss .gg-sd-verdict-head { color: var(--gg-amber); }
+.gg-sd-verdict.is-draw .gg-sd-verdict-head,
+.gg-sd-verdict.is-abort .gg-sd-verdict-head { color: var(--gg-text-2); }
+.gg-sd-verdict-line { margin: 0; font-size: 0.82rem; color: var(--gg-text-2); font-variant-numeric: tabular-nums; }
+.gg-sd-suspect {
+  display: inline-block; margin-top: 0.4rem;
+  padding: 0.16rem 0.6rem;
+  border-radius: var(--gg-radius-pill);
+  border: 1px solid var(--gg-amber);
+  color: var(--gg-amber);
+  font-size: 0.64rem;
+}
+.gg-sd-verdict-note { margin: 0.25rem 0 0; font-size: 0.68rem; color: var(--gg-text-4); }
+
+/* quick draw ------------------------------------------------------------- */
+.gg-sd-card {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(34rem, 92vw);
+  display: flex; flex-direction: column; align-items: center; gap: 0.6rem;
+  padding: clamp(1rem, 3vw, 1.8rem);
+  background: var(--gg-card-bg);
+  border: var(--gg-card-border);
+  border-radius: var(--gg-radius-card);
+  opacity: 0; transition: opacity .2s ease;
+}
+.gg-sd-card.is-in { opacity: 1; }
+.gg-sd-card.is-slip { animation: ggShake .16s linear 1; }
+.gg-sd-card-slot { width: 100%; }
+.gg-sd-card-dots { display: flex; align-items: center; gap: 6px; }
+.gg-sd-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.18); }
+.gg-sd-dot.is-on { background: var(--gg-pink); box-shadow: 0 0 10px rgba(var(--gg-pink-rgb), 0.7); }
+.gg-sd-dot-label { font-size: 0.66rem; color: var(--gg-text-4); margin-left: 0.3rem; font-variant-numeric: tabular-nums; }
+.gg-sd-card-slips { font-size: 0.66rem; color: var(--gg-text-4); font-variant-numeric: tabular-nums; }
+
+.gg-lc-kicker { font-size: 0.62rem; letter-spacing: 0.2em; color: var(--gg-text-4); text-align: center; }
+.gg-lc-phrase { margin: 0.5rem 0; font-size: clamp(1.05rem, 3vw, 1.5rem); font-weight: 700; text-align: center; color: #fff; }
+.gg-lc-input {
+  width: 100%; min-height: 48px;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.5);
+  background: rgba(10, 5, 17, 0.9);
+  color: #fff; font-size: 1rem; font-family: var(--gg-font);
+}
+.gg-lc-input:focus { outline: none; border-color: var(--gg-pink); box-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.3); }
+.gg-lc-hint { margin-top: 0.35rem; font-size: 0.64rem; color: var(--gg-text-4); text-align: center; }
+.gg-lc-give {
+  margin-top: 0.6rem; min-height: 48px;
+  background: transparent; border: 0;
+  color: var(--gg-text-4); font-size: 0.7rem; text-decoration: underline; cursor: pointer;
+}
+
+/* staring swap ----------------------------------------------------------- */
+.gg-sd-swap {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(26rem, 90vw);
+  text-align: center;
+  opacity: 0; transition: opacity .2s ease;
+}
+.gg-sd-swap.is-in { opacity: 1; }
+.gg-sd-swap-head { margin: 0 0 0.3rem; font-size: 1.05rem; }
+.gg-sd-swap-line { margin: 0 0 0.6rem; font-size: 0.78rem; color: var(--gg-text-3); }
+.gg-sd-swap-bar { display: block; height: 2px; width: 100%; background: var(--gg-pink); }
+
+/* reaction duel ---------------------------------------------------------- */
+.gg-sd-react {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(30rem, 86vw);
+  height: min(30rem, 46vh);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem;
+  border-radius: var(--gg-radius-card);
+  background: #2a2740;
+  border: 2px solid rgba(255, 255, 255, 0.10);
+  color: var(--gg-text-3);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .2s ease, background .05s linear, border-color .05s linear, color .05s linear;
+  touch-action: none;
+}
+.gg-sd-react.is-in { opacity: 1; }
+.gg-sd-react-word { font-size: clamp(1.1rem, 4vw, 1.8rem); font-weight: 800; letter-spacing: 0.12em; }
+.gg-sd-react-glyph { font-size: clamp(2.4rem, 9vw, 4.5rem); line-height: 1; }
+.gg-sd-react.is-decoy { background: #fff3d8; border-color: var(--gg-amber); color: #2a2740; }
+.gg-sd-react.is-real { background: var(--gg-pink); border-color: #fff; color: #fff; box-shadow: 0 0 60px rgba(var(--gg-pink-rgb), 0.6); }
+
+/* bubble race ------------------------------------------------------------ */
+.gg-sd-bubbles { position: absolute; inset: 0; opacity: 0; transition: opacity .2s ease; }
+.gg-sd-bubbles.is-in { opacity: 1; }
+.gg-sd-bub-head {
+  position: absolute; left: 50%; top: 1.2rem;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 0.8rem;
+  font-size: 0.78rem; font-variant-numeric: tabular-nums;
+  z-index: 2;
+}
+.gg-sd-bub-them { color: var(--gg-text-4); }
+.gg-sd-bub-ring {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: conic-gradient(var(--gg-pink) var(--gg-ring, 100%), rgba(255, 255, 255, 0.12) 0);
+}
+.gg-sd-bub-field { position: absolute; inset: 12% 4% 16% 4%; }
+.gg-bub {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid rgba(var(--gg-pink-rgb), 0.85);
+  background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.55), rgba(var(--gg-pink-rgb), 0.22) 45%, rgba(var(--gg-pink-rgb), 0.08) 100%);
+  box-shadow: 0 0 22px rgba(var(--gg-pink-rgb), 0.35);
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity .18s ease, transform .18s ease;
+  touch-action: none;
+}
+.gg-bub.is-in { opacity: 1; transform: scale(1); }
+.gg-bub.is-pop { opacity: 0; transform: scale(1.6); transition: opacity .2s ease, transform .2s ease; }
+.gg-bub-shine {
+  position: absolute; left: 22%; top: 18%;
+  width: 22%; height: 22%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+}
+.gg-bub-plus {
+  position: absolute;
+  font-size: 0.86rem; font-weight: 800; color: var(--gg-pink);
+  text-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.8);
+  pointer-events: none;
+  animation: ggFloatUp .7s ease-out forwards;
+}
+
+/* ---------------------------------------------------------------------------
+ * PORTRAIT / NARROW — the rails become one horizontal strip above the mercy
+ * zone, the monitor shrinks to the top-right, the dial spans the width.
+ * ------------------------------------------------------------------------ */
+@media (orientation: portrait), (max-width: 720px) {
+  :root { --gg-mon-w: min(46vw, 220px); --gg-item: 62px; }
+
+  .gg-hud-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; align-items: start; }
+  .gg-rightcol { width: 100%; align-items: flex-end; order: -1; }
+  .gg-well { display: none; }
+
+  .gg-rail {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 7.2rem;
+    flex-direction: row;
+    gap: 0.4rem;
+    padding: 0 0.6rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .gg-rail::-webkit-scrollbar { display: none; }
+  .gg-rail--right { bottom: 7.2rem; justify-content: flex-end; }
+  /* both rails share the strip: left half scrolls in from the left, right from the right */
+  .gg-rail--left { bottom: 12.6rem; }
+
+  .gg-hud-bottom { flex-direction: column; align-items: stretch; gap: 0.4rem; padding-bottom: 5.6rem; }
+  .gg-fxrail { max-width: none; }
+  .gg-dial-host { justify-content: stretch; }
+  .gg-dial { min-width: 0; width: 100%; }
+
+  .gg-emotes { right: 0.6rem; left: 0.6rem; width: auto; bottom: 18rem; }
+
+  .gg-mercy-btn { width: calc(100vw - 1.6rem); height: 84px; }
+  .gg-sd-react { width: 92vw; height: 40vh; }
+}
+
+/* ---------------------------------------------------------------------------
+ * MOTION — every decorative animation above already rides --gg-deco-play; this
+ * is the hard off switch for people who asked for it.
+ * ------------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .gg-mini.is-anim,
+  .gg-mini.is-anim *,
+  .gg-mon-close.is-edge,
+  .gg-sd-track.is-close .gg-sd-notch.is-end,
+  .gg-timer.is-urgent .gg-timer-clock { animation: none !important; }
+  .gg-pip.is-pop, .gg-item.is-shake, .gg-sd-card.is-slip { animation: none !important; }
+  .gg-sd-marker, .gg-timer-fill, .gg-mon-att-fill { transition: none !important; }
+}
+.gg-hud-frame.is-calm .gg-mini.is-anim,
+.gg-hud-frame.is-calm .gg-mini.is-anim * { animation: none !important; }

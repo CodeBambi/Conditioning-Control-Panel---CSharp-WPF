@@ -4,23 +4,61 @@
  * Boot order (load-bearing):
  *   error seams -> register EVERY bridge handler -> announceReady() -> the host
  *   flushes `init` (identity/caps/consent/net) then `manifest` (media URLs) ->
- *   mount the title screen. Standalone (?solo=1) the same two frames are
- *   synthesized by bridge.js, so there is exactly ONE code path below.
+ *   build the singletons -> mount the title screen. Standalone (?solo=1) the
+ *   same two frames are synthesized by bridge.js, so there is exactly ONE code
+ *   path below.
  *
- * The match engine (core/*, owned in parallel) mounts on top of this shell; this
- * file only owns page lifecycle: handshake, liveness, exit, fullscreen, and the
- * boot deadlines that turn a wedge into a reported failure instead of an
- * eternally spinning loader.
+ * WHAT THIS FILE OWNS
+ *   1. page lifecycle: handshake, liveness, exit, fullscreen, boot deadlines;
+ *   2. the SINGLETONS every screen reads (prefs, audio, toasts, sheets, options,
+ *      router, matchLog, executor);
+ *   3. the createMatch FACTORY GoonSession injects — RNG, caps narrowing,
+ *      sudden-death runner, presenter wiring all happen in one closure;
+ *   4. ATTACH/DETACH on currentMatch changes. The relay fallback REBUILDS the
+ *      match object (net/session.js _fallBackToRelay), so nothing may cache the
+ *      first instance — the whole executor/log/HUD graph re-binds here;
+ *   5. the Escape ladder (mercy is never more than one keypress away);
+ *   6. phase-driven routing;
+ *   7. Practice mode: a loopback pair and a scripted opponent, so the game is
+ *      fully playable with no server and no second machine.
  *
- * NOTHING may throw at module import — WebView2 has no devtools, so a throw is a
- * silent infinite loader. Every DOM touch below is inside a function guarded on
- * `document`; the imported modules (bridge/layers/media) are side-effect free by
- * contract, which is what lets the error seams a few lines down still be first.
+ * NOTHING may throw at module import — WebView2 has no devtools, so a throw is
+ * a silent infinite loader. Every DOM touch below is inside a function guarded
+ * on `document`; the statically-imported modules are side-effect free by
+ * contract, and the modules owned by sibling waves (exec/executor, ui/hud,
+ * ui/mercy, ui/sd) are loaded DYNAMICALLY and optionally — a wave that has not
+ * landed yet degrades to a logged stub instead of a blank page.
  * ==========================================================================*/
 
 import * as bridge from './bridge.js';
 import { media } from './exec/media.js';
 import * as layers from './exec/layers.js';
+
+import { GoonMatchService } from './core/match.js';
+import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
+import { GoonRng } from './core/rng.js';
+import { GoonElement, GoonMatchPhase, GoonPayloadKind, GoonRoundKind } from './core/contracts.js';
+import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
+import { GoonReceiptStatus } from './core/scoring.js';
+import { GoonSession } from './net/session.js';
+import { createLoopbackPair, loopbackPresets } from './net/loopbackTransport.js';
+
+import { createRouter } from './ui/router.js';
+import { createPrefs } from './ui/prefs.js';
+import { createAudio } from './ui/audio.js';
+import { createToasts } from './ui/toasts.js';
+import { createSheets } from './ui/sheets.js';
+import { createOptions } from './ui/options.js';
+import { createSoloDriver } from './ui/soloDriver.js';
+import { S } from './ui/strings.js';
+
+import * as titleScreen from './ui/screens/title.js';
+import * as hostScreen from './ui/screens/host.js';
+import * as joinScreen from './ui/screens/join.js';
+import * as lobbyScreen from './ui/screens/lobby.js';
+import * as draftScreen from './ui/screens/draft.js';
+import * as countdownScreen from './ui/screens/countdown.js';
+import * as recapScreen from './ui/screens/recap.js';
 
 /* --- ERROR SEAMS FIRST: everything after this reports instead of vanishing. */
 if (typeof window !== 'undefined') {
@@ -76,6 +114,51 @@ const hasDom = () => typeof document !== 'undefined';
 const el = (id) => (hasDom() ? document.getElementById(id) : null);
 
 /* ----------------------------------------------------------------------------
+ * LOGGER — one console-shaped object for the whole engine. info/debug go to the
+ * browser console only; warn/error tunnel to C# as well, because those are the
+ * lines a support log has to contain. The engine is CHATTY at info (every
+ * payload, every phase) and the C# log is 400 chars per line — flooding it
+ * would push the useful lines out.
+ * -------------------------------------------------------------------------- */
+const logger = {
+  debug: (m) => { try { console.debug('[gg]', m); } catch (_e) { /* ignore */ } },
+  info: (m) => { try { console.info('[gg]', m); } catch (_e) { /* ignore */ } },
+  warn: (m) => { try { console.warn('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('warn: ' + m); },
+  error: (m) => { try { console.error('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('error: ' + m); },
+};
+
+/* ----------------------------------------------------------------------------
+ * SIBLING WAVES — loaded dynamically so a wave that has not merged yet is a
+ * logged stub, not a white page. `stubs` is what the play-test report reads.
+ * -------------------------------------------------------------------------- */
+const stubs = [];
+let createExecutor = null;    // exec/executor.js
+let mountHud = null;          // ui/hud.js
+let mountMercy = null;        // ui/mercy.js
+let createSuddenDeathUi = null; // ui/sd/index.js
+
+async function loadSiblings() {
+  const want = [
+    ['../exec/executor.js', './exec/executor.js', 'createExecutor', (v) => { createExecutor = v; }],
+    ['./hud.js', './ui/hud.js', 'mountHud', (v) => { mountHud = v; }],
+    ['./mercy.js', './ui/mercy.js', 'mountMercy', (v) => { mountMercy = v; }],
+    ['./sd/index.js', './ui/sd/index.js', 'createSuddenDeathUi', (v) => { createSuddenDeathUi = v; }],
+  ];
+  for (const [, path, name, assign] of want) {
+    try {
+      const mod = await import(path);
+      const fn = mod && mod[name];
+      if (typeof fn !== 'function') throw new Error('no export ' + name);
+      assign(fn);
+    } catch (e) {
+      stubs.push(name);
+      logger.warn('sibling module ' + path + ' unavailable (' + ((e && e.message) || e) + ') — running without ' + name);
+    }
+  }
+  if (stubs.length) bridge.log('running without: ' + stubs.join(', '));
+}
+
+/* ----------------------------------------------------------------------------
  * HANDLERS — one per type (bridge.on throws on a duplicate, on purpose).
  * `net-post-result` is consumed INSIDE bridge.js; registering it here would
  * throw at wiring time. That is the intended alarm, not a bug.
@@ -118,7 +201,7 @@ bridge.on('manifest', (m) => {
 
 bridge.on('fullscreen', (m) => {
   session.fullscreen = !!(m && m.on);
-  paintStatus();
+  paintProbe();
 });
 
 bridge.on('ping', (m) => bridge.send({ type: 'pong', t: m && m.t }));
@@ -129,7 +212,7 @@ bridge.on('end-run', () => finishExit('end-run'));
 // haptics-v2 overhaul merges). Wired now so the toy HUD has a seam on day one.
 bridge.on('haptics-state', (m) => {
   session.haptics = m || null;
-  paintStatus();
+  paintProbe();
 });
 
 /* ----------------------------------------------------------------------------
@@ -164,84 +247,19 @@ function settle() {
   bootSettled = true;
   session.ready = true;
   try { clearTimeout(warmTimer); clearTimeout(deadlineTimer); } catch (_e) { /* ignore */ }
-  mountTitle();
-  bridge.log('boot ok');
-}
-
-/* ----------------------------------------------------------------------------
- * TITLE PLACEHOLDER — the real screens land with the UI wave. Everything here
- * exists so a human (and the driver's probe) can see the shell is alive:
- * the logo, the pitch line, a status readout, and the #gg-boot-ok marker.
- * -------------------------------------------------------------------------- */
-function mountTitle() {
-  if (!hasDom()) return;
-  const scr = el('scr-title');
-  if (!scr) return;
-  scr.replaceChildren();
-
-  const card = document.createElement('div');
-  card.className = 'gg-card';
-  card.style.textAlign = 'center';
-
-  const logo = document.createElement('img');
-  logo.className = 'gg-title-logo';
-  logo.src = './assets/goon_game_logo.png';
-  logo.alt = 'Goon Game';
-  logo.decoding = 'async';
-  // A missing/blocked image must never leave a blank title screen.
-  logo.addEventListener('error', () => {
-    logo.remove();
-    const h = document.createElement('h1');
-    h.className = 'gg-grad';
-    h.textContent = 'Goon Game';
-    card.prepend(h);
-  });
-  card.appendChild(logo);
-
-  const kicker = document.createElement('p');
-  kicker.className = 'gg-title-kicker';
-  kicker.textContent = '1v1 · endurance duel · first to break loses';
-  card.appendChild(kicker);
-
-  const status = document.createElement('p');
-  status.className = 'gg-title-status';
-  status.id = 'gg-title-status';
-  card.appendChild(status);
-
-  const ok = document.createElement('span');
-  ok.id = 'gg-boot-ok';
-  ok.textContent = 'boot ok';
-  card.appendChild(ok);
-
-  scr.appendChild(card);
-  scr.hidden = false;
-  try { document.documentElement.setAttribute('data-gg-screen', 'title'); } catch (_e) { /* ignore */ }
-  const loader = el('gg-loader');
-  if (loader) loader.hidden = true;
-  paintStatus();
-}
-
-function paintStatus() {
-  const s = el('gg-title-status');
-  if (!s) return;
-  const m = session.manifest;
-  const parts = [
-    (session.hosted ? 'hosted' : 'standalone') + (session.solo ? ' · solo' : ''),
-    'init: ' + (gotInit ? 'yes' : 'waiting'),
-    'media: ' + (m ? (m.images + ' img / ' + m.videos + ' vid') : '—'),
-    'player: ' + ((session.identity && session.identity.displayName) || '—'),
-    'net: ' + (session.net ? (session.net.viaHost ? 'via host' : (session.net.serverBase || 'none')) : '—'),
-    'mode: ' + ((session.match && (session.match.mode + '/' + session.match.profile)) || '—'),
-    'fullscreen: ' + (session.fullscreen ? 'on' : 'off'),
-  ];
-  if (session.haptics) parts.push('haptics: ' + (session.haptics.enabled ? 'on' : 'off'));
-  s.textContent = parts.join('  ·  ');
-  const ok = el('gg-boot-ok');
-  if (ok) {
-    ok.dataset.hosted = String(session.hosted);
-    ok.dataset.init = String(gotInit);
-    ok.dataset.manifest = String(gotManifest);
-  }
+  loadSiblings()
+    .catch(() => {})
+    .then(() => {
+      try { buildApp(); } catch (e) {
+        logger.error('app build failed: ' + ((e && e.stack) || e));
+        showLoaderFailure('ui failed to start');
+        return;
+      }
+      const loader = el('gg-loader');
+      if (loader) loader.hidden = true;
+      router.show('title');
+      bridge.log('boot ok');
+    });
 }
 
 function showLoaderFailure(msg) {
@@ -249,6 +267,582 @@ function showLoaderFailure(msg) {
   if (note) note.textContent = 'could not start — ' + String(msg).slice(0, 120);
   const ring = hasDom() ? document.querySelector('.gg-loader-ring') : null;
   if (ring) ring.remove();
+}
+
+/* ============================================================================
+ * SINGLETONS
+ * ==========================================================================*/
+
+let prefs = null;
+let audio = null;
+let toasts = null;
+let sheets = null;
+let options = null;
+let router = null;
+let executor = null;
+let matchLog = null;
+let ctx = null;
+
+/* ---- match/session state. NEVER cached by a screen; always read through ctx. */
+let goonSession = null;      // net/session.js GoonSession (host/join path only)
+let currentMatch = null;
+let currentTransport = null;
+let currentSd = null;        // {presenter, inputs, dispose} from ui/sd
+let hudHandle = null;
+let mercyHandle = null;
+let phaseUnsubs = [];
+let escMercied = false;
+let awaitingEntry = false;
+let lastConnectFailed = null;
+
+/* ---- Practice mode */
+let soloPair = null;
+let soloOpponent = null;
+let soloDriver = null;
+
+/* ----------------------------------------------------------------------------
+ * CAPS — narrowed to what exec/ can actually render. Advertising a SHORTER list
+ * than you can run is always safe (core/caps.js); a longer one desyncs a match
+ * the first time the peer drafts something we cannot show. ToyPatterns needs
+ * real haptics and BrainDrain needs the host's blessing, so both are opt-in.
+ * -------------------------------------------------------------------------- */
+function localCaps() {
+  const caps = session.caps || {};
+  const elements = [
+    GoonElement.Flashes,       // 0
+    GoonElement.Videos,        // 1
+    GoonElement.Subliminals,   // 2
+    GoonElement.Bubbles,       // 3
+    GoonElement.LockCards,     // 4
+    GoonElement.BouncingText,  // 7
+  ];
+  const payloads = [
+    GoonPayloadKind.FlashBurst,
+    GoonPayloadKind.SubliminalStorm,
+    GoonPayloadKind.BubbleSwarm,
+    GoonPayloadKind.Video,
+    GoonPayloadKind.LockCard,
+  ];
+  if (caps.haptics) { elements.push(GoonElement.ToyPatterns); payloads.push(GoonPayloadKind.ToyPattern); }
+  if (caps.brainDrain) { elements.push(GoonElement.BrainDrain); payloads.push(GoonPayloadKind.BrainDrain); }
+
+  let rounds = Array.isArray(caps.rounds) ? caps.rounds.slice() : Object.values(GoonRoundKind);
+  // Without a camera there is nothing to win a staring contest with.
+  if (!caps.camera) rounds = rounds.filter((r) => r !== GoonRoundKind.StaringContest);
+  if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
+
+  return localCapsOf({ elements, payloads, rounds, platform: 'web' });
+}
+
+/* ----------------------------------------------------------------------------
+ * MATCH LOG — a plain collector, owned here and read by the recap + the HUD.
+ * It is the ONLY memory of what crossed the wire: the engine keeps score, not
+ * history. Attaches to whatever match is current and re-attaches on a rebuild.
+ * -------------------------------------------------------------------------- */
+function createMatchLog() {
+  let m = null;
+  let unsubs = [];
+  let entries = [];      // payload traffic, both directions
+  let notes = [];        // UI events written by the HUD / mercy / sudden-death
+  let phaseMarks = [];
+  let emotes = [];
+  let closeness = [];
+  let origFire = null;
+  let origFinish = null;
+  const byId = new Map();
+
+  const at = () => (m ? m.liveElapsedMs : 0);
+
+  function push(e) { entries.push(e); byId.set(e.id, e); return e; }
+
+  function statusFromReceipt(status) {
+    if (status === GoonReceiptStatus.Survived) return 'endured';
+    if (status === GoonReceiptStatus.RejectedRate) return 'too_soon';
+    if (status === GoonReceiptStatus.RejectedFiltered) return 'blocked';
+    return 'landed';
+  }
+
+  return {
+    attach(match) {
+      this.detach();
+      if (!match) return;
+      m = match;
+      entries = []; notes = []; phaseMarks = []; emotes = []; closeness = []; byId.clear();
+
+      unsubs.push(match.onPhaseChanged((p) => phaseMarks.push({ phase: p, at: Date.now(), liveMs: at() })));
+      unsubs.push(match.onPayloadAccepted((ev) => {
+        const p = ev && ev.payload;
+        if (p) push({ dir: 'in', id: p.id, kind: p.kind, atMs: at(), status: 'landed' });
+      }));
+      unsubs.push(match.onPayloadRejected((receipt) => {
+        if (receipt) push({ dir: 'in', id: receipt.id, kind: -1, atMs: at(), status: statusFromReceipt(receipt.status) });
+      }));
+      unsubs.push(match.onPayloadReceiptReceived((receipt) => {
+        // Receipts are for OUR outbound payloads; the kind comes from the
+        // interception below, because a receipt carries only an id + status.
+        const e = byId.get(receipt && receipt.id);
+        if (e) e.status = statusFromReceipt(receipt.status);
+      }));
+      unsubs.push(match.onEmoteReceived((e) => emotes.push({ at: at(), text: e.text, icon: e.icon })));
+      unsubs.push(match.onOpponentStateChanged(() => {
+        const c = m.opponent.closeness;
+        const last = closeness.length ? closeness[closeness.length - 1].value : null;
+        if (c !== last) closeness.push({ at: at(), value: c });
+      }));
+
+      // The two verbs the engine does not raise events for. Wrapping the
+      // instance (not the prototype) keeps this local to the match we own and
+      // dies with it — nothing else in the page can observe the patch.
+      origFire = match.tryFirePayload.bind(match);
+      match.tryFirePayload = (req) => {
+        const res = origFire(req);
+        if (res && res.ok) push({ dir: 'out', id: res.id, kind: req.kind, atMs: at(), status: 'landed' });
+        return res;
+      };
+      origFinish = match.notifyInboundPayloadFinished.bind(match);
+      match.notifyInboundPayloadFinished = (id, endured) => {
+        const e = byId.get(id);
+        if (e) e.status = endured ? 'endured' : 'landed';
+        return origFinish(id, endured);
+      };
+    },
+
+    detach() {
+      for (const off of unsubs) { try { off(); } catch (_e) { /* ignore */ } }
+      unsubs = [];
+      m = null;
+      origFire = null;
+      origFinish = null;
+    },
+
+    /**
+     * The sink the HUD / mercy / sudden-death UI write into (ui/hud.js logTo()
+     * probes for push/add/log, in that order). Their entries are UI events, not
+     * wire traffic, so they are kept apart from the payload ledger.
+     */
+    add(entry) {
+      if (!entry) return;
+      notes.push(Object.assign({ atMs: at() }, entry));
+      if (notes.length > 400) notes.shift();
+    },
+    notes() { return notes.slice(); },
+
+    payloads() { return entries.slice(); },
+    emotes() { return emotes.slice(); },
+    closenessTrack() { return closeness.slice(); },
+    sawPhase(p) { return phaseMarks.some((x) => x.phase === p); },
+
+    stats() {
+      let landedOnYou = 0, enduredByYou = 0, blockedByYou = 0, sentByYou = 0, enduredByThem = 0;
+      for (const e of entries) {
+        if (e.dir === 'in') {
+          if (e.status === 'landed' || e.status === 'endured') landedOnYou++;
+          if (e.status === 'endured') enduredByYou++;
+          if (e.status === 'blocked' || e.status === 'too_soon') blockedByYou++;
+        } else {
+          sentByYou++;
+          if (e.status === 'endured') enduredByThem++;
+        }
+      }
+      return { landedOnYou, enduredByYou, blockedByYou, sentByYou, enduredByThem };
+    },
+  };
+}
+
+/* ----------------------------------------------------------------------------
+ * THE createMatch FACTORY — the one closure that knows how a match is built.
+ * net/session.js injects it and never imports core/match.js itself, precisely
+ * so the relay fallback can rebuild a match without this knowledge leaking into
+ * the transport layer.
+ * -------------------------------------------------------------------------- */
+function buildMatch(transport, isHost, { withSuddenDeathUi = true, displayName = null } = {}) {
+  const match = new GoonMatchService(transport, isHost, {
+    rngFactory: (seed) => new GoonRng(seed),
+    logger,
+    displayName: displayName || (session.identity && session.identity.displayName) || 'Player',
+    appVersion: (session.identity && session.identity.appVersion) || '',
+    caps: localCaps(),
+    tag: isHost ? 'GG:host' : 'GG:guest',
+  });
+
+  if (withSuddenDeathUi) {
+    let sd = null;
+    try {
+      sd = createSuddenDeathUi ? createSuddenDeathUi({
+        audio,
+        getClock: () => { try { return transport ? transport.clock : null; } catch (_e) { return null; } },
+        onLog: (entry) => matchLog?.add?.(entry),
+      }) : null;
+    }
+    catch (e) { logger.warn('createSuddenDeathUi threw: ' + ((e && e.message) || e)); }
+    currentSd = sd;
+    match.suddenDeathRunner = new GoonSuddenDeathRunner({
+      presenter: sd ? sd.presenter : null,   // null -> the headless presenter
+      inputs: sd ? sd.inputs : null,         // null -> feeds that never fire
+      logger,
+    });
+  }
+  return match;
+}
+
+/* ----------------------------------------------------------------------------
+ * ATTACH / DETACH — the rebuild-safe graph. Everything that observes a match is
+ * bound HERE and nowhere else, so "the match was replaced" is one function call
+ * rather than a hunt through seven subscribers.
+ * -------------------------------------------------------------------------- */
+function attachMatch(match, transport) {
+  detachMatch();
+  if (!match) return;
+
+  currentMatch = match;
+  currentTransport = transport || (goonSession ? goonSession.transport : null);
+  escMercied = false;
+
+  try { executor?.attach?.(match); } catch (e) { logger.error('executor.attach threw: ' + ((e && e.stack) || e)); }
+  try { matchLog.attach(match); } catch (e) { logger.error('matchLog.attach threw: ' + ((e && e.stack) || e)); }
+
+  phaseUnsubs.push(match.onPhaseChanged(onPhase));
+  phaseUnsubs.push(match.onConnectionHealthChanged((h) => {
+    if (h === 1) toasts?.warn?.(S.toasts.peerWobbly);
+    else if (h === 0) toasts?.good?.(S.toasts.peerBack);
+  }));
+  onPhase(match.phase);
+  paintProbe();
+}
+
+function detachMatch() {
+  for (const off of phaseUnsubs) { try { off(); } catch (_e) { /* ignore */ } }
+  phaseUnsubs = [];
+  unmountHud();
+  unmountMercy();
+  try { executor?.detach?.(); } catch (e) { logger.warn('executor.detach threw: ' + ((e && e.message) || e)); }
+  try { matchLog?.detach?.(); } catch (_e) { /* ignore */ }
+  try { currentSd?.dispose?.(); } catch (_e) { /* ignore */ }
+  currentSd = null;
+  currentMatch = null;
+  currentTransport = null;
+  paintProbe();
+}
+
+function mountHudNow() {
+  if (hudHandle || !mountHud || !currentMatch) return;
+  try {
+    hudHandle = mountHud({
+      match: currentMatch, session, audio, prefs, media, matchLog,
+    }) || null;
+  } catch (e) { logger.error('mountHud threw: ' + ((e && e.stack) || e)); hudHandle = null; }
+}
+
+function unmountHud() {
+  if (!hudHandle) return;
+  try { hudHandle.unmount?.(); } catch (e) { logger.warn('hud.unmount threw: ' + ((e && e.message) || e)); }
+  hudHandle = null;
+  const hud = el('gg-hud');
+  if (hud) { hud.replaceChildren(); hud.hidden = true; }
+}
+
+function mountMercyNow() {
+  if (mercyHandle || !mountMercy) return;
+  try {
+    mercyHandle = mountMercy({
+      getMatch: () => currentMatch,
+      audio,
+      onLog: (entry) => matchLog?.add?.(entry),
+    }) || null;
+  } catch (e) { logger.error('mountMercy threw: ' + ((e && e.stack) || e)); mercyHandle = null; }
+}
+
+function unmountMercy() {
+  if (!mercyHandle) return;
+  try { mercyHandle.unmount?.(); } catch (e) { logger.warn('mercy.unmount threw: ' + ((e && e.message) || e)); }
+  mercyHandle = null;
+  const m = el('gg-mercy');
+  if (m) { m.replaceChildren(); m.hidden = true; }
+}
+
+/* ----------------------------------------------------------------------------
+ * PHASE ROUTING — the engine's phase is the single source of truth for what is
+ * on screen. Nothing else calls router.show() for a match screen.
+ * -------------------------------------------------------------------------- */
+function onPhase(phase) {
+  try { document.documentElement.setAttribute('data-gg-phase', String(phase)); } catch (_e) { /* ignore */ }
+  paintProbe();
+
+  switch (phase) {
+    case GoonMatchPhase.Lobby:
+      // The host/join screen stays up until there is a second person to show —
+      // a lobby with one silhouette in it is worse than the code the player is
+      // still reading aloud.
+      if (router.current !== 'host' && router.current !== 'join') router.show('lobby');
+      break;
+
+    case GoonMatchPhase.Consent:
+      router.show('lobby');
+      break;
+
+    case GoonMatchPhase.Draft:
+      router.show('draft');
+      break;
+
+    case GoonMatchPhase.Countdown:
+      router.show('countdown');
+      break;
+
+    case GoonMatchPhase.Live:
+      router.hide();
+      mountHudNow();
+      mountMercyNow();
+      break;
+
+    case GoonMatchPhase.SuddenDeath:
+      // The HUD stays; the sudden-death UI drives #scr-sd through its presenter.
+      break;
+
+    case GoonMatchPhase.Recap:
+      unmountHud();
+      unmountMercy();
+      router.show('recap');
+      break;
+
+    default:
+      break;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * ACTIONS — everything a screen is allowed to DO. Screens never touch
+ * GoonSession, the transports or the match factory directly.
+ * -------------------------------------------------------------------------- */
+function ensureSession() {
+  if (goonSession) return goonSession;
+  goonSession = new GoonSession({
+    createMatch: (transport, isHost) => buildMatch(transport, isHost),
+    identity: session.identity || {},
+    logger,
+  });
+  // THE rebuild seam. The relay fallback disposes the old match and builds a
+  // new one over a new transport; re-binding here is what keeps the executor,
+  // the log and the HUD pointed at the live object.
+  goonSession.onCurrentMatchChanged((match) => {
+    if (match) {
+      logger.info('currentMatch changed -> re-attaching');
+      attachMatch(match, goonSession.transport);
+    } else {
+      detachMatch();
+      if (!soloPair) router.show('title');
+    }
+  });
+  goonSession.onConnectFailed((reason) => {
+    lastConnectFailed = reason;
+    logger.warn('connect failed: ' + reason);
+    if (awaitingEntry) return;      // the entry screen renders it
+    sheets?.showSignalError?.(errorInfo(reason)).then(() => router.show('title'));
+  });
+  return goonSession;
+}
+
+/** Merge the machine reason with whatever the signaling client recorded. */
+function errorInfo(reason) {
+  const sig = goonSession && goonSession.signaling ? goonSession.signaling.lastErrorInfo : null;
+  if (sig && sig.kind) return sig;
+  return { kind: String(reason || 'network'), detail: null, retryAfterSeconds: null };
+}
+
+async function teardownEverything() {
+  detachMatch();
+  if (soloDriver) { try { soloDriver.stop(); } catch (_e) { /* ignore */ } soloDriver = null; }
+  if (soloOpponent) { try { soloOpponent.dispose(); } catch (_e) { /* ignore */ } soloOpponent = null; }
+  if (soloPair) { try { soloPair.dispose(); } catch (_e) { /* ignore */ } soloPair = null; }
+  if (goonSession) {
+    const s = goonSession;
+    goonSession = null;
+    try { await s.dispose(); } catch (_e) { /* ignore */ }
+  }
+  try { layers.stopAll(); } catch (_e) { /* ignore */ }
+  try { executor?.stopAll?.(); } catch (_e) { /* ignore */ }
+}
+
+const actions = {
+  goTitle() { router.show('title'); },
+  goHost() { router.show('host'); },
+  goJoin() { router.show('join'); },
+
+  async goPractice() { await startSolo(); },
+
+  quit(why) { requestExit(why || 'menu'); },
+
+  /** @returns {Promise<{ok:boolean, code?:string, error?:object}>} */
+  async hostStart() {
+    await teardownEverything();
+    const s = ensureSession();
+    awaitingEntry = true;
+    lastConnectFailed = null;
+    let code = null;
+    try { code = await s.host(); } finally { awaitingEntry = false; }
+    if (code) return { ok: true, code };
+    return { ok: false, error: errorInfo(lastConnectFailed) };
+  },
+
+  /** @returns {Promise<{ok:boolean, error?:object}>} */
+  async joinStart(inviteCode) {
+    await teardownEverything();
+    const s = ensureSession();
+    awaitingEntry = true;
+    lastConnectFailed = null;
+    let ok = false;
+    try { ok = await s.join(inviteCode); } finally { awaitingEntry = false; }
+    if (ok) return { ok: true };
+    return { ok: false, error: errorInfo(lastConnectFailed) };
+  },
+
+  /** The host/join screen's Cancel: fold the pending room, stay on the page. */
+  async cancelPending() {
+    await teardownEverything();
+  },
+
+  /**
+   * User-initiated exit from wherever we are. In Live/SuddenDeath GoonSession
+   * routes this through cancelMatch, i.e. a MERCY — leaving is never a way to
+   * dodge a loss. Pre-live it is a clean fold that never reaches the ledger.
+   */
+  async leave(why) {
+    logger.info('leave (' + (why || '?') + ')');
+    const s = goonSession;
+    if (s) { try { await s.leave(); } catch (e) { logger.warn('leave threw: ' + ((e && e.message) || e)); } }
+    else if (currentMatch) { try { currentMatch.cancelMatch('left'); } catch (_e) { /* ignore */ } }
+    await teardownEverything();
+    router.show('title');
+  },
+};
+
+/* ----------------------------------------------------------------------------
+ * PRACTICE — a loopback pair and a scripted opponent (ui/soloDriver.js).
+ *
+ * Two real matches over a real (in-process) transport: identical message types,
+ * identical clock behaviour, real latency and a deliberately weird guest clock
+ * skew, so a bug that only appears "when the other side does X" appears here.
+ * The local side is the HOST, because that is the side that proposes the
+ * consent sheet and the countdown, i.e. the side with more UI to exercise.
+ * -------------------------------------------------------------------------- */
+async function startSolo() {
+  await teardownEverything();
+
+  const profile = (session.match && session.match.profile) || 'p2p';
+  const preset = loopbackPresets[profile] || loopbackPresets.p2p;
+  const opts = preset();
+  const skew = session.match && Number(session.match.skewMs);
+  if (isFinite(skew) && skew) opts.guestClockSkewMs = skew;
+  opts.logger = logger;
+
+  soloPair = createLoopbackPair(opts);
+
+  const local = buildMatch(soloPair.host, true);
+  soloOpponent = buildMatch(soloPair.guest, false, { withSuddenDeathUi: false, displayName: 'Practice' });
+  soloDriver = createSoloDriver({ match: soloOpponent, logger });
+
+  attachMatch(local, soloPair.host);
+  local.adoptLobby();
+  soloOpponent.adoptLobby();
+  soloDriver.start();
+
+  logger.info('practice: loopback "' + profile + '" latency ' + opts.latencyMs + 'ms skew ' + opts.guestClockSkewMs + 'ms');
+  try {
+    const ok = await soloPair.connect();
+    if (!ok) logger.warn('practice: clock sync did not converge');
+  } catch (e) {
+    logger.error('practice: connect failed: ' + ((e && e.stack) || e));
+    toasts?.bad?.('practice could not start');
+    await teardownEverything();
+    router.show('title');
+  }
+}
+
+/* ============================================================================
+ * BUILD — one call, after init+manifest, before the first screen.
+ * ==========================================================================*/
+function buildApp() {
+  prefs = createPrefs(session.prefs);
+  audio = createAudio({ prefs, logger });
+  toasts = createToasts({ prefs });
+  sheets = createSheets({ audio, logger });
+  matchLog = createMatchLog();
+
+  options = createOptions({
+    prefs, audio, session, logger,
+    setFullscreen: (on) => bridge.send({ type: 'fullscreen-set', on: !!on }),
+    isInMatch: () => !!currentMatch && currentMatch.phase !== GoonMatchPhase.Idle,
+  });
+
+  try {
+    document.documentElement.setAttribute('data-gg-motion', prefs.get('reduceMotion') ? 'reduced' : 'full');
+  } catch (_e) { /* ignore */ }
+
+  if (createExecutor) {
+    try {
+      executor = createExecutor({
+        media, layers, audio, logger,
+        // The toy bridge only exists inside the app: a browser cannot reach a
+        // toy, and a null bridge is how the executor knows to skip toy cues.
+        toyBridge: session.hosted ? ((m) => bridge.send(m)) : null,
+      });
+    } catch (e) {
+      logger.error('createExecutor threw: ' + ((e && e.stack) || e));
+      executor = null;
+    }
+  }
+
+  ctx = {
+    session, prefs, audio, toasts, sheets, options, matchLog, actions, logger,
+    getMatch: () => currentMatch,
+    getTransport: () => currentTransport,
+    getClock: () => { try { return currentTransport ? currentTransport.clock : null; } catch (_e) { return null; } },
+    getSd: () => currentSd,
+  };
+
+  router = createRouter({
+    screens: {
+      title: titleScreen,
+      host: hostScreen,
+      join: joinScreen,
+      lobby: lobbyScreen,
+      draft: draftScreen,
+      countdown: countdownScreen,
+      recap: recapScreen,
+    },
+    ctx,
+    logger,
+  });
+  ctx.router = router;
+  router.onChanged(paintProbe);
+
+  ensureProbe();
+  paintProbe();
+}
+
+/* ----------------------------------------------------------------------------
+ * PROBE — #gg-boot-ok lives on <body>, not inside a screen, so the play-test
+ * driver keeps a live readout of screen + phase for the WHOLE run rather than
+ * only while the title is up.
+ * -------------------------------------------------------------------------- */
+function ensureProbe() {
+  if (!hasDom() || el('gg-boot-ok')) return;
+  const span = document.createElement('span');
+  span.id = 'gg-boot-ok';
+  span.textContent = 'boot ok';
+  document.body.appendChild(span);
+}
+
+function paintProbe() {
+  const ok = el('gg-boot-ok');
+  if (!ok) return;
+  ok.dataset.hosted = String(session.hosted);
+  ok.dataset.init = String(gotInit);
+  ok.dataset.manifest = String(gotManifest);
+  ok.dataset.solo = String(!!soloPair);
+  ok.dataset.screen = String(router ? (router.current || 'none') : 'boot');
+  ok.dataset.phase = String(currentMatch ? currentMatch.phase : -1);
+  ok.dataset.stubs = stubs.join(',');
+  ok.dataset.fullscreen = String(session.fullscreen);
 }
 
 /* ----------------------------------------------------------------------------
@@ -261,6 +855,7 @@ function requestExit(why) {
   if (exiting) return;
   exiting = true;
   bridge.log('exit requested (' + why + ')');
+  try { prefs?.flush?.(); } catch (_e) { /* ignore */ }
   bridge.send({ type: 'exit' });
   try { exitTimer = setTimeout(() => finishExit('fallback'), EXIT_FALLBACK_MS); } catch (_e) { finishExit('fallback'); }
 }
@@ -268,16 +863,43 @@ function requestExit(why) {
 function finishExit(why) {
   try { clearTimeout(exitTimer); } catch (_e) { /* ignore */ }
   exiting = true;
+  try { void teardownEverything(); } catch (_e) { /* best effort */ }
   try { layers.stopAll(); } catch (_e) { /* best effort */ }
   bridge.log('exit-done (' + why + ')');
   bridge.send({ type: 'exit-done' });
 }
 
 /* ----------------------------------------------------------------------------
- * INPUT — Escape (hold to leave) and F11 (window mode).
+ * THE ESCAPE LADDER — the safety contract, in code.
+ *
+ *   TAP, Live or SuddenDeath   -> declareMercy() ON KEYDOWN. Not on keyup, not
+ *                                 behind a confirm dialog, not after an
+ *                                 animation. The dignified concede has to be
+ *                                 the FASTEST thing on the page, and the engine
+ *                                 ends the match locally even if the wire is
+ *                                 dead (core/match.js §11).
+ *   TAP, Lobby/Consent/Draft/Countdown
+ *                              -> confirm-free cancel + leave. Pre-live is a
+ *                                 clean fold that never reaches the ledger, so
+ *                                 there is nothing to confirm.
+ *   TAP, no match              -> close the topmost overlay, or nothing.
+ *   HOLD >= 1.2s               -> mercy first (if we have not already), THEN
+ *                                 the exit handshake. Closing the window can
+ *                                 never be a way to dodge a loss or strand the
+ *                                 opponent waiting on a countersignature.
+ *
+ * e.repeat is dropped and `escDown` latches, so a held key fires the tap action
+ * exactly once — a mercy storm would spam the wire with `mercy` frames.
+ * The mercy BUTTON (ui/mercy.js, sibling I) calls the same match API; neither
+ * path is privileged over the other.
  * -------------------------------------------------------------------------- */
 let escTimer = 0;
-let escHeld = false;
+let escDown = false;
+
+function isPreLive(phase) {
+  return phase === GoonMatchPhase.Lobby || phase === GoonMatchPhase.Consent
+    || phase === GoonMatchPhase.Draft || phase === GoonMatchPhase.Countdown;
+}
 
 function onKeyDown(e) {
   if (e.key === 'F11') {
@@ -289,23 +911,43 @@ function onKeyDown(e) {
     }
     return;
   }
-  if (e.key !== 'Escape' || e.repeat) return;
+  if (e.key !== 'Escape' || e.repeat || escDown) return;
+  escDown = true;
 
-  // TODO(match): route through mercy. Once the match engine lands, a TAP of Esc
-  // in a LIVE match must open the mercy confirm (the dignified surrender), and
-  // this HOLD-to-exit path must MERCY FIRST — declare mercy, let the result
-  // handshake settle, and only then request exit — so leaving the window can
-  // never be a way to dodge a loss or strand the opponent waiting on a
-  // countersignature. Until the engine exists, Esc only does hold-to-exit.
-  escHeld = true;
+  const m = currentMatch;
+  const phase = m ? m.phase : GoonMatchPhase.Idle;
+
+  if (m && (phase === GoonMatchPhase.Live || phase === GoonMatchPhase.SuddenDeath)) {
+    if (!escMercied) {
+      escMercied = true;
+      logger.info('escape -> mercy');
+      try { m.declareMercy(); } catch (err) { logger.error('declareMercy threw: ' + ((err && err.stack) || err)); }
+    }
+  } else if (m && isPreLive(phase)) {
+    logger.info('escape -> pre-live cancel');
+    void actions.leave('escape');
+  } else {
+    if (sheets && sheets.isOpen) sheets.close(null);
+    else if (options && options.isOpen) options.close();
+  }
+
   try {
-    escTimer = setTimeout(() => { if (escHeld) requestExit('hold-escape'); }, ESC_HOLD_MS);
+    escTimer = setTimeout(() => { if (escDown) holdExit(); }, ESC_HOLD_MS);
   } catch (_e) { /* ignore */ }
+}
+
+function holdExit() {
+  const m = currentMatch;
+  if (m && !escMercied && (m.phase === GoonMatchPhase.Live || m.phase === GoonMatchPhase.SuddenDeath)) {
+    escMercied = true;
+    try { m.declareMercy(); } catch (_e) { /* ignore */ }
+  }
+  requestExit('hold-escape');
 }
 
 function onKeyUp(e) {
   if (e.key !== 'Escape') return;
-  escHeld = false;
+  escDown = false;
   try { clearTimeout(escTimer); } catch (_e) { /* ignore */ }
 }
 
@@ -331,6 +973,7 @@ if (hasDom()) {
   try {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('pagehide', () => { try { prefs?.flush?.(); } catch (_e) { /* ignore */ } });
   } catch (_e) { /* ignore */ }
   layers.setFxHeat(0);
   startHeartbeat();
@@ -342,5 +985,16 @@ if (hasDom()) {
 /* Handy for the play-test driver and for anything that needs the shell's guts
  * without importing it (the C# side can evaluate window.__gg.session). */
 if (typeof window !== 'undefined') {
-  try { window.__gg = { session, bridge, media, layers, requestExit }; } catch (_e) { /* ignore */ }
+  try {
+    window.__gg = {
+      session, bridge, media, layers, requestExit,
+      get match() { return currentMatch; },
+      get transport() { return currentTransport; },
+      get router() { return router; },
+      get prefs() { return prefs; },
+      get matchLog() { return matchLog; },
+      get stubs() { return stubs.slice(); },
+      actions,
+    };
+  } catch (_e) { /* ignore */ }
 }
