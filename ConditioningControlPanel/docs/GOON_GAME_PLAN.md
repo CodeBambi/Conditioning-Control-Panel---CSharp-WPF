@@ -28,6 +28,33 @@ Status legend: [ ] todo, [x] done. Update this file as phases land.
    receiver's own local library. Server does matchmaking/signaling + one ledger write.
 10. Only Opus agents implement; Fable coordinates. (Same rule as haptics.)
 
+## Platform-agnostic mandate (added 2026-08-03, mid-Wave-1)
+Mobile (CCP-Mobile, Expo/React Native) and a webapp are planned follow-on clients.
+The C# implementation is ONE client of the protocol, not the protocol itself:
+- **The protocol is the product.** After Wave-1, Fable writes
+  `docs/GOON_GAME_PROTOCOL.md`: a language-neutral spec of every message schema,
+  the signaling + relay + ledger REST contracts (lifted from Phase A's
+  documented JSON), the clock-sync procedure, the seed-XOR commit, the scoring
+  formula/constants, and the deterministic round-generation algorithms
+  (transcribable to TypeScript — Phase D must report its algorithms precisely).
+  Any schema change in `GoonContracts.cs` must be mirrored there.
+- **Capability negotiation** (`GoonCaps` in `HelloMsg`): every client advertises
+  platform + supported payload kinds / draft elements / round kinds. Draft pool =
+  intersection of both players' elements; senders may only send payload kinds the
+  receiver advertised (others → `rejected_filtered`); round kinds from the rounds
+  intersection, with ReactionDuel as the universal fallback every client MUST
+  support. A phone with no BrainDrain overlay or LAN toy path simply advertises
+  less — the match still works.
+- **Wire enum codes are frozen integers** (explicit values in contracts; append
+  only, never renumber). snake_case JSON, no .NET-specific serialization
+  behaviors (no TypeNameHandling, no ticks-based dates — ms integers only).
+- **WebRTC + REST are already cross-platform** (browsers native, RN via
+  react-native-webrtc); the server never needs to know the client platform
+  except as ledger metadata.
+- WPF-isms stay INSIDE this client (dispatcher marshaling, DispatcherTimer,
+  XAML) — that's fine; they must simply never leak into a wire schema or into
+  protocol-visible behavior.
+
 ## Non-negotiable safety rails
 - **Esc/panic always works** and maps to Mercy (graceful concede + full local stop via the
   existing `StopAllRemoteEffects` fan-out shape). GG must NEVER touch `PanicKeyEnabled`,
@@ -189,19 +216,87 @@ never auto-declared a mercy).
       banned-verb list, tuning consts. Agents extend via new members only, noted here.
 
 ### Phase A — Transport (Agent A)
-- [ ] SIPSorcery peer + data channel; signaling client against `/v2/goon/*`; ICE with
+- [x] SIPSorcery peer + data channel; signaling client against `/v2/goon/*`; ICE with
       public STUN; 10 s ICE timeout → relay fallback; reconnect-with-resume (5 s grace).
-- [ ] `MatchClock` (ping rounds, median offset, 30 s re-sync) + fire-at-timestamp scheduler.
-- [ ] Seed exchange (XOR commit) + deterministic PRNG helper.
-- [ ] Mock transport (loopback pair in-process) for offline dev/play-test of B–E.
+- [x] `MatchClock` (ping rounds, median offset, 30 s re-sync) + fire-at-timestamp scheduler.
+- [x] Seed exchange (XOR commit) + deterministic PRNG helper.
+- [x] Mock transport (loopback pair in-process) for offline dev/play-test of B–E.
+
+**Decisions made in Phase A (integration + Phases B/C/E/F need these):**
+- **SIPSorcery 10.0.13 VERDICT: VIABLE, WebRTC stays primary.** Verified by execution
+  (in-process peers: channel open 0.97 s; full invite→join→SDP/ICE→open 2.6 s; 60 KB frame
+  intact; srflx candidate from public STUN). Pure managed — publish unaffected. Trap fixed:
+  answering side gets `ondatachannel` with the channel ALREADY open, so `onopen` never fires
+  there — `HandleChannelOpen` is idempotent and called directly when `readyState == open`.
+- **64-bit seeds ride the wire as decimal STRINGS** (read back from string or number) —
+  bare JSON numbers above 2^53 silently lose low bits in `JSON.parse`, which would hand a
+  web/RN player a different bubble layout. TS reads with `BigInt(s)`. APPROVED by Fable;
+  this is the one non-obvious line for the protocol doc.
+- Files: `GoonWire.cs` (t-discriminated serializer, 16 KB frame cap, never throws),
+  `GoonRng.cs` (xoshiro256** + splitmix64, `NewSeedContribution` CSPRNG, `CombineSeeds`,
+  `Derive(seed, purpose)`), `MatchClock.cs`, `GoonTransportBase.cs`, `GoonSignalingClient.cs`
+  (+ `GoonFakeSignalingServer` = executable server contract), `GoonWebRtcTransport.cs`,
+  `GoonRelayTransport.cs`, `GoonLoopbackTransport.cs`.
+- **Scheduling rule**: never hand-roll `now + 1000` — use `MatchClock.SafeFireAt(extraMs)`
+  (adds buffer + a full RTT). `ScheduleAt` returns null (refuses) for in-buffer instants or
+  an unsynced clock — null = drop and log, NEVER "fire now". Dispose the handle to cancel.
+- **Loopback presets**: `P2P()` 25 ms, `Relay()` 900 ms (features must survive this),
+  `Instant()`; guest carries a deliberate 3517 ms clock skew so raw-local-timestamp bugs are
+  impossible to miss; `SimulateOutage(ms)` for wobbly/abandon paths. `await ConnectAsync()`
+  before scheduling anything.
+- **P2P→relay handoff**: on IceFailed, build `GoonRelayTransport` with the SAME
+  `GoonSignalingClient` + `AdoptRoom(code, token)` — no second invite/join, weekly pass not
+  double-burned.
+- **Forward-compat**: unknown integer enum codes deserialize to out-of-range values, not
+  exceptions — Phase C treats unrecognized kinds as `rejected_filtered`.
+- **Signaling contract highlights** (full spec in `GoonSignalingClient.cs` header, lift into
+  protocol doc): invite returns `{code, token, role, pass: premium|weekly_free}` (402
+  `no_pass` + `next_pass_utc`); `/signal` is post-and-drain in one call with opaque `data`
+  (SIPSorcery `toJSON()` output is byte-identical to the browser's — no translation layer);
+  relay needs own rate budget (~1 call/2 s, 20 min), 16 KB/frame, 128-frame ring, never
+  inspects `data`. Bare 404 with no body = "not deployed yet" → warming-up UI, not "bad code".
 
 ### Phase B — Match engine (Agent B)
-- [ ] `GoonMatchService` state machine + consent lobby model + draft model + drafted-element
+- [x] `GoonMatchService` state machine + consent lobby model + draft model + drafted-element
       session ramp (deterministic from match seed) + mercy/abandon/result handshake
       (result = both clients sign; mismatch recorded as disputed, cosmetics still granted
       to the uncontested parts).
-- [ ] `GoonScoring` + charge economy + attention/interaction multiplier (GazeFocusService
+- [x] `GoonScoring` + charge economy + attention/interaction multiplier (GazeFocusService
       when cam; interaction-check prompts when not).
+
+**Decisions made in Phase B (integration + Phases C/D/E need these):**
+- Files: `GoonMatchService.cs`, `GoonScoring.cs` (+ `GoonPayloadRateLimiter` token bucket),
+  `GoonDraft.cs` (risk tiers + pacing profiles + `BuildRamp`), `GoonMatchTypes.cs`
+  (cue/payload event args, `GoonOpponentState`, `GoonMatchResult`, `GoonCapabilities`,
+  `GoonSuddenDeathContext`, `IGoonSuddenDeathRunner`).
+- **Risk tiers v1**: 0 = Flashes, BouncingText · 1 = Subliminals, Bubbles · 2 = Videos,
+  LockCards, ToyPatterns · 3 = BrainDrain. 3-pick draft sums 1..7 → ×1.15..×2.05.
+- **Phase C surface**: subscribe `ElementStartRequested` / `ElementIntensityChanged` /
+  `ElementStopRequested` (`GoonElementCueEventArgs {Element, Intensity, DurationMs,
+  ElapsedMs}`) + `PayloadAccepted` (`{PayloadMsg, FireAtLocalMs}`), and call back
+  `NotifyInboundPayloadFinished(id, endured)` (endured → +1 charge + `survived` receipt).
+  Engine already truncates/strips payload text and clamps intensity/duration/fire-at
+  defensively; Phase C still owns resolution, level gates, mixer cap. BrainDrain is behind
+  the withheld-content flag — executor must degrade gracefully, not silently no-op.
+- **Caps retrofit done**: draft pool = elements intersection; inbound non-advertised kind →
+  `rejected_filtered`; outbound gated on peer's caps; `AllowedRoundKinds` (rounds
+  intersection + forced ReactionDuel) rides `GoonSuddenDeathContext`; version/pool-size
+  incompatibility → `FailLobby(reason)` + `LobbyFailed` event, clean reset. Empty peer caps
+  = "everything we support" (v1-peer compat).
+- **Message routing rule**: during SuddenDeath the SERVICE forwards RoundSchedule/
+  RoundResult/Mercy to the runner via `HandleMessage` — the runner must NOT subscribe to
+  the transport. No runner attached → Live expiry settles on score comparison.
+- **Phase E surface**: `ReportAttention(pct)` (cam), `InteractionCheckDue` event +
+  `ReportInteractionCheck(passed)` (no-cam, 90 s cadence), `LocalAttentionMode`/
+  `LocalToyConnected` before hosting/joining, Esc ladder → `DeclareMercy()` (works in every
+  phase, never touches panic/lockdown).
+- **Integration (Fable)**: inject `seed => new GoonRng(seed)` at construction (service has a
+  private splitmix64 fallback for standalone use); wire runner ← `GoonSuddenDeathRunner`.
+- **Economy receipt gap**: cost-violating payloads currently report `rejected_rate` (the
+  documented status set has no `rejected_cost`) — decide with the protocol doc whether to
+  add the distinct status (leaning yes).
+- **Abandon semantic (current)**: 60 s without ticks records the DISCONNECTING side as the
+  loser (`Abandon`). Confirm vs. a no-result abandon during play-test (open question).
 
 ### Phase C — Payload executor (Agent C)
 - [ ] `GoonPayloadExecutor`: envelope → service fan-out; receiver-side resolve (tags →
@@ -209,8 +304,36 @@ never auto-declared a mercy).
       match end (RC `StopAllRemoteEffects` shape, minus RC-specific state).
 
 ### Phase D — Sudden death (Agent D)
-- [ ] Round harness on shared clock + seed; quick-draw lock card; staring contest
+- [x] Round harness on shared clock + seed; quick-draw lock card; staring contest
       (cam/cam) with reaction-check fallback; bubble race; escalation ladder + net-3 exit.
+
+**Decisions made in Phase D (integration + Phase E need these):**
+- Files: `GoonSuddenDeath.cs` (`GoonSuddenDeathRunner` implements Agent B's
+  `IGoonSuddenDeathRunner` directly — no adapter; + pure antisymmetric `GoonRoundJudge`),
+  `Rounds\GoonRoundModel.cs` (specs, input-feed interfaces `IGoonRoundInputs`
+  {LockCard, Attention, Reaction, Bubbles}, `IGoonRoundPresenter`, fake feeds for tests),
+  `Rounds\{QuickDraw,StaringContest,ReactionDuel,BubbleRace}Round.cs`.
+- **Contract addition (the only one)**: `RoundResultMsg.progress` (int) — round-specific
+  tally for judging when neither side "completed" (bubbles cleared / avg attention / typed
+  mistakes / false-start flag).
+- **Determinism**: round seed = XOR of per-round contributions (minted once, reused across
+  schedule retries — bumping FireAt never changes the seed); fixed draw order per round is
+  documented in the agent report → transcribe into the protocol doc. Ladder is pure:
+  `KindFor(roundNo, modes)`, `DifficultyFor = 1 + (roundNo-1)/3`; guest validates the
+  host's proposed kind, warns on mismatch, but follows (no deadlock). Host retries a late
+  seed-half once with +2 s; missing half/result → `Aborted`, never a fabricated win.
+- **Quick-draw phrases come from a fixed in-code pool of 16**, NOT the user's lock-card
+  phrase pool (that's per-mod/per-user → two players would get different cards). Cards run
+  `Strict=false` so Esc stays mapped to Mercy. `LockCardService` untouched — Phase E renders
+  via `ShowLockCard(spec.Phrase, spec.Repeats, customStrict:false)` + `LockCardCompleted`.
+- **Phase E wiring table** (render hook + input feed per round) is in the agent report:
+  staring beats through Flash/compositor + webcam blink feed; reaction duel needs a GG HUD
+  overlay (`ArmReactionDuel`/`FireReactionStimulus`, feints from difficulty 2, false start =
+  round loss); bubble race spawns spec bubbles via BubbleService + pop-index callback; plus
+  `ShowRoundIntro` countdown and `ShowRoundVerdict` (badge Suspect reactions).
+- **Caps note (added post-mandate)**: round-kind selection must additionally respect the
+  `GoonCaps.SupportedRounds` intersection — enforce in the host's ladder proposal at
+  integration (guest already follows host).
 
 ### Phase E — UI (after A–D)
 - [ ] Tab (invite/join, consent sheet, draft picker), live HUD overlay (own score, charge

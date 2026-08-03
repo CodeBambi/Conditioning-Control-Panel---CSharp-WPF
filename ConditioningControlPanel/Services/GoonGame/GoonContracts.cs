@@ -11,6 +11,14 @@ using Newtonsoft.Json;
 // serialized member. Every P2P message inherits GoonMessage and is routed by
 // its "t" discriminator. Times labeled *MatchMs* are on the shared MatchClock
 // (see IMatchClock); times labeled *LocalMs* never leave this machine.
+//
+// PLATFORM-AGNOSTIC MANDATE (2026-08-03): mobile (CCP-Mobile/Expo) and web
+// clients are planned. The PROTOCOL is the product; this file is merely the
+// C# binding of it. Therefore: wire enums carry EXPLICIT integer codes and are
+// NEVER reordered or renumbered; clients advertise capabilities in Hello and
+// may only be sent what they advertised; nothing in any schema may assume
+// Windows/WPF. The neutral spec lives in docs/GOON_GAME_PROTOCOL.md (written
+// after Wave-1) — schema changes here must be mirrored there.
 // ============================================================================
 
 namespace ConditioningControlPanel.Services.GoonGame
@@ -29,19 +37,20 @@ namespace ConditioningControlPanel.Services.GoonGame
         Recap,
     }
 
-    public enum GoonAttentionMode { Cam, NoCam }
+    public enum GoonAttentionMode { Cam = 0, NoCam = 1 }
 
-    /// <summary>Draft pool. Each element = a session ingredient the drafting player ENDURES.</summary>
+    /// <summary>Draft pool. Each element = a session ingredient the drafting player ENDURES.
+    /// Wire codes are FROZEN — append only, never renumber.</summary>
     public enum GoonElement
     {
-        Flashes,
-        Videos,
-        Subliminals,
-        Bubbles,
-        LockCards,
-        ToyPatterns,
-        BrainDrain,
-        BouncingText,
+        Flashes = 0,
+        Videos = 1,
+        Subliminals = 2,
+        Bubbles = 3,
+        LockCards = 4,
+        ToyPatterns = 5,
+        BrainDrain = 6,
+        BouncingText = 7,
     }
 
     /// <summary>
@@ -51,29 +60,29 @@ namespace ConditioningControlPanel.Services.GoonGame
     /// </summary>
     public enum GoonPayloadKind
     {
-        FlashBurst,
-        SubliminalStorm,
-        BubbleSwarm,
-        Video,          // mandatory video, attention checks ON
-        LockCard,       // voice if receiver enabled it, typed fallback
-        ToyPattern,     // haptics v2 mixer only; receiver MasterCap applies
-        BrainDrain,     // the one "heavy"; once per match per player
+        FlashBurst = 0,
+        SubliminalStorm = 1,
+        BubbleSwarm = 2,
+        Video = 3,      // mandatory video, attention checks ON
+        LockCard = 4,   // voice if receiver enabled it, typed fallback
+        ToyPattern = 5, // haptics v2 mixer only; receiver MasterCap applies
+        BrainDrain = 6, // the one "heavy"; once per match per player
     }
 
     public enum GoonRoundKind
     {
-        QuickDrawLockCard,  // shared-seed identical card, race to solve
-        StaringContest,     // cam+cam only
-        ReactionDuel,       // fallback when either side is NoCam
-        BubbleRace,         // shared-seed identical swarm, race to clear
+        QuickDrawLockCard = 0,  // shared-seed identical card, race to solve
+        StaringContest = 1,     // cam+cam only
+        ReactionDuel = 2,       // fallback when either side is NoCam
+        BubbleRace = 3,         // shared-seed identical swarm, race to clear
     }
 
     public enum GoonEndReason
     {
-        Mercy,              // dignified self-declared finish (Esc ladder lands here)
-        SuddenDeathLoss,    // net -3 rounds in sudden death
-        Abandon,            // disconnect beyond grace, no resume
-        Draw,               // both merciful within the same tick window
+        Mercy = 0,              // dignified self-declared finish (Esc ladder lands here)
+        SuddenDeathLoss = 1,    // net -3 rounds in sudden death
+        Abandon = 2,            // disconnect beyond grace, no resume
+        Draw = 3,               // both merciful within the same tick window
     }
 
     // --------------------------------------------------------------- constants
@@ -198,6 +207,23 @@ namespace ConditioningControlPanel.Services.GoonGame
         [JsonProperty("pong_local_ms")] public long PongLocalMs { get; set; }
     }
 
+    /// <summary>
+    /// Per-client capability advertisement. Mobile/web clients advertise a smaller
+    /// set. RULES: the draft pool offered to a player = the INTERSECTION of both
+    /// players' SupportedElements; a sender may only send payload kinds the
+    /// RECEIVER advertised (receiver drops others with a rejected_filtered
+    /// receipt); sudden-death round kinds come from the rounds intersection
+    /// (ReactionDuel is the universal fallback every client MUST support).
+    /// </summary>
+    public sealed class GoonCaps
+    {
+        [JsonProperty("platform")] public string Platform { get; set; } = "windows"; // windows|android|ios|web
+        [JsonProperty("payloads")] public List<GoonPayloadKind> SupportedPayloads { get; set; } = new();
+        [JsonProperty("elements")] public List<GoonElement> SupportedElements { get; set; } = new();
+        [JsonProperty("rounds")] public List<GoonRoundKind> SupportedRounds { get; set; } = new();
+        [JsonProperty("min_v")] public int MinProtocolVersion { get; set; } = GoonConsts.ProtocolVersion;
+    }
+
     /// <summary>Lobby hello: identity + capabilities + consent inputs.</summary>
     public sealed class HelloMsg : GoonMessage
     {
@@ -206,6 +232,7 @@ namespace ConditioningControlPanel.Services.GoonGame
         [JsonProperty("attention_mode")] public GoonAttentionMode AttentionMode { get; set; }
         [JsonProperty("toy_connected")] public bool ToyConnected { get; set; }
         [JsonProperty("app_version")] public string AppVersion { get; set; } = "";
+        [JsonProperty("caps")] public GoonCaps Caps { get; set; } = new();
     }
 
     /// <summary>The consent sheet both players must confirm, byte-identical on both sides.</summary>
@@ -293,6 +320,10 @@ namespace ConditioningControlPanel.Services.GoonGame
         [JsonProperty("elapsed_ms")] public int ElapsedMs { get; set; }
         [JsonProperty("reaction_ms")] public int? ReactionMs { get; set; }
         [JsonProperty("suspect")] public bool Suspect { get; set; }                   // < SuspectReactionMs
+        /// <summary>Phase D addition: round-specific tally the winner check needs when neither side
+        /// "completed" — bubbles cleared (BubbleRace), average attention % (StaringContest),
+        /// mistakes typed (QuickDraw), false-start flag (ReactionDuel). 0 when unused.</summary>
+        [JsonProperty("progress")] public int Progress { get; set; }
     }
 
     public sealed class MercyMsg : GoonMessage
