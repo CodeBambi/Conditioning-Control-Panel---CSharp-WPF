@@ -262,12 +262,13 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Programmatic equivalent of a mouse click on a flash window. Runs
         /// the same close + hydra-multiplication + haptic + FlashClicked
-        /// pipeline as MouseLeftButtonDown.
+        /// pipeline as MouseLeftButtonDown. Flagged as gaze-driven so hydra
+        /// can stop the self-sustaining chain (#784) — see OnFlashClicked.
         /// </summary>
         internal void GazePop(FlashWindow window)
         {
             if (window == null || window.IsFadingOut) return;
-            OnFlashClicked(window, App.Settings.Current);
+            OnFlashClicked(window, App.Settings.Current, fromGaze: true);
         }
 
         #endregion
@@ -1691,7 +1692,8 @@ namespace ConditioningControlPanel.Services
             if (!anyLayer) ReleaseLayerHook();
         }
 
-        private void OnFlashClicked(FlashWindow window, AppSettings settings)
+        /// <param name="fromGaze">True when a gaze dwell/blink popped this flash rather than the mouse.</param>
+        private void OnFlashClicked(FlashWindow window, AppSettings settings, bool fromGaze = false)
         {
             // Cancel only THIS window's lifetime — other windows keep living~ ✨
             try { window.LifetimeCts?.Cancel(); } catch { }
@@ -1707,7 +1709,14 @@ namespace ConditioningControlPanel.Services
 
             // Hydra mode: spawn 2 more when clicking (NO NEW AUDIO)
             // No global _cleanupInProgress check needed — each window has its own lifetime~ 🐍
-            if (settings.CorruptionMode)
+            // #784: a gaze pop is automatic — the dwell attractor snaps straight onto the fresh
+            // children and pops them ~1s later, so an unrestricted gaze→hydra chain feeds itself
+            // and flashes never stop spawning (the population cap only bounds how many are on
+            // screen at once, not the endless churn). Let gaze take the FIRST hop off an original
+            // flash (the documented "stare to pop = click, including hydra") and stop there;
+            // children of a gaze pop just dismiss. Mouse clicks are unchanged — a human hand is
+            // the throttle there.
+            if (settings.CorruptionMode && (!fromGaze || window.HydraGeneration == 0))
             {
                 var maxHydra = Math.Min(settings.HydraLimit, 20);
                 int currentCount;
