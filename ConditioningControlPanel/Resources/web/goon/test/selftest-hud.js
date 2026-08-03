@@ -1928,6 +1928,217 @@ const { S: STR } = await import('../ui/strings.js');
     'and neither of them hides it — the count has to stay readable');
 }
 
+// ---------------------------------------------------------- 16. the sfx pass
+/* ui/audio.js stopped being a stub. These pin the four things that make it real
+ * and that nothing else in the suite can see:
+ *   16a — every registered id resolves to a file that EXISTS ON DISK (the whole
+ *         point of a registry is that a rename is a test failure, not silence);
+ *   16b — the pure math and the pool/gesture constants;
+ *   16c — the graph is lazy: importing and constructing under node touches no
+ *         AudioContext, no fetch and no window;
+ *   16d — every hook this pass wired really calls through the audio API, read
+ *         off the source so a deleted call site cannot pass by being absent. */
+
+const audioMod = await import('../ui/audio.js');
+
+/* --- 16a. the registry resolves to real bytes ----------------------------- */
+{
+  const fs = await import('node:fs/promises');
+  const url = await import('node:url');
+  const { SFX_REGISTRY, SFX_IDS, DTRH_SFX_DIR, LOCAL_SFX_DIR } = audioMod;
+
+  ok(typeof audioMod.createAudio === 'function', 'ui/audio.js exports createAudio');
+  ok(SFX_IDS.length === Object.keys(SFX_REGISTRY).length,
+    'SFX_IDS is DERIVED from the registry, so the two cannot drift', String(SFX_IDS.length));
+  ok(Object.isFrozen(SFX_REGISTRY), 'the registry is frozen');
+
+  // Two roots, two rules. DtRH is HOTLINKED at an absolute path (the sprite
+  // precedent in exec/fx.css); everything else is a copy under goon/assets/sfx/.
+  const goonRoot = url.fileURLToPath(new URL('..', import.meta.url));
+  const webRoot = url.fileURLToPath(new URL('../..', import.meta.url));
+  const exists = async (p) => { try { await fs.access(p); return true; } catch (_e) { return false; } };
+
+  let checked = 0;
+  const missing = [];
+  const badGain = [];
+  for (const id of SFX_IDS) {
+    const entry = SFX_REGISTRY[id];
+    if (!Array.isArray(entry.files) || entry.files.length === 0) { missing.push(id + ': no files'); continue; }
+    if (!(entry.gain > 0 && entry.gain <= 1)) badGain.push(id + '=' + entry.gain);
+    for (const u of entry.files) {
+      checked++;
+      let abs;
+      if (u.startsWith(DTRH_SFX_DIR)) abs = webRoot + u.slice(1);          // '/dtrh/...' -> Resources/web/dtrh/...
+      else abs = url.fileURLToPath(new URL(u));                            // resolved local copy
+      if (!(await exists(abs))) missing.push(id + ' -> ' + u);
+    }
+  }
+  ok(missing.length === 0, 'every registered sfx url is a file that exists on disk', missing.join(' | '));
+  ok(badGain.length === 0, 'and every cue trim is a sane 0<g<=1', badGain.join(' '));
+  ok(checked >= 40, 'the registry actually carries a pack, not a token entry', String(checked));
+
+  // The two roots are used, and used the right way round.
+  const urls = SFX_IDS.flatMap((id) => SFX_REGISTRY[id].files);
+  ok(urls.some((u) => u.startsWith(DTRH_SFX_DIR)),
+    'DtRH cues are hotlinked absolute (/dtrh/…), never copied');
+  ok(urls.some((u) => /assets[\\/]sfx[\\/]/.test(u)),
+    'and the intake/bureau recycles are local copies under assets/sfx/');
+  ok(LOCAL_SFX_DIR === '../assets/sfx/', 'the local dir is module-relative (ui/ -> ../assets/sfx/)');
+  ok(!urls.some((u) => u.startsWith('/intake/')),
+    'nothing points at /intake/ — the harnesses only mount /dtrh/, so those had to be copied');
+
+  // The three pops really are three different sounds, or the distinction is a lie.
+  const pops = ['bubble-pop', 'bubble-pop-fx', 'bubble-pop-video'];
+  ok(pops.every((p) => SFX_REGISTRY[p]), 'plain / effect / video bubbles each have their own cue');
+  ok(new Set(pops.map((p) => SFX_REGISTRY[p].files.join(','))).size === 3,
+    'and all three resolve to different files');
+  ok(SFX_REGISTRY['bubble-pop-fx'].gain > SFX_REGISTRY['bubble-pop'].gain,
+    'the effect pop is the juicier of the two');
+  // Taste pins: the caption is under the pops, and the safety valve is not a sting.
+  ok(SFX_REGISTRY['announce-in'].gain < SFX_REGISTRY['bubble-pop'].gain,
+    'the announcer ribbon sits UNDER the pops in the mix');
+  ok(SFX_REGISTRY['subliminal'].gain <= 0.12, 'the subliminal tick stays barely-there');
+  ok(SFX_REGISTRY['gg-drop'].gain > SFX_REGISTRY['gg-drop-dud'].gain,
+    'an armed drop is louder than its fizzle');
+  ok(SFX_REGISTRY['lock-slip'].gain < SFX_REGISTRY['lock-solved'].gain,
+    'a typing slip is quieter than solving the card');
+}
+
+/* --- 16b. the pure math, the pool cap and the gesture path ---------------- */
+{
+  const { cueGain, pickVariant, SFX_TRIM, POOL_MAX, MIN_GAP_MS, UNLOCK_EVENTS } = audioMod;
+
+  ok(SFX_TRIM > 0 && SFX_TRIM <= 1, 'there is ONE exported master trim over every cue', String(SFX_TRIM));
+  ok(POOL_MAX >= 4 && POOL_MAX <= 16,
+    'the pool cap is a real ceiling — 26 bubbles may not become 26 sources', String(POOL_MAX));
+  ok(MIN_GAP_MS > 0, 'and same-frame repeats of one id are swallowed', String(MIN_GAP_MS));
+  ok(UNLOCK_EVENTS.includes('pointerdown') && UNLOCK_EVENTS.includes('keydown'),
+    'the gesture-unlock list covers pointer AND keyboard');
+
+  ok(Math.abs(cueGain(0.5, 1, 1) - 0.5 * SFX_TRIM) < 1e-9, 'cueGain folds the house trim in');
+  ok(cueGain(0.5, 0, 1) === 0, 'master 0 is silence');
+  ok(cueGain(0.5, 1, 0) === 0, 'sfx 0 is silence');
+  ok(Math.abs(cueGain(0.5, 0.5, 0.5) - 0.5 * 0.5 * 0.5 * SFX_TRIM) < 1e-9,
+    'and the three multiply, never conflate');
+
+  // No-repeat-last over a two-file rotation must alternate, never stick.
+  ok(pickVariant(1, 0) === 0, 'a single-variant cue always picks it');
+  ok(pickVariant(2, 0, () => 0) === 1, 'a repeat is stepped one off');
+  ok(pickVariant(2, 1, () => 0.99) === 0, 'in both directions');
+  let stuck = false;
+  let last = -1;
+  for (let i = 0; i < 40; i++) { const v = pickVariant(2, last); if (v === last) stuck = true; last = v; }
+  ok(!stuck, 'and forty draws never repeat the last one');
+}
+
+/* --- 16c. lazy: constructing under node touches nothing ------------------- */
+{
+  ok(typeof globalThis.AudioContext === 'undefined',
+    'the DOM stub really has no AudioContext (so the next checks mean something)');
+
+  const seen = [];
+  const bus = audioMod.createAudio({ logger: { debug: (m) => seen.push(m), warn: (m) => seen.push(m) } });
+  ok(bus.isReal === false, 'no AudioContext in this host -> isReal is false, not a crash');
+  ok(bus.contextState === 'none', 'and no context was constructed');
+  ok(bus.sfx('bubble-pop') === false, 'a cue in a hostless environment is a clean false');
+  ok(bus.sfx('nope-not-a-cue') === false, 'an unknown id is refused');
+  ok(bus.stats.unknown === 1, 'and COUNTED as unknown — a typo must be loud, not silent',
+    JSON.stringify(bus.stats));
+  ok(seen.some((m) => /unknown sfx id/.test(m)), 'the logger hears about it');
+
+  // The whole legacy API is still here: every screen calls these unconditionally.
+  for (const k of ['sfx', 'music', 'stopMusic', 'duck', 'setVolume', 'dispose', 'unlock', 'warm']) {
+    ok(typeof bus[k] === 'function', `the bus still exposes ${k}()`);
+  }
+  bus.music('title');
+  ok(bus.currentMusic === 'title', 'music() still books the bed name');
+  bus.duck(true);
+  ok(bus.isDucked === true, 'duck() still latches');
+  bus.duck(true);
+  ok(bus.isDucked === true, 'and is idempotent');
+  bus.stopMusic();
+  ok(bus.currentMusic === null, 'stopMusic clears it');
+  bus.setVolume('sfx', 0.5);
+  ok(bus.volumes.sfx === 0.5, 'setVolume writes the bus it names');
+  bus.setVolume('nonsense', 0.1);
+  ok(bus.volumes.sfx === 0.5, 'and ignores a bus it does not have');
+  ok(bus.unlock() === 'none', 'unlock() on a hostless bus reports none rather than throwing');
+  bus.dispose();
+  ok(bus.sfx('bubble-pop') === false, 'a disposed bus is inert');
+
+  // It must read the player's existing sliders, not invent a second set.
+  const prefsMod = await import('../ui/prefs.js');
+  const prefs = prefsMod.createPrefs({ masterVolume: 0.4, sfxVolume: 0.6 });
+  const bus2 = audioMod.createAudio({ prefs });
+  ok(bus2.volumes.master === 0.4 && bus2.volumes.sfx === 0.6,
+    'the bus seeds from ui/prefs.js — no settings UI of its own', JSON.stringify(bus2.volumes));
+  prefs.set('sfxVolume', 0.2);
+  ok(bus2.volumes.sfx === 0.2, 'and follows a live slider drag');
+  bus2.dispose();
+}
+
+/* --- 16d. every hook this pass wired is really at its call site ----------- */
+{
+  const fs = await import('node:fs/promises');
+  const url = await import('node:url');
+  const read = async (p) => fs.readFile(url.fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+
+  const bubblesSrc = await read('../exec/bubbles.js');
+  const dropsSrc = await read('../ui/drops.js');
+  const hudSrc = await read('../ui/hud.js');
+  const annSrc = await read('../ui/announcer.js');
+  const lockSrc = await read('../exec/lockCards.js');
+  const recapSrc = await read('../ui/screens/recap.js');
+  const titleSrc = await read('../ui/screens/title.js');
+  const audioSrc = await read('../ui/audio.js');
+
+  ok(/function popCue\(rec\)/.test(bubblesSrc) && /sfx\(popCue\(rec\)\)/.test(bubblesSrc),
+    'exec/bubbles.js routes its pop through popCue(), not one hardcoded id');
+  ok(/rec\.fromPayload[\s\S]{0,80}'bubble-pop'/.test(bubblesSrc),
+    "and a payload's clutter pops the PLAIN cue — their swarm is worth nothing and must not sound rich");
+  ok(/'bubble-pop-video'/.test(bubblesSrc) && /'bubble-pop-fx'/.test(bubblesSrc),
+    'the prism and the effect bubbles have their own');
+
+  ok(/sfx\('gg-drop'\)/.test(dropsSrc), 'ui/drops.js cues an armed drop');
+  ok((dropsSrc.match(/sfx\('gg-drop-dud'\)/g) || []).length === 2,
+    'and BOTH fizzle paths (no charge / arsenal full) cue the dud');
+  ok(!/reason: 'miss'[^\n]*sfx\(/.test(dropsSrc),
+    'a missed roll stays silent — most rolls miss');
+
+  ok(/sfx\(audio, 'payload-in'\)/.test(hudSrc), 'ui/hud.js cues an incoming payload as it lands');
+  ok((hudSrc.match(/sfx\(audio, 'payload-in'\)/g) || []).length === 1,
+    'exactly ONE landing cue — per-family stings would be eight sounds to learn');
+  ok(/mountAnnouncer\(\{\s*host: root, match, audio, onLog \}\)/.test(hudSrc),
+    'and the announcer finally gets the bus handed to it');
+
+  ok(/function cue\(\)[\s\S]{0,220}audio\.sfx\('announce-in'\)/.test(annSrc),
+    'ui/announcer.js has a cue for the ribbon sliding in');
+  ok((annSrc.match(/cue\(\);/g) || []).length === 1,
+    'fired once, on the way IN — the slide-out is deliberately silent');
+
+  ok(/onMistake: \(\) =>[\s\S]{0,160}'lock-slip'/.test(lockSrc),
+    'exec/lockCards.js buzzes a wrong keystroke through the view onMistake seam');
+  ok(/'lock-solved'/.test(lockSrc), 'and still chimes a solved card');
+
+  ok(/const STING = \{ won: 'recap-won', lost: 'recap-lost', draw: 'recap-draw' \}/.test(recapSrc),
+    'ui/screens/recap.js has a sting per verdict');
+  ok(/if \(stung \|\| !tone\) return;/.test(recapSrc),
+    'ONE per mount — paint() runs again when the countersignature lands');
+  ok(/'abandon' spends the one shot on silence|abandon/.test(recapSrc),
+    'and an abandoned match gets no fanfare');
+  ok(/audio\?\.unlock\?\.\(\)/.test(titleSrc),
+    'ui/screens/title.js builds the graph on the first screen, not the first cue');
+
+  // The bus itself must stay import-safe: no module-scope AudioContext / fetch.
+  const beforeFactory = audioSrc.slice(0, audioSrc.indexOf('export function createAudio'));
+  ok(!/new\s+(window\.)?(webkit)?AudioContext/.test(beforeFactory),
+    'ui/audio.js constructs no AudioContext at module scope');
+  ok(!/^\s*(await\s+)?fetch\(/m.test(beforeFactory),
+    'and fetches nothing at import time');
+  ok(/no-user-gesture-required/.test(audioSrc),
+    'the WebView2 autoplay flag is documented where the unlock path lives');
+}
+
 await sleep(60);
 console.log(`\nselftest-hud: ${n - failures}/${n} checks passed`);
 if (failures > 0) {

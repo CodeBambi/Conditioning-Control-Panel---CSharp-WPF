@@ -692,11 +692,25 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     catch (e) { warn(`pop dispatch threw: ${e && e.message}`); }
   }
 
+  /**
+   * WHICH pop you hear. Three cues, not seven: the ear cannot hold a per-kind
+   * table at a 26-bubble burst, but it hears "that one mattered" instantly.
+   *   normal        -> the plain pop (a payload's clutter pops this one too:
+   *                    their swarm is worth nothing and should not sound rich)
+   *   any effect    -> a fatter pop
+   *   video (prism) -> a hollow one, because it just earned you a window
+   */
+  function popCue(rec) {
+    if (!rec || rec.fromPayload || !rec.kind || rec.kind === 'normal') return 'bubble-pop';
+    if (rec.kind === 'video') return 'bubble-pop-video';
+    return 'bubble-pop-fx';
+  }
+
   function pop(rec, x, y) {
     rec.popped = true;
     rec.bubble.classList.add('is-pop');
     sparkleBurst(x, y);
-    sfx('bubble-pop');
+    sfx(popCue(rec));
     announcePop(rec, x, y);
     // Bubble size IS the strength dial in the Fall; same here.
     const strength = Math.round(clamp01((rec.size - BUB_MIN_PX) / (BUB_MAX_PX - BUB_MIN_PX)) * 100);

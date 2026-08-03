@@ -255,10 +255,11 @@ function nowLocalMs() {
  * @param {object} o
  * @param {object} o.host   the .gg-hud-frame (the ribbon is absolutely placed inside it)
  * @param {object} o.match  GoonMatchService
+ * @param {object} [o.audio] {sfx(id)} — the ribbon gets ONE soft cue, see show()
  * @param {Function|object} [o.onLog]
  * @returns {{root:object|null, unmount:Function, showing:Function, queued:Function}}
  */
-export function mountAnnouncer({ host, match, onLog = null } = {}) {
+export function mountAnnouncer({ host, match, audio = null, onLog = null } = {}) {
   const led = createLedger();
   const root = el('div', 'gg-announce');
   if (!root || !host || !match) {
@@ -283,6 +284,13 @@ export function mountAnnouncer({ host, match, onLog = null } = {}) {
       if (typeof onLog === 'function') onLog(entry);
       else if (typeof onLog.push === 'function') onLog.push(entry);
     } catch (_e) { /* the log is never load-bearing */ }
+  }
+
+  /** The ribbon is a CAPTION, so its cue sits under every pop in the mix (see
+   *  the 'announce-in' gain in ui/audio.js) and there is only one of it — the
+   *  slide-OUT is deliberately silent, exactly like the fx rail draining a chip. */
+  function cue() {
+    try { if (audio && typeof audio.sfx === 'function') audio.sfx('announce-in'); } catch (_e) { /* stub */ }
   }
 
   function livePhase() {
@@ -313,6 +321,7 @@ export function mountAnnouncer({ host, match, onLog = null } = {}) {
     add(node, el('span', 'gg-announce-text', line));
     add(root, node);
     cls(node, 'is-in', true);
+    cue();
 
     const rec = { element: item.element, kind: item.kind, node, shownAt: nowLocalMs(), retired: false, timers: [] };
     current = rec;

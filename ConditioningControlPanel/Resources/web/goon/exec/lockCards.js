@@ -281,6 +281,13 @@ export function createLockCards({ layers, media, audio, logger, phrases } = {}) 
     run.view = createLockCardView(host, {
       phrase: draw(),
       repeats: tune.repeats,
+      // One slip = one small buzz. The card ALREADY shakes (`is-wrong`); this is
+      // the shake's ear half, at well under the solved chime's gain — a lock
+      // card is a typing task, not a punishment, and a loud error tone on every
+      // fat-fingered key would turn it into one.
+      onMistake: () => {
+        if (audio && typeof audio.sfx === 'function') { try { audio.sfx('lock-slip'); } catch (_e) { /* ignore */ } }
+      },
       onSolved: () => {
         if (audio && typeof audio.sfx === 'function') { try { audio.sfx('lock-solved'); } catch (_e) { /* ignore */ } }
         const v = run.view;

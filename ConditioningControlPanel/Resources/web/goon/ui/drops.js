@@ -104,6 +104,15 @@ export function createDropRoller({ match, arsenal, audio = null, onLog = null, r
   const rnd = typeof random === 'function' ? random : () => Math.random();
   const stats = { pops: 0, clutter: 0, rolls: 0, drops: 0, refused: 0 };
 
+  /** The roll has exactly two audible outcomes: a slot lit up ('gg-drop', the
+   *  payoff ding of the whole loop) or the roll WON and could not be taken —
+   *  no charge, or the arsenal already full ('gg-drop-dud', a small nothing).
+   *  A miss stays silent: most rolls miss, and a sound for "nothing happened"
+   *  would be the loudest thing in the match. */
+  const sfx = (id) => {
+    try { if (audio && typeof audio.sfx === 'function') audio.sfx(id); } catch (_e) { /* stub */ }
+  };
+
   function isLive() {
     const p = match && match.phase;
     return p === GoonMatchPhase.Live || p === GoonMatchPhase.SuddenDeath;
@@ -138,14 +147,14 @@ export function createDropRoller({ match, arsenal, audio = null, onLog = null, r
 
     const pick = pickDrop(arsenal.droppable(), rnd());
     if (!pick) return { dropped: false, id: null, reason: 'no-candidate' };
-    if (!credit(pick.cost)) { stats.refused++; return { dropped: false, id: null, reason: 'no-charge' }; }
+    if (!credit(pick.cost)) { stats.refused++; sfx('gg-drop-dud'); return { dropped: false, id: null, reason: 'no-charge' }; }
 
     const from = (typeof d.x === 'number' && typeof d.y === 'number') ? { x: d.x, y: d.y } : null;
     const armed = arsenal.armDrop(pick.id, { count: DROP_TUNING.STACK_PER_DROP, from });
-    if (!armed) { stats.refused++; return { dropped: false, id: null, reason: 'refused' }; }
+    if (!armed) { stats.refused++; sfx('gg-drop-dud'); return { dropped: false, id: null, reason: 'refused' }; }
 
     stats.drops++;
-    try { if (audio && typeof audio.sfx === 'function') audio.sfx('gg-drop'); } catch (_e) { /* stub */ }
+    sfx('gg-drop');
     if (typeof toast === 'function') { try { toast(S.arsenal.dropToast(pick.id)); } catch (_e) { /* never load-bearing */ } }
     if (typeof onLog === 'function') { try { onLog({ t: 'bubble-drop', item: pick.id, kind: d.kind }); } catch (_e) { /* ignore */ } }
     return { dropped: true, id: pick.id, reason: 'drop' };

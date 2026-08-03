@@ -17,9 +17,17 @@
  *  3. Decorative loops carry .gg-deco so goon.css's heat armor
  *     (html[data-gg-fx="hot"] { --gg-deco-play: paused }) can park them, and
  *     every one of them stops dead under prefers-reduced-motion (bottom block).
- *  4. NO REMOTE URLs. Bundled art is referenced by ABSOLUTE SAME-ORIGIN path:
- *     ccp.game maps to Resources/web, so /dtrh/assets/... is the very same
- *     virtual host that serves /goon/index.html — no network is involved.
+ *  4. NO REMOTE URLs, and TWO SHAPES OF LOCAL ONE — the difference is whose art
+ *     it is. DtRH's bundle is reached by ABSOLUTE path (`/dtrh/assets/...`):
+ *     ccp.game maps to Resources/web, so that is the very same virtual host that
+ *     serves /goon/index.html, and the harnesses mount /dtrh/ at that exact
+ *     prefix too. GOON'S OWN art is reached RELATIVE (`../assets/...`), because
+ *     this page does NOT live at one fixed prefix: the app serves it at /goon/,
+ *     every headless harness and the solo dev server serve it at the ROOT, so an
+ *     absolute `/goon/assets/...` is a 404 in half the places we run. Relative
+ *     from /exec/*.css resolves in all of them, and it is what the JS tier
+ *     already does (`./assets/items/…` in ui/arsenal.js, `./assets/monitor_frame.png`
+ *     in ui/opponent.js). Either way no network is involved.
  *  5. THREE nodes in this file take pointer input: `.gg-bubble` (pop),
  *     `.gg-flash--hydra` (click-to-split) and `.gg-vwin` (the floating video
  *     window: drag / wheel / click-to-dismiss). #gg-fx and its sub-layers are
@@ -279,20 +287,26 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
  *
  * So: no colour-space filter functions in these rules. Each kind gets its own
  * halo and nothing else — flash warm white, spiral cyan, glitch acid green,
- * braindrain violet, pinkfilter house pink, video iridescent white-violet.
+ * braindrain violet, pinkfilter house pink, video neon red.
  * selftest-exec reads this file and fails if a recolour chain comes back.
  *
- * `video` is the one kind whose sprite is not named after it: it wears the
- * Fall's PRISM bubble, because that iridescent swirl reads as a SCREEN, and
- * popping it opens a floating video window (exec/bubbles.js -> exec/executor.js
- * -> exec/videos.js spawnLocal). Its halo is the palest of the six on purpose:
- * a prism is white light, not a colour. */
+ * `video` is the one kind that is NOT DtRH art. It wore the Fall's prism bubble
+ * for as long as there was nothing better on disk — the reasoning being that an
+ * iridescent swirl "reads as a screen" — and the owner's verdict on seeing it in
+ * a match was that it does not: a prism reads as a prism. It now wears
+ * ../assets/bubbles/video.png, GOON'S OWN sprite (a bubble with a big neon-red
+ * play arrow, lifted from the app's Chaos set), which says what popping it does
+ * without anyone having to be told: it opens a floating video window
+ * (exec/bubbles.js -> exec/executor.js -> exec/videos.js spawnLocal). Its halo
+ * is the only red one in the set, tuned to the arrow rather than to the glass —
+ * and it is the one path in this block that is RELATIVE, because it is ours and
+ * this page is not served at a fixed prefix (rule 4 at the top of the file). */
 .gg-bubble--flash      { background-image: url('/dtrh/assets/bubbles/effects/flash.png');      filter: drop-shadow(0 0 9px rgba(255, 240, 200, 0.75)); }
 .gg-bubble--spiral     { background-image: url('/dtrh/assets/bubbles/effects/spiral.png');     filter: drop-shadow(0 0 9px rgba(110, 225, 255, 0.75)); }
 .gg-bubble--glitch     { background-image: url('/dtrh/assets/bubbles/effects/glitch.png');     filter: drop-shadow(0 0 9px rgba(140, 255, 170, 0.75)); }
 .gg-bubble--braindrain { background-image: url('/dtrh/assets/bubbles/effects/braindrain.png'); filter: drop-shadow(0 0 9px rgba(180, 150, 255, 0.75)); }
 .gg-bubble--pinkfilter { background-image: url('/dtrh/assets/bubbles/effects/pinkfilter.png'); filter: drop-shadow(0 0 10px rgba(var(--gg-pink-rgb), 0.85)); }
-.gg-bubble--video      { background-image: url('/dtrh/assets/bubbles/effects/prism.png');      filter: drop-shadow(0 0 11px rgba(226, 214, 255, 0.85)); }
+.gg-bubble--video      { background-image: url('../assets/bubbles/video.png');                 filter: drop-shadow(0 0 11px rgba(255, 90, 130, 0.8)); }
 
 .gg-bubble.is-pop { pointer-events: none; animation: ggBubblePop 0.39s ease-out forwards; }
 @keyframes ggBubblePop {
@@ -496,8 +510,9 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
  * FOUR ELEMENTS, FOUR ANIMATIONS, AND THAT IS THE POINT. `animation` is a
  * SHORTHAND: two rules declaring it on one element cancel each other, so a
  * one-shot spawn-in and a forever-loop can never share a node. Hence:
- *     .gg-vwin          NO animation, ever — JS writes its transform inline for
- *                       the drag, and keyframes outrank inline author styles.
+ *     .gg-vwin          NO animation WHILE IT LIVES — JS writes its transform
+ *                       inline for the drag, and keyframes outrank inline author
+ *                       styles. THE ONE EXCEPTION IS THE EXIT (see below).
  *     .gg-vwin-drift    the slow wander (loop)
  *     .gg-vwin-inner    the glitch-in (one-shot, one of four variants)
  *     .gg-vwin-inner::after   the glow breath (loop)
@@ -505,6 +520,18 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
  * Every loop parks at html[data-gg-fx="hot"] through --gg-deco-play, because all
  * of it is decoration; the DRAG, the WHEEL and the CLICK keep working parked,
  * because none of them is an animation.
+ *
+ * THE EXIT (.gg-vwin--out) is the wrapper's free slot, and it is free precisely
+ * BECAUSE the element is done being handled: exec/videos.js drops the record
+ * from its pool first and only then hands the orphaned NODE this class, so
+ * nothing is left to drag and nothing inline is left to outrank. Two rules make
+ * it safe to sit on the wrapper at all:
+ *   · it animates opacity/clip-path/filter and NEVER transform — the drag offset
+ *     is an inline transform on this very element, and a transform keyframe here
+ *     would teleport a dismissed window back to its anchor for its last 300ms;
+ *   · it does NOT park at data-gg-fx="hot". A parked exit is a frozen corpse.
+ *     (exec/videos.js still carries a ~600ms removal timer for the cases where
+ *     the animationend never comes at all — reduced motion, a re-parented node.)
  *
  * POINTER: the layer is click-through and the window opts back in. It keeps that
  * opt-in even while #gg-stage is occupied (unlike .gg-flash--hydra) — a window
@@ -528,6 +555,29 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
 }
 .gg-vwin.is-on { opacity: 1; }
 .gg-vwin.is-grabbed { cursor: grabbing; }
+
+/* THE EXIT — a GHOST. The record left the pool the instant the window settled
+   (the slot is free, the count already fell, the receipt is already posted);
+   what is left here is a node nobody owns, playing out one last CRT death.
+   pointer-events goes first: a husk that can still eat a click is the one thing
+   this whole layer exists to avoid. NOT `forwards` — the node is removed on
+   animationend (or on exec/videos.js's fallback timer), and holding the last
+   frame would only matter if it were staying, which it never is. */
+.gg-vwin.gg-vwin--out {
+  pointer-events: none;
+  animation: ggVwinOut 300ms cubic-bezier(0.3, 0.7, 0.1, 1) 1;
+}
+/* Bands tear, the picture collapses to a scanline, the line burns out. All of it
+   is opacity/clip-path/filter — no transform, because the drag offset is inline
+   on this element (see the banner). */
+@keyframes ggVwinOut {
+  0%   { opacity: 1; clip-path: inset(0 0 0 0); filter: none; }
+  22%  { opacity: 1; clip-path: inset(0 0 34% 0); filter: brightness(1.9) hue-rotate(-24deg); }
+  44%  { opacity: 1; clip-path: inset(38% 0 6% 0); filter: brightness(0.8); }
+  66%  { opacity: 0.9; clip-path: inset(6% 0 52% 0); filter: brightness(2.6) saturate(0.3); }
+  84%  { opacity: 0.5; clip-path: inset(46% 0 46% 0); filter: brightness(3.2) saturate(0); }
+  100% { opacity: 0; clip-path: inset(50% 0 50% 0); filter: brightness(3.4) saturate(0); }
+}
 
 /* THE DRIFT. Biased upward (exec/videos.js hands --gg-vwin-dy in negative) so a
    wandering window tends away from MERCY's bottom gutter rather than into it. */
@@ -762,6 +812,12 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
   .gg-vwin-inner,
   .gg-vwin-dot { animation: none; }
   .gg-vwin-inner::after { animation: none; opacity: 1; }
+  /* …and it still LEAVES. The exit is the one animation that could strand a node
+     if it were merely switched off — no keyframes means no animationend — so the
+     calm exit is an opacity drop, and exec/videos.js takes the reduced-motion
+     path (its own short timer) rather than waiting on an event that will never
+     arrive. Either way the ghost is gone inside a few hundred ms. */
+  .gg-vwin.gg-vwin--out { animation: none; opacity: 0; }
   .gg-bubble { animation: none; }        /* no sway; the rise still carries it up */
   .gg-spiral { animation: none; }        /* no spin; the pane still covers + blends */
   .gg-drain.is-glitching { animation: none; }

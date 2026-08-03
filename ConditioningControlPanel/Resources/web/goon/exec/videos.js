@@ -26,10 +26,15 @@
  * THREE ELEMENTS, THREE ANIMATIONS — and that is not styling, it is the
  * ANIMATION SHORTHAND TRAP: `animation` is a shorthand, so a one-shot and a loop
  * declared on ONE element cancel each other. The wrapper takes the drag offset
- * (inline transform, NO animation of its own, so the inline write is
- * authoritative); the drift loop rides .gg-vwin-drift; the one-shot glitch-in
+ * (inline transform, NO animation of its own WHILE IT LIVES, so the inline write
+ * is authoritative); the drift loop rides .gg-vwin-drift; the one-shot glitch-in
  * rides .gg-vwin-inner; the pulse rides .gg-vwin-dot; the glow breathes on
  * .gg-vwin-inner::after. Nobody shares.
+ *
+ * AND IT LEAVES THE WAY IT ARRIVED. A window used to simply vanish; it now
+ * glitches OUT (ggVwinOut, fx.css) on the way, which is where the wrapper's free
+ * animation slot finally gets used — see THE GHOST below for why using it is
+ * safe there and only there.
  *
  * PHYSICAL INTERACTION is exec/flashes.js's, ported rather than reinvented — it
  * already solved the three things that make this kind of node feel broken:
@@ -48,6 +53,42 @@
  * autoplay policy can still refuse a play() with sound before the page has had a
  * gesture; that is HANDLED, not dropped — we retry muted, so the picture never
  * silently fails to appear. The one thing we never do is give up on the visual.
+ *
+ * AND IT FADES, both ways. The handover used to be a hard cut — a window was
+ * unmuted at full volume the frame it appeared and silenced the frame it left —
+ * which in a stack of four reads as an audio glitch rather than as a handover.
+ * Now every change of the audible window is a RAMP on el.volume (500ms in,
+ * 300ms out), and the four rules that make ramps behave are all in rampVolume():
+ *   · .muted MUST NOT BE THE INSTRUMENT. A mute flip is a step function, so a
+ *     rise unmutes FIRST and then ramps the volume up from wherever it was, and
+ *     a fall ramps the volume to zero and only then flips .muted on. Ramping a
+ *     muted element is ramping nothing.
+ *   · ONE RAMP PER ELEMENT. Starting a new one cancels the old, so a window
+ *     whose target changes mid-flight retargets from its CURRENT volume instead
+ *     of two lerps fighting over one property.
+ *   · HANDOVERS CROSSFADE. Both ramps are started in the same tick from
+ *     applyAudio(), so the newcomer rises while the leaver falls; nothing waits
+ *     its turn.
+ *   · AN END YOU CAN SEE COMING IS FADED BEFORE IT ARRIVES. A clip that simply
+ *     ENDS cannot be faded afterwards — there is nothing left to fade — so the
+ *     ramp-out is armed ~300ms before the cap, and again (tighter) once
+ *     loadedmetadata tells us the clip's real duration. An end nobody saw coming
+ *     (a click, an eviction) fades on the way out instead, on the GHOST.
+ *
+ * THE GHOST — the node outlives the record, and ONLY the node. When a window
+ * settles, the record leaves `wins` FIRST and unconditionally: the slot is free,
+ * the count has already fallen, the receipt is already posted, MAX_WINDOWS
+ * arithmetic already agrees. What lingers for the ~300ms exit animation is an
+ * orphan node with pointer-events off, owned by nobody, holding no slot. That
+ * ordering is the whole design — a husk that still counted would be a phantom
+ * window on the opponent's monitor, and a husk that still took clicks would be
+ * the click shield this layer exists to prevent. It removes itself on
+ * animationend, with a ~600ms timer behind it because animationend is not a
+ * promise: a parked animation (heat "hot"), reduced motion, or a re-parented
+ * node can all swallow it, and a leaked node must be impossible, not unlikely.
+ * TEARDOWN NEVER GHOSTS: the payload's cancel fn and stopWindows() (mercy,
+ * recap, detach) remove the node and kill its audio on the spot, because the
+ * recap must inherit an empty layer, not four fading windows.
  *
  * RECEIPTS, mirrored from what the fullscreen payload did before:
  *   video ended · 60s cap · player dismissed it · displaced by a 5th window
@@ -88,8 +129,20 @@ export const GLITCH_VARIANTS = 4;      // .gg-vwin-in--1 .. --4 in fx.css
    (MERCY_CLEARANCE_PX) — the guaranteed way out is never covered, by anything. */
 export const MERCY_KEEPOUT_PX = 96;
 
+/* --- the fades. Audio ramps are asymmetric on purpose: a window arriving may
+   take its time, a window leaving must be out of the way of the next one. ---- */
+export const AUDIO_FADE_IN_MS = 500;    // silence -> volumeFor(intensity)
+export const AUDIO_FADE_OUT_MS = 300;   // volumeFor(intensity) -> silence, then .muted
+export const AUDIO_RAMP_TICK_MS = 25;   // ~40 steps/s: inaudible stepping, no rAF needed
+
+/* --- the exit. The class fx.css hangs ggVwinOut off, how long that animation
+   runs, and the timer that guarantees the node dies even if it never plays. --- */
+export const OUT_CLASS = 'gg-vwin--out';
+export const OUT_ANIM_MS = 300;         // must match ggVwinOut in fx.css
+export const GHOST_REMOVE_MS = 600;     // the "animationend never came" backstop
+
 const HOLD_WATCHDOG_MS = 30000;  // nothing may be "held" longer than this
-const SETTLE_FADE_MS = 240;      // the window's fade-out before the node is torn out
+const SETTLE_FADE_MS = 240;      // the opacity transition on .gg-vwin (fx.css)
 const SPAWN_TRIES = 60;          // placement attempts before the safe-corner fallback
 
 const clamp01 = (n) => (typeof n === 'number' && n === n ? (n < 0 ? 0 : n > 1 ? 1 : n) : 0);
@@ -97,6 +150,13 @@ const lerp = (a, b, t) => a + (b - a) * clamp01(t);
 const num = (v, dflt) => (typeof v === 'number' && v === v ? v : dflt);
 const soon = (fn, ms) => {
   const t = setTimeout(fn, Math.max(0, ms | 0));
+  if (t && typeof t.unref === 'function') t.unref();
+  return t;
+};
+/** setInterval's twin of soon(): unref'd, so a ramp can never hold a loop open. */
+const every = (fn, ms) => {
+  if (typeof setInterval !== 'function') return 0;
+  const t = setInterval(fn, Math.max(1, ms | 0));
   if (t && typeof t.unref === 'function') t.unref();
   return t;
 };
@@ -127,6 +187,47 @@ export function unmutedFlags(count) {
   const out = new Array(n);
   for (let i = 0; i < n; i++) out[i] = (i === n - 1);
   return out;
+}
+
+/**
+ * THE SAME INVARIANT AS A VOLUME, which is what the ramps actually chase: given
+ * the pool's intensities in spawn order, the volume every window should be
+ * HEADING TOWARD. Exactly one non-zero, and it is volumeFor(intensity) of the
+ * newest — never above it, so the ceiling stays wherever volumeFor put it.
+ * @param {number[]} intensities
+ * @returns {number[]}
+ */
+export function audioTargets(intensities) {
+  const arr = Array.isArray(intensities) ? intensities : [];
+  const flags = unmutedFlags(arr.length);
+  const out = new Array(arr.length);
+  for (let i = 0; i < arr.length; i++) out[i] = flags[i] ? volumeFor(arr[i]) : 0;
+  return out;
+}
+
+/**
+ * How long a ramp between two volumes takes. Rising is the generous one (the
+ * window is arriving and has nothing to get out of the way of); falling is the
+ * short one (something else is usually rising into the gap). Going nowhere takes
+ * no time at all, which is what keeps a re-applied target from restarting a fade.
+ */
+export function fadeMsFor(from, to) {
+  const a = clamp01(from), b = clamp01(to);
+  if (Math.abs(b - a) < 1e-6) return 0;
+  return b > a ? AUDIO_FADE_IN_MS : AUDIO_FADE_OUT_MS;
+}
+
+/**
+ * ONE STEP OF THE LERP, pure, so the fade curve is assertable without an audio
+ * element (or a browser). Clamped at both ends: a ramp that overruns its
+ * duration lands exactly on its target and never past it.
+ */
+export function rampAt(from, to, elapsedMs, durMs) {
+  const a = clamp01(from), b = clamp01(to);
+  const d = num(durMs, 0);
+  if (!(d > 0)) return b;
+  const t = clamp01(num(elapsedMs, 0) / d);
+  return +(a + (b - a) * t).toFixed(4);
 }
 
 /**
@@ -206,6 +307,64 @@ export function glitchVariant(rnd) {
   return 1 + Math.min(GLITCH_VARIANTS - 1, Math.floor(R() * GLITCH_VARIANTS));
 }
 
+/* ===========================================================================
+ * THE VOLUME RAMP. Module-level, and keyed on the ELEMENT rather than on the
+ * pool record, because a settling window hands its <video> to a ghost that has
+ * no record any more and still owes the room a 300ms fade-out.
+ * ========================================================================= */
+const RAMP = '__ggVolRamp';
+
+/** Stop whatever this element was doing to its own volume. Idempotent. */
+function cancelRamp(v) {
+  if (!v || !v[RAMP]) return;
+  try { clearInterval(v[RAMP].timer); } catch (_e) { /* ignore */ }
+  v[RAMP] = null;
+}
+
+const setVol = (v, x) => { try { v.volume = clamp01(x); } catch (_e) { /* ignore */ } };
+
+/** Is this element already on its way to `to`? Re-targeting the same place must
+ *  be a no-op, or every applyAudio() would restart the fade it is watching. */
+const rampingTo = (v, to) => !!(v && v[RAMP] && Math.abs(v[RAMP].to - to) < 1e-6);
+
+/**
+ * Ramp one media element's volume to `to`. See the AUDIO banner for the four
+ * rules; this is where all four live.
+ * @param {object} v the media element
+ * @param {number} to target volume, 0..1
+ * @param {{ms?:number, onEnd?:()=>void}} [opts] ms overrides fadeMsFor()
+ */
+function rampVolume(v, to, opts) {
+  if (!v) return;
+  const o = opts || {};
+  const target = clamp01(to);
+  const from = clamp01(num(v.volume, 0));
+  cancelRamp(v);                                    // one ramp per element, ever
+  const ms = Math.max(0, num(o.ms, fadeMsFor(from, target)));
+  // A rise unmutes FIRST: ramping the volume of a muted element ramps nothing.
+  // (If the autoplay policy re-mutes us a tick later, that is play()'s business
+  // and the picture still survives — see play().)
+  if (target > 0) { try { v.muted = false; } catch (_e) { /* ignore */ } }
+  const land = () => {
+    setVol(v, target);
+    // …and a fall flips .muted only once there is nothing left to hear.
+    if (target <= 0) { try { v.muted = true; } catch (_e) { /* ignore */ } }
+    v[RAMP] = null;
+    if (typeof o.onEnd === 'function') { try { o.onEnd(); } catch (_e) { /* ignore */ } }
+  };
+  if (!(ms > 0)) { land(); return; }
+  const t0 = nowMs();
+  const state = { to: target, from, ms, timer: 0 };
+  state.timer = every(() => {
+    const el = nowMs() - t0;
+    if (el >= ms) { try { clearInterval(state.timer); } catch (_e) { /* ignore */ } land(); return; }
+    setVol(v, rampAt(from, target, el, ms));
+  }, AUDIO_RAMP_TICK_MS);
+  if (!state.timer) { land(); return; }              // a host without setInterval
+  v[RAMP] = state;
+  setVol(v, rampAt(from, target, 0, ms));            // step 0 now: no first-frame jump
+}
+
 /** translate() out of a computed matrix, so folding the drift needs no library. */
 function matrixXY(str) {
   const s = String(str || '');
@@ -229,6 +388,7 @@ function matrixXY(str) {
  *        is a number handed upward, and nothing here changes if nobody listens.
  */
 export function createVideos({ layers, media, audio, logger, onWindowCountChanged } = {}) {
+  const sfx = (id) => { try { if (audio && typeof audio.sfx === 'function') audio.sfx(id); } catch (_e) { /* stub */ } };
   const log = logger || null;
   const warn = (m) => { if (log && log.warn) log.warn(`[gg:videos] ${m}`); };
   const info = (m) => { if (log && log.info) log.info(`[gg:videos] ${m}`); };
@@ -385,15 +545,40 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
    * #gg-fx-vwin and never touches #gg-stage.
    * ======================================================================= */
 
-  /** Only the newest window speaks. Re-applied on every spawn and every settle. */
+  /**
+   * Only the newest window speaks — but it RAMPS there. Re-applied on every
+   * spawn and every settle, and it is the crossfade: the leaver's fall and the
+   * newcomer's rise are both started here, in one tick, so neither waits.
+   * Re-targeting a ramp that is already heading to the same place is skipped, or
+   * a fade would restart every time the pool so much as twitched.
+   */
   function applyAudio() {
-    const flags = unmutedFlags(wins.length);
+    const targets = audioTargets(wins.map((w) => w.intensity));
     for (let i = 0; i < wins.length; i++) {
       const v = wins[i].video;
-      if (!v) continue;
-      try { v.muted = !flags[i]; } catch (_e) { /* ignore */ }
-      try { v.volume = volumeFor(wins[i].intensity); } catch (_e) { /* ignore */ }
+      if (!v || rampingTo(v, targets[i])) continue;
+      rampVolume(v, targets[i]);
     }
+  }
+
+  /**
+   * Arm the ramp-out for an end we can SEE COMING (the cap; the clip's own
+   * duration once loadedmetadata reports it). Replaces any previously armed one,
+   * because the second answer is always the tighter one.
+   */
+  function armFade(rec, inMs) {
+    if (!rec || rec.finished) return;
+    try { clearTimeout(rec.fadeTimer); } catch (_e) { /* ignore */ }
+    rec.fadeTimer = soon(() => preFade(rec), Math.max(0, inMs));
+  }
+
+  /** The armed fade itself. A window that was not the one speaking has nothing
+   *  to fade, and must not be hauled out of its own silence to prove it. */
+  function preFade(rec) {
+    if (!rec || rec.finished || !rec.video) return;
+    const v = rec.video;
+    if (v.muted || !(num(v.volume, 0) > 0)) return;
+    rampVolume(v, 0, { ms: AUDIO_FADE_OUT_MS });
   }
 
   /** The one place a window's transform is written: drag offset in screen px. */
@@ -408,29 +593,102 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     if (i >= 0) wins.splice(i, 1);
   }
 
-  function settleWindow(rec, endured) {
-    if (!rec || rec.finished) return;
-    rec.finished = true;
-    try { clearTimeout(rec.endTimer); } catch (_e) { /* ignore */ }
-    if (drag && drag.rec === rec) forgetDrag();
-    drop(rec);
+  /* ------------------------------------------------------------- the ghosts
+   * Nodes that have already left the pool and are playing out their exit. They
+   * are tracked only so a teardown can be sure of them: nothing else in this
+   * module ever reads the set, because a ghost is by definition nobody's.
+   * ---------------------------------------------------------------------- */
+  const ghosts = new Set();
 
-    const v = rec.video;
+  /** Kill one ghost NOW: its audio, its source, its handle, its node. Idempotent. */
+  function closeGhost(g) {
+    if (!g || g.closed) return;
+    g.closed = true;
+    ghosts.delete(g);
+    try { clearTimeout(g.timer); } catch (_e) { /* ignore */ }
+    const v = g.video;
     if (v) {
+      cancelRamp(v);
       try { v.pause(); } catch (_e) { /* ignore */ }
       try { v.removeAttribute('src'); v.load(); } catch (_e) { /* ignore */ }
       v.onended = null; v.onerror = null; v.onloadedmetadata = null;
     }
-    try { if (rec.handle && rec.handle.release) rec.handle.release(); } catch (_e) { /* ignore */ }
-    rec.handle = null;
-    rec.video = null;
+    try { if (g.handle && g.handle.release) g.handle.release(); } catch (_e) { /* ignore */ }
+    g.video = null;
+    g.handle = null;
+    const node = g.node;
+    g.node = null;
+    if (node) { try { node.remove(); } catch (_e) { /* ignore */ } }
+  }
 
-    const node = rec.node;
-    if (node) {
-      try { node.classList.remove('is-on'); } catch (_e) { /* ignore */ }
-      soon(() => { try { node.remove(); } catch (_e) { /* ignore */ } }, SETTLE_FADE_MS);
+  /**
+   * Let one settled window play out its exit. THE RECORD IS ALREADY GONE from
+   * `wins` by the time we are called — see settleWindow — so everything here is
+   * cosmetic and nothing here can hold a slot, a count or a click.
+   *
+   * The removal is belt AND braces: animationend when the exit really plays, and
+   * a timer that does not care whether it did. Under reduced motion there IS no
+   * exit animation (fx.css switches it off), so the calm path is the plain
+   * opacity fade the base rule already transitions, on the shorter clock.
+   */
+  function lingerGhost(g) {
+    const node = g.node;
+    if (!node) { closeGhost(g); return; }
+    ghosts.add(g);
+    // The fade-out an unforeseeable end (a click, an eviction) never got to arm.
+    if (g.video) rampVolume(g.video, 0, { ms: AUDIO_FADE_OUT_MS });
+    try { node.classList.remove('is-on'); } catch (_e) { /* ignore */ }
+    // fx.css does this too; inline so it is true even before the class lands.
+    try { node.style.setProperty('pointer-events', 'none'); } catch (_e) { /* ignore */ }
+    if (!calm) {
+      try {
+        node.classList.add(OUT_CLASS);
+        node.addEventListener('animationend', (e) => {
+          // The glitch-IN on .gg-vwin-inner bubbles up through here as well —
+          // a window dismissed inside its own first 700ms would otherwise take
+          // its spawn-in's animationend as the exit's.
+          if (e && e.target && e.target !== node) return;
+          closeGhost(g);
+        });
+      } catch (_e) { /* no listener: the timer below is the whole safety net */ }
     }
+    g.timer = soon(() => closeGhost(g),
+      calm ? Math.max(SETTLE_FADE_MS, AUDIO_FADE_OUT_MS) : GHOST_REMOVE_MS);
+  }
+
+  /** Every ghost, gone, now. Teardown only — the recap inherits an empty layer. */
+  function purgeGhosts() {
+    for (const g of Array.from(ghosts)) closeGhost(g);
+  }
+
+  /**
+   * ONE window leaves.
+   *
+   * THE ORDER IS THE CONTRACT. The record is out of `wins` before anything
+   * visual happens, so the freed slot, the published count, the MAX_WINDOWS
+   * arithmetic and the receipt are all exactly as immediate as they were when a
+   * window simply vanished. Only the NODE lingers, and it lingers as a ghost:
+   * detached from the pool, pointer-events off, owned by nobody.
+   *
+   * @param {boolean} endured the receipt
+   * @param {boolean} [immediate] TEARDOWN (the payload's cancel fn, stopWindows):
+   *        no ghost, no exit, no fade — the node and its audio go on the spot.
+   */
+  function settleWindow(rec, endured, immediate) {
+    if (!rec || rec.finished) return;
+    rec.finished = true;
+    if (!immediate) sfx('video-window-out');   // teardown (mercy/recap) settles silently
+    try { clearTimeout(rec.endTimer); } catch (_e) { /* ignore */ }
+    try { clearTimeout(rec.fadeTimer); } catch (_e) { /* ignore */ }
+    if (drag && drag.rec === rec) forgetDrag();
+    drop(rec);                       // ← THE POOL DEPARTURE, and it is first
+
+    const g = { node: rec.node, video: rec.video, handle: rec.handle, timer: 0, closed: false };
     rec.node = null;
+    rec.video = null;
+    rec.handle = null;
+    if (immediate) closeGhost(g); else lingerGhost(g);
+
     applyAudio();
     publishCount();
     if (typeof rec.onDone === 'function') {
@@ -652,6 +910,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     if (!entry) return null;
     const handle = (typeof media.acquire === 'function') ? media.acquire(entry) : null;
     if (!handle || !handle.url) return null;
+    sfx('video-window-in');
 
     // At the cap the OLDEST settles first — it has been watched the longest, so
     // it is endured, not interrupted. A LOCAL spawn never reaches this line.
@@ -687,7 +946,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     video.preload = 'auto';
     video.loop = false;               // it ends when the CLIP ends
     video.muted = true;               // applyAudio() hands the mic to the newest
-    video.volume = volumeFor(intensity);
+    video.volume = 0;                 // …and it RAMPS up to volumeFor(intensity)
 
     const dot = document.createElement('span');
     dot.className = calm ? 'gg-vwin-dot' : 'gg-vwin-dot gg-deco';
@@ -701,7 +960,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       node, drift: driftEl, video, handle, onDone,
       intensity: clamp01(intensity),
       dx: 0, dy: 0, held: false, finished: false,
-      baseW, widthPx: baseW, tries: 0, endTimer: 0, bornAt: nowMs(),
+      baseW, widthPx: baseW, tries: 0, endTimer: 0, fadeTimer: 0, bornAt: nowMs(),
     };
 
     video.onerror = () => {
@@ -711,10 +970,17 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       if (!reSource(rec)) settleWindow(rec, false);
     };
     video.onended = () => { if (!rec.finished) settleWindow(rec, true); };
-    // The window wears the CLIP's own shape once the browser knows it.
+    // The window wears the CLIP's own shape once the browser knows it — and the
+    // same event is the only place the clip's real END becomes knowable, which
+    // is the only chance to fade a natural ending at all (see the AUDIO banner).
     video.onloadedmetadata = () => {
       const w = num(video.videoWidth, 0), h = num(video.videoHeight, 0);
       if (w > 0 && h > 0) { try { node.style.setProperty('--gg-vwin-ar', `${w} / ${h}`); } catch (_e) { /* ignore */ } }
+      const secs = num(video.duration, 0);
+      if (secs > 0 && isFinite(secs)) {
+        const endsIn = (secs - num(video.currentTime, 0)) * 1000;
+        if (endsIn > 0 && endsIn < capMs) armFade(rec, endsIn - AUDIO_FADE_OUT_MS);
+      }
     };
     node.addEventListener('pointerdown', (e) => onPointerDown(rec, e));
     try { node.addEventListener('wheel', (e) => onWheel(rec, e), { passive: false }); }
@@ -728,6 +994,9 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     applyAudio();
     play(video);
     rec.endTimer = soon(() => settleWindow(rec, true), capMs);
+    // The cap is an end we can see coming, so its fade is armed with it. A clip
+    // that ends first re-arms this tighter from onloadedmetadata.
+    armFade(rec, capMs - AUDIO_FADE_OUT_MS);
     return rec;
   }
 
@@ -783,7 +1052,10 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
         if (typeof done === 'function') { try { done(false); } catch (e) { warn(`done() threw: ${e && e.message}`); } }
         return () => {};
       }
-      return () => settleWindow(rec, false);
+      // TEARDOWN, not a dismissal: the executor calls this from stopAll (mercy,
+      // recap, detach), and a fading ghost on the recap is exactly the husk this
+      // renderer moved off #gg-stage to avoid. It goes on the spot.
+      return () => settleWindow(rec, false, true);
     },
 
     /**
@@ -850,12 +1122,21 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
      */
     stopWindows() {
       const n = wins.length;
-      while (wins.length) settleWindow(wins[0], false);
+      while (wins.length) settleWindow(wins[0], false, true);
+      // …and anything already mid-exit goes with them. A ghost is harmless while
+      // the match is up (no slot, no count, no clicks) but it is still a node
+      // with a live clip in it, and the recap must inherit an EMPTY layer.
+      purgeGhosts();
       return n;
     },
 
-    /** Test/diagnostic seam: how many windows are floating right now. */
+    /** Test/diagnostic seam: how many windows are floating right now. This is
+     *  the POOL, so a node still playing out its exit is NOT in it — that is the
+     *  whole point of the ghost (see settleWindow). */
     windowCount: () => wins.length,
+
+    /** Test/diagnostic seam: nodes that have left the pool and not yet the DOM. */
+    ghostCount: () => ghosts.size,
   };
 }
 

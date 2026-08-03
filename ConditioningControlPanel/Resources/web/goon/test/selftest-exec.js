@@ -210,6 +210,17 @@ function spyOn(ex, code) {
   return calls;
 }
 
+/* LIVE windows only. Since 2026-08-04 a settled window leaves the pool
+ * IMMEDIATELY and its node lingers a few hundred ms as a GHOST (.gg-vwin--out,
+ * pointer-events off) to play out the exit animation. Every assertion about
+ * "how many windows are up" and every click therefore has to skip the husks —
+ * which is exactly the property being pinned: the record went first, the node
+ * followed. Anything that wants the husks asks for them by name. */
+const liveWins = (host) => host.findAll('gg-vwin').filter((el) => !el._cls.has('gg-vwin--out'));
+const ghostWins = (host) => host.findAll('gg-vwin').filter((el) => el._cls.has('gg-vwin--out'));
+/** Past the ghost clock (GHOST_REMOVE_MS 600 + slack): the layer is settled. */
+const GHOST_WAIT = 700;
+
 const payloadOf = (o) => Object.assign({
   id: 'p1h', kind: GoonPayloadKind.ToyPattern, duration_ms: 1000,
   tags: null, text: '', voice: false, pattern: null, intensity: 0.5,
@@ -1251,6 +1262,78 @@ async function main() {
       ok(f.filter(Boolean).length === 1 && f[n - 1] === true, `exactly one speaker at n=${n}`, JSON.stringify(f));
     }
 
+    /* THE FADES, pure (2026-08-04). The invariant above says WHO speaks; these
+     * say how they get there and back. All of it is assertable without an audio
+     * element, which is the point of extracting it: a ramp bug in a browser is a
+     * bug you hear once and cannot reproduce.
+     *
+     * THE CEILING DID NOT MOVE. volumeFor() is still the only thing that decides
+     * how loud a window is; the ramps merely chase it, and audioTargets() is
+     * unmutedFlags() with the volume filled in. If a fade ever ended above
+     * volumeFor(intensity) the fade would be setting the level, not the dial. */
+    ok(V.AUDIO_FADE_IN_MS === 500 && V.AUDIO_FADE_OUT_MS === 300,
+      'a window fades in over 500ms and out over 300 — arriving may take its time, leaving may not',
+      `${V.AUDIO_FADE_IN_MS}/${V.AUDIO_FADE_OUT_MS}`);
+    ok(V.AUDIO_RAMP_TICK_MS > 0 && V.AUDIO_RAMP_TICK_MS <= 50,
+      'stepped often enough that nobody hears the steps', String(V.AUDIO_RAMP_TICK_MS));
+    ok(V.volumeFor(0.7) === 0.421 && V.volumeFor(1) === 0.55 && V.volumeFor(0) === 0.12,
+      'and volumeFor is untouched: 0.42 at the intensity the duel actually throws',
+      `${V.volumeFor(0)}..${V.volumeFor(0.7)}..${V.volumeFor(1)}`);
+
+    ok(JSON.stringify(V.audioTargets([])) === '[]', 'no windows, no targets');
+    ok(JSON.stringify(V.audioTargets([0.7])) === '[0.421]',
+      'one window heads for its own volumeFor', JSON.stringify(V.audioTargets([0.7])));
+    ok(JSON.stringify(V.audioTargets([0.7, 0.7, 0.7, 0.7])) === '[0,0,0,0.421]',
+      'with four up, three are heading to SILENCE and the newest to 0.421',
+      JSON.stringify(V.audioTargets([0.7, 0.7, 0.7, 0.7])));
+    let targetsAgree = 0;
+    for (let k = 1; k <= 8; k++) {
+      const t = V.audioTargets(new Array(k).fill(0.7));
+      const fl = V.unmutedFlags(k);
+      if (t.every((x, i) => (x > 0) === fl[i]) && t.filter((x) => x > 0).length === 1) targetsAgree++;
+    }
+    ok(targetsAgree === 8, 'and the targets and the mute flags never disagree at any depth', String(targetsAgree));
+    ok(V.audioTargets([1, 1]).every((x) => x <= V.volumeFor(1)),
+      'no target is ever above the ceiling volumeFor sets', JSON.stringify(V.audioTargets([1, 1])));
+
+    ok(V.fadeMsFor(0, 0.4) === V.AUDIO_FADE_IN_MS, 'a rise takes the long fade', String(V.fadeMsFor(0, 0.4)));
+    ok(V.fadeMsFor(0.4, 0) === V.AUDIO_FADE_OUT_MS, 'a fall takes the short one', String(V.fadeMsFor(0.4, 0)));
+    ok(V.fadeMsFor(0.4, 0.4) === 0,
+      'and going nowhere takes no time — which is what stops applyAudio restarting a live fade',
+      String(V.fadeMsFor(0.4, 0.4)));
+
+    ok(V.rampAt(0, 0.4, 0, 500) === 0, 'a ramp starts where it started', String(V.rampAt(0, 0.4, 0, 500)));
+    ok(V.rampAt(0, 0.4, 250, 500) === 0.2, 'half way through is half way there', String(V.rampAt(0, 0.4, 250, 500)));
+    ok(V.rampAt(0, 0.4, 500, 500) === 0.4, 'and it lands on its target', String(V.rampAt(0, 0.4, 500, 500)));
+    ok(V.rampAt(0, 0.4, 900, 500) === 0.4,
+      'an overrun lands ON the target, never past it (a clamp, not a line)', String(V.rampAt(0, 0.4, 900, 500)));
+    ok(V.rampAt(0.4, 0, 150, 300) === 0.2, 'a fall is the same line backwards', String(V.rampAt(0.4, 0, 150, 300)));
+    ok(V.rampAt(0.4, 0, 0, 0) === 0,
+      'a zero-length ramp IS its target — no division by zero, no NaN into el.volume',
+      String(V.rampAt(0.4, 0, 0, 0)));
+    // Monotone and inside the band, both directions — a lerp that overshoots is
+    // a click in the speakers.
+    let rises = 0, falls = 0, strays = 0;
+    let prevUp = -1, prevDown = 2;
+    for (let i = 0; i <= 40; i++) {
+      const el = (i / 40) * 600;                     // deliberately overruns 500
+      const up = V.rampAt(0, 0.42, el, 500);
+      const down = V.rampAt(0.42, 0, el, 300);
+      if (up >= prevUp) rises++;
+      if (down <= prevDown) falls++;
+      if (up < 0 || up > 0.42 || down < 0 || down > 0.42) strays++;
+      prevUp = up; prevDown = down;
+    }
+    ok(rises === 41 && falls === 41, 'a ramp never doubles back on itself', `${rises}/${falls}`);
+    ok(strays === 0, 'and never leaves the band between where it started and where it is going', String(strays));
+
+    // The exit's dials, so the CSS and the JS clock can be compared below.
+    ok(V.OUT_CLASS === 'gg-vwin--out' && V.OUT_ANIM_MS === 300,
+      'the exit is a 300ms one-shot hung off .gg-vwin--out', `${V.OUT_CLASS} ${V.OUT_ANIM_MS}ms`);
+    ok(V.GHOST_REMOVE_MS >= V.OUT_ANIM_MS * 1.5,
+      'and the backstop timer is comfortably past it — animationend is not a promise',
+      `${V.GHOST_REMOVE_MS} vs ${V.OUT_ANIM_MS}`);
+
     // The cap arithmetic: never past 60s, never past what the payload asked,
     // never under a second, and a missing duration falls back to 30s.
     ok(V.windowCapMs(90000) === 60000, 'a 90s payload is capped at 60s', String(V.windowCapMs(90000)));
@@ -1306,8 +1389,8 @@ async function main() {
     const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
     const m = fakeMatch();
     ex.attach(m);
-    const winsOf = () => host.findAll('gg-vwin');
-    const vids = () => host.findAll('gg-vwin-vid');
+    const winsOf = () => liveWins(host);
+    const vids = () => winsOf().map((w) => w.findAll('gg-vwin-vid')[0]).filter(Boolean);
 
     m.emitPayload({
       payload: payloadOf({ id: 'pV1', kind: GoonPayloadKind.Video, duration_ms: 1200, intensity: 0.8 }),
@@ -1343,8 +1426,24 @@ async function main() {
     await sleep(1500);
     ok(m.receipts.length === 1 && m.receipts[0].endured === true,
       'a window that ran its cap receipts endured', JSON.stringify(m.receipts));
-    await sleep(320);
+    // THE POOL DEPARTS BEFORE THE NODE DOES, and this is the moment to catch it:
+    // the receipt is already posted and the count is already 0, while the husk
+    // is still on the layer playing out its exit.
+    const videosR = ex.rendererFor(GoonElement.Videos);
+    ok(videosR.windowCount() === 0 && winsOf().length === 0,
+      'the pool is empty the instant it settles — nothing lingering holds a slot',
+      `${videosR.windowCount()} / ${winsOf().length}`);
+    ok(ghostWins(host).length === 1 && videosR.ghostCount() === 1,
+      'and what lingers is a GHOST: out of the pool, still on the layer',
+      `${ghostWins(host).length} node(s) / ${videosR.ghostCount()} tracked`);
+    ok(ghostWins(host)[0].style.getPropertyValue('pointer-events') === 'none',
+      'which can never eat a click on its way out',
+      ghostWins(host)[0].style.getPropertyValue('pointer-events'));
+    await sleep(GHOST_WAIT);
     ok(winsOf().length === 0, 'and the node is torn out afterwards', String(winsOf().length));
+    ok(host.childNodes.length === 0 && videosR.ghostCount() === 0,
+      'ghost and all — the exit removes itself, it does not merely fade',
+      `${host.childNodes.length} / ${videosR.ghostCount()}`);
 
     // -------- the pool: 4 live, and a 5th settles the OLDEST first
     for (let i = 0; i < 4; i++) {
@@ -1369,17 +1468,25 @@ async function main() {
     const evicted = m.receipts.find((r) => r.id === 'pP0');
     ok(!!evicted && evicted.endured === true,
       'the OLDEST is the one that settles, and being displaced is enduring it', JSON.stringify(evicted));
-    await sleep(320);
+    ok(winsOf().length === 4 && oldest.isConnected,
+      'the slot the fifth window took was free BEFORE the evicted node left the DOM',
+      `${winsOf().length} live, evicted still connected: ${oldest.isConnected}`);
+    await sleep(GHOST_WAIT);
     ok(!oldest.isConnected, 'the evicted window is really gone from the DOM');
-    ok(winsOf().length === 4, 'and the layer is back to four nodes once its fade-out lands',
+    ok(winsOf().length === 4, 'and the layer is back to four nodes once its exit lands',
       String(winsOf().length));
 
     // -------- only the newest speaks
-    const live = host.findAll('gg-vwin-vid');
+    const live = vids();
     ok(live.length === 4, 'four videos are live', String(live.length));
     ok(live.slice(0, 3).every((v) => v.muted === true) && live[3].muted === false,
       'only the NEWEST window is unmuted', live.map((v) => (v.muted ? 'm' : 'SOUND')).join(','));
     ok(live[3].volume > 0 && live[3].volume <= 0.55, 'and it plays at a modest volume', String(live[3].volume));
+    // …and the three it took the mic from ended their fade-out at real zero, not
+    // merely muted at whatever they happened to be playing at.
+    ok(live.slice(0, 3).every((v) => v.volume === 0),
+      'the silenced three rode their ramp all the way to 0 before .muted flipped',
+      live.slice(0, 3).map((v) => v.volume).join(','));
 
     // -------- stopAll: every window gone, nothing left on the stage
     ex.stopAll();
@@ -1404,7 +1511,7 @@ async function main() {
     const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
     const m = fakeMatch();
     ex.attach(m);
-    const winsOf = () => host.findAll('gg-vwin');
+    const winsOf = () => liveWins(host);
     const fire = (id) => m.emitPayload({
       payload: payloadOf({ id, kind: GoonPayloadKind.Video, duration_ms: 40000 }),
       fireAtLocalMs: localMonotonicMs(),
@@ -1424,8 +1531,11 @@ async function main() {
     const c1 = m.receipts.find((r) => r.id === 'pC1');
     ok(!!c1 && c1.endured === true,
       'clicking a window closes it, and closing it yourself is ENDURED', JSON.stringify(c1));
-    await sleep(320);
+    ok(clicked._cls.has('gg-vwin--out') && !clicked._cls.has('is-on'),
+      'the dismissed node glitches OUT rather than vanishing', clicked.className);
+    await sleep(GHOST_WAIT);
     ok(winsOf().length === 0, 'the clicked window is torn out', String(winsOf().length));
+    ok(!clicked.isConnected, 'and the ghost with it — an exit that never removed the node is a leak');
 
     // ---- past the slop it is a DRAG: it follows the pointer and is NOT dismissed
     fire('pC2');
@@ -1481,7 +1591,7 @@ async function main() {
     const c2 = m.receipts.find((r) => r.id === 'pC2');
     ok(!!c2 && c2.endured === true, 'and the next press still dismisses, so no drag state was left stuck',
       JSON.stringify(c2));
-    await sleep(320);
+    await sleep(GHOST_WAIT);
 
     // ---- the clip ending closes the window on its own
     fire('pC3');
@@ -1493,7 +1603,7 @@ async function main() {
     const c3 = m.receipts.find((r) => r.id === 'pC3');
     ok(!!c3 && c3.endured === true, 'a clip that played out endures, without waiting for the 60s cap',
       JSON.stringify(c3));
-    await sleep(320);
+    await sleep(GHOST_WAIT);
     ok(winsOf().length === 0, 'and the window goes with it', String(winsOf().length));
 
     // ---- the cancel fn the executor holds removes the window on the spot
@@ -1506,10 +1616,174 @@ async function main() {
     cancel();
     ok(videos.windowCount() === 0 && endured === false,
       'and its cancel fn takes it down, receipting completed', `${videos.windowCount()} / ${endured}`);
+    // THE CANCEL FN IS TEARDOWN, not a dismissal: it is what executor.stopAll
+    // reaches a thrown window through, so it may not leave a ghost fading onto
+    // the recap. Node gone in the same tick, no exit animation at all.
+    ok(host.childNodes.length === 0 && videos.ghostCount() === 0,
+      'and it leaves NOTHING behind — no husk, no ghost, no exit',
+      `${host.childNodes.length} node(s) / ${videos.ghostCount()} ghost(s)`);
     cancel();
     ok(endured === false, 'a second cancel is a no-op (done() fires at most once)');
     ex.stopAll();
     ex.detach();
+  }
+
+  /* ---------------- video windows: the audio really ramps (2026-08-04)
+   * The pure maths above is the curve; this is the wiring. Everything here is a
+   * bug that used to be audible: the mic changing hands with a step, a window
+   * arriving at full volume, a leaver muted mid-word, or two lerps fighting over
+   * one element's volume because nobody cancelled the first.
+   * ------------------------------------------------------------------------ */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-vwin');
+    const V = await import('../exec/videos.js');
+    const vids = V.createVideos({ layers, media: fakeMedia(), logger: quiet });
+    const vidIn = (i) => (liveWins(host)[i] || { findAll: () => [] }).findAll('gg-vwin-vid')[0];
+    const A = V.volumeFor(0.5), B = V.volumeFor(0.9);
+
+    // ---- ARRIVING: born silent, unmuted first, and genuinely mid-flight after
+    vids.renderPayload({ id: 'pA1', duration_ms: 40000, intensity: 0.5 }, () => {});
+    const a = vidIn(0);
+    ok(!!a && a.volume === 0,
+      'a window is BORN silent — the mic is handed over by a ramp, not by a step', String(a && a.volume));
+    ok(a.muted === false,
+      'and UNMUTED first: ramping the volume of a muted element ramps nothing at all', String(a.muted));
+    await sleep(150);
+    const mid = a.volume;
+    ok(mid > 0 && mid < A, '150ms in it is on its way, not already there', `${mid} of ${A}`);
+    await sleep(500);
+    ok(Math.abs(a.volume - A) < 1e-9,
+      'and it lands exactly on volumeFor(intensity) — the ramp never sets the level', `${a.volume} / ${A}`);
+
+    // ---- THE HANDOVER CROSSFADES: both ramps run at once, neither waits
+    vids.renderPayload({ id: 'pA2', duration_ms: 40000, intensity: 0.9 }, () => {});
+    const b = vidIn(1);
+    await sleep(120);
+    ok(a.volume > 0 && a.volume < A && b.volume > 0 && b.volume < B,
+      'a handover crossfades: the old one is still falling while the new one is already rising',
+      `${a.volume} down / ${b.volume} up`);
+    ok(a.muted === false,
+      'and the leaver stays UNMUTED while it falls — a mute flip would cut it dead mid-fade',
+      String(a.muted));
+    await sleep(500);
+    ok(a.volume === 0 && a.muted === true,
+      'only at the bottom of the ramp does the old window mute', `${a.volume} muted=${a.muted}`);
+    ok(Math.abs(b.volume - B) < 1e-9 && b.muted === false,
+      'while the new one is at its own full level', `${b.volume} / ${B}`);
+
+    // ---- INHERITING: the mic goes back, and it fades back IN
+    vids.stopWindows();                       // teardown of both, immediately
+    ok(vids.windowCount() === 0 && host.childNodes.length === 0,
+      'teardown leaves nothing at all', `${vids.windowCount()} / ${host.childNodes.length}`);
+
+    vids.renderPayload({ id: 'pA3', duration_ms: 40000, intensity: 0.5 }, () => {});
+    const c = vidIn(0);
+    const cancelD = vids.renderPayload({ id: 'pA4', duration_ms: 40000, intensity: 0.5 }, () => {});
+    await sleep(400);
+    ok(c.volume === 0 && c.muted === true, 'the older window has gone quiet', String(c.volume));
+    cancelD();
+    ok(c.muted === false, 'the survivor is unmuted the instant it inherits the mic', String(c.muted));
+    ok(c.volume < A, 'but not yet loud', `${c.volume} of ${A}`);
+    await sleep(150);
+    const back = c.volume;
+    ok(back > 0 && back < A,
+      'it fades back IN from where it actually was, rather than snapping to level', `${back} of ${A}`);
+    await sleep(450);
+    ok(Math.abs(c.volume - A) < 1e-9, 'and gets all the way home', String(c.volume));
+
+    // ---- AN END YOU CAN SEE COMING IS FADED BEFORE IT ARRIVES. A clip that just
+    // ENDS cannot be faded afterwards, so the cap arms its own ramp-out.
+    vids.stopWindows();
+    vids.renderPayload({ id: 'pA5', duration_ms: 1000, intensity: 0.5 }, () => {});
+    const e = vidIn(0);
+    await sleep(600);
+    const peak = e.volume;
+    ok(Math.abs(peak - A) < 1e-9, 'a 1s window reaches full level first', String(peak));
+    await sleep(280);                          // 880ms: 180ms into the armed fade
+    ok(e.volume > 0 && e.volume < peak,
+      'and is already fading out BEFORE its cap, not cut off at it', `${e.volume} of ${peak}`);
+    await sleep(120 + GHOST_WAIT);            // the last 120ms of the cap, then the ghost clock
+    ok(vids.windowCount() === 0 && vids.ghostCount() === 0 && host.childNodes.length === 0,
+      'then it goes, ghost and all', `${vids.windowCount()}/${vids.ghostCount()}/${host.childNodes.length}`);
+
+    // ---- A DISMISSAL fades on the way out instead: nobody saw it coming, so the
+    // ramp rides the GHOST while the exit animation plays.
+    vids.renderPayload({ id: 'pA6', duration_ms: 40000, intensity: 0.5 }, () => {});
+    const f = vidIn(0);
+    await sleep(600);
+    const node = liveWins(host)[0];
+    PID++;
+    ptr(node, 'pointerdown', 300, 300);
+    ptr(node, 'pointerup', 300, 300);
+    ok(vids.windowCount() === 0 && vids.ghostCount() === 1,
+      'the record left the pool and the node became a ghost, in that order',
+      `${vids.windowCount()} pooled / ${vids.ghostCount()} ghost`);
+    ok(f.volume > 0 && f.muted === false, 'whose audio is still up at the moment of the click', String(f.volume));
+    await sleep(150);
+    ok(f.volume > 0 && f.volume < A, 'and fades out under the exit animation', `${f.volume} of ${A}`);
+    await sleep(GHOST_WAIT);
+    ok(vids.ghostCount() === 0 && host.childNodes.length === 0, 'before the node is torn out',
+      `${vids.ghostCount()} / ${host.childNodes.length}`);
+
+    // ---- TEARDOWN NEVER FADES AND NEVER GHOSTS.
+    vids.renderPayload({ id: 'pA7', duration_ms: 40000, intensity: 0.5 }, () => {});
+    const g = vidIn(0);
+    await sleep(600);
+    ok(g.volume > 0, 'one last window, up and audible', String(g.volume));
+    vids.stopWindows();
+    ok(host.childNodes.length === 0 && vids.ghostCount() === 0,
+      'stopWindows takes the node in the same tick — the recap inherits an empty layer',
+      `${host.childNodes.length} / ${vids.ghostCount()}`);
+    const cut = g.volume;
+    await sleep(120);
+    ok(g.volume === cut,
+      'and its ramp was cancelled with it: nothing keeps writing volume to a detached element',
+      `${cut} -> ${g.volume}`);
+  }
+
+  /* ---------------- video windows: the CALM exit (prefers-reduced-motion)
+   * fx.css switches the exit animation off for a calm player, and an animation
+   * that never plays never fires animationend — which is exactly how a node gets
+   * stranded. So the calm path does not wait for one: no .gg-vwin--out at all,
+   * the plain opacity fade the base rule already transitions, and a SHORTER
+   * clock than the 600ms backstop. "Never lingers un-animated" is the rule.
+   *
+   * matchMedia is absent from the stub on purpose (every module must survive a
+   * host without it), so it is conjured for exactly one createVideos() call —
+   * `calm` is read once, when the renderer is built — and taken away again.
+   * ------------------------------------------------------------------------ */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-vwin');
+    const V = await import('../exec/videos.js');
+    let calmVids = null;
+    try {
+      globalThis.matchMedia = (q) => ({ matches: /prefers-reduced-motion/.test(String(q)) });
+      calmVids = V.createVideos({ layers, media: fakeMedia(), logger: quiet });
+    } finally {
+      delete globalThis.matchMedia;
+    }
+    calmVids.renderPayload({ id: 'pCM', duration_ms: 40000, intensity: 0.5 }, () => {});
+    const node = liveWins(host)[0];
+    ok(!!node && !node.findAll('gg-vwin-drift')[0]._cls.has('gg-deco'),
+      'a calm window is built without the decoration opt-in, as it always was');
+    PID++;
+    ptr(node, 'pointerdown', 300, 300);
+    ptr(node, 'pointerup', 300, 300);
+    ok(calmVids.windowCount() === 0, 'a click still dismisses it', String(calmVids.windowCount()));
+    ok(!node._cls.has(V.OUT_CLASS),
+      'and it is NOT given an exit class it would then wait forever on', node.className);
+    ok(!node._cls.has('is-on') && node.isConnected,
+      'it fades on the wrapper\'s own opacity transition instead', node.className);
+    await sleep(400);
+    ok(!node.isConnected && calmVids.ghostCount() === 0,
+      'and it is gone well inside the backstop — a calm player never sits looking at a husk',
+      `connected=${node.isConnected} ghosts=${calmVids.ghostCount()}`);
+    ok(V.GHOST_REMOVE_MS > 400,
+      '…and it beat the backstop outright: the removal came from the calm clock, not from the net',
+      `gone by 400ms, backstop is ${V.GHOST_REMOVE_MS}ms`);
+    calmVids.stopWindows();
   }
 
   /* --------------------------- video windows: the fx.css contract they rest on
@@ -1572,6 +1846,42 @@ async function main() {
     ok(new Set(names).size === 4, 'the four spawn-ins are four DIFFERENT keyframes so 4 windows never look cloned',
       names.join(','));
 
+    /* 1b. THE EXIT — the ONE animation the wrapper is allowed, and the whole
+     * reason it is allowed is that by then the record has left the pool: there
+     * is no drag to outrank, no slot to hold and no click to eat. Three ways it
+     * could still go wrong, all pinned:
+     *   · a TRANSFORM keyframe here would teleport a dismissed window back to
+     *     its anchor for its last 300ms (the drag offset is inline on this very
+     *     element — the .gg-flash--grabbed law, one element further out);
+     *   · `forwards` would hold the husk's last frame forever if anything ever
+     *     stopped the node being removed;
+     *   · --gg-deco-play would PARK the exit at data-gg-fx="hot", i.e. freeze a
+     *     corpse on screen. The exit is the one thing here that is not decoration.
+     */
+    const VV = await import('../exec/videos.js');
+    const outSel = `.gg-vwin.${VV.OUT_CLASS}`;
+    const out = ruleOf(outSel) || '';
+    ok(!!out, `fx.css carries the exit rule ${outSel}`);
+    ok(countAnim(outSel) === 1, 'with exactly one animation on it', String(countAnim(outSel)));
+    const outAnim = String(animOf(outSel));
+    ok(/^ggVwinOut\b/.test(outAnim) && /\b1\s*$/.test(outAnim) && !/infinite/.test(outAnim),
+      'a ONE-SHOT ggVwinOut — a looping exit would never end and never remove anything', outAnim);
+    ok(!/forwards/.test(outAnim),
+      'and NOT `forwards`: the node is removed, so holding its last frame can only ever strand it', outAnim);
+    ok(outAnim.includes(`${VV.OUT_ANIM_MS}ms`),
+      'its duration is the one exec/videos.js budgets for (OUT_ANIM_MS)', `${outAnim} vs ${VV.OUT_ANIM_MS}ms`);
+    ok(/pointer-events:\s*none/.test(out),
+      'the ghost cannot eat a click on its way out — the husk-as-click-shield bug, one last time', out.replace(/\s+/g, ' ').trim());
+    ok(!/animation-play-state/.test(out),
+      'and it never parks at data-gg-fx="hot" — a parked exit is a frozen corpse', out.replace(/\s+/g, ' ').trim());
+    const outKf = (/@keyframes\s+ggVwinOut\s*\{([\s\S]*?)\n\}/.exec(css) || [])[1] || '';
+    ok(!!outKf, 'ggVwinOut is defined');
+    ok(!/transform/.test(outKf),
+      'and animates NO transform: the drag offset is an inline transform on this very element', outKf.replace(/\s+/g, ' ').trim());
+    ok(/100%\s*\{[^}]*opacity:\s*0\b/.test(outKf),
+      'it ends at opacity 0, so the frame before removal is already empty', outKf.replace(/\s+/g, ' ').trim());
+    ok(/clip-path/.test(outKf), 'the tear is clip-path (a compositor property, like everything else here)');
+
     // 2. THE HEAT ARMOR — every loop parks, nothing functional does.
     for (const sel of ['.gg-vwin-drift', '.gg-vwin-dot', '.gg-vwin-inner::after']) {
       ok(/animation-play-state:\s*var\(--gg-deco-play/.test(ruleOf(sel) || ''),
@@ -1612,6 +1922,14 @@ async function main() {
       'and the glitch-in, the glow and the dot pulse with it');
     ok(!/\.gg-vwin\s*\{[^}]*pointer-events:\s*none/.test(calmBlock),
       'but it never takes the window away from the player');
+    // …and it still LEAVES. Switching an exit animation off is the one calm rule
+    // that could strand a node — no keyframes, no animationend — so the calm
+    // exit is a plain opacity drop and exec/videos.js runs its own short timer
+    // rather than waiting on an event that is never coming.
+    ok(new RegExp('\\.gg-vwin\\.' + VV.OUT_CLASS + '\\s*\\{[^}]*animation:\\s*none').test(calmBlock),
+      'reduced motion switches the exit animation off');
+    ok(new RegExp('\\.gg-vwin\\.' + VV.OUT_CLASS + '\\s*\\{[^}]*opacity:\\s*0').test(calmBlock),
+      'and drops the ghost to opacity 0 instead — a calm player never sits looking at a husk');
 
     // TASK 2: the spiral grain. A CONSTANT blur is only safe because nothing
     // animates filter on that pane — ggSpiralSpin is transform-only.
@@ -1724,19 +2042,30 @@ async function main() {
     const m = /\.gg-bubble--video\s*\{([^}]*)\}/.exec(css);
     ok(!!m, 'fx.css carries a .gg-bubble--video rule');
     const rule = m ? m[1] : '';
-    // The one kind whose sprite is not named after it: prism.png is the DtRH
-    // iridescent swirl, and the swirl is what reads as a SCREEN.
-    ok(/background-image:\s*url\('\/dtrh\/assets\/bubbles\/effects\/prism\.png'\)/.test(rule),
-      'and it wears the DtRH PRISM sprite', rule.replace(/\s+/g, ' ').trim());
-    ok(!/url\([^)]*video\.png/.test(rule), 'not a video.png that does not exist in the pack');
+    // 2026-08-04, owner correction: it wore the DtRH prism for want of anything
+    // better on disk, on the theory that an iridescent swirl reads as a screen.
+    // It does not. It now wears goon's OWN sprite — a bubble with a big neon-red
+    // play arrow — which says what popping it does.
+    ok(/background-image:\s*url\('\.\.\/assets\/bubbles\/video\.png'\)/.test(rule),
+      'the video bubble wears goon\'s own play-button sprite', rule.replace(/\s+/g, ' ').trim());
+    ok(!/prism\.png/.test(rule), 'and the prism is gone from it for good', rule.replace(/\s+/g, ' ').trim());
+    // THE PATH SHAPE IS LOAD-BEARING, and it is the opposite of its five
+    // neighbours. DtRH art is absolute (`/dtrh/...`) because that prefix is
+    // mounted identically everywhere; GOON'S OWN art must be RELATIVE, because
+    // this page is served at /goon/ by the app and at the ROOT by every headless
+    // harness and the solo dev server — an absolute `/goon/assets/...` 404s in
+    // half of them, and a 404 sprite is an invisible bubble you cannot pop.
+    ok(!/url\(['"]?\/goon\//.test(rule),
+      'by a RELATIVE url — this page has no fixed prefix, so an absolute one would 404 in the harnesses',
+      rule.replace(/\s+/g, ' ').trim());
     const f = ((/filter:\s*([^;]+)/.exec(rule) || [])[1] || '').trim();
     ok(f.indexOf('drop-shadow(') === 0 && f.lastIndexOf('drop-shadow(') === 0 && /\)$/.test(f),
       'its filter is a LONE drop-shadow — the recolour chains stay dead (see the kind-sprite banner)', f);
     const COLOUR_FNS = ['brightness(', 'sepia(', 'saturate(', 'hue-rotate(', 'contrast(', 'grayscale(', 'invert(', 'opacity('];
     ok(COLOUR_FNS.every((fn) => !f.includes(fn)),
       'no colour-space filter function anywhere in it', COLOUR_FNS.filter((fn) => f.includes(fn)).join(' '));
-    ok(f === 'drop-shadow(0 0 11px rgba(226, 214, 255, 0.85))',
-      'the halo is the pale iridescent white-violet a prism should throw', f);
+    ok(f === 'drop-shadow(0 0 11px rgba(255, 90, 130, 0.8))',
+      'the halo is tuned to the art it now wears: neon red, like the arrow on it', f);
     ok(!/(^|[^-])animation:/.test(rule),
       'and the rule does not redeclare the animation shorthand (that would cancel the sway)', rule);
     // six kinds, six DIFFERENT halos — the halo is what names the kind
@@ -1746,6 +2075,13 @@ async function main() {
     });
     ok(halos.every(Boolean) && new Set(halos).size === 6,
       'all six kinds are told apart by their own halo colour', String(new Set(halos).size));
+    // …and the one sprite that is OURS is really on disk, at the path the
+    // relative url resolves to from /exec/fx.css. A CSS url() that misses is a
+    // silent nothing: the bubble still spawns, still pops, and shows no art.
+    const art = url.fileURLToPath(new URL('../assets/bubbles/video.png', import.meta.url));
+    let bytes = 0;
+    try { bytes = (await fs.stat(art)).size; } catch (_e) { bytes = 0; }
+    ok(bytes > 0, 'and ../assets/bubbles/video.png exists where fx.css points at it', `${bytes} bytes`);
   }
 
   /* ---------------- video bubbles: the live pop -> window path, end to end
@@ -1794,7 +2130,7 @@ async function main() {
         'nothing on #gg-stage (a husk there is a full-screen click shield)', String(stage.childNodes.length));
 
       // ---- and it is the FULL window, not a stripped-down cousin
-      const w0 = winHost.findAll('gg-vwin')[0];
+      const w0 = liveWins(winHost)[0];
       const drift = w0.findAll('gg-vwin-drift')[0];
       const inner = w0.findAll('gg-vwin-inner')[0];
       const dot = w0.findAll('gg-vwin-dot')[0];
@@ -1848,7 +2184,7 @@ async function main() {
         String(videos.windowCount()));
       ok(m.receipts.length === 0,
         'evicting the LOCAL window posts no receipt — it was never on the wire', JSON.stringify(m.receipts));
-      await sleep(320);
+      await sleep(GHOST_WAIT);
       ok(!localNode.isConnected,
         'and it WAS the local one: the pool is one FIFO, oldest first, local or thrown');
 
@@ -1874,7 +2210,7 @@ async function main() {
         String(m.receipts.length));
 
       // ---- an earned window is dismissed the same way a thrown one is
-      const w2 = winHost.findAll('gg-vwin')[0];
+      const w2 = liveWins(winHost)[0];
       PID++;
       ptr(w2, 'pointerdown', 300, 300);
       ptr(w2, 'pointerup', 300, 300);
@@ -2024,10 +2360,9 @@ async function main() {
     ok(seen.slice(4).join(',') === '3,4', 'an eviction publishes the fall AND the rise', seen.slice(4).join(','));
 
     // A click dismisses one — the player's own way out of a window. (The evicted window's node
-    // hangs around for its fade before it is torn out, so wait it out first: clicking the husk
-    // would be clicking a record that is already finished.)
-    await sleep(320);
-    const w0 = winHost.findAll('gg-vwin')[0];
+    // hangs around as a GHOST while it plays out its exit, so skip the husks: clicking one would
+    // be clicking a record that left the pool two paragraphs ago.)
+    const w0 = liveWins(winHost)[0];
     PID++;
     ptr(w0, 'pointerdown', 300, 300);
     ptr(w0, 'pointerup', 300, 300);

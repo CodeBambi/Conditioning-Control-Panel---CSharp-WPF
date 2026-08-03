@@ -132,11 +132,29 @@ export function mount(container, ctx) {
     ]);
   }
 
+  /* --------------------------------------------------------------- sting
+   * ONE sting per mount, on the FIRST paint that knows a tone — paint() runs
+   * again when the countersignature lands (onResultFinalized), and hearing the
+   * verdict twice would read as a second verdict. 'abandon' stays deliberately
+   * silent: nobody won that, and a fanfare over a peer who vanished is a lie.
+   * The generic 'recap-reveal' fires under all four at the bottom of mount(),
+   * so a toneless recap is never mute. */
+  const STING = { won: 'recap-won', lost: 'recap-lost', draw: 'recap-draw' };
+  let stung = false;
+  function stingFor(tone) {
+    if (stung || !tone) return;
+    const id = STING[tone];
+    if (!id) { stung = true; return; }   // 'abandon' spends the one shot on silence
+    stung = true;
+    try { audio?.sfx?.(id); } catch (_e) { /* stub bus */ }
+  }
+
   /* --------------------------------------------------------------- paint */
 
   function paint() {
     const result = match ? match.result : null;
     const v = verdictCopy(result);
+    stingFor(v.tone);
     column.replaceChildren();
 
     /* --- hero ---

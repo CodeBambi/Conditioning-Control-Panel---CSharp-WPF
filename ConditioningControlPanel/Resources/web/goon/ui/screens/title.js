@@ -97,6 +97,14 @@ export function mount(container, ctx) {
   // is a menu item like any other.
   if (prefs && !prefs.get('seenHowItWorks')) ledger.timer(showHowItWorks, 420);
 
+  // Build the audio graph on the FIRST screen, not on the first cue. Under
+  // WebView2 the context comes up running (the host passes
+  // --autoplay-policy=no-user-gesture-required) so this is simply an early warm;
+  // in a plain browser it is what installs the gesture listener that resumes a
+  // suspended context, so the very first menu click is already audible instead
+  // of being the click that merely unlocks the bus.
+  try { audio?.unlock?.(); } catch (_e) { /* stub bus */ }
+
   try { audio?.music?.('title'); } catch (_e) { /* stub bus */ }
   ledger.add(() => { try { audio?.stopMusic?.(); } catch (_e) { /* stub bus */ } });
 

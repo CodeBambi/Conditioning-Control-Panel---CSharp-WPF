@@ -316,7 +316,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
   // The ribbon that calls the shot before it lands. Absolutely placed inside the
   // frame (under the timer, clear of the monitor), so it takes no grid row.
-  const announcer = mountAnnouncer({ host: root, match, onLog });
+  const announcer = mountAnnouncer({ host: root, match, audio, onLog });
 
   led.add(() => { try { announcer.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { attention.unmount(); } catch (_e) { /* gone */ } });
@@ -480,7 +480,12 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     const meta = p && PAYLOAD_META[p.kind];
     if (!meta) return;
     const wait = Math.max(0, (e.fireAtLocalMs || 0) - localMonotonicMs());
-    const t = setTimeout(() => addChip(chipKey('p', p.id), meta, p.duration_ms || 0, true), Math.min(wait, 30000));
+    // ONE landing cue for every family. A per-kind sting would be eight sounds
+    // to learn for information the fx chip already spells out in words.
+    const t = setTimeout(() => {
+      sfx(audio, 'payload-in');
+      addChip(chipKey('p', p.id), meta, p.duration_ms || 0, true);
+    }, Math.min(wait, 30000));
     led.add(() => { try { clearTimeout(t); } catch (_e) { /* gone */ } });
     onLog({ t: 'payload-in', kind: meta.label, id: p.id });
   });
