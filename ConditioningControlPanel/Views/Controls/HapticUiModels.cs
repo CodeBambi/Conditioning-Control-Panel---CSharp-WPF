@@ -62,6 +62,28 @@ namespace ConditioningControlPanel.Views.Controls
         AudioSync
     }
 
+    /// <summary>
+    /// Keeps at most ONE routing row open at a time. Twenty rows that can all be open at
+    /// once is the wall of sliders again with extra steps; one open row is a detail pane.
+    /// </summary>
+    public sealed class HapticRowExpansionScope
+    {
+        private HapticRoutingRowVm? _current;
+
+        internal void NotifyExpanded(HapticRoutingRowVm row)
+        {
+            if (ReferenceEquals(_current, row)) return;
+            var previous = _current;
+            _current = row;
+            previous?.CollapseSilently();
+        }
+
+        internal void NotifyCollapsed(HapticRoutingRowVm row)
+        {
+            if (ReferenceEquals(_current, row)) _current = null;
+        }
+    }
+
     /// <summary>One row of the routing matrix: enable, intensity, pattern, target role.</summary>
     public sealed class HapticRoutingRowVm : HapticVmBase
     {
@@ -69,6 +91,19 @@ namespace ConditioningControlPanel.Views.Controls
         private readonly HapticEventKind? _kind;
         private readonly HapticLayer? _layer;
         private readonly HapticRowLegacyBinding _legacy;
+        private bool _isExpanded;
+
+        /// <summary>Loc keys for the six <see cref="VibrationMode"/>s, in enum order.</summary>
+        private static readonly string[] ModeKeys =
+        {
+            "btn_constant", "btn_pulse", "btn_wave", "btn_heartbeat", "btn_escalate", "btn_earthquake"
+        };
+
+        /// <summary>Loc keys for the four <see cref="ToyRole"/>s, in enum order.</summary>
+        private static readonly string[] RoleKeys =
+        {
+            "haptics_role_all", "haptics_role_reward", "haptics_role_punish", "haptics_role_ambient"
+        };
 
         /// <summary>Raised after any write, so the tab can refresh dependent chrome
         /// (e.g. showing the audio-sync tuning card when that row is switched on).</summary>
@@ -100,10 +135,54 @@ namespace ConditioningControlPanel.Views.Controls
         public string Label { get; }
         public string Hint { get; }
 
+        /// <summary>Set once at build time so the rows share a single "one open at a time" rule.</summary>
+        public HapticRowExpansionScope? Scope { get; set; }
+
+        /// <summary>
+        /// Design pass: at rest a row is a toggle, a name and a value pill. Its slider,
+        /// pattern and target only exist while it is the open row.
+        /// </summary>
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set
+            {
+                if (_isExpanded == value) return;
+                _isExpanded = value;
+                if (value) Scope?.NotifyExpanded(this);
+                else Scope?.NotifyCollapsed(this);
+                Raise();
+            }
+        }
+
+        /// <summary>Closed by the scope because another row opened — no scope callback back.</summary>
+        internal void CollapseSilently()
+        {
+            if (!_isExpanded) return;
+            _isExpanded = false;
+            Raise(nameof(IsExpanded));
+        }
+
         /// <summary>Continuous layers have no pattern — a "vibration mode" only means
-        /// something for a transient envelope. The combo is hidden for them.</summary>
+        /// something for a transient envelope. The combo is collapsed for them.</summary>
         public bool ShowMode => _kind.HasValue;
-        public Visibility ModeVisibility => ShowMode ? Visibility.Visible : Visibility.Hidden;
+        public Visibility ModeVisibility => ShowMode ? Visibility.Visible : Visibility.Collapsed;
+
+        /// <summary>
+        /// The whole row in one pill: "50% · Pulse · All", or "Off". This is what makes a
+        /// collapsed row readable — you never have to open one just to see what it does.
+        /// </summary>
+        public string ValueSummary
+        {
+            get
+            {
+                if (!RowEnabled) return Loc.Get("haptics_row_off");
+                var parts = new List<string>(3) { IntensityText };
+                if (ShowMode) parts.Add(Loc.Get(ModeKeys[Math.Clamp(ModeIndex, 0, ModeKeys.Length - 1)]));
+                parts.Add(Loc.Get(RoleKeys[Math.Clamp(RoleIndex, 0, RoleKeys.Length - 1)]));
+                return string.Join(" · ", parts);
+            }
+        }
 
         private HapticEventRule? EventRule => _kind.HasValue ? _settings.V2.Rule(_kind.Value) : null;
         private HapticLayerRule? LayerRule => _layer.HasValue ? _settings.V2.Rule(_layer.Value) : null;
@@ -136,6 +215,7 @@ namespace ConditioningControlPanel.Views.Controls
                 }
                 SaveSettings();
                 Raise();
+                Raise(nameof(ValueSummary));
                 Changed?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -161,6 +241,7 @@ namespace ConditioningControlPanel.Views.Controls
                 SaveSettings();
                 Raise();
                 Raise(nameof(IntensityText));
+                Raise(nameof(ValueSummary));
                 Changed?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -185,6 +266,7 @@ namespace ConditioningControlPanel.Views.Controls
                 EventRule.Mode = mode;
                 SaveSettings();
                 Raise();
+                Raise(nameof(ValueSummary));
                 Changed?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -202,6 +284,7 @@ namespace ConditioningControlPanel.Views.Controls
                 if (LayerRule != null) LayerRule.Target = role;
                 SaveSettings();
                 Raise();
+                Raise(nameof(ValueSummary));
                 Changed?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -214,6 +297,7 @@ namespace ConditioningControlPanel.Views.Controls
             Raise(nameof(IntensityText));
             Raise(nameof(ModeIndex));
             Raise(nameof(RoleIndex));
+            Raise(nameof(ValueSummary));
         }
     }
 

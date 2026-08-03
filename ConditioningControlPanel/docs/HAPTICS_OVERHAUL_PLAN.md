@@ -287,10 +287,9 @@ Phase F UI decisions at the end of this section).
       frozen `BitmapSource` down to 8×8 (WIC, no re-decode, per-file cached) → `HapticLayer.Luminance`
       with `autoZeroMs = the flash's own lifetime`, so there is no hide hook to get wrong.
       **SubliminalService has no image path** (text-only + whisper audio), so nothing was wired there.
-  - [x] UI: "Flash brightness sync" collapsed Expander in the Media extras block — enable toggle +
-        a 0-100% strength slider (`LuminanceSyncIntensity`). The slider is dimmed to 0.4 opacity
-        while the feature is off, because `PinkSlider` has no disabled visual and a slider that
-        looks live but ignores drags is worse than no slider.
+  - [x] UI: enable toggle in the Extras strip, 0-100% strength slider (`LuminanceSyncIntensity`)
+        in Advanced. (The per-control 0.4-opacity workaround this used to carry is GONE —
+        `PinkSlider` itself now has a real `IsEnabled=False` visual; see the design pass below.)
 - [x] **Temperament dial**: `Services/Haptics/Core/HapticTemperament.cs` — five presets, each a
       multiplier set applied inside `HapticMixer`. Settings key `HapticSettingsV2.Temperament`
       (`[JsonProperty("temperament")]`, default `"balanced"`; an unrecognised value falls back to
@@ -376,6 +375,79 @@ Phase F UI decisions at the end of this section).
   custom `ToggleStyle`, and UIA realises at most one of them at a time, so a smoke test cannot
   toggle "Media > Audio sync" by AutomationId — it has to click the on-screen coordinate. Worth
   knowing before anyone writes a UIA test against the redesigned tab.
+  *(Still true after the F2 design pass, and now it also applies to OPENING a row: click the
+  coordinate of the row's label `Text` element, and scroll it into view first — a click on a row
+  that is only half in the viewport lands on the wrong control. The row's slider, once open, IS
+  reachable through `RangeValuePattern`, which is how the "an edit still saves" check is done.)*
+
+### Phase F2 — Design / information-architecture pass (2026-08-03)
+
+**Why:** the owner reviewed the finished tab and rejected it — *"so many sliders in plain sight and
+options, this is a recipe for choice fatigue. If I had seen this UI at first glance I'd have probably
+closed it."* Nothing was added or removed functionally; every control that existed still exists and is
+still reachable. What changed is **what is visible when**.
+
+**Before → after (maximised 1080p, tab freshly opened, disconnected):**
+| | before | after |
+|---|---|---|
+| sliders visible on first paint | 3 (Master intensity, Max power, + the DtRH/row wall one scroll down) | **1** (Intensity) |
+| cards/sections on first paint | 6 (intro, connection, Power, toys, routing matrix, …) | **5** (intro, connection, How it feels, Your toys, the Customize/Advanced doors) |
+| controls reachable without a click | ~60 | ~10 |
+| height of the tab at rest | ~5.5 viewports | **~1.5 viewports** |
+
+**Tier 1 — first paint.** Header, a shrunk "what is this?" card (image 160→96 px, stale bullet list
+dropped), the connection strip, a **How it feels** card holding the ONE `Intensity` slider
+(`GlobalIntensity`) plus the five temperament chips at full size, and the toy cards. Then two
+collapsed doors. Max power is NOT here any more — it is a safety net, not a volume knob.
+
+**Tier 2 — `Customize` (`HapticCustomizeSection`, one click).** The routing matrix, redesigned:
+a row at rest is `[toggle] icon Name .......... "50% · Pulse · All" ›`. The strip right of the toggle
+is one `ToggleButton`; clicking it reveals that row's strength slider, pattern combo and target combo
+inline. `HapticRowExpansionScope` keeps **one row open at a time** across every group. Group headers
+(Core/Rewards/Media/Games) are unchanged. Below the list, the **Extras** strip: five plain switches
+that belong to no single row (FunScript enable, flash-brightness enable, toy-button input, band split,
+and the indented "squeezing passes attention checks").
+
+**Tier 3 — `Advanced` (`HapticAdvancedSection`, collapsed, at the bottom).** Safety ceiling
+(Max power + its warning), the toy-input back-off slider, FunScript "convert to vibration", flash
+brightness strength, the DtRH ambient/density pair, the Video-Haptic-Sync card (delay/power + the
+`HapticAudioAdvanced` DSP drawer, now 6 knobs — band split was promoted to Extras), and the Pattern lab.
+
+**Mechanics worth knowing:**
+- **Nothing moved in C# except two lines.** `MainWindow.Haptics.cs` gained `_hapticRowScope` and
+  assigns it to each row; every other handler and every `Load*ToUi` helper is untouched, because the
+  x:Names were kept. This is exactly what the Phase F "layout and logic are separated" note bought.
+- **x:Names that moved but did not change**: `SliderHapticMaxPower`/`TxtHapticMaxPower`/
+  `HapticMaxPowerWarning`, `SliderHapticOverrideCooldown`/`TxtHapticOverrideCooldown`,
+  `ChkHapticToyInput`, `ChkHapticToyAttentionCheck`, `ChkHapticFunScript`, `ChkHapticFunScriptVibe`,
+  `ChkHapticLuminance`, `SliderHapticLuminance`/`TxtHapticLuminance`, `ChkHapticBandSplit`,
+  `SliderHapticDtrhAmbient`/`TxtHapticDtrhAmbient`/`CmbHapticDtrhDensity`, the whole pattern lab,
+  the whole audio-sync card, `TxtHapticActivity`, `BtnHapticTest`, `BtnHapticsHelp`, the three
+  `ChkHapticProvider*` and `TxtHapticUrl`/`TxtHapticUrlHint`/`ChkHapticAutoConnect`.
+- **x:Names deleted**: `HapticToyInputSection`, `HapticFunScriptSection`, `HapticLuminanceSection`
+  (those three Expanders dissolved into Extras/Advanced). **New**: `HapticConnectionSetup`,
+  `HapticCustomizeSection`, `HapticAdvancedSection`.
+- **`HapticsFeatureBox` is now an invisible wrapper** around the two doors (it only ever existed so
+  `MainWindow.Patreon.cs` could disable the feature half wholesale — that still works).
+- **Live badges follow their feature.** `HapticOverrideBadge` ("Backing off - you took control") moved
+  into the **Your toys** header, so it is visible at rest even though its settings are two tiers down;
+  `HapticFunScriptLoadedBadge` ("Following x.funscript") moved into the **Customize** header.
+- **`PinkSlider` finally has a disabled visual** (`Resources/Theme/MainWindow.xaml`): an
+  `IsEnabled=False` trigger dims the groove, the pink fill and the thumb. `SetSliderEnabled` no longer
+  pokes `Opacity` per control, and the routing rows can now bind `IsEnabled` to `RowEnabled` and look
+  right for free. This fixes the open issue noted in the Phase F luminance entry — app-wide, not just here.
+- **New VM surface** in `Views/Controls/HapticUiModels.cs`: `HapticRowExpansionScope`,
+  `HapticRoutingRowVm.IsExpanded` / `.Scope` / `.ValueSummary` (the pill text, `"Off"` when the row is
+  off), and `ModeVisibility` changed `Hidden` → `Collapsed` now that the combo is in a stacked body.
+- **Loc (en.json only, as before).** Added: `haptics_feel`, `haptics_feel_sub`, `haptics_intensity`,
+  `haptics_customize`, `haptics_customize_sub`, `haptics_advanced`, `haptics_advanced_sub`,
+  `haptics_extras`, `haptics_extras_sub`, `haptics_connection_setup`, `haptics_connection_setup_sub`,
+  `haptics_row_off`, `haptics_row_tap_hint`, `haptics_safety`. Removed (verified unused):
+  `desc_haptics_bullets`, `haptics_global_dials`, `haptics_global_dials_sub`, `haptics_routing_sub`,
+  `haptics_band_split_sub`. Reworded: `haptics_audio_advanced(_sub)` (band split left that drawer),
+  `haptics_band_split_tip` (absorbed the removed sub-line).
+- **Do not "fix" the file by reformatting it.** `en.json` is CRLF with hand-grouped blank lines; edit it
+  with targeted text edits, never by round-tripping through a JSON dumper.
 
 ### Phase G — Ship prep
 - [ ] Localization keys → all 9 `Localization/Languages/*.json` (STRICT JSON, `\n` escaped, never hand-flip line endings).

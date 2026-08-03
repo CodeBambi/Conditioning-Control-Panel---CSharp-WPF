@@ -36,6 +36,8 @@ namespace ConditioningControlPanel
         private readonly ObservableCollection<HapticProviderChipVm> _hapticProviderChips = new();
         private readonly ObservableCollection<HapticRoutingGroupVm> _hapticRoutingGroups = new();
         private readonly ObservableCollection<HapticToyCardVm> _hapticToyCards = new();
+        /// <summary>One open routing row at a time, across every group.</summary>
+        private readonly HapticRowExpansionScope _hapticRowScope = new();
         private DispatcherTimer? _hapticSliderDebounce;
         /// <summary>Phase F: 1 Hz poll for the two pieces of live state that have no event
         /// (mixer layer-suppression, FunScript's loaded path). Runs ONLY while the tab is on
@@ -69,9 +71,12 @@ namespace ConditioningControlPanel
             HapticsTab.ProviderChipsList.ItemsSource = _hapticProviderChips;
 
             // ---- routing matrix -------------------------------------------------
+            // Design pass: rows are compact at rest and open one at a time, so every row
+            // shares ONE expansion scope regardless of which group it sits in.
             HapticRoutingRowVm Ev(HapticEventKind kind, string icon, string labelKey, string hintKey)
             {
                 var row = HapticRoutingRowVm.ForEvent(s, kind, icon, labelKey, hintKey);
+                row.Scope = _hapticRowScope;
                 row.Changed += OnHapticRoutingRowChanged;
                 return row;
             }
@@ -79,6 +84,7 @@ namespace ConditioningControlPanel
                                   HapticRowLegacyBinding legacy)
             {
                 var row = HapticRoutingRowVm.ForLayer(s, layer, icon, labelKey, hintKey, legacy);
+                row.Scope = _hapticRowScope;
                 row.Changed += OnHapticRoutingRowChanged;
                 return row;
             }
@@ -408,14 +414,15 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// The app's PinkSlider template has no disabled visual, so IsEnabled alone produces a
-        /// slider that looks live and silently ignores every drag. Dim it too.
+        /// PinkSlider now carries a real IsEnabled=False visual (dimmed track + thumb, in
+        /// Resources/Theme/MainWindow.xaml), so this is just IsEnabled. The old per-control
+        /// Opacity workaround is gone — a disabled slider looks disabled everywhere now, not
+        /// only on the two the Haptics tab remembered to dim.
         /// </summary>
         private static void SetSliderEnabled(Slider? slider, bool on)
         {
             if (slider == null) return;
             slider.IsEnabled = on;
-            slider.Opacity = on ? 1.0 : 0.4;
         }
 
         private void LoadHapticMediaExtrasToUi(HapticSettings s)
