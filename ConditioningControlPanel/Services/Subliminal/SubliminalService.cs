@@ -81,8 +81,15 @@ namespace ConditioningControlPanel.Services
         public SubliminalService()
         {
             _audioPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sub_audio");
-            Directory.CreateDirectory(_audioPath);
-            
+            // Best effort only: the install dir is read-only under Program Files, so a missing folder
+            // here must NOT take the app down at startup — the lookups below already degrade to
+            // "no linked audio" when the folder isn't there.
+            try { Directory.CreateDirectory(_audioPath); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("SubliminalService: could not create {Path} - {Error}", _audioPath, ex.Message);
+            }
+
             _timer = new DispatcherTimer();
             _timer.Tick += Timer_Tick;
         }

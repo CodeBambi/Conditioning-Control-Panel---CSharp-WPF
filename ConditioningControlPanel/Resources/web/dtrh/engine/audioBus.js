@@ -16,6 +16,7 @@
  * ==========================================================================*/
 
 import { isMuted, isDucked } from '../shared/audioMute.js';
+import { audioUrl, altAudioUrl } from '../shared/audioSrc.js';
 
 const GESTURES = ['pointerdown', 'touchstart', 'keydown', 'wheel'];
 
@@ -105,22 +106,35 @@ export function makeSfxPlayer() {
   const AC = window.AudioContext || window.webkitAudioContext;
   const buffers = new Map(); // src -> AudioBuffer | 'pending' | 'failed'
   const cache = {};          // element bases (no-WebAudio browsers only)
-  function load(src) {
-    if (!AC || buffers.has(src)) return;
-    buffers.set(src, 'pending');
-    fetch(src)
-      .then((r) => r.arrayBuffer())
+  // Callers keep passing plain '/dtrh/assets/...' paths and keying off them; the
+  // host choice (installed tree vs downloaded content pack, shared/audioSrc.js)
+  // is resolved HERE, with one retry on the other host before a src is written
+  // off as 'failed'. Missing on BOTH hosts ends exactly where it did before.
+  function fetchDecode(url) {
+    return fetch(url)
+      .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
       .then((raw) => {
         const c = getAudioCtx();
         if (!c) throw new Error('no audio ctx');
         return new Promise((res, rej) => c.decodeAudioData(raw, res, rej));
+      });
+  }
+  function load(src) {
+    if (!AC || buffers.has(src)) return;
+    buffers.set(src, 'pending');
+    const primary = audioUrl(src);
+    fetchDecode(primary)
+      .catch(() => {
+        const alt = altAudioUrl(primary);
+        if (!alt) throw new Error('no alternate host');
+        return fetchDecode(alt);
       })
       .then((decoded) => buffers.set(src, decoded))
       .catch(() => buffers.set(src, 'failed'));
   }
   function elementPlay(src, vol) {
     try {
-      if (!cache[src]) { const a = new Audio(src); a.preload = 'auto'; cache[src] = a; }
+      if (!cache[src]) { const a = new Audio(audioUrl(src)); a.preload = 'auto'; cache[src] = a; }
       const a = cache[src].cloneNode(); a.volume = vol; a.play().catch(() => {});
     } catch (e) { /* ignore */ }
   }

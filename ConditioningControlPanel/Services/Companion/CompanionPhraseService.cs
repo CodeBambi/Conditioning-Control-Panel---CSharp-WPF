@@ -14,38 +14,66 @@ namespace ConditioningControlPanel.Services
     public class CompanionPhraseService
     {
         /// <summary>
-        /// Folder where custom phrase audio files are stored.
+        /// Folder where custom phrase audio files are stored. Install-dir anchored because it is also
+        /// the destination <see cref="CopyAudioToFolder"/> writes user-picked clips to; use
+        /// <see cref="ResolveCompanionAudioFile"/> to READ files that may have shipped in a pack.
         /// </summary>
         public static string CompanionAudioFolder =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "companion_audio");
 
         /// <summary>
+        /// Install-dir-relative anchor for <see cref="CompanionAudioFolder"/>, for
+        /// <see cref="ContentLocator"/> probes. This tree is SPLIT once audio ships as a content pack:
+        /// the manifests (bark_rules.json / mantras.json / avatar_manifest.json) stay in the install
+        /// dir while the per-mod .mp3s land under the content root.
+        /// </summary>
+        public static readonly string CompanionAudioRelativeDir =
+            Path.Combine("Resources", "sounds", "companion_audio");
+
+        /// <summary>Install-dir-relative anchor for the baseline voice-line folder.</summary>
+        public static readonly string VoiceLineRelativeDir =
+            Path.Combine("Resources", "sounds", "flashes_audio");
+
+        /// <summary>
+        /// Full path for a file under companion_audio, probing the install dir first and the
+        /// downloaded content packs second. Callers keep their own <c>File.Exists</c> check — a miss
+        /// in both roots comes back as the install-dir path, so "no audio" degradation is unchanged.
+        /// </summary>
+        public static string ResolveCompanionAudioFile(params string[] parts) =>
+            ContentLocator.Resolve(Path.Combine(CompanionAudioRelativeDir, Path.Combine(parts)));
+
+        /// <summary>
         /// Folder where voice line audio files live (filename = phrase text).
         /// Checks active mod's resources first, falls back to embedded folder.
         /// </summary>
-        public static string VoiceLineFolder
+        public static string VoiceLineFolder => ResolveVoiceLineFolder().Absolute;
+
+        /// <summary>
+        /// Voice-line folder resolution, handing back BOTH the absolute folder and — when it's one of
+        /// ours rather than a packaged mod's own — the install-dir-relative path, so callers that must
+        /// scan both roots (bundled install + downloaded pack) can go through
+        /// <see cref="ContentLocator.EnumerateFiles"/>.
+        /// </summary>
+        private static (string Absolute, string? Relative) ResolveVoiceLineFolder()
         {
-            get
+            var modPath = App.Mods?.ActiveMod?.InstalledPath;
+            if (modPath != null)
             {
-                var modPath = App.Mods?.ActiveMod?.InstalledPath;
-                if (modPath != null)
-                {
-                    var modVoiceDir = Path.Combine(modPath, "resources", "sounds", "flashes_audio");
-                    if (Directory.Exists(modVoiceDir))
-                        return modVoiceDir;
-                }
-                // Built-in mods (no InstalledPath) may ship their own idle voicelines embedded per-mod,
-                // mirroring how bark_rules.json / avatar_manifest.json resolve. Lets Sissy play its own
-                // idle "giggle" lines (in the bark voice) instead of the shared old ones.
-                var modId = App.Mods?.ActiveModId;
-                if (!string.IsNullOrEmpty(modId))
-                {
-                    var embeddedModVoiceDir = Path.Combine(CompanionAudioFolder, "mods", modId, "flashes_audio");
-                    if (Directory.Exists(embeddedModVoiceDir))
-                        return embeddedModVoiceDir;
-                }
-                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "flashes_audio");
+                var modVoiceDir = Path.Combine(modPath, "resources", "sounds", "flashes_audio");
+                if (Directory.Exists(modVoiceDir))
+                    return (modVoiceDir, null);
             }
+            // Built-in mods (no InstalledPath) may ship their own idle voicelines embedded per-mod,
+            // mirroring how bark_rules.json / avatar_manifest.json resolve. Lets Sissy play its own
+            // idle "giggle" lines (in the bark voice) instead of the shared old ones.
+            var modId = App.Mods?.ActiveModId;
+            if (!string.IsNullOrEmpty(modId))
+            {
+                var rel = Path.Combine(CompanionAudioRelativeDir, "mods", modId, "flashes_audio");
+                if (ContentLocator.DirectoryExists(rel))
+                    return (ContentLocator.ResolveDirectory(rel), rel);
+            }
+            return (ContentLocator.ResolveDirectory(VoiceLineRelativeDir), VoiceLineRelativeDir);
         }
 
         /// <summary>
@@ -68,8 +96,8 @@ namespace ConditioningControlPanel.Services
                 var modId = App.Mods?.ActiveModId;
                 if (!string.IsNullOrEmpty(modId))
                 {
-                    var dir = Path.Combine(CompanionAudioFolder, "mods", modId, "event_audio");
-                    if (Directory.Exists(dir)) return dir;
+                    var rel = Path.Combine(CompanionAudioRelativeDir, "mods", modId, "event_audio");
+                    if (ContentLocator.DirectoryExists(rel)) return ContentLocator.ResolveDirectory(rel);
                 }
                 return null;
             }
@@ -194,13 +222,14 @@ namespace ConditioningControlPanel.Services
 
             // Voice line phrases (from flashes_audio/ folder - filename is the phrase)
             var voiceLines = GetVoiceLineFiles();
-            for (int i = 0; i < voiceLines.Count; i++)
+            MigrateLegacyVoiceLineIds(voiceLines);
+            foreach (var file in voiceLines)
             {
-                var id = $"{VoiceLineCategory}:{i}";
+                var id = VoiceLineId(file);
                 if (removedIds.Contains(id)) continue;
 
-                var fileName = Path.GetFileName(voiceLines[i]);
-                var text = Path.GetFileNameWithoutExtension(voiceLines[i]);
+                var fileName = Path.GetFileName(file);
+                var text = Path.GetFileNameWithoutExtension(file);
 
                 result.Add(new CompanionPhrase
                 {
@@ -210,7 +239,8 @@ namespace ConditioningControlPanel.Services
                     IsBuiltIn = true,
                     IsEnabled = !disabledIds.Contains(id),
                     AudioFileName = fileName,
-                    AudioFolder = VoiceLineFolder
+                    // The listing can span both roots, so anchor each row on its OWN folder.
+                    AudioFolder = Path.GetDirectoryName(file) ?? VoiceLineFolder
                 });
             }
 
@@ -441,26 +471,108 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Gets sorted list of voice line file paths from the flashes_audio/ folder.
+        /// Gets sorted list of voice line file paths from the flashes_audio/ folder. When the folder
+        /// is one of ours (not a packaged mod's) this is the UNION of the bundled install dir and the
+        /// downloaded content pack, deduped by filename with the install dir winning.
         /// </summary>
         private static List<string> GetVoiceLineFiles()
         {
             try
             {
-                if (!Directory.Exists(VoiceLineFolder))
-                    return new List<string>();
-
+                var (absolute, relative) = ResolveVoiceLineFolder();
                 var extensions = new[] { "*.mp3", "*.wav", "*.ogg", "*.flac" };
                 var files = new List<string>();
                 foreach (var ext in extensions)
-                    files.AddRange(Directory.GetFiles(VoiceLineFolder, ext));
+                {
+                    if (relative != null)
+                        files.AddRange(ContentLocator.EnumerateFiles(relative, ext));
+                    else if (Directory.Exists(absolute))
+                        files.AddRange(Directory.GetFiles(absolute, ext));
+                }
 
-                files.Sort(StringComparer.OrdinalIgnoreCase);
+                // Sort by FILENAME (not full path) so a union across the two roots still reads as one
+                // alphabetical list — within a single folder this is identical to the old path sort.
+                files.Sort((a, b) => string.Compare(
+                    Path.GetFileName(a), Path.GetFileName(b), StringComparison.OrdinalIgnoreCase));
                 return files;
             }
             catch
             {
                 return new List<string>();
+            }
+        }
+
+        /// <summary>
+        /// Stable id for a built-in voice line, keyed on the audio FILENAME stem rather than the
+        /// line's index in the sorted folder listing. Voice-line audio can now arrive AFTER first run
+        /// (content packs download later), and an index-based id silently re-targets every toggle the
+        /// user already made the moment the list grows. Mirrors <see cref="BarkService.BarkLineId"/>.
+        /// </summary>
+        public static string VoiceLineId(string filePath) =>
+            VoiceLineCategory + ":" + Path.GetFileNameWithoutExtension(filePath);
+
+        /// <summary>True for the pre-migration positional form, e.g. <c>VoiceLine:12</c>.</summary>
+        private static bool IsLegacyVoiceLineId(string id)
+        {
+            if (string.IsNullOrEmpty(id) ||
+                !id.StartsWith(VoiceLineCategory + ":", StringComparison.Ordinal)) return false;
+            var tail = id.Substring(VoiceLineCategory.Length + 1);
+            return tail.Length > 0 && tail.All(char.IsDigit);
+        }
+
+        /// <summary>
+        /// One-time (but idempotent, and safe to re-run) migration of positional
+        /// <c>VoiceLine:{index}</c> entries in DisabledPhraseIds/RemovedPhraseIds to the
+        /// filename-based form, mapping each index through the CURRENT sorted listing.
+        ///
+        /// Best effort by design: with no voice lines on disk yet (audio not downloaded) the legacy
+        /// entries are LEFT UNTOUCHED so a later launch that does have the audio can still migrate
+        /// them. An index past the end of the current list is dropped — it can only refer to a line
+        /// that no longer exists.
+        /// </summary>
+        private static void MigrateLegacyVoiceLineIds(List<string> sortedFiles)
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null || sortedFiles.Count == 0) return;
+
+                // A file literally named "12.mp3" would produce an id that LOOKS positional; never
+                // rewrite an id that already matches a real file.
+                HashSet<string>? currentIds = null;
+
+                var changed = false;
+                foreach (var set in new[] { settings.DisabledPhraseIds, settings.RemovedPhraseIds })
+                {
+                    // Cheap scan first — the migrated (and every fresh) profile allocates nothing here.
+                    if (set == null || set.Count == 0 || !set.Any(IsLegacyVoiceLineId)) continue;
+                    var legacy = set.Where(IsLegacyVoiceLineId).ToList();
+
+                    currentIds ??= new HashSet<string>(
+                        sortedFiles.Select(VoiceLineId), StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var old in legacy)
+                    {
+                        if (currentIds.Contains(old)) continue;
+                        set.Remove(old);
+                        changed = true;
+
+                        if (!int.TryParse(old.Substring(VoiceLineCategory.Length + 1), out var idx)) continue;
+                        if (idx < 0 || idx >= sortedFiles.Count) continue;
+                        set.Add(VoiceLineId(sortedFiles[idx]));
+                    }
+                }
+
+                if (changed)
+                {
+                    App.Settings?.Save();
+                    App.Logger?.Information(
+                        "CompanionPhraseService: migrated positional VoiceLine phrase ids to filename-based ids");
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "CompanionPhraseService: failed to migrate legacy VoiceLine phrase ids");
             }
         }
 
@@ -474,13 +586,14 @@ namespace ConditioningControlPanel.Services
             var removedIds = settings?.RemovedPhraseIds ?? new HashSet<string>();
 
             var allFiles = GetVoiceLineFiles();
+            MigrateLegacyVoiceLineIds(allFiles);
             var result = new List<string>();
 
-            for (int i = 0; i < allFiles.Count; i++)
+            foreach (var file in allFiles)
             {
-                var id = $"{VoiceLineCategory}:{i}";
+                var id = VoiceLineId(file);
                 if (!removedIds.Contains(id) && !disabledIds.Contains(id))
-                    result.Add(allFiles[i]);
+                    result.Add(file);
             }
 
             // Include custom phrases in VoiceLine category that have audio

@@ -48,6 +48,9 @@ internal static class LoomHostService
                     // The saved-spiral GIFs (rack thumbnails). Allow: same policy the
                     // game host uses for this mapping.
                     ("ccp.spirals", DtrhLoomStore.SpiralsFolder, CoreWebView2HostResourceAccessKind.Allow),
+                    // Downloaded pack audio (the Loom shares dtrh's modules, which reach for the
+                    // bubbles sfx). Same mapping the game host registers.
+                    ChaosWebViewHost.ContentMapping(),
                 },
                 // Own browser profile: the game's WebView2 state stays untouched.
                 UserDataFolderName = "browser_data_loom",

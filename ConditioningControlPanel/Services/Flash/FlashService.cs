@@ -279,7 +279,14 @@ namespace ConditioningControlPanel.Services
         {
             RefreshImagesPath();
             _soundsPath = CompanionPhraseService.VoiceLineFolder;
-            Directory.CreateDirectory(_soundsPath);
+            // Same hazard as SubliminalService's ctor: the voice-line folder is install-dir anchored
+            // and Program Files is read-only, so once flashes_audio ships as a downloadable content
+            // pack this line would throw on startup for anyone who hasn't fetched it yet. Best effort.
+            try { Directory.CreateDirectory(_soundsPath); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("FlashService: could not create {Path} - {Error}", _soundsPath, ex.Message);
+            }
             // Animation/fade heartbeat runs off CompositionTarget.Rendering (vsync-aligned)
             // — see StartHeartbeat. A 33ms DispatcherTimer's OS-quantized cadence beats
             // against the display refresh and makes GIF flashes judder (same fix as the

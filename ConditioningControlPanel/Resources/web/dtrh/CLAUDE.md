@@ -211,6 +211,15 @@ All paths under `.../ConditioningControlPanel/`. Stores write to `App.UserDataPa
 | `ccp.art` | `{BaseDirectory}/assets/Chaos` (bundled sprites/icons/banners) — **local host, NOT a CDN** | Allow |
 | `ccp.spirals` | `DtrhLoomStore.SpiralsFolder` (`%APPDATA%/.../Spirals`) | Allow |
 | `ccp.mod` | active mod's `resources/dtrh` (if present) | Allow |
+| `ccp.content` | `%LOCALAPPDATA%/.../content/Resources/web` — downloaded content packs, a mirror of the `ccp.game` tree | Allow |
+
+**Audio hosts (content packs).** The heavy audio (barks, drone, bubble sfx, vn vo) no longer ships
+in the installer: it downloads into `ccp.content`, which mirrors `ccp.game` path-for-path. Runtime
+audio URLs therefore go through `shared/audioSrc.js` — `audioUrl(url)` picks the host to try first
+(the C# host injects `window.CCP_CONTENT_READY` before any page script runs) and `altAudioUrl` /
+`altSrcFor` give each load exactly ONE retry on the other host before the engine's existing silent
+degradation takes over. **Manifests never go through it** (`assets/barks/manifest.js` is an
+import-time ES module and stays in the installer, as do `bubbles/manifest.js` and `vn/manifest.json`).
 
 **Per-Dtrh service:**
 - **`DtrhMetaBridge.cs`** — the page's window onto `ChaosMetaState`. `chaos_meta.json` is

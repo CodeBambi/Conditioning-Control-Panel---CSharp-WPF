@@ -167,7 +167,10 @@ namespace ConditioningControlPanel.Services
                     return altPath;
             }
 
-            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", soundRelativePath.Replace('/', Path.DirectorySeparatorChar));
+            // Shared sounds: bundled install dir first, downloaded content pack second. A miss in both
+            // comes back as the install-dir path so callers' "file missing" handling is unchanged.
+            return ContentLocator.Resolve(Path.Combine(
+                "Resources", "sounds", soundRelativePath.Replace('/', Path.DirectorySeparatorChar)));
         }
 
         /// <summary>

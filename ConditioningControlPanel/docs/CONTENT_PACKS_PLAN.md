@@ -5,7 +5,7 @@ out of the box, hosted as assets on the `vX.Y.0` GitHub release of each minor cy
 downloaded once and re-used across every patch of that cycle. First-run onboarding gets a
 mod picker (only CCP Default ships in-box).
 
-Status: **PLANNED — not approved yet.** (2026-08-03)
+Status: **APPROVED — implementation in progress** on `feat/content-packs` (worktree `ccp-wt-packs`). (2026-08-03)
 
 ---
 
@@ -144,6 +144,31 @@ to what every single update used to cost them.
 - Kill mid-download → resume (ranged download); corrupt a pack → sha256 reject + re-fetch.
 - `AudioDiag` startup log (`AudioService.cs:486`) is free telemetry for missing groups.
 - Offline first run: app fully usable, picker says "download later", retry next launch.
+
+## 8.5 Wave-1 implementation corrections (2026-08-03, supersede §1/§6 where they differ)
+
+- **Measured moving payload is 1,097 MB** (8,429 files), not ~1.36 GB. Pack sizes:
+  audio-base 46 / audio-web 131 / mod-bambi 77 / mod-sissy 331 / mod-locked 329 / mod-drone 184.
+- **`vn\vo` is fully per-persona** (`builtin-bambisleep`, `builtin-locked`, `builtin-sissyhypno`,
+  `cheshire`) — all four ship in their mod packs (cheshire → mod-locked); `audio-web` carries **no**
+  vn audio. There are **no DTRH barks for Bambi** (`assets\barks` = circe + sissy only).
+- **`.ccpmod` files live at `ConditioningControlPanel\DroneMod\` / `LockedMod\`** (published to
+  `{app}\DroneMod\`, `{app}\LockedMod\`; `ModService.cs:1402/:1484` reads those paths). In packs they
+  sit at in-zip `packs/<name>.ccpmod` → land at `content\packs\`; every manifest entry uses
+  `targetRoot: ""` plus a `ccpmods: [...]` array Phase C consumes.
+- `flashes_audio` = 68 mp3 + 50 wav; sissyhypno has a third manifest `avatar_manifest.json`
+  (stays in-box; `AvatarPortraitSet.LoadBucket` has a `ContentLocator.Mirror` fallback so the
+  manifest can live install-side while its portraits are content-side).
+- **§7 gained a 4th fix:** `FlashService.cs:282` had the same unguarded ctor
+  `Directory.CreateDirectory` as SubliminalService — worse, because its target (`flashes_audio`)
+  actually leaves the box. Wrapped.
+- Only **4** hosts pin `ccp.game` (Dtrh, DtrhSpike, Loom, Intake — all via `ChaosWebViewHost.Mappings`);
+  `ccp.content` maps with access kind **Allow** (Deny would block cross-origin fetch from ccp.game
+  pages; precedent `ccp.mod`). Pages get `window.CCP_CONTENT_READY` injected at document creation.
+- Intake's chimes/pop are borrowed from `dtrh/assets/bubbles/sfx` → intake audio depends on the
+  dtrh half of `audio-web`.
+- Pack zips are **byte-deterministic** (sorted entries, fixed timestamps) so sha256 survives
+  rebuilds on different machines → cross-cycle contentVersion carry-over actually works.
 
 ## 9. Phases
 

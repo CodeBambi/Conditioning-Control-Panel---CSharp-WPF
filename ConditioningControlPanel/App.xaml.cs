@@ -368,6 +368,10 @@ namespace ConditioningControlPanel
         /// <c>ShouldDeferInterruptions</c> gate.</summary>
         public static Services.Browser.BrowserMediaService BrowserMedia { get; private set; } = null!;
         public static ContentPackService ContentPacks { get; private set; } = null!;
+        /// <summary>Release-hosted content packs (baseline/web audio + per-mod media pulled out of the
+        /// installer, fetched from the vX.Y.0 GitHub release). Null only if construction failed —
+        /// every consumer must null-check; missing content degrades gracefully everywhere.</summary>
+        public static ReleaseContentService? ReleaseContent { get; private set; }
         public static CompanionService Companion { get; private set; } = null!;
         public static CommunityPromptService CommunityPrompts { get; private set; } = null!;
         public static PersonalityService Personality { get; private set; } = null!;
@@ -1634,6 +1638,30 @@ namespace ConditioningControlPanel
 
             // Initialize content packs service
             ContentPacks = new ContentPackService();
+
+            // Release-hosted content packs (audio + mod media that no longer ship in the installer).
+            // Construction is cheap (version math + one Directory.Exists probe); the baseline fetch is
+            // fire-and-forget and no-ops on a full/dev layout, in offline mode, or once installed.
+            try
+            {
+                var releaseContent = new ReleaseContentService();
+                ReleaseContent = releaseContent;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await releaseContent.EnsureBaselineAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.Warning(ex, "ReleaseContent: baseline check failed");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to initialize ReleaseContentService - downloaded content unavailable this session");
+            }
 
             // Initialize webcam tracking + focus game services (Lab — gated by consent dialog).
             // Constructors are no-ops; the camera handle only opens after explicit user consent.
@@ -3473,6 +3501,7 @@ Application State:
             Webcam?.Dispose();
             FocusGame?.Dispose();
             ContentPacks?.Dispose();
+            ReleaseContent?.Dispose();
             Roadmap?.Dispose();
             Programs?.Dispose();
             SkillTree?.Dispose();

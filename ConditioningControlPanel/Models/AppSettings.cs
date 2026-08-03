@@ -1616,6 +1616,22 @@ namespace ConditioningControlPanel.Models
             set { _packGuidMap = value ?? new(); OnPropertyChanged(); }
         }
 
+        private Dictionary<string, InstalledPackStamp> _installedContentPacks = new();
+        /// <summary>
+        /// Release-hosted content packs (audio/mod payload stripped out of the installer and fetched
+        /// from the vX.Y.0 GitHub release) that are installed under
+        /// <c>%LOCALAPPDATA%\ConditioningControlPanel\content\</c>. Maps pack id ->
+        /// {contentVersion, sha256}: a SET, not a bool, so we can tell "installed and current" from
+        /// "installed but the pack's bytes moved". Written by ReleaseContentService.
+        /// Unrelated to <see cref="InstalledPackIds"/> (those are the encrypted creator packs).
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, InstalledPackStamp> InstalledContentPacks
+        {
+            get => _installedContentPacks;
+            set { _installedContentPacks = value ?? new(); OnPropertyChanged(); }
+        }
+
         private List<AssetPreset> _assetPresets = new();
         /// <summary>
         /// Saved asset presets that store which files are disabled.

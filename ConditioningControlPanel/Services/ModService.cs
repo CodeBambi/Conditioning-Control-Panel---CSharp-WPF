@@ -343,6 +343,8 @@ namespace ConditioningControlPanel.Services
                     // Prevent overwriting built-in mods
                     if (manifest.Id.StartsWith("builtin-"))
                         return new ModInstallResult { ErrorMessage = "Cannot install a mod with a 'builtin-' prefix." };
+                    if (ReservedModIds.Contains(manifest.Id))
+                        return new ModInstallResult { ErrorMessage = $"'{manifest.Id}' is a built-in mod ID and cannot be replaced by an installed mod." };
 
                     // Check min app version
                     if (!string.IsNullOrEmpty(manifest.MinAppVersion))
@@ -1370,6 +1372,21 @@ namespace ConditioningControlPanel.Services
         #endregion
 
         #region Private Helpers
+
+        /// <summary>
+        /// Every id the app registers as a built-in (see the ctor). The "builtin-" prefix check is
+        /// NOT sufficient on its own: <see cref="BuiltInMods.DronificationId"/> is deliberately the
+        /// bare community id <c>drone-mode</c>, so without this set a user .ccpmod claiming that id
+        /// would overwrite the built-in registration on install.
+        /// </summary>
+        private static readonly HashSet<string> ReservedModIds = new(StringComparer.OrdinalIgnoreCase)
+        {
+            BuiltInMods.CCPDefaultId,
+            BuiltInMods.BambiSleepId,
+            BuiltInMods.SissyHypnoId,
+            BuiltInMods.DronificationId,
+            BuiltInMods.LockedId,
+        };
 
         /// <summary>
         /// Bundled .ccpmod packages shipped with the app, paired with the built-in

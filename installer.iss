@@ -113,6 +113,93 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
 ; NOTE: Don't include user data files - those go to %APPDATA%
 
+[InstallDelete]
+; =============================================================================================
+; CONTENT PACKS - upgrader convergence.  See ConditioningControlPanel\docs\CONTENT_PACKS_PLAN.md
+; sections 1 (what moves) and 5 (why this section exists).
+;
+; From 6.7 on, ~1.36 GB of version-stable audio and the two bundled .ccpmod archives no longer
+; ship in the installer (stripped in ConditioningControlPanel.csproj via the
+; ContentPack*Exclude properties) and are downloaded instead into
+;   %LOCALAPPDATA%\ConditioningControlPanel\content\.
+; Inno leaves behind files it did not install, so without this section an upgrader keeps the old
+; bundled copies under {app} forever - and ContentLocator probes BaseDirectory first, so those
+; stale copies would permanently shadow every downloaded pack.  [InstallDelete] runs before
+; [Files], so this is a clean sweep followed by a fresh install.
+;
+; RULES for editing this list:
+;   * Per-extension "Type: files" wildcards ONLY.  Never "filesandordirs" on a folder that also
+;     holds a manifest that STILL SHIPS - bark_rules.json, mantras.json, avatar_manifest.json,
+;     vo_manifest.json, sfx_manifest.json, dtrh barks\manifest.js, vn\manifest.json.  A missing
+;     manifest is not a graceful degrade, it is a hang or a crash.
+;   * Never touch %LOCALAPPDATA%\ConditioningControlPanel - user settings, progress, assets,
+;     mods and downloaded packs all live there.  Everything below is {app}-only.
+;   * "dirifempty" only removes a folder that the sweep left empty, so a file a user dropped in
+;     by hand keeps its folder alive.
+;   * Keep in sync with ConditioningControlPanel\Scripts\build-content-packs.ps1.
+; =============================================================================================
+
+; --- audio-base: baseline avatar voice lines (118 files) -------------------------------------
+Type: files;      Name: "{app}\Resources\sounds\flashes_audio\*.mp3"
+Type: files;      Name: "{app}\Resources\sounds\flashes_audio\*.wav"
+Type: dirifempty; Name: "{app}\Resources\sounds\flashes_audio"
+
+; --- mod-bambi / mod-locked companion audio (their 2 .json manifests stay) --------------------
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-bambisleep\*.mp3"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-locked\*.mp3"
+
+; --- mod-sissy: audio AND portraits move; its 3 .json manifests stay --------------------------
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\*.mp3"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\event_audio\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\event_audio"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\flashes_audio\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\flashes_audio"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\portraits\*.png"
+Type: dirifempty; Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\portraits"
+
+; --- audio-web: Intake VO/SFX/music (vo_manifest.json + sfx_manifest.json stay) ----------------
+Type: files;      Name: "{app}\Resources\web\intake\assets\vo\*.mp3"
+Type: files;      Name: "{app}\Resources\web\intake\assets\sfx\*.mp3"
+Type: files;      Name: "{app}\Resources\web\intake\assets\music\*.mp3"
+
+; --- audio-web: DTRH non-persona audio (bubble art + manifest.js stay) ------------------------
+Type: files;      Name: "{app}\Resources\web\dtrh\assets\audio\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\web\dtrh\assets\audio"
+Type: files;      Name: "{app}\Resources\web\dtrh\assets\bubbles\drops\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\web\dtrh\assets\bubbles\drops"
+Type: files;      Name: "{app}\Resources\web\dtrh\assets\bubbles\sfx\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\web\dtrh\assets\bubbles\sfx"
+Type: files;      Name: "{app}\Resources\web\dtrh\assets\bubbles\voices\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\web\dtrh\assets\bubbles\voices"
+
+; --- per-persona DTRH barks: travel with mod-sissy / mod-locked -------------------------------
+; barks\manifest.js is one level up and MUST survive - it is an ES-module import at load time,
+; and a 404 there is a silent infinite loader spin, not a missing sound.
+Type: files;      Name: "{app}\Resources\web\dtrh\assets\barks\circe\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\web\dtrh\assets\barks\circe"
+Type: files;      Name: "{app}\Resources\web\dtrh\assets\barks\sissy\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\web\dtrh\assets\barks\sissy"
+
+; --- per-persona DTRH VN voice-over (vn\manifest.json + vn art stay) --------------------------
+Type: files;      Name: "{app}\Resources\web\dtrh\assets\vn\vo\builtin-bambisleep\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\web\dtrh\assets\vn\vo\builtin-bambisleep"
+Type: files;      Name: "{app}\Resources\web\dtrh\assets\vn\vo\builtin-locked\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\web\dtrh\assets\vn\vo\builtin-locked"
+Type: files;      Name: "{app}\Resources\web\dtrh\assets\vn\vo\builtin-sissyhypno\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\web\dtrh\assets\vn\vo\builtin-sissyhypno"
+Type: files;      Name: "{app}\Resources\web\dtrh\assets\vn\vo\cheshire\*.mp3"
+Type: dirifempty; Name: "{app}\Resources\web\dtrh\assets\vn\vo\cheshire"
+Type: dirifempty; Name: "{app}\Resources\web\dtrh\assets\vn\vo"
+
+; --- bundled built-in mod archives: now shipped inside mod-drone / mod-locked packs ------------
+; These were <Content> in the csproj and published to {app}\DroneMod\ and {app}\LockedMod\.
+; ModService's already-extracted copies under %LOCALAPPDATA%\...\builtin_mods\ are user data and
+; are deliberately left alone - phase C re-stamps them from the downloaded pack instead.
+Type: files;      Name: "{app}\DroneMod\drone-mode.ccpmod"
+Type: dirifempty; Name: "{app}\DroneMod"
+Type: files;      Name: "{app}\LockedMod\locked-resources.ccpmod"
+Type: dirifempty; Name: "{app}\LockedMod"
+
 [Icons]
 ; Start Menu shortcut
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon

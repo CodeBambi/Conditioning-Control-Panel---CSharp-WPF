@@ -19,6 +19,7 @@
 
 import { voiceScale } from './prefs.js';
 import { duckMusic } from './menuMusic.js';
+import { audioUrl, altSrcFor } from '../core/audioSrc.js';
 
 const SRC = '../assets/vo/menu_welcome.mp3';
 
@@ -28,10 +29,34 @@ const LEAD_IN_MS = 700;
 
 let voice = null;
 let leadTimer = 0;
+/** An other-host retry is in flight — the original clip's play() rejection must
+ *  not tear the element down underneath it (both fire for the same 404). */
+let swapping = false;
 
+/** Resolved against THIS module, then pointed at whichever host actually has the
+ *  clip (core/audioSrc.js — the VO ships as a downloaded content pack now). */
 function srcUrl() {
-  try { return new URL(SRC, import.meta.url).href; }
+  try { return audioUrl(new URL(SRC, import.meta.url).href); }
   catch (_e) { return './assets/vo/menu_welcome.mp3'; }
+}
+
+/** The clip 404'd: try the other audio host ONCE, then let it go (a missing
+ *  greeting has always been a silent no-op). altSrcFor spends the single retry,
+ *  so this can never bounce between hosts. */
+function onVoiceError() {
+  if (swapping) return;   // 'error' + the play() rejection both fire: one retry, not two
+  const el = voice;
+  const alt = el ? altSrcFor(el) : null;
+  if (!alt) { release(); return; }
+  swapping = true;
+  try {
+    el.src = alt;
+    const p = el.play();
+    if (p && typeof p.then === 'function') {
+      p.then(() => { swapping = false; duckMusic(true); },
+             () => { swapping = false; release(); });
+    } else { swapping = false; }
+  } catch (_e) { swapping = false; release(); }
 }
 
 /**
@@ -53,13 +78,15 @@ export function playWelcome() {
       // because that mp3 was mastered outside our pipeline).
       voice.volume = Math.min(1, Math.max(0, voiceScale()));
       voice.addEventListener('ended', release);
-      voice.addEventListener('error', release);
+      voice.addEventListener('error', onVoiceError);
       const p = voice.play();
       if (p && typeof p.catch === 'function') {
         // Autoplay refused (no gesture yet). Drop it rather than arming a
         // retry: a greeting that fires minutes later, after the player has
-        // already clicked into Options, is worse than no greeting.
-        p.catch(() => release());
+        // already clicked into Options, is worse than no greeting. A 404 lands
+        // here too, but the 'error' listener above owns the one host retry, so
+        // don't tear the element down while that retry is in flight.
+        p.catch(() => { if (!swapping) release(); });
       } else {
         duckMusic(true);
       }
@@ -71,6 +98,7 @@ export function playWelcome() {
 }
 
 function release() {
+  swapping = false;   // whatever ends the greeting also abandons a pending retry
   duckMusic(false);
   if (voice) {
     try { voice.pause(); } catch (_e) {}

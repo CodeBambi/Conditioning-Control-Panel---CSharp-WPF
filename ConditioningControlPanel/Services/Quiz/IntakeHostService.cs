@@ -89,6 +89,10 @@ namespace ConditioningControlPanel.Services.Quiz
                     // Optional media the in-page effect layer may pull (gif bursts / bubble art).
                     // Allow (CORS-clean) so anything uploaded to WebGL/canvas resolves cleanly.
                     ("ccp.assets", App.EffectiveAssetsPath, CoreWebView2HostResourceAccessKind.Allow),
+                    // CONTENT PACKS: the intake's vo/sfx/music (and the dtrh bubble sfx it borrows
+                    // for chimes/pops) ship as a downloaded pack rather than in the installer. Same
+                    // tree, different root - core/audioSrc.js just swaps the origin per file.
+                    ChaosWebViewHost.ContentMapping(),
                 };
 
                 _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
