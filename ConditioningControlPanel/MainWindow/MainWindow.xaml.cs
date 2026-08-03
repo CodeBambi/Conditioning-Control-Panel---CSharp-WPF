@@ -783,6 +783,32 @@ namespace ConditioningControlPanel
             // Reactivates on its own once the game window closes (IsActive flips false).
             if (Services.Chaos.DtrhHostService.IsActive) { VideoDiag.Log("PANIC", "handed off to the DtRH web game window"); return; }
 
+            // For You feed: a two-rung ladder. Press 1 drops ghost mode if the feed is parked as a
+            // see-through mirror (otherwise the user is staring at a translucent pane they cannot
+            // grab — the mouse passes straight through it, its own close button included), press 2
+            // closes the feed. The press is consumed either way (no fall-through into the "not
+            // running" exit branch). The panic key reaches us regardless of focus: it rides the
+            // WH_KEYBOARD_LL hook in OnGlobalKeyPressed, not a window-level handler.
+            if (Services.Fyp.FypHostService.IsActive)
+            {
+                if (Services.Fyp.FypHostService.IsGhosted)
+                {
+                    VideoDiag.Log("PANIC", "For You feed: ghost mode dropped (press again to close)");
+                    Services.Fyp.FypHostService.ExitGhost();
+                    return;
+                }
+                if (Services.Fyp.FypHostService.RecentlyUnghosted)
+                {
+                    // The reflexive double-tap right after rung 1 — swallow it instead of
+                    // taking the whole feed down (play-tested: one Esc-Esc closed everything).
+                    VideoDiag.Log("PANIC", "For You feed: press ignored (just un-ghosted)");
+                    return;
+                }
+                VideoDiag.Log("PANIC", "closing the For You feed window");
+                Services.Fyp.FypHostService.Close();
+                return;
+            }
+
             // #735 "grace pause": while a mandatory video is really on screen, the FIRST panic press
             // pauses it behind a small Paused/Resume card instead of stopping the engine — the user
             // may be pausing because someone walked in, and a bark, an achievement track and a whole

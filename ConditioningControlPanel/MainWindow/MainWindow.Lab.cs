@@ -227,6 +227,30 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Lab → For You hero card. Opens the TikTok-style feed window (WebView2). Premium:
+        /// the Lab smokescreen already gates the tab, but the entitlement is re-checked here
+        /// so a stale/visible card can't launch without it.
+        /// </summary>
+        internal void BtnStartFyp_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (App.Patreon?.HasPremiumAccess != true)
+                {
+                    ShowAppInfoPopup();
+                    return;
+                }
+                Services.Fyp.FypHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartFyp_Click failed");
+                MessageBox.Show("Couldn't open the For You feed:\n\n" + ex.Message, "For You",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
         /// Quick Start: launch a Chaos run with the saved settings, bypassing the modal hub.
         /// Mirrors what BEGIN CHAOS does after SaveToSettings (StartRun reads ChaosRunConfig.FromSettings),
         /// just without the dialog.

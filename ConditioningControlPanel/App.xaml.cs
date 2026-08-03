@@ -1839,6 +1839,11 @@ namespace ConditioningControlPanel
             else if (e.Args.Contains("--dtrh"))
                 Services.Chaos.DtrhHostService.Launch();
 
+            // For You feed, dev shortcut: `--fyp` opens the feed window immediately,
+            // bypassing the Lab card and the premium gate (dev machines only).
+            if (e.Args.Contains("--fyp"))
+                Services.Fyp.FypHostService.Launch();
+
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
             // for Takeover to start. No-op unless consent is given and the speech engine is available.

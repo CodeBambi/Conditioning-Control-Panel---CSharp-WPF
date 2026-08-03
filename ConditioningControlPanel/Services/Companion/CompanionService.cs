@@ -22,6 +22,7 @@ namespace ConditioningControlPanel.Services
         Mantra,
         AttentionCheck,
         Chaos,
+        Fyp,
         Other
     }
 

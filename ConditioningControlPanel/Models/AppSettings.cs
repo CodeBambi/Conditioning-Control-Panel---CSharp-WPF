@@ -2769,6 +2769,96 @@ namespace ConditioningControlPanel.Models
         }
         #endregion
 
+        #region For You Feed (premium, WebView2)
+        private string _fypLayout = "duo";
+        /// <summary>Feed page layout: "duo" (landscape stacks two-up), "trio" (three-up) or
+        /// "random" (irregular mosaic quilt). Mirrors the mobile reel's setting.</summary>
+        public string FypLayout
+        {
+            get => _fypLayout;
+            set { _fypLayout = value is "duo" or "trio" or "random" ? value : "duo"; OnPropertyChanged(); }
+        }
+
+        private bool _fypIncludeGifs = true;
+        /// <summary>Mix animated GIFs from the images library into the feed.</summary>
+        public bool FypIncludeGifs
+        {
+            get => _fypIncludeGifs;
+            set { _fypIncludeGifs = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypMosaicAutoChange = true;
+        /// <summary>Mosaic layout re-composes itself on a timer (off = holds until swiped).</summary>
+        public bool FypMosaicAutoChange
+        {
+            get => _fypMosaicAutoChange;
+            set { _fypMosaicAutoChange = value; OnPropertyChanged(); }
+        }
+
+        private int _fypMosaicChangeSec = 10;
+        /// <summary>Seconds between mosaic re-compositions. Floored at 3 - every morph
+        /// mounts/releases up to 4 media elements, so a faster cadence churns decoders.</summary>
+        public int FypMosaicChangeSec
+        {
+            get => _fypMosaicChangeSec;
+            set { _fypMosaicChangeSec = Math.Clamp(value, 3, 60); OnPropertyChanged(); }
+        }
+
+        private bool _fypAutoAdvance = false;
+        /// <summary>Scroll to the next page when a clip's window ends (off = loop forever).</summary>
+        public bool FypAutoAdvance
+        {
+            get => _fypAutoAdvance;
+            set { _fypAutoAdvance = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypMuted = false;
+        /// <summary>Feed audio muted.</summary>
+        public bool FypMuted
+        {
+            get => _fypMuted;
+            set { _fypMuted = value; OnPropertyChanged(); }
+        }
+
+        private double _fypWindowOpacity = 1.0;
+        /// <summary>Ghost-mode translucency for the feed (0.01-1.0) - the DWM thumbnail opacity of
+        /// the see-through mirror, never the real window's alpha (the WebView2 window must never be
+        /// layered; see FypGhostOverlay). May go near-invisible: recovery is a single Esc/panic
+        /// press, which restores the fully opaque real window regardless of this value.</summary>
+        public double FypWindowOpacity
+        {
+            get => _fypWindowOpacity;
+            set { _fypWindowOpacity = Math.Clamp(value, 0.01, 1.0); OnPropertyChanged(); }
+        }
+
+        private bool _fypAudioGlow = true;
+        /// <summary>Page-side visual: the playing tile pulses with its own audio level. Persisted
+        /// here and handed to the page in the init payload; the app itself does nothing with it.</summary>
+        public bool FypAudioGlow
+        {
+            get => _fypAudioGlow;
+            set { _fypAudioGlow = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypEyeControl = false;
+        /// <summary>Webcam eye control for the feed: a blink swaps one tile, holding the eyes
+        /// shut for 2s changes the whole page. Off by default - it turns the camera on.</summary>
+        public bool FypEyeControl
+        {
+            get => _fypEyeControl;
+            set { _fypEyeControl = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypEyeGaze = false;
+        /// <summary>With eye control on, a blink swaps the tile the user is LOOKING at rather than
+        /// a random one. Only meaningful once gaze is calibrated; ignored otherwise.</summary>
+        public bool FypEyeGaze
+        {
+            get => _fypEyeGaze;
+            set { _fypEyeGaze = value; OnPropertyChanged(); }
+        }
+        #endregion
+
         #region Lock Card (Unlocks Lv.35)
         private bool _lockCardEnabled = false;
         public bool LockCardEnabled
