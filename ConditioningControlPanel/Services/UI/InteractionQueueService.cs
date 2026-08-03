@@ -301,15 +301,34 @@ public class InteractionQueueService
         }
     }
 
+    // ------------------------------------------------------------------------------------
+    // LOCK/DISPATCHER INVERSION (freeze cluster #775/#777/#779/#780)
+    //
+    // Every caller of the two methods below holds _lock: TryStart (:94), CompleteLocked (:178,
+    // :206), RenewStuckTimeout (:380), ExtendTimeout (:298). They used to marshal with
+    // RunOnUISync, i.e. a BLOCKING cross-thread Dispatcher.Invoke — so a background caller held
+    // _lock while waiting on the UI thread, and any UI-thread TryStart/Complete/QueuedCount
+    // waiting on _lock deadlocked against it. (Video teardown calls Complete() on the UI thread
+    // on every single video end; haptics/OCR/remote-control paths call TryStart off-thread.)
+    // Only DispatcherHelper's 5-second SyncInvokeTimeout broke it, i.e. a 5-second whole-app
+    // freeze per occurrence, silently, with the UI work then abandoned.
+    //
+    // RunOnUI (BeginInvoke) removes the inversion outright: no result is needed here, the
+    // dispatcher preserves FIFO order at a given priority so a start-then-stop pair still lands
+    // in order, and this is a FIVE-MINUTE stuck detector — arming it a dispatcher turn later
+    // cannot matter. On the UI thread RunOnUI still runs inline, exactly as before.
+    // ------------------------------------------------------------------------------------
+
     /// <summary>
-    /// Starts a timer that auto-recovers from stuck interactions
+    /// Starts a timer that auto-recovers from stuck interactions. Safe to call under <see cref="_lock"/>:
+    /// never blocks on the UI thread (see the note above).
     /// </summary>
     private void StartStuckDetectionTimer(TimeSpan? timeout = null)
     {
         try
         {
             var interval = timeout ?? TimeSpan.FromMinutes(DefaultMaxInteractionMinutes);
-            DispatcherHelper.RunOnUISync(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 StopStuckDetectionTimer();
 
@@ -327,11 +346,12 @@ public class InteractionQueueService
         }
     }
 
+    /// <summary>Disarms the stuck detector. Safe to call under <see cref="_lock"/> (see the note above).</summary>
     private void StopStuckDetectionTimer()
     {
         try
         {
-            DispatcherHelper.RunOnUISync(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 _stuckDetectionTimer?.Stop();
                 _stuckDetectionTimer = null;

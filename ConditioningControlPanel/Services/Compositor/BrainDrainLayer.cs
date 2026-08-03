@@ -352,6 +352,11 @@ public sealed class BrainDrainLayer : BaseLayer
 
         try
         {
+            // BREADCRUMB: a full-screen GDI StretchBlt off the DESKTOP DC, on the UI thread, at the
+            // capture cadence — the single heaviest native call the dispatcher makes while the
+            // compositor's present thread is issuing UpdateLayeredWindow against windows on that
+            // same desktop. If a hang report's "last UI mark" is this line, the wedge is here.
+            using var _ = VideoDiag.UiScope("BrainDrainLayer.CapturePass(StretchBlt from desktop DC)");
             var screenDc = GetDC(IntPtr.Zero);
             if (screenDc == IntPtr.Zero) return;
             try

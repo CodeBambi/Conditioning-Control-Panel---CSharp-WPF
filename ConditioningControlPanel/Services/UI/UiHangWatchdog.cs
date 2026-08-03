@@ -116,16 +116,21 @@ public static class UiHangWatchdog
                     if (!_hangLogged)
                     {
                         _hangLogged = true;
-                        App.Logger?.Error("[WATCHDOG] UI thread unresponsive for {Sec:F0}s{Phase} — likely render-thread deadlock",
-                            silence / 1000.0, started ? "" : " (never pumped — wedged during startup)");
+                        // VideoDiag.UiMarkDescription names the call the UI thread never returned
+                        // from (screen capture, layered-window Show/Hide/Close, bitmap lock). It is
+                        // "(idle)" when the wedge is somewhere uninstrumented, which is itself a
+                        // useful negative — see the breadcrumb contract in VideoDiag.
+                        string mark = VideoDiag.UiMarkDescription;
+                        App.Logger?.Error("[WATCHDOG] UI thread unresponsive for {Sec:F0}s{Phase} — likely render-thread deadlock; last UI mark: {Mark}",
+                            silence / 1000.0, started ? "" : " (never pumped — wedged during startup)", mark);
                         // Mirror into the video trace. These lines only ever went to the ROLLING
                         // Serilog file, which a post-freeze relaunch scrolls straight out of the
                         // 100-line tail a bug report attaches — the exact evidence loss VideoDiag
                         // exists to prevent (#750-#753). Log() is a no-op until VideoDiag.Start ran.
                         VideoDiag.Log("WATCHDOG", string.Format(
                             System.Globalization.CultureInfo.InvariantCulture,
-                            "UI thread unresponsive for {0:F0}s{1}",
-                            silence / 1000.0, started ? "" : " (never pumped - wedged during startup)"));
+                            "UI thread unresponsive for {0:F0}s{1} - last UI mark: {2}",
+                            silence / 1000.0, started ? "" : " (never pumped - wedged during startup)", mark));
                     }
                     if (!_dumpWritten)
                     {

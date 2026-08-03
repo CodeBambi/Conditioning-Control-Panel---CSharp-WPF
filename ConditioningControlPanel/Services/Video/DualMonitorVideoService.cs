@@ -36,6 +36,15 @@ namespace ConditioningControlPanel.Services
         private readonly object _bufferLock = new();
         private volatile bool _frameReady;
         private volatile bool _bufferValid;  // Guards buffer access across threads
+
+        /// <summary>Managed staging copy of the newest decoded frame. See
+        /// <see cref="OnCompositionTargetRendering"/>: the native buffer is never read while a
+        /// WriteableBitmap lock is held.</summary>
+        private byte[] _staging = Array.Empty<byte>();
+
+        /// <summary>Per-frame budget for <c>WriteableBitmap.TryLock</c>; a wedged render thread must
+        /// cost a frame, not the dispatcher.</summary>
+        private static readonly Duration BlitLockBudget = new(TimeSpan.FromMilliseconds(150));
         private bool _isPlaying;
         private bool _disposed;
         private Task? _playerDisposeTask;
@@ -49,10 +58,6 @@ namespace ConditioningControlPanel.Services
         // Win32 for window positioning
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-
-        // Win32 for memory copy (safe alternative to unsafe code)
-        [DllImport("kernel32.dll", EntryPoint = "RtlMoveMemory")]
-        private static extern void CopyMemory(IntPtr dest, IntPtr src, uint count);
 
         private static readonly IntPtr HWND_TOPMOST = new(-1);
         private const uint SWP_NOSIZE = 0x0001;
@@ -504,6 +509,16 @@ namespace ConditioningControlPanel.Services
 
             _frameReady = false;
 
+            int bufferSize;
+            Int32Rect dirtyRect;
+
+            // ---- Phase 1: native -> managed staging, under the lock, nothing that can block. ----
+            // The blit below MUST NOT run inside this lock: WriteableBitmap.Lock() waits on the WPF
+            // render thread while the LibVLC decoder parks on _bufferLock inside LockCallback, so a
+            // slow render thread wedges the decoder, player.Stop() never returns, and the teardown
+            // takes the dispatcher with it. That is the #632/#636/#687 freeze cluster; the mandatory
+            // pipeline's twin (VideoService.BlurVmemSurface.OnRendering) was split for it and this
+            // copy was missed. One extra memcpy per frame is the price of that guarantee.
             bool lockAcquired = false;
             try
             {
@@ -519,42 +534,48 @@ namespace ConditioningControlPanel.Services
                 if (!_bufferValid || _frameBuffer == IntPtr.Zero)
                     return;
 
-                var bufferSize = _videoWidth * _videoHeight * 4;
-                var dirtyRect = new Int32Rect(0, 0, (int)_videoWidth, (int)_videoHeight);
+                bufferSize = (int)(_videoWidth * _videoHeight * 4);
+                if (bufferSize <= 0) return;
+                dirtyRect = new Int32Rect(0, 0, (int)_videoWidth, (int)_videoHeight);
 
-                // Copy to each window's bitmap independently
-                // If one fails, others still update
-                foreach (var (_, bitmap, _) in windows)
-                {
-                    try
-                    {
-                        bitmap.Lock();
-                        try
-                        {
-                            CopyMemory(bitmap.BackBuffer, _frameBuffer, bufferSize);
-                            bitmap.AddDirtyRect(dirtyRect);
-                        }
-                        finally
-                        {
-                            bitmap.Unlock();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Debug("DualMonitorVideo: Frame copy error for one window: {Error}", ex.Message);
-                        // Continue to other windows
-                    }
-                }
+                if (_staging.Length < bufferSize) _staging = new byte[bufferSize];
+                Marshal.Copy(_frameBuffer, _staging, 0, bufferSize);
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("DualMonitorVideo: Frame copy error: {Error}", ex.Message);
+                App.Logger?.Debug("DualMonitorVideo: Frame snapshot error: {Error}", ex.Message);
+                return;
             }
             finally
             {
                 if (lockAcquired)
                 {
                     Monitor.Exit(_bufferLock);
+                }
+            }
+
+            // ---- Phase 2: staging -> each window's bitmap, lock released, bounded render wait. ----
+            foreach (var (_, bitmap, _) in windows)
+            {
+                try
+                {
+                    // TryLock, not Lock: Lock() has no timeout and a render thread that never drops
+                    // its read lock would take the dispatcher permanently. Drop the frame instead.
+                    if (!bitmap.TryLock(BlitLockBudget)) continue;
+                    try
+                    {
+                        Marshal.Copy(_staging, 0, bitmap.BackBuffer, bufferSize);
+                        bitmap.AddDirtyRect(dirtyRect);
+                    }
+                    finally
+                    {
+                        bitmap.Unlock();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("DualMonitorVideo: Frame copy error for one window: {Error}", ex.Message);
+                    // Continue to other windows
                 }
             }
         }
