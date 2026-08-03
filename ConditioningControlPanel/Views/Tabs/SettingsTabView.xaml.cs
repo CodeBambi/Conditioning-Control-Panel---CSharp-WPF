@@ -366,6 +366,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkFlashAudio_Changed(sender, e);
         }
+        private void ChkFlashAvoidCenter_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkFlashAvoidCenter_Changed(sender, e);
+        }
         private void ChkFlashEnabled_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -528,6 +533,11 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.SliderPerMin_Changed(sender, e);
+        }
+        private void SliderCenterExclusion_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.SliderCenterExclusion_Changed(sender, e);
         }
         private void SliderSize_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {

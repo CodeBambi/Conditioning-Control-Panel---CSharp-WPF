@@ -245,6 +245,8 @@
   "tooltip_scale_of_flash_images_100_original_size_200_d": "Taille des images flash.\r\n100% = taille originale, 200% = double taille.",
   "setting_size": "Taille",
   "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparence des images flash.\r\nPlus bas = plus transparent, 100% = totalement opaque.",
+  "setting_avoid_screen_center": "Éviter le centre de l'écran",
+  "tooltip_keep_flash_images_out_of_a_square_in_the_midd": "Empêche les images flash d'apparaître dans un carré au centre de chaque écran.\r\nIdéal pour jouer : rien ne masque votre viseur. Le curseur règle la taille de la zone (% du côté le plus court de l'écran).",
   "tooltip_fade_in_out_animation_speed_0_instant_appear": "Vitesse d'animation du fondu.\r\n0% = apparition/disparition instantanée.\r\n100% = fondu lent et doux.",
   "setting_fade": "Fondu",
   "tooltip_how_long_images_stay_on_screen_only_used_when": "Combien de temps les images restent à l'écran.\r\nUtilisé uniquement quand l'audio est désactivé.",
@@ -2770,5 +2772,16 @@
   "wizard_fail_hint_generic": "Aucune réponse. Vérifie que le fournisseur tourne et réessaie.",
   "wizard_devices_found": "Trouvé :",
   "wizard_test_buzz": "Vibration de test",
-  "wizard_test_failed": "Le test n'a pas atteint le jouet - vérifie la connexion et réessaie."
+  "wizard_test_failed": "Le test n'a pas atteint le jouet - vérifie la connexion et réessaie.",
+  "btn_my_reports": "Mes rapports",
+  "my_reports_title": "Mes rapports",
+  "my_reports_subtitle": "Numéros des rapports de bugs et des suggestions que vous avez envoyés. Citez-en un sur Discord pour ajouter des détails.",
+  "my_reports_empty": "Aucun rapport pour l'instant.",
+  "my_reports_kind_bug": "Rapport de bug",
+  "my_reports_kind_suggestion": "Suggestion",
+  "bug_report_token_label": "Votre numéro de rapport",
+  "bug_report_token_hint": "Conservez ce numéro. Citez-le sur Discord pour ajouter des détails ou poser une question sur votre rapport.",
+  "video_grace_paused_title": "En pause",
+  "btn_video_grace_resume": "Reprendre",
+  "video_grace_auto_resume_in": "Reprise dans {0} s"
 }

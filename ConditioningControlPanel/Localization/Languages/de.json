@@ -245,6 +245,8 @@
   "tooltip_scale_of_flash_images_100_original_size_200_d": "Größe der Flash-Bilder.\r\n100% = Originalgröße, 200% = doppelte Größe.",
   "setting_size": "Größe",
   "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparenz der Flash-Bilder.\r\nNiedriger = durchsichtiger, 100% = vollständig solide.",
+  "setting_avoid_screen_center": "Bildschirmmitte meiden",
+  "tooltip_keep_flash_images_out_of_a_square_in_the_midd": "Hält Flash-Bilder aus einem Quadrat in der Mitte jedes Bildschirms heraus.\r\nIdeal zum Spielen: nichts verdeckt dein Fadenkreuz. Der Regler bestimmt die Größe des Bereichs (% der kürzeren Bildschirmseite).",
   "tooltip_fade_in_out_animation_speed_0_instant_appear": "Ein-/Ausblende-Geschwindigkeit.\r\n0% = sofortiges Erscheinen/Verschwinden.\r\n100% = langsames weiches Einblenden.",
   "setting_fade": "Einblenden",
   "tooltip_how_long_images_stay_on_screen_only_used_when": "Wie lange Bilder auf dem Bildschirm bleiben.\r\nWird nur verwendet, wenn Audio deaktiviert ist.",
@@ -2770,5 +2772,16 @@
   "wizard_fail_hint_generic": "Nichts hat geantwortet. Prüfe, ob der Anbieter läuft, und versuche es erneut.",
   "wizard_devices_found": "Gefunden:",
   "wizard_test_buzz": "Test-Summen",
-  "wizard_test_failed": "Der Test hat das Toy nicht erreicht - prüfe die Verbindung und versuche es erneut."
+  "wizard_test_failed": "Der Test hat das Toy nicht erreicht - prüfe die Verbindung und versuche es erneut.",
+  "btn_my_reports": "Meine Meldungen",
+  "my_reports_title": "Meine Meldungen",
+  "my_reports_subtitle": "Meldungsnummern der Fehlerberichte und Vorschläge, die du gesendet hast. Nenne eine davon auf Discord, wenn du Details ergänzen möchtest.",
+  "my_reports_empty": "Noch keine Meldungen.",
+  "my_reports_kind_bug": "Fehlerbericht",
+  "my_reports_kind_suggestion": "Vorschlag",
+  "bug_report_token_label": "Deine Meldungsnummer",
+  "bug_report_token_hint": "Notiere dir diese Nummer. Nenne sie auf Discord, wenn du Details ergänzen oder nach deiner Meldung fragen möchtest.",
+  "video_grace_paused_title": "Pausiert",
+  "btn_video_grace_resume": "Fortsetzen",
+  "video_grace_auto_resume_in": "Fortsetzung in {0}s"
 }

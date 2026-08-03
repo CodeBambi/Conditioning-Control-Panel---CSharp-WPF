@@ -245,6 +245,8 @@
   "tooltip_scale_of_flash_images_100_original_size_200_d": "Escala das imagens flash.\r\n100% = tamanho original, 200% = dobro do tamanho.",
   "setting_size": "Tamanho",
   "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparência das imagens flash.\r\nMenor = mais transparente, 100% = totalmente sólido.",
+  "setting_avoid_screen_center": "Evitar o centro da tela",
+  "tooltip_keep_flash_images_out_of_a_square_in_the_midd": "Mantém as imagens flash fora de um quadrado no centro de cada tela.\r\nÓtimo para jogar: nada cobre a sua mira. O controle define o tamanho da área (% do lado mais curto da tela).",
   "tooltip_fade_in_out_animation_speed_0_instant_appear": "Velocidade da animação de transição.\r\n0% = aparece/desaparece instantaneamente.\r\n100% = transição suave e lenta.",
   "setting_fade": "Transição",
   "tooltip_how_long_images_stay_on_screen_only_used_when": "Quanto tempo as imagens ficam na tela.\r\nUsado apenas quando o áudio está desativado.",
@@ -2769,5 +2771,16 @@
   "wizard_fail_hint_generic": "Ninguém respondeu. Verifique se o provedor está rodando e tente de novo.",
   "wizard_devices_found": "Encontrado:",
   "wizard_test_buzz": "Vibração de teste",
-  "wizard_test_failed": "O teste não chegou ao brinquedo - verifique a conexão e tente de novo."
+  "wizard_test_failed": "O teste não chegou ao brinquedo - verifique a conexão e tente de novo.",
+  "btn_my_reports": "Meus relatos",
+  "my_reports_title": "Meus relatos",
+  "my_reports_subtitle": "Números dos relatos de bugs e sugestões que você enviou. Cite um no Discord se quiser acrescentar detalhes.",
+  "my_reports_empty": "Nenhum relato ainda.",
+  "my_reports_kind_bug": "Relato de bug",
+  "my_reports_kind_suggestion": "Sugestão",
+  "bug_report_token_label": "Seu número de relato",
+  "bug_report_token_hint": "Guarde este número. Cite-o no Discord se quiser acrescentar detalhes ou perguntar sobre o seu relato.",
+  "video_grace_paused_title": "Pausado",
+  "btn_video_grace_resume": "Retomar",
+  "video_grace_auto_resume_in": "Retomando em {0}s"
 }

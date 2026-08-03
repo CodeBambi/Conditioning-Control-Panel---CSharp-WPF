@@ -235,6 +235,22 @@ namespace ConditioningControlPanel.Models
             set { _lastSeenVersion = value ?? ""; OnPropertyChanged(); }
         }
 
+        private List<string> _recentBugReports = new();
+        /// <summary>
+        /// Ring buffer of the report numbers (BUG-XXXXXXXXXX) the server handed back for bug
+        /// reports and suggestions this user filed (#769). Kept so the number survives the
+        /// success dialog and can be quoted in Discord later — surfaced by the "My Reports"
+        /// list in App Info. Entry format: "{token}|{ISO-8601 UTC timestamp}|{kind}" where
+        /// kind is "bug" or "suggestion". Newest last; capped at
+        /// <see cref="Services.BugReportService.MaxRecentReports"/> (oldest trimmed on insert).
+        /// </summary>
+        [JsonProperty("recent_bug_reports")]
+        public List<string> RecentBugReports
+        {
+            get => _recentBugReports;
+            set { _recentBugReports = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
         private string _dismissedAnnouncementId = "";
         /// <summary>
         /// ID of the last server announcement the user dismissed. Prevents showing the same announcement again.
@@ -769,6 +785,29 @@ namespace ConditioningControlPanel.Models
         {
             get => _flashDuration;
             set { _flashDuration = Math.Clamp(value, 1, 30); OnPropertyChanged(); }
+        }
+
+        // Gaming quality-of-life (#770): keep flashes out of a centered square on every monitor so
+        // they never land on the crosshair / HUD centre. This is a PURE GLOBAL USER PREFERENCE —
+        // deliberately absent from SessionSettings, SessionEngine's save/restore, Preset and the
+        // remote/quiz generators, so no session or preset can ever stomp a gamer's exclusion box.
+        private bool _flashAvoidCenter = false;
+        public bool FlashAvoidCenter
+        {
+            get => _flashAvoidCenter;
+            set { _flashAvoidCenter = value; OnPropertyChanged(); }
+        }
+
+        private int _flashCenterExclusionPercent = 25; // 5-60% of the SHORTER monitor edge
+        /// <summary>
+        /// Size of the centered no-flash square, as a percentage of the shorter monitor edge.
+        /// The 60 ceiling is deliberate: above that the legal spawn bands vanish for large images
+        /// (high ImageScale), which would force the unconstrained fallback on every spawn.
+        /// </summary>
+        public int FlashCenterExclusionPercent
+        {
+            get => _flashCenterExclusionPercent;
+            set { _flashCenterExclusionPercent = Math.Clamp(value, 5, 60); OnPropertyChanged(); }
         }
 
         #endregion

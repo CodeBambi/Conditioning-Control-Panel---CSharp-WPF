@@ -922,31 +922,16 @@ namespace ConditioningControlPanel
             var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
             var bubblesVolume = (App.Settings?.Current?.BubblesVolume ?? 50) / 100f;
 
-            Task.Run(() =>
+            try
             {
-                try
-                {
-                    var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
-                    var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
-                    var popPath = Path.Combine(soundsPath, popFiles[soundIndex]);
+                var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
+                var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
+                var popPath = Path.Combine(soundsPath, popFiles[soundIndex]);
 
-                    if (!File.Exists(popPath)) return;
-
-                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
-
-                    using var audioFile = new AudioFileReader(popPath);
-                    audioFile.Volume = volume;
-                    using var outputDevice = new WaveOutEvent();
-                    App.Audio?.ApplyPreferredDevice(outputDevice);
-                    outputDevice.Init(audioFile);
-                    outputDevice.Play();
-                    while (outputDevice.PlaybackState == PlaybackState.Playing)
-                    {
-                        Thread.Sleep(50);
-                    }
-                }
-                catch { }
-            });
+                var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
+                App.Audio?.PlayOneShot(popPath, volume, "bubblecount-pop");
+            }
+            catch { }
         }
 
         private void OnVideoEnded()

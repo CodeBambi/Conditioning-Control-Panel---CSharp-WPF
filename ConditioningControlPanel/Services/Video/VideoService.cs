@@ -228,6 +228,51 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void SetEnhancementDriving(bool active) => _enhancementDriving = active;
 
+        // ---- Grace pause (#735) ----
+        // The first panic press while a mandatory video is really on screen PAUSES it behind a small
+        // "Paused / Resume" card instead of stopping the engine: someone walked in, the user needs the
+        // screen quiet for a moment, not a whole session torn down. Exactly ONE per video run; every
+        // later press falls through to the normal panic ladder, so it costs the user one extra tap to
+        // reach today's behaviour and two to reach exit-the-app.
+        // volatile: read from threadpool watchdog callbacks (progress/vout watches) as well as the UI
+        // thread that sets it, same as this file's other cross-thread flags.
+        private volatile bool _gracePaused;
+        // Per-video budget. Set when the pause ENDS (manual or automatic) and reset by PlayVideo, so
+        // each attention-check retry / troll replay — a fresh GetNextVideo each time — gets its own.
+        private bool _gracePauseConsumed;
+        private DateTime _gracePausedAtUtc;
+        // Timestamp of the last performed grace pause, used ONLY for the double-fire dedup below.
+        private DateTime _lastGracePauseActionUtc = DateTime.MinValue;
+        private DispatcherTimer? _graceCountdownTimer;
+        private readonly List<GracePauseOverlayWindow> _graceOverlays = new();
+        /// <summary>Seconds the video stays paused before it resumes on its own.</summary>
+        internal const int GraceWindowSeconds = 60;
+        /// <summary>
+        /// Dedup window for ONE physical panic keystroke (see <see cref="TryGracePauseFromPanic"/>).
+        /// Far below any human rapid double-tap, far above the dispatcher latency between the window
+        /// handler and the queued global handler.
+        /// </summary>
+        internal const int GraceDedupMs = 200;
+        /// <summary>Floor for a re-armed guard timer, so rounding can never re-arm one at ~0ms.</summary>
+        private static readonly TimeSpan MinReArmInterval = TimeSpan.FromMilliseconds(250);
+
+        /// <summary>
+        /// Arm bookkeeping for a <see cref="DispatcherTimer"/>. WPF exposes no "time left", so the
+        /// grace pause records when each guard timer was armed and with what interval, stops it for
+        /// the duration of the pause, and re-arms it with what was left. Without this a 60s pause
+        /// would make the duration guillotine and the max-length cap fire 60s early (mid-video).
+        /// </summary>
+        private sealed class TimerArm
+        {
+            public DateTime ArmedUtc;
+            public TimeSpan Interval;
+            public TimeSpan Remaining;   // captured at pause, consumed at resume
+        }
+
+        private readonly TimerArm _safetyArm = new();
+        private readonly TimerArm _fallbackArm = new();
+        private readonly TimerArm _maxLenArm = new();
+
         // Cleanup synchronization to prevent race conditions
         private readonly object _cleanupLock = new();
         private volatile bool _isCleaningUp;
@@ -360,6 +405,12 @@ namespace ConditioningControlPanel.Services
         /// <summary>Resume every screen's player (kept in lockstep for multi-monitor). No-op if none.</summary>
         public void PlayPrimary()
         {
+            // #735: never un-pause a grace-paused video from the outside. Deeper's SpeakPromptSession
+            // releases its hold through ITimeSource.Play() and the voice "resume" command lands here
+            // too — either would restart playback UNDER the Paused/Resume card. ResumeFromGrace clears
+            // _gracePaused BEFORE it calls this, so the legitimate resume is unaffected.
+            if (_gracePaused) return;
+
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(false); }
@@ -384,6 +435,15 @@ namespace ConditioningControlPanel.Services
         /// Whether a video is currently playing
         /// </summary>
         public bool IsPlaying => _videoPlaying;
+
+        /// <summary>
+        /// True while the current video is held by a grace pause (#735). The run has NOT ended —
+        /// <see cref="IsPlaying"/> and <see cref="IsStrictActive"/> stay true — so the strict Closing
+        /// veto still refuses Alt+F4 and the scheduler still treats the slot as busy. Watchdogs that
+        /// measure playback PROGRESS must stand down while this is set: a paused video makes no
+        /// progress by design.
+        /// </summary>
+        public bool IsGracePaused => _gracePaused;
 
         /// <summary>
         /// True while a strict-locked video is actively playing. Escape hatches that
@@ -1295,6 +1355,7 @@ namespace ConditioningControlPanel.Services
             _videoPlaying = false;
             _strictActive = false;
             CancelPendingRetry();
+            ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
             try
             {
                 CloseAll(synchronous: false);
@@ -1706,6 +1767,7 @@ namespace ConditioningControlPanel.Services
             _triggerInProgress = false;
             _strictActive = false;
             CancelPendingRetry();
+            ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
             CloseAll(synchronous);
             App.Audio?.ForceUnduck();
             _penalties = 0;
@@ -2063,6 +2125,12 @@ namespace ConditioningControlPanel.Services
             CancelPendingRetry();
             _retryPath = path;
             _startTime = DateTime.Now;
+            // A new video is really starting — including every attention-check retry / troll replay,
+            // each of which is a fresh GetNextVideo through this same method — so the run gets a fresh
+            // grace pause (#735). Any stale pause state is cleared too; the teardown before this
+            // already closed the card, this is the belt to that braces.
+            ClearGraceState();
+            _gracePauseConsumed = false;
             // Fresh clip ⇒ fresh length. _duration was only ever ASSIGNED (LengthChanged / MediaOpened)
             // and never cleared, so a clip that died before LengthChanged inherited the previous
             // clip's length and was credited with it on the skip path (#767).
@@ -2616,7 +2684,48 @@ namespace ConditioningControlPanel.Services
             // memory callbacks (SetVideoFormat + SetVideoCallbacks) instead of a VideoView; it must
             // happen BEFORE Play() below, same as attaching a VideoView.
             if (useBlur)
+            {
                 blurSurface!.Attach(mediaPlayer);
+
+                // #786: the vmem format callback reports the CODED frame size with the sample aspect
+                // ratio dropped, so an anamorphic clip's buffer is the wrong SHAPE and drawing it at
+                // its own pixel aspect widened the picture until it filled the screen. The media's
+                // video track carries the SAR, but only once the ES is enumerated - which is after
+                // the first format callback. Push it in whenever it becomes available; the surface
+                // re-lays-out idempotently. Subscribed BEFORE Play() so a fast start can't outrun it.
+                var aspectTarget = blurSurface!;
+                var aspectPlayer = mediaPlayer;
+                void PushTrackAspect()
+                {
+                    try
+                    {
+                        var tracks = aspectPlayer.Media?.Tracks;
+                        if (tracks == null) return;
+                        foreach (var track in tracks)
+                        {
+                            if (track.TrackType != TrackType.Video) continue;
+                            var v = track.Data.Video;
+                            bool transposed = v.Orientation is VideoOrientation.LeftTop
+                                or VideoOrientation.LeftBottom
+                                or VideoOrientation.RightTop
+                                or VideoOrientation.RightBottom;
+                            double aspect = DisplayAspectFrom(v.Width, v.Height, v.SarNum, v.SarDen, transposed);
+                            if (aspect > 0)
+                            {
+                                aspectTarget.SetSourceAspect(aspect, $"track {v.Width}x{v.Height} sar {v.SarNum}:{v.SarDen}");
+                                return;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("VideoService: video-track aspect probe failed: {Error}", ex.Message);
+                    }
+                }
+                mediaPlayer.Playing += (s, e) => PushTrackAspect();
+                mediaPlayer.ESSelected += (s, e) => PushTrackAspect();
+                mediaPlayer.Vout += (s, e) => PushTrackAspect();
+            }
             else
                 videoView!.MediaPlayer = mediaPlayer;
             VideoDiag.Log("VIDEO", $"win[{tag}]: surface attached +{winSw.ElapsedMilliseconds}ms");
@@ -2783,6 +2892,63 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// True DISPLAY aspect (w/h) of a video track: the coded frame size corrected by the sample
+        /// aspect ratio, and transposed when the track carries a 90°/270° rotation (LibVLC rotates
+        /// the vmem buffer for us via video_format_ApplyRotation, but the track still reports the
+        /// pre-rotation size). Returns 0 when the numbers can't describe a real frame.
+        ///
+        /// #786: the vmem format callback hands us the CODED size with the SAR already dropped, so
+        /// an anamorphic clip (non-square pixels) arrived as, say, 640x368 when its real display
+        /// shape is much taller — and rendering that buffer at its own pixel aspect stretched the
+        /// picture sideways until it filled the screen. Never derive the on-screen shape from the
+        /// buffer when the track can tell us the truth. Pure — unit-tested.
+        /// </summary>
+        internal static double DisplayAspectFrom(uint width, uint height, uint sarNum, uint sarDen, bool transposed)
+        {
+            if (width == 0 || height == 0) return 0;
+            double num = width * (sarNum > 0 ? sarNum : 1u);
+            double den = height * (sarDen > 0 ? sarDen : 1u);
+            if (den <= 0) return 0;
+            double aspect = num / den;
+            if (transposed) aspect = 1.0 / aspect;
+            if (double.IsNaN(aspect) || double.IsInfinity(aspect) || aspect <= 0) return 0;
+            // Sanity fence: real clips live well inside 16:1 .. 1:16. Anything outside is a garbage
+            // SAR and must fall back to the buffer aspect rather than produce a sliver of video.
+            if (aspect > 16.0 || aspect < 1.0 / 16.0) return 0;
+            return aspect;
+        }
+
+        /// <summary>
+        /// Largest rect of <paramref name="aspect"/> (w/h) that fits inside the container —
+        /// i.e. letterbox or pillarbox, never stretch. Returns (0,0) when there is nothing sane to
+        /// fit yet. Pure — unit-tested.
+        /// </summary>
+        internal static (double W, double H) FitToAspect(double containerW, double containerH, double aspect)
+        {
+            if (containerW <= 0 || containerH <= 0 || aspect <= 0 ||
+                double.IsNaN(aspect) || double.IsInfinity(aspect)) return (0, 0);
+
+            double w = containerW;
+            double h = containerW / aspect;
+            if (h > containerH)
+            {
+                h = containerH;
+                w = containerH * aspect;
+            }
+            return (w, h);
+        }
+
+        /// <summary>
+        /// Whether the blurred fill is worth paying for: bars only appear when the video's display
+        /// aspect differs from the screen's by more than the tolerance. Pure — unit-tested.
+        /// </summary>
+        internal static bool NeedsBlurFill(double videoAspect, double screenAspect)
+        {
+            if (videoAspect <= 0 || screenAspect <= 0) return false;
+            return Math.Abs(videoAspect / screenAspect - 1.0) > 0.03;
+        }
+
+        /// <summary>
         /// Byte size of one BGRA frame of the given geometry, or 0 if the geometry is absurd
         /// (overflow / zero side). A bogus format callback must make the blit SKIP the frame, never
         /// allocate or copy on a garbage length. Pure — unit-tested.
@@ -2838,11 +3004,21 @@ namespace ConditioningControlPanel.Services
             // threadpool timer like StartVoutWatchdog, so the verdict lands in the trace even during
             // a freeze; only the teardown it decides on is marshalled back to the dispatcher.
             VideoDiag.Log("BLUR", $"[{surfaceTag}] frame watchdog armed (threadpool timer, {VoutGraceMs}ms)");
+            System.Threading.Timer? self = null;
             var timer = new System.Threading.Timer(_ =>
             {
                 try
                 {
                     if (!_videoPlaying || _isCleaningUp || gen != _teardownGeneration) return; // torn down / superseded
+                    // #735: a grace-paused vmem surface produces no new frames BY DESIGN. Judging it
+                    // here would skip to the next video the moment the user paused inside the grace
+                    // window. Re-arm for another full grace instead of standing down for good.
+                    if (_gracePaused)
+                    {
+                        VideoDiag.Log("BLUR", $"[{surfaceTag}] frame watchdog deferred - video is grace-paused");
+                        try { self?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch { }
+                        return;
+                    }
                     if (surface.HasRendered) { VideoDiag.Log("BLUR", $"[{surfaceTag}] frame watchdog: frames are arriving, all good"); return; }
                     App.Logger?.Warning("VideoService: blurred-background video produced no frame within {Ms}ms on {Surface} — skipping to next",
                         VoutGraceMs, surfaceTag);
@@ -2861,6 +3037,7 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex) { App.Logger?.Debug("StartBlurFrameWatchdog tick error: {E}", ex.Message); }
             }, null, VoutGraceMs, System.Threading.Timeout.Infinite);
+            self = timer;   // lets the grace-pause branch above re-arm this very timer
 
             lock (_blurFrameWatchLock) { _blurFrameWatchTimers.Add(timer); }
         }
@@ -2909,6 +3086,7 @@ namespace ConditioningControlPanel.Services
             private readonly ImageBrush _bgBrush;
             private readonly Image _foreground;
             private readonly System.Windows.Shapes.Rectangle _scrim;
+            private readonly Grid _hostGrid;
 
             // Set from the video-format callback once the decoder reports the real frame size.
             private uint _w;
@@ -2921,6 +3099,15 @@ namespace ConditioningControlPanel.Services
             private bool _hooked;
             private bool _disposed;
             private bool _bufferReleased;
+
+            /// <summary>Per-frame budget for <c>WriteableBitmap.TryLock</c>. Long enough that an
+            /// ordinarily busy render thread still gets its frame through (a fullscreen Gaussian
+            /// pass measures in tens of ms), short enough that a WEDGED one costs a frame instead
+            /// of the dispatcher. See the call site in <see cref="OnRendering"/>.</summary>
+            private const int BlitLockBudgetMs = 150;
+            private static readonly Duration BlitLockBudget =
+                new(TimeSpan.FromMilliseconds(BlitLockBudgetMs));
+            private bool _blitLockTimeoutLogged;
 
             /// <summary>The player whose vmem callbacks feed this surface (set in Attach). CloseAll
             /// uses it to pair the surface with the player's Stop() task, which owns the moment the
@@ -2946,6 +3133,21 @@ namespace ConditioningControlPanel.Services
             // #687: stamped by every FormatCallback (under _bufferLock, so it is paired with _w/_h).
             // A rebuild posted to the dispatcher applies only if its stamp is still the newest.
             private int _formatGeneration;
+
+            // #786: the two aspects that decide the on-screen shape.
+            //   _bufferAspect — what the LATEST format callback reported (coded size, SAR dropped).
+            //                   Re-stamped by every callback so a mid-stream resolution change
+            //                   re-lays-out instead of leaving a stale rect behind.
+            //   _trueAspect   — the SAR-corrected DISPLAY aspect from the media's video track, 0
+            //                   until the track is enumerated. Authoritative when known: an
+            //                   anamorphic clip's buffer aspect is simply the wrong shape.
+            // Written on the UI thread, read from the decoder thread inside FormatCallback, hence
+            // Volatile (doubles are not guaranteed atomic on 32-bit, but this process is x64 and a
+            // torn read here would only mis-log one line).
+            private double _bufferAspect;
+            private double _trueAspect;
+            private string _aspectSource = "buffer";
+            private bool _geometryLogged;
 
             // Delegates handed to native LibVLC — kept in fields so the GC can't collect them
             // while libvlc still holds the pointers (the callbacks fire for the whole playback).
@@ -3005,6 +3207,12 @@ namespace ConditioningControlPanel.Services
 
                 // Sharp centred video: same frame, aspect-fit. Margins are transparent so the
                 // blurred fill shows through where the bars would otherwise be black.
+                //
+                // #786: Stretch.Uniform here fits the BITMAP's pixel aspect, which is only the right
+                // shape when the vmem buffer happens to have square pixels. It is the safe default
+                // until the real display aspect is known; ApplyGeometry then switches this to an
+                // explicitly sized Stretch.Fill rect computed from that aspect, so an anamorphic or
+                // padded buffer can never be drawn stretched.
                 _foreground = new Image
                 {
                     Stretch = Stretch.Uniform,
@@ -3016,6 +3224,11 @@ namespace ConditioningControlPanel.Services
                 grid.Children.Add(_background);
                 grid.Children.Add(_scrim);
                 grid.Children.Add(_foreground);
+                // The window is created at full screen bounds and then re-pinned to the monitor's
+                // physical bounds (ForceFullScreenBounds), so the fit rect has to be recomputed when
+                // the host resizes — otherwise the first layout's numbers stick.
+                grid.SizeChanged += (_, __) => ApplyGeometry();
+                _hostGrid = grid;
                 Root = grid;
             }
 
@@ -3067,23 +3280,31 @@ namespace ConditioningControlPanel.Services
                     gen = ++_formatGeneration; // stamped with the geometry it belongs to
                 }
 
-                // Bars appear when the video aspect differs from the screen aspect. Only then do we
-                // pay for the blurred fill; a clip that already fills the screen shows just the sharp
-                // layer (which covers everything at Uniform == the whole screen).
-                double videoAspect = vh > 0 ? (double)vw / vh : _screenAspect;
-                bool needsBlur = Math.Abs(videoAspect / _screenAspect - 1.0) > 0.03;
+                // Bars appear when the video's DISPLAY aspect differs from the screen aspect. Only
+                // then do we pay for the blurred fill; a clip that already fills the screen shows
+                // just the sharp layer.
+                //
+                // #786: this used to read the aspect straight off the callback's dims. Those are the
+                // coded dims with the SAR dropped, and LibVLC re-reports them mid-setup (640x368 four
+                // times, then 640x386), so the decision flip-flopped AND the shape it was deciding
+                // about was not the shape the clip should have. The authoritative number is the
+                // track's SAR-corrected aspect when we have it; the buffer aspect is the fallback.
+                // Both the decision and the layout are recomputed from scratch on every callback.
+                double bufferAspect = (vw > 0 && vh > 0) ? (double)vw / vh : 0;
+                double effectiveAspect = EffectiveAspect(bufferAspect);
+                bool needsBlur = NeedsBlurFill(effectiveAspect, _screenAspect);
 
-                App.Logger?.Information("VideoService: blurred-background format cb — video {VW}x{VH}, buffer {BW}x{BH}, blurFill={Blur}",
-                    vw, vh, bw, bh, needsBlur);
+                App.Logger?.Information("VideoService: blurred-background format cb — video {VW}x{VH}, buffer {BW}x{BH}, displayAspect={AR:0.000} ({Src}), blurFill={Blur}",
+                    vw, vh, bw, bh, effectiveAspect, Volatile.Read(ref _trueAspect) > 0 ? "track" : "buffer", needsBlur);
                 // Runs on a LibVLC decoder thread — enqueue only, never touch the disk or the UI here.
                 // blurFill=true arms the fullscreen Gaussian; in 6.5.0 it ran every frame over the LIVE
                 // per-frame bitmap and that was the freeze (#616-#623/#632/#636/#687). It now runs over
                 // a small frozen snapshot instead, but the trace still records when it is armed.
-                Diag($"format cb - video {vw}x{vh}, buffer {bw}x{bh}, blurFill={needsBlur}");
+                Diag($"format cb - video {vw}x{vh}, buffer {bw}x{bh}, displayAspect={effectiveAspect:0.000}, blurFill={needsBlur}");
 
                 var disp = Application.Current?.Dispatcher;
                 if (disp != null && !disp.HasShutdownStarted)
-                    disp.BeginInvoke(new Action(() => RebuildBitmap(gen, bw, bh, needsBlur)));
+                    disp.BeginInvoke(new Action(() => RebuildBitmap(gen, bw, bh, bufferAspect)));
 
                 return 1; // one plane (RV32)
             }
@@ -3102,7 +3323,7 @@ namespace ConditioningControlPanel.Services
             /// decoder behind it. The stamp is re-checked INSIDE _bufferLock so the swap is atomic with
             /// respect to a format callback that lands while this rebuild is mid-flight.
             /// </summary>
-            private void RebuildBitmap(int gen, uint bw, uint bh, bool needsBlur)
+            private void RebuildBitmap(int gen, uint bw, uint bh, double bufferAspect)
             {
                 if (_disposed) return;
                 try
@@ -3115,11 +3336,26 @@ namespace ConditioningControlPanel.Services
 
                     var bmp = new WriteableBitmap((int)bw, (int)bh, 96, 96, PixelFormats.Bgr32, null);
                     bool applied;
-                    lock (_bufferLock)
+                    // BOUNDED, like the per-frame blit (:TryEnter 8ms) and Dispose (:TryEnter 250ms):
+                    // this was the last plain `lock (_bufferLock)` left on the UI thread, and since
+                    // 6.6.3 CloseAll no longer waits for Stop() on this path, a decoder thread parked
+                    // in LockCallback/FormatCallback (i.e. the wedged-Stop state the quarantine path
+                    // exists for) can now still be holding this lock long after the surface's video
+                    // ended. An unbounded wait here would hand that native wedge the dispatcher.
+                    // Dropping the rebuild is safe: the geometry the decoder is producing is stale by
+                    // definition once a newer format callback lands, and OnRendering's dimension guard
+                    // skips frames until a rebuild does land.
+                    if (!Monitor.TryEnter(_bufferLock, 250))
+                    {
+                        Diag($"bitmap rebuild dropped ({bw}x{bh}, gen {gen}) - _bufferLock still held by a native callback after 250ms");
+                        return;
+                    }
+                    try
                     {
                         applied = IsRebuildCurrent(gen, _formatGeneration);
                         if (applied) _bitmap = bmp;
                     }
+                    finally { Monitor.Exit(_bufferLock); }
                     if (!applied)
                     {
                         Diag($"stale bitmap rebuild dropped at swap ({bw}x{bh}, gen {gen} superseded)");
@@ -3127,20 +3363,118 @@ namespace ConditioningControlPanel.Services
                     }
 
                     _foreground.Source = bmp;
-                    _needsBlur = needsBlur;
-                    _background.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
-                    _scrim.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+
+                    // #786: re-stamp the buffer aspect from THIS callback and re-derive both the blur
+                    // decision and the fit rect. Every callback lands a complete layout; nothing is
+                    // carried over from the previous geometry.
+                    if (bufferAspect > 0 && Math.Abs(Volatile.Read(ref _bufferAspect) - bufferAspect) >= 0.0005)
+                    {
+                        Volatile.Write(ref _bufferAspect, bufferAspect);
+                        _geometryLogged = false; // the reported shape moved - trace the new fit once
+                    }
+                    ApplyGeometry();
 
                     // The fill is fed by RefreshBackgroundSnapshot, NOT by this bitmap (#687). Drop the
                     // old snapshot so the next frame rebuilds it at the new geometry immediately.
                     _snapW = 0;
                     _snapH = 0;
                     _frameCounter = 0;
-                    if (!needsBlur) _bgBrush.ImageSource = null;
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Debug("BlurVmemSurface: bitmap rebuild failed: {Error}", ex.Message);
+                }
+            }
+
+            /// <summary>
+            /// The aspect the picture must actually be drawn at: the track's SAR-corrected display
+            /// aspect when it is known, else the buffer's own pixel aspect, else the screen's (so a
+            /// surface with no information yet is never sized to nonsense). Callable from any thread.
+            /// </summary>
+            private double EffectiveAspect(double bufferAspect)
+            {
+                double t = Volatile.Read(ref _trueAspect);
+                if (t > 0) return t;
+                if (bufferAspect > 0) return bufferAspect;
+                double b = Volatile.Read(ref _bufferAspect);
+                return b > 0 ? b : _screenAspect;
+            }
+
+            /// <summary>
+            /// The SAR-corrected display aspect read off the media's video track, pushed in once the
+            /// track is enumerated (it is not available when the first format callback fires). Safe
+            /// to call repeatedly and from any thread — it marshals to the UI thread and only
+            /// re-lays-out when the number actually changed.
+            /// </summary>
+            public void SetSourceAspect(double aspect, string source)
+            {
+                if (aspect <= 0 || _disposed) return;
+                var disp = Application.Current?.Dispatcher;
+                if (disp == null || disp.HasShutdownStarted) return;
+                disp.BeginInvoke(new Action(() =>
+                {
+                    if (_disposed) return;
+                    if (Math.Abs(Volatile.Read(ref _trueAspect) - aspect) < 0.0005) return;
+                    Volatile.Write(ref _trueAspect, aspect);
+                    _aspectSource = source;
+                    _geometryLogged = false; // the shape changed - say so once with the new numbers
+                    ApplyGeometry();
+                }));
+            }
+
+            /// <summary>
+            /// Size the sharp layer to the largest rect of the video's true display aspect that fits
+            /// this screen, and arm the blurred fill only when that leaves bars. UI thread only.
+            ///
+            /// #786: the sharp layer used to rely on Stretch.Uniform against the WriteableBitmap,
+            /// which fits the BUFFER's pixel aspect. LibVLC's vmem callback reports the coded frame
+            /// size with the sample-aspect-ratio already dropped, so an anamorphic clip was drawn at
+            /// the wrong shape — widened until it filled the screen. Computing the rect ourselves
+            /// from the display aspect makes the fit independent of whatever geometry the decoder
+            /// happens to report, and re-running it on every format callback, aspect update and
+            /// resize makes repeated callbacks idempotent instead of leaving a stale rect.
+            /// </summary>
+            private void ApplyGeometry()
+            {
+                if (_disposed) return;
+                try
+                {
+                    double aspect = EffectiveAspect(0);
+                    bool needsBlur = NeedsBlurFill(aspect, _screenAspect);
+
+                    _needsBlur = needsBlur;
+                    _background.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+                    _scrim.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+                    if (!needsBlur) _bgBrush.ImageSource = null;
+
+                    double cw = _hostGrid.ActualWidth;
+                    double ch = _hostGrid.ActualHeight;
+                    var (fw, fh) = FitToAspect(cw, ch, aspect);
+                    if (fw <= 0 || fh <= 0)
+                    {
+                        // No usable container size yet (first layout pass). Fall back to WPF's own
+                        // aspect-preserving fit rather than pinning a bogus rect — still never a
+                        // stretch, just possibly the buffer's aspect for a frame or two.
+                        _foreground.Stretch = Stretch.Uniform;
+                        _foreground.Width = double.NaN;
+                        _foreground.Height = double.NaN;
+                        return;
+                    }
+
+                    _foreground.Stretch = Stretch.Fill;   // exact, because the rect below IS the fit
+                    _foreground.Width = fw;
+                    _foreground.Height = fh;
+
+                    if (!_geometryLogged)
+                    {
+                        _geometryLogged = true;
+                        Diag($"fit {fw:0}x{fh:0} in {cw:0}x{ch:0} at displayAspect {aspect:0.000} " +
+                             $"({_aspectSource}; screen {_screenAspect:0.000}), blurFill={needsBlur}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("BlurVmemSurface: geometry apply failed: {Error}", ex.Message);
                 }
             }
 
@@ -3256,8 +3590,23 @@ namespace ConditioningControlPanel.Services
                 // blit crosses a human-visible stall, plus the very first frame. ----
                 try
                 {
+                    using var _ = VideoDiag.UiScope("BlurVmemSurface.Blit(WriteableBitmap.TryLock)");
                     long lockStart = Environment.TickCount64;
-                    bmp.Lock();
+                    // TryLock, NOT Lock: WriteableBitmap.Lock() has no timeout and waits on the WPF
+                    // RENDER thread to drop its read lock. A render thread that never drops it (the
+                    // "likely render-thread deadlock" every #775/#777/#779/#780 report ends on, and
+                    // the CWGXBitmapLockState::LockRead stack a previous hang dump caught) therefore
+                    // takes the dispatcher with it, permanently and silently. A dropped frame is
+                    // always the better trade: the decoder keeps running and the next frame retries.
+                    if (!bmp.TryLock(BlitLockBudget))
+                    {
+                        if (!_blitLockTimeoutLogged)
+                        {
+                            _blitLockTimeoutLogged = true;
+                            Diag($"frame DROPPED - WriteableBitmap.TryLock timed out after {BlitLockBudgetMs}ms (render thread is not releasing its read lock)");
+                        }
+                        return;
+                    }
                     try
                     {
                         Marshal.Copy(staging, 0, bmp.BackBuffer, bytes);
@@ -3640,6 +3989,31 @@ namespace ConditioningControlPanel.Services
                 win.Closing += (s, e) => { if (_videoPlaying && !_isCleaningUp && !_wedgeStallSeen) e.Cancel = true; };
                 win.PreviewKeyDown += (s, e) =>
                 {
+                    // #735: in strict mode Escape may PAUSE, never escape. When Escape is NOT the
+                    // configured panic key it does nothing at all here today, so offering the grace
+                    // pause on it costs the lock nothing (the pause keeps _videoPlaying true, so the
+                    // Closing veto below still refuses Alt+F4) and gives a strict-locked user the
+                    // same "someone walked in" out. When Escape IS the panic key it falls through to
+                    // the block below exactly as before and the global hook drives the ladder.
+                    //
+                    // Lockdown / panic-disabled: NOT offered. LockdownService's contract is "no pause,
+                    // no escape" — it forces StrictLock on and the panic key off — and the global key
+                    // hook already bails on lockdown before any panic handling (MainWindow.xaml.cs,
+                    // OnGlobalKeyPressed). This branch is the only other door into the grace pause, so
+                    // it has to honour the same contract or Escape becomes a lockdown bypass.
+                    if (e.Key == Key.Escape &&
+                        App.Lockdown?.IsActive != true &&
+                        App.Settings.Current.PanicKeyEnabled &&
+                        !string.Equals(App.Settings.Current.PanicKey, Key.Escape.ToString(), StringComparison.Ordinal))
+                    {
+                        if (TryGracePauseFromPanic())
+                        {
+                            VideoDiag.Log("PANIC", "strict window: ESC consumed as video grace pause");
+                            e.Handled = true;
+                            return;
+                        }
+                    }
+
                     // In strict mode, block panic key, Alt+F4, and system keys
                     if (e.Key.ToString() == App.Settings.Current.PanicKey || e.Key == Key.System ||
                         (e.Key == Key.F4 && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)))
@@ -3672,16 +4046,31 @@ namespace ConditioningControlPanel.Services
                         // WPF key routing only happens if the dispatcher is draining input, so this
                         // line doubles as proof the UI thread was alive when the user pressed ESC
                         // (#616-#623: "I hit escape/panic and nothing happened").
-                        VideoDiag.Log("PANIC", "ESC received by the video window - dismissing via Cleanup");
                         e.Handled = true;
+                        // #735: first try the grace pause. If it is unavailable or already spent,
+                        // ESC keeps today's meaning exactly — dismiss this video via Cleanup().
+                        if (TryGracePauseFromPanic())
+                        {
+                            VideoDiag.Log("PANIC", "ESC consumed as video grace pause");
+                            return;
+                        }
+                        VideoDiag.Log("PANIC", "ESC received by the video window - dismissing via Cleanup");
                         Cleanup();
                         return;
                     }
                     if (App.Settings.Current.PanicKeyEnabled &&
                         e.Key.ToString() == App.Settings.Current.PanicKey)
                     {
-                        VideoDiag.Log("PANIC", $"panic key '{e.Key}' received by the video window - ForceCleanup");
                         e.Handled = true;
+                        // Same order as ESC above. The dedup window inside TryGracePauseFromPanic is
+                        // what stops the global hook's queued HandlePanicKeyPress from stopping the
+                        // engine a few ms after this pause.
+                        if (TryGracePauseFromPanic())
+                        {
+                            VideoDiag.Log("PANIC", $"panic key '{e.Key}' consumed by the video window as a grace pause");
+                            return;
+                        }
+                        VideoDiag.Log("PANIC", $"panic key '{e.Key}' received by the video window - ForceCleanup");
                         ForceCleanup();
                     }
                 };
@@ -3741,9 +4130,20 @@ namespace ConditioningControlPanel.Services
             });
         }
 
+        /// <summary>
+        /// Whether the attention spawner's 20ms tick may spawn. <paramref name="gracePaused"/> is the
+        /// #735 half: <c>_videoPlaying</c> stays TRUE through a grace pause (by design — the strict
+        /// Closing veto and the scheduler both depend on it), and <c>ResumeFromGrace</c> re-phases the
+        /// schedule by shifting <c>_startTime</c> forward by the paused duration. Spawning during the
+        /// pause therefore drops targets on top of the Resume card where they expire unclicked, which
+        /// turns a grace pause into a guaranteed failed attention check and a forced replay.
+        /// </summary>
+        internal static bool ShouldSpawnTick(bool videoPlaying, bool gracePaused)
+            => videoPlaying && !gracePaused;
+
         private void CheckSpawnTargets(object? s, EventArgs e)
         {
-            if (!_videoPlaying) return;
+            if (!ShouldSpawnTick(_videoPlaying, _gracePaused)) return;
             var elapsed = (DateTime.Now - _startTime).TotalSeconds;
             while (_spawnTimes.Count > 0 && elapsed >= _spawnTimes[0])
             {
@@ -4226,6 +4626,353 @@ namespace ConditioningControlPanel.Services
 
         #endregion
 
+        #region Grace Pause (#735)
+
+        /// <summary>What a panic press should do to a (possibly playing) mandatory video.</summary>
+        internal enum GraceDecision
+        {
+            /// <summary>Perform the grace pause; the press is consumed and must NOT reach the ladder.</summary>
+            Pause,
+            /// <summary>Same physical keystroke as a pause we just performed — swallow it, change nothing.</summary>
+            ConsumedDedup,
+            /// <summary>Not pausable (no video / already paused / budget spent / attention target live)
+            /// — the press is today's normal panic press.</summary>
+            FallThrough
+        }
+
+        /// <summary>
+        /// Pure decision for one panic press, extracted so the ladder can be unit-tested without
+        /// LibVLC (same seam pattern as <see cref="EvaluateVoutMidPlay"/>).
+        ///
+        /// THE DEDUP IS FIRST AND IT MATTERS. For one physical keystroke with a non-strict video
+        /// window focused, BOTH the window's PreviewKeyDown handler AND the global WH_KEYBOARD_LL
+        /// hook's queued <c>HandlePanicKeyPress</c> run: the hook callback queues first, the window
+        /// handler runs synchronously during message delivery, then the dispatcher drains the queued
+        /// global handler. Without dedup, press 1 would pause (window) and then immediately stop the
+        /// engine (global). The dedup is a TIME WINDOW rather than a "consume the next call" flag on
+        /// purpose: when the video window does NOT have focus only the global handler fires, and a
+        /// one-shot flag would then swallow the user's genuine SECOND press. 200ms is far below a
+        /// human rapid double-tap and far above the dispatcher latency between the two handlers.
+        /// </summary>
+        internal static GraceDecision EvaluateGraceRequest(
+            bool videoPlaying,
+            bool cleaningUp,
+            bool alreadyPaused,
+            bool consumed,
+            bool attentionTargetLive,
+            double msSinceLastGraceAction,
+            int dedupMs = GraceDedupMs)
+        {
+            if (msSinceLastGraceAction < dedupMs) return GraceDecision.ConsumedDedup;
+            if (!videoPlaying || cleaningUp) return GraceDecision.FallThrough;
+            if (alreadyPaused) return GraceDecision.FallThrough;   // press 2 = today's normal panic
+            if (consumed) return GraceDecision.FallThrough;        // one grace pause per video run
+            // Pausing while a "CLICK ME" target is live would break the mini-game's timing, and a
+            // panic press must NEVER be silently swallowed — so refuse the pause and let the press
+            // do what it has always done.
+            if (attentionTargetLive) return GraceDecision.FallThrough;
+            return GraceDecision.Pause;
+        }
+
+        /// <summary>Seconds still to show on the countdown card (rounded up, never negative).</summary>
+        internal static int GraceSecondsRemaining(double elapsedSeconds, int windowSeconds)
+            => (int)Math.Max(0, Math.Ceiling(windowSeconds - elapsedSeconds));
+
+        /// <summary>True once the grace window has fully elapsed and the video must resume itself.</summary>
+        internal static bool ShouldAutoResume(double elapsedSeconds, int windowSeconds)
+            => elapsedSeconds >= windowSeconds;
+
+        /// <summary>
+        /// Time left on a guard timer armed at <paramref name="armedUtc"/> for
+        /// <paramref name="interval"/>. Returns <see cref="TimeSpan.Zero"/> for a timer that was
+        /// never armed, and never less than <see cref="MinReArmInterval"/> otherwise.
+        /// </summary>
+        internal static TimeSpan RemainingTimerInterval(DateTime armedUtc, TimeSpan interval, DateTime nowUtc)
+        {
+            if (armedUtc == default || interval <= TimeSpan.Zero) return TimeSpan.Zero;
+            var remaining = interval - (nowUtc - armedUtc);
+            return remaining < MinReArmInterval ? MinReArmInterval : remaining;
+        }
+
+        /// <summary>
+        /// Entry point for the panic key (#735). Returns TRUE when the press was consumed as a grace
+        /// pause (or as the duplicate half of one) and the caller must return WITHOUT touching the
+        /// panic ladder, the bark, or the achievement tracker. Returns FALSE for "this is a normal
+        /// panic press, carry on".
+        ///
+        /// Must be called on the UI thread (both callers — MainWindow.HandlePanicKeyPress on the
+        /// dispatcher, and the video window's PreviewKeyDown — already are).
+        /// </summary>
+        public bool TryGracePauseFromPanic()
+        {
+            try
+            {
+                var nowUtc = DateTime.UtcNow;
+                var sinceMs = _lastGracePauseActionUtc == DateTime.MinValue
+                    ? double.MaxValue
+                    : (nowUtc - _lastGracePauseActionUtc).TotalMilliseconds;
+
+                bool targetLive;
+                lock (_targets) { targetLive = _targets.Count > 0; }
+
+                var decision = EvaluateGraceRequest(
+                    // _videoPlaying alone goes true ~2.6s before anything is on screen (see the field
+                    // comment on _playbackStarted): there is nothing to pause during pre-roll, and a
+                    // panic there should stop the run as it always has.
+                    videoPlaying: _videoPlaying && _playbackStarted,
+                    cleaningUp: _isCleaningUp,
+                    alreadyPaused: _gracePaused,
+                    consumed: _gracePauseConsumed,
+                    attentionTargetLive: targetLive,
+                    msSinceLastGraceAction: sinceMs);
+
+                switch (decision)
+                {
+                    case GraceDecision.ConsumedDedup:
+                        VideoDiag.Log("PANIC", $"grace pause dedup - same keystroke as the pause {sinceMs:F0}ms ago, swallowed");
+                        return true;
+                    case GraceDecision.Pause:
+                        DoGracePause(nowUtc);
+                        return true;
+                    default:
+                        VideoDiag.Log("PANIC",
+                            $"grace pause NOT available (playing={_videoPlaying}, started={_playbackStarted}, " +
+                            $"cleaning={_isCleaningUp}, paused={_gracePaused}, consumed={_gracePauseConsumed}, " +
+                            $"targetLive={targetLive}) - falling through to the normal panic ladder");
+                        return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                // A bug in here must never eat a panic press. Fall through to the normal ladder.
+                App.Logger?.Warning("VideoService.TryGracePauseFromPanic threw: {Error}", ex.Message);
+                VideoDiag.Log("PANIC", "grace pause THREW - falling through to the normal panic ladder: " + ex.Message);
+                return false;
+            }
+        }
+
+        private void DoGracePause(DateTime nowUtc)
+        {
+            _gracePaused = true;
+            _gracePausedAtUtc = nowUtc;
+            _lastGracePauseActionUtc = nowUtc;
+
+            PausePrimary();
+
+            // Freeze the wall-clock guards for the duration of the pause (see TimerArm).
+            PauseGuardTimers(nowUtc);
+
+            // The InteractionQueue's stuck-recovery would ForceCleanup a deliberately paused video.
+            // Slide its window past the whole pause plus the rest of the clip plus the usual buffer.
+            try
+            {
+                var remainingClipSec = Math.Max(
+                    _safetyArm.Remaining.TotalSeconds,
+                    Math.Max(_fallbackArm.Remaining.TotalSeconds, _maxLenArm.Remaining.TotalSeconds));
+                App.InteractionQueue?.ExtendTimeout(
+                    remainingClipSec + GraceWindowSeconds + 90,
+                    InteractionQueueService.InteractionType.Video);
+            }
+            catch (Exception ex) { App.Logger?.Debug("VideoService: grace-pause ExtendTimeout failed - {Error}", ex.Message); }
+
+            ShowGraceOverlays();
+            StartGraceCountdown();
+
+            App.Logger?.Information("VideoService: grace pause engaged ({Window}s window)", GraceWindowSeconds);
+            VideoDiag.Log("PANIC", $"GRACE PAUSE engaged - video held, auto-resume in {GraceWindowSeconds}s");
+        }
+
+        /// <summary>Ends the pause and resumes playback. Idempotent.</summary>
+        private void ResumeFromGrace(string reason)
+        {
+            if (!_gracePaused) return;
+            _gracePaused = false;
+            _gracePauseConsumed = true;   // one per video run — spent whether it ended by hand or by timeout
+
+            var pausedFor = DateTime.UtcNow - _gracePausedAtUtc;
+            if (pausedFor < TimeSpan.Zero) pausedFor = TimeSpan.Zero;
+
+            StopGraceCountdown();
+            CloseGraceOverlays();
+
+            // _startTime is the attention spawner's wall clock (CheckSpawnTargets compares
+            // DateTime.Now - _startTime against the scheduled spawn times) and is the ONLY read of
+            // that field in this file — watch-time credit is position-based (FinalizeWatchCredit
+            // reads _lastWatchPositionMs). Shift it forward by the pause so the targets keep landing
+            // at their intended positions in the CLIP rather than all at once on resume.
+            _startTime += pausedFor;
+
+            // The enhancement stall watch measures "seconds since playback last advanced" against a
+            // 90s grace. The pause itself contributed up to 60 of those seconds, so restart its clock
+            // here rather than letting the pause eat two thirds of the grace window (#536 + #735).
+            _lastSafetyProgressUtc = DateTime.UtcNow;
+
+            ResumeGuardTimers(DateTime.UtcNow);
+            PlayPrimary();
+
+            App.Logger?.Information("VideoService: grace pause released ({Reason}) after {Sec:F1}s", reason, pausedFor.TotalSeconds);
+            VideoDiag.Log("PANIC", $"grace pause RELEASED ({reason}) after {pausedFor.TotalSeconds:F1}s - playback resumed");
+        }
+
+        /// <summary>
+        /// Tears the grace-pause UI + state down WITHOUT resuming playback — the video itself is
+        /// going away. Called from the teardown funnel (<c>CloseAll</c>) and defensively from
+        /// ForceCleanup/Cleanup/Stop so a paused video that is panicked away, engine-stopped,
+        /// OS-locked or wedge-rescued can never leave an overlay window on screen.
+        /// </summary>
+        private void ClearGraceState()
+        {
+            StopGraceCountdown();
+            CloseGraceOverlays();
+            _gracePaused = false;
+            // _gracePauseConsumed is deliberately NOT cleared here: it is per-video and reset by
+            // PlayVideo, which every new run (including each attention retry) goes through.
+        }
+
+        private void StartGraceCountdown()
+        {
+            StopGraceCountdown();
+            // Any deferred grace action must die with the video it belonged to (see _teardownGeneration).
+            var gen = _teardownGeneration;
+            _graceCountdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _graceCountdownTimer.Tick += (s, e) =>
+            {
+                try
+                {
+                    if (gen != _teardownGeneration || !_gracePaused || _isCleaningUp)
+                    {
+                        StopGraceCountdown();
+                        return;
+                    }
+
+                    var elapsed = (DateTime.UtcNow - _gracePausedAtUtc).TotalSeconds;
+                    if (ShouldAutoResume(elapsed, GraceWindowSeconds))
+                    {
+                        StopGraceCountdown();
+                        ResumeFromGrace("auto-resume");
+                        return;
+                    }
+
+                    var left = GraceSecondsRemaining(elapsed, GraceWindowSeconds);
+                    foreach (var o in _graceOverlays.ToList()) o.SetRemainingSeconds(left);
+                }
+                catch (Exception ex) { App.Logger?.Debug("VideoService: grace countdown tick failed - {Error}", ex.Message); }
+            };
+            _graceCountdownTimer.Start();
+        }
+
+        private void StopGraceCountdown()
+        {
+            try { _graceCountdownTimer?.Stop(); } catch { }
+            _graceCountdownTimer = null;
+        }
+
+        private void ShowGraceOverlays()
+        {
+            CloseGraceOverlays();
+            try
+            {
+                // The per-window loop gets its OWN try: if realizing a card throws (a dying window, a
+                // screen that vanished mid-reconfiguration) the primary-screen fallback below MUST
+                // still run, or the user is left paused with no Resume card at all.
+                try
+                {
+                    // One card per screen that actually has a video window, centred on it.
+                    foreach (var win in _windows.ToList())
+                    {
+                        Screen screen;
+                        try { screen = ScreenForWindow(win); }
+                        catch { continue; }
+                        if (screen == null) continue;
+
+                        var overlay = new GracePauseOverlayWindow(screen, () => ResumeFromGrace("resume button"));
+                        overlay.SetRemainingSeconds(GraceWindowSeconds);
+                        _graceOverlays.Add(overlay);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning("VideoService: per-screen grace overlay failed - {Error}", ex.Message);
+                }
+
+                if (_graceOverlays.Count == 0)
+                {
+                    // No window resolved to a screen (mid-teardown / screen reconfiguration). Put one
+                    // card on the primary rather than pausing with no way to resume by hand.
+                    var primary = Screen.PrimaryScreen;
+                    if (primary != null)
+                    {
+                        var overlay = new GracePauseOverlayWindow(primary, () => ResumeFromGrace("resume button"));
+                        overlay.SetRemainingSeconds(GraceWindowSeconds);
+                        _graceOverlays.Add(overlay);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("VideoService: failed to show grace pause overlay - {Error}", ex.Message);
+            }
+        }
+
+        private void CloseGraceOverlays()
+        {
+            foreach (var o in _graceOverlays.ToList())
+            {
+                try { o.Close(); }
+                catch (Exception ex) { App.Logger?.Debug("VideoService: failed to close grace overlay - {Error}", ex.Message); }
+            }
+            _graceOverlays.Clear();
+        }
+
+        private static Screen ScreenForWindow(Window win)
+        {
+            var hwnd = new WindowInteropHelper(win).Handle;
+            if (hwnd != IntPtr.Zero) return Screen.FromHandle(hwnd);
+            return Screen.PrimaryScreen ?? Screen.AllScreens[0];
+        }
+
+        private void PauseGuardTimers(DateTime nowUtc)
+        {
+            CaptureAndStop(_safetyTimer, _safetyArm, nowUtc);
+            CaptureAndStop(_fallbackSafetyTimer, _fallbackArm, nowUtc);
+            CaptureAndStop(_maxLenCapTimer, _maxLenArm, nowUtc);
+            VideoDiag.Log("PANIC",
+                $"guard timers frozen (safety={_safetyArm.Remaining.TotalSeconds:F1}s, " +
+                $"fallback={_fallbackArm.Remaining.TotalSeconds:F1}s, maxLen={_maxLenArm.Remaining.TotalSeconds:F1}s left)");
+        }
+
+        private static void CaptureAndStop(DispatcherTimer? timer, TimerArm arm, DateTime nowUtc)
+        {
+            arm.Remaining = TimeSpan.Zero;
+            if (timer == null || !timer.IsEnabled) return;
+            arm.Remaining = RemainingTimerInterval(arm.ArmedUtc, arm.Interval, nowUtc);
+            try { timer.Stop(); } catch { }
+        }
+
+        private void ResumeGuardTimers(DateTime nowUtc)
+        {
+            ReArm(_safetyTimer, _safetyArm, nowUtc);
+            ReArm(_fallbackSafetyTimer, _fallbackArm, nowUtc);
+            ReArm(_maxLenCapTimer, _maxLenArm, nowUtc);
+        }
+
+        private static void ReArm(DispatcherTimer? timer, TimerArm arm, DateTime nowUtc)
+        {
+            var remaining = arm.Remaining;
+            arm.Remaining = TimeSpan.Zero;
+            if (timer == null || remaining <= TimeSpan.Zero) return;
+            try
+            {
+                timer.Interval = remaining;
+                arm.ArmedUtc = nowUtc;
+                arm.Interval = remaining;
+                timer.Start();
+            }
+            catch (Exception ex) { App.Logger?.Debug("VideoService: failed to re-arm a guard timer after grace pause - {Error}", ex.Message); }
+        }
+
+        #endregion
+
         #region Safety Timeout
 
         /// <summary>
@@ -4260,6 +5007,16 @@ namespace ConditioningControlPanel.Services
                 // progress-based stall watch: keep the video alive while playback is still advancing,
                 // slide the InteractionQueue stuck window forward too, and only force-close once it has
                 // shown zero progress for the grace window (a genuine wedge, not an intended pause).
+                // #735: a grace-paused video makes no progress BY DESIGN, so the zero-progress
+                // force-end must stand down. (The pause also stops this timer outright — this is the
+                // belt to that braces, and it keeps the stall clock honest across the pause.)
+                if (_gracePaused)
+                {
+                    _lastSafetyProgressUtc = DateTime.UtcNow;
+                    if (_enhancementDriving) SetSafetyInterval(EnhancementRecheckInterval);
+                    return;
+                }
+
                 if (_enhancementDriving)
                 {
                     long curMs = -1;
@@ -4275,13 +5032,13 @@ namespace ConditioningControlPanel.Services
                         // loop either (its window is min 5 min / duration+30s — a long loop can reach it).
                         try { App.InteractionQueue?.ExtendTimeout(_duration > 0 ? _duration : MaxVideoFallbackSeconds, InteractionQueueService.InteractionType.Video); }
                         catch (Exception ex) { App.Logger?.Debug("VideoService: safety-timer ExtendTimeout failed: {E}", ex.Message); }
-                        if (_safetyTimer != null) _safetyTimer.Interval = EnhancementRecheckInterval;
+                        SetSafetyInterval(EnhancementRecheckInterval);
                         return;
                     }
 
                     if ((now - _lastSafetyProgressUtc).TotalSeconds < EnhancementStallGraceSeconds)
                     {
-                        if (_safetyTimer != null) _safetyTimer.Interval = EnhancementRecheckInterval;
+                        SetSafetyInterval(EnhancementRecheckInterval);
                         return; // paused (e.g. speak-hold) but within grace — not a wedge
                     }
 
@@ -4300,8 +5057,24 @@ namespace ConditioningControlPanel.Services
                 }
             };
             _safetyTimer.Start();
+            // Record the arm so a grace pause can stop this timer and re-arm it with what was left
+            // instead of restarting the whole guillotine (#735).
+            _safetyArm.ArmedUtc = DateTime.UtcNow;
+            _safetyArm.Interval = _safetyTimer.Interval;
+            _safetyArm.Remaining = TimeSpan.Zero;
 
             App.Logger?.Debug("VideoService: Safety timer started for {Duration}s (fallback timer stopped)", timeoutSeconds);
+        }
+
+        /// <summary>Changes the safety timer's interval AND its arm bookkeeping together — setting
+        /// <see cref="DispatcherTimer.Interval"/> restarts the countdown, so the two must never drift
+        /// apart or a grace pause would re-arm it with the wrong remainder (#735).</summary>
+        private void SetSafetyInterval(TimeSpan interval)
+        {
+            if (_safetyTimer == null) return;
+            _safetyTimer.Interval = interval;
+            _safetyArm.ArmedUtc = DateTime.UtcNow;
+            _safetyArm.Interval = interval;
         }
 
         /// <summary>
@@ -4325,6 +5098,9 @@ namespace ConditioningControlPanel.Services
                 }
             };
             _fallbackSafetyTimer.Start();
+            _fallbackArm.ArmedUtc = DateTime.UtcNow;   // grace-pause arm bookkeeping (#735)
+            _fallbackArm.Interval = _fallbackSafetyTimer.Interval;
+            _fallbackArm.Remaining = TimeSpan.Zero;
 
             App.Logger?.Debug("VideoService: Fallback safety timer started for {Duration}s", MaxVideoFallbackSeconds);
         }
@@ -4356,6 +5132,9 @@ namespace ConditioningControlPanel.Services
                 }
             };
             _maxLenCapTimer.Start();
+            _maxLenArm.ArmedUtc = DateTime.UtcNow;   // grace-pause arm bookkeeping (#735)
+            _maxLenArm.Interval = _maxLenCapTimer.Interval;
+            _maxLenArm.Remaining = TimeSpan.Zero;
 
             App.Logger?.Debug("VideoService: Max video-length cap timer started for {Max}s", maxSec);
         }
@@ -4421,6 +5200,15 @@ namespace ConditioningControlPanel.Services
             {
                 if (!_videoPlaying || _isCleaningUp) return;
                 if (!ReferenceEquals(player, _primaryMediaPlayer)) return;   // stale timer from a previous video
+                // #735: a video paused inside the start grace window may not have created its vout
+                // yet. Retiring the shared LibVLC over that would be a self-inflicted white-screen
+                // heal. Push the deadline out by another full grace instead of standing down.
+                if (_gracePaused)
+                {
+                    VideoDiag.Log("VOUT", "start watchdog deferred - video is grace-paused");
+                    try { _voutWatchTimer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch { }
+                    return;
+                }
                 if (_voutSeen) return;
                 // Authoritative live check — covers a vout that appeared before the event was wired.
                 try { if (player.VoutCount > 0) return; } catch { }
@@ -4524,6 +5312,12 @@ namespace ConditioningControlPanel.Services
             {
                 if (!_videoPlaying || _isCleaningUp || _voutMidHealUsed) return;
                 if (!ReferenceEquals(player, _primaryMediaPlayer)) return;   // stale timer from a previous video
+                // #735: this poll's decision keys off VoutCount, not time progress, and a paused
+                // LibVLC player keeps its video output — so a grace pause should be invisible here.
+                // Gated anyway because the cost of being wrong is asymmetric: a driver that tears the
+                // vout down on pause would spend a retire from the four-per-session budget and replay
+                // the clip under the user's Resume card. Nothing needs healing during a 60s pause.
+                if (_gracePaused) { _voutLostSinceTicks = 0; return; }
 
                 uint voutCount;
                 try { voutCount = player.VoutCount; } catch { return; }
@@ -4958,6 +5752,11 @@ namespace ConditioningControlPanel.Services
             {
                 _attentionTimer?.Stop();
                 _segmentArmedAtUtc = DateTime.MinValue;   // random-segment mode is one-shot per video
+                // #735: the video is going away, so the grace-pause card must go with it — every
+                // teardown (panic press 2, engine stop, OS lock/suspend, wedge watchdog, natural end)
+                // funnels through here, so this is the one place that guarantees zero orphaned
+                // overlay windows. It does NOT resume playback: the players are about to be stopped.
+                ClearGraceState();
 
                 lock (_targets)
                 {
@@ -5317,6 +6116,7 @@ namespace ConditioningControlPanel.Services
             _maxLenCapTimer = null;
             _videoPlaying = false;
             _triggerInProgress = false;
+            ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
             CloseAll();
 
             App.Logger?.Information("VideoService: Cleanup() - CloseAll completed, _windows now={WinCount}", _windows.Count);
@@ -6115,28 +6915,9 @@ namespace ConditioningControlPanel.Services
 
                 if (File.Exists(popPath))
                 {
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new AudioFileReader(popPath);
-                            // Apply master volume to attention target pop sound
-                            var masterVolume = App.Settings?.Current?.MasterVolume ?? 100;
-                            audioFile.Volume = 0.6f * (masterVolume / 100f);
-                            using var outputDevice = new WaveOutEvent();
-                            App.Audio?.ApplyPreferredDevice(outputDevice);
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-                            while (outputDevice.PlaybackState == PlaybackState.Playing)
-                            {
-                                Thread.Sleep(50);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Debug("Pop sound playback failed: {Error}", ex.Message);
-                        }
-                    });
+                    // Apply master volume to attention target pop sound
+                    var masterVolume = App.Settings?.Current?.MasterVolume ?? 100;
+                    App.Audio?.PlayOneShot(popPath, 0.6f * (masterVolume / 100f), "target-pop");
                 }
             }
             catch (Exception ex)

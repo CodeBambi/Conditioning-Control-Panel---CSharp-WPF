@@ -836,6 +836,8 @@
   "tooltip_scale_of_flash_images_100_original_size_200_d": "闪图缩放比例。\n100% = 原始大小，200% = 双倍大小。",
   "setting_size": "大小",
   "tooltip_transparency_of_flash_images_lower_more_see_t": "闪图透明度。\n越低 = 越透明，100% = 完全不透明。",
+  "setting_avoid_screen_center": "避开屏幕中央",
+  "tooltip_keep_flash_images_out_of_a_square_in_the_midd": "不在每块屏幕正中央的方形区域内显示闪图。\n打游戏很实用 - 准星不会被遮挡。滑块用于调整区域大小（占屏幕短边的百分比）。",
   "tooltip_fade_in_out_animation_speed_0_instant_appear": "淡入/淡出动画速度。\n0% = 瞬间出现/消失。\n100% = 缓慢平滑淡入淡出。",
   "setting_fade": "淡入淡出",
   "tooltip_how_long_images_stay_on_screen_only_used_when": "图片在屏幕上停留多长时间。\n仅在音频禁用时使用。",
@@ -3562,5 +3564,16 @@
   "wizard_fail_hint_generic": "没有任何响应。请确认提供方正在运行，然后再试一次。",
   "wizard_devices_found": "找到：",
   "wizard_test_buzz": "测试振动",
-  "wizard_test_failed": "测试没能到达玩具 - 请检查连接后再试一次。"
+  "wizard_test_failed": "测试没能到达玩具 - 请检查连接后再试一次。",
+  "btn_my_reports": "我的反馈",
+  "my_reports_title": "我的反馈",
+  "my_reports_subtitle": "你已提交的问题反馈和建议的编号。若要补充信息，请在 Discord 中提供该编号。",
+  "my_reports_empty": "暂无反馈记录。",
+  "my_reports_kind_bug": "问题反馈",
+  "my_reports_kind_suggestion": "建议",
+  "bug_report_token_label": "你的反馈编号",
+  "bug_report_token_hint": "请保存该编号。若要补充信息或询问处理进度，请在 Discord 中提供该编号。",
+  "video_grace_paused_title": "已暂停",
+  "btn_video_grace_resume": "继续",
+  "video_grace_auto_resume_in": "{0} 秒后继续"
 }

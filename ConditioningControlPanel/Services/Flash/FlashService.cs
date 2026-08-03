@@ -262,12 +262,13 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Programmatic equivalent of a mouse click on a flash window. Runs
         /// the same close + hydra-multiplication + haptic + FlashClicked
-        /// pipeline as MouseLeftButtonDown.
+        /// pipeline as MouseLeftButtonDown. Flagged as gaze-driven so hydra
+        /// can stop the self-sustaining chain (#784) — see OnFlashClicked.
         /// </summary>
         internal void GazePop(FlashWindow window)
         {
             if (window == null || window.IsFadingOut) return;
-            OnFlashClicked(window, App.Settings.Current);
+            OnFlashClicked(window, App.Settings.Current, fromGaze: true);
         }
 
         #endregion
@@ -1117,9 +1118,11 @@ namespace ConditioningControlPanel.Services
                 {
                     if (!IsOverlapping(finalX, finalY, geom.Width, geom.Height))
                         break;
-                    
-                    finalX = monitor.X + _random.Next(0, Math.Max(1, monitor.Width - geom.Width));
-                    finalY = monitor.Y + _random.Next(0, Math.Max(1, monitor.Height - geom.Height));
+
+                    // MUST go through PickSpawnPoint, not a raw re-randomize: this loop used to
+                    // bypass the geometry rules entirely, so with #770's avoid-center on, any
+                    // overlapping flash would land right back on the crosshair.
+                    (finalX, finalY) = PickSpawnPoint(monitor, geom.Width, geom.Height);
                 }
 
                 // Render path decided at the top of this method (mode-aware cap):
@@ -1805,7 +1808,8 @@ namespace ConditioningControlPanel.Services
             if (!anyLayer) ReleaseLayerHook();
         }
 
-        private void OnFlashClicked(FlashWindow window, AppSettings settings)
+        /// <param name="fromGaze">True when a gaze dwell/blink popped this flash rather than the mouse.</param>
+        private void OnFlashClicked(FlashWindow window, AppSettings settings, bool fromGaze = false)
         {
             // Cancel only THIS window's lifetime — other windows keep living~ ✨
             try { window.LifetimeCts?.Cancel(); } catch { }
@@ -1821,7 +1825,14 @@ namespace ConditioningControlPanel.Services
 
             // Hydra mode: spawn 2 more when clicking (NO NEW AUDIO)
             // No global _cleanupInProgress check needed — each window has its own lifetime~ 🐍
-            if (settings.CorruptionMode)
+            // #784: a gaze pop is automatic — the dwell attractor snaps straight onto the fresh
+            // children and pops them ~1s later, so an unrestricted gaze→hydra chain feeds itself
+            // and flashes never stop spawning (the population cap only bounds how many are on
+            // screen at once, not the endless churn). Let gaze take the FIRST hop off an original
+            // flash (the documented "stare to pop = click, including hydra") and stop there;
+            // children of a gaze pop just dismiss. Mouse clicks are unchanged — a human hand is
+            // the throttle there.
+            if (settings.CorruptionMode && (!fromGaze || window.HydraGeneration == 0))
             {
                 var maxHydra = Math.Min(settings.HydraLimit, 20);
                 int currentCount;
@@ -2198,16 +2209,11 @@ namespace ConditioningControlPanel.Services
             var targetWidth = Math.Max(50, (int)(origWidth * ratio));
             var targetHeight = Math.Max(50, (int)(origHeight * ratio));
 
-            // Random position within monitor bounds with edge padding
-            // Keep targets away from screen edges so they're fully visible and clickable
-            const int edgePadding = 50;
-            var minX = edgePadding;
-            var minY = edgePadding;
-            var maxX = Math.Max(minX + 1, monitor.Width - targetWidth - edgePadding);
-            var maxY = Math.Max(minY + 1, monitor.Height - targetHeight - edgePadding);
-
-            var x = monitor.X + _random.Next(minX, maxX);
-            var y = monitor.Y + _random.Next(minY, maxY);
+            // Random position within monitor bounds with edge padding, honoring the #770
+            // avoid-the-center exclusion box. PickSpawnPoint is the ONE spawn-point computation —
+            // the anti-overlap retry loop in ShowSingleImage re-rolls through it too, or overlapping
+            // flashes would punch straight back into the crosshair.
+            var (x, y) = PickSpawnPoint(monitor, targetWidth, targetHeight);
 
             return new ImageGeometry
             {
@@ -2216,6 +2222,214 @@ namespace ConditioningControlPanel.Services
                 Width = targetWidth,
                 Height = targetHeight
             };
+        }
+
+        /// <summary>
+        /// Keep targets away from screen edges so they're fully visible and clickable.
+        /// </summary>
+        internal const int SpawnEdgePadding = 50;
+
+        /// <summary>
+        /// Picks a top-left spawn point (in virtual-desktop DIPs) for a <paramref name="w"/>x<paramref name="h"/>
+        /// image on <paramref name="monitor"/>. Applies the #770 centered exclusion box when the user
+        /// has it on. Shared by <see cref="CalculateGeometry"/> and the anti-overlap retry loop.
+        /// </summary>
+        private (int X, int Y) PickSpawnPoint(MonitorInfo monitor, int w, int h)
+        {
+            var s = App.Settings?.Current;
+            bool avoid = s?.FlashAvoidCenter == true;
+            int pct = s?.FlashCenterExclusionPercent ?? 25;
+
+            if (avoid &&
+                TryPickAvoidCenterPointAdaptive(monitor.Width, monitor.Height, w, h, pct, _random,
+                    out int lx, out int ly, out _))
+            {
+                return (monitor.X + lx, monitor.Y + ly);
+            }
+
+            if (avoid)
+            {
+                // Even a floor-sized box leaves nowhere legal — the image is bigger than the whole
+                // padded spawn area. Fall back to an unconstrained pick rather than never spawning.
+                // Warning, not Debug: with the feature ON this silently puts flashes back on the
+                // crosshair, which is exactly the complaint #770 exists to fix. Keyed on the full
+                // geometry so a different image size / monitor / percentage still gets reported.
+                var key = (w, h, monitor.Width, monitor.Height, pct);
+                bool firstForThisGeometry;
+                lock (_avoidCenterFallbackLogged)
+                    firstForThisGeometry = _avoidCenterFallbackLogged.Add(key);
+
+                if (firstForThisGeometry)
+                {
+                    App.Logger.Warning(
+                        "Flash avoid-center: no legal band for {W}x{H} on {MW}x{MH} even at the {Floor}% floor — falling back to unconstrained placement (once per geometry; requested {Pct}%)",
+                        w, h, monitor.Width, monitor.Height, MinExclusionPercent, pct);
+                }
+            }
+
+            var (minX, minY, maxX, maxY) = SpawnBounds(monitor.Width, monitor.Height, w, h);
+            return (monitor.X + _random.Next(minX, maxX), monitor.Y + _random.Next(minY, maxY));
+        }
+
+        /// <summary>
+        /// Geometries (image w/h, monitor w/h, requested pct) already reported as unplaceable, so the
+        /// warning above stays once-per-geometry instead of once-per-process (a single bool hid every
+        /// later, different failure) or once-per-flash.
+        /// </summary>
+        private readonly HashSet<(int W, int H, int MonW, int MonH, int Pct)> _avoidCenterFallbackLogged = new();
+
+        /// <summary>
+        /// The unconstrained legal range for a top-left spawn point, in monitor-local DIPs.
+        /// Ranges are half-open on the max end, matching <see cref="Random.Next(int,int)"/>.
+        /// </summary>
+        internal static (int MinX, int MinY, int MaxX, int MaxY) SpawnBounds(int monW, int monH, int w, int h)
+        {
+            var minX = SpawnEdgePadding;
+            var minY = SpawnEdgePadding;
+            var maxX = Math.Max(minX + 1, monW - w - SpawnEdgePadding);
+            var maxY = Math.Max(minY + 1, monH - h - SpawnEdgePadding);
+            return (minX, minY, maxX, maxY);
+        }
+
+        /// <summary>
+        /// #770 — band remap (NOT rejection sampling). Builds the centered exclusion square
+        /// (<paramref name="pct"/>% of the SHORTER monitor edge, per-monitor) and splits the legal
+        /// area into 4 DISJOINT bands where a <paramref name="w"/>x<paramref name="h"/> image fits
+        /// without touching it: left / right / above / below. A band is picked weighted by its area
+        /// and the point is then uniform inside it, so the result is uniform over the whole legal
+        /// region in a single roll — no retry loop, no worst-case starvation.
+        /// </summary>
+        /// <returns>false when the total legal area is 0 (image too large); caller falls back.</returns>
+        internal static bool TryPickAvoidCenterPoint(
+            int monW, int monH, int w, int h, int pct, Random random, out int x, out int y)
+        {
+            x = y = 0;
+
+            var b = new AvoidCenterBands(monW, monH, w, h, pct);
+            long total = b.TotalArea;
+            if (total <= 0) return false;
+
+            // Weighted band pick, then uniform inside the chosen band.
+            long roll = (long)(random.NextDouble() * total);
+            if (roll >= total) roll = total - 1; // guard the 1.0 edge
+            Span<long> areas = stackalloc long[4] { b.LeftArea, b.RightArea, b.AboveArea, b.BelowArea };
+            int band = 0;
+            for (; band < 3; band++)
+            {
+                if (roll < areas[band]) break;
+                roll -= areas[band];
+            }
+
+            switch (band)
+            {
+                case 0: x = random.Next(b.MinX, b.LeftMaxX); y = random.Next(b.MinY, b.MaxY); break;
+                case 1: x = random.Next(b.RightMinX, b.MaxX); y = random.Next(b.MinY, b.MaxY); break;
+                case 2: x = random.Next(b.StripMinX, b.StripMaxX); y = random.Next(b.MinY, b.AboveMaxY); break;
+                default: x = random.Next(b.StripMinX, b.StripMaxX); y = random.Next(b.BelowMinY, b.MaxY); break;
+            }
+            return true;
+        }
+
+        /// <summary>Smallest exclusion box the adaptive shrink will fall back to, in percent.</summary>
+        internal const int MinExclusionPercent = 5;
+
+        /// <summary>Largest exclusion box the setting allows, in percent (matches the AppSettings clamp).</summary>
+        internal const int MaxExclusionPercent = 60;
+
+        /// <summary>
+        /// How much of the padded spawn area must remain legal before the requested exclusion box is
+        /// accepted. Below this the placement is technically legal but visually degenerate — at the
+        /// default 25% a monitor-aspect image at ImageScale=100 leaves 1.4%, i.e. two ~8px-wide
+        /// slivers, so every flash lands in the same two columns.
+        /// </summary>
+        internal const double MinLegalAreaFraction = 0.10;
+
+        /// <summary>
+        /// #770 follow-up — the exclusion box has to DEGRADE, not vanish. A flash at the default
+        /// ImageScale is 40% of the monitor's width, so on 1920x1080 an ordinary 768x432 flash has no
+        /// legal band at all at 30% (the feature silently became a no-op and flashes went back to the
+        /// crosshair) and only 1.4% of the spawn area at the default 25%. This shrinks the effective
+        /// percentage 5 points at a time, down to <see cref="MinExclusionPercent"/>, until at least
+        /// <see cref="MinLegalAreaFraction"/> of the spawn area is legal, and picks with THAT box.
+        /// Legal area is monotonic in the percentage (a smaller square is a subset of a bigger one),
+        /// so the first percentage that clears the bar is also the largest one that does — the user's
+        /// setting is honoured as far as the image size allows.
+        /// </summary>
+        /// <param name="effectivePct">The percentage actually used (&lt;= the requested one).</param>
+        /// <returns>false only when even the floor leaves nothing (image bigger than the spawn area).</returns>
+        internal static bool TryPickAvoidCenterPointAdaptive(
+            int monW, int monH, int w, int h, int pct, Random random,
+            out int x, out int y, out int effectivePct)
+        {
+            x = y = 0;
+            effectivePct = Math.Clamp(pct, MinExclusionPercent, MaxExclusionPercent);
+
+            while (true)
+            {
+                var bands = new AvoidCenterBands(monW, monH, w, h, effectivePct);
+                if (bands.LegalFraction >= MinLegalAreaFraction || effectivePct <= MinExclusionPercent)
+                {
+                    if (bands.TotalArea <= 0) return false;   // at the floor and still nowhere to go
+                    return TryPickAvoidCenterPoint(monW, monH, w, h, effectivePct, random, out x, out y);
+                }
+                effectivePct = Math.Max(MinExclusionPercent, effectivePct - 5);
+            }
+        }
+
+        /// <summary>
+        /// Legal band area as a fraction (0..1) of the unconstrained padded spawn area. Exposed for
+        /// the tests that pin the adaptive shrink's "at least 10% of the screen stays usable" bar.
+        /// </summary>
+        internal static double LegalAreaFraction(int monW, int monH, int w, int h, int pct)
+            => new AvoidCenterBands(monW, monH, w, h, pct).LegalFraction;
+
+        /// <summary>
+        /// The 4 disjoint legal bands around the #770 exclusion square plus their areas. One place so
+        /// the pick and the adaptive shrink can never measure different regions.
+        /// </summary>
+        private readonly struct AvoidCenterBands
+        {
+            public readonly int MinX, MinY, MaxX, MaxY;
+            public readonly int LeftMaxX, RightMinX, StripMinX, StripMaxX, AboveMaxY, BelowMinY;
+            public readonly long LeftArea, RightArea, AboveArea, BelowArea;
+
+            public AvoidCenterBands(int monW, int monH, int w, int h, int pct)
+            {
+                (MinX, MinY, MaxX, MaxY) = SpawnBounds(monW, monH, w, h);
+
+                // Centered exclusion square, sized off the shorter edge so it stays square on ultrawides.
+                double side = Math.Clamp(pct, MinExclusionPercent, MaxExclusionPercent) / 100.0 * Math.Min(monW, monH);
+                int exLeft = (int)Math.Round((monW - side) / 2.0);
+                int exTop = (int)Math.Round((monH - side) / 2.0);
+                int exRight = exLeft + (int)Math.Round(side);
+                int exBottom = exTop + (int)Math.Round(side);
+
+                // An image at local (x,y) misses the box iff it is fully left (x + w <= exLeft),
+                // fully right (x >= exRight), fully above (y + h <= exTop) or fully below (y >= exBottom).
+                // Left/right take the FULL y range; above/below take only the x-strip left over between
+                // them, which keeps the 4 bands disjoint so area weighting stays a true uniform.
+                LeftMaxX = Math.Min(MaxX, exLeft - w + 1);   // exclusive
+                RightMinX = Math.Max(MinX, exRight);
+                StripMinX = Math.Max(MinX, LeftMaxX);
+                StripMaxX = Math.Min(MaxX, RightMinX);       // exclusive
+                AboveMaxY = Math.Min(MaxY, exTop - h + 1);   // exclusive
+                BelowMinY = Math.Max(MinY, exBottom);
+
+                LeftArea = Area(MinX, LeftMaxX, MinY, MaxY);
+                RightArea = Area(RightMinX, MaxX, MinY, MaxY);
+                AboveArea = Area(StripMinX, StripMaxX, MinY, AboveMaxY);
+                BelowArea = Area(StripMinX, StripMaxX, BelowMinY, MaxY);
+            }
+
+            public long TotalArea => LeftArea + RightArea + AboveArea + BelowArea;
+
+            /// <summary>Unconstrained padded spawn area, the denominator for <see cref="LegalFraction"/>.</summary>
+            public long SpawnArea => (long)Math.Max(0, MaxX - MinX) * Math.Max(0, MaxY - MinY);
+
+            public double LegalFraction => SpawnArea <= 0 ? 0.0 : (double)TotalArea / SpawnArea;
+
+            private static long Area(int x0, int x1, int y0, int y1)
+                => (long)Math.Max(0, x1 - x0) * Math.Max(0, y1 - y0);
         }
 
         private bool IsOverlapping(int x, int y, int w, int h)
@@ -2484,33 +2698,10 @@ namespace ConditioningControlPanel.Services
 
                 if (File.Exists(chimePath))
                 {
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new AudioFileReader(chimePath);
-                            using var outputDevice = new WaveOutEvent();
-                            App.Audio?.ApplyPreferredDevice(outputDevice);
-
-                            var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                            var volume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
-                            audioFile.Volume = volume;
-
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-
-                            while (outputDevice.PlaybackState == PlaybackState.Playing)
-                            {
-                                Thread.Sleep(50);
-                            }
-
-                            App.Logger?.Information("🎉 Lucky Flash! 10x XP!");
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Debug("Failed to play lucky flash sound: {Error}", ex.Message);
-                        }
-                    });
+                    var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                    var volume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
+                    App.Audio?.PlayOneShot(chimePath, volume, "lucky-flash");
+                    App.Logger?.Information("🎉 Lucky Flash! 10x XP!");
                 }
             }
             catch (Exception ex)
@@ -2672,6 +2863,7 @@ namespace ConditioningControlPanel.Services
 
                 sound.Init(audioFile);
                 sound.Play();
+                App.Audio?.NoteOutputSuccess();
 
                 // Only assign to fields after everything succeeded
                 _currentAudioFile = audioFile;
@@ -2685,6 +2877,7 @@ namespace ConditioningControlPanel.Services
                 sound?.Dispose();
                 audioFile?.Dispose();
                 App.Logger.Warning("Could not play sound {Path}: {Error}", path, ex.Message);
+                App.Audio?.NoteOutputFailure("flash-sound", ex.Message);
                 return 5.0;
             }
         }
@@ -2900,11 +3093,15 @@ namespace ConditioningControlPanel.Services
                 // Closing a layered window mid-run is the render-thread-deadlock trigger.
                 if (window.IsLoaded && _windowPool.Count < WINDOW_POOL_MAX)
                 {
+                    using var _uiMark = VideoDiag.UiScope("FlashService.HideFlashWindow(layered)");
                     window.Hide();
                     _windowPool.Push(window);
                 }
                 else
                 {
+                    // The pool-overflow branch: the comment above says it, so breadcrumb it — if a
+                    // hang report's "last UI mark" is this, the deadlock trigger fired for real.
+                    using var _uiMark = VideoDiag.UiScope("FlashService.CloseFlashWindow(layered, pool full)");
                     window.Close();
                 }
             }

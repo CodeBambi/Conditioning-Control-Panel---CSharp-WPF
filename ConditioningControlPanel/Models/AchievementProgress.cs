@@ -310,6 +310,55 @@ public class AchievementProgress
     }
 
     /// <summary>
+    /// Pure decision function for the midnight-rollover path: given the last banked day and the
+    /// current day, should the day-advance path run right now?
+    ///
+    /// Deliberately pure (no clock, no settings, no services) so the correctness argument is a
+    /// property of two dates rather than of wall-clock timing, which cannot be tested by waiting.
+    ///
+    /// Returns false when:
+    ///  - <paramref name="lastBankedDate"/> is default/MinValue. That is the "no local launch
+    ///    history" case which <see cref="UpdateDailyStreak"/>'s startup path owns exclusively
+    ///    (it defers to the cloud restore). The rollover path must never claim a first run.
+    ///  - the day has not advanced (<c>today == lastBanked</c>) — today is already banked, so
+    ///    running again would be the double-count we must never produce.
+    ///  - the day went BACKWARDS (<c>today &lt; lastBanked</c>) — a clock correction or a
+    ///    timezone change. Re-running the gap logic there would compute a negative gap and reset
+    ///    a healthy streak to 1, so we simply stand still and let the next real day advance it.
+    /// </summary>
+    public static bool ShouldBankDayRollover(DateTime lastBankedDate, DateTime today)
+    {
+        var last = lastBankedDate.Date;
+        if (last == default) return false;
+        return today.Date > last;
+    }
+
+    /// <summary>
+    /// Day-advance entry point for a calendar rollover that happens while the app is RUNNING
+    /// (PC left asleep, or CCP simply left open across midnight). Both cases previously lost the
+    /// day entirely because <see cref="LastLaunchDate"/> was only ever written on the startup path.
+    ///
+    /// This intentionally delegates to <see cref="UpdateDailyStreak"/> rather than reimplementing
+    /// the day-advance: that keeps Streak Shields, Oopsie Insurance, the shielded-date bookkeeping
+    /// and the Season Recap hooks on exactly one code path, and it means <see cref="LastLaunchDate"/>
+    /// still has exactly one writer. Since UpdateDailyStreak early-returns when the day is already
+    /// banked, startup and rollover can never both bank the same date.
+    ///
+    /// Returns true if a day was banked (caller is then responsible for persisting).
+    /// </summary>
+    public bool TryAdvanceDayRollover()
+    {
+        if (!ShouldBankDayRollover(LastLaunchDate, DateTime.Today)) return false;
+
+        var before = LastLaunchDate.Date;
+        UpdateDailyStreak();
+
+        // UpdateDailyStreak is the sole writer of LastLaunchDate; if it did not move, nothing was
+        // banked (defensive — with the guard above it always moves) and the caller should not save.
+        return LastLaunchDate.Date != before;
+    }
+
+    /// <summary>
     /// Called after SkillTree is initialized to award streak bonus that was deferred during startup.
     /// </summary>
     public void AwardDeferredStreakBonus()

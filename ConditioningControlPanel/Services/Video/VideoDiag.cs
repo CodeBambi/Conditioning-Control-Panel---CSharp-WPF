@@ -137,6 +137,68 @@ namespace ConditioningControlPanel.Services
             catch { }
         }
 
+        // ------------------------------------------------------------------------------------
+        // UI-THREAD BREADCRUMB (#775/#777/#779/#780)
+        //
+        // Every one of those reports is the same shape: the dispatcher stops, nothing is logged,
+        // and the hang dump is the only evidence — because the UI thread died INSIDE a native
+        // call (a GDI screen capture, a layered-window Show/Hide/Close, a WriteableBitmap.Lock
+        // that waits on the render thread) rather than between two log statements. A trace line
+        // written on ENTRY would cost a disk queue push 60 times a second; a breadcrumb costs two
+        // volatile writes, and the watchdogs read it when the stall is already established. The
+        // next report then names the call the UI thread never returned from.
+        //
+        // CONTRACT: written ONLY by the UI thread (so the label and its timestamp cannot tear
+        // against each other in a way that matters), read by the heartbeat/watchdog threads.
+        // Scopes restore the previous label so nesting reads as the innermost active call.
+        // ------------------------------------------------------------------------------------
+
+        private static string _uiMark = "(idle)";
+        private static long _uiMarkTicks;
+
+        /// <summary>Stamp what the UI thread is about to do. UI thread only; never throws.</summary>
+        public static void UiMark(string label)
+        {
+            _uiMark = label;
+            Volatile.Write(ref _uiMarkTicks, DateTime.UtcNow.Ticks);
+        }
+
+        /// <summary>
+        /// <c>using var _ = VideoDiag.UiScope("Something.Risky");</c> — marks the UI thread as being
+        /// inside <paramref name="label"/> and restores the previous label on exit. Two volatile
+        /// writes per call, so it is safe on per-frame paths.
+        /// </summary>
+        public static UiMarkScope UiScope(string label) => new(label);
+
+        public readonly struct UiMarkScope : IDisposable
+        {
+            private readonly string _previous;
+            internal UiMarkScope(string label)
+            {
+                _previous = _uiMark;
+                UiMark(label);
+            }
+            public void Dispose() => UiMark(_previous);
+        }
+
+        /// <summary>"Compositor.Show (entered 41213ms ago)" — what the UI thread was last doing, for
+        /// the stall lines. Safe from any thread.</summary>
+        public static string UiMarkDescription
+        {
+            get
+            {
+                try
+                {
+                    var mark = _uiMark;
+                    var at = Volatile.Read(ref _uiMarkTicks);
+                    if (at == 0) return mark;
+                    long ageMs = (DateTime.UtcNow.Ticks - at) / TimeSpan.TicksPerMillisecond;
+                    return $"{mark} (entered {ageMs}ms ago)";
+                }
+                catch { return "(unknown)"; }
+            }
+        }
+
         /// <summary>Last <paramref name="maxLines"/> lines of the trace, for the bug report attachment.</summary>
         public static string Tail(int maxLines)
         {
@@ -257,7 +319,11 @@ namespace ConditioningControlPanel.Services
                         if (stall >= t && lastReported < t)
                         {
                             lastReported = t;
-                            Log("UI", $"dispatcher UNRESPONSIVE for {stall}ms (no posted callback has run)");
+                            // The breadcrumb is the whole point of this line now: a stall with
+                            // "last UI mark: Compositor.Present" reads completely differently from
+                            // one with "(idle)" (nothing instrumented was running - look at the
+                            // slow-op tracer instead).
+                            Log("UI", $"dispatcher UNRESPONSIVE for {stall}ms (no posted callback has run) - last UI mark: {UiMarkDescription}");
                             break;
                         }
                     }

@@ -245,6 +245,8 @@
   "tooltip_scale_of_flash_images_100_original_size_200_d": "플래시 이미지 크기.\r\n100% = 원본 크기, 200% = 2배 크기.",
   "setting_size": "크기",
   "tooltip_transparency_of_flash_images_lower_more_see_t": "플래시 이미지 투명도.\r\n낮을수록 투명, 100% = 완전 불투명.",
+  "setting_avoid_screen_center": "화면 중앙 피하기",
+  "tooltip_keep_flash_images_out_of_a_square_in_the_midd": "모든 화면 중앙의 정사각형 영역에 플래시 이미지가 나타나지 않도록 합니다.\r\n게임에 유용 - 조준점을 가리지 않습니다. 슬라이더로 영역 크기를 조절합니다 (화면 짧은 변 대비 %).",
   "tooltip_fade_in_out_animation_speed_0_instant_appear": "페이드 인/아웃 애니메이션 속도.\r\n0% = 즉시 나타남/사라짐.\r\n100% = 부드러운 페이드.",
   "setting_fade": "페이드",
   "tooltip_how_long_images_stay_on_screen_only_used_when": "이미지가 화면에 머무는 시간.\r\n오디오 비활성화 시에만 사용돼요.",
@@ -2769,5 +2771,16 @@
   "wizard_fail_hint_generic": "아무 응답이 없어요. 제공자가 실행 중인지 확인하고 다시 시도하세요.",
   "wizard_devices_found": "찾음:",
   "wizard_test_buzz": "테스트 진동",
-  "wizard_test_failed": "테스트가 토이에 닿지 않았어요 - 연결을 확인하고 다시 시도하세요."
+  "wizard_test_failed": "테스트가 토이에 닿지 않았어요 - 연결을 확인하고 다시 시도하세요.",
+  "btn_my_reports": "내 신고 내역",
+  "my_reports_title": "내 신고 내역",
+  "my_reports_subtitle": "지금까지 보낸 버그 신고와 제안의 접수 번호입니다. 내용을 추가하려면 디스코드에서 이 번호를 알려주세요.",
+  "my_reports_empty": "아직 신고 내역이 없습니다.",
+  "my_reports_kind_bug": "버그 신고",
+  "my_reports_kind_suggestion": "제안",
+  "bug_report_token_label": "접수 번호",
+  "bug_report_token_hint": "이 번호를 저장해 두세요. 내용을 추가하거나 문의할 때 디스코드에서 이 번호를 알려주시면 됩니다.",
+  "video_grace_paused_title": "일시정지됨",
+  "btn_video_grace_resume": "재생",
+  "video_grace_auto_resume_in": "{0}초 후 재개"
 }

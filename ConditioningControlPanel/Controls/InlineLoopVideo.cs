@@ -29,9 +29,6 @@ namespace ConditioningControlPanel.Controls
     /// </summary>
     public sealed class InlineLoopVideo : IDisposable
     {
-        [DllImport("kernel32.dll", EntryPoint = "RtlMoveMemory")]
-        private static extern void CopyMemory(IntPtr dest, IntPtr src, uint count);
-
         private readonly string _path;
         private readonly uint _w;
         private readonly uint _h;
@@ -42,6 +39,14 @@ namespace ConditioningControlPanel.Controls
         private IntPtr _frameBuffer = IntPtr.Zero;
         private volatile bool _frameReady;
         private volatile bool _bufferValid;
+
+        /// <summary>Managed staging copy of the newest decoded frame — see <see cref="OnRendering"/>
+        /// for why the native buffer is never read while the bitmap lock is held.</summary>
+        private byte[] _staging = Array.Empty<byte>();
+
+        /// <summary>Per-frame budget for <c>WriteableBitmap.TryLock</c>; a wedged render thread must
+        /// cost a frame, not the dispatcher.</summary>
+        private static readonly Duration BlitLockBudget = new(TimeSpan.FromMilliseconds(150));
 
         private VlcMediaPlayer? _player;
         private Media? _media;
@@ -171,11 +176,30 @@ namespace ConditioningControlPanel.Controls
             _renderingHooked = false;
         }
 
+        /// <summary>
+        /// Per-frame blit, UI thread. Two strictly separated phases — the same split
+        /// <c>VideoService.BlurVmemSurface.OnRendering</c> had to make for the #632/#636/#687 freeze
+        /// cluster, which this control's ancestor code predates:
+        ///
+        ///   1. Under <c>_bufferLock</c>: native buffer -> managed staging. Nothing here blocks on
+        ///      another thread.
+        ///   2. Lock RELEASED: <c>TryLock</c> / copy / <c>AddDirtyRect</c> / <c>Unlock</c>.
+        ///
+        /// Doing step 2 while still holding <c>_bufferLock</c> is a three-thread deadlock:
+        /// <c>WriteableBitmap.Lock()</c> waits on the WPF render thread, and the LibVLC decoder
+        /// thread parks on <c>_bufferLock</c> inside <c>LockCallback</c> — with the decoder parked in
+        /// a native callback, <c>player.Stop()</c> can never return. And <c>Lock()</c> has no
+        /// timeout, so a render thread that never drops its read lock takes the dispatcher with it.
+        /// One extra memcpy per frame buys "a stalled render thread can only ever cost frames".
+        /// </summary>
         private void OnRendering(object? sender, EventArgs e)
         {
             if (!_bufferValid || !_frameReady) return;
             _frameReady = false;
 
+            int bytes = (int)(_w * _h * 4);
+
+            // ---- Phase 1: native -> managed, under the lock, no blocking calls. ----
             bool got = false;
             try
             {
@@ -183,10 +207,26 @@ namespace ConditioningControlPanel.Controls
                 if (!got) return;
                 if (!_bufferValid || _frameBuffer == IntPtr.Zero) return;
 
-                _bitmap.Lock();
+                if (_staging.Length < bytes) _staging = new byte[bytes];
+                Marshal.Copy(_frameBuffer, _staging, 0, bytes);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("InlineLoopVideo: frame snapshot error: {Error}", ex.Message);
+                return;
+            }
+            finally
+            {
+                if (got) Monitor.Exit(_bufferLock);
+            }
+
+            // ---- Phase 2: managed -> bitmap, lock released, bounded wait on the render thread. ----
+            try
+            {
+                if (!_bitmap.TryLock(BlitLockBudget)) return; // render thread is busy: drop the frame
                 try
                 {
-                    CopyMemory(_bitmap.BackBuffer, _frameBuffer, _w * _h * 4);
+                    Marshal.Copy(_staging, 0, _bitmap.BackBuffer, bytes);
                     _bitmap.AddDirtyRect(new Int32Rect(0, 0, (int)_w, (int)_h));
                 }
                 finally
@@ -197,10 +237,6 @@ namespace ConditioningControlPanel.Controls
             catch (Exception ex)
             {
                 App.Logger?.Debug("InlineLoopVideo: frame copy error: {Error}", ex.Message);
-            }
-            finally
-            {
-                if (got) Monitor.Exit(_bufferLock);
             }
         }
 

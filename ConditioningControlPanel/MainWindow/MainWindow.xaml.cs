@@ -170,8 +170,7 @@ namespace ConditioningControlPanel
         
         // Avatar Tube Window
         private AvatarTubeWindow? _avatarTubeWindow;
-        private WaveOutEvent? _levelUpSoundDevice;
-        private AudioFileReader? _levelUpSoundFile;
+        private Services.AudioPlaybackHandle? _levelUpSoundHandle;
         private bool _avatarWasAttachedBeforeMaximize = false;
         private bool _avatarWasAttachedBeforeBrowserFullscreen = false;
 
@@ -688,52 +687,17 @@ namespace ConditioningControlPanel
                 // Stop any previous level up sound still playing
                 StopLevelUpSound();
 
-                Task.Run(() =>
-                {
-                    try
-                    {
-                        var audioFile = new AudioFileReader(soundPath);
-                        var outputDevice = new WaveOutEvent();
-                        App.Audio?.ApplyPreferredDevice(outputDevice);
+                var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.2625f;
 
-                        var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                        var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.2625f;
-                        audioFile.Volume = Math.Max(0.01f, curvedVolume);
+                // AudioService owns the device + its disposal (deferred past NAudio's own unwind,
+                // which is what the old "Handle is not initialized" workaround here was for), and
+                // it never opens the device on the dispatcher — #778/#779.
+                // Stop() on an already-finished handle is a no-op, so no completion bookkeeping is
+                // needed — StopLevelUpSound above already ran before this one started.
+                _levelUpSoundHandle = App.Audio?.PlayOneShot(soundPath, Math.Max(0.01f, curvedVolume), "level-up");
 
-                        outputDevice.Init(audioFile);
-                        outputDevice.PlaybackStopped += (s, e) =>
-                        {
-                            // Defer disposal — disposing inside PlaybackStopped causes
-                            // "Handle is not initialized" when NAudio's internal cleanup
-                            // races with our Dispose call.
-                            Task.Run(() =>
-                            {
-                                try
-                                {
-                                    Thread.Sleep(50); // Let NAudio finish its internal cleanup
-                                    outputDevice.Dispose();
-                                    audioFile.Dispose();
-                                    if (_levelUpSoundDevice == outputDevice)
-                                    {
-                                        _levelUpSoundDevice = null;
-                                        _levelUpSoundFile = null;
-                                    }
-                                }
-                                catch (Exception) { }
-                            });
-                        };
-
-                        _levelUpSoundDevice = outputDevice;
-                        _levelUpSoundFile = audioFile;
-                        outputDevice.Play();
-
-                        App.Logger?.Debug("Level up sound played from: {Path}", soundPath);
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning("Failed to play level up sound: {Error}", ex.Message);
-                    }
-                });
+                App.Logger?.Debug("Level up sound played from: {Path}", soundPath);
             }
             catch (Exception ex)
             {
@@ -745,11 +709,8 @@ namespace ConditioningControlPanel
         {
             try
             {
-                _levelUpSoundDevice?.Stop();
-                _levelUpSoundDevice?.Dispose();
-                _levelUpSoundFile?.Dispose();
-                _levelUpSoundDevice = null;
-                _levelUpSoundFile = null;
+                _levelUpSoundHandle?.Stop();
+                _levelUpSoundHandle = null;
             }
             catch { }
         }
@@ -821,6 +782,22 @@ namespace ConditioningControlPanel
             // those presses can't fall into the "not running" branch and exit the whole app.
             // Reactivates on its own once the game window closes (IsActive flips false).
             if (Services.Chaos.DtrhHostService.IsActive) { VideoDiag.Log("PANIC", "handed off to the DtRH web game window"); return; }
+
+            // #735 "grace pause": while a mandatory video is really on screen, the FIRST panic press
+            // pauses it behind a small Paused/Resume card instead of stopping the engine — the user
+            // may be pausing because someone walked in, and a bark, an achievement track and a whole
+            // session teardown are all the wrong answer to that. Deliberately placed AFTER the two
+            // chaos/DtRH hand-offs (their panic behaviour must not change) and BEFORE the bark, so a
+            // grace pause is silent. One per video run; press 2 falls straight through to everything
+            // below, press 3 exits the app — three taps from a playing video to exit, as before + 1.
+            //
+            // The early return leaves _panicPressCount/_lastPanicTime untouched ON PURPOSE: the pause
+            // is not a rung of the ladder, so it must not advance (or reset) it.
+            if (App.Video?.TryGracePauseFromPanic() == true)
+            {
+                VideoDiag.Log("PANIC", "press consumed as video grace pause");
+                return;
+            }
 
             // Let the companion say a calm, persona-neutral safety line (highest priority,
             // bypasses the bark gate). Fired before the stop flow so it's not suppressed.

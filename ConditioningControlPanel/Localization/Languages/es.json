@@ -245,6 +245,8 @@
   "tooltip_scale_of_flash_images_100_original_size_200_d": "Escala de las imágenes flash.\r\n100% = tamaño original, 200% = doble tamaño.",
   "setting_size": "Tamaño",
   "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparencia de las imágenes flash.\r\nMenor = más transparente, 100% = completamente sólido.",
+  "setting_avoid_screen_center": "Evitar el centro de la pantalla",
+  "tooltip_keep_flash_images_out_of_a_square_in_the_midd": "Mantiene las imágenes flash fuera de un cuadrado en el centro de cada pantalla.\r\nIdeal para jugar: nada tapa tu punto de mira. El control ajusta el tamaño del cuadro (% del lado más corto de la pantalla).",
   "tooltip_fade_in_out_animation_speed_0_instant_appear": "Velocidad de animación de aparición/desaparición.\r\n0% = aparición/desaparición instantánea.\r\n100% = desvanecimiento suave y lento.",
   "setting_fade": "Fundido",
   "tooltip_how_long_images_stay_on_screen_only_used_when": "Cuánto tiempo permanecen las imágenes en pantalla.\r\nSolo se usa cuando el audio está desactivado.",
@@ -2762,5 +2764,16 @@
   "wizard_fail_hint_generic": "Nadie respondió. Comprueba que el proveedor esté funcionando y vuelve a intentarlo.",
   "wizard_devices_found": "Encontrado:",
   "wizard_test_buzz": "Vibración de prueba",
-  "wizard_test_failed": "La prueba no llegó al juguete - revisa la conexión e inténtalo de nuevo."
+  "wizard_test_failed": "La prueba no llegó al juguete - revisa la conexión e inténtalo de nuevo.",
+  "btn_my_reports": "Mis informes",
+  "my_reports_title": "Mis informes",
+  "my_reports_subtitle": "Números de informe de los errores y sugerencias que has enviado. Menciona uno en Discord si quieres añadir detalles.",
+  "my_reports_empty": "Aún no hay informes.",
+  "my_reports_kind_bug": "Informe de error",
+  "my_reports_kind_suggestion": "Sugerencia",
+  "bug_report_token_label": "Tu número de informe",
+  "bug_report_token_hint": "Guarda este número. Menciónalo en Discord si quieres añadir detalles o preguntar por tu informe.",
+  "video_grace_paused_title": "En pausa",
+  "btn_video_grace_resume": "Reanudar",
+  "video_grace_auto_resume_in": "Se reanuda en {0} s"
 }

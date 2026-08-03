@@ -1114,76 +1114,16 @@ namespace ConditioningControlPanel
 
         // ============ AUDIO ============
 
-        private static WaveOutEvent GetPooledDevice()
-        {
-            lock (_audioPoolLock)
-            {
-                if (_audioPool.Count > 0)
-                    return _audioPool.Dequeue();
-            }
-            // Pool is drained when user changes output device (DrainAudioDevicePool),
-            // so we only need to apply on construction.
-            var w = new WaveOutEvent();
-            App.Audio?.ApplyPreferredDevice(w);
-            return w;
-        }
-
         /// <summary>
-        /// Disposes pooled audio devices. Call after the user changes the output device
-        /// setting so the next quiz sound re-creates devices on the new endpoint.
+        /// No-op kept for the settings hook: the WaveOutEvent pool this used to drain is gone.
+        /// AudioService re-resolves the output device per clip and invalidates its own cache
+        /// on the setting change and on endpoint churn (#778/#779).
         /// </summary>
-        public static void DrainAudioDevicePool()
-        {
-            lock (_audioPoolLock)
-            {
-                while (_audioPool.Count > 0)
-                {
-                    try { _audioPool.Dequeue().Dispose(); } catch { }
-                }
-            }
-        }
-
-        private static void ReturnDevice(WaveOutEvent device)
-        {
-            lock (_audioPoolLock)
-            {
-                if (_audioPool.Count < MAX_POOLED_DEVICES)
-                    _audioPool.Enqueue(device);
-                else
-                    device.Dispose();
-            }
-        }
+        public static void DrainAudioDevicePool() { }
 
         private static void PlaySoundAsync(string path, float volume)
         {
-            Task.Run(() =>
-            {
-                WaveOutEvent? outputDevice = null;
-                AudioFileReader? audioFile = null;
-                try
-                {
-                    audioFile = new AudioFileReader(path) { Volume = volume };
-                    outputDevice = GetPooledDevice();
-                    outputDevice.Init(audioFile);
-                    outputDevice.Play();
-
-                    while (outputDevice.PlaybackState == PlaybackState.Playing)
-                        Thread.Sleep(50);
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("Quiz audio playback failed: {Error}", ex.Message);
-                }
-                finally
-                {
-                    audioFile?.Dispose();
-                    if (outputDevice != null)
-                    {
-                        try { outputDevice.Stop(); } catch { }
-                        ReturnDevice(outputDevice);
-                    }
-                }
-            });
+            App.Audio?.PlayOneShot(path, volume, "quiz-sfx");
         }
 
         private static float GetVolume(float multiplier = 1f)

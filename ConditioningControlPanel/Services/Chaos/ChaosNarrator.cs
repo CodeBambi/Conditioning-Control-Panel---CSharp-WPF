@@ -105,7 +105,11 @@ public static class ChaosNarrator
     /// <summary>Force-stop ducking + clear state (run teardown).</summary>
     public static void Reset()
     {
-        try { Application.Current?.Dispatcher.Invoke(() => { _endTimer?.Stop(); }); } catch { }
+        // RunOnUI (BeginInvoke), not a blocking Invoke: Reset() is called from chaos teardown on
+        // arbitrary threads and nothing here needs a result. An unbounded cross-thread Invoke just
+        // pins the caller's thread for as long as the UI thread is busy - and permanently if it
+        // wedges, which is how one freeze cascades into thread-pool starvation (#779: threads +200).
+        try { ConditioningControlPanel.Helpers.DispatcherHelper.RunOnUI(() => { _endTimer?.Stop(); }); } catch { }
         Interlocked.Exchange(ref _busyUntilTicks, 0);
         EndDuck();
     }
@@ -185,25 +189,6 @@ public static class ChaosNarrator
     private static void PlayAsync(string path)
     {
         float vol = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
-        Task.Run(() =>
-        {
-            WaveOutEvent? outputDevice = null;
-            AudioFileReader? audioFile = null;
-            try
-            {
-                audioFile = new AudioFileReader(path) { Volume = vol };
-                outputDevice = new WaveOutEvent();
-                App.Audio?.ApplyPreferredDevice(outputDevice);
-                outputDevice.Init(audioFile);
-                outputDevice.Play();
-                while (outputDevice.PlaybackState == PlaybackState.Playing) Thread.Sleep(40);
-            }
-            catch (Exception ex) { App.Logger?.Warning("ChaosNarrator playback failed: {E}", ex.Message); }
-            finally
-            {
-                try { outputDevice?.Dispose(); } catch { }
-                try { audioFile?.Dispose(); } catch { }
-            }
-        });
+        App.Audio?.PlayOneShot(path, vol, "chaos-narrator");
     }
 }

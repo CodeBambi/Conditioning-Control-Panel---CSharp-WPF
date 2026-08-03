@@ -166,6 +166,8 @@
                              BorderThickness="0" CaretBrush="{DynamicResource PinkBrush}"
                              VerticalAlignment="Center"
                              TextChanged="TxtInput_TextChanged"
+                             ContextMenu="{x:Null}"
+                             AllowDrop="False"
                              PreviewKeyDown="TxtInput_PreviewKeyDown"/>
                     <TextBlock Grid.Column="1" Text="{loc:Str label_esc_to_exit}" Foreground="{DynamicResource PanelAccentBrush}" FontSize="11"
                                VerticalAlignment="Center" Margin="10,0,0,0"/>
