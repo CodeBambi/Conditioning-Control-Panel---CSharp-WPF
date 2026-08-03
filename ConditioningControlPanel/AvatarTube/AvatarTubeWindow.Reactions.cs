@@ -244,22 +244,7 @@ namespace ConditioningControlPanel
                 // Keep fallback sounds quieter (50% of master)
                 var volume = (float)Math.Pow(masterVolume, 1.5) * 0.5f;
 
-                Task.Run(() =>
-                {
-                    try
-                    {
-                        using var audioFile = new NAudio.Wave.AudioFileReader(soundPath);
-                        audioFile.Volume = volume;
-                        using var outputDevice = new NAudio.Wave.WaveOutEvent();
-                        outputDevice.Init(audioFile);
-                        outputDevice.Play();
-                        while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
-                        {
-                            System.Threading.Thread.Sleep(50);
-                        }
-                    }
-                    catch { /* Ignore audio errors */ }
-                });
+                App.Audio?.PlayOneShot(soundPath, volume, "bubble-fallback");
             }
             catch (Exception ex)
             {

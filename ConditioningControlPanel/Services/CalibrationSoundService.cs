@@ -42,34 +42,7 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
-                Task.Run(() =>
-                {
-                    WaveOutEvent? device = null;
-                    AudioFileReader? reader = null;
-                    try
-                    {
-                        reader = new AudioFileReader(path) { Volume = curved };
-                        device = new WaveOutEvent();
-                        App.Audio?.ApplyPreferredDevice(device);
-                        device.Init(reader);
-                        device.Play();
-                        while (device.PlaybackState == PlaybackState.Playing)
-                            Thread.Sleep(50);
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning("CalibrationSoundService playback failed: {Error}", ex.Message);
-                    }
-                    finally
-                    {
-                        reader?.Dispose();
-                        if (device != null)
-                        {
-                            try { device.Stop(); } catch { }
-                            device.Dispose();
-                        }
-                    }
-                });
+                App.Audio?.PlayOneShot(path, curved, "calibration");
             }
             catch (Exception ex)
             {

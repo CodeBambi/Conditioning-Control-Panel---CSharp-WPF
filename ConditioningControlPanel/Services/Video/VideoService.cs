@@ -6583,28 +6583,9 @@ namespace ConditioningControlPanel.Services
 
                 if (File.Exists(popPath))
                 {
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new AudioFileReader(popPath);
-                            // Apply master volume to attention target pop sound
-                            var masterVolume = App.Settings?.Current?.MasterVolume ?? 100;
-                            audioFile.Volume = 0.6f * (masterVolume / 100f);
-                            using var outputDevice = new WaveOutEvent();
-                            App.Audio?.ApplyPreferredDevice(outputDevice);
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-                            while (outputDevice.PlaybackState == PlaybackState.Playing)
-                            {
-                                Thread.Sleep(50);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Debug("Pop sound playback failed: {Error}", ex.Message);
-                        }
-                    });
+                    // Apply master volume to attention target pop sound
+                    var masterVolume = App.Settings?.Current?.MasterVolume ?? 100;
+                    App.Audio?.PlayOneShot(popPath, 0.6f * (masterVolume / 100f), "target-pop");
                 }
             }
             catch (Exception ex)

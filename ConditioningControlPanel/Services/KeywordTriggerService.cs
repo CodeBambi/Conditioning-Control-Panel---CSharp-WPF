@@ -1952,6 +1952,7 @@ namespace ConditioningControlPanel.Services
 
                     _triggerPlayer.Init(_triggerAudioFile);
                     _triggerPlayer.Play();
+                    App.Audio?.NoteOutputSuccess();
 
                     App.Logger?.Information("PlayTriggerAudio: playing '{Path}' curved={Curve:0.00} master={Master:0.00} thread={Thread}",
                         Path.GetFileName(path), curvedVolume, masterVolume, System.Threading.Thread.CurrentThread.ManagedThreadId);
@@ -1961,6 +1962,8 @@ namespace ConditioningControlPanel.Services
                 catch (Exception ex)
                 {
                     App.Logger?.Warning("PlayTriggerAudio: Error playing audio: {Error}", ex.Message);
+                    App.Audio?.NoteOutputFailure("keyword-trigger", ex.Message);
+                    StopTriggerAudio(); // Init/Play threw with the fields already assigned — free them now
                     return 0;
                 }
             }

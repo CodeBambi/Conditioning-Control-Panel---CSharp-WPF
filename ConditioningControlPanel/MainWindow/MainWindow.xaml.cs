@@ -170,8 +170,7 @@ namespace ConditioningControlPanel
         
         // Avatar Tube Window
         private AvatarTubeWindow? _avatarTubeWindow;
-        private WaveOutEvent? _levelUpSoundDevice;
-        private AudioFileReader? _levelUpSoundFile;
+        private Services.AudioPlaybackHandle? _levelUpSoundHandle;
         private bool _avatarWasAttachedBeforeMaximize = false;
         private bool _avatarWasAttachedBeforeBrowserFullscreen = false;
 
@@ -688,52 +687,17 @@ namespace ConditioningControlPanel
                 // Stop any previous level up sound still playing
                 StopLevelUpSound();
 
-                Task.Run(() =>
-                {
-                    try
-                    {
-                        var audioFile = new AudioFileReader(soundPath);
-                        var outputDevice = new WaveOutEvent();
-                        App.Audio?.ApplyPreferredDevice(outputDevice);
+                var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.2625f;
 
-                        var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                        var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.2625f;
-                        audioFile.Volume = Math.Max(0.01f, curvedVolume);
+                // AudioService owns the device + its disposal (deferred past NAudio's own unwind,
+                // which is what the old "Handle is not initialized" workaround here was for), and
+                // it never opens the device on the dispatcher — #778/#779.
+                // Stop() on an already-finished handle is a no-op, so no completion bookkeeping is
+                // needed — StopLevelUpSound above already ran before this one started.
+                _levelUpSoundHandle = App.Audio?.PlayOneShot(soundPath, Math.Max(0.01f, curvedVolume), "level-up");
 
-                        outputDevice.Init(audioFile);
-                        outputDevice.PlaybackStopped += (s, e) =>
-                        {
-                            // Defer disposal — disposing inside PlaybackStopped causes
-                            // "Handle is not initialized" when NAudio's internal cleanup
-                            // races with our Dispose call.
-                            Task.Run(() =>
-                            {
-                                try
-                                {
-                                    Thread.Sleep(50); // Let NAudio finish its internal cleanup
-                                    outputDevice.Dispose();
-                                    audioFile.Dispose();
-                                    if (_levelUpSoundDevice == outputDevice)
-                                    {
-                                        _levelUpSoundDevice = null;
-                                        _levelUpSoundFile = null;
-                                    }
-                                }
-                                catch (Exception) { }
-                            });
-                        };
-
-                        _levelUpSoundDevice = outputDevice;
-                        _levelUpSoundFile = audioFile;
-                        outputDevice.Play();
-
-                        App.Logger?.Debug("Level up sound played from: {Path}", soundPath);
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning("Failed to play level up sound: {Error}", ex.Message);
-                    }
-                });
+                App.Logger?.Debug("Level up sound played from: {Path}", soundPath);
             }
             catch (Exception ex)
             {
@@ -745,11 +709,8 @@ namespace ConditioningControlPanel
         {
             try
             {
-                _levelUpSoundDevice?.Stop();
-                _levelUpSoundDevice?.Dispose();
-                _levelUpSoundFile?.Dispose();
-                _levelUpSoundDevice = null;
-                _levelUpSoundFile = null;
+                _levelUpSoundHandle?.Stop();
+                _levelUpSoundHandle = null;
             }
             catch { }
         }

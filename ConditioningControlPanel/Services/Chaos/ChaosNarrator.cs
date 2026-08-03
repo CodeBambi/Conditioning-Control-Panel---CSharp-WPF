@@ -185,25 +185,6 @@ public static class ChaosNarrator
     private static void PlayAsync(string path)
     {
         float vol = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
-        Task.Run(() =>
-        {
-            WaveOutEvent? outputDevice = null;
-            AudioFileReader? audioFile = null;
-            try
-            {
-                audioFile = new AudioFileReader(path) { Volume = vol };
-                outputDevice = new WaveOutEvent();
-                App.Audio?.ApplyPreferredDevice(outputDevice);
-                outputDevice.Init(audioFile);
-                outputDevice.Play();
-                while (outputDevice.PlaybackState == PlaybackState.Playing) Thread.Sleep(40);
-            }
-            catch (Exception ex) { App.Logger?.Warning("ChaosNarrator playback failed: {E}", ex.Message); }
-            finally
-            {
-                try { outputDevice?.Dispose(); } catch { }
-                try { audioFile?.Dispose(); } catch { }
-            }
-        });
+        App.Audio?.PlayOneShot(path, vol, "chaos-narrator");
     }
 }
