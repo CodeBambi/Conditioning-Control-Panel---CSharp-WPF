@@ -204,11 +204,68 @@ Buttplug device index is session-scoped and unusable as a persisted key.
 - [ ] Converters in Window.Resources (DataTemplate rule); `DispatcherPriority.Normal` not Loaded (starvation trap).
 
 ### Phase F — Features (after E; each cuttable)
-- [ ] **Toy-button input**: attention-check option "squeeze your toy" (VideoService attention checks), lock-card alternative confirm, quest interaction; strength-changed → user-override backoff.
-- [ ] **FunScript**: auto-load `<video>.funscript` beside videos + script folder; position for thrusters (lead 300 ms coast), stroke→vibe envelope conversion otherwise.
-- [ ] **Audio-sync v2**: band-split bass→motor0 / highs→motor1 on multi-vibe toys; surface the 6 hidden DSP knobs in an Advanced expander.
-- [ ] **Flash-luminance sync**: flash/subliminal frame brightness → continuous layer (sample the already-decoded bitmap, cheap).
-- [ ] **Temperament dial**: presets (Gentle/Tease/Cruel/…) = multipliers over mixer params.
+ENGINE side is done and headless-functional (defaults ARE the shipping behaviour — no UI binds any
+of it yet). UI side is Phase E/G.
+- [x] **Toy-button input** (engine): `Services/Haptics/ToyInputService.cs` — debounced `ButtonPressed`
+      + awaitable `WaitForButtonAsync(timeoutMs, ct)`, `StrengthChanged` → mixer back-off.
+      ONE consumer wired: VideoService attention checks (`AttentionCheckToyButton`, default OFF —
+      a press ADDS to the mouse click, never replaces it; success posts `ToyButtonReward`).
+  - [ ] UI: expose the toggle; remaining consumers (lock-card alternative confirm, quest interaction).
+- [x] **FunScript** (engine): `Services/Haptics/FunScript.cs` (pure parser/sampler, unit-tested) +
+      `Services/Haptics/FunScriptService.cs` (wiring). Auto-loads `<video>.funscript` then
+      `<video-dir>\funscripts\<name>.funscript`; Position actuators get a 300 ms lead, everything
+      else gets the speed→intensity envelope on `HapticLayer.Pattern`. Default ON, zero-config.
+  - [ ] UI: none required; optional "script loaded" indicator + a script-folder picker.
+- [x] **Audio-sync v2 band-split** (engine): `AudioSyncSettings.BandSplit` (`band_split`, default OFF)
+      → `AudioAnalyzer.Analyze(..., wantBands, out low, out high)` from the SAME FFT pass →
+      `ChunkManager.LowBandTrack/HighBandTrack` → `HapticService.SetSyncIntensityAsync(low, high)`
+      → `HapticMixer.SetLayerPerActuator`. Only engages when a connected toy has ≥2 Vibrate
+      actuators; 1-motor toys are byte-identical to before.
+  - [ ] UI: the band-split toggle + the 6 hidden DSP knobs in an Advanced expander.
+- [x] **Flash-luminance sync** (engine): `HapticSettings.LuminanceSyncEnabled` (default OFF) +
+      `LuminanceSyncIntensity` (0.5). `FlashService.ApplyLuminanceSync` samples the ALREADY-DECODED
+      frozen `BitmapSource` down to 8×8 (WIC, no re-decode, per-file cached) → `HapticLayer.Luminance`
+      with `autoZeroMs = the flash's own lifetime`, so there is no hide hook to get wrong.
+      **SubliminalService has no image path** (text-only + whisper audio), so nothing was wired there.
+  - [ ] UI: expose toggle + intensity.
+- [ ] **Temperament dial**: presets (Gentle/Tease/Cruel/…) = multipliers over mixer params. NOT STARTED.
+
+**Decisions made in Phase F (Phase E/G need these):**
+- **Contract extensions: none.** `HapticContracts.cs` was not touched — `HapticLayer.Luminance` and
+  `HapticEventKind.ToyButtonReward` were already reserved by Phase A.
+- **New mixer surface (additive):**
+  - `HapticMixer.SetLayerPerActuator(HapticLayer, double[]? perMotor)` — a layer may carry a
+    per-vibration-motor breakdown. The scalar layer value is kept at `max(perMotor)`, so a toy with
+    <2 Vibrate actuators sees exactly the old behaviour. The split only sets the RATIO between
+    motors; soft-ramp, master multiplier, master cap and per-device trim still apply once each.
+    Null clears it; `SetLayer`/`PlayLayerEnvelope`/`ClearAll` all clear it implicitly.
+  - `HapticMixer.SuppressLayersUntil(DateTime utc)` + `AreLayersSuppressed` — mutes every CONTINUOUS
+    layer for a while when the user changes strength ON the toy. Transients deliberately still fire
+    (an achievement buzz is an event, not the app taking the dial back).
+- **New facade surface (additive):** `HapticService.ToyInput`, `.FunScript`, `.SetLayerPerActuator`,
+  `.SuppressContinuousLayers(seconds)`, `.MaxVibrateMotors`, `.HasPositionActuator`,
+  `.SetPositionAsync(0..1)` (fans out to every Position-capable toy via the mixer's per-device
+  `SetPositionAsync`), and an overload `SetSyncIntensityAsync(low, high)` for the band split.
+- **No App.xaml.cs registration.** That file belongs to the UI rebuild, so `ToyInputService` and
+  `FunScriptService` are constructed by `HapticService`'s ctor and disposed by its `Dispose`.
+  Consumers reach them as `App.Haptics.ToyInput` / `App.Haptics.FunScript`.
+- **`HapticSettingsV2.SchemaVersion` is now 2.** Schema 1 seeded the `Luminance` LAYER row disabled
+  ("Phase F, off until it exists"); pass 2 enables that row, because the FEATURE toggle
+  (`LuminanceSyncEnabled`, default false) is the real gate and a disabled layer row would have
+  silently vetoed it. No legacy property was renamed, removed or reset.
+- **Video hooks are three surgical edits** in `Services/Video/VideoService.cs`: FunScript start next
+  to `StartVideoBackgroundVibeAsync` in `StartVideoPlayback`, FunScript stop next to
+  `StopVideoBackgroundVibeAsync` in `CloseAll`, and the toy-button alternative inside `SpawnTarget`
+  (subscribe on spawn, unhook on hit or expiry, `FloatingText.Hit()` = the same idempotent pipeline
+  the mouse and gaze-click use).
+- **FunScript sync uses the existing `PrimaryPlaybackTimeMsChanged` event**, extrapolated with the
+  wall clock between reports at 20 Hz; no report for 900 ms = paused/stopped ⇒ the layer zeroes.
+  A seek is just a report that disagrees with the extrapolation, so it self-corrects.
+- **Open / needs a real toy:** (a) `Position:` inside a Lovense `Function` action string is still
+  assumed (Phase B's open item) — the FunScript position path inherits that risk. (b) The 300 ms
+  position lead and the 10→500 units/s speed→intensity mapping are from the published conversion
+  conventions, not measured on hardware. (c) Toy Events button frames were never captured from a
+  real toy (Phase B open item (a)), so the attention-check alternative is untested end to end.
 
 ### Phase G — Ship prep
 - [ ] Localization keys → all 9 `Localization/Languages/*.json` (STRICT JSON, `\n` escaped, never hand-flip line endings).

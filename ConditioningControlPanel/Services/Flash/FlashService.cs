@@ -1434,6 +1434,11 @@ namespace ConditioningControlPanel.Services
                     ForceTopmost(window);
                 }
 
+                // PHASE F — luminance sync. One bool test when the feature is off. Runs after the
+                // visual is up so it can never delay the flash, and rides the flash's own lifetime
+                // through the mixer's auto-zero (no hide hook, so no way to leave the layer stuck).
+                if (!suppressHaptic) ApplyLuminanceSync(imageData, lifetimeMs);
+
                 lock (_lockObj)
                 {
                     _activeWindows.Add(window);
@@ -1478,6 +1483,117 @@ namespace ConditioningControlPanel.Services
                 App.Achievements?.TrackFlashImage();
             }
         }
+
+        #region Luminance Sync (Phase F)
+
+        /// <summary>Average luminance per image file, 0..1. The sample is a fixed property of the
+        /// file, so it is computed once and reused for every later flash of the same image — a
+        /// 25-flash burst of repeats costs 25 dictionary hits, not 25 downscales.</summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, double> _luminanceCache =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Downscale target for the luminance sample. 8x8 is enough for an average and
+        /// small enough that the WIC scaler's work is dominated by the (already decoded, already
+        /// display-sized) source read.</summary>
+        private const int LuminanceSampleSize = 8;
+
+        /// <summary>
+        /// PHASE F: push the flash's average brightness onto the continuous Luminance layer for as
+        /// long as the flash is up. The layer self-clears (mixer auto-zero) after
+        /// <paramref name="lifetimeMs"/>, so a flash that dies in an unusual way (panic key, engine
+        /// stop, crash-path teardown) still cannot leave the toy humming.
+        ///
+        /// Never re-decodes: it samples the frozen BitmapSource the flash is already showing.
+        /// </summary>
+        private void ApplyLuminanceSync(LoadedImageData imageData, int lifetimeMs)
+        {
+            try
+            {
+                var haptics = App.Haptics;
+                if (haptics == null || !haptics.Settings.LuminanceSyncEnabled) return;      // the whole cost when off
+                if (imageData == null || imageData.Frames.Count == 0) return;
+
+                var scale = haptics.Settings.LuminanceSyncIntensity;
+                if (scale <= 0) return;
+
+                var key = imageData.FilePath;
+                double luminance;
+                if (string.IsNullOrEmpty(key))
+                {
+                    luminance = SampleLuminance(imageData.Frames[0]);
+                }
+                else if (!_luminanceCache.TryGetValue(key!, out luminance))
+                {
+                    luminance = SampleLuminance(imageData.Frames[0]);
+                    if (luminance >= 0) _luminanceCache[key!] = luminance;
+                }
+
+                if (luminance < 0) return;      // sampling failed — stay silent rather than guess
+
+                haptics.SetLayer(Services.Haptics.Core.HapticLayer.Luminance,
+                                 luminance * Math.Clamp(scale, 0, 1),
+                                 autoZeroMs: Math.Clamp(lifetimeMs, 100, 30_000));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("FlashService: luminance sync failed (non-fatal): {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>Average perceptual luminance (Rec. 601) of an already-decoded frame, 0..1.
+        /// Returns -1 when the bitmap cannot be sampled. Downscales to 8x8 through WIC — no file
+        /// access, no GDI+, no second decode.</summary>
+        private static double SampleLuminance(BitmapSource? source)
+        {
+            try
+            {
+                if (source == null || source.PixelWidth <= 0 || source.PixelHeight <= 0) return -1;
+
+                var sx = LuminanceSampleSize / (double)source.PixelWidth;
+                var sy = LuminanceSampleSize / (double)source.PixelHeight;
+                BitmapSource sampled = source;
+                if (sx < 1.0 || sy < 1.0)
+                {
+                    sampled = new TransformedBitmap(source, new ScaleTransform(Math.Min(sx, 1.0), Math.Min(sy, 1.0)));
+                }
+                if (sampled.Format != System.Windows.Media.PixelFormats.Bgra32)
+                {
+                    sampled = new FormatConvertedBitmap(sampled, System.Windows.Media.PixelFormats.Bgra32, null, 0);
+                }
+
+                var w = sampled.PixelWidth;
+                var h = sampled.PixelHeight;
+                if (w <= 0 || h <= 0) return -1;
+
+                var stride = w * 4;
+                var pixels = new byte[stride * h];
+                sampled.CopyPixels(pixels, stride, 0);
+
+                double sum = 0;
+                double weight = 0;
+                for (int i = 0; i < pixels.Length; i += 4)
+                {
+                    // Bgra32 is premultiplied-free straight alpha here; a transparent pixel
+                    // contributes nothing (a mostly-transparent PNG is not "bright").
+                    double alpha = pixels[i + 3] / 255.0;
+                    if (alpha <= 0) continue;
+                    double b = pixels[i] / 255.0;
+                    double g = pixels[i + 1] / 255.0;
+                    double r = pixels[i + 2] / 255.0;
+                    sum += (0.299 * r + 0.587 * g + 0.114 * b) * alpha;
+                    weight += alpha;
+                }
+
+                if (weight <= 0) return 0;
+                return Math.Clamp(sum / weight, 0, 1);
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// COMPOSITOR: convert the decoded frames and spawn this flash's layer item. The

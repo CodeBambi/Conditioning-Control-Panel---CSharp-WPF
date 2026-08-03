@@ -226,6 +226,18 @@ namespace ConditioningControlPanel.Services
 
             var intensity = track.GetIntensityAt(lookAheadTime);
 
+            // PHASE F — BAND SPLIT. Only when the user asked for it AND a connected toy actually
+            // has two or more vibration motors; everything else keeps the single-envelope path
+            // byte for byte. Bass drives motor 0, highs motor 1.
+            if (_settings.BandSplit && _hapticService.MaxVibrateMotors >= 2 &&
+                _chunkManager.LowBandTrack.HasDataForTime(lookAheadTime))
+            {
+                var low = _chunkManager.LowBandTrack.GetIntensityAt(lookAheadTime);
+                var high = _chunkManager.HighBandTrack.GetIntensityAt(lookAheadTime);
+                _ = SendHapticBandsAsync(low, high);
+                return;
+            }
+
             // Send to haptic device
             _ = SendHapticAsync(intensity);
         }
@@ -320,34 +332,51 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                // Device needs at least ~8% to produce perceptible vibration
-                const float minDeviceIntensity = 0.08f;
-                var liveIntensity = (float)_settings.LiveIntensity;
-                float adjustedIntensity;
-
-                if (intensity <= 0.01f || liveIntensity <= 0)
-                {
-                    // Track says quiet or power is off
-                    adjustedIntensity = 0;
-                }
-                else if (liveIntensity <= minDeviceIntensity)
-                {
-                    // Very low power - just multiply, user wants minimal
-                    adjustedIntensity = intensity * liveIntensity;
-                }
-                else
-                {
-                    // Map track intensity [0, 1] to device range [minDevice, liveIntensity]
-                    // This preserves dynamics while ensuring device responds even at low power
-                    adjustedIntensity = minDeviceIntensity + intensity * (liveIntensity - minDeviceIntensity);
-                }
-
-                await _hapticService.SetSyncIntensityAsync(adjustedIntensity);
+                await _hapticService.SetSyncIntensityAsync(ApplyLivePower(intensity));
             }
             catch (Exception ex)
             {
                 Log.Debug("AudioSyncService: Failed to send haptic: {Error}", ex.Message);
             }
+        }
+
+        /// <summary>PHASE F: same power mapping as <see cref="SendHapticAsync"/>, applied to each
+        /// band, then routed to motor 0 (bass) / motor 1 (highs).</summary>
+        private async Task SendHapticBandsAsync(float low, float high)
+        {
+            try
+            {
+                await _hapticService.SetSyncIntensityAsync(ApplyLivePower(low), ApplyLivePower(high));
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("AudioSyncService: Failed to send band-split haptic: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Maps a 0..1 track value onto the user's live power range. Extracted verbatim from
+        /// SendHapticAsync so the band-split path cannot drift from the single-envelope one.
+        /// </summary>
+        private float ApplyLivePower(float intensity)
+        {
+            // Device needs at least ~8% to produce perceptible vibration
+            const float minDeviceIntensity = 0.08f;
+            var liveIntensity = (float)_settings.LiveIntensity;
+
+            if (intensity <= 0.01f || liveIntensity <= 0)
+            {
+                // Track says quiet or power is off
+                return 0;
+            }
+            if (liveIntensity <= minDeviceIntensity)
+            {
+                // Very low power - just multiply, user wants minimal
+                return intensity * liveIntensity;
+            }
+            // Map track intensity [0, 1] to device range [minDevice, liveIntensity]
+            // This preserves dynamics while ensuring device responds even at low power
+            return minDeviceIntensity + intensity * (liveIntensity - minDeviceIntensity);
         }
 
         private void OnChunkReady(object? sender, AudioChunk chunk)

@@ -101,6 +101,14 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         private readonly double[] _layerValues = new double[LayerCount];
         private readonly long[] _layerAutoZeroAt = new long[LayerCount];
         private readonly LayerEnvelope?[] _layerEnvelopes = new LayerEnvelope?[LayerCount];
+        /// <summary>Phase F: optional PER-VIBRATION-MOTOR breakdown of a layer (audio band-split).
+        /// Null for every layer in the normal case, and then costs exactly one bool test per tick.
+        /// Arrays are replaced wholesale, never mutated, so the loop may read them unlocked.</summary>
+        private readonly double[]?[] _layerSplits = new double[]?[LayerCount];
+        private volatile bool _anySplit;
+        /// <summary>Phase F: continuous layers are muted until this tick (user turned the toy up or
+        /// down themselves — see <see cref="SuppressLayersUntil"/>). Transients still fire.</summary>
+        private long _layersSuppressedUntil;
 
         // transients
         private readonly List<ActivePulse> _active = new();
@@ -206,6 +214,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             bool anythingLive;
             List<PulseSample>? pulseSamples;
             double[] layerSnapshot;
+            double[]?[]? splitSnapshot = null;
 
             lock (_gate)
             {
@@ -216,6 +225,18 @@ namespace ConditioningControlPanel.Services.Haptics.Core
 
                 layerSnapshot = new double[LayerCount];
                 for (int i = 0; i < LayerCount; i++) layerSnapshot[i] = _layerValues[i];
+
+                // User-override back-off: the toy's own controls win for a while, so the floor
+                // goes away entirely. Transients are deliberately still allowed — an achievement
+                // buzz is an event, not the app quietly overriding the user's choice again.
+                if (now < _layersSuppressedUntil)
+                {
+                    for (int i = 0; i < LayerCount; i++) layerSnapshot[i] = 0;
+                }
+                else if (_anySplit)
+                {
+                    splitSnapshot = (double[]?[])_layerSplits.Clone();
+                }
 
                 pulseSamples = _active.Count == 0 ? null : new List<PulseSample>(_active.Count);
                 if (pulseSamples != null)
@@ -241,7 +262,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             foreach (var device in devices)
             {
                 if (!device.Enabled || !device.IsConnected) continue;
-                var outputs = BuildOutputs(device, layerSnapshot, pulseSamples, now, out var changed);
+                var outputs = BuildOutputs(device, layerSnapshot, splitSnapshot, pulseSamples, now, out var changed);
                 if (outputs == null || !changed) continue;
                 sends ??= new List<Task>(devices.Count);
                 sends.Add(SafeSendAsync(device, outputs, ct));
@@ -269,10 +290,20 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         /// <summary>Combine floor + transients for one device and turn them into actuator outputs.
         /// Returns null when there is nothing to send.</summary>
         private IReadOnlyList<ActuatorOutput>? BuildOutputs(
-            HapticDevice device, double[] layers, List<PulseSample>? pulses, long now, out bool changed)
+            HapticDevice device, double[] layers, double[]?[]? splits,
+            List<PulseSample>? pulses, long now, out bool changed)
         {
             changed = false;
             var v2 = _settings.V2;
+
+            // --- per-motor split (Phase F audio band-split), only on multi-vibe toys ---
+            double[]? motorFloors = null;
+            if (splits != null)
+            {
+                int motors = 0;
+                foreach (var a in device.Actuators) if (a.Type == ActuatorType.Vibrate) motors++;
+                if (motors >= 2) motorFloors = new double[motors];
+            }
 
             // --- continuous floor (role-filtered, per-layer scaled) ---
             double floorTarget = 0;
@@ -283,8 +314,21 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 var rule = v2.Rule((HapticLayer)i);
                 if (!rule.Enabled) continue;
                 if (!RoleMatches(rule.Target, device.Role)) continue;
-                var scaled = value * Math.Clamp(rule.Intensity, 0, 1);
+                var layerScale = Math.Clamp(rule.Intensity, 0, 1);
+                var scaled = value * layerScale;
                 if (scaled > floorTarget) floorTarget = scaled;
+
+                if (motorFloors == null) continue;
+                // A split layer contributes its OWN value per motor; an unsplit layer contributes
+                // the same value to all of them. SetLayerPerActuator keeps the scalar layer value
+                // at max(perMotor), so floorTarget above always covers every motor.
+                var split = splits![i];
+                for (int m = 0; m < motorFloors.Length; m++)
+                {
+                    var v = split == null ? value : split[Math.Min(m, split.Length - 1)];
+                    var s = v * layerScale;
+                    if (s > motorFloors[m]) motorFloors[m] = s;
+                }
             }
 
             var state = GetDeviceState(device.DeviceKey);
@@ -317,9 +361,29 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             var raw = Math.Max(state.Floor, transient);
 
             // --- master multiplier, hard cap, per-device trim ---
-            var value2 = Math.Min(raw * MasterIntensity, MasterCap);
-            if (raw > 0) value2 = Math.Max(value2, MinPerceptibleIntensity);
-            value2 = Math.Clamp(value2 * Math.Clamp(device.IntensityTrim, 0, 1), 0, 1);
+            double Finish(double rawLevel)
+            {
+                var v = Math.Min(rawLevel * MasterIntensity, MasterCap);
+                if (rawLevel > 0) v = Math.Max(v, MinPerceptibleIntensity);
+                return Math.Clamp(v * Math.Clamp(device.IntensityTrim, 0, 1), 0, 1);
+            }
+
+            var value2 = Finish(raw);
+
+            // Band-split: the ramped floor is redistributed across the motors by the ratio the
+            // layer asked for, so soft-ramp / cap / trim / master all still apply exactly once.
+            double[]? motorRatios = null;
+            if (motorFloors != null && floorTarget > 0)
+            {
+                motorRatios = new double[motorFloors.Length];
+                bool differs = false;
+                for (int m = 0; m < motorFloors.Length; m++)
+                {
+                    motorRatios[m] = Math.Clamp(motorFloors[m] / floorTarget, 0, 1);
+                    if (motorRatios[m] < 0.999) differs = true;
+                }
+                if (!differs) motorRatios = null;   // all motors equal => normal path
+            }
 
             // --- quantize + suppress unchanged ---
             var actuators = device.Actuators;
@@ -340,13 +404,21 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 // SetPositionAsync. Stroke is a range pair, likewise not a generic level.
                 if (a.Type == ActuatorType.Position || a.Type == ActuatorType.Stroke) continue;
 
+                var level = value2;
+                if (motorRatios != null && a.Type == ActuatorType.Vibrate)
+                {
+                    var m = Math.Clamp(a.Index, 0, motorRatios.Length - 1);
+                    level = Finish(Math.Max(state.Floor * motorRatios[m], transient));
+                }
+
                 var steps = Math.Max(1, a.Steps);
-                var q = (int)Math.Round(value2 * steps);
+                var q = (int)Math.Round(level * steps);
                 if (q != 0) allZero = false;
                 if (state.Quantized[i] != q) { changed = true; state.Quantized[i] = q; }
 
                 outputs ??= new List<ActuatorOutput>(actuators.Count);
                 outputs.Add(new ActuatorOutput(a.Type, a.Index, q / (double)steps));
+
             }
 
             if (outputs == null) return null;
@@ -395,8 +467,79 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 _layerEnvelopes[i] = null;                       // an explicit set wins over a running envelope
                 _layerValues[i] = value;
                 _layerAutoZeroAt[i] = (value > 0 && autoZeroMs > 0) ? Environment.TickCount64 + autoZeroMs : 0;
+                if (_layerSplits[i] != null) { _layerSplits[i] = null; RecomputeAnySplitLocked(); }
             }
             if (value > 0) Start();
+        }
+
+        /// <summary>
+        /// PHASE F (audio band-split). Set a continuous layer as a PER-VIBRATION-MOTOR breakdown:
+        /// <paramref name="perMotor"/>[0] drives Vibrate actuator index 0, [1] index 1, and so on
+        /// (a shorter array repeats its last entry). Toys with fewer than two Vibrate actuators
+        /// ignore the breakdown entirely and keep the scalar behaviour, which is <c>max(perMotor)</c>
+        /// — so a single-motor toy feels exactly what it feels today.
+        ///
+        /// Passing null (or an empty array) clears the breakdown and leaves the layer scalar.
+        /// The split rides through soft-ramp, master multiplier, master cap and per-device trim
+        /// unchanged: only the RATIO between motors comes from here.
+        /// </summary>
+        public void SetLayerPerActuator(HapticLayer layer, double[]? perMotor)
+        {
+            if (_disposed) return;
+
+            double[]? copy = null;
+            double scalar = 0;
+            if (perMotor != null && perMotor.Length > 0)
+            {
+                copy = new double[perMotor.Length];
+                for (int i = 0; i < copy.Length; i++)
+                {
+                    var v = double.IsNaN(perMotor[i]) ? 0 : Math.Clamp(perMotor[i], 0, 1);
+                    copy[i] = v;
+                    if (v > scalar) scalar = v;
+                }
+            }
+
+            lock (_gate)
+            {
+                var i = (int)layer;
+                _layerEnvelopes[i] = null;
+                _layerSplits[i] = copy;
+                _layerValues[i] = scalar;
+                _layerAutoZeroAt[i] = 0;
+                RecomputeAnySplitLocked();
+            }
+            if (scalar > 0) Start();
+        }
+
+        private void RecomputeAnySplitLocked()
+        {
+            for (int i = 0; i < LayerCount; i++)
+            {
+                if (_layerSplits[i] != null) { _anySplit = true; return; }
+            }
+            _anySplit = false;
+        }
+
+        /// <summary>
+        /// PHASE F (user-override back-off). Mute every CONTINUOUS layer until <paramref name="untilUtc"/>.
+        /// Called when a toy reports that the USER changed its strength themselves: the app stops
+        /// pushing a floor for a while instead of fighting them for the dial. Transient events are
+        /// deliberately unaffected. A time in the past clears the suppression.
+        /// </summary>
+        public void SuppressLayersUntil(DateTime untilUtc)
+        {
+            if (_disposed) return;
+            var ms = (untilUtc.ToUniversalTime() - DateTime.UtcNow).TotalMilliseconds;
+            var until = ms <= 0 ? 0 : Environment.TickCount64 + (long)Math.Min(ms, 30 * 60_000);
+            lock (_gate) _layersSuppressedUntil = until;
+            if (until > 0) Start();
+        }
+
+        /// <summary>True while <see cref="SuppressLayersUntil"/> is holding the floor at zero.</summary>
+        public bool AreLayersSuppressed
+        {
+            get { lock (_gate) return Environment.TickCount64 < _layersSuppressedUntil; }
         }
 
         public double GetLayer(HapticLayer layer)
@@ -422,6 +565,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                     TotalMs = totalMs
                 };
                 _layerAutoZeroAt[i] = 0;
+                if (_layerSplits[i] != null) { _layerSplits[i] = null; RecomputeAnySplitLocked(); }
             }
             Start();
         }
@@ -598,7 +742,9 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 _layerValues[i] = 0;
                 _layerAutoZeroAt[i] = 0;
                 _layerEnvelopes[i] = null;
+                _layerSplits[i] = null;
             }
+            _anySplit = false;
             foreach (var s in _deviceState.Values) s.Floor = 0;
             if (!completeSequences) return;
             foreach (var s in _sequences.Values) s.Handle.Complete();

@@ -344,6 +344,100 @@ namespace ConditioningControlPanel.Models
             set { _dtrhDensity = Math.Clamp(value, 0, 2); OnPropertyChanged(); }
         }
 
+        // ================================================================================
+        // Phase F feature settings (toy input, FunScript, luminance sync).
+        // ADDITIVE ONLY — every one carries an explicit [JsonProperty] like the v2 block, so a
+        // rename can never silently reset a user. Nothing above this line moved.
+        // No UI binds these yet (Phase E/G): the defaults below ARE the shipping behaviour.
+        // ================================================================================
+
+        private bool _toyInputEnabled = true;
+        private bool _attentionCheckToyButton = false;
+        private int _userOverrideCooldownSec = 30;
+        private bool _funScriptEnabled = true;
+        private bool _funScriptToVibeConversion = true;
+        private bool _luminanceSyncEnabled = false;
+        private double _luminanceSyncIntensity = 0.5;
+
+        /// <summary>
+        /// Listen to two-way toy input (Lovense Toy Events WS: buttons, strength-changed).
+        /// On by default — it costs nothing when no provider ever raises an event, and it is
+        /// what powers the user-override back-off. <see cref="ToyInputService"/>.
+        /// </summary>
+        [JsonProperty("toy_input_enabled")]
+        public bool ToyInputEnabled
+        {
+            get => _toyInputEnabled;
+            set { _toyInputEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// A toy button press ALSO satisfies a video attention check while its targets are on
+        /// screen (the mouse click still works — this never replaces it). Off by default: it
+        /// makes the check easier, so it must be opt-in.
+        /// </summary>
+        [JsonProperty("attention_check_toy_button")]
+        public bool AttentionCheckToyButton
+        {
+            get => _attentionCheckToyButton;
+            set { _attentionCheckToyButton = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// When the user changes the strength ON the toy itself, the app backs its CONTINUOUS
+        /// layers off for this many seconds (transient accents still fire). 0 disables the
+        /// back-off. See <see cref="Services.Haptics.Core.HapticMixer.SuppressLayersUntil"/>.
+        /// </summary>
+        [JsonProperty("user_override_cooldown_sec")]
+        public int UserOverrideCooldownSec
+        {
+            get => _userOverrideCooldownSec;
+            set { _userOverrideCooldownSec = Math.Clamp(value, 0, 600); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Auto-load <c>&lt;video&gt;.funscript</c> (or <c>funscripts/&lt;video&gt;.funscript</c>)
+        /// beside a playing video and drive the toy from it. Zero-config: when no script exists
+        /// nothing happens and nothing is logged.
+        /// </summary>
+        [JsonProperty("funscript_enabled")]
+        public bool FunScriptEnabled
+        {
+            get => _funScriptEnabled;
+            set { _funScriptEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// For toys with no Position actuator, convert the stroke script to a vibration envelope
+        /// (faster strokes = stronger). Off = position-capable toys only.
+        /// </summary>
+        [JsonProperty("funscript_to_vibe")]
+        public bool FunScriptToVibeConversion
+        {
+            get => _funScriptToVibeConversion;
+            set { _funScriptToVibeConversion = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Drive the <see cref="Services.Haptics.Core.HapticLayer.Luminance"/> layer from the
+        /// average brightness of each displayed flash image. Off by default until the Phase E UI
+        /// exposes it. When off the hook is a single bool test per flash.
+        /// </summary>
+        [JsonProperty("luminance_sync_enabled")]
+        public bool LuminanceSyncEnabled
+        {
+            get => _luminanceSyncEnabled;
+            set { _luminanceSyncEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>Scale applied to the sampled 0..1 luminance before it hits the layer.</summary>
+        [JsonProperty("luminance_sync_intensity")]
+        public double LuminanceSyncIntensity
+        {
+            get => _luminanceSyncIntensity;
+            set { _luminanceSyncIntensity = Math.Clamp(value, 0, 1); OnPropertyChanged(); }
+        }
+
         // Audio Sync settings
         private AudioSyncSettings _audioSync = new();
 
@@ -408,6 +502,16 @@ namespace ConditioningControlPanel.Models
                 }
 
                 v2.SchemaVersion = 1;
+            }
+
+            if (v2.SchemaVersion < 2)
+            {
+                // Phase F: the Luminance layer now has a producer (FlashService). Schema 1 seeded
+                // its row disabled ("off until it exists"), so without this pass a user who turns
+                // LuminanceSyncEnabled on would feel nothing — the layer rule would still veto it.
+                // The FEATURE toggle (LuminanceSyncEnabled, default false) stays the real gate.
+                v2.Rule(HapticLayer.Luminance).Enabled = true;
+                v2.SchemaVersion = 2;
             }
         }
 

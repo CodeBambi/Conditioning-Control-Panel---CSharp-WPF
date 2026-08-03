@@ -2292,6 +2292,11 @@ namespace ConditioningControlPanel.Services
                 VideoDiag.Log("VIDEO", $"show complete +{showSw.ElapsedMilliseconds}ms - {_windows.Count} window(s) on screen");
                 VideoStarted?.Invoke(this, EventArgs.Empty);
                 _ = App.Haptics?.StartVideoBackgroundVibeAsync();
+                // PHASE F: look for "<this video>.funscript" (or funscripts\<name>.funscript) and,
+                // if there is one, follow it for as long as this clip plays. Silent no-op when the
+                // feature is off, no script exists or no toy is connected.
+                try { App.Haptics?.FunScript?.OnVideoStarted(path); }
+                catch (Exception ex) { App.Logger?.Debug("FunScript start hook failed: {Error}", ex.Message); }
                 App.Logger?.Information("Playing: {File}", Path.GetFileName(path));
             }
             catch (Exception ex)
@@ -3770,6 +3775,19 @@ namespace ConditioningControlPanel.Services
                 var spawnedTargets = new List<FloatingText>();
                 bool hitRegistered = false; // Prevent double-counting hits from the same spawn
 
+                // PHASE F — "squeeze your toy" attention checks. A toy button press satisfies the
+                // check IN ADDITION to the normal click (it never replaces it), and only while
+                // this spawn's targets are on screen. Subscribed below, dropped the moment the
+                // spawn resolves either way.
+                EventHandler<Services.Haptics.Core.HapticToyEvent>? toyHandler = null;
+                void UnhookToyInput()
+                {
+                    var h = toyHandler;
+                    if (h == null) return;
+                    toyHandler = null;
+                    try { App.Haptics!.ToyInput.ButtonPressed -= h; } catch { }
+                }
+
                 App.Logger?.Debug("Spawning attention target: '{Text}' on {ScreenCount} screen(s) ({Spawned}/{Total})",
                     text, screens.Length, _spawned, _total);
 
@@ -3783,6 +3801,7 @@ namespace ConditioningControlPanel.Services
                         // Only count as a hit once per spawn (user clicked any target from this batch)
                         if (hitRegistered) return;
                         hitRegistered = true;
+                        UnhookToyInput();
 
                         _ = App.Haptics?.VideoTargetHitAsync();
                         _hits++;
@@ -3846,6 +3865,43 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("ATTENTION: Spawned {Count} targets on all screens, total now: {Total}",
                     spawnedTargets.Count, _targets.Count);
 
+                // PHASE F: arm the toy-button alternative for this spawn's lifetime.
+                if (spawnedTargets.Count > 0 &&
+                    App.Haptics != null &&
+                    App.Haptics.Settings.AttentionCheckToyButton &&
+                    App.Haptics.Settings.ToyInputEnabled)
+                {
+                    toyHandler = (s, e) =>
+                    {
+                        // ToyInputService already marshals to the dispatcher, but the event can
+                        // still land during shutdown.
+                        if (Application.Current?.Dispatcher == null) return;
+                        try
+                        {
+                            if (hitRegistered) return;
+                            FloatingText? live = null;
+                            lock (_targets)
+                            {
+                                foreach (var t in spawnedTargets)
+                                    if (_targets.Contains(t)) { live = t; break; }
+                            }
+                            if (live == null) { UnhookToyInput(); return; }
+
+                            App.Logger?.Information("ATTENTION: satisfied by toy button press");
+                            // Same idempotent pipeline as a mouse click / gaze dwell: Hit() plays
+                            // the pop sound and runs the onHit callback (which unhooks us).
+                            live.Hit();
+                            _ = App.Haptics?.PostEvent(Services.Haptics.Core.HapticEventKind.ToyButtonReward);
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("Toy-button attention hit failed: {Error}", ex.Message);
+                        }
+                    };
+                    try { App.Haptics.ToyInput.ButtonPressed += toyHandler; }
+                    catch { toyHandler = null; }
+                }
+
                 // Auto-expire all targets from this spawn together
                 var lifespan = settings.AttentionLifespan * 1000;
                 Task.Delay(lifespan).ContinueWith(_ =>
@@ -3856,6 +3912,7 @@ namespace ConditioningControlPanel.Services
                         {
                             try
                             {
+                                UnhookToyInput();
                                 lock (_targets)
                                 {
                                     foreach (var target in spawnedTargets)
@@ -5278,6 +5335,11 @@ namespace ConditioningControlPanel.Services
 
             // Stop haptic background vibe
             _ = App.Haptics?.StopVideoBackgroundVibeAsync();
+            // PHASE F: drop any funscript that was following this clip and zero its layer. Runs on
+            // every teardown path (natural end, skip, panic, attention retry) because CloseAll is
+            // the single funnel for all of them.
+            try { App.Haptics?.FunScript?.OnVideoStopped(); }
+            catch (Exception ex) { App.Logger?.Debug("FunScript stop hook failed: {Error}", ex.Message); }
 
             // Notify InteractionQueue that video is complete (triggers queued items)
             App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);

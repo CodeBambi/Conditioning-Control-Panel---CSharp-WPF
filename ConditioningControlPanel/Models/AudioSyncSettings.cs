@@ -24,6 +24,7 @@ namespace ConditioningControlPanel.Models
         private int _chunkDurationSeconds = 300;  // 5 minutes
         private int _minBufferAheadSeconds = 120; // 2 minutes
         private double _liveIntensity = 1.0;      // Live intensity multiplier (0-1)
+        private bool _bandSplit = false;          // Phase F: bass -> motor 0, highs -> motor 1
 
         /// <summary>
         /// Enable audio-synced haptics for web videos
@@ -147,6 +148,19 @@ namespace ConditioningControlPanel.Models
         {
             get => _liveIntensity;
             set { _liveIntensity = Math.Clamp(value, 0, 1.0); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Phase F: split the analysed audio into a low band (&lt;~250Hz) and a high band
+        /// (&gt;~2kHz) and route bass to vibration motor 0, highs to motor 1 on toys that have at
+        /// least two Vibrate actuators (Edge, Lapis). Single-motor toys are unaffected — they keep
+        /// the exact combined envelope they get today. Off by default until the UI exposes it.
+        /// </summary>
+        [JsonProperty("band_split")]
+        public bool BandSplit
+        {
+            get => _bandSplit;
+            set { _bandSplit = value; OnPropertyChanged(); }
         }
 
         protected void OnPropertyChanged([CallerMemberName] string? name = null)

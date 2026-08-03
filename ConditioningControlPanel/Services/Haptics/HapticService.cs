@@ -68,6 +68,15 @@ namespace ConditioningControlPanel.Services
         /// <summary>Device registry (roles, trims, battery, capabilities) for the Phase E UI.</summary>
         public HapticDeviceManager DeviceManager => _deviceManager;
 
+        /// <summary>PHASE F: two-way toy input (buttons, user-override back-off). Never null.
+        /// Constructed here rather than in App.OnStartup because Phase F does not touch
+        /// App.xaml.cs — see docs/HAPTICS_OVERHAUL_PLAN.md.</summary>
+        public ToyInputService ToyInput { get; }
+
+        /// <summary>PHASE F: .funscript auto-load + playback. Never null; VideoService drives it
+        /// through <c>App.Haptics.FunScript</c>.</summary>
+        public FunScriptService FunScript { get; }
+
         public bool IsConnected => _deviceManager.IsConnected;
         public string ProviderName => _deviceManager.ProviderNames;
         public bool IsButtplugProvider => Settings.Provider == HapticProviderType.Buttplug;
@@ -100,6 +109,12 @@ namespace ConditioningControlPanel.Services
             _deviceManager.DeviceDiscovered += (s, name) => { try { DeviceDiscovered?.Invoke(this, name); } catch { } };
             _deviceManager.Error += (s, error) => { try { Error?.Invoke(this, error); } catch { } };
             _mixer.Activity += (s, msg) => { try { HapticTriggered?.Invoke(this, msg); } catch { } };
+
+            // Phase F services. Self-initialised here on purpose: App.xaml.cs belongs to the UI
+            // rebuild, so nothing in Phase F may register services there. Both are inert until a
+            // provider raises an input event / a video with a script starts.
+            ToyInput = new ToyInputService(_deviceManager, _mixer, settings);
+            FunScript = new FunScriptService(this, settings);
 
             Settings.PropertyChanged += OnSettingsChanged;
             _mixer.Start();
@@ -223,6 +238,94 @@ namespace ConditioningControlPanel.Services
             => _mixer.SetLayer(layer, value, autoZeroMs);
 
         public double GetLayer(HapticLayer layer) => _mixer.GetLayer(layer);
+
+        // ---------------------------------------------------------------- Phase F additions
+
+        /// <summary>
+        /// PHASE F: set a continuous layer as a per-vibration-motor breakdown (audio band-split).
+        /// Toys with fewer than two Vibrate actuators transparently fall back to
+        /// <c>max(perMotor)</c>, i.e. exactly today's behaviour. Null clears the breakdown.
+        /// </summary>
+        public void SetLayerPerActuator(HapticLayer layer, double[]? perMotor)
+            => _mixer.SetLayerPerActuator(layer, perMotor);
+
+        /// <summary>PHASE F: back the continuous layers off for a while (the user reached for the
+        /// toy themselves). Transient events still fire.</summary>
+        public void SuppressContinuousLayers(int seconds)
+            => _mixer.SuppressLayersUntil(DateTime.UtcNow.AddSeconds(Math.Max(0, seconds)));
+
+        /// <summary>Highest number of Vibrate actuators on any connected, enabled toy
+        /// (Edge = 2, Lapis = 3). 0 when nothing vibrating is connected.</summary>
+        public int MaxVibrateMotors
+        {
+            get
+            {
+                int best = 0;
+                try
+                {
+                    foreach (var d in _deviceManager.Devices)
+                    {
+                        if (!d.Enabled || !d.IsConnected) continue;
+                        int n = 0;
+                        foreach (var a in d.Actuators) if (a.Type == ActuatorType.Vibrate) n++;
+                        if (n > best) best = n;
+                    }
+                }
+                catch { }
+                return best;
+            }
+        }
+
+        /// <summary>True when at least one connected toy has an absolute Position actuator
+        /// (Solace Pro). FunScript uses this to decide position vs. vibration rendering.</summary>
+        public bool HasPositionActuator
+        {
+            get
+            {
+                try
+                {
+                    foreach (var d in _deviceManager.Devices)
+                    {
+                        if (!d.Enabled || !d.IsConnected) continue;
+                        foreach (var a in d.Actuators) if (a.Type == ActuatorType.Position) return true;
+                    }
+                }
+                catch { }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// PHASE F: absolute stroke placement, 0..1, on every connected toy that has a Position
+        /// actuator. Position is deliberately NOT mixed (it is placement, not intensity) — the
+        /// mixer skips Position actuators entirely and FunScript owns this path.
+        /// </summary>
+        public async Task SetPositionAsync(double position01, CancellationToken ct = default)
+        {
+            List<HapticDevice>? targets = null;
+            try
+            {
+                foreach (var d in _deviceManager.Devices)
+                {
+                    if (!d.Enabled || !d.IsConnected) continue;
+                    foreach (var a in d.Actuators)
+                    {
+                        if (a.Type != ActuatorType.Position) continue;
+                        (targets ??= new List<HapticDevice>()).Add(d);
+                        break;
+                    }
+                }
+            }
+            catch { }
+
+            if (targets == null) return;
+            foreach (var d in targets)
+            {
+                try { await _mixer.SetPositionAsync(d.DeviceKey, position01, ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { return; }
+                catch (Exception ex) { App.Logger?.Debug("SetPositionAsync failed for {Key}: {E}", d.DeviceKey, ex.Message); }
+            }
+        }
 
         /// <summary>Everything off NOW, bypassing throttles and unchanged-send suppression.</summary>
         public void PanicStop() => _mixer.PanicStop();
@@ -372,6 +475,76 @@ namespace ConditioningControlPanel.Services
             return HapticTestResult.Success;
         }
 
+        /// <summary>
+        /// Play a rendered pattern at ONE device (the Phase E toy-card Test button and the
+        /// pattern lab's "play on this toy"). Deliberately not routed through the mixer: the
+        /// mixer mixes for every device by ROLE, and a per-toy test is by definition not a role.
+        /// Master multiplier, master cap and the per-device trim are still applied, and the
+        /// device is explicitly zeroed on the way out — a test must never leave a toy running.
+        /// </summary>
+        public async Task<bool> TestDeviceAsync(string deviceKey,
+                                                VibrationMode mode = VibrationMode.Constant,
+                                                double intensity = 0.6, int durationMs = 700,
+                                                CancellationToken token = default)
+        {
+            if (_disposed || string.IsNullOrEmpty(deviceKey)) return false;
+
+            var device = _deviceManager.Find(deviceKey);
+            if (device == null || !device.IsConnected || !device.Enabled) return false;
+
+            durationMs = Math.Clamp(durationMs, 100, 8000);
+            // Same contract as TestAsync: works with the master toggle off (AllowTestWindow only
+            // waives Settings.Enabled), but premium is still required.
+            _mixer.AllowTestWindow(durationMs + 2000);
+            if (!_mixer.IsGateOpen) return false;
+
+            var steps = HapticPatterns.Render(mode, Math.Clamp(intensity, MinPerceptibleIntensity, 1.0),
+                                              durationMs, priority: 5);
+            var total = Math.Max(durationMs, HapticPatterns.TotalMs(steps));
+
+            var trim = Math.Clamp(device.IntensityTrim, 0, 1);
+            var master = _mixer.MasterIntensity;
+            var cap = _mixer.MasterCap;
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                while (sw.ElapsedMilliseconds <= total)
+                {
+                    var raw = HapticPatterns.SampleAt(steps, (int)sw.ElapsedMilliseconds);
+                    var level = Math.Min(raw * master, cap);
+                    if (raw > 0) level = Math.Max(level, MinPerceptibleIntensity);
+                    await SendDeviceLevelAsync(device, level * trim, token).ConfigureAwait(false);
+                    await Task.Delay(HapticMixer.DefaultTickMs, token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { App.Logger?.Debug("TestDeviceAsync failed: {E}", ex.Message); }
+            finally
+            {
+                try { await SendDeviceLevelAsync(device, 0, CancellationToken.None).ConfigureAwait(false); }
+                catch { }
+            }
+
+            Announce("Test " + (string.IsNullOrWhiteSpace(device.Nickname) ? device.Name : device.Nickname), intensity);
+            return true;
+        }
+
+        private Task SendDeviceLevelAsync(HapticDevice device, double level, CancellationToken token)
+        {
+            var outputs = new List<ActuatorOutput>(device.Actuators.Count);
+            foreach (var a in device.Actuators)
+            {
+                // Position is placement and Stroke is a range pair — neither is a level.
+                if (a.Type == ActuatorType.Position || a.Type == ActuatorType.Stroke) continue;
+                var stepCount = Math.Max(1, a.Steps);
+                var q = (int)Math.Round(Math.Clamp(level, 0, 1) * stepCount);
+                outputs.Add(new ActuatorOutput(a.Type, a.Index, q / (double)stepCount));
+            }
+            if (outputs.Count == 0) return Task.CompletedTask;
+            return _deviceManager.SendAsync(device, outputs, token);
+        }
+
         /// <summary>Stop everything currently playing (transients AND continuous layers).</summary>
         public Task StopAsync()
         {
@@ -411,6 +584,28 @@ namespace ConditioningControlPanel.Services
             }
             var clamped = Math.Clamp(intensity, Settings.AudioSync.MinIntensity, Settings.AudioSync.MaxIntensity);
             _mixer.SetLayer(HapticLayer.AudioSync, clamped);
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// PHASE F: band-split audio sync. <paramref name="lowBand"/> drives vibration motor 0,
+        /// <paramref name="highBand"/> motor 1 (and any further motors repeat the high band).
+        /// A single-motor toy hears <c>max(low, high)</c>, so it is unaffected by the mode.
+        /// </summary>
+        public Task SetSyncIntensityAsync(double lowBand, double highBand)
+        {
+            if (!Settings.AudioSync.Enabled)
+            {
+                _mixer.SetLayerPerActuator(HapticLayer.AudioSync, null);
+                _mixer.SetLayer(HapticLayer.AudioSync, 0);
+                return Task.CompletedTask;
+            }
+
+            double Clamp(double v) => v <= 0
+                ? 0
+                : Math.Clamp(v, Settings.AudioSync.MinIntensity, Settings.AudioSync.MaxIntensity);
+
+            _mixer.SetLayerPerActuator(HapticLayer.AudioSync, new[] { Clamp(lowBand), Clamp(highBand) });
             return Task.CompletedTask;
         }
 
@@ -665,6 +860,8 @@ namespace ConditioningControlPanel.Services
             if (_disposed) return;
             _disposed = true;
             Settings.PropertyChanged -= OnSettingsChanged;
+            try { FunScript.Dispose(); } catch { }
+            try { ToyInput.Dispose(); } catch { }
             StopPingTimer();
             // Never blocks: the mixer zeroes state synchronously and flushes the all-stop on a
             // background task with a hard 2s cap (plus a ProcessExit watchdog).
