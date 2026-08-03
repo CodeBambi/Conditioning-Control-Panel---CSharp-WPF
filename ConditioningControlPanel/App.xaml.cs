@@ -382,6 +382,7 @@ namespace ConditioningControlPanel
         public static KeywordHighlightService? KeywordHighlight { get; private set; }
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
         public static RemoteControlService RemoteControl { get; private set; } = null!;
+        public static Services.GoonGame.GoonGameService GoonGame { get; private set; } = null!;
         public static AvailableSubjectsService AvailableSubjects { get; private set; } = null!;
         public static CompanionPhraseService CompanionPhrases { get; private set; } = null!;
         public static CatalogueService Catalogue { get; private set; } = null!;
@@ -1589,6 +1590,8 @@ namespace ConditioningControlPanel
             RemoteControl = new RemoteControlService();
             // Quest credit: each remote-control command received (Patreon-exclusive quest category).
             RemoteControl.CommandReceived += (_, _) => { try { Quests?.TrackRemoteCommand(); } catch { } };
+            // Goon Game duel plumbing. Idle until the user hosts/joins; the server enforces passes.
+            GoonGame = new Services.GoonGame.GoonGameService();
             AvailableSubjects = new AvailableSubjectsService();
             CompanionPhrases = new CompanionPhraseService();
             Catalogue = new CatalogueService();
@@ -3415,6 +3418,7 @@ Application State:
             }
 
             // Dispose trigger sources FIRST so no new effects get queued during shutdown
+            GoonGame?.Dispose();
             RemoteControl?.Dispose();
             ScreenOcr?.Dispose();
             KeywordTriggers?.Dispose();

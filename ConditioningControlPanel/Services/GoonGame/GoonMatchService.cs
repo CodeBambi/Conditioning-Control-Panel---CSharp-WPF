@@ -269,6 +269,24 @@ namespace ConditioningControlPanel.Services.GoonGame
             }
         }
 
+        /// <summary>
+        /// Enters the Lobby over a transport that is already signaling or connected — the
+        /// relay-fallback path, where <see cref="GoonRelayTransport.AdoptRoom"/> re-uses the room
+        /// (and the burned weekly pass) the failed P2P attempt minted, so neither
+        /// <see cref="CreateInviteAsync"/> nor <see cref="JoinAsync"/> may be called again.
+        /// </summary>
+        public bool AdoptLobby()
+        {
+            if (Phase != GoonMatchPhase.Idle) return false;
+            SetPhase(GoonMatchPhase.Lobby);
+            StartPhaseTimer();
+            // If the transport connected before this service subscribed, StateChanged already
+            // fired without us and nothing else will trigger the hello.
+            if (_transport.State is GoonTransportState.ConnectedP2P or GoonTransportState.ConnectedRelay)
+                SendHelloOnce();
+            return true;
+        }
+
         // ----------------------------------------------------------- consent
 
         /// <summary>
