@@ -2580,5 +2580,8 @@
   "program_lock_reason_generic": "Un programa de entrenamiento está ejecutando esta sesión. Sus funciones e intensidad están bloqueadas hasta que termine.",
   "session_lock_reason": "¡Estás en una sesión! Sus funciones e intensidad están bloqueadas hasta que termine.",
   "session_lock_action_title": "Estás en una sesión",
-  "session_lock_action_body": "{0}\n\nEsto sobrescribiría lo que la sesión prescribió. Detén la sesión primero si de verdad quieres cambiarlo."
+  "session_lock_action_body": "{0}\n\nEsto sobrescribiría lo que la sesión prescribió. Detén la sesión primero si de verdad quieres cambiarlo.",
+  "video_grace_paused_title": "En pausa",
+  "btn_video_grace_resume": "Reanudar",
+  "video_grace_auto_resume_in": "Se reanuda en {0} s"
 }

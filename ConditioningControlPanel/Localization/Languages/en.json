@@ -3843,5 +3843,8 @@
   "label_motion_off": "Off",
   "session_lock_reason": "You're in a session! Its features and intensity are locked until it ends.",
   "session_lock_action_title": "You're in a session",
-  "session_lock_action_body": "{0}\n\nThis would overwrite what the session prescribed. Stop the session first if you really want to change it."
+  "session_lock_action_body": "{0}\n\nThis would overwrite what the session prescribed. Stop the session first if you really want to change it.",
+  "video_grace_paused_title": "Paused",
+  "btn_video_grace_resume": "Resume",
+  "video_grace_auto_resume_in": "Resuming in {0}s"
 }

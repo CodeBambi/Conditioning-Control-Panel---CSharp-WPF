@@ -2587,5 +2587,8 @@
   "program_lock_reason_generic": "Um programa de treinamento está executando esta sessão. Seus recursos e intensidade estão bloqueados até ela terminar.",
   "session_lock_reason": "Você está em uma sessão! Seus recursos e intensidade estão bloqueados até ela terminar.",
   "session_lock_action_title": "Você está em uma sessão",
-  "session_lock_action_body": "{0}\n\nIsso substituiria o que a sessão prescreveu. Pare a sessão primeiro se realmente quiser alterar."
+  "session_lock_action_body": "{0}\n\nIsso substituiria o que a sessão prescreveu. Pare a sessão primeiro se realmente quiser alterar.",
+  "video_grace_paused_title": "Pausado",
+  "btn_video_grace_resume": "Retomar",
+  "video_grace_auto_resume_in": "Retomando em {0}s"
 }

@@ -2588,5 +2588,8 @@
   "program_lock_reason_generic": "Un programme d'entraînement gère cette séance. Ses fonctionnalités et son intensité sont verrouillées jusqu'à la fin.",
   "session_lock_reason": "Vous êtes en séance ! Ses fonctionnalités et son intensité sont verrouillées jusqu'à la fin.",
   "session_lock_action_title": "Vous êtes en séance",
-  "session_lock_action_body": "{0}\n\nCela écraserait ce que la séance a prescrit. Arrêtez la séance d'abord si vous voulez vraiment le changer."
+  "session_lock_action_body": "{0}\n\nCela écraserait ce que la séance a prescrit. Arrêtez la séance d'abord si vous voulez vraiment le changer.",
+  "video_grace_paused_title": "En pause",
+  "btn_video_grace_resume": "Reprendre",
+  "video_grace_auto_resume_in": "Reprise dans {0} s"
 }

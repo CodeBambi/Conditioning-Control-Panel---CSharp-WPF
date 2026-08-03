@@ -3385,5 +3385,8 @@
   "program_lock_reason_generic": "训练计划正在运行本次会话。功能和强度将锁定至结束。",
   "session_lock_reason": "您正在会话中！功能和强度将锁定至结束。",
   "session_lock_action_title": "您正在会话中",
-  "session_lock_action_body": "{0}\n\n这将覆盖本次会话所设定的内容。如果确实要更改，请先停止会话。"
+  "session_lock_action_body": "{0}\n\n这将覆盖本次会话所设定的内容。如果确实要更改，请先停止会话。",
+  "video_grace_paused_title": "已暂停",
+  "btn_video_grace_resume": "继续",
+  "video_grace_auto_resume_in": "{0} 秒后继续"
 }

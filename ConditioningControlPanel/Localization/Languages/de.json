@@ -2588,5 +2588,8 @@
   "program_lock_reason_generic": "Ein Trainingsprogramm steuert diese Sitzung. Funktionen und Intensität sind bis zum Ende gesperrt.",
   "session_lock_reason": "Du bist in einer Sitzung! Funktionen und Intensität sind bis zum Ende gesperrt.",
   "session_lock_action_title": "Du bist in einer Sitzung",
-  "session_lock_action_body": "{0}\n\nDies würde überschreiben, was die Sitzung vorgegeben hat. Beende zuerst die Sitzung, wenn du es wirklich ändern willst."
+  "session_lock_action_body": "{0}\n\nDies würde überschreiben, was die Sitzung vorgegeben hat. Beende zuerst die Sitzung, wenn du es wirklich ändern willst.",
+  "video_grace_paused_title": "Pausiert",
+  "btn_video_grace_resume": "Fortsetzen",
+  "video_grace_auto_resume_in": "Fortsetzung in {0}s"
 }
