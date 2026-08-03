@@ -62,6 +62,45 @@
           <input id="mosaic-sec" type="range" min="3" max="60" step="1">
           <span id="mosaic-sec-label">10s</span>
         </div>
+        <div class="options-divider"></div>
+        <div class="option-row">
+          <div class="option-text">
+            <div class="option-title">Highlight audible tile</div>
+            <div class="option-sub">Soft pink ring on the clip you are hearing</div>
+          </div>
+          <button id="toggle-audio-glow" class="pill-toggle" role="switch"></button>
+        </div>
+        <div class="options-divider"></div>
+        <div class="options-label">Eye control</div>
+        <div class="option-row">
+          <div class="option-text">
+            <div class="option-title">Eye control (webcam)</div>
+            <div class="option-sub">Blink to swap a tile - hold eyes closed 2s to change the whole page.</div>
+          </div>
+          <button id="toggle-eye" class="pill-toggle" role="switch"></button>
+        </div>
+        <div class="option-row sub-row" id="eye-gaze-row">
+          <div class="option-text">
+            <div class="option-title">Gaze picks the tile</div>
+            <div class="option-sub">Blink swaps the tile you are looking at. Needs eye-tracking calibration.</div>
+          </div>
+          <button id="toggle-eye-gaze" class="pill-toggle" role="switch"></button>
+        </div>
+        <div class="option-status hidden" id="eye-status"></div>
+        <div class="options-divider"></div>
+        <div class="options-label">Window</div>
+        <div class="option-row" id="opacity-row">
+          <div class="option-text"><div class="option-title">Opacity</div></div>
+          <input id="window-opacity" type="range" min="30" max="100" step="1">
+          <span id="window-opacity-label">100%</span>
+        </div>
+        <div class="option-row" id="clickthrough-row">
+          <div class="option-text">
+            <div class="option-title">Click-through</div>
+            <div class="option-sub">Mouse passes through the window. Press the panic key once to take back control.</div>
+          </div>
+          <button id="toggle-clickthrough" class="pill-toggle" role="switch"></button>
+        </div>
         <div class="options-footer">Mosaic settings apply to the Mosaic layout.</div>
       </div>
     </div>

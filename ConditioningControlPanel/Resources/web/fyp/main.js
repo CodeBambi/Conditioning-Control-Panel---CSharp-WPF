@@ -10,6 +10,13 @@ const CLIP_VIEWED_MIN_DWELL_MS = 5000; // below this a skim earns no XP
 const ATTENTION_MIN_GAP_MS = 120000;   // attention target every 2-4 min
 const ATTENTION_RAND_MS = 120000;
 const ATTENTION_LIFETIME_MS = 6000;
+const OPACITY_POST_MS = 100;           // throttle window-opacity posts while dragging
+const OPACITY_MIN = 0.3;
+// Eye control: one action per 600ms (a double-blink is a very common reflex), and a
+// gaze point older than this is treated as stale — the host freezes gaze while the
+// eyes are closed, so the point at blink time is always ~a moment old by design.
+const EYE_ACTION_COOLDOWN_MS = 600;
+const GAZE_STALE_MS = 1500;
 
 const $ = (id) => document.getElementById(id);
 const viewport = $('viewport');
@@ -32,6 +39,10 @@ let settings = {
   mosaicChangeSec: 10,
   autoAdvance: false,
   muted: false,
+  audioGlow: true,
+  windowOpacity: 1,
+  eyeControl: false,
+  eyeGaze: false,
 };
 let feed = null;
 const pages = new Map();      // compKey -> page object
@@ -39,6 +50,14 @@ const audioFocus = new Map(); // compKey -> tileIndex
 let activeIdx = 0;
 let booted = false;
 let attTimer = null;
+// Click-through is host state, never persisted here: it always starts OFF and
+// the host turns it back off when the user hits the panic key.
+let clickThrough = false;
+// Eye control: the host owns the camera and tells us what is actually true.
+let eyeStatus = { enabled: false, gaze: false, running: false, calibrated: false, reason: null };
+let lastGaze = null;        // { x, y, t } normalized to the client area, or null
+let lastEyeActionAt = 0;
+let pageBusyUntil = 0;      // a page slide is in flight until this timestamp
 
 const pageH = () => viewport.clientHeight || 1;
 const aspect = () => (viewport.clientWidth || 1) / pageH();
@@ -88,6 +107,7 @@ const pageCtx = {
   },
   isAutoAdvance: () => settings.autoAdvance,
   isMuted: () => settings.muted,
+  audioGlow: () => settings.audioGlow !== false,
   audioFocus: (compKey) => audioFocus.get(compKey),
   mosaicAutoChange: () => settings.mosaicAutoChange,
   mosaicChangeMs: () => settings.mosaicChangeSec * 1000,
@@ -137,6 +157,7 @@ function goTo(idx, animated = true) {
   const page = pageAt(idx);
   page?.setActive(true); // both pages live during the slide — no black gap
   applyTrack(animated);
+  if (animated) pageBusyUntil = performance.now() + PAGE_TRANSITION_MS + 60;
   if (prevPage && prevPage !== page) {
     if (animated) {
       setTimeout(() => { if (pageAt(activeIdx) !== prevPage) prevPage.setActive(false); }, PAGE_TRANSITION_MS + 40);
@@ -234,6 +255,133 @@ function updateOptionsUi() {
   $('mosaic-slider-row').classList.toggle('hidden', !settings.mosaicAutoChange);
   $('mosaic-sec').value = String(settings.mosaicChangeSec);
   $('mosaic-sec-label').textContent = `${settings.mosaicChangeSec}s`;
+  $('toggle-audio-glow').classList.toggle('on', settings.audioGlow !== false);
+  const pct = Math.round(clampOpacity(settings.windowOpacity) * 100);
+  $('window-opacity').value = String(pct);
+  $('window-opacity-label').textContent = `${pct}%`;
+  $('toggle-clickthrough').classList.toggle('on', clickThrough);
+  updateEyeUi();
+}
+
+// ---------- window opacity / click-through ----------
+
+function clampOpacity(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(1, Math.max(OPACITY_MIN, Math.round(n * 100) / 100));
+}
+
+let opacityTimer = null;
+let opacityPendingAt = 0;
+let opacityPending = null;
+
+function flushOpacity() {
+  if (opacityTimer != null) { clearTimeout(opacityTimer); opacityTimer = null; }
+  if (opacityPending == null) return;
+  const v = opacityPending;
+  opacityPending = null;
+  opacityPendingAt = performance.now();
+  setting('windowOpacity', v);
+}
+
+/** Live drag feedback without spamming the host: <=1 post per OPACITY_POST_MS. */
+function queueOpacity(v) {
+  opacityPending = v;
+  if (opacityTimer != null) return;
+  const wait = OPACITY_POST_MS - (performance.now() - opacityPendingAt);
+  if (wait <= 0) flushOpacity();
+  else opacityTimer = setTimeout(flushOpacity, wait);
+}
+
+function setClickThrough(on, fromHost) {
+  clickThrough = !!on;
+  document.body.classList.toggle('clickthrough', clickThrough);
+  $('toggle-clickthrough').classList.toggle('on', clickThrough);
+  if (clickThrough) {
+    $('options-scrim').classList.add('hidden'); // nothing is clickable from here on
+    stopAttention();                            // an unclickable target is just a nag
+  } else {
+    scheduleAttention();
+  }
+  if (!fromHost) setting('clickThrough', clickThrough);
+}
+
+// ---------- eye control ----------
+//
+// The host does the sensing (blink / 2s eyes-closed / calibrated gaze) and posts
+// three message types; everything below is just "which page thing does that mean".
+// Deliberately independent of the chrome: in click-through mode the buttons are
+// gone and the window takes no mouse, and eye control is exactly what is left.
+
+function updateEyeUi() {
+  $('toggle-eye').classList.toggle('on', !!settings.eyeControl);
+  $('toggle-eye-gaze').classList.toggle('on', !!settings.eyeGaze);
+  // Gaze needs the master toggle AND a trained calibration to mean anything.
+  $('eye-gaze-row').classList.toggle('disabled', !(settings.eyeControl && eyeStatus.calibrated));
+  const line = eyeStatusText();
+  $('eye-status').textContent = line ?? '';
+  $('eye-status').classList.toggle('hidden', !line);
+}
+
+function eyeStatusText() {
+  switch (eyeStatus.reason) {
+    case 'starting': return 'Starting webcam...';
+    case 'consent': return 'Webcam permission declined - eye control is off.';
+    case 'no-camera': return 'Webcam unavailable - eye control is off.';
+    case 'error': return 'Webcam error - eye control is off.';
+    default: break;
+  }
+  if (!settings.eyeControl) return null;
+  if (!eyeStatus.running) return 'Starting webcam...';
+  if (!eyeStatus.calibrated) return 'Gaze needs calibration - blink still works.';
+  return null; // running normally: no status line at all
+}
+
+/** True when a gesture must be ignored (a dialog is up, nothing to act on, or
+ *  something is already animating). */
+function eyeBusy() {
+  if (!feed || feed.comps.length === 0 || document.hidden) return true;
+  if (!$('options-scrim').classList.contains('hidden')) return true;  // options open
+  if (!$('crash').classList.contains('hidden')) return true;
+  if (!$('empty').classList.contains('hidden')) return true;
+  const now = performance.now();
+  return now - lastEyeActionAt < EYE_ACTION_COOLDOWN_MS || now < pageBusyUntil;
+}
+
+/** Tile the user is looking at, or -1 (gaze off / uncalibrated / off-window / stale). */
+function gazeTile(page) {
+  if (!settings.eyeGaze || !eyeStatus.calibrated || !lastGaze) return -1;
+  if (performance.now() - lastGaze.t > GAZE_STALE_MS) return -1;
+  return page.tileAtPoint(lastGaze.x * window.innerWidth, lastGaze.y * window.innerHeight);
+}
+
+/** Blink: swap ONE tile (gazed-at, else random). A single-tile page has nothing
+ *  to swap within, so a blink pages on instead. */
+function onEyeBlink() {
+  if (eyeBusy()) return;
+  const page = pageAt(activeIdx);
+  if (!page) return;
+  if (page.tileCount <= 1) {
+    lastEyeActionAt = performance.now();
+    next();
+    return;
+  }
+  if (page.busy) return;
+  let idx = gazeTile(page);
+  if (idx < 0) idx = Math.floor(Math.random() * page.tileCount);
+  // Same path as the › chevron: fresh weighted pick + cross-slide. A refusal
+  // (slot mid-slide) costs nothing — leave the cooldown open for the next blink.
+  if (page.swapTileAt(idx)) lastEyeActionAt = performance.now();
+}
+
+/** Eyes held shut ~2s: change the whole page — morph the mosaic, or scroll on. */
+function onEyesClosed() {
+  if (eyeBusy()) return;
+  const page = pageAt(activeIdx);
+  if (!page) return;
+  lastEyeActionAt = performance.now();
+  if (settings.layout === 'random' && page.morphNow()) return;
+  next();
 }
 
 function updateEmptyState() {
@@ -289,6 +437,35 @@ function wireChrome() {
     setting('mosaicChangeSec', Math.max(3, Math.min(60, Number($('mosaic-sec').value) || 10)));
     updateOptionsUi();
   });
+  $('toggle-audio-glow').addEventListener('click', () => {
+    setting('audioGlow', settings.audioGlow === false);
+    updateOptionsUi();
+    pageAt(activeIdx)?.applyAudio(); // ring appears/disappears immediately
+  });
+  $('window-opacity').addEventListener('input', () => {
+    const pct = Number($('window-opacity').value) || 100;
+    $('window-opacity-label').textContent = `${pct}%`;
+    queueOpacity(clampOpacity(pct / 100));
+  });
+  $('window-opacity').addEventListener('change', () => {
+    const pct = Number($('window-opacity').value) || 100;
+    opacityPending = clampOpacity(pct / 100); // the released value always lands
+    flushOpacity();
+    updateOptionsUi();
+  });
+  $('toggle-eye').addEventListener('click', () => {
+    setting('eyeControl', !settings.eyeControl);
+    // Optimistic UI; the host's eyeStatus is authoritative and will correct this
+    // (including flipping the toggle back off if the camera refuses to start).
+    if (!settings.eyeControl) { eyeStatus = { ...eyeStatus, running: false, reason: null }; lastGaze = null; }
+    updateEyeUi();
+  });
+  $('toggle-eye-gaze').addEventListener('click', () => {
+    if (!settings.eyeControl || !eyeStatus.calibrated) return; // row is inert anyway
+    setting('eyeGaze', !settings.eyeGaze);
+    updateEyeUi();
+  });
+  $('toggle-clickthrough').addEventListener('click', () => setClickThrough(!clickThrough, false));
   $('btn-include-gifs').addEventListener('click', () => {
     setting('includeGifs', true);
     updateOptionsUi();
@@ -337,11 +514,24 @@ function wireInput() {
 
 function scheduleAttention() {
   clearTimeout(attTimer);
+  attTimer = null;
+  if (clickThrough) return; // the target could not be clicked anyway
   attTimer = setTimeout(showAttention, ATTENTION_MIN_GAP_MS + Math.random() * ATTENTION_RAND_MS);
+}
+
+/** Click-through just went on: drop the pending timer AND any live target. */
+function stopAttention() {
+  clearTimeout(attTimer);
+  attTimer = null;
+  const el = $('attention');
+  el.onclick = null;
+  el.classList.add('hidden');
+  el.classList.remove('hit');
 }
 
 function showAttention() {
   const el = $('attention');
+  if (clickThrough) return; // scheduleAttention() resumes it when control returns
   if (document.hidden || !feed || feed.comps.length === 0) { scheduleAttention(); return; }
   el.style.left = (10 + Math.random() * 80) + '%';
   el.style.top = (12 + Math.random() * 72) + '%';
@@ -365,6 +555,11 @@ function onHostMessage(data) {
     case 'init': {
       assets = Array.isArray(data.assets) ? data.assets : [];
       settings = { ...settings, ...(data.settings || {}) };
+      // Host may omit either (older builds) — both default rather than go undefined.
+      settings.audioGlow = settings.audioGlow !== false;
+      settings.windowOpacity = clampOpacity(settings.windowOpacity);
+      clickThrough = false; // never sticky across a reload
+      document.body.classList.remove('clickthrough');
       stats.init(data.stats, (s) => post({ type: 'stats-save', stats: s }));
       feed = createFeed(aspect);
       if (!booted) {
@@ -382,6 +577,38 @@ function onHostMessage(data) {
       scheduleAttention();
       break;
     }
+    case 'clickThrough':
+      // The host flips this off when the panic key gives the mouse back.
+      setClickThrough(!!data.on, true);
+      break;
+    case 'eyeStatus':
+      eyeStatus = {
+        enabled: !!data.enabled,
+        gaze: !!data.gaze,
+        running: !!data.running,
+        calibrated: !!data.calibrated,
+        reason: data.reason ?? null,
+      };
+      // The host is the source of truth for both toggles — a camera that refused
+      // to start arrives here as enabled:false and resets the master pill.
+      settings.eyeControl = eyeStatus.enabled;
+      settings.eyeGaze = eyeStatus.gaze;
+      if (!eyeStatus.enabled) lastGaze = null;
+      updateEyeUi();
+      break;
+    case 'gaze':
+      // Heavily smoothed and frozen while the eyes are shut: stamp it so a blink
+      // can tell a live fixation from a stale one.
+      lastGaze = data.inside === false
+        ? null // looking off the feed window entirely -> no tile target
+        : { x: Number(data.x) || 0, y: Number(data.y) || 0, t: performance.now() };
+      break;
+    case 'blink':
+      onEyeBlink();
+      break;
+    case 'eyesClosed':
+      onEyesClosed();
+      break;
     default:
       break;
   }

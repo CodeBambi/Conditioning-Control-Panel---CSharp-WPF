@@ -187,6 +187,10 @@ namespace ConditioningControlPanel.Services
         private const int MaxBlinkClosedMs = 1500;           // longer than this is a stare/squint, not a blink
         private const int BlinkCooldownMs = 500;             // gap required between consecutive blink fires
         private const int BlinkDiagLogIntervalMs = 3000;     // log EAR baseline + blink count every ~3s
+        // Deliberate "hold your eyes shut" gesture. Sits ABOVE MaxBlinkClosedMs on purpose:
+        // a closure long enough to fire OnEyesClosedLong can never also be reported as a
+        // blink, so the two gestures are mutually exclusive by construction.
+        private const int EyesClosedLongMs = 2000;
 
         // EAR is computed against the IRIS MODEL's 71-point eye contour, NOT
         // FaceMesh's eyelid landmarks. FaceMesh's landmarks barely move during
@@ -398,6 +402,17 @@ namespace ConditioningControlPanel.Services
         }
 
         public event Action? OnBlink;
+
+        /// <summary>
+        /// Fired once per closure when the eyes have been continuously closed for
+        /// <see cref="EyesClosedLongMs"/> (2s) — a deliberate "hold it shut" gesture
+        /// rather than a blink. Fires WHILE still closed (not on reopen), so the
+        /// gesture feels immediate. <see cref="OnBlink"/> can never fire for the same
+        /// closure: that path requires closedMs &lt;= MaxBlinkClosedMs (1500ms).
+        /// Marshalled to the UI dispatcher like every other event here.
+        /// </summary>
+        public event Action? OnEyesClosedLong;
+
         public event Action<System.Windows.Point>? OnLongStare;
         public event Action? OnMouthOpen;
         public event Action? OnTongueOut;
@@ -499,6 +514,7 @@ namespace ConditioningControlPanel.Services
         private double _earBaseline;                             // rolling 90-frame max of avg EAR
         private bool _eyesClosed;                                // hysteresis state for both eyes (single)
         private DateTime? _eyesClosedAt;                         // start of current closed window
+        private bool _eyesClosedLongFired;                       // OnEyesClosedLong already fired for THIS closure
         private double _minEarThisClosure;                       // tracks deepest closure during current closed window
         private double _windowMinEar = double.MaxValue;          // min EAR seen since last diag log (for tuning)
         private double _windowMaxEar = double.MinValue;          // max EAR seen since last diag log
@@ -1517,6 +1533,7 @@ namespace ConditioningControlPanel.Services
             _earBaseline = 0;
             _eyesClosed = false;
             _eyesClosedAt = null;
+            _eyesClosedLongFired = false;
             _minEarThisClosure = double.MaxValue;
             _windowMinEar = double.MaxValue;
             _windowMaxEar = double.MinValue;
@@ -1933,6 +1950,7 @@ namespace ConditioningControlPanel.Services
             _pitchSmoothBuffer.Clear();
             _eyesClosed = false;
             _eyesClosedAt = null;
+            _eyesClosedLongFired = false;
             _mouthOpen = false;
             _mouthOpenedAt = null;
             _marSmoothBuffer.Clear();   // drop stale MAR so the median doesn't blip on face re-acquire
@@ -2590,10 +2608,19 @@ namespace ConditioningControlPanel.Services
             {
                 _eyesClosedAt = now;
                 _minEarThisClosure = avgEar;       // start tracking minimum
+                _eyesClosedLongFired = false;
             }
             else if (nowClosed)
             {
                 if (avgEar < _minEarThisClosure) _minEarThisClosure = avgEar;
+                // Still closed: the 2s "hold" gesture fires here, once per closure,
+                // without waiting for the eyes to reopen.
+                if (!_eyesClosedLongFired && _eyesClosedAt.HasValue
+                    && (now - _eyesClosedAt.Value).TotalMilliseconds >= EyesClosedLongMs)
+                {
+                    _eyesClosedLongFired = true;
+                    Dispatch(() => OnEyesClosedLong?.Invoke());
+                }
             }
             else if (!nowClosed && _eyesClosed && _eyesClosedAt.HasValue)
             {
@@ -2617,11 +2644,13 @@ namespace ConditioningControlPanel.Services
                     closedMs, _earBaseline, _minEarThisClosure, _minEarThisClosure / _earBaseline);
                 _eyesClosedAt = null;
                 _minEarThisClosure = double.MaxValue;
+                _eyesClosedLongFired = false;
             }
             else if (!nowClosed)
             {
                 _eyesClosedAt = null;
                 _minEarThisClosure = double.MaxValue;
+                _eyesClosedLongFired = false;
             }
 
             _eyesClosed = nowClosed;

@@ -68,6 +68,21 @@ html, body {
   filter: blur(4px) brightness(0.75);
 }
 
+/* audible-tile cue — an overlay (not a shadow on .tile) so it paints ABOVE the
+   video/img; purely visual, never in the way of the drag gesture */
+.audio-ring {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 105, 180, 0.65),
+    inset 0 0 22px rgba(255, 105, 180, 0.28);
+}
+.tile.audio-glow .audio-ring { opacity: 1; }
+
 /* hover chevrons — the mouse affordance for the horizontal swap */
 .chev {
   position: absolute;
@@ -231,11 +246,28 @@ html, body {
 .pill-toggle.on { background: #ff69b4; }
 .pill-toggle.on::after { left: 23px; }
 
-#mosaic-slider-row { margin-top: 10px; }
-#mosaic-sec { flex: 1; accent-color: #ff69b4; }
-#mosaic-sec-label { font-size: 12px; color: #b0b0c8; width: 34px; text-align: right; }
+#mosaic-slider-row, #opacity-row, #clickthrough-row, #eye-gaze-row { margin-top: 10px; }
+
+/* sub-option: indented under its master toggle, and inert until the master
+   (and, for gaze, a calibration) makes it meaningful */
+.option-row.sub-row { padding-left: 14px; }
+.option-row.disabled { opacity: 0.4; pointer-events: none; }
+
+.option-status { font-size: 11.5px; color: #ffb3d9; margin-top: 8px; }
+#mosaic-sec, #window-opacity { flex: 1; accent-color: #ff69b4; }
+#mosaic-sec-label, #window-opacity-label { font-size: 12px; color: #b0b0c8; width: 34px; text-align: right; }
+#window-opacity-label { width: 40px; }
 
 .options-footer { font-size: 11px; color: #6a6a88; margin-top: 12px; }
+
+/* ---------- click-through (ambient) mode ---------- */
+
+/* The window itself stops taking the mouse (host side); here we strip anything
+   that would beg to be clicked. The caption stays — it is unobtrusive. */
+body.clickthrough #chrome { pointer-events: none; }
+body.clickthrough #top-left,
+body.clickthrough #top-right,
+body.clickthrough #attention { display: none !important; }
 
 /* ---------- attention check ---------- */
 

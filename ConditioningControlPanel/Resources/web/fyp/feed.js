@@ -277,6 +277,44 @@ export function createFeed(getAspect) {
     return out;
   }
 
+  /**
+   * Fresh weighted pick for one tile: orientation want, page-wide exclusion, and
+   * the outgoing cut pushed onto the tile's history stack. Shared by the 'next'
+   * direction and by 'back' when there is no history to replay.
+   */
+  function freshSwap(comp, tileIndex, hKey) {
+    const tile = comp.tiles[tileIndex];
+    const stacked = comp.layout !== 'random' && comp.tiles.length > 1;
+    let want;
+    if (stacked) want = true; // a stacked slot never falls back to portrait
+    else if (comp.layout === 'random') want = (tile.rect.w / tile.rect.h) * getAspect() >= 1;
+    else want = isLandscapeDims(tile.cut.asset.width, tile.cut.asset.height);
+    let pickPool = candidates.filter((c) => c.landscape === want);
+    if (!stacked && pickPool.length < 2) pickPool = candidates;
+    const exclude = new Set(comp.tiles.map((t) => t.cut.segId)); // no dupes on the page
+    exclude.add(tile.cut.segId);
+    const pick = weightedPick(pickPool, recent.ring, segCooldownFor(candidates.length), exclude);
+    if (!pick) return null;
+
+    let stack = history.get(hKey);
+    if (!stack) {
+      if (history.size >= HISTORY_KEYS_MAX) {
+        // evict the oldest stack (Map preserves insertion order)
+        const oldest = history.keys().next().value;
+        if (oldest != null) history.delete(oldest);
+      }
+      stack = [];
+      history.set(hKey, stack);
+    }
+    stack.push(tile.cut);
+    if (stack.length > HISTORY_MAX) stack.splice(0, stack.length - HISTORY_MAX);
+
+    remember(recent.ring, pick.segId);
+    const cut = toCut(pick);
+    comp.tiles[tileIndex] = { ...tile, cut };
+    return cut;
+  }
+
   return {
     get comps() { return comps; },
     get layout() { return layout; },
@@ -328,8 +366,11 @@ export function createFeed(getAspect) {
 
     /**
      * Swap one tile's cut. dir 'next' = fresh weighted pick, 'back' = pop the
-     * tile's history (replaying the exact same window). Returns the new Cut or
-     * null when refused (empty history / no pick) — the surface springs back.
+     * tile's history (replaying the exact same window). A 'back' with nothing
+     * left to replay (first item, or a stack of dead assets) is NOT refused: it
+     * falls through to a fresh pick, so the gesture always yields content and
+     * the caller animates it in whichever direction the user swiped. Returns
+     * null only when the pool itself can offer nothing — the surface springs back.
      */
     swapTile(compKey, tileIndex, dir) {
       const comp = comps.find((c) => c.key === compKey);
@@ -345,7 +386,7 @@ export function createFeed(getAspect) {
           const c = stack.pop();
           if (alive.has(c.asset.id)) { popped = c; break; } // skip cuts whose asset left the pool
         }
-        if (!popped) return null;
+        if (!popped) return freshSwap(comp, tileIndex, hKey); // nothing to go back to
         // Same segId/lenSec/seed => the exact same window replays; fresh surfaceKey
         // so the old surface unmounts (reporting its dwell).
         const restored = { ...popped, surfaceKey: nextSurfaceKey() };
@@ -354,36 +395,7 @@ export function createFeed(getAspect) {
         return restored;
       }
 
-      // dir === 'next'
-      const stacked = comp.layout !== 'random' && comp.tiles.length > 1;
-      let want;
-      if (stacked) want = true; // a stacked slot never falls back to portrait
-      else if (comp.layout === 'random') want = (tile.rect.w / tile.rect.h) * getAspect() >= 1;
-      else want = isLandscapeDims(tile.cut.asset.width, tile.cut.asset.height);
-      let pickPool = candidates.filter((c) => c.landscape === want);
-      if (!stacked && pickPool.length < 2) pickPool = candidates;
-      const exclude = new Set(comp.tiles.map((t) => t.cut.segId)); // no dupes on the page
-      exclude.add(tile.cut.segId);
-      const pick = weightedPick(pickPool, recent.ring, segCooldownFor(candidates.length), exclude);
-      if (!pick) return null;
-
-      let stack = history.get(hKey);
-      if (!stack) {
-        if (history.size >= HISTORY_KEYS_MAX) {
-          // evict the oldest stack (Map preserves insertion order)
-          const oldest = history.keys().next().value;
-          if (oldest != null) history.delete(oldest);
-        }
-        stack = [];
-        history.set(hKey, stack);
-      }
-      stack.push(tile.cut);
-      if (stack.length > HISTORY_MAX) stack.splice(0, stack.length - HISTORY_MAX);
-
-      remember(recent.ring, pick.segId);
-      const cut = toCut(pick);
-      comp.tiles[tileIndex] = { ...tile, cut };
-      return cut;
+      return freshSwap(comp, tileIndex, hKey);
     },
 
     /** Re-compose a random-layout page in place (fresh layout + clips). Returns

@@ -783,11 +783,20 @@ namespace ConditioningControlPanel
             // Reactivates on its own once the game window closes (IsActive flips false).
             if (Services.Chaos.DtrhHostService.IsActive) { VideoDiag.Log("PANIC", "handed off to the DtRH web game window"); return; }
 
-            // For You feed: panic simply closes the feed window — it's a viewer, not a game,
-            // so there's no pause ladder to hand off to. The press is consumed (no fall-through
-            // into the "not running" exit branch).
+            // For You feed: a two-rung ladder. Press 1 hands the window back its clicks if it is
+            // parked click-through (otherwise the user is staring at a semi-transparent pane they
+            // cannot grab — nothing on it is clickable, including its own close button), press 2
+            // closes the feed. The press is consumed either way (no fall-through into the "not
+            // running" exit branch). The panic key reaches us regardless of focus: it rides the
+            // WH_KEYBOARD_LL hook in OnGlobalKeyPressed, not a window-level handler.
             if (Services.Fyp.FypHostService.IsActive)
             {
+                if (Services.Fyp.FypHostService.IsClickThrough)
+                {
+                    VideoDiag.Log("PANIC", "For You feed: click-through disabled (press again to close)");
+                    Services.Fyp.FypHostService.DisableClickThrough();
+                    return;
+                }
                 VideoDiag.Log("PANIC", "closing the For You feed window");
                 Services.Fyp.FypHostService.Close();
                 return;

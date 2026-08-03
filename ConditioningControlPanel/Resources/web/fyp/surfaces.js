@@ -223,6 +223,12 @@ function createTileSlot(page, tileIndex, ctx) {
   clip.className = 'swap-clip';
   slot.appendChild(clip);
 
+  // Audible-tile cue. A shadow set on .tile itself would be painted over by the
+  // <video>/<img>, so the ring lives on its own overlay above the surface.
+  const ring = document.createElement('div');
+  ring.className = 'audio-ring';
+  slot.appendChild(ring);
+
   const chevL = document.createElement('button');
   chevL.className = 'chev chev-l';
   chevL.textContent = '‹';
@@ -329,6 +335,10 @@ function createTileSlot(page, tileIndex, ctx) {
   let lastT = 0;
   let velocity = 0;
   slot.addEventListener('pointerdown', (e) => {
+    // A press on a chevron must never start a drag: setPointerCapture below
+    // retargets the whole gesture (including the compatibility `click`) to the
+    // slot, which is exactly what used to swallow the chevron's own click.
+    if (e.target.closest?.('.chev')) return;
     if (e.button !== 0 || sliding || !surface) return;
     dragId = e.pointerId;
     dragStartX = lastX = e.clientX;
@@ -369,16 +379,39 @@ function createTileSlot(page, tileIndex, ctx) {
   slot.addEventListener('pointerup', endDrag);
   slot.addEventListener('pointercancel', (e) => { if (dragId === e.pointerId) { dragId = null; springBack(); } });
 
-  chevL.addEventListener('click', (e) => { e.stopPropagation(); if (!sliding) commit('back'); });
-  chevR.addEventListener('click', (e) => { e.stopPropagation(); if (!sliding) commit('next'); });
+  // Chevrons drive the same commit path as the drag: ‹ = history-back (what a
+  // rightward drag does), › = fresh pick (what a leftward drag does).
+  function wireChev(btn, dir) {
+    // Stop the press from reaching the slot at all (belt and braces alongside
+    // the .chev bail above) so no pointer capture is ever taken for it.
+    btn.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (sliding || !surface) return;
+      commit(dir);
+    });
+  }
+  wireChev(chevL, 'back');
+  wireChev(chevR, 'next');
 
   return {
     el: slot,
     get tile() { return tile; },
     get surface() { return surface; },
+    get sliding() { return sliding; },
     mount,
     unmount,
     applyRect,
+    /** Eye control: the exact chevron path (same guard, same cross-slide).
+     *  Returns false when the slot could not act (mid-slide / not mounted). */
+    commitSwap(dir) {
+      if (sliding || !surface) return false;
+      commit(dir);
+      return true;
+    },
+    /** Audible-tile ring (page decides; honours the audioGlow setting + mute). */
+    setAudioGlow(on) { slot.classList.toggle('audio-glow', !!on); },
   };
 }
 
@@ -386,7 +419,8 @@ function createTileSlot(page, tileIndex, ctx) {
  * One feed page. Created for every composition in the window; only mounts live
  * media while active. ctx:
  *   { onAdvance(compKey), onSwap(compKey, i, dir), onTapAudio(compKey, i),
- *     onAssetMeta, report, isAutoAdvance(), isMuted(), audioFocus() -> index|null }
+ *     onAssetMeta, report, isAutoAdvance(), isMuted(), audioGlow() -> bool,
+ *     audioFocus() -> index|null }
  */
 export function createPage(comp, ctx) {
   const el = document.createElement('div');
@@ -398,6 +432,7 @@ export function createPage(comp, ctx) {
   let active = false;
   let slots = [];
   let morphTimer = null;
+  let morphing = false;  // a morph's fade-out is in flight
 
   function audioIndex() {
     const focus = ctx.audioFocus(comp.key);
@@ -408,7 +443,13 @@ export function createPage(comp, ctx) {
   function applyAudio() {
     const ai = audioIndex();
     const muted = ctx.isMuted();
-    slots.forEach((s, i) => s.surface?.setMuted(muted || i !== ai));
+    // Nothing is audible while muted (or when no tile carries audio at all) —
+    // in that case no tile glows either.
+    const glow = !muted && ai >= 0 && ctx.audioGlow?.() !== false;
+    slots.forEach((s, i) => {
+      s.surface?.setMuted(muted || i !== ai);
+      s.setAudioGlow(glow && i === ai);
+    });
   }
 
   function slotCtx(i) {
@@ -438,21 +479,32 @@ export function createPage(comp, ctx) {
     slots = [];
   }
 
+  /** The morph itself (fade out -> re-compose -> fade in), shared by the timer and
+   *  by the eyes-closed gesture. Returns false when it could not run. */
+  function runMorph() {
+    if (!active || morphing || comp.layout !== 'random') return false;
+    morphing = true;
+    if (morphTimer != null) { clearTimeout(morphTimer); morphTimer = null; }
+    inner.style.transition = `opacity ${MORPH_FADE_OUT_MS}ms ease-in`;
+    inner.style.opacity = '0';
+    setTimeout(() => {
+      morphing = false;
+      if (!active) { inner.style.opacity = '1'; return; }
+      const tiles = ctx.onMorph(comp.key); // feed re-composes in place
+      if (tiles) { unmountTiles(); mountTiles(); }
+      inner.style.transition = `opacity ${MORPH_FADE_IN_MS}ms ease-out`;
+      inner.style.opacity = '1';
+      scheduleMorph();
+    }, MORPH_FADE_OUT_MS);
+    return true;
+  }
+
+  // Only clears/re-arms the timer — it must NOT touch opacity, or re-arming at the
+  // tail of a morph would stomp the fade-in transition it was just given.
   function scheduleMorph() {
-    cancelMorph();
+    if (morphTimer != null) { clearTimeout(morphTimer); morphTimer = null; }
     if (!active || comp.layout !== 'random' || !ctx.mosaicAutoChange()) return;
-    morphTimer = setTimeout(() => {
-      inner.style.transition = `opacity ${MORPH_FADE_OUT_MS}ms ease-in`;
-      inner.style.opacity = '0';
-      setTimeout(() => {
-        if (!active) { inner.style.opacity = '1'; return; }
-        const tiles = ctx.onMorph(comp.key); // feed re-composes in place
-        if (tiles) { unmountTiles(); mountTiles(); }
-        inner.style.transition = `opacity ${MORPH_FADE_IN_MS}ms ease-out`;
-        inner.style.opacity = '1';
-        scheduleMorph();
-      }, MORPH_FADE_OUT_MS);
-    }, Math.max(3000, ctx.mosaicChangeMs()));
+    morphTimer = setTimeout(runMorph, Math.max(3000, ctx.mosaicChangeMs()));
   }
 
   function cancelMorph() {
@@ -466,6 +518,31 @@ export function createPage(comp, ctx) {
     key: comp.key,
     comp,
     get active() { return active; },
+
+    // ---- eye control ----
+    /** Tiles currently mounted (falls back to the model when inactive). */
+    get tileCount() { return slots.length || comp.tiles.length; },
+    /** True while a tile slide or a morph is in flight — do not act on a gesture. */
+    get busy() { return morphing || slots.some((s) => s.sliding); },
+    /**
+     * Index of the tile under a client-space point, or -1. Uses the slots' own
+     * laid-out rects, so it is right for every layout without duplicating the
+     * band/mosaic geometry: duo/trio bands and mosaic cells are both just rects.
+     */
+    tileAtPoint(cx, cy) {
+      for (let i = 0; i < slots.length; i++) {
+        const r = slots[i].el.getBoundingClientRect();
+        if (cx >= r.left && cx < r.right && cy >= r.top && cy < r.bottom) return i;
+      }
+      return -1;
+    },
+    /** Swap one tile through the exact chevron path (fresh pick + cross-slide). */
+    swapTileAt(i) {
+      return slots[i] ? slots[i].commitSwap('next') : false;
+    },
+    /** Re-compose the whole mosaic now, with the timer's fade choreography. */
+    morphNow() { return runMorph(); },
+
     setActive(on) {
       if (on === active) return;
       active = on;

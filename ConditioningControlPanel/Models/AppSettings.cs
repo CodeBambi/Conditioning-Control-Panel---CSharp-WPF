@@ -2819,6 +2819,44 @@ namespace ConditioningControlPanel.Models
             get => _fypMuted;
             set { _fypMuted = value; OnPropertyChanged(); }
         }
+
+        private double _fypWindowOpacity = 1.0;
+        /// <summary>Whole-window alpha for the feed (0.30-1.0), so it can be parked semi-transparent
+        /// over the desktop. Applied natively (WS_EX_LAYERED + LWA_ALPHA) because WPF's
+        /// Window.Opacity does not reach the WebView2 child HWND. Floored at 0.30 - any lower and
+        /// the window is invisible enough that the user cannot find it to close it.</summary>
+        public double FypWindowOpacity
+        {
+            get => _fypWindowOpacity;
+            set { _fypWindowOpacity = Math.Clamp(value, 0.30, 1.0); OnPropertyChanged(); }
+        }
+
+        private bool _fypAudioGlow = true;
+        /// <summary>Page-side visual: the playing tile pulses with its own audio level. Persisted
+        /// here and handed to the page in the init payload; the app itself does nothing with it.</summary>
+        public bool FypAudioGlow
+        {
+            get => _fypAudioGlow;
+            set { _fypAudioGlow = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypEyeControl = false;
+        /// <summary>Webcam eye control for the feed: a blink swaps one tile, holding the eyes
+        /// shut for 2s changes the whole page. Off by default - it turns the camera on.</summary>
+        public bool FypEyeControl
+        {
+            get => _fypEyeControl;
+            set { _fypEyeControl = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypEyeGaze = false;
+        /// <summary>With eye control on, a blink swaps the tile the user is LOOKING at rather than
+        /// a random one. Only meaningful once gaze is calibrated; ignored otherwise.</summary>
+        public bool FypEyeGaze
+        {
+            get => _fypEyeGaze;
+            set { _fypEyeGaze = value; OnPropertyChanged(); }
+        }
         #endregion
 
         #region Lock Card (Unlocks Lv.35)
