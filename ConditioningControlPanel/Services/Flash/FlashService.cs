@@ -1117,9 +1117,11 @@ namespace ConditioningControlPanel.Services
                 {
                     if (!IsOverlapping(finalX, finalY, geom.Width, geom.Height))
                         break;
-                    
-                    finalX = monitor.X + _random.Next(0, Math.Max(1, monitor.Width - geom.Width));
-                    finalY = monitor.Y + _random.Next(0, Math.Max(1, monitor.Height - geom.Height));
+
+                    // MUST go through PickSpawnPoint, not a raw re-randomize: this loop used to
+                    // bypass the geometry rules entirely, so with #770's avoid-center on, any
+                    // overlapping flash would land right back on the crosshair.
+                    (finalX, finalY) = PickSpawnPoint(monitor, geom.Width, geom.Height);
                 }
 
                 // Render path decided at the top of this method (mode-aware cap):
@@ -2082,16 +2084,11 @@ namespace ConditioningControlPanel.Services
             var targetWidth = Math.Max(50, (int)(origWidth * ratio));
             var targetHeight = Math.Max(50, (int)(origHeight * ratio));
 
-            // Random position within monitor bounds with edge padding
-            // Keep targets away from screen edges so they're fully visible and clickable
-            const int edgePadding = 50;
-            var minX = edgePadding;
-            var minY = edgePadding;
-            var maxX = Math.Max(minX + 1, monitor.Width - targetWidth - edgePadding);
-            var maxY = Math.Max(minY + 1, monitor.Height - targetHeight - edgePadding);
-
-            var x = monitor.X + _random.Next(minX, maxX);
-            var y = monitor.Y + _random.Next(minY, maxY);
+            // Random position within monitor bounds with edge padding, honoring the #770
+            // avoid-the-center exclusion box. PickSpawnPoint is the ONE spawn-point computation —
+            // the anti-overlap retry loop in ShowSingleImage re-rolls through it too, or overlapping
+            // flashes would punch straight back into the crosshair.
+            var (x, y) = PickSpawnPoint(monitor, targetWidth, targetHeight);
 
             return new ImageGeometry
             {
@@ -2100,6 +2097,123 @@ namespace ConditioningControlPanel.Services
                 Width = targetWidth,
                 Height = targetHeight
             };
+        }
+
+        /// <summary>
+        /// Keep targets away from screen edges so they're fully visible and clickable.
+        /// </summary>
+        internal const int SpawnEdgePadding = 50;
+
+        /// <summary>
+        /// Picks a top-left spawn point (in virtual-desktop DIPs) for a <paramref name="w"/>x<paramref name="h"/>
+        /// image on <paramref name="monitor"/>. Applies the #770 centered exclusion box when the user
+        /// has it on. Shared by <see cref="CalculateGeometry"/> and the anti-overlap retry loop.
+        /// </summary>
+        private (int X, int Y) PickSpawnPoint(MonitorInfo monitor, int w, int h)
+        {
+            var s = App.Settings?.Current;
+            bool avoid = s?.FlashAvoidCenter == true;
+            int pct = s?.FlashCenterExclusionPercent ?? 25;
+
+            if (avoid &&
+                TryPickAvoidCenterPoint(monitor.Width, monitor.Height, w, h, pct, _random, out int lx, out int ly))
+            {
+                return (monitor.X + lx, monitor.Y + ly);
+            }
+
+            if (avoid && !_loggedAvoidCenterFallback)
+            {
+                // Total legal band area was 0 — the image is too big for any band to survive next to
+                // the exclusion box. Fall back to an unconstrained pick rather than never spawning.
+                _loggedAvoidCenterFallback = true;
+                App.Logger.Debug(
+                    "Flash avoid-center: no legal band for {W}x{H} on {MW}x{MH} at {Pct}% — falling back to unconstrained placement (logged once)",
+                    w, h, monitor.Width, monitor.Height, pct);
+            }
+
+            var (minX, minY, maxX, maxY) = SpawnBounds(monitor.Width, monitor.Height, w, h);
+            return (monitor.X + _random.Next(minX, maxX), monitor.Y + _random.Next(minY, maxY));
+        }
+
+        private bool _loggedAvoidCenterFallback;
+
+        /// <summary>
+        /// The unconstrained legal range for a top-left spawn point, in monitor-local DIPs.
+        /// Ranges are half-open on the max end, matching <see cref="Random.Next(int,int)"/>.
+        /// </summary>
+        internal static (int MinX, int MinY, int MaxX, int MaxY) SpawnBounds(int monW, int monH, int w, int h)
+        {
+            var minX = SpawnEdgePadding;
+            var minY = SpawnEdgePadding;
+            var maxX = Math.Max(minX + 1, monW - w - SpawnEdgePadding);
+            var maxY = Math.Max(minY + 1, monH - h - SpawnEdgePadding);
+            return (minX, minY, maxX, maxY);
+        }
+
+        /// <summary>
+        /// #770 — band remap (NOT rejection sampling). Builds the centered exclusion square
+        /// (<paramref name="pct"/>% of the SHORTER monitor edge, per-monitor) and splits the legal
+        /// area into 4 DISJOINT bands where a <paramref name="w"/>x<paramref name="h"/> image fits
+        /// without touching it: left / right / above / below. A band is picked weighted by its area
+        /// and the point is then uniform inside it, so the result is uniform over the whole legal
+        /// region in a single roll — no retry loop, no worst-case starvation.
+        /// </summary>
+        /// <returns>false when the total legal area is 0 (image too large); caller falls back.</returns>
+        internal static bool TryPickAvoidCenterPoint(
+            int monW, int monH, int w, int h, int pct, Random random, out int x, out int y)
+        {
+            x = y = 0;
+
+            var (minX, minY, maxX, maxY) = SpawnBounds(monW, monH, w, h);
+
+            // Centered exclusion square, sized off the shorter edge so it stays square on ultrawides.
+            double side = Math.Clamp(pct, 5, 60) / 100.0 * Math.Min(monW, monH);
+            int exLeft = (int)Math.Round((monW - side) / 2.0);
+            int exTop = (int)Math.Round((monH - side) / 2.0);
+            int exRight = exLeft + (int)Math.Round(side);
+            int exBottom = exTop + (int)Math.Round(side);
+
+            // An image at local (x,y) misses the box iff it is fully left (x + w <= exLeft),
+            // fully right (x >= exRight), fully above (y + h <= exTop) or fully below (y >= exBottom).
+            // Left/right take the FULL y range; above/below take only the x-strip left over between
+            // them, which keeps the 4 bands disjoint so area weighting stays a true uniform.
+            int leftMaxX = Math.Min(maxX, exLeft - w + 1);   // exclusive
+            int rightMinX = Math.Max(minX, exRight);
+            int stripMinX = Math.Max(minX, leftMaxX);
+            int stripMaxX = Math.Min(maxX, rightMinX);       // exclusive
+            int aboveMaxY = Math.Min(maxY, exTop - h + 1);   // exclusive
+            int belowMinY = Math.Max(minY, exBottom);
+
+            Span<long> areas = stackalloc long[4];
+            areas[0] = Area(minX, leftMaxX, minY, maxY);        // left
+            areas[1] = Area(rightMinX, maxX, minY, maxY);       // right
+            areas[2] = Area(stripMinX, stripMaxX, minY, aboveMaxY);  // above
+            areas[3] = Area(stripMinX, stripMaxX, belowMinY, maxY);  // below
+
+            long total = areas[0] + areas[1] + areas[2] + areas[3];
+            if (total <= 0) return false;
+
+            // Weighted band pick, then uniform inside the chosen band.
+            long roll = (long)(random.NextDouble() * total);
+            if (roll >= total) roll = total - 1; // guard the 1.0 edge
+            int band = 0;
+            for (; band < 3; band++)
+            {
+                if (roll < areas[band]) break;
+                roll -= areas[band];
+            }
+
+            switch (band)
+            {
+                case 0: x = random.Next(minX, leftMaxX); y = random.Next(minY, maxY); break;
+                case 1: x = random.Next(rightMinX, maxX); y = random.Next(minY, maxY); break;
+                case 2: x = random.Next(stripMinX, stripMaxX); y = random.Next(minY, aboveMaxY); break;
+                default: x = random.Next(stripMinX, stripMaxX); y = random.Next(belowMinY, maxY); break;
+            }
+            return true;
+
+            static long Area(int x0, int x1, int y0, int y1)
+                => (long)Math.Max(0, x1 - x0) * Math.Max(0, y1 - y0);
         }
 
         private bool IsOverlapping(int x, int y, int w, int h)

@@ -245,6 +245,8 @@
   "tooltip_scale_of_flash_images_100_original_size_200_d": "Escala das imagens flash.\r\n100% = tamanho original, 200% = dobro do tamanho.",
   "setting_size": "Tamanho",
   "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparência das imagens flash.\r\nMenor = mais transparente, 100% = totalmente sólido.",
+  "setting_avoid_screen_center": "Evitar o centro da tela",
+  "tooltip_keep_flash_images_out_of_a_square_in_the_midd": "Mantém as imagens flash fora de um quadrado no centro de cada tela.\r\nÓtimo para jogar: nada cobre a sua mira. O controle define o tamanho da área (% do lado mais curto da tela).",
   "tooltip_fade_in_out_animation_speed_0_instant_appear": "Velocidade da animação de transição.\r\n0% = aparece/desaparece instantaneamente.\r\n100% = transição suave e lenta.",
   "setting_fade": "Transição",
   "tooltip_how_long_images_stay_on_screen_only_used_when": "Quanto tempo as imagens ficam na tela.\r\nUsado apenas quando o áudio está desativado.",
