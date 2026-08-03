@@ -221,6 +221,14 @@ namespace ConditioningControlPanel
         {
             var mods = Keyboard.Modifiers;
             if (!IsBlockedInputGesture(e.Key, mods)) return;
+
+            // Auto-repeat: still swallowed, but WITHOUT the feedback. Holding Ctrl+Z fires ~30 of
+            // these a second and each RejectCheat starts DoubleAnimations on up to 6 fullscreen
+            // layered windows — the exact render pressure the #494 notes in this file call out as a
+            // UI-wedge risk, and a wedge with a card up arms the dead-man's switch. The first press
+            // already shook every card, which is all the "no" the user needs.
+            if (e.IsRepeat) { e.Handled = true; return; }
+
             e.Handled = true;
             RejectCheat($"key {mods}+{e.Key}");
         }
@@ -235,7 +243,12 @@ namespace ConditioningControlPanel
         {
             // HasFlag rather than ==, so Ctrl+Shift+V (paste as plain text) is caught too — the old
             // exact-equality check let every extra-modifier variant straight through (#734).
-            if (mods.HasFlag(ModifierKeys.Control) &&
+            //
+            // ...but NOT with Alt down: Windows synthesizes AltGr as Ctrl+Alt, so on Polish, Croatian
+            // and US-International layouts AltGr+{C,V,X,A,Z,Y} are how you type ć/ź/ą/ż and friends.
+            // Blocking those made any phrase containing them literally unsolvable. AltGr is not a
+            // clipboard gesture on any layout, so nothing is lost by letting Ctrl+Alt through.
+            if (mods.HasFlag(ModifierKeys.Control) && !mods.HasFlag(ModifierKeys.Alt) &&
                 (key == Key.C || key == Key.V || key == Key.X || key == Key.A ||
                  key == Key.Z || key == Key.Y || key == Key.Insert))
                 return true;
@@ -253,6 +266,24 @@ namespace ConditioningControlPanel
         /// (paste, undo, a drop) leaves the credit far short of this, so the match is refused.
         /// </summary>
         internal static bool HasTypedEnough(int keystrokes, int phraseLength) => keystrokes >= phraseLength;
+
+        /// <summary>
+        /// Keystroke credit for a TextChanged that PreviewTextInput did NOT account for: the full
+        /// growth of the box, not a single character.
+        ///
+        /// The old "+1 only if it grew by exactly one" rule silently bricked every bulk-but-legitimate
+        /// input route — a CJK IME commits the whole composed phrase in one TextChanged with no
+        /// PreviewTextInput at all, as do Win+H voice typing and the Win+. emoji picker. The gate then
+        /// saw 0 keystrokes for a full-phrase match, wiped the box, and the card became unsolvable for
+        /// that user forever.
+        ///
+        /// This costs no cheat resistance: DataObject.Pasting cancels the paste command so pasted text
+        /// never reaches the box (no TextChanged to credit), IsUndoEnabled is false so Ctrl+Z can't
+        /// resurrect a cleared phrase, and every blocked gesture is handled before the TextBox acts.
+        /// Growth here means text that some input method genuinely produced.
+        /// </summary>
+        internal static int CreditFailSafeGrowth(bool sawTextInput, int previousLength, int currentLength)
+            => (!sawTextInput && currentLength > previousLength) ? currentLength - previousLength : 0;
 
         /// <summary>
         /// Visible "no" for a blocked shortcut or a rejected bulk insert. Deliberately wordless (a shake
@@ -622,11 +653,9 @@ namespace ConditioningControlPanel
 
             var input = TxtInput.Text;
 
-            // Fail-safe keystroke accounting: PreviewTextInput is the counter of record, but if an exotic
-            // input method ever delivers text without raising it, still credit single-character growth.
-            // A bulk insertion (paste, undo, drop) grows the box by more than one character at a time and
-            // is never credited here.
-            if (!_sawTextInput && input.Length == _lastInputLength + 1) _keystrokes++;
+            // Fail-safe keystroke accounting: PreviewTextInput is the counter of record, but if an
+            // input method delivers text without raising it, credit whatever the box actually grew by.
+            _keystrokes += CreditFailSafeGrowth(_sawTextInput, _lastInputLength, input.Length);
             _sawTextInput = false;
             _lastInputLength = input.Length;
 

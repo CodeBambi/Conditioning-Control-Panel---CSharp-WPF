@@ -148,8 +148,13 @@ namespace ConditioningControlPanel
                         break;
 
                     case BugReportService.SubmitOutcome.SavedPending:
+                        // A 202 can carry no report number; formatting the empty string straight into
+                        // the template left the user reading "Report saved ().".
                         ShowSuccessPanel(
-                            Loc.GetF("bug_report_saved_pending_toast", result.Token ?? ""),
+                            string.IsNullOrWhiteSpace(result.Token)
+                                ? BugReportService.TidyEmptyTokenPlaceholder(
+                                    Loc.GetF("bug_report_saved_pending_toast", string.Empty))
+                                : Loc.GetF("bug_report_saved_pending_toast", result.Token),
                             result.Token);
                         break;
 

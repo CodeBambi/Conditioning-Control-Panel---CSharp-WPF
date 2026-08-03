@@ -237,4 +237,66 @@ public class BugReportDiagnosticsTests
 
         Assert.Empty(BugReportService.ParseRecentReports(null));
     }
+
+    [Theory]
+    [InlineData("5")]                       // a truncated/corrupt field: TryParse turned this into a date
+    [InlineData("2026")]
+    [InlineData("2026-08-01")]              // a date, but not the "o" round-trip format we write
+    [InlineData("2026-08-01T10:00:00Z")]    // ISO-ish, but missing the fractional seconds "o" emits
+    public void RecentReports_CorruptStamp_ParsesAsNoStamp_NotAPlausibleDate(string badStamp)
+    {
+        var rows = BugReportService.ParseRecentReports(new[] { $"BUG-1234567890|{badStamp}|bug" });
+
+        Assert.Single(rows);
+        Assert.Equal("BUG-1234567890", rows[0].Token);
+        Assert.Null(rows[0].TimestampUtc);   // graceful skip, never an invented filing date
+    }
+
+    [Fact]
+    public void RecentReports_RoundTrip_ThroughTheExactFormat()
+    {
+        // What AppendRecentReport writes must be exactly what ParseRecentReports accepts.
+        var list = new List<string>();
+        var when = new DateTime(2026, 8, 3, 14, 30, 0, DateTimeKind.Utc);
+        BugReportService.AppendRecentReport(list, "BUG-0123456789", when, BugReportService.ReportKind.Bug);
+
+        var rows = BugReportService.ParseRecentReports(list);
+        Assert.Equal(when, rows[0].TimestampUtc);
+        Assert.Equal(DateTimeKind.Utc, rows[0].TimestampUtc!.Value.Kind);
+    }
+
+    [Fact]
+    public void RecentReports_PipeInTheToken_CannotShiftTheOtherFields()
+    {
+        // The record is pipe-delimited; an unsanitized pipe would push the stamp into the kind slot.
+        var list = new List<string>();
+        var when = new DateTime(2026, 8, 3, 14, 30, 0, DateTimeKind.Utc);
+        BugReportService.AppendRecentReport(list, "BUG-123|456", when, BugReportService.ReportKind.Suggestion);
+
+        Assert.Equal(3, list[0].Split('|').Length);
+        var rows = BugReportService.ParseRecentReports(list);
+        Assert.Equal("BUG-123456", rows[0].Token);
+        Assert.Equal(when, rows[0].TimestampUtc);
+        Assert.Equal(BugReportService.ReportKind.Suggestion, rows[0].Kind);
+    }
+
+    // ------------------------------------------------------------------
+    // #769 — a 202 with no report number must not render "Report saved ()."
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("Report saved (). The maintainer will receive it shortly.",
+                "Report saved. The maintainer will receive it shortly.")]
+    [InlineData("报告已保存（）。维护者将很快收到", "报告已保存。维护者将很快收到")]   // zh-CN full-width parens
+    [InlineData("Saved []", "Saved")]
+    public void EmptyTokenPlaceholder_IsTidiedAway(string raw, string expected)
+        => Assert.Equal(expected, BugReportService.TidyEmptyTokenPlaceholder(raw));
+
+    [Fact]
+    public void TidyEmptyTokenPlaceholder_LeavesARealTokenAlone()
+    {
+        const string filled = "Report saved (BUG-0123456789). The maintainer will receive it shortly.";
+        Assert.Equal(filled, BugReportService.TidyEmptyTokenPlaceholder(filled));
+        Assert.Equal(string.Empty, BugReportService.TidyEmptyTokenPlaceholder(null));
+    }
 }

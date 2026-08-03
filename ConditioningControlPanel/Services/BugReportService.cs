@@ -5,6 +5,7 @@ using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Localization;
 using Newtonsoft.Json;
@@ -332,7 +333,11 @@ namespace ConditioningControlPanel.Services
 
             var kindText = kind == ReportKind.Suggestion ? "suggestion" : "bug";
             var stamp = timestampUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
-            list.Add($"{token.Trim()}|{stamp}|{kindText}");
+            // The record is pipe-delimited, so a pipe inside the token would shift the stamp and kind
+            // into the wrong fields on read. Server tokens are BUG-XXXXXXXXXX today; strip anyway.
+            var safeToken = token.Trim().Replace("|", "");
+            if (safeToken.Length == 0) return;
+            list.Add($"{safeToken}|{stamp}|{kindText}");
 
             if (list.Count > MaxRecentReports)
                 list.RemoveRange(0, list.Count - MaxRecentReports);
@@ -354,12 +359,19 @@ namespace ConditioningControlPanel.Services
                 var token = parts[0].Trim();
                 if (token.Length == 0) continue;
 
+                // EXACT "o" (the format AppendRecentReport writes), not a lenient TryParse: a corrupt
+                // field like "5" parses leniently into a plausible-looking date and the UI then shows
+                // the user a filing date that never happened. Anything else is treated as "no stamp",
+                // which the row already renders gracefully.
+                // NB: RoundtripKind alone — combining it with AdjustToUniversal throws ArgumentException.
                 DateTime? stamp = null;
-                if (parts.Length > 1 && DateTime.TryParse(
-                        parts[1], CultureInfo.InvariantCulture,
-                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed))
+                if (parts.Length > 1 && DateTime.TryParseExact(
+                        parts[1], "o", CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind, out var parsed))
                 {
-                    stamp = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+                    stamp = parsed.Kind == DateTimeKind.Unspecified
+                        ? DateTime.SpecifyKind(parsed, DateTimeKind.Utc)   // no offset written: it was UTC
+                        : parsed.ToUniversalTime();
                 }
 
                 var kind = parts.Length > 2 && string.Equals(parts[2].Trim(), "suggestion", StringComparison.OrdinalIgnoreCase)
@@ -371,6 +383,20 @@ namespace ConditioningControlPanel.Services
 
             result.Reverse(); // stored oldest-first; the UI shows newest-first
             return result;
+        }
+
+        /// <summary>
+        /// Render a "…({0})…" toast when there is no token to put in it. A 202/SavedPending response
+        /// can legitimately carry no report number, and the raw format left the user reading
+        /// "Report saved (). The maintainer will receive it shortly." Drops the now-empty bracket pair
+        /// (ASCII and CJK full-width, which is what the zh-CN string uses) and tidies the spacing.
+        /// Client-side on purpose: no localization file is touched.
+        /// </summary>
+        internal static string TidyEmptyTokenPlaceholder(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            var cleaned = Regex.Replace(text, @"[ \t]*[\(\[（【][ \t]*[\)\]）】]", "");
+            return Regex.Replace(cleaned, @"[ \t]{2,}", " ").Trim();
         }
 
         /// <summary>
@@ -388,7 +414,14 @@ namespace ConditioningControlPanel.Services
 
                 lock (RecentReportsLock)
                 {
-                    AppendRecentReport(settings.RecentBugReports, token, DateTime.UtcNow, kind);
+                    // Build a NEW list and publish it through the setter rather than mutating the live
+                    // one in place. This runs on a threadpool continuation while "My Reports" (and the
+                    // settings serializer) can be enumerating the property WITHOUT the lock — an
+                    // in-place Add/RemoveRange there is an InvalidOperationException waiting to happen.
+                    // Readers now always see a complete, immutable-by-convention snapshot.
+                    var updated = new List<string>(settings.RecentBugReports ?? new List<string>());
+                    AppendRecentReport(updated, token, DateTime.UtcNow, kind);
+                    settings.RecentBugReports = updated;
                 }
                 App.Settings?.Save();
             }
