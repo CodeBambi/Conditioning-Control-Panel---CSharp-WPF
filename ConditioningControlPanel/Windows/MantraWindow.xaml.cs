@@ -42,6 +42,14 @@ namespace ConditioningControlPanel
         {
             InitializeComponent();
             _service = App.Mantra;
+
+            // Same anti-cheat hardening as the lock card (#734). Key blocking alone isn't enough:
+            // the pasting handler also covers the context menu and drag-drop, and undo has to be off
+            // because TryCompleteMantra clears the box (TxtInput.Text = "" below) - Ctrl+Z would put
+            // the finished mantra straight back and the _updatingInput guard does not cover an
+            // undo-driven TextChanged, so every Ctrl+Z/Ctrl+Y pair counted as another repetition.
+            DataObject.AddPastingHandler(TxtInput, (s, e) => e.CancelCommand());
+            TxtInput.IsUndoEnabled = false;
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -225,9 +233,10 @@ namespace ConditioningControlPanel
 
         private void TxtInput_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            // Block paste (Ctrl+V), copy (Ctrl+C), select all (Ctrl+A)
-            if (Keyboard.Modifiers == ModifierKeys.Control &&
-                (e.Key == Key.V || e.Key == Key.C || e.Key == Key.A))
+            // Same gesture set as the lock card (paste/copy/cut/select-all/undo/redo plus the legacy
+            // Shift+Insert / Ctrl+Insert / Shift+Delete clipboard gestures) — shared so the two
+            // anti-cheat surfaces can't drift apart again (#734).
+            if (LockCardWindow.IsBlockedInputGesture(e.Key, Keyboard.Modifiers))
             {
                 e.Handled = true;
             }

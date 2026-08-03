@@ -134,7 +134,7 @@ of truth.)
 ### Localization
 11. **Never put a literal line break inside a language-file string.** Until 2026-07-29, 8 of the 9 `Localization/Languages/*.json` files carried raw newlines inside 38 tooltip values, so only Newtonsoft's leniency parsed them - `System.Text.Json`, `jq`, Python and most format-on-save tools rejected all 8. They are now escaped as `\n`/`\r\n` and every file parses strictly. Keep it that way: write `\n`, not an actual newline.
 12. **A dead language file no longer empties the UI.** `LocalizationManager.LoadLanguageFile` returns an empty dictionary on failure; `SetLanguage` treats that as "fall back to English", and `EnsureFallbackLoaded` logs **Fatal** if `en.json` itself fails (the one case with nothing to fall back to - the UI then renders raw keys like `btn_start_flashes`). If you see that Fatal line, the language file is broken, not the UI.
-13. **Edit language files as raw text, preserving bytes.** `es/fr/pt-BR/de/ja/ko/ru/zh-CN.json` are CRLF; `en.json` is LF. Reading them in a newline-translating text mode and writing them back silently rewrites every line in the file.
+13. **Don't hand-flip language-file line endings.** All 9 `Localization/Languages/*.json` are LF in git; the worktree shows CRLF only because `core.autocrlf=true` converts on checkout. Let autocrlf do its job and never commit a whole-file line-ending diff.
 
 ## Crash Logging
 - Crashes are logged to `logs/crash.log` with full stack traces

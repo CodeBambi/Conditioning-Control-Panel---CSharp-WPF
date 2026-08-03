@@ -33,6 +33,17 @@ namespace ConditioningControlPanel
         private System.Threading.CancellationTokenSource? _voiceCts; // cancels the in-flight recognize on close/panic/privacy
         private bool _evictedAutonomy = false; // we stood the "Hey Bambi" wake/PTT mic down and must restore it
 
+        // ── Anti-cheat: the phrase must actually be TYPED (#734) ───────────────
+        // Blocking the clipboard keys alone was never enough (and the old Window_KeyDown block was dead
+        // code: the TextBox class handler runs Paste and marks the event Handled long before it bubbles
+        // to the Window). Undo was the bigger hole - RegisterSuccessfulRepeat clears the box, so Ctrl+Z
+        // put the whole phrase straight back and re-fired the match, finishing a card in about a second.
+        // Belt and braces: the input is hardened (no paste, no undo, no clipboard gestures) AND a repeat
+        // is only accepted once the user has produced at least as many characters as the phrase is long.
+        private int _keystrokes;          // characters genuinely entered since the last accepted repeat
+        private int _lastInputLength;     // previous TxtInput.Text length, for the growth fail-safe below
+        private bool _sawTextInput;       // PreviewTextInput already credited the change being processed
+
         // Multi-monitor support
         private bool _isPrimary;
         private System.Windows.Forms.Screen? _screen;   // remembered so re-show can reposition on reuse
@@ -172,6 +183,119 @@ namespace ConditioningControlPanel
             {
                 if (IsVisible) ApplyPhysicalBounds();
             };
+
+            // ── Input hardening (#734) ─────────────────────────────────────────
+            // Wired HERE and not in Window_Loaded/Configure on purpose: this window is POOLED (see
+            // _pool / RentWindow), so Configure runs once per card while the ctor runs once per shell.
+            // Handlers attached per-card would stack up on every reuse.
+
+            // Kills every paste route at the source - Ctrl+V, Shift+Insert, the context menu, drag-drop
+            // and anything else that ends in a Paste command. Programmatic Text sets (the mirror sync in
+            // SyncInputToAllWindows) do NOT raise Pasting, so mirrors are unaffected.
+            DataObject.AddPastingHandler(TxtInput, (s, e) =>
+            {
+                e.CancelCommand();
+                RejectCheat("paste");
+            });
+
+            // No undo stack ⇒ Ctrl+Z can't resurrect the phrase that RegisterSuccessfulRepeat cleared.
+            TxtInput.IsUndoEnabled = false;
+
+            TxtInput.PreviewKeyDown += TxtInput_PreviewKeyDown;
+
+            // Primary keystroke counter. Fires for real typing (including IME commits, which arrive as
+            // the composed string) but never for a programmatic Text set or a clipboard insertion.
+            TxtInput.PreviewTextInput += (s, e) =>
+            {
+                _keystrokes += Math.Max(1, e.Text?.Length ?? 1);
+                _sawTextInput = true;
+            };
+        }
+
+        /// <summary>
+        /// Swallow the clipboard / undo gestures before the TextBox's own class handler can act on them.
+        /// This MUST be on the TextBox's PreviewKeyDown: the old block lived in the Window's (bubbling)
+        /// KeyDown, where TextBox had already executed Paste and set Handled - it never ran (#734).
+        /// </summary>
+        private void TxtInput_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            var mods = Keyboard.Modifiers;
+            if (!IsBlockedInputGesture(e.Key, mods)) return;
+
+            // Auto-repeat: still swallowed, but WITHOUT the feedback. Holding Ctrl+Z fires ~30 of
+            // these a second and each RejectCheat starts DoubleAnimations on up to 6 fullscreen
+            // layered windows — the exact render pressure the #494 notes in this file call out as a
+            // UI-wedge risk, and a wedge with a card up arms the dead-man's switch. The first press
+            // already shook every card, which is all the "no" the user needs.
+            if (e.IsRepeat) { e.Handled = true; return; }
+
+            e.Handled = true;
+            RejectCheat($"key {mods}+{e.Key}");
+        }
+
+        /// <summary>
+        /// Every keyboard gesture that could put text into the box without typing it, or take text out
+        /// of it: clipboard (Ctrl+C/V/X, Ctrl+Insert, Shift+Insert, Shift+Delete), select-all, and
+        /// undo/redo. Pure so it can be unit-tested; used by both the input's preview handler and the
+        /// window-level backstop. Escape is deliberately NOT here — it is the always-available exit.
+        /// </summary>
+        internal static bool IsBlockedInputGesture(Key key, ModifierKeys mods)
+        {
+            // HasFlag rather than ==, so Ctrl+Shift+V (paste as plain text) is caught too — the old
+            // exact-equality check let every extra-modifier variant straight through (#734).
+            //
+            // ...but NOT with Alt down: Windows synthesizes AltGr as Ctrl+Alt, so on Polish, Croatian
+            // and US-International layouts AltGr+{C,V,X,A,Z,Y} are how you type ć/ź/ą/ż and friends.
+            // Blocking those made any phrase containing them literally unsolvable. AltGr is not a
+            // clipboard gesture on any layout, so nothing is lost by letting Ctrl+Alt through.
+            if (mods.HasFlag(ModifierKeys.Control) && !mods.HasFlag(ModifierKeys.Alt) &&
+                (key == Key.C || key == Key.V || key == Key.X || key == Key.A ||
+                 key == Key.Z || key == Key.Y || key == Key.Insert))
+                return true;
+
+            // Legacy clipboard gestures: Shift+Insert = paste, Shift+Delete = cut.
+            if (mods.HasFlag(ModifierKeys.Shift) && (key == Key.Insert || key == Key.Delete))
+                return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// The semantic half of the anti-cheat: a repeat only counts once the user has produced at
+        /// least as many characters as the phrase is long. Any route that fills the box in one shot
+        /// (paste, undo, a drop) leaves the credit far short of this, so the match is refused.
+        /// </summary>
+        internal static bool HasTypedEnough(int keystrokes, int phraseLength) => keystrokes >= phraseLength;
+
+        /// <summary>
+        /// Keystroke credit for a TextChanged that PreviewTextInput did NOT account for: the full
+        /// growth of the box, not a single character.
+        ///
+        /// The old "+1 only if it grew by exactly one" rule silently bricked every bulk-but-legitimate
+        /// input route — a CJK IME commits the whole composed phrase in one TextChanged with no
+        /// PreviewTextInput at all, as do Win+H voice typing and the Win+. emoji picker. The gate then
+        /// saw 0 keystrokes for a full-phrase match, wiped the box, and the card became unsolvable for
+        /// that user forever.
+        ///
+        /// This costs no cheat resistance: DataObject.Pasting cancels the paste command so pasted text
+        /// never reaches the box (no TextChanged to credit), IsUndoEnabled is false so Ctrl+Z can't
+        /// resurrect a cleared phrase, and every blocked gesture is handled before the TextBox acts.
+        /// Growth here means text that some input method genuinely produced.
+        /// </summary>
+        internal static int CreditFailSafeGrowth(bool sawTextInput, int previousLength, int currentLength)
+            => (!sawTextInput && currentLength > previousLength) ? currentLength - previousLength : 0;
+
+        /// <summary>
+        /// Visible "no" for a blocked shortcut or a rejected bulk insert. Deliberately wordless (a shake
+        /// of every card) so there is no new user-facing string to localize across the 9 language files.
+        /// </summary>
+        private void RejectCheat(string reason)
+        {
+            App.Logger?.Debug("LockCardWindow: blocked cheat attempt ({Reason})", reason);
+            foreach (var window in _allWindows)
+            {
+                try { window.ShakeCard(); } catch { }
+            }
         }
 
         /// <summary>
@@ -190,6 +314,7 @@ namespace ConditioningControlPanel
             _completedRepeats = 0;
             _isCompleted = false;
             _sharedInput = "";
+            ResetKeystrokeGate();   // a pooled window still carries the previous card's typing credit
 
             _phrase = phrase;
             _requiredRepeats = repeats;
@@ -306,6 +431,8 @@ namespace ConditioningControlPanel
         {
             _isPrimary = true;
             ApplyInputAffordance();
+            // Insurance: this window has been a mirror until now, so nothing it holds counts as typing.
+            ResetKeystrokeGate();
 
             if (_hwnd != IntPtr.Zero)
             {
@@ -495,23 +622,45 @@ namespace ConditioningControlPanel
                 e.Handled = true;
             }
             
-            // Prevent Ctrl+C, Ctrl+V, Ctrl+X (no cheating!)
-            if (Keyboard.Modifiers == ModifierKeys.Control)
+            // Backstop only. This is the Window's BUBBLING KeyDown, so when the input has focus the
+            // TextBox class handler has already run Paste/Undo and marked the event Handled — nothing
+            // below ever fired for the case it was written for (#734). The real block is
+            // TxtInput_PreviewKeyDown; this just covers keys pressed while the input doesn't have focus
+            // (voice mode, mirrors). Do NOT move the Esc branch above into a preview handler: it is the
+            // deliberate always-available exit the dead-man's switch depends on.
+            if (IsBlockedInputGesture(e.Key, Keyboard.Modifiers))
             {
-                if (e.Key == Key.C || e.Key == Key.V || e.Key == Key.X || e.Key == Key.A)
-                {
-                    e.Handled = true;
-                }
+                e.Handled = true;
             }
+        }
+
+        /// <summary>
+        /// Zero the typing credit. Called wherever the input is cleared or its ownership changes, so a
+        /// pooled/promoted window can never inherit another card's (or another monitor's) credit.
+        /// </summary>
+        private void ResetKeystrokeGate()
+        {
+            _keystrokes = 0;
+            _lastInputLength = TxtInput?.Text?.Length ?? 0;
+            _sawTextInput = false;
         }
 
         private void TxtInput_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
+            // Mirrors bail here, so the gate below only ever measures the primary card's real typing —
+            // SyncInputToAllWindows' programmatic Text sets are never credited (or judged) as input.
             if (_isCompleted || !_isPrimary) return;
-            
+
             var input = TxtInput.Text;
+
+            // Fail-safe keystroke accounting: PreviewTextInput is the counter of record, but if an
+            // input method delivers text without raising it, credit whatever the box actually grew by.
+            _keystrokes += CreditFailSafeGrowth(_sawTextInput, _lastInputLength, input.Length);
+            _sawTextInput = false;
+            _lastInputLength = input.Length;
+
             _sharedInput = input;
-            
+
             // Track characters typed for achievement
             _totalCharsTyped++;
             
@@ -531,7 +680,26 @@ namespace ConditioningControlPanel
             // Check if the input matches the phrase (case-insensitive)
             if (string.Equals(input.Trim(), _phrase, StringComparison.OrdinalIgnoreCase))
             {
-                RegisterSuccessfulRepeat();
+                // The gate lives at THIS call site only. The spoken-solve path calls
+                // RegisterSuccessfulRepeat directly and must never be gated on typing (in voice mode
+                // the whole InputBorder is collapsed and nothing is ever typed).
+                if (HasTypedEnough(_keystrokes, _phrase.Length))
+                {
+                    RegisterSuccessfulRepeat();
+                }
+                else
+                {
+                    // A full-phrase match that nobody typed: some insertion route got past the
+                    // hardening above. Refuse it, wipe the box and make the user type it for real.
+                    App.Logger?.Information(
+                        "Lock Card: rejected an untyped match ({Keys} keystroke(s) for a {Len}-char phrase) (#734)",
+                        _keystrokes, _phrase.Length);
+                    TxtInput.Clear();
+                    ResetKeystrokeGate();
+                    _sharedInput = "";
+                    SyncInputToAllWindows("");
+                    RejectCheat("untyped match");
+                }
             }
         }
 
@@ -548,6 +716,8 @@ namespace ConditioningControlPanel
 
             // Clear input for next repeat (no-op/harmless in voice mode)
             TxtInput.Clear();
+            // The next repeat has to be earned from scratch — this is the clear that Ctrl+Z used to undo.
+            ResetKeystrokeGate();
             _sharedInput = "";
             SyncInputToAllWindows("");
 

@@ -54,6 +54,9 @@ namespace ConditioningControlPanel
             SettingsTab.ChkFlashAudio.IsChecked = s.FlashAudioEnabled;
             SettingsTab.SliderFlashDuration.IsEnabled = !s.FlashAudioEnabled;
             SettingsTab.SliderFlashDuration.Opacity = s.FlashAudioEnabled ? 0.5 : 1.0;
+            SettingsTab.ChkFlashAvoidCenter.IsChecked = s.FlashAvoidCenter;
+            SettingsTab.SliderCenterExclusion.Value = s.FlashCenterExclusionPercent;
+            SettingsTab.TxtCenterExclusion.Text = $"{s.FlashCenterExclusionPercent}%";
             
             // Set audio link state based on frequency
             _isLoading = false;
@@ -481,6 +484,8 @@ namespace ConditioningControlPanel
             s.ImageScale = (int)SettingsTab.SliderSize.Value;
             s.FlashOpacity = (int)SettingsTab.SliderOpacity.Value;
             s.FadeDuration = (int)SettingsTab.SliderFade.Value;
+            s.FlashAvoidCenter = SettingsTab.ChkFlashAvoidCenter.IsChecked ?? false;
+            s.FlashCenterExclusionPercent = (int)SettingsTab.SliderCenterExclusion.Value;
 
             // Video
             s.MandatoryVideosEnabled = SettingsTab.ChkVideoEnabled.IsChecked ?? false;

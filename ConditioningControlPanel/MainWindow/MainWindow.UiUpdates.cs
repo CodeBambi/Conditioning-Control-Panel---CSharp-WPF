@@ -798,6 +798,16 @@ namespace ConditioningControlPanel
             ApplySettingsLive();
         }
 
+        /// <summary>
+        /// #770 — size of the centered no-flash square, as a % of the shorter monitor edge.
+        /// </summary>
+        internal void SliderCenterExclusion_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || SettingsTab.TxtCenterExclusion == null) return;
+            SettingsTab.TxtCenterExclusion.Text = $"{(int)e.NewValue}%";
+            ApplySettingsLive();
+        }
+
         internal void SliderFade_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading || SettingsTab.TxtFade == null) return;
@@ -1228,6 +1238,21 @@ namespace ConditioningControlPanel
             var isEnabled = SettingsTab.ChkFlashGlow.IsChecked ?? true;
             App.Settings.Current.FlashGlowEnabled = isEnabled;
             App.Logger?.Information("Flash glow toggled: {Enabled}", isEnabled);
+            App.Settings.Save();
+        }
+
+        /// <summary>
+        /// #770 — keeps flashes out of a centered square on every monitor so they never cover a
+        /// game's crosshair. Global user preference: sessions and presets never touch it.
+        /// </summary>
+        internal void ChkFlashAvoidCenter_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = SettingsTab.ChkFlashAvoidCenter.IsChecked ?? false;
+            App.Settings.Current.FlashAvoidCenter = isEnabled;
+            App.Logger?.Information("Flash avoid-center toggled: {Enabled} ({Pct}%)",
+                isEnabled, App.Settings.Current.FlashCenterExclusionPercent);
             App.Settings.Save();
         }
 

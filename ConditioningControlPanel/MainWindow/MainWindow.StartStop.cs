@@ -717,6 +717,8 @@ namespace ConditioningControlPanel
             s.ImageScale = (int)SettingsTab.SliderSize.Value;
             s.FlashOpacity = (int)SettingsTab.SliderOpacity.Value;
             s.FadeDuration = (int)SettingsTab.SliderFade.Value;
+            s.FlashAvoidCenter = SettingsTab.ChkFlashAvoidCenter.IsChecked ?? false;
+            s.FlashCenterExclusionPercent = (int)SettingsTab.SliderCenterExclusion.Value;
 
             // Video settings
             s.MandatoryVideosEnabled = SettingsTab.ChkVideoEnabled.IsChecked ?? false;

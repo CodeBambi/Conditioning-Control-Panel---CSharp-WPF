@@ -1016,6 +1016,8 @@
   "tooltip_scale_of_flash_images_100_original_size_200_d": "Scale of flash images.\n100% = original size, 200% = double size.",
   "setting_size": "Size",
   "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparency of flash images.\nLower = more see-through, 100% = fully solid.",
+  "setting_avoid_screen_center": "Avoid Screen Center",
+  "tooltip_keep_flash_images_out_of_a_square_in_the_midd": "Keeps flash images out of a square in the middle of every screen.\nGreat for gaming - nothing covers your crosshair. The slider sets the box size (% of the shorter screen edge).",
   "tooltip_fade_in_out_animation_speed_0_instant_appear": "Fade in/out animation speed.\n0% = instant appear/disappear.\n100% = slow smooth fade.",
   "setting_fade": "Fade",
   "tooltip_how_long_images_stay_on_screen_only_used_when": "How long images stay on screen.\nOnly used when audio is disabled.",
@@ -3843,5 +3845,16 @@
   "label_motion_off": "Off",
   "session_lock_reason": "You're in a session! Its features and intensity are locked until it ends.",
   "session_lock_action_title": "You're in a session",
-  "session_lock_action_body": "{0}\n\nThis would overwrite what the session prescribed. Stop the session first if you really want to change it."
+  "session_lock_action_body": "{0}\n\nThis would overwrite what the session prescribed. Stop the session first if you really want to change it.",
+  "btn_my_reports": "My Reports",
+  "my_reports_title": "My Reports",
+  "my_reports_subtitle": "Report numbers from bugs and suggestions you have sent. Quote one in Discord if you want to add details.",
+  "my_reports_empty": "No reports yet.",
+  "my_reports_kind_bug": "Bug report",
+  "my_reports_kind_suggestion": "Suggestion",
+  "bug_report_token_label": "Your report number",
+  "bug_report_token_hint": "Save this number. Quote it in Discord if you want to add details or ask about your report.",
+  "video_grace_paused_title": "Paused",
+  "btn_video_grace_resume": "Resume",
+  "video_grace_auto_resume_in": "Resuming in {0}s"
 }

@@ -822,6 +822,22 @@ namespace ConditioningControlPanel
             // Reactivates on its own once the game window closes (IsActive flips false).
             if (Services.Chaos.DtrhHostService.IsActive) { VideoDiag.Log("PANIC", "handed off to the DtRH web game window"); return; }
 
+            // #735 "grace pause": while a mandatory video is really on screen, the FIRST panic press
+            // pauses it behind a small Paused/Resume card instead of stopping the engine — the user
+            // may be pausing because someone walked in, and a bark, an achievement track and a whole
+            // session teardown are all the wrong answer to that. Deliberately placed AFTER the two
+            // chaos/DtRH hand-offs (their panic behaviour must not change) and BEFORE the bark, so a
+            // grace pause is silent. One per video run; press 2 falls straight through to everything
+            // below, press 3 exits the app — three taps from a playing video to exit, as before + 1.
+            //
+            // The early return leaves _panicPressCount/_lastPanicTime untouched ON PURPOSE: the pause
+            // is not a rung of the ladder, so it must not advance (or reset) it.
+            if (App.Video?.TryGracePauseFromPanic() == true)
+            {
+                VideoDiag.Log("PANIC", "press consumed as video grace pause");
+                return;
+            }
+
             // Let the companion say a calm, persona-neutral safety line (highest priority,
             // bypasses the bark gate). Fired before the stop flow so it's not suppressed.
             App.Bark?.NotifyPanic();
