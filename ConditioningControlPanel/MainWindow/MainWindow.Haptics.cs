@@ -1,43 +1,300 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Net.Http;
-using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
-using System.Windows.Media.Effects;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using Rectangle = System.Windows.Shapes.Rectangle;
-using NAudio.Wave;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
-using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Haptics.Core;
+using ConditioningControlPanel.Views.Controls;
 
 namespace ConditioningControlPanel
 {
-    // Haptics tab: device handlers and intensity controls.
+    // ============================================================================
+    // Haptics tab (Phase E rebuild).
+    //
+    // The nine copy-pasted feature rows and their nine near-identical handlers are
+    // gone: the routing matrix is an ItemsControl over HapticRoutingRowVm, and each
+    // row writes straight through to the settings object the engine reads.
+    // What remains here is the stuff that genuinely needs the window: connection,
+    // panic stop, provider selection, the global dials, the toy registry bridge and
+    // the pattern lab.
+    //
+    // Threading: HapticDeviceManager.DevicesChanged is raised from provider IO
+    // threads, so every refresh marshals with DispatcherPriority.Normal —
+    // DispatcherPriority.Loaded is starved in this app and would never run.
+    // ============================================================================
     public partial class MainWindow
     {
-        #region Haptics Handlers
+        #region Haptics — state
+
+        private bool _hapticsTabBuilt;
+        private readonly ObservableCollection<HapticProviderChipVm> _hapticProviderChips = new();
+        private readonly ObservableCollection<HapticRoutingGroupVm> _hapticRoutingGroups = new();
+        private readonly ObservableCollection<HapticToyCardVm> _hapticToyCards = new();
+        private DispatcherTimer? _hapticSliderDebounce;
+
+        private static HapticSettings HapticCfg => App.Settings.Current.Haptics;
+
+        #endregion
+
+        #region Haptics — build & refresh
+
+        /// <summary>
+        /// One-shot construction of the data-driven parts of the tab. Called from the
+        /// settings-load pass (MainWindow.Settings.cs) before any value is pushed into a
+        /// control, so the routing rows exist by the time the UI is populated.
+        /// </summary>
+        internal void InitializeHapticsTab()
+        {
+            if (_hapticsTabBuilt) return;
+            _hapticsTabBuilt = true;
+
+            var s = HapticCfg;
+            s.EnsureV2Migrated();
+
+            // ---- provider chips -------------------------------------------------
+            _hapticProviderChips.Clear();
+            _hapticProviderChips.Add(new HapticProviderChipVm("lovense", "Lovense"));
+            _hapticProviderChips.Add(new HapticProviderChipVm("buttplug", "Intiface"));
+            _hapticProviderChips.Add(new HapticProviderChipVm("mock", Loc.Get("haptics_provider_mock")));
+            HapticsTab.ProviderChipsList.ItemsSource = _hapticProviderChips;
+
+            // ---- routing matrix -------------------------------------------------
+            HapticRoutingRowVm Ev(HapticEventKind kind, string icon, string labelKey, string hintKey)
+            {
+                var row = HapticRoutingRowVm.ForEvent(s, kind, icon, labelKey, hintKey);
+                row.Changed += OnHapticRoutingRowChanged;
+                return row;
+            }
+            HapticRoutingRowVm Ly(HapticLayer layer, string icon, string labelKey, string hintKey,
+                                  HapticRowLegacyBinding legacy)
+            {
+                var row = HapticRoutingRowVm.ForLayer(s, layer, icon, labelKey, hintKey, legacy);
+                row.Changed += OnHapticRoutingRowChanged;
+                return row;
+            }
+
+            _hapticRoutingGroups.Clear();
+            _hapticRoutingGroups.Add(new HapticRoutingGroupVm("🌀", Loc.Get("haptics_group_core"), new[]
+            {
+                Ev(HapticEventKind.FlashClick, "⚡", "label_flash_click", "haptics_hint_flash_click"),
+                Ev(HapticEventKind.FlashDecay, "💥", "label_flash_show", "haptics_hint_flash_decay"),
+                Ev(HapticEventKind.SubliminalTrigger, "💬", "tab_subliminals", "haptics_hint_subliminal"),
+                Ev(HapticEventKind.KeywordTrigger, "🔑", "haptics_row_keyword", "haptics_hint_keyword"),
+                // Blink has had settings since v6.4 and never had a row until now.
+                Ev(HapticEventKind.BlinkPulse, "👁", "haptics_row_blink", "haptics_hint_blink"),
+            }));
+            _hapticRoutingGroups.Add(new HapticRoutingGroupVm("🏆", Loc.Get("haptics_group_rewards"), new[]
+            {
+                Ev(HapticEventKind.Achievement, "🏆", "tab_achievements", "haptics_hint_achievement"),
+                Ev(HapticEventKind.QuestComplete, "📋", "haptics_row_quest", "haptics_hint_quest"),
+                Ev(HapticEventKind.LevelUp, "⭐", "label_level_up", "haptics_hint_levelup"),
+                Ev(HapticEventKind.GazeReward, "👀", "haptics_row_gaze", "haptics_hint_gaze"),
+            }));
+            _hapticRoutingGroups.Add(new HapticRoutingGroupVm("🎬", Loc.Get("haptics_group_media"), new[]
+            {
+                Ly(HapticLayer.Video, "🎬", "haptics_row_video_bg", "haptics_hint_video_bg", HapticRowLegacyBinding.VideoLevel),
+                Ev(HapticEventKind.VideoTargetHit, "🎯", "label_target_hit", "haptics_hint_target_hit"),
+                Ly(HapticLayer.AudioSync, "🎵", "haptics_row_audio_sync", "haptics_hint_audio_sync", HapticRowLegacyBinding.AudioSync),
+                Ev(HapticEventKind.BouncingTextBounce, "🔤", "label_bounce_text", "haptics_hint_bouncing_text"),
+            }));
+            _hapticRoutingGroups.Add(new HapticRoutingGroupVm("🎮", Loc.Get("haptics_group_games"), new[]
+            {
+                Ev(HapticEventKind.BubblePop, "🫧", "label_bubbles", "haptics_hint_bubble"),
+                Ev(HapticEventKind.DtrhAccent, "🐇", "label_dtrh_haptics", "haptics_hint_dtrh"),
+            }));
+            HapticsTab.RoutingGroupsList.ItemsSource = _hapticRoutingGroups;
+
+            // ---- toy cards ------------------------------------------------------
+            HapticsTab.ToyCardsList.ItemsSource = _hapticToyCards;
+
+            if (App.Haptics != null)
+            {
+                App.Haptics.DeviceManager.DevicesChanged += OnHapticDevicesChanged;
+                App.Haptics.ConnectionChanged += OnHapticConnectionChanged;
+                App.Haptics.HapticTriggered += OnHapticActivity;
+            }
+        }
+
+        private void OnHapticRoutingRowChanged(object? sender, EventArgs e)
+        {
+            // The audio-sync row gates its own tuning card.
+            RefreshAudioSyncCardVisibility();
+        }
+
+        private void OnHapticDevicesChanged(object? sender, EventArgs e)
+            => HapticsRunOnUi(RefreshHapticToys);
+
+        private void OnHapticConnectionChanged(object? sender, bool connected)
+            => HapticsRunOnUi(RefreshHapticConnectionUi);
+
+        private void OnHapticActivity(object? sender, string message)
+        {
+            HapticsRunOnUi(() =>
+            {
+                if (HapticsTab?.TxtHapticActivity == null) return;
+                HapticsTab.TxtHapticActivity.Text = message ?? "";
+            });
+        }
+
+        /// <summary>Marshal to the UI thread at Normal priority (Loaded is starved here) and
+        /// never let a background event fault the app during shutdown.</summary>
+        private void HapticsRunOnUi(Action action)
+        {
+            // (MainWindow.TakeoverUi.cs owns the plain RunOnUi; this one is explicit about
+            // DispatcherPriority.Normal because Loaded is starved in this app.)
+            try
+            {
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                if (dispatcher.CheckAccess()) { SafeRun(action); return; }
+                dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => SafeRun(action)));
+            }
+            catch { }
+        }
+
+        private static void SafeRun(Action action)
+        {
+            try { action(); }
+            catch (Exception ex) { App.Logger?.Debug("Haptics UI refresh failed: {E}", ex.Message); }
+        }
+
+        /// <summary>Rebuild the toy cards from the merged device registry.</summary>
+        internal void RefreshHapticToys()
+        {
+            if (HapticsTab?.ToyCardsList == null) return;
+
+            var manager = App.Haptics?.DeviceManager;
+            _hapticToyCards.Clear();
+            if (manager != null)
+            {
+                foreach (var device in manager.Devices)
+                    _hapticToyCards.Add(new HapticToyCardVm(manager, device));
+            }
+
+            HapticsTab.ToysEmptyState.Visibility = _hapticToyCards.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            HapticsTab.TxtHapticToyCount.Text = _hapticToyCards.Count == 0
+                ? ""
+                : Loc.GetF("haptics_toy_count", _hapticToyCards.Count);
+
+            RefreshPatternToyPicker();
+            RefreshHapticConnectionUi();
+        }
+
+        /// <summary>Status dot, status text, device summary, connect button and provider chips.</summary>
+        internal void RefreshHapticConnectionUi()
+        {
+            if (HapticsTab?.TxtHapticStatus == null) return;
+
+            var haptics = App.Haptics;
+            var connected = haptics?.IsConnected == true;
+
+            HapticsTab.TxtHapticStatus.Text = Loc.Get(connected ? "label_connected" : "label_disconnected");
+            var statusColor = connected ? Color.FromRgb(0x00, 0xE6, 0x76) : Color.FromRgb(0xFF, 0x6B, 0x6B);
+            HapticsTab.TxtHapticStatus.Foreground = new SolidColorBrush(statusColor);
+            HapticsTab.HapticStatusDot.Fill = new SolidColorBrush(statusColor);
+            HapticsTab.BtnHapticConnect.Content = Loc.Get(connected ? "btn_disconnect" : "btn_connect");
+
+            var count = haptics?.DeviceManager.Devices.Count ?? 0;
+            HapticsTab.TxtHapticDevices.Text = count == 0
+                ? Loc.Get("label_no_devices")
+                : Loc.GetF("haptics_devices_merged", count, haptics?.ProviderName ?? "");
+
+            var v2 = HapticCfg.V2;
+            foreach (var chip in _hapticProviderChips)
+            {
+                chip.IsEnabledForConnect = v2.Provider(chip.Key).Enabled;
+                chip.IsConnected = haptics?.DeviceManager.Providers
+                    .Any(p => string.Equals(p.Key, chip.Key, StringComparison.OrdinalIgnoreCase) && p.IsConnected) == true;
+            }
+
+            SetHapticsStatusPulse(connected);
+        }
+
+        /// <summary>The audio-sync tuning sliders only mean anything while that layer is on.</summary>
+        internal void RefreshAudioSyncCardVisibility()
+        {
+            if (HapticsTab?.VideoHapticSyncSliders == null) return;
+            var on = HapticCfg.AudioSync.Enabled;
+            HapticsTab.VideoHapticSyncSliders.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            HapticsTab.TxtAudioSyncDisabledHint.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+            if (SettingsTab?.AudioSyncLatencyPanel != null)
+                SettingsTab.AudioSyncLatencyPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>Push every routing row's value back out of settings (post-load, post-import).</summary>
+        internal void RefreshHapticRoutingRows()
+        {
+            foreach (var group in _hapticRoutingGroups)
+                foreach (var row in group.Rows)
+                    row.Refresh();
+        }
+
+        /// <summary>
+        /// The whole haptics load pass. Called by MainWindow.Settings.cs (inside its _isLoading
+        /// window) and again after the setup wizard closes, since the wizard writes provider
+        /// flags and the Lovense address behind our back.
+        /// </summary>
+        internal void LoadHapticsSettingsToUi()
+        {
+            InitializeHapticsTab();
+
+            var s = HapticCfg;
+            s.EnsureV2Migrated();
+
+            HapticsTab.ChkHapticsEnabled.IsChecked = s.Enabled;
+            HapticsTab.ChkHapticAutoConnect.IsChecked = s.AutoConnect;
+
+            // Per-provider enables replace the old single-choice combo (which had no Mock row and
+            // therefore rendered blank on a fresh install). The v2 flags are what the device
+            // manager actually reads; the legacy enum is kept in step by ChkHapticProvider_Changed.
+            HapticsTab.ChkHapticProviderLovense.IsChecked = s.V2.Provider("lovense").Enabled;
+            HapticsTab.ChkHapticProviderIntiface.IsChecked = s.V2.Provider("buttplug").Enabled;
+            HapticsTab.ChkHapticProviderMock.IsChecked = s.V2.Provider("mock").Enabled;
+            HapticsTab.TxtHapticUrl.Text = s.LovenseUrl ?? "";
+
+            var master = (int)Math.Round(Math.Clamp(s.GlobalIntensity, 0, 1) * 100);
+            HapticsTab.SliderHapticIntensity.Value = master;
+            HapticsTab.TxtHapticIntensity.Text = $"{master}%";
+
+            var cap = (int)Math.Round(Math.Clamp(s.V2.MasterCap, 0.05, 1.0) * 100);
+            HapticsTab.SliderHapticMaxPower.Value = cap;
+            HapticsTab.TxtHapticMaxPower.Text = $"{cap}%";
+            HapticsTab.HapticMaxPowerWarning.Visibility =
+                cap > (int)Math.Round(HapticMixer.DefaultMasterCap * 100) ? Visibility.Visible : Visibility.Collapsed;
+
+            var ambient = (int)Math.Round(Math.Clamp(s.DtrhAmbientIntensity, 0, 1) * 100);
+            HapticsTab.SliderHapticDtrhAmbient.Value = ambient;
+            HapticsTab.TxtHapticDtrhAmbient.Text = $"{ambient}%";
+            HapticsTab.CmbHapticDtrhDensity.SelectedIndex = Math.Clamp(s.DtrhDensity, 0, 2);
+
+            var latencyMs = s.AudioSync.ManualLatencyOffsetMs;
+            HapticsTab.SliderVideoHapticDelay.Value = latencyMs;
+            HapticsTab.TxtVideoHapticDelay.Text = (latencyMs >= 0 ? "+" : "") + latencyMs + "ms";
+            var syncPower = (int)Math.Round(Math.Clamp(s.AudioSync.LiveIntensity, 0, 1) * 100);
+            HapticsTab.SliderVideoHapticPower.Value = syncPower;
+            HapticsTab.TxtVideoHapticPower.Text = $"{syncPower}%";
+
+            RefreshAudioSyncCardVisibility();
+            RefreshHapticRoutingRows();
+            RefreshHapticToys();
+            UpdateHapticPatternPreview();
+        }
+
+        #endregion
+
+        #region Haptics — connection handlers
 
         internal void ChkHapticsEnabled_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             var isEnabled = HapticsTab.ChkHapticsEnabled.IsChecked == true;
 
-            // Check Patreon access when enabling
             if (isEnabled && App.Patreon?.HasPremiumAccess != true)
             {
                 HapticsTab.ChkHapticsEnabled.IsChecked = false;
@@ -49,165 +306,57 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            App.Settings.Current.Haptics.Enabled = isEnabled;
+            HapticCfg.Enabled = isEnabled;
             App.Settings.Save();
         }
 
-        internal void ChkHapticAudioSync_Changed(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Per-provider enable. The v2 device manager connects every enabled provider
+        /// CONCURRENTLY, so these are checkboxes, not a single-choice combo. The legacy
+        /// <c>Provider</c> enum is still written (old settings files and a few call sites read
+        /// it) using the same preference order the device manager uses for de-duplication.
+        /// </summary>
+        internal void ChkHapticProvider_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            var isEnabled = HapticsTab.ChkHapticAudioSync.IsChecked == true;
+            if (sender is not CheckBox box || box.Tag is not string key) return;
 
-            App.Settings.Current.Haptics.AudioSync.Enabled = isEnabled;
+            var v2 = HapticCfg.V2;
+            v2.Provider(key).Enabled = box.IsChecked == true;
+
+            HapticCfg.Provider =
+                v2.Provider("lovense").Enabled ? Services.Haptics.HapticProviderType.Lovense :
+                v2.Provider("buttplug").Enabled ? Services.Haptics.HapticProviderType.Buttplug :
+                Services.Haptics.HapticProviderType.Mock;
+
             App.Settings.Save();
-
-            // Show/hide the sliders panel (new enhanced UI)
-            if (HapticsTab.VideoHapticSyncSliders != null)
-                HapticsTab.VideoHapticSyncSliders.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
-
-            // Show/hide the latency slider panel (legacy, above browser)
-            if (SettingsTab.AudioSyncLatencyPanel != null)
-                SettingsTab.AudioSyncLatencyPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
+            RefreshHapticConnectionUi();
         }
 
-        internal void SliderAudioSyncLatency_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        /// <summary>
+        /// One URL box, one property. The old code switched the box between LovenseUrl and
+        /// ButtplugUrl depending on the provider combo, so the value you typed could land on the
+        /// wrong setting when the combo changed underneath you (flagged in the Phase D notes).
+        /// Intiface's address is not user-editable here — it is the Intiface default and the
+        /// provider owns it.
+        /// </summary>
+        internal void TxtHapticUrl_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_isLoading || HapticsTab.TxtHapticUrl == null) return;
+            // Mirrors into V2.Provider("lovense").Url via HapticSettings.OnPropertyChanged.
+            HapticCfg.LovenseUrl = HapticsTab.TxtHapticUrl.Text;
+            App.Settings.Save();   // debounced in SettingsService: one write per typing burst
+        }
+
+        internal void ChkHapticAutoConnect_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-
-            var latencyMs = (int)SettingsTab.SliderAudioSyncLatency.Value;
-            App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs = latencyMs;
+            HapticCfg.AutoConnect = HapticsTab.ChkHapticAutoConnect.IsChecked == true;
             App.Settings.Save();
-
-            // Update display text
-            if (SettingsTab.TxtAudioSyncLatency != null)
-            {
-                var sign = latencyMs >= 0 ? "+" : "";
-                SettingsTab.TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
-            }
-        }
-
-        internal void SliderAudioSyncIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading) return;
-
-            var intensityPercent = (int)SettingsTab.SliderAudioSyncIntensity.Value;
-            App.Settings.Current.Haptics.AudioSync.LiveIntensity = intensityPercent / 100.0;
-            // Safe to call per tick: SettingsService.Save() is itself debounced (500 ms of quiet
-            // before one disk write), so a slider drag coalesces into a single save.
-            App.Settings.Save();
-
-            // Update display text (live feedback)
-            if (SettingsTab.TxtAudioSyncIntensity != null)
-            {
-                SettingsTab.TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
-            }
-        }
-
-        internal void SliderVideoHapticDelay_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading) return;
-
-            var latencyMs = (int)HapticsTab.SliderVideoHapticDelay.Value;
-            App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs = latencyMs;
-            App.Settings.Save();
-
-            // Update display text
-            if (HapticsTab.TxtVideoHapticDelay != null)
-            {
-                var sign = latencyMs >= 0 ? "+" : "";
-                HapticsTab.TxtVideoHapticDelay.Text = $"{sign}{latencyMs}ms";
-            }
-
-            // Sync with legacy slider if it exists
-            if (SettingsTab.SliderAudioSyncLatency != null)
-                SettingsTab.SliderAudioSyncLatency.Value = latencyMs;
-        }
-
-        internal void SliderVideoHapticPower_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading) return;
-
-            var intensityPercent = (int)HapticsTab.SliderVideoHapticPower.Value;
-            App.Settings.Current.Haptics.AudioSync.LiveIntensity = intensityPercent / 100.0;
-            App.Settings.Save(); // debounced inside SettingsService - one write per drag
-
-            // Update display text (live feedback)
-            if (HapticsTab.TxtVideoHapticPower != null)
-            {
-                HapticsTab.TxtVideoHapticPower.Text = $"{intensityPercent}%";
-            }
-
-            // Sync with legacy slider if it exists
-            if (SettingsTab.SliderAudioSyncIntensity != null)
-                SettingsTab.SliderAudioSyncIntensity.Value = intensityPercent;
-        }
-
-        internal void AlgorithmCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            // For now, only AudioReactive is enabled - future algorithms will be added here
-            if (sender is Border card && card.Tag is string algorithmName)
-            {
-                if (algorithmName == "AudioReactive")
-                {
-                    // Already selected, nothing to do
-                    // Future: App.Settings.Current.Haptics.AudioSync.Algorithm = algorithmName;
-                }
-            }
-        }
-
-        internal void CmbHapticProvider_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {
-            if (_isLoading || HapticsTab.CmbHapticProvider.SelectedItem == null) return;
-
-            var item = HapticsTab.CmbHapticProvider.SelectedItem as System.Windows.Controls.ComboBoxItem;
-            var tag = item?.Tag?.ToString();
-
-            App.Settings.Current.Haptics.Provider = tag switch
-            {
-                "Mock" => Services.Haptics.HapticProviderType.Mock,
-                "Lovense" => Services.Haptics.HapticProviderType.Lovense,
-                "Buttplug" => Services.Haptics.HapticProviderType.Buttplug,
-                _ => Services.Haptics.HapticProviderType.Mock
-            };
-
-            // Load the saved URL for the selected provider (or use default)
-            if (HapticsTab.TxtHapticUrl != null)
-            {
-                var url = tag switch
-                {
-                    "Lovense" => App.Settings.Current.Haptics.LovenseUrl,
-                    "Buttplug" => App.Settings.Current.Haptics.ButtplugUrl,
-                    _ => ""
-                };
-                HapticsTab.TxtHapticUrl.Text = url;
-            }
-
-            // Update hint text based on provider
-            if (HapticsTab.TxtHapticUrlHint != null)
-            {
-                HapticsTab.TxtHapticUrlHint.Text = tag switch
-                {
-                    "Lovense" => Loc.Get("label_lovense_hint"),
-                    "Buttplug" => Loc.Get("label_buttplug_hint"),
-                    _ => ""
-                };
-            }
-
-            App.Settings.Save();
-        }
-
-        internal void BtnHapticsHelp_Click(object sender, RoutedEventArgs e)
-        {
-            var helpWindow = new HapticsSetupWindow
-            {
-                Owner = this
-            };
-            helpWindow.ShowDialog();
         }
 
         internal async void BtnHapticConnect_Click(object sender, RoutedEventArgs e)
         {
-            // Check Patreon access
             if (App.Patreon?.HasPremiumAccess != true)
             {
                 MessageBox.Show(
@@ -223,85 +372,53 @@ namespace ConditioningControlPanel
             if (App.Haptics.IsConnected)
             {
                 await App.Haptics.DisconnectAsync();
-                HapticsTab.BtnHapticConnect.Content = Loc.Get("btn_connect");
-                HapticsTab.TxtHapticStatus.Text = Loc.Get("label_disconnected");
-                HapticsTab.TxtHapticStatus.Foreground = new System.Windows.Media.SolidColorBrush(
-                    System.Windows.Media.Color.FromRgb(0xFF, 0x6B, 0x6B));
-                HapticsTab.TxtHapticDevices.Text = Loc.Get("label_no_devices");
+                RefreshHapticToys();
+                return;
             }
-            else
+
+            var anyProvider = new[] { "lovense", "buttplug", "mock" }
+                .Any(k => HapticCfg.V2.Provider(k).Enabled);
+            if (!anyProvider)
             {
-                HapticsTab.BtnHapticConnect.Content = Loc.Get("login_connecting");
-                HapticsTab.BtnHapticConnect.IsEnabled = false;
-
-                try
-                {
-                    var success = await App.Haptics.ConnectAsync();
-
-                    if (success)
-                    {
-                        HapticsTab.BtnHapticConnect.Content = Loc.Get("btn_disconnect");
-                        HapticsTab.TxtHapticStatus.Text = Loc.Get("label_connected");
-                        HapticsTab.TxtHapticStatus.Foreground = new System.Windows.Media.SolidColorBrush(
-                            System.Windows.Media.Color.FromRgb(0x00, 0xE6, 0x76));
-
-                        var devices = App.Haptics.ConnectedDevices;
-                        HapticsTab.TxtHapticDevices.Text = devices.Count > 0
-                            ? string.Join(", ", devices)
-                            : Loc.Get("label_no_devices_found");
-                    }
-                    else
-                    {
-                        HapticsTab.BtnHapticConnect.Content = Loc.Get("btn_connect");
-                        HapticsTab.TxtHapticStatus.Text = Loc.Get("label_failed");
-                        HapticsTab.TxtHapticStatus.Foreground = new System.Windows.Media.SolidColorBrush(
-                            System.Windows.Media.Color.FromRgb(0xFF, 0x6B, 0x6B));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    HapticsTab.BtnHapticConnect.Content = Loc.Get("btn_connect");
-                    HapticsTab.TxtHapticStatus.Text = Loc.Get("label_error");
-                    HapticsTab.TxtHapticDevices.Text = ex.Message;
-                }
-                finally
-                {
-                    HapticsTab.BtnHapticConnect.IsEnabled = true;
-                }
+                MessageBox.Show(Loc.Get("haptics_no_provider_enabled"), Loc.Get("tab_haptics"),
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
             }
 
-            // FX (PR-4a): the status dot breathes only while a device is genuinely connected.
-            // Read back off the service rather than off which branch we took, so a disconnect that
-            // failed, or a connect that reported success but dropped, still tells the truth.
-            SetHapticsStatusPulse(App.Haptics.IsConnected);
+            HapticsTab.BtnHapticConnect.Content = Loc.Get("login_connecting");
+            HapticsTab.BtnHapticConnect.IsEnabled = false;
+            try
+            {
+                var success = await App.Haptics.ConnectAsync();
+                RefreshHapticToys();
+                if (!success)
+                {
+                    HapticsTab.TxtHapticStatus.Text = Loc.Get("label_failed");
+                    HapticsTab.TxtHapticStatus.Foreground =
+                        new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x6B));
+                    HapticsTab.TxtHapticDevices.Text = Loc.Get("haptics_connect_failed_hint");
+                }
+            }
+            catch (Exception ex)
+            {
+                HapticsTab.TxtHapticStatus.Text = Loc.Get("label_error");
+                HapticsTab.TxtHapticDevices.Text = ex.Message;
+            }
+            finally
+            {
+                HapticsTab.BtnHapticConnect.IsEnabled = true;
+                RefreshHapticConnectionUi();
+            }
         }
 
-        private System.Windows.Threading.DispatcherTimer? _hapticSliderDebounce;
-
-        internal void SliderHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        /// <summary>Everything off NOW. Bypasses throttles, gates and unchanged-send suppression.</summary>
+        internal void BtnHapticPanic_Click(object sender, RoutedEventArgs e)
         {
-            if (_isLoading || HapticsTab.TxtHapticIntensity == null) return;
+            try { App.Haptics?.PanicStop(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Haptics panic stop failed"); }
 
-            var value = (int)HapticsTab.SliderHapticIntensity.Value;
-            HapticsTab.TxtHapticIntensity.Text = $"{value}%";
-            App.Settings.Current.Haptics.GlobalIntensity = value / 100.0;
-            App.Settings.Save(); // debounced inside SettingsService - one write per drag
-
-            // Debounce: wait 150ms after slider stops moving before sending command
-            _hapticSliderDebounce?.Stop();
-            _hapticSliderDebounce = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(150)
-            };
-            _hapticSliderDebounce.Tick += (s, args) =>
-            {
-                _hapticSliderDebounce?.Stop();
-                if (App.Haptics != null && App.Haptics.IsConnected && App.Settings.Current.Haptics.Enabled)
-                {
-                    _ = App.Haptics.LiveIntensityUpdateAsync(value / 100.0);
-                }
-            };
-            _hapticSliderDebounce.Start();
+            if (HapticsTab?.TxtHapticActivity != null)
+                HapticsTab.TxtHapticActivity.Text = Loc.Get("haptics_panic_done");
         }
 
         internal async void BtnHapticTest_Click(object sender, RoutedEventArgs e)
@@ -310,227 +427,269 @@ namespace ConditioningControlPanel
 
             if (!App.Haptics.IsConnected)
             {
-                MessageBox.Show(Loc.Get("msg_connect_to_a_device_first"), Loc.Get("label_not_connected"), MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Loc.Get("msg_connect_to_a_device_first"), Loc.Get("label_not_connected"),
+                    MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             var result = await App.Haptics.TestAsync();
-            if (result == Services.HapticTestResult.Unreachable)
+            if (result == HapticTestResult.Unreachable)
             {
-                MessageBox.Show(
-                    Loc.Get("msg_haptic_test_failed_vpn"),
-                    Loc.Get("label_test_failed"),
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_haptic_test_failed_vpn"), Loc.Get("label_test_failed"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-            else if (result == Services.HapticTestResult.NotConnected)
+            else if (result == HapticTestResult.NotConnected)
             {
-                MessageBox.Show(Loc.Get("msg_connect_to_a_device_first"), Loc.Get("label_not_connected"), MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Loc.Get("msg_connect_to_a_device_first"), Loc.Get("label_not_connected"),
+                    MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
-        internal void TxtHapticUrl_TextChanged(object sender, TextChangedEventArgs e)
+
+        /// <summary>Per-toy test pulse, straight at that one device.</summary>
+        internal async void BtnHapticToyTest_Click(object sender, RoutedEventArgs e)
         {
-            if (_isLoading || HapticsTab.TxtHapticUrl == null) return;
+            if (App.Haptics == null) return;
+            if (sender is not Button btn || btn.Tag is not string deviceKey) return;
 
-            // Save to the appropriate URL based on current provider
-            var provider = App.Settings.Current.Haptics.Provider;
-            if (provider == Services.Haptics.HapticProviderType.Lovense)
-                App.Settings.Current.Haptics.LovenseUrl = HapticsTab.TxtHapticUrl.Text;
-            else if (provider == Services.Haptics.HapticProviderType.Buttplug)
-                App.Settings.Current.Haptics.ButtplugUrl = HapticsTab.TxtHapticUrl.Text;
-            else
-                return; // Mock has no URL - nothing to persist
+            var ok = await App.Haptics.TestDeviceAsync(deviceKey);
+            if (!ok && HapticsTab?.TxtHapticActivity != null)
+                HapticsTab.TxtHapticActivity.Text = Loc.Get("haptics_test_toy_failed");
+        }
 
-            // Debounced inside SettingsService, so typing a URL is one write, not one per keystroke.
+        internal void BtnHapticsHelp_Click(object sender, RoutedEventArgs e)
+        {
+            var wizard = new HapticsSetupWindow { Owner = this };
+            wizard.ShowDialog();
+
+            // The wizard writes provider flags / the Lovense IP and may connect, so re-read.
+            _isLoading = true;
+            try { LoadHapticsSettingsToUi(); }
+            finally { _isLoading = false; }
+            RefreshHapticToys();
+        }
+
+        #endregion
+
+        #region Haptics — global dials
+
+        internal void SliderHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (HapticsTab?.TxtHapticIntensity == null) return;
+            var value = (int)HapticsTab.SliderHapticIntensity.Value;
+            HapticsTab.TxtHapticIntensity.Text = $"{value}%";
+            if (_isLoading) return;
+
+            HapticCfg.GlobalIntensity = value / 100.0;
+            App.Settings.Save();
+
+            // Live preview, 150 ms after the drag settles.
+            _hapticSliderDebounce?.Stop();
+            _hapticSliderDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            _hapticSliderDebounce.Tick += (s, args) =>
+            {
+                _hapticSliderDebounce?.Stop();
+                if (App.Haptics != null && App.Haptics.IsConnected && HapticCfg.Enabled)
+                    _ = App.Haptics.LiveIntensityUpdateAsync(value / 100.0);
+            };
+            _hapticSliderDebounce.Start();
+        }
+
+        /// <summary>
+        /// SAFETY dial: the hard ceiling every actuator is clamped to after the master
+        /// multiplier. Default 0.70 — full power is opt-in, so raising it past the default
+        /// shows a warning instead of quietly doubling what the last session felt like.
+        /// </summary>
+        internal void SliderHapticMaxPower_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (HapticsTab?.TxtHapticMaxPower == null) return;
+            var value = (int)HapticsTab.SliderHapticMaxPower.Value;
+            HapticsTab.TxtHapticMaxPower.Text = $"{value}%";
+            HapticsTab.HapticMaxPowerWarning.Visibility =
+                value > (int)Math.Round(HapticMixer.DefaultMasterCap * 100) ? Visibility.Visible : Visibility.Collapsed;
+            if (_isLoading) return;
+
+            HapticCfg.V2.MasterCap = Math.Clamp(value / 100.0, 0.05, 1.0);
             App.Settings.Save();
         }
 
-        internal void ChkHapticAutoConnect_Changed(object sender, RoutedEventArgs e)
+        internal void SliderHapticDtrhAmbient_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (HapticsTab?.TxtHapticDtrhAmbient == null) return;
+            var value = (int)HapticsTab.SliderHapticDtrhAmbient.Value;
+            HapticsTab.TxtHapticDtrhAmbient.Text = $"{value}%";
             if (_isLoading) return;
-            App.Settings.Current.Haptics.AutoConnect = HapticsTab.ChkHapticAutoConnect.IsChecked == true;
-            App.Settings.Save();
-        }
 
-        internal void ChkHapticFeature_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var checkbox = sender as CheckBox;
-            if (checkbox == null) return;
-
-            var tag = checkbox.Tag?.ToString();
-            var isEnabled = checkbox.IsChecked == true;
-            var haptics = App.Settings.Current.Haptics;
-
-            switch (tag)
-            {
-                case "Bubble":
-                    haptics.BubblePopEnabled = isEnabled;
-                    break;
-                case "FlashDisplay":
-                    haptics.FlashDisplayEnabled = isEnabled;
-                    break;
-                case "FlashClick":
-                    haptics.FlashClickEnabled = isEnabled;
-                    break;
-                case "Video":
-                    haptics.VideoEnabled = isEnabled;
-                    break;
-                case "TargetHit":
-                    haptics.TargetHitEnabled = isEnabled;
-                    break;
-                case "Subliminal":
-                    haptics.SubliminalEnabled = isEnabled;
-                    break;
-                case "LevelUp":
-                    haptics.LevelUpEnabled = isEnabled;
-                    break;
-                case "Achievement":
-                    haptics.AchievementEnabled = isEnabled;
-                    break;
-                case "BouncingText":
-                    haptics.BouncingTextEnabled = isEnabled;
-                    break;
-                case "Dtrh":
-                    haptics.DtrhEnabled = isEnabled;
-                    break;
-            }
-
+            HapticCfg.DtrhAmbientIntensity = value / 100.0;
             App.Settings.Save();
         }
 
         internal void CmbHapticDtrhDensity_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_isLoading || HapticsTab.CmbHapticDtrhDensity == null) return;
-            App.Settings.Current.Haptics.DtrhDensity = HapticsTab.CmbHapticDtrhDensity.SelectedIndex;
+            if (_isLoading || HapticsTab?.CmbHapticDtrhDensity == null) return;
+            HapticCfg.DtrhDensity = HapticsTab.CmbHapticDtrhDensity.SelectedIndex;
             App.Settings.Save();
         }
 
-        private System.Windows.Threading.DispatcherTimer? _hapticFeatureDebounce;
+        #endregion
 
-        internal void SliderHapticFeature_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        #region Haptics — audio sync tuning
+
+        internal void SliderVideoHapticDelay_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (HapticsTab?.TxtVideoHapticDelay == null) return;
+            var latencyMs = (int)HapticsTab.SliderVideoHapticDelay.Value;
+            var sign = latencyMs >= 0 ? "+" : "";
+            HapticsTab.TxtVideoHapticDelay.Text = $"{sign}{latencyMs}ms";
+            if (_isLoading) return;
+
+            HapticCfg.AudioSync.ManualLatencyOffsetMs = latencyMs;
+            App.Settings.Save();
+
+            if (SettingsTab?.SliderAudioSyncLatency != null)
+                SettingsTab.SliderAudioSyncLatency.Value = latencyMs;
+        }
+
+        internal void SliderVideoHapticPower_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (HapticsTab?.TxtVideoHapticPower == null) return;
+            var intensityPercent = (int)HapticsTab.SliderVideoHapticPower.Value;
+            HapticsTab.TxtVideoHapticPower.Text = $"{intensityPercent}%";
+            if (_isLoading) return;
+
+            HapticCfg.AudioSync.LiveIntensity = intensityPercent / 100.0;
+            App.Settings.Save();
+
+            if (SettingsTab?.SliderAudioSyncIntensity != null)
+                SettingsTab.SliderAudioSyncIntensity.Value = intensityPercent;
+        }
+
+        internal void SliderAudioSyncLatency_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading) return;
-            var slider = sender as Slider;
-            if (slider == null) return;
 
-            var tag = slider.Tag?.ToString();
-            var value = slider.Value / 100.0;
-            var haptics = App.Settings.Current.Haptics;
+            var latencyMs = (int)SettingsTab.SliderAudioSyncLatency.Value;
+            HapticCfg.AudioSync.ManualLatencyOffsetMs = latencyMs;
+            App.Settings.Save();
 
-            // Update setting and text label
-            switch (tag)
+            if (SettingsTab.TxtAudioSyncLatency != null)
             {
-                case "Bubble":
-                    haptics.BubblePopIntensity = value;
-                    if (HapticsTab.TxtHapticBubble != null) HapticsTab.TxtHapticBubble.Text = $"{(int)slider.Value}%";
-                    break;
-                case "FlashDisplay":
-                    haptics.FlashDisplayIntensity = value;
-                    if (HapticsTab.TxtHapticFlashDisplay != null) HapticsTab.TxtHapticFlashDisplay.Text = $"{(int)slider.Value}%";
-                    break;
-                case "FlashClick":
-                    haptics.FlashClickIntensity = value;
-                    if (HapticsTab.TxtHapticFlashClick != null) HapticsTab.TxtHapticFlashClick.Text = $"{(int)slider.Value}%";
-                    break;
-                case "Video":
-                    haptics.VideoIntensity = value;
-                    if (HapticsTab.TxtHapticVideo != null) HapticsTab.TxtHapticVideo.Text = $"{(int)slider.Value}%";
-                    break;
-                case "TargetHit":
-                    haptics.TargetHitIntensity = value;
-                    if (HapticsTab.TxtHapticTargetHit != null) HapticsTab.TxtHapticTargetHit.Text = $"{(int)slider.Value}%";
-                    break;
-                case "Subliminal":
-                    haptics.SubliminalIntensity = value;
-                    if (HapticsTab.TxtHapticSubliminal != null) HapticsTab.TxtHapticSubliminal.Text = $"{(int)slider.Value}%";
-                    break;
-                case "LevelUp":
-                    haptics.LevelUpIntensity = value;
-                    if (HapticsTab.TxtHapticLevelUp != null) HapticsTab.TxtHapticLevelUp.Text = $"{(int)slider.Value}%";
-                    break;
-                case "Achievement":
-                    haptics.AchievementIntensity = value;
-                    if (HapticsTab.TxtHapticAchievement != null) HapticsTab.TxtHapticAchievement.Text = $"{(int)slider.Value}%";
-                    break;
-                case "BouncingText":
-                    haptics.BouncingTextIntensity = value;
-                    if (HapticsTab.TxtHapticBouncingText != null) HapticsTab.TxtHapticBouncingText.Text = $"{(int)slider.Value}%";
-                    break;
-                case "Dtrh":
-                    haptics.DtrhIntensity = value;
-                    if (HapticsTab.TxtHapticDtrh != null) HapticsTab.TxtHapticDtrh.Text = $"{(int)slider.Value}%";
-                    break;
-                case "DtrhAmbient":
-                    haptics.DtrhAmbientIntensity = value;
-                    if (HapticsTab.TxtHapticDtrhAmbient != null) HapticsTab.TxtHapticDtrhAmbient.Text = $"{(int)slider.Value}%";
-                    break;
+                var sign = latencyMs >= 0 ? "+" : "";
+                SettingsTab.TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
             }
-
-            // Persist. SettingsService.Save() debounces internally (500 ms of quiet -> one disk
-            // write), so a full drag across the slider still costs exactly one save.
-            App.Settings.Save();
-
-            // Debounce: wait 150ms after slider stops moving before sending live vibration
-            _hapticFeatureDebounce?.Stop();
-            _hapticFeatureDebounce = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(150)
-            };
-            _hapticFeatureDebounce.Tick += (s, args) =>
-            {
-                _hapticFeatureDebounce?.Stop();
-                if (App.Haptics != null && App.Haptics.IsConnected && App.Settings.Current.Haptics.Enabled)
-                {
-                    // Live preview at this intensity level
-                    _ = App.Haptics.LiveIntensityUpdateAsync(value);
-                }
-            };
-            _hapticFeatureDebounce.Start();
         }
 
-        internal void CmbHapticMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        internal void SliderAudioSyncIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading) return;
-            var combo = sender as ComboBox;
+
+            var intensityPercent = (int)SettingsTab.SliderAudioSyncIntensity.Value;
+            HapticCfg.AudioSync.LiveIntensity = intensityPercent / 100.0;
+            // Safe per tick: SettingsService.Save() is debounced (500 ms of quiet -> one write).
+            App.Settings.Save();
+
+            if (SettingsTab.TxtAudioSyncIntensity != null)
+                SettingsTab.TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
+        }
+
+        #endregion
+
+        #region Haptics — pattern lab
+
+        internal void CmbPatternMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+            => UpdateHapticPatternPreview();
+
+        internal void SliderPatternIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (HapticsTab?.TxtPatternIntensity == null) return;
+            HapticsTab.TxtPatternIntensity.Text = $"{(int)HapticsTab.SliderPatternIntensity.Value}%";
+            UpdateHapticPatternPreview();
+        }
+
+        internal void PatternPreviewCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+            => UpdateHapticPatternPreview();
+
+        private VibrationMode SelectedPatternMode =>
+            (VibrationMode)Math.Clamp(HapticsTab?.CmbPatternMode?.SelectedIndex ?? 0, 0, 5);
+
+        private double SelectedPatternIntensity =>
+            Math.Clamp((HapticsTab?.SliderPatternIntensity?.Value ?? 60) / 100.0, 0.05, 1.0);
+
+        /// <summary>
+        /// Draw the selected mode's rendered envelope. This is the SAME renderer the engine
+        /// uses (Services/Haptics/Core/HapticPatterns.cs), so the curve on screen is what the
+        /// toy will feel — not a decorative approximation.
+        ///
+        /// TODO (Deeper unification): HapticPatterns is the plug-in point for a full keyframe
+        /// designer. Merging the six stock modes with Deeper's authored StockHapticPatterns
+        /// means adding a Custom mode whose points are stored per row; the preview strip and
+        /// play path below already accept an arbitrary envelope.
+        /// </summary>
+        private void UpdateHapticPatternPreview()
+        {
+            var canvas = HapticsTab?.PatternPreviewCanvas;
+            var line = HapticsTab?.PatternPreviewLine;
+            if (canvas == null || line == null) return;
+
+            var width = canvas.ActualWidth;
+            var height = canvas.ActualHeight;
+            if (width < 8 || height < 8) return;
+
+            const int durationMs = 1500;
+            var steps = HapticPatterns.Render(SelectedPatternMode, SelectedPatternIntensity, durationMs, 5);
+            var total = Math.Max(durationMs, HapticPatterns.TotalMs(steps));
+
+            var points = new PointCollection();
+            const int samples = 160;
+            for (int i = 0; i <= samples; i++)
+            {
+                var t = (int)(total * (i / (double)samples));
+                var v = HapticPatterns.SampleAt(steps, t);
+                points.Add(new Point(width * (i / (double)samples), height - (height - 4) * v - 2));
+            }
+            line.Points = points;
+
+            if (HapticsTab?.TxtPatternPreviewLabel != null)
+                HapticsTab.TxtPatternPreviewLabel.Text = Loc.GetF("haptics_pattern_preview_len", total);
+        }
+
+        /// <summary>Rebuild the "play on" picker: All toys + one entry per connected toy.</summary>
+        private void RefreshPatternToyPicker()
+        {
+            var combo = HapticsTab?.CmbPatternToy;
             if (combo == null) return;
 
-            var tag = combo.Tag?.ToString();
-            var mode = (Models.VibrationMode)combo.SelectedIndex;
-            var haptics = App.Settings.Current.Haptics;
-
-            switch (tag)
+            var previous = (combo.SelectedItem as ComboBoxItem)?.Tag as string;
+            combo.Items.Clear();
+            combo.Items.Add(new ComboBoxItem { Content = Loc.Get("haptics_pattern_all_toys"), Tag = "" });
+            foreach (var toy in _hapticToyCards)
             {
-                case "Bubble":
-                    haptics.BubblePopMode = mode;
-                    break;
-                case "FlashDisplay":
-                    haptics.FlashDisplayMode = mode;
-                    break;
-                case "FlashClick":
-                    haptics.FlashClickMode = mode;
-                    break;
-                case "Video":
-                    haptics.VideoMode = mode;
-                    break;
-                case "TargetHit":
-                    haptics.TargetHitMode = mode;
-                    break;
-                case "Subliminal":
-                    haptics.SubliminalMode = mode;
-                    break;
-                case "LevelUp":
-                    haptics.LevelUpMode = mode;
-                    break;
-                case "Achievement":
-                    haptics.AchievementMode = mode;
-                    break;
-                case "BouncingText":
-                    haptics.BouncingTextMode = mode;
-                    break;
+                var label = string.IsNullOrWhiteSpace(toy.Nickname) ? toy.Name : toy.Nickname;
+                combo.Items.Add(new ComboBoxItem { Content = label, Tag = toy.DeviceKey });
             }
 
-            App.Settings.Save();
+            var match = combo.Items.OfType<ComboBoxItem>()
+                .FirstOrDefault(i => (i.Tag as string) == previous);
+            combo.SelectedItem = match ?? combo.Items[0];
+        }
+
+        internal async void BtnPatternPlay_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Haptics == null) return;
+            if (!App.Haptics.IsConnected)
+            {
+                MessageBox.Show(Loc.Get("msg_connect_to_a_device_first"), Loc.Get("label_not_connected"),
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var deviceKey = (HapticsTab.CmbPatternToy.SelectedItem as ComboBoxItem)?.Tag as string;
+            var mode = SelectedPatternMode;
+            var intensity = SelectedPatternIntensity;
+
+            if (string.IsNullOrEmpty(deviceKey))
+                await App.Haptics.PlayPatternAsync(intensity, 1500, mode, priority: 5);
+            else
+                await App.Haptics.TestDeviceAsync(deviceKey, mode, intensity, 1500);
         }
 
         #endregion

@@ -107,5 +107,31 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         {
             foreach (var s in steps) into.Add(new HapticPulseStep(s.DelayMs + offsetMs, s.Pulse));
         }
+
+        /// <summary>
+        /// Level a rendered sequence would produce at <paramref name="timeMs"/> after it starts,
+        /// using the mixer's own attack/hold/decay shape and its "max across the active
+        /// envelopes" rule. Added in Phase E so the pattern preview strip and the per-device
+        /// test path draw/play exactly what the engine would do, instead of a look-alike curve.
+        /// </summary>
+        public static double SampleAt(IReadOnlyList<HapticPulseStep> steps, int timeMs)
+        {
+            if (steps == null || steps.Count == 0) return 0;
+            double best = 0;
+            foreach (var step in steps)
+            {
+                var t = timeMs - step.DelayMs;
+                if (t < 0) continue;
+                var p = step.Pulse;
+                double v;
+                if (t < p.AttackMs) v = p.AttackMs <= 0 ? p.Intensity : p.Intensity * (t / (double)p.AttackMs);
+                else if (t - p.AttackMs < p.HoldMs) v = p.Intensity;
+                else if (t - p.AttackMs - p.HoldMs < p.DecayMs)
+                    v = p.DecayMs <= 0 ? 0 : p.Intensity * (1.0 - (t - p.AttackMs - p.HoldMs) / (double)p.DecayMs);
+                else v = 0;
+                if (v > best) best = v;
+            }
+            return Math.Clamp(best, 0, 1);
+        }
     }
 }

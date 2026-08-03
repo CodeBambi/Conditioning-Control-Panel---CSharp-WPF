@@ -1,10 +1,14 @@
-using System;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
+    /// <summary>
+    /// Forwarding shim: every handler hands straight to the MainWindow partial
+    /// (MainWindow/MainWindow.Haptics.cs), which owns the state. Handlers declared
+    /// inside a DataTemplate resolve against THIS class, so the toy-card Test button
+    /// has to be here too.
+    /// </summary>
     public partial class HapticsTabView : UserControl
     {
         public HapticsTabView()
@@ -12,90 +16,66 @@ namespace ConditioningControlPanel.Views.Tabs
             InitializeComponent();
         }
 
-        private void AlgorithmCard_Click(object sender, MouseButtonEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.AlgorithmCard_Click(sender, e);
-        }
+        private MainWindow? Owner => Window.GetWindow(this) as MainWindow;
+
         private void BtnGateUnlock_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnGateUnlock_Click(sender, e);
-        }
-        private void BtnHapticConnect_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnHapticConnect_Click(sender, e);
-        }
-        private void BtnHapticTest_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnHapticTest_Click(sender, e);
-        }
-        private void BtnHapticsHelp_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnHapticsHelp_Click(sender, e);
-        }
-        private void ChkHapticAudioSync_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkHapticAudioSync_Changed(sender, e);
-        }
-        private void ChkHapticAutoConnect_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkHapticAutoConnect_Changed(sender, e);
-        }
-        private void ChkHapticFeature_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkHapticFeature_Changed(sender, e);
-        }
+            => Owner?.BtnGateUnlock_Click(sender, e);
+
         private void ChkHapticsEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkHapticsEnabled_Changed(sender, e);
-        }
-        private void CmbHapticDtrhDensity_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbHapticDtrhDensity_SelectionChanged(sender, e);
-        }
-        private void CmbHapticMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbHapticMode_SelectionChanged(sender, e);
-        }
-        private void CmbHapticProvider_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbHapticProvider_SelectionChanged(sender, e);
-        }
-        private void SliderHapticFeature_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderHapticFeature_Changed(sender, e);
-        }
-        private void SliderHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderHapticIntensity_ValueChanged(sender, e);
-        }
-        private void SliderVideoHapticDelay_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderVideoHapticDelay_Changed(sender, e);
-        }
-        private void SliderVideoHapticPower_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderVideoHapticPower_Changed(sender, e);
-        }
+            => Owner?.ChkHapticsEnabled_Changed(sender, e);
+
+        private void BtnHapticConnect_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnHapticConnect_Click(sender, e);
+
+        private void BtnHapticPanic_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnHapticPanic_Click(sender, e);
+
+        private void BtnHapticTest_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnHapticTest_Click(sender, e);
+
+        private void BtnHapticToyTest_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnHapticToyTest_Click(sender, e);
+
+        private void BtnHapticsHelp_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnHapticsHelp_Click(sender, e);
+
+        private void ChkHapticProvider_Changed(object sender, RoutedEventArgs e)
+            => Owner?.ChkHapticProvider_Changed(sender, e);
+
+        private void ChkHapticAutoConnect_Changed(object sender, RoutedEventArgs e)
+            => Owner?.ChkHapticAutoConnect_Changed(sender, e);
+
         private void TxtHapticUrl_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.TxtHapticUrl_TextChanged(sender, e);
-        }
+            => Owner?.TxtHapticUrl_TextChanged(sender, e);
+
+        private void SliderHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderHapticIntensity_ValueChanged(sender, e);
+
+        private void SliderHapticMaxPower_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderHapticMaxPower_ValueChanged(sender, e);
+
+        private void SliderHapticDtrhAmbient_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderHapticDtrhAmbient_Changed(sender, e);
+
+        private void CmbHapticDtrhDensity_SelectionChanged(object sender, SelectionChangedEventArgs e)
+            => Owner?.CmbHapticDtrhDensity_SelectionChanged(sender, e);
+
+        private void CmbPatternMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+            => Owner?.CmbPatternMode_SelectionChanged(sender, e);
+
+        private void SliderPatternIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderPatternIntensity_Changed(sender, e);
+
+        private void BtnPatternPlay_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnPatternPlay_Click(sender, e);
+
+        private void PatternPreviewCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+            => Owner?.PatternPreviewCanvas_SizeChanged(sender, e);
+
+        private void SliderVideoHapticDelay_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderVideoHapticDelay_Changed(sender, e);
+
+        private void SliderVideoHapticPower_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+            => Owner?.SliderVideoHapticPower_Changed(sender, e);
     }
 }

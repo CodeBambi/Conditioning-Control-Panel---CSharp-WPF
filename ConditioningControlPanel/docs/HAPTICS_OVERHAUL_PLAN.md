@@ -193,15 +193,60 @@ Buttplug device index is session-scoped and unusable as a persisted key.
       **en.json only** — the other 8 languages fall back to English until Phase G).
 
 ### Phase E — UI rebuild (after A-D merge)
-- [ ] `HapticsTabView` redesign, app visual language (cards #252542, pink #FF69B4 accents, pill badges):
-      status strip (provider chips, device count, last-ping age, Connect/Disconnect, PANIC STOP);
-      toy cards grid (icon, name/nickname, battery %, capability chips, Role picker, trim slider, Test);
-      routing matrix (rows = event groups Core/Rewards/Media/Games; columns = Reward/Punish/Ambient; cell = toggle+intensity; shared mode/pattern picker per row);
-      remove dead overlays + fake Coming-Soon rows; add Blink row; Mock in provider list (or auto-provider UI);
-      white TextBox restyled.
-- [ ] Pattern editor: unify 6 `VibrationMode`s + 6 Deeper `StockHapticPatterns` into one keyframe editor w/ live preview on selected toy (borrow Deeper editor curve UI).
-- [ ] Setup wizard v2: actually writes settings + runs Connect with live feedback; Mock/demo path; phone-free note (official Lovense Remote for Windows exists).
-- [ ] Converters in Window.Resources (DataTemplate rule); `DispatcherPriority.Normal` not Loaded (starvation trap).
+- [x] `HapticsTabView` redesign, app visual language (cards #252542, pink #FF69B4 accents, pill badges):
+      status strip (provider chips, device count, Connect/Disconnect, PANIC STOP);
+      toy cards grid (name/nickname, battery %, capability chips, Role picker, trim slider, Test);
+      routing matrix (groups Core/Rewards/Media/Games; per row: toggle + intensity + pattern + target ROLE);
+      dead overlays + fake Coming-Soon rows removed; Blink row added; per-provider checkboxes replace the
+      single-choice combo; white TextBox restyled.
+- [x] Pattern lab: the six `VibrationMode`s with a live envelope preview drawn from the ENGINE's own
+      renderer, plus play-on-a-chosen-toy. Full keyframe designer deliberately deferred (see below).
+- [x] Setup wizard v2: writes the v2 provider flags + Lovense address, runs the real Connect with
+      progress, device list, actionable failure hints and a Test buzz; Mock/demo path included.
+- [x] Converters in the UserControl's own Resources root (DataTemplate rule); `DispatcherPriority.Normal`
+      for every device-manager callback (Loaded is starved in this app).
+
+**Decisions made in Phase E (Phase F needs these):**
+- **The tab is data-driven now.** `Views/Controls/HapticUiModels.cs` holds `HapticRoutingRowVm` /
+  `HapticRoutingGroupVm` / `HapticToyCardVm` / `HapticProviderChipVm` plus two converters. Each VM writes
+  straight through to the settings object the engine reads and calls `App.Settings.Save()` (debounced).
+  Adding a row in Phase F = one line in `MainWindow.InitializeHapticsTab()`, not a XAML copy-paste.
+- **Which property a row writes is per-row and is NOT guessable.** Event rows -> `V2.Rule(kind)`.
+  The **Video** row writes the LEGACY `VideoIntensity`/`VideoEnabled` because
+  `HapticService.StartVideoBackgroundVibeAsync` reads the legacy level (the layer rule only gates/scales).
+  The **AudioSync** row writes BOTH `AudioSync.Enabled` and the layer rule, because the service early-outs
+  on the former. `HapticRowLegacyBinding` encodes exactly this.
+- **New facade method**: `HapticService.TestDeviceAsync(deviceKey, mode, intensity, durationMs)` drives ONE
+  device directly (the mixer mixes by role; a per-toy test is not a role). Master multiplier, master cap
+  and the per-device trim still apply, and the device is always explicitly zeroed on the way out.
+  `HapticPatterns.SampleAt(steps, tMs)` was added alongside it so the preview strip and the per-toy test
+  use the engine's real envelope shape rather than a look-alike curve.
+- **Provider selection is now per-provider `V2.Provider(key).Enabled`** (checkboxes), which is what
+  `HapticDeviceManager.EnabledProviders()` reads. The legacy `Provider` enum is still written
+  (lovense > buttplug > mock) for old call sites. `App.xaml.cs` auto-connect no longer skips Mock.
+- **URL inconsistency resolved**: one box, always `Haptics.LovenseUrl`. The old box switched between
+  LovenseUrl and ButtplugUrl based on the combo, so a typed value could land on the wrong setting.
+  Intiface's address is not user-editable here (the provider owns the Intiface default).
+- **Audio-sync enable moved** from its own card checkbox to the Media > Audio sync routing row.
+  `MainWindow.xaml.cs`'s init block for `ChkHapticAudioSync` + the Video-Haptic-Sync sliders was deleted;
+  `LoadHapticsSettingsToUi()` owns all of it now. The tuning card (delay/power) kept its element names.
+- **Deleted UI**: `HapticsConnectionLock`, `HapticsFeatureLock`, `HapticsComingSoonOverlay` (3 dead
+  overlays; `MainWindow.Patreon.cs` updated), the two fake "Coming Soon" sync-algorithm cards, the
+  provider combo, and the `VideoMode` combo (both expected CS0618 warnings are gone).
+- **Deferred on purpose** (architecture hook left in place): the full keyframe designer unifying the six
+  stock modes with Deeper's `StockHapticPatterns`. `Core/HapticPatterns.cs` is still the single plug-in
+  point; `UpdateHapticPatternPreview()` carries the marked TODO and already accepts an arbitrary envelope.
+- **Phase F slots** (where the new dials belong in this layout):
+  * **Temperament dial** -> the "Power" card (`haptics_global_dials`) as a third row under Master
+    intensity / Max power: a preset picker (Gentle/Tease/Cruel) writing mixer multipliers. That card is
+    already the home for global modifiers and has room for exactly one more row.
+  * **FunScript** -> one more row in the Media group (new `HapticEventKind`/layer + a `HapticRoutingRowVm`
+    line), with the script-folder picker in a small sub-card under the routing list next to the DtRH
+    extras block — that block is the established place for knobs the matrix cannot express.
+  * **Toy-button input** -> a "Toy input" sub-card under the toy grid; per-toy bindings belong on
+    `HapticToyCardVm`, which already carries DeviceKey and the capability chips.
+  * **Audio band-split / flash luminance** -> extra Media rows; the six hidden DSP knobs fit the existing
+    Video Haptic Sync tuning card as an Advanced expander.
 
 ### Phase F — Features (after E; each cuttable)
 ENGINE side is done and headless-functional (defaults ARE the shipping behaviour — no UI binds any

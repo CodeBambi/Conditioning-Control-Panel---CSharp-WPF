@@ -2303,8 +2303,9 @@ namespace ConditioningControlPanel
             }
             finally { _isLoading = false; }
 
-            // Initialize Audio Sync checkbox and sliders
-            HapticsTab.ChkHapticAudioSync.IsChecked = App.Settings.Current.Haptics.AudioSync.Enabled;
+            // Audio-sync ENABLE moved onto the Haptics tab's routing matrix (Media > Audio sync)
+            // in the Phase E rebuild, and the Haptics tab's own delay/power sliders are loaded by
+            // LoadHapticsSettingsToUi(). Only the Settings-tab mirrors are initialised here.
             if (SettingsTab.SliderAudioSyncLatency != null)
             {
                 SettingsTab.SliderAudioSyncLatency.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
@@ -2321,28 +2322,6 @@ namespace ConditioningControlPanel
             if (SettingsTab.AudioSyncLatencyPanel != null)
             {
                 SettingsTab.AudioSyncLatencyPanel.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
-                    ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            // Initialize Video Haptic Sync enhanced UI sliders
-            if (HapticsTab.SliderVideoHapticDelay != null)
-            {
-                HapticsTab.SliderVideoHapticDelay.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
-                var latencyMs = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
-                var sign = latencyMs >= 0 ? "+" : "";
-                if (HapticsTab.TxtVideoHapticDelay != null)
-                    HapticsTab.TxtVideoHapticDelay.Text = $"{sign}{latencyMs}ms";
-            }
-            if (HapticsTab.SliderVideoHapticPower != null)
-            {
-                var intensityPercent = (int)(App.Settings.Current.Haptics.AudioSync.LiveIntensity * 100);
-                HapticsTab.SliderVideoHapticPower.Value = intensityPercent;
-                if (HapticsTab.TxtVideoHapticPower != null)
-                    HapticsTab.TxtVideoHapticPower.Text = $"{intensityPercent}%";
-            }
-            if (HapticsTab.VideoHapticSyncSliders != null)
-            {
-                HapticsTab.VideoHapticSyncSliders.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
                     ? Visibility.Visible : Visibility.Collapsed;
             }
 

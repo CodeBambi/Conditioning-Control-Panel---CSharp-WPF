@@ -245,17 +245,15 @@ namespace ConditioningControlPanel
             // Keep the patron-achievements section lock + counts in sync with entitlement.
             UpdateAchievementCount();
 
-            // Haptics - unlock for all Patreon supporters
+            // Haptics - unlock for all Patreon supporters.
+            // Phase E deleted the three dead lock overlays (HapticsConnectionLock,
+            // HapticsFeatureLock, HapticsComingSoonOverlay) — they were all Collapsed-forever
+            // leftovers stacked behind the one live gate, HapticsGate, refreshed below.
             var hasHapticsAccess = hasPremiumAccess;
             HapticsTab.HapticsContentGrid.Opacity = hasHapticsAccess ? 1.0 : 0.3;
             HapticsTab.HapticsContentGrid.IsHitTestVisible = hasHapticsAccess;
-            HapticsTab.HapticsConnectionLock.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
-            HapticsTab.HapticsFeatureLock.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
             HapticsTab.HapticsConnectionBox.IsEnabled = hasHapticsAccess;
             HapticsTab.HapticsFeatureBox.IsEnabled = hasHapticsAccess;
-
-            // Hide "Coming Soon" overlay for Patreon supporters
-            HapticsTab.HapticsComingSoonOverlay.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
 
             // Bambi Takeover (Autonomy) — visible-but-locked: keep BambiTakeoverTab.AutonomyUnlocked
             // always visible, BambiTakeoverTab.AutonomyLocked stays collapsed (legacy element), and the
