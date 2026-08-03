@@ -195,10 +195,17 @@ queued lock-card can't start on top of the retry video); they `ExtendTimeout(300
 1. **Blurred-background composite (DEFAULT in 6.5.0, `VideoBlurredBackgroundEnabled`)** — a
    `BlurVmemSurface` (`:2200`): LibVLC memory (vmem) callbacks fill a native buffer; a
    `CompositionTarget.Rendering` tick blits it into a `WriteableBitmap` shown twice — a Gaussian-blurred
-   `UniformToFill` fill behind + a sharp `Uniform` video in front — so an aspect-mismatched clip fills
+   `UniformToFill` fill behind + a sharp aspect-fit video in front — so an aspect-mismatched clip fills
    the bars with a blurred copy of itself (TikTok/Shorts look). The blur fill auto-hides when the video
-   already matches the screen aspect (`needsBlur`, `:2339`). Buffer dims come from `ComputeBufferDims`
-   (`:2148`, long side capped 1080). Frame-liveness guarded by `StartBlurFrameWatchdog` (`:2166`).
+   already matches the screen aspect (`needsBlur`). Buffer dims come from `ComputeBufferDims`
+   (long side capped 1080). Frame-liveness guarded by `StartBlurFrameWatchdog`.
+   **#786 — never size the picture off the vmem buffer.** The format callback reports the *coded*
+   frame size with the sample-aspect-ratio dropped, and LibVLC re-reports it mid-setup with different
+   numbers (640x368 x4, then 640x386). `BlurVmemSurface.ApplyGeometry` therefore computes an explicit
+   fit rect (`FitToAspect`) from the **display** aspect — `DisplayAspectFrom(track W, H, SarNum,
+   SarDen, rotated)`, pushed in from `Playing`/`ESSelected`/`Vout`, with the buffer aspect only as a
+   fallback — and re-runs on every format callback, aspect update and resize. The sharp layer is
+   `Stretch.Fill` inside that rect, so an anamorphic clip can never be drawn stretched.
 2. **Classic `VideoView` (HwndHost airspace)** — used when blur is off. A native child HWND; a
    transparent WPF click overlay sits above it to catch clicks (LibVLC's child window bypasses WPF
    events). Guarded by `StartVoutWatchdog`.
