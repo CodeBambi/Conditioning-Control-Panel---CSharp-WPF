@@ -99,10 +99,20 @@ function stripComments(src) {
   const clearBody = body.slice(0, body.indexOf('\n}\n') + 1);
   ok(/executor\?\.stopAll\?\.\(\)/.test(clearBody), 'clearForRecap cancels in-flight payload renders (executor.stopAll)');
   ok(/layers\.stopAll\(\)/.test(clearBody), 'clearForRecap empties the layers (layers.stopAll)');
-  ok(/sheets\.close\(/.test(clearBody), 'clearForRecap closes an open modal sheet (z70 over the recap)');
-  ok(/options\.close\(\)/.test(clearBody), 'clearForRecap closes the options drawer (z70 over the recap)');
+  ok(/closeChrome\(\)/.test(clearBody), 'clearForRecap closes the z70 chrome (closeChrome)');
   ok(/gg-stage/.test(clearBody) && /replaceChildren/.test(clearBody),
     'clearForRecap asserts #gg-stage is empty afterwards');
+
+  // The shared closer itself: ONE helper, two callers (recap + the run start).
+  ok(/function closeChrome\(/.test(code), 'boot.js defines the shared closeChrome()');
+  const chromeBody = (() => {
+    const b = code.slice(code.indexOf('function closeChrome('));
+    return b.slice(0, b.indexOf('\n}\n') + 1);
+  })();
+  ok(/sheets\.close\(/.test(chromeBody), 'closeChrome closes an open modal sheet (#gg-modal, z70)');
+  ok(/options\.close\(\)/.test(chromeBody), 'closeChrome closes the options drawer (#gg-drawer, z70)');
+  ok(/sheets\s*&&\s*sheets\.isOpen/.test(chromeBody) && /options\s*&&\s*options\.isOpen/.test(chromeBody),
+    'and it only closes what is actually open (no toggling a closed drawer back on)');
 
   // …and that it is actually WIRED, at the phase change and on every forced pass.
   const recapCase = code.slice(code.indexOf('case GoonMatchPhase.Recap:'));
@@ -112,6 +122,34 @@ function stripComments(src) {
     'and it runs BEFORE the recap screen goes up');
   const force = code.slice(code.indexOf('function forceRecap('));
   ok(/clearForRecap\(/.test(force.slice(0, force.indexOf('\n}\n'))), 'forceRecap clears the way too');
+
+  /* THE OTHER END OF THE SAME BUG — a sheet left open when the RUN starts.
+   * The "how it works" explainer is one tap from the lobby, and a modal sheet is
+   * a full-height z70 scrim: leave it up and it covers the bottom strip where
+   * exec/bubbles.js spawns the field, so every pop lands on the scrim and the
+   * drop economy silently never produces an item for the whole match. It also
+   * makes Escape ambiguous at the exact moment Escape must mean MERCY. So the
+   * chrome comes down on Countdown, and again on Live for the paths that never
+   * show a countdown (rebuild / late join). */
+  const armOf = (name) => {
+    const at = code.indexOf('case GoonMatchPhase.' + name + ':');
+    return at < 0 ? '' : code.slice(at, at + code.slice(at).indexOf('break;'));
+  };
+  const countdownArm = armOf('Countdown');
+  const liveArm = armOf('Live');
+  ok(/closeChrome\(\)/.test(countdownArm), 'the Countdown phase arm closes the z70 chrome');
+  ok(countdownArm.indexOf('closeChrome()') < countdownArm.indexOf("router.show('countdown')"),
+    'and it does it BEFORE the countdown screen goes up');
+  ok(/closeChrome\(\)/.test(liveArm), 'the Live phase arm closes it too (belt and braces)');
+  ok(liveArm.indexOf('closeChrome()') < liveArm.indexOf('mountMercyNow()'),
+    'before mercy mounts, so nothing is ever over the button');
+
+  /* ...and the Escape ladder is UNTOUCHED. In Live, Escape is mercy, full stop:
+   * no sheet-peeling rung may creep in front of it. */
+  const escLadder = code.slice(code.indexOf('function onKeyDown('), code.indexOf('function holdExit('));
+  ok(!/closeChrome\(/.test(escLadder), 'the Escape ladder does NOT call closeChrome (Live Escape stays mercy)');
+  ok(escLadder.indexOf('declareMercy()') < escLadder.indexOf('sheets.close(null)'),
+    'mercy is still the FIRST rung of the ladder, ahead of every overlay closer');
 
   // The Escape ladder must have a Recap rung. Escape may never be a dead key.
   const esc = code.slice(code.indexOf('function onKeyDown('), code.indexOf('function holdExit('));

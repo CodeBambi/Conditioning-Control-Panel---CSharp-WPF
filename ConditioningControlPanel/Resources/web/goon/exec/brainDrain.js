@@ -4,9 +4,10 @@
  * The heavy, ported from DtRH's payloadFx.showBraindrain + .sf-pfx-drain: ONE
  * full-window veil on #gg-fx-drain that dims to near-black, blurs everything
  * behind it, and carries a faint random image from the player's own pool washed
- * over the top under a dark luminosity blend — so it reads as DRAINED, not as a
- * slideshow. Intensity moves one dial, the veil's opacity, across DtRH's exact
- * 0.35..0.62 band.
+ * over the top — dimmed and part-desaturated by fx.css so it reads as DRAINED,
+ * not as a slideshow, but still IN COLOUR (owner call 2026-08-03; the wash used
+ * to blend at `luminosity` and came out black and white). Intensity moves one
+ * dial, the veil's opacity, across DtRH's exact 0.35..0.62 band.
  *
  * SAFETY, and it is not negotiable: this layer is z30 and the mercy button is
  * z60 with `isolation:isolate` (goon.css's DO-NOT-TOUCH block). The veil can
@@ -73,7 +74,10 @@ export function createBrainDrain({ layers, media, audio, logger } = {}) {
     if (!handle || !handle.url) return;
     releaseWash();
     washHandle = handle;
-    try { veilEl.style.setProperty('background-image', `url("${handle.url}")`); }
+    // --gg-drain-img, never background-image: fx.css composes the wash UNDER a
+    // dim sheet and a desaturating sheet in one background-image list, and an
+    // inline background-image would replace all three with a bare slideshow.
+    try { veilEl.style.setProperty('--gg-drain-img', `url("${handle.url}")`); }
     catch (_e) { /* a host without inline style support just keeps the flat dim */ }
   }
 

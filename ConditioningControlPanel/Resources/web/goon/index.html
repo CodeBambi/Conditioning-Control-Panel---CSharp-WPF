@@ -35,7 +35,10 @@
     <div id="gg-stage"></div>
 
     <!-- z30 — effect layers (exec/layers.js owns these; pointer-events:none.
-         The one opt-in is .gg-bubble, which is poppable; see exec/fx.css). -->
+         The opt-ins are .gg-bubble (poppable), .gg-flash--hydra (splittable) and
+         .gg-vwin (the floating video windows); see exec/fx.css.
+         #gg-fx-vwin is LAST so the windows paint over the scenery — DOM order,
+         never a z-index (fx.css rule 1). -->
     <div id="gg-fx" aria-hidden="true">
         <div id="gg-fx-flash"></div>
         <div id="gg-fx-sub"></div>
@@ -43,6 +46,7 @@
         <div id="gg-fx-spiral"></div>
         <div id="gg-fx-bounce"></div>
         <div id="gg-fx-drain"></div>
+        <div id="gg-fx-vwin"></div>
     </div>
 
     <!-- z40 — in-match HUD (clock, charges, score, opponent plate). -->

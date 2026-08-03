@@ -20,11 +20,14 @@
  *  4. NO REMOTE URLs. Bundled art is referenced by ABSOLUTE SAME-ORIGIN path:
  *     ccp.game maps to Resources/web, so /dtrh/assets/... is the very same
  *     virtual host that serves /goon/index.html — no network is involved.
- *  5. TWO nodes in this file take pointer input: `.gg-bubble` (pop) and
- *     `.gg-flash--hydra` (click-to-split). #gg-fx and its sub-layers are
- *     pointer-events:none, both opt back in one class at a time, and BOTH opt-ins
- *     are dropped by the same `body:has(#gg-stage > *)` rule whenever the stage is
- *     occupied — so neither can ever eat a lock-card or attention-check click.
+ *  5. THREE nodes in this file take pointer input: `.gg-bubble` (pop),
+ *     `.gg-flash--hydra` (click-to-split) and `.gg-vwin` (the floating video
+ *     window: drag / wheel / click-to-dismiss). #gg-fx and its sub-layers are
+ *     pointer-events:none and each opts back in one class at a time.
+ *     `.gg-flash--hydra` ALONE is dropped by the `body:has(#gg-stage > *)` rule
+ *     while the stage is occupied — flashes are scenery, so blocking them is
+ *     intended. The bubbles are economy and the windows are the payload you are
+ *     being asked to close; neither may become unclickable (see their banners).
  * ==========================================================================*/
 
 /* Per-effect knobs. The renderers write these as inline custom properties on
@@ -264,37 +267,24 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
   from { transform: translateX(calc(var(--gg-sway, 28px) * -0.5)); }
   to   { transform: translateX(calc(var(--gg-sway, 28px) * 0.5)); }
 }
-/* THE KIND SPRITES — and the pigment that tells them apart.
+/* THE KIND SPRITES — DtRH art, DROP-SHADOW ONLY, and it stays that way.
  *
- * braindrain.png and glitch.png are the SAME FILE (md5 4180ca81…): one pale,
- * near-colourless bubble with faint green glitch marks, measured at HSL
- * saturation 0.19 / chroma 0.11. Side by side at 40-90px they were the same
- * black-and-white marble, which is unreadable when the two pops do very
- * different things. The art belongs to DtRH and cannot be edited from here, so
- * the identity is painted on in CSS.
+ * 2026-08-03, owner correction: a play-test note that braindrain and glitch
+ * "show in black n white" was read here as the BUBBLES being grey, and every
+ * kind got a sepia/saturate/hue-rotate recolour chain bolted in front of its
+ * halo. Wrong target. The sprites were fine — pale on purpose, and the coloured
+ * drop-shadow is what names the kind. The greyscale the owner saw was the
+ * FULLSCREEN drain veil (see the BRAIN DRAIN block below, which used to blend
+ * the pool image at `luminosity` and threw all of its colour away).
  *
- * THE CHAIN, IN ORDER, AND THE ORDER IS THE WHOLE TRICK:
- *   brightness(<1)  pull the near-white art down — a white pixel has NO
- *                   saturation to boost, so this is what buys headroom;
- *   sepia(1)        stamp a single pigment (~40deg) on every pixel;
- *   saturate(n)     make that pigment loud;
- *   hue-rotate()    swing it to the kind's colour;
- *   brightness(>1)  put the lightness back on the bubble;
- *   drop-shadow()   LAST, always — it lights the shape the chain produced, and
- *                   its own colour must not be run through the recolour above.
- * Measured results (mean hue / chroma over the visible pixels):
- *   braindrain 264deg / 0.90   glitch 135deg / 0.98   — vs 112deg / 0.11 raw.
- * Each target hue is the hue of that kind's own drop-shadow, so the sprite and
- * its halo now agree.
- *
- * spiral (179deg cyan, chroma 0.31) and pinkfilter (312deg, 0.38) already carry
- * their own colour and are left alone. flash measured 0.089 — washed out even by
- * the offenders' standard — so it gets a saturate-only lift that keeps its own
- * hue and its white-hot star intact rather than a recolour. */
-.gg-bubble--flash      { background-image: url('/dtrh/assets/bubbles/effects/flash.png');      filter: saturate(2.6) contrast(1.08) brightness(1.02) drop-shadow(0 0 9px rgba(255, 240, 200, 0.75)); }
+ * So: no colour-space filter functions in these rules. Each kind gets its own
+ * halo and nothing else — flash warm white, spiral cyan, glitch acid green,
+ * braindrain violet, pinkfilter house pink. selftest-exec reads this file and
+ * fails if a recolour chain comes back. */
+.gg-bubble--flash      { background-image: url('/dtrh/assets/bubbles/effects/flash.png');      filter: drop-shadow(0 0 9px rgba(255, 240, 200, 0.75)); }
 .gg-bubble--spiral     { background-image: url('/dtrh/assets/bubbles/effects/spiral.png');     filter: drop-shadow(0 0 9px rgba(110, 225, 255, 0.75)); }
-.gg-bubble--glitch     { background-image: url('/dtrh/assets/bubbles/effects/glitch.png');     filter: brightness(0.65) sepia(1) saturate(7) hue-rotate(86deg) brightness(1.7) drop-shadow(0 0 9px rgba(140, 255, 170, 0.75)); }
-.gg-bubble--braindrain { background-image: url('/dtrh/assets/bubbles/effects/braindrain.png'); filter: brightness(0.65) sepia(1) saturate(6.5) hue-rotate(216deg) brightness(1.2) drop-shadow(0 0 9px rgba(180, 150, 255, 0.75)); }
+.gg-bubble--glitch     { background-image: url('/dtrh/assets/bubbles/effects/glitch.png');     filter: drop-shadow(0 0 9px rgba(140, 255, 170, 0.75)); }
+.gg-bubble--braindrain { background-image: url('/dtrh/assets/bubbles/effects/braindrain.png'); filter: drop-shadow(0 0 9px rgba(180, 150, 255, 0.75)); }
 .gg-bubble--pinkfilter { background-image: url('/dtrh/assets/bubbles/effects/pinkfilter.png'); filter: drop-shadow(0 0 10px rgba(var(--gg-pink-rgb), 0.85)); }
 
 .gg-bubble.is-pop { pointer-events: none; animation: ggBubblePop 0.39s ease-out forwards; }
@@ -327,6 +317,17 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
  * DtRH's .sf-pfx-spiral: one pane, covered, screen-blended, spinning slowly.
  * Overscanned so the rotation never bares a corner. The renderer swaps only the
  * background-image; this rule owns cover/blend/spin.
+ *
+ * THE GRAIN. The bundled pool is 360-640px dithered 256-colour GIFs, and `cover`
+ * on a 1080p+ window blows a 360px source up 3-5x: the dither pattern stops
+ * reading as shading and starts reading as GRAIN crawling over the whole screen.
+ * A constant 1.1px blur softens the dither below the resolution of the eye while
+ * leaving the spiral's own edges (which are huge at that scale) perfectly legible.
+ * It is safe to sit in `filter` because NOTHING animates filter on this pane —
+ * ggSpiralSpin is transform-only and the fade is opacity-only. Do not add a
+ * filter keyframe here without moving this blur onto a wrapper.
+ * (The other half of the fix is in exec/spiral.js: sp7.gif, the 360x360 worst
+ * offender, is out of SPIRAL_POOL. The file stays on disk — DtRH owns it.)
  * ------------------------------------------------------------------------ */
 .gg-spiral {
   position: absolute;
@@ -336,6 +337,7 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
   transform-origin: 50% 50%;
   scale: 1.6;
   opacity: 0;
+  filter: blur(1.1px);
   will-change: opacity, transform;
   transition: opacity var(--gg-spiral-fade, 450ms) ease;
   animation: ggSpiralSpin 14s linear infinite;
@@ -387,18 +389,49 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
 /* ---------------------------------------------------------------------------
  * BRAIN DRAIN (#gg-fx-drain, and the pop flick inside #gg-fx-bubbles) — the
  * heavy, port of DtRH's .sf-pfx-drain. ONE pane: near-black dim, blur-behind,
- * and a faint image from the player's own pool washed over it under a LUMINOSITY
- * blend, which is what keeps it reading as drained instead of as a slideshow.
- * The pane's opacity is the only dial (0.35..0.62).
+ * and a faint image from the player's own pool washed over it. The pane's
+ * opacity is the only dial (0.35..0.62) and higher still means heavier.
+ *
+ * IT USED TO BLEND THE WASH AT `luminosity` — DtRH's recipe, argued here as
+ * "keeps it reading as drained instead of as a slideshow". Luminosity keeps the
+ * source's lightness and takes hue+chroma from the backdrop, and the backdrop is
+ * #0a0410, so EVERY wash came out black and white. 2026-08-03 the owner called
+ * it: the drain is supposed to show the player's own media, in colour. Do not
+ * put `luminosity` back.
+ *
+ * WHAT DRAINS IT NOW, three background layers on the same single pane (top to
+ * bottom, which is the order background-image lists them), no extra element and
+ * no second backdrop-filter — that blur is the most expensive thing this page
+ * draws and there is still exactly ONE of it:
+ *   1. DIM      a near-black violet sheet at --gg-drain-dim (default .42),
+ *               blended `normal`, i.e. plain alpha over everything below. Scaling
+ *               RGB toward black lowers lightness and leaves HSV saturation
+ *               alone, so this buys "heavy" without buying "grey".
+ *   2. BLEED    a mid-grey sheet at --gg-drain-desat (default .30) blended
+ *               `color`: the blend takes hue+chroma from the grey (none) over the
+ *               image's lightness — a full greyscale — and the .30 alpha then
+ *               composites that back, so ~70% of the wash's own colour survives.
+ *               This is the knob that keeps it muted instead of neon.
+ *   3. WASH     the pool image itself, `normal` over the near-black background
+ *               colour. exec/brainDrain.js hands it in through --gg-drain-img
+ *               (NOT background-image — that would replace this whole stack).
+ * Measured headlessly on a full-chroma test wash (sat 1.00, lightness 0.50), the
+ * pane composed at opacity 1: sat 0.68, chroma 0.41, lightness 0.31 — muted and
+ * DARKER than the source. The same wash under `luminosity` measured sat 0.08 and
+ * chroma 0.05 at lightness 0.51: brighter, and grey. That is the whole bug.
  * ------------------------------------------------------------------------ */
 .gg-drain {
   position: absolute;
   inset: 0;
   background-color: #0a0410;
+  background-image:
+    linear-gradient(rgba(8, 3, 14, var(--gg-drain-dim, 0.42)), rgba(10, 4, 16, var(--gg-drain-dim, 0.42))),
+    linear-gradient(rgba(128, 128, 128, var(--gg-drain-desat, 0.30)), rgba(128, 128, 128, var(--gg-drain-desat, 0.30))),
+    var(--gg-drain-img, none);
+  background-blend-mode: normal, color, normal;
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
-  background-blend-mode: luminosity;
   backdrop-filter: blur(7px);
   -webkit-backdrop-filter: blur(7px);
   opacity: 0;
@@ -444,6 +477,161 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
   inset: 0;
   pointer-events: none;
   box-shadow: inset 0 0 90px rgba(var(--gg-pink-rgb), 0.28);
+}
+
+/* ---------------------------------------------------------------------------
+ * FLOATING VIDEO WINDOWS (#gg-fx-vwin) — the PAYLOAD video. The opponent's VHS
+ * is not a takeover of the screen, it is a little cursed monitor that drifts
+ * around it: glitching in, glowing, recording-dot lit, and in the player's hands
+ * (drag it, wheel it bigger, click it away). exec/videos.js owns the behaviour;
+ * the ramp's own mandatory video is still fullscreen on #gg-stage above.
+ *
+ * FOUR ELEMENTS, FOUR ANIMATIONS, AND THAT IS THE POINT. `animation` is a
+ * SHORTHAND: two rules declaring it on one element cancel each other, so a
+ * one-shot spawn-in and a forever-loop can never share a node. Hence:
+ *     .gg-vwin          NO animation, ever — JS writes its transform inline for
+ *                       the drag, and keyframes outrank inline author styles.
+ *     .gg-vwin-drift    the slow wander (loop)
+ *     .gg-vwin-inner    the glitch-in (one-shot, one of four variants)
+ *     .gg-vwin-inner::after   the glow breath (loop)
+ *     .gg-vwin-dot      the recording pulse (loop)
+ * Every loop parks at html[data-gg-fx="hot"] through --gg-deco-play, because all
+ * of it is decoration; the DRAG, the WHEEL and the CLICK keep working parked,
+ * because none of them is an animation.
+ *
+ * POINTER: the layer is click-through and the window opts back in. It keeps that
+ * opt-in even while #gg-stage is occupied (unlike .gg-flash--hydra) — a window
+ * you cannot dismiss is a worse bug than a window that took one click, and these
+ * are small, movable and always closable. They also live here rather than on the
+ * stage precisely so a leftover one can never become a full-screen click shield.
+ * ------------------------------------------------------------------------ */
+.gg-vwin {
+  position: absolute;
+  width: var(--gg-vwin-w, 320px);
+  aspect-ratio: var(--gg-vwin-ar, 16 / 9);
+  pointer-events: auto;
+  touch-action: none;              /* a touch that starts here belongs to the window */
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+  will-change: transform, opacity;
+}
+.gg-vwin.is-on { opacity: 1; }
+.gg-vwin.is-grabbed { cursor: grabbing; }
+
+/* THE DRIFT. Biased upward (exec/videos.js hands --gg-vwin-dy in negative) so a
+   wandering window tends away from MERCY's bottom gutter rather than into it. */
+.gg-vwin-drift {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+  animation: ggVwinDrift var(--gg-vwin-drift-dur, 24s) ease-in-out infinite alternate;
+  animation-play-state: var(--gg-deco-play, running);
+}
+@keyframes ggVwinDrift {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(var(--gg-vwin-dx, 26px), var(--gg-vwin-dy, -22px)); }
+}
+/* IN HAND the window leaves the keyframe world — same law as .gg-flash--grabbed:
+   a live drift keyframe would fight the inline drag transform every frame and
+   win. exec/videos.js FOLDS the drift's current offset into the drag offset
+   before adding this class, so freezing it moves the window by exactly 0px. */
+.gg-vwin.is-grabbed .gg-vwin-drift { animation: none; }
+
+.gg-vwin-inner {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.75);
+  box-shadow:
+    0 0 20px rgba(var(--gg-pink-rgb), 0.5),
+    0 0 46px rgba(var(--gg-violet-rgb), 0.35),
+    0 10px 26px rgba(0, 0, 0, 0.55);
+}
+/* The glow BREATH rides the pseudo-element, so the one-shot glitch-in can own
+   the element's own `animation` slot outright. */
+.gg-vwin-inner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 18px rgba(var(--gg-pink-rgb), 0.35),
+    0 0 26px rgba(var(--gg-violet-rgb), 0.5);
+  animation: ggVwinGlow 3.2s ease-in-out infinite alternate;
+  animation-play-state: var(--gg-deco-play, running);
+}
+@keyframes ggVwinGlow { from { opacity: 0.4; } to { opacity: 1; } }
+
+.gg-vwin-vid {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+/* THE LIVE LIGHT — top-right, pulsing while the clip plays. */
+.gg-vwin-dot {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff2d4b;
+  box-shadow: 0 0 10px rgba(255, 45, 75, 0.95), 0 0 22px rgba(255, 45, 75, 0.55);
+  animation: ggVwinRec 1.4s ease-in-out infinite;
+  animation-play-state: var(--gg-deco-play, running);
+}
+@keyframes ggVwinRec {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.3; transform: scale(0.8); }
+}
+
+/* THE SPAWN-IN — four CRT deaths, one shot each, picked per window so four
+   windows arriving together never look cloned. None of them is `forwards`: they
+   hand the element back to its resting state, which is what keeps them from
+   sitting on top of the drift/drag transforms forever. */
+.gg-vwin-in--1 { animation: ggVwinIn1 560ms steps(3, end) 1; }
+.gg-vwin-in--2 { animation: ggVwinIn2 620ms ease-out 1; }
+.gg-vwin-in--3 { animation: ggVwinIn3 500ms cubic-bezier(0.2, 0.9, 0.1, 1) 1; }
+.gg-vwin-in--4 { animation: ggVwinIn4 680ms steps(4, end) 1; }
+/* 1 — TAPE TEAR: the picture arrives in torn bands that slide into place. */
+@keyframes ggVwinIn1 {
+  0%   { opacity: 0.2; clip-path: inset(0 0 82% 0); transform: translateX(-9%); filter: brightness(2.4); }
+  25%  { opacity: 1; clip-path: inset(46% 0 22% 0); transform: translateX(7%); filter: brightness(0.7); }
+  55%  { clip-path: inset(12% 0 58% 0); transform: translateX(-4%); filter: brightness(1.6) hue-rotate(28deg); }
+  80%  { clip-path: inset(0 0 6% 0); transform: translateX(1.5%); filter: none; }
+  100% { clip-path: inset(0 0 0 0); transform: none; }
+}
+/* 2 — TRACKING JOLT: it lands sideways and shudders into frame. */
+@keyframes ggVwinIn2 {
+  0%   { opacity: 0; transform: translate(14%, -6%) skewX(9deg) scale(1.14); filter: blur(6px) brightness(1.8); }
+  40%  { opacity: 1; transform: translate(-5%, 2%) skewX(-4deg) scale(1.02); filter: blur(1px) hue-rotate(-30deg); }
+  70%  { transform: translate(2%, -1%) skewX(1.5deg) scale(1); filter: none; }
+  100% { transform: none; filter: none; }
+}
+/* 3 — CRT POWER-ON: a hairline that blooms open. */
+@keyframes ggVwinIn3 {
+  0%   { opacity: 0.9; transform: scale(1.3, 0.02); filter: brightness(3.4) saturate(0.2); }
+  45%  { opacity: 1; transform: scale(1.06, 0.5); filter: brightness(1.7); }
+  75%  { transform: scale(0.99, 1.05); filter: brightness(1.1); }
+  100% { transform: none; filter: none; }
+}
+/* 4 — CHANNEL HUNT: hue/contrast stutter with a couple of dropped fields. */
+@keyframes ggVwinIn4 {
+  0%   { opacity: 0; filter: hue-rotate(140deg) saturate(3) contrast(2.4); clip-path: inset(24% 0 24% 0); }
+  30%  { opacity: 1; filter: hue-rotate(-90deg) saturate(2) contrast(1.6); clip-path: inset(0 0 38% 0); }
+  50%  { opacity: 0.25; filter: brightness(2.6); clip-path: inset(40% 0 0 0); }
+  75%  { opacity: 1; filter: hue-rotate(24deg); clip-path: inset(0 0 8% 0); }
+  100% { opacity: 1; filter: none; clip-path: inset(0 0 0 0); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -559,6 +747,14 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
   .gg-flash--expire,
   .gg-flash--grabbed.is-popped { animation: none; opacity: 0; }
   .gg-sub-word { transform: translate(-50%, -50%) !important; transition: opacity 300ms ease; }
+  /* A floating video window still ARRIVES and is still fully handleable — it
+     just stops glitching in, stops wandering and stops blinking. Dragging,
+     wheel-resizing and click-to-dismiss are direct manipulation, not motion,
+     and none of them is behind a keyframe. */
+  .gg-vwin-drift,
+  .gg-vwin-inner,
+  .gg-vwin-dot { animation: none; }
+  .gg-vwin-inner::after { animation: none; opacity: 1; }
   .gg-bubble { animation: none; }        /* no sway; the rise still carries it up */
   .gg-spiral { animation: none; }        /* no spin; the pane still covers + blends */
   .gg-drain.is-glitching { animation: none; }

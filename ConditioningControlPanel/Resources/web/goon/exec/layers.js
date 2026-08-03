@@ -5,9 +5,14 @@
  * it, so nobody appends a flash to the HUD or leaks a video into #gg-fx:
  *
  *   z0  #gg-bg      canvas backdrop
- *   z20 #gg-stage   centre stage (videos, the one layer that takes pointers)
- *   z30 #gg-fx      -> flash · sub · bubbles · spiral · bounce · drain
- *                      (pointer-events:none — the ONE opt-in is `.gg-bubble`)
+ *   z20 #gg-stage   centre stage (the ramp's fullscreen video, lock cards)
+ *   z30 #gg-fx      -> flash · sub · bubbles · spiral · bounce · drain · vwin
+ *                      (pointer-events:none — the opt-ins are `.gg-bubble`,
+ *                       `.gg-flash--hydra` and `.gg-vwin`)
+ *
+ * `vwin` is LAST in the fx stack on purpose: the floating video windows
+ * (exec/videos.js) are handled objects, so they paint over the scenery, and DOM
+ * order is the only way to say that — fx.css rule 1 forbids a z-index here.
  *
  * DOM lookups are LAZY (never at import — the module must import clean under
  * node and before <body> exists) and cached once resolved.
@@ -25,12 +30,13 @@ const IDS = {
   spiral: 'gg-fx-spiral',
   bounce: 'gg-fx-bounce',
   drain: 'gg-fx-drain',
+  vwin: 'gg-fx-vwin',
   stage: 'gg-stage',
   fx: 'gg-fx',
 };
 
 /** The fx children only — stopAll clears these plus the stage. */
-export const FX_LAYERS = ['flash', 'sub', 'bubbles', 'spiral', 'bounce', 'drain'];
+export const FX_LAYERS = ['flash', 'sub', 'bubbles', 'spiral', 'bounce', 'drain', 'vwin'];
 
 const cache = new Map();
 

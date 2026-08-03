@@ -19,10 +19,18 @@
  * Uniform renderer shape — see the banner in exec/flashes.js.
  * ==========================================================================*/
 
-/** The bundled spiral pool (DtRH ships these; goon reads them off the same host). */
+/**
+ * The bundled spiral pool (DtRH ships these; goon reads them off the same host).
+ *
+ * sp7.gif IS DELIBERATELY NOT IN HERE. The pool is dithered 256-colour art at
+ * 360-640px and this pane covers the whole window, so every entry is blown up
+ * 3-5x and its dither reads as crawling GRAIN. sp7 is the 360x360 worst case;
+ * the rest are softened enough by `.gg-spiral { filter: blur(1.1px) }` in
+ * fx.css. The FILE stays on disk — DtRH owns it and still uses it.
+ */
 export const SPIRAL_DIR = '/dtrh/assets/bubbles/effects/spirals/';
 export const SPIRAL_POOL = Object.freeze([
-  'sp1.gif', 'sp2.webp', 'sp3.gif', 'sp4.webp', 'sp5.gif', 'sp6.gif', 'sp7.gif',
+  'sp1.gif', 'sp2.webp', 'sp3.gif', 'sp4.webp', 'sp5.gif', 'sp6.gif',
 ]);
 /** The one still that ships outside the pool — the floor if the pool is ever empty. */
 export const SPIRAL_FALLBACK = '/dtrh/assets/bubbles/effects/spiral.png';

@@ -118,7 +118,7 @@ function markConnected(el, on) {
 }
 
 const LAYER_IDS = ['gg-fx-flash', 'gg-fx-sub', 'gg-fx-bubbles', 'gg-fx-spiral', 'gg-fx-bounce',
-  'gg-fx-drain', 'gg-stage', 'gg-fx'];
+  'gg-fx-drain', 'gg-fx-vwin', 'gg-stage', 'gg-fx'];
 const byId = new Map();
 for (const id of LAYER_IDS) {
   const el = new StubEl('div');
@@ -434,14 +434,23 @@ async function main() {
     ok(PAYLOAD_ELEMENT[GoonPayloadKind.Spiral] === GoonElement.Spiral,
       'GoonPayloadKind.Spiral routes to GoonElement.Spiral', String(PAYLOAD_ELEMENT[GoonPayloadKind.Spiral]));
 
-    // The pool is the DtRH bundle, read off the same ccp.game origin.
-    ok(SPIRAL_POOL.length === 7, 'the bundled spiral pool has all 7 entries', String(SPIRAL_POOL.length));
+    // The pool is the DtRH bundle, read off the same ccp.game origin — MINUS
+    // sp7.gif. Every entry is a dithered 256-colour file blown up to COVER the
+    // window, and at 360x360 sp7's dither read as crawling grain rather than
+    // shading (owner-approved cull, 2026-08-03). The FILE stays on disk: DtRH
+    // owns it and still draws it.
+    ok(SPIRAL_POOL.length === 6, 'the bundled spiral pool has 6 entries', String(SPIRAL_POOL.length));
+    ok(!SPIRAL_POOL.includes('sp7.gif'), 'sp7.gif is culled from the pool (the worst grain offender)',
+      SPIRAL_POOL.join(','));
     let poolHits = 0;
-    for (let i = 0; i < 40; i++) {
+    let sp7 = 0;
+    for (let i = 0; i < 200; i++) {
       const u = pickSpiralUrl();
       if (u.startsWith('/dtrh/assets/bubbles/effects/spirals/') && SPIRAL_POOL.some((f) => u.endsWith(f))) poolHits++;
+      if (u.endsWith('sp7.gif')) sp7++;
     }
-    ok(poolHits === 40, 'every picked spiral url is a bundled DtRH spiral', String(poolHits));
+    ok(poolHits === 200, 'every picked spiral url is a bundled DtRH spiral', String(poolHits));
+    ok(sp7 === 0, 'and 200 picks never drew the culled one', String(sp7));
   }
 
   // ------------------------------------------------------------ spiral renders
@@ -614,9 +623,13 @@ async function main() {
   /* ------------------------------ bubbles: the fx.css contract the field rests on
    * Two things about this field are STYLESHEET facts that no amount of JS can
    * assert from the inside, and both of them were bugs:
-   *   1. braindrain.png and glitch.png are the same byte-identical near-grey
-   *      file, so without a colourising filter the two kinds are indistinguish-
-   *      able on screen;
+   *   1. the kind sprites are DtRH art plus a coloured drop-shadow, full stop.
+   *      A play-test note that braindrain/glitch "show in black n white" was
+   *      once read as the BUBBLES being grey and answered with sepia/saturate/
+   *      hue-rotate recolour chains; the owner corrected it (2026-08-03) — the
+   *      grey thing was the fullscreen drain veil, and the sprites were fine.
+   *      So the pins below are the other way round now: NO colour-space filter
+   *      function may appear in a kind rule;
    *   2. `body:has(#gg-stage > *) .gg-bubble { pointer-events: none }` made the
    *      whole economy unreachable for the length of every video and lock card.
    * So the stylesheet is READ, the way selftest-hud reads hud.css for the monitor
@@ -649,32 +662,25 @@ async function main() {
 
     const bd = filterOf('.gg-bubble--braindrain');
     const gl = filterOf('.gg-bubble--glitch');
-    ok(!!bd && !!gl, 'fx.css still gives braindrain and glitch their own filter chain');
-    ok(!!bd && /sepia\(/.test(bd) && /saturate\(/.test(bd) && hueOf(bd) !== null,
-      'braindrain is COLOURISED (sepia + saturate + hue-rotate), not just shadowed', String(bd));
-    ok(!!gl && /sepia\(/.test(gl) && /saturate\(/.test(gl) && hueOf(gl) !== null,
-      'glitch is COLOURISED too', String(gl));
-    // sepia has to come first or there is no pigment for the rotation to swing:
-    // the art is near-white, and white cannot be saturated.
-    ok(!!bd && bd.indexOf('sepia(') < bd.indexOf('hue-rotate('),
-      'braindrain stamps its pigment (sepia) BEFORE swinging the hue', String(bd));
-    ok(!!gl && gl.indexOf('sepia(') < gl.indexOf('hue-rotate('),
-      'and so does glitch', String(gl));
-    ok(!!bd && /brightness\(\s*0?\.\d/.test(bd.slice(0, bd.indexOf('sepia('))),
-      'braindrain darkens first, so sepia has something to tint', String(bd));
-    ok(!!gl && /brightness\(\s*0?\.\d/.test(gl.slice(0, gl.indexOf('sepia('))),
-      'and so does glitch', String(gl));
-    ok(!!bd && shadowIsLast(bd), 'braindrain keeps its drop-shadow LAST', String(bd));
-    ok(!!gl && shadowIsLast(gl), 'glitch keeps its drop-shadow LAST', String(gl));
-    // THE POINT of the whole exercise: two identical PNGs, two different colours.
-    const dh = (hueOf(bd) === null || hueOf(gl) === null) ? 0
-      : Math.abs(((hueOf(bd) - hueOf(gl)) % 360 + 540) % 360 - 180);
-    ok(dh >= 60, 'the two identical sprites are swung to genuinely different hues',
-      `${hueOf(gl)}deg vs ${hueOf(bd)}deg`);
-    ok(bd !== gl, 'and the two rules are not the same chain');
-    // each hue matches the halo that kind already had (violet / acid green)
-    ok(!!bd && /rgba\(\s*180,\s*150,\s*255/.test(bd), 'braindrain kept its violet halo', String(bd));
-    ok(!!gl && /rgba\(\s*140,\s*255,\s*170/.test(gl), 'glitch kept its acid-green halo', String(gl));
+    const fl = filterOf('.gg-bubble--flash');
+    ok(!!bd && !!gl && !!fl, 'fx.css still gives every kind its own filter declaration');
+    // THE REGRESSION PIN, and it is the whole point of this block: the sprites
+    // are HALO-ONLY. No sepia, no hue-rotate, no saturate — the greyscale the
+    // owner reported was the drain veil, and tinting bubbles never fixed it.
+    ok(bd === 'drop-shadow(0 0 9px rgba(180, 150, 255, 0.75))',
+      'braindrain is its violet halo and nothing else', String(bd));
+    ok(gl === 'drop-shadow(0 0 9px rgba(140, 255, 170, 0.75))',
+      'glitch is its acid-green halo and nothing else', String(gl));
+    ok(fl === 'drop-shadow(0 0 9px rgba(255, 240, 200, 0.75))',
+      'flash is its warm-white halo and nothing else', String(fl));
+    ok(bd !== gl, 'and the kinds are still told apart (different halo colours)');
+    for (const [k, f] of [['braindrain', bd], ['glitch', gl], ['flash', fl]]) {
+      const tint = COLOUR_FNS.filter((fn) => String(f).includes(fn));
+      ok(tint.length === 0,
+        `.gg-bubble--${k} declares NO colour-space filter function`, tint.join(' '));
+      ok(hueOf(f) === null, `.gg-bubble--${k} is not hue-rotated`, String(f));
+      ok(shadowIsLast(f), `.gg-bubble--${k} keeps its drop-shadow LAST`, String(f));
+    }
 
     // the kinds that already read coloured are untouched art-wise, and NO kind
     // rule may declare `animation` — the shorthand would cancel the sway.
@@ -716,6 +722,48 @@ async function main() {
       ok(body === null || !/--gg-deco-play:\s*running/.test(body),
         `${wash} is decoration and still parks at hot heat`, String(body));
     }
+
+    /* ---- THE DRAIN VEIL SHOWS COLOUR (owner call 2026-08-03)
+     * The pane blended the player's own wash at `luminosity` over #0a0410, and
+     * luminosity keeps only the source's LIGHTNESS — every BrainDrain came out
+     * black and white, and the glitch shudder riding the same pane came out
+     * grey with it. The veil now dims + part-desaturates in the background
+     * layer stack instead. Measured headlessly on a full-chroma wash: pane HSL
+     * sat 0.083 -> 0.677, chroma 0.047 -> 0.406, lightness 0.511 -> 0.305, so
+     * it got MORE colour and LESS light — still a veil, not a slideshow. */
+    const drain = ruleOf('.gg-drain');
+    ok(!!drain, 'fx.css still has the .gg-drain pane', String(drain));
+    ok(!!drain && !/background-blend-mode:[^;]*luminosity/.test(drain),
+      'the drain does NOT blend its wash at luminosity (that is the B&W bug)', String(drain));
+    ok(!/background-blend-mode:[^;]*luminosity/.test(css),
+      'and nothing else in fx.css reaches for luminosity either');
+    ok(!!drain && /background-color:\s*#0a0410/.test(drain),
+      'the drain keeps its near-black base colour — it is still a dark veil', String(drain));
+    ok(!!drain && /var\(--gg-drain-img/.test(drain),
+      'the wash comes in through --gg-drain-img, so the dim/desat layers survive it', String(drain));
+    ok(!!drain && /background-blend-mode:\s*normal,\s*color,\s*normal/.test(drain),
+      'the layer stack is dim(normal) over desat(color) over wash(normal)', String(drain));
+    ok(!!drain && /--gg-drain-dim/.test(drain) && /--gg-drain-desat/.test(drain),
+      'both veil knobs are named, and neither is the opacity dial', String(drain));
+    ok(!!drain && /opacity:\s*var\(--gg-drain-op/.test(String(ruleOf('.gg-drain.is-on'))),
+      '--gg-drain-op is still the ONE dial, and higher still means heavier',
+      String(ruleOf('.gg-drain.is-on')));
+    ok(!!drain && !/(^|[^-])filter:/.test(drain),
+      'the pane declares no static filter — the glitch keyframes animate filter and would wipe it',
+      String(drain));
+    // the blur is the most expensive thing this page draws: exactly one pane,
+    // exactly one backdrop-filter (+ its -webkit- twin), and the count is pinned.
+    const bdf = (css.match(/backdrop-filter:/g) || []).length;
+    ok(bdf === 2, 'fx.css still declares backdrop-filter exactly twice (one pane, one -webkit- twin)', String(bdf));
+    ok(/\.gg-drain\s*\{[^}]*backdrop-filter:\s*blur\(7px\)/.test(css),
+      'and the one that exists is the drain blur', String(bdf));
+    // the shudder still rides the veil, and still recolours what is under it
+    const glitchKf = /@keyframes\s+ggDrainGlitch\s*\{([\s\S]*?)\n\}/.exec(css);
+    ok(!!glitchKf && /hue-rotate\(/.test(glitchKf[1]) && /saturate\(/.test(glitchKf[1]),
+      'the glitch shudder still hue-rotates + saturates on top of the new composition',
+      glitchKf ? glitchKf[1].replace(/\s+/g, ' ').trim() : 'none');
+    ok(/\.gg-drain\.is-glitching\s*\{[^}]*animation:\s*ggDrainGlitch/.test(css),
+      'and .is-glitching is what runs it');
   }
 
   /* ------------------------------ bubbles: the stage-avoidance spawn bias
@@ -1171,6 +1219,415 @@ async function main() {
     ex.detach();
   }
 
+  /* ============================ FLOATING VIDEO WINDOWS (the video PAYLOAD) ====
+   * The opponent's VHS used to mount a full-bleed surface on #gg-stage, which is
+   * the one place in this page a leftover node becomes a full-screen click
+   * shield (see selftest-flow's recap teardown). It is a drifting mini window on
+   * #gg-fx-vwin now — handled, dismissable, and swept by layers.stopAll() like
+   * the rest of the tier. The ramp's own mandatory video is STILL fullscreen on
+   * the stage; only renderPayload moved.
+   * ======================================================================== */
+
+  // ------------------------------------- video windows: the pure dials + maths
+  {
+    const V = await import('../exec/videos.js');
+    ok(V.MAX_WINDOWS === 4 && V.WINDOW_CAP_MS === 60000 && V.GLITCH_VARIANTS === 4,
+      'the window budget is 4 on screen, 60s each, 4 spawn-in variants',
+      `${V.MAX_WINDOWS}/${V.WINDOW_CAP_MS}/${V.GLITCH_VARIANTS}`);
+    ok(V.DRAG_SLOP_PX === 6 && V.WHEEL_STEP === 1.08 && V.SIZE_MIN_FACTOR === 0.5 && V.SIZE_MAX_FACTOR === 2.5,
+      'and the physical dials are exec/flashes.js\'s, verbatim',
+      `${V.DRAG_SLOP_PX}px slop, x${V.WHEEL_STEP}, ${V.SIZE_MIN_FACTOR}..${V.SIZE_MAX_FACTOR}x`);
+    ok(V.MERCY_KEEPOUT_PX === 96,
+      'the mercy gutter is the same 96px ui/options.js clips off the drawer', String(V.MERCY_KEEPOUT_PX));
+
+    // THE AUDIO INVARIANT, pure: exactly the newest window speaks. Four
+    // soundtracks at once is mush, and silence is a bug too.
+    ok(JSON.stringify(V.unmutedFlags(0)) === '[]', 'no windows, nobody speaks');
+    ok(JSON.stringify(V.unmutedFlags(1)) === '[true]', 'one window speaks');
+    ok(JSON.stringify(V.unmutedFlags(4)) === '[false,false,false,true]',
+      'with four up, only the NEWEST speaks', JSON.stringify(V.unmutedFlags(4)));
+    for (let n = 1; n <= 8; n++) {
+      const f = V.unmutedFlags(n);
+      ok(f.filter(Boolean).length === 1 && f[n - 1] === true, `exactly one speaker at n=${n}`, JSON.stringify(f));
+    }
+
+    // The cap arithmetic: never past 60s, never past what the payload asked,
+    // never under a second, and a missing duration falls back to 30s.
+    ok(V.windowCapMs(90000) === 60000, 'a 90s payload is capped at 60s', String(V.windowCapMs(90000)));
+    ok(V.windowCapMs(20000) === 20000, 'a 20s payload keeps its own 20s', String(V.windowCapMs(20000)));
+    ok(V.windowCapMs(0) === 30000, 'a payload with no duration falls back to 30s', String(V.windowCapMs(0)));
+    ok(V.windowCapMs(200) === 1000, 'and nothing floats for less than a second', String(V.windowCapMs(200)));
+
+    ok(V.baseWindowWidth(1280) >= 220 && V.baseWindowWidth(1280) <= 400,
+      'the born width is phone-screen-ish', String(V.baseWindowWidth(1280)));
+    ok(V.baseWindowWidth(600) === 220 && V.baseWindowWidth(4000) === 400,
+      'and clamped at both ends', `${V.baseWindowWidth(600)} / ${V.baseWindowWidth(4000)}`);
+
+    // PLACEMENT: never born on MERCY's gutter, never on the opponent's monitor,
+    // never off-screen. Swept with a deterministic RNG so a green run is a green
+    // run — 400 placements across three viewport shapes.
+    let seed = 12345;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const overlaps = (x, y, w, h, r) => !(x + w <= r.x0 || x >= r.x1 || y + h <= r.y0 || y >= r.y1);
+    let onMercy = 0, onMon = 0, offScreen = 0, tried = 0;
+    for (const [W, H] of [[1280, 720], [1920, 1080], [900, 1400]]) {
+      const zones = V.keepOutRects(W, H);
+      const w = V.baseWindowWidth(W), h = w * 9 / 16;
+      for (let i = 0; i < 400; i++) {
+        const p = V.placeWindow(W, H, w, h, rnd);
+        tried++;
+        if (overlaps(p.x, p.y, w, h, zones.mercy)) onMercy++;
+        if (overlaps(p.x, p.y, w, h, zones.monitor)) onMon++;
+        if (p.x < 0 || p.y < 0 || p.x + w > W || p.y + h > H) offScreen++;
+      }
+    }
+    ok(tried === 1200, '1200 placements swept', String(tried));
+    ok(onMercy === 0, 'not one window is born over the mercy gutter', String(onMercy));
+    ok(onMon === 0, 'not one is born over the opponent monitor', String(onMon));
+    ok(offScreen === 0, 'and not one is born off-screen', String(offScreen));
+    // The mercy keep-out really is the bottom strip it claims to be.
+    const z = V.keepOutRects(1280, 720);
+    ok(Math.round(720 - z.mercy.y0) === V.MERCY_KEEPOUT_PX,
+      'the mercy keep-out is exactly the bottom 96px', String(720 - z.mercy.y0));
+    ok(z.monitor.x1 === 1280 && z.monitor.x0 > 640, 'the monitor keep-out hugs the right edge',
+      `${z.monitor.x0}..${z.monitor.x1}`);
+
+    const seen = new Set();
+    for (let i = 0; i < 400; i++) seen.add(V.glitchVariant());
+    ok(seen.size === V.GLITCH_VARIANTS && !seen.has(0) && !seen.has(5),
+      'the spawn-in picker draws all four variants and only those', Array.from(seen).sort().join(','));
+  }
+
+  // ------------------------------- video windows: mounting, the cap, the pool
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-vwin');
+    const stage = byId.get('gg-stage');
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    const winsOf = () => host.findAll('gg-vwin');
+    const vids = () => host.findAll('gg-vwin-vid');
+
+    m.emitPayload({
+      payload: payloadOf({ id: 'pV1', kind: GoonPayloadKind.Video, duration_ms: 1200, intensity: 0.8 }),
+      fireAtLocalMs: localMonotonicMs(),
+    });
+    await sleep(80);
+    ok(winsOf().length === 1, 'a video payload mounts ONE floating window', String(winsOf().length));
+    ok(stage.childNodes.length === 0,
+      'and NOTHING on #gg-stage — a husk there is a full-screen click shield', String(stage.childNodes.length));
+
+    // The node shape IS the animation contract: four loops/one-shots, four
+    // different elements (see the fx.css pins below).
+    const w0 = winsOf()[0];
+    const drift = w0.findAll('gg-vwin-drift')[0];
+    const inner = w0.findAll('gg-vwin-inner')[0];
+    const dot = w0.findAll('gg-vwin-dot')[0];
+    ok(!!drift && !!inner && !!dot, 'the window is wrapper > drift > inner > (video + dot)');
+    ok(drift.parentNode === w0 && inner.parentNode === drift && dot.parentNode === inner,
+      'and it is nested in that order, so no two animations share an element');
+    ok(/gg-vwin-in--[1-4]/.test(inner.className), 'the inner carries one of the four glitch-in variants',
+      inner.className);
+    ok(/px$/.test(w0.style.getPropertyValue('left')) && /px$/.test(w0.style.getPropertyValue('top')),
+      'the window is anchored in px', `${w0.style.getPropertyValue('left')} ${w0.style.getPropertyValue('top')}`);
+    ok(/px$/.test(w0.style.getPropertyValue('--gg-vwin-w')), 'sized through --gg-vwin-w (never a transform scale)',
+      w0.style.getPropertyValue('--gg-vwin-w'));
+    ok(parseFloat(drift.style.getPropertyValue('--gg-vwin-dy')) < 0,
+      'the drift is biased UPWARD, away from the mercy gutter', drift.style.getPropertyValue('--gg-vwin-dy'));
+    ok(vids()[0] && String(vids()[0].src).includes('ccp.assets'),
+      'the clip comes from the player own library through media.acquire', String(vids()[0] && vids()[0].src));
+    ok(vids()[0] && vids()[0].loop === false, 'it does NOT loop — a window dies when its clip ends');
+
+    // The cap: 1200ms was asked for, so 1200ms is what it gets. Ran out = endured.
+    await sleep(1500);
+    ok(m.receipts.length === 1 && m.receipts[0].endured === true,
+      'a window that ran its cap receipts endured', JSON.stringify(m.receipts));
+    await sleep(320);
+    ok(winsOf().length === 0, 'and the node is torn out afterwards', String(winsOf().length));
+
+    // -------- the pool: 4 live, and a 5th settles the OLDEST first
+    for (let i = 0; i < 4; i++) {
+      m.emitPayload({
+        payload: payloadOf({ id: 'pP' + i, kind: GoonPayloadKind.Video, duration_ms: 40000 }),
+        fireAtLocalMs: localMonotonicMs(),
+      });
+      await sleep(40);
+    }
+    await sleep(80);
+    ok(winsOf().length === 4, 'four payloads, four windows', String(winsOf().length));
+    ok(m.receipts.length === 1, 'and none of them has finished yet', String(m.receipts.length));
+
+    const oldest = winsOf()[0];
+    m.emitPayload({
+      payload: payloadOf({ id: 'pP4', kind: GoonPayloadKind.Video, duration_ms: 40000 }),
+      fireAtLocalMs: localMonotonicMs(),
+    });
+    await sleep(120);
+    ok(ex.rendererFor(GoonElement.Videos).windowCount() === 4,
+      'a FIFTH window never makes it five', String(ex.rendererFor(GoonElement.Videos).windowCount()));
+    const evicted = m.receipts.find((r) => r.id === 'pP0');
+    ok(!!evicted && evicted.endured === true,
+      'the OLDEST is the one that settles, and being displaced is enduring it', JSON.stringify(evicted));
+    await sleep(320);
+    ok(!oldest.isConnected, 'the evicted window is really gone from the DOM');
+    ok(winsOf().length === 4, 'and the layer is back to four nodes once its fade-out lands',
+      String(winsOf().length));
+
+    // -------- only the newest speaks
+    const live = host.findAll('gg-vwin-vid');
+    ok(live.length === 4, 'four videos are live', String(live.length));
+    ok(live.slice(0, 3).every((v) => v.muted === true) && live[3].muted === false,
+      'only the NEWEST window is unmuted', live.map((v) => (v.muted ? 'm' : 'SOUND')).join(','));
+    ok(live[3].volume > 0 && live[3].volume <= 0.55, 'and it plays at a modest volume', String(live[3].volume));
+
+    // -------- stopAll: every window gone, nothing left on the stage
+    ex.stopAll();
+    ok(ex.rendererFor(GoonElement.Videos).windowCount() === 0,
+      'executor.stopAll leaves ZERO windows (this is what clearForRecap rests on)',
+      String(ex.rendererFor(GoonElement.Videos).windowCount()));
+    ok(host.childNodes.length === 0, 'the vwin layer is empty', String(host.childNodes.length));
+    ok(stage.childNodes.length === 0, 'and the stage was never touched by them', String(stage.childNodes.length));
+    for (const id of ['pP1', 'pP2', 'pP3', 'pP4']) {
+      const r = m.receipts.find((x) => x.id === id);
+      ok(!!r && r.endured === false, `${id} was cancelled, so it receipts completed (no charge)`, JSON.stringify(r));
+    }
+    await sleep(300);
+    ok(m.receipts.length === 6, 'no late second receipt from a cancelled window', String(m.receipts.length));
+    ex.detach();
+  }
+
+  // -------------------- video windows: click, drag, wheel, and the clip ending
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-vwin');
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    const winsOf = () => host.findAll('gg-vwin');
+    const fire = (id) => m.emitPayload({
+      payload: payloadOf({ id, kind: GoonPayloadKind.Video, duration_ms: 40000 }),
+      fireAtLocalMs: localMonotonicMs(),
+    });
+
+    // ---- a press that never moves is a CLICK, and a click dismisses
+    fire('pC1');
+    await sleep(80);
+    const clicked = winsOf()[0];
+    ok(!!clicked, 'a window to click');
+    PID++;
+    ptr(clicked, 'pointerdown', 300, 300);
+    ok(!clicked._cls.has('is-grabbed'), 'pointerdown alone is not a grab — the press is still deciding');
+    ptr(clicked, 'pointermove', 304, 303);     // 5px: inside DRAG_SLOP_PX
+    ok(!clicked._cls.has('is-grabbed'), 'a wobble inside the slop is still a click', clicked.className);
+    ptr(clicked, 'pointerup', 304, 303);
+    const c1 = m.receipts.find((r) => r.id === 'pC1');
+    ok(!!c1 && c1.endured === true,
+      'clicking a window closes it, and closing it yourself is ENDURED', JSON.stringify(c1));
+    await sleep(320);
+    ok(winsOf().length === 0, 'the clicked window is torn out', String(winsOf().length));
+
+    // ---- past the slop it is a DRAG: it follows the pointer and is NOT dismissed
+    fire('pC2');
+    await sleep(80);
+    const dragged = winsOf()[0];
+    PID++;
+    const down = ptr(dragged, 'pointerdown', 500, 500);
+    ok(down.defaulted === true, 'the press preventDefaults (no native drag ghost, no scroll)');
+    ptr(dragged, 'pointermove', 600, 600);
+    ok(dragged._cls.has('is-grabbed'),
+      'past the slop the window is in hand — and .is-grabbed is what kills the drift keyframe',
+      dragged.className);
+    ok(dxOf(dragged) === 100, 'it follows the pointer one-to-one, in px on top of its anchor',
+      dragged.style.getPropertyValue('transform'));
+    ok(!/scale\(/.test(dragged.style.getPropertyValue('transform')),
+      'and the drag transform carries NOTHING but the offset (size is the width var)',
+      dragged.style.getPropertyValue('transform'));
+    ptr(dragged, 'pointerup', 600, 600);
+    ok(!dragged._cls.has('is-grabbed'), 'released: out of hand', dragged.className);
+    ok(dragged.isConnected && !m.receipts.some((r) => r.id === 'pC2'),
+      'a press that became a drag is NOT a click — dragging never dismisses');
+    ok(dxOf(dragged) === 100, 'and it stays where it was dropped', String(dxOf(dragged)));
+
+    // ---- wheel over it resizes, through the var, clamped both ways
+    const sizeOf = (el) => parseFloat(el.style.getPropertyValue('--gg-vwin-w'));
+    const V = await import('../exec/videos.js');
+    const base = V.baseWindowWidth(1280);
+    ok(Math.abs(sizeOf(dragged) - base) < 1.5, 'a window is born at the base width', String(sizeOf(dragged)));
+    const wev = ptr(dragged, 'wheel', 600, 600, { deltaY: -100 });
+    ok(wev.defaulted === true, 'a wheel over a window preventDefaults so the page can never scroll');
+    ok(Math.abs(sizeOf(dragged) - base * V.WHEEL_STEP) < 1.5,
+      'one notch up grows it by exactly one wheel step', `${base} -> ${sizeOf(dragged)}`);
+    for (let i = 0; i < 30; i++) ptr(dragged, 'wheel', 600, 600, { deltaY: -120 });
+    ok(Math.abs(sizeOf(dragged) - base * V.SIZE_MAX_FACTOR) < 1.5,
+      'growth clamps at 2.5x its base', String(sizeOf(dragged)));
+    for (let i = 0; i < 60; i++) ptr(dragged, 'wheel', 600, 600, { deltaY: 120 });
+    ok(Math.abs(sizeOf(dragged) - base * V.SIZE_MIN_FACTOR) < 1.5,
+      'and shrink clamps at 0.5x', String(sizeOf(dragged)));
+    ok(!/scale\(/.test(dragged.style.getPropertyValue('transform')),
+      'the wheel never stacks a transform scale on the drag offset',
+      dragged.style.getPropertyValue('transform'));
+
+    // ---- pointercancel is a gentle drop: no dismissal, no stuck hand
+    PID++;
+    ptr(dragged, 'pointerdown', 200, 200);
+    ptr(dragged, 'pointermove', 280, 250);
+    ok(dragged._cls.has('is-grabbed'), 'in hand again', dragged.className);
+    ptr(dragged, 'pointercancel', 280, 250);
+    ok(!dragged._cls.has('is-grabbed') && dragged.isConnected && !m.receipts.some((r) => r.id === 'pC2'),
+      'pointercancel drops it where it lies: no dismissal, no stuck hold', dragged.className);
+    // The hand is empty again — the very next press is a clean click.
+    tap(dragged, 280, 250);
+    const c2 = m.receipts.find((r) => r.id === 'pC2');
+    ok(!!c2 && c2.endured === true, 'and the next press still dismisses, so no drag state was left stuck',
+      JSON.stringify(c2));
+    await sleep(320);
+
+    // ---- the clip ending closes the window on its own
+    fire('pC3');
+    await sleep(80);
+    const ending = winsOf()[0];
+    const vid = ending.findAll('gg-vwin-vid')[0];
+    ok(!!vid && typeof vid.onended === 'function', 'the window listens for its clip ending');
+    vid.onended();
+    const c3 = m.receipts.find((r) => r.id === 'pC3');
+    ok(!!c3 && c3.endured === true, 'a clip that played out endures, without waiting for the 60s cap',
+      JSON.stringify(c3));
+    await sleep(320);
+    ok(winsOf().length === 0, 'and the window goes with it', String(winsOf().length));
+
+    // ---- the cancel fn the executor holds removes the window on the spot
+    const videos = ex.rendererFor(GoonElement.Videos);
+    let endured = null;
+    const cancel = videos.renderPayload({ id: 'pC4', duration_ms: 40000, intensity: 0.5 }, (e) => { endured = e; });
+    ok(typeof cancel === 'function', 'renderPayload returns a cancel fn (the uniform renderer shape)');
+    await sleep(40);
+    ok(videos.windowCount() === 1, 'the direct render put one window up', String(videos.windowCount()));
+    cancel();
+    ok(videos.windowCount() === 0 && endured === false,
+      'and its cancel fn takes it down, receipting completed', `${videos.windowCount()} / ${endured}`);
+    cancel();
+    ok(endured === false, 'a second cancel is a no-op (done() fires at most once)');
+    ex.stopAll();
+    ex.detach();
+  }
+
+  /* --------------------------- video windows: the fx.css contract they rest on
+   * Three of these are STYLESHEET facts no JS assertion can reach, and each one
+   * is a bug waiting to come back:
+   *   1. `animation` is a SHORTHAND. A one-shot glitch-in and a forever drift
+   *      declared on ONE element cancel each other — so the wrapper, the drift,
+   *      the glitch, the glow and the dot are five different animation slots on
+   *      four different nodes, and the wrapper's is EMPTY (JS writes its
+   *      transform inline for the drag, and keyframes outrank inline styles).
+   *   2. every loop parks at html[data-gg-fx="hot"] through --gg-deco-play,
+   *      because all of it is decoration — while drag/wheel/click, which are not
+   *      animations, keep working parked.
+   *   3. the layer is click-through and the WINDOW opts back in. A window you
+   *      cannot dismiss is worse than one that ate a click.
+   * ------------------------------------------------------------------------ */
+  {
+    const fs = await import('node:fs/promises');
+    const url = await import('node:url');
+    const raw = await fs.readFile(url.fileURLToPath(new URL('../exec/fx.css', import.meta.url)), 'utf8');
+    const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const ruleOf = (sel) => {
+      const m = new RegExp(esc(sel) + '\\s*\\{([^}]*)\\}').exec(css);
+      return m ? m[1] : null;
+    };
+    const animOf = (sel) => {
+      const b = ruleOf(sel);
+      const m = b && /(^|[;\s])animation:\s*([^;]+)/.exec(b);
+      return m ? m[2].trim() : null;
+    };
+    const countAnim = (sel) => {
+      const b = ruleOf(sel) || '';
+      return (b.match(/(^|[;\s])animation:/g) || []).length;
+    };
+
+    // 1. THE SHORTHAND TRAP
+    ok(ruleOf('.gg-vwin') !== null, 'fx.css has the .gg-vwin wrapper rule');
+    ok(countAnim('.gg-vwin') === 0,
+      'the wrapper declares NO animation — the inline drag transform must stay authoritative',
+      String(animOf('.gg-vwin')));
+    for (const sel of ['.gg-vwin-drift', '.gg-vwin-dot', '.gg-vwin-inner::after']) {
+      ok(countAnim(sel) === 1, `${sel} declares exactly one animation`, String(countAnim(sel)));
+      ok(/infinite/.test(animOf(sel) || ''), `${sel} is the LOOP it is supposed to be`, String(animOf(sel)));
+    }
+    ok(countAnim('.gg-vwin-inner') === 0,
+      'the inner element leaves its animation slot for the one-shot variant classes',
+      String(animOf('.gg-vwin-inner')));
+    for (let i = 1; i <= 4; i++) {
+      const a = animOf(`.gg-vwin-in--${i}`);
+      ok(!!a, `the spawn-in variant .gg-vwin-in--${i} exists`, String(a));
+      ok(/\b1\s*$/.test(String(a)) && !/infinite/.test(String(a)),
+        `variant ${i} is a ONE-SHOT (a loop here would fight nothing but itself, forever)`, String(a));
+      ok(!/forwards/.test(String(a)),
+        `variant ${i} does not hold its last frame (that would outrank the drift + drag transforms)`, String(a));
+      ok(new RegExp('@keyframes\\s+ggVwinIn' + i + '\\s*\\{').test(css), `and ggVwinIn${i} is defined`);
+    }
+    // The four variants really are four different animations.
+    const names = [1, 2, 3, 4].map((i) => String(animOf(`.gg-vwin-in--${i}`)).split(/\s+/)[0]);
+    ok(new Set(names).size === 4, 'the four spawn-ins are four DIFFERENT keyframes so 4 windows never look cloned',
+      names.join(','));
+
+    // 2. THE HEAT ARMOR — every loop parks, nothing functional does.
+    for (const sel of ['.gg-vwin-drift', '.gg-vwin-dot', '.gg-vwin-inner::after']) {
+      ok(/animation-play-state:\s*var\(--gg-deco-play/.test(ruleOf(sel) || ''),
+        `${sel} parks at data-gg-fx="hot" (--gg-deco-play)`, String(ruleOf(sel)));
+    }
+    ok(!/animation-play-state/.test(ruleOf('.gg-vwin') || ''),
+      'the wrapper has nothing to park — dragging a window works exactly the same when hot');
+    // IN HAND the drift is switched off outright: a live keyframe on the drift
+    // element would keep re-writing its transform under the drag.
+    ok(/\.gg-vwin\.is-grabbed\s+\.gg-vwin-drift\s*\{[^}]*animation:\s*none/.test(css),
+      'a grabbed window kills its drift keyframe (animation: none), the .gg-flash--grabbed law');
+
+    // 3. POINTERS
+    ok(/pointer-events:\s*auto/.test(ruleOf('.gg-vwin') || ''),
+      'the window opts back into pointer events (the .gg-bubble pattern)');
+    ok(/touch-action:\s*none/.test(ruleOf('.gg-vwin') || ''),
+      'and claims the touch that starts on it — it is draggable');
+    ok(!new RegExp('body:has\\(#gg-stage > \\*\\)[^{]*\\.gg-vwin\\b').test(css),
+      'nothing takes the window pointer opt-in away while the stage is occupied (a window MUST stay dismissable)');
+
+    // THE LOOK the owner asked for: a red live dot, top-right, and a house glow.
+    const dot = ruleOf('.gg-vwin-dot') || '';
+    ok(/position:\s*absolute/.test(dot) && /top:/.test(dot) && /right:/.test(dot),
+      'the recording dot is pinned to the TOP-RIGHT of the window', dot.replace(/\s+/g, ' ').trim());
+    ok(/background:\s*#ff2d4b/i.test(dot), 'and it is red', dot.replace(/\s+/g, ' ').trim());
+    const inner = ruleOf('.gg-vwin-inner') || '';
+    ok(/box-shadow:[^;]*--gg-pink-rgb/.test(inner) && /box-shadow:[^;]*--gg-violet-rgb/.test(inner),
+      'the border glows in the house pink/violet, like .gg-plate', inner.replace(/\s+/g, ' ').trim());
+    ok(/border:[^;]*--gg-pink-rgb/.test(inner), 'and the border itself is pink');
+
+    // REDUCED MOTION: no drift, no glitch, no blink — but it still ARRIVES and
+    // is still fully handleable, because none of that is a keyframe.
+    const calmBlock = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+    ok(/\.gg-vwin-drift[^}]*\{[^}]*animation:\s*none/.test(calmBlock)
+      || /\.gg-vwin-drift,[\s\S]{0,120}?animation:\s*none/.test(calmBlock),
+      'reduced motion stops the drift');
+    ok(/\.gg-vwin-dot/.test(calmBlock) && /\.gg-vwin-inner/.test(calmBlock),
+      'and the glitch-in, the glow and the dot pulse with it');
+    ok(!/\.gg-vwin\s*\{[^}]*pointer-events:\s*none/.test(calmBlock),
+      'but it never takes the window away from the player');
+
+    // TASK 2: the spiral grain. A CONSTANT blur is only safe because nothing
+    // animates filter on that pane — ggSpiralSpin is transform-only.
+    const spiral = ruleOf('.gg-spiral') || '';
+    const blur = /filter:\s*blur\(([\d.]+)px\)/.exec(spiral);
+    ok(!!blur, 'the spiral pane carries a constant blur (the dither is what reads as grain)', spiral.replace(/\s+/g, ' ').trim());
+    const px = blur ? Number(blur[1]) : NaN;
+    ok(px >= 0.8 && px <= 1.5, 'and it is in the 0.8..1.5px band that softens dither without smearing the spiral',
+      String(px));
+    const spin = /@keyframes\s+ggSpiralSpin\s*\{([\s\S]*?)\}\s*\n/.exec(css);
+    ok(!!spin && !/filter/.test(spin[1]),
+      'ggSpiralSpin still animates transform ONLY — a filter keyframe would outrank the blur', String(spin && spin[1]));
+    ok(!/\.gg-spiral[^{]*\{[^}]*transition:[^;]*filter/.test(css),
+      'and nothing transitions filter on it either');
+  }
+
   // -------------------------------------------------- brain drain: the DtRH veil
   {
     for (const id of LAYER_IDS) byId.get(id).replaceChildren();
@@ -1181,8 +1638,13 @@ async function main() {
     await sleep(60);
     const veils = byId.get('gg-fx-drain').findAll('gg-drain');
     ok(veils.length === 1, 'the drain is exactly one veil pane', String(veils.length));
-    ok(String(veils[0].style.getPropertyValue('background-image')).includes('ccp.assets'),
-      'the veil washes an image from the player own pool', veils[0].style.getPropertyValue('background-image'));
+    ok(String(veils[0].style.getPropertyValue('--gg-drain-img')).includes('ccp.assets'),
+      'the veil washes an image from the player own pool', veils[0].style.getPropertyValue('--gg-drain-img'));
+    // …through the custom property ONLY: an inline background-image would drop
+    // the dim + desaturate layers fx.css composes under the wash (the B&W fix).
+    ok(!String(veils[0].style.getPropertyValue('background-image')).trim(),
+      'and never by writing background-image over the layer stack',
+      veils[0].style.getPropertyValue('background-image'));
     const dop = parseFloat(veils[0].style.getPropertyValue('--gg-drain-op'));
     ok(dop >= 0.35 && dop <= 0.62, 'drain opacity stays inside the 0.35..0.62 band', String(dop));
     ex.stopAll();

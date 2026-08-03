@@ -591,11 +591,30 @@ function clearRecapFallback() {
  * closes them, so a match that ends underneath either one lands the player on a
  * recap they cannot reach.
  */
+/**
+ * THE z70 CHROME — a modal sheet (#gg-modal) and the options drawer (#gg-drawer).
+ * Both are full-height overlays with a scrim, and NOTHING else closes them, so
+ * anything they are still covering when the match moves on is unreachable.
+ *
+ * Two places need that, for two different bugs:
+ *   RECAP    a sheet over the end card = a recap the player cannot click out of;
+ *   COUNTDOWN/LIVE  a sheet left open when the run starts (the "how it works"
+ *            explainer is one tap from the lobby) sits over the bottom strip
+ *            where exec/bubbles.js spawns the field. Its scrim eats every pop,
+ *            which silently freezes the whole drop economy for the match — and
+ *            it makes Escape ambiguous exactly when Escape must mean MERCY and
+ *            nothing else. So the sheet is closed BEFORE the clock starts; the
+ *            Escape ladder itself is untouched.
+ */
+function closeChrome() {
+  try { if (sheets && sheets.isOpen) sheets.close(null); } catch (_e) { /* ignore */ }
+  try { if (options && options.isOpen) options.close(); } catch (_e) { /* ignore */ }
+}
+
 function clearForRecap(why) {
   try { executor?.stopAll?.(); } catch (e) { logger.warn('executor.stopAll threw: ' + ((e && e.message) || e)); }
   try { layers.stopAll(); } catch (e) { logger.warn('layers.stopAll threw: ' + ((e && e.message) || e)); }
-  try { if (sheets && sheets.isOpen) sheets.close(null); } catch (_e) { /* ignore */ }
-  try { if (options && options.isOpen) options.close(); } catch (_e) { /* ignore */ }
+  closeChrome();
 
   if (!hasDom()) return;
   const stage = el('gg-stage');
@@ -712,10 +731,17 @@ function onPhase(phase) {
       break;
 
     case GoonMatchPhase.Countdown:
+      // Nothing may be left over the run when the clock starts — a forgotten
+      // sheet's scrim would eat every bubble pop for the whole match (see
+      // closeChrome).
+      closeChrome();
       router.show('countdown');
       break;
 
     case GoonMatchPhase.Live:
+      closeChrome();          // belt and braces: a match can arrive at Live
+                              // without us ever seeing its Countdown (rebuild,
+                              // late join, a resumed transport)
       router.hide();
       mountHudNow();
       mountMercyNow();
