@@ -135,6 +135,50 @@ public class CompositorEngine : IDisposable
         return handles;
     }
 
+    /// <summary>One visible main-surface host: its native handle and the monitor rect it covers.</summary>
+    public readonly record struct HostAnchor(nint Hwnd, System.Drawing.Rectangle BoundsPx);
+
+    // Lock-free snapshot of the visible MAIN-surface hosts, republished on every show / hide /
+    // create / topology edge (all UI thread). Read from ANY thread — the avatar tube lives on its
+    // own dispatcher under AvatarOwnThread and must never touch the host dictionaries, but it does
+    // need to know where the host sits so it can park itself just BELOW the pink tint (#776).
+    private volatile HostAnchor[] _hostAnchors = Array.Empty<HostAnchor>();
+
+    /// <summary>
+    /// Handle of the visible main-surface host covering the given virtual-desktop device-px point,
+    /// or 0 when no host is up there. Safe from any thread (reads an immutable snapshot).
+    /// </summary>
+    public nint FindHostAnchorAt(int xPx, int yPx)
+    {
+        var anchors = _hostAnchors;
+        foreach (var a in anchors)
+            if (a.BoundsPx.Contains(xPx, yPx)) return a.Hwnd;
+        return 0;
+    }
+
+    /// <summary>Self-heal hook for the 5s z-order reconciler: re-derive the anchor snapshot in case
+    /// an edge was missed (e.g. a host whose hwnd was not realized yet when it was published).
+    /// UI thread only, like <see cref="GetVisibleHostHandles"/>.</summary>
+    public void RepublishHostAnchors() => PublishHostAnchors();
+
+    /// <summary>Republish <see cref="_hostAnchors"/> from the main-surface dictionary. UI thread
+    /// (reads _windows); call on every edge that shows, hides, creates or retargets a host.</summary>
+    private void PublishHostAnchors()
+    {
+        try
+        {
+            var list = new List<HostAnchor>(_windows.Count);
+            foreach (var host in _windows.Values)
+                if (host.IsVisible && host.WindowHandle != 0)
+                    list.Add(new HostAnchor(host.WindowHandle, host.ScreenBoundsPx));
+            _hostAnchors = list.ToArray();
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("CompositorEngine: PublishHostAnchors failed: {Error}", ex.Message);
+        }
+    }
+
     /// <summary>
     /// Pay the one-time host costs (window creation, hwnd + ex-styles, Skia surface alloc, paint
     /// JIT) at startup instead of on the first effect trigger. Creates and shows the main-surface
@@ -150,6 +194,7 @@ public class CompositorEngine : IDisposable
             EnsureWindows(_windows, excluded: false);
             foreach (var w in _windows.Values)
                 if (!w.IsVisible) w.Show();
+            PublishHostAnchors();
             PresentSurface(_windows, excluded: false); // one (empty) frame realizes the surface + JIT
             Wake(); // ticks once, finds nothing active, parks + schedules the window hide
         }
@@ -272,14 +317,19 @@ public class CompositorEngine : IDisposable
     {
         if (!active) return;
         EnsureWindows(surface, excluded);
+        bool shownAny = false;
         foreach (var w in surface.Values)
         {
             if (!w.IsVisible)
             {
-                try { w.Show(); }
+                try { w.Show(); shownAny = true; }
                 catch (Exception ex) { App.Logger?.Error(ex, "CompositorEngine: host Show failed"); }
             }
         }
+        // Edge only — the steady state must not allocate a snapshot every frame. A host that just
+        // showed re-asserted HWND_TOPMOST, so the avatar tube has to learn about it NOW or its next
+        // 500ms tick would jump back over the tint (#776).
+        if (shownAny && !excluded) PublishHostAnchors();
     }
 
     /// <summary>Arm the one-shot hide of all (idle, empty) host windows, WindowHideGrace from
@@ -306,6 +356,7 @@ public class CompositorEngine : IDisposable
                     catch (Exception ex) { App.Logger?.Error(ex, "CompositorEngine: host Hide failed"); }
                 }
             }
+            PublishHostAnchors();   // hosts gone: the tube may go back to the top of the topmost band
         };
         return t;
     }
@@ -450,6 +501,7 @@ public class CompositorEngine : IDisposable
             {
                 RebuildSurface(_windows);
                 RebuildSurface(_excludedWindows);
+                PublishHostAnchors();   // monitor rects moved / a host was torn down
                 Wake();
             }
             catch (Exception ex)
@@ -499,5 +551,6 @@ public class CompositorEngine : IDisposable
         }
         _windows.Clear();
         _excludedWindows.Clear();
+        _hostAnchors = Array.Empty<HostAnchor>();
     }
 }
