@@ -51,8 +51,10 @@ namespace ConditioningControlPanel.Services
         /// Fired (mod id) when a mod's CONTENT availability changed while the active mod stayed put —
         /// a release content pack finished installing, so a built-in that had no assets (or stale
         /// ones) now has them. Mod lists (top-bar selector, Mod Manager, first-run picker) should
-        /// rebuild; nothing about ActiveMod moved, so <see cref="ModChanged"/> deliberately does not
-        /// fire.
+        /// rebuild. WHICH mod is active never changes here, so this is not a mod switch — but it is
+        /// not a substitute for <see cref="ModChanged"/> either: when the arriving content backs the
+        /// mod that is already active, its registration is swapped and ModChanged fires too (see
+        /// <see cref="AdoptBuiltInPackage"/>).
         ///
         /// Always raised on the UI thread. May fire MORE THAN ONCE per pack: once as soon as the
         /// pack's loose media is on disk, and again when a .ccpmod inside it finishes extracting.
@@ -1483,6 +1485,8 @@ namespace ConditioningControlPanel.Services
             var builtInRoot = EnsureBuiltInRoot();
             if (builtInRoot == null) return;
 
+            SweepBuiltInStagingLeftovers(builtInRoot);
+
             foreach (var entry in _bundledBuiltInMods)
                 PrepareBuiltInMod(builtInRoot, entry.RelativePath, entry.BuiltInId, entry.PackId, codeManifest: null);
         }
@@ -1492,8 +1496,48 @@ namespace ConditioningControlPanel.Services
             var builtInRoot = EnsureBuiltInRoot();
             if (builtInRoot == null) return;
 
+            SweepBuiltInStagingLeftovers(builtInRoot);
+
             foreach (var entry in _bundledResourceMods)
                 PrepareBuiltInMod(builtInRoot, entry.RelativePath, entry.BuiltInId, entry.PackId, entry.Manifest);
+        }
+
+        /// <summary>True once the staging sweep has run — it is a once-per-process, startup-only job.</summary>
+        private bool _stagingSwept;
+
+        /// <summary>
+        /// Deletes <c>&lt;id&gt;.new</c> / <c>&lt;id&gt;.old</c> siblings a previous run left behind when it
+        /// died mid-swap (see <see cref="ExtractArchive"/>), so a crashed half-swap self-heals instead of
+        /// silently hoarding a second copy of a 184 MB mod. Runs BEFORE any registration, and only from
+        /// the ctor path: a mid-session sweep could delete the staging folder a background extraction is
+        /// filling right now (the <see cref="_extracting"/> check is a second belt).
+        /// </summary>
+        private void SweepBuiltInStagingLeftovers(string builtInRoot)
+        {
+            if (_stagingSwept) return;
+            _stagingSwept = true;
+
+            try
+            {
+                foreach (var dir in Directory.GetDirectories(builtInRoot))
+                {
+                    if (!dir.EndsWith(StagingSuffix, StringComparison.OrdinalIgnoreCase)
+                        && !dir.EndsWith(RetiredSuffix, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var owningId = Path.GetFileNameWithoutExtension(dir);
+                    if (!string.IsNullOrEmpty(owningId) && _extracting.ContainsKey(owningId)) continue;
+
+                    if (TryDeleteTree(dir))
+                        _log?.Information("ModService: swept leftover built-in staging folder {Dir}", dir);
+                    else
+                        _log?.Warning("ModService: leftover built-in staging folder {Dir} could not be removed", dir);
+                }
+            }
+            catch (Exception ex)
+            {
+                _log?.Debug("ModService: staging sweep failed: {Error}", ex.Message);
+            }
         }
 
         private static string? EnsureBuiltInRoot()
@@ -1528,31 +1572,45 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var source = ResolveCcpmodSource(relativePath, packId);
-                if (source == null)
-                {
-                    // Neither the installer copy nor a downloaded pack is on disk. Same degradation as
-                    // before packs existed: the built-in keeps its hardcoded manifest with no
-                    // InstalledPath and resolves baseline assets. Never an error dialog.
-                    _log?.Information(
-                        "Built-in mod {BuiltInId}: no .ccpmod in the install dir or content packs — using the hardcoded manifest",
-                        builtInId);
-                    return;
-                }
-
                 var extractDir = Path.Combine(builtInRoot, builtInId);
                 var payloadProbe = codeManifest == null
                     ? Path.Combine(extractDir, "mod.json")          // full package: mod.json is the payload proof
                     : Path.Combine(extractDir, "resources");        // resources-only package
                 var timeProbe = codeManifest == null ? payloadProbe : extractDir;
 
+                var source = ResolveCcpmodSource(relativePath, packId);
+                if (source == null)
+                {
+                    // No archive anywhere. That is the NORMAL state for someone who upgraded onto the
+                    // modular installer (which deletes the in-box .ccpmod) and has not fetched the
+                    // pack yet — but the tree an earlier version extracted is still sitting in
+                    // builtin_mods\<id>\ and is perfectly usable, so adopt it instead of dropping the
+                    // mod back to baseline art for the whole session.
+                    if (PathExists(payloadProbe) && RegisterExtractedBuiltIn(builtInId, extractDir, codeManifest))
+                    {
+                        _log?.Information(
+                            "Built-in mod {BuiltInId}: no .ccpmod in the install dir or content packs — keeping the previously extracted tree at {Path}",
+                            builtInId, extractDir);
+                        return;
+                    }
+
+                    // Missing in all three places: same degradation as before packs existed — the
+                    // built-in keeps its hardcoded manifest with no InstalledPath and resolves
+                    // baseline assets. Never an error dialog.
+                    _log?.Information(
+                        "Built-in mod {BuiltInId}: no .ccpmod in the install dir or content packs — using the hardcoded manifest",
+                        builtInId);
+                    return;
+                }
+
                 var needsExtract = ShouldExtract(source, extractDir, payloadProbe, timeProbe);
 
                 if (needsExtract && source.FromPack)
                 {
                     // Register whatever a previous extraction already left on disk FIRST — a
-                    // stale-but-usable tree beats no assets, and reading mod.json before the
-                    // background pass starts deleting the folder keeps the two off each other.
+                    // stale-but-usable tree beats no assets. The background pass unzips into a
+                    // sibling staging folder and swaps with two renames (see ExtractArchive), so the
+                    // tree we register here is never dismantled underneath the running session.
                     if (PathExists(payloadProbe))
                         RegisterExtractedBuiltIn(builtInId, extractDir, codeManifest);
 
@@ -1729,27 +1787,107 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>Sibling folders the swap in <see cref="ExtractArchive"/> stages through.</summary>
+        private const string StagingSuffix = ".new";
+        private const string RetiredSuffix = ".old";
+
         /// <summary>
-        /// Wipe-and-unzip. Returns false (logged, never thrown) on any failure — including the
-        /// mid-session case where a file in the old tree is still open, which leaves the previously
-        /// extracted assets in place rather than half-deleting them.
+        /// Unzip into a sibling staging folder, then swap it in with two directory renames.
+        ///
+        /// The previously extracted tree is NEVER wiped in place: by the time a pack finishes
+        /// downloading it is usually REGISTERED and live (<see cref="AdoptBuiltInPackage"/>), and
+        /// Directory.Delete is not atomic — one mp3 held open by a playing bark throws mid-delete and
+        /// leaves the live tree half-gone, with everything that DID delete missing for the whole
+        /// 10-60s unzip. Staging beside it (same volume, so the swap is a rename, not a copy) shrinks
+        /// that window to two renames.
+        ///
+        /// Returns false — logged, never thrown — on any failure, leaving the old tree serving and
+        /// its stamp still mismatched so the next launch retries.
         /// </summary>
         private static bool ExtractArchive(CcpmodSource source, string extractDir, string builtInId)
         {
+            var stagingDir = extractDir + StagingSuffix;
+            var retiredDir = extractDir + RetiredSuffix;
+
             try
             {
-                if (Directory.Exists(extractDir))
-                    Directory.Delete(extractDir, recursive: true);
-                Directory.CreateDirectory(extractDir);
-                ZipFile.ExtractToDirectory(source.Path, extractDir);
-                WritePackStamp(extractDir, source);
-                _log?.Information("Extracted built-in mod {BuiltInId} from {Path} ({Source})",
-                    builtInId, source.Path, source.FromPack ? "content pack" : "install dir");
-                return true;
+                // Leftovers from a run that died mid-swap would make ExtractToDirectory throw.
+                TryDeleteTree(stagingDir);
+                TryDeleteTree(retiredDir);
+
+                Directory.CreateDirectory(stagingDir);
+                ZipFile.ExtractToDirectory(source.Path, stagingDir);
+                WritePackStamp(stagingDir, source);
             }
             catch (Exception ex)
             {
                 _log?.Error(ex, "Failed to extract built-in mod {BuiltInId} from {Path}", builtInId, source.Path);
+                TryDeleteTree(stagingDir);
+                return false;
+            }
+
+            var hadOld = Directory.Exists(extractDir);
+            if (hadOld)
+            {
+                try
+                {
+                    Directory.Move(extractDir, retiredDir);
+                }
+                catch (Exception ex)
+                {
+                    // Something in the live tree is pinned. Keep serving it exactly as-is — the stamp
+                    // still reads "stale", so the next launch tries the whole swap again.
+                    _log?.Warning(ex,
+                        "Built-in mod {BuiltInId}: could not retire the in-use tree at {Path} — keeping the existing assets and retrying next launch",
+                        builtInId, extractDir);
+                    TryDeleteTree(stagingDir);
+                    return false;
+                }
+            }
+
+            try
+            {
+                Directory.Move(stagingDir, extractDir);
+            }
+            catch (Exception ex)
+            {
+                _log?.Error(ex, "Built-in mod {BuiltInId}: could not swap the extracted tree into {Path}", builtInId, extractDir);
+                if (hadOld)
+                {
+                    // Put the old tree back rather than leaving the mod with no folder at all.
+                    try { Directory.Move(retiredDir, extractDir); }
+                    catch (Exception restoreEx)
+                    {
+                        _log?.Error(restoreEx, "Built-in mod {BuiltInId}: could not restore the retired tree from {Path}", builtInId, retiredDir);
+                    }
+                }
+                TryDeleteTree(stagingDir);
+                return false;
+            }
+
+            if (hadOld && !TryDeleteTree(retiredDir))
+            {
+                _log?.Information(
+                    "Built-in mod {BuiltInId}: retired tree {Path} still has locked files — leaving it for the next launch's sweep",
+                    builtInId, retiredDir);
+            }
+
+            _log?.Information("Extracted built-in mod {BuiltInId} from {Path} ({Source})",
+                builtInId, source.Path, source.FromPack ? "content pack" : "install dir");
+            return true;
+        }
+
+        /// <summary>Best-effort recursive delete. False = locked/failed; the caller decides what to log.</summary>
+        private static bool TryDeleteTree(string dir)
+        {
+            try
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _log?.Debug("ModService: could not delete {Dir}: {Error}", dir, ex.Message);
                 return false;
             }
         }
@@ -1757,7 +1895,8 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Background (re)extraction for a downloaded pack's .ccpmod — startup never blocks on it, and
         /// a pack that lands mid-session uses the same path. On success the registry is updated on the
-        /// UI thread, the resource cache is dropped and <see cref="ModAvailabilityChanged"/> fires.
+        /// UI thread, the resource cache is dropped and <see cref="ModAvailabilityChanged"/> fires —
+        /// plus <see cref="ModChanged"/> when the mod that just gained its assets is the active one.
         /// Coalesced per built-in id: a second request while one is running is ignored.
         /// </summary>
         private void ScheduleBuiltInExtraction(CcpmodSource source, string builtInId, string extractDir, ModManifest? codeManifest)
@@ -1875,17 +2014,51 @@ namespace ConditioningControlPanel.Services
         /// Puts a freshly-extracted package into the registry. When it replaces the ACTIVE mod's
         /// registration — a pack that finished extracting mid-session — the live _activeMod reference
         /// is swapped too, or the session would go on resolving the baseline assets the hardcoded
-        /// manifest points at. (_activeMod is still null while the ctor runs; that case is the
-        /// ordinary startup path and needs nothing.)
+        /// manifest points at, and <see cref="ModChanged"/> is raised so everything that paints from
+        /// the mod (avatar tube, ambient FX, takeover orb, gate FX, bark rules) re-reads the new
+        /// InstalledPath + manifest. Adoption for a NON-active mod stays silent — the caller raises
+        /// <see cref="ModAvailabilityChanged"/> for the list rebuild.
+        /// (_activeMod is still null while the ctor runs; that case is the ordinary startup path,
+        /// which needs neither the swap nor the event.)
         /// </summary>
         private void AdoptBuiltInPackage(string builtInId, ModPackage package)
         {
             _installedMods[builtInId] = package;
-            if (_activeMod is not null && string.Equals(_activeMod.Id, builtInId, StringComparison.OrdinalIgnoreCase))
+            if (_activeMod is null || !string.Equals(_activeMod.Id, builtInId, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _activeMod = package;
+            _log?.Information("ModService: active mod {ModId} adopted its newly extracted assets", builtInId);
+
+            // ActivateMod can't be reused here — it early-returns when the id is unchanged, and the id
+            // is exactly what stays put (only InstalledPath and the manifest moved). Replicate the two
+            // steps of it that consumers depend on. The pool save/restore is deliberately NOT re-run:
+            // the mod id never changed, so the live pools already belong to this mod, and restoring
+            // again would throw away edits made earlier in the session.
+            try { ModResourceResolver.ClearCache(); }
+            catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
+
+            // The extracted mod.json can declare a different companion set than the hardcoded
+            // manifest we were running on.
+            try
             {
-                _activeMod = package;
-                _log?.Information("ModService: active mod {ModId} adopted its newly extracted assets", builtInId);
+                if (App.Companion != null && !IsCompanionSupported(App.Companion.ActiveCompanion))
+                {
+                    foreach (Models.CompanionId cid in Enum.GetValues(typeof(Models.CompanionId)))
+                    {
+                        if (!IsCompanionSupported(cid)) continue;
+                        App.Companion.SwitchCompanion(cid);
+                        _log?.Information("Auto-switched companion to {CompanionId} (previous not supported by the adopted package)", cid);
+                        break;
+                    }
+                }
             }
+            catch (Exception ex) { _log?.Warning(ex, "ModService: companion fallback failed after adopting {ModId}", builtInId); }
+
+            // Raised from a background-triggered path, so a throwing subscriber must not kill the
+            // extraction callback the way it would a user-driven mod switch.
+            try { ModChanged?.Invoke(this, package); }
+            catch (Exception ex) { _log?.Error(ex, "ModService: ModChanged subscriber threw after {ModId} adopted its extracted assets", builtInId); }
         }
 
         /// <summary>

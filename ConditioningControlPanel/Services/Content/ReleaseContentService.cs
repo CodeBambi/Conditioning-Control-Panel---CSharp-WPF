@@ -91,8 +91,20 @@ namespace ConditioningControlPanel.Services
 
         private const int MaxDownloadAttempts = 10;
 
+        /// <summary>
+        /// Bound on the (tiny) manifest GET. <see cref="HttpClient.Timeout"/> is sized for a 380 MB
+        /// pack, so without this a black-holing network would leave the picker "not offline yet" for
+        /// half an hour. Downloads keep the long timeout — they have their own retry ladder.
+        /// </summary>
+        private static readonly TimeSpan ManifestTimeout = TimeSpan.FromSeconds(45);
+
         private readonly HttpClient _httpClient;
-        private readonly ConcurrentDictionary<string, Task<bool>> _inFlight = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// De-dupe map for <see cref="RequestPackAsync"/>. <see cref="Lazy{T}"/> and not a bare Task on
+        /// purpose — see the comment in RequestPackAsync.
+        /// </summary>
+        private readonly ConcurrentDictionary<string, Lazy<Task<bool>>> _inFlight = new(StringComparer.OrdinalIgnoreCase);
         private readonly object _catalogLock = new();
         private List<ContentPackInfo> _catalog = new();
         private string? _resolvedBaseUrl;
@@ -266,7 +278,13 @@ namespace ConditioningControlPanel.Services
                     var url = baseUrl + ManifestFileName;
                     try
                     {
-                        using var response = await _httpClient.GetAsync(url, ct).ConfigureAwait(false);
+                        // The manifest is a couple of KB — bound it far tighter than the 30-minute
+                        // client timeout the pack downloads need, or a black-holing network keeps the
+                        // picker out of its offline state for half an hour.
+                        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        timeoutCts.CancelAfter(ManifestTimeout);
+
+                        using var response = await _httpClient.GetAsync(url, timeoutCts.Token).ConfigureAwait(false);
                         if (response.StatusCode == HttpStatusCode.NotFound)
                         {
                             App.Logger?.Information(
@@ -280,7 +298,7 @@ namespace ConditioningControlPanel.Services
                             continue;
                         }
 
-                        var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                        var json = await response.Content.ReadAsStringAsync(timeoutCts.Token).ConfigureAwait(false);
                         var packs = ParseManifest(json);
                         if (packs == null || packs.Count == 0)
                         {
@@ -300,6 +318,13 @@ namespace ConditioningControlPanel.Services
                     {
                         SetState(ReleaseContentState.Idle);
                         return null;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Our own 45s bound, not the caller's token — treat it as a dead endpoint and
+                        // move on to the previous cycle / the offline state.
+                        App.Logger?.Warning("ReleaseContentService: manifest fetch for {Tag} timed out after {Seconds}s",
+                            tag, (int)ManifestTimeout.TotalSeconds);
                     }
                     catch (Exception ex)
                     {
@@ -380,8 +405,9 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// True when the pack has an install stamp (and, when we know its target folder, that folder
-        /// still exists on disk — a user who nuked <c>content\</c> should re-download).
+        /// True when the pack has an install stamp AND (once the manifest tells us what it delivered)
+        /// its payload is still on disk — a user who nuked <c>content\</c> should re-download. See
+        /// <see cref="HasInstalledPayload"/> for why "the target directory exists" is not that test.
         /// </summary>
         public bool IsInstalled(string packId)
         {
@@ -395,12 +421,63 @@ namespace ConditioningControlPanel.Services
 
                 var target = ResolveTargetDirectory(info);
                 if (target == null) return true;
-                return Directory.Exists(target);
+                return HasInstalledPayload(info, target);
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("ReleaseContentService: IsInstalled({Pack}) failed: {Error}", packId, ex.Message);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Cheap "the payload is still on disk" probe behind <see cref="IsInstalled"/>.
+        ///
+        /// A plain <c>Directory.Exists(target)</c> is worthless for the packs that ship with
+        /// <c>targetRoot: ""</c> (all of them, per plan §8.5): their target IS the content root, which
+        /// always exists because <see cref="DownloadsRoot"/> creation makes it — so a user who deleted
+        /// <c>content\Resources</c> but left <c>content\.downloads</c> stayed "installed" forever. Look
+        /// for something a pack actually delivered instead: any entry under <c>content\Resources</c>,
+        /// or one of the pack's own <c>.ccpmod</c> files under <c>content\packs</c>.
+        ///
+        /// Never claims "gone" on a probe failure — a false negative costs a needless re-download.
+        /// </summary>
+        private static bool HasInstalledPayload(ContentPackInfo info, string target)
+        {
+            try
+            {
+                var root = Path.GetFullPath(ContentRoot).TrimEnd(Path.DirectorySeparatorChar);
+                var full = Path.GetFullPath(target).TrimEnd(Path.DirectorySeparatorChar);
+
+                if (!string.Equals(full, root, StringComparison.OrdinalIgnoreCase))
+                {
+                    // A real sub-folder target: its existence with any content is proof enough.
+                    return Directory.Exists(full) && Directory.EnumerateFileSystemEntries(full).Any();
+                }
+
+                // Content root. A pack that declares .ccpmod entries (mod-drone carries NOTHING else)
+                // is proven by those archives, not by a Resources tree some OTHER pack put there.
+                // ModService reads them in place and never deletes them, so presence is a fair test.
+                var ccpmods = info.Ccpmods;
+                if (ccpmods != null && ccpmods.Count > 0)
+                {
+                    foreach (var entry in ccpmods)
+                    {
+                        if (string.IsNullOrWhiteSpace(entry)) continue;
+                        var rel = entry.Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
+                        if (File.Exists(Path.Combine(root, rel))) return true;
+                    }
+                    return false;
+                }
+
+                // Loose-media pack: .downloads is ours, not payload. Enumerate = first entry only.
+                var resources = Path.Combine(root, "Resources");
+                return Directory.Exists(resources) && Directory.EnumerateFileSystemEntries(resources).Any();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ReleaseContentService: payload probe for {Pack} failed: {Error}", info.Id, ex.Message);
+                return true;
             }
         }
 
@@ -444,7 +521,23 @@ namespace ConditioningControlPanel.Services
                 if (IsFullInstall) return Task.FromResult(true);
                 if (IsInstalled(packId) && !NeedsUpdate(packId)) return Task.FromResult(true);
 
-                return _inFlight.GetOrAdd(packId, id => RunRequestAsync(id, progress, ct));
+                // Lazy, not a bare Task. ConcurrentDictionary.GetOrAdd runs its factory BEFORE it
+                // inserts, so with a bare Task any synchronously-completing RunRequestAsync (offline
+                // mode, a DownloadsRoot that will not create) reached its finally — and its
+                // TryRemove — while the entry did not exist yet, permanently caching a completed
+                // `false` for that pack: toggling OfflineMode back off still got an instant false
+                // until restart. Building the Lazy is free; the body runs on .Value, i.e. after the
+                // insert. Lazy also serialises the body, so two callers can never both open the same
+                // .partial (FileShare.None) with the loser's finally evicting the winner's entry.
+                //
+                // The Lazy is built before it is published so it can hand itself to the body, which
+                // removes exactly THIS entry (never a newer attempt's).
+                Lazy<Task<bool>> attempt = null!;
+                attempt = new Lazy<Task<bool>>(
+                    () => RunRequestAsync(packId, progress, ct, attempt),
+                    LazyThreadSafetyMode.ExecutionAndPublication);
+
+                return _inFlight.GetOrAdd(packId, attempt).Value;
             }
             catch (Exception ex)
             {
@@ -453,7 +546,12 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private async Task<bool> RunRequestAsync(string packId, IProgress<double>? progress, CancellationToken ct)
+        /// <param name="self">
+        /// The <see cref="_inFlight"/> entry this body belongs to, so the finally can remove exactly
+        /// that entry — a stray late finally must never evict a newer attempt for the same pack.
+        /// </param>
+        private async Task<bool> RunRequestAsync(
+            string packId, IProgress<double>? progress, CancellationToken ct, Lazy<Task<bool>> self)
         {
             try
             {
@@ -472,7 +570,11 @@ namespace ConditioningControlPanel.Services
             }
             finally
             {
-                _inFlight.TryRemove(packId, out _);
+                // Key+value overload: only evict the entry this body owns. Every early return above
+                // (not in manifest, already installed) and every DownloadPackAsync failure path runs
+                // through here, and the insert is guaranteed to have happened first.
+                try { _inFlight.TryRemove(new KeyValuePair<string, Lazy<Task<bool>>>(packId, self)); }
+                catch { }
             }
         }
 
@@ -825,6 +927,16 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Stamps a finished pack into settings — on the UI thread.
+        ///
+        /// <c>InstalledContentPacks</c> is a plain <see cref="Dictionary{TKey,TValue}"/> and this runs
+        /// on a download thread; two packs finishing back to back could corrupt it, and
+        /// <c>Save()</c>'s retry path assumes a UI-thread caller (that is how the rest of the app
+        /// touches settings off-thread). Blocking <c>Invoke</c> rather than a post, because the
+        /// caller raises <see cref="PackInstalled"/> immediately afterwards and ModService compares
+        /// this very stamp to decide whether to re-extract.
+        /// </summary>
         private void RecordInstalled(ContentPackInfo info)
         {
             try
@@ -832,12 +944,44 @@ namespace ConditioningControlPanel.Services
                 var settings = App.Settings?.Current;
                 if (settings == null) return;
 
-                settings.InstalledContentPacks[info.Id] = new InstalledPackStamp
+                var stamp = new InstalledPackStamp
                 {
                     ContentVersion = info.ContentVersion,
                     Sha256 = info.Sha256 ?? ""
                 };
-                App.Settings?.Save();
+
+                void Apply()
+                {
+                    try
+                    {
+                        settings.InstalledContentPacks[info.Id] = stamp;
+                        App.Settings?.Save();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "ReleaseContentService: could not persist install stamp for {Pack}", info.Id);
+                    }
+                }
+
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null)
+                {
+                    Apply();   // no WPF app (tests/headless) — nothing to marshal onto
+                    return;
+                }
+                if (dispatcher.HasShutdownStarted)
+                {
+                    // Shutting down: skip the stamp rather than race the serializer. The bytes are on
+                    // disk; next launch's IsInstalled/NeedsUpdate pass re-verifies (worst case, one
+                    // re-download).
+                    App.Logger?.Information(
+                        "ReleaseContentService: dispatcher shutting down — install stamp for {Pack} skipped, it will be re-verified next launch",
+                        info.Id);
+                    return;
+                }
+
+                if (dispatcher.CheckAccess()) Apply();
+                else dispatcher.Invoke(Apply);
             }
             catch (Exception ex)
             {
@@ -873,9 +1017,11 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Fire-and-forget at startup: makes sure the baseline avatar audio (<c>audio-base</c>) is on
-        /// disk. No-ops on a full/dev layout, in offline mode, or when the pack is already stamped —
-        /// so the common case costs zero network. <c>audio-web</c> and the mod packs stay lazy
-        /// (<see cref="RequestPackAsync"/>). Never throws, never blocks startup.
+        /// disk, and — for upgraders (plan §5) — the pack for the ONE mod they were actually using,
+        /// whose bundled media the modular installer's <c>[InstallDelete]</c> sweep just removed.
+        /// No-ops on a full/dev layout, under a debugger, in offline mode, or when everything is
+        /// already stamped, so the common case costs zero network. <c>audio-web</c> and every OTHER
+        /// mod pack stay lazy (<see cref="RequestPackAsync"/>). Never throws, never blocks startup.
         /// </summary>
         public async Task EnsureBaselineAsync(CancellationToken ct = default)
         {
@@ -886,26 +1032,127 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Information("ReleaseContentService: full install detected (bundled audio present) — no packs needed");
                     return;
                 }
+                if (System.Diagnostics.Debugger.IsAttached)
+                {
+                    // After the csproj strip a clean dev clone has no bundled audio either, so
+                    // IsFullInstall is false and a plain `dotnet run` would pull the whole cycle's
+                    // packs off GitHub. Only the AUTOMATIC fetch is suppressed — an explicit download
+                    // from the picker or the Mod Manager still works.
+                    App.Logger?.Information("ReleaseContentService: debugger attached — skipping the automatic startup fetch (explicit downloads still work)");
+                    return;
+                }
                 if (App.Settings?.Current?.OfflineMode == true)
                 {
                     App.Logger?.Information("ReleaseContentService: offline mode — baseline check skipped");
                     return;
                 }
-                if (GetStamp(PackAudioBase) != null && IsInstalled(PackAudioBase))
+
+                var needsBaseline = !(GetStamp(PackAudioBase) != null && IsInstalled(PackAudioBase));
+                var activeModPack = ResolveMissingActiveModPack();
+
+                if (!needsBaseline && activeModPack == null)
                 {
-                    App.Logger?.Debug("ReleaseContentService: baseline audio already installed");
+                    App.Logger?.Debug("ReleaseContentService: baseline audio already installed, active mod has its media");
                     return;
                 }
 
-                App.Logger?.Information("ReleaseContentService: baseline audio missing — fetching manifest");
+                App.Logger?.Information(
+                    "ReleaseContentService: startup content check — baseline {Baseline}, active-mod pack {Pack} — fetching manifest",
+                    needsBaseline ? "MISSING" : "ok", activeModPack ?? "(none needed)");
+
                 var manifest = await FetchManifestAsync(ct).ConfigureAwait(false);
                 if (manifest == null) return;
 
-                await RequestPackAsync(PackAudioBase, null, ct).ConfigureAwait(false);
+                if (needsBaseline)
+                    await RequestPackAsync(PackAudioBase, null, ct).ConfigureAwait(false);
+
+                if (activeModPack != null)
+                {
+                    App.Logger?.Information(
+                        "ReleaseContentService: auto-fetching {Pack} for the active mod (plan §5 upgrade convergence)", activeModPack);
+                    await RequestPackAsync(activeModPack, null, ct).ConfigureAwait(false);
+                }
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "ReleaseContentService: EnsureBaselineAsync failed — content stays absent this session");
+            }
+        }
+
+        /// <summary>
+        /// The pack an upgrader needs for the mod they were actually running, or null when there is
+        /// nothing to do: CCP Default / a user mod (no pack), the pack is already stamped, or the
+        /// mod's media is genuinely still on disk.
+        ///
+        /// That last test is the one that matters — a drone/locked user who upgrades keeps the tree an
+        /// earlier version extracted into <c>builtin_mods\&lt;id&gt;\</c> (ModService registers it even
+        /// once the archive is gone), and re-pulling 184/329 MB for content they already have would be
+        /// the worst possible first impression of the modular build.
+        /// </summary>
+        private string? ResolveMissingActiveModPack()
+        {
+            try
+            {
+                var modId = App.Settings?.Current?.ActiveModId;
+                if (string.IsNullOrWhiteSpace(modId)) return null;
+
+                // ModService owns the id↔pack map (ModPackCatalog carries the same four rows for the UI).
+                var packId = ModService.PackIdForMod(modId!);
+                if (string.IsNullOrEmpty(packId)) return null;
+
+                // Deliberately IsInstalled only, not !NeedsUpdate: a contentVersion bump must never
+                // turn startup into a surprise 329 MB fetch. Refreshing a stale pack is the Mod
+                // Manager's job.
+                if (IsInstalled(packId!)) return null;
+
+                if (HasModMediaOnDisk(modId!))
+                {
+                    App.Logger?.Information(
+                        "ReleaseContentService: active mod {Mod} still has its media on disk — not re-fetching {Pack}", modId, packId);
+                    return null;
+                }
+
+                return packId;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ReleaseContentService: active-mod pack check failed: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// True when a built-in mod's media is present WITHOUT its pack being stamped — the surviving
+        /// state of an in-place upgrade. Two shapes to probe, matching the two shapes the packs take:
+        /// an extracted <c>.ccpmod</c> tree (drone, locked) and loose companion audio (bambi, sissy,
+        /// locked). Any failure answers "present" so a bad probe can never trigger a download.
+        /// </summary>
+        private static bool HasModMediaOnDisk(string modId)
+        {
+            try
+            {
+                // 1) Extracted .ccpmod payload — the exact probes ModService.PrepareBuiltInMod uses
+                //    (mod.json for a full package, resources\ for a resources-only one).
+                var extractDir = Path.Combine(App.UserDataPath, "builtin_mods", modId);
+                if (File.Exists(Path.Combine(extractDir, "mod.json"))) return true;
+                if (Directory.Exists(Path.Combine(extractDir, "resources"))) return true;
+
+                // 2) Loose companion audio. Deliberately audio-only patterns: the .json manifests in
+                //    this folder STAY in the installer, so "any file here" would report a stripped
+                //    install as fully stocked. ContentLocator covers both roots.
+                var relAudio = Path.Combine("Resources", "sounds", "companion_audio", "mods", modId);
+                foreach (var pattern in new[] { "*.mp3", "*.wav" })
+                {
+                    if (ContentLocator.EnumerateFiles(relAudio, pattern, SearchOption.AllDirectories).Any())
+                        return true;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ReleaseContentService: mod-media probe for {Mod} failed: {Error}", modId, ex.Message);
+                return true;
             }
         }
 

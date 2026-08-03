@@ -130,7 +130,16 @@ namespace ConditioningControlPanel.Services
 
         // Paths
         private string _imagesPath = "";
-        private string _soundsPath;
+
+        /// <summary>
+        /// Flash voice-line folder, re-resolved on every use — NEVER cached in a field. On a modular
+        /// install the folder does not exist at construction time (audio-base isn't downloaded yet) and
+        /// a cached path would keep pointing at the empty install-dir location, leaving flash audio
+        /// silent until a restart. Also picks up a mid-session mod switch for free
+        /// (CompanionPhraseService resolves the ACTIVE mod's flashes_audio first).
+        /// Cheap: a couple of Directory.Exists calls, and only hit when the shuffle queue runs dry.
+        /// </summary>
+        private static string SoundsPath => CompanionPhraseService.VoiceLineFolder;
 
         // Image decode cache: avoids reloading/re-decoding the same images every flash
         // Key = file path, Value = (data, lastAccess)
@@ -278,14 +287,16 @@ namespace ConditioningControlPanel.Services
         public FlashService()
         {
             RefreshImagesPath();
-            _soundsPath = CompanionPhraseService.VoiceLineFolder;
             // Same hazard as SubliminalService's ctor: the voice-line folder is install-dir anchored
             // and Program Files is read-only, so once flashes_audio ships as a downloadable content
-            // pack this line would throw on startup for anyone who hasn't fetched it yet. Best effort.
-            try { Directory.CreateDirectory(_soundsPath); }
+            // pack this line would throw on startup for anyone who hasn't fetched it yet. Best effort —
+            // and only a convenience for users dropping their own files in; playback re-resolves the
+            // folder per use (see SoundsPath), so failing here costs nothing.
+            var soundsPath = SoundsPath;
+            try { Directory.CreateDirectory(soundsPath); }
             catch (Exception ex)
             {
-                App.Logger?.Warning("FlashService: could not create {Path} - {Error}", _soundsPath, ex.Message);
+                App.Logger?.Warning("FlashService: could not create {Path} - {Error}", soundsPath, ex.Message);
             }
             // Animation/fade heartbeat runs off CompositionTarget.Rendering (vsync-aligned)
             // — see StartHeartbeat. A 33ms DispatcherTimer's OS-quantized cadence beats
@@ -2659,7 +2670,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (_soundQueue.Count == 0)
                 {
-                    var files = GetMediaFiles(_soundsPath, new[] { ".mp3", ".wav", ".ogg" });
+                    var files = GetMediaFiles(SoundsPath, new[] { ".mp3", ".wav", ".ogg" });
                     if (files.Count == 0) return null;
 
                     // Performance: Shuffle and enqueue all at once

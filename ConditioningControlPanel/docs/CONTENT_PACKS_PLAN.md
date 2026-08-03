@@ -28,10 +28,10 @@ Status: **APPROVED — implementation in progress** on `feat/content-packs` (wor
 | Pack | Contents | ~Size |
 |---|---|---|
 | `audio-base` | `Resources\sounds\flashes_audio` (baseline avatar voice, 118 files) | 46 MB |
-| `audio-web` | `Resources\web\intake\assets\{vo,sfx,music}` + `Resources\web\dtrh\assets` non-persona audio (bubbles, vn shared, drone1.mp3) | ~155 MB |
+| `audio-web` | `Resources\web\intake\assets\{vo,sfx,music}` + `Resources\web\dtrh\assets` non-persona audio (bubbles, drone1.mp3, **cheshire tutorial VO**) | ~151 MB |
 | `mod-bambi` | `Resources\sounds\companion_audio\mods\builtin-bambisleep` | 77 MB |
-| `mod-sissy` | `mods\builtin-sissyhypno` (incl. event_audio, flashes_audio, portraits) + DTRH `assets\barks\sissy` | ~260 MB |
-| `mod-locked` | `locked-resources.ccpmod` art + `mods\builtin-locked` audio + DTRH `assets\barks\circe` + cheshire vo | ~380 MB |
+| `mod-sissy` | `mods\builtin-sissyhypno` (incl. event_audio, flashes_audio, portraits) + DTRH `assets\barks\sissy` | ~331 MB |
+| `mod-locked` | `locked-resources.ccpmod` art + `mods\builtin-locked` audio + DTRH `assets\barks\circe` | ~308 MB |
 | `mod-drone` | `drone-mode.ccpmod` (184 MB: 162 MB PNG + 22 MB audio) | 184 MB |
 
 Per-persona DTRH barks travel with their mod pack, so a user who never downloads Sissy never
@@ -50,7 +50,7 @@ total ≈ 850 MB–1 GB vs 1.66 GB today — and patches (X.Y.1+) are installer-
 - `content-manifest.json` per pack: `{ id, file, sizeBytes, sha256, contentVersion, targetRoot }`.
   `contentVersion` only bumps when the pack's bytes actually change → a user who has
   6.6-cycle packs and updates into 6.7 re-downloads **nothing** unless we changed the audio.
-- GitHub per-asset limit is 2 GiB; largest pack (~380 MB) is fine.
+- GitHub per-asset limit is 2 GiB; largest pack (`mod-sissy`, ~331 MB) is fine.
 - Fallback: manifest 404 (X.Y.0 not published yet) → retry previous minor, then give up
   quietly and retry next launch. Never block startup.
 
@@ -148,10 +148,13 @@ to what every single update used to cost them.
 ## 8.5 Wave-1 implementation corrections (2026-08-03, supersede §1/§6 where they differ)
 
 - **Measured moving payload is 1,097 MB** (8,429 files), not ~1.36 GB. Pack sizes:
-  audio-base 46 / audio-web 131 / mod-bambi 77 / mod-sissy 331 / mod-locked 329 / mod-drone 184.
-- **`vn\vo` is fully per-persona** (`builtin-bambisleep`, `builtin-locked`, `builtin-sissyhypno`,
-  `cheshire`) — all four ship in their mod packs (cheshire → mod-locked); `audio-web` carries **no**
-  vn audio. There are **no DTRH barks for Bambi** (`assets\barks` = circe + sissy only).
+  audio-base 46 / audio-web 151 / mod-bambi 77 / mod-sissy 331 / mod-locked 308 / mod-drone 184.
+- **`vn\vo` is per-persona except `cheshire`.** `builtin-bambisleep`, `builtin-locked` and
+  `builtin-sissyhypno` ship in their mod packs. **`vn\vo\cheshire` (173 clips, 21 MB) ships in
+  `audio-web`, NOT mod-locked** — despite the folder layout, Cheshire is the DTRH FTUE narrator for
+  *every* run (`cheshire_script.js` hardcodes `voFolder: 'cheshire'`; `chaosRun.js` mounts it
+  regardless of active mod), so routing her with Circe would give every Default/Bambi/Sissy user a
+  silent tutorial. There are **no DTRH barks for Bambi** (`assets\barks` = circe + sissy only).
 - **`.ccpmod` files live at `ConditioningControlPanel\DroneMod\` / `LockedMod\`** (published to
   `{app}\DroneMod\`, `{app}\LockedMod\`; `ModService.cs:1402/:1484` reads those paths). In packs they
   sit at in-zip `packs/<name>.ccpmod` → land at `content\packs\`; every manifest entry uses
@@ -167,8 +170,25 @@ to what every single update used to cost them.
   pages; precedent `ccp.mod`). Pages get `window.CCP_CONTENT_READY` injected at document creation.
 - Intake's chimes/pop are borrowed from `dtrh/assets/bubbles/sfx` → intake audio depends on the
   dtrh half of `audio-web`.
-- Pack zips are **byte-deterministic** (sorted entries, fixed timestamps) so sha256 survives
-  rebuilds on different machines → cross-cycle contentVersion carry-over actually works.
+- Pack zips are **byte-deterministic** (entries sorted **ordinally**, fixed timestamps) so sha256
+  survives rebuilds on different machines → cross-cycle contentVersion carry-over actually works.
+  The sort must not be `Sort-Object`: that collates with the current culture, and PS 5.1 (NLS) and
+  pwsh 7 (ICU) order the same 118 `flashes_audio` entries differently, so building next cycle's
+  packs in the other shell would re-hash all six zips and re-download ~1.1 GB for zero content
+  change. `build-content-packs.ps1` uses `[Array]::Sort(..., [StringComparer]::Ordinal)`.
+- **Inno `Type: files` wildcards do NOT recurse.** `builtin-sissyhypno\portraits` nests four
+  subfolders (`0_base`, `1_l1`, `2_beach`, `3_fishnet`), so `portraits\*.png` swept 0 of its 312
+  PNGs and every one would have survived to shadow `mod-sissy` forever on upgraders. That entry is
+  now `Type: filesandordirs` on the folder — safe only because nothing but PNGs lives under
+  `portraits\` (`avatar_manifest.json` is one level up). Any other moving folder with subfolders
+  needs the same treatment or an explicit per-subfolder line.
+- **`build-content-packs.ps1` now hard-fails on strip/pack drift.** It carries
+  `$CsprojStripPatterns`, a hand-maintained mirror of the csproj `ContentPack*Exclude` properties,
+  expands it against the source tree and refuses to build if any file is stripped-but-unpacked
+  (ships nowhere) or packed-but-unstripped (double-ships, and the in-box copy shadows the pack
+  forever). Editing the csproj excludes without editing `$PackSpecs` is now a build error at pack
+  time instead of a silent content bug in the wild. Today: 8,427 stripped files, all packed once
+  (+2 `.ccpmod` archives, which left the build by deleting their `<Content>` item, not by a glob).
 
 ## 9. Phases
 

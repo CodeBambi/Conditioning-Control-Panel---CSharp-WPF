@@ -182,11 +182,16 @@ namespace ConditioningControlPanel
         private bool _finished;
         private bool _closed;
 
-        public ModPickerDialog()
+        /// <param name="preselectModId">
+        /// Built-in mod to tick on open — used for upgraders, whose one active mod just lost its
+        /// bundled media, so restoring what they had is a single click. Null on a fresh install
+        /// (nothing to restore; everything starts unticked).
+        /// </param>
+        public ModPickerDialog(string? preselectModId = null)
         {
             InitializeComponent();
 
-            BuildCards();
+            BuildCards(preselectModId);
             CardsList.ItemsSource = _cards;
 
             try
@@ -214,7 +219,7 @@ namespace ConditioningControlPanel
 
         // ------------------------------------------------------------------ build
 
-        private void BuildCards()
+        private void BuildCards(string? preselectModId = null)
         {
             foreach (var entry in ModPackCatalog.All)
             {
@@ -252,6 +257,12 @@ namespace ConditioningControlPanel
                     {
                         card.State = ModPickerCard.CardState.Installed;
                         card.CanSelect = false;
+                    }
+                    else if (!string.IsNullOrEmpty(preselectModId)
+                             && string.Equals(entry.ModId, preselectModId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // The mod this user was already running — pre-ticked so one press restores it.
+                        card.IsSelected = true;
                     }
                 }
 
@@ -475,7 +486,20 @@ namespace ConditioningControlPanel
             }
 
             _downloading = false;
-            _finished = true;
+
+            // Retry without a detour through the Mod Manager: leave every failed card ticked AND
+            // selectable, and keep the button on "Download selected" so a second press re-requests
+            // them. RequestPackAsync is idempotent and resumes from the surviving .partial, so a
+            // retry after a dropped connection usually costs only the missing bytes.
+            var failed = queue.Where(c => c.State == ModPickerCard.CardState.Failed).ToList();
+            foreach (var card in failed)
+            {
+                card.IsSelected = true;
+                card.CanSelect = true;
+            }
+
+            // Only "finished" once every SELECTED card reached a terminal state with none failed.
+            _finished = failed.Count == 0;
             UpdateDownloadButton();
         }
 
@@ -492,6 +516,15 @@ namespace ConditioningControlPanel
 
             BtnDownload.IsEnabled = true;
             BtnDownload.Opacity = 1.0;
+
+            // A failure outranks everything: the button has to stay an action, not a Close, or the
+            // re-enabled checkbox has nothing to press.
+            if (_cards.Any(c => c.State == ModPickerCard.CardState.Failed))
+            {
+                _finished = false;
+                BtnDownload.Content = Loc.Get("modpicker_btn_download");
+                return;
+            }
 
             if (_finished || _cards.All(c => !c.HasPack || c.IsInstalled))
             {
@@ -518,11 +551,20 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Shows the picker when this is a fresh modular install that has never seen it. Returns false
-        /// (and shows nothing) for full/dev layouts, when the pack service is unavailable, or once the
-        /// <see cref="Models.AppSettings.ModPickerShown"/> flag is set.
+        /// Shows the picker when this install has never seen it and its mod media has to come off the
+        /// network. Returns false (and shows nothing) for full/dev layouts, when the pack service is
+        /// unavailable, or once the <see cref="Models.AppSettings.ModPickerShown"/> flag is set.
+        ///
+        /// Called from BOTH startup paths in MainWindow — first launch and every already-Welcomed
+        /// install upgrading into the modular build (plan §5), whose bundled mod audio the installer
+        /// just deleted. The guards below are what make the second call site a no-op for everyone it
+        /// should not reach, so neither caller needs conditions of its own.
         /// </summary>
-        public static bool ShowIfNeeded(Window? owner = null)
+        /// <param name="preselectActiveMod">
+        /// Tick the card for <c>ActiveModId</c> on open (upgraders: one press restores the mod they
+        /// were already using). Ignored when that mod ships in the box or is already downloaded.
+        /// </param>
+        public static bool ShowIfNeeded(Window? owner = null, bool preselectActiveMod = false)
         {
             try
             {
@@ -534,12 +576,18 @@ namespace ConditioningControlPanel
                 if (svc == null) return false;      // no pack service this session — nothing to offer
                 if (svc.IsFullInstall) return false; // full/dev layout: the mod media is already on disk
 
+                var preselect = preselectActiveMod ? settings.ActiveModId : null;
+                if (!string.IsNullOrEmpty(preselect) && ModPackCatalog.PackIdForMod(preselect) == null)
+                    preselect = null;   // CCP Default or a user mod — nothing on this screen to tick
+
                 // Set the flag BEFORE showing: a crash inside the dialog must not turn it into a
                 // every-launch popup.
                 settings.ModPickerShown = true;
                 App.Settings?.Save();
 
-                var dialog = new ModPickerDialog();
+                App.Logger?.Information("[ModPicker] Showing the mod picker (preselect {Mod})", preselect ?? "(none)");
+
+                var dialog = new ModPickerDialog(preselect);
                 if (owner != null && !ReferenceEquals(owner, dialog)) dialog.Owner = owner;
                 dialog.ShowDialog();
                 return true;

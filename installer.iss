@@ -128,10 +128,15 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ; [Files], so this is a clean sweep followed by a fresh install.
 ;
 ; RULES for editing this list:
-;   * Per-extension "Type: files" wildcards ONLY.  Never "filesandordirs" on a folder that also
-;     holds a manifest that STILL SHIPS - bark_rules.json, mantras.json, avatar_manifest.json,
+;   * Per-extension "Type: files" wildcards by default.  Never "filesandordirs" on a folder that
+;     also holds a manifest that STILL SHIPS - bark_rules.json, mantras.json, avatar_manifest.json,
 ;     vo_manifest.json, sfx_manifest.json, dtrh barks\manifest.js, vn\manifest.json.  A missing
 ;     manifest is not a graceful degrade, it is a hang or a crash.
+;   * BUT: a "Type: files" wildcard does NOT recurse.  If a folder that moves has SUBFOLDERS, a
+;     wildcard on the parent silently leaves every nested file behind (this is exactly what
+;     happened to builtin-sissyhypno\portraits: 4 subfolders, 312 PNGs, 0 swept).  For such a
+;     folder either list every subfolder explicitly, or - only when the folder contains no
+;     surviving manifest - use "filesandordirs" on the folder itself.
 ;   * Never touch %LOCALAPPDATA%\ConditioningControlPanel - user settings, progress, assets,
 ;     mods and downloaded packs all live there.  Everything below is {app}-only.
 ;   * "dirifempty" only removes a folder that the sweep left empty, so a file a user dropped in
@@ -139,23 +144,51 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ;   * Keep in sync with ConditioningControlPanel\Scripts\build-content-packs.ps1.
 ; =============================================================================================
 
+; The audio extension list below (.mp3/.wav/.ogg/.m4a) mirrors $AudioExt in
+; build-content-packs.ps1 and the csproj strip properties.  Only .mp3 (and .wav in
+; flashes_audio, .png in portraits) exists today, so most of these wildcards match nothing --
+; they are listed anyway so all three lists stay provably identical and a future .ogg cannot
+; ship in-box and in a pack at the same time.
+
 ; --- audio-base: baseline avatar voice lines (118 files) -------------------------------------
 Type: files;      Name: "{app}\Resources\sounds\flashes_audio\*.mp3"
 Type: files;      Name: "{app}\Resources\sounds\flashes_audio\*.wav"
+Type: files;      Name: "{app}\Resources\sounds\flashes_audio\*.ogg"
+Type: files;      Name: "{app}\Resources\sounds\flashes_audio\*.m4a"
 Type: dirifempty; Name: "{app}\Resources\sounds\flashes_audio"
 
 ; --- mod-bambi / mod-locked companion audio (their 2 .json manifests stay) --------------------
 Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-bambisleep\*.mp3"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-bambisleep\*.wav"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-bambisleep\*.ogg"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-bambisleep\*.m4a"
 Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-locked\*.mp3"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-locked\*.wav"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-locked\*.ogg"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-locked\*.m4a"
 
 ; --- mod-sissy: audio AND portraits move; its 3 .json manifests stay --------------------------
 Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\*.mp3"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\*.wav"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\*.ogg"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\*.m4a"
 Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\event_audio\*.mp3"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\event_audio\*.wav"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\event_audio\*.ogg"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\event_audio\*.m4a"
 Type: dirifempty; Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\event_audio"
 Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\flashes_audio\*.mp3"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\flashes_audio\*.wav"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\flashes_audio\*.ogg"
+Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\flashes_audio\*.m4a"
 Type: dirifempty; Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\flashes_audio"
-Type: files;      Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\portraits\*.png"
-Type: dirifempty; Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\portraits"
+; portraits\ NESTS (0_base, 1_l1, 2_beach, 3_fishnet) so "portraits\*.png" matches ZERO of the
+; 312 PNGs and every one of them survives the sweep to shadow the mod-sissy pack forever.
+; "filesandordirs" on the folder is the only thing that recurses -- and it is safe HERE and only
+; here: nothing but PNGs lives under portraits\ (avatar_manifest.json is one level up, in the
+; builtin-sissyhypno root, and is untouched by the per-extension wildcards above).  It also
+; removes the now-empty folder itself, so no dirifempty line follows.
+Type: filesandordirs; Name: "{app}\Resources\sounds\companion_audio\mods\builtin-sissyhypno\portraits"
 
 ; --- audio-web: Intake VO/SFX/music (vo_manifest.json + sfx_manifest.json stay) ----------------
 Type: files;      Name: "{app}\Resources\web\intake\assets\vo\*.mp3"

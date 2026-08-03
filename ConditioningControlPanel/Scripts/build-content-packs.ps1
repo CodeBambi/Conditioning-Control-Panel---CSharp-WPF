@@ -65,11 +65,14 @@
     We zip directly from the source tree using \\?\-prefixed paths rather than robocopy-staging
     into a temp dir first -- that avoids both the MAX_PATH ceiling and a pointless 1.36 GB copy.
 
-    KEEP IN SYNC
-    ------------
+    KEEP IN SYNC (ENFORCED)
+    -----------------------
     The $PackSpecs table below and the csproj exclude properties describe the same file set from
     opposite directions. A file matched by neither ships nowhere; a file matched by both ships
-    twice. If you touch one, touch the other.
+    twice (and the in-box copy shadows the pack forever, because ContentLocator probes
+    BaseDirectory first). This is no longer a promise: $CsprojStripPatterns mirrors the csproj
+    globs and Assert-NoStripPackDrift hard-fails the build on any disagreement in either
+    direction. If you touch one, touch the other -- the script will tell you if you forgot.
 #>
 
 [CmdletBinding()]
@@ -140,6 +143,12 @@ $PackSpecs = @(
             @{ Path = 'Resources\web\intake\assets\music';     Ext = $AudioExt }
             @{ Path = 'Resources\web\dtrh\assets\audio';       Ext = $AudioExt }  # drone1.mp3
             @{ Path = 'Resources\web\dtrh\assets\bubbles';     Ext = $AudioExt }  # drops/sfx/voices
+            # Cheshire is NOT a persona -- despite living under vn\vo alongside the three
+            # builtin-* mod folders, she is the DTRH tutorial narrator for EVERY run:
+            # cheshire_script.js hardcodes voFolder:'cheshire' and chaosRun.js mounts it
+            # regardless of the active mod. Routing this with mod-locked (as the plan's §1 table
+            # originally did) gives every Default/Bambi/Sissy user a silent FTUE.
+            @{ Path = 'Resources\web\dtrh\assets\vn\vo\cheshire'; Ext = $AudioExt }
         )
         Files   = @()
     },
@@ -173,7 +182,8 @@ $PackSpecs = @(
             @{ Path = 'Resources\sounds\companion_audio\mods\builtin-locked'; Ext = $AudioExt }
             @{ Path = 'Resources\web\dtrh\assets\barks\circe';                Ext = $AudioExt }
             @{ Path = 'Resources\web\dtrh\assets\vn\vo\builtin-locked';       Ext = $AudioExt }
-            @{ Path = 'Resources\web\dtrh\assets\vn\vo\cheshire';             Ext = $AudioExt }
+            # NOTE: vn\vo\cheshire is deliberately NOT here -- it is mod-independent narration
+            # and lives in audio-web. See the comment there.
         )
         Files   = @(
             @{ Path = 'LockedMod\locked-resources.ccpmod'; Entry = 'packs/locked-resources.ccpmod' }
@@ -230,7 +240,10 @@ function Resolve-PackFiles($spec) {
         }
         foreach ($f in $found) {
             $rel = $f.FullName.Substring($ProjectDir.Length).TrimStart('\')
-            $result.Add([pscustomobject]@{ Source = $f.FullName; Entry = $rel.Replace('\', '/') })
+            # Kind='folder' = swept out of the source tree by a csproj strip glob, and therefore
+            # subject to the drift self-check. Kind='file' = the .ccpmod archives, which left the
+            # build by deleting their <Content> item, not by an exclude glob.
+            $result.Add([pscustomobject]@{ Source = $f.FullName; Entry = $rel.Replace('\', '/'); Kind = 'folder' })
         }
     }
 
@@ -239,16 +252,23 @@ function Resolve-PackFiles($spec) {
         if (-not (Test-Path -LiteralPath $abs)) {
             throw "Pack '$($spec.Id)': source file missing: $abs"
         }
-        $result.Add([pscustomobject]@{ Source = $abs; Entry = $file.Entry })
+        $result.Add([pscustomobject]@{ Source = $abs; Entry = $file.Entry; Kind = 'file' })
     }
 
-    # Deterministic ordering (ordinal, so it does not drift with the machine's locale).
+    # Deterministic ordering. This MUST be ORDINAL. Sort-Object collates with the CURRENT CULTURE,
+    # and PS 5.1 (NLS) and pwsh 7 (ICU) disagree about where '_' , '-' and digits sort -- so
+    # rebuilding this cycle's packs in the other shell would reorder every zip entry, change all
+    # six sha256s, bump every contentVersion and make the entire installed base re-download
+    # ~1.1 GB for zero content change. [Array]::Sort with StringComparer::Ordinal is locale-proof.
     # @() keeps a single-file pack (mod-drone) an array rather than a scalar.
-    return @($result | Sort-Object -Property @{ Expression = { $_.Entry }; Ascending = $true })
+    $items = $result.ToArray()
+    $keys  = [string[]]@($items | ForEach-Object { $_.Entry })
+    [Array]::Sort($keys, $items, [System.StringComparer]::Ordinal)
+    return @($items)
 }
 
-function New-PackZip($spec, [string]$ZipPath) {
-    $files = @(Resolve-PackFiles $spec)
+function New-PackZip($spec, [string]$ZipPath, $Files) {
+    $files = @($Files)
 
     if (Test-Path -LiteralPath $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }
     $tmp = "$ZipPath.tmp"
@@ -272,6 +292,120 @@ function New-PackZip($spec, [string]$ZipPath) {
 }
 
 # ---------------------------------------------------------------------------------------------
+# Strip/pack drift self-check
+# ---------------------------------------------------------------------------------------------
+# !!! HAND-MAINTAINED MIRROR OF ConditioningControlPanel.csproj !!!
+# These globs must be character-for-character the same file set as the
+# $(ContentPackSoundsExclude) + $(ContentPackWebExclude) properties in the csproj -- the set the
+# BUILD STRIPS. $PackSpecs above is the set the PACKS SHIP. The two are edited independently and
+# nothing in MSBuild or Inno cross-checks them, so this list plus Assert-NoStripPackDrift is the
+# only thing standing between a one-line csproj edit and a file that ships NOWHERE (stripped but
+# never packed = silently missing audio for everyone) or TWICE (packed but not stripped = the
+# in-box copy shadows the downloaded pack forever, because ContentLocator probes BaseDirectory
+# first).
+#
+# Deliberately NOT a catch-all: pack membership has to stay explicit, because which pack a file
+# lands in is a product decision (persona gating), not something a glob can infer. So we keep the
+# enumeration AND fail loudly the moment it stops matching the csproj.
+#
+# Pattern shape: <dir>\**\<filemask>  (the only shape the csproj uses).
+$CsprojStripPatterns = @(
+    # $(ContentPackSoundsExclude)
+    'Resources\sounds\flashes_audio\**\*.mp3'
+    'Resources\sounds\flashes_audio\**\*.wav'
+    'Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3'
+    'Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav'
+    'Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg'
+    'Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a'
+    'Resources\sounds\companion_audio\mods\builtin-locked\**\*.mp3'
+    'Resources\sounds\companion_audio\mods\builtin-locked\**\*.wav'
+    'Resources\sounds\companion_audio\mods\builtin-locked\**\*.ogg'
+    'Resources\sounds\companion_audio\mods\builtin-locked\**\*.m4a'
+    'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3'
+    'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav'
+    'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg'
+    'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a'
+    'Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png'
+    # $(ContentPackWebExclude)
+    'Resources\web\intake\assets\vo\**\*.mp3'
+    'Resources\web\intake\assets\sfx\**\*.mp3'
+    'Resources\web\intake\assets\music\**\*.mp3'
+    'Resources\web\dtrh\assets\**\*.mp3'
+)
+
+# Expands $CsprojStripPatterns against the SOURCE TREE. Returns a hashtable of full path -> $true
+# (lower-cased keys; NTFS is case-insensitive and MSBuild globs are too).
+function Get-StrippedFileSet {
+    $set = @{}
+    foreach ($pattern in $CsprojStripPatterns) {
+        $split = $pattern -split '\\\*\*\\'
+        if ($split.Count -ne 2) {
+            throw "Strip pattern '$pattern' is not of the form <dir>\**\<filemask>. " +
+                  "Either fix the pattern or teach Get-StrippedFileSet the new shape."
+        }
+        $dir  = Join-Path $ProjectDir $split[0]
+        $mask = $split[1]
+        if (-not (Test-Path -LiteralPath $dir)) {
+            throw "Strip pattern '$pattern': source folder missing: $dir`n" +
+                  "       The csproj strips a folder that no longer exists - drop the pattern from BOTH files."
+        }
+        # -Filter is the fast path, but the Win32 wildcard behind it also matches 8.3 short-name
+        # aliases (the classic "*.htm matches .html" trap), whereas MSBuild's **\*.mp3 is exact.
+        # Re-check the extension so this mirrors MSBuild and not FindFirstFile.
+        $ext = if ($mask -match '^\*(\.[A-Za-z0-9]+)$') { $Matches[1].ToLowerInvariant() } else { $null }
+        foreach ($f in @(Get-ChildItem -LiteralPath $dir -Recurse -File -Filter $mask)) {
+            if ($ext -and $f.Extension.ToLowerInvariant() -ne $ext) { continue }
+            $set[$f.FullName.ToLowerInvariant()] = $true
+        }
+    }
+    return $set
+}
+
+# Hard-fails if the stripped set and the packed set disagree in either direction.
+# $Resolved: ordered hashtable of packId -> resolved file list (output of Resolve-PackFiles).
+function Assert-NoStripPackDrift($Resolved) {
+    $stripped = Get-StrippedFileSet
+
+    # Only Kind='folder' entries are in scope: the two .ccpmod archives left the build by having
+    # their <Content> item deleted outright, so no strip glob covers them and none should.
+    $packed = @{}
+    foreach ($id in $Resolved.Keys) {
+        foreach ($f in @($Resolved[$id])) {
+            if ($f.Kind -ne 'folder') { continue }
+            $packed[$f.Source.ToLowerInvariant()] = $id
+        }
+    }
+
+    $strippedNotPacked = @($stripped.Keys | Where-Object { -not $packed.ContainsKey($_) })
+    $packedNotStripped = @($packed.Keys   | Where-Object { -not $stripped.ContainsKey($_) })
+
+    if ($strippedNotPacked.Count -or $packedNotStripped.Count) {
+        $msg = "KEEP IN SYNC violation between ConditioningControlPanel.csproj and `$PackSpecs.`n"
+        if ($strippedNotPacked.Count) {
+            $msg += "`n  STRIPPED BUT NOT PACKED ($($strippedNotPacked.Count) file(s)) - these would ship NOWHERE:`n"
+            foreach ($p in @($strippedNotPacked | Sort-Object)[0..([Math]::Min(19, $strippedNotPacked.Count - 1))]) {
+                $msg += "    $p`n"
+            }
+            if ($strippedNotPacked.Count -gt 20) { $msg += "    ... and $($strippedNotPacked.Count - 20) more`n" }
+            $msg += "  Fix: add the folder to `$PackSpecs (choosing a pack), or stop stripping it in the csproj.`n"
+        }
+        if ($packedNotStripped.Count) {
+            $msg += "`n  PACKED BUT NOT STRIPPED ($($packedNotStripped.Count) file(s)) - these would ship TWICE," +
+                    " and the in-box copy would shadow the pack forever:`n"
+            foreach ($p in @($packedNotStripped | Sort-Object)[0..([Math]::Min(19, $packedNotStripped.Count - 1))]) {
+                $msg += "    $p`n"
+            }
+            if ($packedNotStripped.Count -gt 20) { $msg += "    ... and $($packedNotStripped.Count - 20) more`n" }
+            $msg += "  Fix: add the extension/folder to the csproj Exclude properties (BOTH the plain and the" +
+                    " ...Abs variant), to `$CsprojStripPatterns above, and to installer.iss [InstallDelete].`n"
+        }
+        throw $msg
+    }
+
+    Write-Host ("  strip/pack self-check OK ({0} files stripped by the csproj, all packed exactly once)" -f $stripped.Count) -ForegroundColor DarkGray
+}
+
+# ---------------------------------------------------------------------------------------------
 # Previous manifest (contentVersion carry-over)
 # ---------------------------------------------------------------------------------------------
 $prev = @{}
@@ -281,10 +415,39 @@ if ($PreviousManifest) {
     }
     $prevDoc = Get-Content -LiteralPath $PreviousManifest -Raw | ConvertFrom-Json
     # Accept both the wrapped object and a bare array, so an older manifest still works.
-    $prevPacks = if ($prevDoc -is [array]) { $prevDoc } else { $prevDoc.packs }
-    foreach ($p in $prevPacks) { $prev[$p.id] = $p }
+    # Set-StrictMode Latest turns a missing property into a hard throw, so every field of a
+    # foreign document is probed before it is read. A malformed / partial previous manifest must
+    # degrade to "no previous data" (every pack starts at contentVersion 1), never crash the
+    # build -- worst case users re-download, which is exactly what happens without the flag.
+    $prevPacks = @()
+    if ($prevDoc -is [array]) {
+        $prevPacks = @($prevDoc)
+    }
+    elseif ($null -ne $prevDoc -and ($prevDoc.PSObject.Properties.Name -contains 'packs') -and $null -ne $prevDoc.packs) {
+        $prevPacks = @($prevDoc.packs)
+    }
+    else {
+        Write-Warning "Previous manifest has no 'packs' array - ignoring it (all packs restart at contentVersion 1)."
+    }
+    foreach ($p in $prevPacks) {
+        if ($null -eq $p -or ($p.PSObject.Properties.Name -notcontains 'id')) {
+            Write-Warning "Previous manifest: skipping an entry with no 'id'."
+            continue
+        }
+        $prev[[string]$p.id] = $p
+    }
     Write-Host "Previous manifest: $PreviousManifest ($($prev.Count) packs)" -ForegroundColor DarkGray
 }
+
+# ---------------------------------------------------------------------------------------------
+# Resolve every pack up front (even the ones -PackIds excludes: the drift self-check below is
+# only meaningful against the COMPLETE packed set) and refuse to go further if the csproj strip
+# set and the packed set have drifted apart.
+# ---------------------------------------------------------------------------------------------
+$Resolved = [ordered]@{}
+# @() at the call site too: PowerShell unrolls a returned single-element array.
+foreach ($spec in $PackSpecs) { $Resolved[$spec.Id] = @(Resolve-PackFiles $spec) }
+Assert-NoStripPackDrift $Resolved
 
 # ---------------------------------------------------------------------------------------------
 # Build
@@ -295,8 +458,7 @@ if ($ListOnly) {
     Write-Host ""
     $grand = 0; $grandCount = 0; $longest = 0
     foreach ($spec in $PackSpecs) {
-        # @() at the call site too: PowerShell unrolls a returned single-element array.
-        $files = @(Resolve-PackFiles $spec)
+        $files = @($Resolved[$spec.Id])
         $bytes = [long]((@($files) | ForEach-Object { (Get-Item -LiteralPath (Get-LongPath $_.Source)).Length } |
                   Measure-Object -Sum).Sum)
         $max = [int]((@($files) | ForEach-Object { $_.Source.Length } | Measure-Object -Maximum).Maximum)
@@ -330,7 +492,7 @@ foreach ($spec in $PackSpecs) {
     if ($build) {
         Write-Host ("  {0,-11} building..." -f $spec.Id) -NoNewline
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $count = New-PackZip $spec $zipPath
+        $count = New-PackZip $spec $zipPath $Resolved[$spec.Id]
         $sw.Stop()
         Write-Host (" {0} files in {1:n1}s" -f $count, $sw.Elapsed.TotalSeconds)
     }
@@ -347,9 +509,18 @@ foreach ($spec in $PackSpecs) {
 
     $contentVersion = 1
     if ($prev.ContainsKey($spec.Id)) {
-        $old = $prev[$spec.Id]
-        if ($old.sha256 -eq $sha) { $contentVersion = [int]$old.contentVersion }
-        else                      { $contentVersion = [int]$old.contentVersion + 1 }
+        $old      = $prev[$spec.Id]
+        $oldNames = $old.PSObject.Properties.Name
+        $oldSha   = if ($oldNames -contains 'sha256') { [string]$old.sha256 } else { '' }
+        $oldVer   = 0
+        $hasVer   = ($oldNames -contains 'contentVersion') -and
+                    [int]::TryParse([string]$old.contentVersion, [ref]$oldVer) -and ($oldVer -ge 1)
+
+        if (-not $oldSha -or -not $hasVer) {
+            Write-Warning ("Previous manifest entry for '{0}' is missing sha256/contentVersion - treating it as a new pack (contentVersion 1)." -f $spec.Id)
+        }
+        elseif ($oldSha -eq $sha) { $contentVersion = $oldVer }
+        else                      { $contentVersion = $oldVer + 1 }
     }
 
     $ccpmods = @($spec.Files | ForEach-Object { $_.Entry })

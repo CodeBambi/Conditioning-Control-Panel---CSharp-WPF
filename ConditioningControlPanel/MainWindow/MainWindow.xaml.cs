@@ -439,9 +439,14 @@ namespace ConditioningControlPanel
             App.Overlay.Stop();
 
             // v6.0: fresh installs land on CCP Default (neutral baseline).
-            // Content packs (docs/CONTENT_PACKS_PLAN.md §4): the mod media no longer ships in the
-            // installer, so first launch DOES get a picker again — see ModPickerDialog.ShowIfNeeded,
-            // called from the first-launch block below (it no-ops on a full/dev layout).
+            // Content packs (docs/CONTENT_PACKS_PLAN.md §4 + §5): the mod media no longer ships in the
+            // installer, so the picker is back — for BOTH populations. First launch gets it below,
+            // before the tutorial; every ALREADY-Welcomed install gets it from the else branch,
+            // because the modular installer's [InstallDelete] sweep just took their bundled mod audio
+            // away and they would otherwise never be offered it back. ModPickerDialog.ShowIfNeeded
+            // owns the one-shot guards (ModPickerShown / IsFullInstall / null service), so it no-ops
+            // for everyone who should not see it — including every install that still has its
+            // bundled audio.
 
             // Show welcome dialog on first launch, then start tutorial
             // But delay tutorial if update dialog is being shown
@@ -484,6 +489,47 @@ namespace ConditioningControlPanel
                 // Not first launch - check if we need to show "What's New" after an update
                 ShowWhatsNewIfNeeded();
                 TryPresentSeasonRecap();
+
+                // Upgraders into the modular build get the SAME picker, once, at the equivalent safe
+                // point: after the update dialog AND the What's New / season-recap dialogs are done,
+                // and once this window has actually loaded. No tutorial follows here - existing users
+                // already had it.
+                Dispatcher.BeginInvoke(new Action(async () =>
+                {
+                    try
+                    {
+                        // Let the startup dialogs that were queued just above actually claim the
+                        // flag before we start watching it - What's New posts itself and has not
+                        // raised IsStartupDialogShowing yet at this instant.
+                        await Task.Delay(1500);
+
+                        // Same waiting idiom as the first-launch branch, plus IsStartupDialogShowing:
+                        // What's New is modal and posts itself onto the dispatcher, so it can still be
+                        // pending when this runs.
+                        for (int i = 0; i < 60 && (App.IsUpdateDialogActive || IsStartupDialogShowing); i++)
+                        {
+                            await Task.Delay(500);
+                        }
+
+                        for (int i = 0; i < 20 && !IsLoaded; i++)
+                        {
+                            await Task.Delay(500);
+                        }
+
+                        if (!App.IsUpdateDialogActive && !IsStartupDialogShowing && IsLoaded)
+                        {
+                            // Pre-ticks the card for the mod they were already running, so one press
+                            // restores what the installer removed.
+                            ModPickerDialog.ShowIfNeeded(this, preselectActiveMod: true);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to offer the mod picker to an upgrading install");
+                    }
+                    // Normal, NOT Loaded - Loaded-priority work is starved in this app and silently
+                    // never runs (same reason as the first-launch branch above).
+                }), System.Windows.Threading.DispatcherPriority.Normal);
             }
 
             // Initialize scheduler timer (checks every 30 seconds)
