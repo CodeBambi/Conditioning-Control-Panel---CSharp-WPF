@@ -2580,5 +2580,13 @@
   "program_lock_reason_generic": "Un programa de entrenamiento está ejecutando esta sesión. Sus funciones e intensidad están bloqueadas hasta que termine.",
   "session_lock_reason": "¡Estás en una sesión! Sus funciones e intensidad están bloqueadas hasta que termine.",
   "session_lock_action_title": "Estás en una sesión",
-  "session_lock_action_body": "{0}\n\nEsto sobrescribiría lo que la sesión prescribió. Detén la sesión primero si de verdad quieres cambiarlo."
+  "session_lock_action_body": "{0}\n\nEsto sobrescribiría lo que la sesión prescribió. Detén la sesión primero si de verdad quieres cambiarlo.",
+  "btn_my_reports": "Mis informes",
+  "my_reports_title": "Mis informes",
+  "my_reports_subtitle": "Números de informe de los errores y sugerencias que has enviado. Menciona uno en Discord si quieres añadir detalles.",
+  "my_reports_empty": "Aún no hay informes.",
+  "my_reports_kind_bug": "Informe de error",
+  "my_reports_kind_suggestion": "Sugerencia",
+  "bug_report_token_label": "Tu número de informe",
+  "bug_report_token_hint": "Guarda este número. Menciónalo en Discord si quieres añadir detalles o preguntar por tu informe."
 }

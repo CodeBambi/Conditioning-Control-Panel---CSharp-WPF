@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -48,6 +49,14 @@ namespace ConditioningControlPanel.Services
         internal static readonly string[] DiagMarkers =
             { "[RES]", "[WATCHDOG]", "[BLUR]", "[VIDEO]", "[VideoDiag]" };
 
+        // #769: how many report numbers we remember in AppSettings.RecentBugReports.
+        // Newest last; the oldest are trimmed on insert.
+        internal const int MaxRecentReports = 20;
+
+        // Guards the in-place mutation of the settings list — SubmitAsync resumes on a
+        // thread-pool thread, and the "My Reports" UI can read the list concurrently.
+        private static readonly object RecentReportsLock = new();
+
         private readonly HttpClient _httpClient;
 
         public BugReportService()
@@ -72,6 +81,9 @@ namespace ConditioningControlPanel.Services
             public string ScrubbedAppLog { get; set; } = string.Empty;
             public bool IncludeAppLog { get; set; }
             public ScrubberCounts Counts { get; set; } = ScrubberCounts.Empty;
+            /// <summary>What the user is filing. Carried so SubmitAsync can tag the
+            /// remembered report number (#769) without re-sniffing the description.</summary>
+            public ReportKind Kind { get; set; } = ReportKind.Bug;
         }
 
         public class BugMetadata
@@ -182,6 +194,7 @@ namespace ConditioningControlPanel.Services
                 ScrubbedAppLog = scrubbedApp,
                 IncludeAppLog = includeAppLog && !isSuggestion,
                 Counts = totalCounts,
+                Kind = kind,
             };
         }
 
@@ -224,6 +237,9 @@ namespace ConditioningControlPanel.Services
                 if ((int)res.StatusCode == 202)
                 {
                     var token202 = TryExtractToken(responseText);
+                    App.Logger?.Information("[BugReport] Saved pending (bot unreachable): {Token}",
+                        string.IsNullOrEmpty(token202) ? "(no token)" : token202);
+                    RememberReportToken(token202, draft.Kind);
                     return new SubmitResult
                     {
                         Outcome = SubmitOutcome.SavedPending,
@@ -253,6 +269,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 App.Logger?.Information("[BugReport] Submitted successfully: {Token}", token);
+                RememberReportToken(token, draft.Kind);
                 return new SubmitResult
                 {
                     Outcome = SubmitOutcome.Success,
@@ -285,6 +302,99 @@ namespace ConditioningControlPanel.Services
                     Outcome = SubmitOutcome.ValidationFailed,
                     ErrorMessage = ex.Message,
                 };
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Remembered report numbers (#769)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// One decoded entry of <see cref="Models.AppSettings.RecentBugReports"/>.
+        /// </summary>
+        public class RecentReport
+        {
+            public string Token { get; set; } = string.Empty;
+            /// <summary>UTC instant the report was filed. <c>null</c> for a legacy/unparseable stamp.</summary>
+            public DateTime? TimestampUtc { get; set; }
+            public ReportKind Kind { get; set; } = ReportKind.Bug;
+        }
+
+        /// <summary>
+        /// Ring-buffer insert used by <see cref="RememberReportToken"/>. Appends
+        /// "{token}|{ISO-8601 UTC}|{kind}" and trims the oldest entries so the list never
+        /// exceeds <see cref="MaxRecentReports"/>. Blank tokens and a null list are ignored.
+        /// Pure (no settings/IO) so the cap contract can be unit-tested headlessly.
+        /// </summary>
+        internal static void AppendRecentReport(List<string> list, string? token, DateTime timestampUtc, ReportKind kind)
+        {
+            if (list == null || string.IsNullOrWhiteSpace(token)) return;
+
+            var kindText = kind == ReportKind.Suggestion ? "suggestion" : "bug";
+            var stamp = timestampUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
+            list.Add($"{token.Trim()}|{stamp}|{kindText}");
+
+            if (list.Count > MaxRecentReports)
+                list.RemoveRange(0, list.Count - MaxRecentReports);
+        }
+
+        /// <summary>
+        /// Decode stored entries into <see cref="RecentReport"/> rows, NEWEST FIRST.
+        /// Tolerates malformed/legacy entries (a bare token still yields a row). Never throws.
+        /// </summary>
+        internal static List<RecentReport> ParseRecentReports(IEnumerable<string>? entries)
+        {
+            var result = new List<RecentReport>();
+            if (entries == null) return result;
+
+            foreach (var raw in entries)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var parts = raw.Split('|');
+                var token = parts[0].Trim();
+                if (token.Length == 0) continue;
+
+                DateTime? stamp = null;
+                if (parts.Length > 1 && DateTime.TryParse(
+                        parts[1], CultureInfo.InvariantCulture,
+                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed))
+                {
+                    stamp = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+                }
+
+                var kind = parts.Length > 2 && string.Equals(parts[2].Trim(), "suggestion", StringComparison.OrdinalIgnoreCase)
+                    ? ReportKind.Suggestion
+                    : ReportKind.Bug;
+
+                result.Add(new RecentReport { Token = token, TimestampUtc = stamp, Kind = kind });
+            }
+
+            result.Reverse(); // stored oldest-first; the UI shows newest-first
+            return result;
+        }
+
+        /// <summary>
+        /// Persist a report number so the user can quote it in Discord later. Called on BOTH
+        /// the 200 (filed) and 202 (saved pending) paths — a 202 report still gets a real
+        /// number. Failures are swallowed: never break a submission over bookkeeping.
+        /// </summary>
+        private static void RememberReportToken(string? token, ReportKind kind)
+        {
+            if (string.IsNullOrWhiteSpace(token)) return;
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                lock (RecentReportsLock)
+                {
+                    AppendRecentReport(settings.RecentBugReports, token, DateTime.UtcNow, kind);
+                }
+                App.Settings?.Save();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("[BugReport] could not persist report number: {Msg}", ex.Message);
             }
         }
 

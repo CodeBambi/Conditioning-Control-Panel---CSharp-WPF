@@ -2588,5 +2588,13 @@
   "program_lock_reason_generic": "Ein Trainingsprogramm steuert diese Sitzung. Funktionen und Intensität sind bis zum Ende gesperrt.",
   "session_lock_reason": "Du bist in einer Sitzung! Funktionen und Intensität sind bis zum Ende gesperrt.",
   "session_lock_action_title": "Du bist in einer Sitzung",
-  "session_lock_action_body": "{0}\n\nDies würde überschreiben, was die Sitzung vorgegeben hat. Beende zuerst die Sitzung, wenn du es wirklich ändern willst."
+  "session_lock_action_body": "{0}\n\nDies würde überschreiben, was die Sitzung vorgegeben hat. Beende zuerst die Sitzung, wenn du es wirklich ändern willst.",
+  "btn_my_reports": "Meine Meldungen",
+  "my_reports_title": "Meine Meldungen",
+  "my_reports_subtitle": "Meldungsnummern der Fehlerberichte und Vorschläge, die du gesendet hast. Nenne eine davon auf Discord, wenn du Details ergänzen möchtest.",
+  "my_reports_empty": "Noch keine Meldungen.",
+  "my_reports_kind_bug": "Fehlerbericht",
+  "my_reports_kind_suggestion": "Vorschlag",
+  "bug_report_token_label": "Deine Meldungsnummer",
+  "bug_report_token_hint": "Notiere dir diese Nummer. Nenne sie auf Discord, wenn du Details ergänzen oder nach deiner Meldung fragen möchtest."
 }

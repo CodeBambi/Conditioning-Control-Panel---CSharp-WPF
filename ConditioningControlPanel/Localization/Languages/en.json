@@ -3843,5 +3843,13 @@
   "label_motion_off": "Off",
   "session_lock_reason": "You're in a session! Its features and intensity are locked until it ends.",
   "session_lock_action_title": "You're in a session",
-  "session_lock_action_body": "{0}\n\nThis would overwrite what the session prescribed. Stop the session first if you really want to change it."
+  "session_lock_action_body": "{0}\n\nThis would overwrite what the session prescribed. Stop the session first if you really want to change it.",
+  "btn_my_reports": "My Reports",
+  "my_reports_title": "My Reports",
+  "my_reports_subtitle": "Report numbers from bugs and suggestions you have sent. Quote one in Discord if you want to add details.",
+  "my_reports_empty": "No reports yet.",
+  "my_reports_kind_bug": "Bug report",
+  "my_reports_kind_suggestion": "Suggestion",
+  "bug_report_token_label": "Your report number",
+  "bug_report_token_hint": "Save this number. Quote it in Discord if you want to add details or ask about your report."
 }
