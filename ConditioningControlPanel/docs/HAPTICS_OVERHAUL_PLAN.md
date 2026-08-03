@@ -74,23 +74,90 @@ Routing: config maps each `HapticEventKind` row → enabled + intensity + mode/p
 - [ ] `DtrhHapticDirector` re-based onto mixer (ambient → continuous layer, accents → transients). Preserve its exact tuning values.
 
 ### Phase B — LovenseProviderV2 (Agent B)
-- [ ] Per-toy registry from `GetToys` (both parse shapes), capabilities from `shortFunctionNames`, battery, nickname.
-- [ ] `SetOutputsAsync` per device+actuator; heterogeneous = parallel requests; `timeSec:0` + refresh keep-alive OR short-timeSec repeats (pick one, document); StopAll bypass.
-- [ ] HTTPS `.lovense.club:30010` → HTTP `:20010` auto-fallback, one persisted working base URL, `X-platform` header.
-- [ ] Pattern v1 + PatternV2 senders for the pattern editor + presets (pulse/wave/fireworks/earthquake).
-- [ ] Toy Events WS client (`/v1`): handshake, 5 s ping, reconnect w/ backoff; surface `ToyEvent` (buttons, strength-changed, battery, shake). Feature-detect gracefully (older Remote versions lack it).
-- [ ] Dispose HttpClient properly; single intensity mapper.
+Files: `Services/Haptics/LovenseProviderV2.cs`, `Services/Haptics/LovenseToyEventsClient.cs`,
+`Services/Haptics/LovensePatterns.cs`. Legacy `LovenseProvider.cs` untouched (dies at integration).
+- [x] Per-toy registry from `GetToys` (both parse shapes), capabilities from `shortFunctionNames`, battery, nickname.
+- [x] `SetOutputsAsync` per device+actuator; heterogeneous = parallel requests; `timeSec:0` + refresh keep-alive OR short-timeSec repeats (pick one, document); StopAll bypass.
+- [x] HTTPS `.lovense.club:30010` → HTTP `:20010` auto-fallback, one persisted working base URL, `X-platform` header.
+- [x] Pattern v1 + PatternV2 senders for the pattern editor + presets (pulse/wave/fireworks/earthquake).
+- [x] Toy Events WS client (`/v1`): handshake, 5 s ping, reconnect w/ backoff; surface `ToyEvent` (buttons, strength-changed, battery, shake). Feature-detect gracefully (older Remote versions lack it).
+- [x] Dispose HttpClient properly; single intensity mapper.
+
+**Decisions made in Phase B (integration + Phases E/F need these):**
+- **Keep-alive = `timeSec:0` + 25 s refresh.** Every Function command is indefinite; a 1 Hz maintenance
+  loop re-sends a device's current NON-ZERO level set once 25 s have passed since its last send.
+  Short-`timeSec` repeats were rejected — they race their own expiry and leave audible seams at the
+  seams. Because `timeSec:0` has no server watchdog, WE own the stop: zeros are always transmitted
+  explicitly (as `Vibrate:0`, never a `Stop` spam), and `StopAllAsync` clears the suppression cache
+  before firing per-toy `Stop`s.
+- **Unchanged-send suppression** keys off the quantized value per Lovense ACTION VERB
+  (`Vibrate`/`Vibrate1`/`Thrusting`/…), so the 10 Hz mixer loop puts nothing on the wire while levels
+  hold. Sending a pattern/preset clears the cache (the toy is no longer where the cache thinks it is).
+- **One request per device, comma-combined** (`Vibrate:5,Rotate:10`) — different verbs legitimately
+  combine in one `Function` action string. Parallelism is across DEVICES, not across verbs.
+- **Multi-motor discovery** comes from the short codes themselves (`v1`,`v2` = Edge; `v1..v3` = Lapis)
+  → one `HapticActuator` per motor, 0-based `Index`, verb suffix preserved. Firmware that omits both
+  `shortFunctionNames` and `fullFunctionNames` falls back to a small model table, else one Vibrate.
+- **`Stroke` is a range, not a level**: intensity → `Stroke:0-{20..100}` (span always ≥ 20); a zero
+  request omits the fragment (`Thrusting:0` is what actually stops it).
+- **No settings writes.** The winning base URL is session-only (`ActiveBaseUrl`). The configured address
+  comes from `ConfiguredUrlOverride` first, else reflectively from `Haptics.LovenseUrl` /
+  `LovenseAddress` / `LovenseIp` / `LovenseHost`, so the HapticSettings→V2 rework cannot break provider
+  compilation. **Integration should set `ConfiguredUrlOverride` explicitly and retire the reflection.**
+- `ConnectAsync` returns **true when Remote answers with zero toys** (raises an informational `Error`);
+  the 20 s poll picks toys up as they pair. The device manager should not treat that as a failure.
+- **Open / needs a real toy:** (a) the Toy Events access-request FRAME is not in the published Standard
+  API docs — two plausible shapes are sent and the first 5 received frames log at Debug; trim to one
+  after a capture. (b) `Position:` inside a `Function` action string is assumed (Solace Pro).
+  (c) `battery`/`status` field types vary by firmware — both string and number are accepted, unverified.
+  (d) PatternV2 `Setup`→`Play` timing (`startTime`/`offsetTime` semantics) is unexercised.
 
 ### Phase C — ButtplugProviderV2 (Agent C)
-- [ ] Swap csproj package to `Buttplug` 5.0.1; rewrite client against the real 5.x API (verify spec v3 vs v4 empirically).
-- [ ] Per-device dispatch (scalar per feature index), device add/remove events under lock, real ping.
-- [ ] Map Buttplug device features → `HapticActuator` list.
+- [x] Swap csproj package to `Buttplug` 5.0.1; rewrite client against the real 5.x API (verify spec v3 vs v4 empirically).
+- [x] Per-device dispatch (scalar per feature index), device add/remove events under lock, real ping.
+- [x] Map Buttplug device features → `HapticActuator` list.
+
+**VERDICT: `Buttplug` 5.0.1 speaks message spec v4, NOT v3.** Verified empirically by reflecting over
+`buttplug\5.0.1\lib\netstandard2.1\Buttplug.dll`. There is **no** `ScalarCmd`/`ScalarSubcommand`,
+no `VibrateCmd`, no `device.VibrateAsync()`, no `VibrateAttributes`. The v4 surface actually present:
+- `Buttplug.Core.Messages.OutputCmd` / `InputCmd`; enums `OutputType`
+  {Unknown, Vibrate, Oscillate, Rotate, Position, HwPositionWithDuration, Led, Temperature, Constrict, Spray}
+  and `InputType` {Unknown, Battery, RSSI, Button, Pressure, Depth, Position}.
+- Capabilities are **per-feature**: `ButtplugClientDevice.Features` (`IReadOnlyDictionary<uint, ButtplugClientDeviceFeature>`),
+  `HasOutput(OutputType)`, `GetFeaturesWithOutput(OutputType)`, `feature.TryGetOutputRange(type, out min, out max)`
+  (= native step range), `feature.FeatureDefinition` (`DeviceFeature.Output` is `Dictionary<string, DeviceFeatureOutput>`).
+- Output: `device.RunOutputAsync(uint featureIndex, DeviceOutputCommand, ct)` /
+  `feature.RunOutputAsync(...)`; commands built with `new DeviceOutputCommand(OutputType, PercentOrSteps, uint? duration)`
+  or the `DeviceOutput.Vibrate.Steps(n)/.Percent(x)` builders. `device.StopAsync()`, `client.StopAllDevicesAsync(ct)`.
+- Input: `device.BatteryAsync(TimeSpan?, ct)`, `feature.RunInputAsync(DeviceInput.Button.Subscribe())`,
+  `client.InputReadingReceived` → `InputReadingEventArgs { DeviceIndex, FeatureIndex, Reading }`.
+- Connector ships **inside** the same package (`Buttplug.Client.ButtplugWebsocketConnector`); the separate
+  `Buttplug.Client.Connectors.WebsocketConnector` package is 3.x-only and was removed from the csproj.
+- Buttplug 5.0.1 requires `Newtonsoft.Json >= 13.0.4`; the project's pinned 13.0.3 had to be bumped to
+  13.0.4 or restore fails with NU1605 (package downgrade). That is the only other csproj change.
+
+Actuator mapping (Buttplug has no Thrust/Finger/Suction/Pump/Depth/Stroke output type — Lovense-only):
+`Vibrate→Vibrate`, `Rotate→Rotate`, `Oscillate→Oscillate`, `Position`+`HwPositionWithDuration`→`Position`,
+`Constrict→Constrict`; `Led`/`Temperature`/`Spray` ignored. `HapticActuator.Index` is a per-type 0-based
+ordinal (Edge = Vibrate#0/#1) mapped internally back to the Buttplug feature index; `Steps` is the
+feature's own advertised max (fallback 100 for Position, 20 otherwise). Buttplug outputs **latch**, so
+`SetOutputsAsync` sends only on a quantized-step change — no keep-alive. `PingAsync` is a real wire
+round-trip: `RequestDeviceList` sent through our retained connector (the client exposes no public ping).
+Device id = Intiface display name (else model name), ':' stripped, `#n` for duplicates — the numeric
+Buttplug device index is session-scoped and unusable as a persisted key.
 
 ### Phase D — Standalone fixes (Agent D, files disjoint from A/B/C)
-- [ ] Wizard images → absolute pack URIs; wizard port text 30010-vs-20010 unified.
-- [ ] De-dupe double pattern calls: `QuestService.cs:983-984`, `AchievementService.cs:760-761`.
-- [ ] `App.Settings.Save()` on every haptics handler in `MainWindow/MainWindow.Haptics.cs`.
-- [ ] Fix provider-combo load-match failure for Mock (`MainWindow/MainWindow.Settings.cs:267-274`).
+- [x] Wizard images → absolute pack URIs; wizard port text 30010-vs-20010 unified.
+      All 4 PNGs verified present + embedded (`Resource Include="Resources\haptics_guide\*.png"`
+      already covered them, no csproj edit needed). Wizard now says the app finds the port
+      automatically and to keep Game Mode ON; canonical example is `http://IP:30010`.
+- [x] De-dupe double pattern calls: `QuestService.cs:983-984`, `AchievementService.cs:760-761`.
+- [x] `App.Settings.Save()` on every haptics handler in `MainWindow/MainWindow.Haptics.cs`
+      (`SettingsService.Save()` is itself 500 ms-debounced, so per-tick slider calls coalesce
+      into one write — no extra drag-completed plumbing needed).
+- [x] Fix provider-combo load-match failure for Mock (`MainWindow/MainWindow.Settings.cs:267-274`)
+      + added the `Mock (Test Mode)` row to `HapticsTabView.xaml` (loc key `btn_mock_test_mode`,
+      **en.json only** — the other 8 languages fall back to English until Phase G).
 
 ### Phase E — UI rebuild (after A-D merge)
 - [ ] `HapticsTabView` redesign, app visual language (cards #252542, pink #FF69B4 accents, pill badges):
