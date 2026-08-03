@@ -101,7 +101,7 @@ if (data.salt_seed) {
   }
 }
 
-const skipped = ['round_specs', 'ramp'].filter((k) => data[k] !== undefined);
+const skipped = ['round_specs', 'ramp', 'ramps'].filter((k) => data[k] !== undefined);
 if (skipped.length) console.log(`note: skipping ${skipped.join(', ')} — Wave 2 consumes those`);
 
 console.log(`PASS — ${checks} values matched across ${(data.seeds || []).length} seed(s), ` +

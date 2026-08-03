@@ -2,9 +2,10 @@
  * ui/arsenal.js — the two item rails that flank the stage, and the drag-to-fire
  * gesture that turns an item into a payload aimed at the opponent's monitor.
  *
- * One tile per payload kind (plus the emote sheet opener). A tile is an item
- * IMAGE on a .gg-plate with its cost in tiny diamonds, and it always says what
- * state it is in with a WORD, never colour alone:
+ * One tile per payload kind (plus the emote sheet opener). A tile is a BARE ITEM
+ * IMAGE — a sticker cutout sitting on the desk, no plate, no border, no fill —
+ * with its cost in tiny diamonds under it. It always says what state it is in
+ * with a WORD, never colour alone:
  *
  *   ready      full colour; the priciest affordable one gets the glow
  *   too poor   45% + amber pips; tap -> shake + "costs {n} — you have {m}"
@@ -16,7 +17,7 @@
  * FIRING, three ways, all of them arriving at match.tryFirePayload():
  *   1. drag the item onto the monitor (pointer capture + rect hit-test)
  *   2. tap the item, then tap the monitor (armed state; tapping elsewhere disarms)
- *   3. keys 1-7 (first press arms, second press fires)
+ *   3. keys 1-8 (first press arms, second press fires)
  *
  * Node-import-safe: no DOM at import, only inside mountArsenal().
  * ==========================================================================*/
@@ -26,19 +27,26 @@ import { GoonPayloadRateLimiter, GoonReceiptStatus } from '../core/scoring.js';
 import { localMonotonicMs } from '../core/clock.js';
 
 /**
- * The rails, in owner order. `durationMs` is the payload length we request; the
- * engine clamps to 1000..180000 so every one of these lands unchanged.
+ * The rails, in owner order — which is also the KEYBOARD order (1..8), so new
+ * items go on the end and never renumber a finger that already knows the deck.
+ * `durationMs` is the payload length we request; the engine clamps to
+ * 1000..180000 so every one of these lands unchanged. `cost` is documentation
+ * and a fallback only: costOf() is authority whenever it knows the kind.
  */
 export const ARSENAL_ITEMS = Object.freeze([
-  { id: 'flash', rail: 'left', kind: GoonPayloadKind.FlashBurst, img: 'item_flash', label: 'flash', durationMs: 6000 },
-  { id: 'subliminal', rail: 'left', kind: GoonPayloadKind.SubliminalStorm, img: 'item_subliminal', label: 'subliminal', durationMs: 8000 },
-  { id: 'bubbles', rail: 'left', kind: GoonPayloadKind.BubbleSwarm, img: 'item_bubbles', label: 'bubbles', durationMs: 20000 },
-  { id: 'video', rail: 'left', kind: GoonPayloadKind.Video, img: 'item_video', label: 'video', durationMs: 45000 },
-  { id: 'lockcard', rail: 'right', kind: GoonPayloadKind.LockCard, img: 'item_lockcard', label: 'lock card', durationMs: 30000 },
-  { id: 'toy', rail: 'right', kind: GoonPayloadKind.ToyPattern, img: 'item_toy', label: 'toy', durationMs: 10000 },
-  { id: 'braindrain', rail: 'right', kind: GoonPayloadKind.BrainDrain, img: 'item_braindrain', label: 'brain drain', durationMs: 60000 },
-  { id: 'emote', rail: 'right', kind: null, img: 'item_emote', label: 'emote', durationMs: 0 },
+  { id: 'flash', rail: 'left', kind: GoonPayloadKind.FlashBurst, img: 'item_flash', label: 'flash', durationMs: 6000, cost: 1 },
+  { id: 'subliminal', rail: 'left', kind: GoonPayloadKind.SubliminalStorm, img: 'item_subliminal', label: 'subliminal', durationMs: 8000, cost: 1 },
+  { id: 'bubbles', rail: 'left', kind: GoonPayloadKind.BubbleSwarm, img: 'item_bubbles', label: 'bubbles', durationMs: 20000, cost: 1 },
+  { id: 'video', rail: 'left', kind: GoonPayloadKind.Video, img: 'item_video', label: 'video', durationMs: 45000, cost: 2 },
+  { id: 'lockcard', rail: 'right', kind: GoonPayloadKind.LockCard, img: 'item_lockcard', label: 'lock card', durationMs: 30000, cost: 2 },
+  { id: 'toy', rail: 'right', kind: GoonPayloadKind.ToyPattern, img: 'item_toy', label: 'toy', durationMs: 10000, cost: 2 },
+  { id: 'braindrain', rail: 'right', kind: GoonPayloadKind.BrainDrain, img: 'item_braindrain', label: 'brain drain', durationMs: 60000, cost: 3 },
+  { id: 'spiral', rail: 'left', kind: GoonPayloadKind.Spiral, img: 'item_spiral', label: 'spiral', durationMs: 40000, cost: 2 },
+  { id: 'emote', rail: 'right', kind: null, img: 'item_emote', label: 'emote', durationMs: 0, cost: 0 },
 ]);
+
+/** Payload slots, i.e. everything the number keys can reach. */
+const PAYLOAD_ITEMS = ARSENAL_ITEMS.filter((i) => i.kind !== null);
 
 /** Every payload we send goes out at this intensity in v1 (no per-item dial yet). */
 const FIRE_INTENSITY = 0.7;
@@ -160,12 +168,16 @@ function receiptWord(status) {
  * @param {Function} [o.getDropTarget] () => Element (the opponent monitor)
  * @param {Function} [o.onTargeted]    (bool) => void — monitor highlight
  * @param {Function} [o.onEmote]       () => void — opens ui/emotes.js
+ * @param {Function} [o.onFired]       ({id,kind,durationMs,label}) => void — a
+ *                                     fire the engine ACCEPTED. ui/hud.js hands
+ *                                     it to the monitor so the miniature plays
+ *                                     for the payload's own window.
  * @param {Function} [o.onLog]         (entry) => void — match log
  */
 export function mountArsenal({
   leftHost, rightHost, receiptsHost = null, coolHost = null,
   match, audio = null, fx = null,
-  getDropTarget = null, onTargeted = null, onEmote = null, onLog = null,
+  getDropTarget = null, onTargeted = null, onEmote = null, onFired = null, onLog = null,
 } = {}) {
   const led = createLedger();
   const cool = makeCooldownProbe(match);
@@ -187,8 +199,13 @@ export function mountArsenal({
 
   function buildTile(item, host) {
     if (!host) return null;
-    const cost = item.kind === null ? 0 : costOf(item.kind);
-    const root = el('button', 'gg-item gg-plate');
+    // costOf is authority; the item's own `cost` only covers a kind the shared
+    // contract has not landed yet (it returns Infinity for those, which would
+    // otherwise pin the tile at "too poor" forever).
+    const known = item.kind === null ? 0 : costOf(item.kind);
+    const cost = item.kind === null ? 0 : (Number.isFinite(known) ? known : (item.cost | 0));
+    // NO PLATE: the item art IS the button. Chrome would fight the sticker cutouts.
+    const root = el('button', 'gg-item');
     if (!root) return null;
     root.type = 'button';
     root.setAttribute && root.setAttribute('data-gg-item', item.id);
@@ -199,8 +216,12 @@ export function mountArsenal({
       img.alt = '';
       img.draggable = false;
       img.decoding = 'async';
+      // A missing PNG must never show a broken-image glyph: the tile falls back
+      // to a drawn-in-CSS stand-in (spiral gets a real disc, the rest a mark).
       led.listen(img, 'error', () => cls(root, 'is-noart', true));
     }
+    const fallbackArt = add(root, el('i', 'gg-item-fallback'));
+    if (fallbackArt) fallbackArt.setAttribute && fallbackArt.setAttribute('aria-hidden', 'true');
     const nameEl = add(root, el('span', 'gg-item-name', item.label));
     const pipRow = add(root, el('span', 'gg-item-cost'));
     const costPips = [];
@@ -211,7 +232,7 @@ export function mountArsenal({
     if (tip) tip.hidden = true;
 
     add(host, root);
-    const rec = { item, cost, root, img, nameEl, pipRow, costPips, stateEl, sweep, tip, state: 'ready', tipTimer: 0 };
+    const rec = { item, cost, root, img, fallbackArt, nameEl, pipRow, costPips, stateEl, sweep, tip, state: 'ready', tipTimer: 0 };
     wireTile(rec);
     return rec;
   }
@@ -333,6 +354,11 @@ export function mountArsenal({
       if (rec.item.kind === GoonPayloadKind.BrainDrain) { heavyUsed = true; heavyId = res.id; }
       spark(rec);
       addReceipt(res.id, rec.item.label);
+      if (typeof onFired === 'function') {
+        try {
+          onFired({ id: res.id, kind: rec.item.kind, durationMs: rec.item.durationMs, label: rec.item.label });
+        } catch (_e) { /* the monitor is never load-bearing for a fire */ }
+      }
       if (typeof onLog === 'function') { try { onLog({ t: 'payload-out', kind: rec.item.label, id: res.id }); } catch (_e) { /* ignore */ } }
     } else {
       refuse(rec, String(res.error || 'not now'));
@@ -530,15 +556,15 @@ export function mountArsenal({
     else disarm();
   }, true);
 
-  // keys 1-7 — first press arms, second fires
+  // keys 1-8 (one per payload slot) — first press arms, second fires
   led.listen(typeof window !== 'undefined' ? window : null, 'keydown', (e) => {
     if (!e || e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
     const active = d && d.activeElement;
     const tag = active && active.tagName ? String(active.tagName).toLowerCase() : '';
     if (tag === 'input' || tag === 'textarea' || (active && active.isContentEditable)) return;
     const n = parseInt(e.key, 10);
-    if (!(n >= 1 && n <= 7)) return;
-    const item = ARSENAL_ITEMS.filter((i) => i.kind !== null)[n - 1];
+    if (!(n >= 1 && n <= PAYLOAD_ITEMS.length)) return;
+    const item = PAYLOAD_ITEMS[n - 1];
     const rec = item && tiles.get(item.id);
     if (!rec) return;
     if (armed === rec) { disarm(); fire(rec); }

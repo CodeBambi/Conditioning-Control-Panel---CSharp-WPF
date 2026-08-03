@@ -3,7 +3,9 @@
 
 import { GoonRng, combineSeeds, saltSeed, seedFromAny, seedToString } from '../core/rng.js';
 import { serialize, serializeForSend, parse, wireByteLength, MAX_WIRE_BYTES } from '../core/wire.js';
-import { makeMatchStart, makePayload, makeTick, makeRound, costOf, GoonPayloadKind, GoonConsts } from '../core/contracts.js';
+import { makeMatchStart, makePayload, makeTick, makeRound, costOf, GoonElement, GoonPayloadKind, GoonConsts } from '../core/contracts.js';
+import { PoolV1, profileOf, riskTierOf, matchRiskTier, MAX_MATCH_RISK_TIER } from '../core/draft.js';
+import { local as localCaps } from '../core/caps.js';
 import { MatchClock } from '../core/clock.js';
 import { GoonScheduler, ticker } from '../core/scheduler.js';
 
@@ -118,7 +120,41 @@ const quiet = { info() {}, warn() {}, error() {}, log() {} };
   ok(wireByteLength('héllo') === 6, 'wireByteLength counts utf-8 bytes');
 
   ok(costOf(GoonPayloadKind.BrainDrain) === 3 && costOf(GoonPayloadKind.FlashBurst) === 1, 'costOf known kinds');
+  ok(costOf(GoonPayloadKind.Spiral) === 2, 'costOf Spiral == 2', String(costOf(GoonPayloadKind.Spiral)));
   ok(costOf(99) === Infinity, 'costOf unknown -> Infinity');
+}
+
+// -------------------------------------------------------- draft pool + caps
+// The wire codes are FROZEN, so pin them literally: a renumber has to fail here, loudly, rather
+// than at the far end of a duel against a client built from the other half of the change.
+{
+  ok(GoonElement.Spiral === 8, 'GoonElement.Spiral wire code is 8', String(GoonElement.Spiral));
+  ok(GoonPayloadKind.Spiral === 7, 'GoonPayloadKind.Spiral wire code is 7', String(GoonPayloadKind.Spiral));
+
+  ok(PoolV1.includes(GoonElement.Spiral), 'Spiral is in the v1 draft pool');
+  ok(PoolV1.length === 9, 'v1 pool holds every element', String(PoolV1.length));
+
+  const spiral = profileOf(GoonElement.Spiral);
+  const drain = profileOf(GoonElement.BrainDrain);
+  ok(riskTierOf(GoonElement.Spiral) === 2, 'Spiral risk tier 2', String(riskTierOf(GoonElement.Spiral)));
+  ok(spiral.sustained, 'Spiral is sustained like the drain');
+  // The design intent, not just the numbers: earlier onset, gentler ceiling than BrainDrain.
+  ok(spiral.entryFraction < drain.entryFraction, 'Spiral opens earlier than BrainDrain',
+    `${spiral.entryFraction} vs ${drain.entryFraction}`);
+  ok(spiral.intensityEnd < drain.intensityEnd, 'Spiral tops out below BrainDrain',
+    `${spiral.intensityEnd} vs ${drain.intensityEnd}`);
+  ok(spiral.intensityStart < spiral.intensityEnd, 'Spiral ramps upward');
+
+  // A tier-2 addition must not move the ceiling the score formula is clamped to.
+  ok(matchRiskTier([GoonElement.BrainDrain, GoonElement.Spiral, GoonElement.Videos]) === MAX_MATCH_RISK_TIER,
+    'drain + spiral + video is the max-risk draft', String(MAX_MATCH_RISK_TIER));
+
+  // The pool is DERIVED from caps — advertising the element is what puts it in the draft.
+  const caps = localCaps();
+  ok(caps.elements.includes(GoonElement.Spiral), 'local caps advertise the Spiral element');
+  ok(caps.payloads.includes(GoonPayloadKind.Spiral), 'local caps advertise the Spiral payload');
+  ok(caps.elements.includes(GoonElement.BrainDrain) && caps.payloads.includes(GoonPayloadKind.BrainDrain),
+    'local caps advertise BrainDrain');
 }
 
 // ------------------------------------------------------------------ clock + scheduler

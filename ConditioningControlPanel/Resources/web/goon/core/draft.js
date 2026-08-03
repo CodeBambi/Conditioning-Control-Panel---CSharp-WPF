@@ -31,6 +31,7 @@ export const PoolV1 = Object.freeze([
   GoonElement.ToyPatterns,
   GoonElement.BrainDrain,
   GoonElement.BouncingText,
+  GoonElement.Spiral,
 ]);
 
 /** Sustained elements get an Intensity refresh cue on this cadence. */
@@ -90,6 +91,12 @@ const PROFILES = Object.freeze({
   [GoonElement.BrainDrain]: profile({
     element: GoonElement.BrainDrain, riskTier: 3, sustained: true,
     entryFraction: 0.35, intensityStart: 0.25, intensityEnd: 0.75,
+  }),
+  // Modelled on BrainDrain — the same sustained shape — but it opens a tenth of the match
+  // earlier and tops out lower, so a spiral+drain draft escalates in two visible steps.
+  [GoonElement.Spiral]: profile({
+    element: GoonElement.Spiral, riskTier: 2, sustained: true,
+    entryFraction: 0.25, intensityStart: 0.20, intensityEnd: 0.65,
   }),
 });
 

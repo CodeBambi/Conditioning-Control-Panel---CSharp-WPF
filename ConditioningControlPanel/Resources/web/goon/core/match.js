@@ -1024,6 +1024,10 @@ export class GoonMatchService {
     // library, tag stripping, level gates, mixer caps).
     payload.text = sanitizeText(payload.text, TEXT_MAX_CHARS);
     payload.intensity = clamp(payload.intensity, 0.0, 1.0);
+    // ONE clamp band for every kind (1 s .. MAX_PAYLOAD_DURATION_MS) — no per-kind table on either
+    // side, so a new sustained kind (Spiral, 2026-08-03) inherits BrainDrain's band by
+    // construction. Narrowing a single kind here means adding the same switch to
+    // GoonMatchService.HandleInboundPayload in the same commit.
     payload.duration_ms = clamp(payload.duration_ms, 1000, MAX_PAYLOAD_DURATION_MS);
 
     const earliestMatchMs = this._clockNow() + GoonConsts.MinScheduleBufferMs;

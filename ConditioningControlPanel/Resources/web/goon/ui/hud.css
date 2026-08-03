@@ -21,6 +21,9 @@
   --gg-mon-w: clamp(210px, 22vw, 280px);
   --gg-amber: #ffb454;
   --gg-hot: #ff1493;
+  /* the ONLY green in the HUD: "they passed it", nothing else. */
+  --gg-green: #5ef2a0;
+  --gg-green-rgb: 94, 242, 160;
 }
 
 /* ---------------------------------------------------------------------------
@@ -215,36 +218,105 @@
 .gg-rightcol { display: flex; flex-direction: column; align-items: flex-end; gap: 0.45rem; width: var(--gg-mon-w); }
 
 /* ---------------------------------------------------------------------------
- * ARSENAL
+ * ARSENAL — CHROMELESS. The item art IS the button: the PNGs are transparent
+ * sticker cutouts with their own baked outline, so there is no plate, no border,
+ * no fill and no rounded box anywhere on a tile. Every affordance that used to
+ * be drawn on the plate now rides the alpha instead:
+ *
+ *   hover / focus / armed   scale-up + a pink drop-shadow GLOW on the cutout
+ *   too poor / used / filtered  desaturate + dim (plus the word, as always)
+ *   cooling                 a small conic dial in the corner, not a box overlay
+ *   missing art             a CSS stand-in, also chromeless (spiral = a disc)
  * ------------------------------------------------------------------------ */
 .gg-item {
   position: relative;
   width: var(--gg-item);
   min-height: var(--gg-item);
-  padding: 0.35rem 0.3rem 0.5rem;
-  display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+  padding: 0.15rem 0.1rem 0.35rem;
+  display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
   cursor: pointer;
   color: var(--gg-text-1);
-  transition: opacity .18s ease, box-shadow .18s ease, border-color .18s ease, transform .12s ease;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: opacity .18s ease, transform .12s ease;
   touch-action: none;
 }
-.gg-item-img { width: 60%; max-width: 46px; height: auto; display: block; pointer-events: none; user-select: none; }
+.gg-item-img,
+.gg-item-fallback {
+  width: 84%;
+  max-width: 68px;
+  height: auto;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55));
+  transition: filter .18s ease;
+}
 .gg-item.is-noart .gg-item-img { display: none; }
+
+/* the drawn-in-CSS stand-in, only when the PNG is missing */
+.gg-item-fallback { display: none; aspect-ratio: 1; }
+.gg-item.is-noart .gg-item-fallback {
+  display: block;
+  border-radius: 10px;
+  border: 2px solid rgba(var(--gg-pink-rgb), 0.85);
+  background: rgba(var(--gg-pink-rgb), 0.16);
+}
+.gg-item.is-noart[data-gg-item="spiral"] .gg-item-fallback {
+  border: 0;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg,
+    rgba(var(--gg-pink-rgb), 0.95) 0 14deg,
+    rgba(24, 8, 36, 0.95) 14deg 28deg);
+  -webkit-mask-image: radial-gradient(circle, #000 30%, rgba(0, 0, 0, 0.6) 62%, transparent 72%);
+  mask-image: radial-gradient(circle, #000 30%, rgba(0, 0, 0, 0.6) 62%, transparent 72%);
+  filter: drop-shadow(0 0 9px rgba(var(--gg-pink-rgb), 0.55));
+}
+
 .gg-item-name { font-size: 0.6rem; letter-spacing: 0.04em; color: var(--gg-text-2); text-align: center; }
 .gg-item-cost { display: flex; gap: 3px; }
-.gg-cost-pip { width: 7px; height: 7px; transform: rotate(45deg); border-radius: 2px; background: var(--gg-pink); }
-.gg-cost-pip.is-short { background: var(--gg-amber); }
+.gg-cost-pip {
+  width: 7px; height: 7px; transform: rotate(45deg); border-radius: 2px;
+  background: var(--gg-pink);
+  box-shadow: 0 0 6px rgba(var(--gg-pink-rgb), 0.5);
+}
+.gg-cost-pip.is-short { background: var(--gg-amber); box-shadow: 0 0 6px rgba(255, 180, 84, 0.5); }
 .gg-item-state { font-size: 0.55rem; color: var(--gg-text-4); text-align: center; min-height: 0.7em; line-height: 1.1; }
 
-.gg-item.is-poor { opacity: 0.45; }
-.gg-item.is-used { opacity: 0.5; }
-.gg-item.is-used .gg-item-name { text-decoration: line-through; }
-.gg-item.is-filtered {
-  opacity: 0.55;
-  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.06) 0 6px, transparent 6px 12px);
+/* reach states — a glow on the alpha, never an outline box */
+.gg-item:hover:not(:disabled),
+.gg-item:focus-visible { transform: translateY(-2px) scale(1.06); outline: none; }
+.gg-item:hover:not(:disabled) .gg-item-img,
+.gg-item:hover:not(:disabled) .gg-item-fallback,
+.gg-item:focus-visible .gg-item-img,
+.gg-item:focus-visible .gg-item-fallback {
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 10px rgba(var(--gg-pink-rgb), 0.7));
 }
-.gg-item.is-glow { box-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.35); border-color: rgba(var(--gg-pink-rgb), 0.7); }
-.gg-item.is-armed { border-color: var(--gg-pink); box-shadow: 0 0 0 2px rgba(var(--gg-pink-rgb), 0.55); }
+.gg-item.is-glow .gg-item-img,
+.gg-item.is-glow .gg-item-fallback {
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 12px rgba(var(--gg-pink-rgb), 0.55));
+}
+.gg-item.is-armed { transform: translateY(-3px) scale(1.1); }
+.gg-item.is-armed .gg-item-img,
+.gg-item.is-armed .gg-item-fallback {
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 16px rgba(var(--gg-pink-rgb), 0.95)) brightness(1.08);
+}
+
+/* out-of-reach states — desaturate + dim, on top of the word */
+.gg-item.is-poor,
+.gg-item.is-used,
+.gg-item.is-filtered { opacity: 0.5; }
+.gg-item.is-poor .gg-item-img, .gg-item.is-poor .gg-item-fallback,
+.gg-item.is-used .gg-item-img, .gg-item.is-used .gg-item-fallback,
+.gg-item.is-filtered .gg-item-img, .gg-item.is-filtered .gg-item-fallback,
+.gg-item.is-cooling .gg-item-img, .gg-item.is-cooling .gg-item-fallback {
+  filter: grayscale(0.85) brightness(0.62) drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55));
+}
+.gg-item.is-used .gg-item-name { text-decoration: line-through; }
 .gg-item.is-dragging { opacity: 0.35; }
 .gg-item.is-shake { animation: ggShake .12s linear 1; }
 @keyframes ggShake {
@@ -253,11 +325,15 @@
   75% { transform: translateX(4px); }
 }
 
+/* cooldown: a little dial parked on the sticker's shoulder. --gg-sweep is the
+   percentage READY (100% = free to fire), written by ui/arsenal.js. */
 .gg-item-sweep {
-  position: absolute; inset: 0;
-  border-radius: inherit;
+  position: absolute; top: 0; right: 2px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
   pointer-events: none;
-  background: conic-gradient(rgba(var(--gg-pink-rgb), 0.22) var(--gg-sweep, 100%), rgba(0, 0, 0, 0.55) 0);
+  background: conic-gradient(var(--gg-pink) var(--gg-sweep, 100%), rgba(6, 2, 12, 0.85) 0);
+  box-shadow: 0 0 0 1px rgba(var(--gg-pink-rgb), 0.45), 0 2px 6px rgba(0, 0, 0, 0.6);
   opacity: 0;
   transition: opacity .2s ease;
 }
@@ -360,6 +436,26 @@
   z-index: 1;
 }
 .gg-mon-frame.is-nobezel .gg-mon-screen { inset: 0; border: 1px solid rgba(var(--gg-pink-rgb), 0.35); border-radius: 10px; }
+
+/* THE PROJECTION RECT — the little screen inside their little screen. Every
+   miniature plays in here and nothing else does. Sized in % of .gg-mon-screen
+   (centred, ~70% wide, 16:9) so the bezel art can be re-cut without JS. */
+.gg-mon-proj {
+  position: absolute;
+  left: 15%;
+  width: 70%;
+  top: 50%;
+  transform: translateY(-50%);
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 3px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.35));
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.22),
+    inset 0 0 18px rgba(0, 0, 0, 0.7),
+    0 0 16px rgba(var(--gg-violet-rgb), 0.18);
+}
 .gg-mini-idle {
   position: absolute; inset: 0;
   display: grid; place-items: center;
@@ -368,30 +464,79 @@
 }
 
 /* the stylized miniature of their screen ---------------------------------- */
-.gg-mini { position: absolute; inset: 0; display: none; }
+.gg-mini { position: absolute; inset: 0; display: none; pointer-events: none; }
 .gg-mini.is-on { display: block; }
+/* a mini WE are driving with a payload of our own runs a touch hotter */
+.gg-mini.is-yours { filter: saturate(1.3); }
 
-.gg-mini-flash { background: #fff; opacity: 0; }
-.gg-mini-flash.is-anim { animation: ggMiniFlash .7s steps(2, end) infinite; animation-play-state: var(--gg-deco-play); }
-@keyframes ggMiniFlash { 0%, 60% { opacity: 0; } 70%, 80% { opacity: 0.55; } 100% { opacity: 0; } }
-
-.gg-mini-bubbles .gg-mini-bub {
-  position: absolute; bottom: -12px;
-  width: 12px; height: 12px; border-radius: 50%;
-  border: 1px solid rgba(var(--gg-pink-rgb), 0.8);
-  background: rgba(var(--gg-pink-rgb), 0.18);
+/* flashes: a strobing wash + tiny shards thrown across the rect ------------ */
+.gg-mini-flash::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(120% 100% at 50% 40%, #fff 0%, rgba(255, 190, 226, 0.9) 60%, rgba(255, 120, 190, 0.7) 100%);
+  opacity: 0.12;
 }
-.gg-mini-bubbles .gg-mini-bub:nth-child(1) { left: 14%; }
-.gg-mini-bubbles .gg-mini-bub:nth-child(2) { left: 38%; width: 9px; height: 9px; }
-.gg-mini-bubbles .gg-mini-bub:nth-child(3) { left: 62%; width: 14px; height: 14px; }
-.gg-mini-bubbles .gg-mini-bub:nth-child(4) { left: 82%; width: 8px; height: 8px; }
-.gg-mini-bubbles.is-anim .gg-mini-bub { animation: ggMiniRise 3.2s linear infinite; animation-play-state: var(--gg-deco-play); }
-.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(2) { animation-delay: .6s; }
-.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(3) { animation-delay: 1.4s; }
-.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(4) { animation-delay: 2.1s; }
-@keyframes ggMiniRise { from { transform: translateY(0); opacity: 0.9; } to { transform: translateY(-120px); opacity: 0; } }
+.gg-mini-flash.is-anim::before { animation: ggMiniFlash .7s steps(2, end) infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniFlash { 0%, 60% { opacity: 0; } 70%, 80% { opacity: 0.6; } 100% { opacity: 0; } }
+.gg-mini-flash .gg-mini-shard {
+  position: absolute;
+  width: 13px; height: 4px; border-radius: 1px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 8px rgba(var(--gg-pink-rgb), 0.9);
+  opacity: 0;
+}
+.gg-mini-flash .gg-mini-shard:nth-child(1) { left: 12%; top: 22%; }
+.gg-mini-flash .gg-mini-shard:nth-child(2) { left: 62%; top: 34%; width: 9px; }
+.gg-mini-flash .gg-mini-shard:nth-child(3) { left: 28%; top: 66%; width: 17px; }
+.gg-mini-flash .gg-mini-shard:nth-child(4) { left: 74%; top: 74%; width: 7px; }
+.gg-mini-flash.is-anim .gg-mini-shard { animation: ggMiniShard .9s steps(3, end) infinite; animation-play-state: var(--gg-deco-play); }
+.gg-mini-flash.is-anim .gg-mini-shard:nth-child(2) { animation-delay: .18s; }
+.gg-mini-flash.is-anim .gg-mini-shard:nth-child(3) { animation-delay: .42s; }
+.gg-mini-flash.is-anim .gg-mini-shard:nth-child(4) { animation-delay: .61s; }
+@keyframes ggMiniShard {
+  0%, 55% { opacity: 0; transform: scaleX(0.5); }
+  60%, 72% { opacity: 0.95; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(0.6); }
+}
 
-.gg-mini-video { background: rgba(8, 4, 14, 0.85); }
+/* bubbles: the fake glossy pop-bubble look, now living ONLY here ----------- */
+.gg-mini-bubbles .gg-mini-bub {
+  position: absolute; bottom: -14px;
+  width: 13px; height: 13px; border-radius: 50%;
+  opacity: 0.75;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.85) 0 8%, rgba(255, 255, 255, 0) 34%),
+    radial-gradient(circle at 50% 50%,
+      rgba(var(--gg-pink-rgb), 0.05) 40%,
+      rgba(var(--gg-pink-rgb), 0.30) 72%,
+      rgba(var(--gg-violet-rgb), 0.45) 90%,
+      rgba(255, 255, 255, 0.55) 100%);
+  box-shadow: 0 0 8px rgba(var(--gg-pink-rgb), 0.35);
+}
+.gg-mini-bubbles .gg-mini-bub:nth-child(1) { left: 10%; }
+.gg-mini-bubbles .gg-mini-bub:nth-child(2) { left: 32%; width: 9px; height: 9px; }
+.gg-mini-bubbles .gg-mini-bub:nth-child(3) { left: 52%; width: 16px; height: 16px; }
+.gg-mini-bubbles .gg-mini-bub:nth-child(4) { left: 71%; width: 8px; height: 8px; }
+.gg-mini-bubbles .gg-mini-bub:nth-child(5) { left: 86%; width: 12px; height: 12px; }
+/* one animation, not two: rise and sway share the transform channel. */
+.gg-mini-bubbles.is-anim .gg-mini-bub { animation: ggMiniRise 3.4s linear infinite; animation-play-state: var(--gg-deco-play); }
+.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(2) { animation-delay: .5s; animation-duration: 4.1s; }
+.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(3) { animation-delay: 1.2s; animation-duration: 3.0s; }
+.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(4) { animation-delay: 1.9s; animation-duration: 4.4s; }
+.gg-mini-bubbles.is-anim .gg-mini-bub:nth-child(5) { animation-delay: 2.6s; animation-duration: 3.6s; }
+@keyframes ggMiniRise {
+  0% { transform: translate(0, 0); opacity: 0; }
+  12% { opacity: 0.85; }
+  50% { transform: translate(5px, -52px); }
+  100% { transform: translate(-4px, -112px); opacity: 0; }
+}
+
+/* video: bars + a scanline sweeping down the tiny screen ------------------- */
+.gg-mini-video {
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px),
+    rgba(8, 4, 14, 0.9);
+}
 .gg-mini-video .gg-mini-bar {
   position: absolute; left: 12%; right: 12%; height: 6px; border-radius: 3px;
   background: linear-gradient(90deg, rgba(var(--gg-violet-rgb), 0.5), rgba(var(--gg-pink-rgb), 0.6));
@@ -399,8 +544,15 @@
 .gg-mini-video .gg-mini-bar:nth-child(1) { top: 32%; }
 .gg-mini-video .gg-mini-bar:nth-child(2) { top: 50%; right: 30%; }
 .gg-mini-video .gg-mini-bar:nth-child(3) { top: 68%; right: 46%; }
+.gg-mini-video .gg-mini-scan {
+  position: absolute; left: 0; right: 0; top: 0; height: 12px;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  opacity: 0;
+}
 .gg-mini-video.is-anim .gg-mini-bar { animation: ggMiniShimmer 1.6s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
+.gg-mini-video.is-anim .gg-mini-scan { opacity: 1; animation: ggMiniScan 2.4s linear infinite; animation-play-state: var(--gg-deco-play); }
 @keyframes ggMiniShimmer { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+@keyframes ggMiniScan { from { transform: translateY(-14px); } to { transform: translateY(110px); } }
 
 .gg-mini-sub .gg-mini-line {
   position: absolute; top: 46%; left: 100%;
@@ -416,24 +568,57 @@
   font-size: 0.6rem; font-weight: 700; color: var(--gg-pink);
 }
 .gg-mini-bounce.is-anim .gg-mini-word { animation: ggMiniBounce 3.4s ease-in-out infinite alternate; animation-play-state: var(--gg-deco-play); }
-@keyframes ggMiniBounce { from { transform: translate(0, 0); } to { transform: translate(120px, 46px); } }
+@keyframes ggMiniBounce { from { transform: translate(0, 0); } to { transform: translate(90px, 40px); } }
 
-.gg-mini-lock { display: none; }
-.gg-mini-lock.is-on { display: block; }
-.gg-mini-lock::after {
-  content: '';
-  position: absolute; left: 22%; right: 22%; top: 30%; bottom: 30%;
+/* spiral: a turning disc, drawn entirely in CSS — no asset ----------------- */
+.gg-mini-spiral .gg-mini-spiral-disc {
+  position: absolute; left: 50%; top: 50%;
+  height: 150%; width: auto; aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  opacity: 0.8;
+  background: repeating-conic-gradient(from 0deg,
+    rgba(var(--gg-pink-rgb), 0.85) 0 13deg,
+    rgba(18, 6, 30, 0.92) 13deg 26deg);
+  -webkit-mask-image: radial-gradient(circle, #000 26%, rgba(0, 0, 0, 0.85) 55%, transparent 74%);
+  mask-image: radial-gradient(circle, #000 26%, rgba(0, 0, 0, 0.85) 55%, transparent 74%);
+}
+.gg-mini-spiral.is-anim .gg-mini-spiral-disc { animation: ggMiniSpin 7s linear infinite; animation-play-state: var(--gg-deco-play); }
+@keyframes ggMiniSpin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* lock card: a tiny card of scribble lines. Passing it turns it GREEN. ----- */
+.gg-mini-lock .gg-mini-card {
+  position: absolute; left: 17%; right: 17%; top: 21%; bottom: 21%;
   border: 1px solid rgba(var(--gg-pink-rgb), 0.85);
   border-radius: 4px;
-  background: rgba(20, 8, 28, 0.92);
+  background: rgba(20, 8, 28, 0.94);
+  box-shadow: 0 0 10px rgba(var(--gg-pink-rgb), 0.25);
+  transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
 }
-.gg-mini-lock .gg-mini-lock-bar {
-  position: absolute; left: 28%; height: 3px; border-radius: 2px;
-  background: rgba(255, 255, 255, 0.55);
-  z-index: 1;
+.gg-mini-lock .gg-mini-scribble {
+  position: absolute; left: 11%; height: 3px; border-radius: 2px;
+  background: rgba(255, 255, 255, 0.5);
+  transition: background .2s ease;
 }
-.gg-mini-lock .gg-mini-lock-bar:nth-child(1) { top: 44%; width: 44%; }
-.gg-mini-lock .gg-mini-lock-bar:nth-child(2) { top: 56%; width: 26%; }
+.gg-mini-lock .gg-mini-scribble:nth-child(1) { top: 24%; width: 66%; }
+.gg-mini-lock .gg-mini-scribble:nth-child(2) { top: 46%; width: 44%; }
+.gg-mini-lock .gg-mini-scribble:nth-child(3) { top: 68%; width: 56%; }
+.gg-mini-lock .gg-mini-caret {
+  position: absolute; left: 58%; top: 43%;
+  width: 2px; height: 9px;
+  background: var(--gg-pink);
+  box-shadow: 0 0 6px rgba(var(--gg-pink-rgb), 0.9);
+}
+.gg-mini-lock.is-pass .gg-mini-card {
+  border-color: var(--gg-green);
+  background: rgba(8, 32, 20, 0.94);
+  box-shadow: 0 0 16px rgba(var(--gg-green-rgb), 0.6);
+}
+.gg-mini-lock.is-pass .gg-mini-scribble { background: rgba(var(--gg-green-rgb), 0.85); }
+.gg-mini-lock.is-pass .gg-mini-caret { background: var(--gg-green); box-shadow: 0 0 6px rgba(var(--gg-green-rgb), 0.9); }
 
 .gg-mini-toy .gg-mini-toy-dot {
   position: absolute; right: 8%; bottom: 10%;
@@ -443,7 +628,50 @@
 }
 .gg-mini-toy.is-anim .gg-mini-toy-dot { animation: ggPulse 1.1s ease-in-out infinite; animation-play-state: var(--gg-deco-play); }
 
-.gg-mini-drain { background: rgba(30, 8, 46, 0.55); backdrop-filter: blur(1px); }
+/* brain drain: the veil. Dim, blurred, closing in from the edges. */
+.gg-mini-drain { background: rgba(30, 8, 46, 0.55); backdrop-filter: blur(1.5px) saturate(0.85); }
+.gg-mini-drain .gg-mini-drain-vig {
+  position: absolute; inset: 0;
+  background: radial-gradient(115% 100% at 50% 50%, transparent 22%, rgba(6, 2, 12, 0.88) 100%);
+}
+
+/* pass feedback: green wash + checkmark. EXEMPT from the motion budget and
+   from the data-gg-fx="hot" parking rule — it answers something the player did,
+   it is not ambience, and it never rides --gg-deco-play. */
+.gg-mon-pass {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(120% 100% at 50% 50%,
+    rgba(var(--gg-green-rgb), 0.32),
+    rgba(var(--gg-green-rgb), 0.08) 68%,
+    transparent 100%);
+}
+.gg-mon-pass.is-in { animation: ggPassWash 1.2s ease-out 1; }
+@keyframes ggPassWash { 0% { opacity: 0; } 14% { opacity: 1; } 60% { opacity: 0.75; } 100% { opacity: 0; } }
+.gg-mon-check {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%) scale(0.4);
+  font-size: 1.8rem; font-weight: 800; line-height: 1;
+  color: var(--gg-green);
+  text-shadow: 0 0 14px rgba(var(--gg-green-rgb), 0.9);
+  opacity: 0;
+  pointer-events: none;
+}
+.gg-mon-check.is-in { animation: ggCheckPop 1.2s cubic-bezier(.2, .8, .3, 1) 1 forwards; }
+@keyframes ggCheckPop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  22% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  36% { transform: translate(-50%, -50%) scale(1); }
+  76% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+/* the reduced-motion form: same green, same dwell, no travel */
+@keyframes ggCheckFade {
+  0% { opacity: 0; }
+  15%, 76% { opacity: 1; }
+  100% { opacity: 0; }
+}
 
 /* emote bubble + drop hint ------------------------------------------------ */
 .gg-mon-bubble {
@@ -905,11 +1133,16 @@
 @media (prefers-reduced-motion: reduce) {
   .gg-mini.is-anim,
   .gg-mini.is-anim *,
+  .gg-mini.is-anim::before,
   .gg-mon-close.is-edge,
   .gg-sd-track.is-close .gg-sd-notch.is-end,
   .gg-timer.is-urgent .gg-timer-clock { animation: none !important; }
   .gg-pip.is-pop, .gg-item.is-shake, .gg-sd-card.is-slip { animation: none !important; }
   .gg-sd-marker, .gg-timer-fill, .gg-mon-att-fill { transition: none !important; }
+  /* the pass still lands — it just stops travelling */
+  .gg-mon-check.is-in { animation: ggCheckFade 1.2s linear 1 forwards !important; transform: translate(-50%, -50%) scale(1); }
+  .gg-item:hover:not(:disabled), .gg-item:focus-visible, .gg-item.is-armed { transform: none; }
 }
 .gg-hud-frame.is-calm .gg-mini.is-anim,
+.gg-hud-frame.is-calm .gg-mini.is-anim::before,
 .gg-hud-frame.is-calm .gg-mini.is-anim * { animation: none !important; }

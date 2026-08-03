@@ -223,6 +223,14 @@ export const S = Object.freeze({
     retry: 'Try again',
   },
 
+  /* ------------------------------------------------- the opponent monitor */
+  monitor: {
+    idle: 'quiet',
+    dropHint: 'drop it here',
+    /** The green checkmark on their projection: they took the whole payload. */
+    passed: 'they held it',
+  },
+
   /* --------------------------------------------------------------- toasts */
   toasts: {
     copied: 'invite line copied',
@@ -235,7 +243,7 @@ export const S = Object.freeze({
 });
 
 /**
- * The eight draftable elements, in the order the draft grid renders them.
+ * The draftable elements, in the order the draft grid renders them.
  * `risk` mirrors core/draft.js riskTierOf — recomputed live from the engine at
  * render time; the value here is documentation and a fallback, never authority.
  */
@@ -247,7 +255,9 @@ export const ELEMENTS = Object.freeze([
   { id: GoonElement.Videos, name: 'videos', risk: 2, blurb: 'long takeovers. 1–2 minutes.' },
   { id: GoonElement.LockCards, name: 'lock cards', risk: 2, blurb: "type it out. can't look away." },
   { id: GoonElement.ToyPatterns, name: 'toy patterns', risk: 2, blurb: 'bursts, capped by your own limit.' },
+  { id: GoonElement.Spiral, name: 'spiral', risk: 2, blurb: "a slow spiral takes the whole screen. it doesn't blink. neither will they." },
   { id: GoonElement.BrainDrain, name: 'brain drain', risk: 3, blurb: "late, heavy, and it doesn't stop." },
 ]);
+
 
 export default S;

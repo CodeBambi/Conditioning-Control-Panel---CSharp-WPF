@@ -1,5 +1,5 @@
 {
-  "generated_utc": "2026-08-03T15:41:28.8001829Z",
+  "generated_utc": "2026-08-03T17:15:35.1715360Z",
   "app_version": "6.6.3",
   "seeds": [
     {
@@ -463,7 +463,8 @@
       "4": "5711853720457777988",
       "5": "17085863644432668499",
       "6": "852763897832938430",
-      "7": "12243662200031846277"
+      "7": "12243662200031846277",
+      "8": "15538179199407432592"
     }
   },
   "round_specs": [
@@ -3231,5 +3232,584 @@
         "duration_ms": 0
       }
     ]
-  }
+  },
+  "ramps": [
+    {
+      "seed": "6364136223846793005",
+      "live_duration_ms": 720000,
+      "elements": [
+        0,
+        3,
+        4
+      ],
+      "cues": [
+        {
+          "element": 0,
+          "offset_ms": 0,
+          "type": "start",
+          "intensity": 0.35,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 30000,
+          "type": "intensity",
+          "intensity": 0.3729166666666667,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 60000,
+          "type": "intensity",
+          "intensity": 0.3958333333333333,
+          "duration_ms": 0
+        },
+        {
+          "element": 3,
+          "offset_ms": 86400,
+          "type": "start",
+          "intensity": 0.41,
+          "duration_ms": 62199
+        },
+        {
+          "element": 0,
+          "offset_ms": 90000,
+          "type": "intensity",
+          "intensity": 0.41874999999999996,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 120000,
+          "type": "intensity",
+          "intensity": 0.44166666666666665,
+          "duration_ms": 0
+        },
+        {
+          "element": 4,
+          "offset_ms": 144000,
+          "type": "start",
+          "intensity": 0.5,
+          "duration_ms": 42748
+        },
+        {
+          "element": 3,
+          "offset_ms": 148599,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 150000,
+          "type": "intensity",
+          "intensity": 0.46458333333333335,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 180000,
+          "type": "intensity",
+          "intensity": 0.4875,
+          "duration_ms": 0
+        },
+        {
+          "element": 4,
+          "offset_ms": 186748,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 210000,
+          "type": "intensity",
+          "intensity": 0.5104166666666666,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 240000,
+          "type": "intensity",
+          "intensity": 0.5333333333333333,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 270000,
+          "type": "intensity",
+          "intensity": 0.55625,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 300000,
+          "type": "intensity",
+          "intensity": 0.5791666666666666,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 330000,
+          "type": "intensity",
+          "intensity": 0.6020833333333333,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 360000,
+          "type": "intensity",
+          "intensity": 0.625,
+          "duration_ms": 0
+        },
+        {
+          "element": 3,
+          "offset_ms": 365569,
+          "type": "start",
+          "intensity": 0.6038673611111112,
+          "duration_ms": 50015
+        },
+        {
+          "element": 0,
+          "offset_ms": 390000,
+          "type": "intensity",
+          "intensity": 0.6479166666666667,
+          "duration_ms": 0
+        },
+        {
+          "element": 3,
+          "offset_ms": 415584,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 420000,
+          "type": "intensity",
+          "intensity": 0.6708333333333334,
+          "duration_ms": 0
+        },
+        {
+          "element": 4,
+          "offset_ms": 441831,
+          "type": "start",
+          "intensity": 0.7068270833333333,
+          "duration_ms": 56133
+        },
+        {
+          "element": 0,
+          "offset_ms": 450000,
+          "type": "intensity",
+          "intensity": 0.69375,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 480000,
+          "type": "intensity",
+          "intensity": 0.7166666666666667,
+          "duration_ms": 0
+        },
+        {
+          "element": 4,
+          "offset_ms": 497964,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 510000,
+          "type": "intensity",
+          "intensity": 0.7395833333333334,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 540000,
+          "type": "intensity",
+          "intensity": 0.7625,
+          "duration_ms": 0
+        },
+        {
+          "element": 3,
+          "offset_ms": 569298,
+          "type": "start",
+          "intensity": 0.7453458333333334,
+          "duration_ms": 65445
+        },
+        {
+          "element": 0,
+          "offset_ms": 570000,
+          "type": "intensity",
+          "intensity": 0.7854166666666667,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 600000,
+          "type": "intensity",
+          "intensity": 0.8083333333333333,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 630000,
+          "type": "intensity",
+          "intensity": 0.83125,
+          "duration_ms": 0
+        },
+        {
+          "element": 3,
+          "offset_ms": 634743,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 660000,
+          "type": "intensity",
+          "intensity": 0.8541666666666666,
+          "duration_ms": 0
+        },
+        {
+          "element": 4,
+          "offset_ms": 684263,
+          "type": "start",
+          "intensity": 0.8751826388888889,
+          "duration_ms": 35737
+        },
+        {
+          "element": 0,
+          "offset_ms": 690000,
+          "type": "intensity",
+          "intensity": 0.8770833333333333,
+          "duration_ms": 0
+        },
+        {
+          "element": 0,
+          "offset_ms": 720000,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        },
+        {
+          "element": 4,
+          "offset_ms": 720000,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        }
+      ],
+      "name": "baseline"
+    },
+    {
+      "seed": "6364136223846793005",
+      "live_duration_ms": 720000,
+      "elements": [
+        8,
+        6,
+        1
+      ],
+      "cues": [
+        {
+          "element": 1,
+          "offset_ms": 108000,
+          "type": "start",
+          "intensity": 0.575,
+          "duration_ms": 96186
+        },
+        {
+          "element": 8,
+          "offset_ms": 180000,
+          "type": "start",
+          "intensity": 0.2,
+          "duration_ms": 0
+        },
+        {
+          "element": 1,
+          "offset_ms": 204186,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 210000,
+          "type": "intensity",
+          "intensity": 0.225,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 240000,
+          "type": "intensity",
+          "intensity": 0.25,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 251999,
+          "type": "start",
+          "intensity": 0.25,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 270000,
+          "type": "intensity",
+          "intensity": 0.275,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 281999,
+          "type": "intensity",
+          "intensity": 0.282051213565783,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 300000,
+          "type": "intensity",
+          "intensity": 0.3,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 311999,
+          "type": "intensity",
+          "intensity": 0.31410242713156594,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 330000,
+          "type": "intensity",
+          "intensity": 0.325,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 341999,
+          "type": "intensity",
+          "intensity": 0.34615364069734894,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 360000,
+          "type": "intensity",
+          "intensity": 0.35,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 371999,
+          "type": "intensity",
+          "intensity": 0.3782048542631319,
+          "duration_ms": 0
+        },
+        {
+          "element": 1,
+          "offset_ms": 379154,
+          "type": "start",
+          "intensity": 0.7633013888888889,
+          "duration_ms": 89011
+        },
+        {
+          "element": 8,
+          "offset_ms": 390000,
+          "type": "intensity",
+          "intensity": 0.375,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 401999,
+          "type": "intensity",
+          "intensity": 0.4102560678289149,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 420000,
+          "type": "intensity",
+          "intensity": 0.4,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 431999,
+          "type": "intensity",
+          "intensity": 0.4423072813946979,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 450000,
+          "type": "intensity",
+          "intensity": 0.42500000000000004,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 461999,
+          "type": "intensity",
+          "intensity": 0.4743584949604809,
+          "duration_ms": 0
+        },
+        {
+          "element": 1,
+          "offset_ms": 468165,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 480000,
+          "type": "intensity",
+          "intensity": 0.45,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 491999,
+          "type": "intensity",
+          "intensity": 0.5064097085262638,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 510000,
+          "type": "intensity",
+          "intensity": 0.47500000000000003,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 521999,
+          "type": "intensity",
+          "intensity": 0.5384609220920469,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 540000,
+          "type": "intensity",
+          "intensity": 0.5,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 551999,
+          "type": "intensity",
+          "intensity": 0.5705121356578298,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 570000,
+          "type": "intensity",
+          "intensity": 0.525,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 581999,
+          "type": "intensity",
+          "intensity": 0.6025633492236128,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 600000,
+          "type": "intensity",
+          "intensity": 0.55,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 611999,
+          "type": "intensity",
+          "intensity": 0.6346145627893958,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 630000,
+          "type": "intensity",
+          "intensity": 0.575,
+          "duration_ms": 0
+        },
+        {
+          "element": 1,
+          "offset_ms": 631913,
+          "type": "start",
+          "intensity": 0.9388284722222222,
+          "duration_ms": 88087
+        },
+        {
+          "element": 6,
+          "offset_ms": 641999,
+          "type": "intensity",
+          "intensity": 0.6666657763551787,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 660000,
+          "type": "intensity",
+          "intensity": 0.6,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 671999,
+          "type": "intensity",
+          "intensity": 0.6987169899209618,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 690000,
+          "type": "intensity",
+          "intensity": 0.625,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 701999,
+          "type": "intensity",
+          "intensity": 0.7307682034867446,
+          "duration_ms": 0
+        },
+        {
+          "element": 8,
+          "offset_ms": 720000,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        },
+        {
+          "element": 6,
+          "offset_ms": 720000,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        },
+        {
+          "element": 1,
+          "offset_ms": 720000,
+          "type": "stop",
+          "intensity": 0.0,
+          "duration_ms": 0
+        }
+      ],
+      "name": "spiral"
+    }
+  ]
 }

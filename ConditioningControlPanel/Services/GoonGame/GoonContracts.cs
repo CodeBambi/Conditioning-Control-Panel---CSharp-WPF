@@ -51,6 +51,7 @@ namespace ConditioningControlPanel.Services.GoonGame
         ToyPatterns = 5,
         BrainDrain = 6,
         BouncingText = 7,
+        Spiral = 8,     // the DTRH hypnotic spiral as a duel overlay (in-page veil, see GoonDraft)
     }
 
     /// <summary>
@@ -67,6 +68,7 @@ namespace ConditioningControlPanel.Services.GoonGame
         LockCard = 4,   // voice if receiver enabled it, typed fallback
         ToyPattern = 5, // haptics v2 mixer only; receiver MasterCap applies
         BrainDrain = 6, // the one "heavy"; once per match per player
+        Spiral = 7,     // hypnotic spiral overlay; sustained, repeatable (NOT the heavy)
     }
 
     public enum GoonRoundKind
@@ -132,6 +134,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             GoonPayloadKind.LockCard => 2,
             GoonPayloadKind.ToyPattern => 2,
             GoonPayloadKind.BrainDrain => 3,
+            GoonPayloadKind.Spiral => 2,
             _ => int.MaxValue,
         };
     }

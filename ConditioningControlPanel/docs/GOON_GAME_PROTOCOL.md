@@ -139,20 +139,22 @@ Deterministic generation per round (draw ORDER is normative; constants in
 
 ## 9. Frozen enum codes
 - GoonElement: 0 Flashes · 1 Videos · 2 Subliminals · 3 Bubbles · 4 LockCards ·
-  5 ToyPatterns · 6 BrainDrain · 7 BouncingText
+  5 ToyPatterns · 6 BrainDrain · 7 BouncingText · 8 Spiral
 - GoonPayloadKind: 0 FlashBurst · 1 SubliminalStorm · 2 BubbleSwarm · 3 Video ·
-  4 LockCard · 5 ToyPattern · 6 BrainDrain
+  4 LockCard · 5 ToyPattern · 6 BrainDrain · 7 Spiral
 - GoonRoundKind: 0 QuickDrawLockCard · 1 StaringContest · 2 ReactionDuel · 3 BubbleRace
 - GoonEndReason: 0 Mercy · 1 SuddenDeathLoss · 2 Abandon · 3 Draw
 - GoonAttentionMode: 0 Cam · 1 NoCam
 
 ## 10. Economy & scoring constants (v1)
-Charge costs: FlashBurst/SubliminalStorm/BubbleSwarm 1 · Video/LockCard/ToyPattern 2 ·
-BrainDrain 3 (once per match). Charge cap 3; +1 per clean 90 s, +1 per payload fully
-endured, +1 per event won. Score: 1 pt/s × (1 + 0.15 × draft risk sum) × attention
-multiplier (cam 0.5–1.5 rolling; no-cam flat 1.0, failed check → 0.6 for 60 s). Risk
-tiers: Flashes/BouncingText 0 · Subliminals/Bubbles 1 · Videos/LockCards/ToyPatterns 2 ·
-BrainDrain 3. Payload rate: 1 / 30 s, burst 2 (receiver-enforced token bucket).
+Charge costs: FlashBurst/SubliminalStorm/BubbleSwarm 1 · Video/LockCard/ToyPattern/Spiral 2 ·
+BrainDrain 3 (once per match; Spiral is sustained but repeatable). Charge cap 3; +1 per
+clean 90 s, +1 per payload fully endured, +1 per event won. Score: 1 pt/s × (1 + 0.15 ×
+draft risk sum) × attention multiplier (cam 0.5–1.5 rolling; no-cam flat 1.0, failed check
+→ 0.6 for 60 s). Risk tiers: Flashes/BouncingText 0 · Subliminals/Bubbles 1 ·
+Videos/LockCards/ToyPatterns/Spiral 2 · BrainDrain 3 (draft sum clamped to 7). Ramp shapes:
+BrainDrain enters at 0.35 of the live phase and ramps 0.25→0.75; Spiral enters at 0.25 and
+ramps 0.20→0.65. Payload rate: 1 / 30 s, burst 2 (receiver-enforced token bucket).
 
 ## 11. Safety invariants (every client, every platform)
 - The local user's panic/escape gesture maps to Mercy and MUST work in every phase.

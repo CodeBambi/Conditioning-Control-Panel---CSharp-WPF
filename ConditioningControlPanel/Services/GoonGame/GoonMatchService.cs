@@ -957,6 +957,10 @@ namespace ConditioningControlPanel.Services.GoonGame
             // (tags -> own library, tag stripping, level gates, mixer caps).
             payload.Text = Truncate(SanitizeText(payload.Text), GoonConsts.OpponentTextMaxChars);
             payload.Intensity = Math.Clamp(payload.Intensity, 0.0, 1.0);
+            // ONE clamp band for every kind (1 s .. MaxPayloadDurationMs) — there is deliberately no
+            // per-kind table, so a new sustained kind (Spiral, 2026-08-03) inherits BrainDrain's band
+            // by construction. Add a per-kind switch here only if a kind ever needs a NARROWER band,
+            // and mirror it in core/match.js at the same time.
             payload.DurationMs = Math.Clamp(payload.DurationMs, 1000, MaxPayloadDurationMs);
 
             long earliestMatchMs = ClockNow() + GoonConsts.MinScheduleBufferMs;

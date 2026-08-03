@@ -68,10 +68,12 @@ namespace ConditioningControlPanel.Services.GoonGame
     /// v1 risk tiers (open balance question in the plan — these are the starting point):
     ///   0  Flashes, BouncingText      ambient, always-on, low disruption
     ///   1  Subliminals, Bubbles       constant pull on attention, still passive
-    ///   2  Videos, LockCards, ToyPatterns  demand a response / physically escalate
+    ///   2  Videos, LockCards, ToyPatterns, Spiral  demand a response / physically escalate
     ///   3  BrainDrain                 the heavy; also the once-per-match payload
     /// A draft of 3 therefore sums to 1..7 (min 0+0+1, max 3+2+2), i.e. a score
     /// multiplier of 1.15x .. 2.05x at GoonConsts.DraftRiskStep = 0.15.
+    /// Spiral (2026-08-03) joins the tier-2 band: sustained like BrainDrain but
+    /// earlier and gentler, and unlike the heavy it may be fired repeatedly.
     /// </summary>
     public static class GoonDraft
     {
@@ -91,6 +93,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             GoonElement.ToyPatterns,
             GoonElement.BrainDrain,
             GoonElement.BouncingText,
+            GoonElement.Spiral,
         };
 
         private static readonly Dictionary<GoonElement, GoonElementProfile> Profiles = new()
@@ -182,6 +185,18 @@ namespace ConditioningControlPanel.Services.GoonGame
                 EntryFraction = 0.35,
                 IntensityStart = 0.25,
                 IntensityEnd = 0.75,
+            },
+            // Modelled on BrainDrain — the same sustained shape (one Start, SustainedRampStepMs
+            // Intensity cues, one Stop) — but it opens a tenth of the match earlier and tops out
+            // lower, so a spiral+drain draft escalates in two visible steps instead of one wall.
+            [GoonElement.Spiral] = new GoonElementProfile
+            {
+                Element = GoonElement.Spiral,
+                RiskTier = 2,
+                Sustained = true,
+                EntryFraction = 0.25,
+                IntensityStart = 0.20,
+                IntensityEnd = 0.65,
             },
         };
 

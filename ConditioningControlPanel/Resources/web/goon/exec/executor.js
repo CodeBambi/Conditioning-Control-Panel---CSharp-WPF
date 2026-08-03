@@ -50,6 +50,7 @@ import { createLockCards } from './lockCards.js';
 import { createToys } from './toys.js';
 import { createBrainDrain } from './brainDrain.js';
 import { createBouncingText } from './bouncingText.js';
+import { createSpiral } from './spiral.js';
 
 /** Which element renders a given payload kind. Frozen: the wire codes are frozen. */
 export const PAYLOAD_ELEMENT = Object.freeze({
@@ -60,6 +61,7 @@ export const PAYLOAD_ELEMENT = Object.freeze({
   [GoonPayloadKind.LockCard]: GoonElement.LockCards,
   [GoonPayloadKind.ToyPattern]: GoonElement.ToyPatterns,
   [GoonPayloadKind.BrainDrain]: GoonElement.BrainDrain,
+  [GoonPayloadKind.Spiral]: GoonElement.Spiral,
 });
 
 const MAX_SCHEDULE_LEAD_MS = 190000;   // > MAX_PAYLOAD_DURATION_MS; a sane wire guard
@@ -87,6 +89,7 @@ export function createExecutor({ media, layers, audio, logger, toyBridge, phrase
     [GoonElement.ToyPatterns, createToys({ logger: log, toyBridge: bridge })],
     [GoonElement.BrainDrain, createBrainDrain(deps)],
     [GoonElement.BouncingText, createBouncingText(deps)],
+    [GoonElement.Spiral, createSpiral(deps)],
   ]);
 
   let match = null;

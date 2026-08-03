@@ -34,11 +34,13 @@
     <!-- z20 — centre stage: mandatory videos and anything that must take input. -->
     <div id="gg-stage"></div>
 
-    <!-- z30 — effect layers (exec/layers.js owns these; pointer-events:none). -->
+    <!-- z30 — effect layers (exec/layers.js owns these; pointer-events:none.
+         The one opt-in is .gg-bubble, which is poppable; see exec/fx.css). -->
     <div id="gg-fx" aria-hidden="true">
         <div id="gg-fx-flash"></div>
         <div id="gg-fx-sub"></div>
         <div id="gg-fx-bubbles"></div>
+        <div id="gg-fx-spiral"></div>
         <div id="gg-fx-bounce"></div>
         <div id="gg-fx-drain"></div>
     </div>

@@ -270,6 +270,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     {
                         haptics = false,          // haptics v2 is not merged; toy-* are stubs below
                         brainDrain = BrainDrainAllowed(),
+                        spiral = true,            // in-page spiral veil; exec/ owns the renderer
                         camera = false,           // no webcam bridge into the page in v1
                         video = true,
                     },
@@ -487,16 +488,17 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch { return "Player"; }
         }
 
-        /// <summary>May the page draft/render Brain Drain? Gated on the one flag that gates
-        /// <c>OverlayService.StartBrainDrainBlur</c> — <c>OverlayService.BrainDrainWithheld</c>,
-        /// the same flag that hides the effect from the Deeper pickers while it is reworked.
-        /// While it is true this returns false and the page must leave the element out of its
-        /// draft pool (rather than drafting an element that would silently never fire).</summary>
-        private static bool BrainDrainAllowed()
-        {
-            try { return !OverlayService.BrainDrainWithheld; }
-            catch { return false; }
-        }
+        /// <summary>May the page draft/render Brain Drain? ALWAYS, as of 2026-08-03 (owner call).
+        ///
+        /// GG DIVERGES from <c>OverlayService.BrainDrainWithheld</c> ON PURPOSE. That flag gates
+        /// <c>OverlayService.StartBrainDrainBlur</c> — the NATIVE, desktop-wide blur/melt overlay
+        /// that is withheld from the app's pickers while it is reworked. The duel's drain is a
+        /// different thing entirely: an in-page veil drawn by <c>exec/brainDrain.js</c> inside the
+        /// WebView, scoped to the duel window, ending with the match. Withholding the native
+        /// overlay says nothing about the page's veil, so the element is advertised unconditionally
+        /// and the drain is a real part of the duel. (Kept as a method rather than an inlined
+        /// <c>true</c> so the gate has one place to come back to if that ever changes.)</summary>
+        private static bool BrainDrainAllowed() => true;
 
         // ============================ watchdogs / recovery ============================
 

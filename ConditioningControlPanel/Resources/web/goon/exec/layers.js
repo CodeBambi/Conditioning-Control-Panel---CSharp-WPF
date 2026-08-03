@@ -6,7 +6,8 @@
  *
  *   z0  #gg-bg      canvas backdrop
  *   z20 #gg-stage   centre stage (videos, the one layer that takes pointers)
- *   z30 #gg-fx      -> flash · sub · bubbles · bounce · drain (pointer-events:none)
+ *   z30 #gg-fx      -> flash · sub · bubbles · spiral · bounce · drain
+ *                      (pointer-events:none — the ONE opt-in is `.gg-bubble`)
  *
  * DOM lookups are LAZY (never at import — the module must import clean under
  * node and before <body> exists) and cached once resolved.
@@ -21,6 +22,7 @@ const IDS = {
   flash: 'gg-fx-flash',
   sub: 'gg-fx-sub',
   bubbles: 'gg-fx-bubbles',
+  spiral: 'gg-fx-spiral',
   bounce: 'gg-fx-bounce',
   drain: 'gg-fx-drain',
   stage: 'gg-stage',
@@ -28,7 +30,7 @@ const IDS = {
 };
 
 /** The fx children only — stopAll clears these plus the stage. */
-export const FX_LAYERS = ['flash', 'sub', 'bubbles', 'bounce', 'drain'];
+export const FX_LAYERS = ['flash', 'sub', 'bubbles', 'spiral', 'bounce', 'drain'];
 
 const cache = new Map();
 

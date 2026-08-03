@@ -64,7 +64,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                 ["derive"] = BuildDeriveVectors(),
                 ["salt_seed"] = BuildSaltSeedVectors(),
                 ["round_specs"] = BuildRoundSpecVectors(),
-                ["ramp"] = BuildRampVector(),
+                ["ramp"] = BuildRampVector(BaselineDraft),
+                ["ramps"] = BuildRampVectors(),
             };
 
             var dir = Path.GetDirectoryName(path);
@@ -287,16 +288,49 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// <summary>One three-element draft (a sustained element, a burst element, and a second
         /// burst element with a different profile) planned over a full 12-minute live phase — the
         /// widest single check in the file: entry fractions, the sustained ramp cadence, burst
-        /// duration/gap jitter, the end clamp, and the Stop-before-Start sort order.</summary>
-        private static JObject BuildRampVector()
+        /// duration/gap jitter, the end clamp, and the Stop-before-Start sort order.
+        /// Emitted as the top-level <c>ramp</c> section, which predates <c>ramps</c> and is kept
+        /// verbatim so an older gate keeps passing.</summary>
+        private static readonly List<GoonElement> BaselineDraft = new()
         {
-            var draft = new List<GoonElement>
-            {
-                GoonElement.Flashes,     // 0 — sustained
-                GoonElement.Bubbles,     // 3 — burst
-                GoonElement.LockCards,   // 4 — burst, later entry
-            };
+            GoonElement.Flashes,     // 0 — sustained
+            GoonElement.Bubbles,     // 3 — burst
+            GoonElement.LockCards,   // 4 — burst, later entry
+        };
 
+        /// <summary>
+        /// Named ramp cases. Every SUSTAINED element with a distinct profile has to appear in at
+        /// least one draft here or its entry fraction / intensity band is untested — that is how a
+        /// new element (Spiral, 2026-08-03) gets covered without disturbing the baseline vector.
+        /// The spiral case deliberately drafts Spiral ALONGSIDE BrainDrain: the two share a shape
+        /// and differ only in onset and ceiling, which is exactly the pair a transcription slip
+        /// would swap.
+        /// </summary>
+        private static readonly (string Name, List<GoonElement> Draft)[] RampCases =
+        {
+            ("baseline", BaselineDraft),
+            ("spiral", new List<GoonElement>
+            {
+                GoonElement.Spiral,      // 8 — sustained, early onset, gentle ceiling
+                GoonElement.BrainDrain,  // 6 — sustained, late onset, hard ceiling
+                GoonElement.Videos,      // 1 — burst, so the sort order is still exercised
+            }),
+        };
+
+        private static JArray BuildRampVectors()
+        {
+            var arr = new JArray();
+            foreach (var (name, draft) in RampCases)
+            {
+                var o = BuildRampVector(draft);
+                o["name"] = name;
+                arr.Add(o);
+            }
+            return arr;
+        }
+
+        private static JObject BuildRampVector(List<GoonElement> draft)
+        {
             var cues = GoonDraft.BuildRamp(
                 draft, MatchSeed, RampLiveDurationSec, seed => new GoonRng(seed));
 

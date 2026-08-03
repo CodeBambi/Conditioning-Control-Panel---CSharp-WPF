@@ -1,9 +1,10 @@
 /* ============================================================================
  * exec/fx.css — EFFECT TIER. Every class the exec/ renderers add to the DOM
  * lives here and nowhere else (goon.css owns the foundation, ui/*.css owns the
- * screens and the HUD). Visual grammar cribbed from cclabs-site/fall-styles.css
- * (.rh-fx-flash, .rh-sublim-word, .rh-bubble*, .rh-fx-drain) and re-namespaced
- * to gg-, so the duel's effects read as the same product as the Fall.
+ * screens and the HUD). The bubble field, the scattered flashes, the spiral and
+ * the drain veil are direct ports of DtRH (dtrh/styles.css .rh-bubble*, .rh-spark,
+ * .sf-pfx-flash, .sf-pfx-spiral, .sf-pfx-drain) re-namespaced to gg-, so the
+ * duel's effects ARE the Fall's effects, not lookalikes.
  *
  * RULES THIS FILE OBEYS
  *  1. Nothing here may raise z-index. The layers in index.html already decide
@@ -16,48 +17,46 @@
  *  3. Decorative loops carry .gg-deco so goon.css's heat armor
  *     (html[data-gg-fx="hot"] { --gg-deco-play: paused }) can park them, and
  *     every one of them stops dead under prefers-reduced-motion (bottom block).
- *  4. No external URLs. The bubbles are gradients, not sprites — the page is
- *     served from a virtual host with no network guarantee.
+ *  4. NO REMOTE URLs. Bundled art is referenced by ABSOLUTE SAME-ORIGIN path:
+ *     ccp.game maps to Resources/web, so /dtrh/assets/... is the very same
+ *     virtual host that serves /goon/index.html — no network is involved.
+ *  5. Exactly ONE node in this file takes pointer input: `.gg-bubble`. #gg-fx and
+ *     its sub-layers are pointer-events:none, and the opt-in is dropped whenever
+ *     the stage is occupied so a bubble can never eat a lock-card click.
  * ==========================================================================*/
 
 /* Per-effect knobs. The renderers write these as inline custom properties on
    their own nodes (never on :root), so two effects can disagree about opacity
    without fighting over one variable. Values here are the "intensity 0" floor. */
 :root {
-  --gg-flash-op: 0.45;
+  --gg-flash-op: 0.95;
   --gg-sub-op: 0.45;
-  --gg-drain-op: 0.18;
-  --gg-drain-blur: 2px;
+  --gg-drain-op: 0.35;
+  --gg-spiral-op: 0.4;
 }
 
 /* ---------------------------------------------------------------------------
- * FLASHES (#gg-fx-flash) — full-window images/GIFs from the player's own pool.
- * cover, not contain: a letterboxed flash reads as a bug at this size.
+ * FLASHES (#gg-fx-flash) — the DtRH flash, port of .sf-pfx-flash: a SCATTERED
+ * image from the player's own pool, dropped at a random spot, tilted a few
+ * degrees, in and out on one timed animation. Never full-window, never centred.
  * ------------------------------------------------------------------------ */
-.gg-flash-img {
+.gg-flash {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  will-change: opacity, transform;
-  transform: scale(var(--gg-flash-scale, 1.04));
-  transition: opacity var(--gg-flash-fade, 120ms) ease-out;
+  left: 50%;
+  top: 50%;
+  max-width: 38vmin;
+  max-height: 38vmin;
+  border-radius: 10px;
+  filter: drop-shadow(0 0 26px rgba(var(--gg-pink-rgb), 0.85));
+  will-change: transform, opacity;
+  animation: ggFlash var(--gg-flash-dur, 1400ms) ease forwards;
 }
-.gg-flash-img.is-on { opacity: var(--gg-flash-op, 0.45); }
-
-/* The pink wash that rides under a burst — the whole-screen tint, cheap. */
-.gg-flash-wash {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(120% 120% at 50% 45%,
-    rgba(var(--gg-pink-rgb), 0.55) 0%, rgba(var(--gg-violet-rgb), 0.28) 55%, rgba(10, 4, 16, 0) 100%);
-  mix-blend-mode: screen;
-  opacity: 0;
-  transition: opacity 160ms ease-out;
+@keyframes ggFlash {
+  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(0.82); }
+  14%  { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1); }
+  72%  { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.01); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.05); }
 }
-.gg-flash-wash.is-on { opacity: var(--gg-flash-op, 0.35); }
 
 /* ---------------------------------------------------------------------------
  * SUBLIMINALS (#gg-fx-sub) — one word at a time, big, brief, off-centre.
@@ -104,39 +103,108 @@
 }
 
 /* ---------------------------------------------------------------------------
- * BUBBLES (#gg-fx-bubbles) — a passive field. NON-interactive by contract:
- * the poppable Bubble Race is the sudden-death round, not this.
+ * BUBBLES (#gg-fx-bubbles) — the DtRH field, verbatim: the same bubble.png, the
+ * same rise-then-dissolve, the same sway, the same effect sprites per kind, and
+ * the same pop animation + sparkle burst.
+ *
+ * CLICKABLE — and it is the only thing in this tier that is. The layer stays
+ * pointer-events:none; the bubble opts back in. The :has() rule below takes that
+ * opt-in away the moment the stage holds a video or a lock card, so a bubble
+ * drifting over the typing card can never swallow the click.
  * ------------------------------------------------------------------------ */
 .gg-bubble-wrap {
   position: absolute;
-  bottom: -18vh;
+  bottom: 0;
+  pointer-events: none;
   will-change: transform;
   animation: ggBubbleRise var(--gg-rise, 12s) linear forwards;
 }
 @keyframes ggBubbleRise {
-  from { transform: translateY(12vh); }
-  to   { transform: translateY(-124vh); }
+  /* Rises, then dissolves in place near the top instead of shooting off-screen. */
+  0%   { transform: translateY(12vh); opacity: 1; }
+  50%  { transform: translateY(-40vh); opacity: 1; }
+  100% { transform: translateY(-74vh); opacity: 0; }
 }
 .gg-bubble {
-  display: block;
-  width: var(--gg-bub-size, 46px);
-  height: var(--gg-bub-size, 46px);
+  pointer-events: auto;
+  touch-action: manipulation;      /* no double-tap zoom when popping fast */
   border-radius: 50%;
-  opacity: var(--gg-bub-op, 0.6);
-  background:
-    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.85) 0 6%, rgba(255, 255, 255, 0) 30%),
-    radial-gradient(circle at 50% 50%,
-      rgba(var(--gg-pink-rgb), 0.05) 40%,
-      rgba(var(--gg-pink-rgb), 0.30) 72%,
-      rgba(var(--gg-violet-rgb), 0.45) 90%,
-      rgba(255, 255, 255, 0.55) 100%);
-  box-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.35);
+  cursor: pointer;
   will-change: transform;
   animation: ggBubbleSway var(--gg-sway-dur, 4s) ease-in-out infinite alternate;
+  background: center / contain no-repeat url('/dtrh/assets/bubbles/bubble.png');
+  filter: drop-shadow(0 0 7px rgba(var(--gg-pink-rgb), 0.5));
 }
 @keyframes ggBubbleSway {
   from { transform: translateX(calc(var(--gg-sway, 28px) * -0.5)); }
   to   { transform: translateX(calc(var(--gg-sway, 28px) * 0.5)); }
+}
+/* The stage (z20) owns the video surface and the lock card. While it holds
+   anything, the field goes back to being scenery. */
+body:has(#gg-stage > *) .gg-bubble { pointer-events: none; cursor: default; }
+
+.gg-bubble--flash      { background-image: url('/dtrh/assets/bubbles/effects/flash.png');      filter: drop-shadow(0 0 9px rgba(255, 240, 200, 0.75)); }
+.gg-bubble--spiral     { background-image: url('/dtrh/assets/bubbles/effects/spiral.png');     filter: drop-shadow(0 0 9px rgba(110, 225, 255, 0.75)); }
+.gg-bubble--glitch     { background-image: url('/dtrh/assets/bubbles/effects/glitch.png');     filter: drop-shadow(0 0 9px rgba(140, 255, 170, 0.75)); }
+.gg-bubble--braindrain { background-image: url('/dtrh/assets/bubbles/effects/braindrain.png'); filter: drop-shadow(0 0 9px rgba(180, 150, 255, 0.75)); }
+.gg-bubble--pinkfilter { background-image: url('/dtrh/assets/bubbles/effects/pinkfilter.png'); filter: drop-shadow(0 0 10px rgba(var(--gg-pink-rgb), 0.85)); }
+
+.gg-bubble.is-pop { pointer-events: none; animation: ggBubblePop 0.39s ease-out forwards; }
+@keyframes ggBubblePop {
+  0%   { transform: scale(1); opacity: 1; }
+  40%  { transform: scale(1.55); opacity: 0.85; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+/* Pop sparkle burst (DtRH's port of the WPF BubbleService pop): shards fly
+   outward with a touch of gravity, shrinking + fading. --gg-dx/--gg-dy/--gg-fall. */
+.gg-spark {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  color: #ffd9ef;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+  animation: ggSpark 0.62s ease-out forwards;
+}
+@keyframes ggSpark {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--gg-dx, 0px), calc(var(--gg-dy, 0px) + var(--gg-fall, 40px))) scale(0.2); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+ * SPIRAL (#gg-fx-spiral, and the pop flick inside #gg-fx-bubbles) — port of
+ * DtRH's .sf-pfx-spiral: one pane, covered, screen-blended, spinning slowly.
+ * Overscanned so the rotation never bares a corner. The renderer swaps only the
+ * background-image; this rule owns cover/blend/spin.
+ * ------------------------------------------------------------------------ */
+.gg-spiral {
+  position: absolute;
+  inset: 0;
+  background: url('/dtrh/assets/bubbles/effects/spiral.png') center / cover no-repeat;
+  mix-blend-mode: screen;
+  transform-origin: 50% 50%;
+  scale: 1.6;
+  opacity: 0;
+  will-change: opacity, transform;
+  transition: opacity var(--gg-spiral-fade, 450ms) ease;
+  animation: ggSpiralSpin 14s linear infinite;
+  animation-play-state: var(--gg-deco-play, running);
+}
+.gg-spiral.is-on { opacity: var(--gg-spiral-op, 0.4); }
+@keyframes ggSpiralSpin { to { transform: rotate(360deg); } }
+
+/* The pink wash a popped pinkfilter bubble throws (DtRH .sf-pfx-pink). */
+.gg-pink {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 45%,
+    rgba(var(--gg-pink-rgb), 0.5) 0%, rgba(255, 20, 147, 0.62) 100%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity 0.45s ease;
 }
 
 /* ---------------------------------------------------------------------------
@@ -169,32 +237,32 @@
 }
 
 /* ---------------------------------------------------------------------------
- * BRAIN DRAIN (#gg-fx-drain) — the heavy. A blurred veil with a slow pulse.
- * Two stacked nodes on purpose: the blur pane and the tint pane, so the pulse
- * animates a cheap node instead of re-running the backdrop filter every frame.
+ * BRAIN DRAIN (#gg-fx-drain, and the pop flick inside #gg-fx-bubbles) — the
+ * heavy, port of DtRH's .sf-pfx-drain. ONE pane: near-black dim, blur-behind,
+ * and a faint image from the player's own pool washed over it under a LUMINOSITY
+ * blend, which is what keeps it reading as drained instead of as a slideshow.
+ * The pane's opacity is the only dial (0.35..0.62).
  * ------------------------------------------------------------------------ */
-.gg-drain-blur {
+.gg-drain {
   position: absolute;
   inset: 0;
-  backdrop-filter: blur(var(--gg-drain-blur, 2px)) saturate(1.15);
-  -webkit-backdrop-filter: blur(var(--gg-drain-blur, 2px)) saturate(1.15);
+  background-color: #0a0410;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-blend-mode: luminosity;
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
   opacity: 0;
   transition: opacity var(--gg-drain-fade, 900ms) ease;
 }
-.gg-drain-tint {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 50% 50%,
-    rgba(0, 0, 0, 0) 18%, rgba(60, 14, 74, 0.75) 72%, rgba(24, 4, 34, 0.96) 100%);
-  opacity: 0;
-  transition: opacity var(--gg-drain-fade, 900ms) ease;
-}
-.gg-drain-blur.is-on { opacity: 1; }
-.gg-drain-tint.is-on { opacity: var(--gg-drain-op, 0.35); }
-.gg-drain-tint.gg-deco { animation: ggDrainPulse 6.5s ease-in-out infinite; }
-@keyframes ggDrainPulse {
-  0%, 100% { filter: hue-rotate(0deg) brightness(1); }
-  50%      { filter: hue-rotate(-14deg) brightness(1.25); }
+.gg-drain.is-on { opacity: var(--gg-drain-op, 0.35); }
+/* The glitch shudder a popped glitch bubble puts over the drain (showGlitch). */
+.gg-drain.is-glitching { animation: ggDrainGlitch 0.16s steps(2) infinite; }
+@keyframes ggDrainGlitch {
+  0%   { transform: translate(0, 0); filter: none; }
+  50%  { transform: translate(-1.2%, 0); filter: hue-rotate(35deg) saturate(1.5); }
+  100% { transform: translate(1.2%, 0); filter: hue-rotate(-25deg); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -322,11 +390,17 @@
  * player still sees every effect, it just stops travelling and pulsing.
  * ------------------------------------------------------------------------ */
 @media (prefers-reduced-motion: reduce) {
-  .gg-flash-img { transform: none; transition-duration: 260ms; }
+  /* Flashes still appear and still fade — they just stop scaling on the way. */
+  .gg-flash {
+    animation: none;
+    opacity: var(--gg-flash-op, 0.95);
+    transform: translate(-50%, -50%);
+  }
   .gg-sub-word { transform: translate(-50%, -50%) !important; transition: opacity 300ms ease; }
-  .gg-bubble { animation: none; }
+  .gg-bubble { animation: none; }        /* no sway; the rise still carries it up */
+  .gg-spiral { animation: none; }        /* no spin; the pane still covers + blends */
+  .gg-drain.is-glitching { animation: none; }
   .gg-bounce-word.is-hit { animation: none; }
-  .gg-drain-tint.gg-deco { animation: none; }
   .gg-lock, .gg-lock.is-wrong { animation: none; }
   .gg-lock.is-solved { animation: none; opacity: 0; transition: opacity 300ms ease; }
 }

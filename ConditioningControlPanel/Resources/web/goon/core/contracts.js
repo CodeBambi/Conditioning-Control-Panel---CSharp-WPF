@@ -15,6 +15,7 @@ export const GoonElement = Object.freeze({
   ToyPatterns: 5,
   BrainDrain: 6,
   BouncingText: 7,
+  Spiral: 8,        // hypnotic spiral overlay (in-page veil) — see draft.js for its profile
 });
 
 export const GoonPayloadKind = Object.freeze({
@@ -24,7 +25,8 @@ export const GoonPayloadKind = Object.freeze({
   Video: 3,
   LockCard: 4,
   ToyPattern: 5,
-  BrainDrain: 6,
+  BrainDrain: 6,   // the one "heavy"; once per match per player
+  Spiral: 7,       // sustained, repeatable (NOT the heavy)
 });
 
 export const GoonRoundKind = Object.freeze({
@@ -117,6 +119,7 @@ const COSTS = Object.freeze({
   [GoonPayloadKind.LockCard]: 2,
   [GoonPayloadKind.ToyPattern]: 2,
   [GoonPayloadKind.BrainDrain]: 3,
+  [GoonPayloadKind.Spiral]: 2,
 });
 
 /**

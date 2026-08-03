@@ -117,7 +117,8 @@ function markConnected(el, on) {
   for (const c of el.childNodes || []) markConnected(c, on);
 }
 
-const LAYER_IDS = ['gg-fx-flash', 'gg-fx-sub', 'gg-fx-bubbles', 'gg-fx-bounce', 'gg-fx-drain', 'gg-stage', 'gg-fx'];
+const LAYER_IDS = ['gg-fx-flash', 'gg-fx-sub', 'gg-fx-bubbles', 'gg-fx-spiral', 'gg-fx-bounce',
+  'gg-fx-drain', 'gg-stage', 'gg-fx'];
 const byId = new Map();
 for (const id of LAYER_IDS) {
   const el = new StubEl('div');
@@ -146,6 +147,7 @@ globalThis.window = { innerWidth: 1280, innerHeight: 720 };
 const { createExecutor, PAYLOAD_ELEMENT } = await import('../exec/executor.js');
 const { createLockCardView } = await import('../exec/lockCards.js');
 const layers = await import('../exec/layers.js');
+const { pickSpiralUrl, SPIRAL_POOL } = await import('../exec/spiral.js');
 const { GoonElement, GoonPayloadKind } = await import('../core/contracts.js');
 const { localMonotonicMs } = await import('../core/clock.js');
 
@@ -225,6 +227,7 @@ async function main() {
     const codes = [
       GoonElement.Flashes, GoonElement.Videos, GoonElement.Subliminals, GoonElement.Bubbles,
       GoonElement.LockCards, GoonElement.ToyPatterns, GoonElement.BrainDrain, GoonElement.BouncingText,
+      GoonElement.Spiral,
     ];
     const spies = new Map(codes.map((c) => [c, spyOn(ex, c)]));
 
@@ -233,7 +236,7 @@ async function main() {
       ok(spies.get(element).start === 1, `element ${element} routed to its renderer.start`);
     }
     ok(ex.activeCount() === codes.length, 'every element registered active', String(ex.activeCount()));
-    ok(documentElement.getAttribute('data-gg-fx') === 'hot', 'fx heat hot at 8 effects',
+    ok(documentElement.getAttribute('data-gg-fx') === 'hot', 'fx heat hot at every element running',
       String(documentElement.getAttribute('data-gg-fx')));
 
     for (const element of codes) {
@@ -364,14 +367,16 @@ async function main() {
     const m = fakeMatch();
     ex.attach(m);
     for (const element of [GoonElement.Subliminals, GoonElement.Bubbles, GoonElement.BrainDrain,
-      GoonElement.BouncingText, GoonElement.Videos, GoonElement.LockCards]) {
+      GoonElement.BouncingText, GoonElement.Videos, GoonElement.LockCards, GoonElement.Spiral]) {
       m.emitStart({ element, intensity: 0.8, durationMs: 0, elapsedMs: 0 });
     }
     await sleep(120);
     ok(byId.get('gg-fx-sub').childNodes.length > 0, 'subliminals mounted a word node');
     ok(byId.get('gg-fx-bubbles').childNodes.length > 0, 'bubbles mounted a bubble node');
-    ok(byId.get('gg-fx-drain').childNodes.length === 2, 'brain drain mounted its blur + tint panes',
+    ok(byId.get('gg-fx-drain').childNodes.length === 1, 'brain drain mounted exactly one veil pane',
       String(byId.get('gg-fx-drain').childNodes.length));
+    ok(byId.get('gg-fx-spiral').childNodes.length === 1, 'spiral mounted exactly one pane',
+      String(byId.get('gg-fx-spiral').childNodes.length));
     ok(byId.get('gg-fx-bounce').childNodes.length > 0, 'bouncing text mounted a phrase');
     ok(byId.get('gg-stage').findAll('gg-vid').length === 1, 'video mounted one surface on the stage');
     ok(byId.get('gg-stage').findAll('gg-lock').length === 1, 'lock card mounted one card on the stage');
@@ -400,6 +405,129 @@ async function main() {
       JSON.stringify(sent[sent.length - 1]));
     m.emitStop({ element: GoonElement.ToyPatterns, intensity: 0, durationMs: 0, elapsedMs: 0 });
     ok(sent[sent.length - 1].type === 'toy-stop', 'toy element stop forwards toy-stop');
+    ex.detach();
+  }
+
+  // ------------------------------------------------------- spiral registration
+  {
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    ok(ex.rendererFor(GoonElement.Spiral) !== null, 'GoonElement.Spiral has a renderer');
+    ok(ex.rendererFor(GoonElement.Spiral).name === 'spiral', 'the spiral renderer is named lowercase',
+      String(ex.rendererFor(GoonElement.Spiral).name));
+    ok(PAYLOAD_ELEMENT[GoonPayloadKind.Spiral] === GoonElement.Spiral,
+      'GoonPayloadKind.Spiral routes to GoonElement.Spiral', String(PAYLOAD_ELEMENT[GoonPayloadKind.Spiral]));
+
+    // The pool is the DtRH bundle, read off the same ccp.game origin.
+    ok(SPIRAL_POOL.length === 7, 'the bundled spiral pool has all 7 entries', String(SPIRAL_POOL.length));
+    let poolHits = 0;
+    for (let i = 0; i < 40; i++) {
+      const u = pickSpiralUrl();
+      if (u.startsWith('/dtrh/assets/bubbles/effects/spirals/') && SPIRAL_POOL.some((f) => u.endsWith(f))) poolHits++;
+    }
+    ok(poolHits === 40, 'every picked spiral url is a bundled DtRH spiral', String(poolHits));
+  }
+
+  // ------------------------------------------------------------ spiral renders
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+
+    m.emitPayload({
+      payload: payloadOf({ id: 'pSp', kind: GoonPayloadKind.Spiral, duration_ms: 1000, intensity: 0.9 }),
+      fireAtLocalMs: localMonotonicMs(),
+    });
+    await sleep(120);
+    const panes = byId.get('gg-fx-spiral').findAll('gg-spiral');
+    ok(panes.length === 1, 'spiral payload mounts exactly one pane', String(panes.length));
+    ok(String(panes[0].style.getPropertyValue('background-image')).includes('/dtrh/assets/bubbles/effects/spirals/'),
+      'the pane draws a bundled DtRH spiral', panes[0].style.getPropertyValue('background-image'));
+    const op = parseFloat(panes[0].style.getPropertyValue('--gg-spiral-op'));
+    ok(op >= 0.25 && op <= 0.7, 'spiral opacity stays inside the 0.25..0.70 band', String(op));
+
+    // A running element must not stack a SECOND pane under the payload.
+    m.emitStart({ element: GoonElement.Spiral, intensity: 0.4, durationMs: 0, elapsedMs: 0 });
+    ok(byId.get('gg-fx-spiral').findAll('gg-spiral').length === 1,
+      'element + payload share one pane', String(byId.get('gg-fx-spiral').findAll('gg-spiral').length));
+
+    await sleep(1100);
+    ok(m.receipts.length === 1 && m.receipts[0].endured === true,
+      'a spiral payload that ran its duration receipts endured', JSON.stringify(m.receipts));
+    ex.detach();
+  }
+
+  // -------------------------------------------------- bubbles: the DtRH field
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+
+    m.emitPayload({
+      payload: payloadOf({ id: 'pBub', kind: GoonPayloadKind.BubbleSwarm, duration_ms: 1000, intensity: 0.9 }),
+      fireAtLocalMs: localMonotonicMs(),
+    });
+    await sleep(300);
+    const host = byId.get('gg-fx-bubbles');
+    const bubbles = host.findAll('gg-bubble');
+    ok(bubbles.length > 0, 'the swarm mounted real bubbles', String(bubbles.length));
+    ok(bubbles.every((b) => /gg-bubble--/.test(b.className)),
+      'every bubble carries a DtRH kind class', bubbles.map((b) => b.className).join('|'));
+    const wrap = host.findAll('gg-bubble-wrap')[0];
+    ok(!!wrap && /s$/.test(wrap.style.getPropertyValue('--gg-rise')),
+      'the wrap rises on a seconds-valued --gg-rise', wrap && wrap.style.getPropertyValue('--gg-rise'));
+
+    // POPPING IS COSMETIC: it must not touch the payload's receipt.
+    const b = bubbles[0];
+    b.fire('pointerdown');
+    ok(b._cls.has('is-pop'), 'a bubble pops on pointerdown');
+    ok(host.findAll('gg-spark').length === 9, 'the pop threw its sparkle burst',
+      String(host.findAll('gg-spark').length));
+    ok(m.receipts.length === 0, 'popping does not settle the swarm early');
+
+    await sleep(1500);
+    ok(m.receipts.length === 1 && m.receipts[0].endured === true,
+      'the swarm still receipts endured after its full duration', JSON.stringify(m.receipts));
+    ex.detach();
+  }
+
+  // ------------------------------------------------- flashes: the DtRH scatter
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    m.emitStart({ element: GoonElement.Flashes, intensity: 1, durationMs: 0, elapsedMs: 0 });
+    await sleep(60);
+    const shots = byId.get('gg-fx-flash').findAll('gg-flash');
+    ok(shots.length > 0, 'the flash bed mounted a scattered image', String(shots.length));
+    const f = shots[0];
+    ok(/vw$/.test(f.style.getPropertyValue('left')) && /vh$/.test(f.style.getPropertyValue('top')),
+      'flashes scatter in vw/vh like payloadFx', `${f.style.getPropertyValue('left')} ${f.style.getPropertyValue('top')}`);
+    ok(/deg$/.test(f.style.getPropertyValue('--gg-flash-rot')), 'flashes carry a rotation',
+      f.style.getPropertyValue('--gg-flash-rot'));
+    ok(/ms$/.test(f.style.getPropertyValue('--gg-flash-dur')), 'flashes carry a timed duration',
+      f.style.getPropertyValue('--gg-flash-dur'));
+    ex.stopAll();
+    ex.detach();
+  }
+
+  // -------------------------------------------------- brain drain: the DtRH veil
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    m.emitStart({ element: GoonElement.BrainDrain, intensity: 1, durationMs: 0, elapsedMs: 0 });
+    await sleep(60);
+    const veils = byId.get('gg-fx-drain').findAll('gg-drain');
+    ok(veils.length === 1, 'the drain is exactly one veil pane', String(veils.length));
+    ok(String(veils[0].style.getPropertyValue('background-image')).includes('ccp.assets'),
+      'the veil washes an image from the player own pool', veils[0].style.getPropertyValue('background-image'));
+    const dop = parseFloat(veils[0].style.getPropertyValue('--gg-drain-op'));
+    ok(dop >= 0.35 && dop <= 0.62, 'drain opacity stays inside the 0.35..0.62 band', String(dop));
+    ex.stopAll();
     ex.detach();
   }
 

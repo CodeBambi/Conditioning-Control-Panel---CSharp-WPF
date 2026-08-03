@@ -33,6 +33,7 @@ const GLYPHS = {
   5: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c2.8 0 5 2.2 5 5v8a5 5 0 0 1-10 0V8c0-2.8 2.2-5 5-5z"/><rect x="10.6" y="6" width="2.8" height="6" rx="1.4" class="cut"/></svg>', // toy patterns
   6: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 1 6 6v2.5a5.5 5.5 0 0 1-5.5 5.5H12v4l-3-2.4V17H8a5 5 0 0 1-5-5V9a6 6 0 0 1 6-6z"/></svg>', // brain drain
   7: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15c3-7 6-7 9 0s6 7 9 0" fill="none" stroke-width="2.4"/><circle cx="3" cy="15" r="1.8"/><circle cx="21" cy="15" r="1.8"/></svg>', // bouncing text
+  8: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6a9.4 9.4 0 1 0 9.4 9.4 7.6 7.6 0 0 0-7.6-7.6 6 6 0 0 0-6 6 4.6 4.6 0 0 0 4.6 4.6 3.4 3.4 0 0 0 3.4-3.4 2 2 0 0 0-2-2" fill="none" stroke-width="2"/></svg>', // spiral
 };
 
 export function mount(container, ctx) {

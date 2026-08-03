@@ -131,10 +131,25 @@ function ok(cond, label, extra = '') {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** Walk the stub tree collecting every node carrying a class. */
+function findAll(root, className) {
+  const out = [];
+  (function walk(node) {
+    if (!node) return;
+    if (node._classes && node._classes.has(className)) out.push(node);
+    for (const kid of node.children || []) walk(kid);
+  })(root);
+  return out;
+}
+const findOne = (root, className) => findAll(root, className)[0] || null;
+const hasClass = (node, className) => !!(node && node._classes && node._classes.has(className));
+
 // ------------------------------------------------------------------ imports
 
-const { GoonConsts, GoonMatchPhase, GoonPayloadKind, GoonRoundKind } = await import('../core/contracts.js');
+const { GoonConsts, GoonElement, GoonMatchPhase, GoonPayloadKind, GoonRoundKind } = await import('../core/contracts.js');
 const { nullRoundInputs, nullRoundPresenter, GoonStimulusKind, GoonRoundVerdict } = await import('../core/rounds/model.js');
+const { riskTierOf } = await import('../core/draft.js');
+const { ELEMENTS } = await import('../ui/strings.js');
 
 const hudMod = await import('../ui/hud.js');
 const mercyMod = await import('../ui/mercy.js');
@@ -299,8 +314,15 @@ function makeFakeMatch() {
     match,
     getDropTarget: () => mon,
   });
-  ok(left.children.length === 4, 'left rail renders 4 items', String(left.children.length));
+  ok(left.children.length === 5, 'left rail renders 5 items', String(left.children.length));
   ok(right.children.length === 4, 'right rail renders 4 items', String(right.children.length));
+  ok(left.children.length + right.children.length === arsenalMod.ARSENAL_ITEMS.length,
+    'every arsenal item got a slot (9 with spiral)', String(left.children.length + right.children.length));
+  ok(arsenalMod.ARSENAL_ITEMS.some((i) => i.id === 'spiral' && i.kind === GoonPayloadKind.Spiral),
+    'the spiral slot is wired to GoonPayloadKind.Spiral');
+  ok(!!findOne(left, 'gg-item-fallback'), 'each tile carries a CSS art fallback for a missing PNG');
+  ok(findAll(left, 'gg-plate').length === 0 && findAll(right, 'gg-plate').length === 0,
+    'item tiles are chromeless: no .gg-plate anywhere on the rails');
 
   const res = ars.fire('flash');
   ok(res && res.ok === true, 'arsenal fire path reaches the engine');
@@ -326,6 +348,43 @@ function makeFakeMatch() {
 
   ars.unmount();
   ok(match._subs.released === match._subs.taken, 'arsenal releases its subscriptions', `${match._subs.released}/${match._subs.taken}`);
+}
+
+// ------------------------------------ 2b. the spiral slot + the onFired glue
+// A fresh mount, because the rate-limit mirror in the block above is spent by
+// then and a refused fire would prove nothing about the slot.
+{
+  const match = makeFakeMatch();
+  const fired = [];
+  const ars = arsenalMod.mountArsenal({
+    leftHost: document.createElement('div'),
+    rightHost: document.createElement('div'),
+    receiptsHost: document.createElement('div'),
+    match,
+    onFired: (shot) => fired.push(shot),
+  });
+  const res = ars.fire('spiral');
+  ok(res && res.ok === true, 'the spiral slot fires');
+  ok(match._fires.length === 1 && match._fires[0].kind === GoonPayloadKind.Spiral,
+    'spiral fires GoonPayloadKind.Spiral', JSON.stringify(match._fires[0] || null));
+  ok(match._fires[0].durationMs >= 1000 && match._fires[0].durationMs <= 180000, 'spiral duration is inside the clamps');
+  ok(fired.length === 1 && fired[0].id === res.id && fired[0].kind === GoonPayloadKind.Spiral && fired[0].durationMs > 0,
+    'onFired hands hud.js the kind + duration + id of an accepted fire', JSON.stringify(fired));
+  ars.unmount();
+}
+
+// -------------------------------- 2c. the risk table in ui/strings.js agrees
+// Two tables describe the same thing (core/draft.js is authority, strings.js
+// carries a copy for the tile). Nothing else cross-checks them.
+{
+  for (const meta of ELEMENTS) {
+    ok(meta.risk === riskTierOf(meta.id), `ELEMENTS risk matches core/draft.js for ${meta.name}`,
+      `${meta.risk} vs ${riskTierOf(meta.id)}`);
+  }
+  const spiral = ELEMENTS.find((e) => e.id === GoonElement.Spiral);
+  ok(!!spiral && spiral.name === 'spiral' && typeof spiral.blurb === 'string' && spiral.blurb.length > 10,
+    'the draft pool carries a spiral tile with copy');
+  ok(!!spiral && spiral.blurb === spiral.blurb.toLowerCase(), 'element blurbs stay lowercase');
 }
 
 // -------------------------------------------------------- 3. closeness + emotes
@@ -520,7 +579,79 @@ function makeFakeMatch() {
   qd.dispose();
 }
 
-// -------------------------------------------------- 7. mount/unmount is idempotent
+// ---------------------------------- 7. the opponent monitor's little screen
+{
+  const match = makeFakeMatch();
+  match.opponent.activeEffects = [];
+  const host = document.createElement('div');
+  const mon = opponentMod.mountOpponent({ host, match, audio: { sfx() {} } });
+
+  const proj = findOne(mon.root, 'gg-mon-proj');
+  ok(!!proj, 'the monitor has a projection rect');
+  ok(mon.projection === proj, 'the projection rect is exposed to callers');
+  const minis = findAll(proj, 'gg-mini');
+  ok(minis.length === 9, 'nine minis, all inside the projection rect', String(minis.length));
+  ok(findAll(mon.root, 'gg-mini').length === minis.length, 'no mini is drawn outside the rect');
+
+  // effect NAMES off their tick drive the minis, including the two quiet ones
+  match.opponent.activeEffects = ['Spiral', 'BrainDrain'];
+  match._emit('opp');
+  const spiral = findOne(proj, 'gg-mini-spiral');
+  const drain = findOne(proj, 'gg-mini-drain');
+  const bubbles = findOne(proj, 'gg-mini-bubbles');
+  ok(hasClass(spiral, 'is-on') && hasClass(spiral, 'is-anim'), "'Spiral' lights and turns the spiral mini");
+  ok(hasClass(drain, 'is-on'), "'BrainDrain' lays the drain veil over the rect");
+  ok(!hasClass(bubbles, 'is-on'), 'a mini nobody asked for stays dark');
+  ok(findOne(proj, 'gg-mini-idle').hidden === true, 'the idle word steps aside when something is on');
+
+  // the motion budget still holds
+  match.opponent.activeEffects = ['Flashes', 'Bubbles', 'Videos', 'Subliminals', 'BouncingText', 'Spiral'];
+  match._emit('opp');
+  ok(findAll(proj, 'is-anim').length === 2, 'at most two minis carry motion at once', String(findAll(proj, 'is-anim').length));
+
+  // a payload WE fired animates its own mini for its own window, with no help
+  // from their tick (active_effects never lists a payload they are enduring)
+  match.opponent.activeEffects = [];
+  match._emit('opp');
+  mon.markPayloadFired({ id: 'q1', kind: GoonPayloadKind.LockCard, durationMs: 4000, leadMs: 0 });
+  await sleep(20);
+  const lock = findOne(proj, 'gg-mini-lock');
+  ok(hasClass(lock, 'is-on'), 'a fired lock card opens its mini on the payload window alone');
+  ok(hasClass(lock, 'is-yours'), 'a mini we are driving is marked as ours');
+
+  // …and surviving it is the flagship: green card, green wash, checkmark
+  mon.markReceipt('q1', 'survived');
+  const check = findOne(proj, 'gg-mon-check');
+  const wash = findOne(proj, 'gg-mon-pass');
+  ok(hasClass(lock, 'is-pass'), 'a survived lock card lights the mini green');
+  ok(hasClass(check, 'is-in') && hasClass(wash, 'is-in'), 'the pass plays the green wash + checkmark');
+  ok(!hasClass(lock, 'is-on'), 'the payload window closes on the receipt');
+
+  // anything else just closes, quietly
+  mon.markPayloadFired({ id: 'q2', kind: GoonPayloadKind.Spiral, durationMs: 4000, leadMs: 0 });
+  await sleep(20);
+  ok(hasClass(findOne(proj, 'gg-mini-spiral'), 'is-on'), 'a fired spiral opens the spiral mini');
+  mon.markReceipt('q2', 'rejected_filtered');
+  ok(!hasClass(findOne(proj, 'gg-mini-spiral'), 'is-on'), 'a rejected payload closes its window');
+
+  mon.unmount();
+  ok(match._subs.released === match._subs.taken, 'the monitor releases its subscriptions', `${match._subs.released}/${match._subs.taken}`);
+}
+
+// --------------------------- 7b. hud.js is the glue between rail and monitor
+{
+  const match = makeFakeMatch();
+  const hud = hudMod.mountHud({ match, audio: { sfx() {} } });
+  const res = hud.parts.arsenal.fire('lockcard');
+  ok(res && res.ok === true, 'the desk can fire through hud.parts.arsenal');
+  match._emit('pRec', { id: res.id, status: 'survived' });
+  const check = findOne(dom.byId.get('gg-hud'), 'gg-mon-check');
+  ok(hasClass(check, 'is-in'), 'a survived receipt for our own payload greens their monitor');
+  hud.unmount();
+  ok(match._subs.released === match._subs.taken, 'the glue leaks no subscriptions', `${match._subs.released}/${match._subs.taken}`);
+}
+
+// -------------------------------------------------- 8. mount/unmount is idempotent
 
 {
   const match = makeFakeMatch();

@@ -304,7 +304,14 @@ let soloDriver = null;
  * CAPS — narrowed to what exec/ can actually render. Advertising a SHORTER list
  * than you can run is always safe (core/caps.js); a longer one desyncs a match
  * the first time the peer drafts something we cannot show. ToyPatterns needs
- * real haptics and BrainDrain needs the host's blessing, so both are opt-in.
+ * real haptics, so it stays opt-in until the haptics merge.
+ *
+ * BrainDrain and Spiral are ON by default (owner call 2026-08-03). Both are
+ * IN-PAGE veils drawn by exec/ inside this WebView, NOT the withheld native
+ * OverlayService blur — see GoonHostService.BrainDrainAllowed for the full
+ * reasoning. The host still sends the flags, so `!== false` keeps a host that
+ * deliberately turns one off in control while defaulting a host that predates
+ * the flag (or a browser opened without a host at all) to ON.
  * -------------------------------------------------------------------------- */
 function localCaps() {
   const caps = session.caps || {};
@@ -324,7 +331,8 @@ function localCaps() {
     GoonPayloadKind.LockCard,
   ];
   if (caps.haptics) { elements.push(GoonElement.ToyPatterns); payloads.push(GoonPayloadKind.ToyPattern); }
-  if (caps.brainDrain) { elements.push(GoonElement.BrainDrain); payloads.push(GoonPayloadKind.BrainDrain); }
+  if (caps.brainDrain !== false) { elements.push(GoonElement.BrainDrain); payloads.push(GoonPayloadKind.BrainDrain); }
+  if (caps.spiral !== false) { elements.push(GoonElement.Spiral); payloads.push(GoonPayloadKind.Spiral); }
 
   let rounds = Array.isArray(caps.rounds) ? caps.rounds.slice() : Object.values(GoonRoundKind);
   // Without a camera there is nothing to win a staring contest with.

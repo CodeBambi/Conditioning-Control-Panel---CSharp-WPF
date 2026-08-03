@@ -42,6 +42,7 @@ const ELEMENT_META = Object.freeze({
   [GoonElement.ToyPatterns]: { glyph: '∿', label: 'toy' },
   [GoonElement.BrainDrain]: { glyph: '◍', label: 'brain drain' },
   [GoonElement.BouncingText]: { glyph: '⇄', label: 'bouncing text' },
+  [GoonElement.Spiral]: { glyph: '◎', label: 'spiral' },
 });
 
 /** Admitted inbound payloads -> the same chip, violet-edged: THEY did this. */
@@ -53,7 +54,17 @@ const PAYLOAD_META = Object.freeze({
   [GoonPayloadKind.LockCard]: { glyph: '▢', label: 'lock card' },
   [GoonPayloadKind.ToyPattern]: { glyph: '∿', label: 'toy pattern' },
   [GoonPayloadKind.BrainDrain]: { glyph: '◍', label: 'brain drain' },
+  [GoonPayloadKind.Spiral]: { glyph: '◎', label: 'spiral' },
 });
+
+/**
+ * How far ahead the engine schedules an outbound payload. core/match.js uses
+ * max(GoonConsts.MinScheduleBufferMs, 1500) and does not publish the number, so
+ * the miniature leads by the same amount rather than starting the animation the
+ * instant the tile is tapped. Being ~0.5s out here costs nothing: the window is
+ * seconds-to-minutes long and it closes on the receipt either way.
+ */
+const PAYLOAD_LEAD_MS = Math.max(GoonConsts.MinScheduleBufferMs, 1500);
 
 /** Score count-up window. */
 const SCORE_LERP_MS = 250;
@@ -265,6 +276,17 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     getDropTarget: () => opponent.dropTarget,
     onTargeted: (on) => opponent.setTargeted && opponent.setTargeted(on),
     onEmote: () => emotes.toggle(),
+    // The glue the owner asked for: what we FIRED drives their little screen,
+    // without waiting for (or needing) their tick to mention it.
+    onFired: (shot) => {
+      if (!shot || typeof opponent.markPayloadFired !== 'function') return;
+      opponent.markPayloadFired({
+        id: shot.id,
+        kind: shot.kind,
+        durationMs: shot.durationMs,
+        leadMs: PAYLOAD_LEAD_MS,
+      });
+    },
     onLog,
   });
   const dial = mountCloseness({ host: dialHost, match, audio, onLog });
@@ -441,6 +463,14 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     const t = setTimeout(() => addChip(chipKey('p', p.id), meta, p.duration_ms || 0, true), Math.min(wait, 30000));
     led.add(() => { try { clearTimeout(t); } catch (_e) { /* gone */ } });
     onLog({ t: 'payload-in', kind: meta.label, id: p.id });
+  });
+
+  // Receipts for what WE sent: 'survived' is the green flash + checkmark on the
+  // monitor; every other terminal status just closes the window. (The arsenal
+  // takes its own subscription for the receipt strip — these are independent.)
+  sub('onPayloadReceiptReceived', (r) => {
+    if (!r || typeof opponent.markReceipt !== 'function') return;
+    opponent.markReceipt(r.id, r.status);
   });
 
   // ---------------------------------------------------------------- phases

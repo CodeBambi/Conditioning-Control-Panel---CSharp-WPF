@@ -4,7 +4,11 @@
 //
 // Part 1 — RAMP PARITY: replays the `ramp` section of rng-vectors.json (dumped by the C#
 //          GoonVectorDumper, the REFERENCE implementation) through core/draft.js buildRamp and
-//          deep-compares every cue, in order, field by field.
+//          deep-compares every cue, in order, field by field. Then does the same for every NAMED
+//          case in `ramps` (baseline + spiral/braindrain), so each sustained profile's entry
+//          fraction and intensity band is covered, not just the ones the baseline draft happens
+//          to use. `ramps` is optional only so an un-regenerated vectors file fails loudly on
+//          content rather than confusingly on a missing key.
 // Part 2 — SMOKE: two GoonMatchService instances over an in-file fake transport pair (this file
 //          owns the fake; net/ owns the real ones) run hello -> consent -> draft -> match_start ->
 //          live ticks, and both sides must agree on the combined seed AND on the ramp it plans.
@@ -55,8 +59,7 @@ const ACTION_NAMES = {
   [GoonCueAction.Stop]: 'stop',
 };
 
-function checkRamp() {
-  const ramp = data.ramp;
+function checkRamp(ramp, label) {
   if (!ramp) {
     console.error('vectors file has no `ramp` section — regenerate with --goon-vectors');
     process.exit(2);
@@ -71,8 +74,9 @@ function checkRamp() {
   const got = buildRamp(ramp.elements, seed, liveSec, (s) => new GoonRng(s));
 
   if (got.length !== expected.length) {
-    fail('ramp', {
+    fail(label, {
       seed: ramp.seed,
+      elements: JSON.stringify(ramp.elements),
       'cue count expected': expected.length,
       'cue count got': got.length,
     });
@@ -90,8 +94,9 @@ function checkRamp() {
               : e.duration_ms !== g.durationMs ? 'duration_ms'
                 : null;
     if (mismatch) {
-      fail('ramp', {
+      fail(label, {
         seed: ramp.seed,
+        elements: JSON.stringify(ramp.elements),
         index: i,
         field: mismatch,
         expected: JSON.stringify(e),
@@ -103,7 +108,27 @@ function checkRamp() {
   return expected.length;
 }
 
-const rampCues = checkRamp();
+let rampCues = checkRamp(data.ramp, 'ramp');
+let rampCaseCount = 1;
+
+// Named cases. Spiral (element 8) MUST be exercised by one of them — it is the whole reason
+// `ramps` exists, and a vectors file regenerated from a build that predates it would otherwise
+// pass silently while testing nothing new.
+const namedRamps = Array.isArray(data.ramps) ? data.ramps : [];
+if (namedRamps.length === 0) {
+  console.error('vectors file has no `ramps` section — regenerate with --goon-vectors');
+  process.exit(2);
+}
+let sawSpiral = false;
+for (const r of namedRamps) {
+  rampCues += checkRamp(r, `ramps[${r.name || '?'}]`);
+  rampCaseCount++;
+  if ((r.elements || []).includes(GoonElement.Spiral)) sawSpiral = true;
+}
+if (!sawSpiral) {
+  console.error(`no ramps case drafts Spiral (element ${GoonElement.Spiral}) — stale vectors file`);
+  process.exit(2);
+}
 
 // ============================================================================ part 2: fake wire
 
@@ -287,6 +312,7 @@ async function smoke() {
 
 const smokeResult = await smoke();
 
-console.log(`PASS — ramp parity: ${rampCues} cues matched (seed ${data.ramp.seed}); ` +
+console.log(`PASS — ramp parity: ${rampCues} cues matched across ${rampCaseCount} draft(s), ` +
+  `Spiral covered (seed ${data.ramp.seed}); ` +
   `smoke: full phase run over a fake transport pair, combined seed ${smokeResult.seed}, host score ${smokeResult.score}`);
 process.exit(0);
