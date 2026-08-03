@@ -139,29 +139,9 @@ namespace ConditioningControlPanel
                 var soundPath = soundPaths.FirstOrDefault(File.Exists);
                 if (soundPath != null)
                 {
-                    System.Threading.Tasks.Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new AudioFileReader(soundPath);
-                            using var outputDevice = new WaveOutEvent();
-                            App.Audio?.ApplyPreferredDevice(outputDevice);
-
-                            var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                            var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
-                            audioFile.Volume = Math.Max(0.01f, curvedVolume);
-
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-
-                            while (outputDevice.PlaybackState == PlaybackState.Playing)
-                                System.Threading.Thread.Sleep(50);
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Debug("Failed to play completion sound: {Error}", ex.Message);
-                        }
-                    });
+                    var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                    var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
+                    App.Audio?.PlayOneShot(soundPath, Math.Max(0.01f, curvedVolume), "session-complete");
                 }
             }
             catch (Exception ex)

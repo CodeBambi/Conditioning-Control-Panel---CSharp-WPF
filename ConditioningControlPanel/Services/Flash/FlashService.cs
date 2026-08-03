@@ -2573,33 +2573,10 @@ namespace ConditioningControlPanel.Services
 
                 if (File.Exists(chimePath))
                 {
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new AudioFileReader(chimePath);
-                            using var outputDevice = new WaveOutEvent();
-                            App.Audio?.ApplyPreferredDevice(outputDevice);
-
-                            var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                            var volume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
-                            audioFile.Volume = volume;
-
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-
-                            while (outputDevice.PlaybackState == PlaybackState.Playing)
-                            {
-                                Thread.Sleep(50);
-                            }
-
-                            App.Logger?.Information("🎉 Lucky Flash! 10x XP!");
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Debug("Failed to play lucky flash sound: {Error}", ex.Message);
-                        }
-                    });
+                    var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                    var volume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
+                    App.Audio?.PlayOneShot(chimePath, volume, "lucky-flash");
+                    App.Logger?.Information("🎉 Lucky Flash! 10x XP!");
                 }
             }
             catch (Exception ex)
@@ -2761,6 +2738,7 @@ namespace ConditioningControlPanel.Services
 
                 sound.Init(audioFile);
                 sound.Play();
+                App.Audio?.NoteOutputSuccess();
 
                 // Only assign to fields after everything succeeded
                 _currentAudioFile = audioFile;
@@ -2774,6 +2752,7 @@ namespace ConditioningControlPanel.Services
                 sound?.Dispose();
                 audioFile?.Dispose();
                 App.Logger.Warning("Could not play sound {Path}: {Error}", path, ex.Message);
+                App.Audio?.NoteOutputFailure("flash-sound", ex.Message);
                 return 5.0;
             }
         }

@@ -63,8 +63,8 @@ namespace ConditioningControlPanel.Services
         private DateTime _modAudioFilesCacheTime;
         private string? _modAudioCacheModId;
 
-        private WaveOutEvent? _audioPlayer;
-        private AudioFileReader? _audioFile;
+        // The whisper device itself is owned by AudioService — this is only the stop handle.
+        private AudioPlaybackHandle? _audioHandle;
 
         private bool _isRunning;
         private bool _oneShotActive; // Allow one-shot display when service not running (remote control)
@@ -517,53 +517,49 @@ namespace ConditioningControlPanel.Services
             {
                 StopAudio();
 
-                _audioFile = new AudioFileReader(path);
-                _audioPlayer = new WaveOutEvent();
-                App.Audio?.ApplyPreferredDevice(_audioPlayer);
-
                 // Apply volume with curve, including master volume
                 var masterVol = App.Settings.Current.MasterVolume / 100.0f;
                 var subVol = App.Settings.Current.SubAudioVolume / 100.0f;
                 var curvedVol = (float)Math.Pow(subVol * masterVol, 1.5);
-                _audioFile.Volume = curvedVol;
-                
-                _audioPlayer.Init(_audioFile);
+
                 // Capture duck generation so stale callbacks after ForceUnduck are ignored
                 var duckGen = App.Audio?.DuckGeneration ?? -1;
-                _audioPlayer.PlaybackStopped += (s, e) =>
-                {
-                    // Unduck after playback + small delay
-                    Task.Delay(500).ContinueWith(_ =>
-                    {
-                        try { App.Audio?.Unduck(duckGen); }
-                        catch (Exception ex) { App.Logger?.Debug("Unduck failed in PlaybackStopped: {Error}", ex.Message); }
-                    });
-                };
-                _audioPlayer.Play();
-                // Tell the bark system a whisper is now audible so the companion won't talk over it.
-                App.Audio?.MarkWhisperAudio(_audioFile.TotalTime.TotalSeconds);
 
+                // Whispers are the highest-frequency clip in the app; the old inline WaveOutEvent
+                // was built on the UI thread, which meant NAudio posted PlaybackStopped back to the
+                // dispatcher — so the unduck AND the disposal both stalled whenever the UI was busy
+                // (#778/#779). AudioService now owns the device off-thread and guarantees the
+                // completion callback fires exactly once, including when playback is refused.
+                var handle = App.Audio?.PlayOneShot(path, curvedVol, "whisper",
+                    onStarted: duration =>
+                    {
+                        // Tell the bark system a whisper is now audible so the companion won't talk over it.
+                        App.Audio?.MarkWhisperAudio(duration.TotalSeconds);
+                    },
+                    onFinished: () =>
+                    {
+                        // Unduck after playback + small delay
+                        Task.Delay(500).ContinueWith(_ =>
+                        {
+                            try { App.Audio?.Unduck(duckGen); }
+                            catch (Exception ex) { App.Logger?.Debug("Unduck failed after whisper: {Error}", ex.Message); }
+                        });
+                    });
+
+                _audioHandle = handle;
                 App.Logger?.Debug("Playing subliminal audio: {Path}", Path.GetFileName(path));
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning("Could not play subliminal audio: {Error}", ex.Message);
-                App.Audio.Unduck();
+                App.Audio?.Unduck();
             }
         }
 
         private void StopAudio()
         {
-            try
-            {
-                _audioPlayer?.Stop();
-                _audioPlayer?.Dispose();
-                _audioFile?.Dispose();
-            }
-            catch { }
-            
-            _audioPlayer = null;
-            _audioFile = null;
+            try { _audioHandle?.Stop(); } catch { }
+            _audioHandle = null;
         }
 
         /// <summary>

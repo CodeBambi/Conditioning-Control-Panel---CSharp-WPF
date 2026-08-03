@@ -17,7 +17,11 @@ namespace ConditioningControlPanel.Services
     /// Handles audio playback and system audio ducking.
     /// Ported from Python utils.py AudioDucker.
     /// </summary>
-    public class AudioService : IDisposable
+    /// <remarks>
+    /// One-shot clip playback, the output circuit breaker and the endpoint watcher live in
+    /// <c>Services/Audio/AudioService.Playback.cs</c>.
+    /// </remarks>
+    public partial class AudioService : IDisposable
     {
         #region Fields
 
@@ -155,8 +159,12 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
+            // NOT permanent any more (#779): the circuit breaker clears this via
+            // InvalidateOutputDeviceCache when it trips and again when its cooldown expires, and
+            // the endpoint watcher clears it the moment a device comes back — so restarting the
+            // Windows Audio Endpoint Builder service recovers playback instead of needing a relaunch.
             _waveOutPermanentlyUnavailable = true;
-            App.Logger?.Warning("AudioService: no WaveOut device on this system would accept waveOutOpen ({Count} candidates tried). Audio playback disabled this session.", count);
+            App.Logger?.Warning("AudioService: no WaveOut device on this system would accept waveOutOpen ({Count} candidates tried). Audio playback paused until an endpoint returns.", count);
             return null;
         }
 
@@ -804,15 +812,20 @@ namespace ConditioningControlPanel.Services
 
                 _soundPlayer.Init(_soundFile);
                 _soundPlayer.Play();
-                
+                NoteOutputSuccess();
+
                 var duration = _soundFile.TotalTime.TotalSeconds;
                 App.Logger?.Debug("Playing sound: {Path}, duration: {Duration}s", Path.GetFileName(path), duration);
-                
+
                 return duration;
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning("Could not play sound {Path}: {Error}", path, ex.Message);
+                // Init/Play can throw with the fields already assigned — free them here rather than
+                // leaving an open device parked until the next PlaySound call (#778).
+                StopSound();
+                NoteOutputFailure("playsound", ex.Message);
                 return 0;
             }
         }
@@ -1703,6 +1716,7 @@ namespace ConditioningControlPanel.Services
             _disposed = true;
 
             StopSound();
+            ShutdownPlayback();
             _duckWatchdog?.Dispose();
             _duckRescanTimer?.Dispose();
             _restoreRetryTimer?.Dispose();

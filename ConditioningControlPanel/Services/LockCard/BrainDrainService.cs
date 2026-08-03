@@ -181,10 +181,12 @@ namespace ConditioningControlPanel.Services
         
         private void PlayAudio(string filePath)
         {
+            if (App.Audio?.IsOutputSuppressed == true) return; // endpoint down — stay quiet, don't spin
+
             try
             {
                 StopCurrentAudio();
-                
+
                 _audioReader = new AudioFileReader(filePath);
                 _audioReader.Volume = (float)(App.Settings.Current.MasterVolume / 100.0);
                 
@@ -202,10 +204,13 @@ namespace ConditioningControlPanel.Services
                 };
                 
                 _waveOut.Play();
+                App.Audio?.NoteOutputSuccess();
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "BrainDrain: Error playing audio file {Path}", filePath);
+                App.Audio?.NoteOutputFailure("braindrain", ex.Message);
+                StopCurrentAudio(); // Init/Play threw with the fields already assigned — free them now
             }
         }
         
