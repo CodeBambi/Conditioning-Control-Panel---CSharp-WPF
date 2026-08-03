@@ -73,11 +73,16 @@
     BaseDirectory first). This is no longer a promise: $CsprojStripPatterns mirrors the csproj
     globs and Assert-NoStripPackDrift hard-fails the build on any disagreement in either
     direction. If you touch one, touch the other -- the script will tell you if you forgot.
+
+    The third leg, installer.iss [InstallDelete], is GENERATED rather than mirrored: every run
+    (and -DeletionsOnly on its own) rewrites <repo>\installer-content-deletions.iss with one
+    exact-name deletion line per packed file, and installer.iss #includes it. Exact names,
+    never wildcards, so files USERS hand-dropped into the swept folders survive upgrades. The
+    fragment is committed - commit the regenerated copy whenever the pack set changes.
 #>
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
     [ValidatePattern('^\d+\.\d+\.\d+$')]
     [string]$Version,
 
@@ -89,7 +94,13 @@ param(
 
     # Resolve + report the file set without writing any zip. Use this to sanity-check that the
     # packs cover EXACTLY what the csproj strips (see KEEP IN SYNC above) before a real run.
-    [switch]$ListOnly
+    [switch]$ListOnly,
+
+    # Regenerate ONLY installer-content-deletions.iss (the exact-name [InstallDelete] list that
+    # installer.iss #includes) and exit. No zips, no manifest, no -Version needed. A normal pack
+    # build regenerates it too; either way the file is COMMITTED, so run this after any change
+    # to $PackSpecs / the csproj strip set and commit the result.
+    [switch]$DeletionsOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -105,8 +116,13 @@ $ProjectDir = Split-Path -Parent $PSScriptRoot                     # ...\Conditi
 $RepoRoot   = Split-Path -Parent $ProjectDir                       # ...\<repo>
 if (-not $OutputDir) { $OutputDir = Join-Path $RepoRoot 'releases\content-packs' }
 
-$verParts = $Version.Split('.')
-$CycleTag = "v$($verParts[0]).$($verParts[1]).0"
+# Committed next to installer.iss, which #includes it into [InstallDelete].
+$DeletionsIss = Join-Path $RepoRoot 'installer-content-deletions.iss'
+
+if (-not $Version -and -not $DeletionsOnly) {
+    throw '-Version is required (e.g. 6.6.0) unless -DeletionsOnly.'
+}
+$CycleTag = if ($Version) { $verParts = $Version.Split('.'); "v$($verParts[0]).$($verParts[1]).0" } else { $null }
 
 # Fixed zip timestamp -- see DETERMINISM above.
 $FixedStamp = [DateTimeOffset]::new(2000, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
@@ -259,12 +275,19 @@ function Resolve-PackFiles($spec) {
     # and PS 5.1 (NLS) and pwsh 7 (ICU) disagree about where '_' , '-' and digits sort -- so
     # rebuilding this cycle's packs in the other shell would reorder every zip entry, change all
     # six sha256s, bump every contentVersion and make the entire installed base re-download
-    # ~1.1 GB for zero content change. [Array]::Sort with StringComparer::Ordinal is locale-proof.
+    # ~1.1 GB for zero content change. Ordinal is locale-proof.
+    #
+    # !!! Never "optimise" this to the keyed [Array]::Sort($keys, $items, comparer). PowerShell
+    # binds that to the generic Sort[TKey,TValue] overload and CONVERTS $items to a fresh
+    # TValue[] before the call, so the reorder lands in a throwaway copy and the original array
+    # comes back untouched -- a silent no-op that left the zips in filesystem-enumeration order
+    # (stable on one NTFS volume, hence green determinism re-runs, but not across filesystems).
+    # SortedList mutates its own storage and cannot fail that way; .Add also throws on a
+    # duplicate entry path, which would be a $PackSpecs bug worth dying on.
     # @() keeps a single-file pack (mod-drone) an array rather than a scalar.
-    $items = $result.ToArray()
-    $keys  = [string[]]@($items | ForEach-Object { $_.Entry })
-    [Array]::Sort($keys, $items, [System.StringComparer]::Ordinal)
-    return @($items)
+    $sorted = New-Object 'System.Collections.Generic.SortedList[string,object]' ([System.StringComparer]::Ordinal)
+    foreach ($item in $result) { $sorted.Add($item.Entry, $item) }
+    return @($sorted.Values)
 }
 
 function New-PackZip($spec, [string]$ZipPath, $Files) {
@@ -397,12 +420,116 @@ function Assert-NoStripPackDrift($Resolved) {
             }
             if ($packedNotStripped.Count -gt 20) { $msg += "    ... and $($packedNotStripped.Count - 20) more`n" }
             $msg += "  Fix: add the extension/folder to the csproj Exclude properties (BOTH the plain and the" +
-                    " ...Abs variant), to `$CsprojStripPatterns above, and to installer.iss [InstallDelete].`n"
+                    " ...Abs variant) and to `$CsprojStripPatterns above, then rerun (installer-content-deletions.iss regenerates itself).`n"
         }
         throw $msg
     }
 
     Write-Host ("  strip/pack self-check OK ({0} files stripped by the csproj, all packed exactly once)" -f $stripped.Count) -ForegroundColor DarkGray
+}
+
+# ---------------------------------------------------------------------------------------------
+# installer.iss [InstallDelete] fragment
+# ---------------------------------------------------------------------------------------------
+# Emits installer-content-deletions.iss: one explicit "Type: files" line per file that moved
+# into a pack, plus deepest-first "dirifempty" lines. installer.iss #includes it.
+#
+# WHY EXACT NAMES AND NEVER WILDCARDS: a wildcard ("flashes_audio\*.mp3") cannot tell a shipped
+# file from one the USER hand-dropped into the same folder, so it would delete user content on
+# every upgrade. An explicit list only ever matches what we shipped; user files survive in
+# place and keep working (ContentLocator unions the install dir with the content root).
+# Shipped manifests (bark_rules.json, vn\manifest.json, ...) are inherently safe too: they are
+# not pack payload, so they can never appear in this list.
+#
+# Folders below vn\vo that hold no surviving manifest can genuinely empty out once all four
+# persona VO folders are swept, so vn\vo itself is the one ancestor added by hand here.
+$ExtraDirIfEmpty = @('Resources\web\dtrh\assets\vn\vo')
+
+function Write-InstallerDeletions($Resolved, [string]$Path) {
+    # Install-relative source paths, both kinds: loose audio AND the two .ccpmod archives
+    # ($f.Source is always under $ProjectDir; $f.Entry is the ZIP path, wrong for ccpmods).
+    $rels = New-Object System.Collections.Generic.List[string]
+    foreach ($id in $Resolved.Keys) {
+        foreach ($f in @($Resolved[$id])) {
+            $rels.Add($f.Source.Substring($ProjectDir.Length).TrimStart('\'))
+        }
+    }
+    $files = $rels.ToArray()
+    # Ordinal for the same reason the zip entries are (see Resolve-PackFiles): the committed
+    # file must not churn just because the script ran under a different culture/shell.
+    [Array]::Sort($files, [System.StringComparer]::Ordinal)
+
+    # dirifempty candidates: every dir on the chain from each deleted file UP TO the pack-spec
+    # root folder it came from (inclusive). Never higher - parents like Resources\sounds hold
+    # surviving content and must not even be candidates.
+    $roots = New-Object System.Collections.Generic.List[string]
+    foreach ($spec in $PackSpecs) {
+        foreach ($fo in $spec.Folders) { $roots.Add([string]$fo.Path) }
+        foreach ($fi in $spec.Files)   { $roots.Add((Split-Path -Parent $fi.Path)) }
+    }
+
+    $dirSet = @{}
+    foreach ($rel in $files) {
+        $dir = Split-Path -Parent $rel
+        $best = $null
+        foreach ($r in $roots) {
+            $isUnder = ($dir.Length -eq $r.Length -and $dir -ieq $r) -or
+                       ($dir.Length -gt $r.Length -and $dir.Substring(0, $r.Length + 1) -ieq ($r + '\'))
+            if ($isUnder -and ($null -eq $best -or $r.Length -gt $best.Length)) { $best = $r }
+        }
+        if ($null -eq $best) {
+            throw "Deletion generator: '$rel' is under no `$PackSpecs root - teach Write-InstallerDeletions about it."
+        }
+        $d = $dir
+        while ($true) {
+            $dirSet[$d.ToLowerInvariant()] = $d
+            if ($d -ieq $best) { break }
+            $d = Split-Path -Parent $d
+        }
+    }
+    foreach ($extra in $ExtraDirIfEmpty) { $dirSet[$extra.ToLowerInvariant()] = $extra }
+
+    # Deepest first, so a child folder is removed before its parent is tested for emptiness.
+    # Key = zero-padded inverted depth + path -> one ordinal sort gives both orderings.
+    # SortedList, not keyed [Array]::Sort -- see the warning in Resolve-PackFiles.
+    $sortedDirs = New-Object 'System.Collections.Generic.SortedList[string,string]' ([System.StringComparer]::Ordinal)
+    foreach ($d in $dirSet.Values) {
+        $sortedDirs.Add((('{0:d3}' -f (999 - ($d -split '\\').Count)) + $d), $d)
+    }
+    $dirs = @($sortedDirs.Values)
+
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine('; ============================================================================================')
+    [void]$sb.AppendLine('; AUTO-GENERATED by ConditioningControlPanel\Scripts\build-content-packs.ps1 - DO NOT HAND-EDIT.')
+    [void]$sb.AppendLine('; Regenerate (and commit) after any change to $PackSpecs / the csproj strip set:')
+    [void]$sb.AppendLine(';   powershell -ExecutionPolicy Bypass -File ConditioningControlPanel\Scripts\build-content-packs.ps1 -DeletionsOnly')
+    [void]$sb.AppendLine(';')
+    [void]$sb.AppendLine('; #included from installer.iss [InstallDelete]. Every file that moved out of the installer')
+    [void]$sb.AppendLine('; into a content pack, deleted from {app} by EXACT name on upgrade. No wildcards: files a')
+    [void]$sb.AppendLine('; user hand-dropped into these folders are never matched and survive. dirifempty removes')
+    [void]$sb.AppendLine('; only folders the sweep actually emptied.')
+    [void]$sb.AppendLine(('; {0} files, {1} folder candidates.' -f $files.Count, $dirs.Count))
+    [void]$sb.AppendLine('; ============================================================================================')
+    foreach ($rel in $files) {
+        # Real pack filenames are phrase text and DO go past ASCII (en dash, swung dash), hence
+        # UTF-8 WITH BOM below - Inno 6 is Unicode and reads BOM'd .iss natively. Quotes and
+        # control chars stay fatal: there is no safe way to quote them in an Inno Name.
+        foreach ($ch in $rel.ToCharArray()) {
+            if ([int]$ch -lt 32 -or $ch -eq '"') {
+                throw "Deletion generator: '$rel' contains a character Inno cannot safely express (char $([int]$ch))."
+            }
+        }
+        # '{' opens an Inno constant; '{{' is the literal escape.
+        [void]$sb.AppendLine(('Type: files;      Name: "{{app}}\{0}"' -f $rel.Replace('{', '{{')))
+    }
+    foreach ($d in $dirs) {
+        [void]$sb.AppendLine(('Type: dirifempty; Name: "{{app}}\{0}"' -f $d.Replace('{', '{{')))
+    }
+
+    # UTF-8 WITH BOM (Inno reads BOM-less files as ANSI) + CRLF, byte-stable across runs, so
+    # git diffs are content-only.
+    [System.IO.File]::WriteAllText($Path, $sb.ToString(), (New-Object System.Text.UTF8Encoding($true)))
+    Write-Host ("  installer deletions: {0} ({1} files + {2} dirifempty)" -f $Path, $files.Count, $dirs.Count) -ForegroundColor DarkGray
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -469,6 +596,17 @@ if ($ListOnly) {
     Write-Host ""
     Write-Host ("  TOTAL       {0,6} files {1,9:n1}M" -f $grandCount, ($grand / 1MB)) -ForegroundColor Cyan
     Write-Host ("  Longest source path: {0} chars (MAX_PATH is 260; zipping uses \\?\ so this is informational)" -f $longest) -ForegroundColor DarkGray
+    Write-Host ""
+    return
+}
+
+# Always regenerate the committed [InstallDelete] fragment when the resolved set is in hand --
+# a pack build whose file set changed but whose fragment didn't is exactly the drift this whole
+# script exists to prevent. (-ListOnly returned above: it promises to write nothing.)
+Write-InstallerDeletions $Resolved $DeletionsIss
+if ($DeletionsOnly) {
+    Write-Host ""
+    Write-Host "  -DeletionsOnly: fragment written. Commit it if 'git status' says it changed." -ForegroundColor Yellow
     Write-Host ""
     return
 }

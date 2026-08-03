@@ -175,13 +175,22 @@ to what every single update used to cost them.
   The sort must not be `Sort-Object`: that collates with the current culture, and PS 5.1 (NLS) and
   pwsh 7 (ICU) order the same 118 `flashes_audio` entries differently, so building next cycle's
   packs in the other shell would re-hash all six zips and re-download ~1.1 GB for zero content
-  change. `build-content-packs.ps1` uses `[Array]::Sort(..., [StringComparer]::Ordinal)`.
-- **Inno `Type: files` wildcards do NOT recurse.** `builtin-sissyhypno\portraits` nests four
-  subfolders (`0_base`, `1_l1`, `2_beach`, `3_fishnet`), so `portraits\*.png` swept 0 of its 312
-  PNGs and every one would have survived to shadow `mod-sissy` forever on upgraders. That entry is
-  now `Type: filesandordirs` on the folder — safe only because nothing but PNGs lives under
-  `portraits\` (`avatar_manifest.json` is one level up). Any other moving folder with subfolders
-  needs the same treatment or an explicit per-subfolder line.
+  change. And it must not be the keyed `[Array]::Sort($keys, $items, comparer)` either: PowerShell
+  binds that to the generic overload and **converts `$items` to a fresh typed array first**, so the
+  reorder lands in a throwaway copy — a silent no-op that left the first uploaded zips in
+  NTFS-enumeration order (green same-volume determinism runs, no cross-filesystem guarantee).
+  `build-content-packs.ps1` uses an ordinal-comparer `SortedList`, which cannot fail that way;
+  packs were rebuilt + re-uploaded to v6.6.0 with truly sorted entries on 2026-08-04.
+- **`[InstallDelete]` is generated, exact-name, wildcard-free.** `installer.iss` `#include`s
+  `<repo>\installer-content-deletions.iss`, emitted by `build-content-packs.ps1` (every run, or
+  `-DeletionsOnly` standalone) from the same resolved set the zips ship — one `Type: files` line
+  per moved file (8,429 = 8,427 stripped + 2 ccpmods) plus deepest-first `dirifempty` lines. The
+  fragment is **committed**; regenerate + commit whenever the pack set changes. Exact names mean
+  files a *user* hand-dropped into swept folders (e.g. their own `flashes_audio` mp3s) survive
+  upgrades and keep working via the ContentLocator union — the original per-extension wildcards
+  would have deleted them. This also retires the wildcard-recursion trap (the 312-PNG
+  `portraits\` near-miss): every path is explicit, so nothing depends on `Type: files` recursion
+  semantics, and the one `filesandordirs` (which *would* have eaten user files) is gone.
 - **`build-content-packs.ps1` now hard-fails on strip/pack drift.** It carries
   `$CsprojStripPatterns`, a hand-maintained mirror of the csproj `ContentPack*Exclude` properties,
   expands it against the source tree and refuses to build if any file is stripped-but-unpacked
