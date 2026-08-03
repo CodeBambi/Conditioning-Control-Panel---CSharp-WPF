@@ -2679,7 +2679,48 @@ namespace ConditioningControlPanel.Services
             // memory callbacks (SetVideoFormat + SetVideoCallbacks) instead of a VideoView; it must
             // happen BEFORE Play() below, same as attaching a VideoView.
             if (useBlur)
+            {
                 blurSurface!.Attach(mediaPlayer);
+
+                // #786: the vmem format callback reports the CODED frame size with the sample aspect
+                // ratio dropped, so an anamorphic clip's buffer is the wrong SHAPE and drawing it at
+                // its own pixel aspect widened the picture until it filled the screen. The media's
+                // video track carries the SAR, but only once the ES is enumerated - which is after
+                // the first format callback. Push it in whenever it becomes available; the surface
+                // re-lays-out idempotently. Subscribed BEFORE Play() so a fast start can't outrun it.
+                var aspectTarget = blurSurface!;
+                var aspectPlayer = mediaPlayer;
+                void PushTrackAspect()
+                {
+                    try
+                    {
+                        var tracks = aspectPlayer.Media?.Tracks;
+                        if (tracks == null) return;
+                        foreach (var track in tracks)
+                        {
+                            if (track.TrackType != TrackType.Video) continue;
+                            var v = track.Data.Video;
+                            bool transposed = v.Orientation is VideoOrientation.LeftTop
+                                or VideoOrientation.LeftBottom
+                                or VideoOrientation.RightTop
+                                or VideoOrientation.RightBottom;
+                            double aspect = DisplayAspectFrom(v.Width, v.Height, v.SarNum, v.SarDen, transposed);
+                            if (aspect > 0)
+                            {
+                                aspectTarget.SetSourceAspect(aspect, $"track {v.Width}x{v.Height} sar {v.SarNum}:{v.SarDen}");
+                                return;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("VideoService: video-track aspect probe failed: {Error}", ex.Message);
+                    }
+                }
+                mediaPlayer.Playing += (s, e) => PushTrackAspect();
+                mediaPlayer.ESSelected += (s, e) => PushTrackAspect();
+                mediaPlayer.Vout += (s, e) => PushTrackAspect();
+            }
             else
                 videoView!.MediaPlayer = mediaPlayer;
             VideoDiag.Log("VIDEO", $"win[{tag}]: surface attached +{winSw.ElapsedMilliseconds}ms");
@@ -2846,6 +2887,63 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// True DISPLAY aspect (w/h) of a video track: the coded frame size corrected by the sample
+        /// aspect ratio, and transposed when the track carries a 90°/270° rotation (LibVLC rotates
+        /// the vmem buffer for us via video_format_ApplyRotation, but the track still reports the
+        /// pre-rotation size). Returns 0 when the numbers can't describe a real frame.
+        ///
+        /// #786: the vmem format callback hands us the CODED size with the SAR already dropped, so
+        /// an anamorphic clip (non-square pixels) arrived as, say, 640x368 when its real display
+        /// shape is much taller — and rendering that buffer at its own pixel aspect stretched the
+        /// picture sideways until it filled the screen. Never derive the on-screen shape from the
+        /// buffer when the track can tell us the truth. Pure — unit-tested.
+        /// </summary>
+        internal static double DisplayAspectFrom(uint width, uint height, uint sarNum, uint sarDen, bool transposed)
+        {
+            if (width == 0 || height == 0) return 0;
+            double num = width * (sarNum > 0 ? sarNum : 1u);
+            double den = height * (sarDen > 0 ? sarDen : 1u);
+            if (den <= 0) return 0;
+            double aspect = num / den;
+            if (transposed) aspect = 1.0 / aspect;
+            if (double.IsNaN(aspect) || double.IsInfinity(aspect) || aspect <= 0) return 0;
+            // Sanity fence: real clips live well inside 16:1 .. 1:16. Anything outside is a garbage
+            // SAR and must fall back to the buffer aspect rather than produce a sliver of video.
+            if (aspect > 16.0 || aspect < 1.0 / 16.0) return 0;
+            return aspect;
+        }
+
+        /// <summary>
+        /// Largest rect of <paramref name="aspect"/> (w/h) that fits inside the container —
+        /// i.e. letterbox or pillarbox, never stretch. Returns (0,0) when there is nothing sane to
+        /// fit yet. Pure — unit-tested.
+        /// </summary>
+        internal static (double W, double H) FitToAspect(double containerW, double containerH, double aspect)
+        {
+            if (containerW <= 0 || containerH <= 0 || aspect <= 0 ||
+                double.IsNaN(aspect) || double.IsInfinity(aspect)) return (0, 0);
+
+            double w = containerW;
+            double h = containerW / aspect;
+            if (h > containerH)
+            {
+                h = containerH;
+                w = containerH * aspect;
+            }
+            return (w, h);
+        }
+
+        /// <summary>
+        /// Whether the blurred fill is worth paying for: bars only appear when the video's display
+        /// aspect differs from the screen's by more than the tolerance. Pure — unit-tested.
+        /// </summary>
+        internal static bool NeedsBlurFill(double videoAspect, double screenAspect)
+        {
+            if (videoAspect <= 0 || screenAspect <= 0) return false;
+            return Math.Abs(videoAspect / screenAspect - 1.0) > 0.03;
+        }
+
+        /// <summary>
         /// Byte size of one BGRA frame of the given geometry, or 0 if the geometry is absurd
         /// (overflow / zero side). A bogus format callback must make the blit SKIP the frame, never
         /// allocate or copy on a garbage length. Pure — unit-tested.
@@ -2983,6 +3081,7 @@ namespace ConditioningControlPanel.Services
             private readonly ImageBrush _bgBrush;
             private readonly Image _foreground;
             private readonly System.Windows.Shapes.Rectangle _scrim;
+            private readonly Grid _hostGrid;
 
             // Set from the video-format callback once the decoder reports the real frame size.
             private uint _w;
@@ -3020,6 +3119,21 @@ namespace ConditioningControlPanel.Services
             // #687: stamped by every FormatCallback (under _bufferLock, so it is paired with _w/_h).
             // A rebuild posted to the dispatcher applies only if its stamp is still the newest.
             private int _formatGeneration;
+
+            // #786: the two aspects that decide the on-screen shape.
+            //   _bufferAspect — what the LATEST format callback reported (coded size, SAR dropped).
+            //                   Re-stamped by every callback so a mid-stream resolution change
+            //                   re-lays-out instead of leaving a stale rect behind.
+            //   _trueAspect   — the SAR-corrected DISPLAY aspect from the media's video track, 0
+            //                   until the track is enumerated. Authoritative when known: an
+            //                   anamorphic clip's buffer aspect is simply the wrong shape.
+            // Written on the UI thread, read from the decoder thread inside FormatCallback, hence
+            // Volatile (doubles are not guaranteed atomic on 32-bit, but this process is x64 and a
+            // torn read here would only mis-log one line).
+            private double _bufferAspect;
+            private double _trueAspect;
+            private string _aspectSource = "buffer";
+            private bool _geometryLogged;
 
             // Delegates handed to native LibVLC — kept in fields so the GC can't collect them
             // while libvlc still holds the pointers (the callbacks fire for the whole playback).
@@ -3079,6 +3193,12 @@ namespace ConditioningControlPanel.Services
 
                 // Sharp centred video: same frame, aspect-fit. Margins are transparent so the
                 // blurred fill shows through where the bars would otherwise be black.
+                //
+                // #786: Stretch.Uniform here fits the BITMAP's pixel aspect, which is only the right
+                // shape when the vmem buffer happens to have square pixels. It is the safe default
+                // until the real display aspect is known; ApplyGeometry then switches this to an
+                // explicitly sized Stretch.Fill rect computed from that aspect, so an anamorphic or
+                // padded buffer can never be drawn stretched.
                 _foreground = new Image
                 {
                     Stretch = Stretch.Uniform,
@@ -3090,6 +3210,11 @@ namespace ConditioningControlPanel.Services
                 grid.Children.Add(_background);
                 grid.Children.Add(_scrim);
                 grid.Children.Add(_foreground);
+                // The window is created at full screen bounds and then re-pinned to the monitor's
+                // physical bounds (ForceFullScreenBounds), so the fit rect has to be recomputed when
+                // the host resizes — otherwise the first layout's numbers stick.
+                grid.SizeChanged += (_, __) => ApplyGeometry();
+                _hostGrid = grid;
                 Root = grid;
             }
 
@@ -3141,23 +3266,31 @@ namespace ConditioningControlPanel.Services
                     gen = ++_formatGeneration; // stamped with the geometry it belongs to
                 }
 
-                // Bars appear when the video aspect differs from the screen aspect. Only then do we
-                // pay for the blurred fill; a clip that already fills the screen shows just the sharp
-                // layer (which covers everything at Uniform == the whole screen).
-                double videoAspect = vh > 0 ? (double)vw / vh : _screenAspect;
-                bool needsBlur = Math.Abs(videoAspect / _screenAspect - 1.0) > 0.03;
+                // Bars appear when the video's DISPLAY aspect differs from the screen aspect. Only
+                // then do we pay for the blurred fill; a clip that already fills the screen shows
+                // just the sharp layer.
+                //
+                // #786: this used to read the aspect straight off the callback's dims. Those are the
+                // coded dims with the SAR dropped, and LibVLC re-reports them mid-setup (640x368 four
+                // times, then 640x386), so the decision flip-flopped AND the shape it was deciding
+                // about was not the shape the clip should have. The authoritative number is the
+                // track's SAR-corrected aspect when we have it; the buffer aspect is the fallback.
+                // Both the decision and the layout are recomputed from scratch on every callback.
+                double bufferAspect = (vw > 0 && vh > 0) ? (double)vw / vh : 0;
+                double effectiveAspect = EffectiveAspect(bufferAspect);
+                bool needsBlur = NeedsBlurFill(effectiveAspect, _screenAspect);
 
-                App.Logger?.Information("VideoService: blurred-background format cb — video {VW}x{VH}, buffer {BW}x{BH}, blurFill={Blur}",
-                    vw, vh, bw, bh, needsBlur);
+                App.Logger?.Information("VideoService: blurred-background format cb — video {VW}x{VH}, buffer {BW}x{BH}, displayAspect={AR:0.000} ({Src}), blurFill={Blur}",
+                    vw, vh, bw, bh, effectiveAspect, Volatile.Read(ref _trueAspect) > 0 ? "track" : "buffer", needsBlur);
                 // Runs on a LibVLC decoder thread — enqueue only, never touch the disk or the UI here.
                 // blurFill=true arms the fullscreen Gaussian; in 6.5.0 it ran every frame over the LIVE
                 // per-frame bitmap and that was the freeze (#616-#623/#632/#636/#687). It now runs over
                 // a small frozen snapshot instead, but the trace still records when it is armed.
-                Diag($"format cb - video {vw}x{vh}, buffer {bw}x{bh}, blurFill={needsBlur}");
+                Diag($"format cb - video {vw}x{vh}, buffer {bw}x{bh}, displayAspect={effectiveAspect:0.000}, blurFill={needsBlur}");
 
                 var disp = Application.Current?.Dispatcher;
                 if (disp != null && !disp.HasShutdownStarted)
-                    disp.BeginInvoke(new Action(() => RebuildBitmap(gen, bw, bh, needsBlur)));
+                    disp.BeginInvoke(new Action(() => RebuildBitmap(gen, bw, bh, bufferAspect)));
 
                 return 1; // one plane (RV32)
             }
@@ -3176,7 +3309,7 @@ namespace ConditioningControlPanel.Services
             /// decoder behind it. The stamp is re-checked INSIDE _bufferLock so the swap is atomic with
             /// respect to a format callback that lands while this rebuild is mid-flight.
             /// </summary>
-            private void RebuildBitmap(int gen, uint bw, uint bh, bool needsBlur)
+            private void RebuildBitmap(int gen, uint bw, uint bh, double bufferAspect)
             {
                 if (_disposed) return;
                 try
@@ -3201,20 +3334,118 @@ namespace ConditioningControlPanel.Services
                     }
 
                     _foreground.Source = bmp;
-                    _needsBlur = needsBlur;
-                    _background.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
-                    _scrim.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+
+                    // #786: re-stamp the buffer aspect from THIS callback and re-derive both the blur
+                    // decision and the fit rect. Every callback lands a complete layout; nothing is
+                    // carried over from the previous geometry.
+                    if (bufferAspect > 0 && Math.Abs(Volatile.Read(ref _bufferAspect) - bufferAspect) >= 0.0005)
+                    {
+                        Volatile.Write(ref _bufferAspect, bufferAspect);
+                        _geometryLogged = false; // the reported shape moved - trace the new fit once
+                    }
+                    ApplyGeometry();
 
                     // The fill is fed by RefreshBackgroundSnapshot, NOT by this bitmap (#687). Drop the
                     // old snapshot so the next frame rebuilds it at the new geometry immediately.
                     _snapW = 0;
                     _snapH = 0;
                     _frameCounter = 0;
-                    if (!needsBlur) _bgBrush.ImageSource = null;
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Debug("BlurVmemSurface: bitmap rebuild failed: {Error}", ex.Message);
+                }
+            }
+
+            /// <summary>
+            /// The aspect the picture must actually be drawn at: the track's SAR-corrected display
+            /// aspect when it is known, else the buffer's own pixel aspect, else the screen's (so a
+            /// surface with no information yet is never sized to nonsense). Callable from any thread.
+            /// </summary>
+            private double EffectiveAspect(double bufferAspect)
+            {
+                double t = Volatile.Read(ref _trueAspect);
+                if (t > 0) return t;
+                if (bufferAspect > 0) return bufferAspect;
+                double b = Volatile.Read(ref _bufferAspect);
+                return b > 0 ? b : _screenAspect;
+            }
+
+            /// <summary>
+            /// The SAR-corrected display aspect read off the media's video track, pushed in once the
+            /// track is enumerated (it is not available when the first format callback fires). Safe
+            /// to call repeatedly and from any thread — it marshals to the UI thread and only
+            /// re-lays-out when the number actually changed.
+            /// </summary>
+            public void SetSourceAspect(double aspect, string source)
+            {
+                if (aspect <= 0 || _disposed) return;
+                var disp = Application.Current?.Dispatcher;
+                if (disp == null || disp.HasShutdownStarted) return;
+                disp.BeginInvoke(new Action(() =>
+                {
+                    if (_disposed) return;
+                    if (Math.Abs(Volatile.Read(ref _trueAspect) - aspect) < 0.0005) return;
+                    Volatile.Write(ref _trueAspect, aspect);
+                    _aspectSource = source;
+                    _geometryLogged = false; // the shape changed - say so once with the new numbers
+                    ApplyGeometry();
+                }));
+            }
+
+            /// <summary>
+            /// Size the sharp layer to the largest rect of the video's true display aspect that fits
+            /// this screen, and arm the blurred fill only when that leaves bars. UI thread only.
+            ///
+            /// #786: the sharp layer used to rely on Stretch.Uniform against the WriteableBitmap,
+            /// which fits the BUFFER's pixel aspect. LibVLC's vmem callback reports the coded frame
+            /// size with the sample-aspect-ratio already dropped, so an anamorphic clip was drawn at
+            /// the wrong shape — widened until it filled the screen. Computing the rect ourselves
+            /// from the display aspect makes the fit independent of whatever geometry the decoder
+            /// happens to report, and re-running it on every format callback, aspect update and
+            /// resize makes repeated callbacks idempotent instead of leaving a stale rect.
+            /// </summary>
+            private void ApplyGeometry()
+            {
+                if (_disposed) return;
+                try
+                {
+                    double aspect = EffectiveAspect(0);
+                    bool needsBlur = NeedsBlurFill(aspect, _screenAspect);
+
+                    _needsBlur = needsBlur;
+                    _background.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+                    _scrim.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+                    if (!needsBlur) _bgBrush.ImageSource = null;
+
+                    double cw = _hostGrid.ActualWidth;
+                    double ch = _hostGrid.ActualHeight;
+                    var (fw, fh) = FitToAspect(cw, ch, aspect);
+                    if (fw <= 0 || fh <= 0)
+                    {
+                        // No usable container size yet (first layout pass). Fall back to WPF's own
+                        // aspect-preserving fit rather than pinning a bogus rect — still never a
+                        // stretch, just possibly the buffer's aspect for a frame or two.
+                        _foreground.Stretch = Stretch.Uniform;
+                        _foreground.Width = double.NaN;
+                        _foreground.Height = double.NaN;
+                        return;
+                    }
+
+                    _foreground.Stretch = Stretch.Fill;   // exact, because the rect below IS the fit
+                    _foreground.Width = fw;
+                    _foreground.Height = fh;
+
+                    if (!_geometryLogged)
+                    {
+                        _geometryLogged = true;
+                        Diag($"fit {fw:0}x{fh:0} in {cw:0}x{ch:0} at displayAspect {aspect:0.000} " +
+                             $"({_aspectSource}; screen {_screenAspect:0.000}), blurFill={needsBlur}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("BlurVmemSurface: geometry apply failed: {Error}", ex.Message);
                 }
             }
 
