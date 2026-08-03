@@ -175,6 +175,15 @@ namespace ConditioningControlPanel
             _topmostTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(TopmostReassertMs) };
             _topmostTimer.Tick += (s, e) => Reassert();
 
+            // Close() is not the only route out (Alt+F4, a dispatcher shutdown, an owner tearing the
+            // window down). Whichever one fires, the 300ms tick must stop — otherwise it keeps calling
+            // SetWindowPos on a dead HWND for the rest of the session.
+            _win.Closed += (s, e) =>
+            {
+                _closed = true;
+                try { _topmostTimer.Stop(); } catch { }
+            };
+
             _win.Loaded += (s, e) =>
             {
                 if (_hwnd == IntPtr.Zero) _hwnd = new WindowInteropHelper(_win).Handle;

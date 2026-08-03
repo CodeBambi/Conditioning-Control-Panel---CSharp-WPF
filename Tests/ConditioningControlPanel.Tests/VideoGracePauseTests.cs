@@ -203,4 +203,25 @@ public class VideoGracePauseTests
         Assert.True(ShouldAutoResume(60, GraceWindowSeconds));
         Assert.True(ShouldAutoResume(75, GraceWindowSeconds));  // a starved dispatcher tick still resumes
     }
+
+    // ---- 4. the attention spawner must stand down while paused ----
+
+    [Fact]
+    public void AttentionSpawner_StandsDown_WhileGracePaused()
+    {
+        // _videoPlaying stays TRUE through the pause (the strict Closing veto depends on it), so the
+        // old `if (!_videoPlaying) return;` guard let targets spawn on top of the Resume card. They
+        // then expire unclicked and force a failed-attention replay — the pause became a punishment.
+        Assert.False(ShouldSpawnTick(videoPlaying: true, gracePaused: true));
+    }
+
+    [Fact]
+    public void AttentionSpawner_Runs_WhenPlayingAndNotPaused()
+        => Assert.True(ShouldSpawnTick(videoPlaying: true, gracePaused: false));
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AttentionSpawner_NeverRuns_WithoutAVideo(bool gracePaused)
+        => Assert.False(ShouldSpawnTick(videoPlaying: false, gracePaused: gracePaused));
 }

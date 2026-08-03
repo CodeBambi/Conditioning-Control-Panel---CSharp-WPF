@@ -234,7 +234,9 @@ namespace ConditioningControlPanel.Services
         // screen quiet for a moment, not a whole session torn down. Exactly ONE per video run; every
         // later press falls through to the normal panic ladder, so it costs the user one extra tap to
         // reach today's behaviour and two to reach exit-the-app.
-        private bool _gracePaused;
+        // volatile: read from threadpool watchdog callbacks (progress/vout watches) as well as the UI
+        // thread that sets it, same as this file's other cross-thread flags.
+        private volatile bool _gracePaused;
         // Per-video budget. Set when the pause ENDS (manual or automatic) and reset by PlayVideo, so
         // each attention-check retry / troll replay — a fresh GetNextVideo each time — gets its own.
         private bool _gracePauseConsumed;
@@ -403,6 +405,12 @@ namespace ConditioningControlPanel.Services
         /// <summary>Resume every screen's player (kept in lockstep for multi-monitor). No-op if none.</summary>
         public void PlayPrimary()
         {
+            // #735: never un-pause a grace-paused video from the outside. Deeper's SpeakPromptSession
+            // releases its hold through ITimeSource.Play() and the voice "resume" command lands here
+            // too — either would restart playback UNDER the Paused/Resume card. ResumeFromGrace clears
+            // _gracePaused BEFORE it calls this, so the legitimate resume is unaffected.
+            if (_gracePaused) return;
+
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(false); }
@@ -3712,7 +3720,15 @@ namespace ConditioningControlPanel.Services
                     // Closing veto below still refuses Alt+F4) and gives a strict-locked user the
                     // same "someone walked in" out. When Escape IS the panic key it falls through to
                     // the block below exactly as before and the global hook drives the ladder.
+                    //
+                    // Lockdown / panic-disabled: NOT offered. LockdownService's contract is "no pause,
+                    // no escape" — it forces StrictLock on and the panic key off — and the global key
+                    // hook already bails on lockdown before any panic handling (MainWindow.xaml.cs,
+                    // OnGlobalKeyPressed). This branch is the only other door into the grace pause, so
+                    // it has to honour the same contract or Escape becomes a lockdown bypass.
                     if (e.Key == Key.Escape &&
+                        App.Lockdown?.IsActive != true &&
+                        App.Settings.Current.PanicKeyEnabled &&
                         !string.Equals(App.Settings.Current.PanicKey, Key.Escape.ToString(), StringComparison.Ordinal))
                     {
                         if (TryGracePauseFromPanic())
@@ -3839,9 +3855,20 @@ namespace ConditioningControlPanel.Services
             });
         }
 
+        /// <summary>
+        /// Whether the attention spawner's 20ms tick may spawn. <paramref name="gracePaused"/> is the
+        /// #735 half: <c>_videoPlaying</c> stays TRUE through a grace pause (by design — the strict
+        /// Closing veto and the scheduler both depend on it), and <c>ResumeFromGrace</c> re-phases the
+        /// schedule by shifting <c>_startTime</c> forward by the paused duration. Spawning during the
+        /// pause therefore drops targets on top of the Resume card where they expire unclicked, which
+        /// turns a grace pause into a guaranteed failed attention check and a forced replay.
+        /// </summary>
+        internal static bool ShouldSpawnTick(bool videoPlaying, bool gracePaused)
+            => videoPlaying && !gracePaused;
+
         private void CheckSpawnTargets(object? s, EventArgs e)
         {
-            if (!_videoPlaying) return;
+            if (!ShouldSpawnTick(_videoPlaying, _gracePaused)) return;
             var elapsed = (DateTime.Now - _startTime).TotalSeconds;
             while (_spawnTimes.Count > 0 && elapsed >= _spawnTimes[0])
             {
@@ -4518,17 +4545,27 @@ namespace ConditioningControlPanel.Services
             CloseGraceOverlays();
             try
             {
-                // One card per screen that actually has a video window, centred on it.
-                foreach (var win in _windows.ToList())
+                // The per-window loop gets its OWN try: if realizing a card throws (a dying window, a
+                // screen that vanished mid-reconfiguration) the primary-screen fallback below MUST
+                // still run, or the user is left paused with no Resume card at all.
+                try
                 {
-                    Screen screen;
-                    try { screen = ScreenForWindow(win); }
-                    catch { continue; }
-                    if (screen == null) continue;
+                    // One card per screen that actually has a video window, centred on it.
+                    foreach (var win in _windows.ToList())
+                    {
+                        Screen screen;
+                        try { screen = ScreenForWindow(win); }
+                        catch { continue; }
+                        if (screen == null) continue;
 
-                    var overlay = new GracePauseOverlayWindow(screen, () => ResumeFromGrace("resume button"));
-                    overlay.SetRemainingSeconds(GraceWindowSeconds);
-                    _graceOverlays.Add(overlay);
+                        var overlay = new GracePauseOverlayWindow(screen, () => ResumeFromGrace("resume button"));
+                        overlay.SetRemainingSeconds(GraceWindowSeconds);
+                        _graceOverlays.Add(overlay);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning("VideoService: per-screen grace overlay failed - {Error}", ex.Message);
                 }
 
                 if (_graceOverlays.Count == 0)
