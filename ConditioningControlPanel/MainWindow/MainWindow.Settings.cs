@@ -263,14 +263,35 @@ namespace ConditioningControlPanel
             HapticsTab.ChkHapticsEnabled.IsChecked = s.Haptics.Enabled;
             HapticsTab.SliderHapticIntensity.Value = s.Haptics.GlobalIntensity * 100;
 
-            // Set provider combo box first
-            foreach (System.Windows.Controls.ComboBoxItem item in HapticsTab.CmbHapticProvider.Items)
+            // Set provider combo box first.
+            // Match on Tag, case-insensitively, and NEVER leave the combo blank: Mock is the
+            // default provider, and before the Mock row existed this loop simply found nothing
+            // and fell out, so a fresh install rendered an empty provider box. Fall back to the
+            // Mock row (then to the first row) whenever the saved provider has no matching item.
             {
-                if (item.Tag?.ToString() == s.Haptics.Provider.ToString())
+                var providerTag = s.Haptics.Provider.ToString();
+                System.Windows.Controls.ComboBoxItem? matchedItem = null;
+                System.Windows.Controls.ComboBoxItem? mockItem = null;
+
+                foreach (var entry in HapticsTab.CmbHapticProvider.Items)
                 {
-                    HapticsTab.CmbHapticProvider.SelectedItem = item;
-                    break;
+                    if (entry is not System.Windows.Controls.ComboBoxItem item) continue;
+                    var tag = item.Tag?.ToString();
+                    if (string.Equals(tag, providerTag, StringComparison.OrdinalIgnoreCase))
+                    {
+                        matchedItem = item;
+                        break;
+                    }
+                    if (mockItem == null && string.Equals(tag, "Mock", StringComparison.OrdinalIgnoreCase))
+                        mockItem = item;
                 }
+
+                HapticsTab.CmbHapticProvider.SelectedItem =
+                    matchedItem
+                    ?? mockItem
+                    ?? HapticsTab.CmbHapticProvider.Items
+                        .OfType<System.Windows.Controls.ComboBoxItem>()
+                        .FirstOrDefault();
             }
 
             // Then set URL based on provider

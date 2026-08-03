@@ -979,8 +979,9 @@ public class QuestService : IDisposable
             // Play Windows notification sound
             SystemSounds.Exclamation.Play();
 
-            // Trigger haptic feedback (using achievement pattern - feels celebratory)
-            _ = App.Haptics?.AchievementPatternAsync();
+            // Trigger haptic feedback (using achievement pattern - feels celebratory).
+            // ONE call only: this fired twice, which stacked two overlapping copies of the
+            // same pattern on the toy rather than making it play any stronger.
             _ = App.Haptics?.AchievementPatternAsync();
         }
         catch (Exception ex)

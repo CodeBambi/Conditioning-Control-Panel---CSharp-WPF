@@ -103,6 +103,9 @@
                                           SelectionChanged="CmbHapticProvider_SelectionChanged">
                                     <ComboBoxItem Content="{loc:Str btn_lovense_connect}" Tag="Lovense" Foreground="Black"/>
                                     <ComboBoxItem Content="{loc:Str btn_buttplug_io_intiface}" Tag="Buttplug" Foreground="Black"/>
+                                    <!-- Mock is the DEFAULT HapticProviderType. Without this row the load-time
+                                         Tag match had nothing to select and the combo rendered blank. -->
+                                    <ComboBoxItem Content="{loc:Str btn_mock_test_mode}" Tag="Mock" Foreground="Black"/>
                                 </ComboBox>
                                 <TextBox x:Name="TxtHapticUrl" x:FieldModifier="internal" Grid.Column="3"
                                          Background="#FFFFFF" Foreground="Black" BorderThickness="1"

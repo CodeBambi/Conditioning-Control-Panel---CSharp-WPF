@@ -92,7 +92,9 @@ namespace ConditioningControlPanel
 
             var intensityPercent = (int)SettingsTab.SliderAudioSyncIntensity.Value;
             App.Settings.Current.Haptics.AudioSync.LiveIntensity = intensityPercent / 100.0;
-            // Don't save on every change - too frequent. Settings auto-save on close.
+            // Safe to call per tick: SettingsService.Save() is itself debounced (500 ms of quiet
+            // before one disk write), so a slider drag coalesces into a single save.
+            App.Settings.Save();
 
             // Update display text (live feedback)
             if (SettingsTab.TxtAudioSyncIntensity != null)
@@ -127,6 +129,7 @@ namespace ConditioningControlPanel
 
             var intensityPercent = (int)HapticsTab.SliderVideoHapticPower.Value;
             App.Settings.Current.Haptics.AudioSync.LiveIntensity = intensityPercent / 100.0;
+            App.Settings.Save(); // debounced inside SettingsService - one write per drag
 
             // Update display text (live feedback)
             if (HapticsTab.TxtVideoHapticPower != null)
@@ -282,6 +285,7 @@ namespace ConditioningControlPanel
             var value = (int)HapticsTab.SliderHapticIntensity.Value;
             HapticsTab.TxtHapticIntensity.Text = $"{value}%";
             App.Settings.Current.Haptics.GlobalIntensity = value / 100.0;
+            App.Settings.Save(); // debounced inside SettingsService - one write per drag
 
             // Debounce: wait 150ms after slider stops moving before sending command
             _hapticSliderDebounce?.Stop();
@@ -334,12 +338,18 @@ namespace ConditioningControlPanel
                 App.Settings.Current.Haptics.LovenseUrl = HapticsTab.TxtHapticUrl.Text;
             else if (provider == Services.Haptics.HapticProviderType.Buttplug)
                 App.Settings.Current.Haptics.ButtplugUrl = HapticsTab.TxtHapticUrl.Text;
+            else
+                return; // Mock has no URL - nothing to persist
+
+            // Debounced inside SettingsService, so typing a URL is one write, not one per keystroke.
+            App.Settings.Save();
         }
 
         internal void ChkHapticAutoConnect_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             App.Settings.Current.Haptics.AutoConnect = HapticsTab.ChkHapticAutoConnect.IsChecked == true;
+            App.Settings.Save();
         }
 
         internal void ChkHapticFeature_Changed(object sender, RoutedEventArgs e)
@@ -385,12 +395,15 @@ namespace ConditioningControlPanel
                     haptics.DtrhEnabled = isEnabled;
                     break;
             }
+
+            App.Settings.Save();
         }
 
         internal void CmbHapticDtrhDensity_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_isLoading || HapticsTab.CmbHapticDtrhDensity == null) return;
             App.Settings.Current.Haptics.DtrhDensity = HapticsTab.CmbHapticDtrhDensity.SelectedIndex;
+            App.Settings.Save();
         }
 
         private System.Windows.Threading.DispatcherTimer? _hapticFeatureDebounce;
@@ -454,6 +467,10 @@ namespace ConditioningControlPanel
                     break;
             }
 
+            // Persist. SettingsService.Save() debounces internally (500 ms of quiet -> one disk
+            // write), so a full drag across the slider still costs exactly one save.
+            App.Settings.Save();
+
             // Debounce: wait 150ms after slider stops moving before sending live vibration
             _hapticFeatureDebounce?.Stop();
             _hapticFeatureDebounce = new System.Windows.Threading.DispatcherTimer
@@ -512,6 +529,8 @@ namespace ConditioningControlPanel
                     haptics.BouncingTextMode = mode;
                     break;
             }
+
+            App.Settings.Save();
         }
 
         #endregion

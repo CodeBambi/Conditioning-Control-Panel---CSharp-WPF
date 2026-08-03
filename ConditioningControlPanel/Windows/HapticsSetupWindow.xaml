@@ -88,8 +88,10 @@
                                 <Run Foreground="{DynamicResource PinkBrush}" FontWeight="Bold">Game Mode</Run>
                             </TextBlock>
                             <Border Background="#2D2D4A" CornerRadius="8" Padding="10" MaxHeight="400">
+                                <!-- Absolute pack URI on purpose: a relative Source resolves against
+                                     this file's /Windows/ BaseUri and silently renders blank (55f87208). -->
                                 <Image x:Name="ImgLovenseStep1" Stretch="Uniform"
-                                       Source="Resources/haptics_guide/lovense_step1.png"/>
+                                       Source="pack://application:,,,/Resources/haptics_guide/lovense_step1.png"/>
                             </Border>
                         </StackPanel>
                     </Grid>
@@ -112,13 +114,13 @@
                                 <Run Foreground="{DynamicResource PinkBrush}" FontWeight="Bold">Local IP</Run>
                                 <Run> address shown</Run>
                                 <LineBreak/>
-                                <Run>3. Note the </Run>
-                                <Run Foreground="{DynamicResource PinkBrush}" FontWeight="Bold">Port</Run>
-                                <Run> number (usually 20010)</Run>
+                                <Run>3. Leave </Run>
+                                <Run Foreground="{DynamicResource PinkBrush}" FontWeight="Bold">Game Mode</Run>
+                                <Run> switched ON - the app finds the right port automatically, so you never have to read it off the phone.</Run>
                             </TextBlock>
                             <Border Background="#2D2D4A" CornerRadius="8" Padding="10" MaxHeight="400">
                                 <Image x:Name="ImgLovenseStep2" Stretch="Uniform"
-                                       Source="Resources/haptics_guide/lovense_step2.png"/>
+                                       Source="pack://application:,,,/Resources/haptics_guide/lovense_step2.png"/>
                             </Border>
                         </StackPanel>
                     </Grid>
@@ -146,17 +148,23 @@
                                     </TextBlock>
 
                                     <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="4" Padding="12" Margin="0,10,0,10">
-                                        <TextBlock Text="http://[IP]:[Port]" Foreground="{DynamicResource PinkBrush}"
+                                        <TextBlock Text="http://[IP]:30010" Foreground="{DynamicResource PinkBrush}"
                                                    FontSize="16" FontWeight="Bold" FontFamily="Consolas"
                                                    HorizontalAlignment="Center"/>
                                     </Border>
 
                                     <TextBlock Text="{loc:Str label_example}" Foreground="#808080" FontSize="12" Margin="0,5,0,5"/>
                                     <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="4" Padding="10">
-                                        <TextBlock Text="http://192.168.1.104:20010" Foreground="#00FF00"
+                                        <TextBlock Text="http://192.168.1.104:30010" Foreground="#00FF00"
                                                    FontSize="14" FontFamily="Consolas"
                                                    HorizontalAlignment="Center"/>
                                     </Border>
+
+                                    <TextBlock TextWrapping="Wrap" Foreground="#808080" FontSize="12" Margin="0,10,0,0">
+                                        <Run>Don't worry about the port number - the app finds the right port automatically. Just make sure </Run>
+                                        <Run FontWeight="Bold">Game Mode</Run>
+                                        <Run> is ON in Lovense Remote.</Run>
+                                    </TextBlock>
 
                                     <TextBlock TextWrapping="Wrap" Foreground="#B0B0B0" FontSize="13" Margin="0,15,0,0">
                                         <Run>3. Click </Run>
@@ -195,7 +203,7 @@
                             </TextBlock>
                             <Border Background="#2D2D4A" CornerRadius="8" Padding="10" MaxHeight="400">
                                 <Image x:Name="ImgButtplugStep1" Stretch="Uniform"
-                                       Source="Resources/haptics_guide/buttplug_step1.png"/>
+                                       Source="pack://application:,,,/Resources/haptics_guide/buttplug_step1.png"/>
                             </Border>
                         </StackPanel>
                     </Grid>
@@ -222,7 +230,7 @@
                             </TextBlock>
                             <Border Background="#2D2D4A" CornerRadius="8" Padding="10" MaxHeight="400">
                                 <Image x:Name="ImgButtplugStep2" Stretch="Uniform"
-                                       Source="Resources/haptics_guide/buttplug_step2.png"/>
+                                       Source="pack://application:,,,/Resources/haptics_guide/buttplug_step2.png"/>
                             </Border>
                         </StackPanel>
                     </Grid>
