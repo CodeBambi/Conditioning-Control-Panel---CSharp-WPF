@@ -524,6 +524,15 @@
   background: rgba(255, 212, 94, 0.12);
   color: var(--gg-gold);
 }
+/* quieter than disputed on purpose: nothing is WRONG, the countersignature is
+   just still in the post. It disappears on its own when onResultFinalized
+   repaints the hero. */
+.gg-badge--unconfirmed {
+  margin-top: 0.9rem;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--gg-text-4);
+}
 .gg-recap-h {
   margin: 0 0 0.7rem;
   font-size: 0.7rem;

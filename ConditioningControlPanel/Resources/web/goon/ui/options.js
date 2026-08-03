@@ -6,6 +6,11 @@
  *   out of a match — volumes, motion, fullscreen, reset;
  *   IN a match     — volumes, motion, fullscreen ONLY, plus the line
  *                    "Match settings are locked once you start."
+ *
+ * IT IS AN OVERLAY, NOT A SCREEN. In a live match it opens over the HUD from the
+ * HUD's own gear (ui/hud.js dispatches `gg-options-open`, boot.js listens) and
+ * changes nothing about the phase, the router or the match clock. Opening it is
+ * never a pause.
  * The match terms are on the wire and countersigned; a drawer that appeared to
  * let you change them mid-duel would be lying, and the engine would ignore it.
  *
@@ -144,6 +149,20 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
     return panel;
   }
 
+  /** Ancestor walk. Element.closest does not exist in the node test harness. */
+  function within(node, root) {
+    for (let n = node; n; n = n.parentNode) if (n === root) return true;
+    return false;
+  }
+
+  /** The HUD gear toggles; an outside-close here would fight it into a no-op. */
+  function isToggleControl(node) {
+    for (let n = node; n; n = n.parentNode) {
+      try { if (n.classList && n.classList.contains('gg-gear')) return true; } catch (_e) { /* stub */ }
+    }
+    return false;
+  }
+
   function openDrawer() {
     if (!host || open) return;
     open = true;
@@ -156,6 +175,25 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
     // One frame so the slide-in transition has a start state to animate from.
     ledger.timer(() => panel.classList.add('is-open'), 16);
     ledger.timer(() => { try { panel.querySelector('input,button')?.focus(); } catch (_e) { /* ignore */ } }, 40);
+
+    /* ESCAPE IS SPOKEN FOR. In a live match Escape means MERCY (boot.js's escape
+     * ladder) and this drawer must never take that key away from the player —
+     * so it is NOT closable with Escape while a match is up. The ways out are
+     * the ×, the gear again, and a click anywhere off the panel.
+     *
+     * Deliberately no scrim: a full-bleed z70 backdrop would sit on top of
+     * #gg-mercy (z60), which is the one thing that may never be covered. That
+     * also means this listener has to be on the document, and armed a tick late
+     * so the click that opened the drawer does not immediately shut it. */
+    ledger.timer(() => {
+      if (ledger.isDisposed) return;
+      ledger.listen(doc, 'pointerdown', (e) => {
+        const t = e && e.target;
+        if (!t || within(t, panel) || isToggleControl(t)) return;
+        close();
+      }, true);
+    }, 0);
+
     try { audio?.sfx?.('ui-select'); } catch (_e) { /* stub bus */ }
   }
 

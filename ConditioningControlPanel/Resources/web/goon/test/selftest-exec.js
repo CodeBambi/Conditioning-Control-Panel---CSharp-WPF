@@ -492,23 +492,106 @@ async function main() {
     ex.detach();
   }
 
-  // ------------------------------------------------- flashes: the DtRH scatter
+  // -------------------------------------- flashes: the DtRH scatter + the hydra
   {
+    const { MAX_LIVE, HYDRA_CHILDREN, BASE_HOLD_MS } = await import('../exec/flashes.js');
+    ok(MAX_LIVE === 20 && HYDRA_CHILDREN === 2 && BASE_HOLD_MS === 5000,
+      'flash budget is 20 on screen, 2 per split, ~5s each',
+      `${MAX_LIVE}/${HYDRA_CHILDREN}/${BASE_HOLD_MS}`);
+
     for (const id of LAYER_IDS) byId.get(id).replaceChildren();
-    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const host = byId.get('gg-fx-flash');
+    const heard = [];
+    const ex = createExecutor({
+      media: fakeMedia(), layers, logger: quiet, toyBridge: null,
+      audio: { sfx: (id) => heard.push(id) },
+    });
     const m = fakeMatch();
     ex.attach(m);
+    // A dismissed flash lingers in the DOM for its pop-out; "on screen" is the
+    // un-popped population, which is also what the cap counts.
+    const shotsOf = () => host.findAll('gg-flash').filter((el) => !el._cls.has('is-popped'));
+
     m.emitStart({ element: GoonElement.Flashes, intensity: 1, durationMs: 0, elapsedMs: 0 });
     await sleep(60);
-    const shots = byId.get('gg-fx-flash').findAll('gg-flash');
+    const shots = shotsOf();
     ok(shots.length > 0, 'the flash bed mounted a scattered image', String(shots.length));
     const f = shots[0];
     ok(/vw$/.test(f.style.getPropertyValue('left')) && /vh$/.test(f.style.getPropertyValue('top')),
       'flashes scatter in vw/vh like payloadFx', `${f.style.getPropertyValue('left')} ${f.style.getPropertyValue('top')}`);
     ok(/deg$/.test(f.style.getPropertyValue('--gg-flash-rot')), 'flashes carry a rotation',
       f.style.getPropertyValue('--gg-flash-rot'));
-    ok(/ms$/.test(f.style.getPropertyValue('--gg-flash-dur')), 'flashes carry a timed duration',
-      f.style.getPropertyValue('--gg-flash-dur'));
+    const dur = parseFloat(f.style.getPropertyValue('--gg-flash-dur'));
+    ok(/ms$/.test(f.style.getPropertyValue('--gg-flash-dur')) && dur >= 4600 && dur <= 5400,
+      'a flash holds ~5s on screen', f.style.getPropertyValue('--gg-flash-dur'));
+    ok(f._cls.has('gg-flash--hydra'),
+      'flashes carry the pointer opt-in modifier (bare .gg-flash stays click-through)', f.className);
+
+    // Freeze the bed: the hydra arithmetic below must not race the cadence.
+    // Airborne flashes stay up (and stay clickable) for the rest of their 5s.
+    m.emitStop({ element: GoonElement.Flashes, intensity: 0, durationMs: 0, elapsedMs: 0 });
+    const atStop = shotsOf().length;
+    await sleep(320);                              // longer than any pending beat stagger
+    const before = shotsOf().length;
+    ok(before === atStop, 'a stopped bed spawns nothing more (the beat stagger honours stop)',
+      `${atStop} -> ${before}`);
+    ok(before > 0, 'stopping the bed leaves the airborne flashes on screen', String(before));
+
+    const target = shotsOf()[0];
+    target.fire('pointerdown');
+    ok(target._cls.has('is-popped'), 'a clicked flash pops out');
+    ok(heard.includes('flash-pop'), 'the click hits the flash-pop sfx hook', heard.join(','));
+    await sleep(320);                              // both children hatch by 210ms
+    ok(shotsOf().length === before + 1,
+      'one click dismisses one and hatches two', `${before} -> ${shotsOf().length}`);
+    const kid = shotsOf().find((el) => el._cls.has('gg-flash--hatch'));
+    ok(!!kid, 'hydra children carry the pop-in class');
+    ok(kid && /vmin$/.test(kid.style.getPropertyValue('--gg-flash-size')),
+      'children size through the CSS var, never a stacked transform',
+      kid && kid.style.getPropertyValue('--gg-flash-size'));
+    await sleep(420);
+    ok(host.findAll('gg-flash').filter((el) => el._cls.has('is-popped')).length === 0,
+      'the dismissed node is torn out of the DOM (no leak if animationend never lands)');
+
+    // Hammer the split: every round doubles the field until MAX_LIVE bites.
+    for (let round = 0; round < 6 && shotsOf().length < MAX_LIVE; round++) {
+      for (const el of shotsOf()) el.fire('pointerdown');
+      await sleep(280);
+    }
+    await sleep(300);
+    const atCap = shotsOf();
+    ok(atCap.length === MAX_LIVE, 'the hydra fills to the cap and refuses to pass it',
+      String(atCap.length));
+
+    atCap[0].fire('pointerdown');
+    await sleep(320);
+    ok(shotsOf().length === MAX_LIVE - 1,
+      'at the cap a click only dismisses — no children', String(shotsOf().length));
+
+    ex.stopAll();
+    ex.detach();
+  }
+
+  // ------------------------------- flashes: clicking is COSMETIC (receipt intact)
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-flash');
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    // renderPayload floors a burst at 3000ms whatever duration_ms says.
+    m.emitPayload({
+      payload: payloadOf({ id: 'pFB', kind: GoonPayloadKind.FlashBurst, duration_ms: 3000, intensity: 0.8 }),
+      fireAtLocalMs: localMonotonicMs(),
+    });
+    await sleep(140);
+    const shots = host.findAll('gg-flash').filter((el) => !el._cls.has('is-popped'));
+    ok(shots.length > 0, 'a FlashBurst puts flashes on screen', String(shots.length));
+    shots[0].fire('pointerdown');
+    ok(m.receipts.length === 0, 'clicking a flash does not settle the burst early');
+    await sleep(3300);
+    ok(m.receipts.length === 1 && m.receipts[0].endured === true,
+      'the burst still receipts endured after its full duration', JSON.stringify(m.receipts));
     ex.stopAll();
     ex.detach();
   }

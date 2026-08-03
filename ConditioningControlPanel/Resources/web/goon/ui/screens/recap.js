@@ -115,11 +115,22 @@ export function mount(container, ctx) {
     const v = verdictCopy(result);
     column.replaceChildren();
 
-    /* --- hero --- */
+    /* --- hero ---
+     * Three states, not two. The verdict is painted from the LOCAL result the
+     * moment the match ends, because that is when this screen mounts — the
+     * countersignature can be up to the engine's 10 s handshake behind it, and
+     * a peer that vanished may never send one at all. Rather than stall on a
+     * blank screen (or, worse, leave the player behind an interstitial waiting
+     * for a frame that is not coming), say plainly that it is unconfirmed and
+     * repaint when onResultFinalized lands. */
+    const badge = !result ? null
+      : result.disputed ? { cls: 'gg-badge--disputed', text: S.recap.disputed }
+        : !result.agreed ? { cls: 'gg-badge--unconfirmed', text: S.recap.unconfirmed }
+          : null;
     const hero = el('section', { class: 'gg-card gg-recap-hero is-' + (v.tone || 'draw') }, [
       el('h1', { class: 'gg-recap-verdict gg-grad', text: v.hero }),
       v.line ? el('p', { class: 'gg-recap-reason', text: v.line }) : null,
-      result && result.disputed ? el('span', { class: 'gg-badge gg-badge--disputed', text: S.recap.disputed }) : null,
+      badge ? el('span', { class: 'gg-badge ' + badge.cls, text: badge.text }) : null,
     ]);
     column.appendChild(hero);
 

@@ -135,6 +135,7 @@ export const S = Object.freeze({
     draw: 'Draw.',
     vanished: 'They vanished.',
     disputed: 'Results disagree — both were recorded.',
+    unconfirmed: 'Unconfirmed — waiting on the other side.',
     mercyLine: (name, ms) => (name || 'they') + ' pressed mercy at ' + mmss(ms) + '.',
     sdLine: (a, b) => 'Sudden death, ' + a + '–' + b + '.',
     abandonLine: 'Connection lost for a minute.',

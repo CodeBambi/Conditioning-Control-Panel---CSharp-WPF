@@ -438,13 +438,22 @@
 .gg-mon-frame.is-nobezel .gg-mon-screen { inset: 0; border: 1px solid rgba(var(--gg-pink-rgb), 0.35); border-radius: 10px; }
 
 /* THE PROJECTION RECT — the little screen inside their little screen. Every
-   miniature plays in here and nothing else does. Sized in % of .gg-mon-screen
-   (centred, ~70% wide, 16:9) so the bezel art can be re-cut without JS. */
+   miniature plays in here and nothing else does.
+
+   z-index: 3 IS THE WHOLE FEATURE. monitor_frame.png (z2) is opaque art with a
+   painted pure-black CRT face, so the rect has to sit ON TOP of it — it is a
+   sibling of the <img>, appended after it in ui/opponent.js, and it is the only
+   thing in this block that must not be "tidied" back inside .gg-mon-screen (that
+   element's z-index:1 opens a stacking context the minis can never climb out of).
+
+   The geometry is % of .gg-mon-frame, matched to the CRT face the art paints
+   (~26%-74% across, ~23%-71% down). Re-cut the art -> re-measure these four. */
 .gg-mon-proj {
   position: absolute;
-  left: 15%;
-  width: 70%;
-  top: 50%;
+  z-index: 3;
+  left: 26%;
+  width: 48%;
+  top: 47%;
   transform: translateY(-50%);
   aspect-ratio: 16 / 9;
   overflow: hidden;
@@ -456,6 +465,10 @@
     inset 0 0 18px rgba(0, 0, 0, 0.7),
     0 0 16px rgba(var(--gg-violet-rgb), 0.18);
 }
+/* No art loaded (the PNG 404'd): the dark glass IS the screen, so the rect can
+   have almost all of it. */
+.gg-mon-frame.is-nobezel .gg-mon-proj { left: 9%; width: 82%; top: 50%; }
+
 .gg-mini-idle {
   position: absolute; inset: 0;
   display: grid; place-items: center;
@@ -852,6 +865,8 @@
 .gg-mercy-takeover.is-in { opacity: 1; }
 .gg-mercy-takeover-title { margin: 0; font-size: clamp(1.6rem, 5vw, 2.6rem); font-weight: 800; color: #fff; }
 .gg-mercy-takeover-line { margin: 0; font-size: 0.95rem; color: var(--gg-text-3); }
+/* the visible way off the scrim; it also auto-dismisses (ui/mercy.js) */
+.gg-mercy-takeover-hint { margin: 1.2rem 0 0; font-size: 0.72rem; letter-spacing: 0.16em; text-transform: lowercase; color: var(--gg-text-4); }
 
 .gg-mercy-sting {
   position: fixed; left: 50%; bottom: 8.5rem;

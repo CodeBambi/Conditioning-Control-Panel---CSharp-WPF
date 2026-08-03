@@ -20,9 +20,11 @@
  *  4. NO REMOTE URLs. Bundled art is referenced by ABSOLUTE SAME-ORIGIN path:
  *     ccp.game maps to Resources/web, so /dtrh/assets/... is the very same
  *     virtual host that serves /goon/index.html — no network is involved.
- *  5. Exactly ONE node in this file takes pointer input: `.gg-bubble`. #gg-fx and
- *     its sub-layers are pointer-events:none, and the opt-in is dropped whenever
- *     the stage is occupied so a bubble can never eat a lock-card click.
+ *  5. TWO nodes in this file take pointer input: `.gg-bubble` (pop) and
+ *     `.gg-flash--hydra` (click-to-split). #gg-fx and its sub-layers are
+ *     pointer-events:none, both opt back in one class at a time, and BOTH opt-ins
+ *     are dropped by the same `body:has(#gg-stage > *)` rule whenever the stage is
+ *     occupied — so neither can ever eat a lock-card or attention-check click.
  * ==========================================================================*/
 
 /* Per-effect knobs. The renderers write these as inline custom properties on
@@ -39,23 +41,69 @@
  * FLASHES (#gg-fx-flash) — the DtRH flash, port of .sf-pfx-flash: a SCATTERED
  * image from the player's own pool, dropped at a random spot, tilted a few
  * degrees, in and out on one timed animation. Never full-window, never centred.
+ *
+ * SIZE lives in --gg-flash-size (38vmin + 15%, the owner's bump). exec/flashes.js
+ * only writes the property for HYDRA CHILDREN, which taper per generation; it is
+ * a size var and never a transform, so it cannot fight the tilt or the fade.
+ *
+ * CLICKABLE — but only the `--hydra` variant. exec/bubbles.js mints plain
+ * `.gg-flash` nodes for its pop effect and those must stay click-through, so the
+ * pointer opt-in rides a modifier instead of the base class. The :has() rule
+ * below takes even that away the moment the stage holds a video or a lock card
+ * (the same rule the bubble field obeys), so a flash lying over the typing card
+ * can never swallow the click.
  * ------------------------------------------------------------------------ */
 .gg-flash {
   position: absolute;
   left: 50%;
   top: 50%;
-  max-width: 38vmin;
-  max-height: 38vmin;
+  max-width: var(--gg-flash-size, 43.7vmin);
+  max-height: var(--gg-flash-size, 43.7vmin);
   border-radius: 10px;
   filter: drop-shadow(0 0 26px rgba(var(--gg-pink-rgb), 0.85));
   will-change: transform, opacity;
   animation: ggFlash var(--gg-flash-dur, 1400ms) ease forwards;
 }
+/* Snappier in/out than the old 14%/28%: at a 5s lifetime a proportional fade
+   spent 2.1s of every flash ramping. 7%/16% holds ~3.9s of the 5s solid. */
 @keyframes ggFlash {
   0%   { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(0.82); }
-  14%  { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1); }
-  72%  { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.01); }
+  7%   { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1); }
+  84%  { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.01); }
   100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.05); }
+}
+
+/* The pointer opt-in. Base .gg-flash stays click-through (bubbles' pop flashes). */
+.gg-flash--hydra {
+  pointer-events: auto;
+  touch-action: manipulation;      /* no double-tap zoom when splitting fast */
+  cursor: pointer;
+}
+/* The stage (z20) owns the video surface and the lock card. While it holds
+   anything, the flashes go back to being scenery. */
+body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default; }
+
+/* A hatched child: same shape, but it snaps in with an overshoot so the split
+   reads as a split instead of another flash quietly fading up. */
+.gg-flash--hatch { animation-name: ggFlashHatch; }
+@keyframes ggFlashHatch {
+  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(0.42); }
+  4%   { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.12); }
+  8%   { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(0.97); }
+  84%  { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.01); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.05); }
+}
+
+/* The dismissed one. The shorthand replaces the running fade outright, and the
+   animationend it fires is the same teardown hook the fade would have used. */
+.gg-flash.is-popped {
+  pointer-events: none;
+  animation: ggFlashPop 220ms ease-out forwards;
+}
+@keyframes ggFlashPop {
+  0%   { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1); }
+  45%  { opacity: 0.9; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.2); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.34); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -390,12 +438,16 @@ body:has(#gg-stage > *) .gg-bubble { pointer-events: none; cursor: default; }
  * player still sees every effect, it just stops travelling and pulsing.
  * ------------------------------------------------------------------------ */
 @media (prefers-reduced-motion: reduce) {
-  /* Flashes still appear and still fade — they just stop scaling on the way. */
+  /* Flashes still appear and still fade — they just stop scaling on the way.
+     (The hatch overshoot goes with it; both lose to this rule on source order.
+     A dismissed flash needs the explicit override: .gg-flash.is-popped outranks
+     a bare .gg-flash whatever the order, and it still has to disappear.) */
   .gg-flash {
     animation: none;
     opacity: var(--gg-flash-op, 0.95);
     transform: translate(-50%, -50%);
   }
+  .gg-flash.is-popped { animation: none; opacity: 0; }
   .gg-sub-word { transform: translate(-50%, -50%) !important; transition: opacity 300ms ease; }
   .gg-bubble { animation: none; }        /* no sway; the rise still carries it up */
   .gg-spiral { animation: none; }        /* no spin; the pane still covers + blends */

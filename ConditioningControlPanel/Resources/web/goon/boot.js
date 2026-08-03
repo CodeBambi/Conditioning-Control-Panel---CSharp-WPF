@@ -79,6 +79,20 @@ const BOOT_MS = 45000;   // hosted: give up and tell C#
 const EXIT_FALLBACK_MS = 1200;
 const ESC_HOLD_MS = 1200;
 
+/**
+ * How long after `matchEnded` we stop waiting for the countersignature and put
+ * the recap in front of the player anyway.
+ *
+ * The engine already has a 10 s result handshake (core/match.js
+ * RESULT_HANDSHAKE_TIMEOUT_MS, matching GoonMatchService.ResultHandshakeTimeoutMs)
+ * and _endMatch flips the phase to Recap synchronously, so in the healthy case
+ * this timer never does anything. It exists for the case the owner actually hit:
+ * SOMETHING between the concede and the recap — an overlay, a screen that failed
+ * to mount, a peer that vanished mid-handshake — leaves the player looking at a
+ * dead end. Ending a match must always, always land on the recap.
+ */
+const RECAP_FALLBACK_MS = 4000;
+
 /* ----------------------------------------------------------------------------
  * SESSION — the page's read-only view of who we are and what we agreed to.
  * Everything downstream (lobby, draft, HUD, executors) reads THIS, never the raw
@@ -294,6 +308,7 @@ let phaseUnsubs = [];
 let escMercied = false;
 let awaitingEntry = false;
 let lastConnectFailed = null;
+let recapFallbackTimer = 0;
 
 /* ---- Practice mode */
 let soloPair = null;
@@ -514,11 +529,62 @@ function attachMatch(match, transport) {
     if (h === 1) toasts?.warn?.(S.toasts.peerWobbly);
     else if (h === 0) toasts?.good?.(S.toasts.peerBack);
   }));
+  // THE RECAP IS NOT OPTIONAL (see RECAP_FALLBACK_MS). The timer is armed on
+  // matchEnded and deliberately NOT cancelled by resultFinalized: the handshake
+  // landing says nothing about whether the player can SEE the recap, which is
+  // the thing that was broken.
+  phaseUnsubs.push(match.onMatchEnded(() => armRecapFallback()));
+  phaseUnsubs.push(match.onResultFinalized(() => forceRecap('finalized', false)));
   onPhase(match.phase);
   paintProbe();
 }
 
+/* ----------------------------------------------------------------------------
+ * THE RECAP SAFETY NET. Conceding is the one thing a player is promised will
+ * always work, and "always works" has to include what happens after it.
+ * -------------------------------------------------------------------------- */
+function armRecapFallback() {
+  clearRecapFallback();
+  try { recapFallbackTimer = setTimeout(() => forceRecap('fallback', true), RECAP_FALLBACK_MS); }
+  catch (_e) { forceRecap('fallback', true); }
+}
+
+function clearRecapFallback() {
+  try { clearTimeout(recapFallbackTimer); } catch (_e) { /* ignore */ }
+  recapFallbackTimer = 0;
+}
+
+/**
+ * Idempotent: puts the recap in front of the player, and (on the fallback pass)
+ * clears anything left covering it. The mercy takeover dismisses itself
+ * (ui/mercy.js), but it is a full-bleed z65 scrim over a z10 screen, so this
+ * sweeps <body> for a stray one rather than trusting one owner to still be alive.
+ * `sweep` is false on the resultFinalized pass — that can land in tens of ms over
+ * a loopback and yanking "you tapped out." away that fast would just be a flicker.
+ */
+function forceRecap(why, sweep) {
+  const m = currentMatch;
+  if (!m || m.phase !== GoonMatchPhase.Recap) return;
+  if (sweep) {
+    try { mercyHandle?.dismissTakeover?.(); } catch (_e) { /* ignore */ }
+    if (hasDom()) {
+      try {
+        for (const node of Array.from(document.querySelectorAll('.gg-mercy-takeover') || [])) {
+          try { node.remove(); } catch (_e) { /* gone */ }
+        }
+      } catch (_e) { /* stub DOM */ }
+    }
+  }
+  if (router && router.current !== 'recap') {
+    logger.warn('recap was not up after the match ended (' + why + ') — forcing it');
+    unmountHud();
+    unmountMercy();
+    router.show('recap');
+  }
+}
+
 function detachMatch() {
+  clearRecapFallback();
   for (const off of phaseUnsubs) { try { off(); } catch (_e) { /* ignore */ } }
   phaseUnsubs = [];
   unmountHud();
@@ -780,6 +846,22 @@ function buildApp() {
     setFullscreen: (on) => bridge.send({ type: 'fullscreen-set', on: !!on }),
     isInMatch: () => !!currentMatch && currentMatch.phase !== GoonMatchPhase.Idle,
   });
+
+  /* THE IN-MATCH OPTIONS SEAM. The HUD's gear (ui/hud.js) cannot reach `options`
+   * — it is a boot singleton and the HUD is mounted by a dynamically loaded
+   * sibling — so it asks by event and THIS is the ear. Without this listener the
+   * gear is a button that does nothing, which is exactly how it shipped.
+   *
+   * It is a TOGGLE, and the drawer is an OVERLAY (#gg-drawer, z70) — never a
+   * router.show(). Opening it during a live match must not touch the phase, the
+   * HUD or the screen stack; the match keeps running underneath, Escape still
+   * means MERCY (see the escape ladder), and the drawer clips itself clear of
+   * the mercy button (ui/options.js MERCY_CLEARANCE_PX). */
+  try {
+    document.addEventListener('gg-options-open', () => {
+      try { options?.toggle?.(); } catch (e) { logger.warn('options.toggle threw: ' + ((e && e.message) || e)); }
+    });
+  } catch (_e) { /* no document: nothing to open */ }
 
   try {
     document.documentElement.setAttribute('data-gg-motion', prefs.get('reduceMotion') ? 'reduced' : 'full');

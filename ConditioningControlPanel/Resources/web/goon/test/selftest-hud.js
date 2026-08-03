@@ -75,6 +75,22 @@ function installDom() {
         if (s) for (const fn of Array.from(s)) { try { fn(evt); } catch (_e) { /* ignore */ } }
         return true;
       },
+      /** Just enough selector engine for `.class` and bare tag names. */
+      querySelectorAll(sel) {
+        const sels = String(sel || '').split(',').map((s) => s.trim()).filter(Boolean);
+        const out = [];
+        const hit = (kid, s) => (s.startsWith('.')
+          ? !!(kid._classes && kid._classes.has(s.slice(1)))
+          : kid.tagName === s.toUpperCase());
+        (function walk(nd) {
+          for (const kid of nd.children || []) {
+            if (sels.some((s) => hit(kid, s))) out.push(kid);
+            walk(kid);
+          }
+        })(node);
+        return out;
+      },
+      querySelector(sel) { return node.querySelectorAll(sel)[0] || null; },
       getBoundingClientRect() { return { left: 100, top: 100, right: 300, bottom: 220, width: 200, height: 120 }; },
       focus() {}, blur() {},
       setPointerCapture() {}, releasePointerCapture() {},
@@ -89,16 +105,21 @@ function installDom() {
   doc.body = makeNode('body');
   doc.activeElement = null;
   const byId = new Map();
-  for (const id of ['gg-hud', 'gg-mercy', 'gg-stage', 'scr-sd', 'gg-toasts']) {
+  for (const id of ['gg-hud', 'gg-mercy', 'gg-stage', 'scr-sd', 'gg-toasts', 'gg-drawer', 'gg-modal']) {
     const n = makeNode('div');
     n.id = id;
+    n.hidden = true;
     byId.set(id, n);
     doc.body.appendChild(n);
   }
   doc.createElement = (tag) => makeNode(tag);
   doc.createTextNode = (t) => { const n = makeNode('#text'); n.textContent = String(t); return n; };
   doc.getElementById = (id) => byId.get(id) || null;
-  doc.querySelector = () => null;
+  // <body> is not a child of the document node in this stub, so the document's
+  // own queries have to start from it explicitly (boot.js sweeps for a stray
+  // .gg-mercy-takeover this way).
+  doc.querySelectorAll = (sel) => doc.body.querySelectorAll(sel);
+  doc.querySelector = (sel) => doc.body.querySelectorAll(sel)[0] || null;
 
   const win = makeNode('window');
   win.innerWidth = 1280;
@@ -661,6 +682,222 @@ function makeFakeMatch() {
   }
   ok(match._subs.released === match._subs.taken, 'repeat mount/unmount leaks nothing', `${match._subs.released}/${match._subs.taken}`);
   ok(dom.byId.get('gg-hud').children.length === 0, 'no HUD residue after three cycles');
+}
+
+/* ===========================================================================
+ * 9. REGRESSION — the opponent monitor was completely invisible (0803).
+ *
+ * assets/monitor_frame.png is OPAQUE art with a painted pure-black CRT face, and
+ * the projection rect was a child of .gg-mon-screen (z-index:1 -> its own
+ * stacking context) while the <img> sat at z-index:2. Every mini rendered under
+ * the art. Structure and z-order are BOTH asserted, because either one alone
+ * puts it back under the paint.
+ * ======================================================================== */
+{
+  const match = makeFakeMatch();
+  const host = document.createElement('div');
+  const mon = opponentMod.mountOpponent({ host, match });
+  const frame = findOne(mon.root, 'gg-mon-frame');
+  const proj = findOne(mon.root, 'gg-mon-proj');
+  const bezel = findOne(mon.root, 'gg-mon-bezel');
+  const screen = findOne(mon.root, 'gg-mon-screen');
+
+  ok(!!frame && !!proj && !!bezel && !!screen, 'the monitor has frame + screen + bezel + projection');
+  ok(proj.parentNode === frame, 'the projection rect is a SIBLING of the bezel art, not a child of the glass');
+  ok(!screen.contains(proj), 'the projection rect is not inside .gg-mon-screen (that element opens a stacking context)');
+  const kids = frame.children;
+  ok(kids.indexOf(proj) > kids.indexOf(bezel),
+    'the projection rect is painted AFTER the opaque bezel <img>', `proj@${kids.indexOf(proj)} bezel@${kids.indexOf(bezel)}`);
+  ok(findAll(proj, 'gg-mini').length === 9 && findAll(mon.root, 'gg-mini').length === 9,
+    'all nine minis moved with the rect');
+  mon.unmount();
+}
+
+// …and the CSS half of the same fix. A z-index the minis cannot win is exactly
+// how this shipped, so the stylesheet is read rather than trusted.
+{
+  const fs = await import('node:fs/promises');
+  const url = await import('node:url');
+  const css = await fs.readFile(url.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8');
+  const zOf = (selector) => {
+    const block = new RegExp('\\' + selector + '\\s*\\{([^}]*)\\}').exec(css);
+    const z = block && /z-index:\s*(-?\d+)/.exec(block[1]);
+    return z ? Number(z[1]) : null;
+  };
+  const zProj = zOf('.gg-mon-proj');
+  const zBezel = zOf('.gg-mon-bezel');
+  ok(zProj !== null, 'hud.css gives .gg-mon-proj an explicit z-index');
+  ok(zBezel !== null, 'hud.css gives .gg-mon-bezel an explicit z-index');
+  ok(zProj > zBezel, 'the projection rect outranks the opaque bezel art', `${zProj} vs ${zBezel}`);
+}
+
+/* --- 9b. …and the REAL mount path is what feeds it ------------------------
+ * The old 7b check emitted a receipt by hand, which greens the monitor whether
+ * or not anything is wired. This one spies on the object mountHud actually
+ * built, and then lets a real fire open a real window on its real timer. */
+{
+  const match = makeFakeMatch();
+  const hud = hudMod.mountHud({ match, audio: { sfx() {} } });
+  const mon = hud.parts.opponent;
+
+  const seen = [];
+  const real = mon.markPayloadFired;
+  mon.markPayloadFired = (o) => { seen.push(o); return real(o); };
+  const res = hud.parts.arsenal.fire('flash');
+  mon.markPayloadFired = real;
+
+  ok(res && res.ok === true, 'the real desk fires');
+  ok(seen.length === 1, 'mountHud wires arsenal.onFired -> opponent.markPayloadFired', String(seen.length));
+  ok(seen[0] && seen[0].id === res.id, 'the monitor is told the id the engine accepted');
+  ok(seen[0] && seen[0].kind === GoonPayloadKind.FlashBurst, 'and the kind', String(seen[0] && seen[0].kind));
+  ok(seen[0] && seen[0].durationMs > 0, 'and how long it runs', String(seen[0] && seen[0].durationMs));
+  ok(seen[0] && seen[0].leadMs >= GoonConsts.MinScheduleBufferMs,
+    'the window leads by at least the engine schedule buffer', String(seen[0] && seen[0].leadMs));
+
+  // no receipt, no active_effects: the fired window alone must light the mini.
+  match.opponent.activeEffects = [];
+  match._emit('opp');
+  const proj = findOne(dom.byId.get('gg-hud'), 'gg-mon-proj');
+  const flash = findOne(proj, 'gg-mini-flash');
+  ok(!hasClass(flash, 'is-on'), 'the mini is dark until the payload is due');
+  await sleep(seen[0].leadMs + 200);
+  ok(hasClass(flash, 'is-on'), 'a real fire opens its mini on the real clock, with no help from their tick');
+  ok(hasClass(flash, 'is-yours'), 'and it is marked as ours');
+  hud.unmount();
+  ok(match._subs.released === match._subs.taken, 'the real path leaks no subscriptions', `${match._subs.released}/${match._subs.taken}`);
+}
+
+/* ===========================================================================
+ * 10. REGRESSION — "you tapped out." stranded the player (0803).
+ *
+ * declareMercy() ends the match SYNCHRONOUSLY, so boot.js unmounts this layer
+ * before declare() reaches showTakeover — the scrim was built after its own
+ * ledger had already been run, landed on <body> with no owner, and covered the
+ * recap (z65 over z10) forever. The ordering is reproduced exactly.
+ * ======================================================================== */
+{
+  const match = makeFakeMatch();
+  const onBody = () => dom.doc.body.children.filter((c) => c._classes && c._classes.has('gg-mercy-takeover'));
+  let mercy = null;
+  // This IS the production ordering: phase -> Recap -> boot.js unmountMercy().
+  match.declareMercy = () => { match._calls.mercy++; mercy.unmount(); };
+
+  mercy = mercyMod.mountMercy({ getMatch: () => match });
+  const btn = dom.byId.get('gg-mercy').children[0].children[0];
+  await sleep(760);
+  btn.dispatchEvent({ type: 'pointerdown', preventDefault() {} });
+
+  ok(match._calls.mercy === 1, 'the concede still reaches the engine first');
+  ok(onBody().length === 1, 'the takeover is shown even though the layer unmounted mid-declare');
+  ok(document.querySelectorAll('.gg-mercy-takeover').length === 1,
+    "boot.js's recap sweep can find a stray takeover");
+  ok(typeof mercy.dismissTakeover === 'function', 'mercy exposes the dismissal seam boot.js calls');
+
+  // three independent ways off it — a tap…
+  onBody()[0].dispatchEvent({ type: 'pointerdown' });
+  ok(onBody().length === 0, 'tapping the takeover reveals the recap underneath');
+}
+{
+  // …and, for a player who taps nothing, its own timer.
+  const match = makeFakeMatch();
+  const onBody = () => dom.doc.body.children.filter((c) => c._classes && c._classes.has('gg-mercy-takeover'));
+  let mercy = null;
+  match.declareMercy = () => { mercy.unmount(); };
+  mercy = mercyMod.mountMercy({ getMatch: () => match });
+  const btn = dom.byId.get('gg-mercy').children[0].children[0];
+  await sleep(760);
+  btn.dispatchEvent({ type: 'pointerdown', preventDefault() {} });
+  ok(onBody().length === 1, 'the takeover is up');
+  await sleep(mercyMod.TAKEOVER_MS + 250);
+  ok(onBody().length === 0, 'the takeover never outlives the match, even untouched',
+    `waited ${mercyMod.TAKEOVER_MS + 250}ms`);
+  // …and the third is boot.js's sweep, which the seam above covers.
+}
+
+/* ===========================================================================
+ * 11. REGRESSION — Options could not be opened during a match (0803).
+ *
+ * The HUD's gear dispatched `gg-options-open` and NOTHING listened, so it was a
+ * dead button. The drawer must open as an OVERLAY over a live HUD: no router
+ * navigation, no pause, and clear of the mercy button.
+ * ======================================================================== */
+{
+  const optionsMod = await import('../ui/options.js');
+  const prefsStub = (() => {
+    const v = { masterVolume: 0.8, musicVolume: 0.5, sfxVolume: 0.7, reduceMotion: false };
+    return { get: (k) => v[k], set: (k, x) => { v[k] = x; }, reset() {} };
+  })();
+  const options = optionsMod.createOptions({
+    prefs: prefsStub,
+    session: { hosted: false },
+    isInMatch: () => true,
+  });
+
+  // the seam boot.js owns: a document-level ear for the HUD's gear
+  document.addEventListener('gg-options-open', () => options.toggle());
+
+  const match = makeFakeMatch();
+  const hud = hudMod.mountHud({ match, audio: { sfx() {} } });
+  const hudHost = dom.byId.get('gg-hud');
+  const drawer = dom.byId.get('gg-drawer');
+  const gear = findOne(hudHost, 'gg-gear');
+  ok(!!gear, 'the live HUD carries an options gear');
+
+  gear.dispatchEvent({ type: 'click' });
+  ok(options.isOpen === true, 'the HUD gear opens Options during a live match');
+  ok(drawer.hidden === false, 'it opens in the #gg-drawer overlay (z70)');
+  const panel = findOne(drawer, 'gg-panel');
+  ok(!!panel, 'the drawer renders its panel');
+  ok(hasClass(panel, 'is-inmatch'), 'the in-match variant is used');
+  ok(panel.style['--gg-drawer-clip'] === '96px', 'the mercy clearance is applied',
+    String(panel.style['--gg-drawer-clip']));
+  ok(!!findOne(panel, 'gg-panel-note'), 'it says match settings are locked instead of pretending otherwise');
+  ok(!!findOne(panel, 'gg-panel-close'), 'there is a close button (Escape is reserved for MERCY while live)');
+
+  // it is an overlay: the HUD is untouched and no screen was navigated to
+  ok(hudHost.hidden === false && hudHost.children.length > 0, 'the live HUD is still mounted underneath');
+  ok(dom.byId.get('gg-modal').children.length === 0, 'nothing was pushed onto the modal layer');
+  ok(match._calls.mercy === 0, 'opening Options does not concede');
+
+  await sleep(30);
+  // the gear is a toggle, so an outside-close must not fight it
+  gear.dispatchEvent({ type: 'pointerdown', target: gear });
+  ok(options.isOpen === true, 'a pointerdown on the gear itself does not close the drawer');
+  gear.dispatchEvent({ type: 'click' });
+  ok(options.isOpen === false, 'the gear toggles it shut again');
+
+  gear.dispatchEvent({ type: 'click' });
+  await sleep(30);
+  ok(options.isOpen === true, 'reopened');
+  document.dispatchEvent({ type: 'pointerdown', target: dom.doc.body });
+  ok(options.isOpen === false, 'a click off the panel closes it — no Escape needed');
+  await sleep(320);   // the slide-out runs before the layer is torn down
+  ok(drawer.hidden === true, 'and the overlay layer is emptied');
+  ok(drawer.children.length === 0, 'leaving no panel behind');
+
+  hud.unmount();
+  options.dispose();
+}
+
+// --- 11b. the two-file contract the block above cannot see -----------------
+// The block above supplies its own listener, exactly as boot.js does — which
+// means it would still pass with boot.js having no ear at all (the bug). The
+// dispatcher and the listener live in different files, so the event NAME is
+// checked across both: a missing listener and a typo'd one look the same to the
+// player (a gear that does nothing) and neither shows up in any other gate.
+{
+  const fs = await import('node:fs/promises');
+  const url = await import('node:url');
+  const read = async (p) => fs.readFile(url.fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+  const hudSrc = await read('../ui/hud.js');
+  const bootSrc = await read('../boot.js');
+
+  const dispatched = /new CustomEvent\(\s*'([^']+)'/.exec(hudSrc);
+  ok(!!dispatched, 'ui/hud.js dispatches a CustomEvent for the gear');
+  const listened = new RegExp("addEventListener\\(\\s*'" + (dispatched ? dispatched[1] : 'x') + "'").test(bootSrc);
+  ok(listened, `boot.js listens for '${dispatched && dispatched[1]}' — without it the HUD gear is a dead button`);
+  ok(/options\??\.?\.?toggle|options\?\.toggle/.test(bootSrc), 'and answers it by toggling the options drawer');
+  ok(!/router\.show\(\s*'options'/.test(bootSrc), 'Options is never a screen navigation');
 }
 
 await sleep(60);

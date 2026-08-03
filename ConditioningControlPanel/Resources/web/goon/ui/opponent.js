@@ -159,12 +159,34 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
   for (let i = 0; i < GoonConsts.ChargeCap; i++) pips.push(add(pipRow, el('i', 'gg-pip gg-pip--sm')));
 
   // ---- the screen inside the bezel ---------------------------------------
-  // .gg-mon-screen is the machine's glass; .gg-mon-proj is the PROJECTION RECT —
-  // a centred 16:9 window where every miniature actually plays. It is sized in
-  // percentages of the screen so the bezel art can be re-cut without touching JS.
+  // THE STACKING ORDER HERE IS LOAD-BEARING. assets/monitor_frame.png is an
+  // OPAQUE cel-shaded CRT whose face is painted PURE BLACK — it is not a cutout.
+  // So the three layers go, bottom to top:
+  //
+  //   .gg-mon-screen  dark glass, only ever seen through .is-nobezel (z1);
+  //   .gg-mon-bezel   the art itself                                  (z2);
+  //   .gg-mon-proj    the PROJECTION RECT, where every miniature plays (z3).
+  //
+  // The projection rect used to be a CHILD of .gg-mon-screen, and z-index:1 on
+  // that element opens a stacking context — no z-index on a descendant can climb
+  // out of it, so every mini rendered underneath the painted black screen and
+  // nothing was ever visible. DOM order below and `z-index: 3` in hud.css are
+  // two halves of one fix; do not separate them.
   const frame = add(root, el('div', 'gg-mon-frame'));
-  const screen = add(frame, el('div', 'gg-mon-screen'));
-  const proj = add(screen, el('div', 'gg-mon-proj'));
+  add(frame, el('div', 'gg-mon-screen'));
+
+  const bezel = el('img', 'gg-mon-bezel');
+  if (bezel) {
+    bezel.src = './assets/monitor_frame.png';
+    bezel.alt = '';
+    bezel.decoding = 'async';
+    led.listen(bezel, 'error', () => { cls(frame, 'is-nobezel', true); try { bezel.remove(); } catch (_e) { /* gone */ } });
+    add(frame, bezel);
+  }
+
+  // …and the projection rect ON TOP of the art, sized (in hud.css) to the CRT
+  // face the art paints.
+  const proj = add(frame, el('div', 'gg-mon-proj'));
   const parts = new Map();
   for (const m of MINIS) {
     const node = add(proj, el('div', 'gg-mini ' + m.cls));
@@ -196,15 +218,6 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
   if (check && check.setAttribute) {
     check.setAttribute('role', 'status');
     check.setAttribute('aria-label', S.monitor.passed);
-  }
-
-  const bezel = el('img', 'gg-mon-bezel');
-  if (bezel) {
-    bezel.src = './assets/monitor_frame.png';
-    bezel.alt = '';
-    bezel.decoding = 'async';
-    led.listen(bezel, 'error', () => { cls(frame, 'is-nobezel', true); try { bezel.remove(); } catch (_e) { /* gone */ } });
-    add(frame, bezel);
   }
 
   // emote bubble — one at a time, textContent only

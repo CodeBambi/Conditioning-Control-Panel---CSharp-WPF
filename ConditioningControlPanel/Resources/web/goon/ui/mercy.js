@@ -23,6 +23,20 @@ import { GoonEndReason } from '../core/contracts.js';
 
 const ARM_MS = 700;
 
+/**
+ * How long "you tapped out." holds before it gets out of the way.
+ *
+ * IT MUST GET OUT OF THE WAY. declareMercy() ends the match SYNCHRONOUSLY
+ * (core/match.js _endMatch -> phase Recap), which makes boot.js unmount this
+ * whole layer BEFORE declare() gets to its next statement — so the takeover is
+ * built after our own ledger has already been run and cannot be owned by it.
+ * It therefore owns itself: this timer, a tap-anywhere dismiss, and the sweep
+ * in boot.js are three independent ways off the screen, because the recap is
+ * already mounted UNDERNEATH it (z10) and a takeover that never leaves is a
+ * player stranded on a full-bleed scrim with no button on it.
+ */
+export const TAKEOVER_MS = 2400;
+
 const doc = () => (typeof document !== 'undefined' ? document : null);
 
 function el(tag, cls, text) {
@@ -94,6 +108,7 @@ export function mountMercy({ getMatch = null, audio = null, onLog = null } = {})
   let armed = false;
   let localDeclared = false;
   let takeover = null;
+  let dismissTakeover = null;
 
   const armTimer = setTimeout(() => {
     armed = true;
@@ -134,17 +149,35 @@ export function mountMercy({ getMatch = null, audio = null, onLog = null } = {})
    * Full-bleed. It goes on <body>, NOT inside #gg-mercy: that layer carries a
    * translateX(-50%), which would make it the containing block for a fixed
    * child and shrink the scrim to the size of the button.
+   *
+   * SELF-OWNING by necessity — see TAKEOVER_MS. Nothing here goes through the
+   * ledger, because by the time this runs the ledger has already been disposed.
    */
   function showTakeover(title, line) {
     if (takeover) return;
-    takeover = el('div', 'gg-mercy-takeover');
-    if (!takeover) return;
-    add(takeover, el('h2', 'gg-mercy-takeover-title', title));
-    add(takeover, el('p', 'gg-mercy-takeover-line', line));
-    add((d && d.body) || host, takeover);
+    const node = el('div', 'gg-mercy-takeover');
+    if (!node) return;
+    takeover = node;
+    add(node, el('h2', 'gg-mercy-takeover-title', title));
+    add(node, el('p', 'gg-mercy-takeover-line', line));
+    // The way out is on the node itself, so it works even after the recap has
+    // replaced everything else on the page.
+    add(node, el('p', 'gg-mercy-takeover-hint', 'tap to see the recap'));
+    add((d && d.body) || host, node);
     if (wrap) wrap.hidden = true;
-    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => cls(takeover, 'is-in', true));
-    else cls(takeover, 'is-in', true);
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => cls(node, 'is-in', true));
+    else cls(node, 'is-in', true);
+
+    let autoTimer = 0;
+    const drop = () => {
+      try { clearTimeout(autoTimer); } catch (_e) { /* gone */ }
+      if (takeover === node) takeover = null;
+      try { node.remove(); } catch (_e) { /* already gone */ }
+    };
+    dismissTakeover = drop;
+    try { node.addEventListener('pointerdown', drop); node.addEventListener('click', drop); }
+    catch (_e) { /* stub DOM */ }
+    try { autoTimer = setTimeout(drop, TAKEOVER_MS); } catch (_e) { /* no timers: the tap still works */ }
   }
 
   /** Their concede: a sting, not a takeover — the recap is H's screen. */
@@ -185,9 +218,14 @@ export function mountMercy({ getMatch = null, audio = null, onLog = null } = {})
     declare,
     /** For H's Esc ladder, if it wants to route through the same guard. */
     isArmed() { return armed; },
+    /** boot.js's recap sweep calls this; so does a tap on the scrim. */
+    dismissTakeover() { if (typeof dismissTakeover === 'function') dismissTakeover(); },
     unmount() {
       led.run();
-      try { if (takeover) takeover.remove(); } catch (_e) { /* gone */ }
+      // NOTE: in the ordinary mercy path this runs BEFORE the takeover exists
+      // (declareMercy is synchronous), which is exactly why the takeover carries
+      // its own dismissal. This line only covers the unmount-after-show order.
+      if (typeof dismissTakeover === 'function') { try { dismissTakeover(); } catch (_e) { /* gone */ } }
       try { wrap && wrap.remove(); } catch (_e) { /* gone */ }
       if (host) host.hidden = true;
     },
