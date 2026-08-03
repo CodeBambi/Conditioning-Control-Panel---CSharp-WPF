@@ -279,13 +279,20 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
  *
  * So: no colour-space filter functions in these rules. Each kind gets its own
  * halo and nothing else — flash warm white, spiral cyan, glitch acid green,
- * braindrain violet, pinkfilter house pink. selftest-exec reads this file and
- * fails if a recolour chain comes back. */
+ * braindrain violet, pinkfilter house pink, video iridescent white-violet.
+ * selftest-exec reads this file and fails if a recolour chain comes back.
+ *
+ * `video` is the one kind whose sprite is not named after it: it wears the
+ * Fall's PRISM bubble, because that iridescent swirl reads as a SCREEN, and
+ * popping it opens a floating video window (exec/bubbles.js -> exec/executor.js
+ * -> exec/videos.js spawnLocal). Its halo is the palest of the six on purpose:
+ * a prism is white light, not a colour. */
 .gg-bubble--flash      { background-image: url('/dtrh/assets/bubbles/effects/flash.png');      filter: drop-shadow(0 0 9px rgba(255, 240, 200, 0.75)); }
 .gg-bubble--spiral     { background-image: url('/dtrh/assets/bubbles/effects/spiral.png');     filter: drop-shadow(0 0 9px rgba(110, 225, 255, 0.75)); }
 .gg-bubble--glitch     { background-image: url('/dtrh/assets/bubbles/effects/glitch.png');     filter: drop-shadow(0 0 9px rgba(140, 255, 170, 0.75)); }
 .gg-bubble--braindrain { background-image: url('/dtrh/assets/bubbles/effects/braindrain.png'); filter: drop-shadow(0 0 9px rgba(180, 150, 255, 0.75)); }
 .gg-bubble--pinkfilter { background-image: url('/dtrh/assets/bubbles/effects/pinkfilter.png'); filter: drop-shadow(0 0 10px rgba(var(--gg-pink-rgb), 0.85)); }
+.gg-bubble--video      { background-image: url('/dtrh/assets/bubbles/effects/prism.png');      filter: drop-shadow(0 0 11px rgba(226, 214, 255, 0.85)); }
 
 .gg-bubble.is-pop { pointer-events: none; animation: ggBubblePop 0.39s ease-out forwards; }
 @keyframes ggBubblePop {

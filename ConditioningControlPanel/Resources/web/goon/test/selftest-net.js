@@ -396,12 +396,90 @@ async function testSessionFallback() {
   await busy.leave();
 }
 
+// ====================================== 5. the tick's `vwin` on a real channel (2026-08-04)
+//
+// APPEND-ONLY WIRE GROWTH, the DraftMsg allowed/confirmed precedent: one optional integer on the
+// state tick saying how many FLOATING VIDEO WINDOWS the sender has up. Everything below is about
+// the two directions of forgiveness that make an append-only field safe:
+//
+//   ABSENT = 0. An older peer, or the C# reference client, never mentions it. That must parse as
+//   a tick with no windows, not as undefined leaking into a monitor.
+//
+//   NEVER TRUST THE NUMBER. It is clamped to the wire cap and then to the display cap on the way
+//   IN and on the way OUT, so nothing downstream ever has to ask whether 9, -3, "2" or NaN is
+//   possible. Frames are pushed through _sendRaw, i.e. straight into the peer's parse(), because
+//   a hostile or mismatched peer is exactly what does not go through our own factories.
+async function testVwinTick() {
+  const pair = createLoopbackPair(loopbackOptions(Object.assign(loopbackPresets.instant(), { logger: quiet })));
+  const { host, guest } = pair;
+  const got = [];
+  guest.onMessageReceived((m) => { if (m && m.t === 'tick') got.push(m); });
+  await pair.connect();
+
+  const lastTick = () => got[got.length - 1] || null;
+  const raw = async (json) => {
+    const before = got.length;
+    await host._sendRaw(json);
+    await until(() => got.length > before, 2000);
+    return lastTick();
+  };
+
+  await host.send(makeTick({ score: 7, vwin: 3 }));
+  ok(await until(() => got.length > 0, 2000), 'a tick carrying vwin crosses the channel');
+  ok(lastTick() && lastTick().vwin === 3, 'and arrives with the count intact', JSON.stringify(lastTick()));
+  ok(lastTick() && lastTick().score === 7, 'the fields it rides with are untouched', String(lastTick() && lastTick().score));
+
+  await host.send(makeTick({ score: 1 }));
+  await until(() => got.length > 1, 2000);
+  ok(lastTick().vwin === 0, 'a tick built without one reports zero windows', String(lastTick().vwin));
+
+  // The old-peer frame: byte for byte what a client that predates the field emits.
+  const old = await raw('{"t":"tick","v":1,"at_match_ms":900,"score":12,"attention_pct":80,'
+    + '"attention_mode":0,"active_effects":["Flashes"],"toy":false,"charges":2}');
+  ok(!!old, 'a tick with NO vwin member still routes');
+  ok(old.vwin === 0, 'ABSENT reads as zero, never undefined', String(old.vwin));
+  ok(old.score === 12 && old.active_effects.length === 1, '…and the rest of that old frame parses normally');
+
+  const cases = [
+    ['{"t":"tick","v":1,"vwin":9}', 4, 'over the wire cap clamps to the display cap'],
+    ['{"t":"tick","v":1,"vwin":5}', 4, 'five windows read as a full pool of four'],
+    ['{"t":"tick","v":1,"vwin":4}', 4, 'four is four'],
+    ['{"t":"tick","v":1,"vwin":-3}', 0, 'a negative count is zero'],
+    ['{"t":"tick","v":1,"vwin":2.7}', 2, 'a fraction truncates rather than poisoning the DOM'],
+    ['{"t":"tick","v":1,"vwin":"2"}', 2, 'a numeric string is read forgivingly'],
+    ['{"t":"tick","v":1,"vwin":"lots"}', 0, 'a word is zero'],
+    ['{"t":"tick","v":1,"vwin":null}', 0, 'an explicit null is zero'],
+    ['{"t":"tick","v":1,"vwin":1e9}', 4, 'an absurd number is still just a full pool'],
+    ['{"t":"tick","v":1,"vwin":[3]}', 0, 'an array where an int belongs is zero (Number([3]) is 3 — not here)'],
+    ['{"t":"tick","v":1,"vwin":true}', 0, 'a boolean is zero too'],
+  ];
+  for (const [json, want, label] of cases) {
+    const msg = await raw(json);
+    ok(!!msg && msg.vwin === want, `vwin: ${label}`, `${json} -> ${msg && msg.vwin}`);
+  }
+
+  // Outbound is clamped too: our own bug must not be what puts 12 on their screen.
+  const beforeOut = got.length;
+  await host.send(makeTick({ vwin: 12 }));
+  await until(() => got.length > beforeOut, 2000);
+  ok(lastTick().vwin === 4, 'a local over-count is clamped on the way OUT as well', String(lastTick().vwin));
+
+  // And it costs the 16 KB guard nothing: the field is four bytes of name.
+  const fat = got.length;
+  await host.send(makeTick({ vwin: 4, active_effects: new Array(4000).fill('effectname') }));
+  await sleep(120);
+  ok(got.length === fat, 'the oversize guard still drops a fat tick, vwin or not', String(got.length - fat));
+
+  pair.dispose();
+}
+
 // ============================================================ run
 const main = async () => {
   await testSignaling();
   await testLoopback();
   await testRelayTransport();
   await testSessionFallback();
+  await testVwinTick();
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);

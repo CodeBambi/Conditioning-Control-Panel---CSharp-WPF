@@ -3,7 +3,7 @@
 // JSON, snake_case, integer enum codes, integer milliseconds, 64-bit seeds as decimal STRINGS,
 // nulls dropped. The wire is UNTRUSTED: parse() never throws, it returns null and logs.
 
-import { GoonConsts, MessageFactories, PROTOCOL_VERSION } from './contracts.js';
+import { GoonConsts, MessageFactories, PROTOCOL_VERSION, clampWindowCount } from './contracts.js';
 import { seedFromAny, seedToString } from './rng.js';
 
 export const MAX_WIRE_BYTES = 16 * 1024;
@@ -16,6 +16,19 @@ export const MAX_WIRE_BYTES = 16 * 1024;
 const SEED_FIELDS = Object.freeze({
   match_start: ['seed_contribution'],
   round: ['seed_contribution'],
+});
+
+/**
+ * Per-message-type fields that are NORMALIZED IN BOTH DIRECTIONS, listed one by one for the same
+ * reason SEED_FIELDS is: the wire is untrusted, and a field whose range the rest of the app relies
+ * on has to be pinned where the frame is built and where it is read, not hopefully downstream.
+ *
+ * Outbound it keeps our own bug from putting an impossible number on the wire; inbound it means no
+ * consumer of a parsed tick ever sees a `vwin` of -1, 9, "3" or NaN. Absent stays absent-shaped:
+ * the factory default (0) is what gets clamped, so a peer that never heard of the field reads 0.
+ */
+const CLAMPED_FIELDS = Object.freeze({
+  tick: Object.freeze({ vwin: clampWindowCount }),
 });
 
 const encoder = typeof TextEncoder === 'function' ? new TextEncoder() : null;
@@ -71,6 +84,9 @@ export function serialize(msg) {
   for (const field of SEED_FIELDS[msg.t] || []) {
     if (msg[field] !== null && msg[field] !== undefined) body[field] = seedToString(msg[field]);
   }
+
+  const clamps = CLAMPED_FIELDS[msg.t];
+  if (clamps) for (const field of Object.keys(clamps)) body[field] = clamps[field](body[field]);
 
   return JSON.stringify(body);
 }
@@ -155,6 +171,9 @@ export function parse(json, { logger, tag = 'GoonWire' } = {}) {
   out.v = v;
 
   for (const field of SEED_FIELDS[t] || []) out[field] = seedFromAny(obj[field]);
+
+  const clamps = CLAMPED_FIELDS[t];
+  if (clamps) for (const field of Object.keys(clamps)) out[field] = clamps[field](out[field]);
 
   return out;
 }

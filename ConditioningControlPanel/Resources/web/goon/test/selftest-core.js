@@ -270,6 +270,111 @@ const quiet = { info() {}, warn() {}, error() {}, log() {} };
   ok(matchRiskTier(pool) === matchRiskTier(pool.slice().reverse()), 'risk is order-independent');
 }
 
+// ------------------------------------------- vwin: the tick's window count (2026-08-04)
+//
+// The opponent monitor draws how many FLOATING VIDEO WINDOWS the other player has up. The count
+// cannot be inferred from active_effects — a window they popped off their own bubble field is
+// invisible to us, and a thrown one is a payload, which never appears there either — so the tick
+// grew one optional integer, APPEND-ONLY, on the DraftMsg allowed/confirmed precedent.
+//
+// Three seams, all here: the CLAMP (nothing downstream may ever see an impossible number), the
+// SETTER exec/executor.js calls (phase-gated one way, so a stale claim cannot outlive the match),
+// and the INGEST that feeds the monitor. Imported dynamically to leave this file's import block
+// exactly as it was.
+{
+  const { clampWindowCount, GoonMatchPhase } = await import('../core/contracts.js');
+  const { GoonMatchService } = await import('../core/match.js');
+
+  // --- the clamp: wire cap first, then the display cap ------------------------------------
+  ok(clampWindowCount(0) === 0 && clampWindowCount(1) === 1 && clampWindowCount(4) === 4,
+    'a legal count passes through untouched');
+  ok(clampWindowCount(5) === 4 && clampWindowCount(8) === 4 && clampWindowCount(9999) === 4,
+    'anything above the pool reads as a full pool');
+  ok(clampWindowCount(-1) === 0 && clampWindowCount(-9999) === 0, 'negatives are zero');
+  ok(clampWindowCount(2.9) === 2, 'fractions truncate', String(clampWindowCount(2.9)));
+  ok(clampWindowCount('3') === 3, 'a quoted number is read forgivingly');
+  ok(clampWindowCount(undefined) === 0 && clampWindowCount(null) === 0 && clampWindowCount(NaN) === 0,
+    'absent / null / NaN all mean no windows');
+  ok(clampWindowCount([3]) === 0 && clampWindowCount(true) === 0 && clampWindowCount({}) === 0,
+    'and a shape that is not a number at all is zero, not whatever JS would coerce it to');
+
+  // --- the factory + the serializer -------------------------------------------------------
+  ok(makeTick().vwin === 0, 'a tick built with no opinion reports no windows');
+  ok(makeTick({ vwin: 3 }).vwin === 3, 'the factory carries the count');
+  ok(makeTick({ vwin: 77 }).vwin === 4, 'and clamps it at the door');
+  ok(JSON.parse(serialize(makeTick({ vwin: 2 }))).vwin === 2, 'it survives serialize');
+  ok(parse(serialize(makeTick({ vwin: 3 }))).vwin === 3, 'and the full round trip');
+  ok(parse('{"t":"tick","v":1}').vwin === 0, 'a frame that never mentions it parses as zero');
+  ok(parse('{"t":"tick","v":1,"vwin":6}').vwin === 4, 'parse clamps an over-claim');
+  ok(JSON.parse(serialize({ t: 'tick', v: 1, score: 1 })).vwin === 0,
+    'even a hand-built tick leaves the serializer with a legal vwin');
+
+  // --- the setter, and the phase gate -----------------------------------------------------
+  const sent = [];
+  const transport = {
+    send(m) { sent.push(m); return Promise.resolve(true); },
+    onMessageReceived() { return () => {}; },
+    onStateChanged() { return () => {}; },
+  };
+  const match = new GoonMatchService(transport, true, { logger: quiet, tag: 'GG:vwin' });
+  ok(match.localWindowCount === 0, 'a fresh match reports no windows');
+  ok(match.setLocalWindowCount(3) === false && match.localWindowCount === 0,
+    'and refuses a count in Idle — a window cannot exist before the run does');
+
+  match._phase = GoonMatchPhase.Live;
+  ok(match.setLocalWindowCount(3) === true && match.localWindowCount === 3, 'Live takes the count');
+  ok(match.setLocalWindowCount(99) === true && match.localWindowCount === 4, 'clamped on the way in',
+    String(match.localWindowCount));
+  ok(match.setLocalWindowCount(-2) === true && match.localWindowCount === 0, 'a negative lands as zero');
+  ok(match.setLocalWindowCount('2') === true && match.localWindowCount === 2, 'a quoted number is taken too');
+  ok(match.setLocalWindowCount({}) === true && match.localWindowCount === 0,
+    'and garbage empties the report rather than sticking');
+
+  // --- what the tick actually carries ------------------------------------------------------
+  match.setLocalWindowCount(2);
+  // Backdated well past TickIntervalMs — the pump is a rate limiter, and 0 is only "long ago"
+  // if the process has already been running for three seconds.
+  match._lastTickSentLocalMs = -1e6;
+  match._maybeSendStateTick();
+  const built = sent.filter((m) => m && m.t === 'tick').pop() || null;
+  ok(!!built, 'the tick pump built a tick');
+  ok(!!built && built.vwin === 2, 'and it carries the local window count', String(built && built.vwin));
+  ok(!!built && built.charges === 0 && Array.isArray(built.active_effects),
+    'alongside everything the tick already carried');
+
+  match._phase = GoonMatchPhase.SuddenDeath;
+  ok(match.setLocalWindowCount(1) === true && match.localWindowCount === 1, 'sudden death still has windows');
+  match._phase = GoonMatchPhase.Recap;
+  ok(match.setLocalWindowCount(3) === false && match.localWindowCount === 1,
+    'a claim after the match ends is refused — no phantom stack on their little screen');
+  ok(match.setLocalWindowCount(0) === true && match.localWindowCount === 0,
+    'but the teardown zero is ALWAYS taken (executor.stopAll runs on the way out)');
+
+  // --- the ingest that feeds the monitor ---------------------------------------------------
+  ok(match.opponent.vwin === 0, 'the opponent starts with an empty stack');
+  let painted = 0;
+  match.onOpponentStateChanged(() => { painted++; });
+
+  match._handleTick(parse(serialize(makeTick({ vwin: 3 }))));
+  ok(match.opponent.vwin === 3, 'their tick fills it', String(match.opponent.vwin));
+  ok(painted === 1, 'and raises the event the monitor repaints on', String(painted));
+
+  match._handleTick(makeTick({}));
+  ok(match.opponent.vwin === 0, 'a tick without the field empties it again (an older peer, or C#)');
+
+  // A tick that never went through parse() — the solo driver and the play-test harness both
+  // build one by hand — is clamped by the ingest itself rather than trusted.
+  match._handleTick(Object.assign(makeTick({}), { vwin: 99 }));
+  ok(match.opponent.vwin === 4, 'ingest clamps on its own', String(match.opponent.vwin));
+  match._handleTick(Object.assign(makeTick({}), { vwin: -5 }));
+  ok(match.opponent.vwin === 0, 'in both directions');
+
+  ok(match.setLocalWindowCount(2) === false,
+    'and none of that ingest resurrected the local setter outside Live');
+  match.dispose();
+  ok(match.setLocalWindowCount(0) === false, 'a disposed match takes nothing at all');
+}
+
 // ------------------------------------------------------------------ clock + scheduler
 const main = async () => {
   // Loopback pair with a fake 5000 ms skew on the guest: sync must converge back to ~0 error.

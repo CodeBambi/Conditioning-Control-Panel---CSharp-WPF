@@ -1799,6 +1799,135 @@ const { S: STR } = await import('../ui/strings.js');
     'and so does prefers-reduced-motion — the banner still appears, it just stops moving');
 }
 
+/* ===========================================================================
+ * 15. THEIR FLOATING VIDEO WINDOWS — "the opponent monitor should show how many
+ *     floating video windows the opponent currently has" (owner, 0804).
+ *
+ * The count arrives on the tick as `vwin` (0..4) and is drawn as a little
+ * staggered stack of windows in the projection rect. It is NOT a .gg-mini and
+ * that is the point: a mini is one node keyed by an effect NAME, on or off, and
+ * this is a COUNT — nodes are added and removed to match it exactly.
+ *
+ * Pinned below: the ten minis are untouched, the stack tracks the number in both
+ * directions, an over-claim is clamped by the UI as well as the wire, the rect
+ * stops reading "idle" when windows are up, and the CSS keeps the three-element
+ * animation split (one-shot / drift / pulse), the --gg-deco-play exemption that
+ * makes the monitor information rather than chrome, and the reduced-motion rule
+ * that stops them while leaving them VISIBLE.
+ * ======================================================================== */
+{
+  const match = makeFakeMatch();
+  match.opponent.activeEffects = [];
+  match.opponent.vwin = 0;
+  const host = document.createElement('div');
+  const mon = opponentMod.mountOpponent({ host, match, audio: { sfx() {} } });
+  const proj = findOne(mon.root, 'gg-mon-proj');
+  const box = findOne(proj, 'gg-mon-vwins');
+  const minis = () => findAll(proj, 'gg-mon-vwin');
+  const set = (v) => { match.opponent.vwin = v; match._emit('opp'); };
+
+  ok(!!box, 'the projection rect carries a window-stack container');
+  ok(box.parentNode === proj, 'and it lives INSIDE the rect, not on the bezel');
+  ok(findAll(proj, 'gg-mini').length === 10 && findAll(mon.root, 'gg-mini').length === 10,
+    'the ten minis are untouched — the stack is not one of them', String(findAll(proj, 'gg-mini').length));
+  ok(minis().length === 0, 'no windows, no rects', String(minis().length));
+
+  set(3);
+  ok(minis().length === 3, 'three windows draw three rects', String(minis().length));
+  ok(hasClass(box, 'is-on'), 'and the container says so');
+  const first = minis()[0];
+  const body = findOne(first, 'gg-mon-vwin-body');
+  ok(!!body, 'each rect has its own drift body (the shorthand trap: one animation per element)');
+  ok(!!findOne(body, 'gg-mon-vwin-dot'), '…and the little recording dot inside it');
+  ok(findAll(proj, 'gg-mon-vwin-dot').length === 3, 'one dot per window, never a spare',
+    String(findAll(proj, 'gg-mon-vwin-dot').length));
+
+  set(1);
+  ok(minis().length === 1, 'a closed window takes its rect with it — no lingering fade-out',
+    String(minis().length));
+  set(4);
+  ok(minis().length === 4, 'a full pool is four', String(minis().length));
+  set(9);
+  ok(minis().length === 4, 'and a peer claiming nine still only ever draws four', String(minis().length));
+  set(-2);
+  ok(minis().length === 0, 'a negative claim draws nothing', String(minis().length));
+  set('2');
+  ok(minis().length === 2, 'a quoted number is read forgivingly', String(minis().length));
+  set('lots');
+  ok(minis().length === 0, 'a word draws nothing at all', String(minis().length));
+  set(undefined);
+  ok(minis().length === 0, 'and so does an opponent that never mentioned windows (an older peer)',
+    String(minis().length));
+
+  // the idle word: four windows up is not an idle machine
+  const idle = findOne(proj, 'gg-mini-idle');
+  ok(idle.hidden === false, 'with nothing on at all, the rect reads idle');
+  set(2);
+  ok(idle.hidden === true, 'their windows alone are enough to stop it reading idle');
+  set(0);
+  ok(idle.hidden === false, 'and it comes back when the last one closes');
+
+  set(3);
+  mon.unmount();
+  ok(findAll(host, 'gg-mon-vwin').length === 0, 'unmount takes the whole stack with it',
+    String(findAll(host, 'gg-mon-vwin').length));
+}
+
+/* --- 15b. …and the CSS half of it ---------------------------------------- */
+{
+  const fs = await import('node:fs/promises');
+  const url = await import('node:url');
+  const css = await fs.readFile(url.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8');
+  const blockOf = (sel) => {
+    const m = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^}]*)\\}').exec(css);
+    return m ? m[1] : null;
+  };
+  // (the plain selector, not the container `.gg-mon-vwins` — the `\s*\{` is what tells them apart)
+  const wrap = blockOf('.gg-mon-vwin') || '';
+  const drift = blockOf('.gg-mon-vwin-body') || '';
+  const dot = blockOf('.gg-mon-vwin-dot') || '';
+
+  ok(!!wrap && !!drift && !!dot, 'hud.css styles all three elements of a window mini');
+
+  // THE ANIMATION SHORTHAND TRAP: one `animation` declaration per element, and the one-shot and
+  // the loops must live on DIFFERENT elements or they cancel each other.
+  const decls = (b) => (b.match(/(^|[;\s])animation:/g) || []).length;
+  ok(decls(wrap) === 1 && decls(drift) === 1 && decls(dot) === 1,
+    'exactly one animation declaration on each', `${decls(wrap)}/${decls(drift)}/${decls(dot)}`);
+  ok(!/infinite/.test(wrap) && /\s1\s+both/.test(wrap), 'the wrapper carries the ONE-SHOT pop-in', wrap.trim());
+  ok(/infinite/.test(drift) && /infinite/.test(dot), 'the drift and the pulse are the loops');
+
+  // The monitor is INFORMATION: both loops ride --gg-deco-play, which .gg-mon-proj re-declares as
+  // `running`, so they keep moving while the local machine is at data-gg-fx="hot".
+  ok(/animation-play-state:\s*var\(--gg-deco-play\)/.test(drift)
+    && /animation-play-state:\s*var\(--gg-deco-play\)/.test(dot),
+    'both loops ride --gg-deco-play (the projection rect exempts them from the hot freeze)');
+  ok(!/--gg-deco-play:\s*paused/.test(wrap + drift + dot), 'and nothing here re-pauses itself');
+
+  // Four slots, all in the TOP band — the emote bubble owns the middle of the rect (~34%-66%)
+  // and the bezel owns everything outside it.
+  const slots = [...css.matchAll(/\.gg-mon-vwin:nth-child\((\d)\)\s*\{([^}]*)\}/g)]
+    .map((m) => ({ i: Number(m[1]), body: m[2] }))
+    .filter((s) => /top:/.test(s.body));
+  ok(slots.length === 4, 'four staggered slots are positioned', String(slots.length));
+  const height = Number((/height:\s*([\d.]+)%/.exec(wrap) || [])[1]);
+  ok(height > 0, 'the rect has a % height to reason about', String(height));
+  const tops = slots.map((s) => Number((/top:\s*([\d.]+)%/.exec(s.body) || [])[1]));
+  const lefts = slots.map((s) => Number((/left:\s*([\d.]+)%/.exec(s.body) || [])[1]));
+  ok(tops.every((t) => t + height <= 34),
+    'nothing in the stack reaches the emote bubble band', JSON.stringify(tops.map((t) => t + height)));
+  ok(new Set(tops).size > 1 && new Set(lefts).size > 1,
+    'and the slots really are staggered, not a row', JSON.stringify(slots.map((s, i) => `${lefts[i]}/${tops[i]}`)));
+
+  // The hard off switches stop the motion and NOTHING ELSE: a still window is still countable.
+  ok(/prefers-reduced-motion[\s\S]*?\.gg-mon-vwin,\s*\.gg-mon-vwin \*\s*\{\s*animation:\s*none\s*!important/.test(css),
+    'prefers-reduced-motion stops the stack dead');
+  ok(/is-calm\s+\.gg-mon-vwin,[\s\S]{0,120}animation:\s*none\s*!important/.test(css),
+    '.is-calm stops it too');
+  ok(!/\.gg-mon-vwin[^{]*\{[^}]*display:\s*none/.test(css),
+    'and neither of them hides it — the count has to stay readable');
+}
+
 await sleep(60);
 console.log(`\nselftest-hud: ${n - failures}/${n} checks passed`);
 if (failures > 0) {

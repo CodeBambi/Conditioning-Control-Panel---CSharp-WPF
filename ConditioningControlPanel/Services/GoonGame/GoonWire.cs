@@ -79,7 +79,23 @@ namespace ConditioningControlPanel.Services.GoonGame
         public static string Serialize(GoonMessage message)
         {
             if (message == null) throw new ArgumentNullException(nameof(message));
+            Normalize(message);
             return JsonConvert.SerializeObject(message, Settings);
+        }
+
+        /// <summary>
+        /// Per-field normalization of the numbers whose RANGE is part of the contract, applied on
+        /// the way out as well as on the way in. Listed message by message, field by field, for the
+        /// same reason the type map is explicit: the wire is untrusted inbound, and outbound a bug
+        /// of ours must not be the thing that puts an impossible number on a peer's screen.
+        ///
+        /// Everything here is APPEND-ONLY and defaults to the absent value, so a peer that has
+        /// never heard of a field is indistinguishable from one that sent its zero.
+        /// </summary>
+        private static void Normalize(GoonMessage message)
+        {
+            if (message is StateTickMsg tick)
+                tick.VideoWindows = StateTickMsg.ClampVideoWindows(tick.VideoWindows);
         }
 
         /// <summary>
@@ -124,7 +140,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                         logTag, v, GoonConsts.ProtocolVersion);
                 }
 
-                return obj.ToObject(clrType, JsonSerializer.Create(Settings)) as GoonMessage;
+                var parsed = obj.ToObject(clrType, JsonSerializer.Create(Settings)) as GoonMessage;
+                if (parsed != null) Normalize(parsed);
+                return parsed;
             }
             catch (Exception ex)
             {

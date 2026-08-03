@@ -18,6 +18,11 @@
  * piece of motion here that is feedback rather than ambience, and the only one
  * exempt from the two-mini motion budget.
  *
+ * …and one thing that is not a mini at all: the FLOATING VIDEO WINDOWS they have
+ * up (tick `vwin`), drawn as a little staggered stack of windows in the rect.
+ * A count, not an on/off — see VWIN_MAX_MINIS below for why it sits outside the
+ * MINIS table.
+ *
  * EMOTES ARE NOT PAYLOADS. `t:'emote'` is its own message family: no cost, no
  * rate limiter beyond the sheet's own 5 s, no `accepted` ACK and NO RECEIPT AT
  * ALL. So there is nothing for ui/hud.js to thread the way it threads a fire,
@@ -121,6 +126,23 @@ export function isTerminalReceipt(status) {
   const s = String(status || '');
   return TERMINAL_RECEIPTS.has(s) || s.indexOf('rejected') === 0;
 }
+
+/**
+ * FLOATING VIDEO WINDOWS ON THEIR SCREEN (tick `vwin`, 2026-08-04).
+ *
+ * Not an entry in MINIS, and that is the whole design note. Every row up there is ONE node that is
+ * either on or off, keyed by an effect NAME; this is a COUNT — up to four little windows, drawn as
+ * four little windows, appearing and vanishing one at a time as they open and close over there.
+ * The wire cannot express it any other way either: half of those windows are ones they popped for
+ * themselves off their own bubble field, so they never appear in `active_effects` and the other
+ * side has no way to infer them. Hence the optional integer, and hence a stack of its own.
+ *
+ * It is INFORMATION (batch-3 law): the minis stay drawn while the local machine is "hot" because
+ * .gg-mon-proj re-declares --gg-deco-play, and prefers-reduced-motion leaves them visible and
+ * still. The count is the datum, so nodes are added and REMOVED synchronously with it — no
+ * out-animation is allowed to hold a window open for a few hundred ms and misreport the number.
+ */
+const VWIN_MAX_MINIS = 4;
 
 /** How long the green pass wash + checkmark hold. Feedback, never ambience. */
 const PASS_MS = 1200;
@@ -271,6 +293,12 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
     }
     parts.set(m.key, node);
   }
+  // …and their floating video windows, which are a COUNT rather than an effect (see VWIN_MAX_MINIS
+  // above). The container is always here and empty; paintWindowMinis fills it.
+  const vwinBox = add(proj, el('div', 'gg-mon-vwins'));
+  /** @type {Element[]} the live window minis, oldest first — index IS the stagger slot. */
+  const vwinMinis = [];
+
   const idle = add(proj, el('div', 'gg-mini-idle', S.monitor.idle));
 
   // pass feedback: a subtle green wash over the projection + a checkmark. This
@@ -369,7 +397,41 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
       cls(node, 'is-anim', moving.has(m.key));
       cls(node, 'is-yours', forced.has(m.key));
     }
+    // Their floating windows are their own stack, outside the MINIS table and outside the motion
+    // budget (four ~24px rects sharing one slow drift each — see the CSS note). They count toward
+    // "something is on that screen" all the same: four windows up is not an idle machine.
+    drawn += paintWindowMinis(op);
     if (idle) idle.hidden = drawn > 0;
+  }
+
+  /**
+   * Their floating video windows, one little rounded rect per window, staggered so four read as a
+   * drifting STACK rather than a bar. Adds and removes nodes to match the count exactly — the
+   * number IS the message, so nothing lingers on its way out.
+   *
+   * @returns {number} how many are drawn right now
+   */
+  function paintWindowMinis(op) {
+    if (!vwinBox) return 0;
+    const raw = op ? Number(op.vwin) : 0;
+    const want = Number.isFinite(raw) ? Math.max(0, Math.min(VWIN_MAX_MINIS, Math.trunc(raw))) : 0;
+
+    while (vwinMinis.length > want) {
+      const node = vwinMinis.pop();
+      try { node.remove(); } catch (_e) { /* stub DOM / already gone */ }
+    }
+    while (vwinMinis.length < want) {
+      const node = add(vwinBox, el('i', 'gg-mon-vwin'));
+      if (!node) break;
+      // THREE elements, THREE animations — the same shorthand trap the real window solves in
+      // exec/fx.css: the wrapper takes the one-shot pop-in, the body the drift loop, the dot the
+      // recording pulse. Two of those on one element would silently cancel each other.
+      const body = add(node, el('i', 'gg-mon-vwin-body'));
+      add(body, el('i', 'gg-mon-vwin-dot'));
+      vwinMinis.push(node);
+    }
+    cls(vwinBox, 'is-on', vwinMinis.length > 0);
+    return vwinMinis.length;
   }
 
   function paintCloseness(op) {

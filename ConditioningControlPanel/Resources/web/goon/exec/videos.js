@@ -55,6 +55,21 @@
  *   executor cancel (mercy / stopAll) · nothing playable in the library
  *                                              -> done(false) "completed", no charge
  *
+ * AND A THIRD DOOR INTO THE SAME POOL, spawnLocal(): a `video` bubble popped
+ * (exec/bubbles.js), exec/executor.js heard it on the POP_EVENT seam, and the
+ * player earned a window off their own field. It is the SAME object in every
+ * visible way — but it has no wire behind it, so it settles SILENTLY (no
+ * receipt, no done()) and it NEVER EVICTS: at MAX_WINDOWS it fizzles rather
+ * than close a window the opponent made you sit through. Eviction remains a
+ * PAYLOAD's privilege alone (a payload does evict a local window — the pool is
+ * one pool). See spawnLocal at the bottom of this file.
+ *
+ * THE POOL IS ALSO A REPORT (2026-08-04). Both doors change one number — how many windows are
+ * floating — and the opponent's monitor draws it, so every mutation publishes wins.length through
+ * the optional onWindowCountChanged callback. exec/ never talks to core/ or ui/ directly: the
+ * number goes UP to exec/executor.js, which hands it to core/match.js for the tick's `vwin`.
+ * Nobody listening = nothing changes.
+ *
  * Uniform renderer shape — see the banner in exec/flashes.js.
  * ==========================================================================*/
 
@@ -205,7 +220,15 @@ function matrixXY(str) {
   return null;
 }
 
-export function createVideos({ layers, media, audio, logger } = {}) {
+/**
+ * @param {object} [o]
+ * @param {(n:number)=>void} [o.onWindowCountChanged] fired with wins.length whenever it CHANGES —
+ *        a window opened, settled, was evicted or was swept. exec/executor.js forwards it to
+ *        core/match.js, which puts it on the state tick as `vwin` so the opponent's monitor can
+ *        draw the stack. Renderers do not import one another and know nothing about the wire; this
+ *        is a number handed upward, and nothing here changes if nobody listens.
+ */
+export function createVideos({ layers, media, audio, logger, onWindowCountChanged } = {}) {
   const log = logger || null;
   const warn = (m) => { if (log && log.warn) log.warn(`[gg:videos] ${m}`); };
   const info = (m) => { if (log && log.info) log.info(`[gg:videos] ${m}`); };
@@ -215,6 +238,23 @@ export function createVideos({ layers, media, audio, logger } = {}) {
   const runs = new Set();             // every live element run
   const wins = [];                    // floating windows, OLDEST FIRST
   let drag = null;                    // the ONE live press, if any
+
+  const countSink = typeof onWindowCountChanged === 'function' ? onWindowCountChanged : null;
+  let lastCount = 0;                  // what the sink was last told; edges only
+
+  /**
+   * Publish wins.length upward, once per actual change. Called after EVERY mutation of the pool —
+   * the eviction inside openWindow is a settle followed by a push, so the sink sees 4 -> 3 -> 4
+   * rather than a stuck number, and a listener that only redraws on change costs nothing.
+   * A throwing listener is a listener's problem: it must never take a window down with it.
+   */
+  function publishCount() {
+    if (!countSink) return;
+    const n = wins.length;
+    if (n === lastCount) return;
+    lastCount = n;
+    try { countSink(n); } catch (e) { warn(`onWindowCountChanged threw: ${e && e.message}`); }
+  }
 
   const stage = () => (layers && typeof layers.get === 'function' ? layers.get('stage') : null);
   const winLayer = () => (layers && typeof layers.get === 'function' ? layers.get('vwin') : null);
@@ -392,6 +432,7 @@ export function createVideos({ layers, media, audio, logger } = {}) {
     }
     rec.node = null;
     applyAudio();
+    publishCount();
     if (typeof rec.onDone === 'function') {
       try { rec.onDone(endured); } catch (e) { warn(`done() threw: ${e && e.message}`); }
     }
@@ -595,11 +636,16 @@ export function createVideos({ layers, media, audio, logger } = {}) {
 
   /* ------------------------------------------------------------ the window */
 
-  /** Build + mount one window. Returns the record, or null if it cannot exist. */
-  function openWindow(intensity, capMs, onDone) {
+  /**
+   * Build + mount one window. Returns the record, or null if it cannot exist.
+   * @param {boolean} [mayEvict=true] false for a LOCAL spawn: a self-popped
+   *        window may never displace a payload window (see spawnLocal).
+   */
+  function openWindow(intensity, capMs, onDone, mayEvict) {
     if (typeof document === 'undefined') return null;
     const host = winLayer();
     if (!host) return null;
+    if (mayEvict === false && wins.length >= MAX_WINDOWS) return null;
     if (!media || typeof media.drawKind !== 'function') return null;
 
     const entry = media.drawKind('video');
@@ -608,7 +654,7 @@ export function createVideos({ layers, media, audio, logger } = {}) {
     if (!handle || !handle.url) return null;
 
     // At the cap the OLDEST settles first — it has been watched the longest, so
-    // it is endured, not interrupted.
+    // it is endured, not interrupted. A LOCAL spawn never reaches this line.
     while (wins.length >= MAX_WINDOWS) settleWindow(wins[0], true);
 
     const baseW = baseWindowWidth(vpW());
@@ -677,6 +723,7 @@ export function createVideos({ layers, media, audio, logger } = {}) {
     try { video.src = handle.url; } catch (_e) { /* onerror will redraw */ }
     host.appendChild(node);
     wins.push(rec);
+    publishCount();
     soon(() => { if (!rec.finished && rec.node) rec.node.classList.add('is-on'); }, 16);
     applyAudio();
     play(video);
@@ -729,7 +776,7 @@ export function createVideos({ layers, media, audio, logger } = {}) {
       const p = payload || {};
       const capMs = windowCapMs(p.duration_ms);
       const intensity = p.intensity !== undefined ? p.intensity : 0.6;
-      const rec = openWindow(intensity, capMs, done);
+      const rec = openWindow(intensity, capMs, done, true);
       if (!rec) {
         // Nothing playable in the receiver's library: a silent no-op, receipted
         // completed (endured=false — nothing was endured, so no charge).
@@ -737,6 +784,74 @@ export function createVideos({ layers, media, audio, logger } = {}) {
         return () => {};
       }
       return () => settleWindow(rec, false);
+    },
+
+    /**
+     * A window the player EARNED — exec/bubbles.js's `video` kind popped, and
+     * exec/executor.js routed the pop here over the POP_EVENT seam. Everything
+     * about it is a payload window: the same `wins` pool, the same chrome, the
+     * same glitch-in, the same drag/wheel/click, the same 60s-or-clip-end
+     * lifetime, the same newest-unmuted chain, and layers.stopAll() takes it
+     * with the rest of the tier.
+     *
+     * THE TWO DIFFERENCES ARE BOTH ABOUT THE WIRE, AND BOTH ARE THE POINT:
+     *
+     *   NO RECEIPT. onDone is null, so nothing settles, nothing is notified and
+     *   the opponent never hears about it. There is no payload id to close and
+     *   no charge to earn: this window came out of the player's own bubble
+     *   field, and paying a survival charge for closing your own window would
+     *   be a charge printer. The pop already paid, once, through the drop
+     *   economy (POP_WORTH_EFFECT).
+     *
+     *   IT NEVER EVICTS. At MAX_WINDOWS it FIZZLES and returns false instead of
+     *   settling the oldest. An opponent's thrown VHS is something you are being
+     *   asked to sit through and close; a self-pop must never be able to close
+     *   it for you — least of all by receipting it `survived` on your way past.
+     *   Eviction stays exactly where it was: an ARRIVING PAYLOAD evicts the
+     *   oldest window, local or not, and a local one just dies quietly when it
+     *   is the one displaced.
+     *
+     * The pop is still a pop either way. bubbles.js has already burst it, paid
+     * its drop and dispatched its event before we are called, so a fizzle costs
+     * the player nothing but the window.
+     *
+     * @param {{duration_ms?:number, intensity?:number}} [opts]
+     * @returns {boolean} true if a window went up
+     */
+    spawnLocal(opts) {
+      const o = opts || {};
+      if (wins.length >= MAX_WINDOWS) {
+        info(`local window fizzled — ${wins.length}/${MAX_WINDOWS} up, and a self-pop never displaces one`);
+        return false;
+      }
+      const capMs = windowCapMs(o.duration_ms);
+      const intensity = o.intensity !== undefined ? o.intensity : 0.6;
+      const rec = openWindow(intensity, capMs, null, false);
+      if (!rec) { info('local window fizzled — nothing playable in the library'); return false; }
+      return true;
+    },
+
+    /**
+     * Take down EVERY floating window, thrown or earned. exec/executor.js calls this from
+     * stopAll() (mercy, recap, detach), just before layers.stopAll() wipes the tier's DOM.
+     *
+     * It exists because those two are not the same sweep. A THROWN window is reached through its
+     * payload's cancel fn, so stopAll already had it; a window the player EARNED off their own
+     * bubble has no payload, no id and no cancel — layers.stopAll() would delete its node and
+     * leave the record in `wins` forever. Nothing was visible after that, so it never mattered
+     * until the pool became something we REPORT (`vwin`): a phantom count would have kept a stack
+     * of windows on the opponent's monitor for a match the player had already left.
+     *
+     * Each one settles endured=false — interrupted, not endured — which is the same receipt the
+     * cancel fn posts, so calling this after the cancels is idempotent rather than a second
+     * receipt (settleWindow latches on rec.finished).
+     *
+     * @returns {number} how many were still up
+     */
+    stopWindows() {
+      const n = wins.length;
+      while (wins.length) settleWindow(wins[0], false);
+      return n;
     },
 
     /** Test/diagnostic seam: how many windows are floating right now. */

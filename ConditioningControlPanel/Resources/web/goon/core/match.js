@@ -59,7 +59,7 @@
 
 import {
   GoonAttentionMode, GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonTransportState,
-  GoonConsts, costOf, enumName, isClockMessage,
+  GoonConsts, clampWindowCount, costOf, enumName, isClockMessage,
   makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMercy,
   makePayloadReceipt, makeResult, makeTick, makePayload,
 } from './contracts.js';
@@ -101,6 +101,12 @@ export class GoonOpponentState {
     this.toyActive = false;
     this.closeness = null;
     this.activeEffects = [];
+    /* How many FLOATING VIDEO WINDOWS they have up right now, 0..4 (tick `vwin`, added
+       2026-08-04). It keeps the wire's name rather than a camelCase one because it is the one
+       member here that is a straight copy of an OPTIONAL field: grep `vwin` and you get the
+       contract, the serializer, this line and the monitor that draws it, with nothing in between
+       to translate. 0 is also what a peer that never heard of the field looks like. */
+    this.vwin = 0;
 
     this.lastTickLocalMs = 0;
     this.health = GoonConnectionHealth.Fresh;
@@ -259,6 +265,7 @@ export class GoonMatchService {
     this._startMatchMs = 0;
     this._lobbyFailureReason = null;
     this._localCloseness = null;
+    this._localWindowCount = 0;   // floating video windows WE have up; rides every tick as `vwin`
 
     this.localAttentionMode = GoonAttentionMode.NoCam;
     this.localToyConnected = false;
@@ -342,6 +349,9 @@ export class GoonMatchService {
 
   /** Self-reported closeness dial, 0-3 or null. Bluffable BY DESIGN. */
   get localCloseness() { return this._localCloseness; }
+
+  /** Floating video windows WE have up right now (0..4), as the next tick will report them. */
+  get localWindowCount() { return this._localWindowCount; }
 
   /** The opponent's lobby hello (identity + capabilities), once it arrives. */
   get remoteHello() { return this._remoteHello; }
@@ -610,6 +620,32 @@ export class GoonMatchService {
 
   setCloseness(closeness) {
     this._localCloseness = (closeness === null || closeness === undefined) ? null : clamp(closeness | 0, 0, 3);
+  }
+
+  /**
+   * How many FLOATING VIDEO WINDOWS the local player has up (exec/videos.js owns the pool; the
+   * count arrives through exec/executor.js, which is the one module that holds both the renderers
+   * and the match). Rides the next state tick as `vwin` so the opponent's monitor can draw them.
+   *
+   * IT IS A REPORT, NOT A COMMAND: nothing in the engine reads it, no score, no rate limit, no
+   * gate. Purely additive — leave it at 0 and every behaviour is exactly what it was.
+   *
+   * PHASE-GATED one way only. A non-zero count is refused outside Live/SuddenDeath, because a
+   * window cannot exist before the run starts or after it ends and a stale claim would leave a
+   * phantom stack on their little screen. ZERO is always accepted: that is the teardown path
+   * (executor.stopAll on mercy/recap) and it must never be the thing that strands the report.
+   *
+   * MIRROR: GoonMatchService.SetLocalWindowCount(int).
+   *
+   * @param   {number} count 0..4 after clamping; anything unusable reads as 0
+   * @returns {boolean} true when the value was taken
+   */
+  setLocalWindowCount(count) {
+    if (this._disposed) return false;
+    const n = clampWindowCount(count);
+    if (n > 0 && this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath) return false;
+    this._localWindowCount = n;
+    return true;
   }
 
   sendEmote(text, icon) {
@@ -1096,6 +1132,9 @@ export class GoonMatchService {
       toy: this._activeElements.has(GoonElement.ToyPatterns),
       closeness: this._localCloseness,
       charges: this._scoring.charges,
+      // APPEND-ONLY optional field. A peer that predates it drops it on the floor; the C#
+      // reference client sends 0 because it has no floating windows to report.
+      vwin: this._localWindowCount,
     }));
   }
 
@@ -1125,6 +1164,10 @@ export class GoonMatchService {
     this._opponent.toyActive = !!tick.toy;
     this._opponent.closeness = (tick.closeness === null || tick.closeness === undefined) ? null : clamp(tick.closeness, 0, 3);
     this._opponent.charges = clamp(tick.charges, 0, GoonConsts.ChargeCap);
+    // Optional and untrusted: absent (an older peer, or the C# client) reads 0, and the clamp runs
+    // here as well as in wire.js because a tick can also reach us from a caller that built one by
+    // hand (the solo driver, a play-test harness) and never went through parse().
+    this._opponent.vwin = clampWindowCount(tick.vwin);
     this._opponent.lastTickLocalMs = localMonotonicMs();
     this._opponent.hasSeenTick = true;
 

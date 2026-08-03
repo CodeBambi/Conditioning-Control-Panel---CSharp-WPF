@@ -109,7 +109,34 @@ export const GoonConsts = Object.freeze({
   AttentionMultMax: 1.5,
   NoCamFailedCheckMult: 0.6,
   NoCamFailedCheckPenaltyMs: 60000,
+
+  // Floating video windows on the tick (`vwin`). TWO caps, on purpose:
+  // the WIRE cap is what a frame may even claim, the DISPLAY cap is what a
+  // monitor will ever draw (exec/videos.js MAX_WINDOWS). Clamping to the wire
+  // cap first and then to the display cap means a peer that grows its pool to
+  // six still reads as "full" here instead of as garbage.
+  VideoWindowsWireMax: 8,
+  VideoWindowsDisplayMax: 4,
 });
+
+/**
+ * Untrusted window count -> 0..VideoWindowsDisplayMax. Anything that is not a
+ * finite number (null, a string, NaN, an object) is ZERO, which is also what an
+ * ABSENT field means: an older peer, or the C# reference client, simply never
+ * mentions `vwin` and its monitor stack stays empty.
+ *
+ * MIRROR: StateTickMsg.ClampVideoWindows in Services/GoonGame/GoonContracts.cs.
+ */
+export function clampWindowCount(v) {
+  // A number, or a string a peer wrote its number into (some clients quote everything). NOTHING
+  // else: `Number([3])` is 3 and `Number(true)` is 1 in this language, and an array or a boolean
+  // arriving where an integer belongs is a broken frame, not a count of three windows.
+  const n = typeof v === 'number' ? v : (typeof v === 'string' ? Number(v) : NaN);
+  if (!Number.isFinite(n)) return 0;
+  const i = Math.trunc(n);
+  const wire = i < 0 ? 0 : (i > GoonConsts.VideoWindowsWireMax ? GoonConsts.VideoWindowsWireMax : i);
+  return wire > GoonConsts.VideoWindowsDisplayMax ? GoonConsts.VideoWindowsDisplayMax : wire;
+}
 
 const COSTS = Object.freeze({
   [GoonPayloadKind.FlashBurst]: 1,
@@ -203,6 +230,19 @@ export function makeMatchStart(o = {}) {
   };
 }
 
+/**
+ * Periodic state tick.
+ *
+ * `vwin` (2026-08-04) is APPEND-ONLY, exactly like DraftMsg's allowed/confirmed pair: how many
+ * FLOATING VIDEO WINDOWS the sender currently has up (exec/videos.js, shared pool of
+ * MAX_WINDOWS=4). It cannot be derived from `active_effects` and never could — half of those
+ * windows are SELF-POPPED (a `video` bubble the sender popped on their own field), which the
+ * other side has no way of knowing about, and a thrown one is a payload, which never appears
+ * in active_effects either.
+ *
+ * ABSENT MEANS ZERO. An older peer, or the C# reference client (which leaves its local count at
+ * 0), omits it and every reader here reads 0 — no branch, no version check, no new enum code.
+ */
 export function makeTick(o = {}) {
   return {
     t: 'tick',
@@ -215,6 +255,7 @@ export function makeTick(o = {}) {
     toy: o.toy ?? false,
     closeness: o.closeness ?? null,
     charges: o.charges ?? 0,
+    vwin: clampWindowCount(o.vwin),
   };
 }
 

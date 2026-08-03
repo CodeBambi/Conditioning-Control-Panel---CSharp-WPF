@@ -807,6 +807,86 @@
   100% { opacity: 0; transform: translateY(14px) rotate(8deg); }
 }
 
+/* THEIR FLOATING VIDEO WINDOWS — the tick's `vwin`, 0..4 (2026-08-04) ---------
+   "the opponent monitor should show how many floating video windows the opponent
+   currently has."
+
+   NOT a .gg-mini, deliberately: every mini is one node that is on or off, keyed
+   by an effect name, and this is a COUNT. ui/opponent.js adds and removes one
+   .gg-mon-vwin per window, so the number of rects in here IS the number of
+   windows on their screen — which is also why nothing fades out. An out-animation
+   would hold a rect open after the window closed, and the little screen would be
+   lying.
+
+   THE SAME THREE-ELEMENT SPLIT THE REAL WINDOW USES (exec/fx.css): `animation`
+   is a shorthand, so a one-shot and a loop on one element cancel each other.
+      .gg-mon-vwin        the pop-in ONE-SHOT (and the slot — nth-child)
+      .gg-mon-vwin-body   the drift LOOP
+      .gg-mon-vwin-dot    the recording pulse LOOP
+   Nobody shares, exactly as the windows themselves don't.
+
+   GEOMETRY. Four staggered slots in the TOP band of the rect (nothing reaches
+   past ~32% down), because the emote bubble owns the middle (~34%-66%) and the
+   bezel art owns everything outside the rect. Overlapping either would put this
+   information under something else.
+
+   MOTION. They ride --gg-deco-play like every mini, so .gg-mon-proj's `running`
+   keeps them alive at data-gg-fx="hot" (the monitor is information, not chrome),
+   and the two hard off switches below still stop them dead while leaving them
+   VISIBLE — a still window is still a window you can count. */
+/* The container is always mounted and usually empty; `.is-on` is a STATE HOOK, not a style —
+   ui/opponent.js sets it while the stack has anything in it, so a play-test driver (and
+   selftest-hud) can ask the DOM "are they running windows?" without counting children. */
+.gg-mon-vwins { position: absolute; inset: 0; pointer-events: none; }
+.gg-mon-vwin {
+  position: absolute;
+  width: 26%;
+  height: 15%;
+  border-radius: 2px;
+  background: linear-gradient(160deg, rgba(38, 16, 58, 0.96), rgba(12, 5, 22, 0.96));
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.7);
+  box-shadow: 0 0 7px rgba(var(--gg-violet-rgb), 0.55), inset 0 0 4px rgba(0, 0, 0, 0.8);
+  animation: ggMonVwinIn 260ms cubic-bezier(.2, .9, .3, 1.5) 1 both;
+}
+/* the stack: each slot a little along and a little lower, so a full pool reads
+   as depth instead of as a row */
+.gg-mon-vwin:nth-child(1) { left: 4%; top: 4%; }
+.gg-mon-vwin:nth-child(2) { left: 21%; top: 12%; }
+.gg-mon-vwin:nth-child(3) { left: 38%; top: 5%; }
+.gg-mon-vwin:nth-child(4) { left: 13%; top: 17%; }
+@keyframes ggMonVwinIn {
+  0% { opacity: 0; transform: scale(0.4) translateY(4px); }
+  70% { opacity: 1; transform: scale(1.14) translateY(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.gg-mon-vwin-body {
+  position: absolute; inset: 1px;
+  border-radius: 1px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.11) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(var(--gg-pink-rgb), 0.3), rgba(var(--gg-violet-rgb), 0.16));
+  animation: ggMonVwinDrift 5.5s ease-in-out infinite alternate;
+  animation-play-state: var(--gg-deco-play);
+}
+/* …and each one wanders on its own clock, so four never move as one block */
+.gg-mon-vwin:nth-child(2) .gg-mon-vwin-body { animation-duration: 6.8s; animation-direction: alternate-reverse; }
+.gg-mon-vwin:nth-child(3) .gg-mon-vwin-body { animation-duration: 4.7s; }
+.gg-mon-vwin:nth-child(4) .gg-mon-vwin-body { animation-duration: 7.6s; animation-direction: alternate-reverse; }
+@keyframes ggMonVwinDrift {
+  from { transform: translate(0, 0); }
+  to { transform: translate(1.5px, -1.5px); }
+}
+/* the little red recording light, in the corner the real window puts it */
+.gg-mon-vwin-dot {
+  position: absolute; right: 1px; top: 1px;
+  width: 3px; height: 3px; border-radius: 50%;
+  background: #ff3b5c;
+  box-shadow: 0 0 4px rgba(255, 59, 92, 0.95);
+  animation: ggMonVwinBlink 1.4s ease-in-out infinite;
+  animation-play-state: var(--gg-deco-play);
+}
+@keyframes ggMonVwinBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.28; } }
+
 /* pass feedback: green wash + checkmark. EXEMPT from the motion budget and
    from the data-gg-fx="hot" parking rule — it answers something the player did,
    it is not ambience, and it never rides --gg-deco-play. */
@@ -1323,11 +1403,18 @@
   /* the pass still lands — it just stops travelling */
   .gg-mon-check.is-in { animation: ggCheckFade 1.2s linear 1 forwards !important; transform: translate(-50%, -50%) scale(1); }
   .gg-item:hover:not(:disabled), .gg-item:focus-visible, .gg-item.is-armed { transform: none; }
+  /* the opponent's window stack animates off its own PRESENCE, not off .is-anim,
+     so it is stopped by name — in its own rule, because the list above is pinned
+     character-for-character by selftest-hud. It stays DRAWN either way: four
+     still rects are still four windows you can count. */
+  .gg-mon-vwin, .gg-mon-vwin * { animation: none !important; }
 }
 .gg-hud-frame.is-calm .gg-mini.is-anim,
 .gg-hud-frame.is-calm .gg-mini.is-anim::before,
 .gg-hud-frame.is-calm .gg-mini.is-anim *,
 .gg-hud-frame.is-calm .gg-mini-emote * { animation: none !important; }
+.gg-hud-frame.is-calm .gg-mon-vwin,
+.gg-hud-frame.is-calm .gg-mon-vwin * { animation: none !important; }
 
 /* ===========================================================================
  * ANNOUNCER — the top-centre ribbon (ui/announcer.js), added 2026-08-03.

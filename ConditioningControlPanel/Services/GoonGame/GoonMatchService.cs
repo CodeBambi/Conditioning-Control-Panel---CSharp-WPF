@@ -168,6 +168,21 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// <summary>Self-reported closeness dial, 0-3 or null. Bluffable BY DESIGN.</summary>
         public int? LocalCloseness { get; private set; }
 
+        /// <summary>
+        /// Floating video windows the LOCAL player has up (0-4), reported on every state tick as
+        /// <c>vwin</c>. This client has no floating-window renderer of its own, so it stays 0 and
+        /// the field rides along as a zero — the web client is where the number comes from.
+        /// </summary>
+        public int LocalVideoWindows { get; private set; }
+
+        /// <summary>
+        /// …and the same number the other way: how many the OPPONENT claims, clamped, straight off
+        /// their last tick. It lives here rather than on GoonOpponentState because that type is
+        /// shared (GoonMatchTypes.cs) and this is a report nothing in the engine consumes — it
+        /// exists for a HUD that wants to draw their windows, exactly as the web monitor does.
+        /// </summary>
+        public int OpponentVideoWindows { get; private set; }
+
         /// <summary>The opponent's lobby hello (identity + capabilities), once it arrives.</summary>
         public HelloMsg? RemoteHello => _remoteHello;
 
@@ -468,6 +483,30 @@ namespace ConditioningControlPanel.Services.GoonGame
         public void SetCloseness(int? closeness)
         {
             LocalCloseness = closeness.HasValue ? Math.Clamp(closeness.Value, 0, 3) : null;
+        }
+
+        /// <summary>
+        /// How many FLOATING VIDEO WINDOWS the local player has up. Rides the next state tick as
+        /// <c>vwin</c> so the opponent's monitor can draw them.
+        ///
+        /// IT IS A REPORT, NOT A COMMAND: nothing in the engine reads it — no score, no rate
+        /// limit, no gate. Purely additive; leave it at 0 (which this client does, having no such
+        /// renderer) and every behaviour is exactly what it was.
+        ///
+        /// PHASE-GATED ONE WAY ONLY. A non-zero count is refused outside Live/SuddenDeath, because
+        /// a window cannot exist before the run starts or after it ends and a stale claim would
+        /// leave a phantom stack on their little screen. ZERO is always accepted: that is the
+        /// teardown path, and it must never be the thing that strands the report.
+        ///
+        /// MIRROR: setLocalWindowCount() in the web client's core/match.js.
+        /// </summary>
+        /// <returns>true when the value was taken.</returns>
+        public bool SetLocalWindowCount(int count)
+        {
+            int n = StateTickMsg.ClampVideoWindows(count);
+            if (n > 0 && Phase is not (GoonMatchPhase.Live or GoonMatchPhase.SuddenDeath)) return false;
+            LocalVideoWindows = n;
+            return true;
         }
 
         public void SendEmote(string text, string icon)
@@ -989,6 +1028,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                 ToyActive = _activeElements.Contains(GoonElement.ToyPatterns),
                 Closeness = LocalCloseness,
                 Charges = Scoring.Charges,
+                // APPEND-ONLY optional field. A peer that predates it drops it on the floor.
+                VideoWindows = LocalVideoWindows,
             });
         }
 
@@ -1022,6 +1063,9 @@ namespace ConditioningControlPanel.Services.GoonGame
             Opponent.ToyActive = tick.ToyActive;
             Opponent.Closeness = tick.Closeness.HasValue ? Math.Clamp(tick.Closeness.Value, 0, 3) : null;
             Opponent.Charges = Math.Clamp(tick.Charges, 0, GoonConsts.ChargeCap);
+            // Optional and untrusted: absent (an older peer) reads 0. Clamped here as well as in
+            // GoonWire because a tick can also reach us from a caller that built one by hand.
+            OpponentVideoWindows = StateTickMsg.ClampVideoWindows(tick.VideoWindows);
             Opponent.LastTickLocalMs = Environment.TickCount64;
             Opponent.HasSeenTick = true;
 

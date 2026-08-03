@@ -124,6 +124,14 @@ namespace ConditioningControlPanel.Services.GoonGame
         public const double NoCamFailedCheckMult = 0.6;     // for 60 s after a failed check
         public const int NoCamFailedCheckPenaltyMs = 60000;
 
+        // Floating video windows on the tick (StateTickMsg.VideoWindows). TWO caps on purpose:
+        // the WIRE cap is what a frame may even claim, the DISPLAY cap is what a monitor will
+        // ever draw (the web client's exec/videos.js MAX_WINDOWS). Clamping to the wire cap and
+        // then to the display cap means a peer that grows its pool to six still reads as "full"
+        // instead of as garbage.
+        public const int VideoWindowsWireMax = 8;
+        public const int VideoWindowsDisplayMax = 4;
+
         /// <summary>Charge cost per payload kind.</summary>
         public static int CostOf(GoonPayloadKind kind) => kind switch
         {
@@ -275,7 +283,20 @@ namespace ConditioningControlPanel.Services.GoonGame
         [JsonProperty("seed_contribution")] public ulong SeedContribution { get; set; }  // XOR'd with peer's
     }
 
-    /// <summary>Periodic state tick (GoonConsts.TickIntervalMs).</summary>
+    /// <summary>
+    /// Periodic state tick (GoonConsts.TickIntervalMs).
+    ///
+    /// <c>vwin</c> (2026-08-04) is APPEND-ONLY, exactly like DraftMsg's allowed/confirmed pair:
+    /// how many FLOATING VIDEO WINDOWS the sender currently has up (the web client's
+    /// exec/videos.js pool, capped at four). It cannot be derived from <c>active_effects</c> and
+    /// never could — half of those windows are SELF-POPPED (a `video` bubble the sender popped on
+    /// their own field), which the other side has no way of knowing about, and a thrown one is a
+    /// payload, which never appears in active_effects either.
+    ///
+    /// ABSENT MEANS ZERO. An older peer omits it and reads 0 here; this reference client has no
+    /// floating windows of its own, so it sends 0 and a web peer's monitor draws nothing. No new
+    /// enum code, no reordering, no version branch.
+    /// </summary>
     public sealed class StateTickMsg : GoonMessage
     {
         public override string Type => "tick";
@@ -287,6 +308,18 @@ namespace ConditioningControlPanel.Services.GoonGame
         [JsonProperty("toy")] public bool ToyActive { get; set; }
         [JsonProperty("closeness")] public int? Closeness { get; set; }              // 0-3 self-report, null = hidden; bluffable BY DESIGN
         [JsonProperty("charges")] public int Charges { get; set; }
+        [JsonProperty("vwin")] public int VideoWindows { get; set; }                 // 0-4 floating video windows; ABSENT = 0
+
+        /// <summary>
+        /// Untrusted window count -> 0..GoonConsts.VideoWindowsDisplayMax. Mirror of
+        /// clampWindowCount() in the web client's core/contracts.js, and applied by GoonWire in
+        /// BOTH directions so no consumer of a tick ever sees a negative or an absurd count.
+        /// </summary>
+        public static int ClampVideoWindows(int raw)
+        {
+            int wire = Math.Clamp(raw, 0, GoonConsts.VideoWindowsWireMax);
+            return Math.Min(wire, GoonConsts.VideoWindowsDisplayMax);
+        }
     }
 
     /// <summary>

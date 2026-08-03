@@ -21,7 +21,7 @@ import { createLedger } from './router.js';
 import { GoonRng } from '../core/rng.js';
 import { GoonStimulusKind, fakeRoundInputs } from '../core/rounds/model.js';
 import { GoonSuddenDeathRunner } from '../core/suddenDeath.js';
-import { GoonMatchPhase, GoonPayloadKind, costOf } from '../core/contracts.js';
+import { GoonMatchPhase, GoonPayloadKind, GoonConsts, costOf } from '../core/contracts.js';
 
 /** How long the bot "thinks" before signing the consent sheet. */
 const CONSENT_THINK_MS = [700, 1600];
@@ -195,6 +195,25 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
     log('payload ' + kind + (res.ok ? ' sent' : ' refused: ' + res.error));
   }
 
+  /* ------------------------------------------------ fake floating windows */
+  // The bot has no exec/ renderer, so its REAL window count never leaves 0 and
+  // practice would never show the monitor's window minis. Simulate instead: a
+  // video payload the human lands "opens a window" on the bot's screen for its
+  // duration (60s ceiling, like the real pool), and now and then the bot "pops
+  // a video bubble" of its own. The count rides the real tick field (`vwin`),
+  // so the human sees the true monitor pipeline, fed honest-shaped data.
+  const fakeWins = [];   // expiry timestamps (ms)
+  function publishFakeWins() {
+    const now = Date.now();
+    for (let i = fakeWins.length - 1; i >= 0; i--) { if (fakeWins[i] <= now) fakeWins.splice(i, 1); }
+    match.setLocalWindowCount(fakeWins.length);
+  }
+  function fakeWindow(ms) {
+    if (fakeWins.length >= GoonConsts.VideoWindowsDisplayMax) return;
+    fakeWins.push(Date.now() + ms);
+    publishFakeWins();
+  }
+
   function onPhase(phase) {
     switch (phase) {
       case GoonMatchPhase.Consent: onConsent(); break;
@@ -202,6 +221,11 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
       case GoonMatchPhase.Live:
         match.setCloseness(1);
         payloadTimer = ledger.interval(tryPayload, PAYLOAD_TRY_MS);
+        ledger.interval(() => {
+          if (match.phase !== GoonMatchPhase.Live) return;
+          if (rng.nextDouble() < 0.22) fakeWindow(30000);   // the bot's own "video bubble pop"
+          publishFakeWins();                                 // prune expiries either way
+        }, 8000);
         // Bluffs its closeness dial upward as the match wears on. It is
         // self-reported and bluffable BY DESIGN — the bot should use that.
         ledger.interval(() => {
@@ -210,6 +234,8 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
         }, 45000);
         break;
       case GoonMatchPhase.Recap:
+        fakeWins.length = 0;
+        match.setLocalWindowCount(0);   // zero is always accepted; no phantom count into recap
         clearRound();
         break;
       default: break;
@@ -224,6 +250,8 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
     // It endures everything, all the way. A bot that flinched would hide the
     // "+1 charge for them" path from the human's recap.
     const wait = Math.max(1000, (p.duration_ms | 0)) + 300;
+    // A landed video "opens a window" on the bot's screen (see fake block above).
+    if (p.kind === GoonPayloadKind.Video) fakeWindow(Math.min(60000, Math.max(1000, p.duration_ms | 0)));
     ledger.timer(() => {
       if (ledger.isDisposed) return;
       match.notifyInboundPayloadFinished(p.id, true);

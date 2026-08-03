@@ -20,9 +20,21 @@
  *     }))
  *
  * and ui/hud.js -> ui/drops.js does the economics. `worth` is the drop weight:
- * 1 for a plain bubble, POP_WORTH_EFFECT for one of the five effect kinds, and
+ * 1 for a plain bubble, POP_WORTH_EFFECT for one of the six effect kinds, and
  * ZERO for a bubble an opponent's BubbleSwarm minted (their clutter must never
  * pay us — see fromPayload below).
+ *
+ * THE SAME EVENT NOW CARRIES A SECOND CONSUMER. The `video` kind (the Fall's
+ * prism sprite) pops into a FLOATING VIDEO WINDOW — the very object an
+ * opponent's Video payload throws, which until now was unreachable unless
+ * someone threw one at you. exec/executor.js listens on POP_EVENT and asks
+ * exec/videos.js for a local window; this module never imports that renderer,
+ * and never learns whether a window actually appeared. See popFx('video').
+ *
+ * TWO RULES GUARD IT, both because a window is heavy and long-lived:
+ *   · `video` is the RAREST kind (w 5), and
+ *   · a SWARM may not mint it at all (PAYLOAD_MINT_EXCLUDED) — otherwise
+ *     throwing a swarm would paper the victim's screen in free windows.
  *
  * POINTER RULES. #gg-fx and every one of its sub-layers are pointer-events:none;
  * `.gg-bubble` is the ONLY node in this tier that opts back in (fx.css), so the
@@ -69,16 +81,55 @@ const RISE_MIN_HOT = 4.5, RISE_MAX_HOT = 8;
 const BUB_MIN_PX = 80, BUB_MAX_PX = 150;
 
 /** The DtRH spawn mix, minus the kinds another element owns (subliminal) and the
- *  Fall's scoring-only ones (lucky/prism). Weights are DtRH's. */
-const KINDS = [
+ *  Fall's scoring-only ones (lucky/golden). Weights are DtRH's, except `video`,
+ *  which is this game's own: the Fall's prism sprite over a floating window.
+ *  It is the RAREST effect on purpose — a window is a heavy, long-lived object
+ *  and four of them is the whole pool. */
+export const KINDS = Object.freeze([
   { id: 'normal', w: 50 },
   { id: 'flash', w: 9 },
   { id: 'spiral', w: 8 },
   { id: 'glitch', w: 7 },
   { id: 'braindrain', w: 6 },
   { id: 'pinkfilter', w: 6 },
-];
-const KIND_TOTAL = KINDS.reduce((a, k) => a + k.w, 0);
+  { id: 'video', w: 5 },
+].map((k) => Object.freeze(k)));
+
+/**
+ * Kinds an INBOUND BubbleSwarm may never mint.
+ *
+ * `video` pops into a floating video window (exec/videos.js, wired through
+ * exec/executor.js), and a swarm is the opponent's clutter: letting theirs mint
+ * it would hand them a way to paper the victim's screen in windows for free,
+ * which is the arsenal's Video payload with none of its cost. Their swarm
+ * already pays nothing (POP_WORTH_PAYLOAD); this is the same rule for the
+ * effect side of a pop.
+ */
+export const PAYLOAD_MINT_EXCLUDED = Object.freeze(['video']);
+
+const FIELD_KINDS = KINDS;
+const SWARM_KINDS = Object.freeze(KINDS.filter((k) => !PAYLOAD_MINT_EXCLUDED.includes(k.id)));
+
+/** The weighted table one bubble is drawn from, given who is minting it. */
+export function kindPool(fromPayload) {
+  return fromPayload ? SWARM_KINDS : FIELD_KINDS;
+}
+
+/**
+ * Draw one kind out of the right pool. Pure and injectable so the self-test can
+ * sweep it without a DOM (and so the mint exclusion is assertable directly).
+ * @param {boolean} [fromPayload] minted for an inbound BubbleSwarm
+ * @param {() => number} [rnd]
+ */
+export function pickKind(fromPayload, rnd) {
+  const R = typeof rnd === 'function' ? rnd : Math.random;
+  const pool = kindPool(fromPayload);
+  let total = 0;
+  for (const k of pool) total += k.w;
+  let r = R() * total;
+  for (const k of pool) if ((r -= k.w) < 0) return k.id;
+  return 'normal';
+}
 
 /* --------------------------------------------------------------- drop seam */
 
@@ -256,12 +307,6 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
 
   /* ------------------------------------------------------------ spawn / field */
 
-  function pickKind() {
-    let r = Math.random() * KIND_TOTAL;
-    for (const k of KINDS) if ((r -= k.w) < 0) return k.id;
-    return 'normal';
-  }
-
   /** Drop bookkeeping for nodes the layer tore out from under us (layers.stopAll). */
   function prune() {
     for (const rec of Array.from(live)) if (!rec.wrap || !rec.wrap.isConnected) live.delete(rec);
@@ -338,7 +383,9 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
 
     // Our own bed fills first; anything past it while a swarm is up is THEIRS.
     const fromPayload = payloadRuns.size > 0 && fieldCount() >= fieldTarget;
-    const kind = pickKind();
+    // …and WHO minted it decides what it may be: a swarm's bubbles are drawn
+    // from the narrower pool (no `video` — see PAYLOAD_MINT_EXCLUDED).
+    const kind = pickKind(fromPayload);
     const size = Math.round(rand(BUB_MIN_PX, BUB_MAX_PX));
     const rise = rand(tune.riseMinS, tune.riseMaxS);
 
@@ -611,6 +658,14 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
         h.glitchTimer = soon(() => { if (h.el) h.el.classList.remove('is-glitching'); }, ms);
         break;
       }
+      case 'video':
+        // NOT OURS TO SPAWN, and deliberately so. A popped prism bubble earns a
+        // floating video window, but the windows are exec/videos.js's pool and
+        // this module does not import another renderer — exec/executor.js hears
+        // the pop on the POP_EVENT seam (the same event the drop economy rides)
+        // and asks the videos renderer for a LOCAL window. Same rule as the drop
+        // seam in the banner: an event, not an import.
+        break;
       default:
         break;   // 'normal' pops for the pop's sake
     }

@@ -12,6 +12,16 @@
  *   onElementStopRequested    -> renderer.stop()
  *   onPayloadAccepted         -> schedule at fireAtLocalMs, then renderPayload()
  *
+ * …plus ONE seam that is not the match's: the bubble field's `gg-bubble-pop`
+ * document event, forwarded to the videos renderer when a `video` bubble pops
+ * (see THE BUBBLE -> WINDOW SEAM below). It is subscribed and unsubscribed with
+ * the match subscriptions and carries no receipts.
+ *
+ * WHAT IT PUBLISHES BACK (one number, added 2026-08-04):
+ *   videos.onWindowCountChanged(n) -> match.setLocalWindowCount(n)
+ * How many floating video windows are up, on its way to the state tick's `vwin`
+ * and from there to the opponent's monitor. See THE WINDOW COUNT SEAM below.
+ *
  * FIRE-AT-LOCAL: `fireAtLocalMs` is a LOCAL performance.now()-based instant
  * (match.js converts the sender's match-ms through MatchClock.matchMsToLocal,
  * falling back to now+MinScheduleBufferMs when the clock is unusable), so the
@@ -45,7 +55,7 @@ import { media as defaultMedia } from './media.js';
 import { createFlashes } from './flashes.js';
 import { createVideos } from './videos.js';
 import { createSubliminals } from './subliminals.js';
-import { createBubbles } from './bubbles.js';
+import { createBubbles, POP_EVENT } from './bubbles.js';
 import { createLockCards } from './lockCards.js';
 import { createToys } from './toys.js';
 import { createBrainDrain } from './brainDrain.js';
@@ -66,6 +76,29 @@ export const PAYLOAD_ELEMENT = Object.freeze({
 
 const MAX_SCHEDULE_LEAD_MS = 190000;   // > MAX_PAYLOAD_DURATION_MS; a sane wire guard
 
+/* ---------------------------------------------------- the bubble -> window seam
+ * Popping a `video` bubble (exec/bubbles.js's prism kind) spawns ONE floating
+ * video window. That is a SECOND renderer reacting to a FIRST renderer's event,
+ * and this file is where those two are allowed to meet: exec/ modules do not
+ * import one another (bubbles.js already publishes its pops as a document event
+ * for ui/drops.js — "an event, not an import"), so the fan-out subscribes to the
+ * very same seam and forwards the one kind that needs a partner.
+ *
+ * IT IS NOT A PAYLOAD and must never be mistaken for one: no id, no entry in
+ * activePayloads, no receipt, no charge, and NO HEAT BUMP — activeCount() counts
+ * what the MATCH is running, and a bubble the player popped for themselves is
+ * not that. The window's own decoration already parks under html[data-gg-fx]
+ * (exec/fx.css), which is the heat behaviour it is supposed to have.
+ * -------------------------------------------------------------------------- */
+
+/** The bubble kind that earns a window (exec/bubbles.js KINDS). */
+export const VIDEO_BUBBLE_KIND = 'video';
+/** How long an earned window may float. windowCapMs() clamps it anyway. */
+export const BUBBLE_WINDOW_MS = 30000;
+/** Its volume band, matching renderPayload's default so earned and thrown
+ *  windows sound alike. */
+export const BUBBLE_WINDOW_INTENSITY = 0.6;
+
 export function createExecutor({ media, layers, audio, logger, toyBridge, phrases } = {}) {
   const L = layers || defaultLayers;
   const M = media || defaultMedia;
@@ -79,10 +112,34 @@ export function createExecutor({ media, layers, audio, logger, toyBridge, phrase
 
   const deps = { layers: L, media: M, audio: A, logger: log, phrases };
 
+  // Declared before the renderers because one of them closes over it (see below).
+  let match = null;
+
+  /* ------------------------------------------- the window count seam (2026-08-04)
+   * exec/videos.js owns the floating-window pool; core/match.js owns the wire. They
+   * do not know about each other, and this file is where they are allowed to meet —
+   * the same rule the bubble -> window seam above follows, just pointing the other
+   * way: an EVENT comes in from a renderer, a NUMBER goes out to the match.
+   *
+   * The renderer is built once, at construct time, long before any match is
+   * attached, so the callback closes over the mutable `match` instead of taking it:
+   * an unattached executor drops the number on the floor, which is exactly right —
+   * there is nobody to report to.
+   *
+   * PURELY ADDITIVE. It is not in activePayloads, it is not in activeElements, it
+   * does NOT touch activeCount()/setFxHeat (a window the player popped for
+   * themselves is not something the match is running — see the banner above) and
+   * the match does nothing with the value except put it on its next tick. */
+  function publishWindowCount(n) {
+    if (!match || typeof match.setLocalWindowCount !== 'function') return;
+    try { match.setLocalWindowCount(n); }
+    catch (e) { warn(`setLocalWindowCount(${n}) threw: ${e && e.message}`); }
+  }
+
   /** element code -> renderer. Built once; renderers are stateless until started. */
   const renderers = new Map([
     [GoonElement.Flashes, createFlashes(deps)],
-    [GoonElement.Videos, createVideos(deps)],
+    [GoonElement.Videos, createVideos(Object.assign({}, deps, { onWindowCountChanged: publishWindowCount }))],
     [GoonElement.Subliminals, createSubliminals(deps)],
     [GoonElement.Bubbles, createBubbles(deps)],
     [GoonElement.LockCards, createLockCards(deps)],
@@ -92,7 +149,6 @@ export function createExecutor({ media, layers, audio, logger, toyBridge, phrase
     [GoonElement.Spiral, createSpiral(deps)],
   ]);
 
-  let match = null;
   let unsubs = [];
   const activeElements = new Set();          // element codes with a sustained run
   const activePayloads = new Map();          // payload id -> {cancel, timer, kind, settle}
@@ -139,6 +195,28 @@ export function createExecutor({ media, layers, audio, logger, toyBridge, phrase
     if (!r) return;
     try { r.stop(); } catch (e) { error(`stop ${r.name} threw: ${(e && e.stack) || e}`); }
     if (activeElements.delete(c.element)) syncHeat();
+  }
+
+  /* -------------------------------------------------- bubble -> video window */
+
+  /**
+   * One popped `video` bubble -> one local floating window. Everything this
+   * handler can do is spawn; it never settles, never receipts and never touches
+   * the registry (see the banner above the constants).
+   */
+  function onBubblePop(e) {
+    const d = (e && e.detail) || {};
+    if (d.kind !== VIDEO_BUBBLE_KIND) return;
+    // Belt and braces on the mint rule: bubbles.js never mints `video` into an
+    // inbound swarm (PAYLOAD_MINT_EXCLUDED), and if that ever regresses, the
+    // opponent's clutter still buys them nothing here.
+    if (d.payload) return;
+    const r = rendererFor(GoonElement.Videos);
+    if (!r || typeof r.spawnLocal !== 'function') return;
+    try {
+      const made = r.spawnLocal({ duration_ms: BUBBLE_WINDOW_MS, intensity: BUBBLE_WINDOW_INTENSITY });
+      info(made ? 'video bubble popped -> local window' : 'video bubble popped -> fizzled (pool full or no clips)');
+    } catch (err) { warn(`spawnLocal threw: ${err && err.message}`); }
   }
 
   /* ------------------------------------------------------------- payloads */
@@ -221,6 +299,15 @@ export function createExecutor({ media, layers, audio, logger, toyBridge, phrase
       sub('onElementIntensityChanged', onIntensity);
       sub('onElementStopRequested', onStop);
       sub('onPayloadAccepted', onPayload);
+      // The bubble field's pop seam is a DOCUMENT event, not a match one, so it
+      // is subscribed by hand — and torn off with the rest on detach(), so a
+      // pop after the match cannot conjure a window onto the recap.
+      if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
+        try {
+          document.addEventListener(POP_EVENT, onBubblePop);
+          unsubs.push(() => { try { document.removeEventListener(POP_EVENT, onBubblePop); } catch (_e) { /* ignore */ } });
+        } catch (e) { warn(`${POP_EVENT} subscribe failed: ${e && e.message}`); }
+      }
       syncHeat();
       info(`attached (${unsubs.length} subscriptions)`);
     },
@@ -259,6 +346,17 @@ export function createExecutor({ media, layers, audio, logger, toyBridge, phrase
         try { r.stop(); } catch (e) { error(`stop ${r.name} threw: ${(e && e.stack) || e}`); }
       }
       activeElements.clear();
+
+      // The floating video windows the player EARNED (a popped `video` bubble) have no payload
+      // and no cancel fn, so neither loop above reaches them — and layers.stopAll() below only
+      // deletes their NODES, leaving live records in the renderer's pool. Harmless while the pool
+      // was private; not harmless now that it is reported to the opponent as `vwin`. Swept here,
+      // BEFORE the DOM goes, so each one settles properly (and the count lands on 0).
+      const vids = rendererFor(GoonElement.Videos);
+      if (vids && typeof vids.stopWindows === 'function') {
+        try { const swept = vids.stopWindows(); if (swept) info(`swept ${swept} floating window(s)`); }
+        catch (e) { warn(`stopWindows threw: ${e && e.message}`); }
+      }
 
       // Elements that were never in our registry (a renderer restarted by a
       // stray cue, say) still lose their nodes here: the layers own the DOM.

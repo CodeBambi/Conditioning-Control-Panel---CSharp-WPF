@@ -1628,6 +1628,273 @@ async function main() {
       'and nothing transitions filter on it either');
   }
 
+  /* ============================ VIDEO BUBBLES — the prism kind that opens one ==
+   * The floating window was reachable ONE way: an opponent throwing a Video
+   * payload at you. That makes the whole object untestable solo and unearnable
+   * in a duel where nobody spends a charge on it. So the bubble field grew a
+   * sixth effect kind — `video`, wearing the Fall's PRISM sprite — and popping
+   * it opens a window off the player's OWN library.
+   *
+   * FOUR RULES, and every one of them is an exploit if it slips:
+   *   1. the pop is an ordinary effect pop: worth 2.5 to the drop economy, no
+   *      more and no less, whether or not a window actually appears;
+   *   2. a SWARM may never mint it (PAYLOAD_MINT_EXCLUDED) — otherwise throwing
+   *      one swarm papers the victim's screen in free windows;
+   *   3. a self-pop NEVER EVICTS. At MAX_WINDOWS it fizzles, because an
+   *      opponent's window is something you are being asked to close and popping
+   *      your own bubble must not close it for you (and must not receipt it
+   *      `survived` on the way past). A PAYLOAD still evicts the oldest, local
+   *      windows included — one pool, one FIFO;
+   *   4. nothing about it reaches the wire: no receipt, no charge, no id.
+   *
+   * The seam is exec/bubbles.js's existing `gg-bubble-pop` document event, read
+   * by exec/executor.js and forwarded to videos.spawnLocal(). Renderers still do
+   * not import each other; the fan-out is where two of them meet.
+   * ======================================================================== */
+
+  // ------------------------- video bubbles: the kind table + the mint exclusion
+  {
+    const bub = await import('../exec/bubbles.js');
+    const EX = await import('../exec/executor.js');
+
+    const vk = bub.KINDS.find((k) => k.id === 'video');
+    ok(!!vk, 'exec/bubbles.js declares a `video` bubble kind');
+    ok(!!vk && vk.w === 5, 'weighted 5 — a window is heavy, so it is the rare one', String(vk && vk.w));
+    const effects = bub.KINDS.filter((k) => k.id !== 'normal');
+    ok(effects.length === 6, 'there are six effect kinds now', effects.map((k) => k.id).join(','));
+    ok(effects.every((k) => k.w >= vk.w),
+      'and `video` is the RAREST of them (rarer than flash and glitch, both 9/7)',
+      effects.map((k) => `${k.id}:${k.w}`).join(' '));
+
+    // It is an ordinary effect bubble to the economy — 2.5, exactly like the
+    // other five. The window is the flourish; the drop is the payment.
+    ok(bub.POP_WORTH_EFFECT === 2.5, 'an effect pop is worth 2.5', String(bub.POP_WORTH_EFFECT));
+    ok(bub.popWorthOf('video', false) === bub.POP_WORTH_EFFECT,
+      'and a video bubble is worth exactly that', String(bub.popWorthOf('video', false)));
+    ok(bub.popWorthOf('video', true) === bub.POP_WORTH_PAYLOAD,
+      'while one THEY minted is worth nothing, like all their clutter');
+
+    // ---- RULE 2, at the source: the swarm pool has no `video` in it at all
+    ok(Array.isArray(bub.PAYLOAD_MINT_EXCLUDED) && bub.PAYLOAD_MINT_EXCLUDED.includes('video'),
+      'the mint exclusion names `video`', JSON.stringify(bub.PAYLOAD_MINT_EXCLUDED));
+    ok(bub.kindPool(false).some((k) => k.id === 'video'), 'our OWN field draws from a pool that has it');
+    ok(bub.kindPool(true).every((k) => k.id !== 'video'),
+      'an inbound swarm draws from one that does NOT',
+      bub.kindPool(true).map((k) => k.id).join(','));
+    ok(bub.kindPool(true).length === bub.kindPool(false).length - 1,
+      'and the two pools differ by exactly that one kind',
+      `${bub.kindPool(false).length} vs ${bub.kindPool(true).length}`);
+
+    // …and swept, because a weighted table is exactly the kind of thing that
+    // silently starts including one more entry than it meant to.
+    let seed = 987654321;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    let swarmVideo = 0, fieldVideo = 0, swarmDraws = 0;
+    for (let i = 0; i < 4000; i++) {
+      const s = bub.pickKind(true, rnd);
+      swarmDraws++;
+      if (s === 'video') swarmVideo++;
+      if (bub.pickKind(false, rnd) === 'video') fieldVideo++;
+    }
+    ok(swarmDraws === 4000 && swarmVideo === 0,
+      '4000 swarm draws mint ZERO video bubbles', String(swarmVideo));
+    ok(fieldVideo > 0, 'while our own field really does mint them', String(fieldVideo));
+    ok(fieldVideo < 4000 * 0.10,
+      'and rarely — well under a tenth of the field', (fieldVideo / 4000).toFixed(4));
+    // the pure picker only ever answers with kinds that exist
+    const ids = new Set(bub.KINDS.map((k) => k.id));
+    let strays = 0;
+    for (let i = 0; i < 500; i++) if (!ids.has(bub.pickKind(i % 2 === 0, rnd))) strays++;
+    ok(strays === 0, 'and never invents a kind that has no sprite', String(strays));
+
+    // ---- the executor-side dials this seam runs on
+    ok(EX.VIDEO_BUBBLE_KIND === 'video', 'the executor forwards exactly the `video` kind', EX.VIDEO_BUBBLE_KIND);
+    ok(EX.BUBBLE_WINDOW_MS > 0 && EX.BUBBLE_WINDOW_MS <= 60000,
+      'an earned window floats for a payload-legal span', String(EX.BUBBLE_WINDOW_MS));
+    ok(EX.BUBBLE_WINDOW_INTENSITY >= 0 && EX.BUBBLE_WINDOW_INTENSITY <= 1,
+      'at a normal intensity', String(EX.BUBBLE_WINDOW_INTENSITY));
+  }
+
+  // ---------------------------- video bubbles: the fx.css contract of the sprite
+  {
+    const fs = await import('node:fs/promises');
+    const url = await import('node:url');
+    const raw = await fs.readFile(url.fileURLToPath(new URL('../exec/fx.css', import.meta.url)), 'utf8');
+    const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+    const m = /\.gg-bubble--video\s*\{([^}]*)\}/.exec(css);
+    ok(!!m, 'fx.css carries a .gg-bubble--video rule');
+    const rule = m ? m[1] : '';
+    // The one kind whose sprite is not named after it: prism.png is the DtRH
+    // iridescent swirl, and the swirl is what reads as a SCREEN.
+    ok(/background-image:\s*url\('\/dtrh\/assets\/bubbles\/effects\/prism\.png'\)/.test(rule),
+      'and it wears the DtRH PRISM sprite', rule.replace(/\s+/g, ' ').trim());
+    ok(!/url\([^)]*video\.png/.test(rule), 'not a video.png that does not exist in the pack');
+    const f = ((/filter:\s*([^;]+)/.exec(rule) || [])[1] || '').trim();
+    ok(f.indexOf('drop-shadow(') === 0 && f.lastIndexOf('drop-shadow(') === 0 && /\)$/.test(f),
+      'its filter is a LONE drop-shadow — the recolour chains stay dead (see the kind-sprite banner)', f);
+    const COLOUR_FNS = ['brightness(', 'sepia(', 'saturate(', 'hue-rotate(', 'contrast(', 'grayscale(', 'invert(', 'opacity('];
+    ok(COLOUR_FNS.every((fn) => !f.includes(fn)),
+      'no colour-space filter function anywhere in it', COLOUR_FNS.filter((fn) => f.includes(fn)).join(' '));
+    ok(f === 'drop-shadow(0 0 11px rgba(226, 214, 255, 0.85))',
+      'the halo is the pale iridescent white-violet a prism should throw', f);
+    ok(!/(^|[^-])animation:/.test(rule),
+      'and the rule does not redeclare the animation shorthand (that would cancel the sway)', rule);
+    // six kinds, six DIFFERENT halos — the halo is what names the kind
+    const halos = ['flash', 'spiral', 'glitch', 'braindrain', 'pinkfilter', 'video'].map((k) => {
+      const b = (new RegExp('\\.gg-bubble--' + k + '\\s*\\{([^}]*)\\}').exec(css) || [])[1] || '';
+      return ((/filter:\s*([^;]+)/.exec(b) || [])[1] || '').trim();
+    });
+    ok(halos.every(Boolean) && new Set(halos).size === 6,
+      'all six kinds are told apart by their own halo colour', String(new Set(halos).size));
+  }
+
+  /* ---------------- video bubbles: the live pop -> window path, end to end
+   * Math.random is pinned at 0.99 for this block, which is the top of every
+   * weighted draw and therefore ALWAYS the last (rarest) kind in the field pool:
+   * `video`. The same 0.99 through the SWARM pool lands on pinkfilter, which is
+   * the exclusion proving itself the hard way. Nothing else in the spawn path
+   * cares what the number is (size/rise/sway/placement are all ranges). */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    const bubHost = byId.get('gg-fx-bubbles');
+    const winHost = byId.get('gg-fx-vwin');
+    const stage = byId.get('gg-stage');
+    const videos = ex.rendererFor(GoonElement.Videos);
+    const pops = [];
+    const onPop = (e) => pops.push(e.detail);
+    document.addEventListener('gg-bubble-pop', onPop);
+    const prisms = () => bubHost.findAll('gg-bubble')
+      .filter((b) => b._cls.has('gg-bubble--video') && !b._cls.has('is-pop'));
+
+    const realRandom = Math.random;
+    Math.random = () => 0.99;
+    try {
+      m.emitStart({ element: GoonElement.Bubbles, intensity: 1, durationMs: 0, elapsedMs: 0 });
+      await sleep(700);
+      ok(prisms().length > 0, 'the field really mints video bubbles', String(prisms().length));
+      ok(prisms()[0].getAttribute('data-gg-mint') === 'field',
+        'and they are OURS — a swarm can never mint one', prisms()[0].getAttribute('data-gg-mint'));
+      ok(videos.windowCount() === 0, 'no window before anybody pops one', String(videos.windowCount()));
+
+      // ---- THE POP
+      prisms()[0].fire('pointerdown');
+      const last = pops[pops.length - 1];
+      ok(pops.length === 1 && last.kind === 'video', 'popping it dispatches one gg-bubble-pop', JSON.stringify(last));
+      ok(last.worth === 2.5, 'worth 2.5 — an effect bubble like any other', String(last.worth));
+      ok(last.payload === false, 'and flagged as ours, so ui/drops.js pays for it');
+      ok(videos.windowCount() === 1, 'and ONE floating window went up', String(videos.windowCount()));
+      ok(m.receipts.length === 0,
+        'with NO receipt: a local window has no payload id and earns no charge', JSON.stringify(m.receipts));
+      ok(ex.activeCount() === 1,
+        'and no registry entry either — activeCount still counts only the running element', String(ex.activeCount()));
+      ok(stage.childNodes.length === 0,
+        'nothing on #gg-stage (a husk there is a full-screen click shield)', String(stage.childNodes.length));
+
+      // ---- and it is the FULL window, not a stripped-down cousin
+      const w0 = winHost.findAll('gg-vwin')[0];
+      const drift = w0.findAll('gg-vwin-drift')[0];
+      const inner = w0.findAll('gg-vwin-inner')[0];
+      const dot = w0.findAll('gg-vwin-dot')[0];
+      const vid = w0.findAll('gg-vwin-vid')[0];
+      ok(!!drift && !!inner && !!dot && !!vid,
+        'it is the same wrapper > drift > inner > (video + dot) a payload builds');
+      ok(/gg-vwin-in--[1-4]/.test(inner.className), 'with one of the four glitch-in variants', inner.className);
+      ok(/px$/.test(w0.style.getPropertyValue('--gg-vwin-w')), 'sized through --gg-vwin-w',
+        w0.style.getPropertyValue('--gg-vwin-w'));
+      ok(parseFloat(drift.style.getPropertyValue('--gg-vwin-dy')) < 0, 'drifting up, away from mercy',
+        drift.style.getPropertyValue('--gg-vwin-dy'));
+      ok(String(vid.src).includes('ccp.assets'),
+        'and the clip is drawn from the PLAYER OWN library through media.acquire', String(vid.src));
+      ok(vid.muted === false, 'being the newest window, it speaks');
+      const localNode = w0;
+
+      // ---- RULE 3: fill the pool with THROWN windows, then pop another prism
+      for (let i = 0; i < 3; i++) {
+        m.emitPayload({
+          payload: payloadOf({ id: 'pVB' + i, kind: GoonPayloadKind.Video, duration_ms: 40000 }),
+          fireAtLocalMs: localMonotonicMs(),
+        });
+        await sleep(30);
+      }
+      await sleep(60);
+      ok(videos.windowCount() === 4, 'the pool is full: 1 earned + 3 thrown', String(videos.windowCount()));
+      ok(m.receipts.length === 0, 'and none of the thrown ones has finished', JSON.stringify(m.receipts));
+
+      await sleep(900);                       // let the top-up mint more prisms
+      const spare = prisms()[0];
+      ok(!!spare, 'another prism to pop with the pool already full');
+      const before = pops.length;
+      spare.fire('pointerdown');
+      ok(pops.length === before + 1, 'it still POPS', `${before} -> ${pops.length}`);
+      ok(pops[pops.length - 1].worth === 2.5,
+        'and still pays its 2.5 — a full pool costs the player nothing',
+        String(pops[pops.length - 1].worth));
+      ok(videos.windowCount() === 4,
+        'but NO fifth window: a self-pop never displaces one', String(videos.windowCount()));
+      ok(m.receipts.length === 0,
+        'and above all it never receipted somebody else\'s window as survived', JSON.stringify(m.receipts));
+
+      // ---- ONE POOL, and a PAYLOAD is the only thing that may evict from it —
+      // including a local window, which just dies quietly (no id, no receipt).
+      m.emitPayload({
+        payload: payloadOf({ id: 'pVB3', kind: GoonPayloadKind.Video, duration_ms: 40000 }),
+        fireAtLocalMs: localMonotonicMs(),
+      });
+      await sleep(120);
+      ok(videos.windowCount() === 4, 'an arriving payload still evicts to stay at four',
+        String(videos.windowCount()));
+      ok(m.receipts.length === 0,
+        'evicting the LOCAL window posts no receipt — it was never on the wire', JSON.stringify(m.receipts));
+      await sleep(320);
+      ok(!localNode.isConnected,
+        'and it WAS the local one: the pool is one FIFO, oldest first, local or thrown');
+
+      ex.stopAll();
+      ok(videos.windowCount() === 0, 'stopAll sweeps earned and thrown windows alike',
+        String(videos.windowCount()));
+      ok(m.receipts.length === 4 && m.receipts.every((r) => r.endured === false),
+        'the four THROWN ones receipt completed, and there is no fifth receipt for the earned one',
+        JSON.stringify(m.receipts));
+
+      // ---- the seam itself, driven by hand: kind gates it, `payload` blocks it
+      const bang = (detail) => document.dispatchEvent(new CustomEvent('gg-bubble-pop', { detail, bubbles: true }));
+      bang({ kind: 'flash', worth: 2.5, payload: false, size: 100, x: 0, y: 0 });
+      ok(videos.windowCount() === 0, 'a flash pop opens no window — only `video` does',
+        String(videos.windowCount()));
+      bang({ kind: 'video', worth: 0, payload: true, size: 100, x: 0, y: 0 });
+      ok(videos.windowCount() === 0,
+        'and a swarm-minted video pop is refused at the seam too (the second lock on the mint rule)',
+        String(videos.windowCount()));
+      bang({ kind: 'video', worth: 2.5, payload: false, size: 100, x: 0, y: 0 });
+      ok(videos.windowCount() === 1, 'ours opens exactly one', String(videos.windowCount()));
+      ok(m.receipts.length === 4, 'and still not one receipt from the local path',
+        String(m.receipts.length));
+
+      // ---- an earned window is dismissed the same way a thrown one is
+      const w2 = winHost.findAll('gg-vwin')[0];
+      PID++;
+      ptr(w2, 'pointerdown', 300, 300);
+      ptr(w2, 'pointerup', 300, 300);
+      ok(videos.windowCount() === 0, 'a click dismisses it, exactly like a thrown one',
+        String(videos.windowCount()));
+      ok(m.receipts.length === 4, 'silently — closing your own window is not a survival',
+        String(m.receipts.length));
+
+      // ---- and after detach nothing can conjure one onto the recap
+      document.removeEventListener('gg-bubble-pop', onPop);
+      ex.detach();
+      bang({ kind: 'video', worth: 2.5, payload: false, size: 100, x: 0, y: 0 });
+      ok(videos.windowCount() === 0, 'a pop after detach opens nothing at all',
+        String(videos.windowCount()));
+    } finally {
+      Math.random = realRandom;
+      document.removeEventListener('gg-bubble-pop', onPop);
+    }
+  }
+
   // -------------------------------------------------- brain drain: the DtRH veil
   {
     for (const id of LAYER_IDS) byId.get(id).replaceChildren();
@@ -1705,6 +1972,143 @@ async function main() {
     si.value = 'ab'; si.fire('input');
     ok(strictSolved, 'strict mode accepts the exact phrase');
     sv.dispose();
+  }
+
+  /* ------------- videos: the window COUNT leaves the renderer (2026-08-04)
+   *
+   * The opponent's monitor draws how many floating video windows you have up, which means the
+   * pool is no longer private: every mutation has to publish wins.length upward, through
+   * exec/executor.js, into the match's next tick as `vwin`.
+   *
+   * What is pinned here is the SEAM, not the wire (core/wire.js and the match's half live in
+   * selftest-net / selftest-core):
+   *   1. one edge per change, and never a stuck number — an eviction is a fall AND a rise;
+   *   2. every door into the pool counts, including the self-popped window the opponent can
+   *      never see any other way;
+   *   3. stopAll ends at ZERO, including for local windows that no cancel fn reaches — the bug
+   *      this seam would otherwise have shipped: a phantom stack on their screen for a match the
+   *      player had already left;
+   *   4. a listener is never load-bearing: no sink, or a throwing sink, and the windows behave
+   *      exactly as they always did.
+   */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+
+    const seen = [];
+    const m = Object.assign(fakeMatch(), {
+      setLocalWindowCount(count) { seen.push(count); return true; },
+    });
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const videos = ex.rendererFor(GoonElement.Videos);
+    const winHost = byId.get('gg-fx-vwin');
+    const last = () => (seen.length ? seen[seen.length - 1] : null);
+    const throwPayload = async (id) => {
+      m.emitPayload({
+        payload: payloadOf({ id, kind: GoonPayloadKind.Video, duration_ms: 40000 }),
+        fireAtLocalMs: localMonotonicMs(),
+      });
+      await sleep(40);
+    };
+
+    ex.attach(m);
+    ok(seen.length === 0, 'attaching publishes nothing — no windows, no news', JSON.stringify(seen));
+
+    for (let i = 0; i < 4; i++) await throwPayload('vwc' + i);
+    ok(videos.windowCount() === 4, 'four thrown windows are up', String(videos.windowCount()));
+    ok(seen.join(',') === '1,2,3,4', 'one edge per window as the pool fills', seen.join(','));
+
+    // The fifth evicts the oldest, and that is TWO changes: the pool cannot silently stay at 4
+    // or a monitor driven off the edges would miss the swap entirely.
+    await throwPayload('vwc4');
+    ok(videos.windowCount() === 4, 'still four after the fifth arrives', String(videos.windowCount()));
+    ok(seen.slice(4).join(',') === '3,4', 'an eviction publishes the fall AND the rise', seen.slice(4).join(','));
+
+    // A click dismisses one — the player's own way out of a window. (The evicted window's node
+    // hangs around for its fade before it is torn out, so wait it out first: clicking the husk
+    // would be clicking a record that is already finished.)
+    await sleep(320);
+    const w0 = winHost.findAll('gg-vwin')[0];
+    PID++;
+    ptr(w0, 'pointerdown', 300, 300);
+    ptr(w0, 'pointerup', 300, 300);
+    ok(videos.windowCount() === 3, 'the click took one down', String(videos.windowCount()));
+    ok(last() === 3, 'and the count fell with it', String(last()));
+
+    // …and the window the player EARNED counts exactly the same. This is the whole reason the
+    // field exists: nothing about a self-pop reaches the opponent any other way.
+    ok(videos.spawnLocal({ duration_ms: 30000, intensity: 0.5 }) === true, 'a self-popped window goes up');
+    ok(last() === 4, 'and is counted like any other', String(last()));
+
+    // A fizzled self-pop changes nothing, so it publishes nothing.
+    const beforeFizzle = seen.length;
+    ok(videos.spawnLocal({ duration_ms: 30000 }) === false, 'the pool is full, so the next pop fizzles');
+    ok(seen.length === beforeFizzle, 'and a fizzle is not a change', String(seen.length - beforeFizzle));
+
+    // THE SWEEP. Three of these are thrown (cancel fns reach them) and one is earned (nothing
+    // does) — before stopWindows() that last record survived layers.stopAll() forever.
+    ex.stopAll();
+    ok(videos.windowCount() === 0, 'stopAll leaves no window standing, earned or thrown',
+      String(videos.windowCount()));
+    ok(last() === 0, 'and the count published is ZERO', String(last()));
+    ok(winHost.childNodes.length === 0, 'with the layer emptied behind it', String(winHost.childNodes.length));
+    // Five payloads were thrown and five receipts came back — one per ID and NOT ONE MORE. The
+    // earned window is the sixth thing that lived in this pool and it is silent, exactly as it
+    // was before the count seam existed: it has no id to close and earns no charge.
+    ok(m.receipts.length === 5, 'five thrown windows, five receipts', JSON.stringify(m.receipts));
+    ok(m.receipts.filter((r) => r.endured).length === 2,
+      'the evicted one and the dismissed one were ENDURED', JSON.stringify(m.receipts));
+    ok(m.receipts.slice(2).every((r) => r.endured === false),
+      'and the three the sweep took receipt completed', JSON.stringify(m.receipts));
+
+    const settled = seen.length;
+    ex.stopAll();
+    ok(seen.length === settled, 'a second stopAll publishes nothing — edges only', String(seen.length - settled));
+
+    // Detach tears down through the same path, so a window can never outlive the match.
+    await throwPayload('vwc5');
+    ok(videos.windowCount() === 1 && last() === 1, 'one more window for the road', String(last()));
+    ex.detach();
+    ok(videos.windowCount() === 0 && last() === 0,
+      'detach (stopAll first, while the match is still attached) ends at zero', String(last()));
+
+    // A pop after detach reaches nobody, so nothing is published to a match that is gone.
+    const afterDetach = seen.length;
+    document.dispatchEvent(new CustomEvent('gg-bubble-pop', {
+      detail: { kind: 'video', worth: 2.5, payload: false, size: 100, x: 0, y: 0 }, bubbles: true,
+    }));
+    ok(seen.length === afterDetach, 'and a pop after detach publishes nothing at all',
+      String(seen.length - afterDetach));
+  }
+
+  /* ------------- …and the callback is never load-bearing --------------------- */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const V = await import('../exec/videos.js');
+
+    // No sink at all: the renderer is exactly what it was before the seam existed.
+    const plain = V.createVideos({ layers, media: fakeMedia(), logger: quiet });
+    plain.renderPayload({ id: 'vwp0', duration_ms: 40000, intensity: 0.5 }, () => {});
+    ok(plain.windowCount() === 1, 'a renderer with no listener still opens windows', String(plain.windowCount()));
+    ok(plain.stopWindows() === 1, 'stopWindows reports what it swept', String(plain.windowCount()));
+    ok(plain.windowCount() === 0, 'and sweeps it');
+    ok(plain.stopWindows() === 0, 'sweeping an empty pool is a no-op');
+
+    // A sink that throws is the listener's problem and nobody else's.
+    let calls = 0;
+    let endured = null;
+    const boom = V.createVideos({
+      layers,
+      media: fakeMedia(),
+      logger: quiet,
+      onWindowCountChanged() { calls++; throw new Error('a listener exploded'); },
+    });
+    boom.renderPayload({ id: 'vwp1', duration_ms: 40000, intensity: 0.5 }, (e) => { endured = e; });
+    ok(boom.windowCount() === 1, 'a throwing listener does not stop the window going up', String(boom.windowCount()));
+    ok(calls === 1, 'it was called exactly once', String(calls));
+    boom.stopWindows();
+    ok(boom.windowCount() === 0 && endured === false,
+      'and the window still settles, and still receipts', `${boom.windowCount()} / ${endured}`);
+    ok(calls === 2, 'both edges were offered to it', String(calls));
   }
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
