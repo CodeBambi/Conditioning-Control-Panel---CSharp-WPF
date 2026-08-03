@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -35,16 +34,23 @@ internal static class FypHostService
 
     private static string StatsFilePath => Path.Combine(App.UserDataPath, "fyp_stats.json");
 
-    // ---- desktop-parking state (see the "window mechanics" region at the bottom) ----
-    // Session-only: click-through ALWAYS starts off, so a relaunch can never come up as an
+    // ---- ghost-mode state (see the "window mechanics" region at the bottom) ----
+    // Session-only: ghost mode ALWAYS starts off, so a relaunch can never come up as an
     // un-clickable ghost the user has no way to grab.
-    private static bool _clickThrough;
-    // WS_EX_LAYERED is applied lazily and then left on (at alpha 255 when fully opaque) — flipping
-    // the bit back off re-stamps the frame for no gain.
-    private static bool _layered;
+    private static bool _ghosted;
+    private static FypGhostOverlay? _ghost;
+    private static double _ghostLeft, _ghostTop;      // the real window's parked-from position
+    private static bool _ghostWasMaximized;           // it was maximized before we normalized it
+    private static DateTime _lastGhostExitUtc = DateTime.MinValue;
 
-    /// <summary>True while the window is passing clicks through to whatever is behind it.</summary>
-    public static bool IsClickThrough => _clickThrough;
+    /// <summary>True while the feed is a see-through DWM mirror and the real window is parked
+    /// off-screen (mouse passes straight through to whatever is behind it).</summary>
+    public static bool IsGhosted => _ghosted;
+
+    /// <summary>True just after ghost mode ended. The panic ladder uses this to swallow the
+    /// reflexive double-tap: rung 1 drops the ghost, and a second press inside this window
+    /// must not immediately take the whole feed down.</summary>
+    public static bool RecentlyUnghosted => (DateTime.UtcNow - _lastGhostExitUtc).TotalMilliseconds < 1500;
 
     /// <summary>True while the For You window is open.</summary>
     public static bool IsActive => _host != null;
@@ -79,8 +85,14 @@ internal static class FypHostService
                 OwnedByMainWindow = true,
                 WindowTitle = "For You",
                 LogTag = "FypHost",
-                // An autoplaying feed: media must start without a user gesture.
-                ExtraBrowserArguments = "--autoplay-policy=no-user-gesture-required",
+                // An autoplaying feed: media must start without a user gesture. The two
+                // occlusion flags are what make GHOST MODE work: the real window is parked off
+                // the virtual desktop while the DWM mirror shows it, and Chromium would
+                // otherwise call it occluded/backgrounded, stop rendering, and freeze the
+                // mirror to a still frame.
+                ExtraBrowserArguments = "--autoplay-policy=no-user-gesture-required "
+                                        + "--disable-features=CalculateNativeWinOcclusion "
+                                        + "--disable-backgrounding-occluded-windows",
                 OnReady = PostInit,
                 OnMessage = OnPageMessage,
                 OnProcessFailed = _ => Close(),
@@ -104,12 +116,11 @@ internal static class FypHostService
         // found it. Nothing in here posts to the page, so ordering only matters for the stray
         // event that could otherwise land between here and Dispose().
         DisableEyeControl();
+        // Un-ghost BEFORE the host goes: the mirror window must not outlive its thumbnail source,
+        // and ExitGhost needs _host to put the real window back where it came from.
+        ExitGhost();
         var h = _host;
         _host = null;
-        // Session-only window state dies with the window: the next Launch() starts clickable and
-        // re-applies the persisted opacity from scratch.
-        _clickThrough = false;
-        _layered = false;
         try { _meta?.Save(); } catch { }
         try { h?.Dispose(); }
         catch (Exception ex) { App.Logger?.Debug("FypHost.Close: {E}", ex.Message); }
@@ -141,9 +152,9 @@ internal static class FypHostService
                 },
                 stats = LoadStats(),
             });
-            // Restore the parked opacity now the window is up. Click-through is deliberately NOT
-            // restored (session-only) — the page's toggle comes up off to match.
-            if ((s?.FypWindowOpacity ?? 1.0) < 1.0) ApplyWindowState();
+            // Opacity is applied host-side, but only once ghost mode engages (there is nothing to
+            // make translucent before that); ghost mode itself is deliberately NOT restored
+            // (session-only) — the page's toggle comes up off.
             // Persisted eye control re-arms the camera on every launch (with the same consent
             // gate as the toggle) — the page has already rendered its toggle "on" from the
             // payload above, and eyeStatus corrects it if the camera refuses.
@@ -185,6 +196,11 @@ internal static class FypHostService
                 ApplySetting((string?)o["key"], o["value"]);
                 break;
             }
+            case "calibrate":
+            {
+                _host?.Window?.Dispatcher.BeginInvoke(new Action(RunGazeCalibration));
+                break;
+            }
             case "close":
             {
                 _host?.Window?.Dispatcher.BeginInvoke(Close);
@@ -207,15 +223,14 @@ internal static class FypHostService
     {
         if (key == null || value == null) return;
         // Session-only and settings-free, so it is handled before the settings null-guard.
+        // ("clickThrough" is the on-the-wire key name the page has always used; host-side the
+        // feature is ghost mode. Only the user-facing strings changed.)
         if (key == "clickThrough")
         {
             try
             {
-                bool on = (bool?)value ?? false;
-                if (on == _clickThrough) return;
-                _clickThrough = on;
-                ApplyWindowState();
-                App.Logger?.Information("FypHost: click-through {State}", on ? "ON" : "off");
+                if ((bool?)value ?? false) EnterGhost();
+                else ExitGhost();
             }
             catch (Exception ex) { App.Logger?.Debug("FypHost: clickThrough failed: {E}", ex.Message); }
             return;
@@ -233,9 +248,15 @@ internal static class FypHostService
                 case "mosaicChangeSec": s.FypMosaicChangeSec = (int?)value ?? 10; break;
                 case "autoAdvance": s.FypAutoAdvance = (bool?)value ?? false; break;
                 case "muted": s.FypMuted = (bool?)value ?? false; break;
-                // The setter clamps to 0.30-1.0; read it back so the live window and the stored
-                // value can never disagree about what a rogue payload asked for.
-                case "windowOpacity": s.FypWindowOpacity = (double?)value ?? 1.0; ApplyWindowState(); break;
+                // Persist, and push straight onto the ghost mirror when one is up — the mirror
+                // is a plain window, so its constant alpha IS the opacity (see below).
+                case "windowOpacity":
+                {
+                    double v = (double?)value ?? 1.0;
+                    s.FypWindowOpacity = v;
+                    _ghost?.SetOpacity(v);
+                    break;
+                }
                 case "audioGlow": s.FypAudioGlow = (bool?)value ?? true; break;   // page-side visual: persist only
                 case "eyeControl":
                 {
@@ -278,38 +299,46 @@ internal static class FypHostService
         catch (Exception ex) { App.Logger?.Warning("FypHost: stats save failed: {E}", ex.Message); }
     }
 
-    // ======================= window mechanics: opacity + click-through =======================
+    // ================== window mechanics: GHOST MODE (opacity + click-through) ==================
     //
-    // The point of both is "park the feed over the desktop and keep working": a faint, unclickable
-    // pane of the feed running behind whatever the user is actually doing.
+    // The point is "park the feed over the desktop and keep working": a faint, unclickable pane of
+    // the feed running behind whatever the user is actually doing.
     //
-    // OPACITY — WPF's Window.Opacity is useless here. It is a composition-tree property, and the
-    // WebView2 surface is a CHILD HWND that DWM composites separately (the classic airspace
-    // problem): the WPF chrome would fade and the video would stay solid. AllowsTransparency=true
-    // is worse still — that is the per-pixel UpdateLayeredWindow path, in which a WebView2 child
-    // does not paint at all (see the class comment on ChaosWebViewHost). The one technique that
-    // does work is the OTHER layered-window mode: WS_EX_LAYERED + SetLayeredWindowAttributes with
-    // LWA_ALPHA, which since Windows 8 makes DWM apply a constant alpha to the whole window
-    // hierarchy, child HWNDs included, with no bearing on how anything paints.
+    // THE MECHANISM IS A DWM LIVE-THUMBNAIL MIRROR (the OnTopReplica technique), not a style dance
+    // on the feed window. Ghosting moves the REAL WebView2 window fully off the virtual desktop
+    // (shown, never minimized — a minimized source freezes the thumbnail) and shows a
+    // FypGhostOverlay at its former rectangle: an empty WPF window carrying a live DWM thumbnail
+    // of the real one. Audio keeps playing, blink/gaze keep driving the real page, and the mirror
+    // simply shows the result — see-through and input-transparent for real.
     //
-    // CLICK-THROUGH — WS_EX_TRANSPARENT on the top-level window (which also requires WS_EX_LAYERED
-    // to actually pass input through, not merely skip hit-testing). That alone is not enough here:
-    // WebView2 parents its own child HWNDs (Chrome_WidgetWin_*, "Intermediate D3D Window") under
-    // ours, and a child still answers WM_NCHITTEST for its own rectangle — which is exactly the
-    // rectangle the video fills. So the flag is stamped on every descendant too, and cleared off
-    // every descendant when click-through goes away.
+    // Why not just style the feed window (this was shipped once and reproduced live 2026-08-03):
+    //   - WPF Window.Opacity: composition-tree property; the WebView2 child HWND ignores it.
+    //   - AllowsTransparency=true: per-pixel UpdateLayeredWindow path; WebView2 does not paint at
+    //     all (see the class comment on ChaosWebViewHost).
+    //   - WS_EX_LAYERED + SetLayeredWindowAttributes(LWA_ALPHA): the moment the constant-alpha
+    //     path ENGAGES, the WebView2 content goes solid BLACK and stays black — DWM's layered
+    //     redirection never sees the Chromium child processes' cross-process DirectComposition
+    //     visuals ("clicking the opacity brings up a black screen").
+    //   - WS_EX_TRANSPARENT alone gave real click-through, but paired with a page-side dim overlay
+    //     it only ever made the feed DARKER — you still could not see the desktop behind it.
+    // NOTHING may ever call SetLayeredWindowAttributes on the FEED window. On the MIRROR window
+    // SLWA is used with LWA_COLORKEY only — pixel-measured on this machine: LWA_ALPHA multiplies
+    // the DWM thumbnail together with the surface (no alpha value works), while a color-keyed
+    // surface drops out of composition and lets DWM_TNP_OPACITY blend the mirror against the
+    // desktop. See FypGhostOverlay for the styles, the DWM structs and the DPI math.
 
-    /// <summary>Push the current opacity/click-through state onto the live window. Safe to call
-    /// from any thread and before the window exists (then it is simply a no-op).</summary>
-    private static void ApplyWindowState()
+    /// <summary>Park the real feed window off-screen and put the see-through DWM mirror in its
+    /// place. Idempotent; no-op before the window exists.</summary>
+    private static void EnterGhost()
     {
+        if (_ghosted) return;
         var win = _host?.Window;
         if (win == null) return;
         if (!win.Dispatcher.CheckAccess())
         {
             // WebView2 raises WebMessageReceived on the thread that created it, so ApplySetting is
             // already on the UI thread in practice - this is belt and braces, not a hot path.
-            try { win.Dispatcher.BeginInvoke(new Action(ApplyWindowState)); } catch { }
+            try { win.Dispatcher.BeginInvoke(new Action(EnterGhost)); } catch { }
             return;
         }
         try
@@ -317,55 +346,109 @@ internal static class FypHostService
             var hwnd = new WindowInteropHelper(win).Handle;
             if (hwnd == IntPtr.Zero) return;
 
-            double opacity = Math.Clamp(App.Settings?.Current?.FypWindowOpacity ?? 1.0, 0.30, 1.0);
-            // Never touch the frame of a window that has only ever been fully opaque and clickable:
-            // the layered path is opt-in, so an untouched feed stays exactly as it was before.
-            if (!_layered && opacity >= 1.0 && !_clickThrough) return;
+            // A maximized window has no meaningful Left/Top to mirror or restore, so normalize
+            // first (remembering to put it back) and read the restored rect.
+            _ghostWasMaximized = win.WindowState == WindowState.Maximized;
+            if (win.WindowState != WindowState.Normal) win.WindowState = WindowState.Normal;
 
-            long ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
-            long want = ex | WS_EX_LAYERED;
-            if (_clickThrough) want |= WS_EX_TRANSPARENT;
-            else want &= ~WS_EX_TRANSPARENT;
-            if (want != ex) SetWindowLongPtr(hwnd, GWL_EXSTYLE, new IntPtr(want));
-            _layered = true;
+            _ghostLeft = win.Left;
+            _ghostTop = win.Top;
+            double w = win.ActualWidth > 0 ? win.ActualWidth : win.Width;
+            double h = win.ActualHeight > 0 ? win.ActualHeight : win.Height;
+            if (!(w > 0) || !(h > 0))
+            {
+                // Nothing to mirror yet, and nothing has moved — put the state back and bail.
+                if (_ghostWasMaximized) win.WindowState = WindowState.Maximized;
+                _ghostWasMaximized = false;
+                return;
+            }
+            var bounds = new Rect(_ghostLeft, _ghostTop, w, h);
 
-            SetLayeredWindowAttributes(hwnd, 0, (byte)Math.Round(opacity * 255.0), LWA_ALPHA);
-            ApplyChildClickThrough(hwnd, _clickThrough);
+            // From here on ExitGhost is the only correct way out, so arm it BEFORE the window
+            // moves: a throw below must never leave the real window parked off-screen.
+            _ghosted = true;
+
+            // The overlay ctor captures the feed's home monitor from its HWND, so it must run
+            // BEFORE the park moves the window off every monitor.
+            _ghost = new FypGhostOverlay(hwnd, bounds, App.Settings?.Current?.FypWindowOpacity ?? 1.0,
+                onGear: GhostGearClicked, onMute: GhostMuteClicked,
+                isMuted: () => App.Settings?.Current?.FypMuted ?? false);
+
+            // Park it past the right edge of every monitor. Still SHOWN (DWM keeps compositing it,
+            // so the thumbnail stays live); the browser flags keep Chromium from throttling it.
+            win.Left = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth + 200;
+
+            _ghost.Show();
+            App.Logger?.Information(
+                "FypHostService: ghost mode ON (mirror at {L}x{T} {W}x{H}, real window parked at {Park})",
+                (int)bounds.X, (int)bounds.Y, (int)bounds.Width, (int)bounds.Height, (int)win.Left);
         }
-        catch (Exception ex) { App.Logger?.Debug("FypHost.ApplyWindowState: {E}", ex.Message); }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("FypHost.EnterGhost failed: {E}", ex.Message);
+            ExitGhost();   // never leave the real window parked off-screen with no mirror
+        }
     }
 
-    /// <summary>Stamp (or strip) WS_EX_TRANSPARENT on every descendant HWND of the host window.
-    /// WebView2's own child windows hit-test independently of ours.</summary>
-    private static void ApplyChildClickThrough(IntPtr parent, bool on)
-    {
-        try { EnumChildWindows(parent, _childStyler, on ? new IntPtr(1) : IntPtr.Zero); }
-        catch (Exception ex) { App.Logger?.Debug("FypHost.ApplyChildClickThrough: {E}", ex.Message); }
-    }
-
-    // Held in a static field so the GC cannot collect the delegate under the native callback.
-    private static readonly EnumWindowsProc _childStyler = (child, lParam) =>
+    /// <summary>The ghost gear button: give the window back and open the options popover in one
+    /// click, so tweaking settings from ghost mode is one step instead of Esc-then-gear.</summary>
+    private static void GhostGearClicked()
     {
         try
         {
-            long ex = GetWindowLongPtr(child, GWL_EXSTYLE).ToInt64();
-            long want = lParam != IntPtr.Zero ? (ex | WS_EX_TRANSPARENT) : (ex & ~WS_EX_TRANSPARENT);
-            if (want != ex) SetWindowLongPtr(child, GWL_EXSTYLE, new IntPtr(want));
+            ExitGhost();
+            _host?.Window?.Activate();
+            _host?.Post(new { type = "openOptions" });
         }
-        catch { }
-        return true;   // keep enumerating
-    };
+        catch (Exception ex) { App.Logger?.Debug("FypHost: ghost gear failed: {E}", ex.Message); }
+    }
 
-    /// <summary>Give the window back its clicks and tell the page to un-check its toggle.
-    /// The panic ladder's first rung; also safe to call when click-through is already off.</summary>
-    public static void DisableClickThrough()
+    /// <summary>The ghost speaker button: flip mute WITHOUT leaving ghost mode — the parked
+    /// window keeps playing audio, so this is the one control worth reaching in ghost.</summary>
+    private static void GhostMuteClicked()
     {
-        if (!_clickThrough) return;
-        _clickThrough = false;
-        ApplyWindowState();
+        try
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FypMuted = !s.FypMuted;
+            _host?.Post(new { type = "setMuted", on = s.FypMuted });
+            _ghost?.RefreshMuteGlyph();
+        }
+        catch (Exception ex) { App.Logger?.Debug("FypHost: ghost mute failed: {E}", ex.Message); }
+    }
+
+    /// <summary>Close the mirror, bring the real window back to where it was, and tell the page to
+    /// un-check its toggle. The panic ladder's first rung; idempotent and safe when off.</summary>
+    public static void ExitGhost()
+    {
+        if (!_ghosted) return;
+        var win = _host?.Window;
+        if (win != null && !win.Dispatcher.CheckAccess())
+        {
+            try { win.Dispatcher.BeginInvoke(new Action(ExitGhost)); } catch { }
+            return;
+        }
+        _ghosted = false;
+        var g = _ghost;
+        _ghost = null;
+        try { g?.Close(); }
+        catch (Exception ex) { App.Logger?.Debug("FypHost.ExitGhost close: {E}", ex.Message); }
+        try
+        {
+            if (win != null)
+            {
+                win.Left = _ghostLeft;
+                win.Top = _ghostTop;
+                if (_ghostWasMaximized) win.WindowState = WindowState.Maximized;
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("FypHost.ExitGhost restore: {E}", ex.Message); }
+        _ghostWasMaximized = false;
+        _lastGhostExitUtc = DateTime.UtcNow;
         try { _host?.Post(new { type = "clickThrough", on = false }); }
-        catch (Exception ex) { App.Logger?.Debug("FypHost.DisableClickThrough post: {E}", ex.Message); }
-        App.Logger?.Information("FypHostService: click-through disabled");
+        catch (Exception ex) { App.Logger?.Debug("FypHost.ExitGhost post: {E}", ex.Message); }
+        App.Logger?.Information("FypHostService: ghost mode off");
     }
 
     // ============================= webcam eye control =============================
@@ -538,6 +621,27 @@ internal static class FypHostService
         catch (Exception ex) { App.Logger?.Debug("FypHost: eyeStatus post: {E}", ex.Message); }
     }
 
+    /// <summary>The page's Calibrate button: run the native gaze-calibration dialog over the
+    /// feed, then re-wire gaze and tell the page the new state. UI thread only.</summary>
+    private static void RunGazeCalibration()
+    {
+        try
+        {
+            if (WebcamCalibrationWindow.IsShowing) return;
+            if (App.Webcam?.IsRunning != true)
+            {
+                // The page disables the button without a running camera; this is belt and braces.
+                PostEyeStatus(null);
+                return;
+            }
+            ExitGhost();   // a parked window cannot host a modal dot dance
+            WebcamCalibrationWindow.ShowDialogWithRecalibrate(_host?.Window);
+            SyncGazeSubscription();
+            PostEyeStatus(null);
+        }
+        catch (Exception ex) { App.Logger?.Warning("FypHost: gaze calibration failed: {E}", ex.Message); }
+    }
+
     // All three handlers already arrive on the UI thread (the service Dispatch()es every event),
     // which is also the thread that owns the WebView2 — Post() is safe from here.
     private static void OnEyeBlink()
@@ -603,19 +707,4 @@ internal static class FypHostService
         catch (Exception ex) { App.Logger?.Debug("FypHost: gaze post: {E}", ex.Message); }
     }
 
-    private const int GWL_EXSTYLE = -20;
-    private const long WS_EX_LAYERED = 0x00080000L;
-    private const long WS_EX_TRANSPARENT = 0x00000020L;
-    private const uint LWA_ALPHA = 0x2;
-
-    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
-    [DllImport("user32.dll")]
-    private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
 }

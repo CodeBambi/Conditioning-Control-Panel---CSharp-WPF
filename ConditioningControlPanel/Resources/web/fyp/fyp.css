@@ -254,6 +254,20 @@ html, body {
 .option-row.disabled { opacity: 0.4; pointer-events: none; }
 
 .option-status { font-size: 11.5px; color: #ffb3d9; margin-top: 8px; }
+
+.mini-btn {
+  padding: 6px 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 105, 180, 0.55);
+  background: rgba(255, 105, 180, 0.15);
+  color: #ffb3d9;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 150ms ease;
+}
+.mini-btn:hover { background: rgba(255, 105, 180, 0.35); color: #fff; }
 #mosaic-sec, #window-opacity { flex: 1; accent-color: #ff69b4; }
 #mosaic-sec-label, #window-opacity-label { font-size: 12px; color: #b0b0c8; width: 34px; text-align: right; }
 #window-opacity-label { width: 40px; }
@@ -268,6 +282,30 @@ body.clickthrough #chrome { pointer-events: none; }
 body.clickthrough #top-left,
 body.clickthrough #top-right,
 body.clickthrough #attention { display: none !important; }
+
+/* Notice shown when ghost mode engages, so the vanished chrome reads as a
+   mode, not a breakage. Never interactive; fades out on its own. */
+#ct-note {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 420px;
+  padding: 18px 26px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 105, 180, 0.55);
+  background: rgba(18, 18, 31, 0.92);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.55);
+  text-align: center;
+  pointer-events: none;
+  z-index: 35;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+#ct-note.show { opacity: 1; }
+.ct-note-title { font-size: 17px; font-weight: 700; letter-spacing: 1px; color: #ffb3d9; margin-bottom: 8px; }
+.ct-note-sub { font-size: 13px; color: #d5d5e8; line-height: 1.5; }
+.ct-note-sub b { color: #fff; }
 
 /* ---------- attention check ---------- */
 

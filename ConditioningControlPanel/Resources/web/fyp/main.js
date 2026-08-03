@@ -11,7 +11,7 @@ const ATTENTION_MIN_GAP_MS = 120000;   // attention target every 2-4 min
 const ATTENTION_RAND_MS = 120000;
 const ATTENTION_LIFETIME_MS = 6000;
 const OPACITY_POST_MS = 100;           // throttle window-opacity posts while dragging
-const OPACITY_MIN = 0.3;
+const OPACITY_MIN = 0.01;
 // Eye control: one action per 600ms (a double-blink is a very common reflex), and a
 // gaze point older than this is treated as stale — the host freezes gaze while the
 // eyes are closed, so the point at blink time is always ~a moment old by design.
@@ -263,7 +263,12 @@ function updateOptionsUi() {
   updateEyeUi();
 }
 
-// ---------- window opacity / click-through ----------
+// ---------- window opacity / ghost mode ----------
+//
+// Both are HOST-side now. The slider sets the real translucency of the ghost mirror (a plain
+// window whose constant alpha the DWM thumbnail respects), so there is nothing to draw here —
+// the page only reports the value. Ghost mode itself parks the real window off-screen; the
+// page keeps calling it `clickThrough` on the wire, which is all the host listens for.
 
 function clampOpacity(v) {
   const n = Number(v);
@@ -293,14 +298,23 @@ function queueOpacity(v) {
   else opacityTimer = setTimeout(flushOpacity, wait);
 }
 
+let ctNoteTimer = null;
+
+/** Ghost mode on/off. (`clickThrough` is the wire name; the host parks the real window
+ *  off-screen behind a see-through DWM mirror.) */
 function setClickThrough(on, fromHost) {
   clickThrough = !!on;
   document.body.classList.toggle('clickthrough', clickThrough);
   $('toggle-clickthrough').classList.toggle('on', clickThrough);
+  clearTimeout(ctNoteTimer);
   if (clickThrough) {
     $('options-scrim').classList.add('hidden'); // nothing is clickable from here on
     stopAttention();                            // an unclickable target is just a nag
+    // The chrome just vanished on purpose — say so, or it reads as a breakage.
+    $('ct-note').classList.add('show');
+    ctNoteTimer = setTimeout(() => $('ct-note').classList.remove('show'), 7000);
   } else {
+    $('ct-note').classList.remove('show');
     scheduleAttention();
   }
   if (!fromHost) setting('clickThrough', clickThrough);
@@ -318,6 +332,9 @@ function updateEyeUi() {
   $('toggle-eye-gaze').classList.toggle('on', !!settings.eyeGaze);
   // Gaze needs the master toggle AND a trained calibration to mean anything.
   $('eye-gaze-row').classList.toggle('disabled', !(settings.eyeControl && eyeStatus.calibrated));
+  // Calibration only needs a running camera, i.e. the master toggle.
+  $('eye-calibrate-row').classList.toggle('disabled', !(settings.eyeControl && eyeStatus.running));
+  $('btn-calibrate').textContent = eyeStatus.calibrated ? 'Recalibrate' : 'Calibrate';
   const line = eyeStatusText();
   $('eye-status').textContent = line ?? '';
   $('eye-status').classList.toggle('hidden', !line);
@@ -445,7 +462,7 @@ function wireChrome() {
   $('window-opacity').addEventListener('input', () => {
     const pct = Number($('window-opacity').value) || 100;
     $('window-opacity-label').textContent = `${pct}%`;
-    queueOpacity(clampOpacity(pct / 100));
+    queueOpacity(clampOpacity(pct / 100)); // the host owns the visual (ghost mirror alpha)
   });
   $('window-opacity').addEventListener('change', () => {
     const pct = Number($('window-opacity').value) || 100;
@@ -466,6 +483,8 @@ function wireChrome() {
     updateEyeUi();
   });
   $('toggle-clickthrough').addEventListener('click', () => setClickThrough(!clickThrough, false));
+  // The host runs the native calibration dialog (it owns the webcam); the click just asks.
+  $('btn-calibrate').addEventListener('click', () => post({ type: 'calibrate' }));
   $('btn-include-gifs').addEventListener('click', () => {
     setting('includeGifs', true);
     updateOptionsUi();
@@ -493,6 +512,12 @@ function wireInput() {
       case 'ArrowDown': case 'PageDown': next(); e.preventDefault(); break;
       case 'ArrowUp': case 'PageUp': prev(); e.preventDefault(); break;
       case 'm': case 'M': setMuted(!settings.muted); break;
+      case 'Escape':
+        // Only meaningful while the window still holds keyboard focus (right
+        // after flipping the toggle — exactly when someone wants out). Native
+        // fullscreen-exit on Esc still happens; that's fine, both say "back off".
+        if (clickThrough) setClickThrough(false, false);
+        break;
       default: break;
     }
   });
@@ -580,6 +605,16 @@ function onHostMessage(data) {
     case 'clickThrough':
       // The host flips this off when the panic key gives the mouse back.
       setClickThrough(!!data.on, true);
+      break;
+    case 'openOptions':
+      // The ghost gear button: the host has just un-ghosted us and wants the popover up.
+      updateOptionsUi();
+      $('options-scrim').classList.remove('hidden');
+      break;
+    case 'setMuted':
+      // The ghost speaker button. setMuted echoes a settings-changed back; the host sets
+      // the same value again, which is harmless.
+      setMuted(!!data.on);
       break;
     case 'eyeStatus':
       eyeStatus = {
