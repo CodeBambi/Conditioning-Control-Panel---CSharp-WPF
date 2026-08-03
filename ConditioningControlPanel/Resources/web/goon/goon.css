@@ -1,0 +1,284 @@
+/* ============================================================================
+ * goon.css — FOUNDATION TIER for the Goon Game page.
+ *
+ * Tokens cribbed from cclabs-site/fall-styles.css and re-namespaced to gg-*, so
+ * the duel reads as the same product as the Fall and the app. The full HUD /
+ * screen / draft CSS arrives with the UI wave; this file owns only:
+ *   1. tokens        2. the z-stack        3. the component kit
+ *   4. the loader    5. the mercy isolation block    6. motion/portrait rails
+ *
+ * NO webfonts (offline by construction) and no external URLs of any kind — the
+ * page is served from a virtual host with no network guarantee.
+ * ==========================================================================*/
+
+:root {
+  /* --- brand ------------------------------------------------------------ */
+  --gg-pink: #ff69b4;
+  --gg-pink-hover: #ff1493;
+  --gg-gold: #ffd45e;
+  --gg-violet: #b388ff;
+  --gg-pink-rgb: 255, 105, 180;
+  --gg-violet-rgb: 179, 136, 255;
+
+  /* --- text ramp (bright -> dim) ---------------------------------------- */
+  --gg-text: #fff;
+  --gg-text-1: #e8d8ee;
+  --gg-text-2: #cbb3d6;
+  --gg-text-3: #a98cb8;
+  --gg-text-4: #907a9e;
+
+  /* --- surfaces --------------------------------------------------------- */
+  --gg-card-bg: rgba(20, 10, 28, 0.85);
+  --gg-card-border: 1px solid rgba(255, 105, 180, 0.35);
+  --gg-card-glow: 0 0 60px rgba(255, 105, 180, 0.18);
+  --gg-plate-bg: rgba(12, 6, 20, 0.72);
+  --gg-plate-border: 1px solid rgba(255, 105, 180, 0.30);
+  --gg-scrim: rgba(8, 4, 14, 0.6);
+
+  /* --- shape / type ----------------------------------------------------- */
+  --gg-radius-card: 24px;
+  --gg-radius-plate: 14px;
+  --gg-radius-pill: 999px;
+  --gg-font: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+
+  /* --- mercy placement (its own vars so nothing else can nudge it) ------- */
+  --gg-mercy-bottom: 2.2rem;
+  --gg-mercy-z: 60;
+
+  /* --- decorative-animation switch (see the armor rule below) ----------- */
+  --gg-deco-play: running;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: radial-gradient(120% 120% at 50% 0%, #2a1030 0%, #12081a 55%, #08040e 100%);
+  color: var(--gg-text);
+  font-family: var(--gg-font);
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+/* ---------------------------------------------------------------------------
+ * THE Z-STACK — mirrors index.html comment-for-comment. Every layer is a fixed
+ * full-bleed box; only #gg-stage and the screens take pointer input.
+ * ------------------------------------------------------------------------ */
+#gg-bg      { position: fixed; inset: 0; z-index: 0;  width: 100%; height: 100%; }
+#gg-screens { position: fixed; inset: 0; z-index: 10; }
+#gg-stage   { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; }
+#gg-fx      { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+#gg-hud     { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+#gg-toasts  { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+#gg-drawer  { position: fixed; inset: 0 0 0 auto; z-index: 70; width: min(24rem, 92vw); }
+#gg-modal   { position: fixed; inset: 0; z-index: 70; }
+#gg-loader  { position: fixed; inset: 0; z-index: 90; }
+
+/* fx children stack inside their parent and never eat clicks */
+#gg-fx > div { position: absolute; inset: 0; pointer-events: none; }
+/* HUD/toast contents opt back IN individually */
+#gg-hud > *, #gg-toasts > * { pointer-events: auto; }
+
+[hidden] { display: none !important; }
+
+.gg-screen {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: clamp(1rem, 4vw, 3rem);
+  overflow-y: auto;
+}
+
+/* ---------------------------------------------------------------------------
+ * COMPONENT KIT
+ * ------------------------------------------------------------------------ */
+.gg-card {
+  background: var(--gg-card-bg);
+  border: var(--gg-card-border);
+  border-radius: var(--gg-radius-card);
+  box-shadow: var(--gg-card-glow);
+  padding: clamp(1.2rem, 3vw, 2.2rem);
+  max-width: min(46rem, 94vw);
+}
+
+.gg-btn {
+  font-family: var(--gg-font);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--gg-text);
+  background: rgba(20, 12, 28, 0.78);
+  border: 1px solid rgba(255, 105, 180, 0.55);
+  border-radius: var(--gg-radius-pill);
+  padding: 0.55rem 1.35rem;
+  cursor: pointer;
+  transition: border-color .2s, background .2s, box-shadow .2s, opacity .2s;
+}
+.gg-btn:hover { border-color: var(--gg-pink); background: rgba(40, 18, 50, 0.85); }
+.gg-btn:disabled { opacity: 0.5; cursor: default; }
+.gg-btn--primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, #d6479c, #8e50c9);
+  box-shadow: 0 6px 22px rgba(255, 105, 180, 0.30);
+}
+.gg-btn--primary:hover { box-shadow: 0 6px 28px rgba(255, 105, 180, 0.45); background: linear-gradient(135deg, #e6539f, #9a5ad8); }
+.gg-btn--ghost {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--gg-text-2);
+}
+.gg-btn--ghost:hover { color: var(--gg-text); border-color: rgba(255, 105, 180, 0.55); background: rgba(255, 255, 255, 0.04); }
+
+/* Small readable slab over busy effects (HUD chips, opponent plate, timers). */
+.gg-plate {
+  background: var(--gg-plate-bg);
+  border: var(--gg-plate-border);
+  border-radius: var(--gg-radius-plate);
+  backdrop-filter: blur(6px);
+  padding: 0.5rem 0.85rem;
+}
+
+/* ARMOR: at full effect pressure the plates go opaque (a blurred backdrop over
+   a flashing stage is both unreadable and the most expensive thing on screen)
+   and every decorative animation parks. ONE rule each — layers.setFxHeat()
+   flips html[data-gg-fx]. */
+html[data-gg-fx="hot"] .gg-plate { background: rgba(10, 5, 17, 0.90); backdrop-filter: none; }
+html[data-gg-fx="hot"] { --gg-deco-play: paused; }
+/* Decorative motion opts in by using the token; nothing functional may. */
+.gg-deco, .gg-loader-ring, .gg-eyebrow i { animation-play-state: var(--gg-deco-play); }
+
+.gg-eyebrow {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--gg-text-3);
+}
+.gg-eyebrow i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--gg-pink);
+  box-shadow: 0 0 10px rgba(var(--gg-pink-rgb), 0.9);
+  animation: ggBlink 1.6s ease-in-out infinite;
+}
+@keyframes ggBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+/* label/value row (consent sheet, options, draft summaries) */
+.gg-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.gg-row > .gg-row-label { color: var(--gg-text-2); font-size: 0.9rem; }
+.gg-row > .gg-row-value { color: var(--gg-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.gg-row input[type="range"] { accent-color: var(--gg-pink); flex: 1 1 10rem; }
+
+/* bottom sheet (mobile-ish panels: consent, emote picker) */
+.gg-sheet {
+  background: var(--gg-card-bg);
+  border: var(--gg-card-border);
+  border-radius: var(--gg-radius-card) var(--gg-radius-card) 0 0;
+  box-shadow: 0 -10px 60px rgba(0, 0, 0, 0.55);
+  padding: clamp(1rem, 3vw, 1.8rem);
+  max-height: 85vh; overflow-y: auto;
+}
+
+.gg-scrim { position: absolute; inset: 0; background: var(--gg-scrim); backdrop-filter: blur(3px); }
+
+.gg-grad {
+  background: linear-gradient(135deg, var(--gg-pink), var(--gg-violet));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+
+.gg-sr-only {
+  position: absolute !important; width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+ * LOADER (z90) — the only thing on screen until boot settles.
+ * ------------------------------------------------------------------------ */
+.gg-loader {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1rem;
+  background: #0d0716;
+  color: var(--gg-text-4);
+}
+.gg-loader-ring {
+  width: 48px; height: 48px; border-radius: 50%;
+  border: 3px solid rgba(var(--gg-pink-rgb), 0.2);
+  border-top-color: var(--gg-pink);
+  animation: ggSpin 0.9s linear infinite;
+}
+@keyframes ggSpin { to { transform: rotate(360deg); } }
+.gg-loader-caption { margin: 0; font-size: 1rem; letter-spacing: 0.04em; }
+.gg-loader-note { margin: 0; min-height: 1.2em; font-size: 0.82rem; color: var(--gg-text-4); }
+
+/* ---------------------------------------------------------------------------
+ * TITLE placeholder (the UI wave replaces this wholesale).
+ * ------------------------------------------------------------------------ */
+.gg-title-logo { width: min(30rem, 78vw); height: auto; display: block; filter: drop-shadow(0 0 40px rgba(var(--gg-pink-rgb), 0.35)); }
+.gg-title-kicker { margin: 1.1rem 0 0; color: var(--gg-text-2); font-size: 0.98rem; letter-spacing: 0.06em; text-align: center; }
+.gg-title-status { margin: 1.6rem 0 0; color: var(--gg-text-4); font-size: 0.8rem; text-align: center; line-height: 1.7; font-variant-numeric: tabular-nums; }
+#gg-boot-ok { display: block; margin-top: 0.8rem; font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gg-text-3); }
+
+/* ===========================================================================
+ * DO NOT TOUCH — MERCY ISOLATION
+ * The mercy button is the player's guaranteed way out of a live duel. It is
+ * NEVER dimmed, blurred, filtered, tinted, scaled, transformed or animated by
+ * any other rule, at any effect heat, in any phase. isolation:isolate keeps it
+ * out of every blend/filter group above it, and it sits on its own z-layer so
+ * no scrim or overlay can ever land on top. If a future effect needs to "cover
+ * the screen", it covers everything EXCEPT this. Nothing here is negotiable —
+ * changing it changes the safety contract, not the styling.
+ * ======================================================================== */
+#gg-mercy {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--gg-mercy-bottom) + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: var(--gg-mercy-z);
+  isolation: isolate;
+  filter: none !important;
+  opacity: 1 !important;
+  pointer-events: auto;
+}
+.gg-mercy-btn {
+  font-family: var(--gg-font);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(24, 6, 18, 0.92);
+  border: 2px solid var(--gg-pink-hover);
+  border-radius: var(--gg-radius-pill);
+  box-shadow: 0 0 28px rgba(255, 20, 147, 0.35);
+  padding: 0.7rem 1.8rem;
+  cursor: pointer;
+  animation: none !important;
+  transition: background .15s, box-shadow .15s;
+}
+.gg-mercy-btn:hover { background: rgba(48, 10, 32, 0.95); box-shadow: 0 0 34px rgba(255, 20, 147, 0.5); }
+/* END DO NOT TOUCH ------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------------
+ * MOTION — decorative keyframes only. Functional motion (countdown, progress)
+ * must not live behind this switch.
+ * ------------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .gg-deco, .gg-loader-ring, .gg-eyebrow i { animation: none !important; }
+  * { scroll-behavior: auto !important; }
+}
+
+/* ---------------------------------------------------------------------------
+ * PORTRAIT / narrow — stub. The real responsive pass ships with the UI wave.
+ * ------------------------------------------------------------------------ */
+@media (orientation: portrait), (max-width: 720px) {
+  .gg-card { border-radius: 18px; padding: 1.1rem; }
+  .gg-title-logo { width: min(22rem, 86vw); }
+  #gg-drawer { width: 100vw; }
+  :root { --gg-mercy-bottom: 1.4rem; }
+}

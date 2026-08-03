@@ -1,0 +1,155 @@
+<Window x:Class="ConditioningControlPanel.GoonTestWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Goon Game Test Cockpit"
+        Height="940" Width="1560"
+        MinHeight="640" MinWidth="1100"
+        WindowStartupLocation="CenterScreen"
+        Background="#FF1A1A2E">
+
+    <!-- Dev-only play-test cockpit for the Goon Game 1v1 duel (Services\GoonGame\).
+         Two independent player panels in one process: real server signaling + WebRTC,
+         or the in-process loopback transport pair. Launched with the goon-test flag.
+         Converters/styles live HERE (Window.Resources) per CLAUDE.md, never in a child Grid. -->
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="GgBg" Color="#FF1A1A2E" />
+        <SolidColorBrush x:Key="GgPanel" Color="#FF252542" />
+        <SolidColorBrush x:Key="GgPanelDeep" Color="#FF15152B" />
+        <SolidColorBrush x:Key="GgAccent" Color="#FFFF69B4" />
+        <SolidColorBrush x:Key="GgText" Color="#FFEDEDF5" />
+        <SolidColorBrush x:Key="GgMuted" Color="#FF9A9ABF" />
+        <SolidColorBrush x:Key="GgButton" Color="#FF35355F" />
+        <SolidColorBrush x:Key="GgButtonHot" Color="#FF4A4A82" />
+
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource GgText}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource GgText}" />
+            <Setter Property="Background" Value="{StaticResource GgButton}" />
+            <Setter Property="BorderBrush" Value="#FF50508C" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource GgButtonHot}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Foreground" Value="{StaticResource GgText}" />
+            <Setter Property="Background" Value="#FF1E1E38" />
+            <Setter Property="BorderBrush" Value="#FF50508C" />
+            <Setter Property="Padding" Value="3,2" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource GgText}" />
+            <Setter Property="Margin" Value="4,2" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource GgText}" />
+            <Setter Property="Margin" Value="6,2" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="#FF101024" />
+            <Setter Property="Background" Value="#FFD8D8EC" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="MinWidth" Value="90" />
+        </Style>
+
+        <Style TargetType="ListBox">
+            <Setter Property="Foreground" Value="{StaticResource GgText}" />
+            <Setter Property="Background" Value="{StaticResource GgPanelDeep}" />
+            <Setter Property="BorderBrush" Value="#FF3A3A68" />
+            <Setter Property="FontFamily" Value="Consolas" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource GgText}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="2,0" />
+        </Style>
+
+        <Style TargetType="Slider">
+            <Setter Property="Margin" Value="4,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+
+        <!-- Mode bar -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource GgPanel}" Padding="10,6" Margin="0,0,0,2">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="GOON GAME TEST COCKPIT" FontWeight="Bold" FontSize="14"
+                           Foreground="{StaticResource GgAccent}" Margin="0,0,20,0" />
+                <TextBlock Text="Mode:" Margin="0,0,4,0" />
+                <RadioButton x:Name="RadioServer" Content="Server (real /v2/goon + WebRTC)" IsChecked="True"
+                             GroupName="GgMode" Checked="Mode_Changed" />
+                <RadioButton x:Name="RadioLoopback" Content="Loopback (in-process, no server)"
+                             GroupName="GgMode" Checked="Mode_Changed" />
+                <ComboBox x:Name="CmbLoopProfile" SelectedIndex="0" IsEnabled="False" Width="150">
+                    <ComboBoxItem Content="P2P (25ms)" />
+                    <ComboBoxItem Content="Relay (900ms)" />
+                    <ComboBoxItem Content="Instant (0ms)" />
+                </ComboBox>
+                <Button x:Name="BtnCreateLoopback" Content="Create Loopback Pair" IsEnabled="False"
+                        Click="BtnCreateLoopback_Click" />
+                <Button x:Name="BtnOutage" Content="Simulate 20s Outage" IsEnabled="False"
+                        Click="BtnOutage_Click" />
+                <Button x:Name="BtnTearDown" Content="Tear Down Both" Click="BtnTearDown_Click" />
+            </StackPanel>
+        </Border>
+
+        <!-- Status strip -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource GgPanel}" Padding="10,4" Margin="0,2,0,0">
+            <TextBlock x:Name="TxtStatus" Text="idle" Foreground="{StaticResource GgMuted}" TextWrapping="Wrap" />
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border x:Name="PanelHostA" Grid.Column="0" Background="{StaticResource GgPanel}"
+                    Margin="2" Padding="6" CornerRadius="4" />
+            <Border x:Name="PanelHostB" Grid.Column="1" Background="{StaticResource GgPanel}"
+                    Margin="2" Padding="6" CornerRadius="4" />
+        </Grid>
+    </DockPanel>
+</Window>

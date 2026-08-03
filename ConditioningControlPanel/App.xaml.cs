@@ -382,7 +382,6 @@ namespace ConditioningControlPanel
         public static KeywordHighlightService? KeywordHighlight { get; private set; }
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
         public static RemoteControlService RemoteControl { get; private set; } = null!;
-        public static Services.GoonGame.GoonGameService GoonGame { get; private set; } = null!;
         public static AvailableSubjectsService AvailableSubjects { get; private set; } = null!;
         public static CompanionPhraseService CompanionPhrases { get; private set; } = null!;
         public static CatalogueService Catalogue { get; private set; } = null!;
@@ -1590,8 +1589,9 @@ namespace ConditioningControlPanel
             RemoteControl = new RemoteControlService();
             // Quest credit: each remote-control command received (Patreon-exclusive quest category).
             RemoteControl.CommandReceived += (_, _) => { try { Quests?.TrackRemoteCommand(); } catch { } };
-            // Goon Game duel plumbing. Idle until the user hosts/joins; the server enforces passes.
-            GoonGame = new Services.GoonGame.GoonGameService();
+            // (No app-level GoonGameService singleton: the Goon Game's clients build their own
+            // facade — the browser client via GoonHostService, the dev cockpit via GoonTestPanel —
+            // so an always-constructed idle singleton owned nothing and was never read.)
             AvailableSubjects = new AvailableSubjectsService();
             CompanionPhrases = new CompanionPhraseService();
             Catalogue = new CatalogueService();
@@ -1797,6 +1797,16 @@ namespace ConditioningControlPanel
             if (e.Args.Contains("--stress"))
                 StartHangStressMode();
 
+            // `--goon-test`: dev play-test cockpit for the Goon Game 1v1 duel — two independent
+            // player panels in this one process (each with its OWN GoonGameService, never the
+            // App.GoonGame singleton) so a full duel can be run against yourself over the real
+            // server signaling, or over the in-process loopback transport. Never opened otherwise.
+            if (e.Args.Contains("--goon-test"))
+            {
+                try { new GoonTestWindow().Show(); }
+                catch (Exception ex) { Logger?.Error(ex, "Failed to open the Goon Game test cockpit"); }
+            }
+
             // `--overlay-host`: force the unified overlay host ON for this launch only (in-memory,
             // not persisted) so the compositor path can be A/B tested without editing settings.
             if (e.Args.Contains("--overlay-host"))
@@ -1837,6 +1847,29 @@ namespace ConditioningControlPanel
                 Services.Chaos.DtrhHostService.Launch(testMode: true);
             else if (e.Args.Contains("--dtrh"))
                 Services.Chaos.DtrhHostService.Launch();
+
+            // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight
+            // away (same shape as `--dtrh`). Needs MainWindow to exist first — the host owns its
+            // window natively above main and ducks main out of the way at launch.
+            if (e.Args.Contains("--goon"))
+                Services.GoonGame.GoonHostService.Launch();
+
+            // `--goon-vectors`: write the deterministic RNG/round/ramp parity vectors the browser
+            // client's tests assert against, then quit. Every dev arg in this method runs after
+            // startup (MainWindow is already built above), so the window flashes for an instant
+            // before Shutdown - acceptable for a throwaway build step, and it keeps the dumper
+            // running against a fully initialised App (logger, settings, version).
+            if (e.Args.Contains("--goon-vectors"))
+            {
+                try
+                {
+                    var vectorsPath = Services.GoonGame.GoonVectorDumper.Run();
+                    Logger?.Information("Goon parity vectors written to {Path}", vectorsPath);
+                }
+                catch (Exception ex) { Logger?.Error(ex, "Failed to write the Goon parity vectors"); }
+                Shutdown();
+                return;
+            }
 
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
@@ -3418,7 +3451,6 @@ Application State:
             }
 
             // Dispose trigger sources FIRST so no new effects get queued during shutdown
-            GoonGame?.Dispose();
             RemoteControl?.Dispose();
             ScreenOcr?.Dispose();
             KeywordTriggers?.Dispose();

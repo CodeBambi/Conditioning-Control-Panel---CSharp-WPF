@@ -2914,6 +2914,19 @@ namespace ConditioningControlPanel.Models
             set { _intakeFullscreen = value; OnPropertyChanged(); }
         }
 
+        private bool _goonFullscreen = false;
+        /// <summary>Launch the Goon Game (1v1 duel) web client borderless-fullscreen. Same contract
+        /// as <see cref="IntakeFullscreen"/>: C# owns the window mode, the page only mirrors the
+        /// state the host echoes back, and GoonHostService writes this whenever the page's toggle
+        /// moves. Defaults off — and a recovery relaunch deliberately ignores it, so a wedged page
+        /// always comes back in a titled window that Windows can still close.</summary>
+        [JsonProperty]
+        public bool GoonFullscreen
+        {
+            get => _goonFullscreen;
+            set { _goonFullscreen = value; OnPropertyChanged(); }
+        }
+
         // ---- Weekly Intake Pass (free-tier onboarding) ----------------------------
         // The Graded Intake is a premium Exclusive, but free users get ONE run a week so
         // the app has a front door: the intake drafts a session, and that session is the
