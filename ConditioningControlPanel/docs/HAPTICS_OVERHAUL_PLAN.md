@@ -67,11 +67,44 @@ Routing: config maps each `HapticEventKind` row → enabled + intensity + mode/p
 ## Phases & task list
 
 ### Phase A — Engine core (Agent A)
-- [ ] `HapticMixer`, `HapticDeviceManager`, safety layer, 10 Hz loop per device.
-- [ ] `MockProviderV2`: 2-3 virtual toys (e.g. "Mock Lush" vibe×1, "Mock Edge" vibe×2, "Mock Solace" thrust+depth no-vibe), toast/log visualization compatible with the old Mock toast (singleton HWND pattern preserved — HWND leak history).
-- [ ] `HapticSettingsV2` nested config with explicit `[JsonProperty]` everywhere + migration from old `HapticSettings` (old property names must keep loading; map 10× per-feature Enabled/Intensity/Mode → routing rows; keep `AudioSyncSettings` snake_case keys working).
-- [ ] Rewire `HapticService` as facade: keep EVERY existing public method compiling (~25 call sites) as shims → mixer; premium gate + Enabled gate at the choke point; kill CTS races, force-enable on connect, dead RampUpAsync, `.Wait(1000)` dispose.
-- [ ] `DtrhHapticDirector` re-based onto mixer (ambient → continuous layer, accents → transients). Preserve its exact tuning values.
+Files: `Services/Haptics/Core/HapticMixer.cs`, `HapticDeviceManager.cs`, `MockProviderV2.cs`,
+`HapticPatterns.cs`, `MockToast.cs`; reworked `Services/Haptics/HapticService.cs`,
+`DtrhHapticDirector.cs`, `Models/HapticSettings.cs`.
+- [x] `HapticMixer`, `HapticDeviceManager`, safety layer, 10 Hz loop per device.
+- [x] `MockProviderV2`: 3 virtual toys ("Mock Lush" vibe×1, "Mock Edge" vibe×2, "Mock Solace" Thrust 20 steps + Depth 3 steps, no vibe), toast visualization sharing the old Mock toast (the singleton was hoisted to `Core/MockToast.cs` so BOTH mocks use ONE window — HWND leak history).
+- [x] `HapticSettingsV2` nested config with explicit `[JsonProperty]` everywhere + migration from old `HapticSettings` (no legacy property renamed or removed; 10× per-feature Enabled/Intensity/Mode → routing rows; `AudioSyncSettings` untouched).
+- [x] Rewire `HapticService` as facade: every existing public method keeps its exact signature and now posts into the mixer; premium gate + Enabled gate at the choke point; CTS dispose races, force-enable on connect, dead RampUpAsync and `.Wait(1000)` dispose all gone.
+- [x] `DtrhHapticDirector` re-based onto mixer (ambient → `HapticLayer.Dtrh`, accents → priority-tagged pulses). Tuning values unchanged.
+
+**Decisions made in Phase A (integration + Phases E/F need these):**
+- **Provider registration**: `HapticDeviceManager`'s ctor registers `MockProviderV2` only and carries
+  the marker `// PROVIDER-REGISTRATION-POINT: LovenseProviderV2 + ButtplugProviderV2 added at
+  integration`. Until those are wired in, a Lovense/Buttplug user connects to nothing.
+- **Contract extension (the only one)**: `HapticLayer.Pattern` added to `HapticContracts.cs`. Authored
+  Deeper keyframe envelopes (`SetSyncPatternAsync`) need their own layer so they cannot stomp
+  `AudioSync` or `Manual`. Members added only; nothing renamed or removed.
+- **Output ceiling changed**: every output is `min(raw × GlobalIntensity, MasterCap)` then × the
+  per-device trim. Defaults `GlobalIntensity = 0.70` (the dead "Intensity" slider, now live) and
+  `MasterCap = 0.70` mean **max output is 0.70, not 1.0**. Phase E must surface both and the patch
+  notes must say so. Migration rescues a stored `GlobalIntensity <= 0.05` back to 0.7 (that slider did
+  nothing before, so a parked 0 was never a real preference).
+- **Mixing rules**: continuous layers combine by MAX (role-filtered, per-layer scaled); transient
+  envelopes sum within a priority group and MAX across groups, then ride over the floor by MAX. The
+  floor's RISE is slew-limited (soft ramp); transients are not, so short accents stay sharp.
+- **Legacy props still drive the engine**: today's Haptics tab writes the flat properties, so
+  `HapticSettings.OnPropertyChanged` mirrors them into the matching v2 routing rows. Keep that mirror
+  until the Phase E UI binds the rows directly and the old controls are gone.
+- **`HapticSettings.VideoMode` is now `[Obsolete]`** — 2 expected CS0618 warnings at
+  `MainWindow.Haptics.cs:514` and `MainWindow.Settings.cs:344`. Phase E deletes that combo row.
+- **Mode rendering** lives in `Core/HapticPatterns.cs` (the six `VibrationMode`s as envelope
+  sequences). That is where the Phase E pattern editor should plug in.
+- `HapticService.TestAsync` calls `HapticMixer.AllowTestWindow(4000)` so the Test button still works
+  with the master toggle off (premium is still required).
+- **New first-class API** for Phases E/F: `PostEvent(HapticEventKind, double?)`,
+  `SetLayer(HapticLayer, double, int autoZeroMs = 0)`, `PanicStop()`,
+  `PlayPatternAsync(intensity, ms, mode, priority, role, ct)`, plus
+  `HapticMixer.SetPositionAsync(deviceKey, 0..1)` — Position is deliberately NOT driven by the
+  generic mixer (it is placement, not intensity); FunScript owns it.
 
 ### Phase B — LovenseProviderV2 (Agent B)
 Files: `Services/Haptics/LovenseProviderV2.cs`, `Services/Haptics/LovenseToyEventsClient.cs`,

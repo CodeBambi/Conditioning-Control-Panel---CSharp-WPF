@@ -148,7 +148,12 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         Luminance,   // flash/subliminal brightness sync (Phase F)
         Dtrh,        // DtrhHapticDirector ambient depth
         Session,     // session ramp (future)
-        Manual       // live slider / test
+        Manual,      // live slider / test
+        /// <summary>Authored keyframe envelopes (Deeper runtime patterns + its editor preview,
+        /// i.e. HapticService.SetSyncPatternAsync). Added in Phase A — see
+        /// docs/HAPTICS_OVERHAUL_PLAN.md "Contract extensions". It needs its own layer so a
+        /// Deeper pattern cannot stomp the AudioSync or Manual layer.</summary>
+        Pattern
     }
 
     /// <summary>Semantic transient events; the routing matrix maps each to enabled +
