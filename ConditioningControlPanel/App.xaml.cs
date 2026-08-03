@@ -3406,7 +3406,10 @@ Application State:
                 try
                 {
                     Logger?.Information("Syncing profile to cloud before exit...");
-                    ProfileSync.SyncProfileAsync().Wait(TimeSpan.FromSeconds(2));
+                    // Task.Run so the await continuations land on the thread pool: ProfileSyncService
+                    // has no ConfigureAwait(false), and a bare Wait() here blocks the very dispatcher
+                    // those continuations need - the sync could never finish inside the timeout.
+                    Task.Run(() => ProfileSync.SyncProfileAsync()).Wait(TimeSpan.FromSeconds(2));
                 }
                 catch (Exception ex)
                 {
