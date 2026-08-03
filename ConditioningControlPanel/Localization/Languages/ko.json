@@ -245,6 +245,8 @@
   "tooltip_scale_of_flash_images_100_original_size_200_d": "플래시 이미지 크기.\r\n100% = 원본 크기, 200% = 2배 크기.",
   "setting_size": "크기",
   "tooltip_transparency_of_flash_images_lower_more_see_t": "플래시 이미지 투명도.\r\n낮을수록 투명, 100% = 완전 불투명.",
+  "setting_avoid_screen_center": "화면 중앙 피하기",
+  "tooltip_keep_flash_images_out_of_a_square_in_the_midd": "모든 화면 중앙의 정사각형 영역에 플래시 이미지가 나타나지 않도록 합니다.\r\n게임에 유용 - 조준점을 가리지 않습니다. 슬라이더로 영역 크기를 조절합니다 (화면 짧은 변 대비 %).",
   "tooltip_fade_in_out_animation_speed_0_instant_appear": "페이드 인/아웃 애니메이션 속도.\r\n0% = 즉시 나타남/사라짐.\r\n100% = 부드러운 페이드.",
   "setting_fade": "페이드",
   "tooltip_how_long_images_stay_on_screen_only_used_when": "이미지가 화면에 머무는 시간.\r\n오디오 비활성화 시에만 사용돼요.",
