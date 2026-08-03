@@ -181,11 +181,11 @@ namespace ConditioningControlPanel
                 PillRankPercentile.ToolTip = App.Mods?.GetStatPillTooltip("popular_girl")
                     ?? ML("Your rank percentile (Popular Girl skill)", "tooltip_your_rank_percentile_popular_girl_skill");
 
-            // Mod-aware Bambi Takeover header + side-nav button label
+            // Mod-aware Bambi Takeover header + Exclusives card title
             // (Drone mod → "Drone Takeover", SissyHypno → "Sissy Takeover", etc.)
             var takeoverLabel = App.Mods?.GetTakeoverLabel() ?? Loc.Get("tab_takeover");
             if (BambiTakeoverTab.TxtBambiTakeoverHeader != null) BambiTakeoverTab.TxtBambiTakeoverHeader.Text = takeoverLabel;
-            if (TxtSubBambiTakeover != null) TxtSubBambiTakeover.Text = takeoverLabel;
+            RefreshExclusivesTab(); // repaints card titles (incl. Takeover) + chips
 
             // Refresh bonus chips with updated names
             RefreshXPBarBonuses();
