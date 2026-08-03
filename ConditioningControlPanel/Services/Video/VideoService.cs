@@ -1484,6 +1484,21 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
+            // For You feed open: the feed IS the video experience — a mandatory video over it
+            // would fight the feed's own players for audio and attention. Drop outright (never
+            // queue: the feed can stay open far longer than the queue's stuck window), releasing
+            // a dequeued claim the same way the cascade guard above does.
+            if (Fyp.FypHostService.IsActive)
+            {
+                App.Logger?.Information("VideoService: TriggerVideo dropped - For You feed active");
+                if (!_videoPlaying &&
+                    App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video)
+                {
+                    App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
+                }
+                return;
+            }
+
             // Check if another fullscreen interaction is active (bubble count, lock card)
             // If so, queue this video for later
             // Note: If CurrentInteraction is already Video, the queue dequeued us — proceed normally

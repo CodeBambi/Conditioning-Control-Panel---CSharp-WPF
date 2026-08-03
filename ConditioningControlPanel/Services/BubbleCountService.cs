@@ -142,6 +142,17 @@ public class BubbleCountService : IDisposable
             return;
         }
 
+        // For You feed open: bubble count is a video-class interaction and stands down like
+        // the mandatory video does. Drop, never queue (the feed outlives the stuck window),
+        // handing back a dequeued slot the same way the poison guard above does.
+        if (Fyp.FypHostService.IsActive)
+        {
+            App.Logger?.Information("BubbleCountService: game dropped - For You feed active");
+            if (App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.BubbleCount)
+                App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+            return;
+        }
+
         var settings = App.Settings.Current;
 
         // Check if another fullscreen interaction is active (video, lock card)

@@ -1052,7 +1052,8 @@ namespace ConditioningControlPanel.Services
             // honest instead of completing and doing nothing.
             if (settings.AutonomyCanTriggerWebVideo
                 && App.BrowserMedia?.ShouldDeferNewVideo != true
-                && App.Video?.IsPlaying != true)
+                && App.Video?.IsPlaying != true
+                && !Fyp.FypHostService.IsActive)
                 candidates.Add((AutonomyActionType.WebVideo, 20));
 
             // Wallpaper shuffle - subtle desktop wallpaper change

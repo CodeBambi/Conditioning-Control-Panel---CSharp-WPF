@@ -783,6 +783,16 @@ namespace ConditioningControlPanel
             // Reactivates on its own once the game window closes (IsActive flips false).
             if (Services.Chaos.DtrhHostService.IsActive) { VideoDiag.Log("PANIC", "handed off to the DtRH web game window"); return; }
 
+            // For You feed: panic simply closes the feed window — it's a viewer, not a game,
+            // so there's no pause ladder to hand off to. The press is consumed (no fall-through
+            // into the "not running" exit branch).
+            if (Services.Fyp.FypHostService.IsActive)
+            {
+                VideoDiag.Log("PANIC", "closing the For You feed window");
+                Services.Fyp.FypHostService.Close();
+                return;
+            }
+
             // #735 "grace pause": while a mandatory video is really on screen, the FIRST panic press
             // pauses it behind a small Paused/Resume card instead of stopping the engine — the user
             // may be pausing because someone walked in, and a bark, an achievement track and a whole

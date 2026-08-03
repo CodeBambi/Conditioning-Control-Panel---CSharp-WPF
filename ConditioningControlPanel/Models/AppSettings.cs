@@ -2769,6 +2769,58 @@ namespace ConditioningControlPanel.Models
         }
         #endregion
 
+        #region For You Feed (premium, WebView2)
+        private string _fypLayout = "duo";
+        /// <summary>Feed page layout: "duo" (landscape stacks two-up), "trio" (three-up) or
+        /// "random" (irregular mosaic quilt). Mirrors the mobile reel's setting.</summary>
+        public string FypLayout
+        {
+            get => _fypLayout;
+            set { _fypLayout = value is "duo" or "trio" or "random" ? value : "duo"; OnPropertyChanged(); }
+        }
+
+        private bool _fypIncludeGifs = true;
+        /// <summary>Mix animated GIFs from the images library into the feed.</summary>
+        public bool FypIncludeGifs
+        {
+            get => _fypIncludeGifs;
+            set { _fypIncludeGifs = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypMosaicAutoChange = true;
+        /// <summary>Mosaic layout re-composes itself on a timer (off = holds until swiped).</summary>
+        public bool FypMosaicAutoChange
+        {
+            get => _fypMosaicAutoChange;
+            set { _fypMosaicAutoChange = value; OnPropertyChanged(); }
+        }
+
+        private int _fypMosaicChangeSec = 10;
+        /// <summary>Seconds between mosaic re-compositions. Floored at 3 - every morph
+        /// mounts/releases up to 4 media elements, so a faster cadence churns decoders.</summary>
+        public int FypMosaicChangeSec
+        {
+            get => _fypMosaicChangeSec;
+            set { _fypMosaicChangeSec = Math.Clamp(value, 3, 60); OnPropertyChanged(); }
+        }
+
+        private bool _fypAutoAdvance = false;
+        /// <summary>Scroll to the next page when a clip's window ends (off = loop forever).</summary>
+        public bool FypAutoAdvance
+        {
+            get => _fypAutoAdvance;
+            set { _fypAutoAdvance = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypMuted = false;
+        /// <summary>Feed audio muted.</summary>
+        public bool FypMuted
+        {
+            get => _fypMuted;
+            set { _fypMuted = value; OnPropertyChanged(); }
+        }
+        #endregion
+
         #region Lock Card (Unlocks Lv.35)
         private bool _lockCardEnabled = false;
         public bool LockCardEnabled

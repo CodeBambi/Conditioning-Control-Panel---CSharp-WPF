@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>For You</title>
+  <link rel="stylesheet" href="fyp.css">
+</head>
+<body>
+  <div id="app">
+    <div id="viewport">
+      <div id="track"></div>
+    </div>
+
+    <!-- chrome -->
+    <div id="chrome">
+      <div id="top-left">
+        <button id="btn-options" class="round-btn" title="Feed options">⚙</button>
+      </div>
+      <div id="top-right">
+        <button id="btn-advance" class="round-btn" title="Auto-advance: scroll on when a clip ends">⟳</button>
+        <button id="btn-mute" class="round-btn" title="Mute">🔊</button>
+        <button id="btn-fullscreen" class="round-btn" title="Fullscreen">⛶</button>
+      </div>
+      <div id="caption">
+        <div id="caption-name"></div>
+        <div id="caption-folder"></div>
+      </div>
+    </div>
+
+    <!-- feed options popover -->
+    <div id="options-scrim" class="hidden">
+      <div id="options-card">
+        <div class="options-header">
+          <span>Feed options</span>
+          <button id="btn-options-close" class="round-btn small" title="Close">✕</button>
+        </div>
+        <div class="options-label">Layout</div>
+        <div class="layout-row">
+          <button class="layout-chip" data-layout="duo"><span class="chip-icon">▤</span>Duo</button>
+          <button class="layout-chip" data-layout="trio"><span class="chip-icon">☰</span>Trio</button>
+          <button class="layout-chip" data-layout="random"><span class="chip-icon">▦</span>Mosaic</button>
+        </div>
+        <div class="options-divider"></div>
+        <div class="option-row">
+          <div class="option-text">
+            <div class="option-title">Include GIFs</div>
+            <div class="option-sub">Mix animated GIFs into the feed</div>
+          </div>
+          <button id="toggle-gifs" class="pill-toggle" role="switch"></button>
+        </div>
+        <div class="options-divider"></div>
+        <div class="option-row">
+          <div class="option-text">
+            <div class="option-title">Auto-change mosaic</div>
+            <div class="option-sub" id="mosaic-sub">Mosaic reshuffles on a timer</div>
+          </div>
+          <button id="toggle-mosaic" class="pill-toggle" role="switch"></button>
+        </div>
+        <div class="option-row" id="mosaic-slider-row">
+          <div class="option-text"><div class="option-title">Change every</div></div>
+          <input id="mosaic-sec" type="range" min="3" max="60" step="1">
+          <span id="mosaic-sec-label">10s</span>
+        </div>
+        <div class="options-footer">Mosaic settings apply to the Mosaic layout.</div>
+      </div>
+    </div>
+
+    <!-- attention check -->
+    <button id="attention" class="hidden" title="tap!">💗</button>
+
+    <!-- empty state -->
+    <div id="empty" class="hidden">
+      <div class="empty-emoji">🎬</div>
+      <h1>For You</h1>
+      <p>An endless feed of 20-40 second clips from your own videos and GIFs.<br>
+         Add some to your assets folder to switch it on.</p>
+      <button id="btn-include-gifs" class="empty-btn hidden"></button>
+      <p class="empty-hint">Only active videos and GIFs are used - curate in the Assets tab.</p>
+    </div>
+
+    <!-- crash containment -->
+    <div id="crash" class="hidden">
+      <div class="empty-emoji">💥</div>
+      <h1>The For You feed crashed</h1>
+      <p id="crash-detail"></p>
+      <button id="btn-retry" class="empty-btn">RETRY</button>
+    </div>
+
+    <!-- boot -->
+    <div id="boot">
+      <div class="boot-pulse">♡</div>
+    </div>
+  </div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
