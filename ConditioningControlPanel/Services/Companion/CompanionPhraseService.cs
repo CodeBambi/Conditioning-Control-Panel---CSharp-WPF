@@ -364,28 +364,16 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void PlayAudioFile(string path)
         {
-            Task.Run(() =>
+            try
             {
-                try
-                {
-                    var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
-                    var volume = (float)Math.Pow(masterVolume, 1.5) * 0.7f;
-
-                    using var audioFile = new NAudio.Wave.AudioFileReader(path);
-                    audioFile.Volume = volume;
-                    using var outputDevice = new NAudio.Wave.WaveOutEvent();
-                    outputDevice.Init(audioFile);
-                    outputDevice.Play();
-                    while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
-                    {
-                        System.Threading.Thread.Sleep(50);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("Failed to play phrase audio: {Error}", ex.Message);
-                }
-            });
+                var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
+                var volume = (float)Math.Pow(masterVolume, 1.5) * 0.7f;
+                App.Audio?.PlayOneShot(path, volume, "phrase-audio");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to play phrase audio: {Error}", ex.Message);
+            }
         }
 
         /// <summary>

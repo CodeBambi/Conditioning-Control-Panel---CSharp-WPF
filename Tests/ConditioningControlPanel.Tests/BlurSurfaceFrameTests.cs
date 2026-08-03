@@ -136,4 +136,128 @@ public class BlurSurfaceFrameTests
 
         Assert.False(IsRebuildCurrent(postedGen, current));
     }
+
+    // ---- #786: display aspect vs buffer aspect ----
+
+    [Fact]
+    public void DisplayAspect_SquarePixelsIsJustWidthOverHeight()
+    {
+        Assert.Equal(16.0 / 9.0, DisplayAspectFrom(1920, 1080, 1, 1, false), 5);
+        Assert.Equal(640.0 / 368.0, DisplayAspectFrom(640, 368, 1, 1, false), 5);
+    }
+
+    [Fact]
+    public void DisplayAspect_AppliesTheSampleAspectRatio()
+    {
+        // The #786 shape: an anamorphic clip whose coded frame is nothing like its display frame.
+        // Reading the buffer's own pixel aspect (1.739) drew it far too wide.
+        Assert.Equal(0.87, DisplayAspectFrom(640, 368, 1, 2, false), 2);
+        // Classic DVD: 720x480 storage, 32:27 pixels -> 16:9 on screen.
+        Assert.Equal(16.0 / 9.0, DisplayAspectFrom(720, 480, 32, 27, false), 3);
+    }
+
+    [Fact]
+    public void DisplayAspect_ZeroSarIsTreatedAsSquare()
+    {
+        // libvlc reports 0:0 for "unspecified"; that must mean square pixels, not a divide by zero.
+        Assert.Equal(640.0 / 368.0, DisplayAspectFrom(640, 368, 0, 0, false), 5);
+    }
+
+    [Fact]
+    public void DisplayAspect_RotatedTracksAreTransposed()
+    {
+        // A 90-degree-rotated 1920x1080 phone clip presents as 1080x1920; LibVLC rotates the vmem
+        // buffer but the track still reports the pre-rotation size.
+        Assert.Equal(1080.0 / 1920.0, DisplayAspectFrom(1920, 1080, 1, 1, true), 5);
+    }
+
+    [Fact]
+    public void DisplayAspect_GarbageIsRejectedSoTheBufferAspectWins()
+    {
+        Assert.Equal(0, DisplayAspectFrom(0, 368, 1, 1, false));
+        Assert.Equal(0, DisplayAspectFrom(640, 0, 1, 1, false));
+        Assert.Equal(0, DisplayAspectFrom(640, 368, 100, 1, false));   // 174:1, not a real clip
+        Assert.Equal(0, DisplayAspectFrom(640, 368, 1, 100, false));   // 1:57
+    }
+
+    // ---- #786: the fit rect (letterbox / pillarbox, never stretch) ----
+
+    [Fact]
+    public void Fit_PillarboxesAClipNarrowerThanTheScreen()
+    {
+        var (w, h) = FitToAspect(1920, 1080, 9.0 / 16.0);
+        Assert.Equal(1080, h, 3);            // height-limited
+        Assert.Equal(607.5, w, 3);
+        Assert.Equal(9.0 / 16.0, w / h, 5);  // aspect preserved exactly
+    }
+
+    [Fact]
+    public void Fit_LetterboxesAClipWiderThanTheScreen()
+    {
+        var (w, h) = FitToAspect(1920, 1080, 2.39);
+        Assert.Equal(1920, w, 3);            // width-limited
+        Assert.Equal(1920 / 2.39, h, 3);
+        Assert.True(h < 1080);
+    }
+
+    [Fact]
+    public void Fit_NeverExceedsTheContainerAndNeverStretches()
+    {
+        foreach (var aspect in new[] { 0.5, 0.75, 1.0, 1.333, 1.739, 1.778, 2.35 })
+        {
+            var (w, h) = FitToAspect(1920, 1080, aspect);
+            Assert.True(w <= 1920.001 && h <= 1080.001);
+            Assert.Equal(aspect, w / h, 5);
+        }
+    }
+
+    [Fact]
+    public void Fit_NoContainerYetYieldsNothingRatherThanABogusRect()
+    {
+        Assert.Equal((0d, 0d), FitToAspect(0, 1080, 1.778));
+        Assert.Equal((0d, 0d), FitToAspect(1920, 0, 1.778));
+        Assert.Equal((0d, 0d), FitToAspect(1920, 1080, 0));
+        Assert.Equal((0d, 0d), FitToAspect(1920, 1080, double.NaN));
+    }
+
+    // ---- #786: the blur-fill decision is a pure function of the two aspects ----
+
+    [Fact]
+    public void BlurFill_ArmsOnlyWhenBarsWouldShow()
+    {
+        double screen = 16.0 / 9.0;
+        Assert.False(NeedsBlurFill(1.778, screen));           // exact match
+        Assert.False(NeedsBlurFill(640.0 / 368.0, screen));   // 1.739, inside the 3% tolerance
+        Assert.True(NeedsBlurFill(640.0 / 386.0, screen));    // 1.658, outside it
+        Assert.True(NeedsBlurFill(9.0 / 16.0, screen));       // vertical clip
+    }
+
+    [Fact]
+    public void BlurFill_UnknownAspectDoesNotArmTheGaussian()
+    {
+        Assert.False(NeedsBlurFill(0, 16.0 / 9.0));
+        Assert.False(NeedsBlurFill(1.778, 0));
+    }
+
+    [Fact]
+    public void RepeatedFormatCallbacks_EachOneFullyDeterminesTheLayout()
+    {
+        // The #786 trace: 640x368 four times, then 640x386 twice, for one playback. Because the fit
+        // is recomputed from the LATEST dims every time, replaying the sequence in any order lands
+        // the same rect for the same dims - no stale layout survives a callback.
+        double screen = 16.0 / 9.0;
+        var seen = new List<(double W, double H)>();
+        foreach (var (vw, vh) in new List<(double, double)> { (640, 368), (640, 368), (640, 368), (640, 368), (640, 386), (640, 386) })
+            seen.Add(FitToAspect(1920, 1080, vw / vh));
+
+        Assert.Equal(seen[0], seen[3]);   // same dims -> identical layout, idempotent
+        Assert.Equal(seen[4], seen[5]);
+        Assert.NotEqual(seen[0], seen[4]);
+
+        // And neither one is ever a stretch: both fit inside the screen at their own aspect.
+        Assert.Equal(640.0 / 368.0, seen[0].W / seen[0].H, 5);
+        Assert.Equal(640.0 / 386.0, seen[4].W / seen[4].H, 5);
+        Assert.False(NeedsBlurFill(640.0 / 368.0, screen));
+        Assert.True(NeedsBlurFill(640.0 / 386.0, screen));
+    }
 }

@@ -253,6 +253,16 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
+            // The output circuit breaker is open (endpoint dead / Windows audio restarting) —
+            // opening a device now would block on the audio-service RPC and re-arm the cooldown
+            // on every gap. Stay silent and come back on the next wait (#778/#779).
+            if (App.Audio?.IsOutputSuppressed == true)
+            {
+                _pending.Clear();      // don't resume half a mantra minutes later
+                ScheduleNext();
+                return;
+            }
+
             try
             {
                 DisposeOutput(); // release the previous clip before opening the next
@@ -263,11 +273,13 @@ namespace ConditioningControlPanel.Services
                 _output.Init(_reader);
                 _output.PlaybackStopped += OnPlaybackStopped;
                 _output.Play();
+                App.Audio?.NoteOutputSuccess();
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "MantraChantService.PlayNext failed for {Path} — moving on after the next wait.", path);
                 DisposeOutput();
+                App.Audio?.NoteOutputFailure("mantra-chant", ex.Message);
                 ScheduleNext(); // don't wedge the loop on one bad clip
             }
         }

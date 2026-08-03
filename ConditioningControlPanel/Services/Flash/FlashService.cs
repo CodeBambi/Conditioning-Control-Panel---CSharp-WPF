@@ -262,12 +262,13 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Programmatic equivalent of a mouse click on a flash window. Runs
         /// the same close + hydra-multiplication + haptic + FlashClicked
-        /// pipeline as MouseLeftButtonDown.
+        /// pipeline as MouseLeftButtonDown. Flagged as gaze-driven so hydra
+        /// can stop the self-sustaining chain (#784) — see OnFlashClicked.
         /// </summary>
         internal void GazePop(FlashWindow window)
         {
             if (window == null || window.IsFadingOut) return;
-            OnFlashClicked(window, App.Settings.Current);
+            OnFlashClicked(window, App.Settings.Current, fromGaze: true);
         }
 
         #endregion
@@ -1691,7 +1692,8 @@ namespace ConditioningControlPanel.Services
             if (!anyLayer) ReleaseLayerHook();
         }
 
-        private void OnFlashClicked(FlashWindow window, AppSettings settings)
+        /// <param name="fromGaze">True when a gaze dwell/blink popped this flash rather than the mouse.</param>
+        private void OnFlashClicked(FlashWindow window, AppSettings settings, bool fromGaze = false)
         {
             // Cancel only THIS window's lifetime — other windows keep living~ ✨
             try { window.LifetimeCts?.Cancel(); } catch { }
@@ -1707,7 +1709,14 @@ namespace ConditioningControlPanel.Services
 
             // Hydra mode: spawn 2 more when clicking (NO NEW AUDIO)
             // No global _cleanupInProgress check needed — each window has its own lifetime~ 🐍
-            if (settings.CorruptionMode)
+            // #784: a gaze pop is automatic — the dwell attractor snaps straight onto the fresh
+            // children and pops them ~1s later, so an unrestricted gaze→hydra chain feeds itself
+            // and flashes never stop spawning (the population cap only bounds how many are on
+            // screen at once, not the endless churn). Let gaze take the FIRST hop off an original
+            // flash (the documented "stare to pop = click, including hydra") and stop there;
+            // children of a gaze pop just dismiss. Mouse clicks are unchanged — a human hand is
+            // the throttle there.
+            if (settings.CorruptionMode && (!fromGaze || window.HydraGeneration == 0))
             {
                 var maxHydra = Math.Min(settings.HydraLimit, 20);
                 int currentCount;
@@ -2573,33 +2582,10 @@ namespace ConditioningControlPanel.Services
 
                 if (File.Exists(chimePath))
                 {
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new AudioFileReader(chimePath);
-                            using var outputDevice = new WaveOutEvent();
-                            App.Audio?.ApplyPreferredDevice(outputDevice);
-
-                            var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                            var volume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
-                            audioFile.Volume = volume;
-
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-
-                            while (outputDevice.PlaybackState == PlaybackState.Playing)
-                            {
-                                Thread.Sleep(50);
-                            }
-
-                            App.Logger?.Information("🎉 Lucky Flash! 10x XP!");
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Debug("Failed to play lucky flash sound: {Error}", ex.Message);
-                        }
-                    });
+                    var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                    var volume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
+                    App.Audio?.PlayOneShot(chimePath, volume, "lucky-flash");
+                    App.Logger?.Information("🎉 Lucky Flash! 10x XP!");
                 }
             }
             catch (Exception ex)
@@ -2761,6 +2747,7 @@ namespace ConditioningControlPanel.Services
 
                 sound.Init(audioFile);
                 sound.Play();
+                App.Audio?.NoteOutputSuccess();
 
                 // Only assign to fields after everything succeeded
                 _currentAudioFile = audioFile;
@@ -2774,6 +2761,7 @@ namespace ConditioningControlPanel.Services
                 sound?.Dispose();
                 audioFile?.Dispose();
                 App.Logger.Warning("Could not play sound {Path}: {Error}", path, ex.Message);
+                App.Audio?.NoteOutputFailure("flash-sound", ex.Message);
                 return 5.0;
             }
         }
@@ -2989,11 +2977,15 @@ namespace ConditioningControlPanel.Services
                 // Closing a layered window mid-run is the render-thread-deadlock trigger.
                 if (window.IsLoaded && _windowPool.Count < WINDOW_POOL_MAX)
                 {
+                    using var _uiMark = VideoDiag.UiScope("FlashService.HideFlashWindow(layered)");
                     window.Hide();
                     _windowPool.Push(window);
                 }
                 else
                 {
+                    // The pool-overflow branch: the comment above says it, so breadcrumb it — if a
+                    // hang report's "last UI mark" is this, the deadlock trigger fired for real.
+                    using var _uiMark = VideoDiag.UiScope("FlashService.CloseFlashWindow(layered, pool full)");
                     window.Close();
                 }
             }

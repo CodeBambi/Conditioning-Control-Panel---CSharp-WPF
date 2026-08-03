@@ -202,28 +202,7 @@ namespace ConditioningControlPanel
                 var master = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
                 var volume = (float)Math.Pow(master * 0.5f, 1.5);
 
-                Task.Run(() =>
-                {
-                    WaveOutEvent? output = null;
-                    AudioFileReader? reader = null;
-                    try
-                    {
-                        reader = new AudioFileReader(path) { Volume = volume };
-                        output = new WaveOutEvent();
-                        App.Audio?.ApplyPreferredDevice(output);
-                        output.Init(reader);
-                        output.Play();
-                        while (output.PlaybackState == PlaybackState.Playing)
-                            System.Threading.Thread.Sleep(50);
-                    }
-                    catch { }
-                    finally
-                    {
-                        reader?.Dispose();
-                        try { output?.Stop(); } catch { }
-                        output?.Dispose();
-                    }
-                });
+                App.Audio?.PlayOneShot(path, volume, "popquiz-chime");
             }
             catch (Exception ex)
             {
