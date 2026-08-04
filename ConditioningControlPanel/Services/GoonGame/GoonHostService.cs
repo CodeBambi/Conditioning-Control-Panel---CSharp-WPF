@@ -825,18 +825,18 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// <c>true</c> so the gate has one place to come back to if that ever changes.)</summary>
         private static bool BrainDrainAllowed() => true;
 
-        /// <summary>May the page send its OWN media to the opponent? PREMIUM ONLY.
+        /// <summary>May the page send its OWN media to the opponent? YES — for everyone in a room.
         ///
-        /// Unlike <see cref="BrainDrainAllowed"/> (unconditionally true because the duel's drain is
-        /// an in-page veil), this is a real entitlement gate: transferring the user's own library to
-        /// another machine is the supporter-facing half of the feature. RECEIVING is NOT gated, so a
-        /// free player still sees a supporter's media — which is what makes the feature worth
-        /// buying. The page checks this with <c>=== true</c>, so a host that predates the flag
-        /// defaults the SEND capability OFF rather than on.</summary>
+        /// This WAS a premium gate (tier >= 1). Owner call 2026-08-04: the supporter perk is
+        /// HOSTING (<see cref="HostingAllowed"/>, tier 2) — once a duel exists, BOTH players
+        /// sending their media is what makes the match feel like a duel, and an invited free
+        /// player throwing blanks read as broken in the very first real play-test. The server's
+        /// <c>media_send</c> verdict on /invite and /join flipped to unconditional the same day,
+        /// so the two verdicts still agree. Consent still gates it per-match (the lobby checkbox
+        /// both sides must tick), and receiving was never gated.</summary>
         private static bool TransferAllowed()
         {
-            try { return App.Patreon?.HasPremiumAccess == true; }
-            catch { return false; }
+            return true;
         }
 
         /// <summary>May the page MINT a room? TIER 2 ONLY.

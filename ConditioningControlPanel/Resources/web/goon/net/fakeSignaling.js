@@ -314,8 +314,9 @@ export class GoonFakeSignalingServer {
         // because the client is entitled to confirm the id it just presented was honoured.
         // (Absent for account joins: JSON.stringify drops an undefined.)
         if (guest) body.guest_id = uid;
-        // A guest has no user record, so it can never be a premium SENDER. Receiving is not gated.
-        if (guest && typeof body.media_send === 'boolean') body.media_send = false;
+        // 2026-08-04: sending is unconditional for every seat (the tier gate is
+        // hosting alone), so the fake no longer forces a guest's verdict false —
+        // it mirrors whatever `mediaSend` this server instance was told to model.
         return ok(body);
       }
 
