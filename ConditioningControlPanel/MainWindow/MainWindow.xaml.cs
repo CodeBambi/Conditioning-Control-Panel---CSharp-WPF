@@ -2132,51 +2132,6 @@ namespace ConditioningControlPanel
                 App.Logger?.Debug("Recalibrate-suggest check failed: {Error}", ex.Message);
             }
 
-            // v5.9.8 Blink Trainer flagship sticky. Fires once for users who
-            // updated to v5.9.8 and haven't yet visited the new Exclusives →
-            // Blink Trainer page. Suppression is belt-and-suspenders:
-            //   - ShowSticky no-ops if its key is in DismissedNotificationKeys
-            //   - the if-check below short-circuits when HasSeenBlinkTrainerFlagship is true
-            //   - the action handler ALSO adds the key to DismissedNotificationKeys
-            //     in case HasSeen somehow doesn't persist.
-            try
-            {
-                const string flagshipKey = "blink-trainer-flagship-v5.9.8";
-                if (App.Settings?.Current?.HasSeenBlinkTrainerFlagship == false)
-                {
-                    App.Notifications?.ShowSticky(
-                        flagshipKey,
-                        Localization.Loc.Get("blink_trainer_flagship_toast"),
-                        Services.NotificationType.Info,
-                        actionLabel: Localization.Loc.Get("blink_trainer_flagship_toast_action"),
-                        action: () =>
-                        {
-                            try
-                            {
-                                // Belt-and-suspenders dedupe: add the key to
-                                // DismissedNotificationKeys so the toast can't
-                                // refire next launch even if HasSeen flag fails
-                                // to persist.
-                                var s = App.Settings?.Current;
-                                if (s != null && !s.DismissedNotificationKeys.Contains(flagshipKey))
-                                {
-                                    s.DismissedNotificationKeys.Add(flagshipKey);
-                                    App.Settings?.Save();
-                                }
-                                ShowTab("blinktrainer");
-                            }
-                            catch (Exception ex)
-                            {
-                                App.Logger?.Warning(ex, "Blink Trainer toast action: failed");
-                            }
-                        });
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Blink Trainer flagship sticky: failed");
-            }
-
             // One-time premium celebration for entitlements granted silently (cached state
             // restored in the ctor, the grace window, V2-linked accounts). The provider
             // TierChanged handlers cover the loud grant paths; this covers the quiet ones
