@@ -1,0 +1,12 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:CcpClient.Features.Dashboard"
+        x:Class="CcpClient.Features.Dashboard.DashboardWindow"
+        x:DataType="vm:DashboardViewModel"
+        x:CompileBindings="True"
+        Title="Dashboard" Width="800" Height="600">
+  <StackPanel Margin="12">
+    <TextBlock Classes="h1" Text="{CompiledBinding Title}"/>
+    <Button Content="Start" Command="{CompiledBinding StartCommand}" IsVisible="{CompiledBinding CanStart}"/>
+  </StackPanel>
+</Window>
