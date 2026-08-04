@@ -100,6 +100,7 @@ Provisioning a distro is an owner decision. Windows evidence only; no Linux evid
 - Step 1 plan review: `spine_review_step(step=1, type=plan)` → `skipped: true`, `spawnFailed: false`, verdict null — "Nested reviewer spawn blocked inside pi worker session… the batch engine runs reviews after worker success (SP-195)". Artifact: `.reviews/1-20260804T121421.md`. Review Level 2 honored by the engine post-.DONE.
 - Step 2 plan review: `spine_review_step(step=2, type=plan)` → `skipped: true`, `spawnFailed: false`, verdict null (same SP-195 message). Artifact: `.reviews/2-20260804T121819.md`.
 - Step 3 plan review: `spine_review_step(step=3, type=plan)` → `skipped: true`, `spawnFailed: false`, verdict null (same SP-195 message). Artifact: `.reviews/3-20260804T122510.md`.
+- Step 4 plan review: `spine_review_step(step=4, type=plan)` → `skipped: true`, `spawnFailed: false`, verdict null (same SP-195 message). Artifact: `.reviews/4-20260804T122610.md`.
 
 ## Step 2: applied re-derivation — evidence
 
