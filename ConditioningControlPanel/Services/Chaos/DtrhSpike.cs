@@ -43,6 +43,8 @@ internal static class DtrhSpike
                 {
                     ("ccp.game", webRoot, CoreWebView2HostResourceAccessKind.Deny),
                     ("ccp.assets", assetsRoot, CoreWebView2HostResourceAccessKind.Allow),
+                    // Downloaded pack audio, so the spike exercises the same host set as the game.
+                    ChaosWebViewHost.ContentMapping(),
                 },
                 UserDataFolderName = "browser_data_dtrh",
                 InputEnabled = true,

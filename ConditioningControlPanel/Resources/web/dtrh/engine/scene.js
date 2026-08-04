@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { Q, setQuality } from '../shared/quality.js';
 import { createFog } from '../shared/fog.js';
 import { isMuted, toggleMuted, onMuteChange } from '../shared/audioMute.js';
+import { audioUrl, altSrcFor } from '../shared/audioSrc.js';
 import { disposeTextures } from '../shared/assets.js';
 import { buildLoopLayout, createTunnel, FOG_COLOR, FOG_DENSITY } from './tunnel.js';
 import { createFallNav } from './fallNav.js';
@@ -178,8 +179,20 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   try {
     drone = new Audio();
     drone.crossOrigin = 'anonymous';
-    drone.src = modDroneUrl() || DRONE_URL;
+    // The shipped bed may sit in the install tree or in a downloaded content
+    // pack (audioSrc.js). A mod's own drone is a ccp.mod URL and passes through.
+    drone.src = modDroneUrl() || audioUrl(DRONE_URL);
     drone.loop = true; drone.preload = 'auto'; drone.volume = DRONE_FLOOR;
+    // Wrong host (or simply absent): try the other one ONCE, then stay silent -
+    // altSrcFor hands back null the second time, so this can't loop.
+    drone.addEventListener('error', () => {
+      const alt = altSrcFor(drone);
+      if (!alt) return;                       // absent on both hosts: silent bed, as before
+      try {
+        drone.src = alt;
+        if (droneStarted && !isMuted()) { const p = drone.play(); if (p && p.catch) p.catch(() => {}); }
+      } catch (e) { /* ignore */ }
+    });
   } catch (e) { drone = null; }
   function setDroneVolume(v) {
     if (droneGain) droneGain.gain.value = v;
@@ -227,15 +240,27 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       && !isMuted() && !document.hidden && !(gamePaused && pauseHeld);
     if (want && !mbox) {
       try {
-        mbox = new Audio(MUSICBOX_URL);
+        mbox = new Audio(audioUrl(MUSICBOX_URL));
         mbox.loop = true;
         mbox.preload = 'auto';
         mbox.volume = 0;
+        // One host swap before declaring the asset missing (install tree vs a
+        // downloaded content pack); the toggle still reads "(asset missing)"
+        // when neither has it. NOT `once`, so the retry can report its own
+        // failure - altSrcFor returns null then, so it ends after one swap.
         mbox.addEventListener('error', () => {
+          const el = mbox;
+          if (!el) return;
+          const alt = altSrcFor(el);
+          if (alt) {
+            try { el.src = alt; } catch (e) { /* ignore */ }
+            syncMusicBox();   // re-applies the same want/mute/hidden predicate
+            return;
+          }
           mboxFailed = true;
-          try { if (mbox) mbox.pause(); } catch (e) { /* ignore */ }
+          try { el.pause(); } catch (e) { /* ignore */ }
           mbox = null;
-        }, { once: true });
+        });
       } catch (e) { mboxFailed = true; mbox = null; }
     }
     if (!mbox) return;

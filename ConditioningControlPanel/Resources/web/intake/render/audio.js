@@ -80,6 +80,7 @@
  * ==========================================================================*/
 
 import { depthToChannels, clampToCaps, clampIntensity, RewardKind, clamp01, lerp } from '../core/contracts.js';
+import { audioUrl, altAudioUrl } from '../core/audioSrc.js';
 import {
   binauralScale, effectsScale, voiceScale, subscribe as subscribePrefs,
 } from '../ui/prefs.js';
@@ -220,7 +221,9 @@ export const CHIME_SAMPLE_COUNT = 3;
 export function chimeSampleUrls() {
   const rel = (n) => `../../dtrh/assets/bubbles/sfx/chime${n}.mp3`;
   try {
-    return [1, 2, 3].map((n) => new URL(rel(n), import.meta.url).href);
+    // audioUrl: same path, possibly on the downloaded-content host (core/audioSrc.js).
+    // The loaders below retry the other host once before falling back to synth.
+    return [1, 2, 3].map((n) => audioUrl(new URL(rel(n), import.meta.url).href));
   } catch (_e) {
     // no URL/base available: hand back page-relative strings and hope
     return [1, 2, 3].map((n) => `../dtrh/assets/bubbles/sfx/chime${n}.mp3`);
@@ -242,7 +245,7 @@ export function chimeSampleSpec(intensity) {
  * -------------------------------------------------------------------------- */
 export function popSampleUrl() {
   const rel = '../../dtrh/assets/bubbles/sfx/Pop.mp3';
-  try { return new URL(rel, import.meta.url).href; }
+  try { return audioUrl(new URL(rel, import.meta.url).href); }
   catch (_e) { return '../dtrh/assets/bubbles/sfx/Pop.mp3'; }
 }
 /** POP intensity -> real Pop.mp3 playback gain (sample carries its own envelope,
@@ -400,10 +403,12 @@ export function sfxManifestUrl() {
   try { return new URL(rel, import.meta.url).href; }
   catch (_e) { return './assets/sfx/sfx_manifest.json'; }
 }
-/** One sfx sample URL for `id` variant `n` (1-based). Same resolution rules. */
+/** One sfx sample URL for `id` variant `n` (1-based). Same resolution rules, plus
+ *  the content-host preference (the MANIFEST above stays on the page's origin —
+ *  it ships in the installer; only the mp3s it names travel in a pack). */
 export function sfxSampleUrl(id, n) {
   const rel = '../assets/sfx/' + id + '-' + n + '.mp3';
-  try { return new URL(rel, import.meta.url).href; }
+  try { return audioUrl(new URL(rel, import.meta.url).href); }
   catch (_e) { return './assets/sfx/' + id + '-' + n + '.mp3'; }
 }
 /** Manifest gain x already-clamped intensity -> the buffer-source gain. Pure. */
@@ -445,11 +450,35 @@ export function voManifestUrl() {
   try { return new URL(rel, import.meta.url).href; }
   catch (_e) { return './assets/vo/vo_manifest.json'; }
 }
-/** One vo sample URL for `file` (the manifest's `file` field). Same resolution rules. */
+/** One vo sample URL for `file` (the manifest's `file` field). Same resolution
+ *  rules + the content-host preference (the manifest itself stays on the page's
+ *  own origin — it ships in the installer, the clips it names may not). */
 export function voSampleUrl(file) {
   const rel = '../assets/vo/' + file;
-  try { return new URL(rel, import.meta.url).href; }
+  try { return audioUrl(new URL(rel, import.meta.url).href); }
   catch (_e) { return './assets/vo/' + file; }
+}
+
+/* ----------------------------------------------------------------------------
+ * ONE fetch chokepoint for audio bytes — used by every loader below (chimes,
+ * pop, sfx library, VO lines). Tries the URL it is given, then ONCE more on the
+ * other audio host (installed tree <-> downloaded content pack; core/audioSrc.js
+ * decides whether there even is one). Missing on both hosts throws exactly like
+ * the plain fetch did, so each loader's existing silent fallback is unchanged.
+ * -------------------------------------------------------------------------- */
+async function fetchAudioBytes(url) {
+  if (typeof fetch !== 'function') throw new Error('no fetch in this host');
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.arrayBuffer();
+  } catch (e) {
+    const alt = altAudioUrl(url);
+    if (!alt) throw e;
+    const r2 = await fetch(alt);
+    if (!r2.ok) throw new Error('HTTP ' + r2.status);
+    return await r2.arrayBuffer();
+  }
 }
 
 /* Full depth->binauralDepth channel read (curve x caps in one place). */
@@ -707,9 +736,7 @@ export function createAudio({ caps } = {}) {
         const urls = chimeSampleUrls();
         const settled = await Promise.all(urls.map(async (u) => {
           try {
-            const r = await fetch(u);
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            const ab = await r.arrayBuffer();
+            const ab = await fetchAudioBytes(u);
             return await c.decodeAudioData(ab);
           } catch (e) {
             fails.push(u.split('/').pop() + ': ' + ((e && e.message) ? e.message : String(e)));
@@ -882,10 +909,7 @@ export function createAudio({ caps } = {}) {
     popLoad = 'loading';
     (async () => {
       try {
-        if (typeof fetch !== 'function') throw new Error('no fetch in this host');
-        const r = await fetch(popSampleUrl());
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const ab = await r.arrayBuffer();
+        const ab = await fetchAudioBytes(popSampleUrl());
         popBuf = await c.decodeAudioData(ab);
         popLoad = 'ready';
       } catch (e) {
@@ -980,9 +1004,7 @@ export function createAudio({ caps } = {}) {
         for (let n = 1; n <= count; n++) urls.push(sfxSampleUrl(id, n));
         const settled = await Promise.all(urls.map(async (u) => {
           try {
-            const r = await fetch(u);
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            const ab = await r.arrayBuffer();
+            const ab = await fetchAudioBytes(u);
             return await c.decodeAudioData(ab);
           } catch (e) {
             fails.push(u.split('/').pop() + ': ' + ((e && e.message) ? e.message : String(e)));
@@ -1129,9 +1151,7 @@ export function createAudio({ caps } = {}) {
         const entry = man && man[id];
         if (!entry || typeof entry.file !== 'string' || !entry.file) return null; // missing = silent
         if (typeof fetch !== 'function') return null;
-        const r = await fetch(voSampleUrl(entry.file));
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const ab = await r.arrayBuffer();
+        const ab = await fetchAudioBytes(voSampleUrl(entry.file));
         const buf = await c.decodeAudioData(ab);
         voCache.set(id, buf); evictVoCache();
         return buf;

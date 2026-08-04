@@ -17,6 +17,7 @@
 import { FALL_DRIFT } from '/dtrh/assets/barks/manifest.js';
 import { modDrift } from '../modContent.js';
 import { isMuted, onMuteChange } from '../shared/audioMute.js';
+import { audioUrl, altSrcFor } from '../shared/audioSrc.js';
 import { getLevel, onLevels } from './audioLevels.js';
 import { getAudioCtx, getMasterOut, makeSfxPlayer } from './audioBus.js';
 
@@ -286,7 +287,10 @@ export function createDriftChain({ getDepth }) {
       el.pause();
       el.currentTime = 0;
       el.onended = null;
-      el.src = bark.url || (BASE + bark.mod + '/' + bark.file);
+      // Shipped clips may live in the install tree OR in a downloaded barks pack
+      // (audioSrc.js picks the host; the play() failure path below tries the
+      // other one once). A mod's own bark.url is a ccp.mod URL and passes through.
+      el.src = bark.url || audioUrl(BASE + bark.mod + '/' + bark.file);
       ensureVoiceRoute();
       keepCtxAwake();          // don't start a clip into a suspended (silent) context
       stallPos = 0; stallTicks = 0; // fresh clip: reset the freeze detector
@@ -296,7 +300,7 @@ export function createDriftChain({ getDepth }) {
       currentIsResolve = isResolve;
       el.onended = () => { el.onended = null; clearSafety(); advance(isResolve); };
       armSafety();
-      const mySrc = el.src;
+      let mySrc = el.src;
       let chimed = false;
       const attempt = (left) => {
         const p = el.play();
@@ -304,6 +308,20 @@ export function createDriftChain({ getDepth }) {
         p.then(() => {
           if (isResolve && !chimed && el.src === mySrc) { chimed = true; playChime(); }
         }).catch(() => {
+          // Not on this host? The clip may have come down in a content pack (or,
+          // for a legacy install, still be in the install tree). Swap hosts ONCE
+          // - altSrcFor returns null the second time, so this can't ping-pong.
+          // Only for a SOURCE failure (el.error network/not-supported): an
+          // autoplay refusal must keep its retry ladder on the host it had.
+          const srcFailed = !!(el.error && (el.error.code === 2 || el.error.code === 4));
+          if (srcFailed && el.src === mySrc && started && !isMuted() && !document.hidden) {
+            const alt = altSrcFor(el);
+            if (alt) {
+              try { el.src = alt; mySrc = el.src; } catch (e) { /* ignore */ }
+              setTimeout(() => attempt(left), RETRY_GAP_MS);
+              return;
+            }
+          }
           if (left > 0 && el.src === mySrc && started && !isMuted() && !document.hidden) {
             setTimeout(() => attempt(left - 1), RETRY_GAP_MS);
           } else if (el.src === mySrc) {

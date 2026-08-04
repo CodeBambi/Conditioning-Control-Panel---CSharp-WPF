@@ -72,6 +72,11 @@ internal static class DtrhHostService
         if (_host != null) { _host.FocusWeb(); return; }
         try
         {
+            // The descent's audio (bubbles sfx, vn shared, drone bed) ships as the lazy audio-web
+            // pack. Fire-and-forget: no-op once installed, on a full install, or offline.
+            try { _ = App.ReleaseContent?.RequestPackAsync(ReleaseContentService.PackAudioWeb); }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost: audio-web request failed: {E}", ex.Message); }
+
             _exiting = false;
             _runActive = false;
             _worldFrozen = false;
@@ -96,6 +101,11 @@ internal static class DtrhHostService
                 ("ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"), CoreWebView2HostResourceAccessKind.Allow),
                 // THE LOOM: the saved-spiral GIFs (thumbnails + in-run overlay pool).
                 ("ccp.spirals", DtrhLoomStore.SpiralsFolder, CoreWebView2HostResourceAccessKind.Allow),
+                // CONTENT PACKS: downloaded audio (barks, drone, bubbles sfx, vn vo) that no longer
+                // ships in the installer. Mirrors the ccp.game tree, so the page's audio shim only
+                // swaps the origin. Folder is created by ContentMapping() - a missing one would be
+                // skipped, and then the shim's fallback would never find anything.
+                ChaosWebViewHost.ContentMapping(),
             };
             // Creator mods: an installed mod's resources/dtrh folder (voice clips,
             // descent media, portrait, drone). Mapping ONLY the dtrh subfolder keeps

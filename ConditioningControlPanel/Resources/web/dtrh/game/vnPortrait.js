@@ -18,6 +18,7 @@
  * ==========================================================================*/
 
 import { modTint, modCompanion, modPortrait } from '../modContent.js';
+import { audioUrl, altSrcFor } from '../shared/audioSrc.js';
 
 const TINT = {
   'builtin-bambisleep': { a: '255,105,180', b: '255,60,120' },
@@ -157,12 +158,40 @@ export function createVnPortrait(hud, opts = {}) {
     const b = manifest && manifest.beats && manifest.beats[id];
     if (!b) return { emote: id };
     const line = (b.lines && (b.lines[modId] || b.lines['builtin-sissyhypno'])) || '';
-    const voUrl = b.vo ? ('/dtrh/assets/vn/vo/' + modId + '/' + b.vo) : null;
+    // The manifest itself stays in the installer; only the clip it names can be
+    // in a downloaded content pack (shared/audioSrc.js picks the host).
+    const voUrl = b.vo ? audioUrl('/dtrh/assets/vn/vo/' + modId + '/' + b.vo) : null;
     return { emote: b.emote, line, hold: b.hold, voUrl };
   }
 
   // ---- voice (per-beat mp3 -> reactive aura, and we wait for it to finish) ----
   let actx = null, audioEl = null, analyser = null, gain = null, vdata = null, voicePlaying = false, voiceEndCb = null;
+  // A clip lives in the install tree OR in a downloaded content pack; voSwapping
+  // = an other-host retry is in flight and holds the beat open until it settles.
+  // Absent on both hosts releases the beat exactly as a missing clip always did.
+  let voSwapping = false;
+  function endVoice() {
+    if (voSwapping) return;
+    voicePlaying = false;
+    if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); }
+  }
+  function failVoice() {
+    // 'error' and the play() rejection both fire for one 404 - the retry already
+    // in flight owns the outcome, so a re-entrant call must not cancel it.
+    if (voSwapping) return;
+    // Only a SOURCE failure is worth another host (an autoplay refusal would hit
+    // the same wall twice, and el.error stays null for it).
+    const srcFailed = !!(audioEl && audioEl.error);
+    const alt = (srcFailed && voicePlaying) ? altSrcFor(audioEl) : null;
+    if (!alt) { endVoice(); return; }
+    voSwapping = true;
+    try {
+      audioEl.src = alt; audioEl.currentTime = 0;
+      const p = audioEl.play();
+      if (p && p.then) p.then(() => { voSwapping = false; }, () => { voSwapping = false; endVoice(); });
+      else voSwapping = false;
+    } catch (e) { voSwapping = false; endVoice(); }
+  }
   function ensureVoiceGraph() {
     if (actx) return;
     try {
@@ -173,10 +202,10 @@ export function createVnPortrait(hud, opts = {}) {
       vdata = new Uint8Array(analyser.fftSize);
       gain = actx.createGain();
       src.connect(analyser); analyser.connect(gain); gain.connect(actx.destination);
-      const endVoice = () => { voicePlaying = false; if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); } };
       audioEl.addEventListener('ended', endVoice);
       // a missing/blocked mp3 must unblock the beat immediately, not stall on waitVoice's timeout
-      audioEl.addEventListener('error', endVoice);
+      // (failVoice spends the one other-host retry first, if there is one)
+      audioEl.addEventListener('error', failVoice);
     } catch (e) { actx = null; }
   }
   function startVoice(url) {
@@ -184,9 +213,9 @@ export function createVnPortrait(hud, opts = {}) {
     try {
       if (actx.state === 'suspended') actx.resume();
       if (gain) { try { gain.gain.cancelScheduledValues(actx.currentTime); gain.gain.setValueAtTime(1, actx.currentTime); } catch (e) {} }
-      audioEl.src = url; audioEl.currentTime = 0; voicePlaying = true;
+      audioEl.src = url; audioEl.currentTime = 0; voicePlaying = true; voSwapping = false;
       // if play() rejects (404/autoplay block) 'ended' never fires - clear the flag and resolve the wait so the beat doesn't hang ~12s
-      audioEl.play().catch(() => { voicePlaying = false; if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); } });
+      audioEl.play().catch(failVoice);
     } catch (e) { /* ignore */ }
   }
   function fadeVoice(ms) {
@@ -202,7 +231,7 @@ export function createVnPortrait(hud, opts = {}) {
     } catch (e) { /* ignore */ }
     setTimeout(stopVoice, (ms || 280) + 30);
   }
-  function stopVoice() { voicePlaying = false; try { if (audioEl) audioEl.pause(); } catch (e) {} if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); } }
+  function stopVoice() { voicePlaying = false; voSwapping = false; try { if (audioEl) audioEl.pause(); } catch (e) {} if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); } }
   function waitVoice(maxMs) {
     if (!voicePlaying) return Promise.resolve();
     return new Promise((res) => { voiceEndCb = res; setTimeout(() => { if (voiceEndCb === res) { voiceEndCb = null; res(); } }, maxMs || 12000); });

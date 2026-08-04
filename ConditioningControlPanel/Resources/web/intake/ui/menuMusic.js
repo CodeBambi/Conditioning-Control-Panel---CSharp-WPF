@@ -24,6 +24,7 @@
  */
 
 import { getPrefs, setPref, subscribe, musicScale } from './prefs.js';
+import { audioUrl, altSrcFor } from '../core/audioSrc.js';
 
 const SRC = '../assets/music/menu-theme.mp3';
 const FADE_IN_MS  = 900;
@@ -85,9 +86,11 @@ let outGain = null;    // makeup attenuation (drive adds loudness)
 let graphDead = false; // a build failed for good; never try again
 let corrupt = 0;       // last applied 0..1 level
 
-/** Resolve the mp3 against THIS module, so the page's own path never matters. */
+/** Resolve the mp3 against THIS module, so the page's own path never matters —
+ *  then let core/audioSrc.js say WHICH host it is on (the track ships as a
+ *  downloaded content pack now; ensureEl retries the other host once). */
 function srcUrl() {
-  try { return new URL(SRC, import.meta.url).href; }
+  try { return audioUrl(new URL(SRC, import.meta.url).href); }
   catch (_e) { return './assets/music/menu-theme.mp3'; }
 }
 
@@ -158,7 +161,25 @@ function ensureEl() {
   audio.preload = 'auto';
   audio.volume = 0;          // always fade up from silence
   // Long file: let it stream rather than blocking on a full buffer.
+  // crossOrigin also matters once the track comes from the content host: the
+  // corruption graph below taps the element through WebAudio, and a tapped
+  // cross-origin element without CORS goes silent.
   try { audio.crossOrigin = 'anonymous'; } catch (_e) { /* same-origin anyway */ }
+
+  // Not on the host we guessed? Swap to the other one ONCE and pick up where we
+  // were (altSrcFor returns null the second time, so a track that is on neither
+  // host simply stays silent — the shell has always tolerated that).
+  audio.addEventListener('error', () => {
+    const el = audio;
+    if (!el) return;
+    const alt = altSrcFor(el);
+    if (!alt) return;
+    try {
+      el.src = alt;
+      el.load();
+      if (wanted && musicGain() > 0) play();
+    } catch (_e) { /* silent shell is an acceptable end state */ }
+  });
 
   // Live pref tracking: volume slider retunes the playing track, and the mute
   // switch fades out/in rather than cutting, so toggling it is never a pop.
