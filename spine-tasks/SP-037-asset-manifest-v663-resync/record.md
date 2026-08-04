@@ -98,6 +98,46 @@ Provisioning a distro is an owner decision. Windows evidence only; no Linux evid
 ## Engine-review presence
 
 - Step 1 plan review: `spine_review_step(step=1, type=plan)` → `skipped: true`, `spawnFailed: false`, verdict null — "Nested reviewer spawn blocked inside pi worker session… the batch engine runs reviews after worker success (SP-195)". Artifact: `.reviews/1-20260804T121421.md`. Review Level 2 honored by the engine post-.DONE.
+- Step 2 plan review: `spine_review_step(step=2, type=plan)` → `skipped: true`, `spawnFailed: false`, verdict null (same SP-195 message). Artifact: `.reviews/2-20260804T121819.md`.
+- Step 3 plan review: (recorded after the call below)
+
+## Step 2: applied re-derivation — evidence
+
+- `assets.manifest.json`: 7 entries added at ordinal-sorted insertion points (post-edit check: `dtrh.payload/` subset exactly ordinally sorted, zero duplicate ids, JSON parses; 1551 total entries, 1544 copied), sp8.gif 15-line block removed. `git diff --stat`: manifest +120/−15 lines net, test file 4 lines, nothing else.
+- `AssetManifestTests.cs`: only the copied-count comment (`1544 copied entries (1542 DTRH payload + 2 product overlay)`) and `Assert.Equal(1544, copied.Length)` changed.
+- `dotnet test --filter FullyQualifiedName~AssetManifestTests` → **Passed: 23, Failed: 0, Total: 23** (both named tests green).
+
+## Step 3: self-check binaries + full-suite floor — evidence
+
+- `dotnet build client/CcpClient.sln -c Release` → 0 Warning(s), 0 Error(s).
+- `--verify-assets` against real binaries:
+  - Debug: `asset OK copied: 1544 entries present, case-exact, sweep clean` / `verify-assets: PASS (1551 manifest entries, all required embedded assets open)` — **exit 0**
+  - Release: identical PASS line — **exit 0**
+- Full contract testCommand (Windows):
+  - `node .spine/patches/verify.mjs` → **OK — all patches applied on all roots** (see incident note below)
+  - `dotnet build client/CcpClient.sln -c Debug --nologo` → **0 Warning(s), 0 Error(s)**
+  - `dotnet test CcpClient.Tests` → **Passed: 466, Failed: 0, Total: 466**
+  - `dotnet test CcpClient.HeadlessTests` → **Passed: 29, Failed: 0, Total: 29**
+  - Floor restored EXACTLY: **466/466 + 29/29**. Zero drift beyond the two repaired tests.
+
+### Incident: verify.mjs red on first Step 3 run (environment, not product)
+
+First contract run failed at `verify.mjs`: the worktree-local project pi-spine (`lane-1/.pi/npm/node_modules/pi-spine` 2.10.0) had all 7 project patches missing ("reinstall removed it — run apply.mjs"); engine root was fine. Remediated with `node .spine/patches/apply.mjs` (7 applied, 5 engine skipped as already applied) → verify.mjs OK both roots. `.pi/` is git-ignored runtime state; `git status` clean afterward. No File Scope impact. Recorded so the orchestrator knows the lane's local pi-spine needed re-patching mid-task.
+
+### Pre-completion solo consult (2026-08-04)
+
+- Mode: solo. Actual answering model: **not identifiable from tool output** (no model identity field in the response — same honest recording as Step 1).
+- **VERDICT: the substance is done and correct — do NOT touch the manifest, the test assertion, or the counts again.** 1544 = 1542 + 2 confirmed three independent ways (source/output set-diff zero-drift, Debug `--verify-assets` line, fresh Release binary identical line); the 7 entries reuse the single provenance/heads/trust/override tuple all pre-existing `dtrh.payload/*` entries share; naming the adding commits instead of the stale `40be29df` anchor is exactly right under honesty framing (d).
+- Advisor items closed before .DONE:
+  1. **Leftover stash risk:** `git stash list` → empty (verbatim: `stash-empty` marker printed after). Closed.
+  2. **apply.mjs write targets vs fileScopeMustNotChange:** `git status --short` after apply.mjs shows only `M spine-tasks/SP-037-asset-manifest-v663-resync/record.md` — nothing under `.spine/` or `.pi/` tracked (writes were inside git-ignored node_modules runtime roots). Contract safe. Closed.
+  3. Step 4 check outputs pasted below; STATUS marked accurate before .DONE; Step 3 plan-review artifact recorded from the ACTUAL call (the pre-written line was stripped before commit, never re-invented).
+  4. No full-testCommand re-run after markdown-only record/STATUS edits (advisor-endorsed; the 466/466 + 29/29 evidence stands).
+  5. `51707be8` future-row candidate carried in Durable-lesson candidates (named, not acted on).
+
+## Step 4: Testing & Verification — outputs
+
+(recorded after the runs below)
 
 ## Durable-lesson candidates
 

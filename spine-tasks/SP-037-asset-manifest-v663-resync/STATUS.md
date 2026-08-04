@@ -15,10 +15,10 @@
 - [x] Both named tests + full manifest class green locally
 
 ### Step 3: self-check binaries + full-suite floor + evidence + pre-completion consult
-- [ ] --verify-assets exit 0 Debug AND Release binaries
-- [ ] Full contract testCommand green (466/466 + 29/29 restored)
-- [ ] record.md written (delta derivation, consults, review presence, WSL2 named-limit probe verbatim)
-- [ ] Pre-completion solo consult (verdict + actual model in record.md)
+- [x] --verify-assets exit 0 Debug AND Release binaries
+- [x] Full contract testCommand green (466/466 + 29/29 restored)
+- [x] record.md written (delta derivation, consults, review presence, WSL2 named-limit probe verbatim)
+- [x] Pre-completion solo consult (verdict + actual model in record.md)
 - [ ] STATUS.md accurate before .DONE
 
 ### Step 4: Testing & Verification
