@@ -54,7 +54,7 @@ public class AiProviderLabIntegrationTests
                 ProbeTimeout = TimeSpan.FromMilliseconds(800),
                 Retry = retry ?? AiRetryPolicy.Off,
             });
-            Pipeline = new AiOperationPipeline(Registry, Capabilities, LoopbackOnlyAdmissionPolicy.Instance, Diagnostics);
+            Pipeline = new AiOperationPipeline(Registry, Capabilities, LoopbackOnlyAdmissionPolicy.Instance, Diagnostics, new AiModerationBoundary());
             Pipeline.RegisterProvider(uncooperative ? new UncooperativeTransportDecorator(Provider) : Provider);
         }
 

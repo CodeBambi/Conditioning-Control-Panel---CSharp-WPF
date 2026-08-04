@@ -37,6 +37,7 @@ public sealed class AiOperationPipeline
     private readonly CapabilityRegistry _capabilities;
     private readonly IAiEndpointAdmissionPolicy _admissionPolicy;
     private readonly IAiDiagnosticsSink _diagnostics;
+    private readonly AiModerationBoundary _moderation;
     private readonly AsyncOperationOwner _owner;
     private readonly object _gate = new();
     private readonly Dictionary<AiProviderId, IAiProvider> _providers = [];
@@ -49,12 +50,14 @@ public sealed class AiOperationPipeline
         OperationRegistry registry,
         CapabilityRegistry capabilities,
         IAiEndpointAdmissionPolicy admissionPolicy,
-        IAiDiagnosticsSink diagnostics)
+        IAiDiagnosticsSink diagnostics,
+        AiModerationBoundary moderation)
     {
         ArgumentNullException.ThrowIfNull(registry);
         _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
         _admissionPolicy = admissionPolicy ?? throw new ArgumentNullException(nameof(admissionPolicy));
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
+        _moderation = moderation ?? throw new ArgumentNullException(nameof(moderation));
         _owner = registry.OwnerFor("Ai");
     }
 
@@ -216,6 +219,44 @@ public sealed class AiOperationPipeline
             return Unavailable(operationClass, descriptor.EndpointClass, AiReplyCodes.NotConfigured, started);
         }
 
+        // Moderation admission (contract §7; admission §3): AFTER the provider-admission
+        // chain (WPF offline-first discipline — content is never evaluated for an
+        // operation that cannot run, AiService.cs:263-274) and BEFORE SendAttempts++
+        // (pure local evaluation; a blocked operation performs ZERO network).
+        var inputSurface = operationClass == AiOperationClass.Interactive
+            ? AiModerationSurfaces.InteractiveChatInput
+            : AiModerationSurfaces.AwarenessOperationInput;
+        var outputSurface = operationClass == AiOperationClass.Interactive
+            ? AiModerationSurfaces.InteractiveReplyOutput
+            : AiModerationSurfaces.AwarenessReplyOutput;
+        string? softHitCode = null;
+
+        if (operationClass == AiOperationClass.Interactive &&
+            _moderation.Escalation.GetState().CooldownActive)
+        {
+            // Escalation consulted at admission (admission §3 rule 4): a cooling-down
+            // interactive operation is TYPED, never silently allowed. Interactive-only
+            // consult (WPF baseline: user chat input only; awareness-extension is an
+            // owner-pending VALUES question — record.md §3.2 rule 4).
+            return Unavailable(operationClass, descriptor.EndpointClass, AiReplyCodes.ModerationCooldown, started);
+        }
+
+        switch (_moderation.EvaluateInput(request.Prompt, inputSurface))
+        {
+            case AiModerationVerdict.Block inputBlock:
+                // Only user-TYPED interactive input escalates (WPF ModerationCounter
+                // discipline — awareness and output hits are never the user's doing).
+                if (operationClass == AiOperationClass.Interactive)
+                {
+                    _moderation.Escalation.RecordHit();
+                }
+
+                return Refused(operationClass, descriptor.EndpointClass, inputBlock, AiModerationSource.Input, started);
+            case AiModerationVerdict.SoftHit:
+                softHitCode = "soft-hit:input";
+                break;
+        }
+
         // The ONLY I/O path: an SP-004 owned operation under the current generation.
         EnsureArmed();
         AiReply? reply = null;
@@ -234,6 +275,24 @@ public sealed class AiOperationPipeline
                 return OperationOutcome.Cancelled.Instance;
             }
 
+            // Output moderation boundary (contract §7 rule 1): after the stale check
+            // (discarded replies are never moderated — no side effects on dropped work),
+            // before the reply is applied. Model-produced Generated text only; app-authored
+            // Fallback text is a recorded non-claim (record.md §2 row 12). Output blocks
+            // never escalate (WPF: model output is never the user's doing).
+            if (produced is AiReply.Generated generated)
+            {
+                switch (_moderation.EvaluateOutput(generated.Text, outputSurface))
+                {
+                    case AiModerationVerdict.Block outputBlock:
+                        reply = new AiReply.Refused(new AiModerationRefusal(outputBlock.CategoryCode, AiModerationSource.Output));
+                        return OperationOutcome.Completed.Instance;
+                    case AiModerationVerdict.SoftHit:
+                        softHitCode = "soft-hit:output";
+                        break;
+                }
+            }
+
             reply = produced;
             return OperationOutcome.Completed.Instance;
         });
@@ -242,8 +301,20 @@ public sealed class AiOperationPipeline
         var outcome = await completion.ConfigureAwait(false);
         var appliedReply = outcome is OperationOutcome.Completed ? reply : null;
         Emit(operationClass, descriptor.EndpointClass, OutcomeOf(outcome, appliedReply),
-            StableCodeOf(outcome, appliedReply), ElapsedMs(started), _owner.Generation);
+            softHitCode ?? StableCodeOf(outcome, appliedReply), ElapsedMs(started), _owner.Generation);
         return new AiOperationResult(outcome, appliedReply, AiAdmission.Admitted.Instance);
+    }
+
+    private AiOperationResult Refused(AiOperationClass operationClass, AiEndpointClass endpointClass, AiModerationVerdict.Block block, AiModerationSource source, long started)
+    {
+        // Content-free (contract §12): the diagnostic carries the SIDE code only — never
+        // the category (policy-document contents are never logged) and never the text.
+        Emit(operationClass, endpointClass, AiDiagnosticOutcome.Refused,
+            source == AiModerationSource.Input ? "refused:input" : "refused:output", ElapsedMs(started), _owner.Generation);
+        return new AiOperationResult(
+            OperationOutcome.Completed.Instance,
+            new AiReply.Refused(new AiModerationRefusal(block.CategoryCode, source)),
+            AiAdmission.Admitted.Instance);
     }
 
     private AiOperationResult Unavailable(AiOperationClass operationClass, AiEndpointClass endpointClass, string code, long started)
@@ -324,6 +395,9 @@ public sealed class AiOperationPipeline
         {
             AiReply.Unavailable u => u.Code,
             AiReply.Fallback f => f.Code,
+            // Refusals reached via the output boundary emit here; the SIDE code only,
+            // never the category (policy-document contents are never logged, contract §12).
+            AiReply.Refused r => r.Refusal.Source == AiModerationSource.Input ? "refused:input" : "refused:output",
             _ => null,
         },
     };

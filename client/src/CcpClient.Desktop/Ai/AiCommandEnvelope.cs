@@ -434,8 +434,8 @@ public static class AiEnvelopeValidator
         return AiCommandVerdict.Valid.Instance;
     }
 
-    /// <summary>Every free-text command field (contract §7 rule 2): subliminal text, mantra, bounce words, media titles/paths.</summary>
-    private static IEnumerable<string> FreeTextFields(AiCommandData data) => data switch
+    /// <summary>Every free-text command field (contract §7 rule 2): subliminal text, mantra, bounce words, media titles/paths. The SINGLE enumeration source shared by the gate and the c3 boundary's coverage tripwire — they cannot drift.</summary>
+    public static IEnumerable<string> FreeTextFields(AiCommandData data) => data switch
     {
         AiCommandData.Subliminal s => [s.Text],
         AiCommandData.MantraLockscreen m => [m.Mantra],

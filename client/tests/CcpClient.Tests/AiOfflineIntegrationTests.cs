@@ -34,7 +34,7 @@ public class AiOfflineIntegrationTests
         var registry = new OperationRegistry();
         var capabilities = new CapabilityRegistry();
         var diagnostics = new CollectingAiDiagnosticsSink();
-        var pipeline = new AiOperationPipeline(registry, capabilities, LoopbackOnlyAdmissionPolicy.Instance, diagnostics);
+        var pipeline = new AiOperationPipeline(registry, capabilities, LoopbackOnlyAdmissionPolicy.Instance, diagnostics, new AiModerationBoundary());
 
         // Cloud inventory registered (typed absence); loopback implementation registered
         // but its probe NEVER runs — nothing is proven. This is the offline posture.
@@ -73,7 +73,7 @@ public class AiOfflineIntegrationTests
         var registry = new OperationRegistry();
         var capabilities = new CapabilityRegistry();
         var pipeline = new AiOperationPipeline(
-            registry, capabilities, LoopbackOnlyAdmissionPolicy.Instance, new CollectingAiDiagnosticsSink());
+            registry, capabilities, LoopbackOnlyAdmissionPolicy.Instance, new CollectingAiDiagnosticsSink(), new AiModerationBoundary());
 
         pipeline.RegisterDescriptor(
             new AiProviderDescriptor(AiProviderId.Cloud, AiEndpointClass.FirstPartyCloud),

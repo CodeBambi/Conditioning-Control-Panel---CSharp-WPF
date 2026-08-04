@@ -123,10 +123,18 @@ public abstract record AiModerationVerdict
     }
 
     /// <summary>Log-worthy but not blocking (first-attempt soft-hit shape, e.g. ProfessionalAdvice).</summary>
-    public sealed record SoftHit(string CategoryCode) : AiModerationVerdict;
+    public sealed record SoftHit(string CategoryCode) : AiModerationVerdict
+    {
+        /// <summary>The §3 surface that produced the verdict (contract §7 rule 3's Block(category, surface) shape; set by the boundary, statically known at each call site). Null only for hand-constructed verdicts.</summary>
+        public string? SurfaceId { get; init; }
+    }
 
     /// <summary>Hard block; the content must not be sent, shown, or executed.</summary>
-    public sealed record Block(string CategoryCode) : AiModerationVerdict;
+    public sealed record Block(string CategoryCode) : AiModerationVerdict
+    {
+        /// <summary>The §3 surface that produced the verdict (see <see cref="SoftHit.SurfaceId"/>).</summary>
+        public string? SurfaceId { get; init; }
+    }
 }
 
 /// <summary>
@@ -181,4 +189,7 @@ public static class AiReplyCodes
 
     /// <summary>The selected provider's endpoint class is not admitted by the admission policy (contract §6; rejection happens BEFORE any socket opens).</summary>
     public const string EndpointNotAdmitted = "endpoint-not-admitted";
+
+    /// <summary>The interactive operation was not admitted because the moderation escalation cooldown is active (admission §3 rule 4). Typed, never a silent allow; not a content refusal, not provider unavailability (contract §11 rule 1 interactive shape).</summary>
+    public const string ModerationCooldown = "moderation-cooldown";
 }
