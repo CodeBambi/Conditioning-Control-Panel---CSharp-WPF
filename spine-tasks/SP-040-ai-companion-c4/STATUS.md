@@ -14,10 +14,10 @@
 - [x] Consent gating at write admission (typed no-op on denial)
 - [x] Unit tests (round-trips, Degraded, journal, consent, both-answers schema shape) — 13/13 green
 
-### Step 3: persist wiring + explicit clear + file-content proofs
-- [ ] Moderation-gated persist (blocked turn rolled back, never persisted — file proof)
-- [ ] Explicit-clear (in-memory emptied + document deleted — file-content proof)
-- [ ] Offline zero-network + content-free diagnostics + redaction registry
+### Step 3: persist wiring + explicit clear + file-content proofs (COMPLETE)
+- [x] Moderation-gated persist (blocked turn rolled back, never persisted — file proof)
+- [x] Explicit-clear (in-memory emptied + document deleted — file-content proof)
+- [x] Offline zero-network + content-free diagnostics + redaction registry (zero new log sites; full suite 536/536 + 29/29)
 
 ### Step 4: evidence consolidation + pre-completion consult
 - [ ] record.md (archaeology, design, proofs, consults, review presence)

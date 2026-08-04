@@ -38,6 +38,7 @@ public sealed class AiOperationPipeline
     private readonly IAiEndpointAdmissionPolicy _admissionPolicy;
     private readonly IAiDiagnosticsSink _diagnostics;
     private readonly AiModerationBoundary _moderation;
+    private readonly IAiMemoryStore? _memory;
     private readonly AsyncOperationOwner _owner;
     private readonly object _gate = new();
     private readonly Dictionary<AiProviderId, IAiProvider> _providers = [];
@@ -51,13 +52,15 @@ public sealed class AiOperationPipeline
         CapabilityRegistry capabilities,
         IAiEndpointAdmissionPolicy admissionPolicy,
         IAiDiagnosticsSink diagnostics,
-        AiModerationBoundary moderation)
+        AiModerationBoundary moderation,
+        IAiMemoryStore? memory = null)
     {
         ArgumentNullException.ThrowIfNull(registry);
         _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
         _admissionPolicy = admissionPolicy ?? throw new ArgumentNullException(nameof(admissionPolicy));
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         _moderation = moderation ?? throw new ArgumentNullException(nameof(moderation));
+        _memory = memory; // OPTIONAL (SP-040 lane-disjointness): existing call sites compile unchanged.
         _owner = registry.OwnerFor("Ai");
     }
 
@@ -291,6 +294,23 @@ public sealed class AiOperationPipeline
                         softHitCode = "soft-hit:output";
                         break;
                 }
+            }
+
+            // Memory persist (admission §4 rule 5; SP-040 slice c4 — discharges c3 inventory
+            // row 6's Reserved→Wired seam): ONLY after the output boundary passes, inside the
+            // live operation, before reply application. Append-never — a blocked turn returns
+            // above before any append (the WPF append-then-rollback strengthened, P2/H5
+            // LocalAiService.cs:603-630; the file remains at the prior known-clean state).
+            // Interactive Generated pairs only: awareness turns are NEVER persisted (WPF
+            // stateless ambient path, LocalAiService.cs:476-502) and app-authored Fallback
+            // text is c3's recorded non-claim. Consent is enforced by the store at write
+            // admission; the save is enqueued, not awaited (WPF latency discipline,
+            // LocalAiService.cs:644). Persisting memory is not remembering it into a prompt —
+            // context consumption lands in c7.
+            if (_memory is not null && operationClass == AiOperationClass.Interactive && produced is AiReply.Generated passed)
+            {
+                _memory.Append(new AiMemoryTurn(AiMemoryRole.User, request.Prompt));
+                _memory.Append(new AiMemoryTurn(AiMemoryRole.Assistant, passed.Text));
             }
 
             reply = produced;
