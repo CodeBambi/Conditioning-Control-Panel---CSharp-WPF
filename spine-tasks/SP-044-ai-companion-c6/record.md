@@ -70,7 +70,8 @@ AiCommandExecutor.Execute(plan, gates)
 ### 2.3 Assigned obligations (wave-7 land)
 
 - **Reserved→Wired flip:** `AiModerationSurfaces.AwarenessContextFields` → `Wired`, `ReservedFor=null`, entry point named `AiAwarenessContextPackaging.TryPackage`; coverage test counts 5/6 → **6/5** + one assertion arm (packaging blocks a forbidden field → false + typed refusal; clean context packages) in `AiModerationCoverageTests.cs`.
-- **Bool-door retirement:** grep (2026-08-04, this worktree) finds `RunAwarenessAsync(request, awarenessConsent: bool)` call sites in **6 test files**: `AiMemoryPipelineTests.cs:184`, `AiModerationCoverageTests.cs:94,110,257`, `AiModerationPipelineBoundaryTests.cs:103,140,201`, `AiOfflineIntegrationTests.cs:53`, `AiOperationPipelineTests.cs:297`, `AiProviderLabIntegrationTests.cs:329`. The packet's "4 call sites" estimate is stale. `AiMemoryPipelineTests.cs`, `AiModerationPipelineBoundaryTests.cs`, `AiProviderLabIntegrationTests.cs` are OUTSIDE SP-044 File Scope — migration cannot be "typed overload everywhere", so the bool overload CANNOT be deleted. **Disposition (pending grep re-proof at Step 3): record the resistance, leave the overload + retirement condition intact.**
+- **Reserved→Wired flip (LANDED, Step 3):** `AiModerationSurfaces.AwarenessContextFields` → `Wired`, `ReservedFor=null`, entry point named `AiAwarenessContextPackaging.TryPackage` (non-pipeline-seam precedent: `CommandFreeText` names `AiEnvelopeValidator.FreeTextFields`); coverage test counts 5/6 → **6/5** + assertion arm (forbidden field → `TryPackage` false + typed input refusal, null request; clean context packages). Suite green (24/24 moderation tests; full suite 580/29).
+- **Bool-door retirement (NOT CLEAN — recorded, overload left):** grep re-proof at Step 3 (2026-08-04, this worktree): `RunAwarenessAsync(request, awarenessConsent: bool)` call sites in **6 test files** — `AiMemoryPipelineTests.cs:184`, `AiModerationCoverageTests.cs:94,110,257`, `AiModerationPipelineBoundaryTests.cs:103,140,201`, `AiOfflineIntegrationTests.cs:53`, `AiOperationPipelineTests.cs:297`, `AiProviderLabIntegrationTests.cs:329`. The packet's "4 call sites" estimate is stale (SP-042's record counted 4 out-of-scope files at its land). `AiMemoryPipelineTests.cs`, `AiModerationPipelineBoundaryTests.cs`, `AiProviderLabIntegrationTests.cs` are OUTSIDE SP-044 File Scope, so "typed overload everywhere + bool overload deleted" is unreachable — **any call site resists → overload left with the retirement condition intact** (consult §3.1.8: ALL call sites left untouched so the next packet's grep is unambiguous). **Retirement condition (verbatim for the follow-up packet):** migrate all 6 files to the typed `AiAwarenessConsent` overload, then delete the bool overload; requires a packet whose File Scope covers all 6 test files.
 
 ## 3. Consults
 
@@ -96,6 +97,7 @@ Solo consult, 2026-08-04, with the full archaeology + design above. **Actual ans
 ## 4. Engine review presence (T-2)
 
 - Step 1 plan review (`spine_review_step step=1 type=plan`): **SKIPPED by runtime** — "Nested reviewer spawn blocked inside pi worker session... the batch engine runs reviews after worker success (SP-195)"; artifact `.reviews/1-20260804T230925.md`; `spawnFailed=false` → proceed (engine-owned reviews run post-.DONE).
+- Step 2 plan review (`spine_review_step step=2 type=plan`): **SKIPPED by runtime** — same SP-195 nested-spawn block; artifact `.reviews/2-20260804T231104.md`; `spawnFailed=false` → proceed.
 
 ## 5. Budgets, surprises, durable-lesson candidates
 
