@@ -9,10 +9,10 @@
 - [x] AiMemoryDocument schema + store design + consent seam (placeholder default recorded)
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
-### Step 2: store implementation + schema machinery
-- [ ] AiMemoryStore.cs on SP-005 machinery (round-trips, quarantine→Degraded, journal, preserve)
-- [ ] Consent gating at write admission (typed no-op on denial)
-- [ ] Unit tests (round-trips, Degraded, journal, consent, both-answers schema shape)
+### Step 2: store implementation + schema machinery (COMPLETE)
+- [x] AiMemoryStore.cs on SP-005 machinery (round-trips, quarantine→Degraded, journal, preserve)
+- [x] Consent gating at write admission (typed no-op on denial)
+- [x] Unit tests (round-trips, Degraded, journal, consent, both-answers schema shape) — 13/13 green
 
 ### Step 3: persist wiring + explicit clear + file-content proofs
 - [ ] Moderation-gated persist (blocked turn rolled back, never persisted — file proof)

@@ -1,8 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace CcpClient.Desktop.Ai;
 
 /// <summary>One remembered turn (contract §5). Content is user data under the persistence contract's authority; it NEVER flows into diagnostics (§12) and is never a secret (§10).</summary>
 public sealed record AiMemoryTurn(AiMemoryRole Role, string Text);
 
+/// <summary>Serialized as readable role names (the WPF persisted shape, LocalAiService.cs PersistedTurn Role strings) — never opaque numbers in a user-data document.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum AiMemoryRole
 {
     User,
