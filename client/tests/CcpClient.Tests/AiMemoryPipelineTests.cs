@@ -133,6 +133,35 @@ public class AiMemoryPipelineTests
     }
 
     [Fact]
+    public async Task OutputBlockedTurn_TypedRefusal_RolledBack_PriorKnownCleanStateSurvives()
+    {
+        using var h = new Harness(OutputBlockPolicy);
+        await h.AdmitProviderAsync(CleanReply);
+
+        // Prior KNOWN-CLEAN state on disk (WPF P2/H5 claim shape, LocalAiService.cs:624-630:
+        // "the file on disk remains at the prior known-clean state") — pre-completion consult A:
+        // an absence-of-file proof on a virgin store would not prove the rollback claim.
+        await h.Pipeline.RunInteractiveAsync(new AiRequest("prior clean question"));
+        Assert.IsType<OperationOutcome.Completed>(await h.Memory.SaveImmediate());
+        var priorContent = h.MemoryFileContent();
+        Assert.NotNull(priorContent);
+        Assert.Contains("prior clean question", priorContent);
+
+        h.Pipeline.SelectProvider(AiProviderId.LocalOllama); // fresh generation (no memory effect)
+        var blockedProvider = new StubProvider(new AiReply.Generated($"reply with {Forbidden}", AiEndpointClass.Loopback));
+        h.Pipeline.RegisterProvider(blockedProvider); // same id: reply now trips the OUTPUT boundary
+        var blocked = await h.Pipeline.RunInteractiveAsync(new AiRequest("second clean question"));
+
+        var refused = Assert.IsType<AiReply.Refused>(blocked.Reply);
+        Assert.Equal(AiModerationSource.Output, refused.Refusal.Source);
+        await h.Memory.FlushAsync(TimeSpan.FromSeconds(5));
+
+        // The blocked turn NEVER hit disk: the file is byte-identical to the prior clean state.
+        Assert.Equal(priorContent, h.MemoryFileContent());
+        Assert.Equal(2, h.Memory.ReadRecent(10).Count); // the prior pair only
+    }
+
+    [Fact]
     public async Task InputBlockedTurn_NeverPersisted()
     {
         using var h = new Harness(OutputBlockPolicy);

@@ -81,11 +81,12 @@ public enum AiMemoryWriteAdmission
     WritesDisabled,
 }
 
-/// <summary>Typed explicit-clear outcome. <see cref="Degraded"/>: in-memory state emptied but a newer-schema document was NOT deleted (an older build never clobbers a newer one).</summary>
+/// <summary>Typed explicit-clear outcome. <see cref="Degraded"/>: in-memory state emptied but a newer-schema document was NOT deleted (an older build never clobbers a newer one). <see cref="Failed"/>: the delete was attempted but the document is still on disk (never reported as Cleared — a privacy operation must not lie, pre-completion consult B).</summary>
 public enum AiMemoryClearOutcome
 {
     Cleared,
     Degraded,
+    Failed,
 }
 
 /// <summary>
@@ -154,6 +155,9 @@ public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
     /// <summary>The last write's typed admission. Null before any write attempt.</summary>
     public AiMemoryWriteAdmission? LastWriteAdmission { get; private set; }
 
+    /// <summary>The last ADMITTED write's owned completion (pre-completion consult C): admission and persistence are distinct facts — a faulted persist surfaces here as a typed <see cref="OperationOutcome.Failed"/>, never silently. Null before any admitted write.</summary>
+    public Task<OperationOutcome>? LastWriteCompletion { get; private set; }
+
     /// <summary>The last explicit clear's typed outcome. Null before any clear.</summary>
     public AiMemoryClearOutcome? LastClearOutcome { get; private set; }
 
@@ -208,7 +212,7 @@ public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
                     m.Turns.RemoveRange(0, m.Turns.Count - maxTurns);
                 }
             });
-            _ = _store.Save();
+            LastWriteCompletion = _store.Save();
             LastWriteAdmission = AiMemoryWriteAdmission.Admitted;
         }
     }
@@ -246,7 +250,9 @@ public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
 
             TryDelete(_filePath);
             TryDelete(_tempPath);
-            LastClearOutcome = AiMemoryClearOutcome.Cleared;
+            // The outcome reports reality, never intent (pre-completion consult B): a failed
+            // delete (AV scanner, lock, read-only) must not read as Cleared on a privacy operation.
+            LastClearOutcome = File.Exists(_filePath) ? AiMemoryClearOutcome.Failed : AiMemoryClearOutcome.Cleared;
         }
     }
 

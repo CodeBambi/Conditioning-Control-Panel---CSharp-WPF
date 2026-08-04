@@ -33,6 +33,9 @@ public class AiMemoryStoreTests
         store.Append(AssistantTurn);
         Assert.Equal(AiMemoryWriteAdmission.Admitted, store.LastWriteAdmission);
         Assert.IsType<OperationOutcome.Completed>(await store.SaveImmediate());
+        // Admitted ≠ persisted (consult C): the disk result is a separately observable typed outcome.
+        Assert.NotNull(store.LastWriteCompletion);
+        Assert.IsType<OperationOutcome.Completed>(await store.LastWriteCompletion);
 
         var reloaded = NewStore(path);
         await reloaded.StartAsync(CancellationToken.None);

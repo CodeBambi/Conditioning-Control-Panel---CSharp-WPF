@@ -1,5 +1,5 @@
 ## STATUS: SP-040 — AI companion slice c4: memory
-**Current Step:** Step 1 — archaeology + schema + consent design + pre-approach consult
+**Current Step:** complete — all 5 steps done; .DONE created
 **Last Updated:** 2026-08-04 (worker)
 **Blockers:** none
 
@@ -19,12 +19,12 @@
 - [x] Explicit-clear (in-memory emptied + document deleted — file-content proof)
 - [x] Offline zero-network + content-free diagnostics + redaction registry (zero new log sites; full suite 536/536 + 29/29)
 
-### Step 4: evidence consolidation + pre-completion consult
-- [ ] record.md (archaeology, design, proofs, consults, review presence)
-- [ ] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+### Step 4: evidence consolidation + pre-completion consult (COMPLETE)
+- [x] record.md (archaeology, design, proofs, consults, review presence)
+- [x] Pre-completion solo consult (verdict + actual model in record.md — 3 fix-first adopted, 4 record-only)
+- [x] STATUS.md accurate before .DONE
 
-### Step 5: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥516/29 floor)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+### Step 5: Testing & Verification (COMPLETE)
+- [x] Contract testCommand passes (verify.mjs exit 0 + build 0W/0E on Rebuild + 537/537 + 29/29 ≥ 516/29 floor)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths
