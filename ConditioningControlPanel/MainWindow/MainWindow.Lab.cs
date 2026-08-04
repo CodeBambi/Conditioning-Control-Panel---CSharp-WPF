@@ -172,6 +172,29 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Lab → "Goon Game" card. Opens the 1v1 duel client (Resources/web/goon) in a WebView2
+        /// window via <see cref="Services.GoonGame.GoonHostService"/>, which supplies identity, the
+        /// server bridge and the asset manifest. No entitlement check here on purpose: the card is
+        /// an unconditional door, and the lobby/server do the gating (the transfer-your-own-media
+        /// half is the only premium part, and GoonHostService advertises that capability itself).
+        /// Launch() is idempotent — a live duel is re-focused rather than relaunched — so there is
+        /// no IsActive guard to duplicate.
+        /// </summary>
+        internal void BtnStartGoon_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Services.GoonGame.GoonHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartGoon_Click failed");
+                MessageBox.Show("Couldn't open the Goon Game:\n\n" + ex.Message,
+                    Services.GoonGame.GoonHostService.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
         /// Lab → Chaos Mode hero card. Opens the setup/lobby window where the user
         /// configures the run; BEGIN CHAOS there persists settings and launches via
         /// <see cref="App.Chaos"/> (which owns the countdown, HUD and loop).

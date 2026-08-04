@@ -72,6 +72,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnStartFyp_Click(sender, e);
         }
+        private void BtnStartGoon_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnStartGoon_Click(sender, e);
+        }
         // BtnStartQuiz / BtnStartIntake / BtnTestPopQuiz moved to GradedIntakeTabView
         // when the Graded Intake graduated to its own Exclusives page.
         private void BtnStartBureau_Click(object sender, RoutedEventArgs e)
