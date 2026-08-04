@@ -30,7 +30,7 @@
  * FIRING, three ways, all of them arriving at match.tryFirePayload():
  *   1. drag the item onto the monitor (pointer capture + rect hit-test)
  *   2. tap the item, then tap the monitor (armed state; tapping elsewhere disarms)
- *   3. keys 1-8 (first press arms, second press fires)
+ *   3. keys 1-7 (first press arms, second press fires)
  *
  * Node-import-safe: no DOM at import, only inside mountArsenal().
  * ==========================================================================*/
@@ -38,19 +38,29 @@
 import { GoonConsts, GoonMatchPhase, GoonPayloadKind, costOf } from '../core/contracts.js';
 import { GoonPayloadRateLimiter, GoonReceiptStatus } from '../core/scoring.js';
 import { localMonotonicMs } from '../core/clock.js';
+import { dressGhost } from './throwPreview.js';
 import { S } from './strings.js';
 
 /**
- * The rails, in owner order — which is also the KEYBOARD order (1..8), so new
+ * The rails, in owner order — which is also the KEYBOARD order (1..7), so new
  * items go on the end and never renumber a finger that already knows the deck.
  * `durationMs` is the payload length we request; the engine clamps to
  * 1000..180000 so every one of these lands unchanged. `cost` is documentation
  * and a fallback only: costOf() is authority whenever it knows the kind.
+ *
+ * THERE IS NO BUBBLE THROWABLE (owner, 2026-08-04). BubbleSwarm used to sit here
+ * as a 1-charge sticker, from before bubbles became the ALWAYS-ON baseline field
+ * (t=0 to the end, for both players, a locked tile in the agreement UI). Throwing
+ * more of the thing that is already running the whole match bought nothing, so the
+ * item is gone: it cannot be dropped, armed, keyed or fired. The WIRE is untouched
+ * — GoonPayloadKind.BubbleSwarm (2) is still a frozen contract int, still in our
+ * localCaps (boot.js) and still fully rendered INBOUND by exec/bubbles.js, so an
+ * older or third-party client that throws one at us lands normally. We simply have
+ * no way to throw one back.
  */
 export const ARSENAL_ITEMS = Object.freeze([
   { id: 'flash', rail: 'left', kind: GoonPayloadKind.FlashBurst, img: 'item_flash', label: 'flash', durationMs: 6000, cost: 1 },
   { id: 'subliminal', rail: 'left', kind: GoonPayloadKind.SubliminalStorm, img: 'item_subliminal', label: 'subliminal', durationMs: 8000, cost: 1 },
-  { id: 'bubbles', rail: 'left', kind: GoonPayloadKind.BubbleSwarm, img: 'item_bubbles', label: 'bubbles', durationMs: 20000, cost: 1 },
   { id: 'video', rail: 'left', kind: GoonPayloadKind.Video, img: 'item_video', label: 'video', durationMs: 45000, cost: 2 },
   { id: 'lockcard', rail: 'right', kind: GoonPayloadKind.LockCard, img: 'item_lockcard', label: 'lock card', durationMs: 30000, cost: 2 },
   { id: 'toy', rail: 'right', kind: GoonPayloadKind.ToyPattern, img: 'item_toy', label: 'toy', durationMs: 10000, cost: 2 },
@@ -643,6 +653,10 @@ export function mountArsenal({
         ghost.style.width = (r.width || 64) + 'px';
         ghost.style.height = (r.height || 64) + 'px';
       }
+      // What you are holding is what they are about to get: for the media-backed
+      // kinds this swaps the sticker for a live preview of the content (null =
+      // keep the sticker). One line, no branch — see ui/throwPreview.js.
+      ghost = dressGhost(ghost, rec.item.kind) || ghost;
       add(d.body, ghost);
       moveGhost(x, y);
       cls(root, 'is-dragging', true);
@@ -726,7 +740,7 @@ export function mountArsenal({
     else disarm();
   }, true);
 
-  // keys 1-8 (one per payload slot) — first press arms, second fires
+  // keys 1-7 (one per payload slot) — first press arms, second fires
   led.listen(typeof window !== 'undefined' ? window : null, 'keydown', (e) => {
     if (!e || e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
     const active = d && d.activeElement;

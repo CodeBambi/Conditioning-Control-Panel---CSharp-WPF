@@ -83,7 +83,7 @@ export const PREF_DEFAULTS = Object.freeze({
    */
   showOpponentAvatars: true,
   /**
-   * The HUD's zen toggle (ui/hud.js): score, risk, the closeness dial and the
+   * The HUD's zen toggle (ui/hud.js): score, its multiplier, the closeness dial and the
    * mercy button hidden, leaving the opponent monitor and the arsenal. OFF by
    * default — a duel you cannot read your own score in is a choice, never a
    * starting position — and remembered only so a player who wants the quiet
@@ -93,6 +93,47 @@ export const PREF_DEFAULTS = Object.freeze({
    * it back.
    */
   hudZen: false,
+  /**
+   * THE ARSENAL SIDEBAR's collapse state (ui/hud.js). Three values, not a
+   * boolean, and the third one is the whole reason this is a string:
+   *
+   *   'auto'  never touched the handle — open on a desk, SHUT on a phone
+   *   'open'  asked for it open, on every device
+   *   'shut'  asked for it shut, on every device
+   *
+   * A boolean cannot say "I have no opinion yet", and the right starting state
+   * genuinely differs by screen: a desktop has a whole gutter going spare, a
+   * phone does not and the drawer would open on top of the field the player is
+   * trying to pop bubbles in. Once the handle is used the answer is explicit and
+   * travels with the player to whatever they play on next — a remembered choice
+   * that a rotation could silently undo would not be a remembered choice.
+   *
+   * Resolved by resolveArsenalOpen() below, which is where the policy lives; the
+   * HUD only asks "am I narrow?". Like hudZen this is NOT mirrored onto <html>
+   * from here — ui/hud.js owns that bit for as long as a HUD is mounted.
+   */
+  arsenalOpen: 'auto',
+  /**
+   * WHERE THE PLAYER PARKED THE OPPONENT'S MONITOR, and how big they made it
+   * (ui/opponent.js — drag + wheel, "like the gifs"). Three plain numbers rather
+   * than one blob because `coerce` below already keeps numbers honest against a
+   * corrupt store, and a JSON string in here would need its own parser.
+   *
+   *   monitorX / monitorY   top-left in ABSOLUTE viewport px. -1 on BOTH is the
+   *                         sentinel for "never dragged — leave it docked in the
+   *                         HUD column", which is the default and the state the
+   *                         double-tap reset writes back. Absolute px is
+   *                         deliberate and safe: ui/opponent.js re-clamps on the
+   *                         way in (and on every viewport resize), so a monitor
+   *                         parked on a 4K desk and reopened on a laptop lands
+   *                         on screen rather than off the edge of it.
+   *   monitorScale          a FACTOR of the docked --gg-mon-w, 0.5x..2.5x, not a
+   *                         pixel width — so 1.5x stays 1.5x when the window (and
+   *                         with it that clamp) changes size.
+   */
+  monitorX: -1,
+  monitorY: -1,
+  monitorScale: 1,
   /** Last consent terms this player proposed — pre-filled next lobby. */
   matchLengthSec: 720,
   payloadGapSec: 30,
@@ -169,6 +210,32 @@ function freshDefaults() {
   const out = {};
   for (const k of Object.keys(PREF_DEFAULTS)) out[k] = cloneValue(PREF_DEFAULTS[k]);
   return out;
+}
+
+/* ---------------------------------------------------------------------------
+ * THE ARSENAL SIDEBAR's three states. Exported as constants because ui/hud.js
+ * writes them and selftest-hud pins them, and a stringly-typed pref that two
+ * files spell by hand is a typo away from being permanently 'auto'.
+ * ------------------------------------------------------------------------ */
+export const ARSENAL_OPEN_AUTO = 'auto';
+export const ARSENAL_OPEN_ON = 'open';
+export const ARSENAL_OPEN_OFF = 'shut';
+
+/**
+ * The stored pref + the viewport -> is the sidebar open?
+ *
+ * Pure and total: ANY value that is not one of the two explicit answers falls
+ * through to the auto policy, so a corrupt store, an older client's boolean or
+ * a host seeding nonsense all land on "sensible for this screen" rather than on
+ * a collapsed arsenal nobody asked for.
+ *
+ * @param {string} value    the stored `arsenalOpen`
+ * @param {boolean} narrow  true on the phone/portrait breakpoint
+ */
+export function resolveArsenalOpen(value, narrow) {
+  if (value === ARSENAL_OPEN_ON) return true;
+  if (value === ARSENAL_OPEN_OFF) return false;
+  return !narrow;
 }
 
 /* ---------------------------------------------------------------------------

@@ -4,22 +4,32 @@
  * Composes the live-match HUD inside #gg-hud and owns the layout grid:
  *
  *   ┌ top ────────────────────────────────────────────────────────────────┐
- *   │ score · charges · risk        11:47 ▮▮▯▯▯      attention  ⊟  ⚙      │
+ *   │ score · charges · ×mult       11:47 ▮▮▯▯▯      attention  ⊟  ⚙      │
  *   ├ body ───────────────────────────────────────────────────────────────┤
- *   │ [rail]              (the stage well — never covered)      [monitor] │
- *   │  4 items                                                  [receipts]│
- *   │                                                           [rail 4]  │
+ *   │ ┌ arsenal ──┐◂                                            [monitor] │
+ *   │ │ HEAT ▰▰▱  │      (the stage well — never covered)       [receipts]│
+ *   │ │ ▣▣ ▣▣     │                                                       │
+ *   │ │ ▣▣ ▣▣     │                                                       │
+ *   │ └───────────┘                                                       │
  *   ├ bottom ─────────────────────────────────────────────────────────────┤
  *   │ own effects                                     you're telling them │
  *   └──────────────────────── MERCY (its own layer, ui/mercy.js) ─────────┘
  *
+ * THE ARSENAL IS A COLLAPSIBLE SIDEBAR (owner, 2026-08-04). The eight stickers,
+ * their cooldown dials and the heat gauge that feeds them live in one panel on
+ * the LEFT behind a handle that never hides — collapsed it is the handle and a
+ * count badge, nothing more. Keys 1-7 fire either way (ui/arsenal.js binds them
+ * on `window`), and the panel is a slide-in drawer on a phone rather than a
+ * squeeze on the play area. See the sidebar's own block below the top bar.
+ *
  * THE MIDDLE IS SACRED. The HUD frames #gg-stage, it never lands on top of it:
  * everything here is edge-anchored and the centre column is pointer-transparent.
  *
- * ZEN (the ⊟ beside the gear). One bit, and everything it hides — score, risk,
- * the closeness dial, MERCY — is hidden by ui/hud.css off .gg-hud--zen and
- * html[data-gg-zen]. The monitor and the arsenal stay: they are what the duel is
- * played on. See the toggle's own block below for why hiding MERCY is safe.
+ * ZEN (the ⊟ beside the gear). One bit, and everything it hides — score, the
+ * score multiplier, the closeness dial, MERCY — is hidden by ui/hud.css off
+ * .gg-hud--zen and html[data-gg-zen]. The monitor, the arsenal and the heat
+ * gauge that feeds it stay: they are what the duel is played on. See the
+ * toggle's own block below for why hiding MERCY is safe.
  *
  * ANIMATION BUDGET. Chrome animations go through fx.play(): at most two run at
  * once and anything that waited more than 600 ms is dropped rather than played
@@ -32,7 +42,7 @@
 import { GoonConsts, GoonElement, GoonMatchPhase, GoonPayloadKind } from '../core/contracts.js';
 import { localMonotonicMs } from '../core/clock.js';
 import { mountOpponent, EMOTE_MINI_MS } from './opponent.js';
-import { mountArsenal } from './arsenal.js';
+import { mountArsenal, ARSENAL_ITEMS } from './arsenal.js';
 import { mountCloseness } from './closeness.js';
 import { mountAttention } from './attention.js';
 import { mountEmotes } from './emotes.js';
@@ -40,6 +50,8 @@ import { mountAnnouncer } from './announcer.js';
 import { mountMicHud } from './voice/micHud.js';
 import { createDropRoller } from './drops.js';
 import { avatarNode, emitAva } from './avatar.js';
+import { setPreviewMedia } from './throwPreview.js';
+import { resolveArsenalOpen, ARSENAL_OPEN_ON, ARSENAL_OPEN_OFF } from './prefs.js';
 import { S } from './strings.js';
 
 /** exec/bubbles.js's economy seam. Kept as a literal so ui/ never imports exec/. */
@@ -68,6 +80,34 @@ export const DISCORD_DM_EVENT = 'gg-discord-dm';
  */
 export const HUD_ZEN_CLASS = 'gg-hud--zen';
 export const HUD_ZEN_ATTR = 'data-gg-zen';
+
+/**
+ * THE ARSENAL SIDEBAR's one bit — a class on `.gg-arsenal` and nothing else.
+ *
+ * Unlike zen there is no <html> mirror and there must not be one: everything the
+ * collapse touches is a descendant of the sidebar itself, MERCY is not involved
+ * at any point, and a stray attribute outliving a match is exactly the failure
+ * mode zen already had to be hand-unwound for.
+ */
+export const ARSENAL_OPEN_CLASS = 'is-open';
+
+/**
+ * The breakpoint the drawer behaviour hangs off, spelled ONCE. It is the same
+ * query ui/hud.css's portrait/narrow block uses — the sidebar goes from a grid
+ * column to a slide-in drawer there, and resolveArsenalOpen() starts it shut —
+ * so the two must not be able to disagree. selftest-hud pins them equal.
+ */
+export const ARSENAL_NARROW_MQ = '(orientation: portrait), (max-width: 720px)';
+
+/** Keys 1..N, i.e. one per payload slot. ui/arsenal.js owns the binding. */
+const ARSENAL_KEY_COUNT = ARSENAL_ITEMS.filter((i) => i.kind !== null).length;
+
+/** Is this a phone-shaped screen? Absent matchMedia (node, old hosts) = no. */
+function isNarrowViewport() {
+  try {
+    return typeof matchMedia === 'function' && !!matchMedia(ARSENAL_NARROW_MQ).matches;
+  } catch (_e) { return false; }
+}
 
 /** Own-draft element cues -> the chip that shows them on the bottom-left rail. */
 const ELEMENT_META = Object.freeze({
@@ -286,7 +326,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const pipRow = add(scoreBox, el('div', 'gg-pips'));
   const pips = [];
   for (let i = 0; i < GoonConsts.ChargeCap; i++) pips.push(add(pipRow, el('i', 'gg-pip')));
-  const riskEl = add(scoreBox, el('div', 'gg-risk', '×1.00 risk'));
+  const multEl = add(scoreBox, el('div', 'gg-mult', S.hud.scoreMult(1)));
 
   const timerBox = add(top, el('div', 'gg-timer gg-plate'));
   const timerClock = add(timerBox, el('div', 'gg-timer-clock', '0:00'));
@@ -322,7 +362,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const attSlot = add(rightTop, el('div', 'gg-att-slot'));
 
   /* ---- THE ZEN TOGGLE ---------------------------------------------------
-   * One button, always on screen, that takes the score, the risk multiplier,
+   * One button, always on screen, that takes the score, its multiplier,
    * the closeness dial and the mercy button away and gives them back. What is
    * left is what the duel is actually played on: their monitor and the arsenal.
    *
@@ -402,7 +442,96 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
   // ------------------------------------------------------------------ body
   const body = add(root, el('div', 'gg-hud-body'));
-  const leftRail = add(body, el('div', 'gg-rail gg-rail--left'));
+
+  /* ==== THE ARSENAL SIDEBAR ================================================
+   * Everything you can THROW lives in one collapsible panel on the LEFT, behind
+   * a handle that never hides. (owner, 2026-08-04: "the throwable items should
+   * live in a sidebar that can be collapsed".)
+   *
+   * WHY LEFT. The right edge is spoken for three times over — the opponent's
+   * monitor column, the receipts strip under it, and exec/videos.js's
+   * keepOutRects(), which refuses to BEAR a floating window on the right 22vw or
+   * the bottom-centre mercy gutter. The left gutter is the only side of the desk
+   * with nothing structural in it, and it is nowhere near MERCY's keep-out
+   * (0.28w..0.72w), so a sidebar there cannot cover the one button that must
+   * never be covered.
+   *
+   * WHAT IS IN IT: the eight stickers (as two four-tall columns — a single
+   * vertical stack of eight is ~720px, which does not fit a laptop, and a
+   * 2-column grid keeps every tile a full finger wide), and the HEAT GAUGE,
+   * which is the arsenal's own drop meter and belongs with the economy it feeds
+   * rather than under a monitor it has nothing to do with.
+   *
+   * IT DOES NOT EAT THE FIELD. `.gg-arsenal` is pointer-events:none (ui/hud.css,
+   * at the same 0,2,0 as the .gg-plate rule that would otherwise re-enable it);
+   * only the tiles and the handle opt back in. Bubbles rise on #gg-fx BELOW the
+   * HUD, so a bubble drifting behind the panel is still poppable through it —
+   * which matters more here than anywhere, because popping bubbles is the only
+   * way the arsenal is ever fed. There is NO scrim, on any breakpoint: a
+   * full-screen scrim is what froze the drop economy the last time a sheet
+   * opened at Live, and one above z60 would bury MERCY.
+   *
+   * COLLAPSED IS A REAL COLLAPSE. `.gg-arsenal-panel` is display:none, so the
+   * tiles are not merely invisible — there is no box left to hit. Keys 1-7 are
+   * bound on `window` by ui/arsenal.js and never look at the DOM, so the whole
+   * deck still fires from a shut drawer; the handle pulses and carries a count
+   * badge so a shut drawer still says what you are holding. */
+  const sideBox = add(body, el('aside', 'gg-arsenal'));
+  const sidePanel = add(sideBox, el('div', 'gg-arsenal-panel'));
+
+  /* ---- THE HEAT GAUGE -----------------------------------------------------
+   * What popping bubbles is FOR, made visible. It sits at the head of the
+   * arsenal panel, directly on top of the rails it fills: gauge climbs ->
+   * sticker lights up, in one glance and one column. (It rode the foot of the
+   * monitor column until the sidebar existed; it moved WITH the arsenal, because
+   * it is the item economy's readout and not the monitor's.)
+   *
+   * IT IS A READOUT, NOT A CONTROL. No .gg-plate (which would re-enable pointer
+   * events at 0,2,0 and put a dead 190px box over the desk), no click target, no
+   * focus. ui/hud.css opts it out explicitly at the same specificity anyway —
+   * and the sidebar around it is pointer-transparent for the same reason.
+   *
+   * IT NEVER TOUCHES MERCY. #gg-mercy is its own fixed z60 layer in goon.css;
+   * this lives inside .gg-hud-frame, whose whole layer (#gg-hud, z40) is a
+   * stacking context BELOW it — no z-index written in this tier can reach past
+   * it. It gates nothing and covers nothing.
+   *
+   * role=progressbar + aria-valuetext because the fill is a colour, and colour
+   * is never the only channel on this tier. */
+  const heatBox = add(sidePanel, el('div', 'gg-heat'));
+  if (heatBox && heatBox.setAttribute) {
+    try {
+      heatBox.setAttribute('role', 'progressbar');
+      heatBox.setAttribute('aria-label', S.hud.heatLabel);
+      heatBox.setAttribute('aria-valuemin', '0');
+      heatBox.setAttribute('aria-valuemax', '100');
+      heatBox.setAttribute('aria-valuenow', '0');
+    } catch (_e) { /* stub DOM */ }
+  }
+  add(heatBox, el('span', 'gg-heat-label', S.hud.heatLabel));
+  const heatTrack = add(heatBox, el('span', 'gg-heat-track'));
+  const heatFill = add(heatTrack, el('i', 'gg-heat-fill'));
+
+  // The two rails keep their names and their four-and-four split: they are the
+  // sidebar's two columns now instead of the desk's two edges, and ui/arsenal.js
+  // is handed exactly the same pair of hosts it always was.
+  const railBox = add(sidePanel, el('div', 'gg-arsenal-rails'));
+  const leftRail = add(railBox, el('div', 'gg-rail gg-rail--left'));
+  const rightRail = add(railBox, el('div', 'gg-rail gg-rail--right'));
+
+  /* ---- THE HANDLE — the one node that never hides -------------------------
+   * Last in the DOM so it sits on the panel's INNER edge (the side facing the
+   * field) in both states, which is where a thumb reaches for it and where it
+   * stays put when the panel comes and goes. Sized >= 48px both ways: it is the
+   * only way back to your own items on a phone, so it is never one of the things
+   * that shrinks. */
+  const sideTab = add(sideBox, el('button', 'gg-arsenal-tab'));
+  if (sideTab) sideTab.type = 'button';
+  const sideTabGlyph = add(sideTab, el('i', 'gg-arsenal-tab-glyph'));
+  if (sideTabGlyph) sideTabGlyph.setAttribute && sideTabGlyph.setAttribute('aria-hidden', 'true');
+  const sideTabCount = add(sideTab, el('span', 'gg-arsenal-tab-count'));
+  if (sideTabCount) sideTabCount.hidden = true;
+
   add(body, el('div', 'gg-well'));                         // the stage window: never covered
   const rightCol = add(body, el('div', 'gg-rightcol'));
   const oppAvaBox = add(rightCol, el('div', 'gg-ava-minibox gg-ava-minibox--opp'));
@@ -431,7 +560,71 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const coolHost = add(rightCol, el('div', 'gg-cool'));
   if (coolHost) coolHost.hidden = true;
   const voiceHost = add(rightCol, el('div', 'gg-voice-host'));
-  const rightRail = add(rightCol, el('div', 'gg-rail gg-rail--right'));
+
+  /* ---- THE COLLAPSE BIT --------------------------------------------------
+   * One class on one node; every hide, every slide and every layout consequence
+   * hangs off it in ui/hud.css. Nothing about firing reads it — that is the
+   * point of putting the keyboard on `window` in ui/arsenal.js — so a shut
+   * drawer is a hidden control panel, never a disabled one.
+   *
+   * The starting state is resolveArsenalOpen(pref, narrow) in ui/prefs.js: open
+   * on a desk, shut on a phone, until the player says otherwise ONCE, after
+   * which their answer travels with them (see the pref's own block).
+   */
+  let sideOpen = resolveArsenalOpen(
+    (prefs && typeof prefs.get === 'function') ? prefs.get('arsenalOpen') : undefined,
+    isNarrowViewport(),
+  );
+
+  function paintSide() {
+    cls(sideBox, ARSENAL_OPEN_CLASS, sideOpen);
+    text(sideTabGlyph, sideOpen ? S.arsenal.sidebarHideGlyph : S.arsenal.sidebarShowGlyph);
+    if (sideTab && sideTab.setAttribute) {
+      try {
+        const label = sideOpen ? S.arsenal.sidebarHide : S.arsenal.sidebarShow;
+        sideTab.setAttribute('aria-expanded', sideOpen ? 'true' : 'false');
+        sideTab.setAttribute('aria-label', label);
+        sideTab.title = sideOpen ? label : S.arsenal.sidebarTitle;
+      } catch (_e) { /* stub DOM */ }
+    }
+  }
+
+  function setSide(on, remember) {
+    const next = !!on;
+    if (next === sideOpen) return;
+    sideOpen = next;
+    paintSide();
+    // Persisting is a nicety, not the state: the bit above is already true.
+    if (remember && prefs && typeof prefs.set === 'function') {
+      try { prefs.set('arsenalOpen', sideOpen ? ARSENAL_OPEN_ON : ARSENAL_OPEN_OFF); }
+      catch (_e) { /* no store, no problem */ }
+    }
+  }
+  paintSide();
+  led.listen(sideTab, 'click', () => { sfx(audio, 'ui-select'); setSide(!sideOpen, true); });
+
+  /* A key press into a SHUT drawer has to land somewhere the eye can see, or the
+   * arsenal reads as broken from behind its own handle. The count badge covers
+   * "what do I have"; this covers "that did something". It is deliberately a
+   * plain listener rather than a new ui/arsenal.js callback: it fires on the
+   * gesture, not on the outcome, which is exactly what the player needs told
+   * when the tile that would have shaken or lit up is not on screen. */
+  let tabPulseTimer = 0;
+  function pulseTab() {
+    if (!sideTab) return;
+    cls(sideTab, 'is-bump', true);
+    try { clearTimeout(tabPulseTimer); } catch (_e) { /* gone */ }
+    tabPulseTimer = setTimeout(() => cls(sideTab, 'is-bump', false), 320);
+  }
+  led.add(() => { try { clearTimeout(tabPulseTimer); } catch (_e) { /* gone */ } });
+  led.listen(typeof window !== 'undefined' ? window : null, 'keydown', (e) => {
+    if (sideOpen || !e || e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
+    const active = d && d.activeElement;
+    const tag = active && active.tagName ? String(active.tagName).toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || (active && active.isContentEditable)) return;
+    const n = parseInt(e.key, 10);
+    if (n >= 1 && n <= ARSENAL_KEY_COUNT) pulseTab();
+  });
 
   // ---------------------------------------------------------------- bottom
   const bottom = add(root, el('div', 'gg-hud-bottom'));
@@ -439,7 +632,20 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const dialHost = add(bottom, el('div', 'gg-dial-host'));
 
   // ------------------------------------------------------------ sub-mounts
-  const opponent = mountOpponent({ host: monHost, match, audio, fx });
+  /* The media pool reaches the THROW PREVIEW here and nowhere else. It is a
+   * module-level handoff rather than a mount argument because the two things
+   * that need it — the inbound projectile (ui/opponent.js) and the arsenal's
+   * drag ghost — are minted deep inside closures that take no media, and
+   * threading one through the arsenal would be a real edit to a file this
+   * feature has no other business in. `media` is already a mountHud option
+   * (boot.js has always passed it); it was simply unused until now. */
+  setPreviewMedia(media);
+  led.add(() => setPreviewMedia(null));
+
+  // `prefs` is threaded in only so the monitor can remember where it was dragged
+  // to and how big it was wheeled (ui/opponent.js, THE LOOSE MONITOR). Optional
+  // there: no store, no memory, everything else identical.
+  const opponent = mountOpponent({ host: monHost, match, audio, fx, prefs });
   const emotes = mountEmotes({ host: root, match, audio, onLog });
   const arsenal = mountArsenal({
     leftHost: leftRail,
@@ -490,7 +696,11 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     tokenHost: root,
     match,
     audio,
-    getAvoid: () => [leftRail, rightRail, dialHost, monHost, d && d.getElementById ? d.getElementById('gg-mercy') : null].filter(Boolean),
+    /* `sideBox` rather than the two rails: it is the whole sidebar including the
+     * handle, and it is the only one of the three whose rect is HONEST in both
+     * states — a collapsed panel is display:none, so a rail measures 0x0 and an
+     * attention token would happily land on the handle. */
+    getAvoid: () => [sideBox, dialHost, monHost, d && d.getElementById ? d.getElementById('gg-mercy') : null].filter(Boolean),
     onLog,
   });
 
@@ -651,14 +861,76 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     }
   }
 
-  function paintRisk() {
+  function paintMult() {
     const s = match.scoring;
+    // `riskMultiplier` is the ENGINE's frozen name for the pool's score bonus
+    // (core/scoring.js, C#-parity). Nothing player-facing says "risk" any more.
     const mult = s && typeof s.riskMultiplier === 'number' ? s.riskMultiplier : 1;
-    text(riskEl, '×' + mult.toFixed(2) + ' risk');
+    text(multEl, S.hud.scoreMult(mult));
+  }
+
+  /* THE HEAT GAUGE. Polled, not subscribed: heat decays on the wall clock with
+   * no timer behind it (ui/drops.js keeps it lazy), so the only way the bar can
+   * show a cool-down is for the painter to ask. paintAll already runs at 5 Hz
+   * and the fill has its own CSS transition, so that reads as continuous.
+   * A poll also cannot leak a subscription, which the suite counts. */
+  function paintHeat() {
+    if (!heatFill || !heatBox) return;
+    const f = drops && typeof drops.heatFraction === 'number' ? drops.heatFraction : 0;
+    const pct = Math.max(0, Math.min(100, f * 100));
+    if (heatFill.style) heatFill.style.width = pct.toFixed(1) + '%';
+    // The word travels with the colour, always: the gauge is never the only channel.
+    cls(heatBox, 'is-hot', pct >= 66);
+    if (heatBox.setAttribute) {
+      try {
+        heatBox.setAttribute('aria-valuenow', String(Math.round(pct)));
+        heatBox.setAttribute('aria-valuetext', S.hud.heatValue(pct));
+      } catch (_e) { /* stub DOM */ }
+    }
+  }
+
+  /* THE HANDLE's COUNT BADGE. A shut drawer hides every ×N sticker badge at
+   * once, so the handle carries their sum: "you are holding four things" is the
+   * one fact a collapsed arsenal still has to tell, and it is the difference
+   * between a tidy desk and a player who forgot they had items.
+   *
+   * Summed off arsenal.droppable(), which is already the honest set — a kind
+   * outside either side's caps and a spent brain drain are both absent from it,
+   * so the badge can never count a stack that cannot be fired. Painted on the
+   * same 5 Hz poll as the heat gauge and memoised, because the number moves
+   * perhaps twice a minute. */
+  let paintedArmed = -1;
+  function armedTotal() {
+    try {
+      const list = arsenal && typeof arsenal.droppable === 'function' ? arsenal.droppable() : null;
+      if (!Array.isArray(list)) return 0;
+      let n = 0;
+      for (const c of list) n += (c && c.armed) | 0;
+      return n;
+    } catch (_e) { return 0; }
+  }
+
+  function paintArmedBadge() {
+    if (!sideTabCount) return;
+    const n = armedTotal();
+    if (n === paintedArmed) return;
+    const gained = n > paintedArmed && paintedArmed >= 0;
+    paintedArmed = n;
+    text(sideTabCount, n > 0 ? S.arsenal.tabCount(n) : '');
+    sideTabCount.hidden = n <= 0;
+    cls(sideTab, 'is-stocked', n > 0);
+    if (sideTab && sideTab.setAttribute) {
+      try { sideTab.setAttribute('data-gg-armed', String(n)); } catch (_e) { /* stub DOM */ }
+    }
+    if (sideTabCount.setAttribute) {
+      try { sideTabCount.setAttribute('aria-label', S.arsenal.tabCountLabel(n)); } catch (_e) { /* stub DOM */ }
+    }
+    // A drop that lands behind a shut drawer still gets ONE beat of feedback.
+    if (gained && !sideOpen) pulseTab();
   }
 
   function paintAll() {
-    try { paintScore(); paintCharges(); paintTimer(); paintRisk(); }
+    try { paintScore(); paintCharges(); paintTimer(); paintMult(); paintHeat(); paintArmedBadge(); }
     catch (_e) { /* a paint must never take the match down */ }
   }
 
@@ -735,6 +1007,13 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     const meta = p && PAYLOAD_META[p.kind];
     if (!meta) return;
     const wait = Math.max(0, (e.fireAtLocalMs || 0) - localMonotonicMs());
+    // THE THROW. Their monitor flares and the thing they threw flies at us,
+    // fitted INSIDE the lead the engine already reserved so it lands on the very
+    // instant the effect starts. Nothing about the schedule, the receipts or the
+    // cue below moves — see THE THROW in ui/opponent.js.
+    if (typeof opponent.markInbound === 'function') {
+      opponent.markInbound({ kind: p.kind, waitMs: wait, payload: p });
+    }
     // ONE landing cue for every family. A per-kind sting would be eight sounds
     // to learn for information the fx chip already spells out in words.
     const t = setTimeout(() => {
@@ -795,8 +1074,20 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     /** Exposed so H (or a play-test driver) can poke the desk without re-deriving it. */
     parts: {
       root, arsenal, opponent, dial, attention, emotes, announcer, fx, drops, mic,
+      /** The heat gauge: the node the drop economy paints itself onto. */
+      heat: { box: heatBox, fill: heatFill, get fraction() { return drops.heatFraction; } },
       /** The zen toggle, for a driver that wants the state without the click. */
       zen: { button: zenBtn, set: (on) => setZen(on, true), get on() { return zenOn; } },
+      /** The collapsible arsenal sidebar — same shape, same reason as zen. */
+      sidebar: {
+        root: sideBox,
+        panel: sidePanel,
+        tab: sideTab,
+        count: sideTabCount,
+        set: (on) => setSide(on, true),
+        get open() { return sideOpen; },
+        get armed() { return armedTotal(); },
+      },
     },
     unmount() {
       fx.stop();

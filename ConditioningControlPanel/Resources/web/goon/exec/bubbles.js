@@ -19,7 +19,9 @@
  *       detail: { kind, worth, payload, size }
  *     }))
  *
- * and ui/hud.js -> ui/drops.js does the economics. `worth` is the drop weight:
+ * and ui/hud.js -> ui/drops.js does the economics (since 2026-08-04 that means
+ * banking HEAT, which is what the gauge over the arsenal rail paints and what
+ * sets the odds on this pop and the next). `worth` is the weight it banks at:
  * 1 for a plain bubble, POP_WORTH_EFFECT for one of the six effect kinds, and
  * ZERO for a bubble an opponent's BubbleSwarm minted (their clutter must never
  * pay us — see fromPayload below).
@@ -136,8 +138,9 @@ export function pickKind(fromPayload, rnd) {
 /** The event ui/hud.js listens for. One dispatch per pop, no exceptions. */
 export const POP_EVENT = 'gg-bubble-pop';
 
-/** Drop weight of an effect-kind pop. ui/drops.js multiplies its base chance by
- *  this, so 1 -> 12% and 2.5 -> 30% at the shipped tuning. */
+/** Drop weight of an effect-kind pop. ui/drops.js banks HEAT_PER_WORTH heat per
+ *  unit of this, and heat is what buys drops, so an effect bubble is worth two
+ *  and a half plain ones: ~30% of a drop against ~12%, at the shipped tuning. */
 export const POP_WORTH_EFFECT = 2.5;
 /** Plain bubble. */
 export const POP_WORTH_NORMAL = 1;

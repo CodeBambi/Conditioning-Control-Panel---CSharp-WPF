@@ -427,36 +427,6 @@ namespace ConditioningControlPanel
         /// </summary>
         private void RefreshBlinkTrainerTab()
         {
-            // First-visit flag flip (Phase G) — suppresses the v5.9.8 flagship
-            // sticky toast on next launch. Also dismisses the toast in this
-            // session if it's currently showing (H.3): once the user finds
-            // the feature, the announcement has done its job.
-            // Isolated try/catch so a settings failure here can't keep the
-            // rest of the refresh from running.
-            try
-            {
-                if (App.Settings?.Current is { HasSeenBlinkTrainerFlagship: false } first)
-                {
-                    first.HasSeenBlinkTrainerFlagship = true;
-                    App.Settings?.Save();
-
-                    // Fade out the toast if it's still on screen, and persist
-                    // the dismissal so it can't refire even if HasSeen somehow
-                    // doesn't stick.
-                    const string flagshipKey = "blink-trainer-flagship-v5.9.8";
-                    App.Notifications?.Dismiss(flagshipKey);
-                    if (!first.DismissedNotificationKeys.Contains(flagshipKey))
-                    {
-                        first.DismissedNotificationKeys.Add(flagshipKey);
-                        App.Settings?.Save();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "HasSeenBlinkTrainerFlagship flag: failed to set");
-            }
-
             try
             {
                 var s = App.Settings?.Current;

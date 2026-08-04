@@ -34,7 +34,10 @@
  *     the bezel, which is not part of their screen and never was.
  *
  * The monitor is also the payload DROP TARGET (ui/arsenal.js hit-tests against
- * the element this module exposes as `dropTarget`).
+ * the element this module exposes as `dropTarget`) — and, since 2026-08-04, the
+ * place an INBOUND payload visibly comes FROM: markInbound() flares the bezel and
+ * throws a projectile at our stage that lands as the effect starts. See THE
+ * THROW below for why it cannot delay anything.
  *
  * TRUST: every remote-sourced string is written with textContent. The engine
  * already sanitized it; this module never builds markup from it either way.
@@ -46,6 +49,7 @@ import { GoonConnectionHealth } from '../core/match.js';
 import { GoonConsts, GoonElement, GoonMatchPhase, GoonPayloadKind, enumName } from '../core/contracts.js';
 import { GoonReceiptStatus } from '../core/scoring.js';
 import { S } from './strings.js';
+import { createPreview, stickerUrl } from './throwPreview.js';
 
 /** Closeness 0-3 -> the word that always rides with the colour. */
 export const CLOSENESS_WORDS = Object.freeze(['steady', 'warm', 'close', 'edge']);
@@ -144,10 +148,184 @@ export function isTerminalReceipt(status) {
  */
 const VWIN_MAX_MINIS = 4;
 
+/* ---------------------------------------------------------------------------
+ * THE THROW — cause and effect for an inbound payload (2026-08-04).
+ *
+ * "when the opponent fires a payload at us the opponent monitor should
+ *  highlight, and the item should fly from the monitor to our field, and THEN
+ *  the effect triggers."
+ *
+ * Until now an inbound payload simply HAPPENED: exec/executor.js rendered it at
+ * `fireAtLocalMs` and the only acknowledgement was ui/audio.js's `payload-in`
+ * thud. There was no actor. So: their monitor flares, a projectile leaves it,
+ * and it lands ON the instant the effect starts.
+ *
+ * NOTHING HERE MAY DELAY ANYTHING. The engine schedules every payload
+ * GoonConsts.MinScheduleBufferMs (1000 ms) ahead so both clients fire it at the
+ * same wall instant, and this animation is fitted INSIDE that lead: it starts at
+ * `wait - THROW_MS` and impacts at `wait`. The executor's timer, the receipts and
+ * the ACKs are untouched — this file cannot reach them and must never want to.
+ * A short lead (clock skew, a peer that scheduled tight) shortens the FLIGHT
+ * instead of moving the effect: worst case the projectile lands a couple of
+ * hundred ms into an effect that already started, which is a cosmetic overlap
+ * and not a stalled duel.
+ *
+ * WHAT FLIES is a live preview of the content that is about to play whenever the
+ * payload is backed by media — the clip itself for a Video, the image a burst
+ * will throw — with the item sticker painted underneath it until the first frame
+ * decodes, and left showing for the kinds that have no content (see
+ * ui/throwPreview.js for which are which, and how exact the picture is).
+ * ------------------------------------------------------------------------- */
+
+/** The flight, when the schedule lead can pay for it in full. */
+export const THROW_MS = 760;
+/** …and the shortest one we will draw when it cannot. Never longer than the lead. */
+export const THROW_MIN_MS = 380;
+/** The splash at the far end. Its own node, so it cannot cancel the flight. */
+export const THROW_HIT_MS = 420;
+/** How long their monitor stays lit for a throw. Starts with the wind-up. */
+export const THROW_FLARE_MS = 620;
+/** Where on our screen it lands: the stage's optical centre, not the geometric one. */
+export const THROW_TARGET_Y = 0.44;
+/** A lead longer than this is a clock we do not believe; the flare fires anyway. */
+const MAX_THROW_LEAD_MS = 30000;
+
 /** How long the green pass wash + checkmark hold. Feedback, never ambience. */
 const PASS_MS = 1200;
 /** Longest payload window we will ever hold a mini open for (engine clamp). */
 const MAX_WINDOW_MS = 180000;
+
+/* ---------------------------------------------------------------------------
+ * THE LOOSE MONITOR — drag it, wheel it bigger (owner, 2026-08-04: make the
+ * opponent monitor draggable and resizable "like the gifs").
+ *
+ * "Like the gifs" is a specification, not a vibe: exec/flashes.js and
+ * exec/videos.js already settled what a grabbable thing on this desk feels like,
+ * and this is that grammar, ported rather than reinvented —
+ *
+ *   · 6 px of slop decides press-vs-drag, and it is decided on POINTERMOVE, so a
+ *     tap that never travels is not a drag. Unlike a video window a sub-slop tap
+ *     here does NOTHING (the monitor has no click action and must not grow one);
+ *     the only exception is the reset, below, which needs two of them.
+ *   · the WHEEL resizes, through a CSS custom property that drives WIDTH
+ *     (--gg-mon-loose-w, the --gg-vwin-w precedent), 0.5x..2.5x of the docked
+ *     size. NEVER `transform: scale`: a scale would fight the drag offset, and
+ *     it would resample the bezel art instead of re-laying it out. Width is the
+ *     only dial because every number inside the frame is a PERCENTAGE of it
+ *     (--gg-mon-face-*, aspect-ratio: 16/9), so the minis re-lay-out for free.
+ *   · desktop-only, deliberately. A phone has no wheel and this is not worth a
+ *     pinch: the drag alone already works there through pointer events.
+ *
+ * AND THE ONE THING THE GIFS DID NOT HAVE TO SOLVE: the monitor is a ROW IN A
+ * COLUMN. A floating window is born detached; this starts life in the HUD's
+ * right-hand column and only leaves it when the player asks. See DETACH-ON-
+ * DEMAND in mountOpponent for why that is the choice and what holds its place.
+ *
+ * Every number below is exported because selftest-hud pins against these rather
+ * than re-typing them.
+ * ------------------------------------------------------------------------- */
+
+/** <= this much travel and the press was not a drag. exec/videos.js's number. */
+export const MON_DRAG_SLOP_PX = 6;
+/** Size multiplier per wheel notch. exec/videos.js's WHEEL_STEP. */
+export const MON_WHEEL_STEP = 1.08;
+/** Wheel clamps, relative to the monitor's DOCKED width. videos.js's SIZE_*_FACTOR. */
+export const MON_MIN_FACTOR = 0.5;
+export const MON_MAX_FACTOR = 2.5;
+/** Never flush against an edge: a monitor you cannot get a finger onto is lost. */
+export const MON_EDGE_PAD_PX = 8;
+/** The bottom gutter MERCY owns — exec/videos.js MERCY_KEEPOUT_PX, same number,
+ *  same reason: the guaranteed way out is never covered, by anything. */
+export const MON_MERCY_KEEPOUT_PX = 96;
+/** Nothing may be "held" longer than this. exec/videos.js's HOLD_WATCHDOG_MS. */
+export const MON_HOLD_WATCHDOG_MS = 30000;
+/** Two sub-slop taps inside this window are the RESET gesture. */
+export const MON_RESET_TAP_MS = 420;
+/** The width var. Falls back to the docked --gg-mon-w when it is not written. */
+export const MON_WIDTH_VAR = '--gg-mon-loose-w';
+/** On .gg-mon while it is detached; on .gg-mon while it is in hand. */
+export const MON_LOOSE_CLASS = 'is-loose';
+export const MON_GRABBED_CLASS = 'is-grabbed';
+/** On the HOST element ui/hud.js hands us, while it is holding the column open. */
+export const MON_HOST_LOOSE_CLASS = 'is-mon-loose';
+
+/**
+ * The three pref keys. Position is stored in ABSOLUTE viewport px and re-clamped
+ * on the way back in, so a monitor parked on a 4K desk and reopened on a laptop
+ * lands on screen rather than off the edge of it.
+ */
+export const MON_PREF_X = 'monitorX';
+export const MON_PREF_Y = 'monitorY';
+export const MON_PREF_SCALE = 'monitorScale';
+/** x/y sentinel for "never dragged — dock it". Any real position is >= 0. */
+export const MON_DOCKED = -1;
+
+/**
+ * The monitor's DOCKED width in px — hud.css's `--gg-mon-w: clamp(210px, 22vw,
+ * 280px)`, in JS, because the scale factor has to be relative to something and
+ * a computed style is not available on every host this file runs on.
+ * @param {number} viewportW
+ */
+export function monitorBaseWidth(viewportW) {
+  const w = Number(viewportW) > 0 ? Number(viewportW) : 1280;
+  return Math.round(Math.min(280, Math.max(210, w * 0.22)));
+}
+
+/** Any number -> a legal scale factor. Pure, total. */
+export function clampMonitorScale(scale) {
+  const s = Number(scale);
+  if (!isFinite(s) || s <= 0) return 1;
+  return s < MON_MIN_FACTOR ? MON_MIN_FACTOR : (s > MON_MAX_FACTOR ? MON_MAX_FACTOR : s);
+}
+
+/** One wheel gesture: `notches` positive GROWS. Pure, total. */
+export function monitorScaleStep(scale, notches) {
+  const s = clampMonitorScale(scale);
+  const n = Number(notches);
+  if (!isFinite(n) || !n) return s;
+  return clampMonitorScale(s * Math.pow(MON_WHEEL_STEP, n));
+}
+
+/** scale + viewport -> the width to write into MON_WIDTH_VAR. Pure, total. */
+export function monitorWidth(scale, viewportW) {
+  return Math.round(monitorBaseWidth(viewportW) * clampMonitorScale(scale));
+}
+
+/**
+ * WHERE IT IS ALLOWED TO BE. Two rules, applied in this order and no other:
+ *
+ *   1. ON SCREEN, with MON_EDGE_PAD_PX to spare. A monitor bigger than the
+ *      viewport is pinned to the top-left rather than pushed off it — a clamp
+ *      whose min exceeds its max must resolve to the reachable end.
+ *   2. OFF MERCY. exec/videos.js's keepOutRects() refuses to BEAR a floating
+ *      window in the bottom-centre gutter (0.28w..0.72w, bottom 96px); the same
+ *      rectangle is a hard wall here, because unlike a video window this one can
+ *      be parked and left there. The resolution is a single axis — pushed UP,
+ *      never sideways — so a drag along the bottom of the screen slides along
+ *      the top of the gutter instead of teleporting around the button.
+ *
+ * Pure and total: no DOM, no rounding surprises, safe to sweep in a test.
+ * @returns {{x:number, y:number}} the corrected top-left, rounded
+ */
+export function clampMonitorPos(x, y, w, h, viewportW, viewportH) {
+  const vw = Number(viewportW) > 0 ? Number(viewportW) : 1280;
+  const vh = Number(viewportH) > 0 ? Number(viewportH) : 720;
+  const ww = Math.max(0, Number(w) || 0);
+  const hh = Math.max(0, Number(h) || 0);
+  const pad = MON_EDGE_PAD_PX;
+  const maxX = Math.max(pad, vw - ww - pad);
+  const maxY = Math.max(pad, vh - hh - pad);
+  let cx = Number(x); if (!isFinite(cx)) cx = pad;
+  let cy = Number(y); if (!isFinite(cy)) cy = pad;
+  cx = cx < pad ? pad : (cx > maxX ? maxX : cx);
+  cy = cy < pad ? pad : (cy > maxY ? maxY : cy);
+  // …and off the one rectangle that is never covered.
+  const mx0 = vw * 0.28;
+  const mx1 = vw * 0.72;
+  const my0 = vh - MON_MERCY_KEEPOUT_PX;
+  if (cx < mx1 && cx + ww > mx0 && cy + hh > my0) cy = Math.max(pad, my0 - hh);
+  return { x: Math.round(cx), y: Math.round(cy) };
+}
 
 // ------------------------------------------------------------------ helpers
 
@@ -214,9 +392,13 @@ function effectName(v) {
  * @param {object}  o.match            GoonMatchService
  * @param {object}  [o.audio]          {sfx(id)}
  * @param {object}  [o.fx]             chrome-animation budget from ui/hud.js
+ * @param {object}  [o.prefs]         ui/prefs.js store — where the monitor's
+ *        dragged position and wheel size are remembered. Optional in the same
+ *        way every other consumer treats it: no store, no memory, everything
+ *        else identical.
  * @returns {{unmount:Function, root:Element|null, dropTarget:Element|null, showEmote:Function}}
  */
-export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
+export function mountOpponent({ host, match, audio = null, fx = null, prefs = null } = {}) {
   const led = createLedger();
   const root = el('div', 'gg-mon');
   if (!root || !host) {
@@ -224,6 +406,7 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
       unmount() { led.run(); },
       root: null, dropTarget: null,
       showEmote() {}, markEmoteFired() { return false; },
+      isLoose() { return false; }, loosePlacement() { return null; }, redock() { return false; },
     };
   }
 
@@ -237,13 +420,16 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
   for (let i = 0; i < GoonConsts.ChargeCap; i++) pips.push(add(pipRow, el('i', 'gg-pip gg-pip--sm')));
 
   // ---- the screen inside the bezel ---------------------------------------
-  // THE STACKING ORDER HERE IS LOAD-BEARING. assets/monitor_frame.png is an
-  // OPAQUE cel-shaded CRT whose face is painted PURE BLACK — it is not a cutout.
-  // So the three layers go, bottom to top:
+  // THE STACKING ORDER HERE IS LOAD-BEARING. assets/monitor_frame.png (935x667
+  // since 2026-08-04) is a CRT television on a TRANSPARENT background — the
+  // surround is a cutout now, but THE SCREEN FACE IS STILL PAINTED OPAQUE BLACK,
+  // which is the only part of the old "it is not a cutout" note that this fix
+  // ever depended on. So the four layers still go, bottom to top:
   //
-  //   .gg-mon-screen  dark glass, only ever seen through .is-nobezel (z1);
-  //   .gg-mon-bezel   the art itself                                  (z2);
-  //   .gg-mon-proj    the PROJECTION RECT, where every miniature plays (z3).
+  //   .gg-mon-screen  dark glass behind the face; the fallback backdrop  (z1);
+  //   .gg-mon-bezel   the art itself                                     (z2);
+  //   .gg-mon-proj    the PROJECTION RECT, where every miniature plays   (z3);
+  //   .gg-mon-throw   the flare when they throw something at us          (z4).
   //
   // The projection rect used to be a CHILD of .gg-mon-screen, and z-index:1 on
   // that element opens a stacking context — no z-index on a descendant can climb
@@ -262,8 +448,8 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
     add(frame, bezel);
   }
 
-  // …and the projection rect ON TOP of the art, sized (in hud.css) to the CRT
-  // face the art paints.
+  // …and the projection rect ON TOP of the art, sized (in hud.css, off the
+  // --gg-mon-face-* custom properties) to the CRT face the art paints.
   const proj = add(frame, el('div', 'gg-mon-proj'));
   const parts = new Map();
   let emoteIconEl = null;
@@ -311,6 +497,13 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
     check.setAttribute('aria-label', S.monitor.passed);
   }
 
+  // THE THROW FLARE (z4, above the projection). Its own node because it carries
+  // a one-shot and everything under it carries loops: one `animation` shorthand
+  // per element, or they cancel each other. It is INFORMATION, not chrome — it
+  // re-declares --gg-deco-play like the rect does, so a hot local stack cannot
+  // park the one flourish that explains where the next 60 seconds came from.
+  const flare = add(frame, el('i', 'gg-mon-throw'));
+
   // emote bubble — one at a time, textContent only
   const bubble = add(frame, el('div', 'gg-mon-bubble'));
   if (bubble) bubble.hidden = true;
@@ -350,6 +543,15 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
   let passTimer = 0;
   let lastEmoteMarkAt = -Infinity;
   let lastEmoteMarkKey = null;
+  let flareTimer = 0;
+  let throwSeq = 0;
+
+  /** Projectiles in the air right now — nodes on <body>, so unmount must sweep them. */
+  const inFlight = new Set();
+  led.add(() => {
+    try { clearTimeout(flareTimer); } catch (_e) { /* gone */ }
+    for (const rec of Array.from(inFlight)) dropFlight(rec);
+  });
 
   /** payload id -> {key, open, timers[]} for the payloads WE fired. */
   const windows = new Map();
@@ -716,16 +918,509 @@ export function mountOpponent({ host, match, audio = null, fx = null } = {}) {
     led.add(() => { try { clearTimeout(passTimer); } catch (_e) { /* gone */ } });
   }
 
+  // --------------------------------------------------------- the throw at us
+
+  /**
+   * The app's own reduced-motion preference, which ui/hud.js writes as `is-calm`
+   * on the HUD frame. The projectile lives on <body> — OUTSIDE that subtree — so
+   * no descendant selector can reach it and the check has to be made in JS. (The
+   * OS-level `prefers-reduced-motion` is handled in hud.css, which can.)
+   */
+  function isCalm() {
+    let n = root;
+    for (let i = 0; n && i < 12; i++) {
+      try { if (n.classList && n.classList.contains('is-calm')) return true; } catch (_e) { /* stub */ }
+      n = n.parentNode;
+    }
+    return false;
+  }
+
+  function rectOf(node) {
+    try {
+      if (!node || typeof node.getBoundingClientRect !== 'function') return null;
+      const r = node.getBoundingClientRect();
+      return (r && r.width > 0 && r.height > 0) ? r : null;
+    } catch (_e) { return null; }
+  }
+
+  /** Where a thrown thing lands on OUR side: over the stage, not over the desk. */
+  function stagePoint() {
+    const w = (typeof window !== 'undefined' && window) ? Number(window.innerWidth) : 0;
+    const h = (typeof window !== 'undefined' && window) ? Number(window.innerHeight) : 0;
+    if (!(w > 0) || !(h > 0)) return null;
+    return { x: w / 2, y: h * THROW_TARGET_Y };
+  }
+
+  /** Their monitor lights up: THEY did this, and it is about to arrive. */
+  function flareMonitor() {
+    cls(root, 'is-throwing', true);
+    try { clearTimeout(flareTimer); } catch (_e) { /* gone */ }
+    if (typeof setTimeout === 'function') {
+      flareTimer = setTimeout(() => cls(root, 'is-throwing', false), THROW_FLARE_MS);
+    }
+  }
+
+  /** Take one projectile down: its preview's refcount first, then its node. */
+  function dropFlight(rec) {
+    if (!rec) return;
+    inFlight.delete(rec);
+    for (const t of rec.timers) { try { clearTimeout(t); } catch (_e) { /* gone */ } }
+    rec.timers.length = 0;
+    if (typeof rec.destroy === 'function') { try { rec.destroy(); } catch (_e) { /* already gone */ } }
+    try { if (rec.node) rec.node.remove(); } catch (_e) { /* gone */ }
+  }
+
+  /**
+   * The projectile. Three nodes, three animations, ON PURPOSE: `animation` is a
+   * shorthand, so a second live rule on the same element silently cancels the
+   * first. The outer travels in X (linear), the middle travels in Y (with a lob
+   * partway through — that is the arc), the art spins and swells. The splash at
+   * the far end is a FOURTH node for the same reason.
+   */
+  function launch(kind, payload, flightMs) {
+    const d = doc();
+    if (!d || !d.body) return null;
+    const from = rectOf(frame);
+    const to = stagePoint();
+    if (!from || !to) return null;
+
+    const fly = el('i', 'gg-throw');
+    if (!fly) return null;
+    const arc = add(fly, el('i', 'gg-throw-arc'));
+    const art = add(arc, el('i', 'gg-throw-art'));
+    if (!arc || !art) return null;
+
+    // The sticker is the FLOOR: painted as the art node's background from the
+    // first frame, so a preview that is slow, broken or simply not applicable
+    // degrades to it with no timer and no branch.
+    const sticker = stickerUrl(kind);
+    if (sticker && art.style && typeof art.style.setProperty === 'function') {
+      art.style.setProperty('--gg-throw-sticker', 'url(' + sticker + ')');
+    }
+
+    // …and the live preview of what is actually about to play, when there is
+    // one. The PAYLOAD goes with it: its `xfer:` tags are what make an inbound
+    // preview exact rather than representative — the receiver resolves the same
+    // artifact the executor is about to (ui/throwPreview.js, exec/media.js
+    // drawFor). Resolved HERE, at animation start, off the same pool.
+    const preview = createPreview({ kind, payload, cls: 'gg-throw-live' });
+    if (preview) {
+      add(art, preview.node);
+      cls(fly, 'is-live', true);
+    }
+
+    const cx = from.left + from.width / 2;
+    const cy = from.top + from.height / 2;
+    const spin = ((throwSeq++ % 2) ? -1 : 1) * 210;
+    if (fly.style) {
+      fly.style.left = Math.round(cx) + 'px';
+      fly.style.top = Math.round(cy) + 'px';
+      if (typeof fly.style.setProperty === 'function') {
+        fly.style.setProperty('--gg-throw-dx', Math.round(to.x - cx) + 'px');
+        fly.style.setProperty('--gg-throw-dy', Math.round(to.y - cy) + 'px');
+        fly.style.setProperty('--gg-throw-ms', Math.round(flightMs) + 'ms');
+        fly.style.setProperty('--gg-throw-spin', spin + 'deg');
+      }
+    }
+    add(d.body, fly);
+    return { node: fly, destroy: preview ? preview.destroy : null, timers: [], to };
+  }
+
+  /** The splash where it lands. Removed on a timer — animationend is not a promise. */
+  function splash(to) {
+    const d = doc();
+    if (!d || !d.body || !to) return;
+    const hit = el('i', 'gg-throw-hit');
+    if (!hit) return;
+    if (hit.style) {
+      hit.style.left = Math.round(to.x) + 'px';
+      hit.style.top = Math.round(to.y) + 'px';
+    }
+    add(d.body, hit);
+    laterOnce(THROW_HIT_MS + 80, () => { try { hit.remove(); } catch (_e) { /* gone */ } });
+  }
+
+  function throwAtUs(kind, payload, flightMs) {
+    flareMonitor();
+    // Reduced motion: the highlight IS the feedback. Nothing travels, and the
+    // `payload-in` cue still lands on the beat it always did.
+    if (isCalm()) return;
+    const rec = launch(kind, payload, flightMs);
+    if (!rec) return;
+    inFlight.add(rec);
+    // Impact: the projectile is spent and the effect is starting in the same
+    // frame. It goes on a TIMER rather than animationend, which a parked
+    // animation, a reduced-motion override or a re-parent can all swallow.
+    rec.timers.push(laterOnce(flightMs, () => {
+      const at = rec.to;
+      dropFlight(rec);
+      splash(at);
+    }));
+  }
+
+  /**
+   * ui/hud.js calls this the moment the engine ACCEPTS an inbound payload, with
+   * the same `wait` its own landing cue uses. We do not touch the effect, the
+   * receipt or the clock — we fill the lead the engine already reserved.
+   *
+   * @param   {object} o {kind, waitMs, payload}
+   * @returns {boolean} whether anything will be drawn
+   */
+  function markInbound({ kind = null, waitMs = 0, payload = null } = {}) {
+    if (kind === null || kind === undefined) return false;
+    const wait = Math.max(0, Math.min(MAX_THROW_LEAD_MS, Number(waitMs) || 0));
+    // Fit the flight inside the lead; never push the impact past it by more than
+    // the shortest readable throw.
+    const flight = wait >= THROW_MS ? THROW_MS : Math.max(THROW_MIN_MS, wait);
+    const delay = Math.max(0, wait - flight);
+    if (delay <= 0) throwAtUs(kind, payload, flight);
+    else laterOnce(delay, () => throwAtUs(kind, payload, flight));
+    return true;
+  }
+
+  /* =========================================================================
+   * THE LOOSE MONITOR — the drag, the wheel, and the hole it leaves behind.
+   *
+   * DETACH ON DEMAND, not always. The monitor is a row in the HUD's right-hand
+   * column and it stays one until the player touches it: docked, it is
+   * bit-for-bit the element it was before this feature existed — same box, same
+   * flow, same size, no `position: fixed`, no measurement, no timer. The first
+   * gesture that MEANS something (a drag past the slop, or a wheel notch) is
+   * what takes it off the shelf, and it comes off exactly where it was standing,
+   * at exactly the size it was, so nothing on screen moves at the moment of
+   * detaching. Always-detached would have been fewer branches and one more bug:
+   * the default spot would have to be COMPUTED, and computing "where the column
+   * would have put it" is guessing at a layout that is being restructured by
+   * somebody else this week.
+   *
+   * THE HOLE IS THE OTHER HALF. `position: fixed` takes the monitor out of the
+   * column's flow, and the receipts under it would jump up by its whole height
+   * the frame it leaves. So the moment before it goes, its height is measured
+   * and written as a `min-height` on the HOST ui/hud.js already handed us. That
+   * keeps the placeholder entirely inside this file — the column can be
+   * rearranged around us without a second owner for this number — and it is a
+   * MEASUREMENT rather than a constant, so it is right at every viewport.
+   *
+   * THE TRAPS THE GIFS DOCUMENTED, and where each one landed here:
+   *   · "keyframes outrank inline transforms, so a grabbed node needs
+   *     `animation: none`, and the live keyframe translate must be FOLDED into
+   *     the drag offset first or it jumps 0px→anchor." The monitor's own
+   *     flourishes all live on DESCENDANTS (.gg-mon-throw carries the flare;
+   *     .gg-mon itself has only an opacity transition) — that is the one-
+   *     animation-slot-per-node rule this file already followed — so there is
+   *     nothing on the root to fold. `.gg-mon.is-loose` still declares
+   *     `transform: none; animation: none` in hud.css, which is what keeps that
+   *     true if a keyframe is ever added to the root.
+   *   · "the z-lift is a re-append, and a re-append RELEASES pointer capture."
+   *     There is no re-append here and there must never be one: the monitor
+   *     lifts with a z-index (hud.css), it stays the child of the host it was
+   *     mounted into, and unmount() is therefore unchanged. So there is no stale
+   *     `lostpointercapture` to swallow — the handler below treats every one of
+   *     them as a plain cancel, which is only correct BECAUSE we never re-parent.
+   *
+   * AND IT NEVER STEALS THE DROP. Firing an item is a drag that STARTS on an
+   * arsenal sticker: ui/arsenal.js takes pointer capture on the tile, so no
+   * pointerdown ever reaches the monitor during one, and the drop is resolved
+   * against getBoundingClientRect() at pointerUP — a LIVE rect, so it follows
+   * the monitor wherever it has been dragged. The armed-tap path is a
+   * CAPTURE-phase listener on `document`, which runs before anything here can
+   * see the event; this handler deliberately does not preventDefault or
+   * stopPropagation on pointerdown, so that path is untouched too.
+   * ====================================================================== */
+
+  /** The element we were mounted into — the placeholder, once we leave it. */
+  const dockHost = (root.parentNode || host);
+  /** {x, y, scale} while detached; null while docked. The ONE bit of state. */
+  let loose = null;
+  /** The ONE live press, if any. */
+  let grab = null;
+  /** Sub-slop taps: two inside MON_RESET_TAP_MS re-dock. */
+  let lastTapAt = -Infinity;
+
+  const winRef = (typeof window !== 'undefined' && window) ? window : null;
+  const vpW = () => { const v = winRef ? Number(winRef.innerWidth) : 0; return v > 0 ? v : 1280; };
+  const vpH = () => { const v = winRef ? Number(winRef.innerHeight) : 0; return v > 0 ? v : 720; };
+  const ptX = (e) => { const v = Number(e && e.clientX); return isFinite(v) ? v : 0; };
+  const ptY = (e) => { const v = Number(e && e.clientY); return isFinite(v) ? v : 0; };
+
+  function prefNum(key, fallback) {
+    try {
+      if (prefs && typeof prefs.get === 'function') {
+        const v = Number(prefs.get(key));
+        if (isFinite(v)) return v;
+      }
+    } catch (_e) { /* no store, no memory */ }
+    return fallback;
+  }
+  function prefPut(key, value) {
+    try { if (prefs && typeof prefs.set === 'function') prefs.set(key, value); }
+    catch (_e) { /* no store, no memory */ }
+  }
+
+  /** The one place the detached monitor's geometry is written. */
+  function paintLoose() {
+    if (!loose || !root.style) return;
+    try { root.style.setProperty(MON_WIDTH_VAR, monitorWidth(loose.scale, vpW()) + 'px'); }
+    catch (_e) { /* stub DOM */ }
+    try { root.style.left = Math.round(loose.x) + 'px'; root.style.top = Math.round(loose.y) + 'px'; }
+    catch (_e) { /* stub DOM */ }
+  }
+
+  /**
+   * Re-apply the two rules to wherever it currently is. Measured LIVE rather
+   * than predicted: the height is the frame's 16/9 plus five rows of text whose
+   * wrapping depends on the width we just wrote, and nothing but layout knows it.
+   */
+  function clampLoose() {
+    if (!loose) return;
+    const r = rectOf(root);
+    const w = r ? r.width : monitorWidth(loose.scale, vpW());
+    const h = r ? r.height : 0;
+    const out = clampMonitorPos(loose.x, loose.y, w, h, vpW(), vpH());
+    loose.x = out.x;
+    loose.y = out.y;
+    paintLoose();
+  }
+
+  function persistLoose() {
+    if (!loose) return;
+    prefPut(MON_PREF_X, Math.round(loose.x));
+    prefPut(MON_PREF_Y, Math.round(loose.y));
+    prefPut(MON_PREF_SCALE, Number(clampMonitorScale(loose.scale).toFixed(3)));
+  }
+
+  /**
+   * Take it off the shelf. Idempotent, and a no-op cost while docked — this is
+   * the ONLY thing that ever reads the docked layout.
+   * @returns {boolean} whether the monitor is detached now
+   */
+  function detach() {
+    if (loose) return true;
+    if (!root.classList) return false;
+    const r = rectOf(root);
+    const base = monitorBaseWidth(vpW());
+    // The size it is standing at, expressed in the units the wheel speaks. Using
+    // the MEASURED width rather than assuming 1.0 is what makes the detach
+    // invisible: the column may be narrower than --gg-mon-w on a small desk.
+    const scale = clampMonitorScale((r && r.width > 0 && base > 0) ? r.width / base : 1);
+    if (r && r.height > 0 && dockHost && dockHost.style && typeof dockHost.style.setProperty === 'function') {
+      // setProperty/removeProperty rather than .minHeight/.removeProperty, so the
+      // write and the erase name the SAME property on every host we run on.
+      try { dockHost.style.setProperty('min-height', Math.round(r.height) + 'px'); } catch (_e) { /* stub DOM */ }
+    }
+    cls(dockHost, MON_HOST_LOOSE_CLASS, true);
+    loose = { x: r ? r.left : MON_EDGE_PAD_PX, y: r ? r.top : MON_EDGE_PAD_PX, scale };
+    cls(root, MON_LOOSE_CLASS, true);
+    paintLoose();
+    clampLoose();
+    return true;
+  }
+
+  /** Back to the column, at the column's size. The reset gesture's whole body. */
+  function redock(remember) {
+    if (!loose) return false;
+    loose = null;
+    cls(root, MON_LOOSE_CLASS, false);
+    cls(root, MON_GRABBED_CLASS, false);
+    cls(dockHost, MON_HOST_LOOSE_CLASS, false);
+    if (root.style) {
+      try {
+        root.style.removeProperty(MON_WIDTH_VAR);
+        root.style.removeProperty('left');
+        root.style.removeProperty('top');
+      } catch (_e) { /* stub DOM */ }
+    }
+    if (dockHost && dockHost.style) {
+      try { dockHost.style.removeProperty('min-height'); } catch (_e) { /* stub DOM */ }
+    }
+    if (remember) {
+      prefPut(MON_PREF_X, MON_DOCKED);
+      prefPut(MON_PREF_Y, MON_DOCKED);
+      prefPut(MON_PREF_SCALE, 1);
+    }
+    return true;
+  }
+
+  /* ------------------------------------------------------------- the press */
+
+  function forgetGrab() {
+    if (!grab) return;
+    const g = grab;
+    grab = null;
+    try { clearTimeout(g.watchdog); } catch (_e) { /* gone */ }
+    if (typeof root.removeEventListener === 'function') {
+      try {
+        root.removeEventListener('pointermove', onMonMove);
+        root.removeEventListener('pointerup', onMonUp);
+        root.removeEventListener('pointercancel', onMonCancel);
+        root.removeEventListener('lostpointercapture', onMonCancel);
+      } catch (_e) { /* stub DOM */ }
+    }
+  }
+
+  function endGrab(why) {
+    const g = grab;
+    if (!g) return;
+    forgetGrab();
+    if (!g.moved) {
+      // A press that never travelled. The monitor has NO click action — the one
+      // thing two of them mean is "put it back".
+      if (why !== 'up') return;
+      const t = nowMs();
+      if (t - lastTapAt <= MON_RESET_TAP_MS) {
+        lastTapAt = -Infinity;
+        if (redock(true)) sfx(audio, 'ui-select');
+      } else {
+        lastTapAt = t;
+      }
+      return;
+    }
+    cls(root, MON_GRABBED_CLASS, false);
+    // Only a completed drag is worth remembering. A cancel/watchdog drop leaves
+    // it exactly where the hand let go and writes nothing.
+    if (why === 'up') persistLoose();
+  }
+
+  function onMonDown(e) {
+    // A right press is not a drag, and swallowing it here is how a browser gets
+    // talked out of its own context menu — which this element does not want to
+    // be in the business of suppressing.
+    if (e && e.button != null && e.button !== 0) return;
+    if (grab) endGrab('restart');
+    const x = ptX(e), y = ptY(e);
+    grab = {
+      pointerId: (e && e.pointerId != null) ? e.pointerId : null,
+      x0: x, y0: y, baseX: 0, baseY: 0, moved: false, watchdog: 0,
+    };
+    if (typeof root.addEventListener === 'function') {
+      try {
+        root.addEventListener('pointermove', onMonMove);
+        root.addEventListener('pointerup', onMonUp);
+        root.addEventListener('pointercancel', onMonCancel);
+        root.addEventListener('lostpointercapture', onMonCancel);
+      } catch (_e) { /* stub DOM */ }
+    }
+    if (typeof setTimeout === 'function') {
+      grab.watchdog = setTimeout(() => { if (grab) endGrab('watchdog'); }, MON_HOLD_WATCHDOG_MS);
+    }
+    try {
+      if (typeof root.setPointerCapture === 'function' && e && e.pointerId != null) root.setPointerCapture(e.pointerId);
+    } catch (_e) { /* capture is a nicety; the node listeners still work without it */ }
+  }
+
+  const idMatch = (g, e) => !(g.pointerId != null && e && e.pointerId != null && e.pointerId !== g.pointerId);
+
+  function onMonMove(e) {
+    const g = grab;
+    if (!g || !idMatch(g, e)) return;
+    const x = ptX(e), y = ptY(e);
+    if (!g.moved) {
+      if (Math.hypot(x - g.x0, y - g.y0) <= MON_DRAG_SLOP_PX) return;   // still a press
+      if (!detach()) { forgetGrab(); return; }
+      g.moved = true;
+      g.baseX = loose.x;
+      g.baseY = loose.y;
+      cls(root, MON_GRABBED_CLASS, true);
+    }
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    loose.x = g.baseX + (x - g.x0);
+    loose.y = g.baseY + (y - g.y0);
+    paintLoose();
+    clampLoose();
+  }
+
+  function onMonUp(e) {
+    const g = grab;
+    if (!g || !idMatch(g, e)) return;
+    endGrab('up');
+  }
+
+  /** pointercancel / lostpointercapture. See the banner: there is no re-append
+   *  in this module, so a lost capture is never paperwork — it is a real drop. */
+  function onMonCancel(e) {
+    const g = grab;
+    if (!g || !idMatch(g, e)) return;
+    endGrab('cancel');
+  }
+
+  /**
+   * THE WHEEL. Hovering is the whole gesture (no press), exactly as it is over a
+   * floating video window, and it drives WIDTH through MON_WIDTH_VAR — never a
+   * transform scale, which would fight the drag offset and resample the art.
+   * The top-LEFT corner is the anchor, which is what videos.js does too: a grow
+   * that also moved the thing under your cursor is two changes, not one.
+   *
+   * A wheel over a DOCKED monitor detaches it first. There is no other honest
+   * answer — the docked width is the column's width, and resizing in place would
+   * reflow the whole right-hand side of the desk.
+   */
+  function onMonWheel(e) {
+    const dy = Number(e && e.deltaY) || 0;
+    if (!dy) return;
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();   // the page never scrolls
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    if (!detach()) return;
+    const notches = Math.max(-3, Math.min(3, Math.round(dy / 100) || (dy > 0 ? 1 : -1)));
+    const next = monitorScaleStep(loose.scale, -notches);                  // wheel UP grows
+    if (Math.abs(next - loose.scale) < 1e-4) return;
+    loose.scale = next;
+    paintLoose();
+    clampLoose();
+    persistLoose();
+  }
+
+  led.listen(root, 'pointerdown', onMonDown);
+  // passive:false or the preventDefault above is ignored and the page scrolls.
+  led.listen(root, 'wheel', onMonWheel, { passive: false });
+  // The viewport changed under a parked monitor: same two rules, re-applied. The
+  // width is re-DERIVED from the scale rather than kept in px, so a monitor at
+  // 1.5x is 1.5x of the new --gg-mon-w and not a stale pixel count.
+  led.listen(winRef, 'resize', () => {
+    if (!loose) return;
+    paintLoose();
+    clampLoose();
+    persistLoose();
+  });
+  led.add(() => {
+    forgetGrab();
+    // The placeholder is on somebody else's node: it must not outlive us.
+    if (dockHost && dockHost.style) { try { dockHost.style.removeProperty('min-height'); } catch (_e) { /* gone */ } }
+    cls(dockHost, MON_HOST_LOOSE_CLASS, false);
+  });
+
+  /* WHERE THEY LEFT IT. Deferred one beat because a monitor mounted this frame
+   * has no layout yet, and detach() has to measure the docked box to know how
+   * big a hole to leave in the column. A stored x/y of MON_DOCKED (the default)
+   * means "never dragged" and nothing happens at all. */
+  laterOnce(16, () => {
+    const x = prefNum(MON_PREF_X, MON_DOCKED);
+    const y = prefNum(MON_PREF_Y, MON_DOCKED);
+    if (!(x >= 0) || !(y >= 0)) return;
+    if (!detach()) return;
+    loose.scale = clampMonitorScale(prefNum(MON_PREF_SCALE, 1));
+    loose.x = x;
+    loose.y = y;
+    paintLoose();
+    clampLoose();
+  });
+
   return {
     root,
     dropTarget: frame,
     /** The projection rect — exposed so a play-test driver can find the minis. */
     projection: proj,
+    /** Detached from the HUD column? selftest-hud and the play-test driver pin these. */
+    isLoose: () => !!loose,
+    loosePlacement: () => (loose ? { x: loose.x, y: loose.y, scale: loose.scale } : null),
+    /** The reset gesture's seam (double-tap calls exactly this). */
+    redock: () => redock(true),
     showEmote,
     /** OUR emote, on THEIR screen. The seam a ui/hud.js hook would call. */
     markEmoteFired,
     setTargeted,
     markPayloadFired,
+    /** THEIR payload, on ITS way to us: the flare + the projectile. */
+    markInbound,
     markReceipt,
     unmount() {
       for (const id of Array.from(windows.keys())) closeWindow(id);

@@ -259,6 +259,33 @@ export function createGoonMediaPool() {
     /** Draw specifically an image/video (null when that kind is absent). */
     drawKind: drawKindInner,
 
+    /**
+     * A NON-CONSUMING look at what the next drawKind(kind) would most likely
+     * hand back: the topmost entry of that kind still in the shuffled deck (and,
+     * for a deck that has not been dealt yet, the first one in the pool).
+     *
+     * IT MUTATES NOTHING — not `deck`, not `recent`, not the echo guard — and
+     * that restraint is the entire reason it exists. ui/throwPreview.js shows the
+     * player a thumbnail of what a payload is about to play; if it got that
+     * thumbnail by DRAWING, it would spend the draw the effect was going to make
+     * and the preview would be a picture of a clip that then never played. A
+     * preview must never be able to change what it is previewing.
+     *
+     * It is a GUESS by construction (drawKind skips past the wrong kinds, and
+     * anything may draw in between), so callers treat it as representative —
+     * see `exact` in ui/throwPreview.js. A tag hit is the only exact answer.
+     */
+    peekKind(kind) {
+      const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
+      if (!want) return null;
+      for (let i = deck.length - 1; i >= 0; i--) {
+        const e = entries[deck[i]];
+        if (e && e.kind === want) return view(e);
+      }
+      for (const e of entries) if (e.kind === want) return view(e);
+      return null;
+    },
+
     /* ------------------------------------------------ received (peer) artifacts */
 
     /**
