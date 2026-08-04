@@ -2,6 +2,9 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
 
+// T-15 leaked-listener self-check: after ALL collections finish, any undisposed lab fails the run LOUD.
+[assembly: Xunit.AssemblyFixture(typeof(CcpClient.Tests.AiLabLeakSelfCheck))]
+
 namespace CcpClient.Tests;
 
 /// <summary>Deterministic failure-injection modes for the fake Ollama loopback endpoint (SP-019 shapes, Ollama-native protocol).</summary>
@@ -56,7 +59,10 @@ public sealed record AiLabRequestRecord(
 /// </summary>
 public sealed class AiProviderLab : IDisposable
 {
-    private readonly HttpListener _listener = new();
+    /// <summary>Live-instance registry (T-15 self-check): port → prefix for every undisposed lab. A leaked entry at assembly teardown = a leaked listener holding a loopback port; the assembly fixture fails the run LOUD with the port/prefix named.</summary>
+    private static readonly ConcurrentDictionary<int, string> LivePrefixes = new();
+
+    private readonly HttpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _loop;
     private readonly ConcurrentQueue<AiLabMode> _modes = new();
@@ -70,22 +76,37 @@ public sealed class AiProviderLab : IDisposable
 
     public AiProviderLab()
     {
+        // SP-023 rule HONORED (T-15 root cause): a FAILED Start() DISPOSES the instance, so
+        // every bind attempt uses a FRESH HttpListener. The pre-hardening loop reused one
+        // instance; a port collision (zombie test host or ephemeral churn) → HttpListenerException
+        // → instance disposed → retry threw ObjectDisposedException, which the HttpListenerException-
+        // only catch did not handle — the ODE escaped the constructor and failed the test.
         for (var attempt = 0; ; attempt++)
         {
             var port = Random.Shared.Next(49152, 65535);
+            var candidate = new HttpListener();
             try
             {
-                _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-                _listener.Start();
+                candidate.Prefixes.Add($"http://127.0.0.1:{port}/");
+                candidate.Start();
+                _listener = candidate;
                 Port = port;
                 break;
             }
-            catch (HttpListenerException) when (attempt < 25)
+            catch (HttpListenerException ex)
             {
-                _listener.Prefixes.Clear();
+                try { candidate.Close(); } catch { }
+                if (attempt >= 25)
+                {
+                    throw new InvalidOperationException(
+                        $"AiProviderLab: {attempt + 1} loopback bind attempts failed (last prefix http://127.0.0.1:{port}/) — " +
+                        "likely leaked dotnet test hosts holding loopback ports (T-15 zombie class): enumerate and kill stray dotnet.exe test hosts.",
+                        ex);
+                }
             }
         }
 
+        LivePrefixes[Port] = $"http://127.0.0.1:{Port}/";
         _loop = Task.Run(ServeLoop);
     }
 
@@ -122,6 +143,7 @@ public sealed class AiProviderLab : IDisposable
             }
             catch (OperationCanceledException) { break; }
             catch (HttpListenerException) { break; }
+            catch (ObjectDisposedException) { break; } // harness teardown (listener closed mid-await) — never a product failure
 
             _ = Task.Run(() => Handle(ctx));
         }
@@ -129,12 +151,15 @@ public sealed class AiProviderLab : IDisposable
 
     private async Task Handle(HttpListenerContext ctx)
     {
-        var req = ctx.Request;
-        var res = ctx.Response;
         var seq = Interlocked.Increment(ref _seq);
         var mode = _modes.TryDequeue(out var m) ? m : AiLabMode.Ok;
+        HttpListenerResponse? res = null;
         try
         {
+            // ctx.Request/ctx.Response access stays INSIDE the try: on a torn-down listener
+            // these throw ObjectDisposedException — harness teardown, never a product failure.
+            var req = ctx.Request;
+            res = ctx.Response;
             var bodyBytes = 0;
             using (var ms = new MemoryStream())
             {
@@ -222,9 +247,13 @@ public sealed class AiProviderLab : IDisposable
                     break;
             }
         }
+        catch (ObjectDisposedException)
+        {
+            // Harness teardown raced an in-flight request — classified as harness, never product.
+        }
         catch
         {
-            try { res.Abort(); } catch { }
+            try { res?.Abort(); } catch { }
         }
     }
 
@@ -297,7 +326,25 @@ public sealed class AiProviderLab : IDisposable
     public void Dispose()
     {
         _cts.Cancel();
-        try { _listener.Stop(); } catch { }
+        try { _listener.Close(); } catch { } // aborts in-flight requests; their handlers fault into their own catches (abandon-by-abort)
         try { _loop.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        LivePrefixes.TryRemove(Port, out _);
     }
+
+    /// <summary>The leaked-listener self-check (T-15): called by the assembly fixture at test-assembly teardown. Throws LOUD naming every leaked port/prefix. Never called from this class's own Dispose — a Dispose throw during test-failure unwinding would mask the real failure.</summary>
+    public static void AssertNoLeakedListeners()
+    {
+        if (!LivePrefixes.IsEmpty)
+        {
+            throw new InvalidOperationException(
+                "AiProviderLab leaked listener(s) holding loopback port(s): " +
+                string.Join(", ", LivePrefixes.Select(kv => $"{kv.Value} (port {kv.Key})")));
+        }
+    }
+}
+
+/// <summary>Assembly-teardown self-check (T-15): runs AFTER all collections (no parallel-lab race), adds zero test cases. Any lab still registered leaked its listener.</summary>
+public sealed class AiLabLeakSelfCheck : IDisposable
+{
+    public void Dispose() => AiProviderLab.AssertNoLeakedListeners();
 }

@@ -1,6 +1,6 @@
 ## STATUS: SP-041 — T-15: c2 AI lab harness hardening
-**Current Step:** Step 1 — harness archaeology + fix design + pre-approach consult (in progress)
-**Last Updated:** 2026-08-04 (worker, Step 1 started)
+**Current Step:** Step 3 — stability proof + evidence + pre-completion consult (in progress)
+**Last Updated:** 2026-08-04 (worker, Step 2 complete — 516/516 green, self-check demoed loud, after-state collision proof)
 **Blockers:** none
 
 ### Step 1: archaeology + fix design + pre-approach consult
@@ -10,9 +10,9 @@
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: harden the harness
-- [ ] AiProviderLab.cs lifecycle + teardown + self-check
-- [ ] Consumer files: host-exit discipline only (assertions untouched unless justified)
-- [ ] Full matrix green with identical lab semantics
+- [x] AiProviderLab.cs lifecycle + teardown + self-check
+- [x] Consumer files: host-exit discipline only (assertions untouched unless justified)
+- [x] Full matrix green with identical lab semantics
 
 ### Step 3: stability proof + evidence + pre-completion consult
 - [ ] 5 consecutive full-suite runs green (transcripts; hosts reaped; no leaked dotnet test hosts)

@@ -113,7 +113,7 @@ the SP-039/T-7 precedent); route pin = Opus 5 main. Substance applied:
 
 | Step | Call | Result |
 |------|------|--------|
-| 1 | `spine_review_step --step 1 --type plan` | (recorded at call time) |
+| 1 | `spine_review_step --step 1 --type plan` | **SKIPPED** (SP-195: nested reviewer spawn blocked in worker session; engine runs reviews after .DONE). Artifact `.reviews/1-20260804T164721.md` |
 
 ## 6. Stability proof (Step 3) — transcripts in `evidence/`
 
