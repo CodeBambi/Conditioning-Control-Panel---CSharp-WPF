@@ -808,6 +808,9 @@ export const S = Object.freeze({
     dropHint: 'drop it here',
     /** The green checkmark on their projection: they took the whole payload. */
     passed: 'they held it',
+    /** The titlebar's tooltip. All three gestures, because not one of them is
+     *  discoverable and the grip dots only ever promise the first. */
+    dragHint: 'drag to move · wheel to resize · double-tap to put it back',
   },
 
   /* ---------------------------------------------- the announcer ribbon (ui/announcer.js)
