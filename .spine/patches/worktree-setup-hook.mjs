@@ -37,6 +37,9 @@ const PI_SPINE_REL = path.join("node_modules", "pi-spine");
 const startedAt = Date.now();
 /** @type {Record<string, unknown>} */
 const result = { ok: true, prestaged: false, reason: "unset", sourceVersion: null, verifyExit: null };
+const worktree = process.env.SPINE_WORKTREE || process.cwd();
+const destNpm = path.join(worktree, ".pi", "npm");
+const destPiSpine = path.join(destNpm, PI_SPINE_REL);
 
 function log(line) {
 	process.stderr.write(`[worktree-setup-hook] ${line}\n`);
@@ -52,29 +55,25 @@ function readVersion(piSpineDir) {
 
 function main() {
 	const projectRoot = process.env.SPINE_PROJECT_ROOT;
-	const worktree = process.env.SPINE_WORKTREE || process.cwd();
-	if (!projectRoot) {
-		result.reason = "SPINE_PROJECT_ROOT unset — not running under the spine batch engine";
-		return;
-	}
-	const sourceNpm = path.join(projectRoot, ".pi", "npm");
-	const destNpm = path.join(worktree, ".pi", "npm");
-	const sourcePiSpine = path.join(sourceNpm, PI_SPINE_REL);
-	const destPiSpine = path.join(destNpm, PI_SPINE_REL);
-
-	result.sourceVersion = readVersion(sourcePiSpine);
-	if (!result.sourceVersion) {
-		result.reason = `source pi-spine missing at ${sourcePiSpine} — lane falls back to pi's registry install (today's manual-remediation path)`;
-		return;
-	}
 	const destVersion = readVersion(destPiSpine);
 	if (destVersion) {
 		result.prestaged = true;
 		result.reason = `already-present (pi-spine ${destVersion} in lane) — idempotent skip`;
 		return;
 	}
+	if (!projectRoot) {
+		result.reason = "SPINE_PROJECT_ROOT unset — not running under the spine batch engine";
+		return;
+	}
+	const sourcePiSpine = path.join(projectRoot, ".pi", "npm", PI_SPINE_REL);
 
-	fs.cpSync(sourceNpm, destNpm, { recursive: true, dereference: true });
+	result.sourceVersion = readVersion(sourcePiSpine);
+	if (!result.sourceVersion) {
+		result.reason = `source pi-spine missing at ${sourcePiSpine} — lane falls back to pi's registry install (today's manual-remediation path)`;
+		return;
+	}
+
+	fs.cpSync(path.join(projectRoot, ".pi", "npm"), destNpm, { recursive: true, dereference: true });
 	result.prestaged = true;
 	result.reason = `copied .pi/npm from SPINE_PROJECT_ROOT (pi-spine ${result.sourceVersion})`;
 
@@ -92,8 +91,12 @@ function main() {
 	} else {
 		result.reason += " (verify.mjs absent in lane — self-check skipped)";
 	}
+}
 
-	// Durable per-lane evidence (gitignored path: .gitignore ".pi/npm/").
+// Durable per-lane evidence for EVERY outcome (gitignored path: .gitignore
+// ".pi/npm/"); the engine discards the hook's stdout/stderr, so this log is the
+// only record when prestaging was skipped or failed.
+function writeLaneLog() {
 	try {
 		fs.mkdirSync(destNpm, { recursive: true });
 		fs.writeFileSync(
@@ -102,7 +105,7 @@ function main() {
 				at: new Date().toISOString(),
 				batchId: process.env.SPINE_BATCH_ID ?? null,
 				laneNumber: process.env.SPINE_LANE_NUMBER ?? null,
-				projectRoot,
+				projectRoot: process.env.SPINE_PROJECT_ROOT ?? null,
 				worktree,
 				...result,
 				durationMs: Date.now() - startedAt,
@@ -120,6 +123,7 @@ try {
 	result.reason = `hook-error: ${err instanceof Error ? err.message : String(err)}`;
 	log(result.reason);
 }
+writeLaneLog();
 result.durationMs = Date.now() - startedAt;
 // Last stdout line is the engine's contract — keep it the ONLY stdout output.
 process.stdout.write(JSON.stringify(result) + "\n");
