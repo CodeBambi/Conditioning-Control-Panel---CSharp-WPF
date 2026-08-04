@@ -54,7 +54,31 @@ export function mount(container, ctx) {
     return b;
   };
 
-  item(S.title.host, () => actions.goHost(), { variant: standalone ? '' : 'primary' });
+  /* THE HOST GATE (2026-08-04). Hosting is a tier-2 perk — the server refuses below it with 403
+   * no_host_access — and the C# host answers the same question locally in `caps.canHost`, so
+   * HOSTED we can say so on the menu instead of routing the player to a screen whose entire
+   * content is a refusal. The item stays VISIBLE and dims: a missing menu row reads as a broken
+   * build, and a perk nobody can see is a perk nobody buys.
+   *
+   * STANDALONE it stays enabled. Out here entitlement is unknowable until a server has answered
+   * (the same reason the status ribbon below still renders no premium state), and a page that
+   * dimmed Host on a guess would lock a paying supporter out of the thing they paid for. The 403
+   * sheet is the fallback and it says the same sentence.
+   *
+   * `=== false` on purpose, exactly how the page reads every other cap: a host that predates the
+   * flag leaves Host alone rather than locking it. */
+  const hostLocked = !standalone && (session.caps || {}).canHost === false;
+  const hostItem = item(S.title.host, () => { if (!hostLocked) actions.goHost(); }, {
+    variant: hostLocked ? '' : (standalone ? '' : 'primary'),
+    note: hostLocked ? S.title.hostNoLab : '',
+  });
+  if (hostLocked) {
+    // The lobby's transfer-row pattern: disable the control and put the WHY directly under it.
+    // `disabled` carries the dimming too (.gg-btn:disabled) and keeps it out of the tab order.
+    hostItem.disabled = true;
+    hostItem.classList.add('is-disabled');
+    hostItem.setAttribute('aria-disabled', 'true');
+  }
   item(S.title.join, () => actions.goJoin());
   item(S.title.practice, () => actions.goPractice(), {
     variant: standalone ? 'primary' : '',

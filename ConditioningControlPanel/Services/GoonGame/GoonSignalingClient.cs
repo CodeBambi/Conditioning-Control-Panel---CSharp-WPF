@@ -25,27 +25,43 @@ namespace ConditioningControlPanel.Services.GoonGame
     // { error, cap, count, retry_after_seconds } shape the client already knows how to read.
     //
     // ---------------------------------------------------------------------------- POST /v2/goon/invite
-    // Host mints a match. Server checks premium OR burns the weekly free pass (server decides,
-    // never the client) and stores the room under a short crockford32 code with a ~5 min TTL.
+    // Host mints a match. HOSTING IS A TIER-2 PERK (2026-08-04): the server refuses anything below
+    // computeEffectiveTier(user) >= 2, into which the whitelist folds as permanent tier 2. The
+    // launch model — tier>=1 free play plus a weekly free pass for tier 0 — is GONE, along with
+    // the 402 that carried it; joining costs nothing now, so there is no pass left to charge.
+    // The room is stored under a short crockford32 code with a ~5 min TTL.
     //   req  { "unified_id":"u_...", "display_name":"Bambi", "app_version":"6.6.3",
     //          "protocol_version":1, "prefer_relay":false }
     //   200  { "ok":true, "code":"7QK4RM", "token":"<host room token>", "role":"host",
-    //          "expires_in_sec":300, "pass":"premium"|"weekly_free", "relay_allowed":true }
-    //   402  { "error":"no_pass", "next_pass_utc":"2026-08-10T00:00:00Z" }   weekly pass spent
+    //          "expires_in_sec":300, "pass":"premium", "relay_allowed":true }
+    //          `pass` is legacy-shaped: a tier-2 host was always "premium" in the old vocabulary.
+    //   403  { "error":"no_host_access" }      not tier 2 — hosting is a supporter perk
     //   401  { "error":"unauthorized" }
     //   429  { "error":"rate_limited", "cap":"user"|"ip", "count":N, "retry_after_seconds":N }
+    //   (402 no_pass is retired. Still PARSED — an old server in front of a new client must keep
+    //    producing a sentence rather than a status number — but never sent.)
     //
     // ------------------------------------------------------------------------------ POST /v2/goon/join
-    // Guest redeems the code. Same pass check. Server marks the room joined so the host's next
-    // /signal poll sees peer_joined.
+    // Guest redeems the code. FREE FOR EVERYONE — no tier check at all. Server marks the room
+    // joined so the host's next /signal poll sees peer_joined.
     //   req  { "unified_id":"u_...", "code":"7QK4RM", "display_name":"Circe",
     //          "app_version":"6.6.3", "protocol_version":1 }
     //   200  { "ok":true, "token":"<guest room token>", "role":"guest", "expires_in_sec":300,
-    //          "peer_display_name":"Bambi", "peer_app_version":"6.6.3", "pass":"premium",
-    //          "relay_allowed":true }
+    //          "peer_display_name":"Bambi", "peer_app_version":"6.6.3",
+    //          "pass":"free"|"rejoin"|"self_duel", "relay_allowed":true }
+    //          `pass` is now an ADVISORY LABEL for what happened, not what was charged.
     //   404  { "error":"unknown_code" }        bad/expired code
     //   409  { "error":"already_joined" }      someone else took the seat
-    //   402/401/429 as above
+    //   401/429 as above
+    //
+    //   ANONYMOUS GUESTS (web client only). A /join body with NO unified_id field at all is an
+    //   invite-link click from someone with no account: the server mints a `g_` + 16 hex guest
+    //   identity, returns it as `guest_id`, and the client must present THAT as unified_id on
+    //   every later room-scoped call (/signal, /relay, /leave, /ledger, /report, /blocked,
+    //   /peercard) with no X-Auth-Token at all. media_send is always false for a guest. THIS
+    //   CLIENT NEVER TAKES THAT PATH — the desktop app always has an account — and it is
+    //   documented here because this header is the contract, not because C# implements it. The
+    //   web binding (Resources/web/goon/net/signaling.js) is where it lives.
     //
     // ---------------------------------------------------------------------------- POST /v2/goon/signal
     // The SDP/ICE mailbox. ONE call both posts and drains, so a ~2 s short-poll costs one request.
@@ -97,7 +113,8 @@ namespace ConditioningControlPanel.Services.GoonGame
         public string Code { get; set; } = "";
         public string Token { get; set; } = "";
         public int ExpiresInSec { get; set; }
-        /// <summary>"premium" | "weekly_free" — what the server charged for this match.</summary>
+        /// <summary>Always "premium" — legacy-shaped, and nothing is charged. Reaching a 200 at
+        /// all IS the entitlement answer now (tier 2 or 403 no_host_access).</summary>
         public string Pass { get; set; } = "";
         public bool RelayAllowed { get; set; } = true;
     }
@@ -109,6 +126,8 @@ namespace ConditioningControlPanel.Services.GoonGame
         public int ExpiresInSec { get; set; }
         public string PeerDisplayName { get; set; } = "";
         public string PeerAppVersion { get; set; } = "";
+        /// <summary>"free" | "rejoin" | "self_duel" — advisory label for what happened to the
+        /// seat. Joining is free, so it never describes a charge.</summary>
         public string Pass { get; set; } = "";
         public bool RelayAllowed { get; set; } = true;
     }
@@ -159,7 +178,12 @@ namespace ConditioningControlPanel.Services.GoonGame
 
         /// <summary>LastError when the endpoint answered 404 with no room context, i.e. Phase F isn't deployed.</summary>
         public const string ErrorNotDeployed = "not_deployed";
+        /// <summary>Retired 2026-08-04 (the weekly free pass is gone). Kept so an OLD server in
+        /// front of a new client still produces a sentence instead of a status number.</summary>
         public const string ErrorNoPass = "no_pass";
+        /// <summary>/invite refused: hosting is tier 2 and this account is not. A product
+        /// message, not a fault — see the header. Joining stays free.</summary>
+        public const string ErrorNoHostAccess = "no_host_access";
         public const string ErrorUnknownCode = "unknown_code";
         public const string ErrorAlreadyJoined = "already_joined";
         public const string ErrorExpired = "expired";
@@ -400,10 +424,16 @@ namespace ConditioningControlPanel.Services.GoonGame
             switch ((int)status)
             {
                 case 401:
+                    LastError = serverError ?? ErrorUnauthorized;
+                    break;
                 case 403:
+                    // The host gate. A bare 403 is still "signed out" — but /invite's refusal is
+                    // an entitlement answer ("no_host_access"), and folding it into unauthorized
+                    // would tell a tier-1 patron to reconnect an account that is connected fine.
                     LastError = serverError ?? ErrorUnauthorized;
                     break;
                 case 402:
+                    // Retired: the server no longer charges for anything. Parsed for tolerance.
                     LastError = serverError ?? ErrorNoPass;
                     LastErrorDetail = json?["next_pass_utc"]?.Value<string>();
                     break;
@@ -477,8 +507,17 @@ namespace ConditioningControlPanel.Services.GoonGame
     /// pins the contract Phase F has to match. If the server and this class ever disagree, one of
     /// them is a bug.
     ///
-    /// It deliberately does NOT model auth, the weekly pass, or rate limiting: those are server
-    /// policy, and faking them here would only teach the client to trust a fake.
+    /// It deliberately does NOT model auth or rate limiting: those are server policy, and faking
+    /// them here would only teach the client to trust a fake. The HOST GATE is the one entitlement
+    /// rule it does model (<see cref="HostGate"/>, off by default) — not as auth, but because
+    /// "hosting is refused, joining is not" is the shape of the surface, and a fake that let
+    /// everybody host would never exercise the client's 403 path.
+    ///
+    /// DOCUMENTED GAP: the seat model here is still a bare <c>Joined</c> flag. Seat identity,
+    /// same-uid reclaim, /leave and self-duel — all live on the real server and in the web fake
+    /// (<c>Resources/web/goon/net/fakeSignaling.js</c>) — are deliberately NOT ported. Nothing
+    /// breaks (the desktop app is the HOST in the owner's setup and the additions are
+    /// backward-compatible), but do not trust this class for a rejoin or self-duel case.
     /// </summary>
     public sealed class GoonFakeSignalingServer
     {
@@ -495,8 +534,26 @@ namespace ConditioningControlPanel.Services.GoonGame
         }
 
         private readonly Dictionary<string, Room> _rooms = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _labAccess = new(StringComparer.Ordinal);
         private readonly object _gate = new();
         private int _codeCounter;
+
+        /// <summary>Enforce the tier-2 host gate on /invite? OFF by default, so the transport
+        /// tests that just need a room are not all about entitlement. Turn it on and only uids
+        /// passed to <see cref="SetLabAccess"/> may mint one; everyone else gets the real
+        /// server's 403 <c>no_host_access</c>. Joining is never gated either way.</summary>
+        public bool HostGate { get; set; }
+
+        /// <summary>Test hook: grant (or revoke) tier-2 hosting for a uid. Stands in for the
+        /// server's user record — the fake models WHO may, never HOW it is proven.</summary>
+        public void SetLabAccess(string unifiedId, bool on = true)
+        {
+            if (string.IsNullOrEmpty(unifiedId)) return;
+            lock (_gate)
+            {
+                if (on) _labAccess.Add(unifiedId); else _labAccess.Remove(unifiedId);
+            }
+        }
 
         /// <summary>Hand this to <see cref="GoonSignalingClient"/>'s constructor.</summary>
         public GoonHttpPost Post => PostAsync;
@@ -512,6 +569,11 @@ namespace ConditioningControlPanel.Services.GoonGame
                 {
                     case "/v2/goon/invite":
                     {
+                        // HOST GATE: tier 2 or nothing. The real server compares
+                        // computeEffectiveTier(user) >= 2 and answers 403 no_host_access below it.
+                        if (HostGate && !_labAccess.Contains(req["unified_id"]?.Value<string>() ?? ""))
+                            return Fail(HttpStatusCode.Forbidden, GoonSignalingClient.ErrorNoHostAccess);
+
                         var room = new Room
                         {
                             Code = "LOOP" + (++_codeCounter).ToString("D2"),
@@ -539,6 +601,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                         if (room.Joined)
                             return Fail(HttpStatusCode.Conflict, GoonSignalingClient.ErrorAlreadyJoined);
                         room.Joined = true;
+                        // JOINING IS FREE — no gate, nothing charged. `pass` survives as an
+                        // advisory label; this fake's bare seat model only ever produces "free".
                         return Ok(new JObject
                         {
                             ["ok"] = true,
@@ -547,7 +611,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                             ["expires_in_sec"] = 300,
                             ["peer_display_name"] = "host",
                             ["peer_app_version"] = UpdateService.AppVersion,
-                            ["pass"] = "premium",
+                            ["pass"] = "free",
                             ["relay_allowed"] = true,
                         });
                     }

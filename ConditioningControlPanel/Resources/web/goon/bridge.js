@@ -140,9 +140,19 @@ export function netInfo() {
   return { serverBase: netCfg.serverBase, viaHost: netCfg.viaHost, hasToken: !!netCfg.authToken, pending: pending.size };
 }
 
-/** POST JSON. Resolves {status, body} — status 0 means "never got an answer". */
-export function postNet(path, body) {
+/**
+ * POST JSON. Resolves {status, body} — status 0 means "never got an answer".
+ *
+ * `opts.noAuth` sends the call WITHOUT X-Auth-Token: the anonymous-guest path
+ * (net/signaling.js), whose caller has no account token and whose only authority
+ * is the room token in the body. Direct-fetch only, which is the only place it
+ * can arise — hosted, the app always has an account and the C# side attaches the
+ * header itself.
+ * @param {{noAuth?: boolean}} [opts]
+ */
+export function postNet(path, body, opts) {
   const p = String(path || '');
+  const noAuth = !!(opts && opts.noAuth);
   if (isHosted && netCfg.viaHost) {
     const id = 'n' + (++netSeq);
     return new Promise((resolve) => {
@@ -158,7 +168,7 @@ export function postNet(path, body) {
   // Direct fetch (standalone, or a host that opted out of proxying).
   const url = (netCfg.serverBase || '') + p;
   const headers = { 'Content-Type': 'application/json' };
-  if (netCfg.authToken) headers['X-Auth-Token'] = netCfg.authToken;
+  if (netCfg.authToken && !noAuth) headers['X-Auth-Token'] = netCfg.authToken;
   let f = null;
   try { f = (typeof fetch === 'function') ? fetch : null; } catch (_e) { f = null; }
   if (!f) return Promise.resolve({ status: 0, body: '' });
@@ -214,6 +224,11 @@ export function standaloneInit() {
   const prefs = readPrefs();
   const profile = q.get('profile') || prefs.profile || 'p2p';
   const name = q.get('name') || prefs.name || 'Solo';
+  /* A REAL ACCOUNT ID, or ''. `?uid=` now, or one an earlier launch adopted into prefs. The
+   * `local-…` fallback below is deliberately NOT one: it is a display convenience for the pure-dev
+   * path, the server would refuse it, and treating it as an account is what would send an
+   * invite-link visitor to a 401 instead of to a free guest seat. */
+  const account = String(q.get('uid') || prefs.unifiedId || '');
   return {
     type: 'init',
     protocol: PROTOCOL,
@@ -224,9 +239,18 @@ export function standaloneInit() {
     identity: {
       // `?uid=` lets a phone/browser identify as a real account (paired with
       // `?token=` below) — without it the page plays as a throwaway local id.
-      unifiedId: String(q.get('uid') || prefs.unifiedId || 'local-' + name),
+      unifiedId: account || ('local-' + name),
       displayName: String(name).slice(0, 32),
       appVersion: 'dev',
+      /**
+       * NO ACCOUNT AT ALL — the invite-link click from somebody who has never
+       * seen the app. `/join` then omits `unified_id` entirely and the server
+       * mints a free `g_` guest seat (net/signaling.js `anonymous`). Joining is
+       * free for everyone; only HOSTING is gated, and a guest never hosts.
+       *
+       * Hosted this field is simply absent: the C# host always has an account.
+       */
+      anonymous: !account,
     },
     caps: Object.assign({
       haptics: false,

@@ -330,6 +330,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                         camera = false,           // no webcam bridge into the page in v1
                         video = true,
                         mediaTransfer = TransferAllowed(),
+                        canHost = HostingAllowed(),
                     },
                     consent = new
                     {
@@ -835,6 +836,21 @@ namespace ConditioningControlPanel.Services.GoonGame
         private static bool TransferAllowed()
         {
             try { return App.Patreon?.HasPremiumAccess == true; }
+            catch { return false; }
+        }
+
+        /// <summary>May the page MINT a room? TIER 2 ONLY.
+        ///
+        /// A rung above <see cref="TransferAllowed"/>, and a different question: sending media is
+        /// tier 1, hosting a duel is tier 2. The server enforces it at <c>/v2/goon/invite</c>
+        /// (403 <c>no_host_access</c> below <c>computeEffectiveTier &gt;= 2</c>) and this is the
+        /// same verdict computed locally, so the title screen can dim Host instead of routing the
+        /// player to a screen whose only content is a refusal. JOINING is free for everyone and is
+        /// never gated here. The page reads this with <c>=== true</c>, so a host that predates the
+        /// flag leaves Host enabled and falls back to the server's answer.</summary>
+        private static bool HostingAllowed()
+        {
+            try { return App.Patreon?.HasLabAccess == true; }
             catch { return false; }
         }
 

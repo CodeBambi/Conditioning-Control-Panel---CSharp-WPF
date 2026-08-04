@@ -4,10 +4,19 @@
 // one page, or two tabs sharing one of these), and — because it is executable — it pins the
 // contract the real server has to match. If the two ever disagree, one of them is a bug.
 //
-// It deliberately does NOT model auth, the weekly pass, or rate limiting: those are server policy,
-// and faking them here would only teach the client to trust a fake.
+// It deliberately does NOT model auth or rate limiting: those are server policy, and faking them
+// here would only teach the client to trust a fake. The weekly free pass is gone entirely.
 //
 // Server rules that ARE modelled, because clients depend on them:
+//   * THE HOST GATE (2026-08-04): /invite is TIER 2 ONLY and answers 403 `no_host_access` below it,
+//     while /join is FREE for everyone. Modelled — unlike auth — because "hosting is refused,
+//     joining never is" is the shape of the surface, and a fake where everyone hosts would leave
+//     the client's 403 path unexercised. `hostGate` is OFF by default so the room-lifecycle tests
+//     are not all about entitlement; `setLabAccess` fills the tier-2 set once it is on;
+//   * ANONYMOUS GUESTS: a /join with NO `unified_id` field at all is an invite-link click from
+//     somebody with no account. The server mints `g_` + 16 hex, returns it as `guest_id`, and takes
+//     it as `unified_id` on every later room-scoped call — where it behaves like any other uid,
+//     which is exactly what the seat rules below have to keep being true for;
 //   * append-only per-room list, `since` is an EXCLUSIVE cursor;
 //   * a caller never receives its own messages back (no self-echo) — but the cursor still advances
 //     PAST them, so the next poll doesn't re-walk the whole list;
@@ -41,6 +50,23 @@ const SELF_SUFFIX = '#self';
 export const shadowGuestUid = (uid) => `${uid}${SELF_SUFFIX}`;
 export const isShadowUid = (uid) => typeof uid === 'string' && uid.endsWith(SELF_SUFFIX);
 
+/**
+ * An anonymous joiner's seat identity: `g_` + 8 random bytes hex, minted by the server and handed
+ * back once, on the /join response. Real unified ids are `u_[a-z0-9]{8,24}`, so the two shapes can
+ * never be mistaken for one another even though they travel in the same field. It doubles as the
+ * seat-reclaim key — a guest has no account token — which is why it is random.
+ */
+const GUEST_ID_RE = /^g_[a-f0-9]{16}$/;
+export const isGuestUid = (uid) => typeof uid === 'string' && GUEST_ID_RE.test(uid);
+let guestCounter = 0;
+function mintGuestUid() {
+  // Deterministic-ish rather than crypto-random: this is a fake, and a test that has to name the
+  // id it expects is worth more here than entropy the client can never see.
+  const n = (++guestCounter).toString(16).padStart(4, '0');
+  const r = Math.floor(Math.random() * 0xffffffffffff).toString(16).padStart(12, '0');
+  return `g_${(n + r).slice(0, 16)}`;
+}
+
 function ok(body) { return Promise.resolve({ status: 200, body: JSON.stringify(body) }); }
 function fail(status, error) { return Promise.resolve({ status, body: JSON.stringify({ error }) }); }
 
@@ -66,8 +92,11 @@ export class GoonFakeSignalingServer {
    * @param {boolean|null} [o.mediaSend] the `media_send` verdict /invite //join answer with.
    *   null (the default) models a server that PREDATES the field and omits it entirely —
    *   the client must then leave its recorded verdict untouched.
+   * @param {boolean} [o.hostGate] enforce the tier-2 host gate on /invite (see `hostGate`)
+   * @param {string[]} [o.labAccess] uids that clear that gate (see setLabAccess)
    */
-  constructor({ ttlMs = DEFAULT_TTL_MS, now = () => Date.now(), codePrefix = 'LOOP', whitelist = [], mediaSend = null } = {}) {
+  constructor({ ttlMs = DEFAULT_TTL_MS, now = () => Date.now(), codePrefix = 'LOOP', whitelist = [],
+    mediaSend = null, hostGate = false, labAccess = [] } = {}) {
     this._rooms = new Map();
     this._ttlMs = ttlMs;
     this._now = now;
@@ -81,6 +110,16 @@ export class GoonFakeSignalingServer {
      * @type {Set<string>}
      */
     this._whitelist = new Set(Array.isArray(whitelist) ? whitelist.map(String) : []);
+    /**
+     * Enforce the tier-2 HOST gate on /invite? The real server always does
+     * (`computeEffectiveTier(user) >= 2`, whitelist folded in as permanent tier 2, 403
+     * `no_host_access` below it). Here it defaults OFF so the several dozen room-lifecycle
+     * assertions are not all about entitlement — turn it on to exercise the refusal, and fill
+     * `_labAccess` with the uids that clear it. Joining is never gated either way.
+     */
+    this.hostGate = !!hostGate;
+    /** @type {Set<string>} uids at tier 2, i.e. allowed to mint a room while `hostGate` is on. */
+    this._labAccess = new Set(Array.isArray(labAccess) ? labAccess.map(String) : []);
     /** Every request the server saw — handy in an assertion. */
     this.requests = [];
     /**
@@ -136,6 +175,27 @@ export class GoonFakeSignalingServer {
     return this;
   }
 
+  /**
+   * Test hook: grant (or revoke) TIER 2, i.e. the right to mint a room while `hostGate` is on.
+   * Distinct from `setWhitelisted` on purpose — the whitelist is a self-duel permission and folds
+   * to tier 2 upstream, but a plain tier-2 patron may host and still may not duel itself.
+   * @param {string} uid
+   * @param {boolean} [on]
+   */
+  setLabAccess(uid, on = true) {
+    const u = String(uid || '');
+    if (!u) return this;
+    if (on) this._labAccess.add(u); else this._labAccess.delete(u);
+    return this;
+  }
+
+  /** Whitelist folds to permanent tier 2, exactly as computeEffectiveTier does it server-side. */
+  _mayHost(uid) {
+    if (!this.hostGate) return true;
+    const u = String(uid || '');
+    return this._labAccess.has(u) || this._whitelist.has(u);
+  }
+
   /** Hand this to GoonSignalingClient's `post` option. */
   get post() { return (path, body) => this._handle(path, body); }
 
@@ -166,6 +226,10 @@ export class GoonFakeSignalingServer {
 
     switch (p) {
       case '/v2/goon/invite': {
+        // THE HOST GATE. Tier 2 or nothing — and note there is no anonymous branch here at all:
+        // a guest has no account to be tier 2 with, so an uid-less /invite simply fails the gate.
+        if (!this._mayHost(req.unified_id)) return fail(403, GoonSignalError.NoHostAccess);
+
         this._codeCounter++;
         const room = {
           code: `${this._codePrefix}${String(this._codeCounter).padStart(2, '0')}`,
@@ -194,10 +258,20 @@ export class GoonFakeSignalingServer {
       }
 
       case '/v2/goon/join': {
+        /* ANONYMOUS JOINER: no `unified_id` FIELD at all (not an empty one) = an invite-link click
+         * from somebody with no account. The seat identity is minted here, before anything else
+         * looks at the uid, so every rule below — self-duel, reclaim, already_joined — sees one
+         * uid shape and needs no anonymous branch of its own. Joining is free; there is
+         * deliberately no gate on this route to mirror. */
+        const anonymous = !req.unified_id;
+        const uid = anonymous ? mintGuestUid() : (typeof req.unified_id === 'string' ? req.unified_id : '');
+        // A returning guest re-presents the g_ id it was given, so "is this a guest" is a question
+        // about the id's SHAPE, not about whether we just minted it.
+        const guest = isGuestUid(uid);
+
         const room = this._live(req.code);
         // A bad code and an expired code are indistinguishable to a joiner, by design.
         if (!room) return fail(404, GoonSignalError.UnknownCode);
-        const uid = typeof req.unified_id === 'string' ? req.unified_id : '';
         // Your own room is not a full room. One account cannot hold both seats:
         // the ledger, the pair record and the peer card are all "the other uid".
         // …unless the account is WHITELISTED, which is the owner's two-device
@@ -218,7 +292,7 @@ export class GoonFakeSignalingServer {
         // otherwise be handed to the fresh peer connection as if it were live. The
         // SEQ counter deliberately keeps counting — the host's cursor is past it.
         if (rejoin) room.signals = [];
-        return ok(this._withMediaSend({
+        const body = this._withMediaSend({
           ok: true,
           rejoin,
           // Advisory: both seats are one account. Nothing in the match depends on it.
@@ -228,11 +302,21 @@ export class GoonFakeSignalingServer {
           expires_in_sec: Math.max(0, Math.round((room.expiresAt - this._now()) / 1000)),
           peer_display_name: 'host',
           peer_app_version: 'fake',
-          pass: 'premium',
+          // Joining costs nothing; `pass` survives as an advisory label for what happened
+          // to the SEAT, never for what was charged.
+          pass: rejoin ? 'rejoin' : (selfDuel ? 'self_duel' : 'free'),
           relay_allowed: true,
           // The joiner is the GUEST, so the peer whose card it learns is the host.
           peer_card_ver: this.hostCardVer,
-        }));
+        });
+        // THE SEAT IDENTITY, disclosed here and nowhere else — it is the reclaim key, and this
+        // response is the only place the guest can learn it. Present for a returning guest too,
+        // because the client is entitled to confirm the id it just presented was honoured.
+        // (Absent for account joins: JSON.stringify drops an undefined.)
+        if (guest) body.guest_id = uid;
+        // A guest has no user record, so it can never be a premium SENDER. Receiving is not gated.
+        if (guest && typeof body.media_send === 'boolean') body.media_send = false;
+        return ok(body);
       }
 
       case '/v2/goon/leave': {

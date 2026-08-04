@@ -123,8 +123,16 @@ export function createSheets({ root = null, audio = null, logger = null } = {}) 
     ];
 
     switch (kind) {
+      // The host gate, and the weekly pass it replaced. `no_pass` is retired server-side and is
+      // kept here only so an OLD server in front of a new client still produces a product message
+      // instead of falling through to "check your connection" about a server that answered fine.
+      case 'no_host_access':
       case 'no_pass':
-        return open({ icon: S.sheets.noPass.icon, headline: S.sheets.noPass.headline, line: S.sheets.noPass.line(detail) });
+        return open({
+          icon: S.sheets.noHostAccess.icon,
+          headline: S.sheets.noHostAccess.headline,
+          line: S.sheets.noHostAccess.line,
+        });
       case 'not_deployed':
         return open({ icon: S.sheets.notDeployed.icon, headline: S.sheets.notDeployed.headline, line: S.sheets.notDeployed.line });
       case 'rate_limited':

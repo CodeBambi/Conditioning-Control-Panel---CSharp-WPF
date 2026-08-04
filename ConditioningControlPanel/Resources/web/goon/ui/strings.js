@@ -35,6 +35,9 @@ export const S = Object.freeze({
   title: {
     kicker: '1v1 · endurance duel · first to break loses',
     host: 'Host a match',
+    // The dimmed-Host note. Same voice as lobby.transferNoPremium — lowercase, an explanation
+    // rather than a pitch, and it names the thing that is still free instead of stopping at "no".
+    hostNoLab: 'hosting is a supporter perk — joining a room is always free.',
     join: 'Join with a code',
     practice: 'Practice',
     practiceNote: 'solo · scripted opponent',
@@ -692,10 +695,14 @@ export const S = Object.freeze({
 
   /* --------------------------------------------------------------- sheets */
   sheets: {
-    noPass: {
+    /* THE HOST GATE. Not a fault and not a wall: joining is free forever, so the sentence has to
+       leave the player somewhere to go rather than only closing a door. It also answers the
+       retired 402 `no_pass` — an old server's "your free match is spent" is the same conversation
+       with worse information, and this is the only copy left for either. */
+    noHostAccess: {
       icon: '✦',
-      headline: 'Your free match is spent',
-      line: (when) => 'Your next free match unlocks ' + (when || 'next week') + '.',
+      headline: 'Hosting is a supporter perk',
+      line: "Opening a room is for Tier 2 supporters. Joining someone else's is always free — ask them for a code.",
     },
     notDeployed: {
       icon: '⏳',

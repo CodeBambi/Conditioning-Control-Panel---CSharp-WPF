@@ -23,8 +23,9 @@
 // first currentMatch instance. The rebuild window is safe: ICE can only fail in Lobby, before the
 // hello/consent exchange has happened.
 //
-// This facade does NOT gate on premium/pass state — the server enforces passes at /v2/goon/invite
-// (402 no_pass). UI may pre-gate for niceness, never here.
+// This facade does NOT gate on entitlement — the server enforces the tier-2 HOST bar at
+// /v2/goon/invite (403 no_host_access) and nothing at all at /join, which is free for everyone,
+// account or not. UI may pre-gate for niceness (title.js dims Host on caps.canHost), never here.
 //
 // LEAVE vs TEARDOWN: leave() is user-initiated and routes through match.cancelMatch (in Live that
 // is a Mercy). Every internal path — fallback, failure, dispose — uses dispose() only, which sends
@@ -67,25 +68,41 @@ export class GoonSession {
   /**
    * @param {object} o
    * @param {(transport:object, isHost:boolean) => object} o.createMatch REQUIRED — see the header
-   * @param {object} [o.identity] {unifiedId, displayName, appVersion} for the signaling body
+   * @param {object} [o.identity] {unifiedId, displayName, appVersion, anonymous} for the body
    * @param {object} [o.logger]
+   * @param {{id?:string, code?:string, save?:(id:string, code:string)=>void}} [o.guest]
+   *   the anonymous seat identity kept across reloads — see `this._guest`
    * @param {() => GoonSignalingClient} [o.createSignaling] test seam
    * @param {(isHost:boolean, signaling:GoonSignalingClient) => object} [o.createWebrtc] test seam
    * @param {(isHost:boolean, signaling:GoonSignalingClient) => object} [o.createRelay] test seam
    */
-  constructor({ createMatch, identity = null, logger = null, createSignaling = null,
+  constructor({ createMatch, identity = null, logger = null, guest = null, createSignaling = null,
     createWebrtc = null, createRelay = null } = {}) {
     if (typeof createMatch !== 'function') throw new Error('GoonSession: createMatch factory is required');
 
     this._createMatch = createMatch;
     this._identity = identity || {};
     this._log = logger || (typeof console !== 'undefined' ? console : null);
+    /**
+     * THE ANONYMOUS SEAT, across reloads. Read at signaling-CONSTRUCTION time rather than copied
+     * here, so a `save` that also updates `id`/`code` in place is what lets the next session on
+     * this page reclaim the seat instead of arriving as a stranger.
+     */
+    this._guest = (guest && typeof guest === 'object') ? guest : null;
 
     this._createSignaling = createSignaling || (() => new GoonSignalingClient({
       unifiedId: this._identity.unifiedId || '',
       appVersion: this._identity.appVersion || '',
       displayName: this._identity.displayName || '',
       logger: this._log,
+      /* NO ACCOUNT BEHIND THIS PAGE: /join asks the server for a seat identity rather than
+       * presenting one, and re-presents the one it holds when this is the same room again. */
+      anonymous: this._identity.anonymous === true,
+      guestId: (this._guest && this._guest.id) || '',
+      guestRoom: (this._guest && this._guest.code) || '',
+      onGuest: this._guest && typeof this._guest.save === 'function'
+        ? (id, code) => this._guest.save(id, code)
+        : null,
     }));
     this._createWebrtc = createWebrtc || ((isHost, signaling) => new GoonWebRtcTransport({
       isHost, signaling, logger: this._log, displayName: this._identity.displayName || '',

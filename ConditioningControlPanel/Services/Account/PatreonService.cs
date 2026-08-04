@@ -131,6 +131,28 @@ namespace ConditioningControlPanel.Services
         public bool HasPremiumAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true)
             || (App.SubscribeStar?.HasPremiumAccess == true);
 
+        /// <summary>
+        /// Whether the user has Lab access: Tier 2+ OR whitelisted.
+        ///
+        /// THIS IS THE GOON GAME **HOST** BAR, and it mirrors the server exactly:
+        /// <c>/v2/goon/invite</c> answers 403 <c>no_host_access</c> below
+        /// <c>computeEffectiveTier(user) &gt;= 2</c>. Joining a duel is free for everyone;
+        /// minting the room is the tier-2 perk. <see cref="HasPremiumAccess"/> is deliberately
+        /// NOT the right gate here — in this codebase "premium" means tier 1.
+        ///
+        /// Whitelist folds to permanent tier 2 on both sides (<see cref="SetWhitelistStatus"/>
+        /// raises CurrentTier to Level2, computeEffectiveTier does the same server-side), so the
+        /// OR is belt-and-braces rather than a second rule. SubscribeStar is OR'd in the same way
+        /// the server folds <c>substar_tier</c>. The 2-week grace cache is NOT: it caches a
+        /// tier-1 entitlement and would let a lapsed patron host.
+        ///
+        /// Advisory only — the server refuses on its own, and this exists so the UI can say so
+        /// before the round-trip instead of after it.
+        /// </summary>
+        public bool HasLabAccess => CurrentTier >= PatreonTier.Level2 || IsWhitelisted
+            || (App.SubscribeStar?.CurrentTier ?? PatreonTier.None) >= PatreonTier.Level2
+            || (App.SubscribeStar?.IsWhitelisted == true);
+
         public PatreonService()
         {
             _tokenStorage = new SecureTokenStorage();

@@ -3,9 +3,13 @@
  *
  * The whole screen is one promise's lifetime: actions.hostStart() resolves with
  * a code or a machine-readable failure, and every failure has a SENTENCE (see
- * ui/sheets.js showSignalError) rather than a status number. "no_pass" in
+ * ui/sheets.js showSignalError) rather than a status number. "no_host_access" in
  * particular is a product message, not an error — the player has not done
- * anything wrong, their free match is simply spent.
+ * anything wrong, hosting is simply a tier-2 perk and they are not tier 2. It is
+ * also the one refusal that still reaches this screen with title.js's gate in
+ * place: STANDALONE cannot know the answer before asking, and a tier that lapsed
+ * since launch would walk past a hosted check too. (The retired 402 "no_pass"
+ * lands on the same sheet, for an old server in front of a new client.)
  *
  * The five-minute expiry is a CLIENT-SIDE countdown against the server's own
  * TTL. It is deliberately advisory: when it runs out we say so and offer a new
