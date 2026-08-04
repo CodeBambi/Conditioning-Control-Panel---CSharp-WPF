@@ -1,6 +1,22 @@
-# Port Status (as of 2026-08-04)
+# Port Status (as of 2026-08-04, second export — laptop resume session)
 
-Branch: `feat/crossplatform` (now pushed; see incidents file for the 2026-08-04 force-push).
+Branch: `feat/crossplatform` @ SP-037 land (`7e2fd5b8`) + reconcile commit. Pushed.
+
+## New since the first export
+
+- **Resume reconciliation executed (laptop):** waves 1–3 verified; the desktop's parked wave-4 batch `20260722T152755` lane commits NEVER travelled (desktop-local) — wave 4 is a FRESH execution of the packets, not a resume.
+- **SP-037 authored + LANDED** (v6.6.3 manifest-drift repair, floor-repair precondition): empirical sweep +7/−1 (board hypothesis said +4 — sweep vindicated), copied-count 1538→1544, floor restored **466/466 + 29/29**; substitution-norm land (engine review chain absent — see park below); row WIP, owner ratifies. Next unused ID = **SP-038**.
+- **WAVE 4 PARKED (pause protocol, both-routes-failed branch):** anthropic fresh-subprocess route DOWN account-wide (`400 "extra usage"` — engine reviewer spawn + manual `pi -p` probes, opus-5 AND fable-5; in-session consult UNAFFECTED). SP-035+SP-036 stay pending + 2026-08-04-amended (Ollama present on laptop; WSL zero-distros named limit; consult rewire; SP-036 three-seat subject). Owner action: restore spawn capacity (claude.ai/settings/usage) or explicitly accept reduced assurance. Full state: `.spine/handoff.md`.
+- **Engine restored on laptop:** global pi-spine re-pinned 2.12.2 → admitted 2.10.0 (BOTH settings.json + npm package.json exact), 12 patches applied, verify.mjs green.
+- **Laptop bootstrap fixes (durable, in incidents file):** `git config --global core.hidedotfiles false` (hidden-.git EPERM class) + `pi.exe` shim (Node 24 cannot spawn the cmd/shell shims).
+
+## Pause state
+
+Parked 2026-08-04 ~13:10 UTC (anthropic spawn 400). Previous park (2026-07-22 Fable window) superseded. Resume: owner pastes `client/port.txt` after restoring spawn capacity.
+
+## Board honesty rule
+
+Landed rows stay WIP until the owner ratifies them. 18 rows were flipped WIP→DONE only with RATIFIED decree citation placed in evidence cells. Never flip without it.
 
 ## Landed
 
