@@ -39,9 +39,14 @@ internal static class FypHostService
     // un-clickable ghost the user has no way to grab.
     private static bool _ghosted;
     private static FypGhostOverlay? _ghost;
-    private static double _ghostLeft, _ghostTop;      // the real window's parked-from position
+    private static double _ghostLeft, _ghostTop;      // the real window's parked-from position (DIPs, log/fallback)
     private static bool _ghostWasMaximized;           // it was maximized before we normalized it
     private static DateTime _lastGhostExitUtc = DateTime.MinValue;
+    private static int _restoreX, _restoreY, _restoreW, _restoreH;   // pre-park window rect (physical px)
+    private static int _parkX, _parkY, _parkW, _parkH;               // parked window rect (physical px)
+    private static EventHandler? _ghostStateGuard;    // heals a minimize of the parked window
+    private static HwndSource? _ghostHookSource;      // carries the SC_MINIMIZE veto while ghosted
+    private static HwndSourceHook? _ghostHook;        // strong ref: AddHook holds only weakly
 
     /// <summary>True while the feed is a see-through DWM mirror and the real window is parked
     /// off-screen (mouse passes straight through to whatever is behind it).</summary>
@@ -374,14 +379,47 @@ internal static class FypHostService
                 onGear: GhostGearClicked, onMute: GhostMuteClicked,
                 isMuted: () => App.Settings?.Current?.FypMuted ?? false);
 
-            // Park it past the right edge of every monitor. Still SHOWN (DWM keeps compositing it,
-            // so the thumbnail stays live); the browser flags keep Chromium from throttling it.
-            win.Left = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth + 200;
+            // Park it past the right edge of every monitor, RESIZED so the client area is
+            // exactly the home monitor. The mirror letterboxes at the source's aspect, and a
+            // windowed source (screen-wide but short of the taskbar) is wider-aspect than the
+            // monitor — that letterbox was the bare band across the top of the ghost (its twin
+            // sat invisibly over the taskbar). Sized 1:1 there is nothing to letterbox.
+            // One native call, physical px end to end: atomic (no flash of a monitor-sized
+            // window at the old spot) and an exact round-trip for ExitGhost regardless of what
+            // DPI the parking spot resolves to. Still SHOWN (DWM keeps compositing it, so the
+            // thumbnail stays live); the browser flags keep Chromium from throttling it.
+            GetWindowRect(hwnd, out var wr);
+            GetClientRect(hwnd, out var cr);
+            _restoreX = wr.Left; _restoreY = wr.Top;
+            _restoreW = wr.Right - wr.Left; _restoreH = wr.Bottom - wr.Top;
+            int chromeW = _restoreW - cr.Right;    // window minus client: borders + title bar
+            int chromeH = _restoreH - cr.Bottom;
+            var scr = System.Windows.Forms.Screen.FromHandle(hwnd).Bounds;
+            var vs = System.Windows.Forms.SystemInformation.VirtualScreen;
+            _parkX = vs.Right + 200;
+            _parkY = scr.Y;
+            _parkW = scr.Width + Math.Max(0, chromeW);
+            _parkH = scr.Height + Math.Max(0, chromeH);
+            SetWindowPos(hwnd, IntPtr.Zero, _parkX, _parkY, _parkW, _parkH,
+                SWP_NOZORDER | SWP_NOACTIVATE);
+
+            // Show Desktop / Win+D minimizes every restorable top-level window — the parked
+            // source included — and a minimized source stops being composed: the mirror freezes
+            // on its last frame, and the minimize scrambles the window's saved restore rect so
+            // every LATER ghost cycle comes up frozen too (play-tested 2026-08-04). Two layers:
+            // veto SC_MINIMIZE while ghosted (the window is off-screen, minimizing it means
+            // nothing), and if a minimize lands anyway (raw ShowWindow skips WM_SYSCOMMAND),
+            // heal it — restore, re-park, re-register the thumbnail.
+            _ghostHookSource = HwndSource.FromHwnd(hwnd);
+            _ghostHook = GhostWndProc;
+            _ghostHookSource?.AddHook(_ghostHook);
+            _ghostStateGuard = OnGhostWindowStateChanged;
+            win.StateChanged += _ghostStateGuard;
 
             _ghost.Show();
             App.Logger?.Information(
-                "FypHostService: ghost mode ON (mirror at {L}x{T} {W}x{H}, real window parked at {Park})",
-                (int)bounds.X, (int)bounds.Y, (int)bounds.Width, (int)bounds.Height, (int)win.Left);
+                "FypHostService: ghost mode ON (mirror on {Mon}, real window parked at {X}x{Y} {W}x{H}px)",
+                scr, _parkX, _parkY, _parkW, _parkH);
         }
         catch (Exception ex)
         {
@@ -436,10 +474,27 @@ internal static class FypHostService
         catch (Exception ex) { App.Logger?.Debug("FypHost.ExitGhost close: {E}", ex.Message); }
         try
         {
+            if (win != null && _ghostStateGuard != null) win.StateChanged -= _ghostStateGuard;
+            _ghostStateGuard = null;
+            if (_ghostHookSource != null && _ghostHook != null) _ghostHookSource.RemoveHook(_ghostHook);
+            _ghostHookSource = null;
+            _ghostHook = null;
+        }
+        catch (Exception ex) { App.Logger?.Debug("FypHost.ExitGhost unhook: {E}", ex.Message); }
+        try
+        {
             if (win != null)
             {
-                win.Left = _ghostLeft;
-                win.Top = _ghostTop;
+                // A minimize can still have slipped through (the veto arms mid-Show-Desktop, a
+                // race loses): un-minimize FIRST or the rect restore below lands on a window
+                // nobody can see. Windows' own restore rect may be the parked spot by now —
+                // the native SetWindowPos right after puts the real geometry back regardless.
+                if (win.WindowState == WindowState.Minimized) win.WindowState = WindowState.Normal;
+                var hwnd = new WindowInteropHelper(win).Handle;
+                if (hwnd != IntPtr.Zero && _restoreW > 0 && _restoreH > 0)
+                    SetWindowPos(hwnd, IntPtr.Zero, _restoreX, _restoreY, _restoreW, _restoreH,
+                        SWP_NOZORDER | SWP_NOACTIVATE);
+                else { win.Left = _ghostLeft; win.Top = _ghostTop; }
                 if (_ghostWasMaximized) win.WindowState = WindowState.Maximized;
             }
         }
@@ -450,6 +505,68 @@ internal static class FypHostService
         catch (Exception ex) { App.Logger?.Debug("FypHost.ExitGhost post: {E}", ex.Message); }
         App.Logger?.Information("FypHostService: ghost mode off");
     }
+
+    /// <summary>While ghosted, refuse SC_MINIMIZE on the parked window (Show Desktop, Win+D,
+    /// Win+M all arrive here). A minimized source freezes the DWM mirror; off the virtual
+    /// desktop there is nothing a minimize could mean anyway. Never swallows when not ghosted.</summary>
+    private static IntPtr GhostWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (_ghosted && msg == WM_SYSCOMMAND && ((long)wParam & 0xFFF0) == SC_MINIMIZE)
+            handled = true;
+        return IntPtr.Zero;
+    }
+
+    /// <summary>The belt to the veto's braces: a minimize that reached the parked window some
+    /// other way is healed after the fact — back to Normal, back to the parking spot (restore-
+    /// from-minimize goes to Windows' saved rect, which can be anywhere by now), and a FRESH
+    /// thumbnail registration, because DWM does not reliably resume the old one.</summary>
+    private static void OnGhostWindowStateChanged(object? sender, EventArgs e)
+    {
+        if (!_ghosted) return;
+        var win = _host?.Window;
+        if (win == null || win.WindowState != WindowState.Minimized) return;
+        // Deferred: this event is raised off the window's own WM_SIZE — let it finish first.
+        win.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            try
+            {
+                if (!_ghosted) return;
+                var w = _host?.Window;
+                if (w == null || w.WindowState != WindowState.Minimized) return;
+                w.WindowState = WindowState.Normal;
+                var hwnd = new WindowInteropHelper(w).Handle;
+                if (hwnd != IntPtr.Zero)
+                    SetWindowPos(hwnd, IntPtr.Zero, _parkX, _parkY, _parkW, _parkH,
+                        SWP_NOZORDER | SWP_NOACTIVATE);
+                _ghost?.RefreshThumbnail();
+                App.Logger?.Information("FypHostService: parked window was minimized (Show Desktop?) — healed");
+            }
+            catch (Exception ex) { App.Logger?.Debug("FypHost: ghost minimize heal failed: {E}", ex.Message); }
+        }));
+    }
+
+    // ------------------------------- native (ghost mode) -------------------------------
+
+    private const int WM_SYSCOMMAND = 0x0112;
+    private const int SC_MINIMIZE = 0xF020;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+        int x, int y, int cx, int cy, uint flags);
 
     // ============================= webcam eye control =============================
     //

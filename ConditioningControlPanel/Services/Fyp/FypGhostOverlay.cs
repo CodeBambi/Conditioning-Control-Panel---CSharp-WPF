@@ -133,6 +133,17 @@ internal sealed class FypGhostOverlay
         UpdateThumbnailBounds();
     }
 
+    /// <summary>Drop the registration and register a fresh thumbnail on the same source. The
+    /// host calls this after healing a minimize of the parked window (Show Desktop reaches it
+    /// too): DWM freezes a minimized source's thumbnail on its last frame and does not reliably
+    /// resume the OLD registration once the window is restored off-screen.</summary>
+    public void RefreshThumbnail()
+    {
+        if (_closed) return;
+        Unregister();
+        EnsureThumbnail();
+    }
+
     /// <summary>Drop the thumbnail and close the mirror and its buttons. Idempotent.</summary>
     public void Close()
     {
