@@ -1,14 +1,22 @@
 # Operating Rules (owner-established, cross-session)
 
-## Consult routes — CRITICAL
+## Consult routes — REWIRED 2026-08-04
 
-- **Solo Fable 5 (`anthropic/claude-fable-5`) is the ONLY working consult route**
-  (landscape verified 2026-07-21).
-- Sol fallback route is DEAD. Council probe #5 FAILED even after owner-directed
-  roster changes (synthesizer kimi-api/k3→fable-5, performance seat→zai/glm-5.2);
-  architect+tester (uva/*) error proved the route broken.
-- **Owner lifted ALL gates** (recorded 2026-07-21) — gates no longer block, but the
-  pause protocol below still applies to consult-route failures.
+Model access is limited to **Opus 5, Fable 5, Kimi K3** (uva/sol/luna and zai/glm
+routes are gone — zai failed with provider balance error 1113). Config:
+`.pi/bpx-consult.json` (project-level, committed).
+
+- **solo/advisor**: `anthropic/claude-fable-5` (high) — the proven route.
+- **gut-check**: `kimi-coding/kimi-for-coding-highspeed` (low, terse) — the cheap
+  fast model, deliberately the dumb one.
+- **council**: architect+tester `anthropic/claude-opus-5`, critic+performance
+  `anthropic/claude-fable-5`, simplifier+security `kimi-api/k3`;
+  **synthesizer `kimi-api/k3` (max)** — owner-specified.
+- **debate**: advocate=architect (opus-5), critic=critic (fable-5).
+- History: before the rewire, solo Fable 5 was the ONLY working route; Sol
+  fallback dead; council probes #4/#5 failed on uva/* seats. **Owner lifted ALL
+  gates** (recorded 2026-07-21) — gates no longer block, but the pause protocol
+  below still applies to consult-route failures.
 
 ## Pause protocol
 

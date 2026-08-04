@@ -8,7 +8,7 @@
       "feedbackMode": "steer"
     },
     "gutCheck": {
-      "model": "zai/glm-5.2",
+      "model": "kimi-coding/kimi-for-coding-highspeed",
       "thinkingLevel": "low",
       "terse": true,
       "feedbackMode": "steer"
@@ -23,8 +23,8 @@
         "performance"
       ],
       "synthesizer": {
-        "model": "anthropic/claude-fable-5",
-        "thinkingLevel": "high"
+        "model": "kimi-api/k3",
+        "thinkingLevel": "max"
       },
       "parallel": true,
       "timeoutMs": 120000,
@@ -40,7 +40,7 @@
   },
   "personas": {
     "architect": {
-      "defaultModel": "uva/gpt-5.6-sol",
+      "defaultModel": "anthropic/claude-opus-5",
       "thinkingLevel": "high"
     },
     "critic": {
@@ -52,7 +52,7 @@
       "thinkingLevel": "max"
     },
     "tester": {
-      "defaultModel": "uva/gpt-5.6-luna",
+      "defaultModel": "anthropic/claude-opus-5",
       "thinkingLevel": "high"
     },
     "security": {
@@ -60,7 +60,7 @@
       "thinkingLevel": "max"
     },
     "performance": {
-      "defaultModel": "zai/glm-5.2",
+      "defaultModel": "anthropic/claude-fable-5",
       "thinkingLevel": "medium"
     }
   },
