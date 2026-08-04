@@ -289,6 +289,10 @@ bridge.on('init', (m) => {
     unifiedId: String(idm.unifiedId || idm.id || ''),
     displayName: String(idm.displayName || idm.name || ''),
     appVersion: String(idm.appVersion || ''),
+    /* NO ACCOUNT AT ALL — set only by bridge.standaloneInit, for a visitor who arrived on an
+     * invite link. /join then omits unified_id and plays on a server-minted guest seat. `=== true`
+     * because a host that never heard of the field must not read as anonymous. */
+    anonymous: idm.anonymous === true,
   };
   session.caps = m.caps || null;
   session.consent = m.consent || null;
@@ -1448,11 +1452,33 @@ function cancelFoldToTitle() {
   foldTimer = 0;
 }
 
+/**
+ * THE ANONYMOUS SEAT, remembered across reloads.
+ *
+ * A visitor who arrived on an invite link has no account, so /join mints them a `g_` identity and
+ * that id IS their seat: lose it and a refresh comes back as a stranger, is told the room already
+ * has two players — by its own ghost — and the invite is dead for the rest of the room's TTL.
+ * It rides in the same localStorage blob as every other standalone pref, and `save` writes the
+ * live fields too, because ensureSession() builds ONE GoonSession per page and the reclaim has to
+ * be readable by the signaling client it constructs next.
+ */
+const guestSeat = {
+  id: String(bridge.storedPrefs().guestId || ''),
+  code: String(bridge.storedPrefs().guestRoom || ''),
+  save(id, code) {
+    this.id = String(id || '');
+    this.code = String(code || '');
+    try { bridge.savePrefs({ guestId: this.id, guestRoom: this.code }); }
+    catch (_e) { /* a lost seat costs a rejoin, never the match in progress */ }
+  },
+};
+
 function ensureSession() {
   if (goonSession) return goonSession;
   goonSession = new GoonSession({
     createMatch: (transport, isHost) => buildMatch(transport, isHost),
     identity: session.identity || {},
+    guest: guestSeat,
     logger,
   });
   // THE rebuild seam. The relay fallback disposes the old match and builds a

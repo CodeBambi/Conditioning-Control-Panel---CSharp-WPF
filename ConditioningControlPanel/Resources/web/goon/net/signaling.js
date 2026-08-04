@@ -8,9 +8,14 @@
 //
 // FAILURE MODEL (unchanged from C#): every method resolves null on failure and leaves a
 // machine-readable reason in `lastError` (+ `lastErrorDetail`, `retryAfterSeconds`). Nothing here
-// throws for a server outcome — the lobby has to tell "your weekly pass is spent" (a product
+// throws for a server outcome — the lobby has to tell "hosting is a supporter perk" (a product
 // message) apart from "the endpoint 404s" (server not deployed) apart from "you're offline".
 // `lastErrorInfo` is the {kind, detail, retryAfterSeconds} triple the UI renders from.
+//
+// ENTITLEMENT (2026-08-04). HOSTING is tier 2 — /invite answers 403 no_host_access below it — and
+// JOINING is free for everyone, including people with no account at all: see `anonymous` on the
+// constructor for the server-minted `g_` seat identity that carries them. The weekly free pass
+// (402 no_pass) is gone; it is still PARSED, so an old server keeps producing a sentence.
 
 import { postNet } from '../bridge.js';
 import { GoonConsts } from '../core/contracts.js';
@@ -27,7 +32,10 @@ export const GOON_PATHS = Object.freeze({
 export const GoonSignalError = Object.freeze({
   /** The endpoint answered 404 with no room context, i.e. the server route isn't deployed. */
   NotDeployed: 'not_deployed',
+  /** Retired with the weekly free pass. Kept so an OLD server still gets a sentence, not a code. */
   NoPass: 'no_pass',
+  /** /invite refused: minting a room is a tier-2 perk. Joining stays free for everyone. */
+  NoHostAccess: 'no_host_access',
   UnknownCode: 'unknown_code',
   AlreadyJoined: 'already_joined',
   /** The code you typed is your OWN room — one account cannot sit on both seats. */
@@ -50,6 +58,14 @@ export function normalizeCode(code) {
   return String(code ?? '').trim().toUpperCase().replace(/[-\s]/g, '');
 }
 
+/**
+ * A server-minted anonymous seat identity: `g_` + 8 random bytes hex. Real unified ids are
+ * `u_[a-z0-9]{8,24}`, so the two shapes can never be confused for one another — which is the
+ * point, because this one is presented in the same `unified_id` field.
+ */
+const GUEST_ID_RE = /^g_[a-f0-9]{16}$/;
+export const isGuestId = (v) => typeof v === 'string' && GUEST_ID_RE.test(v);
+
 function sanitize(s, max) {
   const v = String(s ?? '').trim();
   if (!v) return '';
@@ -68,13 +84,36 @@ export class GoonSignalingClient {
    * @param {string} [o.appVersion]
    * @param {string} [o.displayName] default display name for createInvite/join
    * @param {object} [o.logger]
+   * @param {boolean} [o.anonymous] this page has NO account (see `this.anonymous`)
+   * @param {string} [o.guestId] a `g_` seat id kept from an earlier launch, for the rejoin
+   * @param {string} [o.guestRoom] the room code that `guestId` holds a seat in
+   * @param {(id:string, code:string) => void} [o.onGuest] sink that persists a minted seat id
    */
-  constructor({ post = null, unifiedId = '', appVersion = '', displayName = '', logger = null } = {}) {
+  constructor({ post = null, unifiedId = '', appVersion = '', displayName = '', logger = null,
+    anonymous = false, guestId = '', guestRoom = '', onGuest = null } = {}) {
     this._post = typeof post === 'function' ? post : postNet;
     this._log = logger || (typeof console !== 'undefined' ? console : null);
     this.unifiedId = String(unifiedId || '');
     this.appVersion = String(appVersion || '');
     this.displayName = String(displayName || '');
+
+    /**
+     * ANONYMOUS JOIN (2026-08-04). True when there is no account behind this page at all — an
+     * invite-link click from somebody who has never seen the app. `/join` then omits `unified_id`
+     * ENTIRELY (the field's ABSENCE is the request; an empty string is a 400) and the server mints
+     * a `g_` seat identity, hands it back as `guest_id`, and expects it as `unified_id` on every
+     * later room-scoped call. No X-Auth-Token rides along either — a guest has no account token,
+     * and the room token is the whole of its authority.
+     *
+     * Hosting is never anonymous: /invite is tier-2 gated and a guest has no account to be tier 2
+     * with. This flag only ever changes what the JOIN path sends.
+     */
+    this.anonymous = !!anonymous;
+    /** The `g_` seat identity, once /join has minted one (or one kept from an earlier launch). */
+    this.guestId = isGuestId(guestId) ? guestId : '';
+    /** The room `guestId` holds a seat in. A g_ id is only ever re-presented for ITS OWN room. */
+    this.guestRoom = normalizeCode(guestRoom);
+    this._onGuest = typeof onGuest === 'function' ? onGuest : null;
 
     /** @type {string|null} machine-readable reason for the last failure */
     this.lastError = null;
@@ -125,6 +164,27 @@ export class GoonSignalingClient {
     if (typeof fn !== 'function') return () => {};
     this._peerCardListeners.add(fn);
     return () => this._peerCardListeners.delete(fn);
+  }
+
+  /**
+   * Adopts the `guest_id` off a /join response: THE seat identity from here on.
+   *
+   * Writing it into `unifiedId` is what makes /signal, /relay and /leave work with no second
+   * branch — every one of them already sends that field. The sink persists it so a reload can
+   * re-present it and reclaim the seat instead of arriving as a stranger and being told the room
+   * is full. Ignores anything that is not the documented `g_` shape.
+   */
+  _adoptGuestId(json, code) {
+    const id = json && typeof json.guest_id === 'string' ? json.guest_id : '';
+    if (!isGuestId(id)) return null;
+    this.guestId = id;
+    this.guestRoom = code;
+    this.unifiedId = id;
+    if (this._onGuest) {
+      // A persistence sink must never be able to break a join that already succeeded.
+      try { this._onGuest(id, code); } catch (e) { this._warn(`guest-id sink threw: ${(e && e.message) || e}`); }
+    }
+    return id;
   }
 
   /** Records `media_send` off a parsed /invite or /join response. Absent = old server = no-op. */
@@ -192,15 +252,31 @@ export class GoonSignalingClient {
     };
   }
 
-  /** @returns {Promise<{token, expiresInSec, peerDisplayName, peerAppVersion, pass, relayAllowed, rejoin, selfDuel}|null>} */
+  /** @returns {Promise<{token, expiresInSec, peerDisplayName, peerAppVersion, pass, relayAllowed, rejoin, selfDuel, guestId}|null>} */
   async join(code, displayName = null) {
-    const json = await this._call(GOON_PATHS.join, {
-      unified_id: this.unifiedId,
-      code: normalizeCode(code),
+    const room = normalizeCode(code);
+    const body = {
+      code: room,
       display_name: sanitize(displayName ?? this.displayName, 32),
       app_version: this.appVersion,
       protocol_version: GoonConsts.ProtocolVersion,
-    });
+    };
+
+    /* THE UID GOES ON LAST, and for an anonymous joiner it may not go on at all — the ABSENCE of
+     * the field is what asks the server for a seat identity, so it is set rather than blanked.
+     *
+     * A reload re-presents the `g_` id it was given for THIS room and reclaims the seat
+     * (pass:"rejoin", fresh token). Any other room omits it and takes a fresh identity: a guest id
+     * lives only as long as the room it was minted for, and carrying one across rooms would make
+     * it a durable handle on a person who never signed up for one. */
+    if (!this.anonymous) {
+      body.unified_id = this.unifiedId;
+    } else if (this.guestId && this.guestRoom === room) {
+      body.unified_id = this.guestId;
+      this.unifiedId = this.guestId;
+    }
+
+    const json = await this._call(GOON_PATHS.join, body);
     if (!json) return null;
 
     const token = typeof json.token === 'string' ? json.token : '';
@@ -211,6 +287,8 @@ export class GoonSignalingClient {
 
     return {
       token,
+      /** The `g_` seat identity this client now presents as unified_id; '' for an account join. */
+      guestId: this._adoptGuestId(json, room) || '',
       expiresInSec: intOr(json.expires_in_sec, 300),
       peerDisplayName: typeof json.peer_display_name === 'string' ? json.peer_display_name : '',
       peerAppVersion: typeof json.peer_app_version === 'string' ? json.peer_app_version : '',
@@ -355,7 +433,9 @@ export class GoonSignalingClient {
 
     let res;
     try {
-      res = await this._post(path, body);
+      // A guest has no account token to send, and sending one would be a lie about who is
+      // calling. The room token in the body is the whole of its authority (see `anonymous`).
+      res = await this._post(path, body, this.anonymous ? { noAuth: true } : undefined);
     } catch (e) {
       // postNet does not reject, but an injected post might.
       this.lastError = GoonSignalError.Network;
@@ -391,10 +471,16 @@ export class GoonSignalingClient {
 
     switch (status) {
       case 401:
+        this.lastError = serverError || GoonSignalError.Unauthorized;
+        break;
       case 403:
+        // THE HOST GATE. /invite answers `no_host_access` here and it is a product message, not a
+        // fault — telling a tier-1 patron to reconnect a perfectly connected account (which is
+        // what the bare `unauthorized` fallback says) would send them chasing the wrong problem.
         this.lastError = serverError || GoonSignalError.Unauthorized;
         break;
       case 402:
+        // Retired with the weekly free pass; parsed only so an old server still gets a sentence.
         this.lastError = serverError || GoonSignalError.NoPass;
         this.lastErrorDetail = json && typeof json.next_pass_utc === 'string' ? json.next_pass_utc : null;
         break;

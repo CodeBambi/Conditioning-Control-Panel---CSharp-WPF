@@ -42,10 +42,20 @@ Base: `https://codebambi-proxy.vercel.app`, all POST, auth = `X-Auth-Token` head
 429 body `{error:"rate_limited", cap, count, retry_after_seconds}`. Full field-level spec
 with all error cases lives at the top of `GoonSignalingClient.cs` — summary:
 
+**Entitlement (2026-08-04).** Exactly one route is gated: **hosting is tier 2**
+(`computeEffectiveTier(user) >= 2`, into which the whitelist folds as permanent tier 2), and
+`/invite` answers **403 `no_host_access`** below it. **Joining is free for everyone** — no tier
+check at all, and no account required (see *Anonymous guests* below). The launch model (tier ≥ 1
+free play plus a weekly free pass for tier 0) and its **402 `no_pass`** are **retired**; clients
+still parse `no_pass` so an old server keeps producing a sentence, but nothing sends it. The
+in-app host answers the same question locally as `caps.canHost` on its `init` frame, so the
+desktop title screen can dim Host before the round-trip; a standalone web page cannot know the
+answer before asking and leaves Host live, relying on the 403.
+
 | Endpoint | Purpose | Key semantics |
 |---|---|---|
-| `/v2/goon/invite` | host mints room | server checks premium OR burns weekly free pass (`pass:"premium"\|"weekly_free"`; 402 `no_pass` + `next_pass_utc`); crockford32 code, ~5 min TTL; answers `media_send` — the caller's premium SEND verdict for media transfer (tier≥1). The standalone web client defaults sending OFF against a real server and adopts this answer; the C# host computes the same verdict locally, so to it the field is advisory |
-| `/v2/goon/join` | guest redeems code | 404 `unknown_code`; 409 `already_joined` (a DIFFERENT uid holds the seat) or `self_join` (the code is your own room — one account cannot hold both seats); the SAME uid **reclaims** its seat instead of being refused: fresh token, `rejoin:true`, no second pass burned, stale SDP dropped; **whitelisted** accounts are the one exception to `self_join` and get a **self-duel** instead (`self_duel:true`, `pass:"self_duel"`) — see below; returns peer display name/version + the caller's own `media_send` verdict (see `/invite`) |
+| `/v2/goon/invite` | host mints room | **TIER 2 ONLY** — 403 `no_host_access` below it; crockford32 code, ~5 min TTL; `pass:"premium"` is legacy-shaped and charges nothing (reaching a 200 at all IS the entitlement answer); answers `media_send` — the caller's premium SEND verdict for media transfer (tier≥1, a rung BELOW the host bar). The standalone web client defaults sending OFF against a real server and adopts this answer; the C# host computes the same verdict locally, so to it the field is advisory |
+| `/v2/goon/join` | guest redeems code | **FREE — no tier check, and no account required**; 404 `unknown_code`; 409 `already_joined` (a DIFFERENT uid holds the seat) or `self_join` (the code is your own room — one account cannot hold both seats); the SAME uid **reclaims** its seat instead of being refused: fresh token, `rejoin:true`, stale SDP dropped; **whitelisted** accounts are the one exception to `self_join` and get a **self-duel** instead (`self_duel:true`) — see below; `pass` survives as an ADVISORY LABEL only, one of `"free" \| "rejoin" \| "self_duel"`; a body with **no `unified_id` field at all** mints an anonymous guest and answers `guest_id` (see below); returns peer display name/version + the caller's own `media_send` verdict (see `/invite`; always `false` for a guest) |
 | `/v2/goon/leave` | release the seat | best-effort, fire-and-forget, `{code, token, role}`; a guest hands the seat back and the ROOM stays up, a host folds the room outright; 409 `match_started` once the ledger has a row (releasing the seat invalidates the token that row is written with). Optional by design — the room TTL is still the backstop, and a client treats any failure as "never mind" |
 | `/v2/goon/signal` | SDP/ICE mailbox | post-and-drain in ONE call, ~2 s short-poll, setup only; `data` is opaque (browser-identical `toJSON()` blobs — JS does `JSON.parse` straight into `setRemoteDescription`/`addIceCandidate`); append-only list, exclusive `since` cursor, callers never receive their own messages |
 | `/v2/goon/relay` | fallback transport | same shape; `data` = whole GoonMessage frame; `wait_ms` long-poll hint; own rate budget (~1 call/2 s per player, match-length TTL), 16 KB/frame, 128-frame ring; server MUST NOT inspect or persist `data` |
@@ -53,6 +63,34 @@ with all error cases lives at the top of `GoonSignalingClient.cs` — summary:
 
 A bare 404 (no error body) on any route = "server not deployed" → clients show a
 warming-up message, never "bad code".
+
+### Anonymous guests (free join, 2026-08-04)
+
+Joining does not require an account. A `/join` body with **no `unified_id` field at all** — not an
+empty one, which is a 400 — is an invite-link click from somebody who has never seen the app. The
+server mints them a guest identity, **`g_` + 8 random bytes hex** (`^g_[a-f0-9]{16}$`), and returns
+it as **`guest_id`** on that one response.
+
+The client MUST then present that value as `unified_id` on **every** subsequent room-scoped call —
+`/signal`, `/relay`, `/leave`, `/ledger`, `/report`, `/blocked`, `/peercard` — alongside the room
+`token` it also received. **No `X-Auth-Token` header** goes with any of them: a guest has no
+account token, and the per-seat room token is the whole of its authority (the uid check is the
+secondary lock, exactly as it is for accounts).
+
+- Unified ids are `u_[a-z0-9]{8,24}`, so a `g_` id can never collide with — or be spelled by — a
+  real account, even though it travels in the same field.
+- The `g_` id **doubles as the seat-reclaim key**, which is why it is random and disclosed only
+  once. A guest that reloads re-presents its stored id with the **same room code** and reclaims its
+  seat through the normal rejoin path (`pass:"rejoin"`, fresh token). Clients persist it with the
+  room code and re-present it **only for that room** — carrying one across rooms would turn a
+  throwaway seat into a durable handle on somebody who never signed up for one.
+- A guest has **no user record**: `media_send` is always `false` for it, `/peercard` shares
+  nothing, and the ledger writes no `goon:ledger:g_*` history.
+- Guests never host: `/invite` is tier-2 gated and has no anonymous branch.
+
+Implemented on the server and in the **web** client (`net/signaling.js` `anonymous`, persisted
+through `bridge.savePrefs`). The C# client never takes this path — the desktop app always has an
+account — and documents it without implementing it.
 
 ### Self-duel (whitelist only, 2026-08-04)
 
@@ -82,8 +120,8 @@ by — a real caller, and every uid-keyed structure keeps seeing two identities:
 - a self-duel guest **reclaims the shadow seat** on rejoin (never a second shadow), and
   `/leave` frees it like any other seat.
 
-A self-duel costs no pass at all (`pass:"self_duel"`): the account already paid at
-`/invite`, and whitelist is permanent tier 2 anyway.
+A self-duel is labelled `pass:"self_duel"`. Nothing is charged for it, or for any join — whitelist
+is permanent tier 2 and the account already cleared the only gate there is, at `/invite`.
 
 > **Seat identity, `/leave` and self-duel (2026-08-04)** are implemented on the server
 > and in the **web** client (`Resources/web/goon/net/`). The C# client
@@ -93,13 +131,17 @@ A self-duel costs no pass at all (`pass:"self_duel"`): the account already paid 
 > `self_duel`. None of it is a break — the additions are backward-compatible and the
 > desktop app is the HOST in the owner's setup, which needs no client-side change —
 > but the C# fake no longer models everything the real server does, so port it before
-> trusting it for a rejoin or self-duel case.
+> trusting it for a rejoin or self-duel case. The **host gate** and **free join** (v1.5)
+> ARE ported to both: the C# client maps 403 `no_host_access` and its fake refuses a
+> non-tier-2 `/invite` (`HostGate` + `SetLabAccess`, off by default) and charges nothing
+> for a join. **Anonymous guests are web-only** by design — the desktop app always has an
+> account and can never take that path.
 
 ## 3. Transport
 - Primary: WebRTC **data channel**, ordered + reliable, one channel, no media tracks.
   ICE via public STUN (Google, Cloudflare). No TURN.
 - ICE not complete within **10 s** → fall back to relay **adopting the same room**
-  (same code + token; the invite/pass is never double-charged).
+  (same code + token; the room is never re-minted and `/join` is never re-issued).
 - Disconnect grace: **5 s** reconnect-with-resume before the wobbly/abandon flow.
 - Known WebRTC portability note: some stacks surface the answering side's channel already
   open (`ondatachannel` fires with `readyState == "open"`); open-handling MUST be
@@ -317,3 +359,14 @@ Everything here is additive: a client without it interoperates unchanged.
   invite-link format (§6, client-side only — no server change, no new endpoint).
   Web client only; the C# client neither sends nor reads `media_prep` and, per §1,
   ignores the frame as an unknown `t`.
+- v1.5 (2026-08-04, host gate + free join): §2 **hosting is tier 2** — `/invite` answers
+  403 `no_host_access` below `computeEffectiveTier >= 2` — and **joining is free for
+  everyone**, including people with no account, who play on a server-minted `g_` guest
+  seat (`guest_id` on the `/join` response, presented as `unified_id` on every later
+  room-scoped call, no `X-Auth-Token`). The weekly free pass and its 402 `no_pass` are
+  retired; clients keep parsing `no_pass` for old-server tolerance. `pass` on `/join`
+  becomes the advisory label `"free" | "rejoin" | "self_duel"`. New host→page `init`
+  cap `caps.canHost` (§2) lets the desktop title screen dim Host before the round-trip;
+  it is NOT a peer-negotiated hello cap and never crosses the wire between players.
+  No wire-version change: every addition is a new response field or a new refusal on an
+  existing route, and §1's unknown-field rules already cover both.
