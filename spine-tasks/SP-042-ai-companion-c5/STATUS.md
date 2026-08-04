@@ -1,13 +1,13 @@
 ## STATUS: SP-042 — AI companion slice c5: awareness
-**Current Step:** Step 1 — archaeology + consent/cooldown design + pre-approach consult
-**Last Updated:** 2026-08-04 (authored)
+**Current Step:** Step 2 — consent + cooldown machinery + suppression outcomes (in progress)
+**Last Updated:** 2026-08-04 (worker, Step 1 started)
 **Blockers:** none
 
-### Step 1: archaeology + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (consent pair, cooldown mechanisms + ?? 90 discrepancy, packaging, keyword machinery, routing, removed pre-check)
-- [ ] Design (consent seam, AiCooldownRegistry, packaging through boundary, owned routing, title capability)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+### Step 1: archaeology + design + pre-approach consult [COMPLETE]
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (consent pair, cooldown mechanisms + ?? 90 discrepancy, packaging, keyword machinery, routing, removed pre-check)
+- [x] Design (consent seam, AiCooldownRegistry, packaging through boundary, owned routing, title capability)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: consent + cooldown machinery + suppression outcomes
 - [ ] Consent seam at admission (typed, denied = typed no-op)
