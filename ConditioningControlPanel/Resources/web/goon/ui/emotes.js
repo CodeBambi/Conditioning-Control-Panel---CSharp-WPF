@@ -25,6 +25,75 @@ export const EMOTE_ICONS = Object.freeze(['😏', '💦', '🔥', '🫠', '👀'
 /** One emote every five seconds, locally enforced. */
 const RATE_MS = 5000;
 
+/* ----------------------------------------------------------------------------
+ * THE VOICE-NOTE HOOK (docs/GOON_VOICE_PLAN.md §UI "Emote hook").
+ *
+ * A pre-recorded note can be pinned to an emote; firing that emote also sends
+ * the note, and it plays on the other side with the bubble. The rule this hook
+ * lives by is one line long and it is the whole design:
+ *
+ *   THE EMOTE NEVER WAITS FOR THE NOTE. Not one frame. `match.sendEmote` has
+ *   already happened by the time anything below runs, the send is fired and
+ *   forgotten, every failure is swallowed, and a voice tier that is missing,
+ *   broken or throwing is indistinguishable from one that simply had no note
+ *   pinned to this emote. Six icons in a sheet must not be able to fail because
+ *   of a microphone feature.
+ *
+ * IT IS A MODULE-LEVEL PROVIDER, set by boot.js, rather than a mountEmotes()
+ * dependency — because this sheet is mounted by ui/hud.js, which is owned by
+ * another wave and cannot be asked to thread a new dep through. An instance
+ * provider passed to mountEmotes() wins over the module one where both exist,
+ * so the day the HUD does thread it, nothing here has to change.
+ *
+ * The provider is asked for BOTH halves at once — the service and the note id —
+ * so this file needs to know nothing about prefs, the emote map or the store.
+ * -------------------------------------------------------------------------- */
+
+/** @type {null|((emoteKey:string) => ({voice:object, noteId:string}|null))} */
+let moduleVoiceProvider = null;
+
+/**
+ * boot.js calls this once. Pass null to unhook (a page teardown).
+ * @param {null|((emoteKey:string) => ({voice:object, noteId:string}|null))} fn
+ */
+export function setVoiceProvider(fn) {
+  moduleVoiceProvider = typeof fn === 'function' ? fn : null;
+}
+
+/** The provider currently in force. Exported for the self-tests only. */
+export function getVoiceProvider() { return moduleVoiceProvider; }
+
+/**
+ * Fire the note pinned to `emoteKey`, if there is one. Returns true when a send
+ * was STARTED (not when it succeeded — nothing here ever learns that).
+ * Synchronous, total, and it swallows everything.
+ */
+export function fireVoiceForEmote(emoteKey, provider, onLog) {
+  const p = typeof provider === 'function' ? provider : moduleVoiceProvider;
+  if (!p) return false;
+  try {
+    const key = String(emoteKey || '');
+    if (!key) return false;
+    const hit = p(key);
+    if (!hit || !hit.voice || !hit.noteId) return false;
+    if (typeof hit.voice.sendNote !== 'function') return false;
+    // Fire and forget, with the rejection handler attached in the same
+    // expression: an unhandled rejection out of an emote click would surface as
+    // a page-level error for a feature the player did not even use.
+    const p2 = hit.voice.sendNote(hit.noteId, { emote: key });
+    if (p2 && typeof p2.then === 'function') {
+      p2.then(
+        (res) => { if (onLog && res && !res.ok) { try { onLog({ t: 'voice-note-dropped', emote: key, reason: res.reason }); } catch (_e) { /* ignore */ } } },
+        () => { /* the service already logged it; the emote is long gone */ },
+      );
+    }
+    return true;
+  } catch (_e) {
+    // A provider that throws is a bug in boot, not a reason the emote failed.
+    return false;
+  }
+}
+
 const doc = () => (typeof document !== 'undefined' ? document : null);
 
 function el(tag, cls, text) {
@@ -82,9 +151,11 @@ function nowMs() {
  * @param {object}   o.match
  * @param {object}   [o.audio]
  * @param {Function} [o.onLog]
+ * @param {Function} [o.voiceProvider]  see THE VOICE-NOTE HOOK above — an
+ *                   instance override for the module-level provider boot sets.
  * @returns {{unmount:Function, open:Function, close:Function, toggle:Function, isOpen:Function}}
  */
-export function mountEmotes({ host, match, audio = null, onLog = null } = {}) {
+export function mountEmotes({ host, match, audio = null, onLog = null, voiceProvider = null } = {}) {
   const led = createLedger();
   const root = el('div', 'gg-emotes gg-plate');
   if (!root || !host) return { unmount() { led.run(); }, open() {}, close() {}, toggle() {}, isOpen() { return false; } };
@@ -127,6 +198,12 @@ export function mountEmotes({ host, match, audio = null, onLog = null } = {}) {
     last = nowMs();
     try { if (match && typeof match.sendEmote === 'function') match.sendEmote(text || '', icon || ''); }
     catch (_e) { /* the engine is allowed to be gone */ }
+    /* THE VOICE NOTE RIDES ALONG — AFTER the emote is on the wire, never before,
+     * and never awaited. The key is the ICON where there is one (that is what the
+     * picker in ui/screens/voice.js binds and what travels in the `emote` field
+     * of the voice meta); a preset LINE is accepted as a key too, so a future
+     * picker that offers the sentences needs no change here. */
+    fireVoiceForEmote(icon || text, voiceProvider, onLog);
     sfx(audio, 'gg-emote');
     if (typeof onLog === 'function') { try { onLog({ t: 'emote-out', text: text || '', icon: icon || '' }); } catch (_e) { /* ignore */ } }
     paint();

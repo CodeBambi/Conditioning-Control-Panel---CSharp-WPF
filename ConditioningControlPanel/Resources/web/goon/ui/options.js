@@ -104,7 +104,7 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
   function build() {
     const inMatch = !!(isInMatch && isInMatch());
 
-    /* SIX VOLUME ROWS, all on one piece of machinery: `key.replace('Volume','')`
+    /* SEVEN VOLUME ROWS, all on one piece of machinery: `key.replace('Volume','')`
      * hands ui/audio.js the bus name, and every one of those buses is a gain
      * node something is ALREADY playing through, so a drag retunes what you can
      * hear rather than the next thing to start. Offered mid-match like every
@@ -116,7 +116,14 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
      * slider, then the opponent's videos. `media` is the odd one out and rides
      * the same row anyway: it is not a WebAudio bus at all (see ui/prefs.js's
      * MEDIA_SPEC) but it is a volume, and a player looking for "why is that clip
-     * so loud" looks in the volume block. */
+     * so loud" looks in the volume block.
+     *
+     * VOICE IS LAST, and it is last because it is the loudest thing on the list in
+     * every sense except decibels: it is another person actually speaking to you.
+     * A player who wants it turned down wants it turned down NOW, mid-match, and
+     * the bottom of the volume block is where the eye lands after the six knobs
+     * it already knows. It is a real bus (ui/audio.js), so a drag retunes a note
+     * that is already playing rather than only the next one. */
     const body = el('div', { class: 'gg-panel-body' }, [
       volumeRow('masterVolume', S.options.master),
       volumeRow('musicVolume', S.options.music),
@@ -124,6 +131,7 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
       volumeRow('uiVolume', S.options.ui),
       volumeRow('gameVolume', S.options.game),
       volumeRow('mediaVolume', S.options.media),
+      volumeRow('voiceVolume', S.options.voice),
     ]);
     body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.mediaNote }));
 

@@ -417,11 +417,15 @@ const quiet = { info() {}, warn() {}, error() {}, log() {} };
   // BYTE-IDENTICAL bytes on the wire — which is what keeps the payload path unchanged. The two new
   // members are booleans, so they DO ride along as `false` (the `vwin` precedent: append-only,
   // absent-means-default, and an unknown-member-ignoring reader on the far side).
+  // (`voice_notes` / `voice` joined these two literals in the 2026-08-04 voice-note pass. They are
+  // MODERN-SERIALIZER pins: what THIS build puts on the wire. The hand-written frames further down
+  // that stand in for OLD PEERS deliberately do NOT carry either field — that is the whole point
+  // of those checks, and adding the members to them would test nothing.)
   ok(serialize(makeConsent()) === '{"t":"consent","v":1,"live_duration_sec":720,"toy_cap":0.7,'
-    + '"payload_min_gap_ms":30000,"confirmed":false,"media_transfer":false}',
+    + '"payload_min_gap_ms":30000,"confirmed":false,"media_transfer":false,"voice_notes":false}',
     'a default consent frame serializes exactly as pinned', serialize(makeConsent()));
   ok(JSON.stringify(makeCaps()) === '{"platform":"web","payloads":[],"elements":[],"rounds":[],'
-    + '"min_v":1,"transfer":false}',
+    + '"min_v":1,"transfer":false,"voice":0}',
     'and a default caps object', JSON.stringify(makeCaps()));
   ok(serialize(makePayload({ id: 'x1' })) === '{"t":"payload","v":1,"id":"x1","kind":0,'
     + '"fire_at_match_ms":0,"duration_ms":0,"voice":false,"intensity":0}',
@@ -539,6 +543,193 @@ const quiet = { info() {}, warn() {}, error() {}, log() {} };
     ok(m.mediaTransferAgreed === true, '…and a build that speaks it -> agreed');
     m.setMediaTransfer(false);
     ok(m.mediaTransferAgreed === false, 'withdrawing ours turns it off immediately');
+    m.dispose();
+  }
+}
+
+// ----------------------------------- voice notes: caps.voice + consent.voice_notes (2026-08-04)
+//
+// The SECOND per-side declaration on the consent frame, cloned from `media_transfer` field for
+// field — and cloned here too, deliberately, because the trap is the same one and it is the kind
+// that only shows up against a peer nobody tested with. Every check below has a twin thirty lines
+// up; if one of them ever passes while its twin fails, the two fields have drifted apart.
+//
+// The WEDGE TEST is repeated in full for the same reason: `sameSheet()` must not have learned
+// about `voice_notes` either, or a C# client (which now carries the member but not the concept)
+// and every older page would echo a sheet that can never compare equal.
+//
+// The wire family itself (`t:'voice'`) is pinned in test/selftest-voice.js — this block is only
+// the two APPEND-ONLY fields, which is what core owns.
+{
+  const {
+    makeCaps, makeConsent, makeHello, makeVoice, GoonMatchPhase, VOICE_CAP_VERSION,
+    VOICE_SUBS, clampVoiceCount, clampVoiceSub, peerSpeaksVoice,
+  } = await import('../core/contracts.js');
+  const { GoonMatchService } = await import('../core/match.js');
+
+  // --- caps.voice: an integer REVISION, not a boolean ---------------------------------------
+  ok(makeCaps().voice === 0, 'caps.voice defaults to 0 — no claim is no support');
+  ok(makeCaps({ voice: 1 }).voice === 1, 'and carries an explicit revision');
+  ok(VOICE_CAP_VERSION === 1, 'this build speaks voice revision 1', String(VOICE_CAP_VERSION));
+  ok(localCaps().voice === 0,
+    'caps.local() leaves it to the caller (boot.js sets it; a headless caller stays a "legacy" peer)');
+  ok(localCaps({ voice: VOICE_CAP_VERSION }).voice === 1, 'and passes an override straight through');
+  ok(makeCaps({ voice: true }).voice === 0 && makeCaps({ voice: [1] }).voice === 0,
+    'a boolean (or an array) where a revision belongs is a broken frame, not a 1');
+  ok(makeCaps({ voice: '2' }).voice === 2, 'a quoted number is read forgivingly, like every other count');
+  ok(makeCaps({ voice: -3 }).voice === 0 && makeCaps({ voice: 1.9 }).voice === 1,
+    'negatives are zero and fractions truncate');
+
+  ok(peerSpeaksVoice({ voice: 1 }) === true && peerSpeaksVoice({ voice: 2 }) === true,
+    'peerSpeaksVoice accepts this revision and any later one');
+  ok(peerSpeaksVoice({ voice: 0 }) === false && peerSpeaksVoice({}) === false && peerSpeaksVoice(null) === false,
+    'and reads absent / 0 / no caps at all as "they cannot"');
+  ok(peerSpeaksVoice({ voice: true }) === false,
+    'a boolean true does NOT count — `true >= 1` is the coercion this helper exists to refuse');
+
+  const vhello = parse(serialize(makeHello({ caps: localCaps({ voice: VOICE_CAP_VERSION }) })));
+  ok(vhello.caps.voice === 1, 'caps.voice survives a full hello round trip');
+  ok(parse('{"t":"hello","v":1,"caps":{"platform":"windows","min_v":1}}').caps.voice === 0,
+    'a hello whose caps never mention it reads 0, never undefined');
+  ok(parse('{"t":"hello","v":1}').caps.voice === 0, 'a hello with NO caps at all reads 0 too');
+
+  // --- consent.voice_notes: round-trip, absent-is-false ---------------------------------------
+  ok(makeConsent().voice_notes === false, 'consent.voice_notes defaults to false');
+  ok(parse(serialize(makeConsent({ voice_notes: true }))).voice_notes === true, 'and round-trips');
+  const legacyVoiceSheet = parse('{"t":"consent","v":1,"live_duration_sec":600,"toy_cap":0.5,'
+    + '"payload_min_gap_ms":30000,"confirmed":true}');
+  ok(legacyVoiceSheet.voice_notes === false, 'a consent frame WITHOUT the field parses to false');
+  ok(legacyVoiceSheet.media_transfer === false,
+    'and the older declaration is still absent-means-false beside it — two fields, one rule');
+  // The two are independent: opting into one must never imply the other.
+  const both = parse(serialize(makeConsent({ media_transfer: true, voice_notes: false })));
+  ok(both.media_transfer === true && both.voice_notes === false,
+    'your library and your VOICE are two different consents on one frame');
+
+  // --- the sub discriminator's clamps (shape only; the family lives in selftest-voice) --------
+  ok(JSON.stringify(VOICE_SUBS) === '["meta","chunk","end"]', 'the three subs are frozen in order',
+    JSON.stringify(VOICE_SUBS));
+  ok(clampVoiceSub('meta') === 'meta' && clampVoiceSub('nope') === '' && clampVoiceSub(null) === '',
+    'an unknown sub collapses to "" so it falls off the receiver switch');
+  ok(clampVoiceCount(7) === 7 && clampVoiceCount('7') === 7 && clampVoiceCount(-1) === 0
+    && clampVoiceCount(NaN) === 0 && clampVoiceCount(true) === 0 && clampVoiceCount({}) === 0,
+  'and every count on the family is a non-negative integer or zero');
+  ok(makeVoice().t === 'voice' && makeVoice().sub === '', 'the factory exists and refuses a nameless sub');
+
+  const mkVoiceMatch = () => new GoonMatchService({
+    send() { return Promise.resolve(true); },
+    onMessageReceived() { return () => {}; },
+    onStateChanged() { return () => {}; },
+  }, true, { logger: quiet, tag: 'GG:voice' });
+
+  // --- peerSupportsVoice comes off the hello and can never fail a lobby ----------------------
+  {
+    const m = mkVoiceMatch();
+    ok(m.peerSupportsVoice === false, 'a fresh match assumes the peer cannot hear a voice note');
+    m._phase = GoonMatchPhase.Lobby;
+    m._handleHello(makeHello({ caps: localCaps({ voice: VOICE_CAP_VERSION }) }));
+    ok(m.peerSupportsVoice === true, 'a hello advertising it flips the flag');
+    ok(m.lobbyFailureReason === null, 'and nothing about it can fail a lobby');
+    ok(m.availableDraftPool.length === PoolV1.length, 'it enters NO intersection');
+    m.dispose();
+
+    const old = mkVoiceMatch();
+    old._phase = GoonMatchPhase.Lobby;
+    old._handleHello(parse('{"t":"hello","v":1,"caps":{"platform":"windows","payloads":[0,3],'
+      + '"elements":[0,1,2,3,4,5,6,7,8],"rounds":[2],"min_v":1}}'));
+    ok(old.peerSupportsVoice === false, 'a C#-shaped hello leaves it false');
+    ok(old.lobbyFailureReason === null, 'and that lobby is perfectly healthy');
+    old.dispose();
+  }
+
+  // --- the toggle clears both confirmations, by hand -----------------------------------------
+  {
+    const m = mkVoiceMatch();
+    m._phase = GoonMatchPhase.Consent;
+    m.proposeConsent(600, 0.5, 30000);
+    m._localConsentConfirmed = true;
+    m._remoteConsentConfirmed = true;
+
+    ok(m.setLocalVoiceNotes(true) === true, 'setLocalVoiceNotes is taken in Consent');
+    ok(m.localVoiceNotes === true, 'the local flag is set');
+    ok(m.localConsentConfirmed === false && m.remoteConsentConfirmed === false,
+      'and BOTH confirmations were cleared — they signed a sheet with no mic on it');
+    ok(m.consentSheet.voice_notes === true, 'the re-sent sheet carries the declaration');
+    ok(m.consentSheet.live_duration_sec === 600 && m.consentSheet.toy_cap === 0.5,
+      'while the actual terms are untouched');
+    ok(m.consentSheet.media_transfer === false, 'and the OTHER declaration is untouched too');
+
+    m._phase = GoonMatchPhase.Draft;
+    ok(m.setLocalVoiceNotes(false) === false, 'and it is refused once the lobby is over');
+    ok(m.localVoiceNotes === true, 'with nothing changed');
+    m.dispose();
+  }
+
+  // --- THE WEDGE TEST, again, for the second field --------------------------------------------
+  {
+    const m = mkVoiceMatch();
+    m._phase = GoonMatchPhase.Lobby;
+    m._handleHello(makeHello({ caps: localCaps({ voice: VOICE_CAP_VERSION }) }));   // -> Consent
+    m.proposeConsent(600, 0.5, 30000);
+    m.setLocalVoiceNotes(true);
+    m.confirmConsent();
+    ok(m.localConsentConfirmed === true, 'we signed the sheet with our opt-in on it');
+
+    // Their echo: the SAME terms, signed — and no `voice_notes` member at all.
+    m._handleConsent(parse('{"t":"consent","v":1,"live_duration_sec":600,"toy_cap":0.5,'
+      + '"payload_min_gap_ms":30000,"confirmed":true}'));
+
+    ok(m.phase === GoonMatchPhase.Draft,
+      'CONSENT CONVERGED against a peer that has never heard of the field — no wedge', String(m.phase));
+    ok(m.remoteVoiceNotes === false, 'their absent declaration reads as "they did not opt in"');
+    ok(m.localVoiceNotes === true, 'and OUR opt-in survived their echo untouched');
+    ok(m.consentSheet.voice_notes === true, 'as does the copy on our own sheet');
+    ok(m.voiceNotesAgreed === false, 'so nothing is agreed — no note can leave');
+    m.dispose();
+  }
+
+  // --- a counter-proposal must not flip our own opt-in (cloneSheet keeps the LOCAL value) -----
+  {
+    const m = mkVoiceMatch();
+    m._phase = GoonMatchPhase.Lobby;
+    m._handleHello(makeHello({ caps: localCaps({ voice: VOICE_CAP_VERSION, transfer: true }) }));
+    m.proposeConsent(600, 0.5, 30000);
+    m.setLocalVoiceNotes(true);
+    m.setMediaTransfer(true);
+
+    // Different terms AND an explicit opt-OUT from them, on BOTH declarations.
+    m._handleConsent(parse('{"t":"consent","v":1,"live_duration_sec":900,"toy_cap":0.4,'
+      + '"payload_min_gap_ms":30000,"confirmed":false,"media_transfer":false,"voice_notes":false}'));
+    ok(m.consentSheet.live_duration_sec === 900, 'the counter-proposal was adopted');
+    ok(m.localVoiceNotes === true && m.consentSheet.voice_notes === true,
+      'but adopting their sheet did NOT adopt their opt-out');
+    ok(m.localMediaTransfer === true && m.consentSheet.media_transfer === true,
+      'and cloneSheet carried BOTH local declarations across, not just the one it was written for');
+    ok(m.remoteVoiceNotes === false, 'their declaration is recorded as theirs');
+    ok(m.localConsentConfirmed === false, 'and both signatures cleared, as a counter-proposal must');
+
+    // Now they opt in on the settled terms: read on the SAME-sheet branch too.
+    m.confirmConsent();
+    m._handleConsent(parse('{"t":"consent","v":1,"live_duration_sec":900,"toy_cap":0.4,'
+      + '"payload_min_gap_ms":30000,"confirmed":true,"media_transfer":true,"voice_notes":true}'));
+    ok(m.remoteVoiceNotes === true, 'the same-sheet branch reads it as well');
+    ok(m.voiceNotesAgreed === true, 'both sides + a build that speaks it = agreed');
+    m.dispose();
+  }
+
+  // --- all three inputs are required, and they are SEPARATE from the media triple -------------
+  {
+    const m = mkVoiceMatch();
+    m._phase = GoonMatchPhase.Consent;
+    m.setLocalVoiceNotes(true);
+    m._remoteVoiceNotes = true;
+    ok(m.voiceNotesAgreed === false, 'both opt-ins but an old build -> not agreed');
+    m._peerSupportsVoice = true;
+    ok(m.voiceNotesAgreed === true, '…and a build that speaks it -> agreed');
+    ok(m.mediaTransferAgreed === false,
+      'while the media lane stayed exactly where it was — one consent never implies the other');
+    m.setLocalVoiceNotes(false);
+    ok(m.voiceNotesAgreed === false, 'withdrawing ours turns it off immediately');
     m.dispose();
   }
 }

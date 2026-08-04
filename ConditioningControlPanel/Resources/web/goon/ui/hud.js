@@ -37,6 +37,7 @@ import { mountCloseness } from './closeness.js';
 import { mountAttention } from './attention.js';
 import { mountEmotes } from './emotes.js';
 import { mountAnnouncer } from './announcer.js';
+import { mountMicHud } from './voice/micHud.js';
 import { createDropRoller } from './drops.js';
 import { avatarNode, emitAva } from './avatar.js';
 import { S } from './strings.js';
@@ -237,10 +238,13 @@ function logTo(sink, entry) {
  * @param {object} [o.media]    exec/media pool (unused by the HUD in v1)
  * @param {object} [o.matchLog] array/fn/sink for a human-readable match log
  * @param {object} [o.discord]  ui/discord.js handle — the avatar minis + DM
+ * @param {object} [o.voice]    ui/voice/voiceService.js handle — the mic + the
+ *                              incoming chip. null (or a build with the feature
+ *                              off) simply means there is no mic on the desk.
  * @returns {{unmount:Function}}
  */
 export function mountHud({ match, session = null, audio = null, prefs = null, media = null,
-  matchLog = null, discord = null } = {}) {
+  matchLog = null, discord = null, voice = null } = {}) {
   const led = createLedger();
   const fx = createFx();
   const d = doc();
@@ -403,9 +407,30 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const rightCol = add(body, el('div', 'gg-rightcol'));
   const oppAvaBox = add(rightCol, el('div', 'gg-ava-minibox gg-ava-minibox--opp'));
   const monHost = add(rightCol, el('div', 'gg-mon-host'));
+  /* THEIR VOICE, IN THEIR COLUMN (ui/voice/micHud.js).
+   *
+   * Two slots, both FLOW children of the monitor column, and that is the whole
+   * of the placement decision: the browser lays them out, so neither can land on
+   * MERCY's bottom-centre gutter, the closeness dial, either rail, the announcer
+   * ribbon or the monitor itself at ANY viewport — including the portrait pass,
+   * where this column moves to the top of the body (order: -1). Nothing here is
+   * absolutely placed against the frame, so there is no band to keep clear of
+   * and nothing to re-measure when the phone rules move one.
+   *
+   *   chip slot  directly under the bezel: the speaking indicator for a note
+   *              THEY sent, as close to their face as this file can put it
+   *              without reaching into ui/opponent.js.
+   *   mic slot   under the receipts, above their rail: the button you hold.
+   *              Its recording strip grows LEFTWARDS out of the button, inside
+   *              the slot, so holding it never moves anything on the desk.
+   *
+   * Both collapse to nothing when the feature is not live (hidden host, not an
+   * emptied one — see micHud's header on why it must not rebuild its nodes). */
+  const voiceChipHost = add(rightCol, el('div', 'gg-voice-chiphost'));
   const receiptsHost = add(rightCol, el('div', 'gg-receipts'));
   const coolHost = add(rightCol, el('div', 'gg-cool'));
   if (coolHost) coolHost.hidden = true;
+  const voiceHost = add(rightCol, el('div', 'gg-voice-host'));
   const rightRail = add(rightCol, el('div', 'gg-rail gg-rail--right'));
 
   // ---------------------------------------------------------------- bottom
@@ -473,6 +498,14 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // frame (under the timer, clear of the monitor), so it takes no grid row.
   const announcer = mountAnnouncer({ host: root, match, audio, onLog });
 
+  /* The mic. Mounted unconditionally and hidden by itself: whether a duel has
+   * voice in it is five facts wide (both consents, the peer's build, the phase,
+   * your own opt-in) and ui/voice/voiceService.js is the one place that knows —
+   * the desk subscribes to the answer instead of re-deriving any of it. With no
+   * service at all this is a no-op handle and no DOM. */
+  const mic = mountMicHud({ host: voiceHost, chipHost: voiceChipHost, voice, audio, onLog });
+
+  led.add(() => { try { mic.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { announcer.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { attention.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { dial.unmount(); } catch (_e) { /* gone */ } });
@@ -761,7 +794,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   return {
     /** Exposed so H (or a play-test driver) can poke the desk without re-deriving it. */
     parts: {
-      root, arsenal, opponent, dial, attention, emotes, announcer, fx, drops,
+      root, arsenal, opponent, dial, attention, emotes, announcer, fx, drops, mic,
       /** The zen toggle, for a driver that wants the state without the click. */
       zen: { button: zenBtn, set: (on) => setZen(on, true), get on() { return zenOn; } },
     },

@@ -102,9 +102,74 @@ export const PREF_DEFAULTS = Object.freeze({
   seenHowItWorks: false,
   /** Local-only counter; the recap's "GG" title reads it. Never sent anywhere. */
   matchesPlayed: 0,
+
+  /* ---------------------------------------------------------------- voice notes
+   * FOUR keys, and the first two are the safety pair. Both default to the answer
+   * that does nothing:
+   *
+   *   voiceNotesEnabled  the opt-in itself. OFF, and it stays off until the
+   *     player turns it on in the Voice Notes screen — never from a lobby, never
+   *     as a side effect of anything else. With it off the receiver drops an
+   *     inbound note UNREAD: not decoded, not queued, not played. That is a
+   *     stronger promise than "we hide the button", and it is the reason this is
+   *     a pref the receive path reads rather than a piece of UI state.
+   *   voiceAckSeen       whether the acknowledgment modal has been read and
+   *     accepted. It gates the TOGGLE, not the feature: false means the switch
+   *     cannot be moved at all. Separate from the toggle because "I understand
+   *     what this does" and "I want it on right now" are different answers, and
+   *     a player who turns the feature off must not have to re-read the modal to
+   *     turn it back on.
+   *   voiceVolume        the 7th slider (ui/options.js), on the `voice` bus in
+   *     ui/audio.js. 0.9 rather than the 0.85 the cue buses use: a voice is
+   *     quieter and more consequential than a pop, and this is the one sound on
+   *     the page that another person made on purpose.
+   *   voiceEmoteMap      { [emoteKey]: noteId } — one pre-recorded note per
+   *     emote. THE ONLY NON-SCALAR PREF ON THE PAGE, which is why `coerce`
+   *     grew an object branch; it is a plain string->string map, it round-trips
+   *     through JSON like everything else here, and a corrupt store lands as {}
+   *     rather than as "[object Object]".
+   * -------------------------------------------------------------------------- */
+  voiceNotesEnabled: false,
+  voiceAckSeen: false,
+  voiceVolume: 0.9,
+  voiceEmoteMap: Object.freeze({}),
 });
 
 function clamp01(v) { const n = Number(v); return !isFinite(n) ? 0 : n < 0 ? 0 : n > 1 ? 1 : n; }
+
+/** A plain object (not an array, not null, not a Date/Map/whatever). */
+function isPlainObject(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * A defensive copy of one stored value.
+ *
+ * Scalars are returned as they are; an OBJECT pref is copied, because the value
+ * in `values` must never be the same reference as the one in PREF_DEFAULTS (a
+ * caller mutating `prefs.all().voiceEmoteMap` would otherwise edit the DEFAULT,
+ * for the life of the page, for every store built after it). Only string /
+ * number / boolean members survive the copy: the sink is JSON, so anything else
+ * would either vanish on the way to storage or come back as something the
+ * reader never expected.
+ */
+function cloneValue(v) {
+  if (!isPlainObject(v)) return v;
+  const out = {};
+  for (const k of Object.keys(v)) {
+    const val = v[k];
+    const t = typeof val;
+    if (t === 'string' || t === 'number' || t === 'boolean') out[k] = val;
+  }
+  return out;
+}
+
+/** PREF_DEFAULTS with every object value freshly cloned. See cloneValue. */
+function freshDefaults() {
+  const out = {};
+  for (const k of Object.keys(PREF_DEFAULTS)) out[k] = cloneValue(PREF_DEFAULTS[k]);
+  return out;
+}
 
 /* ---------------------------------------------------------------------------
  * MIGRATIONS — a retired key seeding the keys that replaced it.
@@ -179,7 +244,24 @@ function coerce(key, value) {
     if (!isFinite(n)) return def;
     return (key.endsWith('Volume')) ? clamp01(n) : n;
   }
+  /* AN OBJECT DEFAULT (voiceEmoteMap, so far) — checked BEFORE the string
+   * fall-through, which is the whole reason this branch exists: `String({})` is
+   * "[object Object]", so without it the one map on this page would survive
+   * exactly one save and come back as a nine-character string that every reader
+   * would then treat as truthy. Anything that is not a plain object at all
+   * (a JSON array, a leftover string, null) lands as a FRESH empty default
+   * rather than as itself. */
+  if (isPlainObject(def)) return isPlainObject(value) ? cloneValue(value) : cloneValue(def);
   return value === undefined || value === null ? def : String(value);
+}
+
+/** Value equality for the change check. Objects compare by CONTENT — identity
+ *  would report a change on every set and turn a no-op into a storage write. */
+function sameValue(a, b) {
+  if (isPlainObject(a) || isPlainObject(b)) {
+    try { return JSON.stringify(a) === JSON.stringify(b); } catch (_e) { return false; }
+  }
+  return a === b;
 }
 
 /* ---------------------------------------------------------------------------
@@ -252,7 +334,7 @@ function reflect(key, values) {
  *                        after the local store, which is the more recent edit).
  */
 export function createPrefs(seed) {
-  const values = Object.assign({}, PREF_DEFAULTS);
+  const values = freshDefaults();
   for (const src of [seed || {}, readStore()]) {
     const blob = migratePrefs(src);
     for (const k of Object.keys(PREF_DEFAULTS)) {
@@ -286,13 +368,19 @@ export function createPrefs(seed) {
   }
 
   return {
-    get(key) { return values[key]; },
-    all() { return Object.assign({}, values); },
+    /** A COPY for object prefs (scalars are returned as they are) — the store's
+     *  own value is never handed out, so an edit has to come back through set(). */
+    get(key) { return cloneValue(values[key]); },
+    all() {
+      const out = {};
+      for (const k of Object.keys(values)) out[k] = cloneValue(values[k]);
+      return out;
+    },
 
     set(key, value) {
       if (!(key in PREF_DEFAULTS)) return false;
       const next = coerce(key, value);
-      if (values[key] === next) return false;
+      if (sameValue(values[key], next)) return false;
       values[key] = next;
       schedule();
       emit(key);
@@ -305,7 +393,7 @@ export function createPrefs(seed) {
       for (const k of Object.keys(partial || {})) {
         if (!(k in PREF_DEFAULTS)) continue;
         const next = coerce(k, partial[k]);
-        if (values[k] === next) continue;
+        if (sameValue(values[k], next)) continue;
         values[k] = next;
         changed = true;
         emit(k);
@@ -316,7 +404,10 @@ export function createPrefs(seed) {
 
     reset() {
       const before = JSON.stringify(values);
-      Object.assign(values, PREF_DEFAULTS);
+      // freshDefaults(), NOT PREF_DEFAULTS: assigning the frozen defaults straight in would put
+      // the SHARED map object into `values`, where the next edit either throws (it is frozen) or
+      // rewrites the default for every store on the page.
+      Object.assign(values, freshDefaults());
       if (JSON.stringify(values) === before) return false;
       schedule();
       for (const k of Object.keys(PREF_DEFAULTS)) emit(k);

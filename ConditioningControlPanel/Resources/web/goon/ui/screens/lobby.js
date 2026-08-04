@@ -118,8 +118,22 @@ export function mount(container, ctx) {
   const gapRow = mkSlider(S.lobby.gap, { min: GAP_MIN_SEC, max: GAP_MAX_SEC, step: 5 });
   const xferRow = mkCheck(S.lobby.transfer);
 
+  /* THE VOICE-NOTE LINE — READ ONLY, and deliberately not a row.
+   *
+   * There is no toggle for it here and there must not be: turning voice notes on
+   * is an acknowledgment (your real voice goes to them, theirs can come back),
+   * and that gate lives on one screen — ui/screens/voice.js, off the title menu.
+   * A second entry point without the modal would be a way to switch a mic on
+   * without ever reading what it does.
+   *
+   * So this is a STATUS SENTENCE about a decision made elsewhere: whose side has
+   * it on, or that their build is too old to speak the family at all. It renders
+   * nothing at all when neither side has opted in, because a line that says
+   * "off" on a screen full of terms reads as a term. */
+  const voiceLine = el('p', { class: 'gg-row-sub gg-voice-lobbyline', text: '', hidden: true });
+
   const sheetBox = el('div', { class: 'gg-consent' }, [
-    durRow.row, toyRow.row, gapRow.row, xferRow.row, xferRow.sub,
+    durRow.row, toyRow.row, gapRow.row, xferRow.row, xferRow.sub, voiceLine,
   ]);
 
   /* ---------------------------------------------------------- confirm UI */
@@ -270,7 +284,25 @@ export function mount(container, ctx) {
       ? S.lobby.transferTheirsOn : S.lobby.transferTheirsOff;
   }
 
-  function paintAll() { paintIdentity(); paintConnection(); paintSheet(); paintConfirm(); paintTransfer(); }
+  /**
+   * The voice-note status line. Four states, in the order that answers the
+   * question a player is actually asking ("can they hear me?"):
+   * both on, the peer's build cannot, only mine, only theirs. Silent otherwise.
+   */
+  function paintVoice() {
+    const mine = !!match.localVoiceNotes;
+    const theirs = !!match.remoteVoiceNotes;
+    let text = '';
+    if (mine && theirs && match.peerSupportsVoice) text = S.voice.lobbyBoth;
+    else if ((mine || theirs) && !match.peerSupportsVoice) text = S.voice.lobbyPeerOld;
+    else if (mine) text = S.voice.lobbyYours;
+    else if (theirs) text = S.voice.lobbyTheirs;
+    voiceLine.textContent = text;
+    voiceLine.hidden = !text;
+    voiceLine.classList.toggle('is-on', text === S.voice.lobbyBoth);
+  }
+
+  function paintAll() { paintIdentity(); paintConnection(); paintSheet(); paintConfirm(); paintTransfer(); paintVoice(); }
 
   /* --------------------------------------------------------------- input */
 
@@ -354,9 +386,10 @@ export function mount(container, ctx) {
 
   /* --------------------------------------------------------- engine wiring */
 
-  ledger.sub(match.onConsentChanged(() => { paintSheet(); paintConfirm(); paintTransfer(); }));
-  // The hello is what sets peerSupportsTransfer, and it arrives with the opponent.
-  ledger.sub(match.onOpponentStateChanged(() => { paintIdentity(); paintTransfer(); }));
+  ledger.sub(match.onConsentChanged(() => { paintSheet(); paintConfirm(); paintTransfer(); paintVoice(); }));
+  // The hello is what sets peerSupportsTransfer (and peerSupportsVoice), and it
+  // arrives with the opponent.
+  ledger.sub(match.onOpponentStateChanged(() => { paintIdentity(); paintTransfer(); paintVoice(); }));
   ledger.sub(match.onPhaseChanged(() => { paintAll(); }));
   ledger.sub(match.onLobbyFailed((reason) => {
     sheets?.open?.({

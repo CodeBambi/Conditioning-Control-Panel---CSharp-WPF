@@ -246,7 +246,30 @@ namespace ConditioningControlPanel.Services.GoonGame
         [JsonProperty("caps")] public GoonCaps Caps { get; set; } = new();
     }
 
-    /// <summary>The consent sheet both players must confirm, byte-identical on both sides.</summary>
+    /// <summary>
+    /// The consent sheet both players must confirm, byte-identical on both sides.
+    ///
+    /// <c>voice_notes</c> (2026-08-04) is APPEND-ONLY, on the vwin precedent, and it is NOT A TERM
+    /// OF THE SHEET. It is a PER-SIDE DECLARATION that happens to ride the consent frame: on the
+    /// wire it always means "THE SENDER opts in to voice notes", never "the agreed value", and each
+    /// client ANDs its own value with the one it last heard from the peer (the web client's
+    /// core/match.js <c>voiceNotesAgreed</c>).
+    ///
+    /// IT MUST NEVER JOIN THE SHEET FINGERPRINT. The comparison that decides "same terms or a
+    /// counter-proposal" is over the three real terms above; a client that includes this field in
+    /// it would never compare equal against a peer that drops it, both sides would clear each
+    /// other's confirmations forever, and the lobby would wedge with no timeout out of it. (See the
+    /// guard comment on sameSheet() in the web client's core/match.js.)
+    ///
+    /// ABSENT MEANS FALSE — no declaration is no opt-in — which is also why there is no Normalize
+    /// entry for it in GoonWire: a bool has no illegal range to clamp, Newtonsoft's error handler
+    /// already lands a malformed value on <c>false</c>, and a peer that has never heard of the
+    /// field reads exactly the same thing as one that opted out.
+    ///
+    /// THIS CLIENT NEVER SENDS OR PLAYS AUDIO. The voice-note family (<c>t:"voice"</c>) is
+    /// web-only; this property exists so the reference implementation round-trips the sheet without
+    /// dropping a member — parity, not participation. It ships <c>false</c> and means it.
+    /// </summary>
     public sealed class ConsentSheetMsg : GoonMessage
     {
         public override string Type => "consent";
@@ -254,6 +277,7 @@ namespace ConditioningControlPanel.Services.GoonGame
         [JsonProperty("toy_cap")] public double ToyCap { get; set; } = 0.7;   // can only LOWER the receiver's own cap
         [JsonProperty("payload_min_gap_ms")] public int PayloadMinGapMs { get; set; } = GoonConsts.PayloadMinGapMs;
         [JsonProperty("confirmed")] public bool Confirmed { get; set; }
+        [JsonProperty("voice_notes")] public bool VoiceNotes { get; set; }   // per-side opt-in; ABSENT = false
     }
 
     /// <summary>

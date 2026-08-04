@@ -1649,6 +1649,201 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
 .gg-hud-frame.is-calm .gg-mon-vwin * { animation: none !important; }
 
 /* ===========================================================================
+ * VOICE NOTES — the held mic and the incoming chip (ui/voice/micHud.js).
+ *
+ * PLACEMENT IS FLOW, NOT COORDINATES, and that is the whole safety argument.
+ * Both slots are ordinary children of `.gg-rightcol` (ui/hud.js builds them
+ * around the receipts), so the browser keeps them inside the monitor column at
+ * every viewport. They cannot reach MERCY's bottom-centre gutter, the closeness
+ * dial, either rail, the announcer ribbon or the bezel itself, because none of
+ * them is positioned against the frame — unlike the emote sheet and the
+ * portrait rails, there is no band here to measure and nothing to re-measure
+ * when the phone pass moves one. Sudden death takes them away with the rest of
+ * the body (.gg-hud-frame.is-sd .gg-hud-body), for free.
+ *
+ * THE STRIP GROWS INSIDE ITS OWN SLOT. `.gg-voice-host` is a fixed 48px row and
+ * the strip is absolutely placed against it, anchored right — so a recording
+ * expands LEFTWARDS over the (pointer-transparent) well and NOTHING on the desk
+ * moves while a button is being held. A layout shift under a live pointer
+ * capture is how a hold gets dropped half way through a sentence.
+ *
+ * POINTER-EVENTS — THE 0,2,0 TRAP, for the third time in this file. `.gg-hud-
+ * frame .gg-plate { pointer-events: auto }` near the top is specificity 0,2,0,
+ * and the strip wears .gg-plate while it is recording (for goon.css's
+ * html[data-gg-fx="hot"] hardening). The opt-out below is therefore written at
+ * 0,2,0 as well and LATER in the file, with the one control that must stay
+ * clickable re-opting in at the same weight: a transparent pill lying across
+ * the stage would eat clicks meant for #gg-stage.
+ *
+ * ONE ANIMATION SLOT PER ELEMENT. The pulse is on `.gg-voice-dot` and the level
+ * bars on `.gg-voice-bar` — leaves that animate and do nothing else. The strip
+ * and the chip carry state classes instead, so no `animation` shorthand can
+ * cancel another. Both animations opt into --gg-deco-play: their BASE state (a
+ * solid red dot, three standing bars) is the state that carries the meaning, so
+ * parking them at heat costs no information.
+ *
+ * ZEN takes both away by name, like the dial and the effect chips: it exists to
+ * hand the stage back, and a mic you are not holding is chrome.
+ * ======================================================================== */
+.gg-voice-host {
+  position: relative;
+  width: 100%;
+  height: 48px;
+  flex: 0 0 auto;
+}
+.gg-voice-chiphost { width: 100%; display: flex; justify-content: flex-end; }
+
+.gg-voice {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  max-width: min(22rem, 62vw);
+  border-radius: var(--gg-radius-pill);
+  /* the plate's own padding would push the button off the column's right edge;
+     .gg-plate is added by CLASS while recording, so this comes later and wins */
+  padding: 0 0 0 0.85rem;
+}
+/* idle: no plate, no box — just the round button, exactly like the gear */
+.gg-voice:not(.gg-plate) { background: none; border: 0; backdrop-filter: none; padding-left: 0; }
+
+/* THE 0,2,0 OPT-OUT (see the header) + the one re-opt-in. */
+.gg-hud-frame .gg-voice,
+.gg-hud-frame .gg-voice-hint,
+.gg-hud-frame .gg-voice-chip { pointer-events: none; }
+.gg-hud-frame .gg-voice-btn { pointer-events: auto; }
+
+.gg-voice-btn {
+  flex: 0 0 auto;
+  width: 48px; height: 48px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.05rem; line-height: 1; color: var(--gg-text-2);
+  background: var(--gg-plate-bg);
+  border: var(--gg-plate-border);
+  border-radius: 50%;
+  cursor: pointer;
+  touch-action: none;             /* a long press must not scroll the page away */
+  user-select: none;
+  transition: color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.gg-voice-btn:hover { color: #fff; border-color: var(--gg-pink); }
+.gg-voice.is-rec .gg-voice-btn {
+  color: #fff;
+  border-color: var(--gg-hot);
+  box-shadow: 0 0 18px rgba(255, 20, 147, 0.55);
+}
+/* past the slide threshold the BUTTON says so too, not only the words */
+.gg-voice.is-cancel .gg-voice-btn { color: var(--gg-text-4); border-color: var(--gg-text-4); box-shadow: none; }
+
+/* the strip's contents exist only while there is something to say */
+.gg-voice-meta { display: none; align-items: center; gap: 0.5rem; min-width: 0; }
+.gg-voice[data-gg-voice="rec"] .gg-voice-meta,
+.gg-voice[data-gg-voice="send"] .gg-voice-meta,
+.gg-voice[data-gg-voice="flash"] .gg-voice-meta { display: flex; }
+
+.gg-voice-dot {
+  flex: 0 0 auto;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--gg-hot);
+  box-shadow: 0 0 10px rgba(255, 20, 147, 0.8);
+  animation: ggVoicePulse 1.1s ease-in-out infinite;
+  animation-play-state: var(--gg-deco-play);
+}
+@keyframes ggVoicePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.72); } }
+/* nothing is being recorded in these two, so the red light goes out */
+.gg-voice[data-gg-voice="send"] .gg-voice-dot,
+.gg-voice[data-gg-voice="flash"] .gg-voice-dot { display: none; }
+
+.gg-voice-time {
+  font-size: 0.72rem; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--gg-text-1);
+  white-space: nowrap;
+}
+.gg-voice-slide {
+  font-size: 0.62rem; letter-spacing: 0.08em;
+  color: var(--gg-text-4);
+  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.gg-voice.is-cancel .gg-voice-slide { color: var(--gg-hot); }
+
+/* The hint caption: a tap, a refused mic, a send that came back too soon. Sits
+   ABOVE the strip so the finger on the button never covers the answer. */
+.gg-voice-hint {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.3rem);
+  max-width: min(18rem, 70vw);
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(12, 6, 20, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.62rem; letter-spacing: 0.04em;
+  color: var(--gg-text-2);
+  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- their note, playing (the chip under the bezel) --------------------- */
+.gg-voice-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(12, 6, 20, 0.72);
+  border-left: 3px solid var(--gg-violet);
+  font-size: 0.62rem; color: var(--gg-text-2);
+  max-width: 100%;
+}
+.gg-voice-chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gg-voice-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 11px; }
+.gg-voice-bar {
+  width: 3px; height: 11px;
+  border-radius: 2px;
+  background: var(--gg-violet);
+  transform-origin: 50% 100%;
+  animation: ggVoiceBar .9s ease-in-out infinite;
+  animation-play-state: var(--gg-deco-play);
+}
+.gg-voice-bar:nth-child(2) { animation-delay: .15s; }
+.gg-voice-bar:nth-child(3) { animation-delay: .3s; }
+@keyframes ggVoiceBar { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
+
+/* ---- zen: both go, like the dial and the effect chips ------------------- */
+.gg-hud-frame.gg-hud--zen .gg-voice-host,
+.gg-hud-frame.gg-hud--zen .gg-voice-chiphost { display: none; }
+
+/* ---- hot: the round button and the two captions harden like every plate -- */
+html[data-gg-fx="hot"] .gg-voice-btn { background: rgba(10, 5, 17, 0.90); }
+html[data-gg-fx="hot"] .gg-voice-hint,
+html[data-gg-fx="hot"] .gg-voice-chip { background: rgba(10, 5, 17, 0.92); }
+
+/* ---- motion off: the words and the red dot stay, they just stop moving --- */
+.gg-hud-frame.is-calm .gg-voice-dot,
+.gg-hud-frame.is-calm .gg-voice-bar { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .gg-voice-dot, .gg-voice-bar { animation: none !important; }
+}
+
+@media (orientation: portrait), (max-width: 720px) {
+  /* The column is 190px wide here and sits at the TOP of the body, so the strip
+     leans further out over the stage while it is held — 78vw is the widest it
+     may be, which still clears the frame's own padding on a 375pt phone. */
+  .gg-voice-host { height: 44px; }
+  .gg-voice { height: 44px; max-width: 78vw; }
+  .gg-voice-btn { width: 44px; height: 44px; font-size: 0.98rem; }
+  .gg-voice-time { font-size: 0.68rem; }
+  .gg-voice-slide { font-size: 0.56rem; }
+  .gg-voice-chip { font-size: 0.58rem; }
+}
+
+/* ===========================================================================
  * ANNOUNCER — the top-centre ribbon (ui/announcer.js), added 2026-08-03.
  *
  * "we should announce briefly on the top of the screen whats going on (the
@@ -1822,3 +2017,4 @@ html[data-gg-fx="hot"] .gg-announce-sheen { display: none; }
   .gg-hud-frame .gg-ava[data-size="mini"] { --gg-ava-size: 32px; }
   .gg-ava-dm { min-width: 30px; height: 24px; font-size: 0.58rem; }
 }
+

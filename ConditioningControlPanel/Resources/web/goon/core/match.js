@@ -61,7 +61,7 @@ import {
   GoonAttentionMode, GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonTransportState,
   GoonConsts, clampWindowCount, costOf, enumName, isClockMessage,
   makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMercy,
-  makePayloadReceipt, makeResult, makeTick, makePayload,
+  makePayloadReceipt, makeResult, makeTick, makePayload, makeVoice, peerSpeaksVoice, VOICE_SUBS,
 } from './contracts.js';
 import { GoonRng, combineSeeds, newSeedContribution } from './rng.js';
 import { localMonotonicMs } from './clock.js';
@@ -239,6 +239,15 @@ export class GoonMatchService {
     this._localMediaTransfer = false;
     this._remoteMediaTransfer = false;
 
+    // VOICE NOTES. The same three booleans, for the same reasons, kept SEPARATE from the media
+    // triple above rather than folded into it: they are two different consents (their library vs
+    // their actual voice) and neither may ever imply the other. `_peerSupportsVoice` comes off
+    // caps.voice — a revision integer, not an entitlement — and is what stops us sending into a
+    // build that will drop the frames without a word (the family has no receipts to notice with).
+    this._peerSupportsVoice = false;
+    this._localVoiceNotes = false;
+    this._remoteVoiceNotes = false;
+
     this._localSeedContribution = null;
     this._remoteSeedContribution = null;
 
@@ -304,6 +313,7 @@ export class GoonMatchService {
       opponentStateChanged: makeEvent(),
       connectionHealthChanged: makeEvent(),
       emoteReceived: makeEvent(),
+      voiceFrameReceived: makeEvent(),
       interactionCheckDue: makeEvent(),
       lobbyFailed: makeEvent(),
       matchEnded: makeEvent(),
@@ -343,6 +353,29 @@ export class GoonMatchService {
    */
   get mediaTransferAgreed() {
     return this._localMediaTransfer && this._remoteMediaTransfer && this._peerSupportsTransfer;
+  }
+
+  /** OUR voice-note opt-in, as it rides every consent frame we send. */
+  get localVoiceNotes() { return this._localVoiceNotes; }
+  /** THEIR opt-in, as last declared on a consent frame. Absent field -> false. */
+  get remoteVoiceNotes() { return this._remoteVoiceNotes; }
+  /** Their BUILD advertised `caps.voice >= 1` in the hello. Nothing to do with consent. */
+  get peerSupportsVoice() { return this._peerSupportsVoice; }
+  /**
+   * All three, ANDed — the MATCH's half of "is voice live right now". The other half is the
+   * PHASE (Countdown/Live/SuddenDeath) and it is applied at the send/receive door rather than
+   * here, because this getter is also what the lobby reads while there is no phase to speak of.
+   * ui/voice/voiceService.js `available()` is the one predicate that combines both.
+   */
+  get voiceNotesAgreed() {
+    return this._localVoiceNotes && this._remoteVoiceNotes && this._peerSupportsVoice;
+  }
+
+  /** The three phases a voice note may cross the wire in. Everything else is silence. */
+  get voicePhaseOpen() {
+    return this._phase === GoonMatchPhase.Countdown
+      || this._phase === GoonMatchPhase.Live
+      || this._phase === GoonMatchPhase.SuddenDeath;
   }
 
   /** What WE allow (canonical, always-on element excluded). */
@@ -437,6 +470,16 @@ export class GoonMatchService {
   onOpponentStateChanged(fn) { return this._ev.opponentStateChanged.on(fn); }
   onConnectionHealthChanged(fn) { return this._ev.connectionHealthChanged.on(fn); }
   onEmoteReceived(fn) { return this._ev.emoteReceived.on(fn); }
+  /**
+   * Every inbound `t:'voice'` frame, phase-gated and shape-clamped, in arrival order.
+   *
+   * DELIBERATELY NOT CONSENT-GATED HERE. The receiver's "my opt-in is off, so this is dropped
+   * UNREAD" rule is the whole safety property of the feature and it belongs to ONE owner
+   * (ui/voice/voiceService.js), which drops the frame before a single byte is decoded. Splitting
+   * the same rule across two tiers is how a feature ends up with a path where only one of them
+   * ran. What core owes the service is a frame that is the right shape, from the right phase.
+   */
+  onVoiceFrame(fn) { return this._ev.voiceFrameReceived.on(fn); }
   /** No-cam only: prompt an interaction check, then call reportInteractionCheck(). */
   onInteractionCheckDue(fn) { return this._ev.interactionCheckDue.on(fn); }
   onLobbyFailed(fn) { return this._ev.lobbyFailed.on(fn); }
@@ -510,8 +553,9 @@ export class GoonMatchService {
       toy_cap: clamp(toyCap, 0.0, 1.0),
       payload_min_gap_ms: Math.max(GoonConsts.PayloadMinGapMs, payloadMinGapMs),
       confirmed: false,
-      // Not a term — OUR standing declaration, republished on every frame we author.
+      // Not terms — OUR standing declarations, republished on every frame we author.
       media_transfer: this._localMediaTransfer,
+      voice_notes: this._localVoiceNotes,
     });
     this._localConsentConfirmed = false;
     this._remoteConsentConfirmed = false;
@@ -523,7 +567,7 @@ export class GoonMatchService {
   confirmConsent() {
     if (this._phase !== GoonMatchPhase.Consent) return;
     this._localConsentConfirmed = true;
-    this._send(cloneSheet(this._consentSheet, true, this._localMediaTransfer));
+    this._send(cloneSheet(this._consentSheet, true, this._localMediaTransfer, this._localVoiceNotes));
     this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
     this._tryEnterDraft();
   }
@@ -532,7 +576,7 @@ export class GoonMatchService {
   withdrawConsent() {
     if (this._phase !== GoonMatchPhase.Consent) return;
     this._localConsentConfirmed = false;
-    this._send(cloneSheet(this._consentSheet, false, this._localMediaTransfer));
+    this._send(cloneSheet(this._consentSheet, false, this._localMediaTransfer, this._localVoiceNotes));
     this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
   }
 
@@ -553,7 +597,34 @@ export class GoonMatchService {
     this._localMediaTransfer = !!on;
     this._localConsentConfirmed = false;
     this._remoteConsentConfirmed = false;
-    this._consentSheet = cloneSheet(this._consentSheet, false, this._localMediaTransfer);
+    this._consentSheet = cloneSheet(this._consentSheet, false, this._localMediaTransfer, this._localVoiceNotes);
+    this._send(this._consentSheet);
+    this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
+    return true;
+  }
+
+  /**
+   * The VOICE-NOTE opt-in — setMediaTransfer's twin, line for line, and for every one of the same
+   * reasons (see the block above and the guard comment on `sameSheet`).
+   *
+   * The one thing worth saying twice: flipping this CLEARS BOTH CONFIRMATIONS. Your opponent
+   * signed a sheet on which nobody's voice was going to be recorded; turning the mic on after
+   * they signed would be advancing them onto a term they never saw, and it is exactly the kind of
+   * term this rule exists for. The ack gate in front of the toggle (ui/screens/voice.js) is the
+   * LOCAL half of the same idea — this is the half the other player gets.
+   *
+   * It is NOT the whole gate either: the peer's build has to speak the family (`caps.voice`) and
+   * the phase has to be open. `voiceNotesAgreed` ANDs the consents; the service ANDs the rest.
+   *
+   * @returns {boolean} true when the toggle was taken (Lobby/Consent only).
+   */
+  setLocalVoiceNotes(on) {
+    if (this._phase !== GoonMatchPhase.Lobby && this._phase !== GoonMatchPhase.Consent) return false;
+
+    this._localVoiceNotes = !!on;
+    this._localConsentConfirmed = false;
+    this._remoteConsentConfirmed = false;
+    this._consentSheet = cloneSheet(this._consentSheet, false, this._localMediaTransfer, this._localVoiceNotes);
     this._send(this._consentSheet);
     this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
     return true;
@@ -703,6 +774,61 @@ export class GoonMatchService {
       text: sanitizeText(text, EMOTE_TEXT_MAX_CHARS),
       icon: sanitizeText(icon, EMOTE_ICON_MAX_CHARS),
     }));
+  }
+
+  /* ------------------------------------------------------------ voice notes
+   *
+   * ONE DOOR, three verbs on top of it. Everything a voice frame has to satisfy before it may
+   * leave is checked HERE, once, so a caller cannot assemble a note that goes out half-gated:
+   *
+   *   · not disposed, not ended, and the PHASE is Countdown/Live/SuddenDeath. A note that lands
+   *     on a recap has nowhere to play and a note before the countdown is a mic hot in a lobby;
+   *   · BOTH consents plus the peer's `caps.voice` (voiceNotesAgreed). Sending to a build that
+   *     never heard of the family is not "harmless": the frame is dropped silently at the far end
+   *     and this family has NO receipt, so the sender would sit there believing it landed;
+   *   · the sub is one of the three (clampVoiceSub in the factory turns anything else into '',
+   *     and '' is refused here rather than put on the wire as a frame nobody can route).
+   *
+   * FIRE AND FORGET, exactly like `t:'emote'`: no id reservation, no ACK, no retry, no ledger
+   * entry, no charge. The boolean is "we handed it to the transport", never "they heard it".
+   * The BYTES ceiling is not here either — a frame too big for the lane is dropped by
+   * wire.serializeForSend with an error, and the chunk plan that keeps us under it belongs to
+   * ui/voice/voiceService.js, which is the tier that knows what a chunk is.
+   *
+   * @returns {boolean} true when the frame reached the transport
+   */
+  sendVoiceFrame(sub, fields = {}) {
+    if (this._disposed || this._ended) return false;
+    if (!this.voicePhaseOpen) return false;
+    if (!this.voiceNotesAgreed) return false;
+
+    const msg = makeVoice(Object.assign({}, fields, {
+      sub,
+      // The one string on this family that a HUMAN chose. Sanitized on the way out as well as on
+      // the way in, exactly as the emote family does with its own text and icon.
+      emote: fields.emote == null ? null : (sanitizeText(fields.emote, EMOTE_ICON_MAX_CHARS) || null),
+    }));
+    if (msg.sub === '') return false;
+
+    this._send(msg);
+    return true;
+  }
+
+  /** Announce one note: id, total bytes, duration, chunk count, and the emote it rides (or null). */
+  sendVoiceMeta({ id, bytes, durMs, parts, emote = null } = {}) {
+    return this.sendVoiceFrame('meta', { id, bytes, durMs, parts, emote });
+  }
+
+  /** One base64 slice of it. The lane is ordered, so `seq` is a check and never a sort key. */
+  sendVoiceChunk(id, seq, data) {
+    if (typeof data !== 'string' || data === '') return false;
+    return this.sendVoiceFrame('chunk', { id, seq, data });
+  }
+
+  /** ...and the full stop. Its own frame rather than a flag on the last chunk, so a truncated
+   *  transfer is INDISTINGUISHABLE from one that is still arriving until the sender says so. */
+  sendVoiceEnd(id) {
+    return this.sendVoiceFrame('end', { id });
   }
 
   // ---------------------------------------------------------- payloads
@@ -868,6 +994,7 @@ export class GoonMatchService {
         case 'payload_receipt': this._handleReceipt(message); break;
         case 'mercy': this._handleRemoteMercy(message); break;
         case 'emote': this._handleEmote(message); break;
+        case 'voice': this._handleVoice(message); break;
         case 'result': this._handleRemoteResult(message); break;
         case 'round':
         case 'round_result':
@@ -922,6 +1049,11 @@ export class GoonMatchService {
     // pairing can run, so it can never narrow a pool and can never fail a lobby. A peer that omits
     // it (C# reference client, older page) reads false and the feature simply never starts.
     this._peerSupportsTransfer = !!(caps && caps.transfer);
+    // ...and the voice-note discriminator, read on exactly the same terms and in exactly the same
+    // place. `peerSpeaksVoice` is forgiving about a quoted number and strict about a boolean —
+    // see the helper in core/contracts.js. False for every peer that predates the family, which
+    // is what keeps a fire-and-forget send from disappearing into a build that cannot hear it.
+    this._peerSupportsVoice = peerSpeaksVoice(caps);
 
     if (caps && caps.min_v > GoonConsts.ProtocolVersion) {
       this._failLobby(`opponent requires protocol v${caps.min_v}, this client speaks v${GoonConsts.ProtocolVersion} - update required`);
@@ -971,12 +1103,13 @@ export class GoonMatchService {
     // Their declaration rides EVERY consent frame, counter-proposal or not, so it is read on both
     // branches before anything else is decided. It is theirs alone: it never touches our own flag.
     this._remoteMediaTransfer = !!sheet.media_transfer;
+    this._remoteVoiceNotes = !!sheet.voice_notes;
 
     if (!sameSheet(sheet, this._consentSheet)) {
       // A counter-proposal: adopt it and clear BOTH confirms so nobody can be advanced onto
-      // terms they never saw. Note the LOCAL media_transfer being carried across — adopting their
-      // terms must not silently flip our own opt-in.
-      this._consentSheet = cloneSheet(sheet, false, this._localMediaTransfer);
+      // terms they never saw. Note the LOCAL media_transfer and voice_notes being carried across
+      // — adopting their terms must not silently flip either of our own opt-ins.
+      this._consentSheet = cloneSheet(sheet, false, this._localMediaTransfer, this._localVoiceNotes);
       this._localConsentConfirmed = false;
       this._remoteConsentConfirmed = !!sheet.confirmed;
       this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
@@ -1338,6 +1471,27 @@ export class GoonMatchService {
     emote.text = sanitizeText(emote.text, EMOTE_TEXT_MAX_CHARS);
     emote.icon = sanitizeText(emote.icon, EMOTE_ICON_MAX_CHARS);
     this._ev.emoteReceived.emit(emote, (e) => this._warn(`emoteReceived handler threw: ${e && e.message}`));
+  }
+
+  /**
+   * An inbound voice frame. TWO gates and nothing else:
+   *
+   *   1. the PHASE. A note that arrives on the recap (or in the lobby) is dropped without being
+   *      looked at — post-match frames are ignored, per the protocol, and a mic that could reach
+   *      somebody after they tapped out is the one shape of this feature nobody agreed to;
+   *   2. the SUB. '' is what clampVoiceSub answers for a kind we do not know, which is how a
+   *      newer peer's fourth sub arrives — ignored, never routed, never an error.
+   *
+   * Everything else — the local opt-in, the size ceilings, the rate limit, the assembly, the
+   * decode — is ui/voice/voiceService.js's, deliberately (see onVoiceFrame). `emote` is sanitized
+   * here for the same reason `_handleEmote` sanitizes its own strings: it is the one member of
+   * this family that a person typed, and it ends up on a bubble.
+   */
+  _handleVoice(frame) {
+    if (!this.voicePhaseOpen) return;
+    if (!frame.sub || !VOICE_SUBS.includes(frame.sub)) return;
+    frame.emote = frame.emote == null ? null : (sanitizeText(frame.emote, EMOTE_ICON_MAX_CHARS) || null);
+    this._ev.voiceFrameReceived.emit(frame, (e) => this._warn(`voiceFrame handler threw: ${e && e.message}`));
   }
 
   _handleRemoteMercy(mercy) {
@@ -1717,18 +1871,23 @@ export class GoonMatchService {
 /**
  * Re-sign a sheet.
  *
- * `mediaTransfer` is passed in rather than copied off `sheet` because one of the three call sites
- * hands this function the INBOUND sheet (the counter-proposal branch of `_handleConsent`). Copying
- * it there would adopt the PEER's opt-in as our own — a consent flag silently flipped by the other
- * player, which is the one thing a per-side declaration exists to prevent. Always OUR value.
+ * `mediaTransfer` and `voiceNotes` are passed in rather than copied off `sheet` because one of the
+ * call sites hands this function the INBOUND sheet (the counter-proposal branch of
+ * `_handleConsent`). Copying them there would adopt the PEER's opt-ins as our own — a consent flag
+ * silently flipped by the other player, which is the one thing a per-side declaration exists to
+ * prevent. Always OUR values, on every branch.
+ *
+ * A NEW PER-SIDE DECLARATION MUST BE ADDED AS A PARAMETER, never read off `sheet`. That is the
+ * entire discipline here, and `voice_notes` is the second field to follow it.
  */
-function cloneSheet(sheet, confirmed, mediaTransfer) {
+function cloneSheet(sheet, confirmed, mediaTransfer, voiceNotes) {
   return makeConsent({
     live_duration_sec: sheet.live_duration_sec,
     toy_cap: sheet.toy_cap,
     payload_min_gap_ms: sheet.payload_min_gap_ms,
     confirmed,
     media_transfer: !!mediaTransfer,
+    voice_notes: !!voiceNotes,
   });
 }
 
@@ -1744,7 +1903,8 @@ function sameElementSet(a, b) {
  *
  * DO NOT ADD FIELDS TO THIS FUNCTION. It is the sheet FINGERPRINT, and a mismatch makes
  * `_handleConsent` adopt the peer's sheet and clear BOTH confirmations. Teach it about a field a
- * peer might not send — `media_transfer` being the live example, but the rule is general — and
+ * peer might not send — `media_transfer` and `voice_notes` being the live examples, but the rule
+ * is general — and
  * that peer (the C# reference client, an older page, anything that drops the member) echoes a
  * sheet that can NEVER compare equal: each side keeps adopting the other's sheet, keeps clearing
  * the other's confirmation, and the lobby wedges PERMANENTLY. There is no timeout out of it.

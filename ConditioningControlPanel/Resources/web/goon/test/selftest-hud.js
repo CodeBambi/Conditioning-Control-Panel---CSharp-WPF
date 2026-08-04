@@ -3234,8 +3234,8 @@ const audioMod = await import('../ui/audio.js');
     const panel = findOne(dom.byId.get('gg-drawer'), 'gg-panel');
     ok(!!panel, 'the drawer opened');
     const sliders = findAll(panel, 'gg-panel-row--slider');
-    ok(sliders.length === 6,
-      'there are SIX volume rows now — master, music, drone, ui, game and media (§19)', String(sliders.length));
+    ok(sliders.length === 7,
+      'there are SEVEN volume rows now — master, music, drone, ui, game, media and voice (§19)', String(sliders.length));
     const labelOf = (rowNode) => {
       const lab = findOne(rowNode, 'gg-panel-label');
       return lab && lab.children[0] ? lab.children[0].textContent : '';
@@ -3459,8 +3459,8 @@ const audioMod = await import('../ui/audio.js');
     const bus = audioMod.createAudio({ prefs: p });
     ok(bus.volumes.ui === 0.4 && bus.volumes.game === 0.6,
       'the mixer seeds BOTH cue buses from prefs', JSON.stringify(bus.volumes));
-    ok(Object.keys(bus.volumes).sort().join(',') === 'drone,game,master,media,music,ui',
-      'and exposes exactly the six sliders the drawer draws', Object.keys(bus.volumes).join(','));
+    ok(Object.keys(bus.volumes).sort().join(',') === 'drone,game,master,media,music,ui,voice',
+      'and exposes exactly the seven sliders the drawer draws', Object.keys(bus.volumes).join(','));
 
     p.set('gameVolume', 0.1);
     ok(bus.volumes.game === 0.1 && bus.volumes.ui === 0.4,
@@ -3551,10 +3551,13 @@ const audioMod = await import('../ui/audio.js');
       const lab = findOne(rowNode, 'gg-panel-label');
       return lab && lab.children[0] ? lab.children[0].textContent : '';
     };
-    ok(sliders.length === 6, 'SIX volume rows', String(sliders.length));
+    // SEVEN since the 2026-08-04 voice-note pass — the 7th is another player's
+    // actual voice, and it goes last (see the block comment in ui/options.js).
+    ok(sliders.length === 7, 'SEVEN volume rows', String(sliders.length));
     ok(sliders.map(labelOf).join(' | ')
-        === [S.options.master, S.options.music, S.options.drone, S.options.ui, S.options.game, S.options.media].join(' | '),
-      'reading Master, Music, Drone, UI sounds, Game sounds, Media — in that order',
+        === [S.options.master, S.options.music, S.options.drone, S.options.ui, S.options.game,
+          S.options.media, S.options.voice].join(' | '),
+    'reading Master, Music, Drone, UI sounds, Game sounds, Media, Voice notes — in that order',
       sliders.map(labelOf).join(' | '));
     ok([S.options.ui, S.options.game, S.options.media, S.options.mediaNote].every((s) => typeof s === 'string' && s.length),
       'every new label lives in ui/strings.js with the rest');
@@ -3744,6 +3747,432 @@ const audioMod = await import('../ui/audio.js');
   await sleep(0);
   ok(late.released === true && wl2.active === false,
     'wakelock: a sentinel that lands after stop() is released, not leaked');
+}
+
+/* ===========================================================================
+ * 20. VOICE NOTES — THE HELD MIC (wave 2, docs/GOON_VOICE_PLAN.md).
+ *
+ * A button you hold for up to ten seconds and the other duelist hears you. Four
+ * things are pinned here because all four are ways this feature can go wrong in
+ * a way nobody would notice from a screenshot:
+ *
+ *   THE MICROPHONE IS RELEASED. Every terminal path of ui/voice/recorder.js —
+ *   stop, cancel, the 10s cap, a denied permission, dispose — must leave the
+ *   tracks stopped. A hot mic is the one bug in this feature that would be a
+ *   betrayal rather than an annoyance, so the fake stream below counts it.
+ *
+ *   NOTHING STRANDS A HELD RECORDING. pointerup, a slide past the threshold,
+ *   pointercancel, lostpointercapture and the feature going away mid-hold all
+ *   end the gesture. A recording nobody can stop would hold the mic open until
+ *   the match ended.
+ *
+ *   THE MIC IS ABSENT, NOT DISABLED, until voice is live — and it appears on the
+ *   availability EDGE, which is the only signal ui/voice/voiceService.js gives.
+ *
+ *   ESCAPE IS UNTOUCHED. Escape during Live is Mercy. This file may not add a
+ *   rung to that ladder, so it may not contain a key handler at all — asserted
+ *   against the source, because "we forgot we added one" is exactly how a
+ *   safety verb gets shadowed.
+ * ======================================================================== */
+{
+  const recMod = await import('../ui/voice/recorder.js');
+  const micMod = await import('../ui/voice/micHud.js');
+  const { S: S20 } = await import('../ui/strings.js');
+
+  ok(typeof recMod.createVoiceRecorder === 'function', 'ui/voice/recorder.js exports createVoiceRecorder');
+  ok(typeof micMod.mountMicHud === 'function', 'ui/voice/micHud.js exports mountMicHud');
+
+  /* --- 20a. the container chain, and the four refusals -------------------- */
+  ok(recMod.VN_MIME_CANDIDATES[0] === 'audio/webm;codecs=opus',
+    'opus-in-webm is the first container tried (what WebView2 records natively)');
+  ok(recMod.VN_MIME_CANDIDATES[recMod.VN_MIME_CANDIDATES.length - 1] === '',
+    'and the last rung is the UA default — an unknown browser still records');
+  ok(recMod.pickVoiceMime((m) => m.indexOf('audio/webm') === 0) === 'audio/webm;codecs=opus',
+    'chromium picks opus');
+  ok(recMod.pickVoiceMime((m) => m.indexOf('audio/mp4') === 0) === 'audio/mp4;codecs=mp4a.40.2',
+    'safari falls through to mp4 rather than refusing');
+  ok(recMod.pickVoiceMime(() => false) === '', 'a host that supports none of them still gets a recorder');
+  ok(recMod.pickVoiceMime(() => { throw new Error('nope'); }) === '',
+    'a probe that THROWS is a no, not a crash');
+  ok(recMod.VN_AUDIO_BPS === 32000, '~32 kbps: ten seconds is ~40KB, a sixth of the byte cap',
+    String(recMod.VN_AUDIO_BPS));
+  ok(recMod.micErrorReason({ name: 'NotAllowedError' }) === 'denied', 'a refusal is "denied"');
+  ok(recMod.micErrorReason({ name: 'NotFoundError' }) === 'missing', 'no device is "missing" — a different sentence');
+  ok(recMod.micErrorReason({ name: 'NotReadableError' }) === 'failed', 'a busy device is "failed"');
+  ok(recMod.micErrorReason(null) === 'failed', 'and anything else still answers');
+
+  /* --- 20b. the recorder's state machine, without a microphone ------------
+   * The two injectable seams (getUserMedia, recorderFactory) are what let the
+   * whole of this run under node — the module must never reach for a real one. */
+  function fakeMic({ maxMs = 500, fail = null } = {}) {
+    const tracks = [{ kind: 'audio', stopped: false, stop() { this.stopped = true; } }];
+    const stream = { getTracks: () => tracks };
+    const made = [];
+    const rec = recMod.createVoiceRecorder({
+      maxMs,
+      getUserMedia: () => (fail ? Promise.reject(fail) : Promise.resolve(stream)),
+      recorderFactory: (s, opts) => {
+        const r = {
+          opts,
+          started: false,
+          start() { this.started = true; },
+          stop() {
+            setTimeout(() => {
+              try { this.ondataavailable && this.ondataavailable({ data: new Uint8Array(64) }); } catch (_e) { /* ignore */ }
+              try { this.onstop && this.onstop(); } catch (_e) { /* ignore */ }
+            }, 0);
+          },
+        };
+        made.push(r);
+        return r;
+      },
+      isTypeSupported: (m) => m === 'audio/webm;codecs=opus',
+    });
+    return { rec, tracks, made, stream };
+  }
+
+  {
+    const f = fakeMic();
+    const started = await f.rec.start();
+    ok(started.ok === true && started.reason === 'recording', 'start() opens the microphone', JSON.stringify(started));
+    ok(f.rec.isRecording() === true, 'and says so');
+    ok(f.tracks[0].stopped === false, 'the track is live WHILE recording');
+    ok(f.made[0] && f.made[0].opts.mimeType === 'audio/webm;codecs=opus', 'the picked container reaches MediaRecorder');
+    ok(f.made[0] && f.made[0].opts.audioBitsPerSecond === recMod.VN_AUDIO_BPS, 'at the pinned bitrate');
+    ok((await f.rec.start()).reason === 'busy', 'a second start while recording is refused, not stacked');
+
+    const res = await f.rec.stop();
+    ok(res.ok === true && res.reason === 'stopped', 'stop() hands back the note', JSON.stringify(res.reason));
+    ok(res.blob && res.blob.size === 64, 'with the recorded bytes on it', String(res.blob && res.blob.size));
+    ok(typeof res.durMs === 'number' && res.durMs >= 0 && res.durMs <= 500, 'and a measured duration', String(res.durMs));
+    ok(f.tracks[0].stopped === true, 'THE MICROPHONE IS RELEASED after a stop — no hot mic');
+    ok(f.rec.state() === 'idle', 'and the recorder is idle again');
+    ok((await f.rec.stop()).reason === 'idle', 'a second stop is not an error path');
+  }
+
+  {
+    const f = fakeMic();
+    await f.rec.start();
+    const res = await f.rec.cancel();
+    ok(res.ok === false && res.reason === 'cancelled', 'cancel() answers "cancelled"');
+    ok(!res.blob, 'and keeps NOTHING — the audio is never assembled');
+    ok(f.tracks[0].stopped === true, 'THE MICROPHONE IS RELEASED after a cancel too');
+  }
+
+  {
+    // The 10s cap, shrunk to the recorder's own floor so the suite can wait it out.
+    const f = fakeMic({ maxMs: 500 });
+    const capped = [];
+    f.rec.onCapped((r) => capped.push(r));
+    await f.rec.start();
+    await sleep(620);
+    ok(capped.length === 1, 'the cap stops the recording by itself', String(capped.length));
+    ok(capped[0] && capped[0].ok === true && capped[0].capped === true && !!capped[0].blob,
+      'and hands the finished note to whoever is listening (the HUD auto-sends it)');
+    ok(f.tracks[0].stopped === true, 'THE MICROPHONE IS RELEASED on the cap path as well');
+    ok(f.rec.isRecording() === false, 'and nothing is still running');
+  }
+
+  {
+    const denied = Object.assign(new Error('denied'), { name: 'NotAllowedError' });
+    const f = fakeMic({ fail: denied });
+    let threw = null;
+    let res = null;
+    try { res = await f.rec.start(); } catch (e) { threw = e; }
+    ok(!threw, 'a denied microphone NEVER throws at the caller', threw && threw.message);
+    ok(res && res.ok === false && res.reason === 'denied', 'it is an answer: {ok:false, reason:"denied"}', JSON.stringify(res));
+    ok(f.rec.state() === 'idle', 'and leaves nothing behind');
+  }
+
+  {
+    const f = fakeMic();
+    await f.rec.start();
+    f.rec.dispose();
+    ok(f.tracks[0].stopped === true, 'dispose() mid-recording takes the microphone with it');
+  }
+
+  /* --- 20c. the gesture --------------------------------------------------- */
+  function fakeVoice() {
+    const stateSubs = new Set();
+    const inSubs = new Set();
+    let avail = false;
+    const sends = [];
+    return {
+      available: () => avail,
+      sendBlob(blob, o) { sends.push({ blob, o }); return Promise.resolve({ ok: true, reason: 'sent', id: sends.length, parts: 1 }); },
+      onStateChanged(fn) { stateSubs.add(fn); return () => stateSubs.delete(fn); },
+      onIncoming(fn) { inSubs.add(fn); return () => inSubs.delete(fn); },
+      _set(v) { avail = !!v; for (const fn of Array.from(stateSubs)) fn(avail); },
+      _incoming(p) { for (const fn of Array.from(inSubs)) fn(p); },
+      _sends: sends,
+    };
+  }
+  function fakeRec() {
+    const st = { starts: 0, stops: 0, cancels: 0, recording: false, disposed: false, capSubs: new Set() };
+    const api = {
+      start() { st.starts++; st.recording = true; return Promise.resolve({ ok: true, reason: 'recording' }); },
+      stop() { st.stops++; st.recording = false; return Promise.resolve({ ok: true, reason: 'stopped', blob: { size: 64 }, durMs: 900 }); },
+      cancel() { st.cancels++; st.recording = false; return Promise.resolve({ ok: false, reason: 'cancelled' }); },
+      state() { return st.recording ? 'recording' : 'idle'; },
+      isRecording() { return st.recording; },
+      elapsedMs() { return 900; },
+      maxMs() { return 10000; },
+      mimeType() { return ''; },
+      onCapped(fn) { st.capSubs.add(fn); return () => st.capSubs.delete(fn); },
+      dispose() { st.disposed = true; st.recording = false; },
+    };
+    return { api, st };
+  }
+  const ptr = (node, type, x, id = 7) => node.dispatchEvent({
+    type, pointerId: id, clientX: x, clientY: 0, preventDefault() {},
+  });
+  /** One mounted mic with its fakes, live and idle. */
+  function mountMic() {
+    const host = document.createElement('div');
+    const chipHost = document.createElement('div');
+    const v = fakeVoice();
+    const r = fakeRec();
+    const mic = micMod.mountMicHud({ host, chipHost, voice: v, recorder: r.api });
+    return { host, chipHost, v, r, mic, btn: mic.parts.button };
+  }
+
+  {
+    const m = mountMic();
+    ok(!!m.btn && m.btn.tagName === 'BUTTON', 'the mic is a real button');
+    ok(m.host.hidden === true, 'and it is ABSENT until voice is live — not a greyed-out promise');
+    ok(m.btn.getAttribute('aria-label') === S20.voice.hudLabel, 'labelled from strings.js');
+    const beforeEdge = m.btn;
+    m.v._set(true);
+    ok(m.host.hidden === false, 'the availability EDGE brings it in');
+    m.v._set(false);
+    ok(m.host.hidden === true, '...and takes it away again');
+    m.v._set(true);
+    ok(m.btn === beforeEdge && m.mic.parts.button === beforeEdge,
+      'the SAME node throughout: rebuilding it would release a live pointer capture');
+    m.mic.unmount();
+  }
+
+  {
+    // hold -> release = send
+    const m = mountMic();
+    m.v._set(true);
+    ptr(m.btn, 'pointerdown', 200);
+    ok(m.r.st.starts === 1, 'pointerdown opens the microphone immediately (no lost first syllable)');
+    ok(m.mic.isRecording() === false, 'but the strip does not expand on a tap-length press');
+    await sleep(320);
+    ok(m.mic.isRecording() === true, 'a 250ms hold IS a recording');
+    ok(hasClass(m.mic.parts.strip, 'is-rec'), 'and the strip says so');
+    ok(hasClass(m.mic.parts.strip, 'gg-plate'), 'wearing .gg-plate while it is a strip (the hot-heat hardening)');
+    ptr(m.btn, 'pointerup', 200);
+    await sleep(30);
+    ok(m.r.st.stops === 1 && m.r.st.cancels === 0, 'release STOPS the recording');
+    ok(m.v._sends.length === 1, 'and sends exactly one note');
+    ok(m.v._sends[0].o && m.v._sends[0].o.durMs === 900, 'with the measured duration on it');
+    m.mic.unmount();
+  }
+
+  {
+    // a tap is a hint, never a note
+    const m = mountMic();
+    m.v._set(true);
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(60);
+    ptr(m.btn, 'pointerup', 200);
+    await sleep(20);
+    ok(m.v._sends.length === 0, 'a sub-250ms tap sends nothing');
+    ok(m.r.st.cancels === 1, 'and the microphone it opened is closed on the cancel path');
+    ok(m.mic.parts.hint && m.mic.parts.hint.hidden === false, 'the "hold to record" hint appears');
+    ok(m.mic.parts.hint.textContent === S20.voice.holdHint, '...in the copy deck\'s words', m.mic.parts.hint.textContent);
+    m.mic.unmount();
+  }
+
+  {
+    // slide left past the threshold = cancel
+    const m = mountMic();
+    m.v._set(true);
+    ptr(m.btn, 'pointerdown', 300);
+    await sleep(320);
+    ptr(m.btn, 'pointermove', 300 - (micMod.MIC_ARM_PX + 2));
+    ok(hasClass(m.mic.parts.strip, 'is-cancel'), 'crossing half way SAYS it is about to cancel');
+    ok(m.v._sends.length === 0 && m.r.st.cancels === 0, 'and has not cancelled yet');
+    ptr(m.btn, 'pointermove', 300 - (micMod.MIC_CANCEL_PX + 2));
+    await sleep(20);
+    ok(m.r.st.cancels === 1, 'past 80px the recording is cancelled');
+    ok(m.v._sends.length === 0, 'and NOTHING goes out');
+    m.mic.unmount();
+  }
+
+  for (const type of ['pointercancel', 'lostpointercapture']) {
+    const m = mountMic();
+    m.v._set(true);
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(320);
+    ptr(m.btn, type, 200);
+    await sleep(20);
+    ok(m.r.st.cancels === 1 && m.v._sends.length === 0,
+      `${type} cancels the hold — a held recording never strands`);
+    ok(m.mic.isRecording() === false, 'and the strip folds away');
+    m.mic.unmount();
+  }
+
+  {
+    // the feature going away under a live hold
+    const m = mountMic();
+    m.v._set(true);
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(320);
+    m.v._set(false);
+    await sleep(20);
+    ok(m.r.st.cancels === 1, 'voice going unavailable mid-hold cancels the recording');
+    ok(m.host.hidden === true, 'and the mic leaves with it');
+    m.mic.unmount();
+  }
+
+  {
+    // the 10s cap auto-sends
+    const m = mountMic();
+    m.v._set(true);
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(320);
+    for (const fn of Array.from(m.r.st.capSubs)) fn({ ok: true, capped: true, blob: { size: 40 }, durMs: 10000 });
+    await sleep(20);
+    ok(m.v._sends.length === 1, 'the ten-second cap stops AND sends');
+    ok(m.mic.isRecording() === false, 'and the gesture is over even with the button still down');
+    m.mic.unmount();
+  }
+
+  {
+    // their note arriving
+    const m = mountMic();
+    const chip = m.mic.parts.chip;
+    ok(!!chip && chip.hidden === true, 'the incoming chip starts hidden');
+    ok(m.chipHost.hidden === true, '...at the HOST too, so an empty slot costs the column no flex gap');
+    m.v._incoming({ emote: null, durMs: 1500, bytes: 4000 });
+    ok(chip.hidden === false && m.chipHost.hidden === false,
+      'and appears when one of THEIR notes starts playing');
+    const chipWords = findOne(chip, 'gg-voice-chip-text');
+    ok(chipWords && String(chipWords.textContent).indexOf(S20.voice.incoming) >= 0,
+      'saying so in words, not only in moving bars', chipWords && chipWords.textContent);
+    ok(findAll(chip, 'gg-voice-bar').length === 3, 'the three level bars are their own leaf elements (animation budget)');
+    m.mic.unmount();
+    ok(m.chipHost.children.length === 0, 'unmount takes the chip with it');
+  }
+
+  {
+    // the refusal copy
+    ok(micMod.sendReasonLine('sent') === S20.voice.sent, 'a sent note says "sent"');
+    ok(micMod.sendReasonLine('too-soon', 3) === S20.voice.tooSoon(3), 'the 4s floor is phrased as a wait');
+    ok(micMod.sendReasonLine('unavailable') === S20.voice.notActive, 'a dead feature explains itself');
+    ok(micMod.sendReasonLine('nonsense-from-the-future') === S20.voice.sendFailed,
+      'and an unknown reason still says something true');
+  }
+
+  /* --- 20d. ESCAPE IS NOT TOUCHED ----------------------------------------- */
+  {
+    const fs20 = await import('node:fs/promises');
+    const url20 = await import('node:url');
+    const src = await fs20.readFile(url20.fileURLToPath(new URL('../ui/voice/micHud.js', import.meta.url)), 'utf8');
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    ok(!/keydown|keyup|['"]Escape['"]/.test(code),
+      'ui/voice/micHud.js has NO key handler at all — Escape during Live stays Mercy');
+    ok(!/pointerType/.test(code),
+      'and the gesture is not gated on pointerType: mouse, touch and pen alike');
+    ok(/setPointerCapture/.test(code), 'the hold is pointer-captured, so a finger may leave the button');
+    ok(/lostpointercapture/.test(code), 'and a lost capture is a cancel, not a strand');
+  }
+
+  /* --- 20e. hud.js really mounts it --------------------------------------- */
+  {
+    const match20 = makeFakeMatch();
+    const voice20 = fakeVoice();
+    const hud20 = hudMod.mountHud({ match: match20, audio: { sfx() {} }, voice: voice20 });
+    const frame20 = findOne(dom.byId.get('gg-hud'), 'gg-hud-frame');
+    const col20 = findOne(frame20, 'gg-rightcol');
+    const micHost20 = findOne(frame20, 'gg-voice-host');
+    const chipHost20 = findOne(frame20, 'gg-voice-chiphost');
+    ok(!!micHost20 && !!chipHost20, 'mountHud gives the mic and the chip a slot each');
+    ok(micHost20.parentNode === col20 && chipHost20.parentNode === col20,
+      'both are FLOW children of the opponent column — no coordinates, so no keep-out to miss');
+    const kids = col20.children;
+    ok(kids.indexOf(chipHost20) === kids.indexOf(findOne(col20, 'gg-mon-host')) + 1,
+      'the chip sits directly under their bezel');
+    ok(kids.indexOf(micHost20) < kids.indexOf(findOne(col20, 'gg-rail--right')),
+      'and the mic above their rail, inside the column');
+    ok(!!findOne(frame20, 'gg-voice-btn'), 'the button is built');
+    ok(micHost20.hidden === true, 'and hidden until the feature is live');
+    ok(!!hud20.parts.mic && typeof hud20.parts.mic.isRecording === 'function',
+      'exposed on parts, like every other sub-mount');
+    voice20._set(true);
+    ok(micHost20.hidden === false, 'the desk shows it on the availability edge');
+    hud20.unmount();
+    ok(dom.byId.get('gg-hud').children.length === 0, 'and it comes down with the desk');
+    ok(match20._subs.released === match20._subs.taken, 'with no subscription left behind',
+      `${match20._subs.released}/${match20._subs.taken}`);
+  }
+  {
+    // no service (a build with the feature off, or a construction failure)
+    const match20b = makeFakeMatch();
+    const hud20b = hudMod.mountHud({ match: match20b, audio: { sfx() {} } });
+    const frame20b = findOne(dom.byId.get('gg-hud'), 'gg-hud-frame');
+    ok(!findOne(frame20b, 'gg-voice-btn'), 'no voice service = no mic on the desk at all');
+    ok(findOne(frame20b, 'gg-voice-host').hidden === true
+      && findOne(frame20b, 'gg-voice-chiphost').hidden === true,
+      'and both slots are hidden, so the column is exactly what it was before this feature');
+    hud20b.unmount();
+  }
+
+  /* --- 20f. the CSS half --------------------------------------------------
+   * micHud.js only toggles classes. Placement, the click-through, the animation
+   * budget and zen are all stylesheet facts, and a mic with no rules would pass
+   * every check above while lying across the stage eating clicks. */
+  {
+    const fs20 = await import('node:fs/promises');
+    const url20 = await import('node:url');
+    const css20 = await fs20.readFile(url20.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8');
+    const at20 = css20.indexOf('VOICE NOTES — the held mic');
+    const end20 = css20.indexOf('ANNOUNCER — the top-centre ribbon');
+    ok(at20 > 0, 'hud.css carries the voice section');
+    // BOUNDED, not sliced to EOF: the announcer's own section asserts that
+    // nothing after its header loops, and a `infinite` of ours must not land
+    // inside its slice. (It did, for one commit.)
+    const sec20 = css20.slice(at20, end20 > at20 ? end20 : css20.length);
+    const bare20 = sec20.replace(/\/\*[\s\S]*?\*\//g, '');
+
+    ok(/\.gg-voice-host\s*\{[^}]*position:\s*relative/.test(bare20),
+      'the slot is the containing block...');
+    ok(/\.gg-voice\s*\{[^}]*position:\s*absolute/.test(bare20) && /\.gg-voice\s*\{[^}]*right:\s*0/.test(bare20),
+      '...and the strip is anchored to its right edge, so a recording grows LEFTWARDS and nothing on the desk moves');
+    ok(!/position:\s*fixed/.test(bare20) && !/z-index/.test(bare20),
+      'nothing here is fixed and nothing claims a z-index — MERCY owns z60 and this tier does not go near it');
+
+    ok(/\.gg-hud-frame\s+\.gg-voice,[\s\S]{0,120}pointer-events:\s*none/.test(bare20),
+      'pointer-events: none at 0,2,0 — .gg-plate would otherwise turn the strip back on over the stage');
+    ok(/\.gg-hud-frame\s+\.gg-voice-btn\s*\{[^}]*pointer-events:\s*auto/.test(bare20),
+      'and the one control that must stay clickable re-opts in at the same weight');
+    ok(css20.indexOf('.gg-hud-frame .gg-voice,') > css20.indexOf('.gg-hud-frame .gg-plate,'),
+      'written LATER in the file than the .gg-plate rule it is answering');
+
+    // THE ANIMATION BUDGET: only leaf elements animate, and only two of them.
+    const animated = [];
+    const re20 = /([^{}]+)\{([^{}]*)\}/g;
+    let m20;
+    while ((m20 = re20.exec(bare20))) {
+      if (/(^|[;\s])animation:\s*(?!none)/.test(m20[2])) animated.push(m20[1].trim());
+    }
+    ok(animated.length > 0, 'the strip animates something');
+    ok(animated.every((sel) => /gg-voice-dot|gg-voice-bar/.test(sel)),
+      'and ONLY on the dot and the level bars — never on a node that already carries state classes',
+      animated.join(' | '));
+    ok(/\.gg-voice-dot\s*\{[^}]*animation-play-state:\s*var\(--gg-deco-play\)/.test(bare20),
+      'the pulse parks with every other decoration at data-gg-fx="hot" (the red dot itself stays)');
+
+    ok(/gg-hud--zen\s+\.gg-voice-host/.test(bare20) && /gg-hud--zen\s+\.gg-voice-chiphost/.test(bare20),
+      'zen takes both slots away by name, like the dial and the effect chips');
+    ok(/prefers-reduced-motion[\s\S]*gg-voice-dot[\s\S]*animation:\s*none/.test(bare20),
+      'motion off stops the pulse without taking the state away');
+    ok(/\.gg-voice-btn\s*\{[^}]*width:\s*48px[\s\S]{0,40}height:\s*48px/.test(bare20),
+      'the hit area is the tier\'s 48px, like the gear and the zen toggle');
+  }
 }
 
 await sleep(60);

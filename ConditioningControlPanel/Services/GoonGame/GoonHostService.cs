@@ -94,6 +94,11 @@ namespace ConditioningControlPanel.Services.GoonGame
         private static bool _recoveryWindowed;   // this relaunch is a recovery: ignore the remembered fullscreen
         private static bool _duckPreference = true;
         private static bool _duckedMainWindow;   // WE minimized main at launch, so WE owe a restore
+        /// <summary>The CoreWebView2 whose <c>PermissionRequested</c> we have already subscribed to.
+        /// The page's "ready" handshake fires again on every reload (and a recovery relaunch builds a
+        /// whole new core), so the hook is keyed on the INSTANCE rather than on a bool — the same
+        /// core must never collect two handlers, and a new one must never inherit "already done".</summary>
+        private static CoreWebView2? _micPermissionCore;
         private static WindowState _mainStateBeforeDuck = WindowState.Normal;
 
         /// <summary>One client for the whole app session — a per-request HttpClient exhausts
@@ -294,6 +299,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 _lastPaintMoveUtc = DateTime.UtcNow;
                 _paintStallHandled = false;
                 _host?.FocusWeb();
+                HookMicPermission();
 
                 var consent = new ConsentSheetMsg();   // the engine's own defaults, never a fork
                 _host?.Post(new
@@ -377,6 +383,71 @@ namespace ConditioningControlPanel.Services.GoonGame
                     m.Images.Count, m.Videos.Count, received.Count);
             }
             catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnPageReady: {E}", ex.Message); }
+        }
+
+        // ============================ the microphone ============================
+
+        /// <summary>
+        /// Subscribe to <c>CoreWebView2.PermissionRequested</c> so the page's microphone request is
+        /// answered instead of ignored (voice notes — <c>docs/GOON_VOICE_PLAN.md</c> §Recording).
+        ///
+        /// WHY THIS EXISTS AT ALL. A hosted WebView2 has no permission UI of its own: with nobody
+        /// handling this event, <c>getUserMedia({audio:true})</c> from an app-hosted page resolves to
+        /// the host's default and the mic silently never opens. The player would hold the button,
+        /// watch the timer run, and send ten seconds of nothing — the worst possible failure for a
+        /// feature whose entire product is "they hear you".
+        ///
+        /// WHY ALLOWING IS NOT A DECISION MADE HERE. The real gate is in the page and it is
+        /// double-locked: voice notes are OFF by default, the toggle refuses to move until an
+        /// acknowledgment modal has been read, and audio only ever flows when BOTH duelists have
+        /// turned it on and the phase is Live/Countdown/SuddenDeath. On top of that the microphone
+        /// is opened per recording and released the moment the button comes up (no hot mic —
+        /// ui/voice/recorder.js). A second, host-level prompt in front of all that would be a
+        /// dialog the player has already answered, in a window that has no good place to show one.
+        ///
+        /// EVERY OTHER PERMISSION KIND IS LEFT ALONE — camera, geolocation, notifications, clipboard,
+        /// screen capture, the lot. Not handled, not stated, so WebView2's own default stands. The
+        /// duel surface asks for exactly one device and this method is the whole of that grant.
+        ///
+        /// UI-THREAD AFFINITY: called from <see cref="OnPageReady"/>, which the host raises on the
+        /// dispatcher; the event itself is raised on the same thread. Nothing here touches state a
+        /// worker thread also writes.
+        /// </summary>
+        private static void HookMicPermission()
+        {
+            try
+            {
+                var core = _host?.WebView?.CoreWebView2;
+                if (core == null) return;                              // not initialized yet / already gone
+                if (ReferenceEquals(core, _micPermissionCore)) return;  // a reload's second "ready"
+                _micPermissionCore = core;
+                core.PermissionRequested += OnPermissionRequested;
+                App.Logger?.Debug("GoonHostService: microphone permission handler attached");
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.HookMicPermission: {E}", ex.Message); }
+        }
+
+        /// <summary>Allow the microphone; leave every other permission kind to WebView2's default.</summary>
+        private static void OnPermissionRequested(object? sender, CoreWebView2PermissionRequestedEventArgs e)
+        {
+            try
+            {
+                if (e == null) return;
+                if (e.PermissionKind != CoreWebView2PermissionKind.Microphone)
+                {
+                    // Deliberately NOT setting State/Handled: an untouched request keeps the
+                    // default behaviour, which is what "every other kind is none of our business"
+                    // has to mean in code as well as in the comment above.
+                    return;
+                }
+                e.State = CoreWebView2PermissionState.Allow;
+                // Handled = true suppresses the browser's own permission UI. There is nowhere
+                // sensible for it in a borderless duel window, and the in-page opt-in has already
+                // asked the same question in the player's own words.
+                e.Handled = true;
+                App.Logger?.Information("GoonHostService: microphone permission allowed (voice notes)");
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnPermissionRequested: {E}", ex.Message); }
         }
 
         // ============================ page messages ============================
@@ -1489,6 +1560,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                 try { ResetPeerCardState(); } catch { }
                 try { _host?.Dispose(); } catch { }
                 _host = null;
+                // The handler dies with the core it was attached to; forgetting the reference is
+                // what lets the NEXT launch (a relaunch, a recovery) hook its own fresh core.
+                _micPermissionCore = null;
                 _exiting = false;
                 RestoreMainWindow();
                 App.Logger?.Information("GoonHostService: closed");

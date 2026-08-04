@@ -42,7 +42,9 @@ import { peerRenderLog, resetPeerRenderLog } from './exec/videos.js';
 import { GoonMatchService } from './core/match.js';
 import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
 import { GoonRng } from './core/rng.js';
-import { GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind } from './core/contracts.js';
+import {
+  GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION,
+} from './core/contracts.js';
 import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
 import { GoonReceiptStatus } from './core/scoring.js';
 import { GoonSession } from './net/session.js';
@@ -62,6 +64,16 @@ import { createAssetsStore, localPlayableEntries } from './ui/assetsStore.js';
 import { createDiscord, confirmOpenDm } from './ui/discord.js';
 import { emitAva, mountVsSplash } from './ui/avatar.js';
 import { createWakeLock } from './ui/wakeLock.js';
+// Statically imported like the rest of the wave-1 tier (and unlike ui/hud.js et
+// al, which are sibling waves): this module has no DOM, no AudioContext and no
+// bridge call at import time, and a duel where the voice service silently failed
+// to load would be a duel where a consent the player gave has no effect.
+import { createVoiceService } from './ui/voice/voiceService.js';
+// ...and the library the service loads pre-recorded notes from. Same reasoning,
+// plus one more: it is the ONE writer of prefs.voiceEmoteMap, and two of those
+// would be two answers to "which note does this emote fire".
+import { createNoteStore } from './ui/voice/noteStore.js';
+import { setVoiceProvider } from './ui/emotes.js';
 import { S } from './ui/strings.js';
 
 import * as titleScreen from './ui/screens/title.js';
@@ -72,6 +84,7 @@ import * as draftScreen from './ui/screens/draft.js';
 import * as countdownScreen from './ui/screens/countdown.js';
 import * as recapScreen from './ui/screens/recap.js';
 import * as assetsScreen from './ui/screens/assets.js';
+import * as voiceScreen from './ui/screens/voice.js';
 
 /* --- ERROR SEAMS FIRST: everything after this reports instead of vanishing. */
 if (typeof window !== 'undefined') {
@@ -395,6 +408,11 @@ let mediaQueue = null;       // net/mediaQueue.js — one per page, re-attached 
 let wakeLock = null;         // ui/wakeLock.js — held while a match is attached (phone screens)
 let artifacts = null;        // the adapter below, over assets' item map
 let discord = null;          // ui/discord.js — owns the discord + peer-card verbs
+/* ui/voice/noteStore.js — PAGE-SCOPED, unlike the voice service beside it. The
+ * eight pre-recorded notes belong to the player, not to a duel: they survive
+ * every match, every relay rebuild and every trip back to the title menu, and
+ * the library screen is reached with no match in existence at all. */
+let noteStore = null;
 let vsSplash = null;         // the countdown's decorative VS card, if one is up
 let ctx = null;
 
@@ -403,6 +421,7 @@ let goonSession = null;      // net/session.js GoonSession (host/join path only)
 let currentMatch = null;
 let currentTransport = null;
 let currentSd = null;        // {presenter, inputs, dispose} from ui/sd
+let voice = null;            // ui/voice/voiceService.js — MATCH-SCOPED, see attachMatch
 let hudHandle = null;
 let mercyHandle = null;
 let phaseUnsubs = [];
@@ -450,12 +469,26 @@ function localCaps() {
   if (caps.brainDrain !== false) { elements.push(GoonElement.BrainDrain); payloads.push(GoonPayloadKind.BrainDrain); }
   if (caps.spiral !== false) { elements.push(GoonElement.Spiral); payloads.push(GoonPayloadKind.Spiral); }
 
+  /* THE VOICE-NOTE DISCRIMINATOR. Advertised unconditionally, for every build
+   * that ships ui/voice/voiceService.js, because it is a statement about what
+   * this BUILD can PARSE and never about what this player has agreed to or paid
+   * for: the consent lives on the consent frame (`voice_notes`) and the local
+   * opt-in lives in prefs. Advertising it does not turn anything on.
+   *
+   * It has to be here rather than at the send site because `t:'voice'` is
+   * fire-and-forget — an old peer drops the frames without a word, and this
+   * integer is the ONLY way the sender ever finds out. (`transfer`, its sibling
+   * in core/caps.js, is NOT advertised from this file today: the media lane
+   * gates itself on session.caps.mediaTransfer + supportsBulk instead. Left
+   * exactly as it was — that is the media lane's business, not this pass's.) */
+  const voiceCap = VOICE_CAP_VERSION;
+
   let rounds = Array.isArray(caps.rounds) ? caps.rounds.slice() : Object.values(GoonRoundKind);
   // Without a camera there is nothing to win a staring contest with.
   if (!caps.camera) rounds = rounds.filter((r) => r !== GoonRoundKind.StaringContest);
   if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
 
-  return localCapsOf({ elements, payloads, rounds, platform: 'web' });
+  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap });
 }
 
 /* ============================================================================
@@ -856,6 +889,41 @@ function attachMatch(match, transport) {
    * and both die with this match. (Trap register #7 — documented where applied.) */
   try { mediaQueue?.attach?.(match, currentTransport); }
   catch (e) { logger.warn('mediaQueue.attach threw: ' + ((e && e.message) || e)); }
+
+  /* --- VOICE NOTES, per match. Built HERE rather than in buildApp() because it
+   * subscribes to the match's own frame pump and consent events, and a relay
+   * REBUILD hands us a brand new GoonMatchService — a singleton would go on
+   * listening to a corpse and the mic would answer "available" against a match
+   * nobody is in. Same lifetime as the HUD it feeds, torn down in detachMatch. */
+  try {
+    voice = createVoiceService({
+      match, audio, prefs,
+      // The library the emote hook fires from. Page-scoped and built in buildApp,
+      // so every match shares the same eight notes; a null one (a host where
+      // buildApp failed early) simply means sendNote() answers 'unavailable' and
+      // live notes still work.
+      noteStore,
+      // The same content gate the media lane renders through. See the consult in
+      // voiceService.onEnd: local map only, fails open, never waits on the net.
+      blocklist,
+      logger,
+    });
+  } catch (e) { logger.error('createVoiceService threw: ' + ((e && e.stack) || e)); voice = null; }
+  /* SEED THE DECLARATION FROM THE PREFERENCE, on every attach.
+   *
+   * `prefs.voiceNotesEnabled` is the player's standing answer; `voice_notes` on
+   * the consent frame is what the OPPONENT gets told. They are two different
+   * things and this is the one line that keeps them in step — without it a
+   * player who opted in on the title screen would reach the lobby with the
+   * declaration off and the mic would never appear for either of them.
+   *
+   * Done HERE rather than in the lobby screen because a relay REBUILD hands us a
+   * brand new GoonMatchService with a fresh (false) declaration and no screen
+   * remount to notice. core/match.js refuses the call outside Lobby/Consent, so
+   * a mid-match re-attach is a no-op rather than a signature-clearing surprise. */
+  try {
+    if (prefs.get('voiceNotesEnabled')) match.setLocalVoiceNotes(true);
+  } catch (e) { logger.warn('setLocalVoiceNotes threw: ' + ((e && e.message) || e)); }
   /* KEEP THE SCREEN ON for the duration. A phone that dims and locks mid-Live is
    * an unintended mercy; the lock is match-scoped (start here, stop in
    * detachMatch) so an idle title screen never holds one. Unsupported = no-op. */
@@ -1118,6 +1186,11 @@ function detachMatch() {
   // Cancels every transfer and clears the queue; the STORE is untouched, because a
   // committed artifact is hash-keyed and stays valid across matches and sessions.
   try { mediaQueue?.detach?.(); } catch (_e) { /* ignore */ }
+  // The voice service dies WITH the match (see attachMatch) and takes the bus
+  // with it: a note that landed in the last second of a duel must not still be
+  // talking over the recap.
+  try { voice?.dispose?.(); } catch (_e) { /* ignore */ }
+  voice = null;
   try { wakeLock?.stop?.(); } catch (_e) { /* a screen convenience, never load-bearing */ }
   try { currentSd?.dispose?.(); } catch (_e) { /* ignore */ }
   currentSd = null;
@@ -1130,7 +1203,11 @@ function mountHudNow() {
   if (hudHandle || !mountHud || !currentMatch) return;
   try {
     hudHandle = mountHud({
-      match: currentMatch, session, audio, prefs, media, matchLog, discord,
+      // `voice` is threaded in now and UNUSED until wave 2 mounts ui/voice/micHud.js
+      // from inside the HUD. mountHud takes a destructured options object, so an
+      // extra key is inert — and handing it over here means the mic lands as one
+      // line in ui/hud.js rather than as a second wiring pass through this file.
+      match: currentMatch, session, audio, prefs, media, matchLog, discord, voice,
     }) || null;
   } catch (e) { logger.error('mountHud threw: ' + ((e && e.stack) || e)); hudHandle = null; }
 }
@@ -1346,6 +1423,11 @@ const actions = {
   goJoin() { router.show('join'); },
   /** @param {{filter?:string}} [args] e.g. {filter:'needs'} from a "N need compressing" prompt. */
   goAssets(args) { router.show('assets', args || null); },
+  /** ui/screens/voice.js — the pre-recorded note library. Title menu only:
+   *  there is deliberately no way into it from inside a match (the toggle it
+   *  carries clears both consent signatures, and a live duel is the wrong place
+   *  to renegotiate a term). */
+  goVoice() { router.show('voice'); },
 
   async goPractice() { await startSolo(); },
 
@@ -1579,6 +1661,25 @@ function buildApp() {
   });
   primeReceived(session.received);      // the manifest usually beat us here
 
+  /* --- VOICE NOTES: the library, and the emote hook -------------------------
+   * ONE store for the page (see the declaration). It is built even on a host
+   * with no IndexedDB — the store falls back to memory and the screen still
+   * works for the length of the session.
+   *
+   * The provider below is how ui/emotes.js reaches a service it cannot import:
+   * the sheet is mounted by ui/hud.js (a sibling wave's file), the service is
+   * rebuilt per match, and the map lives in prefs. Asking through one closure
+   * keeps all three facts in this file — and returns null for every case where
+   * nothing should be sent, so the hot path in emotes.js is a single call with
+   * no knowledge of any of it. */
+  noteStore = createNoteStore({ prefs, logger });
+  setVoiceProvider((emoteKey) => {
+    if (!voice || !noteStore) return null;
+    const noteId = noteStore.noteFor(emoteKey);
+    if (!noteId) return null;
+    return { voice, noteId };
+  });
+
   options = createOptions({
     prefs, audio, session, logger,
     setFullscreen: (on) => bridge.send({ type: 'fullscreen-set', on: !!on }),
@@ -1653,9 +1754,15 @@ function buildApp() {
   ctx = {
     session, prefs, audio, toasts, sheets, options, matchLog, actions, logger, assets,
     receivedStore, blocklist, mediaQueue, discord,
+    /** ui/screens/voice.js: the pre-recorded note library (page-scoped). */
+    notes: noteStore,
     /** ui/screens/recap.js: which peer artifacts rendered (and were flagged) this match. */
     getPeerRenders: peerRenderLog,
     getMatch: () => currentMatch,
+    /** ui/screens/voice.js (wave 2): the live service, or null out of a match.
+     *  A THUNK, never a snapshot — it is rebuilt per match (and per relay
+     *  fallback), and a screen that captured one would be holding a corpse. */
+    getVoice: () => voice,
     getTransport: () => currentTransport,
     getClock: () => { try { return currentTransport ? currentTransport.clock : null; } catch (_e) { return null; } },
     getSd: () => currentSd,
@@ -1671,6 +1778,7 @@ function buildApp() {
       countdown: countdownScreen,
       recap: recapScreen,
       assets: assetsScreen,
+      voice: voiceScreen,
     },
     ctx,
     logger,

@@ -31,9 +31,13 @@ export const SCREEN_IDS = Object.freeze({
   countdown: 'scr-countdown',
   sd: 'scr-sd',
   recap: 'scr-recap',
-  // The one screen that is not a match phase: the media/compression library,
-  // reached from the title menu and left with Back.
+  // The two screens that are not match phases: the media/compression library
+  // and the voice-note library, both reached from the title menu and left with
+  // Back. (Every name here MUST have a <section> in index.html — selftest-assets
+  // walks this map and checks, because a missing section makes router.show()
+  // return null and turns the menu item into a button that does nothing.)
   assets: 'scr-assets',
+  voice: 'scr-voice',
 });
 
 /**
