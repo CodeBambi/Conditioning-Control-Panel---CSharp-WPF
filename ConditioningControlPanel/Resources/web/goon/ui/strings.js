@@ -70,12 +70,23 @@ export const S = Object.freeze({
     expiresIn: (ms) => 'expires in ' + mmss(ms),
     expired: 'this code expired. mint a new one.',
     inviteLine: (code) => 'Goon Game duel — code ' + code + ' (expires in 5 min)',
+    /* --- the shareable link (ui/inviteLink.js). The PRIMARY copy button: a
+       code is a fine thing to read aloud and a miserable thing to thumb into a
+       phone, and the link opens straight into the room with nothing to type.
+       The plain-code button stays right beside it — some people paste into
+       places a URL would be eaten. --- */
+    copyLink: 'Copy invite link',
+    copiedLink: 'Link copied',
+    linkNote: 'the link opens the game and joins this room — no typing at their end.',
+    inviteLinkLine: (url) => 'Goon Game duel — tap to join: ' + url + ' (expires in 5 min)',
   },
 
   /* ----------------------------------------------------------------- join */
   join: {
     eyebrow: 'join a room',
     lead: 'type the six characters they sent you.',
+    /** Arrived on a `?join=` link: nothing to type, so nothing is asked for. */
+    leadLinked: 'the link brought the code with it. one moment…',
     action: 'Join',
     joining: 'joining…',
     back: 'Back',
@@ -122,6 +133,12 @@ export const S = Object.freeze({
     transferRelay: 'only on a direct connection. this one is relayed.',
     transferTheirsOn: 'they opted in',
     transferTheirsOff: 'they have not',
+    /* --- "they are still picking their media" (the `media_prep` wire message).
+       The host used to sit on "waiting for them" for a minute with no idea
+       whether anybody had arrived; this is the difference between a dead room
+       and a room where somebody is busy. --- */
+    eyebrowPicking: 'they are getting set up',
+    prepPicking: (name) => (name || 'they') + ' joined — picking their media…',
   },
 
   /* -------------------------------------------------------------- discord
@@ -632,6 +649,47 @@ export const S = Object.freeze({
     ribbon: (ready, size) => ready + ' ready · ' + size + ' cached',
   },
 
+  /* ------------------------------------------------- the media-setup step
+   * FIRST-RUN ONBOARDING FOR LINK JOINERS (ui/screens/mediaSetup.js). Somebody
+   * tapped a duel link, has never opened this thing before, and is about to be
+   * dropped into a lobby with an empty deck — where every effect fires against
+   * a blank screen and the match looks broken rather than empty.
+   *
+   * Two rules the copy has to keep:
+   *   1. the twenty-item suggestion is a SUGGESTION and must read as one. The
+   *      button unlocks on the first file; nothing here may sound like a gate.
+   *   2. it says where the media STAYS. A stranger asking a first-time visitor
+   *      for their porn folder has about one sentence to be honest in. */
+  mediaSetup: {
+    eyebrow: 'before you play',
+    headline: 'bring something to endure',
+    /** The whole premise, in one line: the game plays YOUR library at you. */
+    lead: 'a duel runs on your own media — every flash, clip and whisper you get is yours. your deck is empty, so it would be a very quiet match.',
+    tips: [
+      'twenty-odd images or gifs is where it starts to feel like a duel. more is better, and more is easy.',
+      'throw in a few short clips too — those are the ones that take the whole screen.',
+      'a .zip of the lot works: drop the archive in and it unpacks itself.',
+    ],
+    /** Named because it is the answer to "…but I do not have a folder ready". */
+    discordLine: 'no stash yet? plenty of girls share their packs on the discord.',
+    discordCta: 'open the discord',
+    add: 'add media',
+    /** The running tally. Reassuring at 3, congratulatory at 20 — see `enough`. */
+    count: (n) => n + (n === 1 ? ' item added' : ' items added'),
+    countNone: 'nothing added yet.',
+    /** Under the tally while they are still short of the suggestion. */
+    suggest: (want) => 'aim for about ' + want + '. you can always add more later.',
+    /** …and once they clear it. Praise, not a permission slip. */
+    enough: 'that will do nicely.',
+    remove: 'remove',
+    lock: "I'm set",
+    lockNeed: 'add at least one thing',
+    /** The opponent is watching a "picking their media" line while this is up. */
+    waiting: 'they know you are still picking. take your time.',
+    note: 'your picks stay on this device and travel nowhere unless you switch sending on in the lobby.',
+    leave: 'Leave',
+  },
+
   /* --------------------------------------------------------------- sheets */
   sheets: {
     noPass: {
@@ -793,6 +851,7 @@ export const S = Object.freeze({
   /* --------------------------------------------------------------- toasts */
   toasts: {
     copied: 'invite line copied',
+    linkCopied: 'invite link copied',
     copyFailed: 'could not copy — select the code instead',
     peerWobbly: 'their connection is wobbling',
     peerBack: 'they are back',

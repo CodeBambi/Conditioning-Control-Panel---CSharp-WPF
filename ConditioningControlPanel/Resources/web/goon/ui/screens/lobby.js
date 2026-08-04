@@ -72,6 +72,15 @@ export function mount(container, ctx) {
 
   const connLine = el('p', { class: 'gg-conn', text: S.lobby.connecting });
 
+  /* "<name> joined — picking their media…" (the `media_prep` frame, protocol §6).
+   * A first-time guest who arrived on an invite link is held on the media-setup
+   * step before this screen, which from the HOST's side used to look identical
+   * to an empty room: the code was read, somebody tapped it, and the lobby still
+   * said "waiting for them". This line is the difference, and it costs nothing
+   * against a peer that never sends the frame — absent reads as "ready", so an
+   * older build simply never lights it. */
+  const prepLine = el('p', { class: 'gg-lobby-prep', text: '', hidden: true, role: 'status' });
+
   /* -------------------------------------------------------- consent rows */
 
   function mkSlider(labelText, { min, max, step, disabled = false }) {
@@ -151,7 +160,7 @@ export function mount(container, ctx) {
   const eyebrow = el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.lobby.eyebrowWaiting })]);
 
   container.appendChild(el('div', { class: 'gg-card gg-lobby' }, [
-    eyebrow, duel, connLine, sheetBox, lamps, changedLine,
+    eyebrow, duel, connLine, prepLine, sheetBox, lamps, changedLine,
     el('div', { class: 'gg-lobby-actions' }, [leaveBtn, confirmBtn]),
   ]));
 
@@ -195,7 +204,18 @@ export function mount(container, ctx) {
       : el('span', { class: 'gg-badge is-ghost', text: '…' }));
     them.version.textContent = known && opp.appVersion ? 'v' + opp.appVersion : '';
 
-    eyebrow.lastChild.textContent = known ? S.lobby.eyebrowReady : S.lobby.eyebrowWaiting;
+    // THEY ARE HERE, THEY ARE JUST BUSY. `remoteMediaPrep` outranks the plain
+    // "waiting for them" eyebrow because it answers a different question: not
+    // "has anybody arrived" (they have) but "why is nothing happening".
+    const picking = !!match.remoteMediaPrep;
+    prepLine.textContent = picking
+      ? S.lobby.prepPicking(opp.displayName || (hello && hello.display_name) || S.lobby.them)
+      : '';
+    prepLine.hidden = !picking;
+
+    eyebrow.lastChild.textContent = picking
+      ? S.lobby.eyebrowPicking
+      : (known ? S.lobby.eyebrowReady : S.lobby.eyebrowWaiting);
     sheetBox.classList.toggle('is-waiting', !known);
   }
 
@@ -390,6 +410,12 @@ export function mount(container, ctx) {
   // The hello is what sets peerSupportsTransfer (and peerSupportsVoice), and it
   // arrives with the opponent.
   ledger.sub(match.onOpponentStateChanged(() => { paintIdentity(); paintTransfer(); paintVoice(); }));
+  // `media_prep` (protocol §6). Optional seam on purpose: a match object built
+  // before this message existed simply has no subscribe verb, and the line stays
+  // hidden — exactly the state an absent frame means.
+  if (typeof match.onMediaPrepChanged === 'function') {
+    ledger.sub(match.onMediaPrepChanged(() => paintIdentity()));
+  }
   ledger.sub(match.onPhaseChanged(() => { paintAll(); }));
   ledger.sub(match.onLobbyFailed((reason) => {
     sheets?.open?.({

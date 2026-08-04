@@ -794,6 +794,40 @@
 .gg-local-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.84rem; }
 .gg-local-size { flex: 0 0 auto; font-size: 0.74rem; color: var(--gg-text-3); font-variant-numeric: tabular-nums; }
 
+/* ---------------------------------------------------------------------------
+ * THE FIRST-RUN MEDIA STEP (ui/screens/mediaSetup.js).
+ *
+ * Same width as the standalone picker it reuses — this is the same card doing a
+ * bigger job, not a new species — with the picked list CAPPED IN HEIGHT and
+ * scrolled on its own. A zip of two hundred photos must not push "I'm set" below
+ * the fold on a phone: the confirm is the whole point of the screen, and a
+ * button you have to scroll past a list to find is a button nobody presses.
+ * ------------------------------------------------------------------------ */
+/* The lobby's "they joined — picking their media…" line, under the link state. */
+.gg-lobby-prep {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--gg-text-3);
+  text-align: center;
+}
+
+.gg-mediasetup { min-width: min(32rem, 96vw); max-width: min(32rem, 96vw); text-align: center; }
+.gg-mediasetup-tips { text-align: left; margin: 0.7rem 0 0.4rem; }
+.gg-mediasetup-discord { margin-bottom: 0.2rem; }
+.gg-mediasetup-tally { margin: 0.7rem 0 0.15rem; font-size: 0.95rem; font-weight: 600; }
+.gg-mediasetup-waiting { color: var(--gg-text-4); font-style: italic; }
+.gg-mediasetup .gg-local-list { max-height: 34vh; overflow-y: auto; }
+
+/* The one inline anchor on the page. Underlined as well as coloured — colour is
+ * never the only channel here, and this one has to read as tappable at a glance
+ * to somebody who has been in the product for eleven seconds. */
+.gg-link {
+  color: var(--gg-pink);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+.gg-link:hover, .gg-link:focus-visible { color: #fff; }
+
 .gg-assets-head { text-align: center; }
 .gg-assets-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; margin-bottom: 0.9rem; }
 .gg-assets-chip { background: rgba(255, 255, 255, 0.06); color: var(--gg-text-2); border-color: rgba(255, 255, 255, 0.12); }

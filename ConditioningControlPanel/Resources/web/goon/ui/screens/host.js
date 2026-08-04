@@ -14,10 +14,18 @@
  * boot's phase router leaves this screen mounted while the match sits in Lobby
  * with no remote hello — the swap to the lobby screen happens on Consent (or on
  * a hello landing), which is the first moment there is a second person to show.
+ *
+ * TWO WAYS TO HAND THE ROOM OVER, and the LINK is the primary one. Six
+ * characters read down a voice call is fine; six characters thumbed into a
+ * phone by somebody who has never seen this page is where invites die. The link
+ * (ui/inviteLink.js) opens the standalone client straight into the join flow
+ * with nothing to type. The plain-code line stays right beside it, because a URL
+ * is eaten or mangled in more places than a six-character word is.
  * ==========================================================================*/
 
 import { createLedger, el, button } from '../router.js';
 import { S } from '../strings.js';
+import { buildInviteUrl } from '../inviteLink.js';
 
 const EXPIRY_MS = 5 * 60 * 1000;
 const GOLD_UNDER_MS = 60 * 1000;
@@ -26,7 +34,7 @@ export function mount(container, ctx) {
   const ledger = createLedger();
   ledger.logger = ctx?.logger || null;
 
-  const { actions, audio, toasts, sheets } = ctx;
+  const { session, actions, audio, toasts, sheets } = ctx;
   let code = null;
   let expiresAt = 0;
   let cancelled = false;
@@ -37,8 +45,11 @@ export function mount(container, ctx) {
   const expiryBar = el('div', { class: 'gg-expiry' }, [el('i', { class: 'gg-expiry-fill' })]);
   const expiryText = el('p', { class: 'gg-expiry-text', text: '' });
 
+  const linkBtn = button(ledger, S.host.copyLink, () => copyLink(), { variant: 'primary', audio, sfx: 'code-copy' });
+  linkBtn.disabled = true;
   const copyBtn = button(ledger, S.host.copy, () => copyInvite(), { variant: '', audio, sfx: 'code-copy' });
   copyBtn.disabled = true;
+  const linkNote = el('p', { class: 'gg-host-linknote', text: S.host.linkNote, hidden: true });
 
   const waiting = el('div', { class: 'gg-waiting', hidden: true }, [
     el('span', { class: 'gg-dots gg-deco', 'aria-hidden': 'true' }, [el('i'), el('i'), el('i')]),
@@ -53,7 +64,8 @@ export function mount(container, ctx) {
     copyChip,
     expiryBar,
     expiryText,
-    el('div', { class: 'gg-host-actions' }, [copyBtn, cancelBtn]),
+    el('div', { class: 'gg-host-actions' }, [linkBtn, copyBtn, cancelBtn]),
+    linkNote,
     waiting,
   ]);
   container.appendChild(card);
@@ -72,16 +84,40 @@ export function mount(container, ctx) {
 
   ledger.listen(codeRow, 'click', () => { if (code) copyInvite(); });
 
-  async function copyInvite() {
-    if (!code) return;
-    const line = S.host.inviteLine(code);
+  /**
+   * THE LINK, built from where this page actually is.
+   *
+   * Standalone that is `location.origin + location.pathname`, so a play-test on
+   * a LAN address links to the LAN address. HOSTED it is the public deployment
+   * constant instead — the WebView2 page lives on the virtual host
+   * `https://ccp.game/…`, which resolves on exactly one machine, and pasting
+   * that into a chat window would hand somebody a link that cannot load.
+   */
+  function inviteUrl() {
+    if (!code) return '';
+    const loc = (typeof location !== 'undefined') ? location : null;
+    return buildInviteUrl(code, {
+      hosted: !!(session && session.hosted),
+      origin: (loc && loc.origin) || '',
+      pathname: (loc && loc.pathname) || '',
+    });
+  }
+
+  /**
+   * One clipboard path for both buttons. `chipText` is what the inline chip says,
+   * because "Copied" over a code and "Link copied" over a URL are the difference
+   * between a player pasting the right thing and pasting it twice.
+   */
+  async function copyText(text, chipText, toastText) {
+    if (!text) return;
     let ok = false;
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(line);
+        await navigator.clipboard.writeText(text);
         ok = true;
       }
     } catch (_e) { ok = false; }
+    if (ledger.isDisposed) return;
     if (!ok) {
       // Clipboard is permission-gated in a plain browser; select the code so the
       // player can copy it by hand instead of being told "no".
@@ -91,14 +127,28 @@ export function mount(container, ctx) {
         const sel = window.getSelection();
         sel.removeAllRanges();
         sel.addRange(range);
-        ok = true;
       } catch (_e) { /* ignore */ }
       toasts?.warn?.(S.toasts.copyFailed);
       return;
     }
+    copyChip.textContent = chipText;
     copyChip.hidden = false;
     ledger.timer(() => { copyChip.hidden = true; }, 1600);
-    toasts?.good?.(S.toasts.copied);
+    toasts?.good?.(toastText);
+  }
+
+  function copyInvite() {
+    if (!code) return;
+    void copyText(S.host.inviteLine(code), S.host.copied, S.toasts.copied);
+  }
+
+  function copyLink() {
+    const url = inviteUrl();
+    // No usable base (a `file:` page with no public constant to fall back on):
+    // the code path is still whole, so hand them that rather than an empty
+    // clipboard and a chip that lies.
+    if (!url) { copyInvite(); return; }
+    void copyText(S.host.inviteLinkLine(url), S.host.copiedLink, S.toasts.linkCopied);
   }
 
   /* --------------------------------------------------------------- expiry */
@@ -114,6 +164,9 @@ export function mount(container, ctx) {
       expiryText.textContent = S.host.expired;
       expiryBar.classList.add('is-dead');
       copyBtn.disabled = true;
+      // A dead link is worse than no link: it opens the app and then says "no
+      // room with that code", which reads as the game being broken.
+      linkBtn.disabled = true;
       return;
     }
     expiryText.textContent = S.host.expiresIn(left);
@@ -149,6 +202,8 @@ export function mount(container, ctx) {
     eyebrow.lastChild.textContent = S.host.open;
     renderCode(code);
     copyBtn.disabled = false;
+    linkBtn.disabled = false;
+    linkNote.hidden = false;
     waiting.hidden = false;
     tickExpiry();
     ledger.interval(tickExpiry, 500);

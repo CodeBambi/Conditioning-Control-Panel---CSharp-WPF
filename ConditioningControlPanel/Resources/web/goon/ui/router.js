@@ -26,6 +26,12 @@ export const SCREEN_IDS = Object.freeze({
   title: 'scr-title',
   host: 'scr-host',
   join: 'scr-join',
+  /**
+   * The first-run media step (ui/screens/mediaSetup.js). NOT a match phase: the
+   * engine walks Lobby -> Consent underneath it exactly as usual, and boot.js
+   * simply holds this screen in front of the lobby until the player has a deck.
+   */
+  mediaSetup: 'scr-media-setup',
   lobby: 'scr-lobby',
   draft: 'scr-draft',
   countdown: 'scr-countdown',
