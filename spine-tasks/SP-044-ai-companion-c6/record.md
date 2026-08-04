@@ -112,6 +112,8 @@ Follow-up verdict (fresh instance; authoritative in place of the lost items 4–
 - Step 1 plan review (`spine_review_step step=1 type=plan`): **SKIPPED by runtime** — "Nested reviewer spawn blocked inside pi worker session... the batch engine runs reviews after worker success (SP-195)"; artifact `.reviews/1-20260804T230925.md`; `spawnFailed=false` → proceed (engine-owned reviews run post-.DONE).
 - Step 2 plan review (`spine_review_step step=2 type=plan`): **SKIPPED by runtime** — same SP-195 nested-spawn block; artifact `.reviews/2-20260804T231104.md`; `spawnFailed=false` → proceed.
 - Step 3 plan review (`spine_review_step step=3 type=plan`): **SKIPPED by runtime** — same SP-195 nested-spawn block; artifact `.reviews/3-20260804T231523.md`; `spawnFailed=false` → proceed.
+- Step 4 plan review (`spine_review_step step=4 type=plan`): **SKIPPED by runtime** — same SP-195 nested-spawn block; artifact `.reviews/4-20260804T232224.md`; `spawnFailed=false` → proceed.
+- Step 5 plan review (`spine_review_step step=5 type=plan`): **SKIPPED by runtime** — same SP-195 nested-spawn block; artifact `.reviews/5-20260804T232237.md`; `spawnFailed=false` → proceed. **Summary: zero in-worker reviews ran on this task (uniform SP-195 runtime skip); all review phases are engine-owned post-.DONE.**
 
 ## 5. Evidence summary (U class — per the admission's conditioned WH shrink)
 

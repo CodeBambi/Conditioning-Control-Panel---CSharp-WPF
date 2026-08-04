@@ -1,5 +1,5 @@
 ## STATUS: SP-044 — AI companion slice c6: command execution
-**Current Step:** Step 5 — Testing & Verification
+**Current Step:** complete
 **Last Updated:** 2026-08-04 (worker)
 **Blockers:** none
 
@@ -26,6 +26,6 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥564/29 floor)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+- [x] Contract testCommand passes (verify.mjs + build 0W/0E + ≥564/29 floor)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths
